@@ -1,38 +1,29 @@
 import Foundation
 
-enum MissionThreadRow: Identifiable, Equatable {
-    case day(id: String, at: Date)
-    case person(id: String, text: AttributedString, attachments: [String])
-    case companion(id: String, text: AttributedString)
-
-    var id: String {
-        switch self {
-        case .day(let id, _), .person(let id, _, _), .companion(let id, _): id
-        }
-    }
-}
-
-enum MissionTranscript {
+struct MissionTranscript: Equatable {
     static let summonses: Set<String> = [
         "Carry out this mission.",
         "The coding agent of this mission is blocked and waiting on you.",
     ]
 
-    static func rows(of messages: [MissionThreadMessage], calendar: Calendar) -> [MissionThreadRow]
-    {
-        var rows: [MissionThreadRow] = []
-        var shownDay: Date?
+    var openedDay = ""
+    var entries: [ThreadEntry] = []
+    var attachments: [ThreadMessage.ID: [String]] = [:]
+
+    init() {}
+
+    init(of messages: [MissionThreadMessage], openedAt: Date, time: ConversationTime) {
+        openedDay = time.dayLabel(for: openedAt)
+        var entries: [ThreadEntry] = []
         for message in messages.sorted(by: { $0.seq < $1.seq }) {
-            guard let row = row(of: message) else { continue }
-            let sentAt = Date(timeIntervalSince1970: TimeInterval(message.createdAt) / 1000)
-            let day = calendar.startOfDay(for: sentAt)
-            if day != shownDay {
-                rows.append(.day(id: "day-\(message.id)", at: sentAt))
-                shownDay = day
-            }
-            rows.append(row)
+            guard let shown = shown(message) else { continue }
+            entries.append(.message(shown))
         }
-        return rows
+        self.entries = ThreadLayout.mark(entries, time: time, shownDay: openedAt)
+    }
+
+    static func openedLine(by companion: Companion?) -> String {
+        "Mission opened by \(companion?.name ?? "the companion")"
     }
 
     static func upserting(_ message: MissionThreadMessage, into messages: [MissionThreadMessage])
@@ -41,21 +32,25 @@ enum MissionTranscript {
         (messages.filter { $0.id != message.id } + [message]).sorted { $0.seq < $1.seq }
     }
 
-    private static func row(of message: MissionThreadMessage) -> MissionThreadRow? {
+    private mutating func shown(_ message: MissionThreadMessage) -> ThreadMessage? {
         let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return nil }
+        let sentAt = Date(timeIntervalSince1970: TimeInterval(message.createdAt) / 1000)
         guard message.role == .user, message.authorBotId == nil else {
-            return .companion(id: message.id, text: markdown(content))
+            return ThreadMessage(
+                id: message.id, isYours: false, text: content, sentAt: sentAt,
+                authorId: message.authorBotId)
         }
-        guard !summonses.contains(content) else { return nil }
+        guard !Self.summonses.contains(content) else { return nil }
         let split = MissionAttachmentBlock.split(content)
-        return .person(id: message.id, text: markdown(split.text), attachments: split.names)
-    }
-
-    static func markdown(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
+        guard !split.text.isEmpty else {
+            return ThreadMessage(
+                id: message.id, isYours: true, text: split.names.joined(separator: "\n\n"),
+                sentAt: sentAt)
+        }
+        if !split.names.isEmpty {
+            attachments[message.id] = split.names
+        }
+        return ThreadMessage(id: message.id, isYours: true, text: split.text, sentAt: sentAt)
     }
 }

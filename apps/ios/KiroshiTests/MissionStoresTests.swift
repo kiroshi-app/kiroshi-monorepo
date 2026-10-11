@@ -139,8 +139,8 @@ struct MissionStoresTests {
         await waitUntil { store.hasLoaded && store.isOnline }
 
         #expect(
-            store.rows.dropFirst() == [
-                .companion(id: "q", text: MissionTranscript.markdown("Which one first?"))
+            MissionTesting.shown(store.transcript) == [
+                .init(id: "q", isYours: false, bubbles: ["Which one first?"])
             ])
 
         store.draft = " The account step. "
@@ -156,10 +156,8 @@ struct MissionStoresTests {
         #expect(message?["createdAt"] as? Int == 100_000)
         #expect(message?.keys.contains("repliedToMessageId") == true)
         #expect(
-            store.rows.last
-                == .person(
-                    id: "id-1", text: MissionTranscript.markdown("The account step."),
-                    attachments: []))
+            MissionTesting.shown(store.transcript).last
+                == .init(id: "id-1", isYours: true, bubbles: ["The account step."]))
         following.cancel()
         await connection.stop()
     }
@@ -211,7 +209,7 @@ struct MissionStoresTests {
 
         #expect(store.sendProblem == nil)
         #expect(store.draft == "And a second thought")
-        #expect(store.rows.last?.id == "id-1")
+        #expect(store.transcript.entries.last?.id == "id-1")
         following.cancel()
         await connection.stop()
     }
