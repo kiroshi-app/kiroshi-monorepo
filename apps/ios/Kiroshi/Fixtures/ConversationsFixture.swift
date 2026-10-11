@@ -105,6 +105,34 @@
             ],
         ]) { _, home in home }
 
+        static let releasePlanning: [FixtureHost.Message] = [
+            .init(
+                id: "p-ask", isYours: true,
+                content: "What’s left before we can cut 0.42? I’d like it out tomorrow.",
+                daysAgo: 1, hour: 17, minute: 30),
+            .init(
+                id: "p-notes", isYours: false,
+                content:
+                    "The release notes need a last pass, and the changelog still lists two fixes that moved to 0.43.",
+                daysAgo: 1, hour: 17, minute: 32, author: juniper.id),
+            .init(
+                id: "p-move", isYours: false,
+                content: "I’ll move them tonight and send you the draft first thing.",
+                daysAgo: 1, hour: 17, minute: 33, author: juniper.id),
+            .init(
+                id: "p-ticket", isYours: false,
+                content:
+                    "On my side, the onboarding ticket is too big for one review. I’d split it in two: the account step, then the space picker.",
+                daysAgo: 1, hour: 17, minute: 41, author: atlas.id),
+            .init(
+                id: "p-ok", isYours: true, content: "Split it, and keep the account step first.",
+                daysAgo: 1, hour: 17, minute: 45),
+            .init(
+                id: "p-done", isYours: false,
+                content: "Will do. Both halves land in Linear before the tag.", daysAgo: 1,
+                hour: 17, minute: 46, author: atlas.id),
+        ]
+
         static let groupThread: [FixtureHost.Message] = [
             .init(
                 id: "g-ask", isYours: true, content: "Can you two get 0.42 out today?",
@@ -172,8 +200,10 @@
                 script.refusesCompanions = true
             case .threadFailed:
                 script.refusesThread = true
-            case .groupThread, .groupMention:
+            case .groupThread:
                 script.messages[releaseCrew.id] = groupThread
+            case .groupMention:
+                script.messages[releaseCrew.id] = releasePlanning + groupThread
             case .groupWorking:
                 script.messages[releaseCrew.id] =
                     groupThread + [

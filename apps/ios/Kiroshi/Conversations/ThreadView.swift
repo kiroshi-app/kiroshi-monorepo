@@ -199,7 +199,7 @@ struct MentionSuggestions: View {
                     } label: {
                         Label {
                             Text(companion.name)
-                                .foregroundStyle(Color.kiroshi(.foreground))
+                                .foregroundStyle(.primary)
                         } icon: {
                             CompanionAvatar(companion, size: .inline)
                         }
@@ -217,6 +217,7 @@ struct MentionSuggestions: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(height: min(CGFloat(companions.count), 4.5) * (rowHeight + 1))
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 20))
     }
 }
 
