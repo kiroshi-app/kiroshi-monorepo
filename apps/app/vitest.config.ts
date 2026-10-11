@@ -17,9 +17,6 @@ export default defineConfig({
 				new URL("../../packages/ui/src", import.meta.url),
 			),
 			"@": fileURLToPath(new URL("./src", import.meta.url)),
-			"lucide-react": fileURLToPath(
-				new URL("../../packages/ui/src/shims/lucide-react.ts", import.meta.url),
-			),
 		},
 	},
 })

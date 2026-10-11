@@ -1,15 +1,39 @@
+import {
+	CheckIcon,
+	ChevronDownIcon,
+	ChevronRightIcon,
+	ChevronUpIcon,
+	CircleCheckIcon,
+	InfoIcon,
+	LoaderCircleIcon,
+	OctagonXIcon,
+	PanelLeftIcon,
+	TriangleAlertIcon,
+	XIcon,
+} from "@keyline-icons/react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { Row } from "@workspace/storybook/story-utils"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import * as RegistryGlyphs from "@workspace/ui/shims/lucide-react"
 
 const BRAND_MARKS = ["Claude", "GitHub", "Linear", "Paper", "Superset", "X"]
 
 const KEYLINE_GLYPHS: [string, Icon][] = [
 	...Object.entries(Icons).filter(([name]) => !BRAND_MARKS.includes(name)),
-	...Object.entries(RegistryGlyphs),
+	...Object.entries({
+		CheckIcon,
+		ChevronDownIcon,
+		ChevronRightIcon,
+		ChevronUpIcon,
+		CircleCheckIcon,
+		InfoIcon,
+		LoaderCircleIcon,
+		OctagonXIcon,
+		PanelLeftIcon,
+		TriangleAlertIcon,
+		XIcon,
+	}),
 ]
 
 const ICON_GRID_UNITS_PER_PIXEL_AT_16PX = 24 / 16
