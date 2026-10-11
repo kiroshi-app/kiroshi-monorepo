@@ -466,10 +466,7 @@ fn laid_avatar(
 }
 
 fn unpacked_file(entry: &mut tar::Entry<'_, File>, target: &Path) -> io::Result<()> {
-	if let Some(dir) = target.parent() {
-		private_files::create_dir(dir)?;
-	}
-	entry.unpack(target).map(|_| ())
+	private_files::replace_atomically_with(target, |file| io::copy(entry, file).map(|_| ()))
 }
 
 fn reown_minted_bots(trees: &Trees, minted: &MintedIds) -> io::Result<()> {
