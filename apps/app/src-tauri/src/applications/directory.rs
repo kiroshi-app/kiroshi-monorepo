@@ -1227,7 +1227,7 @@ pub(crate) mod tests {
 
 		let answered = directory.searched("").await.expect("the search answers");
 		let named = directory.named("one").await.expect("the name resolves");
-		directory.curated().await.expect("the catalogue reads");
+		directory.catalogue().await.expect("the catalogue reads");
 
 		assert!(held.asked().is_empty(), "the directory was read");
 		assert_eq!(names(&answered.applications), ["one"]);
@@ -1281,7 +1281,7 @@ pub(crate) mod tests {
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
 		let seed = json!([a_row("superset", "curated", 1), a_row("paper", "curated", 2)]);
 		let seeded = a_directory_over(vec![seed]).await;
-		planted(&directory, feed_stale(Cached { read_at: NOON, ..a_cache_of(&seeded) }));
+		planted(&directory, feed_stale(a_cache_of(&seeded)));
 
 		let answered = directory.searched("notion").await.expect("the search answers");
 
