@@ -49,10 +49,10 @@ final class MissionsAccessibilityTests: XCTestCase {
     }
 
     func auditTheThread(_ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>) throws {
-        let navigationBar = app.navigationBars.firstMatch.frame
+        let titleBottom = titleBottom(in: app)
         try audit(app) { issue in
             guard let element = issue.element else { return false }
-            let isInTheTitle = element.frame.minY < navigationBar.maxY
+            let isInTheTitle = element.frame.minY < titleBottom
             let isScrolledOffScreenAtTheLargestSize = !onScreenAtTheLargestSize.contains(
                 element.label)
             return switch issue.auditType {

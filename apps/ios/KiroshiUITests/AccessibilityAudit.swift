@@ -35,6 +35,12 @@ extension XCTestCase {
         try app.performAccessibilityAudit(for: .all.subtracting(.contrast), handle)
     }
 
+    @MainActor func titleBottom(in app: XCUIApplication) -> CGFloat {
+        let bar = app.navigationBars.firstMatch
+        return bar.staticTexts.allElementsBoundByIndex.map(\.frame.maxY).reduce(
+            bar.frame.maxY, max)
+    }
+
     @MainActor func composer(in app: XCUIApplication) -> XCUIElement {
         let field = app.textViews.firstMatch
         return field.exists ? field : app.textFields.firstMatch
@@ -49,13 +55,12 @@ extension XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["Loading the conversation"]
                 .waitForNonExistence(timeout: 10))
+        let top = titleBottom(in: app)
         let pickerTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mention '"))
             .allElementsBoundByIndex.map(\.frame.minY).min()
         let visible = CGRect(
-            x: transcript.frame.minX, y: app.navigationBars.firstMatch.frame.maxY,
-            width: transcript.frame.width,
-            height: min(pickerTop ?? .infinity, composer(in: app).frame.minY)
-                - app.navigationBars.firstMatch.frame.maxY)
+            x: transcript.frame.minX, y: top, width: transcript.frame.width,
+            height: min(pickerTop ?? .infinity, composer(in: app).frame.minY) - top)
         let shown = transcript.descendants(matching: .any).allElementsBoundByIndex
             .filter { visible.contains($0.frame) }
             .map(\.label)
