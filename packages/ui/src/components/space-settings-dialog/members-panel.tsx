@@ -10,6 +10,7 @@ import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
+	FIELD_OPTION_MARKS_CLASS,
 	SETTINGS_TAG_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -31,6 +32,11 @@ type SpaceMember = {
 type SpaceInviteRole = "guest" | "member"
 
 const INVITE_ROLES: SpaceInviteRole[] = ["guest", "member"]
+
+const ROLE_OPTION_CLASS = "flex items-start gap-3 border border-border p-3"
+
+const ROLE_OPTION_BLOCKED_CLASS =
+	"rounded-xl opacity-50 has-[:checked]:bg-muted"
 
 type InviteRefusal = "invited" | "self" | "malformed"
 
@@ -108,11 +114,10 @@ const useFailureText = (failure: MembersFailure | undefined, space: string) => {
 
 type RoleOptionProps = {
 	role: SpaceInviteRole
-	isSelected: boolean
 	isHosted: boolean
 }
 
-const RoleOption = ({ role, isSelected, isHosted }: RoleOptionProps) => {
+const RoleOption = ({ role, isHosted }: RoleOptionProps) => {
 	const { t } = useTranslation("settings")
 	const id = useId()
 	const nameId = `${id}-name`
@@ -121,11 +126,8 @@ const RoleOption = ({ role, isSelected, isHosted }: RoleOptionProps) => {
 	return (
 		<label
 			className={cn(
-				"flex items-start gap-3 rounded-xl p-3",
-				isSelected ? "bg-card" : "bg-card/50",
-				isHosted
-					? ["cursor-pointer", !isSelected && "hover:bg-card/75"]
-					: "opacity-50",
+				ROLE_OPTION_CLASS,
+				isHosted ? FIELD_OPTION_MARKS_CLASS : ROLE_OPTION_BLOCKED_CLASS,
 			)}
 			htmlFor={id}
 		>
@@ -266,12 +268,7 @@ const InviteField = ({
 					value={selectedRole}
 				>
 					{INVITE_ROLES.map((option) => (
-						<RoleOption
-							isHosted={isHosted}
-							isSelected={option === selectedRole}
-							key={option}
-							role={option}
-						/>
+						<RoleOption isHosted={isHosted} key={option} role={option} />
 					))}
 				</RadioGroup>
 			</div>
