@@ -6,6 +6,7 @@ import { ApplicationMark } from "@workspace/ui/components/plugin-settings/applic
 import {
 	CATALOGUE_APPLICATIONS,
 	DRAWN_MARK,
+	HOSTILE_MARK,
 	UNREACHABLE_MARK,
 } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 
@@ -89,6 +90,24 @@ export const WithDrawnMark = meta.story({
 			"border-border",
 			"bg-muted",
 			"text-foreground",
+		)
+	},
+})
+
+export const WithHostileMark = meta.story({
+	tags: ["test-only", "!autodocs"],
+	args: { mark: HOSTILE_MARK },
+	play: async ({ canvasElement }) => {
+		const slot = slotIn(canvasElement, "application-mark")
+
+		await expect(slot.querySelector("script")).toBeNull()
+		await expect(slot.querySelector("[onload]")).toBeNull()
+		await expect(slot.querySelector("svg")).not.toBeNull()
+		await expect(slot).toHaveClass(
+			"border",
+			"border-border",
+			"bg-muted",
+			"text-muted-foreground",
 		)
 	},
 })

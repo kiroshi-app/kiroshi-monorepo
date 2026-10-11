@@ -88,6 +88,9 @@ export const UNREACHABLE_MARK = "data:image/png;base64,Tm90QW5JbWFnZQ=="
 export const DRAWN_MARK =
 	'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 2 20h20L12 2Z"/></svg>'
 
+export const HOSTILE_MARK =
+	'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script></svg>'
+
 export const LONG_NAME_APPLICATION: CatalogueApplication = {
 	id: "smithery/slack",
 	name: "a-very-long-application-name-that-keeps-going-on-and-on-well-past-the-width-of-the-card-it-is-drawn-in",
