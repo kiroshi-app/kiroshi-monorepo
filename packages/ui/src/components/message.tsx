@@ -1,28 +1,14 @@
-import {
-	type ComponentPropsWithRef,
-	createContext,
-	type ReactNode,
-	useContext,
-} from "react"
+import type { ComponentPropsWithRef, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotTitleBadge } from "@workspace/ui/components/bot-badge"
 import { Icons } from "@workspace/ui/components/icons"
-import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { formatDateTime, toRelativeTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 export type MessageFrom = "user" | "assistant"
-
-interface MessageContextValue {
-	from: MessageFrom
-}
-
-const MessageContext = createContext<MessageContextValue>({
-	from: "assistant",
-})
 
 export interface MessageProps
 	extends Omit<ComponentPropsWithRef<"article">, "children"> {
@@ -46,6 +32,18 @@ export type MessageFooterProps = ComponentPropsWithRef<"div">
 interface MessageTimeProps {
 	at: number
 	now: number
+	className?: string
+}
+
+interface MessageClockProps {
+	at: number
+	className?: string
+}
+
+interface SentTimeProps {
+	at: number
+	label: string
+	className?: string
 }
 
 const DATE_AND_TIME: Intl.DateTimeFormatOptions = {
@@ -63,44 +61,47 @@ const startOfLocalDay = (at: number) => new Date(at).setHours(0, 0, 0, 0)
 const calendarDaysBetween = (at: number, now: number) =>
 	Math.round((startOfLocalDay(now) - startOfLocalDay(at)) / DAY_MS)
 
-const sentAgo = (at: number, now: number) =>
-	now - at < DAY_MS
-		? toRelativeTime(Math.min(at, now), now)
-		: toRelativeTime(now - calendarDaysBetween(at, now) * DAY_MS, now)
+const HOURS_AND_MINUTES: Intl.DateTimeFormatOptions = {
+	hour: "2-digit",
+	minute: "2-digit",
+	hourCycle: "h23",
+}
+
+const formatClock = (at: number) => formatDateTime(at, HOURS_AND_MINUTES)
+
+const capitalised = (label: string, language: string) =>
+	label.charAt(0).toLocaleUpperCase(language) + label.slice(1)
+
+const sentLabel = (at: number, now: number, language: string) => {
+	const days = calendarDaysBetween(at, now)
+
+	return days < 1
+		? formatClock(at)
+		: capitalised(toRelativeTime(now - days * DAY_MS, now), language)
+}
 
 export function Message({ from, children, className, ...props }: MessageProps) {
 	const { t } = useTranslation("chat")
 
 	return (
-		<MessageSideContext.Provider value={from === "user" ? "end" : "start"}>
-			<MessageContext.Provider value={{ from }}>
-				<article
-					data-slot="message"
-					data-from={from}
-					aria-label={props["aria-label"] ?? t(`transcript.message.${from}`)}
-					className={cn(
-						"group/message flex w-full items-start gap-2",
-						from === "user" ? "flex-row-reverse" : "flex-row",
-						className,
-					)}
-					{...props}
-				>
-					{children}
-				</article>
-			</MessageContext.Provider>
-		</MessageSideContext.Provider>
+		<article
+			data-slot="message"
+			data-from={from}
+			aria-label={props["aria-label"] ?? t(`transcript.message.${from}`)}
+			className={cn("group/message flex w-full items-start gap-2", className)}
+			{...props}
+		>
+			{children}
+		</article>
 	)
 }
 
 export function MessageContent({ className, ...props }: MessageContentProps) {
-	const { from } = useContext(MessageContext)
-
 	return (
 		<div
 			data-slot="message-content"
 			className={cn(
-				"flex min-w-0 flex-1 flex-col gap-1.5 text-sm leading-6",
-				from === "user" ? "items-end" : "items-start",
+				"flex min-w-0 flex-1 flex-col items-start gap-1.5 text-sm leading-6",
 				className,
 			)}
 			{...props}
@@ -109,14 +110,11 @@ export function MessageContent({ className, ...props }: MessageContentProps) {
 }
 
 export function MessageHeader({ className, ...props }: MessageHeaderProps) {
-	const { from } = useContext(MessageContext)
-
 	return (
 		<div
 			data-slot="message-header"
 			className={cn(
-				"flex items-center gap-1.5 px-1 text-xs leading-none text-muted-foreground",
-				from === "user" ? "justify-end" : "justify-start",
+				"flex items-center justify-start gap-1.5 px-1 text-xs leading-none text-muted-foreground",
 				className,
 			)}
 			{...props}
@@ -127,6 +125,7 @@ export function MessageHeader({ className, ...props }: MessageHeaderProps) {
 export function MessageAuthor({
 	author,
 	className,
+	children,
 	...props
 }: MessageAuthorProps) {
 	const { t } = useTranslation("chat")
@@ -139,21 +138,24 @@ export function MessageAuthor({
 		>
 			<span
 				className={cn(
-					"max-w-48 truncate font-medium",
-					author.isDeleted ? "text-muted-foreground" : "text-foreground/80",
+					"max-w-48 truncate font-semibold text-sm leading-5",
+					author.isDeleted ? "text-muted-foreground" : "text-foreground",
 				)}
 			>
 				{author.name}
 			</span>
 			<BotTitleBadge
-				className={cn(author.isDeleted && "bg-muted text-muted-foreground")}
+				className={cn(
+					"self-center",
+					author.isDeleted && "bg-muted text-muted-foreground",
+				)}
 				title={author.title}
 			/>
 			{author.isLead ? (
 				<>
 					<Icons.Crown
 						aria-hidden="true"
-						className="size-3 shrink-0 text-bot-badge-attention"
+						className="size-3 shrink-0 self-center text-bot-badge-attention"
 						data-slot="message-author-lead"
 					/>
 					<span className="sr-only">{t("transcript.author.lead")}</span>
@@ -163,41 +165,58 @@ export function MessageAuthor({
 				<span
 					data-slot="message-author-deleted"
 					title={t("transcript.author.deleted")}
-					className="inline-flex items-center"
+					className="inline-flex items-center self-center"
 				>
 					<Icons.Delete aria-hidden="true" className="size-3 shrink-0" />
 					<span className="sr-only">{t("transcript.author.deleted")}</span>
 				</span>
 			) : null}
+			{children}
 		</MessageHeader>
 	)
 }
 
-export function MessageTime({ at, now }: MessageTimeProps) {
-	useTranslation()
+const SentTime = ({ at, label, className }: SentTimeProps) => (
+	<TooltipHint content={formatSentDate(at)}>
+		<time
+			data-slot="message-time"
+			dateTime={new Date(at).toISOString()}
+			// biome-ignore lint/a11y/noNoninteractiveTabindex: the full date tooltip opens on keyboard focus
+			tabIndex={0}
+			className={cn(
+				"whitespace-nowrap font-normal tabular-nums outline-offset-2",
+				className,
+			)}
+		>
+			{label}
+		</time>
+	</TooltipHint>
+)
+
+export function MessageTime({ at, now, className }: MessageTimeProps) {
+	const { i18n } = useTranslation()
 
 	return (
-		<TooltipHint content={formatSentDate(at)}>
-			<time
-				data-slot="message-time"
-				dateTime={new Date(at).toISOString()}
-				className="whitespace-nowrap tabular-nums"
-			>
-				{sentAgo(at, now)}
-			</time>
-		</TooltipHint>
+		<SentTime
+			at={at}
+			label={sentLabel(at, now, i18n.language)}
+			className={cn("text-xs leading-4", className)}
+		/>
 	)
 }
 
-export function MessageFooter({ className, ...props }: MessageFooterProps) {
-	const { from } = useContext(MessageContext)
+export function MessageClock({ at, className }: MessageClockProps) {
+	useTranslation()
 
+	return <SentTime at={at} label={formatClock(at)} className={className} />
+}
+
+export function MessageFooter({ className, ...props }: MessageFooterProps) {
 	return (
 		<div
 			data-slot="message-footer"
 			className={cn(
-				"flex min-h-5 items-center gap-1 px-1 text-xs text-muted-foreground",
-				from === "user" ? "justify-end" : "justify-start",
+				"flex min-h-5 items-center justify-start gap-1 px-1 text-xs text-muted-foreground",
 				className,
 			)}
 			{...props}

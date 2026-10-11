@@ -127,7 +127,7 @@ export const Sides = meta.story({
 		docs: {
 			description: {
 				story:
-					"Both sides at once, neither told which it is on. Check that the companion's actions sit to the right of its bubble and the reader's to the left of theirs — always on the outside, so they never cover the words and never collide with the gutter the companion's avatar occupies. `packages/ui/src/components/turn.tsx:499` fills the companion row and `packages/ui/src/components/turn.tsx:341` the reader row, neither saying which side it is on.",
+					"Both speakers at once, neither told which side it is on. Every row reads from the start edge, so the companion's actions and the reader's both sit to the right of their bubble — always on the outside, so they never cover the words and never collide with the gutter the avatar occupies. `AssistantTurn` fills the companion row and `UserTurn` the reader row in `packages/ui/src/components/turn.tsx`, neither saying which side it is on.",
 			},
 		},
 	},
@@ -138,10 +138,10 @@ export const Sides = meta.story({
 		await expect(edgeOf("Copy").left).toBeGreaterThan(
 			canvas.getByText(ANSWER).getBoundingClientRect().right,
 		)
-		await expect(edgeOf("Retry").right).toBeLessThan(
+		await expect(edgeOf("Retry").left).toBeGreaterThan(
 			canvas
 				.getByText("How is this workspace laid out?")
-				.getBoundingClientRect().left,
+				.getBoundingClientRect().right,
 		)
 	},
 })
@@ -165,7 +165,7 @@ export const Pinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached Claude has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on — it is given first, and on the reader's side the row runs the other way so that first action still lands against the bubble. `packages/ui/src/components/turn.tsx:354` pins the retry of a prompt that failed, ahead of the copy `packages/ui/src/components/turn.tsx:363` adds.",
+					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached Claude has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on — it is given first, so it lands against the bubble on the reader's row as on every other. `packages/ui/src/components/turn.tsx:354` pins the retry of a prompt that failed, ahead of the copy `packages/ui/src/components/turn.tsx:363` adds.",
 			},
 		},
 	},
@@ -176,7 +176,7 @@ export const Pinned = meta.story({
 		const retry = canvas.getByRole("button", { name: "Retry" })
 		const copy = canvas.getByRole("button", { name: "Copy" })
 
-		await expect(retry.getBoundingClientRect().left).toBeGreaterThan(
+		await expect(retry.getBoundingClientRect().left).toBeLessThan(
 			copy.getBoundingClientRect().left,
 		)
 	},

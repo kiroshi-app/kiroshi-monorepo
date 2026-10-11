@@ -249,10 +249,11 @@ conversation-message-transcriptscrollprobe--long-thread
 conversation-message-transcriptscrollprobe--long-thread-streaming
 conversation-message-transcriptscrollprobe--whole-thread
 conversation-message-turn--authored
-conversation-message-turn--bot-turn-with-time
 conversation-message-turn--companion-menu-off-gutter
 conversation-message-turn--companion-menu-on-gutter
 conversation-message-turn--companion-menu-unanswered
+conversation-message-turn--companion-message
+conversation-message-turn--companion-message-dark
 conversation-message-turn--companion-select-from-gutter
 conversation-message-turn--companion-select-on-gutter
 conversation-message-turn--companion-select-on-gutter-focused
@@ -262,6 +263,8 @@ conversation-message-turn--deleted-author
 conversation-message-turn--error
 conversation-message-turn--footnoted
 conversation-message-turn--footnoted-squeezed
+conversation-message-turn--inner-row-hovered
+conversation-message-turn--inner-row-hovered-dark
 conversation-message-turn--long-content
 conversation-message-turn--mark
 conversation-message-turn--mark-across-runs
@@ -277,13 +280,15 @@ conversation-message-turn--person-turn-with-time
 conversation-message-turn--picture-beside-blot
 conversation-message-turn--pinned
 conversation-message-turn--quoted
+conversation-message-turn--reader-message
+conversation-message-turn--reader-message-dark
 conversation-message-turn--reply
 conversation-message-turn--reported-by-long-title
 conversation-message-turn--reported-by-routine
 conversation-message-turn--reported-by-unnamed-trigger
 conversation-message-turn--run
-conversation-message-turn--run-of-three-timed-messages
-conversation-message-turn--run-timed-on-its-last-bubble
+conversation-message-turn--run-of-three
+conversation-message-turn--run-of-three-dark
 conversation-message-turn--send-time-tooltip
 conversation-message-turn--sent-in-the-future
 conversation-message-turn--sent-just-after-midnight
@@ -296,7 +301,6 @@ conversation-message-turn--thread-crossing-a-day
 conversation-message-turn--time-follows-now
 conversation-message-turn--titled
 conversation-message-turn--titled-deleted
-conversation-message-turn--user-turn-with-time
 conversation-message-turn--variants
 conversation-message-turn--working-companion-stops-from-its-row
 conversation-missions-missionactivityline--default

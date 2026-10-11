@@ -17,14 +17,19 @@ import {
 import { CompanionMenuHost } from "@workspace/ui/components/companion-menu"
 import { useCompanionSelect } from "@workspace/ui/components/companion-select"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
-import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import {
+	AvatarFrame,
+	displayNameOf,
+	initialsOf,
+} from "@workspace/ui/components/initials-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
-	formatSentDate,
 	Message,
 	MessageAuthor,
+	MessageClock,
 	MessageContent,
 	MessageFooter,
+	type MessageFrom,
 	MessageHeader,
 	MessageTime,
 } from "@workspace/ui/components/message"
@@ -45,7 +50,6 @@ import {
 } from "@workspace/ui/components/message-quote"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import type { RosterBot } from "@workspace/ui/components/roster"
-import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenuItem,
 	ContextMenuSeparator,
@@ -91,10 +95,11 @@ interface TurnGroupProps {
 
 interface UserTurnProps {
 	children: ReactNode
+	name?: string
+	image?: string
 	state?: UserTurnState
 	run?: TurnRun
 	sentAt?: number
-	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -112,7 +117,6 @@ type AssistantTurnProps = {
 	state?: TurnState
 	run?: TurnRun
 	sentAt?: number
-	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -137,7 +141,6 @@ type PersonTurnProps = {
 	image?: string
 	run?: TurnRun
 	sentAt?: number
-	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -159,37 +162,139 @@ const TURN_FOOTER_KEY: Partial<
 const HIGHLIGHT =
 	"rounded-xl transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
+const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
+
+const ROW_HIGHLIGHT =
+	"transition-colors duration-200 hover:bg-message-row-hover data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
+
+const RUN_ROW_PADDING = {
+	single: "pt-2 pb-1",
+	first: "pt-2 pb-0.5",
+	middle: "py-0.5",
+	last: "pt-0.5 pb-1",
+} satisfies Record<TurnRun, string>
+
 const RUN_RADIUS = {
-	user: {
-		single: "",
-		first: "rounded-br-md",
-		middle: "rounded-tr-md rounded-br-md",
-		last: "rounded-tr-md",
-	},
-	assistant: {
-		single: "",
-		first: "rounded-bl-md",
-		middle: "rounded-tl-md rounded-bl-md",
-		last: "rounded-tl-md",
-	},
-} satisfies Record<"user" | "assistant", Record<TurnRun, string>>
+	single: "",
+	first: "rounded-bl-md",
+	middle: "rounded-tl-md rounded-bl-md",
+	last: "rounded-tl-md",
+} satisfies Record<TurnRun, string>
 
-interface TurnTimeLineProps {
-	sentAt?: number
-	now?: number
-	className?: string
-}
+const TURN_GUTTER = "flex w-10 shrink-0 justify-end"
 
-const TurnTimeLine = ({ sentAt, now, className }: TurnTimeLineProps) =>
-	sentAt === undefined || now === undefined ? null : (
-		<MessageFooter data-slot="message-time-line" className={className}>
-			<MessageTime at={sentAt} now={now} />
-		</MessageFooter>
-	)
+const TURN_GUTTER_TIME =
+	"pt-3.5 text-[11px]/4 text-muted-foreground opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
+
+const TURN_HEAD = "h-5 items-baseline gap-1.5 self-stretch"
+
+const PERSON_INITIALS =
+	"grid size-full place-items-center bg-person-avatar font-medium text-foreground text-sm uppercase leading-none"
 
 const opensRun = (run: TurnRun) => run === "single" || run === "first"
 
-const closesRun = (run: TurnRun) => run === "single" || run === "last"
+const sentTimeOf = (sentAt?: number, now?: number) =>
+	sentAt === undefined || now === undefined ? null : (
+		<MessageTime at={sentAt} now={now} />
+	)
+
+interface TurnGutterTimeProps {
+	sentAt?: number
+}
+
+const TurnGutterTime = ({ sentAt }: TurnGutterTimeProps) => (
+	<span
+		data-slot="message-gutter"
+		aria-hidden={sentAt === undefined ? "true" : undefined}
+		className={cn(TURN_GUTTER, TURN_GUTTER_TIME)}
+	>
+		{sentAt === undefined ? null : <MessageClock at={sentAt} />}
+	</span>
+)
+
+interface PersonGutterProps {
+	name?: string
+	image?: string
+}
+
+const PersonGutter = ({ name, image }: PersonGutterProps) => (
+	<span data-slot="message-gutter" aria-hidden="true" className={TURN_GUTTER}>
+		<AvatarFrame
+			image={image}
+			shape="round"
+			size={TURN_AVATAR_SIZE}
+			slot="user-avatar"
+		>
+			<span className={PERSON_INITIALS}>{initialsOf(displayNameOf(name))}</span>
+		</AvatarFrame>
+	</span>
+)
+
+type TurnRowProps = {
+	from: MessageFrom
+	run: TurnRun
+	messageId?: string
+	sentAt?: number
+	avatar: ReactNode
+	head: ReactNode
+	children: ReactNode
+	className?: string
+	"aria-label"?: string
+}
+
+const TurnRow = ({
+	from,
+	run,
+	messageId,
+	sentAt,
+	avatar,
+	head,
+	children,
+	className,
+	...labelled
+}: TurnRowProps) => {
+	const anchor = useMessageAnchor(messageId)
+	const opens = opensRun(run)
+
+	return (
+		<Message
+			from={from}
+			{...labelled}
+			{...anchor}
+			className={cn(
+				ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
+				ROW_HIGHLIGHT,
+				RUN_ROW_PADDING[run],
+				className,
+			)}
+		>
+			{opens ? avatar : <TurnGutterTime sentAt={sentAt} />}
+			<MessageContent className="gap-1">
+				{opens ? head : null}
+				{children}
+			</MessageContent>
+		</Message>
+	)
+}
+
+interface PersonHeadProps {
+	name?: string
+	sentAt?: number
+	now?: number
+}
+
+const PersonHead = ({ name, sentAt, now }: PersonHeadProps) => {
+	const shownName = displayNameOf(name)
+
+	return (
+		<MessageAuthor
+			author={{ id: shownName, name: shownName }}
+			className={cn(TURN_HEAD, MESSAGE_BUBBLE_INLINE_PADDING)}
+		>
+			{sentTimeOf(sentAt, now)}
+		</MessageAuthor>
+	)
+}
 
 function runPositionFor(index: number, length: number): TurnRun {
 	if (length === 1) return "single"
@@ -218,7 +323,6 @@ interface TurnActionListProps {
 
 interface TurnBodyProps {
 	repliedTo?: QuotedMessage
-	sentAt?: number
 	className?: string
 	children: ReactNode
 }
@@ -305,8 +409,8 @@ function turnMenuOf(actions: TurnAction[]) {
 	return actions.length > 0 ? <TurnActionMenu actions={actions} /> : undefined
 }
 
-function TurnBody({ repliedTo, sentAt, className, children }: TurnBodyProps) {
-	const content = (
+function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
+	const body = (
 		<MessageBubbleContent
 			data-slot="message-bubble-content"
 			className={cn("whitespace-pre-wrap", className)}
@@ -314,12 +418,6 @@ function TurnBody({ repliedTo, sentAt, className, children }: TurnBodyProps) {
 			{children}
 		</MessageBubbleContent>
 	)
-	const body =
-		sentAt === undefined ? (
-			content
-		) : (
-			<TooltipHint content={formatSentDate(sentAt)}>{content}</TooltipHint>
-		)
 
 	return repliedTo ? <MessageQuote {...repliedTo}>{body}</MessageQuote> : body
 }
@@ -337,14 +435,14 @@ function TurnGroup({
 		<MessageBubbleGroup
 			data-slot="chat-turn-group"
 			{...anchor}
-			className={cn("gap-1", messageId && HIGHLIGHT, className)}
+			className={cn("gap-0", messageId && HIGHLIGHT, className)}
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
-				const closes = index === turns.length - 1
+				const opens = index === 0
 				return cloneElement(row, {
 					run: row.props.run ?? runPositionFor(index, turns.length),
-					carriesMark: row.props.carriesMark ?? (carriesMark && closes),
+					carriesMark: row.props.carriesMark ?? (carriesMark && opens),
 				})
 			})}
 		</MessageBubbleGroup>
@@ -363,10 +461,11 @@ function PendingSpinner() {
 
 function UserTurn({
 	children,
+	name,
+	image,
 	state = "complete",
 	run = "single",
 	sentAt,
-	hasTimeLine = true,
 	now,
 	copyText,
 	messageId,
@@ -381,61 +480,53 @@ function UserTurn({
 	const { t } = useTranslation("chat")
 	const queued = state === "queued"
 	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
-	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
-		<Message
+		<TurnRow
 			from="user"
-			{...anchor}
-			className={cn(messageId && HIGHLIGHT, className)}
+			run={run}
+			messageId={messageId}
+			sentAt={sentAt}
+			className={className}
+			avatar={<PersonGutter name={name} image={image} />}
+			head={<PersonHead name={name} sentAt={sentAt} now={now} />}
 		>
-			<MessageContent>
-				<MessageBubble variant={queued ? "tint" : "solid"}>
-					<MessageActions
-						actions={
-							<>
-								{queued ? <PendingSpinner /> : null}
-								{queued && onCancel ? (
-									<MessageAction
-										alwaysVisible
-										label={t("turn.cancel")}
-										onClick={onCancel}
-									>
-										<Icons.Close />
-									</MessageAction>
-								) : null}
-								{state === "failed" && onRetry ? (
-									<MessageAction
-										alwaysVisible
-										label={t("turn.retry")}
-										onClick={onRetry}
-									>
-										<Icons.Retry />
-									</MessageAction>
-								) : null}
-								<TurnActionButtons actions={actions} />
-							</>
-						}
-						menu={turnMenuOf(actions)}
-					>
-						<TurnBody
-							repliedTo={repliedTo}
-							sentAt={sentAt}
-							className={RUN_RADIUS.user[run]}
-						>
-							{children}
-						</TurnBody>
-					</MessageActions>
-				</MessageBubble>
-				<TurnTimeLine
-					sentAt={hasTimeLine ? sentAt : undefined}
-					now={now}
-					className={MESSAGE_BUBBLE_INLINE_PADDING}
-				/>
-				{footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : null}
-			</MessageContent>
-		</Message>
+			<MessageBubble variant={queued ? "tint" : "solid"}>
+				<MessageActions
+					actions={
+						<>
+							{queued ? <PendingSpinner /> : null}
+							{queued && onCancel ? (
+								<MessageAction
+									alwaysVisible
+									label={t("turn.cancel")}
+									onClick={onCancel}
+								>
+									<Icons.Close />
+								</MessageAction>
+							) : null}
+							{state === "failed" && onRetry ? (
+								<MessageAction
+									alwaysVisible
+									label={t("turn.retry")}
+									onClick={onRetry}
+								>
+									<Icons.Retry />
+								</MessageAction>
+							) : null}
+							<TurnActionButtons actions={actions} />
+						</>
+					}
+					menu={turnMenuOf(actions)}
+				>
+					<TurnBody repliedTo={repliedTo} className={RUN_RADIUS[run]}>
+						{children}
+					</TurnBody>
+				</MessageActions>
+			</MessageBubble>
+			{footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : null}
+		</TurnRow>
 	)
 }
 
@@ -443,33 +534,51 @@ interface TurnRunHeaderProps {
 	author?: MessageAuthor
 	cause?: TurnCause
 	className?: string
+	children?: ReactNode
 }
 
-const TurnRunHeader = ({ author, cause, className }: TurnRunHeaderProps) => {
+const TurnRunHeader = ({
+	author,
+	cause,
+	className,
+	children,
+}: TurnRunHeaderProps) => {
 	const { t } = useTranslation("chat")
 
-	if (!cause) {
-		return author ? (
-			<MessageAuthor author={author} className={className} />
-		) : null
+	if (cause) {
+		const TriggerIcon = TRIGGER_SOURCE_ICON[cause.triggerSourceId] ?? Icons.Bell
+
+		return (
+			<MessageHeader
+				data-slot="turn-cause"
+				className={cn("min-w-0 gap-1", className)}
+			>
+				<span className="sr-only">
+					{t(CAUSE_LABEL_KEY[cause.kind ?? "routine"])}
+				</span>
+				<TriggerIcon
+					aria-hidden="true"
+					className="size-3 shrink-0 self-center"
+				/>
+				<span data-slot="turn-cause-title" className="truncate">
+					{cause.routineTitle}
+				</span>
+				{children}
+			</MessageHeader>
+		)
 	}
 
-	const TriggerIcon = TRIGGER_SOURCE_ICON[cause.triggerSourceId] ?? Icons.Bell
+	if (author) {
+		return (
+			<MessageAuthor author={author} className={className}>
+				{children}
+			</MessageAuthor>
+		)
+	}
 
-	return (
-		<MessageHeader
-			data-slot="turn-cause"
-			className={cn("min-w-0 gap-1", className)}
-		>
-			<span className="sr-only">
-				{t(CAUSE_LABEL_KEY[cause.kind ?? "routine"])}
-			</span>
-			<TriggerIcon aria-hidden="true" className="size-3 shrink-0" />
-			<span data-slot="turn-cause-title" className="truncate">
-				{cause.routineTitle}
-			</span>
-		</MessageHeader>
-	)
+	return children ? (
+		<MessageHeader className={className}>{children}</MessageHeader>
+	) : null
 }
 
 function AssistantTurn(props: AssistantTurnProps) {
@@ -478,7 +587,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 		state = "complete",
 		run = "single",
 		sentAt,
-		hasTimeLine = true,
 		now,
 		copyText,
 		messageId,
@@ -501,10 +609,9 @@ function AssistantTurn(props: AssistantTurnProps) {
 	const markId = useMarkId(markedBotId)
 	const footerKey = TURN_FOOTER_KEY[state]
 	const shownFooter = footerKey ? t(footerKey) : footer
-	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 	const onSelectCompanion = useCompanionSelect()
-	const gutterBot = identity ?? (closesRun(run) ? author : undefined)
+	const gutterBot = identity ?? author
 	const mark = gutterBot ? (
 		<BotIdentityAvatar
 			blot={gutterBot.blot}
@@ -527,74 +634,59 @@ function AssistantTurn(props: AssistantTurnProps) {
 		) : null
 
 	return (
-		<Message
+		<TurnRow
 			from="assistant"
-			{...anchor}
-			className={cn(messageId && HIGHLIGHT, className)}
-		>
-			<MessageContent
-				className="grid gap-x-2 gap-y-0"
-				style={{ gridTemplateColumns: `${TURN_AVATAR_SIZE}px 1fr` }}
-			>
-				{opensRun(run) ? (
-					<TurnRunHeader
-						author={author}
-						cause={cause}
-						className={cn(
-							"col-start-2 row-start-1 pb-1",
-							bare ? undefined : MESSAGE_BUBBLE_INLINE_PADDING,
-						)}
-					/>
-				) : null}
+			run={run}
+			messageId={messageId}
+			sentAt={sentAt}
+			className={className}
+			avatar={
 				<CompanionMenuHost companionId={gutterBot?.id}>
 					<span
 						data-slot="message-gutter"
 						aria-hidden={control ? undefined : "true"}
-						className="col-start-1 row-start-2 self-end"
+						className={TURN_GUTTER}
 					>
 						{mark ? (
 							<SharedMark markId={markId}>{control ?? mark}</SharedMark>
 						) : null}
 					</span>
 				</CompanionMenuHost>
-				<MessageBubble
-					variant={bare ? "bare" : "soft"}
+			}
+			head={
+				<TurnRunHeader
+					author={author}
+					cause={cause}
 					className={cn(
-						"col-start-2 row-start-2 min-w-0",
-						fills && "items-stretch",
+						TURN_HEAD,
+						bare ? "px-0" : MESSAGE_BUBBLE_INLINE_PADDING,
 					)}
 				>
-					<MessageActions
-						actions={<TurnActionButtons actions={actions} />}
-						menu={turnMenuOf(actions)}
+					{sentTimeOf(sentAt, now)}
+				</TurnRunHeader>
+			}
+		>
+			<MessageBubble
+				variant={bare ? "bare" : "soft"}
+				className={cn("min-w-0", fills && "items-stretch")}
+			>
+				<MessageActions
+					actions={<TurnActionButtons actions={actions} />}
+					menu={turnMenuOf(actions)}
+				>
+					<TurnBody
+						repliedTo={repliedTo}
+						className={cn(
+							bare ? undefined : RUN_RADIUS[run],
+							fills && "w-full",
+						)}
 					>
-						<TurnBody
-							repliedTo={repliedTo}
-							sentAt={sentAt}
-							className={cn(
-								bare ? undefined : RUN_RADIUS.assistant[run],
-								fills && "w-full",
-							)}
-						>
-							{children}
-						</TurnBody>
-					</MessageActions>
-				</MessageBubble>
-				<TurnTimeLine
-					sentAt={hasTimeLine ? sentAt : undefined}
-					now={now}
-					className={cn(
-						"col-start-2 row-start-3 pt-1.5",
-						bare ? undefined : MESSAGE_BUBBLE_INLINE_PADDING,
-					)}
-				/>
-				{shownFooter ? (
-					<MessageFooter className="col-start-2 row-start-4 pt-1.5">
-						{shownFooter}
-					</MessageFooter>
-				) : null}
-			</MessageContent>
-		</Message>
+						{children}
+					</TurnBody>
+				</MessageActions>
+			</MessageBubble>
+			{shownFooter ? <MessageFooter>{shownFooter}</MessageFooter> : null}
+		</TurnRow>
 	)
 }
 
@@ -604,7 +696,6 @@ const PersonTurn = ({
 	image,
 	run = "single",
 	sentAt,
-	hasTimeLine = true,
 	now,
 	copyText,
 	messageId,
@@ -615,69 +706,30 @@ const PersonTurn = ({
 	className,
 }: PersonTurnProps) => {
 	const { t } = useTranslation("chat")
-	const anchor = useMessageAnchor(messageId)
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
 
 	return (
-		<Message
+		<TurnRow
 			from="assistant"
 			aria-label={t("transcript.message.person", { name })}
-			{...anchor}
-			className={cn(messageId && HIGHLIGHT, className)}
+			run={run}
+			messageId={messageId}
+			sentAt={sentAt}
+			className={className}
+			avatar={<PersonGutter name={name} image={image} />}
+			head={<PersonHead name={name} sentAt={sentAt} now={now} />}
 		>
-			<MessageContent
-				className="grid gap-x-2 gap-y-0"
-				style={{ gridTemplateColumns: `${TURN_AVATAR_SIZE}px 1fr` }}
-			>
-				{opensRun(run) ? (
-					<MessageHeader
-						data-slot="message-author"
-						className={cn(
-							"col-start-2 row-start-1 min-w-0 pb-1",
-							MESSAGE_BUBBLE_INLINE_PADDING,
-						)}
-					>
-						<span className="max-w-48 truncate font-medium text-foreground/80">
-							{name}
-						</span>
-					</MessageHeader>
-				) : null}
-				<span
-					data-slot="message-gutter"
-					aria-hidden="true"
-					className="col-start-1 row-start-2 self-end"
+			<MessageBubble variant="soft" className="min-w-0">
+				<MessageActions
+					actions={<TurnActionButtons actions={actions} />}
+					menu={turnMenuOf(actions)}
 				>
-					{closesRun(run) ? (
-						<InitialsAvatar image={image} name={name} size={TURN_AVATAR_SIZE} />
-					) : null}
-				</span>
-				<MessageBubble
-					variant="soft"
-					className="col-start-2 row-start-2 min-w-0"
-				>
-					<MessageActions
-						actions={<TurnActionButtons actions={actions} />}
-						menu={turnMenuOf(actions)}
-					>
-						<TurnBody
-							repliedTo={repliedTo}
-							sentAt={sentAt}
-							className={RUN_RADIUS.assistant[run]}
-						>
-							{children}
-						</TurnBody>
-					</MessageActions>
-				</MessageBubble>
-				<TurnTimeLine
-					sentAt={hasTimeLine ? sentAt : undefined}
-					now={now}
-					className={cn(
-						"col-start-2 row-start-3 pt-1.5",
-						MESSAGE_BUBBLE_INLINE_PADDING,
-					)}
-				/>
-			</MessageContent>
-		</Message>
+					<TurnBody repliedTo={repliedTo} className={RUN_RADIUS[run]}>
+						{children}
+					</TurnBody>
+				</MessageActions>
+			</MessageBubble>
+		</TurnRow>
 	)
 }
 
