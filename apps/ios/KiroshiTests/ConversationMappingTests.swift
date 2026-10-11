@@ -25,6 +25,16 @@ struct ConversationMappingTests {
         #expect(MessagePreview(message).line == "You: Hi")
     }
 
+    @Test func readsACompanionsRoleFromItsTitle() throws {
+        let decode = { (json: String) in
+            try JSONDecoder().decode(Companion.self, from: Data(json.utf8))
+        }
+
+        #expect(try decode(#"{"id":"j","name":"Juniper","title":"Writer"}"#).role == "Writer")
+        #expect(try decode(#"{"id":"o","name":"Otto","title":"  "}"#).role == nil)
+        #expect(try decode(#"{"id":"p","name":"Pico"}"#).role == nil)
+    }
+
     @Test func readsAGroupNamedAfterItsPresentMembersWhenUntitled() throws {
         let json = #"""
             {"id":"g1","spaceId":"s1","sectionId":null,"pinPosition":2,"title":"  ","instructions":"","createdAt":7,"updatedAt":7,"participants":[
