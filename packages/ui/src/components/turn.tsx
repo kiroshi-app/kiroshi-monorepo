@@ -29,7 +29,6 @@ import {
 	MessageClock,
 	MessageContent,
 	MessageFooter,
-	type MessageFrom,
 	MessageHeader,
 	MessageTime,
 } from "@workspace/ui/components/message"
@@ -48,6 +47,7 @@ import {
 	MessageQuote,
 	type QuotedMessage,
 } from "@workspace/ui/components/message-quote"
+import { MessageSideContext } from "@workspace/ui/components/message-side-context"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import {
@@ -96,7 +96,6 @@ interface TurnGroupProps {
 interface UserTurnProps {
 	children: ReactNode
 	name?: string
-	image?: string
 	state?: UserTurnState
 	run?: TurnRun
 	sentAt?: number
@@ -181,14 +180,27 @@ const RUN_RADIUS = {
 	last: "rounded-tl-md",
 } satisfies Record<TurnRun, string>
 
+const READER_RUN_RADIUS = {
+	single: "",
+	first: "rounded-ee-md",
+	middle: "rounded-se-md rounded-ee-md",
+	last: "rounded-se-md",
+} satisfies Record<TurnRun, string>
+
 const TURN_ROW_GRID = "grid grid-cols-[auto_minmax(0,1fr)] gap-y-1"
+
+const READER_ROW_GRID = "grid grid-cols-[minmax(0,1fr)] gap-y-1"
+
+const READER_COLUMN = "items-end"
 
 const TURN_GUTTER = "flex w-10 shrink-0 justify-end"
 
 const TURN_AVATAR_GUTTER = cn(TURN_GUTTER, "self-end")
 
-const TURN_GUTTER_TIME =
-	"pt-3.5 text-[11px]/4 text-muted-foreground opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
+const TURN_HOVER_TIME =
+	"text-[11px]/4 text-muted-foreground opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
+
+const TURN_GUTTER_TIME = cn("pt-3.5", TURN_HOVER_TIME)
 
 const TURN_HEAD = "h-5 items-baseline gap-1.5 self-stretch"
 
@@ -241,7 +253,6 @@ const PersonGutter = ({ name, image }: PersonGutterProps) => (
 )
 
 type TurnRowProps = {
-	from: MessageFrom
 	run: TurnRun
 	messageId?: string
 	sentAt?: number
@@ -254,7 +265,6 @@ type TurnRowProps = {
 }
 
 const TurnRow = ({
-	from,
 	run,
 	messageId,
 	sentAt,
@@ -271,7 +281,7 @@ const TurnRow = ({
 
 	return (
 		<Message
-			from={from}
+			from="assistant"
 			{...labelled}
 			{...anchor}
 			className={cn(
@@ -478,8 +488,6 @@ function PendingSpinner() {
 
 function UserTurn({
 	children,
-	name,
-	image,
 	state = "complete",
 	run = "single",
 	sentAt,
@@ -495,57 +503,87 @@ function UserTurn({
 	className,
 }: UserTurnProps) {
 	const { t } = useTranslation("chat")
+	const anchor = useMessageAnchor(messageId)
 	const queued = state === "queued"
 	const footerKey = queued ? TURN_FOOTER_KEY.queued : undefined
 	const actions = useTurnActions({ copyText, onReply, onPin, pinned })
+	const opens = opensRun(run)
+	const headTime = opens ? sentTimeOf(sentAt, now) : null
 
 	return (
-		<TurnRow
-			from="user"
-			run={run}
-			messageId={messageId}
-			sentAt={sentAt}
-			className={className}
-			avatar={<PersonGutter name={name} image={image} />}
-			head={<PersonHead name={name} sentAt={sentAt} now={now} />}
-			footer={
-				footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : undefined
-			}
-		>
-			<MessageBubble variant={queued ? "tint" : "solid"}>
-				<MessageActions
-					actions={
-						<>
-							{queued ? <PendingSpinner /> : null}
-							{queued && onCancel ? (
-								<MessageAction
-									alwaysVisible
-									label={t("turn.cancel")}
-									onClick={onCancel}
-								>
-									<Icons.Close />
-								</MessageAction>
-							) : null}
-							{state === "failed" && onRetry ? (
-								<MessageAction
-									alwaysVisible
-									label={t("turn.retry")}
-									onClick={onRetry}
-								>
-									<Icons.Retry />
-								</MessageAction>
-							) : null}
-							<TurnActionButtons actions={actions} />
-						</>
-					}
-					menu={turnMenuOf(actions)}
-				>
-					<TurnBody repliedTo={repliedTo} className={RUN_RADIUS[run]}>
-						{children}
-					</TurnBody>
-				</MessageActions>
-			</MessageBubble>
-		</TurnRow>
+		<MessageSideContext.Provider value="end">
+			<Message
+				from="user"
+				{...anchor}
+				className={cn(
+					READER_ROW_GRID,
+					ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
+					ROW_HIGHLIGHT,
+					RUN_ROW_PADDING[run],
+					className,
+				)}
+			>
+				{headTime ? (
+					<MessageContent className={READER_COLUMN}>
+						<MessageHeader
+							className={cn(
+								TURN_HEAD,
+								MESSAGE_BUBBLE_INLINE_PADDING,
+								"justify-end",
+							)}
+						>
+							{headTime}
+						</MessageHeader>
+					</MessageContent>
+				) : null}
+				<MessageContent className={READER_COLUMN}>
+					<MessageBubble variant={queued ? "tint" : "solid"}>
+						<MessageActions
+							actions={
+								<>
+									{!opens && sentAt !== undefined ? (
+										<MessageClock at={sentAt} className={TURN_HOVER_TIME} />
+									) : null}
+									{queued ? <PendingSpinner /> : null}
+									{queued && onCancel ? (
+										<MessageAction
+											alwaysVisible
+											label={t("turn.cancel")}
+											onClick={onCancel}
+										>
+											<Icons.Close />
+										</MessageAction>
+									) : null}
+									{state === "failed" && onRetry ? (
+										<MessageAction
+											alwaysVisible
+											label={t("turn.retry")}
+											onClick={onRetry}
+										>
+											<Icons.Retry />
+										</MessageAction>
+									) : null}
+									<TurnActionButtons actions={actions} />
+								</>
+							}
+							menu={turnMenuOf(actions)}
+						>
+							<TurnBody
+								repliedTo={repliedTo}
+								className={READER_RUN_RADIUS[run]}
+							>
+								{children}
+							</TurnBody>
+						</MessageActions>
+					</MessageBubble>
+				</MessageContent>
+				{footerKey ? (
+					<MessageContent className={READER_COLUMN}>
+						<MessageFooter>{t(footerKey)}</MessageFooter>
+					</MessageContent>
+				) : null}
+			</Message>
+		</MessageSideContext.Provider>
 	)
 }
 
@@ -654,7 +692,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 
 	return (
 		<TurnRow
-			from="assistant"
 			run={run}
 			messageId={messageId}
 			sentAt={sentAt}
@@ -731,7 +768,6 @@ const PersonTurn = ({
 
 	return (
 		<TurnRow
-			from="assistant"
 			aria-label={t("transcript.message.person", { name })}
 			run={run}
 			messageId={messageId}
