@@ -129,6 +129,7 @@ struct ConversationMappingTests {
         #expect(time.listLabel(for: now.addingTimeInterval(-3_600)) == "11:00")
         #expect(time.listLabel(for: now.addingTimeInterval(-86_400)) == "Yesterday")
         #expect(time.listLabel(for: now.addingTimeInterval(-4 * 86_400)) == "Tuesday")
-        #expect(time.threadLabel(for: now.addingTimeInterval(-3_600)) == "Today 11:00")
+        #expect(time.dayLabel(for: now.addingTimeInterval(-3_600)) == "Today")
+        #expect(time.timeLabel(for: now.addingTimeInterval(-3_600)) == "11:00")
     }
 }
