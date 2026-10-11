@@ -194,6 +194,10 @@ const narrowed = (applications: Application[], narrowing: CatalogueNarrowing) =>
 		narrowing.needle,
 	)
 
+const isReadingWithNoRowsHeld = (state: ApplicationsState) =>
+	(state.isReadingCatalogue && state.curated.length === 0) ||
+	(state.isReadingDirectory && state.directory.length === 0)
+
 type ApplicationsCatalogueSource = {
 	state: ApplicationsState
 	controller: ApplicationsController
@@ -225,9 +229,7 @@ const toApplicationsCatalogue = ({
 			...narrowed(state.curated, narrowing).map(toCatalogueApplication),
 			...narrowed(beyondCurated, narrowing).map(toRegistryApplication),
 		],
-		isLoading:
-			(state.isReadingCatalogue && state.curated.length === 0) ||
-			(state.isReadingDirectory && state.directory.length === 0),
+		isLoading: isReadingWithNoRowsHeld(state),
 		hasFailed: state.hasDirectoryFailed,
 		hasPartlyFailed: state.hasDirectoryPartlyFailed,
 		isStale: state.isDirectoryStale,
