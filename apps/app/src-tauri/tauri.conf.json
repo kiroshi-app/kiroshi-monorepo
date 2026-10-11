@@ -22,6 +22,7 @@
 				"base-uri": "'self'",
 				"frame-src": "'none'"
 			},
+			"dangerousDisableAssetCspModification": ["style-src"],
 			"assetProtocol": {
 				"enable": true,
 				"scope": ["$APPDATA/avatars/*", "$APPDATA/attachments/**"]
