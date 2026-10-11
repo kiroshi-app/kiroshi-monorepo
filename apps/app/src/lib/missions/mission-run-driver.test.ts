@@ -1375,11 +1375,6 @@ describe("startMissionRunDriver while a joined space is active", () => {
 	let activeSpaceId: string | null
 	let harness: Harness
 
-	const hostTurnEnded: AgentEvent = {
-		type: "turnEnded",
-		ended: { sessionId: null, outcome: "completed" },
-	}
-
 	const sentToTheMissions = () => ({
 		boards: vi.mocked(harness.missions.board).mock.calls.length,
 		unreported: vi.mocked(harness.missions.unreported).mock.calls.length,
@@ -1396,7 +1391,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 				runtimeSessionId: "a-host-session",
 				epoch: 1,
 			},
-			hostTurnEnded,
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
 		)
 		await settled()
 	}
@@ -1428,8 +1423,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 	it("reads no board and no unreported mission on start", async () => {
 		await startOn(JOINED_SPACE, "done")
 
-		expect(sentToTheMissions().boards).toBe(0)
-		expect(sentToTheMissions().unreported).toBe(0)
+		expect(sentToTheMissions()).toMatchObject({ boards: 0, unreported: 0 })
 		expect(harness.starts).toEqual([])
 	})
 
@@ -1465,8 +1459,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 
 		await leaveForALocalSpace()
 
-		expect(sentToTheMissions().boards).toBe(1)
-		expect(sentToTheMissions().unreported).toBe(1)
+		expect(sentToTheMissions()).toMatchObject({ boards: 1, unreported: 1 })
 		expect(harness.originStarts()).toHaveLength(1)
 	})
 
@@ -1506,8 +1499,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 		activeSpaceId = "workshop"
 		await harness.announceJoinedSpace()
 
-		expect(sentToTheMissions().boards).toBe(0)
-		expect(sentToTheMissions().unreported).toBe(0)
+		expect(sentToTheMissions()).toMatchObject({ boards: 0, unreported: 0 })
 		expect(harness.starts).toEqual([])
 	})
 })
