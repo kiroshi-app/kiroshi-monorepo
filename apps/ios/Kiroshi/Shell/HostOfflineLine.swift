@@ -9,11 +9,11 @@ struct HostOfflineLine: View {
             Image(systemName: "circle.fill")
                 .imageScale(.small)
                 .font(.caption2)
-                .foregroundStyle(Color.kiroshi(.presenceOffline))
+                .foregroundStyle(Color(.systemGray))
                 .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(Color.kiroshi(.foreground))
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 4)

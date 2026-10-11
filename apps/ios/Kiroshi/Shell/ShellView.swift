@@ -13,11 +13,14 @@ struct ShellView: View {
                 value: .conversations
             ) {
                 SpaceScreen(store: store, account: account, section: .conversations)
+                    .tint(.accentColor)
             }
             Tab("Missions", systemImage: "flag", value: SpaceSection.missions) {
                 MissionsScreen(store: store, account: account)
+                    .tint(.accentColor)
             }
         }
+        .tint(.primary)
         .environment(store.pictures)
         .task(id: RelayFollow(spaceId: store.currentSpaceId, isInForeground: isInForeground)) {
             guard isInForeground else { return }

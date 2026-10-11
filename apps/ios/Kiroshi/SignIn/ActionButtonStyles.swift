@@ -7,8 +7,8 @@ extension View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
-            .tint(Color.kiroshi(.foreground))
-            .foregroundStyle(SignInGround())
+            .tint(.primary)
+            .foregroundStyle(Color(.systemBackground))
     }
 
     func secondaryAction() -> some View {
@@ -17,15 +17,15 @@ extension View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
-            .tint(Color.kiroshi(.muted))
-            .foregroundStyle(Color.kiroshi(.foreground))
+            .tint(Color(.systemGray5))
+            .foregroundStyle(.primary)
     }
 
     func plainAction() -> some View {
         buttonSizing(.flexible)
             .frame(minHeight: 48)
             .buttonStyle(.borderless)
-            .tint(Color.kiroshi(.foreground))
+            .tint(.primary)
     }
 
     func bottomActions() -> some View {
@@ -34,12 +34,6 @@ extension View {
     }
 
     func signInGround() -> some View {
-        background(SignInGround())
-    }
-}
-
-struct SignInGround: ShapeStyle {
-    func resolve(in environment: EnvironmentValues) -> Color {
-        Color.kiroshi(environment.colorScheme == .dark ? .background : .card)
+        background(Color(.systemBackground))
     }
 }

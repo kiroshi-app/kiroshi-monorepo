@@ -26,17 +26,17 @@ struct EmailView: View {
                             if canContinue { model.continueWithEmail() }
                         }
                         .focused($isEmailFocused)
-                        .foregroundStyle(Color.kiroshi(.foreground))
+                        .tint(.blue)
                         .padding(.horizontal, 16)
                         .frame(minHeight: 52)
-                        .background(Color.kiroshi(.muted), in: .capsule)
+                        .background(Color(.secondarySystemBackground), in: .capsule)
                     if let problem = model.emailProblem {
                         ProblemLabel(message: problem.message)
                             .padding(.horizontal, 12)
                     } else {
                         Text("No account yet? This creates one.")
                             .font(.footnote)
-                            .foregroundStyle(Color.kiroshi(.mutedForeground))
+                            .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
                     }
                 }

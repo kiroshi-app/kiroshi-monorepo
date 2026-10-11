@@ -13,7 +13,6 @@ struct OpeningView: View {
             Text("Your companions, away from your Mac.")
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.kiroshi(.foreground))
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

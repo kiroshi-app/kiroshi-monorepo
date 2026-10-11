@@ -27,11 +27,11 @@ struct CodeView: View {
                             .fontWeight(.semibold)
                             .frame(minHeight: 44)
                         Button("Use a different email", action: model.useDifferentEmail)
-                            .tint(Color.kiroshi(.mutedForeground))
+                            .tint(.secondary)
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.borderless)
-                    .tint(Color.kiroshi(.foreground))
+                    .tint(.primary)
                     .multilineTextAlignment(.leading)
                     .disabled(model.isSigningIn || model.isRequestingCode)
                 }
@@ -68,7 +68,7 @@ struct CodeView: View {
                 ProgressView()
                 Text("Signing in…")
                     .font(.subheadline)
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 4)
         } else if let problem = model.codeProblem {
@@ -76,7 +76,7 @@ struct CodeView: View {
         } else {
             Text("The code works for 5 minutes.")
                 .font(.footnote)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
         }
     }

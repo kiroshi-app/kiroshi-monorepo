@@ -10,21 +10,15 @@ struct SettingsView: View {
             Section {
                 AccountRow(email: model.signedInEmail)
             }
-            .listRowBackground(Color.kiroshi(.card))
             Section {
                 Button("Sign out", role: .destructive, action: model.signOutTapped)
-                    .foregroundStyle(Color.kiroshi(.destructive))
             } footer: {
                 Text("Your spaces stop working on this iPhone until you sign in again.")
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
             }
-            .listRowBackground(Color.kiroshi(.card))
         }
         .listStyle(.insetGrouped)
         .listSectionSpacing(22)
         .contentMargins(.top, 0, for: .scrollContent)
-        .scrollContentBackground(.hidden)
-        .background(Color.kiroshi(.background))
         .safeAreaBar(edge: .bottom) {
             BrandFooter()
         }
@@ -35,6 +29,7 @@ struct SettingsView: View {
                 Button(role: .close) {
                     dismiss()
                 }
+                .tint(.primary)
             }
         }
         .alert("Sign out of Kiroshi?", isPresented: $model.isConfirmingSignOut) {
@@ -75,10 +70,9 @@ private struct AccountRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Email")
                     .font(.footnote)
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
+                    .foregroundStyle(.secondary)
                 Text(email)
                     .font(.headline)
-                    .foregroundStyle(Color.kiroshi(.foreground))
             }
         }
         .accessibilityElement(children: .combine)
@@ -107,7 +101,7 @@ private struct BrandFooter: View {
                 .accessibilityHidden(true)
             Text(Self.version)
                 .font(.footnote)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 10)

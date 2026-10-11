@@ -45,22 +45,21 @@ private struct CodeBox: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 16)
-            .fill(Color.kiroshi(isOutlined ? .card : .muted))
-            .strokeBorder(
-                Color.kiroshi(isWrong ? .destructive : .foreground), lineWidth: isOutlined ? 2 : 0
+            .fill(
+                Color(isOutlined ? .secondarySystemGroupedBackground : .secondarySystemBackground)
             )
+            .strokeBorder(isWrong ? Color(.systemRed) : .primary, lineWidth: isOutlined ? 2 : 0)
             .frame(minHeight: 60)
             .overlay {
                 if isCurrent {
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(.tint)
+                        .fill(.blue)
                         .frame(width: 2, height: 28)
                 } else {
                     Text(digit)
                         .font(.title.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
-                        .foregroundStyle(Color.kiroshi(.foreground))
                 }
             }
     }

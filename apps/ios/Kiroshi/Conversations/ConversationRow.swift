@@ -23,13 +23,13 @@ struct ConversationRow: View {
                     if let label = summary.timeLabel {
                         Text(label)
                             .font(.subheadline)
-                            .foregroundStyle(Color.kiroshi(.mutedForeground))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if let preview = summary.preview {
                     Text(preview)
                         .font(.subheadline)
-                        .foregroundStyle(Color.kiroshi(.mutedForeground))
+                        .foregroundStyle(.secondary)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                 }
             }
@@ -37,7 +37,7 @@ struct ConversationRow: View {
         }
         .padding(.vertical, 12)
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] + 16 }
-        .foregroundStyle(Color.kiroshi(.foreground))
+        .foregroundStyle(.primary)
         .accessibilityElement(children: .combine)
         .accessibilityValue(memberNames)
     }
@@ -77,10 +77,10 @@ private struct RoleBadge: View {
     var body: some View {
         Text(role)
             .font(.caption.weight(.medium))
-            .foregroundStyle(Color.kiroshi(.mutedForeground))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
-            .background(Color.kiroshi(.muted), in: .rect(cornerRadius: 6))
+            .background(Color(.systemGray5), in: .rect(cornerRadius: 6))
     }
 }
 
