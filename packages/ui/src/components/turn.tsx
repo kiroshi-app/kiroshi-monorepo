@@ -29,7 +29,6 @@ import {
 	MessageClock,
 	MessageContent,
 	MessageFooter,
-	type MessageFrom,
 	MessageHeader,
 	MessageTime,
 } from "@workspace/ui/components/message"
@@ -254,7 +253,6 @@ const PersonGutter = ({ name, image }: PersonGutterProps) => (
 )
 
 type TurnRowProps = {
-	from: MessageFrom
 	run: TurnRun
 	messageId?: string
 	sentAt?: number
@@ -267,7 +265,6 @@ type TurnRowProps = {
 }
 
 const TurnRow = ({
-	from,
 	run,
 	messageId,
 	sentAt,
@@ -284,7 +281,7 @@ const TurnRow = ({
 
 	return (
 		<Message
-			from={from}
+			from="assistant"
 			{...labelled}
 			{...anchor}
 			className={cn(
@@ -695,7 +692,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 
 	return (
 		<TurnRow
-			from="assistant"
 			run={run}
 			messageId={messageId}
 			sentAt={sentAt}
@@ -772,7 +768,6 @@ const PersonTurn = ({
 
 	return (
 		<TurnRow
-			from="assistant"
 			aria-label={t("transcript.message.person", { name })}
 			run={run}
 			messageId={messageId}
