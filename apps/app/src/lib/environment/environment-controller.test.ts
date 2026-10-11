@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { createEnvironmentController } from "./environment-controller"
+import { toEnvironmentRows } from "./environment-rows"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { EnvScope } from "../conversations/store-contract"
@@ -9,6 +10,31 @@ import type { TranscriptStore } from "../conversations/store-port"
 const SPACE: EnvScope = { kind: "space", id: "s-1" }
 
 const BOT: EnvScope = { kind: "bot", id: "b-1", spaceId: "s-1" }
+
+const SERVER: EnvScope = { kind: "server", name: "atlas", owner: BOT }
+
+const declaringUnset = (
+	store: TranscriptStore,
+	scope: EnvScope,
+	name: string,
+): TranscriptStore => {
+	let isUnset = true
+	return {
+		...store,
+		environmentVariables: async (asked) => [
+			...(isUnset
+				? [{ name, definedIn: scope, servedFrom: scope, isUnset }]
+				: []),
+			...(await store.environmentVariables(asked)),
+		],
+		setEnvironmentVariable: (written, writtenName, value) => {
+			if (writtenName === name) {
+				isUnset = false
+			}
+			return store.setEnvironmentVariable(written, writtenName, value)
+		},
+	}
+}
 
 const opened = async (store: TranscriptStore, scope: EnvScope = BOT) => {
 	const controller = createEnvironmentController(store)
@@ -76,6 +102,31 @@ describe("environment controller", () => {
 			{ name: "BOT_SEED", definedIn: BOT, servedFrom: BOT },
 		])
 	})
+
+	it.each([
+		["space Settings", SPACE],
+		["companion Settings", BOT],
+		["the MCP server editor", SERVER],
+	])(
+		"draws an unset name with its value once Replace writes one, in %s",
+		async (_, scope) => {
+			const store = declaringUnset(
+				createFakeTranscriptStore(),
+				scope,
+				"ATLAS_TOKEN",
+			)
+			const controller = await opened(store, scope)
+			expect(toEnvironmentRows(controller.getState().entries)).toEqual([
+				expect.objectContaining({ name: "ATLAS_TOKEN", isUnset: true }),
+			])
+
+			await controller.set("ATLAS_TOKEN", "sk-1")
+
+			const [row] = toEnvironmentRows(controller.getState().entries)
+			expect(row).toMatchObject({ name: "ATLAS_TOKEN" })
+			expect(row).not.toHaveProperty("isUnset")
+		},
+	)
 
 	it("never reads a stored value back into what it lists", async () => {
 		const store = createFakeTranscriptStore()
