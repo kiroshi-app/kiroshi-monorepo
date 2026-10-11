@@ -1,6 +1,7 @@
 export type MissionSeqs = {
 	handled: (missionId: string, stateSeq: number) => boolean
 	remember: (missionId: string, stateSeq: number) => void
+	forget: (missionId: string) => void
 }
 
 export const createMissionSeqs = (): MissionSeqs => {
@@ -14,6 +15,10 @@ export const createMissionSeqs = (): MissionSeqs => {
 
 		remember: (missionId, stateSeq) => {
 			lastHandled.set(missionId, stateSeq)
+		},
+
+		forget: (missionId) => {
+			lastHandled.delete(missionId)
 		},
 	}
 }

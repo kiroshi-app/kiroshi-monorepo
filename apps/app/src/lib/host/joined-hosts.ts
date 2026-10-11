@@ -47,6 +47,13 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"hosting_state",
 	"hosting_start",
 	"hosting_stop",
+	"hosting_members",
+	"hosting_invite_member",
+	"hosting_withdraw_invitation",
+	"hosting_remove_member",
+	"mcp_oauth_cancel",
+	"mission_board",
+	"mission_unreported",
 	"notification_show",
 	"companion_launch_outcome",
 	"account_state",
@@ -56,6 +63,8 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"agent_sign_in",
 	"agent_sign_in_code",
 	"agent_sign_in_cancel",
+	"agent_shutdown",
+	"agent_live_sessions",
 	"connection_set",
 	"invitations_list",
 	"invitation_accept",
@@ -82,13 +91,19 @@ const LOCAL_EVENTS: ReadonlySet<string> = new Set([
 
 const TAURI_PLUGIN_PREFIX = "plugin:"
 
-const OAUTH_CONNECT_COMMAND = "mcp_oauth_connect"
-
-const OAUTH_CANCEL_COMMAND = "mcp_oauth_cancel"
-
 const SPACE_READS_THE_HOST_KEEPS: ReadonlySet<string> = new Set([
 	"env_list",
 	"mcp_application_status",
+])
+
+const COMMANDS_THE_HOST_REFUSES: ReadonlySet<string> = new Set([
+	"env_list",
+	"env_set",
+	"env_delete",
+	"mcp_application_status",
+	"mcp_oauth_connect",
+	"mcp_oauth_disconnect",
+	"search_messages",
 ])
 
 const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
@@ -196,6 +211,9 @@ const readsWhatTheHostKeeps = (command: string, args?: InvokeArgs): boolean => {
 const describeRejection = (reason: unknown): string =>
 	reason instanceof Error ? reason.message : String(reason)
 
+const keepOnTheHost = <T>(command: string): Promise<T> =>
+	Promise.reject(new Error(`${command} of a joined space stays on its host`))
+
 export const createJoinedHosts = ({
 	local,
 	join,
@@ -219,7 +237,6 @@ export const createJoinedHosts = ({
 	let requested: string | null = null
 	let localIdsRecall: Promise<void> | null = null
 	let hasLocalIds = false
-	let oauthConnectSide: ConversationSource = null
 
 	const record = (id: string, state: JoinedHostState) => {
 		const current = store.getState()
@@ -546,9 +563,6 @@ export const createJoinedHosts = ({
 		call: Parameters<Invoke>,
 	): Promise<T> => {
 		const [command, args] = call
-		if (command === OAUTH_CONNECT_COMMAND) {
-			oauthConnectSide = target
-		}
 		if (target === null) {
 			return provenance.record(null, command, local.invoke<T>(...call))
 		}
@@ -564,9 +578,6 @@ export const createJoinedHosts = ({
 
 	const invoke: Invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {
 		const [command, args] = call
-		if (command === OAUTH_CANCEL_COMMAND) {
-			return sendTo<T>(oauthConnectSide, call)
-		}
 		const { active } = store.getState()
 		if (
 			isLocalCommand(command) ||
@@ -576,11 +587,14 @@ export const createJoinedHosts = ({
 			return sendTo<T>(null, call)
 		}
 		if (readsWhatTheHostKeeps(command, args)) {
-			return Promise.reject(
-				new Error(`${command} of a joined space stays on its host`),
-			)
+			return keepOnTheHost<T>(command)
 		}
-		const route = () => sendTo<T>(ownerOf(active, args), call)
+		const route = () => {
+			const target = ownerOf(active, args)
+			return target !== null && COMMANDS_THE_HOST_REFUSES.has(command)
+				? keepOnTheHost<T>(command)
+				: sendTo<T>(target, call)
+		}
 		return provenance.namesConversation(args)
 			? recallLocalIds().then(route)
 			: route()
