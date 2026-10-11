@@ -456,10 +456,10 @@ function TurnGroup({
 		>
 			{turns.map((turn, index) => {
 				const row = turn as ReactElement<InjectedTurnProps>
-				const opens = index === 0
+				const closes = index === turns.length - 1
 				return cloneElement(row, {
 					run: row.props.run ?? runPositionFor(index, turns.length),
-					carriesMark: row.props.carriesMark ?? (carriesMark && opens),
+					carriesMark: row.props.carriesMark ?? (carriesMark && closes),
 				})
 			})}
 		</MessageBubbleGroup>
