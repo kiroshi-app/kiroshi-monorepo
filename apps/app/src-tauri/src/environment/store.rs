@@ -184,10 +184,17 @@ pub fn copy_owner(root: &Path, source: &EnvOwner, target: &EnvOwner) -> Result<(
 }
 
 fn copied_scope(root: &Path, source: &EnvScope, target: &EnvScope) -> Result<(), EnvError> {
-	for (name, value) in stored(&file(root, source)?)? {
-		set(root, target, &name, &value)?;
+	let mut unset = Vec::new();
+	for (name, value) in held(&file(root, source)?)? {
+		match value {
+			Some(value) => set(root, target, &name, &value)?,
+			None => unset.push(name),
+		}
 	}
-	Ok(())
+	if unset.is_empty() {
+		return Ok(());
+	}
+	declare(root, target, &unset)
 }
 
 pub fn owner_dirs(root: &Path, owner: &EnvOwner) -> Result<[PathBuf; 2], EnvError> {
@@ -690,6 +697,52 @@ mod tests {
 		assert_eq!(resolved.base, holding(&[("ONLY_SPACE", "space"), ("TOKEN", "bot")]));
 		assert_eq!(resolved.per_server["clock"], holding(&[("TOKEN", "server")]));
 		assert_eq!(resolve(&root, &an_owner()).expect("the store reads"), resolved);
+	}
+
+	#[test]
+	fn a_copy_declares_unset_what_the_bot_and_its_servers_hold_unset() {
+		let root = a_root("copy-owner-unset");
+		let copy = EnvOwner::Bot { id: "b2".to_owned(), space_id: "s1".to_owned() };
+		let copied_server = EnvScope::Server { name: "clock".to_owned(), owner: copy.clone() };
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+		declare(&root, &a_bot(), &["PENDING".to_owned()]).expect("the bot declares it");
+		declare(&root, &a_server(), &["REGION".to_owned()]).expect("the server declares it");
+
+		copy_owner(&root, &an_owner(), &copy).expect("the store copies");
+
+		assert_eq!(
+			unset_names(&list(&root, &EnvScope::from(&copy)).expect("the chain reads")),
+			vec![("PENDING", &EnvScope::from(&copy), &EnvScope::from(&copy))]
+		);
+		assert_eq!(
+			unset_names(&list(&root, &copied_server).expect("the chain reads")),
+			vec![
+				("PENDING", &EnvScope::from(&copy), &EnvScope::from(&copy)),
+				("REGION", &copied_server, &copied_server),
+			]
+		);
+		assert_eq!(
+			resolve(&root, &copy).expect("the store reads").base,
+			holding(&[("TOKEN", "bot")])
+		);
+	}
+
+	#[test]
+	fn a_copy_keeps_the_value_the_target_holds_for_a_name_the_source_holds_unset() {
+		let root = a_root("copy-owner-kept");
+		let copy = EnvOwner::Bot { id: "b2".to_owned(), space_id: "s1".to_owned() };
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("the bot declares it");
+		set(&root, &EnvScope::from(&copy), "TOKEN", "held").expect("the copy keeps it");
+
+		copy_owner(&root, &an_owner(), &copy).expect("the store copies");
+
+		assert_eq!(
+			resolve(&root, &copy).expect("the store reads").base,
+			holding(&[("TOKEN", "held")])
+		);
+		assert!(
+			unset_names(&list(&root, &EnvScope::from(&copy)).expect("the chain reads")).is_empty()
+		);
 	}
 
 	#[test]
