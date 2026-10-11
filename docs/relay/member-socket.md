@@ -135,6 +135,22 @@ The host forwards an event only when it concerns the shared space: an event abou
 another space, or a host-wide `agent://event` (its `scope` is `null`), never
 reaches a member.
 
+### Conversation events
+
+| Event | Payload | Fired by |
+|---|---|---|
+| `conversation://created` | `{ "spaceId", "conversation" }` | `conversation_create` |
+| `conversation://updated` | `{ "spaceId", "conversation" }` | `conversation_update`; a companion seated in a conversation it was not seated in (`conversation_add_participant`, or a companion inviting another); `conversation_remove_participant`; `conversation_set_lead` |
+| `conversation://deleted` | `{ "spaceId", "conversationId" }` | `conversation_delete` |
+
+- `conversation` is the whole conversation as stored once the write landed, the
+  same shape `conversation_list` returns. A member replaces its row with it.
+- `conversation.participants` lists every seat the conversation ever had: a
+  companion still seated has `leftAt: null`, a removed one carries the time it
+  left. The lead is the seat whose `role` is `"lead"`.
+- Each write fires its event once, after it is stored. Seating a companion
+  already seated fires nothing, and a write that fails fires nothing.
+
 ### The avatar frame
 
 A member reads the avatar picture of a bot through the socket. It is a call frame
