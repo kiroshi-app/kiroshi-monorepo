@@ -90,7 +90,7 @@ struct FlatHexagon: View {
         let outline = CompanionOutline(drawing: Self.ground)
         if isDashed {
             outline
-                .stroke(Color(.systemGray2), style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                .stroke(.secondary, style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
                 .padding(1)
         } else {
             outline.fill(Color(.systemGray6))
