@@ -361,7 +361,104 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    var created: FixtureHost.Group {
+        FixtureHost.Group(id: "group-new", title: "", members: [juniper, pico], createdAt: 10_000)
+    }
+
+    @Test func thePickerListsTheCompanionsOfTheSpaceInTheHostsOrder() async {
+        let host = host
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.companions.map(\.name) == ["Juniper", "Atlas", "Pico"])
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func creatingAGroupAsksTheHostThenListsAndOpensIt() async throws {
+        let host = TestHost(companions: [juniper, atlas, pico], holding: ["conversation_create"])
+        let (store, connection, following) = await follow(host)
+        store.pickCompanions()
+
+        let creating = try #require(store.createGroup(with: ["juniper", "pico"]))
+        let call = try #require(await host.nextCall("conversation_create"))
+        #expect(store.creation == .creating)
+        let args = try call.args(as: CreateArgs.self)
+        #expect(args.spaceId == "s-1")
+        #expect(args.botIds == ["juniper", "pico"])
+        #expect(args.title == "")
+        #expect(call.text.contains(#""sectionId":null"#))
+        host.push(
+            event: "conversation://created",
+            payload: #"{"spaceId":"s-1","conversation":\#(created.json)}"#)
+        await waitUntil { store.summaries.contains { $0.id == "group-new" } }
+        host.reply(TestHost.ok(call, created.json))
+        await creating.value
+
+        #expect(store.summaries.filter { $0.id == "group-new" }.count == 1)
+        #expect(store.summaries.first?.subject.title == "Juniper, Pico")
+        #expect(store.opened?.id == "group-new")
+        #expect(store.opened?.members.map(\.id) == ["juniper", "pico"])
+        #expect(!store.isPickingCompanions)
+        #expect(store.creation == .idle)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aRefusedCreationFailsAndKeepsThePickerOpen() async throws {
+        let host = TestHost(companions: [juniper, atlas]) { call in
+            call.command == "conversation_create"
+                ? TestHost.refused(call, status: 500, TestHost.unavailable) : nil
+        }
+        let (store, connection, following) = await follow(host)
+        store.pickCompanions()
+
+        await store.createGroup(with: ["atlas"])?.value
+
+        #expect(store.creation == .failed)
+        #expect(store.isPickingCompanions)
+        #expect(store.opened == nil)
+        #expect(!store.summaries.contains { $0.subject.isGroup("group-new") })
+        store.pickCompanions()
+        #expect(store.creation == .idle)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func cancellingWhileCreatingIsNotAFailureAndOpensNothing() async throws {
+        let host = TestHost(companions: [juniper, atlas, pico], holding: ["conversation_create"])
+        let (store, connection, following) = await follow(host)
+        store.pickCompanions()
+
+        let creating = try #require(store.createGroup(with: ["juniper", "pico"]))
+        let call = try #require(await host.nextCall("conversation_create"))
+        store.stopPicking()
+        host.reply(TestHost.ok(call, created.json))
+        await creating.value
+
+        #expect(store.creation == .idle)
+        #expect(!store.isPickingCompanions)
+        #expect(store.opened == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func nothingIsCreatedWithoutACompanion() async {
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.createGroup(with: []) == nil)
+        #expect(store.creation == .idle)
+        following.cancel()
+        await connection.stop()
+    }
+
     struct SpaceArgs: Decodable {
         let spaceId: String
+    }
+
+    struct CreateArgs: Decodable {
+        let spaceId: String
+        let sectionId: String?
+        let title: String
+        let botIds: [String]
     }
 }
