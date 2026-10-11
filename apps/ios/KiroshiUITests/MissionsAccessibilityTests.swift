@@ -10,23 +10,12 @@ final class MissionsAccessibilityTests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", objective)).firstMatch
     }
 
-    func launchInEnglish(_ fixture: String, _ arguments: String...) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments =
-            ["-fixture", fixture, "-AppleLocale", "en_US", "-AppleLanguages", "(en)"] + arguments
-        app.launch()
-        return app
-    }
-
     func textsOnScreenAtTheLargestSize(of fixture: String, waitingFor label: String) -> Set<
         String
     > {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-fixture", fixture,
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
-        ]
-        app.launch()
+        let app = launch(
+            fixture, "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
         XCTAssertTrue(
             app.descendants(matching: .any).matching(
                 NSPredicate(format: "label BEGINSWITH %@", label)
@@ -90,7 +79,8 @@ final class MissionsAccessibilityTests: XCTestCase {
         try auditTheList(app, onScreenAtTheLargestSize: onScreen)
     }
 
-    func testOpeningAMissionThenSwipingLeftShowsEachMessagesTime() {
+    func testAnOpenedMissionPassesTheAuditThenSwipingLeftShowsEachMessagesTime() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "5.2")
         let app = launchInEnglish("5.1", "-holdsTimes", "YES")
         app.tabBars.buttons["Missions"].tap()
         let split = row("Split the onboarding flow", in: app)
@@ -99,10 +89,15 @@ final class MissionsAccessibilityTests: XCTestCase {
         let opened = app.staticTexts["Mission opened by Atlas"]
         XCTAssertTrue(opened.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Today"].exists)
+        XCTAssertTrue(app.buttons["Attach"].exists)
         let question = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH %@", "Done. OPE")
         ).firstMatch
         XCTAssertTrue(question.waitForExistence(timeout: 10))
+        XCTAssertTrue(split.waitForNonExistence(timeout: 10))
+
+        try auditTheThread(app, onScreenAtTheLargestSize: onScreen)
+
         let time = app.staticTexts.matching(
             NSPredicate(format: "label == %@", question.value as? String ?? "")
         ).firstMatch
@@ -114,15 +109,6 @@ final class MissionsAccessibilityTests: XCTestCase {
         XCTAssertTrue(time.waitForExistence(timeout: 5))
         XCTAssertTrue(app.frame.contains(time.frame))
         XCTAssertLessThan(question.frame.minX, restingX)
-    }
-
-    func testTheThreadPassesTheAudit() throws {
-        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "5.2")
-        let app = launch("5.2")
-        XCTAssertTrue(app.staticTexts["Mission opened by Atlas"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Attach"].exists)
-
-        try auditTheThread(app, onScreenAtTheLargestSize: onScreen)
     }
 
     func testNoMissionsSaysWhereTheyComeFromAndPassesTheAudit() throws {

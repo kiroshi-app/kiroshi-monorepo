@@ -1,9 +1,18 @@
 import XCTest
 
 extension XCTestCase {
-    @MainActor func launch(_ fixture: String) -> XCUIApplication {
+    @MainActor func launch(_ fixture: String, _ arguments: String...) -> XCUIApplication {
+        launch(fixture, arguments: arguments)
+    }
+
+    @MainActor func launchInEnglish(_ fixture: String, _ arguments: String...) -> XCUIApplication {
+        launch(
+            fixture, arguments: ["-AppleLocale", "en_US", "-AppleLanguages", "(en)"] + arguments)
+    }
+
+    @MainActor func launch(_ fixture: String, arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-fixture", fixture]
+        app.launchArguments = ["-disablesAnimations", "YES", "-fixture", fixture] + arguments
         app.launch()
         return app
     }
@@ -32,12 +41,9 @@ extension XCTestCase {
     }
 
     @MainActor func labelsFullyOnScreenAtTheLargestSize(of fixture: String) -> Set<String> {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-fixture", fixture,
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
-        ]
-        app.launch()
+        let app = launch(
+            fixture, "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
         let transcript = app.scrollViews.firstMatch
         XCTAssertTrue(composer(in: app).waitForExistence(timeout: 10))
         XCTAssertTrue(
