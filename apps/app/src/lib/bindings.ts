@@ -56,6 +56,7 @@ export const commands = {
 	agentAnswerQuestion: (scope: RuntimeScope, id: string, answers: { [key in string]: string }, annotations: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null) => typedError<null, TransportError>(__TAURI_INVOKE("agent_answer_question", { scope, id, answers, annotations })),
 	agentShutdown: (scope: RuntimeScope) => typedError<null, TransportError>(__TAURI_INVOKE("agent_shutdown", { scope })),
 	agentLiveSessions: () => typedError<LiveSession[], TransportError>(__TAURI_INVOKE("agent_live_sessions")),
+	agentPendingQuestions: (conversationId: string) => typedError<ScopedEvent_Serialize[], TransportError>(__TAURI_INVOKE("agent_pending_questions", { conversationId })),
 	conversationBots: (spaceId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots", { spaceId })),
 	conversationBotsByPresence: (spaceId: string, excludedConversationId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots_by_presence", { spaceId, excludedConversationId })),
 	conversationCreateBot: (identity: BotIdentity, spaceId: string | null) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_create_bot", { identity, spaceId })),
@@ -254,6 +255,17 @@ export type AccountState = ({ kind: "signedOut" }) & { email?: never; failure?: 
 	kind: "signedIn",
 } & KiroshiAccount | ({ kind: "unreachable"; reason: string }) & { email?: never; failure?: never } | ({ kind: "failed"; failure: AccountFailure }) & { email?: never; reason?: never };
 
+export type ActivityEvent = {
+	id: string,
+	title: string,
+	kind: ActivityKind,
+	status: ActivityStatus,
+};
+
+export type ActivityKind = "tool" | "permission";
+
+export type ActivityStatus = "pending" | "running" | "succeeded" | "failed";
+
 export type AgentCommand = AgentCommand_Serialize | AgentCommand_Deserialize;
 
 export type AgentCommand_Deserialize = {
@@ -265,6 +277,12 @@ export type AgentCommand_Serialize = {
 	name: string,
 	description?: string | null,
 };
+
+export type AgentEvent = AgentEvent_Serialize | AgentEvent_Deserialize;
+
+export type AgentEvent_Deserialize = ({ type: "connectionChanged"; state: ConnectionState }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; text?: never; title?: never } | ({ type: "turnChanged"; state: TurnState }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; text?: never; title?: never } | ({ type: "sessionReady"; sessionId: string; resumed: boolean }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; seq?: never; state?: never; text?: never; title?: never } | ({ type: "commandsListed"; commands: AgentCommand_Deserialize[] }) & { activity?: never; bundle?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "messageStarted"; message: ChatMessage }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "messageDelta"; id: string; seq: number; text: string }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; message?: never; request?: never; resumed?: never; sessionId?: never; state?: never; title?: never } | ({ type: "messageCompleted"; message: ChatMessage }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "activity"; activity: ActivityEvent }) & { bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "permissionRequested"; request: PermissionRequest }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "questionRequested"; request: QuestionRequest_Deserialize }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "permissionResolved"; id: string; decision: PermissionDecision }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; detail?: never; ended?: never; error?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "turnEnded"; ended: TurnEnded_Deserialize }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "botEvolved"; bundle: EvolvedBundle; commitId: string; title: string }) & { activity?: never; commands?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never } | ({ type: "botEvolutionFailed"; bundle: EvolvedBundle; detail: string }) & { activity?: never; commands?: never; commitId?: never; decision?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "failed"; error: TransportError }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never };
+
+export type AgentEvent_Serialize = ({ type: "connectionChanged"; state: ConnectionState }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; text?: never; title?: never } | ({ type: "turnChanged"; state: TurnState }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; text?: never; title?: never } | ({ type: "sessionReady"; sessionId: string; resumed: boolean }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; seq?: never; state?: never; text?: never; title?: never } | ({ type: "commandsListed"; commands: AgentCommand_Serialize[] }) & { activity?: never; bundle?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "messageStarted"; message: ChatMessage }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "messageDelta"; id: string; seq: number; text: string }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; message?: never; request?: never; resumed?: never; sessionId?: never; state?: never; title?: never } | ({ type: "messageCompleted"; message: ChatMessage }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "activity"; activity: ActivityEvent }) & { bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "permissionRequested"; request: PermissionRequest }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "questionRequested"; request: QuestionRequest_Serialize }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "permissionResolved"; id: string; decision: PermissionDecision }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; detail?: never; ended?: never; error?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "turnEnded"; ended: TurnEnded_Serialize }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "botEvolved"; bundle: EvolvedBundle; commitId: string; title: string }) & { activity?: never; commands?: never; decision?: never; detail?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never } | ({ type: "botEvolutionFailed"; bundle: EvolvedBundle; detail: string }) & { activity?: never; commands?: never; commitId?: never; decision?: never; ended?: never; error?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never } | ({ type: "failed"; error: TransportError }) & { activity?: never; bundle?: never; commands?: never; commitId?: never; decision?: never; detail?: never; ended?: never; id?: never; message?: never; request?: never; resumed?: never; seq?: never; sessionId?: never; state?: never; text?: never; title?: never };
 
 export type Application = Application_Serialize | Application_Deserialize;
 
@@ -416,6 +434,13 @@ export type Application_Serialize = {
 
 export type ApplicationsError = { kind: "catalogueUnreadable"; detail: string } | { kind: "registryUnreached"; detail: string } | { kind: "registryTimedOut" } | { kind: "registryRefused"; status: number } | { kind: "registryUnreadable"; detail: string };
 
+export type AskedQuestion = {
+	header: string,
+	question: string,
+	options: QuestionOption[],
+	multiSelect: boolean,
+};
+
 export type AttachmentStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownConversation"; id: string } | { kind: "tooMany"; count: number; limit: number } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "tooLargeTogether"; bytes: number; limit: number } | { kind: "unwritable"; detail: string };
 
 export type AuthPosture = "authRequired" | "noAuth";
@@ -531,6 +556,14 @@ export type Chat = {
 	id: string,
 	createdAt: number,
 	updatedAt: number,
+};
+
+export type ChatMessage = {
+	id: string,
+	role: MessageRole,
+	text: string,
+	completion: MessageCompletion,
+	timestamp: number,
 };
 
 export type CheckReport = CheckReport_Serialize | CheckReport_Deserialize;
@@ -650,6 +683,8 @@ export type EventTurn = {
 	turnId: string,
 	conversationId: string,
 };
+
+export type EvolvedBundle = "bot" | "user" | "space";
 
 export type FieldType = "string" | "number" | "boolean" | "datetime";
 
@@ -814,6 +849,8 @@ export type MembersChanged = {
 
 export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
 
+export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
+
 export type MessageHit = {
 	messageId: string,
 	seq: number,
@@ -837,6 +874,8 @@ export type MessageReference = {
 	runtimeSessionId: string | null,
 	providerSessionId: string | null,
 };
+
+export type MessageRole = "user" | "assistant";
 
 export type MessageSearchError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number };
 
@@ -1005,6 +1044,13 @@ export type PayloadField = {
 
 export type PermissionDecision = "allowOnce" | "deny";
 
+export type PermissionRequest = {
+	id: string,
+	toolName: string,
+	title: string,
+	detail: string | null,
+};
+
 export type PinnedBubble = {
 	message: TranscriptMessage,
 	blockIndex: number,
@@ -1012,6 +1058,28 @@ export type PinnedBubble = {
 };
 
 export type PluginScope = { kind: "bot"; id: string } | { kind: "space"; id: string } | { kind: "user" };
+
+export type QuestionOption = {
+	label: string,
+	description: string | null,
+	preview: string | null,
+};
+
+export type QuestionRequest = QuestionRequest_Serialize | QuestionRequest_Deserialize;
+
+export type QuestionRequest_Deserialize = {
+	id: string,
+	questions: AskedQuestion[],
+	subject?: QuestionSubject | null,
+};
+
+export type QuestionRequest_Serialize = {
+	id: string,
+	questions: AskedQuestion[],
+	subject?: QuestionSubject | null,
+};
+
+export type QuestionSubject = { kind: "applicationScope"; application: string };
 
 export type Refusal = "disabled" | "filter" | "dedupeValueMissing" | "alreadySeen";
 
@@ -1170,6 +1238,20 @@ export type RuntimeSession = {
 	botId: string,
 	seq: number,
 	startedAt: number,
+};
+
+export type ScopedEvent = ScopedEvent_Serialize | ScopedEvent_Deserialize;
+
+export type ScopedEvent_Deserialize = {
+	scope: RuntimeScope | null,
+	turn?: EventTurn | null,
+	event: AgentEvent_Deserialize,
+};
+
+export type ScopedEvent_Serialize = {
+	scope: RuntimeScope | null,
+	turn?: EventTurn | null,
+	event: AgentEvent_Serialize,
 };
 
 export type Section = {
@@ -1360,6 +1442,28 @@ export type TriggerSource_Serialize = {
 	dedupeKey: string,
 	header?: string | null,
 };
+
+export type TurnEnded = TurnEnded_Serialize | TurnEnded_Deserialize;
+
+export type TurnEnded_Deserialize = {
+	sessionId: string | null,
+	outcome: TurnOutcome,
+	structuredOutput: Json | null,
+	totalCostUsd: number | null,
+	modelUsage: Json | null,
+};
+
+export type TurnEnded_Serialize = {
+	sessionId: string | null,
+	outcome: TurnOutcome,
+	structuredOutput?: Json | null,
+	totalCostUsd?: number | null,
+	modelUsage?: Json | null,
+};
+
+export type TurnOutcome = "completed" | "cancelled" | "failed";
+
+export type TurnState = "idle" | "submitting" | "running" | "stopping" | "failed";
 
 export type UserPreferences = {
 	displayName: string,

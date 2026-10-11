@@ -4104,6 +4104,15 @@ fn a_guest_reads_the_installs_of_a_shared_conversation_and_not_of_its_own() {
 }
 
 #[test]
+fn a_guest_reads_the_pending_questions_of_a_shared_conversation_and_not_of_its_own() {
+	run(kept_in_the_shared_space(
+		"agent_pending_questions",
+		json!({ "conversationId": GUEST_LOCAL_CONVERSATION }),
+		json!({ "conversationId": "c-mine" }),
+	));
+}
+
+#[test]
 fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 	run(async {
 		let guest = Guest::of_two_spaces("installs-refusal").await;

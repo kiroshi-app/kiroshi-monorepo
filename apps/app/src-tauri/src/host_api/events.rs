@@ -14,7 +14,8 @@ use tokio::time::{error::Elapsed, timeout};
 
 use super::invoke::{self, REFUSED, UNAUTHORIZED};
 use super::token::HostToken;
-use crate::events::{self, Frame};
+use crate::agent::commands::subscribed_with_pending_questions;
+use crate::events::Frame;
 use crate::routines::webhook::{named_here, Calls};
 
 pub const PATH: &str = "/api/events";
@@ -58,29 +59,36 @@ pub(crate) fn query_admitted(token: &HostToken, uri: &Uri) -> bool {
 }
 
 async fn opened<R: Runtime>(State(calls): State<Calls<R>>, upgrade: WebSocketUpgrade) -> Response {
-	let heard = events::subscribed(&calls.app);
+	let (pending, heard) = subscribed_with_pending_questions(&calls.app);
 	upgrade
 		.on_failed_upgrade(|failure| {
 			eprintln!("a host api event client never connected: {failure}")
 		})
-		.on_upgrade(|socket| relayed(socket, heard))
+		.on_upgrade(|socket| caught_up_then_relayed(socket, pending, heard))
+}
+
+async fn caught_up_then_relayed(
+	mut socket: WebSocket,
+	pending: Vec<Frame>,
+	heard: Receiver<Frame>,
+) {
+	for frame in pending {
+		if !delivered(&mut socket, &frame).await {
+			return;
+		}
+	}
+	relayed(socket, heard).await
 }
 
 pub(crate) async fn relayed(mut socket: WebSocket, mut heard: Receiver<Frame>) {
 	loop {
 		tokio::select! {
 			frame = heard.recv() => match frame {
-				Ok(frame) => match sent_in_time(&mut socket, Message::Text(frame.as_ref().into())).await {
-					Ok(Ok(())) => {}
-					Ok(Err(failure)) => {
-						return eprintln!("a host api event client left mid frame: {failure}");
+				Ok(frame) => {
+					if !delivered(&mut socket, &frame).await {
+						return;
 					}
-					Err(_) => {
-						return eprintln!(
-							"a host api event client was dropped: it stalled on a frame for {SEND_PATIENCE:?}"
-						);
-					}
-				},
+				}
 				Err(RecvError::Lagged(missed)) => return fell_behind(socket, missed).await,
 				Err(RecvError::Closed) => return,
 			},
@@ -89,6 +97,22 @@ pub(crate) async fn relayed(mut socket: WebSocket, mut heard: Receiver<Frame>) {
 					return;
 				}
 			}
+		}
+	}
+}
+
+async fn delivered(socket: &mut WebSocket, frame: &Frame) -> bool {
+	match sent_in_time(socket, Message::Text(frame.as_ref().into())).await {
+		Ok(Ok(())) => true,
+		Ok(Err(failure)) => {
+			eprintln!("a host api event client left mid frame: {failure}");
+			false
+		}
+		Err(_) => {
+			eprintln!(
+				"a host api event client was dropped: it stalled on a frame for {SEND_PATIENCE:?}"
+			);
+			false
 		}
 	}
 }

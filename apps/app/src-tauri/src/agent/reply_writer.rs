@@ -706,6 +706,7 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 
 	use super::*;
+	use crate::agent::commands;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
 	use crate::db::repositories::messages::{
 		MessageRole, MessageState, NewUserMessage, StoredMessage,
@@ -959,6 +960,40 @@ mod tests {
 		desk.record(&question("r1")).await;
 
 		assert_eq!(written.assistant_rows().await, 1);
+	}
+
+	#[tokio::test]
+	async fn a_question_whose_line_fails_to_persist_is_still_held_for_a_later_listener() {
+		let written = Written::new("question-unpersisted").await;
+		written.prompt("t1", "p1").await;
+		written
+			.database()
+			.messages()
+			.call(|connection| {
+				Ok(connection.execute(
+					"CREATE TRIGGER refused BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'refused'); END",
+					[],
+				)?)
+			})
+			.await
+			.expect("the trigger lands");
+		let scope = RuntimeScope {
+			conversation_id: written.conversation_id.clone(),
+			bot_id: DEFAULT_BOT_ID.to_owned(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 1,
+		};
+		let run = commands::a_run_held_by_the_app(written.app.handle(), scope);
+		let (queue, queued) = mpsc::unbounded_channel();
+		queue.send(Entry::Submitted(submitted("t1", "p1"))).expect("the turn is queued");
+		queue.send(Entry::Event(question("r1"))).expect("the question is queued");
+		drop(queue);
+
+		write_then_forward(queued, written.desk_telling(Arc::new(run))).await;
+
+		assert_eq!(written.stored("question-r1").await, None);
+		let (pending, _) = commands::subscribed_with_pending_questions(written.app.handle());
+		assert_eq!(pending.len(), 1);
 	}
 
 	#[tokio::test]

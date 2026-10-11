@@ -146,6 +146,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("agent_answer_question", Reach::Scoped(Write, RUNTIME_SCOPE)),
 	("agent_shutdown", Reach::HostOnly),
 	("agent_live_sessions", Reach::HostOnly),
+	("agent_pending_questions", Reach::Scoped(Read, CONVERSATION_ID)),
 	("conversation_bots", Reach::Scoped(Read, SPACE_ID)),
 	(
 		"conversation_bots_by_presence",

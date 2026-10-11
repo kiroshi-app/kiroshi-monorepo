@@ -1,15 +1,15 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard, PoisonError};
 
 use serde::de::DeserializeOwned;
 use tauri::{AppHandle, Manager, Runtime, State};
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, Mutex};
 
 use super::contract::{
 	AccountReport, AgentEvent, CheckReport, ConnectionState, EventTurn, EvolvedBundle, LiveSession,
-	OfferedModel, PermissionDecision, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn,
-	TransportError,
+	OfferedModel, PermissionDecision, QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle,
+	SubmittedTurn, TransportError,
 };
 use super::host::hosted;
 use super::protocol::{self, Checked};
@@ -29,7 +29,7 @@ use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
-use crate::events::{self, AGENT_EVENT};
+use crate::events::{self, Frame, AGENT_EVENT};
 use crate::json::JsonValue;
 use crate::mcp_oauth::refresh;
 use crate::mcp_oauth::reports::StandingHost;
@@ -55,8 +55,32 @@ fn announce_in_turn<R: Runtime>(
 	turn: Option<EventTurn>,
 	event: AgentEvent,
 ) {
-	if let Err(failure) = events::emit(app, AGENT_EVENT, ScopedEvent { scope, turn, event }) {
+	announce_scoped(app, ScopedEvent { scope, turn, event });
+}
+
+fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
+	if let Err(failure) = events::emit(app, AGENT_EVENT, scoped) {
 		eprintln!("a turn event was not announced: {failure}");
+	}
+}
+
+pub(crate) fn subscribed_with_pending_questions<R: Runtime>(
+	app: &AppHandle<R>,
+) -> (Vec<Frame>, broadcast::Receiver<Frame>) {
+	let Some(state) = app.try_state::<AgentState>() else {
+		return (Vec::new(), events::subscribed(app));
+	};
+	let (pending, heard) = state.live.questions_pending_at(|| events::subscribed(app));
+	(pending.into_iter().filter_map(|question| framed_question(question.scoped())).collect(), heard)
+}
+
+fn framed_question(asked: ScopedEvent) -> Option<Frame> {
+	match events::frame(AGENT_EVENT, &asked) {
+		Ok(frame) => Some(frame),
+		Err(failure) => {
+			eprintln!("a pending question did not serialize for a new listener: {failure}");
+			None
+		}
 	}
 }
 
@@ -78,6 +102,28 @@ fn participant_key(scope: &RuntimeScope) -> ParticipantKey {
 
 struct Live<S = Arc<Session>> {
 	runs: std::sync::Mutex<HashMap<RunKey, Run<S>>>,
+	questions: std::sync::Mutex<Vec<PendingQuestion>>,
+}
+
+#[derive(Clone)]
+struct PendingQuestion {
+	scope: RuntimeScope,
+	turn: Option<EventTurn>,
+	request: QuestionRequest,
+}
+
+impl PendingQuestion {
+	fn scoped(self) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(self.scope),
+			turn: self.turn,
+			event: AgentEvent::QuestionRequested { request: self.request },
+		}
+	}
+
+	fn asked_by(&self, scope: &RuntimeScope) -> bool {
+		run_key(&self.scope) == run_key(scope)
+	}
 }
 
 struct Run<S> {
@@ -110,7 +156,39 @@ impl<S> Admission<S> {
 
 impl<S> Default for Live<S> {
 	fn default() -> Self {
-		Self { runs: std::sync::Mutex::new(HashMap::new()) }
+		Self {
+			runs: std::sync::Mutex::new(HashMap::new()),
+			questions: std::sync::Mutex::new(Vec::new()),
+		}
+	}
+}
+
+impl<S> Live<S> {
+	fn questions(&self) -> MutexGuard<'_, Vec<PendingQuestion>> {
+		self.questions.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn release_question(&self, scope: &RuntimeScope, id: &str) {
+		self.questions()
+			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
+	}
+
+	fn drop_questions(&self, scope: &RuntimeScope) {
+		self.questions().retain(|question| !question.asked_by(scope));
+	}
+
+	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
+		self.questions()
+			.iter()
+			.filter(|question| question.scope.conversation_id == conversation_id)
+			.cloned()
+			.map(PendingQuestion::scoped)
+			.collect()
+	}
+
+	fn questions_pending_at<T>(&self, subscribe: impl FnOnce() -> T) -> (Vec<PendingQuestion>, T) {
+		let questions = self.questions();
+		(questions.clone(), subscribe())
 	}
 }
 
@@ -122,8 +200,10 @@ impl<S: Clone> Live<S> {
 			.iter()
 			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
 		let replaced = runs
-			.insert(key, Run { scope, session: None, started_at: now_ms() })
+			.insert(key, Run { scope: scope.clone(), session: None, started_at: now_ms() })
 			.and_then(|replaced| replaced.session);
+		drop(runs);
+		self.drop_questions(&scope);
 		Admission { replaced, keeps_lineage }
 	}
 
@@ -140,14 +220,29 @@ impl<S: Clone> Live<S> {
 	}
 
 	fn clear(&self, scope: &RuntimeScope) -> Option<S> {
-		self.runs.lock().expect("live runs").remove(&run_key(scope)).and_then(|run| run.session)
+		let cleared = self
+			.runs
+			.lock()
+			.expect("live runs")
+			.remove(&run_key(scope))
+			.and_then(|run| run.session);
+		self.drop_questions(scope);
+		cleared
 	}
 
 	fn clear_all(&self) -> Vec<S> {
-		std::mem::take(&mut *self.runs.lock().expect("live runs"))
-			.into_values()
-			.filter_map(|run| run.session)
-			.collect()
+		let cleared = std::mem::take(&mut *self.runs.lock().expect("live runs"));
+		self.questions().clear();
+		cleared.into_values().filter_map(|run| run.session).collect()
+	}
+
+	fn hold_question(&self, asked: PendingQuestion, announce: impl FnOnce(PendingQuestion)) {
+		let mut questions = self.questions();
+		if !self.holds(&asked.scope) {
+			return;
+		}
+		questions.push(asked.clone());
+		announce(asked);
 	}
 
 	fn report(&self) -> Vec<LiveSession> {
@@ -196,6 +291,14 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		if !self.live.holds(&self.scope) {
 			return;
 		}
+		if let AgentEvent::QuestionRequested { request } = &event {
+			let asked =
+				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
+			return self
+				.live
+				.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
+		}
+		self.release_questions_settled_by(&event);
 		if let AgentEvent::SessionReady { session_id, .. } = &event {
 			self.record_its_own_lineage(session_id.clone());
 		}
@@ -208,6 +311,19 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 }
 
 impl<R: Runtime> RunSink<R> {
+	fn release_questions_settled_by(&self, event: &AgentEvent) {
+		match event {
+			AgentEvent::PermissionResolved { id, .. } => {
+				self.live.release_question(&self.scope, id)
+			}
+			AgentEvent::TurnEnded { .. } => self.live.drop_questions(&self.scope),
+			AgentEvent::Failed { error } if error.is_fatal() => {
+				self.live.drop_questions(&self.scope)
+			}
+			_ => {}
+		}
+	}
+
 	fn record_its_own_lineage(&self, provider_session_id: String) {
 		if !self.records_its_own_lineage {
 			return;
@@ -982,6 +1098,15 @@ pub async fn agent_live_sessions(
 	Ok(state.live.report())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_pending_questions(
+	state: State<'_, AgentState>,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
+	Ok(state.live.questions_in(&conversation_id))
+}
+
 pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {
 	let session = state.live.clear(scope);
 	if let Some(session) = session {
@@ -1025,6 +1150,19 @@ pub async fn agent_shutdown<R: Runtime>(
 #[cfg(test)]
 pub(crate) fn a_live_run<R: Runtime>(app: &AppHandle<R>, scope: RuntimeScope) -> impl TurnSink {
 	let live = Arc::new(Live::default());
+	live.take_over(scope.clone());
+	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+}
+
+#[cfg(test)]
+pub(crate) fn a_run_held_by_the_app<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: RuntimeScope,
+) -> impl TurnSink {
+	if app.try_state::<AgentState>().is_none() {
+		app.manage(AgentState::default());
+	}
+	let live = app.state::<AgentState>().live.clone();
 	live.take_over(scope.clone());
 	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
 }
@@ -1815,5 +1953,209 @@ mod tests {
 			None,
 			"a refused id outlived the crash that proved it dead"
 		);
+	}
+
+	mod pending_questions {
+		use tauri::test::{mock_builder, MockRuntime};
+
+		use super::super::super::contract::{TurnEnded, TurnOutcome};
+		use super::*;
+		use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+
+		fn an_app(name: &str) -> AppOfItsOwn {
+			an_app_of_its_own(&format!("pending-question-{name}"), mock_builder())
+		}
+
+		fn the_turn() -> Option<EventTurn> {
+			Some(EventTurn { turn_id: "t1".into(), conversation_id: "c1".into() })
+		}
+
+		fn question(id: &str) -> AgentEvent {
+			AgentEvent::QuestionRequested {
+				request: QuestionRequest { id: id.into(), questions: Vec::new(), subject: None },
+			}
+		}
+
+		fn answered(id: &str) -> AgentEvent {
+			AgentEvent::PermissionResolved {
+				id: id.into(),
+				decision: PermissionDecision::AllowOnce,
+			}
+		}
+
+		fn turn_ended() -> AgentEvent {
+			AgentEvent::TurnEnded {
+				ended: TurnEnded {
+					session_id: None,
+					outcome: TurnOutcome::Completed,
+					structured_output: None,
+					total_cost_usd: None,
+					model_usage: None,
+				},
+			}
+		}
+
+		fn crashed() -> AgentEvent {
+			AgentEvent::Failed { error: TransportError::Crashed { code: Some(1), detail: None } }
+		}
+
+		fn a_late_listener(app: &AppHandle<MockRuntime>) -> Vec<Frame> {
+			let (pending, mut heard) = subscribed_with_pending_questions(app);
+			assert!(heard.try_recv().is_err(), "the late listener heard a live frame");
+			pending
+		}
+
+		async fn pending_in(
+			app: &AppHandle<MockRuntime>,
+			conversation_id: &str,
+		) -> Vec<ScopedEvent> {
+			agent_pending_questions(app.state(), conversation_id.to_owned())
+				.await
+				.expect("the command answers")
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_a_pending_question_as_it_was_announced() {
+			let app = an_app("command-asked");
+			let mut original = events::subscribed(app.handle());
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			run.emit(question("q1"), the_turn());
+			let announced = original.try_recv().expect("the question was emitted");
+
+			let pending = pending_in(app.handle(), "c1").await;
+
+			let returned: Vec<Frame> = pending
+				.iter()
+				.map(|question| events::frame(AGENT_EVENT, question).expect("a frame"))
+				.collect();
+			assert_eq!(returned, vec![announced]);
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_an_empty_list_when_no_question_waits() {
+			let app = an_app("command-empty");
+			a_run_held_by_the_app(app.handle(), a_scope());
+
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_no_question_of_another_conversation() {
+			let app = an_app("command-elsewhere");
+			let here = a_run_held_by_the_app(app.handle(), a_scope());
+			let elsewhere = a_run_held_by_the_app(app.handle(), another_bots_run());
+			here.emit(question("q1"), the_turn());
+			elsewhere.emit(
+				question("q9"),
+				Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+			);
+
+			let pending = pending_in(app.handle(), "c1").await;
+
+			assert_eq!(pending.len(), 1);
+			assert!(pending.iter().all(|question| question
+				.scope
+				.as_ref()
+				.is_some_and(|scope| scope.conversation_id == "c1")));
+		}
+
+		#[test]
+		fn a_listener_subscribing_after_a_question_hears_it_once_in_its_turn() {
+			let app = an_app("asked");
+			let mut original = events::subscribed(app.handle());
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+
+			run.emit(question("q1"), the_turn());
+
+			let emitted = original.try_recv().expect("the question was emitted");
+			assert_eq!(a_late_listener(app.handle()), vec![emitted]);
+		}
+
+		#[test]
+		fn a_question_asked_after_a_listener_subscribed_reaches_it_live_only() {
+			let app = an_app("asked-live");
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let (pending, mut heard) = subscribed_with_pending_questions(app.handle());
+
+			run.emit(question("q1"), the_turn());
+
+			assert!(pending.is_empty());
+			assert!(heard.try_recv().is_ok());
+			assert!(heard.try_recv().is_err(), "the question reached the listener twice");
+		}
+
+		#[tokio::test]
+		async fn a_question_answered_or_ended_with_its_turn_reaches_no_later_listener() {
+			for (name, settling) in
+				[("answered", answered("q1")), ("ended", turn_ended()), ("crashed", crashed())]
+			{
+				let app = an_app(name);
+				let run = a_run_held_by_the_app(app.handle(), a_scope());
+				run.emit(question("q1"), the_turn());
+
+				run.emit(settling, the_turn());
+
+				assert!(
+					a_late_listener(app.handle()).is_empty(),
+					"{name} left the question pending"
+				);
+				assert!(pending_in(app.handle(), "c1").await.is_empty(), "{name} kept it listed");
+			}
+		}
+
+		#[test]
+		fn an_answer_releases_its_own_question_and_keeps_the_other() {
+			let app = an_app("answered-one");
+			let mut original = events::subscribed(app.handle());
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			run.emit(question("q1"), the_turn());
+			run.emit(question("q2"), the_turn());
+			let kept = original.try_recv().and_then(|_| original.try_recv()).expect("q2 emitted");
+
+			run.emit(answered("q1"), the_turn());
+
+			assert_eq!(a_late_listener(app.handle()), vec![kept]);
+		}
+
+		#[tokio::test]
+		async fn a_stopped_session_leaves_no_question_pending() {
+			let app = an_app("stopped");
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			run.emit(question("q1"), the_turn());
+
+			shutdown_session(&app.state::<AgentState>(), &a_scope()).await;
+
+			assert!(a_late_listener(app.handle()).is_empty());
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn a_replaced_or_cleared_session_leaves_no_question_pending() {
+			let replaced = an_app("replaced");
+			a_run_held_by_the_app(replaced.handle(), a_scope()).emit(question("q1"), the_turn());
+			let cleared = an_app("cleared");
+			a_run_held_by_the_app(cleared.handle(), a_scope()).emit(question("q1"), the_turn());
+
+			replaced.state::<AgentState>().live.take_over(a_scope());
+			cleared.state::<AgentState>().live.clear_all();
+
+			for app in [&replaced, &cleared] {
+				assert!(a_late_listener(app.handle()).is_empty());
+				assert!(pending_in(app.handle(), "c1").await.is_empty());
+			}
+		}
+
+		#[test]
+		fn a_question_of_a_run_already_let_go_is_neither_held_nor_emitted() {
+			let app = an_app("let-go");
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			let mut original = events::subscribed(app.handle());
+			app.state::<AgentState>().live.clear(&a_scope());
+
+			run.emit(question("q1"), the_turn());
+
+			assert!(original.try_recv().is_err());
+			assert!(a_late_listener(app.handle()).is_empty());
+		}
 	}
 }
