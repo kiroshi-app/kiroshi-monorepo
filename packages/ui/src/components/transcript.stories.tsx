@@ -2,12 +2,18 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { FRAME_POLL } from "@workspace/storybook/story-utils"
+import { FRAME_POLL, slotsIn } from "@workspace/storybook/story-utils"
+import { DaySeparator } from "@workspace/ui/components/day-separator"
 import {
 	Transcript,
 	type TranscriptItem,
 	type TranscriptProps,
 } from "@workspace/ui/components/transcript"
+import {
+	AssistantTurn,
+	TurnGroup,
+	UserTurn,
+} from "@workspace/ui/components/turn"
 import { Button } from "@workspace/ui/components/ui/button"
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -942,5 +948,75 @@ export const RestsAfterAResize = meta.story({
 		await userEvent.click(canvas.getByRole("button", { name: "Resize frame" }))
 		await settleScroll()
 		await expectRestingPadding(viewport, answer)
+	},
+})
+
+const JOINED_NOW = new Date(2026, 9, 10, 9, 30).getTime()
+
+const JOINED_RUNS: TranscriptItem[] = [
+	{
+		key: "asked",
+		render: () => (
+			<TurnGroup>
+				<UserTurn name="Shoto Puget">Is any of that destructive?</UserTurn>
+			</TurnGroup>
+		),
+	},
+	{
+		key: "answered",
+		render: () => (
+			<TurnGroup>
+				<AssistantTurn author={{ id: "bot-atlas", name: "Atlas" }}>
+					Nothing is deleted.
+				</AssistantTurn>
+				<AssistantTurn author={{ id: "bot-atlas", name: "Atlas" }}>
+					The migration only adds a column.
+				</AssistantTurn>
+			</TurnGroup>
+		),
+	},
+	{
+		key: "day",
+		render: () => <DaySeparator at={JOINED_NOW} now={JOINED_NOW} />,
+	},
+	{
+		key: "followed-up",
+		render: () => (
+			<TurnGroup>
+				<UserTurn name="Shoto Puget">Ship it.</UserTurn>
+			</TurnGroup>
+		),
+	},
+]
+
+export const JoinsConsecutiveRuns = meta.story({
+	render: (args) => (
+		<div className={FRAME_CLASS}>
+			<Transcript
+				{...args}
+				className="flex-1"
+				contentClassName="flex flex-col px-6 py-3"
+				rows={JOINED_RUNS}
+			/>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Two message runs in a row sit on their own row padding alone, 4px under the last row of one and 8px over the head of the next, with no transcript gap between them. Every other row keeps the transcript gap: check that the day separator still stands 24px clear of the runs on both sides. " +
+					MOUNTED_BY_THE_LAYOUT,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const [asked, answered, day, followedUp] = slotsIn(
+			canvasElement,
+			"message-scroller-item",
+		).map((item) => item.getBoundingClientRect())
+
+		await expect(answered.top - asked.bottom).toBe(0)
+		await expect(day.top - answered.bottom).toBe(24)
+		await expect(followedUp.top - day.bottom).toBe(24)
 	},
 })
