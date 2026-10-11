@@ -24,8 +24,8 @@ type Behaviour = "crash" | "serve"
 
 type Recorded = {
 	args: string[]
-	mode: number
-	config: { mcpServers: Record<string, { env?: Record<string, string> }> }
+	mode?: number
+	config?: { mcpServers: Record<string, { env?: Record<string, string> }> }
 }
 
 const fakeClaude = (
@@ -34,11 +34,12 @@ const fakeClaude = (
 ): string => `#!${process.execPath}
 const { readFileSync, statSync, writeFileSync } = require("node:fs")
 const args = process.argv.slice(2)
-const path = args[args.indexOf("--mcp-config") + 1]
+const flag = args.indexOf("--mcp-config")
+const path = flag === -1 ? undefined : args[flag + 1]
 writeFileSync(${JSON.stringify(record)}, JSON.stringify({
 	args,
-	mode: statSync(path).mode & 0o777,
-	config: JSON.parse(readFileSync(path, "utf8")),
+	mode: path && statSync(path).mode & 0o777,
+	config: path && JSON.parse(readFileSync(path, "utf8")),
 }))
 if (${JSON.stringify(behaviour)} === "crash") process.exit(1)
 let buffered = ""
@@ -145,7 +146,23 @@ describe("openClaudeSession", () => {
 		expect(configDirectories()).toHaveLength(1)
 		expect(args.join(" ")).not.toContain(SECRET)
 		expect(mode).toBe(0o600)
-		expect(config.mcpServers.clock?.env?.TOKEN).toBe(SECRET)
+		expect(config?.mcpServers.clock?.env?.TOKEN).toBe(SECRET)
+
+		await session.close()
+
+		expect(configDirectories()).toEqual([])
+	})
+
+	it("writes no config directory for a session without an agent, even with resolved servers", async () => {
+		installClaude("serve")
+
+		const session = await openClaudeSession(
+			{ ...request, agent: undefined },
+			() => {},
+		)
+
+		expect(recorded().args).not.toContain("--mcp-config")
+		expect(configDirectories()).toEqual([])
 
 		await session.close()
 
@@ -159,7 +176,7 @@ describe("openClaudeSession", () => {
 		await rejectionOf(openClaudeSession(request, emit))
 		await closed
 
-		expect(recorded().config.mcpServers.clock?.env?.TOKEN).toBe(SECRET)
+		expect(recorded().config?.mcpServers.clock?.env?.TOKEN).toBe(SECRET)
 		expect(configDirectories()).toEqual([])
 	})
 

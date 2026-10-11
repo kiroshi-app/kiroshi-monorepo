@@ -89,6 +89,9 @@ const writablePaths = ({
 	spacePath,
 }: BundleScope): string[] => definedPaths([botPath, userPath, spacePath])
 
+const handsServers = (request: SessionRequest): boolean =>
+	Boolean(request.pluginPath && request.agent)
+
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
 
@@ -116,7 +119,7 @@ export const buildOptions = (
 		includePartialMessages: request.partialMessages,
 		canUseTool,
 		...settings,
-		...(request.pluginPath && request.agent
+		...(handsServers(request)
 			? {
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
@@ -330,7 +333,9 @@ export const openClaudeSession = async (
 		record(line)
 	}
 	const reminder = createMissionStatusReminder()
-	const mcpConfig = mcpConfigFileFor(resolved.servers)
+	const mcpConfig = handsServers(request)
+		? mcpConfigFileFor(resolved.servers)
+		: undefined
 	const launch = () => {
 		const options = buildOptions(
 			request,
