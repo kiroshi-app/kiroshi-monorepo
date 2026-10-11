@@ -295,7 +295,7 @@ impl Directory {
 		if self.kept().is_disk_read {
 			return;
 		}
-		let cached = self.file.as_deref().and_then(from_file);
+		let cached = self.file.as_deref().and_then(from_file).map(without_community);
 		let mut held = self.keeping();
 		held.is_disk_read = true;
 		held.cached = cached;
@@ -318,7 +318,7 @@ impl Directory {
 			}
 			None => listed(&self.base, None).await.and_then(|listing| replaced(listing, now)),
 		};
-		match read {
+		match read.map(without_community) {
 			Ok(cached) => {
 				if let Some(file) = self.file.as_deref() {
 					to_file(file, &cached);
@@ -490,6 +490,11 @@ fn merged(cached: Cached, listing: Listing, now: i64) -> Cached {
 		is_feed_stale: listing.is_feed_stale,
 		rows,
 	}
+}
+
+fn without_community(mut cached: Cached) -> Cached {
+	cached.rows.retain(|row| row.tier != Tier::Community);
+	cached
 }
 
 fn position(row: &Row) -> (Tier, bool, Option<i64>, &str) {
@@ -931,7 +936,7 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_curated_or_partner_row_is_verified_and_a_community_row_is_not_said_to_be() {
+	async fn a_curated_or_partner_row_is_verified_and_a_community_row_is_dropped() {
 		let read = read_from(vec![
 			a_row("one", "curated", 1),
 			a_row("two", "partner", 1),
@@ -939,10 +944,38 @@ pub(crate) mod tests {
 		])
 		.await;
 
-		assert_eq!(names(&read), ["one", "two", "three"]);
+		assert_eq!(names(&read), ["one", "two"]);
 		assert_eq!(read[0].verified, Some(true));
 		assert_eq!(read[1].verified, Some(true));
-		assert_eq!(read[2].verified, None);
+	}
+
+	#[tokio::test]
+	async fn a_read_answering_only_community_rows_caches_no_row_and_no_failure() {
+		let (base, _) = serving(vec![json!([a_row("odd", "community", 1)])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+
+		let answered = directory.searched("").await.expect("the search answers");
+
+		assert!(answered.applications.is_empty());
+		assert_eq!(answered.registry_failure, None);
+		assert!(a_cache_of(&directory).rows.is_empty());
+	}
+
+	#[tokio::test]
+	async fn a_community_row_of_a_cache_written_before_is_never_answered() {
+		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let written = a_cache_of(&a_directory_over(vec![a_page(&["one"])]).await);
+		let odd = row(a_row("odd", "community", 1)).expect("the row reads");
+		to_file(&file, &Cached { rows: [written.rows, vec![odd]].concat(), ..written });
+		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
+		let directory = Directory::timed(base, Some(file), Box::new(Stopped(NOON)));
+
+		let answered = directory.searched("").await.expect("the search answers");
+		let named = directory.named("odd").await.expect("the name resolves");
+
+		assert!(held.asked().is_empty(), "the directory was read");
+		assert_eq!(names(&answered.applications), ["one"]);
+		assert_eq!(named, None);
 	}
 
 	#[tokio::test]
@@ -1085,7 +1118,7 @@ pub(crate) mod tests {
 	async fn the_read_follows_the_cursor_until_it_is_null_and_keeps_the_cloud_order() {
 		let (base, held) = serving(vec![
 			json!([a_row("first", "curated", 1), a_row("second", "partner", 1)]),
-			json!([a_row("third", "community", 1)]),
+			json!([a_row("third", "partner", 1)]),
 		])
 		.await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
