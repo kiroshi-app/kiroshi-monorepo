@@ -305,9 +305,24 @@
         private let inbound: AsyncStream<Inbound>
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
 
+        private let listed: AsyncStream<Void>.Continuation
+        private let playingGroupChanges: Task<Void, Never>?
+
         init(script: FixtureHost.Script) {
             self.script = script
-            (inbound, inboundContinuation) = AsyncStream.makeStream()
+            let (inbound, inboundContinuation) = AsyncStream.makeStream(of: Inbound.self)
+            self.inbound = inbound
+            self.inboundContinuation = inboundContinuation
+            let (listing, listed) = AsyncStream.makeStream(of: Void.self)
+            self.listed = listed
+            playingGroupChanges =
+                script.playsGroupChanges
+                ? Task {
+                    for await _ in listing {
+                        await Self.playGroupChanges(into: inboundContinuation)
+                        return
+                    }
+                } : nil
         }
 
         func push(_ message: Inbound) {
@@ -345,6 +360,8 @@
         func ping() async throws {}
 
         func close() {
+            playingGroupChanges?.cancel()
+            listed.finish()
             push(.close(1000))
         }
 
@@ -381,9 +398,7 @@
                 }
             case "conversation_list":
                 reply(id, "[\(script.groups.map(\.json).joined(separator: ","))]")
-                if script.playsGroupChanges {
-                    playGroupChanges()
-                }
+                listed.yield()
             case "conversation_main_chat":
                 let companionId = args["botId"] as? String ?? ""
                 reply(
@@ -408,7 +423,9 @@
             }
         }
 
-        private func playGroupChanges() {
+        private static func playGroupChanges(
+            into inbound: AsyncStream<Inbound>.Continuation
+        ) async {
             let launchPlan = FixtureHost.Group(
                 id: "group-launch", title: "Launch plan",
                 members: [
@@ -422,11 +439,13 @@
                     "conversation://updated", launchPlan.renamed("Launch checklist")),
                 FixtureHost.groupDeleted(launchPlan),
             ]
-            Task { [inboundContinuation] in
-                for frame in frames {
-                    try? await ContinuousClock().sleep(for: .seconds(3))
-                    inboundContinuation.yield(.frame(frame))
+            for frame in frames {
+                do {
+                    try await ContinuousClock().sleep(for: .seconds(3))
+                } catch {
+                    return
                 }
+                inbound.yield(.frame(frame))
             }
         }
 
