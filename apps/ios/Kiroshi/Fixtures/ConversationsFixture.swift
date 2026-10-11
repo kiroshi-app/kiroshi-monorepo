@@ -1,5 +1,6 @@
 #if DEBUG
     import Foundation
+    import Synchronization
     import UIKit
 
     @MainActor
@@ -333,6 +334,7 @@
 
         private let script: FixtureHost.Script
         private let pages = FixturePageCount()
+        private let created = Mutex<[FixtureHost.Group]>([])
         private let inbound: AsyncStream<Inbound>
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
 
@@ -439,7 +441,8 @@
                                 #"{"type":"turnChanged","state":"running"}"#)))
                 }
             case "conversation_list":
-                reply(id, "[\(script.groups.map(\.json).joined(separator: ","))]")
+                let groups = script.groups + created.withLock { $0 }
+                reply(id, "[\(groups.map(\.json).joined(separator: ","))]")
                 listed.yield()
             case "conversation_main_chat":
                 let companionId = args["botId"] as? String ?? ""
@@ -456,6 +459,20 @@
                 playTurn(after: message)
             case "agent_cancel_turn":
                 reply(id, "null")
+            case "conversation_create":
+                let companionIds = args["botIds"] as? [String] ?? []
+                let group = created.withLock { groups in
+                    let group = FixtureHost.Group(
+                        id: "group-created-\(groups.count + 1)", title: "",
+                        members: companionIds.compactMap { companionId in
+                            script.companions.first { $0.id == companionId }
+                        },
+                        createdAt: Date.now.milliseconds)
+                    groups.append(group)
+                    return group
+                }
+                reply(id, group.json)
+                push(.frame(FixtureHost.groupEvent("conversation://created", group)))
             case "relay_avatar" where args["file"] as? String == "shoto.png":
                 reply(id, FixtureHost.picture)
             default:
