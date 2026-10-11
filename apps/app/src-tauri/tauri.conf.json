@@ -11,6 +11,17 @@
 	},
 	"app": {
 		"security": {
+			"csp": {
+				"default-src": "'self'",
+				"script-src": "'self'",
+				"style-src": "'self' 'unsafe-inline'",
+				"img-src": "'self' asset: http://asset.localhost data: blob: https: http://127.0.0.1:*",
+				"font-src": "'self' data:",
+				"connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*",
+				"object-src": "'none'",
+				"base-uri": "'self'",
+				"frame-src": "'none'"
+			},
 			"assetProtocol": {
 				"enable": true,
 				"scope": ["$APPDATA/avatars/*", "$APPDATA/attachments/**"]
