@@ -165,7 +165,7 @@ const HIGHLIGHT =
 const ROW_BLEEDS_TO_TRANSCRIPT_EDGE = "-mx-6 w-auto px-6"
 
 const ROW_HIGHLIGHT =
-	"transition-colors duration-200 hover:bg-message-row-hover data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
+	"transition-colors duration-200 data-[highlighted]:bg-accent/40 motion-reduce:transition-none"
 
 const RUN_ROW_PADDING = {
 	single: "pt-2 pb-1",

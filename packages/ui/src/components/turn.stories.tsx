@@ -11,7 +11,6 @@ import {
 	shown,
 	slotIn,
 	slotsIn,
-	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
@@ -1954,7 +1953,7 @@ export const InnerRowHovered = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the pointer resting on a row inside a run. The row paints its highlight across the transcript width and writes its own hours and minutes in the empty gutter, level with the first line of its bubble; the head row paints the same highlight and keeps its header. Check the highlight and the gutter time in the light and the dark theme, and that the gutter time opens the full date on hover.",
+					"Reach for this for the pointer resting on a row inside a run. The row keeps its resting background and writes its own hours and minutes in the empty gutter, level with the first line of its bubble; the head row keeps its resting background and its header. Check the unchanged background and the gutter time in the light and the dark theme, and that the gutter time opens the full date on hover.",
 			},
 		},
 	},
@@ -1965,11 +1964,8 @@ export const InnerRowHovered = meta.story({
 		const gutter = slotIn(middle, "message-gutter")
 		const [clock] = timesIn(gutter)
 		const bubble = slotIn(middle, "message-bubble-content")
-		const highlight = tokenStyleIn(
-			middle,
-			"bg-message-row-hover",
-			"backgroundColor",
-		)
+		const middleAtRest = getComputedStyle(middle).backgroundColor
+		const headAtRest = getComputedStyle(head).backgroundColor
 
 		await pointer.hover(bubble)
 		await waitFor(() => expect(getComputedStyle(gutter).opacity).toBe("1"))
@@ -1979,18 +1975,14 @@ export const InnerRowHovered = meta.story({
 			gutter.getBoundingClientRect().right,
 			0,
 		)
-		await waitFor(() =>
-			expect(getComputedStyle(middle).backgroundColor).toBe(highlight),
-		)
+		await expect(getComputedStyle(middle).backgroundColor).toBe(middleAtRest)
 		await expect(middle.getBoundingClientRect().width).toBe(
 			head.getBoundingClientRect().width,
 		)
 
 		await pointer.hover(head)
-		await waitFor(() =>
-			expect(getComputedStyle(head).backgroundColor).toBe(highlight),
-		)
-		await expect(getComputedStyle(gutter).opacity).toBe("0")
+		await waitFor(() => expect(getComputedStyle(gutter).opacity).toBe("0"))
+		await expect(getComputedStyle(head).backgroundColor).toBe(headAtRest)
 		await pointer.unhover(head)
 	},
 })
