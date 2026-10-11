@@ -5149,6 +5149,12 @@
       "required": [],
       "type": "object"
     },
+    "SpaceRole": {
+      "enum": [
+        "guest",
+        "member"
+      ]
+    },
     "StorageFailure": {
       "anyOf": [
         {
@@ -7803,6 +7809,19 @@
       },
       "ok": {
         "$ref": "#/$defs/Bot"
+      }
+    },
+    "hosting_caller_role": {
+      "args": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/SpaceError"
+      },
+      "ok": {
+        "$ref": "#/$defs/SpaceRole"
       }
     },
     "hosting_state": {

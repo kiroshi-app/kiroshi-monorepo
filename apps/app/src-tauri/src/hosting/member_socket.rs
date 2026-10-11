@@ -42,7 +42,7 @@ const FRAME_NAMES: [&str; 3] = ["CallFrame", "AnswerFrame", "EventFrame"];
 fn guest_commands() -> BTreeSet<&'static str> {
 	REACHES
 		.iter()
-		.filter(|(_, reach)| matches!(reach, Reach::Free | Reach::Scoped(_)))
+		.filter(|(_, reach)| matches!(reach, Reach::Free(_) | Reach::Scoped(..)))
 		.map(|(command, _)| *command)
 		.collect()
 }

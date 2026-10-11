@@ -114,6 +114,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		hosting::commands::hosting_state,
 		hosting::commands::hosting_members::<tauri::Wry>,
 		hosting::commands::hosting_invite_member::<tauri::Wry>,
+		hosting::commands::hosting_caller_role,
 		hosting::commands::hosting_withdraw_invitation::<tauri::Wry>,
 		hosting::commands::hosting_remove_member::<tauri::Wry>,
 		invitations::commands::invitations_list::<tauri::Wry>,

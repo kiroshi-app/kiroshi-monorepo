@@ -21,7 +21,8 @@ use tokio::sync::mpsc;
 use super::authorship::Caller;
 use super::bridge::{belongs_to_the_host, LocalApi};
 use super::contract::{
-	HostingState, Member, MemberStatus, MembersError, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
+	HostingState, Member, MemberStatus, MembersError, SpaceRole, CHANGED_EVENT,
+	MEMBERS_CHANGED_EVENT,
 };
 use super::members::{invite, list, remove, withdraw};
 use super::reach;
@@ -1056,7 +1057,12 @@ fn a_relay_guest_adding_a_server_to_a_space_plugin_reaches_the_host() {
 		let mut member = harness.member().await;
 		let args = a_stdio_server_on(json!({ "kind": "space", "id": PERSONAL }));
 
-		let frame = json!({ "id": "p", "command": "plugin_set_mcp_server", "args": args });
+		let frame = json!({
+			"id": "p",
+			"command": "plugin_set_mcp_server",
+			"sender": { "accountId": A_JOINER },
+			"args": args,
+		});
 		send(&mut member, &frame.to_string()).await;
 		let answered = answer(&mut member).await;
 
@@ -1316,7 +1322,17 @@ impl Harness {
 	}
 
 	async fn invited(&self, email: &str) -> Result<Member, MembersError> {
-		invite(self.app.handle(), PERSONAL.to_owned(), email.to_owned()).await
+		self.invited_as(email, SpaceRole::Member).await
+	}
+
+	async fn invited_as(&self, email: &str, role: SpaceRole) -> Result<Member, MembersError> {
+		invite(self.app.handle(), PERSONAL.to_owned(), email.to_owned(), role).await
+	}
+
+	async fn stored_role(&self, user_id: &str) -> SpaceRole {
+		let state = self.app.state::<DatabaseState>();
+		let hosting = state.as_ref().expect("the database").space_hosting();
+		hosting.member_role(PERSONAL.to_owned(), user_id.to_owned()).await.expect("the role reads")
 	}
 
 	async fn withdrawn(&self, user_id: &str) -> Result<Vec<Member>, MembersError> {
@@ -1338,7 +1354,13 @@ impl Harness {
 }
 
 fn member(user_id: &str, email: &str, status: MemberStatus) -> Member {
-	Member { user_id: user_id.to_owned(), name: None, email: email.to_owned(), status }
+	Member {
+		user_id: user_id.to_owned(),
+		name: None,
+		email: email.to_owned(),
+		status,
+		role: SpaceRole::Member,
+	}
 }
 
 fn user_ids(members: &[Member]) -> Vec<&str> {
@@ -1407,7 +1429,93 @@ fn a_pending_member_is_withdrawn_and_a_joined_one_removed_each_read_back() {
 		assert_eq!(heard.len(), 3);
 		assert_eq!(
 			heard[2],
-			json!([{ "userId": "owner", "name": null, "email": OWNER_EMAIL, "status": "host" }])
+			json!([{
+				"userId": "owner",
+				"name": null,
+				"email": OWNER_EMAIL,
+				"status": "host",
+				"role": "member"
+			}])
+		);
+	});
+}
+
+#[test]
+fn an_invitation_stores_its_role_for_the_invited_user_and_lists_it_with_the_members() {
+	run(async {
+		let harness = Harness::hosted("members-roles").await;
+
+		let guest = harness.invited_as("ada@example.com", SpaceRole::Guest).await.expect("invited");
+		let member =
+			harness.invited_as("bo@example.com", SpaceRole::Member).await.expect("invited");
+		let listed = harness.listed().await.expect("the members list");
+
+		assert_eq!((guest.role, member.role), (SpaceRole::Guest, SpaceRole::Member));
+		assert_eq!(harness.stored_role(&guest.user_id).await, SpaceRole::Guest);
+		assert_eq!(harness.stored_role(&member.user_id).await, SpaceRole::Member);
+		assert_eq!(
+			listed.iter().map(|member| member.role).collect::<Vec<_>>(),
+			vec![SpaceRole::Member, SpaceRole::Guest, SpaceRole::Member]
+		);
+		assert_eq!(harness.heard_member_lists()[0][1]["role"], "guest");
+	});
+}
+
+#[test]
+fn a_membership_without_a_stored_role_is_listed_as_member() {
+	run(async {
+		let harness = Harness::hosted("members-unstored-role").await;
+		harness.seed(&[cloud_member("joiner", "joiner@example.com", "member", "joined")]);
+
+		let members = harness.listed().await.expect("the members list");
+
+		assert_eq!(members[1].role, SpaceRole::Member);
+	});
+}
+
+#[test]
+fn a_removed_member_and_a_withdrawn_invitation_leave_no_stored_role() {
+	run(async {
+		let harness = Harness::hosted("members-role-forgotten").await;
+		harness.listed_with_a_guest_and_a_joiner().await;
+		let state = harness.app.state::<DatabaseState>();
+		let hosting = state.as_ref().expect("the database").space_hosting();
+		for user_id in ["guest", "joiner"] {
+			hosting
+				.set_member_role(PERSONAL.to_owned(), user_id.to_owned(), SpaceRole::Guest)
+				.await
+				.expect("the role is stored");
+		}
+
+		harness.withdrawn("guest").await.expect("the invitation is withdrawn");
+		harness.removed("joiner").await.expect("the member is removed");
+
+		assert!(hosting.member_roles(PERSONAL.to_owned()).await.expect("listed").is_empty());
+	});
+}
+
+#[test]
+fn an_invitation_whose_role_is_not_stored_is_withdrawn_and_refused() {
+	run(async {
+		let harness = Harness::hosted("members-role-unstored").await;
+		let state = harness.app.state::<DatabaseState>();
+		let database = state.as_ref().expect("the database");
+		database
+			.call_mut(|connection| Ok(connection.execute_batch("DROP TABLE space_member_roles")?))
+			.await
+			.expect("the roles table is dropped");
+
+		let refused = harness.invited_as("ada@example.com", SpaceRole::Guest).await;
+
+		assert!(matches!(refused, Err(MembersError::Space { .. })), "{refused:?}");
+		let calls = harness.member_calls();
+		assert_eq!(calls.len(), 3, "{calls:?}");
+		assert!(calls[2].starts_with("DELETE "), "{calls:?}");
+		assert!(harness.heard_member_lists().is_empty());
+		assert_eq!(
+			harness.relay.members.lock().expect("the relay").len(),
+			1,
+			"the invitation outlived its unstored role"
 		);
 	});
 }
@@ -1684,6 +1792,8 @@ const TWO_SPACES: &str = "
 
 const PROBE_PATIENCE: Duration = Duration::from_millis(100);
 
+const A_JOINER: &str = "joiner-account";
+
 struct Guest {
 	harness: Harness,
 	effects: HostEffects,
@@ -1719,7 +1829,14 @@ impl Guest {
 	}
 
 	async fn called(&mut self, command: &str, args: Value) -> Value {
-		let frame = json!({ "id": command, "command": command, "args": args });
+		self.called_by(Some(A_JOINER), command, args).await
+	}
+
+	async fn called_by(&mut self, sender: Option<&str>, command: &str, args: Value) -> Value {
+		let mut frame = json!({ "id": command, "command": command, "args": args });
+		if let Some(sender) = sender {
+			frame["sender"] = json!({ "accountId": sender });
+		}
 		send(&mut self.member, &frame.to_string()).await;
 		answer(&mut self.member).await
 	}
@@ -1756,9 +1873,133 @@ fn space_named(space_id: &str) -> Value {
 	json!({ "spaceId": space_id })
 }
 
+impl Guest {
+	async fn holding(name: &str, role: Option<SpaceRole>) -> Self {
+		let guest = Self::of_two_spaces(name).await;
+		if let Some(role) = role {
+			db::open(&guest.effects.database)
+				.space_hosting()
+				.set_member_role(PERSONAL.to_owned(), A_JOINER.to_owned(), role)
+				.await
+				.expect("the role is stored");
+		}
+		guest
+	}
+}
+
+fn a_turn_summoning_a_bot() -> Value {
+	json!({ "message": { "conversationId": "c-mine", "repliedToMessageId": null }, "summoned": ["b-mine"] })
+}
+
+fn an_approval_answer() -> Value {
+	json!({ "scope": a_runtime_scope("c-mine"), "requestId": "p1", "decision": "allow" })
+}
+
+fn an_agent_launch() -> Value {
+	json!({ "scope": a_runtime_scope("c-mine") })
+}
+
+fn refused_to_a_guest(command: &str) -> Value {
+	json!({
+		"id": command,
+		"status": 403,
+		"body": {
+			"error": "a guest of the shared space only reads",
+			"command": command,
+			"role": "guest",
+		},
+	})
+}
+
+async fn a_guest_is_refused(command: &str, args: Value) {
+	let mut guest = Guest::holding(&format!("guest-{command}"), Some(SpaceRole::Guest)).await;
+
+	let answered = guest.called(command, args).await;
+
+	assert_eq!(answered, refused_to_a_guest(command));
+	assert!(guest.effects.reached().is_empty(), "{:?}", guest.effects.reached());
+}
+
+async fn answered_as_today(role: Option<SpaceRole>, command: &str, args: Value) {
+	let mut guest = Guest::holding(&format!("member-{command}"), role).await;
+
+	guest.forwarded(command, args).await;
+
+	assert_eq!(guest.effects.reached(), [command]);
+}
+
+#[test]
+fn a_guest_cannot_send_a_turn() {
+	run(a_guest_is_refused("conversation_send_turn", a_turn_summoning_a_bot()));
+}
+
+#[test]
+fn a_guest_cannot_answer_an_approval() {
+	run(a_guest_is_refused("agent_respond_to_permission", an_approval_answer()));
+}
+
+#[test]
+fn a_guest_cannot_launch_an_agent() {
+	run(a_guest_is_refused("agent_start_or_resume_session", an_agent_launch()));
+}
+
+#[test]
+fn a_member_sends_a_turn() {
+	run(answered_as_today(
+		Some(SpaceRole::Member),
+		"conversation_send_turn",
+		a_turn_summoning_a_bot(),
+	));
+}
+
+#[test]
+fn a_member_answers_an_approval() {
+	run(answered_as_today(
+		Some(SpaceRole::Member),
+		"agent_respond_to_permission",
+		an_approval_answer(),
+	));
+}
+
+#[test]
+fn a_member_launches_an_agent() {
+	run(answered_as_today(
+		Some(SpaceRole::Member),
+		"agent_start_or_resume_session",
+		an_agent_launch(),
+	));
+}
+
+#[test]
+fn a_guest_reads_a_conversation_page() {
+	run(answered_as_today(
+		Some(SpaceRole::Guest),
+		"conversation_message_page",
+		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 50 }),
+	));
+}
+
+#[test]
+fn a_membership_without_a_stored_role_writes_as_a_member() {
+	run(answered_as_today(None, "conversation_send_turn", a_turn_summoning_a_bot()));
+}
+
+#[test]
+fn a_write_without_a_sender_is_refused_as_from_a_guest() {
+	run(async {
+		let mut guest = Guest::holding("write-without-sender", None).await;
+
+		let answered =
+			guest.called_by(None, "conversation_send_turn", a_turn_summoning_a_bot()).await;
+
+		assert_eq!(answered, refused_to_a_guest("conversation_send_turn"));
+		assert!(guest.effects.reached().is_empty(), "{:?}", guest.effects.reached());
+	});
+}
+
 fn held_of(command: &str, index: usize) -> reach::Held {
 	match reach::reach_of(command) {
-		Some(reach::Reach::Scoped(helds)) => helds[index],
+		Some(reach::Reach::Scoped(_, helds)) => helds[index],
 		reach => panic!("{command} is not scoped: {reach:?}"),
 	}
 }
@@ -2811,6 +3052,7 @@ impl Authoring {
 				name: None,
 				email: GUEST_EMAIL.to_owned(),
 				status: MemberStatus::Joined,
+				role: SpaceRole::Member,
 			}]);
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
@@ -2975,7 +3217,7 @@ fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_re
 }
 
 #[test]
-fn a_relayed_frame_stores_its_sender_over_a_forged_author_and_none_without_a_sender() {
+fn a_relayed_frame_stores_its_sender_over_a_forged_author_and_one_without_a_sender_is_refused() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.relayed(json!({
@@ -2985,26 +3227,52 @@ fn a_relayed_frame_stores_its_sender_over_a_forged_author_and_none_without_a_sen
 			"args": { "message": host.sent("vouched")["message"] },
 		}))
 		.await;
-		host.relayed(json!({
-			"id": 2,
-			"command": "conversation_send_user_message",
-			"args": host.sent("anonymous"),
-		}))
-		.await;
+		let anonymous = host
+			.answered(json!({
+				"id": 2,
+				"command": "conversation_send_user_message",
+				"args": host.sent("anonymous"),
+			}))
+			.await;
 
 		let read = direct(&host.window, "conversation_message_page", host.page());
 
+		assert_eq!(anonymous["status"], json!(403), "{anonymous}");
 		assert_eq!(
 			Authoring::authors(&read),
-			vec![
-				(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL)),
-				(json!("anonymous"), Value::Null, Value::Null),
-			]
+			vec![(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL))]
 		);
 		assert!(
 			host.app.state::<Hosting>().relayed.is_empty(),
 			"a vouched member outlived its call"
 		);
+	});
+}
+
+#[test]
+fn a_caller_reads_its_own_role_in_the_shared_space() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let state = host.app.state::<DatabaseState>();
+		state
+			.as_ref()
+			.expect("the database")
+			.space_hosting()
+			.set_member_role(PERSONAL.to_owned(), GUEST.to_owned(), SpaceRole::Guest)
+			.await
+			.expect("the role is stored");
+		let asked_by = |sender: Value| {
+			let mut frame = json!({ "id": 1, "command": "hosting_caller_role" });
+			if !sender.is_null() {
+				frame["sender"] = sender;
+			}
+			host.relayed(frame)
+		};
+
+		assert_eq!(asked_by(guest_sender()).await, json!("guest"));
+		assert_eq!(asked_by(json!({ "accountId": "another-account" })).await, json!("member"));
+		assert_eq!(asked_by(Value::Null).await, json!("guest"));
+		assert_eq!(direct(&host.window, "hosting_caller_role", json!({})), json!("member"));
 	});
 }
 
@@ -3179,7 +3447,13 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 			"args": pin,
 		}))
 		.await;
-		host.relayed(json!({ "id": 3, "command": "conversation_pin_message", "args": pin })).await;
+		host.relayed(json!({
+			"id": 3,
+			"command": "conversation_pin_message",
+			"sender": { "accountId": "another-account" },
+			"args": pin,
+		}))
+		.await;
 		let state = host.app.state::<DatabaseState>();
 		let messages = state.as_ref().expect("the store is open").messages();
 		messages
@@ -3200,6 +3474,7 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 			.answered(json!({
 				"id": 4,
 				"command": "conversation_append_user_message",
+				"sender": { "accountId": "another-account" },
 				"args": { "message": host.unstarted("relayed")["message"] },
 			}))
 			.await;
@@ -3226,13 +3501,14 @@ fn a_member_frame_names_the_conversation_its_reach_reads() {
 fn a_relayed_frame_ignores_a_forged_from_and_stores_the_account_of_its_sender() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
-		host.relayed(json!({
-			"id": 1,
-			"command": "conversation_send_user_message",
-			"from": GUEST,
-			"args": host.unstarted("from-only"),
-		}))
-		.await;
+		let from_only = host
+			.answered(json!({
+				"id": 1,
+				"command": "conversation_send_user_message",
+				"from": GUEST,
+				"args": host.unstarted("from-only"),
+			}))
+			.await;
 		host.relayed(json!({
 			"id": 2,
 			"command": "conversation_send_user_message",
@@ -3244,12 +3520,10 @@ fn a_relayed_frame_ignores_a_forged_from_and_stores_the_account_of_its_sender() 
 
 		let read = direct(&host.window, "conversation_message_page", host.page());
 
+		assert_eq!(from_only["status"], json!(403), "{from_only}");
 		assert_eq!(
 			Authoring::authors(&read),
-			vec![
-				(json!("from-only"), Value::Null, Value::Null),
-				(json!("from-and-sender"), json!(GUEST), json!(GUEST_EMAIL)),
-			]
+			vec![(json!("from-and-sender"), json!(GUEST), json!(GUEST_EMAIL))]
 		);
 	});
 }

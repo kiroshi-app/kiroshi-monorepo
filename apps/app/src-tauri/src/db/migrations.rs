@@ -54,6 +54,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 45, statements: BOT_EFFORT },
 	Migration { version: 46, statements: SPACE_HOSTING },
 	Migration { version: 47, statements: MESSAGE_ACCOUNT_AUTHOR },
+	Migration { version: 48, statements: SPACE_MEMBER_ROLES },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1063,6 +1064,15 @@ CREATE TABLE space_hosting (
 const MESSAGE_ACCOUNT_AUTHOR: &str = "
 ALTER TABLE messages ADD COLUMN author_account_id TEXT;
 ALTER TABLE messages ADD COLUMN author_name TEXT;
+";
+
+const SPACE_MEMBER_ROLES: &str = "
+CREATE TABLE space_member_roles (
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL,
+	role TEXT NOT NULL CHECK (role IN ('guest', 'member')),
+	PRIMARY KEY (space_id, user_id)
+);
 ";
 
 pub fn latest_version() -> u32 {
@@ -3653,6 +3663,39 @@ mod tests {
 		assert!(duplicate.is_err(), "two spaces held the same instance");
 		assert!(second_row_for_a_space.is_err(), "a space held two instances");
 		assert_eq!(count(&connection, "space_hosting"), 0);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_member_role_is_guest_or_member_once_per_member_and_leaves_with_its_space() {
+		let dir = temp_dir();
+		let connection = migrated(&dir);
+		write(
+			&connection,
+			"INSERT INTO spaces (id, name, position, created_at) VALUES ('work', 'Work', 1, 1)",
+		)
+		.expect("the space is inserted");
+		write(
+			&connection,
+			"INSERT INTO space_member_roles (space_id, user_id, role) VALUES ('work', 'u1', 'guest')",
+		)
+		.expect("the role is inserted");
+
+		let owner = write(
+			&connection,
+			"INSERT INTO space_member_roles (space_id, user_id, role) VALUES ('work', 'u2', 'owner')",
+		);
+		let second_role = write(
+			&connection,
+			"INSERT INTO space_member_roles (space_id, user_id, role) VALUES ('work', 'u1', 'member')",
+		);
+		write(&connection, "DELETE FROM spaces WHERE id = 'work'").expect("the space leaves");
+
+		assert!(owner.is_err(), "a role outside guest and member reached the file");
+		assert!(second_role.is_err(), "a member held two roles in one space");
+		assert_eq!(count(&connection, "space_member_roles"), 0);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

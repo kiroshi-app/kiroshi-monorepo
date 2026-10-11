@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use rusqlite::{params, Connection, OptionalExtension};
 
+use super::messages::stored_as_text;
 use super::spaces::SpaceError;
 use crate::db::{Access, DatabaseError};
+use crate::hosting::contract::SpaceRole;
 
 const SELECT_REGISTRATION: &str = "SELECT spaces.name, space_hosting.instance_id
 	FROM spaces LEFT JOIN space_hosting ON space_hosting.space_id = spaces.id
@@ -20,6 +25,21 @@ const SELECT_HOSTED: &str =
 
 const SELECT_REGISTERED_INSTANCES: &str =
 	"SELECT instance_id FROM space_hosting WHERE instance_id IS NOT NULL ORDER BY instance_id ASC";
+
+const UPSERT_MEMBER_ROLE: &str = "INSERT INTO space_member_roles (space_id, user_id, role)
+	VALUES (?1, ?2, ?3)
+	ON CONFLICT (space_id, user_id) DO UPDATE SET role = excluded.role";
+
+const SELECT_MEMBER_ROLE: &str =
+	"SELECT role FROM space_member_roles WHERE space_id = ?1 AND user_id = ?2";
+
+const SELECT_MEMBER_ROLES: &str =
+	"SELECT user_id, role FROM space_member_roles WHERE space_id = ?1";
+
+const DELETE_MEMBER_ROLE: &str =
+	"DELETE FROM space_member_roles WHERE space_id = ?1 AND user_id = ?2";
+
+stored_as_text!(SpaceRole);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registration {
@@ -68,6 +88,63 @@ impl SpaceHostingRepository {
 				let mut statement = connection.prepare_cached(SELECT_HOSTED)?;
 				let ids = statement.query_map([], |row| row.get(0))?.collect::<Result<_, _>>()?;
 				Ok(ids)
+			})
+			.await
+	}
+
+	pub async fn set_member_role(
+		&self,
+		space_id: String,
+		user_id: String,
+		role: SpaceRole,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				connection.execute(UPSERT_MEMBER_ROLE, params![space_id, user_id, role])?;
+				Ok(())
+			})
+			.await
+	}
+
+	pub async fn member_role(
+		&self,
+		space_id: String,
+		user_id: String,
+	) -> Result<SpaceRole, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let stored = connection
+					.query_row(SELECT_MEMBER_ROLE, params![space_id, user_id], |row| row.get(0))
+					.optional()?;
+				Ok(stored.unwrap_or(SpaceRole::Member))
+			})
+			.await
+	}
+
+	pub async fn member_roles(
+		&self,
+		space_id: String,
+	) -> Result<HashMap<String, SpaceRole>, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(SELECT_MEMBER_ROLES)?;
+				let roles = statement
+					.query_map([space_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+					.collect::<Result<_, _>>()?;
+				Ok(roles)
+			})
+			.await
+	}
+
+	pub async fn forget_member_role(
+		&self,
+		space_id: String,
+		user_id: String,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				connection.execute(DELETE_MEMBER_ROLE, params![space_id, user_id])?;
+				Ok(())
 			})
 			.await
 	}
@@ -169,5 +246,42 @@ mod tests {
 
 		assert!(intended.is_empty());
 		assert_eq!(hosting.registered_instance_ids().await.expect("listed"), vec!["i1".to_owned()]);
+	}
+
+	#[tokio::test]
+	async fn a_member_without_a_stored_role_reads_as_member_and_a_forgotten_one_goes_back_to_it() {
+		let database = open(&temp_dir());
+		let hosting = database.space_hosting();
+		let role = |user_id: &str| hosting.member_role(PERSONAL.to_owned(), user_id.to_owned());
+
+		let unstored = role("u1").await.expect("read");
+		hosting
+			.set_member_role(PERSONAL.to_owned(), "u1".to_owned(), SpaceRole::Guest)
+			.await
+			.expect("stored");
+		let stored = role("u1").await.expect("read");
+		let listed = hosting.member_roles(PERSONAL.to_owned()).await.expect("listed");
+		hosting.forget_member_role(PERSONAL.to_owned(), "u1".to_owned()).await.expect("forgotten");
+
+		assert_eq!(unstored, SpaceRole::Member);
+		assert_eq!(stored, SpaceRole::Guest);
+		assert_eq!(listed, HashMap::from([("u1".to_owned(), SpaceRole::Guest)]));
+		assert_eq!(role("u1").await.expect("read"), SpaceRole::Member);
+		assert!(hosting.member_roles(PERSONAL.to_owned()).await.expect("listed").is_empty());
+	}
+
+	#[tokio::test]
+	async fn a_role_set_again_replaces_the_stored_one() {
+		let database = open(&temp_dir());
+		let hosting = database.space_hosting();
+		let set = |role| hosting.set_member_role(PERSONAL.to_owned(), "u1".to_owned(), role);
+
+		set(SpaceRole::Guest).await.expect("stored");
+		set(SpaceRole::Member).await.expect("replaced");
+
+		assert_eq!(
+			hosting.member_role(PERSONAL.to_owned(), "u1".to_owned()).await.expect("read"),
+			SpaceRole::Member
+		);
 	}
 }
