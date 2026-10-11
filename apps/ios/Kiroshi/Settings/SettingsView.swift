@@ -29,6 +29,7 @@ struct SettingsView: View {
                 Button(role: .close) {
                     dismiss()
                 }
+                .tint(.primary)
             }
         }
         .alert("Sign out of Kiroshi?", isPresented: $model.isConfirmingSignOut) {
