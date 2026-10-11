@@ -53,7 +53,10 @@ const SIGNED_IN: AccountState = {
 	status: "signedIn",
 	name: "Ada Martin",
 	email: "ada.martin@example.com",
+	plan: "pro",
 }
+
+const PLAN = en.settings.account.signedIn.plan
 
 const LONG_EMAIL =
 	"ada.martin.who.signed.up.with.her.whole.department.address.for.every.space@kiroshi-research-laboratories.example.com"
@@ -640,7 +643,7 @@ export const SignedIn = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard S5: a reader signed in to Kiroshi. Check that the card names them and their email as handed in, that Sign out calls back, and that the caption warns what stops working. Pick `WithALongEmail` for an address wider than the card.",
+					"Artboards S5, A1 and A2: a reader signed in to Kiroshi on the Pro plan. Check that the card names them, their email as handed in and their plan behind the Free during the beta badge, that Sign out calls back, and that the caption warns what stops working. Pick `WithALongEmail` for an address wider than the card.",
 			},
 		},
 	},
@@ -653,11 +656,54 @@ export const SignedIn = meta.story({
 		).toBeVisible()
 		await expect(within(panel).getByText(SIGNED_IN.name)).toBeVisible()
 		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
+		await expect(within(panel).getByText(PLAN.label)).toBeVisible()
+		await expect(within(panel).getByText(PLAN.beta)).toBeVisible()
+		await expect(within(panel).getByText(PLAN.pro)).toBeVisible()
 
 		await userEvent.click(
 			within(panel).getByRole("button", { name: "Sign out" }),
 		)
 		await expect(args.account?.onSignOut).toHaveBeenCalledOnce()
+	},
+})
+
+export const SignedInOnTheFreePlan = meta.story({
+	args: { tab: "account", account: accountIn({ ...SIGNED_IN, plan: "free" }) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader signed in on the Free plan: the Plan row names it, with no beta badge.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const panel = await accountPanelIn(dialog)
+
+		await expect(within(panel).getByText(PLAN.label)).toBeVisible()
+		await expect(within(panel).getByText(PLAN.free)).toBeVisible()
+		await expect(within(panel).queryByText(PLAN.beta)).toBeNull()
+	},
+})
+
+export const SignedInWithoutAPlan = meta.story({
+	args: { tab: "account", account: accountIn({ ...SIGNED_IN, plan: null }) },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader signed in whose account carries no plan: the card stops at Email, with no Plan row and no badge.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const panel = await accountPanelIn(dialog)
+
+		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
+		await expect(within(panel).queryByText(PLAN.label)).toBeNull()
+		await expect(within(panel).queryByText(PLAN.beta)).toBeNull()
 	},
 })
 

@@ -34,6 +34,12 @@ const settings = {
 			body: "Vous pouvez héberger des espaces pour des personnes hors de votre réseau, et rejoindre ceux qu’elles hébergent pour vous.",
 			name: "Nom",
 			email: "E-mail",
+			plan: {
+				label: "Offre",
+				beta: "Gratuit pendant la bêta",
+				pro: "Pro",
+				free: "Gratuit",
+			},
 			signOut: "Se déconnecter",
 			caption:
 				"Les espaces que vous hébergez ou avez rejoints via Kiroshi cessent de fonctionner ici jusqu’à votre prochaine connexion.",

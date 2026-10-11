@@ -34,6 +34,12 @@ const settings = {
 			body: "You can host spaces for people who aren’t on your network, and join the ones they host for you.",
 			name: "Name",
 			email: "Email",
+			plan: {
+				label: "Plan",
+				beta: "Free during the beta",
+				pro: "Pro",
+				free: "Free",
+			},
 			signOut: "Sign out",
 			caption:
 				"Spaces you host or joined through Kiroshi stop working here until you sign in again.",
