@@ -141,7 +141,7 @@ const urlOf = (application: Application) =>
 
 export const DIRECTORY_READ_BOUND_MS = 15_000
 
-export type CatalogueStatus = {
+type CatalogueStatus = {
 	isLoading: boolean
 	hasFailed: boolean
 }
