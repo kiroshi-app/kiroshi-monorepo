@@ -141,6 +141,22 @@ describe("raiseReportedFailure", () => {
 })
 
 describe("a refused joined-space request", () => {
+	it("copies neither the host, the port nor the URL of a request that fails before any answer", async () => {
+		const host = memberHostAnswering(async () => {
+			throw new TypeError(
+				"error sending request for url (http://192.168.1.20:45367/invoke/send_message)",
+			)
+		})
+
+		await expect(host.invoke("send_message", RELAYED_ARGS)).rejects.toThrow(
+			"error sending request",
+		)
+
+		const copiedText = copiedTextOfRaisedNotice()
+		expect(copiedText).toContain("Command: send_message")
+		expect(copiedText).not.toMatch(/192\.168\.1\.20|45367|http:|\/invoke\//)
+	})
+
 	it("names the command, the status, the member side, the version and the platform", async () => {
 		const host = memberHostAnswering(
 			async () => new Response(OTHER_SPACE_REFUSAL, { status: 403 }),
