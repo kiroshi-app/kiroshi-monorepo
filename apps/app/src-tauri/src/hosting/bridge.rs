@@ -12,7 +12,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use super::authorship::RelayedMember;
-use super::reach::{self, Reach};
+use super::contract::SpaceRole;
+use super::reach::{self, Access, Reach};
 use super::Hosting;
 
 use crate::avatars::Avatars;
@@ -21,12 +22,18 @@ use crate::file_store::FileStore;
 use crate::host_api::files::AVATAR_PATH;
 use crate::host_api::invoke::{names_an_app_command, RELAYED_MEMBER_HEADER};
 use crate::missions::github::installed_tls_provider;
+use crate::spaces::commands::ready;
+use crate::spaces::contract::SpaceError;
 
 const INVOKE_BOUND: Duration = Duration::from_secs(300);
 
 const HOST_ONLY_REFUSAL: &str = "this command belongs to the host";
 
 const OTHER_SPACE_REFUSAL: &str = "this command reaches outside the shared space";
+
+const GUEST_REFUSAL: &str = "a guest of the shared space only reads";
+
+const ROLE_UNREAD: &str = "the role of the sender was not read";
 
 pub(crate) const SHARED_SPACE_COMMAND: &str = "relay_shared_space";
 
@@ -167,6 +174,9 @@ pub(super) async fn bridged<R: Runtime>(
 		);
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
+	if let Some((status, body)) = role_refusal(&app, &shared_space_id, &call).await {
+		return answer(call.id, status, body);
+	}
 	if call.sender.is_none() {
 		eprintln!(
 			"a member frame reached the host without sender: {} in conversation {}",
@@ -182,6 +192,51 @@ pub(super) async fn bridged<R: Runtime>(
 		Ok((status, body)) => answer(call.id, status, body),
 		Err(reason) => answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
 	}
+}
+
+async fn role_refusal<R: Runtime>(
+	app: &AppHandle<R>,
+	shared_space_id: &str,
+	call: &MemberCall,
+) -> Option<(StatusCode, Value)> {
+	if reach::access_of(&call.command) == Some(Access::Read) {
+		return None;
+	}
+	let role = match &call.sender {
+		None => SpaceRole::Guest,
+		Some(user_id) => match sender_role(app, shared_space_id, user_id).await {
+			Ok(role) => role,
+			Err(failure) => {
+				eprintln!(
+					"the relayed {} was refused in shared space {shared_space_id}: the role of its sender was not read: {failure:?}",
+					call.command
+				);
+				return Some((StatusCode::INTERNAL_SERVER_ERROR, json!(ROLE_UNREAD)));
+			}
+		},
+	};
+	if role == SpaceRole::Member {
+		return None;
+	}
+	eprintln!(
+		"the relayed {} from sender {} was refused in shared space {shared_space_id}: a guest only reads",
+		call.command,
+		call.sender.as_deref().map_or_else(|| "none".to_owned(), |sender| Value::from(sender).to_string())
+	);
+	let body = json!({ "error": GUEST_REFUSAL, "command": call.command, "role": role });
+	Some((StatusCode::FORBIDDEN, body))
+}
+
+async fn sender_role<R: Runtime>(
+	app: &AppHandle<R>,
+	shared_space_id: &str,
+	user_id: &str,
+) -> Result<SpaceRole, SpaceError> {
+	let database_state = app.state::<DatabaseState>();
+	Ok(ready(&database_state)?
+		.space_hosting()
+		.member_role(shared_space_id.to_owned(), user_id.to_owned())
+		.await?)
 }
 
 async fn invoked(
@@ -413,6 +468,33 @@ mod tests {
 		classified.sort();
 
 		assert_eq!(classified, registered);
+	}
+
+	#[test]
+	fn every_command_a_member_reaches_is_read_or_write_and_what_a_guest_may_not_do_writes() {
+		let unclassified: Vec<&str> = reach::REACHES
+			.iter()
+			.filter(|(command, reach)| {
+				*reach != Reach::HostOnly && reach::access_of(command).is_none()
+			})
+			.map(|(command, _)| *command)
+			.collect();
+		assert_eq!(unclassified, Vec::<&str>::new());
+		for command in [
+			"conversation_send_turn",
+			"conversation_send_user_message",
+			"conversation_append_user_message",
+			"conversation_add_participant",
+			"agent_submit_prompt",
+			"agent_start_or_resume_session",
+			"agent_check",
+			"agent_title",
+			"agent_respond_to_permission",
+			"agent_answer_question",
+			"routine_run_now",
+		] {
+			assert_eq!(reach::access_of(command), Some(Access::Write), "{command}");
+		}
 	}
 
 	fn declared_event_name(line: &str) -> Option<&str> {
