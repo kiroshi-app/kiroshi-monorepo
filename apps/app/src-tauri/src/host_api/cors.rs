@@ -5,7 +5,13 @@ use axum::response::{IntoResponse, Response};
 
 pub const WEB_ORIGIN: &str = "http://127.0.0.1:1420";
 
-const WEB_ORIGINS: [&str; 2] = [WEB_ORIGIN, "http://localhost:1420"];
+pub const WINDOW_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) {
+	"http://tauri.localhost"
+} else {
+	"tauri://localhost"
+};
+
+pub const ACCEPTED_ORIGINS: [&str; 3] = [WEB_ORIGIN, "http://localhost:1420", WINDOW_ORIGIN];
 
 const API_PREFIX: &str = "/api/";
 
@@ -14,7 +20,7 @@ const ALLOWED_METHODS: &str = "GET, POST, OPTIONS";
 const ALLOWED_HEADERS: &str = "Authorization, Content-Type";
 
 pub(crate) async fn shared(request: Request, next: Next) -> Response {
-	let Some(origin) = web_origin(&request) else {
+	let Some(origin) = accepted_origin(&request) else {
 		return next.run(request).await;
 	};
 	if request.method() == Method::OPTIONS {
@@ -25,12 +31,12 @@ pub(crate) async fn shared(request: Request, next: Next) -> Response {
 	response
 }
 
-fn web_origin(request: &Request) -> Option<HeaderValue> {
+fn accepted_origin(request: &Request) -> Option<HeaderValue> {
 	if !request.uri().path().starts_with(API_PREFIX) {
 		return None;
 	}
 	let origin = request.headers().get(header::ORIGIN)?;
-	WEB_ORIGINS.contains(&origin.to_str().ok()?).then(|| origin.clone())
+	ACCEPTED_ORIGINS.contains(&origin.to_str().ok()?).then(|| origin.clone())
 }
 
 fn preflight(origin: HeaderValue) -> Response {

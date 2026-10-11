@@ -173,6 +173,7 @@ async fn events_opened(State(proxy): State<Proxy>, upgrade: WebSocketUpgrade) ->
 
 #[cfg(test)]
 mod tests {
+	use axum::http::Method;
 	use tokio::sync::mpsc;
 
 	use super::*;
@@ -306,6 +307,34 @@ mod tests {
 
 		assert_eq!(answer.status(), HOST_OFFLINE.0);
 		assert_eq!(answer.text().await.expect("the text"), HOST_OFFLINE.1);
+	}
+
+	#[tokio::test]
+	async fn a_preflight_from_the_packaged_window_is_allowed_before_any_token() {
+		let link = Arc::new(MemberLink::new());
+		let origin = a_guest_proxy(link, Arc::new(HostToken::random())).await;
+
+		for path in
+			[invoke::PATH.replace("{command}", "conversation_list"), events::PATH.to_owned()]
+		{
+			let answer = a_client()
+				.request(Method::OPTIONS, format!("{origin}{path}"))
+				.header(header::ORIGIN, cors::WINDOW_ORIGIN)
+				.header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+				.header(header::ACCESS_CONTROL_REQUEST_HEADERS, "authorization")
+				.send()
+				.await
+				.expect("an answer");
+
+			assert!(answer.status().is_success(), "{path}: {}", answer.status());
+			let headers = answer.headers();
+			assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], cors::WINDOW_ORIGIN);
+			assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_METHODS], "GET, POST, OPTIONS");
+			assert_eq!(
+				headers[header::ACCESS_CONTROL_ALLOW_HEADERS],
+				"Authorization, Content-Type"
+			);
+		}
 	}
 
 	#[tokio::test]

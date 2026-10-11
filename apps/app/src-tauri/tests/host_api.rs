@@ -13,6 +13,7 @@ use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
+use kiroshi_app::host_api::cors;
 use kiroshi_app::host_api::events::SEND_PATIENCE;
 use kiroshi_app::host_api::invoke::MAX_BODY_BYTES;
 use kiroshi_app::missions::commands::MissionChanged;
@@ -787,12 +788,23 @@ async fn a_directory_answers_not_found() {
 	assert_eq!(server.fetched("/api/files/attachments/c1/inner", &token).await.status, 404);
 }
 
+#[test]
+fn exactly_the_dev_server_and_the_packaged_window_origins_are_accepted() {
+	let window = if cfg!(any(windows, target_os = "android")) {
+		"http://tauri.localhost"
+	} else {
+		"tauri://localhost"
+	};
+
+	assert_eq!(cors::ACCEPTED_ORIGINS, ["http://127.0.0.1:1420", "http://localhost:1420", window]);
+}
+
 #[tokio::test(flavor = "multi_thread")]
-async fn a_preflight_from_the_dev_server_is_allowed() {
+async fn a_preflight_from_each_accepted_origin_is_allowed() {
 	let host = Host::new();
 	let server = host.started();
 
-	for origin in ["http://127.0.0.1:1420", "http://localhost:1420"] {
+	for origin in cors::ACCEPTED_ORIGINS {
 		let headers = format!(
 			"Origin: {origin}\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: authorization\r\n"
 		);
@@ -809,16 +821,18 @@ async fn a_preflight_from_the_dev_server_is_allowed() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_call_from_the_dev_server_names_its_origin() {
+async fn a_call_from_each_accepted_origin_names_its_origin() {
 	let host = Host::new();
 	let server = host.started();
 
-	let answer = server
-		.requested("GET", "/api/files/avatars/face.png", "Origin: http://localhost:1420\r\n")
-		.await;
+	for origin in cors::ACCEPTED_ORIGINS {
+		let answer = server
+			.requested("GET", "/api/files/avatars/face.png", &format!("Origin: {origin}\r\n"))
+			.await;
 
-	assert_eq!(answer.status, 401);
-	assert_eq!(answer.header("access-control-allow-origin"), Some("http://localhost:1420"));
+		assert_eq!(answer.status, 401, "{origin}");
+		assert_eq!(answer.header("access-control-allow-origin"), Some(origin));
+	}
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -827,23 +841,27 @@ async fn a_foreign_origin_is_given_no_cors_header() {
 	let server = host.started();
 	let token = host.token();
 
-	let preflight = server
-		.requested(
-			"OPTIONS",
-			"/api/invoke/conversation_list",
-			"Origin: http://evil.test\r\nAccess-Control-Request-Method: POST\r\n",
-		)
-		.await;
-	let call = server
-		.requested(
-			"GET",
-			"/api/files/avatars/face.png",
-			&format!("Origin: http://evil.test\r\nAuthorization: Bearer {token}\r\n"),
-		)
-		.await;
+	for origin in
+		["http://evil.test", "tauri://localhost.evil.test", "https://localhost:1420", "null"]
+	{
+		let preflight = server
+			.requested(
+				"OPTIONS",
+				"/api/invoke/conversation_list",
+				&format!("Origin: {origin}\r\nAccess-Control-Request-Method: POST\r\n"),
+			)
+			.await;
+		let call = server
+			.requested(
+				"GET",
+				"/api/files/avatars/face.png",
+				&format!("Origin: {origin}\r\nAuthorization: Bearer {token}\r\n"),
+			)
+			.await;
 
-	for answer in [preflight, call] {
-		assert!(!answer.head.contains("access-control-allow"), "{}", answer.head);
+		for answer in [preflight, call] {
+			assert!(!answer.head.contains("access-control-allow"), "{origin}: {}", answer.head);
+		}
 	}
 }
 
