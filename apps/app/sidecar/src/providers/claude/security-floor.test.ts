@@ -129,6 +129,26 @@ describe("securityFloor", () => {
 		}
 	})
 
+	it("refuses the MCP config file, as written and through its resolved symlink", () => {
+		const written = "/var/folders/xy/T/kiroshi-mcp-abc/mcp.json"
+		const resolved = "/private/var/folders/xy/T/kiroshi-mcp-abc/mcp.json"
+		const scope: FloorScope = {
+			appDataDir: APP_DATA,
+			home: homedir(),
+			mcpConfigPaths: [written, resolved],
+			platform: "darwin",
+			pluginPaths: [],
+			writablePaths: [],
+		}
+		const settings = securityFloor(scope)
+
+		for (const path of [written, resolved]) {
+			expect(settings.permissions?.deny).toContain(`Read(/${path})`)
+			expect(settings.sandbox?.filesystem?.denyRead).toContain(path)
+			expect(deniesRead(scope, path)).toBe(true)
+		}
+	})
+
 	it("refuses the host API token and every mission hook key, not the hook script", () => {
 		const scope: FloorScope = {
 			appDataDir: APP_DATA,

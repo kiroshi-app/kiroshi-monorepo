@@ -87,12 +87,17 @@ const pathsOf = ({ directories, files }: Denial): string[] => [
 	...files,
 ]
 
-const deniedReads = (home: string, appDataDir?: string): Denial => ({
+const deniedReads = (
+	home: string,
+	appDataDir: string | undefined,
+	mcpConfigPaths: string[],
+): Denial => ({
 	directories: under(home, READ_DIRECTORIES),
 	files: [
 		...under(home, READ_FILES),
 		...ENVIRONMENT_FILES,
 		...under(appDataDir, APP_DATA_FILES),
+		...mcpConfigPaths,
 	],
 })
 
@@ -144,6 +149,7 @@ export type FloorScope = {
 	appDataDir?: string
 	conversationId?: string
 	home: string
+	mcpConfigPaths?: string[]
 	platform: NodeJS.Platform
 	pluginPaths: string[]
 	writablePaths: string[]
@@ -153,11 +159,12 @@ const readFloor = ({
 	appDataDir,
 	conversationId,
 	home,
+	mcpConfigPaths = [],
 	pluginPaths,
 }: FloorScope) => {
 	const attachments = ownedAttachments(appDataDir, conversationId)
 	return {
-		reads: deniedReads(home, appDataDir),
+		reads: deniedReads(home, appDataDir, mcpConfigPaths),
 		bundles: foreignBundles(appDataDir, pluginPaths),
 		attachments: foreignAttachments(appDataDir, attachments),
 		trees: under(appDataDir, DENIED_TREES),

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { spawn } from "node:child_process"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import type { Settings } from "@anthropic-ai/claude-agent-sdk"
+import { query, type Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
@@ -19,6 +20,7 @@ import { AWAITING_AUTH, leftOut } from "./server-env"
 import type { RenewedGrant } from "./server-renewal"
 import {
 	buildOptions,
+	declaredServers,
 	dialledServers,
 	reportConnections,
 	stopTurn,
@@ -56,6 +58,18 @@ const request = {
 	pluginPath: "/bots/b1",
 	agent: "bean",
 	identity,
+}
+
+const SECRET = "sk-live-secret-value"
+
+const secretServers = {
+	servers: { clock: { command: "run", env: { TOKEN: SECRET } } },
+	rejections: [],
+}
+
+const mcpConfig = {
+	path: "/var/folders/xy/T/kiroshi-mcp-test/mcp.json",
+	resolvedPath: "/private/var/folders/xy/T/kiroshi-mcp-test/mcp.json",
 }
 
 const rejectedDetails = [
@@ -451,14 +465,15 @@ describe("buildOptions", () => {
 		).toContain(failure)
 	})
 
-	it("names to the pass the servers the options carry, and nothing else", () => {
+	it("names to the pass the resolved servers the session declares, and nothing else", () => {
+		const servers = { clock: { command: "run" } }
 		const options = buildOptions(request, undefined, undefined, {
-			servers: { clock: { command: "run" } },
+			servers,
 			rejections: [],
 		})
 
-		expect(dialledServers(options)).toEqual(["clock"])
-		expect(Object.keys(options.mcpServers ?? {})).toEqual([
+		expect(dialledServers(declaredServers(options, servers))).toEqual(["clock"])
+		expect(Object.keys(declaredServers(options, servers))).toEqual([
 			"clock",
 			KIROSHI_SERVER,
 		])
@@ -478,16 +493,21 @@ describe("buildOptions", () => {
 		rmSync(bundle, { recursive: true, force: true })
 
 		expect(withoutAgent.mcpServers).toBeUndefined()
-		expect(dialledServers(withoutAgent)).toEqual([])
+		expect(
+			dialledServers(
+				declaredServers(withoutAgent, { clock: { command: "run" } }),
+			),
+		).toEqual([])
 	})
 
 	it("hands the kept servers and the rejections of one same resolution", () => {
+		const servers = { clock: { command: "run" } }
 		const options = buildOptions(request, undefined, undefined, {
-			servers: { clock: { command: "run" } },
+			servers,
 			rejections,
 		})
 
-		expect(Object.keys(options.mcpServers ?? {})).toEqual([
+		expect(Object.keys(declaredServers(options, servers))).toEqual([
 			"clock",
 			KIROSHI_SERVER,
 		])
@@ -523,6 +543,71 @@ describe("buildOptions", () => {
 		)
 		expect(append).not.toContain("clock")
 		expect(append).not.toContain("narrow")
+	})
+
+	it("hands the resolved servers over by the config file alone, beside the kiroshi server", () => {
+		const options = buildOptions(
+			request,
+			undefined,
+			undefined,
+			secretServers,
+			undefined,
+			mcpConfig,
+		)
+
+		expect(Object.keys(options.mcpServers ?? {})).toEqual([KIROSHI_SERVER])
+		expect(options.extraArgs).toEqual({ "mcp-config": mcpConfig.path })
+	})
+
+	it("sets no config flag and inlines no resolved server without a config file", () => {
+		const options = buildOptions(request, undefined, undefined, secretServers)
+
+		expect(Object.keys(options.mcpServers ?? {})).toEqual([KIROSHI_SERVER])
+		expect(options.extraArgs).toBeUndefined()
+	})
+
+	it("denies the agent reading the config file, as written and resolved", () => {
+		const floor = buildOptions(
+			request,
+			undefined,
+			undefined,
+			secretServers,
+			undefined,
+			mcpConfig,
+		).managedSettings
+
+		for (const path of [mcpConfig.path, mcpConfig.resolvedPath]) {
+			expect(floor?.permissions?.deny).toContain(`Read(/${path})`)
+			expect(floor?.sandbox?.filesystem?.denyRead).toContain(path)
+		}
+	})
+
+	it("spawns Claude Code with the config path on the argv and no secret", async () => {
+		const options = buildOptions(
+			request,
+			undefined,
+			undefined,
+			secretServers,
+			undefined,
+			mcpConfig,
+		)
+		const spawned = Promise.withResolvers<string[]>()
+		const run = query({
+			prompt: "hello",
+			options: {
+				...options,
+				spawnClaudeCodeProcess: ({ args }) => {
+					spawned.resolve(args)
+					return spawn("true", { stdio: ["pipe", "pipe", "pipe"] })
+				},
+			},
+		})
+
+		const args = await spawned.promise
+		run.close()
+
+		expect(args.join(" ")).not.toContain(SECRET)
+		expect(args[args.indexOf("--mcp-config") + 1]).toBe(mcpConfig.path)
 	})
 })
 

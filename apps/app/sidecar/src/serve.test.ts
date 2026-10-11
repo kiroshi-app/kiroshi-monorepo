@@ -7,6 +7,7 @@ import { sessionRequest } from "./serve"
 
 import { claudeSourceExecutable } from "./providers/claude/build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./providers/claude/executable"
+import { resolvedServers } from "./providers/claude/server-env"
 import { buildOptions } from "./providers/claude/session"
 import { spaceLine } from "./providers/claude/system-layer"
 import { DEFAULT_PROVIDER_ID } from "./providers/registry"
@@ -171,12 +172,11 @@ describe("serve", () => {
 	it("expands a declared server from the environment the open command holds", () => {
 		const bundle = declaringClock()
 		try {
-			const options = buildOptions(
+			const { servers } = resolvedServers(
 				sessionRequest(openCommand({ agent: "bean", pluginPath: bundle })),
-				undefined,
 			)
 
-			expect(options.mcpServers?.clock).toEqual({
+			expect(servers.clock).toEqual({
 				command: "run",
 				args: ["--token", "narrow"],
 			})
