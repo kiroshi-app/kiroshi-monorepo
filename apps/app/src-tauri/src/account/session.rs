@@ -476,7 +476,7 @@ mod tests {
 
 				let account = cloud.me(BEARER).await.expect("the account parses");
 
-				assert_eq!(account.plan, plan, "{answered}");
+				assert_eq!(account.plan, plan, "{:?}", answered.get("plan"));
 				assert_eq!(
 					(account.id.as_str(), account.email.as_str(), account.created_at.as_str()),
 					("u1", EMAIL, "2026-10-01T00:00:00.000Z")
