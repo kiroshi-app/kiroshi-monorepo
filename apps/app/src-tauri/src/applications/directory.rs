@@ -723,7 +723,7 @@ pub(crate) mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::test_app::an_app_of_its_own;
+	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const NOON: i64 = 1_700_000_000_000;
 
@@ -957,6 +957,14 @@ pub(crate) mod tests {
 	) -> Arc<Directory> {
 		let directory = Arc::into_inner(directory).expect("the directory is held once");
 		Arc::new(Directory { first_read_wait, refresh_bound, ..directory })
+	}
+
+	fn refreshes_heard(app: &AppOfItsOwn) -> tokio::sync::mpsc::UnboundedReceiver<String> {
+		let (told, heard) = tokio::sync::mpsc::unbounded_channel();
+		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
+			told.send(event.payload().to_owned()).expect("the test listens");
+		});
+		heard
 	}
 
 	fn planted(directory: &Directory, cached: Cached) {
@@ -1653,10 +1661,7 @@ pub(crate) mod tests {
 	#[tokio::test]
 	async fn a_background_refresh_that_lands_rows_is_announced_once_to_the_window() {
 		let app = an_app_of_its_own("directory-refreshed", mock_builder());
-		let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
-		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
-			told.send(event.payload().to_owned()).expect("the test listens");
-		});
+		let mut heard = refreshes_heard(&app);
 		let (base, _) = serving(vec![a_page(&["fresh"])]).await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1)));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
@@ -1675,10 +1680,7 @@ pub(crate) mod tests {
 	#[tokio::test]
 	async fn a_refused_refresh_is_announced_once_after_its_failure_is_held() {
 		let app = an_app_of_its_own("directory-refused", mock_builder());
-		let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
-		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
-			told.send(event.payload().to_owned()).expect("the test listens");
-		});
+		let mut heard = refreshes_heard(&app);
 		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
 		*held.refusals.lock().expect("the stub records") = 1;
 		let clock = Moving::at(NOON + REREAD_MS + 1);
@@ -1707,10 +1709,7 @@ pub(crate) mod tests {
 	#[tokio::test]
 	async fn a_refresh_past_its_bound_is_announced_once_after_its_failure_is_held() {
 		let app = an_app_of_its_own("directory-unlisted", mock_builder());
-		let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
-		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
-			told.send(event.payload().to_owned()).expect("the test listens");
-		});
+		let mut heard = refreshes_heard(&app);
 		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
 		held.hold_back();
 		let directory = bounded(
