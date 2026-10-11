@@ -1,16 +1,24 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { SettingsField } from "@workspace/ui/components/settings-field"
+import { Badge } from "@workspace/ui/components/ui/badge"
 import { Button } from "@workspace/ui/components/ui/button"
+
+type AccountPlan = "free" | "pro"
 
 type AccountState =
 	| { status: "signedOut" }
 	| { status: "waiting" }
-	| { status: "signedIn"; name: string; email: string }
+	| {
+			status: "signedIn"
+			name: string
+			email: string
+			plan: AccountPlan | null
+	  }
 
 type AccountPanelProps = {
 	account: AccountState
@@ -35,7 +43,7 @@ const AccountIntro = ({ title, body }: AccountIntroProps) => (
 
 type AccountRowProps = {
 	label: string
-	value: string
+	value: ReactNode
 }
 
 const AccountRow = ({ label, value }: AccountRowProps) => (
@@ -69,6 +77,21 @@ const AccountPanel = ({
 						label={t("account.signedIn.email")}
 						value={account.email}
 					/>
+					{account.plan ? (
+						<AccountRow
+							label={t("account.signedIn.plan.label")}
+							value={
+								<span className="flex items-center justify-end gap-2">
+									{account.plan === "pro" ? (
+										<Badge variant="secondary">
+											{t("account.signedIn.plan.beta")}
+										</Badge>
+									) : null}
+									{t(`account.signedIn.plan.${account.plan}`)}
+								</span>
+							}
+						/>
+					) : null}
 				</dl>
 				<div className="flex flex-col items-start gap-2">
 					<Button onClick={onSignOut} variant="outline">
