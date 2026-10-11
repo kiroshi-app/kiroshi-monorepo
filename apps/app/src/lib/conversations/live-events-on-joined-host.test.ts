@@ -23,7 +23,16 @@ import { agentTransport } from "../agent/transport"
 import { createRosterController } from "../bots/roster-controller"
 import { useRosterReloads } from "../bots/use-roster-reloads"
 import { createChatController } from "../chat/chat-controller"
-import { sidebarActivityFor } from "../chat/screen-model"
+import {
+	questionMessageIdOf,
+	questionMessageText,
+} from "../chat/question-message"
+import {
+	sidebarActivityFor,
+	toRuns,
+	toTranscriptRows,
+} from "../chat/screen-model"
+import { useAskedQuestion } from "../chat/use-asked-question"
 import type { HostSocket } from "../host/http"
 import { aMission } from "../missions/mission-fixtures"
 import { useLiveMissions } from "../missions/use-live-missions"
@@ -1108,3 +1117,137 @@ describe("a prompt raised by a turn the other Mac started", () => {
 		detach()
 	})
 })
+
+type QuestionShown = {
+	messages: TranscriptMessage[]
+	question: QuestionRequest | null
+}
+
+const QUESTION_ROW_ID = questionMessageIdOf(QUESTION.id)
+
+const openAskedRoom = async () => {
+	const room = await openRoom()
+	const shown = (): QuestionShown => {
+		const { messages, pendingPrompt } = room.controller.getState()
+		const question =
+			pendingPrompt?.kind === "question" ? pendingPrompt.request : null
+		return { messages, question }
+	}
+	return { ...room, shown }
+}
+
+const openAskedSoloChat = async () => {
+	const solo = await openSoloChat()
+	const shown = (): QuestionShown => {
+		const { messages, foreignTurn } = solo.controller.stateFor(solo.botId)
+		return { messages, question: foreignTurn?.question ?? null }
+	}
+	return { ...solo, shown }
+}
+
+const askedIn = ({ messages, question }: QuestionShown) =>
+	renderHook(() =>
+		useAskedQuestion({
+			question,
+			runs: toRuns(toTranscriptRows(messages)),
+			toQuote: vi.fn(),
+		}),
+	).result.current.asked
+
+const questionRowsIn = ({ messages }: QuestionShown) =>
+	messages.filter(({ id }) => id === QUESTION_ROW_ID)
+
+const ASKED_CARD = { messageId: QUESTION_ROW_ID, request: QUESTION }
+
+describe.each([
+	["a room", openAskedRoom],
+	["a solo conversation", openAskedSoloChat],
+] as const)(
+	"the question card of a turn the other Mac started in %s",
+	(_, open) => {
+		const openAsked = async (emit: Emit, join: () => Promise<void>) => {
+			const opened = await open()
+			await join()
+			const scope = {
+				...foreignScope(opened.conversationId),
+				botId: opened.botId,
+			}
+			const turn = storedTurn(opened.conversationId)
+			const emitTurn = (event: AgentEvent) =>
+				emit("agent://event", { scope, turn, event })
+			await emitTurn(ASKED_QUESTION)
+			return { ...opened, scope, emitTurn }
+		}
+
+		it.each(sides)(
+			"anchors one question row and shows its card on %s",
+			async (_, emit: Emit, join) => {
+				const { shown, detach } = await openAsked(emit, join)
+
+				expect(questionRowsIn(shown())).toMatchObject([
+					{
+						role: "assistant",
+						content: questionMessageText(QUESTION),
+						completion: "complete",
+					},
+				])
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"keeps one row and one card on %s once the question row is stored",
+			async (_, emit: Emit, join) => {
+				const { store, shown, detach, botId, conversationId } = await openAsked(
+					emit,
+					join,
+				)
+				const prompt = await repliedElsewhere(store, {
+					conversationId,
+					botId,
+					replyId: QUESTION_ROW_ID,
+					text: questionMessageText(QUESTION),
+				})
+
+				await emit("conversation://message-stored", prompt)
+				await settled()
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"sends the answer given on %s to the agent of the starting side and closes the card",
+			async (_, emit: Emit, join) => {
+				const { driver, shown, scope, detach, controller } = await openAsked(
+					emit,
+					join,
+				)
+				const answer = vi.spyOn(driver, "answerQuestion").mockResolvedValue()
+
+				await act(() => controller.answer(QUESTION.id, ANSWERS))
+
+				expect(answer).toHaveBeenCalledWith(scope, QUESTION.id, ANSWERS)
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"closes the card on %s once the question is resolved",
+			async (_, emit: Emit, join) => {
+				const { shown, emitTurn, detach } = await openAsked(emit, join)
+
+				await emitTurn(QUESTION_RESOLVED)
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+	},
+)
