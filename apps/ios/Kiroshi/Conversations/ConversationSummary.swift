@@ -25,6 +25,13 @@ enum ConversationSubject: Hashable, Identifiable, Sendable {
         }
     }
 
+    var namedAuthors: [Companion] {
+        switch self {
+        case .companion: []
+        case .group(let group): group.authors
+        }
+    }
+
     func isGroup(_ conversationId: String) -> Bool {
         guard case .group(let group) = self else { return false }
         return group.id == conversationId

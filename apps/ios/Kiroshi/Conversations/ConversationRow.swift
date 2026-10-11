@@ -86,6 +86,7 @@ private struct RoleBadge: View {
 
 struct WorkingLabel: View {
     let name: String
+    var isSeveral = false
     let font: Font
 
     var body: some View {
@@ -93,7 +94,11 @@ struct WorkingLabel: View {
             Image(systemName: "ellipsis")
                 .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing)
                 .accessibilityHidden(true)
-            Text("\(name) is working…")
+            if isSeveral {
+                Text("\(name) are working…")
+            } else {
+                Text("\(name) is working…")
+            }
         }
         .font(font)
         .foregroundStyle(Color.kiroshi(.foreground))

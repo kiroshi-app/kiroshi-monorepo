@@ -22,8 +22,11 @@ struct ThreadView: View {
                     ThreadEntryView(entry: entry)
                 }
                 if thread.isWorking {
-                    WorkingLabel(name: thread.workingName, font: .subheadline)
-                        .padding(.vertical, 4)
+                    WorkingLabel(
+                        name: thread.workingName,
+                        isSeveral: thread.workingCompanions.count > 1, font: .subheadline
+                    )
+                    .padding(.vertical, 4)
                 }
             }
             .padding(.horizontal)
@@ -76,6 +79,15 @@ struct ThreadView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(thread.subject.title)
+        .toolbar {
+            if case .group(let group) = thread.subject {
+                ToolbarItem(placement: .principal) {
+                    GroupTitle(
+                        group: group,
+                        working: thread.isWorking ? Set(thread.workingCompanions.map(\.id)) : [])
+                }
+            }
+        }
         .toolbar(.hidden, for: .tabBar)
         .task(id: space.connection.map(ObjectIdentifier.init)) {
             guard let connection = space.connection else { return }
@@ -102,7 +114,9 @@ struct ThreadEntryView: View {
                     .foregroundStyle(Color.kiroshi(.mutedForeground))
                     .frame(maxWidth: .infinity)
             }
-            if message.isYours {
+            if let author = message.author {
+                CompanionMessageView(message: message, author: author)
+            } else if message.isYours {
                 Text(message.rendered)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -121,6 +135,88 @@ struct ThreadEntryView: View {
         case .activities(let group):
             ActivityGroupView(group: group)
         }
+    }
+}
+
+struct GroupTitle: View {
+    let group: GroupConversation
+    let working: Set<Companion.ID>
+
+    var body: some View {
+        HStack(spacing: 8) {
+            GroupAvatar(group: group, size: .title, working: working)
+            Text(group.name)
+                .font(.headline)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityShowsLargeContentViewer()
+    }
+}
+
+struct CompanionMessageView: View {
+    let message: ThreadMessage
+    let author: Companion
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            if message.opensRun {
+                CompanionAvatar(author, size: .title)
+            } else {
+                CompanionPlaceholder(size: .title)
+                    .hidden()
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if message.opensRun {
+                    Text(author.name)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.kiroshi(.mutedForeground))
+                }
+                Text(message.rendered)
+                    .lineSpacing(2)
+                    .foregroundStyle(Color.kiroshi(.foreground))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(author.name), \(message.rendered)"))
+    }
+}
+
+struct MentionSuggestions: View {
+    let companions: [Companion]
+    let pick: (Companion) -> Void
+    @ScaledMetric(relativeTo: .body) private var rowHeight: CGFloat = 44
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(companions) { companion in
+                    Button {
+                        pick(companion)
+                    } label: {
+                        Label {
+                            Text(companion.name)
+                                .foregroundStyle(Color.kiroshi(.foreground))
+                        } icon: {
+                            CompanionAvatar(companion, size: .inline)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: rowHeight, alignment: .leading)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Mention \(companion.name)")
+                    if companion.id != companions.last?.id {
+                        Divider()
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(CGFloat(companions.count), 4.5) * (rowHeight + 1))
     }
 }
 
@@ -158,6 +254,11 @@ struct ThreadComposer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if !thread.mentionCandidates.isEmpty {
+                MentionSuggestions(companions: thread.mentionCandidates) { companion in
+                    thread.mention(companion)
+                }
+            }
             if let failure = thread.sendFailure {
                 ProblemLabel(message: failure.message(name: thread.workingName))
             }
