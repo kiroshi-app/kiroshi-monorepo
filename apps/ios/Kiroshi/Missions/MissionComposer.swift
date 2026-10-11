@@ -8,13 +8,13 @@ struct MissionComposer: View {
     @State private var isPickingFiles = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var couldNotAttach = false
+    @ScaledMetric(relativeTo: .body) private var control: CGFloat = 32
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let problem {
-                Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(Color.kiroshi(.destructive))
+                ProblemLabel(message: LocalizedStringKey(problem))
             }
             if !thread.attachments.isEmpty {
                 ScrollView(.horizontal) {
@@ -44,38 +44,48 @@ struct MissionComposer: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.body.weight(.medium))
-                        .padding(4)
-                        .accessibilityLabel("Attach")
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(Color(.secondarySystemBackground), in: .circle)
+                        .overlay {
+                            Circle().strokeBorder(Color(.systemGray5))
+                        }
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .tint(Color.kiroshi(.mutedForeground))
-                .foregroundStyle(Color.kiroshi(.foreground))
+                .accessibilityLabel("Attach")
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 HStack(alignment: .bottom, spacing: 8) {
                     TextField("Answer this mission…", text: $thread.draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .padding(.vertical, 8)
-                        .foregroundStyle(Color.kiroshi(.foreground))
+                        .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 3 : 6))
+                        .padding(.vertical, 11)
                     if thread.isSending {
                         ProgressView()
-                            .padding(.vertical, 8)
+                            .frame(width: control, height: control)
+                            .padding(.vertical, 6)
                     } else if thread.canSend {
-                        Button("Send", systemImage: "arrow.up.circle.fill") { thread.send() }
-                            .labelStyle(.iconOnly)
-                            .font(.title)
-                            .padding(.vertical, 2)
+                        Button {
+                            thread.send()
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color(.systemBackground))
+                                .frame(width: control, height: control)
+                                .background(.primary, in: .circle)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Send")
                     }
                 }
-                .padding(.leading, 14)
-                .padding(.trailing, 4)
+                .padding(.leading, 16)
+                .padding(.trailing, 6)
+                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 22))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 20).strokeBorder(Color.kiroshi(.border))
+                    RoundedRectangle(cornerRadius: 22).strokeBorder(Color(.systemGray5))
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.kiroshi(.card))
         .photosPicker(isPresented: $isPickingPhotos, selection: $photos, matching: .images)
         .fileImporter(
             isPresented: $isPickingFiles, allowedContentTypes: [.item],

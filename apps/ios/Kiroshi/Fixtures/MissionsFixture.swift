@@ -7,7 +7,7 @@
         static let splitOnboarding = mission(
             id: "mission-212", ticket: "OPE-212", objective: "Split the onboarding flow",
             botId: "bot-atlas", state: "waiting_human", isAgentRunning: false,
-            status: "Asked you which screen goes first", movedAt: at(hour: 8, minute: 32))
+            status: "Asked you which screen goes first.", movedAt: at(hour: 8, minute: 32))
 
         static var answers: [String: String] {
             [
@@ -39,7 +39,7 @@
                 json(
                     id: "mission-212", ticket: "OPE-212", objective: "Split the onboarding flow",
                     botId: "bot-atlas", state: "waiting_human", isAgentRunning: false,
-                    status: "Asked you which screen goes first", movedAt: at(hour: 8, minute: 32)),
+                    status: "Asked you which screen goes first.", movedAt: at(hour: 8, minute: 32)),
                 json(
                     id: "mission-215", ticket: "OPE-215",
                     objective: "Add dictation to the composer",
@@ -48,7 +48,8 @@
                 json(
                     id: "mission-218", ticket: "OPE-218", objective: "Retry failed uploads",
                     botId: "bot-juniper", state: "working", isAgentRunning: false,
-                    status: "Fixed the red check, CI is running", movedAt: at(hour: 9, minute: 2)),
+                    status: "Fixed the red check, CI is running again.",
+                    movedAt: at(hour: 9, minute: 2)),
                 json(
                     id: "mission-209", ticket: "OPE-209", objective: "Settings sheet on iPhone",
                     botId: "bot-mira", state: "ready_to_merge", isAgentRunning: false, status: nil,
@@ -66,7 +67,7 @@
             let askedAt = at(hour: 8, minute: 31)
             let answeredAt = at(hour: 8, minute: 32)
             return #"""
-                {"conversationId":"\#(threadConversationId)","hasMore":false,"arrivals":[],"messages":[\#(message(id: "message-1", seq: 1, role: "user", content: "Carry out this mission.", createdAt: summonedAt, botId: nil)),\#(message(id: "message-2", seq: 2, role: "user", content: "Split OPE-212 in two, one ticket per screen.\\nAttached to this message, sent 2026-10-11T08:31:00.000Z, 1 file:\\n1/1 /Users/sam/Library/Application Support/app.kiroshi/attachments/thread-212/onboarding-flow.png", createdAt: askedAt, botId: nil)),\#(message(id: "message-3", seq: 3, role: "assistant", content: "Done. OPE‑212 keeps the account step, OPE‑219 takes the space picker. Both are in Linear.\\n\\nWhich one goes first? The space picker needs the account step, so I’d start there.", createdAt: answeredAt, botId: "bot-atlas"))]}
+                {"conversationId":"\#(threadConversationId)","hasMore":false,"arrivals":[],"messages":[\#(message(id: "message-1", seq: 1, role: "user", content: "Carry out this mission.", createdAt: summonedAt, botId: nil)),\#(message(id: "message-2", seq: 2, role: "user", content: "Split OPE-212 in two, one ticket per screen.", createdAt: askedAt, botId: nil)),\#(message(id: "message-3", seq: 3, role: "assistant", content: "Done. OPE‑212 keeps the account step, OPE‑219 takes the space picker. Both are in Linear.\\n\\nWhich one goes first? The space picker needs the account step, so I’d start there.", createdAt: answeredAt, botId: "bot-atlas"))]}
                 """#
         }
 

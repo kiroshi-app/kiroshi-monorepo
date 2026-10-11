@@ -129,6 +129,44 @@ struct DaySeparator: View {
     }
 }
 
+struct TimesRevealingScroll<Content: View>: View {
+    let content: Content
+    @State private var revealDrag: CGFloat
+    @ScaledMetric(relativeTo: .footnote) private var timeWidth = MessageBubbles.timeWidth
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+        #if DEBUG
+            _revealDrag = State(initialValue: ConversationsFixture.showsTimes ? .infinity : 0)
+        #else
+            _revealDrag = State(initialValue: 0)
+        #endif
+    }
+
+    var body: some View {
+        ScrollView {
+            content
+                .offset(x: -revealed)
+                .environment(\.areTimesShown, revealed > 0)
+        }
+        .gesture(TimesReveal(reveal: { revealDrag = $0 }, release: hideTimes))
+    }
+
+    private var revealed: CGFloat {
+        min(revealDrag, timeWidth + MessageBubbles.timeGap)
+    }
+
+    private func hideTimes() {
+        #if DEBUG
+            guard !ConversationsFixture.holdsTimes else { return }
+        #endif
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
+            revealDrag = 0
+        }
+    }
+}
+
 struct TimesReveal: UIGestureRecognizerRepresentable {
     let reveal: (CGFloat) -> Void
     let release: () -> Void

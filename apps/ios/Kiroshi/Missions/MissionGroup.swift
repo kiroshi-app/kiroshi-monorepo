@@ -54,6 +54,14 @@ extension Mission {
         return state == .waitingHuman ? "Blocked on you" : "Working now"
     }
 
+    func titleLine(companion: MissionCompanion?) -> String {
+        [ticket.externalId, companion?.name].compactMap(\.self).joined(separator: " · ")
+    }
+
+    func detailLine(companion: MissionCompanion?) -> String {
+        [companion?.name, statusLine].compactMap(\.self).joined(separator: " · ")
+    }
+
     func moved(by changed: MissionChanged) -> Mission {
         var moved = self
         moved.isAgentRunning = changed.isAgentRunning

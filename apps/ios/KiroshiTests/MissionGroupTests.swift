@@ -61,6 +61,17 @@ struct MissionGroupTests {
                 == "Ready to merge")
     }
 
+    @Test func aRowReadsItsCompanionAndStatusAndTheTitleItsTicket() {
+        let atlas = Companion(id: "bot-1", name: "Atlas")
+        let mission = MissionTesting.mission(
+            state: "waiting_human", status: "Asked you which screen goes first.")
+
+        #expect(
+            mission.detailLine(companion: atlas) == "Atlas · Asked you which screen goes first.")
+        #expect(mission.titleLine(companion: atlas) == "OPE-1 · Atlas")
+        #expect(mission.detailLine(companion: nil) == "Asked you which screen goes first.")
+    }
+
     @Test func aChangeMovesTheMissionUnlessItIsStale() {
         let mission = MissionTesting.mission(state: "working", stateSeq: 4)
         let moved = mission.moved(

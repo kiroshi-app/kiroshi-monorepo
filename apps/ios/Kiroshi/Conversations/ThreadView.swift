@@ -3,29 +3,23 @@ import SwiftUI
 struct ThreadView: View {
     let space: SpaceStore
     @State private var thread: ThreadStore
-    @State private var revealDrag: CGFloat
-    @ScaledMetric(relativeTo: .footnote) private var timeWidth = MessageBubbles.timeWidth
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
     init(subject: ConversationSubject, space: SpaceStore) {
         self.space = space
         #if DEBUG
             let draft = ConversationsFixture.draft
-            let revealDrag: CGFloat = ConversationsFixture.showsTimes ? .infinity : 0
         #else
             let draft = ""
-            let revealDrag: CGFloat = 0
         #endif
         _thread = State(initialValue: ThreadStore(subject: subject, draft: draft))
-        _revealDrag = State(initialValue: revealDrag)
     }
 
     var body: some View {
-        ScrollView {
+        TimesRevealingScroll {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(thread.entries) { entry in
-                    ThreadEntryView(entry: entry, subject: thread.subject)
+                    ThreadEntryView(entry: entry, soloCompanion: soloCompanion)
                 }
                 if thread.isWorking {
                     WorkingLine(
@@ -42,10 +36,7 @@ struct ThreadView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, 12)
-            .offset(x: -revealed)
-            .environment(\.areTimesShown, revealed > 0)
         }
-        .gesture(TimesReveal(reveal: { revealDrag = $0 }, release: hideTimes))
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .background(Color(.systemBackground))
@@ -92,23 +83,15 @@ struct ThreadView: View {
         }
     }
 
-    private var revealed: CGFloat {
-        min(revealDrag, timeWidth + MessageBubbles.timeGap)
-    }
-
-    private func hideTimes() {
-        #if DEBUG
-            guard !ConversationsFixture.holdsTimes else { return }
-        #endif
-        withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
-            revealDrag = 0
-        }
+    private var soloCompanion: Companion? {
+        guard case .companion(let companion) = thread.subject else { return nil }
+        return companion
     }
 }
 
 struct ThreadEntryView: View {
     let entry: ThreadEntry
-    let subject: ConversationSubject
+    let soloCompanion: Companion?
 
     var body: some View {
         switch entry {
@@ -131,11 +114,6 @@ struct ThreadEntryView: View {
             ActivityGroupView(group: group)
                 .padding(.top, 20)
         }
-    }
-
-    private var soloCompanion: Companion? {
-        guard case .companion(let companion) = subject else { return nil }
-        return companion
     }
 
     private func accessibilityText(of message: ThreadMessage) -> Text {

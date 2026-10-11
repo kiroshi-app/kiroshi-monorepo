@@ -3,6 +3,21 @@ import Foundation
 @testable import Kiroshi
 
 enum MissionTesting {
+    struct Shown: Equatable {
+        let id: String
+        let isYours: Bool
+        let bubbles: [String]
+    }
+
+    static func shown(_ transcript: MissionTranscript) -> [Shown] {
+        transcript.entries.compactMap { entry in
+            guard case .message(let message) = entry else { return nil }
+            return Shown(
+                id: message.id, isYours: message.isYours,
+                bubbles: message.bubbles.map { String($0.text.characters) })
+        }
+    }
+
     static func mission(
         id: String = "mission-1", state: String = "working", stateSeq: Int = 1,
         isAgentRunning: Bool = false, status: String? = nil, openedAt: Int = 1_000,

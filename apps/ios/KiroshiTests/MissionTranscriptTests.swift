@@ -4,50 +4,104 @@ import Testing
 @testable import Kiroshi
 
 struct MissionTranscriptTests {
-    let utc: Calendar = {
+    static let day = 1_791_619_860_000
+
+    let time: ConversationTime = {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
-        return calendar
+        return ConversationTime(
+            now: Date(timeIntervalSince1970: TimeInterval(day) / 1000 + 3_600), calendar: calendar,
+            locale: Locale(identifier: "en_US"))
     }()
 
-    @Test func thePromptAndTheCompanionShowUnderTheirDayAndTheSummonsIsHidden() {
-        let day = 1_791_619_860_000
-        let messages = [
-            MissionTesting.message(
-                id: "reply", seq: 3, role: "assistant", content: "Done.", createdAt: day + 60_000,
-                botId: "b-1"),
-            MissionTesting.message(
-                id: "summons", seq: 1, content: "Carry out this mission.", createdAt: day),
-            MissionTesting.message(
-                id: "prompt", seq: 2, content: "Split it.", createdAt: day + 30_000),
-            MissionTesting.message(
-                id: "writing", seq: 4, role: "assistant", content: "", createdAt: day + 90_000,
-                botId: "b-1"),
-        ].map(MissionTesting.decoded)
+    func transcript(_ messages: [String], openedAt: Int = day - 60_000) -> MissionTranscript {
+        MissionTranscript(
+            of: messages.map(MissionTesting.decoded),
+            openedAt: Date(timeIntervalSince1970: TimeInterval(openedAt) / 1000), time: time)
+    }
 
-        let rows = MissionTranscript.rows(of: messages, calendar: utc)
+    func message(_ entry: ThreadEntry?) -> ThreadMessage? {
+        guard case .message(let message) = entry else { return nil }
+        return message
+    }
+
+    @Test func thePromptAndTheCompanionShowInBubblesAndTheSummonsIsHidden() {
+        let shown = transcript([
+            MissionTesting.message(
+                id: "reply", seq: 3, role: "assistant", content: "Done.",
+                createdAt: Self.day + 60_000,
+                botId: "b-1"),
+            MissionTesting.message(
+                id: "summons", seq: 1, content: "Carry out this mission.", createdAt: Self.day),
+            MissionTesting.message(
+                id: "prompt", seq: 2, content: "Split it.", createdAt: Self.day + 30_000),
+            MissionTesting.message(
+                id: "writing", seq: 4, role: "assistant", content: "", createdAt: Self.day + 90_000,
+                botId: "b-1"),
+        ])
 
         #expect(
-            rows == [
-                .day(
-                    id: "day-prompt",
-                    at: Date(timeIntervalSince1970: TimeInterval(day + 30_000) / 1000)),
-                .person(
-                    id: "prompt", text: MissionTranscript.markdown("Split it."), attachments: []),
-                .companion(id: "reply", text: MissionTranscript.markdown("Done.")),
+            MissionTesting.shown(shown) == [
+                .init(id: "prompt", isYours: true, bubbles: ["Split it."]),
+                .init(id: "reply", isYours: false, bubbles: ["Done."]),
             ])
     }
 
-    @Test func aNewDayOpensANewSeparator() {
-        let messages = [
-            MissionTesting.message(id: "first", seq: 1, content: "One", createdAt: 0),
-            MissionTesting.message(id: "next", seq: 2, content: "Two", createdAt: 86_400_000),
-        ].map(MissionTesting.decoded)
+    @Test func theCompanionSpeaksInOneBubblePerParagraphLikeTheConversationThread() {
+        let shown = transcript([
+            MissionTesting.message(
+                id: "reply", seq: 1, role: "assistant",
+                content: "Done. Both are in Linear.\\n\\nWhich one goes first?",
+                createdAt: Self.day,
+                botId: "b-1")
+        ])
+
+        let reply = message(shown.entries.first)
+        #expect(reply?.bubbles.map(\.position) == [.first, .last])
+        #expect(reply?.authorId == "b-1")
+        #expect(reply?.closesRun == true)
+        #expect(reply?.time == "8:11\u{202F}AM")
+    }
+
+    @Test func theDayTheMissionOpenedIsShownOnceAboveItsFirstMessages() {
+        let shown = transcript([
+            MissionTesting.message(id: "first", seq: 1, content: "One", createdAt: Self.day),
+            MissionTesting.message(
+                id: "next", seq: 2, content: "Two", createdAt: Self.day + 86_400_000),
+        ])
+
+        #expect(shown.openedDay == "Today")
+        #expect(message(shown.entries.first)?.dayLabel == nil)
+        #expect(message(shown.entries.last)?.dayLabel != nil)
+    }
+
+    @Test func attachedFilesAreNamedUnderTheTextTheyCameWith() {
+        let shown = transcript([
+            MissionTesting.message(
+                id: "with-text", seq: 1,
+                content:
+                    "Here it is.\\nAttached to this message, sent 2026-10-11T08:31:00.000Z, 1 file:\\n1/1 /tmp/a/flow.png",
+                createdAt: Self.day),
+            MissionTesting.message(
+                id: "alone", seq: 2,
+                content:
+                    "Attached to this message, sent 2026-10-11T08:31:00.000Z, 2 files:\\n1/2 /tmp/a/one.png\\n2/2 /tmp/a/two.pdf",
+                createdAt: Self.day),
+        ])
 
         #expect(
-            MissionTranscript.rows(of: messages, calendar: utc).map(\.id) == [
-                "day-first", "first", "day-next", "next",
+            MissionTesting.shown(shown) == [
+                .init(id: "with-text", isYours: true, bubbles: ["Here it is."]),
+                .init(id: "alone", isYours: true, bubbles: ["one.png", "two.pdf"]),
             ])
+        #expect(shown.attachments == ["with-text": ["flow.png"]])
+    }
+
+    @Test func theOpenedLineNamesTheCompanion() {
+        #expect(
+            MissionTranscript.openedLine(by: Companion(id: "b-1", name: "Atlas"))
+                == "Mission opened by Atlas")
+        #expect(MissionTranscript.openedLine(by: nil) == "Mission opened by the companion")
     }
 
     @Test func aStoredMessageReplacesTheOneSentWithTheSameId() {

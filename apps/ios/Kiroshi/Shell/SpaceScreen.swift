@@ -15,7 +15,7 @@ enum SpaceSection {
     var systemImage: String {
         switch self {
         case .conversations: "bubble.left.and.bubble.right"
-        case .missions: "target"
+        case .missions: "flag"
         }
     }
 }
@@ -28,29 +28,7 @@ struct SpaceScreen: View {
     var body: some View {
         NavigationStack {
             content
-                .safeAreaInset(edge: .top) {
-                    if let offlineSpace = store.offlineSpace {
-                        HostOfflineLine(space: offlineSpace, email: store.email)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 10)
-                    }
-                }
-                .navigationTitle(store.currentSpace?.name ?? "")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarTitleMenu {
-                    SpaceMenu(store: store)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        SettingsButton(
-                            account: account, spaces: store.spaces, section: section
-                        ) {
-                            AccountInitial(initial: store.accountInitial)
-                        }
-                        .accessibilityLabel("Settings")
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-                }
+                .spaceChrome(store: store, account: account, section: section)
         }
     }
 
@@ -64,7 +42,7 @@ struct SpaceScreen: View {
     }
 }
 
-private struct AccountInitial: View {
+struct AccountInitial: View {
     let initial: String
 
     var body: some View {

@@ -91,17 +91,23 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 The same fixtures feed the `#Preview`s.
 
-Page 4 "Missions" opens on the Missions tab: `4.1` (the grouped list of Studio), `4.2` (the thread of OPE-212, with the composer), `4.3` (no missions) and `4.4` (Side project answers its list, then its host leaves). The scripted socket answers `mission_space_feed`, `conversation_bots`, `conversation_message_page`, `chat_store_attachments` and `conversation_send_turn`, so sending in `4.2` goes through the real store and relay connection.
+Page 5 "Missions" of "Kiroshi, iOS 2" opens on the Missions tab: `5.1` (the grouped list of Studio), `5.2` (the thread of OPE-212, in the bubbles of page 3, with the composer), `5.3` (no missions) and `5.4` (Side project answers its list, then its host leaves). The scripted socket answers `mission_space_feed`, `conversation_bots`, `conversation_message_page`, `chat_store_attachments` and `conversation_send_turn`, so sending in `5.2` goes through the real store and relay connection. A swipe left in the thread shows each message's time, and `-holdsTimes YES` keeps it slid as on page 3:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 5.2 -AppleLocale en_US -holdsTimes YES
+```
+
+`KiroshiUITests` runs the accessibility audit on `5.1` to `5.4` and opens OPE-212 from `5.1` then swipes left to bring the times in.
 
 ## Settings and Sign out without the network
 
-Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations tab, and the gear of the Missions tab present. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
+Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations and Missions tabs, presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
 ```
 
-`KiroshiUITests` opens the sheet from `2.1` and `4.1`, checks `6.1` opens it once, on Conversations only, cancels and confirms Sign out from `6.1`, and runs the accessibility audit on `6.1` and `6.2`.
+`KiroshiUITests` opens the sheet from `2.1` and `5.1`, checks `6.1` opens it once, on Conversations only, cancels and confirms Sign out from `6.1`, and runs the accessibility audit on `6.1` and `6.2`.
 
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 
@@ -118,7 +124,7 @@ Tap the gear, then Sign out. Relaunched with `-fixture keychain` after confirmin
 
 ## Missions
 
-The Missions tab reads `mission_space_feed` for the shared Space and places each mission by its `state`: Needs you (`waiting_human`), Working (`working`, `waiting_bot`), Review (`ready_to_merge`). `failed`, `done` and `closed` have no group on page 4 and are not shown. A mission's thread is its thread conversation (`conversation_message_page`), read again when the companion speaks there, when the agent finishes a message or a turn there, and on every reconnection; an answer goes out with `conversation_send_turn`, files first through `chat_store_attachments`.
+The Missions tab reads `mission_space_feed` for the shared Space and places each mission by its `state`: Needs you (`waiting_human`), Working (`working`, `waiting_bot`), Review (`ready_to_merge`). `failed`, `done` and `closed` have no group on page 5 and are not shown. A mission's thread is its thread conversation (`conversation_message_page`), drawn with the Conversation thread's bubbles under a `Mission opened by` line at the mission's `openedAt`, read again when the companion speaks there, when the agent finishes a message or a turn there, and on every reconnection; an answer goes out with `conversation_send_turn`, files first through `chat_store_attachments`.
 
 ## Companion avatars
 

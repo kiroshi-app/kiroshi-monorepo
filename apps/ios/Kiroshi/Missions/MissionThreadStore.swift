@@ -20,9 +20,14 @@ final class MissionThreadStore {
     var draft = ""
     var attachments: [PickedAttachment] = []
     private(set) var messages: [MissionThreadMessage] = [] {
-        didSet { rows = MissionTranscript.rows(of: messages, calendar: calendar) }
+        didSet {
+            transcript = MissionTranscript(
+                of: messages,
+                openedAt: Date(timeIntervalSince1970: TimeInterval(mission.openedAt) / 1000),
+                time: ConversationTime(now: now(), calendar: calendar))
+        }
     }
-    private(set) var rows: [MissionThreadRow] = []
+    private(set) var transcript = MissionTranscript()
     private(set) var hasLoaded = false
     private(set) var hasFailed = false
     private(set) var isOnline = false

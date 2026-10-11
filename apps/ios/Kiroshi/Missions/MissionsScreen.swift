@@ -15,9 +15,8 @@ struct MissionsScreen: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .scrollContentBackground(.hidden)
-                .background(Color.kiroshi(.background))
-                .spaceChrome(store: store, account: account)
+                .background(Color(.systemBackground))
+                .spaceChrome(store: store, account: account, section: .missions)
                 .navigationDestination(for: MissionsRoute.self) { route in
                     switch route {
                     case .mission(let mission):
@@ -36,56 +35,78 @@ struct MissionsScreen: View {
         let sections = missions.sections
         if !sections.isEmpty {
             List(sections) { section in
-                Section(section.group.title) {
+                Section {
                     ForEach(section.missions) { mission in
-                        NavigationLink(value: MissionsRoute.mission(mission)) {
-                            MissionRow(
-                                mission: mission,
-                                companion: missions.companion(of: mission))
+                        Button {
+                            path.append(.mission(mission))
+                        } label: {
+                            MissionRow(mission: mission, companion: missions.companion(of: mission))
                         }
-                        .listRowBackground(Color.kiroshi(.card))
+                        .listRowInsets(.vertical, 0)
+                        .listRowSeparator(.hidden)
                     }
+                } header: {
+                    MissionSectionHeader(title: section.group.title)
+                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16))
                 }
             }
-            .listStyle(.insetGrouped)
+            .listStyle(.plain)
+            .listSectionSpacing(0)
+            .environment(\.defaultMinListHeaderHeight, 0)
         } else if missions.hasLoaded {
-            ContentUnavailableView {
-                Label("No missions yet", systemImage: "target")
-            } description: {
-                Text("Missions your companions open in this space show up here.")
+            ScrollingUnavailable {
+                ContentUnavailableView {
+                    Label("No missions yet", systemImage: "flag")
+                } description: {
+                    Text("Missions your companions open in this space show up here.")
+                }
             }
         } else if missions.hasFailed {
-            ContentUnavailableView {
-                Label("Couldn’t load missions", systemImage: "exclamationmark.triangle")
-            } description: {
-                Text("The missions are still there; only the list didn’t load.")
-            } actions: {
-                Button("Try Again") { missions.retry() }
+            ScrollingUnavailable {
+                ContentUnavailableView {
+                    Label("Couldn’t load missions", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("The missions are still there; only the list didn’t load.")
+                } actions: {
+                    Button("Try Again") { missions.retry() }
+                }
             }
         } else if store.offlineSpace == nil {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Color.kiroshi(.background)
+            Color(.systemBackground)
                 .ignoresSafeArea()
         }
     }
 }
 
+private struct ScrollingUnavailable<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            content
+        }
+        .defaultScrollAnchor(.center, for: .alignment)
+        .scrollBounceBehavior(.basedOnSize)
+    }
+}
+
 #if DEBUG
-    #Preview("4.1 Missions · list") {
+    #Preview("5.1 Missions · list") {
         SignInRootView(model: .fixture(.missions))
     }
 
-    #Preview("4.2 Mission · thread") {
+    #Preview("5.2 Mission · thread") {
         SignInRootView(model: .fixture(.missionThread))
     }
 
-    #Preview("4.3 State · no missions") {
+    #Preview("5.3 State · no missions") {
         SignInRootView(model: .fixture(.noMissions))
     }
 
-    #Preview("4.4 State · host offline") {
+    #Preview("5.4 State · host offline") {
         SignInRootView(model: .fixture(.missionsHostOffline))
     }
 #endif

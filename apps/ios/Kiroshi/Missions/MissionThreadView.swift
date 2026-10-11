@@ -12,17 +12,27 @@ struct MissionThreadView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
-                ForEach(thread.rows) { row in
-                    MissionThreadRowView(row: row)
+        TimesRevealingScroll {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(spacing: 20) {
+                    DaySeparator(label: thread.transcript.openedDay)
+                    MachineLine(text: MissionTranscript.openedLine(by: companion))
+                }
+                .padding(.top, 20)
+                ForEach(thread.transcript.entries) { entry in
+                    ThreadEntryView(entry: entry, soloCompanion: companion)
+                    if let names = thread.transcript.attachments[entry.id] {
+                        AttachedFiles(names: names)
+                            .padding(.top, 4)
+                    }
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 12)
+            .padding(.bottom, 12)
         }
         .defaultScrollAnchor(.bottom)
-        .background(Color.kiroshi(.card))
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .background(Color(.systemBackground))
         .overlay {
             if thread.hasFailed {
                 ContentUnavailableView {
@@ -32,30 +42,17 @@ struct MissionThreadView: View {
                         "The mission is still there; only this view didn’t load. Go back and open it again."
                     )
                 }
+                .background(Color(.systemBackground))
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaBar(edge: .bottom) {
             MissionComposer(thread: thread)
         }
         .navigationTitle(thread.mission.objective)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    HStack(spacing: 4) {
-                        CompanionAvatar(
-                            companion, size: .inline, isWorking: thread.mission.isAgentRunning)
-                        Text(subtitle)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(Color.kiroshi(.mutedForeground))
-                    }
-                    Text(thread.mission.objective)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.kiroshi(.foreground))
-                        .lineLimit(1)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
+                MissionTitle(mission: thread.mission, companion: companion)
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -68,54 +65,65 @@ struct MissionThreadView: View {
     private var companion: MissionCompanion? {
         missions.companion(of: thread.mission)
     }
+}
 
-    private var subtitle: String {
-        [thread.mission.ticket.externalId, companion?.name]
-            .compactMap(\.self)
-            .joined(separator: " · ")
+struct MissionTitle: View {
+    let mission: Mission
+    let companion: MissionCompanion?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            CompanionAvatar(companion, size: .title, isWorking: mission.isAgentRunning)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(mission.titleLine(companion: companion))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(mission.objective)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 16)
+        .frame(minHeight: 44)
+        .glassEffect(in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityShowsLargeContentViewer()
     }
 }
 
-struct MissionThreadRowView: View {
-    let row: MissionThreadRow
+struct MachineLine: View {
+    let text: String
 
     var body: some View {
-        switch row {
-        case .day(_, let at):
-            Text(Self.dayLabel(at))
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
-                .frame(maxWidth: .infinity)
-        case .person(_, let text, let attachments):
-            VStack(alignment: .leading, spacing: 6) {
-                if !text.characters.isEmpty {
-                    Text(text)
-                }
-                ForEach(attachments, id: \.self) { name in
-                    Label(name, systemImage: "paperclip")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.kiroshi(.userBubbleForeground).opacity(0.8))
-                }
-            }
-            .foregroundStyle(Color.kiroshi(.userBubbleForeground))
-            .tint(Color.kiroshi(.userBubbleForeground))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.kiroshi(.userBubble), in: .rect(cornerRadius: 20))
-            .padding(.leading, 56)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        case .companion(_, let text):
+        HStack(spacing: 8) {
+            Circle()
+                .fill(.tertiary)
+                .frame(width: 5, height: 5)
+                .accessibilityHidden(true)
             Text(text)
-                .foregroundStyle(Color.kiroshi(.foreground))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
         }
+        .padding(.horizontal, 4)
     }
+}
 
-    static func dayLabel(_ at: Date, calendar: Calendar = .current) -> String {
-        let time = at.formatted(.dateTime.hour().minute())
-        if calendar.isDateInToday(at) { return "Today \(time)" }
-        if calendar.isDateInYesterday(at) { return "Yesterday \(time)" }
-        return "\(at.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))) \(time)"
+struct AttachedFiles: View {
+    let names: [String]
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            ForEach(names, id: \.self) { name in
+                Label(name, systemImage: "paperclip")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.trailing, 4)
     }
 }
