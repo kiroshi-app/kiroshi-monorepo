@@ -11,7 +11,7 @@ struct ConversationRow: View {
                 .unredacted()
             VStack(alignment: .leading, spacing: 2) {
                 headerLayout {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    nameLayout {
                         Text(summary.subject.title)
                             .font(.headline)
                             .fixedSize(horizontal: false, vertical: true)
@@ -56,6 +56,12 @@ struct ConversationRow: View {
     private var memberNames: String {
         guard case .group(let group) = summary.subject else { return "" }
         return group.memberNames
+    }
+
+    private var nameLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
     }
 
     private var headerLayout: AnyLayout {

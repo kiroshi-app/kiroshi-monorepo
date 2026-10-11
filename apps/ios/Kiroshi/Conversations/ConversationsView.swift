@@ -45,35 +45,27 @@ struct ConversationsView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Loading companions")
         case .failed:
-            ScrollView {
-                ContentUnavailableView {
-                    Label("Couldn’t load your companions.", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text("Check that your Mac is on, then try again.")
-                } actions: {
-                    Button("Try Again") {
-                        store.reload()
-                    }
-                    .buttonStyle(.bordered)
+            ContentUnavailableView {
+                Label("Couldn’t load your companions.", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("Check that your Mac is on, then try again.")
+            } actions: {
+                Button("Try Again") {
+                    store.reload()
                 }
-                .containerRelativeFrame(.vertical)
+                .buttonStyle(.bordered)
             }
         case .loaded where store.summaries.isEmpty:
-            ScrollView {
-                ContentUnavailableView {
-                    Label {
-                        Text("No companions yet")
-                    } icon: {
-                        FlatHexagon(isDashed: true)
-                            .frame(width: 56, height: 56)
-                            .accessibilityHidden(true)
-                    }
-                } description: {
-                    Text(
-                        "Add one to \(space.currentSpace?.name ?? "") on your Mac. It shows up here."
-                    )
+            ContentUnavailableView {
+                Label {
+                    Text("No companions yet")
+                } icon: {
+                    FlatHexagon(isDashed: true)
+                        .frame(width: 56, height: 56)
+                        .accessibilityHidden(true)
                 }
-                .containerRelativeFrame(.vertical)
+            } description: {
+                Text("Add one to \(space.currentSpace?.name ?? "") on your Mac. It shows up here.")
             }
         case .loaded:
             List(store.summaries) { summary in

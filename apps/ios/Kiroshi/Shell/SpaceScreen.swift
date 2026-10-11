@@ -36,21 +36,11 @@ struct SpaceScreen: View {
                     }
                 }
                 .navigationTitle(store.currentSpace?.name ?? "")
-                .navigationBarTitleDisplayMode(.large)
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbarTitleMenu {
                     SpaceMenu(store: store)
                 }
                 .toolbar {
-                    ToolbarItem(placement: .largeTitle) {
-                        Menu {
-                            SpaceMenu(store: store)
-                        } label: {
-                            SpaceTitle(name: store.currentSpace?.name ?? "")
-                                .unredacted()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topBarLeading) {
                         SettingsButton(
                             account: account, spaces: store.spaces, section: section
@@ -70,25 +60,6 @@ struct SpaceScreen: View {
             ConversationsView(space: store)
         case .missions:
             ContentUnavailableView(section.title, systemImage: section.systemImage)
-        }
-    }
-}
-
-private struct SpaceTitle: View {
-    let name: String
-    @ScaledMetric(relativeTo: .largeTitle) private var chevronSide = 24
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(name)
-                .font(.largeTitle.bold())
-                .foregroundStyle(Color.kiroshi(.foreground))
-            Image(systemName: "chevron.down")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
-                .frame(width: chevronSide, height: chevronSide)
-                .background(Color.kiroshi(.muted), in: .circle)
-                .accessibilityHidden(true)
         }
     }
 }
