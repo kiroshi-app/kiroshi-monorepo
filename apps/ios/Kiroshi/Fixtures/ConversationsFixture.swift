@@ -15,6 +15,10 @@
             UserDefaults.standard.bool(forKey: "holdsTimes")
         }
 
+        static var hasHistory: Bool {
+            UserDefaults.standard.bool(forKey: "history")
+        }
+
         static var draft: String {
             UserDefaults.standard.string(forKey: "draft")
                 ?? (SignInFixture.opened == .groupMention ? "@" : "")
@@ -190,6 +194,23 @@
                     hour: 8, minute: 30)
             ]
 
+        static let releaseHistory: [FixtureHost.Message] = [
+            .init(
+                id: "m-tone", isYours: false,
+                content:
+                    "I kept the tone close to the last two releases: short, one line per change, no jargon.\n\nWant me to add the screenshots?",
+                daysAgo: 1, hour: 17, minute: 2),
+            .init(
+                id: "m-headlines", isYours: true,
+                content: "What changed since 0.41? Just the headlines.", daysAgo: 1, hour: 17,
+                minute: 10),
+            .init(
+                id: "m-landed", isYours: false,
+                content:
+                    "Applications landed, the roster scrolls per space, and notifications respect focus now.\n\nEleven fixes on top. I’d lead with the first one.",
+                daysAgo: 1, hour: 17, minute: 12),
+        ]
+
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
                 fixture.rawValue.hasPrefix("2.")
@@ -207,7 +228,7 @@
             case .conversationsLive:
                 script.playsGroupChanges = true
             case .thread, .swipedThread:
-                script.messages[juniper.id] = releaseNotes
+                script.messages[juniper.id] = (hasHistory ? releaseHistory : []) + releaseNotes
             case .threadHostOffline:
                 script.messages[juniper.id] = releaseNotes
                 script.hostLeavesAfter = .seconds(2)
