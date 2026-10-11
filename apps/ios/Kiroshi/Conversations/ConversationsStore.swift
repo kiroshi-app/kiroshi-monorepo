@@ -96,9 +96,6 @@ final class ConversationsStore {
             publish(changed)
         case .groupDeleted(let id):
             guard summaries.contains(where: { $0.subject.isGroup(id) }) else { return }
-            if opened?.isGroup(id) == true {
-                opened = nil
-            }
             working[id] = nil
             publish(summaries.filter { !$0.subject.isGroup(id) })
         }
