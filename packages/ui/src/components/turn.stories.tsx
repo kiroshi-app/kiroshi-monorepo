@@ -1837,6 +1837,7 @@ export const PersonTurnWithTime = meta.story({
 })
 
 export const RunOfThreeTimedMessages = meta.story({
+	tags: ["test-only"],
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<TurnGroup>
