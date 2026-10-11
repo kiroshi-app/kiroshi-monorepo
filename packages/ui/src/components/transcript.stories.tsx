@@ -1039,10 +1039,6 @@ const NEXT_STAGE: Record<AtRestStage, AtRestStage> = {
 	replied: "replied",
 }
 
-const SENT_TEXT = "Is any of that destructive?"
-
-const REPLY_TEXT = "Nothing is deleted, the migration only adds a column."
-
 const assistantRun = (key: string, text: string, isMarked: boolean) => ({
 	key,
 	render: () => (
@@ -1066,8 +1062,12 @@ const userRun = (key: string, text: string) => ({
 const atRestRowsOf = (stage: AtRestStage): TranscriptItem[] => [
 	userRun("asked", "Walk me through the rollout."),
 	assistantRun("answered", "The index build goes first.", stage === "answered"),
-	...(stage === "answered" ? [] : [userRun("sent", SENT_TEXT)]),
-	...(stage === "replied" ? [assistantRun("replied", REPLY_TEXT, true)] : []),
+	...(stage === "answered"
+		? []
+		: [userRun("sent", "Is any of that destructive?")]),
+	...(stage === "replied"
+		? [assistantRun("replied", "Nothing is deleted.", true)]
+		: []),
 ]
 
 const AtRestDemo = (args: TranscriptProps) => {
