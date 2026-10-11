@@ -62,6 +62,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		agent::commands::agent_answer_question,
 		agent::commands::agent_shutdown::<tauri::Wry>,
 		agent::commands::agent_live_sessions,
+		agent::commands::agent_pending_questions,
 		conversations::commands::conversation_bots::<tauri::Wry>,
 		conversations::commands::conversation_bots_by_presence::<tauri::Wry>,
 		conversations::commands::conversation_create_bot::<tauri::Wry>,

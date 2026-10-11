@@ -177,6 +177,15 @@ impl<S> Live<S> {
 		self.questions().retain(|question| !question.asked_by(scope));
 	}
 
+	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
+		self.questions()
+			.iter()
+			.filter(|question| question.scope.conversation_id == conversation_id)
+			.cloned()
+			.map(PendingQuestion::scoped)
+			.collect()
+	}
+
 	fn questions_pending_at<T>(&self, subscribe: impl FnOnce() -> T) -> (Vec<PendingQuestion>, T) {
 		let questions = self.questions();
 		(questions.clone(), subscribe())
@@ -1089,6 +1098,15 @@ pub async fn agent_live_sessions(
 	Ok(state.live.report())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_pending_questions(
+	state: State<'_, AgentState>,
+	conversation_id: String,
+) -> Result<Vec<ScopedEvent>, TransportError> {
+	Ok(state.live.questions_in(&conversation_id))
+}
+
 pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {
 	let session = state.live.clear(scope);
 	if let Some(session) = session {
@@ -1987,6 +2005,60 @@ mod tests {
 			pending
 		}
 
+		async fn pending_in(
+			app: &AppHandle<MockRuntime>,
+			conversation_id: &str,
+		) -> Vec<ScopedEvent> {
+			agent_pending_questions(app.state(), conversation_id.to_owned())
+				.await
+				.expect("the command answers")
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_a_pending_question_as_it_was_announced() {
+			let app = an_app("command-asked");
+			let mut original = events::subscribed(app.handle());
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			run.emit(question("q1"), the_turn());
+			let announced = original.try_recv().expect("the question was emitted");
+
+			let pending = pending_in(app.handle(), "c1").await;
+
+			let returned: Vec<Frame> = pending
+				.iter()
+				.map(|question| events::frame(AGENT_EVENT, question).expect("a frame"))
+				.collect();
+			assert_eq!(returned, vec![announced]);
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_an_empty_list_when_no_question_waits() {
+			let app = an_app("command-empty");
+			a_run_held_by_the_app(app.handle(), a_scope());
+
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn the_command_returns_no_question_of_another_conversation() {
+			let app = an_app("command-elsewhere");
+			let here = a_run_held_by_the_app(app.handle(), a_scope());
+			let elsewhere = a_run_held_by_the_app(app.handle(), another_bots_run());
+			here.emit(question("q1"), the_turn());
+			elsewhere.emit(
+				question("q9"),
+				Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+			);
+
+			let pending = pending_in(app.handle(), "c1").await;
+
+			assert_eq!(pending.len(), 1);
+			assert!(pending.iter().all(|question| question
+				.scope
+				.as_ref()
+				.is_some_and(|scope| scope.conversation_id == "c1")));
+		}
+
 		#[test]
 		fn a_listener_subscribing_after_a_question_hears_it_once_in_its_turn() {
 			let app = an_app("asked");
@@ -2012,8 +2084,8 @@ mod tests {
 			assert!(heard.try_recv().is_err(), "the question reached the listener twice");
 		}
 
-		#[test]
-		fn a_question_answered_or_ended_with_its_turn_reaches_no_later_listener() {
+		#[tokio::test]
+		async fn a_question_answered_or_ended_with_its_turn_reaches_no_later_listener() {
 			for (name, settling) in
 				[("answered", answered("q1")), ("ended", turn_ended()), ("crashed", crashed())]
 			{
@@ -2027,6 +2099,7 @@ mod tests {
 					a_late_listener(app.handle()).is_empty(),
 					"{name} left the question pending"
 				);
+				assert!(pending_in(app.handle(), "c1").await.is_empty(), "{name} kept it listed");
 			}
 		}
 
@@ -2053,6 +2126,23 @@ mod tests {
 			shutdown_session(&app.state::<AgentState>(), &a_scope()).await;
 
 			assert!(a_late_listener(app.handle()).is_empty());
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn a_replaced_or_cleared_session_leaves_no_question_pending() {
+			let replaced = an_app("replaced");
+			a_run_held_by_the_app(replaced.handle(), a_scope()).emit(question("q1"), the_turn());
+			let cleared = an_app("cleared");
+			a_run_held_by_the_app(cleared.handle(), a_scope()).emit(question("q1"), the_turn());
+
+			replaced.state::<AgentState>().live.take_over(a_scope());
+			cleared.state::<AgentState>().live.clear_all();
+
+			for app in [&replaced, &cleared] {
+				assert!(a_late_listener(app.handle()).is_empty());
+				assert!(pending_in(app.handle(), "c1").await.is_empty());
+			}
 		}
 
 		#[test]

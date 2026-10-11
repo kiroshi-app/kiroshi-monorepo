@@ -6324,6 +6324,28 @@
         "type": "array"
       }
     },
+    "agent_pending_questions": {
+      "args": {
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversationId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TransportError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/ScopedEvent_Serialize"
+        },
+        "type": "array"
+      }
+    },
     "agent_respond_to_permission": {
       "args": {
         "properties": {
