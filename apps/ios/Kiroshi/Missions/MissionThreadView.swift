@@ -94,13 +94,14 @@ struct MissionThreadRowView: View {
                 ForEach(attachments, id: \.self) { name in
                     Label(name, systemImage: "paperclip")
                         .font(.subheadline)
-                        .foregroundStyle(Color.kiroshi(.mutedForeground))
+                        .foregroundStyle(Color.kiroshi(.userBubbleForeground).opacity(0.8))
                 }
             }
-            .foregroundStyle(Color.kiroshi(.foreground))
+            .foregroundStyle(Color.kiroshi(.userBubbleForeground))
+            .tint(Color.kiroshi(.userBubbleForeground))
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.kiroshi(.muted), in: .rect(cornerRadius: 20))
+            .background(Color.kiroshi(.userBubble), in: .rect(cornerRadius: 20))
             .padding(.leading, 56)
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .companion(_, let text):

@@ -16,6 +16,8 @@ enum KiroshiColor: String, CaseIterable, Sendable {
     case presenceOnline = "presence-online"
     case presenceOffline = "presence-offline"
     case railAvatar = "rail-avatar"
+    case userBubble = "user-bubble"
+    case userBubbleForeground = "user-bubble-foreground"
 }
 
 extension Color {
