@@ -15,6 +15,13 @@ struct ConversationRelay: Sendable {
             "conversation_list", SpaceArgs(spaceId: spaceId), as: [GroupConversation].self)
     }
 
+    func createGroup(in spaceId: String, with companionIds: [Companion.ID]) async throws
+        -> GroupConversation
+    {
+        let args = CreateArgs(spaceId: spaceId, sectionId: nil, title: "", botIds: companionIds)
+        return try await ask("conversation_create", args, as: GroupConversation.self)
+    }
+
     func mainChat(of companionId: Companion.ID, in spaceId: String) async throws -> String {
         let args = MainChatArgs(botId: companionId, spaceId: spaceId)
         return try await ask("conversation_main_chat", args, as: MainChat.self).id
@@ -63,6 +70,28 @@ private struct MainChat: Decodable {
 
 private struct SpaceArgs: Encodable {
     let spaceId: String
+}
+
+private struct CreateArgs: Encodable {
+    enum CodingKeys: String, CodingKey {
+        case spaceId
+        case sectionId
+        case title
+        case botIds
+    }
+
+    let spaceId: String
+    let sectionId: String?
+    let title: String
+    let botIds: [String]
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(spaceId, forKey: .spaceId)
+        try container.encode(sectionId, forKey: .sectionId)
+        try container.encode(title, forKey: .title)
+        try container.encode(botIds, forKey: .botIds)
+    }
 }
 
 private struct MainChatArgs: Encodable {

@@ -24,6 +24,22 @@ struct ConversationsView: View {
             .navigationDestination(item: $store.opened) { subject in
                 ThreadView(subject: subject, space: space)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        store.pickCompanions()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("New Conversation")
+                    .disabled(store.phase != .loaded)
+                }
+            }
+            .sheet(isPresented: $store.isPickingCompanions, onDismiss: store.stopPicking) {
+                NewConversationSheet(
+                    companions: store.companions, creation: store.creation,
+                    create: { store.createGroup(with: $0) }, cancel: store.stopPicking)
+            }
     }
 
     @ViewBuilder private var content: some View {

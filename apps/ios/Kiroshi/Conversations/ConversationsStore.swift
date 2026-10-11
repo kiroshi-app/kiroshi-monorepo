@@ -10,9 +10,18 @@ final class ConversationsStore {
         case failed
     }
 
+    enum Creation: Equatable {
+        case idle
+        case creating
+        case failed
+    }
+
     private(set) var phase = Phase.loading
     private(set) var summaries: [ConversationSummary] = []
+    private(set) var companions: [Companion] = []
+    private(set) var creation = Creation.idle
     var opened: ConversationSubject?
+    var isPickingCompanions = false
 
     @ObservationIgnored private var instanceId: Space.ID?
     @ObservationIgnored private var spaceId: String?
@@ -20,6 +29,7 @@ final class ConversationsStore {
     @ObservationIgnored private var opening: Companion.ID?
     @ObservationIgnored private var working: [String: Set<Companion.ID>] = [:]
     @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private var creating: Task<Void, Never>?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
 
@@ -38,8 +48,10 @@ final class ConversationsStore {
             spaceId = nil
             phase = .loading
             summaries = []
+            companions = []
             working = [:]
             opened = nil
+            stopPicking()
         }
         relay = ConversationRelay(connection: connection)
         for await update in await connection.updates() {
@@ -74,6 +86,54 @@ final class ConversationsStore {
         await reload()?.value
     }
 
+    func pickCompanions() {
+        creation = .idle
+        isPickingCompanions = true
+    }
+
+    func stopPicking() {
+        creating?.cancel()
+        creating = nil
+        creation = .idle
+        isPickingCompanions = false
+    }
+
+    @discardableResult
+    func createGroup(with companionIds: [Companion.ID]) -> Task<Void, Never>? {
+        guard let spaceId, let relay, creation != .creating, !companionIds.isEmpty else {
+            return nil
+        }
+        creation = .creating
+        let task = Task { await create(companionIds, in: spaceId, through: relay) }
+        creating = task
+        return task
+    }
+
+    private func create(
+        _ companionIds: [Companion.ID], in spaceId: String, through relay: ConversationRelay
+    ) async {
+        do {
+            let group = try await relay.createGroup(in: spaceId, with: companionIds)
+            guard !Task.isCancelled, self.spaceId == spaceId else { return }
+            creating = nil
+            creation = .idle
+            admit(group)
+            isPickingCompanions = false
+            opened = .group(group)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled, self.spaceId == spaceId else { return }
+            creating = nil
+            creation = .failed
+        }
+    }
+
+    private func admit(_ group: GroupConversation) {
+        guard phase == .loaded, !summaries.contains(where: { $0.id == group.id }) else { return }
+        publish(summaries + [summary(of: group, lastMessage: nil)])
+    }
+
     private func apply(_ event: ConversationEvent) {
         switch event {
         case .messageStored(let message):
@@ -84,10 +144,7 @@ final class ConversationsStore {
         case .companionsChanged:
             reload()
         case .groupCreated(let group):
-            guard phase == .loaded, !summaries.contains(where: { $0.id == group.id }) else {
-                return
-            }
-            publish(summaries + [summary(of: group, lastMessage: nil)])
+            admit(group)
         case .groupUpdated(let group):
             guard let index = summaries.firstIndex(where: { $0.subject.isGroup(group.id) })
             else { return }
@@ -149,8 +206,9 @@ final class ConversationsStore {
 
     private func load(_ spaceId: String, through relay: ConversationRelay) async {
         do {
-            async let companions = relay.companions(in: spaceId)
+            async let listedCompanions = relay.companions(in: spaceId)
             async let groups = relay.groups(in: spaceId)
+            let companions = try await listedCompanions
             let subjects =
                 try await groups.map(ConversationSubject.group)
                 + companions.map(ConversationSubject.companion)
@@ -174,6 +232,7 @@ final class ConversationsStore {
                         summary.conversationId.flatMap { working[$0] } ?? []
                     return summary
                 })
+            self.companions = companions
             phase = .loaded
             if let opening, let subject = subjects.first(where: { $0.id == opening }) {
                 self.opening = nil
