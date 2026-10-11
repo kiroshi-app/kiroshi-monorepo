@@ -64,6 +64,7 @@ const renderTurn = (
 		row: { ...rowOf(role, text), ...author },
 		anchor: "m-1",
 		state,
+		hasTimeLine: true,
 		onRetry,
 		pinned: false,
 		now: 0,
