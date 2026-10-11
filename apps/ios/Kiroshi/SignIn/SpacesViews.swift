@@ -8,7 +8,7 @@ struct LoadingSpacesView: View {
             ProgressView()
                 .controlSize(.large)
             Text("Loading your spaces…")
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
         .padding(.horizontal, 40)
@@ -42,19 +42,18 @@ struct NoSpaceView: View {
         VStack(spacing: 14) {
             Image(systemName: "square.stack")
                 .font(.largeTitle)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("No spaces yet")
                 .font(.title2.bold())
-                .foregroundStyle(Color.kiroshi(.foreground))
                 .accessibilityAddTraits(.isHeader)
             Text(
                 "Turn on hosting for a space on your Mac, or ask someone to invite you. It shows up here."
             )
-            .foregroundStyle(Color.kiroshi(.mutedForeground))
+            .foregroundStyle(.secondary)
             Text("Signed in as \(model.signedInEmail)")
                 .font(.subheadline)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
                 .padding(.top, 6)
         }
         .multilineTextAlignment(.center)

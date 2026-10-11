@@ -8,10 +8,9 @@ struct SignInHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.largeTitle.bold())
-                .foregroundStyle(Color.kiroshi(.foreground))
                 .accessibilityAddTraits(.isHeader)
             Text(message)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(.secondary)
         }
     }
 }
