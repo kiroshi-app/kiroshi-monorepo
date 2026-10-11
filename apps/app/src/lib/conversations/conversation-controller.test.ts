@@ -1275,6 +1275,69 @@ describe("createConversationController", () => {
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 		})
 
+		it("keeps the question and holds the failure of the companion when its runtime rejects the answer", async () => {
+			const nyx = await askedIn(harness)
+			vi.spyOn(harness.driver, "answerQuestion").mockRejectedValue(
+				SERVER_ENV_REJECTED,
+			)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			const state = harness.controller.getState()
+			expect(state.latestError).toMatchObject({
+				botId: nyx,
+				error: SERVER_ENV_REJECTED,
+			})
+			expect(state.pendingPrompt).toMatchObject({
+				kind: "question",
+				request: { id: "ask-1" },
+			})
+			const page = await harness.store.loadPage(harness.conversation.id, null)
+			expect(
+				page.messages.filter(
+					(message) => message.repliedToMessageId === "question-ask-1",
+				),
+			).toEqual([])
+		})
+
+		it("releases the question and holds the failure when only the answer row is refused", async () => {
+			await askedIn(harness)
+			vi.spyOn(harness.store, "appendUserMessage").mockRejectedValue(
+				new Error("refused"),
+			)
+
+			await harness.controller.answer("ask-1", { "Which wall?": "the north" })
+			await harness.settled()
+
+			const state = harness.controller.getState()
+			expect(state.pendingPrompt).toBeNull()
+			expect(state.latestError?.error).toEqual({
+				kind: "readFailed",
+				detail: "Error: refused",
+			})
+		})
+
+		it("keeps the permission and holds the failure of the companion when its runtime rejects the decision", async () => {
+			const nyx = await permittedIn(harness)
+			vi.spyOn(harness.driver, "respondToPermission").mockRejectedValue(
+				SERVER_ENV_REJECTED,
+			)
+
+			await harness.controller.respond("let-1", "allowOnce")
+			await harness.settled()
+
+			const state = harness.controller.getState()
+			expect(state.latestError).toMatchObject({
+				botId: nyx,
+				error: SERVER_ENV_REJECTED,
+			})
+			expect(state.pendingPrompt).toMatchObject({
+				kind: "permission",
+				request: { id: "let-1" },
+			})
+		})
+
 		it("releases the ask when the turn of the companion ends", async () => {
 			const nyx = await askedIn(harness)
 
@@ -1779,6 +1842,19 @@ describe("failures the conversation carries to the screen", () => {
 		controller.dismissError(held?.id ?? "")
 
 		expect(controller.getState().latestError).toBeNull()
+		detach()
+	})
+
+	it("holds the failure of a transcript that would not load", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "loadPage").mockRejectedValue(new Error("refused"))
+
+		const { controller, detach } = await openedOn(store)
+
+		expect(controller.getState().latestError?.error).toEqual({
+			kind: "readFailed",
+			detail: "Error: refused",
+		})
 		detach()
 	})
 

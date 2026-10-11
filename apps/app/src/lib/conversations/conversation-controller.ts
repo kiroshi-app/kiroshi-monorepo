@@ -461,7 +461,10 @@ export const createConversationController = (
 	const write = (operation: () => Promise<unknown>, shown?: () => void) => {
 		void enqueue(operation).then(
 			() => shown?.(),
-			() => undefined,
+			(reason) => {
+				noteFailure(toReadError(reason))
+				sync()
+			},
 		)
 	}
 
@@ -1334,7 +1337,13 @@ export const createConversationController = (
 		if (!isAnswerable) {
 			return
 		}
-		await driver.answerQuestion(held.scope, id, answers).catch(() => undefined)
+		try {
+			await driver.answerQuestion(held.scope, id, answers)
+		} catch (reason) {
+			noteSpeakerFailure(held.botId, toTransportError(reason))
+			sync()
+			return
+		}
 		recordAnswers(held, pending.request, answers)
 		releasePrompt(held, id)
 	}
@@ -1351,9 +1360,13 @@ export const createConversationController = (
 		if (!held?.scope) {
 			return
 		}
-		await driver
-			.respondToPermission(held.scope, id, decision)
-			.catch(() => undefined)
+		try {
+			await driver.respondToPermission(held.scope, id, decision)
+		} catch (reason) {
+			noteSpeakerFailure(held.botId, toTransportError(reason))
+			sync()
+			return
+		}
 		releasePrompt(held, id)
 	}
 
@@ -1418,7 +1431,9 @@ export const createConversationController = (
 		forgetFailure()
 		sync()
 		await Promise.all([
-			enqueue(() => transcript.load(next.id)).catch(() => undefined),
+			enqueue(() => transcript.load(next.id)).catch((reason) => {
+				noteFailure(toReadError(reason))
+			}),
 			readCauses(next.id),
 		])
 		sync()
