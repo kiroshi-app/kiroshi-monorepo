@@ -40,14 +40,16 @@ use crate::companions::contract::{
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
 };
 use crate::conversations::commands::{
-	conversation_append_user_message, conversation_create, conversation_create_bot_from_draft,
-	conversation_delete, conversation_delete_bot, conversation_duplicate_bot,
-	conversation_send_user_message, conversation_update, conversation_update_bot,
+	conversation_add_participant, conversation_append_user_message, conversation_create,
+	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
+	conversation_duplicate_bot, conversation_remove_participant, conversation_send_user_message,
+	conversation_set_lead, conversation_update, conversation_update_bot,
 };
 use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, NewUserMessage,
-	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
-	MESSAGE_STORED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
+	Bot, BotDraft, BotIdentity, Conversation, NewUserMessage, ParticipantRole,
+	TranscriptStoreError, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
+	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT,
+	UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -3569,6 +3571,49 @@ impl Guest {
 			.expect("the conversation is deleted");
 	}
 
+	async fn first_conversation_updated(&mut self) -> Value {
+		next_text(&mut self.member, |frame| frame["event"]["event"] == CONVERSATION_UPDATED_EVENT)
+			.await
+	}
+
+	async fn companion_seated(
+		&self,
+		conversation_id: &str,
+		bot_id: &str,
+		invited_by_bot_id: Option<&str>,
+	) -> Result<Conversation, TranscriptStoreError> {
+		let app = self.harness.app.handle().clone();
+		conversation_add_participant(
+			app,
+			self.harness.app.state(),
+			conversation_id.to_owned(),
+			bot_id.to_owned(),
+			invited_by_bot_id.map(str::to_owned),
+		)
+		.await
+	}
+
+	async fn companion_removed(
+		&self,
+		conversation_id: &str,
+		bot_id: &str,
+	) -> Result<Conversation, TranscriptStoreError> {
+		let app = self.harness.app.handle().clone();
+		let state = self.harness.app.state();
+		conversation_remove_participant(app, state, conversation_id.to_owned(), bot_id.to_owned())
+			.await
+	}
+
+	async fn lead_given(
+		&self,
+		conversation_id: &str,
+		bot_id: &str,
+	) -> Result<Conversation, TranscriptStoreError> {
+		let app = self.harness.app.handle().clone();
+		let state = self.harness.app.state();
+		conversation_set_lead(app, state, conversation_id.to_owned(), bot_id.to_owned()).await
+	}
+
 	async fn user_message_appended(&self, conversation_id: &str, turn_id: &str) -> i64 {
 		let app = self.harness.app.handle().clone();
 		let message = a_user_message(conversation_id, turn_id);
@@ -3707,6 +3752,124 @@ fn a_relay_guest_hears_a_conversation_updated_in_the_shared_space_only() {
 
 		let payload = json!({ "spaceId": PERSONAL, "conversation": as_json(updated) });
 		assert_eq!(heard, as_forwarded((CONVERSATION_UPDATED_EVENT, payload)));
+	});
+}
+
+fn seated_in(conversation: &Conversation, bot_id: &str) -> bool {
+	conversation
+		.participants
+		.iter()
+		.any(|participant| participant.bot_id == bot_id && participant.left_at.is_none())
+}
+
+fn led_by(conversation: &Conversation) -> Option<&str> {
+	conversation
+		.participants
+		.iter()
+		.find(|participant| participant.role == ParticipantRole::Lead)
+		.map(|participant| participant.bot_id.as_str())
+}
+
+fn stored_in_the_shared_space(conversation: &Conversation) -> Value {
+	let payload = json!({ "spaceId": PERSONAL, "conversation": as_json(conversation) });
+	as_forwarded((CONVERSATION_UPDATED_EVENT, payload))
+}
+
+#[test]
+fn a_relay_guest_hears_a_conversation_updated_with_the_companion_seated_in_it() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("companion-seated").await;
+
+		let seated = guest.companion_seated("c-mine", "b-mine", None).await.expect("seated");
+		let heard = guest.first_conversation_updated().await;
+
+		assert!(seated_in(&seated, "b-mine"), "the companion is missing from the participants");
+		assert_eq!(heard, stored_in_the_shared_space(&seated));
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_a_conversation_updated_without_the_companion_removed_from_it() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("companion-removed").await;
+		guest.companion_seated("c-mine", "b-mine", None).await.expect("seated");
+		guest.first_conversation_updated().await;
+
+		let removed = guest.companion_removed("c-mine", "b-mine").await.expect("removed");
+		let heard = guest.first_conversation_updated().await;
+
+		assert!(!seated_in(&removed, "b-mine"), "the removed companion is still seated");
+		assert_eq!(heard, stored_in_the_shared_space(&removed));
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_a_conversation_updated_with_the_new_lead() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("lead-changed").await;
+		guest.companion_seated("c-mine", "b-mine", None).await.expect("seated");
+		guest.companion_seated("c-mine", "b-shared", None).await.expect("seated");
+		guest.first_conversation_updated().await;
+		guest.first_conversation_updated().await;
+
+		let led = guest.lead_given("c-mine", "b-shared").await.expect("led");
+		let heard = guest.first_conversation_updated().await;
+
+		assert_eq!(led_by(&led), Some("b-shared"));
+		assert_eq!(heard, stored_in_the_shared_space(&led));
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_nothing_from_a_companion_seated_again() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("companion-seated-again").await;
+		guest.companion_seated("c-mine", "b-mine", None).await.expect("seated");
+		guest.first_conversation_updated().await;
+
+		guest.companion_seated("c-mine", "b-mine", None).await.expect("seated again");
+		let renamed = guest.conversation_updated("c-mine").await;
+		let heard = guest.first_conversation_updated().await;
+
+		assert_eq!(heard, stored_in_the_shared_space(&renamed));
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_nothing_from_a_member_change_in_another_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("member-change-elsewhere").await;
+
+		guest.companion_seated("c-theirs", "b-theirs", None).await.expect("seated");
+		guest.companion_seated("c-shared", "b-theirs", None).await.expect("seated");
+		guest.lead_given("c-shared", "b-theirs").await.expect("led");
+		guest.companion_removed("c-shared", "b-shared").await.expect("removed");
+		let renamed = guest.conversation_updated("c-mine").await;
+		let heard = guest.first_conversation_updated().await;
+
+		assert_eq!(heard, stored_in_the_shared_space(&renamed));
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_nothing_from_a_member_write_that_fails() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("member-write-fails").await;
+		let refused = |bot_id: &str| TranscriptStoreError::UnknownParticipant {
+			conversation_id: "c-mine".to_owned(),
+			bot_id: bot_id.to_owned(),
+		};
+
+		let seated = guest.companion_seated("c-mine", "b-mine", Some("b-shared")).await;
+		let removed = guest.companion_removed("c-mine", "b-mine").await;
+		let led = guest.lead_given("c-mine", "b-mine").await;
+		let renamed = guest.conversation_updated("c-mine").await;
+		let heard = guest.first_conversation_updated().await;
+
+		assert_eq!(seated, Err(refused("b-shared")));
+		assert_eq!(removed, Err(refused("b-mine")));
+		assert_eq!(led, Err(refused("b-mine")));
+		assert_eq!(heard, stored_in_the_shared_space(&renamed));
 	});
 }
 

@@ -124,6 +124,7 @@ pub(crate) async fn seat_participant<R: Runtime>(
 		.await?;
 	if let Some(arrival) = &joined.arrival {
 		launch::announce(app, COMPANION_ARRIVED, CompanionArrival::from(arrival.clone()));
+		announce_stored(app, CONVERSATION_UPDATED, &drawn(app, joined.conversation.clone()));
 	}
 	Ok(joined)
 }
@@ -137,7 +138,9 @@ pub async fn conversation_remove_participant<R: Runtime>(
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let left = ready(&state)?.conversations().remove_participant(conversation_id, bot_id).await?;
-	Ok(drawn(&app, left))
+	let left = drawn(&app, left);
+	announce_stored(&app, CONVERSATION_UPDATED, &left);
+	Ok(left)
 }
 
 #[tauri::command]
@@ -149,7 +152,9 @@ pub async fn conversation_set_lead<R: Runtime>(
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let led = ready(&state)?.conversations().set_lead(conversation_id, bot_id).await?;
-	Ok(drawn(&app, led))
+	let led = drawn(&app, led);
+	announce_stored(&app, CONVERSATION_UPDATED, &led);
+	Ok(led)
 }
 
 fn announce_stored<R: Runtime>(
