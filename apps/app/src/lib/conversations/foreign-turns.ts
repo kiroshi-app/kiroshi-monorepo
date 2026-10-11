@@ -121,8 +121,7 @@ export const createForeignTurns = (
 		reviseSpeaker(turn, (speaker) => ({ ...speaker, permission }))
 	}
 
-	const writeQuestionRow = (turn: ForeignTurn, question: QuestionRequest) => {
-		const { scope } = turn
+	const writeQuestionRow = (scope: RuntimeScope, question: QuestionRequest) =>
 		transcript.append({
 			id: questionMessageIdOf(question.id),
 			conversationId: scope.conversationId,
@@ -137,11 +136,10 @@ export const createForeignTurns = (
 			repliedToMessageId: null,
 			runtimeSessionId: scope.runtimeSessionId,
 		})
-	}
 
 	const askQuestion = (turn: ForeignTurn, question: QuestionRequest) => {
 		openSpeaker(turn)
-		writeQuestionRow(turn, question)
+		writeQuestionRow(turn.scope, question)
 		reviseSpeaker(turn, (speaker) => ({ ...speaker, question }))
 	}
 
