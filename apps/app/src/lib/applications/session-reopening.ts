@@ -1,6 +1,6 @@
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { raiseReportedFailure } from "../failure-report"
 import type { ChatController } from "../chat/chat-controller"
 import { isTurnBusy } from "../chat/chat-state"
 import type { Bot, EnvOwner } from "../conversations/store-contract"
@@ -64,14 +64,17 @@ export const createSessionReopener = ({
 		if (handle) {
 			return
 		}
-		raiseFailureNotice({
-			title: i18n.t("bots:applications.reopen.refused.title", {
-				companion: companion.name,
-			}),
-			description: i18n.t("bots:applications.reopen.refused.description", {
-				name: application,
-			}),
-		})
+		raiseReportedFailure(
+			{
+				title: i18n.t("bots:applications.reopen.refused.title", {
+					companion: companion.name,
+				}),
+				description: i18n.t("bots:applications.reopen.refused.description", {
+					name: application,
+				}),
+			},
+			{ raisedIn: "session-reopening" },
+		)
 	}
 
 	const isMidTurn = (companion: Bot) =>

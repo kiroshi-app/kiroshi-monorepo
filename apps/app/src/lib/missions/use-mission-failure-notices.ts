@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
+import { raiseReportedFailure } from "@/lib/failure-report"
 
 export const useMissionSendFailure = (refused: RefusedMessage | null): void => {
 	const t = useChatCopy()
@@ -14,10 +14,13 @@ export const useMissionSendFailure = (refused: RefusedMessage | null): void => {
 			return
 		}
 		reportedId.current = refused.id
-		raiseFailureNotice({
-			title: t("missions.failure.send.title"),
-			description: t("missions.failure.send.description"),
-		})
+		raiseReportedFailure(
+			{
+				title: t("missions.failure.send.title"),
+				description: t("missions.failure.send.description"),
+			},
+			{ raisedIn: "use-mission-failure-notices" },
+		)
 	}, [refused, t])
 }
 
@@ -32,10 +35,13 @@ export const useMissionReadFailure = (hasFailedToRead: boolean): void => {
 		if (!hasFailedToRead || wasReported) {
 			return
 		}
-		raiseFailureNotice({
-			title: t("missions.failure.read.title"),
-			description: t("missions.failure.read.description"),
-		})
+		raiseReportedFailure(
+			{
+				title: t("missions.failure.read.title"),
+				description: t("missions.failure.read.description"),
+			},
+			{ raisedIn: "use-mission-failure-notices" },
+		)
 	}, [hasFailedToRead, t])
 }
 
@@ -53,10 +59,13 @@ export const useSpaceMissionsFailure = (
 		if (!hasFailed || wasReported) {
 			return
 		}
-		raiseFailureNotice({
-			title: t("activity.failure.missions.title"),
-			description: t("activity.failure.missions.description"),
-			action: { label: t("notice.retry"), onPress: reload },
-		})
+		raiseReportedFailure(
+			{
+				title: t("activity.failure.missions.title"),
+				description: t("activity.failure.missions.description"),
+				action: { label: t("notice.retry"), onPress: reload },
+			},
+			{ raisedIn: "use-mission-failure-notices" },
+		)
 	}, [hasFailed, reload, t])
 }

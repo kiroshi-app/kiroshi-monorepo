@@ -121,6 +121,9 @@ describe("useCompanionAnnouncements", () => {
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: expect.any(String),
 			description: REFUSAL.reason,
+			report: expect.objectContaining({
+				raisedIn: "use-companion-announcements",
+			}),
 		})
 		expect(onCreated).not.toHaveBeenCalled()
 	})
@@ -156,6 +159,9 @@ describe("useCompanionAnnouncements", () => {
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: expect.any(String),
 			description: REFUSAL.reason,
+			report: expect.objectContaining({
+				raisedIn: "use-companion-announcements",
+			}),
 		})
 		expect(onCreated).not.toHaveBeenCalled()
 	})

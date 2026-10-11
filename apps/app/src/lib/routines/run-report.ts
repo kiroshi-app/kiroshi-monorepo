@@ -1,4 +1,3 @@
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -9,6 +8,7 @@ import {
 } from "./routine-contract"
 import type { ReportedRunsReader } from "./run-port"
 
+import { raiseReportedFailure } from "../failure-report"
 import type { TranscriptStore } from "../conversations/store-port"
 import type { TranscriptMessage } from "../conversations/transcript-contract"
 import { isHostOffline } from "../host/host-offline"
@@ -87,10 +87,13 @@ export const readReportedCauses = async ({
 		return indexedByTurnId(await read(conversationId))
 	} catch (reason) {
 		if (!isHostOffline(reason)) {
-			raiseFailureNotice({
-				title: i18n.t("chat:transcript.cause.unavailable.title"),
-				description,
-			})
+			raiseReportedFailure(
+				{
+					title: i18n.t("chat:transcript.cause.unavailable.title"),
+					description,
+				},
+				{ raisedIn: "run-report" },
+			)
 		}
 		return null
 	}

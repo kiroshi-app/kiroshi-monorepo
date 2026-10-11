@@ -1,7 +1,4 @@
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { listen } from "./index"
@@ -12,6 +9,7 @@ import {
 	type HostingChanged,
 	type HostingState,
 } from "../bindings"
+import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
 type HostingControllerState = {
@@ -89,7 +87,7 @@ type Session = {
 
 export const createHostingController = ({
 	transport = hostingTransport,
-	reportFailure = raiseFailureNotice,
+	reportFailure = failureReporterIn("hosting-controller"),
 }: HostingControllerOptions = {}): HostingController => {
 	const stateStore = createStore<HostingControllerState>({
 		hosting: undefined,

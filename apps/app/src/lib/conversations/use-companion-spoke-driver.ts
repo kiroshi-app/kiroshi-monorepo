@@ -1,12 +1,11 @@
 import { useEffect } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
-
 import { startCompanionSpokeDriver } from "./companion-spoke-driver"
 import type { ConversationRuntimes } from "./conversation-runtimes"
 import type { SpokenWords } from "./spoken-words"
 import { arrivalsTransport } from "./store-transport"
 
+import { failureReporterIn } from "../failure-report"
 import type { RosterController } from "../bots/roster-controller"
 
 export type CompanionSpokeDriverMount = {
@@ -27,7 +26,7 @@ export const useCompanionSpokeDriver = ({
 				roster,
 				companions: arrivalsTransport,
 				spokenWords,
-				reportFailure: raiseFailureNotice,
+				reportFailure: failureReporterIn("companion-spoke-driver"),
 			}),
 		[runtimes, roster, spokenWords],
 	)

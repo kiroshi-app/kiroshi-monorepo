@@ -3,7 +3,6 @@ import { type RefObject, useEffect, useRef } from "react"
 import {
 	endNotice,
 	type NoticeMessage,
-	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import { type ChatCopy, useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
@@ -15,6 +14,7 @@ import {
 	needsFreshSession,
 	noticeTitleFor,
 } from "@/lib/chat/screen-model"
+import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
 
 type SessionFailure = {
@@ -122,10 +122,13 @@ export const useSessionFailureNotice = ({
 		}
 		const failure: RaisedFailure = {
 			errorId: error.id,
-			noticeId: raiseFailureNotice({
-				...transportMessageOf(t, { error, onRestart, onSignIn }),
-				onClose: dismissUnlessReleased,
-			}),
+			noticeId: raiseReportedFailure(
+				{
+					...transportMessageOf(t, { error, onRestart, onSignIn }),
+					onClose: dismissUnlessReleased,
+				},
+				{ raisedIn: "use-session-failure-notice" },
+			),
 		}
 		raised.current = failure
 	}, [errorId, error, onDismiss, onRestart, onSignIn, t])

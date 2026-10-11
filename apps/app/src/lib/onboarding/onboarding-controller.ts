@@ -1,7 +1,4 @@
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { exitDetailOf } from "./onboarding-failure"
@@ -16,6 +13,7 @@ import {
 	type SignInActions,
 } from "./sign-in-flow"
 
+import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 import type { CompanionCreated } from "../companions/companions-transport"
 
@@ -64,7 +62,9 @@ export type OnboardingControllerOptions = {
 export const createOnboardingController = (
 	port: OnboardingPort,
 	world: OnboardingWorld,
-	{ reportFailure = raiseFailureNotice }: OnboardingControllerOptions = {},
+	{
+		reportFailure = failureReporterIn("onboarding-controller"),
+	}: OnboardingControllerOptions = {},
 ): OnboardingController => {
 	const stateStore = createStore(initialOnboardingState)
 	const current = stateStore.getState

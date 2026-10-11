@@ -1,9 +1,7 @@
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { failureReporterIn } from "../failure-report"
 import type { EvolvedBundle, RuntimeScope } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 import {
@@ -39,7 +37,7 @@ export const startEvolutionSource = ({
 	companionPlugin,
 	userPlugin,
 	spacePlugin,
-	reportFailure = raiseFailureNotice,
+	reportFailure = failureReporterIn("evolution-source"),
 }: EvolutionSourceOptions): (() => void) => {
 	const readOpenPanel = (panel: PluginPanel, scope: PluginScope) => {
 		if (isSamePluginScope(panel.getState().scope, scope)) {

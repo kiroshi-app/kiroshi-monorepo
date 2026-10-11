@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -8,6 +7,8 @@ import {
 	type CompanionSeedRefused,
 	companionsTransport,
 } from "./companions-transport"
+
+import { raiseReportedFailure } from "../failure-report"
 
 export type CompanionAnnouncements = {
 	onCreated: (created: CompanionCreated) => void
@@ -43,10 +44,13 @@ export const useCompanionAnnouncements = (
 
 		const refused = ({ reason }: CompanionSeedRefused) =>
 			settleOnce(`refused:${reason}`, () =>
-				raiseFailureNotice({
-					title: i18n.t("bots:roster.seedRefused"),
-					description: reason,
-				}),
+				raiseReportedFailure(
+					{
+						title: i18n.t("bots:roster.seedRefused"),
+						description: reason,
+					},
+					{ raisedIn: "use-companion-announcements" },
+				),
 			)
 
 		const listening = Promise.all([

@@ -40,5 +40,6 @@ it("keeps a failed read in state and raises it as a failure notice", async () =>
 	)
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
 		title: "Couldn’t read the models this machine offers.",
+		report: expect.objectContaining({ raisedIn: "use-model-catalogue" }),
 	})
 })

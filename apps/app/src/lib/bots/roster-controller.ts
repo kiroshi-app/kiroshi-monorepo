@@ -3,15 +3,13 @@ import type {
 	BotSettingsValue,
 } from "@workspace/ui/components/bot-settings"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 import { type RosterLine, rosterLinesIn, type SoloThreads } from "./roster-line"
 
+import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -282,7 +280,9 @@ export type RosterControllerOptions = {
 
 export const createRosterController = (
 	store: TranscriptStore,
-	{ reportFailure = raiseFailureNotice }: RosterControllerOptions = {},
+	{
+		reportFailure = failureReporterIn("roster-controller"),
+	}: RosterControllerOptions = {},
 ): RosterController => {
 	const stateStore = createStore(initialRosterState)
 	const current = stateStore.getState

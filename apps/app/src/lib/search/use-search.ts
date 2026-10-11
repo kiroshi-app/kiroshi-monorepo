@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { SearchPaletteProps } from "@workspace/ui/components/search-palette"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -23,6 +22,7 @@ import {
 import { type SearchPort, searchPort } from "./search-port"
 import { useSearchKeys } from "./use-search-keys"
 
+import { raiseReportedFailure } from "../failure-report"
 import { useControllerState } from "../use-controller"
 
 export type SearchSource = {
@@ -81,10 +81,13 @@ export const useSearchNavigation = ({
 	)
 
 const raiseSearchFailure = () =>
-	raiseFailureNotice({
-		title: i18n.t("search:unavailable.title"),
-		description: i18n.t("search:unavailable.description"),
-	})
+	raiseReportedFailure(
+		{
+			title: i18n.t("search:unavailable.title"),
+			description: i18n.t("search:unavailable.description"),
+		},
+		{ raisedIn: "use-search" },
+	)
 
 export const useSearch = ({
 	spaceId,

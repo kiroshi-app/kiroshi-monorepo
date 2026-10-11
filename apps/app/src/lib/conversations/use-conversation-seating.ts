@@ -6,7 +6,6 @@ import {
 	useState,
 } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -17,6 +16,8 @@ import {
 	unseatedBots,
 } from "./roster-conversations"
 import type { Bot, Conversation } from "./store-contract"
+
+import { raiseReportedFailure } from "../failure-report"
 
 export type ConversationSeating = {
 	seat: (conversationId: string, botId: string) => Promise<Conversation | null>
@@ -111,9 +112,12 @@ export const useSuggestedBots = (conversationId: string | null) => {
 			(bots) => land(toBotRows(bots).slice(0, SUGGESTED_BOTS_SHOWN)),
 			() => {
 				land(NO_BOTS)
-				raiseFailureNotice({
-					title: i18n.t("chat:conversationSeating.unavailable"),
-				})
+				raiseReportedFailure(
+					{
+						title: i18n.t("chat:conversationSeating.unavailable"),
+					},
+					{ raisedIn: "use-conversation-seating" },
+				)
 			},
 		)
 		return () => {

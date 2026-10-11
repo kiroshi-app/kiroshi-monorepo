@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { TranscriptMessage } from "@/lib/conversations/transcript-contract"
+import { raiseReportedFailure } from "@/lib/failure-report"
 import type { MessageLanding } from "@/lib/search/message-landing-controller"
 
 export type MessageLandingRequest = {
@@ -34,10 +34,13 @@ export const useMessageLanding = ({
 	const giveUp = useCallback(
 		(taken: MessageLanding) => {
 			onTaken(taken)
-			raiseFailureNotice({
-				title: t("transcript.landing.unavailable.title"),
-				description: t("transcript.landing.unavailable.description"),
-			})
+			raiseReportedFailure(
+				{
+					title: t("transcript.landing.unavailable.title"),
+					description: t("transcript.landing.unavailable.description"),
+				},
+				{ raisedIn: "use-message-landing" },
+			)
 		},
 		[onTaken, t],
 	)

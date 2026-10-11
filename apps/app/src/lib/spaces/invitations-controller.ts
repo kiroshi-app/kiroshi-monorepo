@@ -1,7 +1,4 @@
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import type {
 	SpaceInvitation,
 	SpaceInvitationFailure,
@@ -18,6 +15,7 @@ import {
 	type InvitationsChanged,
 	type JoinedSpace,
 } from "../bindings"
+import { failureReporterIn } from "../failure-report"
 import { listen } from "../host"
 import { createStore } from "../store"
 
@@ -136,7 +134,7 @@ const initialInvitationsState: InvitationsState = {
 export const createInvitationsController = ({
 	joinedSpaces,
 	transport = invitationsTransport,
-	reportFailure = raiseFailureNotice,
+	reportFailure = failureReporterIn("invitations-controller"),
 }: InvitationsControllerOptions): InvitationsController => {
 	const stateStore = createStore(initialInvitationsState)
 	const current = stateStore.getState

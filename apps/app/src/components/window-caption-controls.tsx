@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { MaximizeButtonState } from "@/lib/bindings"
+import { raiseReportedFailure } from "@/lib/failure-report"
 import {
 	closeWindow,
 	declareMaximizeButton,
@@ -26,9 +26,12 @@ type WindowAction =
 	| "pointer"
 
 const raiseWindowFailure = (action: WindowAction) => () => {
-	raiseFailureNotice({
-		title: i18n.t(`common:windowControls.failure.${action}`),
-	})
+	raiseReportedFailure(
+		{
+			title: i18n.t(`common:windowControls.failure.${action}`),
+		},
+		{ raisedIn: "window-caption-controls" },
+	)
 }
 
 const runWindowAction =

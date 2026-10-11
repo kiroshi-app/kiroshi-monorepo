@@ -7,7 +7,6 @@ import {
 	useState,
 } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type {
@@ -17,6 +16,7 @@ import type {
 } from "./application-port"
 import type { ReopenedScope } from "./session-reopening"
 
+import { raiseReportedFailure } from "../failure-report"
 import type { Space } from "../conversations/store-contract"
 import { isHostOffline } from "../host/host-offline"
 import { useHostReconnections } from "../host/use-host-reconnections"
@@ -72,9 +72,12 @@ export const useConversationInstalls = (
 				console.error("applications: installs could not be read", reason)
 				setRead(landedRead(conversationId, NO_INSTALLS))
 				if (!isHostOffline(reason)) {
-					raiseFailureNotice({
-						title: i18n.t("chat:applicationInstall.unreadable"),
-					})
+					raiseReportedFailure(
+						{
+							title: i18n.t("chat:applicationInstall.unreadable"),
+						},
+						{ raisedIn: "use-conversation-installs" },
+					)
 				}
 			},
 		)

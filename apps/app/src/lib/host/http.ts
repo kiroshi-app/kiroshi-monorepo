@@ -1,15 +1,27 @@
 import type { InvokeArgs } from "@tauri-apps/api/core"
 import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import type {
+	FailureReport,
+	NoticeMessage,
+} from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { hostOfflineOf } from "./host-offline"
+
+import { raiseReportedFailure } from "../failure-report"
 
 export type HostSocket = Pick<
 	WebSocket,
 	"onclose" | "onmessage" | "onopen" | "close"
 >
+
+export type HostRefusal = {
+	message: string
+	command?: string
+	status?: number
+	side?: FailureReport["side"]
+}
 
 type HostConnection = {
 	host: string
@@ -21,7 +33,7 @@ export type HttpHostOptions = HostConnection & {
 	openSocket: (url: string) => HostSocket
 	onDown: () => void
 	onUp: () => void
-	onRefused: (message: string, status?: number) => void
+	onRefused: (refusal: HostRefusal) => void
 }
 
 export type HttpHost = {
@@ -85,12 +97,11 @@ const refusalOf = async (response: Response): Promise<Refusal> => {
 const messageOf = (reason: unknown): string =>
 	reason instanceof Error ? reason.message : String(reason)
 
-const DEDICATED_REFUSAL_NOTICES: Record<number, () => void> = {
-	401: () =>
-		raiseFailureNotice({
-			title: i18n.t("chat:screen.notice.unauthorized.title"),
-			description: i18n.t("chat:screen.notice.unauthorized.description"),
-		}),
+const DEDICATED_REFUSAL_NOTICES: Record<number, () => NoticeMessage> = {
+	401: () => ({
+		title: i18n.t("chat:screen.notice.unauthorized.title"),
+		description: i18n.t("chat:screen.notice.unauthorized.description"),
+	}),
 }
 
 const HOST_ONLY_STATUS = 403
@@ -100,35 +111,44 @@ const HOST_ONLY_REFUSAL = "this command belongs to the host"
 const isHostOnlyRefusal = (message: string, status?: number) =>
 	status === HOST_ONLY_STATUS && message.includes(HOST_ONLY_REFUSAL)
 
-const raiseHostOnlyNotice = () =>
-	raiseFailureNotice({
-		title: i18n.t("chat:screen.notice.failed"),
-		description: i18n.t("chat:screen.notice.hostOnly"),
-	})
+const REFUSAL_RAISED_IN = "host-refusal"
 
-export const raiseRefusalNotice = (message: string, status?: number) => {
+const HOST_OFFLINE_RAISED_IN = "host-offline"
+
+const hostOnlyNotice = (): NoticeMessage => ({
+	title: i18n.t("chat:screen.notice.failed"),
+	description: i18n.t("chat:screen.notice.hostOnly"),
+})
+
+const refusalNoticeOf = ({ message, status }: HostRefusal): NoticeMessage => {
 	if (isHostOnlyRefusal(message, status)) {
-		raiseHostOnlyNotice()
-		return
+		return hostOnlyNotice()
 	}
-	const raiseDedicatedNotice = status
-		? DEDICATED_REFUSAL_NOTICES[status]
-		: undefined
-	if (raiseDedicatedNotice) {
-		raiseDedicatedNotice()
-		return
-	}
-	raiseFailureNotice({
-		title: i18n.t("chat:screen.notice.failed"),
-		description: message,
-	})
+	const dedicatedNotice = status ? DEDICATED_REFUSAL_NOTICES[status] : undefined
+	return (
+		dedicatedNotice?.() ?? {
+			title: i18n.t("chat:screen.notice.failed"),
+			description: message,
+		}
+	)
 }
 
-export const raiseHostOfflineNotice = () =>
-	raiseFailureNotice({
-		title: i18n.t("chat:screen.notice.hostOffline.title"),
-		description: i18n.t("chat:screen.notice.hostOffline.description"),
+export const raiseRefusalNotice = (refusal: HostRefusal) =>
+	raiseReportedFailure(refusalNoticeOf(refusal), {
+		raisedIn: REFUSAL_RAISED_IN,
+		command: refusal.command,
+		httpStatus: refusal.status,
+		side: refusal.side,
 	})
+
+export const raiseHostOfflineNotice = () =>
+	raiseReportedFailure(
+		{
+			title: i18n.t("chat:screen.notice.hostOffline.title"),
+			description: i18n.t("chat:screen.notice.hostOffline.description"),
+		},
+		{ raisedIn: HOST_OFFLINE_RAISED_IN, side: "member" },
+	)
 
 const isFrame = (value: unknown): value is Frame =>
 	typeof value === "object" &&
@@ -193,8 +213,8 @@ export const createHttpHost = ({
 	let presence: Presence = "unknown"
 	let isClosed = false
 
-	const refuse = (reason: unknown, status?: number): never => {
-		onRefused(messageOf(reason), status)
+	const refuse = (command: string, reason: unknown, status?: number): never => {
+		onRefused({ message: messageOf(reason), command, status, side: "member" })
 		throw reason
 	}
 
@@ -206,7 +226,7 @@ export const createHttpHost = ({
 				"content-type": JSON_TYPE,
 			},
 			body: JSON.stringify(args, encodeArgument),
-		}).catch(refuse)
+		}).catch((reason: unknown) => refuse(command, reason))
 
 	const invoke = async <T>(command: string, args: InvokeArgs = {}) => {
 		const response = await post(command, args)
@@ -218,7 +238,7 @@ export const createHttpHost = ({
 			if (response.status === HOST_OFFLINE_STATUS) {
 				return goOffline(reason)
 			}
-			return refuse(reason, response.status)
+			return refuse(command, reason, response.status)
 		}
 		markAnswered()
 		return (await answerOf(response)) as T

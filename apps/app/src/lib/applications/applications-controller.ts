@@ -1,8 +1,5 @@
 import { readMcpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import {
 	type CatalogueCategory,
 	EVERYTHING_CATEGORY,
@@ -16,6 +13,7 @@ import type {
 	InstallField,
 } from "./application-port"
 
+import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 import {
 	declaredServers,
@@ -168,7 +166,9 @@ export type ApplicationsControllerOptions = {
 export const createApplicationsController = (
 	port: ApplicationPort,
 	store: TranscriptStore,
-	{ reportFailure = raiseFailureNotice }: ApplicationsControllerOptions = {},
+	{
+		reportFailure = failureReporterIn("applications-controller"),
+	}: ApplicationsControllerOptions = {},
 ): ApplicationsController => {
 	const stateStore = createStore(initialApplicationsState)
 	const current = stateStore.getState
