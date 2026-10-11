@@ -626,12 +626,14 @@ export type EnvEntry_Deserialize = {
 	name: string,
 	definedIn: EnvScope_Deserialize,
 	servedFrom: EnvScope_Deserialize,
+	isUnset?: boolean,
 };
 
 export type EnvEntry_Serialize = {
 	name: string,
 	definedIn: EnvScope_Serialize,
 	servedFrom: EnvScope_Serialize,
+	isUnset?: boolean,
 };
 
 export type EnvError = { kind: "invalidName"; name: string } | { kind: "invalidScope"; detail: string } | { kind: "unreadable"; detail: string } | { kind: "unwritable"; detail: string } | { kind: "emptyValue" };

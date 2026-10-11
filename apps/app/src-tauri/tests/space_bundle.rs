@@ -22,6 +22,9 @@ use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
 const ATTACHMENT: &[u8] = b"the bytes of a note that travels with its conversation";
 const SPACE_SECRET: (&str, &str) = ("SPACE_TOKEN", "space-value");
 const BOT_SECRET: (&str, &str) = ("BOT_TOKEN", "bot-value");
+const SPACE_SERVER_SECRET: (&str, &str) = ("CLOCK_REGION", "space-server-value");
+const BOT_SERVER_SECRET: (&str, &str) = ("CLOCK_KEY", "bot-server-value");
+const SERVER: &str = "clock";
 
 struct Home {
 	app: AppOfItsOwn,
@@ -120,6 +123,19 @@ impl Home {
 
 	fn env_root(&self) -> PathBuf {
 		store::root(self.app.handle()).expect("an env root")
+	}
+
+	fn env_entries(&self, scope: Value) -> Vec<(String, bool)> {
+		let listed = self.call("env_list", json!({ "scope": scope })).expect("the env lists");
+		listed
+			.as_array()
+			.expect("a list")
+			.iter()
+			.map(|entry| {
+				let name = entry["name"].as_str().expect("a name").to_owned();
+				(name, entry["isUnset"] == json!(true))
+			})
+			.collect()
 	}
 
 	fn bot_root(&self) -> PathBuf {
@@ -273,6 +289,28 @@ fn seeded(home: &Home) -> Seeded {
 		}),
 	)
 	.expect("the bot env is written");
+	home.call(
+		"env_set",
+		json!({
+			"scope": { "kind": "server", "name": SERVER, "owner": { "kind": "space", "id": space_id } },
+			"name": SPACE_SERVER_SECRET.0,
+			"value": SPACE_SERVER_SECRET.1
+		}),
+	)
+	.expect("the space server env is written");
+	home.call(
+		"env_set",
+		json!({
+			"scope": {
+				"kind": "server",
+				"name": SERVER,
+				"owner": { "kind": "bot", "id": bot_ids[0], "spaceId": space_id }
+			},
+			"name": BOT_SERVER_SECRET.0,
+			"value": BOT_SERVER_SECRET.1
+		}),
+	)
+	.expect("the bot server env is written");
 	let attachment_name =
 		Path::new(&attachment).file_name().expect("a name").to_string_lossy().into_owned();
 	let avatar = worn_avatar(home, &bot_ids[0]);
@@ -371,6 +409,82 @@ fn assert_owner_only_under(dir: &Path) {
 	}
 }
 
+fn space_scope(space_id: &str) -> Value {
+	json!({ "kind": "space", "id": space_id })
+}
+
+fn bot_scope(space_id: &str, bot_id: &str) -> Value {
+	json!({ "kind": "bot", "id": bot_id, "spaceId": space_id })
+}
+
+fn bot_server_scope(space_id: &str, bot_id: &str) -> Value {
+	json!({ "kind": "server", "name": SERVER, "owner": bot_scope(space_id, bot_id) })
+}
+
+fn space_server_scope(space_id: &str) -> Value {
+	json!({ "kind": "server", "name": SERVER, "owner": space_scope(space_id) })
+}
+
+fn unset(names: &[&str]) -> Vec<(String, bool)> {
+	names.iter().map(|name| ((*name).to_owned(), true)).collect()
+}
+
+fn assert_names_arrived_unset(home: &Home, space_id: &str, bot_id: &str) {
+	assert_eq!(home.env_entries(space_scope(space_id)), unset(&[SPACE_SECRET.0]));
+	assert_eq!(
+		home.env_entries(bot_scope(space_id, bot_id)),
+		unset(&[BOT_SECRET.0, SPACE_SECRET.0])
+	);
+	assert_eq!(
+		home.env_entries(space_server_scope(space_id)),
+		unset(&[SPACE_SERVER_SECRET.0, SPACE_SECRET.0])
+	);
+	assert_eq!(
+		home.env_entries(bot_server_scope(space_id, bot_id)),
+		unset(&[BOT_SECRET.0, BOT_SERVER_SECRET.0, SPACE_SECRET.0])
+	);
+	let resolved = store::resolve(
+		&home.env_root(),
+		&EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() },
+	)
+	.expect("the bot env");
+	assert!(resolved.base.is_empty(), "an unset name resolved: {:?}", resolved.base);
+	assert!(resolved.per_server.is_empty(), "an unset name resolved: {:?}", resolved.per_server);
+}
+
+fn values() -> [&'static str; 4] {
+	[SPACE_SECRET.1, BOT_SECRET.1, SPACE_SERVER_SECRET.1, BOT_SERVER_SECRET.1]
+}
+
+fn holds(haystack: &[u8], needle: &str) -> bool {
+	haystack.windows(needle.len()).any(|window| window == needle.as_bytes())
+}
+
+fn appended_file(builder: &mut tar::Builder<Vec<u8>>, path: &str, bytes: &[u8]) {
+	let mut header = tar::Header::new_gnu();
+	header.set_entry_type(tar::EntryType::Regular);
+	header.set_size(bytes.len() as u64);
+	header.set_mode(0o600);
+	builder.append_data(&mut header, path, bytes).expect("the file is written");
+}
+
+fn manifest_of(archive: &Path) -> Value {
+	let mut read = tar::Archive::new(fs::File::open(archive).expect("the archive opens"));
+	let mut entries = read.entries().expect("entries");
+	let first = entries.next().expect("a first entry").expect("an entry");
+	serde_json::from_reader(first).expect("the manifest is json")
+}
+
+fn archived_paths(archive: &Path) -> Vec<String> {
+	let mut read = tar::Archive::new(fs::File::open(archive).expect("the archive opens"));
+	read.entries()
+		.expect("entries")
+		.map(|entry| {
+			entry.expect("an entry").path().expect("a path").to_string_lossy().into_owned()
+		})
+		.collect()
+}
+
 fn scratch() -> RemovedOnDrop {
 	let dir = RemovedOnDrop(
 		std::env::temp_dir().join(format!("kiroshi-space-bundle-{}", uuid::Uuid::new_v4())),
@@ -430,15 +544,7 @@ fn a_space_travels_to_another_root_whole_and_twice_without_colliding() {
 	assert_eq!(fs::read(resolved).expect("the avatar"), fs::read(&seeded.avatar).expect("source"));
 	assert_eq!(target.avatar_of(&first_id, &seeded.bot_ids[1]), Value::Null);
 
-	let space_env = store::resolve(&target.env_root(), &EnvOwner::Space { id: first_id.clone() })
-		.expect("the space env");
-	assert_eq!(space_env.base.get(SPACE_SECRET.0).map(String::as_str), Some(SPACE_SECRET.1));
-	let bot_env = store::resolve(
-		&target.env_root(),
-		&EnvOwner::Bot { id: seeded.bot_ids[0].clone(), space_id: first_id.clone() },
-	)
-	.expect("the bot env");
-	assert_eq!(bot_env.base.get(BOT_SECRET.0).map(String::as_str), Some(BOT_SECRET.1));
+	assert_names_arrived_unset(&target, &first_id, &seeded.bot_ids[0]);
 
 	let topics = target.topics_of(&first_id);
 	assert_eq!(topics.len(), 1);
@@ -488,9 +594,15 @@ fn a_space_travels_to_another_root_whole_and_twice_without_colliding() {
 	let relocated =
 		target.dir.join("attachments").join(&second_conversation).join(&seeded.attachment_name);
 	assert_eq!(fs::read(relocated).expect("the second copy of the attachment"), ATTACHMENT);
-	let reminted_env = store::resolve(&target.env_root(), &EnvOwner::Space { id: second_id })
-		.expect("the second space env");
-	assert_eq!(reminted_env.base.get(SPACE_SECRET.0).map(String::as_str), Some(SPACE_SECRET.1));
+	let reminted_bot = target
+		.bots_of(&second_id)
+		.into_iter()
+		.find(|bot| bot["avatarImagePath"].is_string())
+		.expect("the bot that held the secret")["id"]
+		.as_str()
+		.expect("an id")
+		.to_owned();
+	assert_names_arrived_unset(&target, &second_id, &reminted_bot);
 
 	let _ = fs::remove_dir_all(scratch);
 }
@@ -517,7 +629,7 @@ fn an_archive_of_another_version_or_that_fails_midway_leaves_the_target_untouche
 	let refused = target
 		.call("space_import", json!({ "path": future.to_string_lossy() }))
 		.expect_err("a future archive is refused");
-	assert_eq!(refused, json!({ "kind": "unsupportedArchive", "found": 999, "supported": 1 }));
+	assert_eq!(refused, json!({ "kind": "unsupportedArchive", "found": 999, "supported": 2 }));
 	assert_eq!(target.files(), files);
 	assert_eq!(target.table_counts(), counts);
 
@@ -553,15 +665,7 @@ fn an_archive_declaring_open_modes_lands_owner_only() {
 
 	assert_owner_only_under(&target.env_root());
 	assert_owner_only_under(&target.bot_root());
-	let space_env = store::resolve(&target.env_root(), &EnvOwner::Space { id: space_id.clone() })
-		.expect("the space env");
-	assert_eq!(space_env.base.get(SPACE_SECRET.0).map(String::as_str), Some(SPACE_SECRET.1));
-	let bot_env = store::resolve(
-		&target.env_root(),
-		&EnvOwner::Bot { id: seeded.bot_ids[0].clone(), space_id },
-	)
-	.expect("the bot env");
-	assert_eq!(bot_env.base.get(BOT_SECRET.0).map(String::as_str), Some(BOT_SECRET.1));
+	assert_names_arrived_unset(&target, &space_id, &seeded.bot_ids[0]);
 
 	let _ = fs::remove_dir_all(scratch);
 }
@@ -665,5 +769,129 @@ fn exporting_a_space_that_does_not_exist_writes_nothing() {
 
 	assert_eq!(refused, json!({ "kind": "unknownSpace", "id": "missing" }));
 	assert!(!archive.exists());
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn an_export_carries_the_names_of_its_secrets_and_never_their_values() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+
+	let archive = exported(&source, &seeded.space_id, &scratch);
+
+	let bytes = fs::read(&archive).expect("the archive reads");
+	for value in values() {
+		assert!(!holds(&bytes, value), "the archive carries the value {value}");
+	}
+	assert!(archived_paths(&archive).iter().all(|path| !path.starts_with("env")));
+	let manifest = manifest_of(&archive);
+	assert_eq!(manifest["format_version"], json!(2));
+	let quiet_bot = &seeded.bot_ids[1];
+	assert_eq!(
+		manifest["env"],
+		json!({
+			"space": { "names": [SPACE_SECRET.0], "servers": { SERVER: [SPACE_SERVER_SECRET.0] } },
+			"bots": {
+				seeded.bot_ids[0].clone(): {
+					"names": [BOT_SECRET.0],
+					"servers": { SERVER: [BOT_SERVER_SECRET.0] }
+				},
+				quiet_bot.clone(): { "names": [], "servers": {} }
+			}
+		})
+	);
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn an_imported_name_is_listed_unset_until_a_value_is_written_for_it() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let archive = exported(&source, &seeded.space_id, &scratch);
+	let target = Home::new();
+
+	let space_id = imported(&target, &archive)["id"].as_str().expect("an id").to_owned();
+	let bot_id = seeded.bot_ids[0].clone();
+	assert_names_arrived_unset(&target, &space_id, &bot_id);
+
+	target
+		.call(
+			"env_set",
+			json!({ "scope": bot_scope(&space_id, &bot_id), "name": BOT_SECRET.0, "value": "typed" }),
+		)
+		.expect("the value is written");
+	assert_eq!(
+		target.env_entries(bot_scope(&space_id, &bot_id)),
+		vec![(BOT_SECRET.0.to_owned(), false), (SPACE_SECRET.0.to_owned(), true)]
+	);
+	let resolved = store::resolve(
+		&target.env_root(),
+		&EnvOwner::Bot { id: bot_id.clone(), space_id: space_id.clone() },
+	)
+	.expect("the bot env");
+	assert_eq!(resolved.base, BTreeMap::from([(BOT_SECRET.0.to_owned(), "typed".to_owned())]));
+
+	target
+		.call("env_delete", json!({ "scope": space_scope(&space_id), "name": SPACE_SECRET.0 }))
+		.expect("the declared name is dropped");
+	assert_eq!(target.env_entries(space_scope(&space_id)), Vec::new());
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn a_version_1_archive_lands_the_names_of_its_env_files_and_none_of_their_values() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let bot_id = seeded.bot_ids[0].clone();
+	let current = exported(&source, &seeded.space_id, &scratch);
+	let version_1 = rewritten(&current, &scratch, |path, bytes| match path {
+		"manifest.json" => {
+			serde_json::to_vec(&json!({ "format_version": 1, "space_id": seeded.space_id }))
+				.expect("json")
+		}
+		_ => bytes,
+	});
+	let env_file = |name: &str, value: &str| format!("{name}=\"{value}\"\n").into_bytes();
+	let carried = [
+		("env/space/.env".to_owned(), env_file(SPACE_SECRET.0, SPACE_SECRET.1)),
+		(
+			format!("env/space-servers/{SERVER}/.env"),
+			env_file(SPACE_SERVER_SECRET.0, SPACE_SERVER_SECRET.1),
+		),
+		(format!("env/bots/{bot_id}/.env"), env_file(BOT_SECRET.0, BOT_SECRET.1)),
+		(
+			format!("env/bot-servers/{bot_id}/{SERVER}/.env"),
+			env_file(BOT_SERVER_SECRET.0, BOT_SERVER_SECRET.1),
+		),
+	];
+	let target = Home::new();
+	let current_with_files = extended(&current, &scratch, |builder| {
+		let (path, bytes) = &carried[0];
+		appended_file(builder, path, bytes);
+	});
+	assert_eq!(
+		target
+			.call("space_import", json!({ "path": current_with_files.to_string_lossy() }))
+			.expect_err("a version 2 archive carrying an env file is refused"),
+		json!({ "kind": "unreadableArchive", "detail": "the archive holds a path outside its layout" })
+	);
+
+	let version_1 = extended(&version_1, &scratch, |builder| {
+		for (path, bytes) in &carried {
+			appended_file(builder, path, bytes);
+		}
+	});
+
+	let space_id = imported(&target, &version_1)["id"].as_str().expect("an id").to_owned();
+
+	assert_names_arrived_unset(&target, &space_id, &bot_id);
+	for (path, bytes) in target.files() {
+		for value in values() {
+			assert!(!holds(&bytes, value), "{} holds the value {value}", path.display());
+		}
+	}
 	let _ = fs::remove_dir_all(scratch);
 }

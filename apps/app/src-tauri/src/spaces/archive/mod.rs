@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -15,23 +15,83 @@ use crate::avatars::{self, Avatars};
 use crate::bundles;
 use crate::db::repositories::space_rows::{MintedIds, SpaceRows};
 use crate::db::Database;
-use crate::environment::contract::EnvOwner;
+use crate::environment::contract::{EnvError, EnvOwner, EnvScope};
 use crate::environment::store;
 use crate::file_store::FileStore;
 use crate::private_files;
 
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 pub const ARCHIVE_EXTENSION: &str = "kiroshi";
 pub const ARCHIVE_FILTER_NAME: &str = "Kiroshi space";
 
 const MANIFEST_NAME: &str = "manifest.json";
 const ROWS_NAME: &str = "rows.json";
 const FORMAT_VERSION_KEY: &str = "format_version";
+const READABLE_VERSIONS: [u32; 2] = [1, FORMAT_VERSION];
+const VERSION_1_ENV_FILE: &str = ".env";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
 	format_version: u32,
 	space_id: String,
+	#[serde(default)]
+	env: EnvNames,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct EnvNames {
+	space: OwnerNames,
+	bots: BTreeMap<String, OwnerNames>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct OwnerNames {
+	names: Vec<String>,
+	servers: BTreeMap<String, Vec<String>>,
+}
+
+impl EnvNames {
+	fn read(env_root: &Path, space_id: &str, rows: &SpaceRows) -> Result<Self, EnvError> {
+		let mut bots = BTreeMap::new();
+		for bot_id in rows.seated_bot_ids() {
+			let owner = EnvOwner::Bot { id: bot_id.clone(), space_id: space_id.to_owned() };
+			bots.insert(bot_id, OwnerNames::read(env_root, &owner)?);
+		}
+		let space = OwnerNames::read(env_root, &EnvOwner::Space { id: space_id.to_owned() })?;
+		Ok(Self { space, bots })
+	}
+
+	fn held_in_version_1(&mut self, tree: &Tree, rest: &Path) -> Option<&mut Vec<String>> {
+		let parts = rest.iter().map(|part| part.to_str()).collect::<Option<Vec<&str>>>()?;
+		let (owner, server) = match (tree, parts.as_slice()) {
+			(Tree::SpaceEnv, [VERSION_1_ENV_FILE]) => (&mut self.space, None),
+			(Tree::SpaceServers, [server, VERSION_1_ENV_FILE]) => (&mut self.space, Some(*server)),
+			(Tree::BotEnv(id), [VERSION_1_ENV_FILE]) => {
+				(self.bots.entry(id.clone()).or_default(), None)
+			}
+			(Tree::BotServers(id), [server, VERSION_1_ENV_FILE]) => {
+				(self.bots.entry(id.clone()).or_default(), Some(*server))
+			}
+			_ => return None,
+		};
+		Some(match server {
+			None => &mut owner.names,
+			Some(server) => owner.servers.entry(server.to_owned()).or_default(),
+		})
+	}
+}
+
+impl OwnerNames {
+	fn read(env_root: &Path, owner: &EnvOwner) -> Result<Self, EnvError> {
+		let mut servers = BTreeMap::new();
+		for server in store::server_names(env_root, owner)? {
+			let scope = EnvScope::Server { name: server.clone(), owner: owner.clone() };
+			servers.insert(server, store::names(env_root, &scope)?);
+		}
+		Ok(Self { names: store::names(env_root, &EnvScope::from(owner))?, servers })
+	}
 }
 
 #[derive(Clone)]
@@ -106,6 +166,10 @@ impl Tree {
 		Some((tree, rest.iter().collect()))
 	}
 
+	fn is_env(&self) -> bool {
+		matches!(self, Tree::SpaceEnv | Tree::SpaceServers | Tree::BotEnv(_) | Tree::BotServers(_))
+	}
+
 	fn owner<'a>(&'a self, space_id: &'a str) -> &'a str {
 		match self {
 			Tree::Space | Tree::SpaceEnv | Tree::SpaceServers => space_id,
@@ -132,8 +196,12 @@ pub async fn export(
 		keep_readable_avatars(&places, &mut rows);
 		let mut trees = trees_of(&places, &space_id, &rows, &MintedIds::new())?;
 		trees.extend(carried_avatars(&rows, |name| places.avatars.join(name))?);
+		let env = EnvNames::read(&places.env, &space_id, &rows).map_err(|error| {
+			unwritable_archive(format!("the secret names could not be read: {error:?}"))
+		})?;
+		let manifest = Manifest { format_version: FORMAT_VERSION, space_id, env };
 		private_files::replace_atomically_with(&target, |file| {
-			packed(file, &space_id, &rows, &trees)
+			packed(file, &manifest, &rows, &trees)
 		})
 		.map_err(unwritable_archive)
 	})
@@ -149,7 +217,7 @@ pub async fn import(
 	let opened = archive.clone();
 	let (manifest, rows) = blocking(move || head(&opened)).await?;
 	let (mut rows, held) = database.space_rows().held_ids(rows).await?;
-	let space_id = manifest.space_id;
+	let space_id = manifest.space_id.clone();
 	let minted = minted(&places, &space_id, &rows, held)?;
 	let mut trees = trees_of(&places, &space_id, &rows, &minted)?;
 	relocate_attachments(&places, &mut rows, &minted);
@@ -158,7 +226,8 @@ pub async fn import(
 	trees.extend(avatars);
 	let laid = blocking({
 		let minted = minted.clone();
-		move || laid_down(&archive, &trees, &minted)
+		let places = places.clone();
+		move || laid_down(&archive, manifest, &places, &trees, &minted)
 	})
 	.await?;
 	let imported = database.space_rows().write(rows, space_id, minted, now()).await;
@@ -193,7 +262,7 @@ fn trees_of(
 ) -> Result<Trees, SpaceError> {
 	let placed = |id: &str| -> Result<String, SpaceError> {
 		refuse_unplain(id)?;
-		Ok(minted.get(id).cloned().unwrap_or_else(|| id.to_owned()))
+		Ok(placed_id(minted, id))
 	};
 	let space = placed(space_id)?;
 	let [space_env, space_servers] = env_dirs(places, &EnvOwner::Space { id: space.clone() })?;
@@ -215,6 +284,10 @@ fn trees_of(
 		trees.insert(Tree::Attachments(conversation_id), dir);
 	}
 	Ok(trees)
+}
+
+fn placed_id(minted: &MintedIds, id: &str) -> String {
+	minted.get(id).cloned().unwrap_or_else(|| id.to_owned())
 }
 
 fn env_dirs(places: &Places, owner: &EnvOwner) -> Result<[PathBuf; 2], SpaceError> {
@@ -324,12 +397,11 @@ fn relocate_avatars(rows: &mut SpaceRows, avatars: &Trees) {
 	});
 }
 
-fn packed(file: &mut File, space_id: &str, rows: &SpaceRows, trees: &Trees) -> io::Result<()> {
+fn packed(file: &mut File, manifest: &Manifest, rows: &SpaceRows, trees: &Trees) -> io::Result<()> {
 	let mut builder = tar::Builder::new(file);
-	let manifest = Manifest { format_version: FORMAT_VERSION, space_id: space_id.to_owned() };
-	appended_bytes(&mut builder, MANIFEST_NAME, &serde_json::to_vec_pretty(&manifest)?)?;
+	appended_bytes(&mut builder, MANIFEST_NAME, &serde_json::to_vec_pretty(manifest)?)?;
 	appended_bytes(&mut builder, ROWS_NAME, &serde_json::to_vec(rows)?)?;
-	let mut ordered: Vec<_> = trees.iter().collect();
+	let mut ordered: Vec<_> = trees.iter().filter(|(tree, _)| !tree.is_env()).collect();
 	ordered.sort();
 	for (tree, path) in ordered {
 		let is_avatar = matches!(tree, Tree::Avatar(_));
@@ -377,12 +449,12 @@ fn head(archive: &Path) -> Result<(Manifest, SpaceRows), SpaceError> {
 	let mut archive = tar::Archive::new(file);
 	let mut entries = archive.entries().map_err(unreadable_io)?;
 	let manifest: serde_json::Value = entry_read(entries.next(), MANIFEST_NAME)?;
-	let found = manifest.get(FORMAT_VERSION_KEY).and_then(serde_json::Value::as_u64);
-	if found != Some(u64::from(FORMAT_VERSION)) {
-		return Err(SpaceError::UnsupportedArchive {
-			found: found.and_then(|found| u32::try_from(found).ok()),
-			supported: FORMAT_VERSION,
-		});
+	let found = manifest
+		.get(FORMAT_VERSION_KEY)
+		.and_then(serde_json::Value::as_u64)
+		.and_then(|found| u32::try_from(found).ok());
+	if !found.is_some_and(|found| READABLE_VERSIONS.contains(&found)) {
+		return Err(SpaceError::UnsupportedArchive { found, supported: FORMAT_VERSION });
 	}
 	let manifest: Manifest = serde_json::from_value(manifest)
 		.map_err(|_| unreadable_archive("the manifest names no space"))?;
@@ -403,9 +475,17 @@ fn entry_read<T: DeserializeOwned>(
 		.map_err(|_| unreadable_archive(&format!("{name} is not the JSON this host reads")))
 }
 
-fn laid_down(archive: &Path, trees: &Trees, minted: &MintedIds) -> Result<Laid, SpaceError> {
+fn laid_down(
+	archive: &Path,
+	mut manifest: Manifest,
+	places: &Places,
+	trees: &Trees,
+	minted: &MintedIds,
+) -> Result<Laid, SpaceError> {
 	let mut laid = Laid::default();
-	match unpacked(archive, trees, minted, &mut laid) {
+	let outcome = unpacked(archive, &mut manifest, trees, minted, &mut laid)
+		.and_then(|()| declared(places, &manifest, trees, minted, &mut laid));
+	match outcome {
 		Ok(()) => Ok(laid),
 		Err(failure) => {
 			laid.take_back();
@@ -416,6 +496,7 @@ fn laid_down(archive: &Path, trees: &Trees, minted: &MintedIds) -> Result<Laid, 
 
 fn unpacked(
 	archive: &Path,
+	manifest: &mut Manifest,
 	trees: &Trees,
 	minted: &MintedIds,
 	laid: &mut Laid,
@@ -429,10 +510,15 @@ fn unpacked(
 			continue;
 		}
 		let (tree, rest) = Tree::parsed(&path)
+			.filter(|(tree, _)| !tree.is_env() || manifest.format_version == 1)
 			.ok_or_else(|| unreadable_archive("the archive holds a path outside its layout"))?;
 		let root = trees.get(&tree).ok_or_else(|| {
 			unreadable_archive("the archive holds files of a row it does not carry")
 		})?;
+		if tree.is_env() {
+			carried_names(&mut entry, &tree, &rest, &mut manifest.env)?;
+			continue;
+		}
 		if let Tree::Avatar(_) = tree {
 			laid_avatar(&mut entry, &rest, root, laid)?;
 			continue;
@@ -447,6 +533,83 @@ fn unpacked(
 		.map_err(unwritable_bundle)?;
 	}
 	reown_minted_bots(trees, minted).map_err(unwritable_bundle)
+}
+
+fn carried_names(
+	entry: &mut tar::Entry<'_, File>,
+	tree: &Tree,
+	rest: &Path,
+	env: &mut EnvNames,
+) -> Result<(), SpaceError> {
+	match entry.header().entry_type() {
+		tar::EntryType::Directory => return Ok(()),
+		tar::EntryType::Regular => {}
+		_ => return Err(unreadable_archive("the archive holds a link or a device")),
+	}
+	let Some(names) = env.held_in_version_1(tree, rest) else {
+		return Ok(());
+	};
+	let text = io::read_to_string(entry).map_err(unreadable_io)?;
+	let carried = store::names_in(&text)
+		.map_err(|_| unreadable_archive("an env file of the archive is not NAME=VALUE lines"))?;
+	names.extend(carried);
+	Ok(())
+}
+
+fn declared(
+	places: &Places,
+	manifest: &Manifest,
+	trees: &Trees,
+	minted: &MintedIds,
+	laid: &mut Laid,
+) -> Result<(), SpaceError> {
+	let space = placed_id(minted, &manifest.space_id);
+	let space_owner = EnvOwner::Space { id: space.clone() };
+	declared_owner(places, &manifest.env.space, &space_owner, laid)?;
+	for (bot_id, names) in &manifest.env.bots {
+		if !trees.contains_key(&Tree::Bot(bot_id.clone())) {
+			return Err(unreadable_archive("the archive names secrets of a row it does not carry"));
+		}
+		let owner = EnvOwner::Bot { id: placed_id(minted, bot_id), space_id: space.clone() };
+		declared_owner(places, names, &owner, laid)?;
+	}
+	Ok(())
+}
+
+fn declared_owner(
+	places: &Places,
+	held: &OwnerNames,
+	owner: &EnvOwner,
+	laid: &mut Laid,
+) -> Result<(), SpaceError> {
+	let [own_dir, servers_dir] = env_dirs(places, owner)?;
+	declared_scope(places, &EnvScope::from(owner), &held.names, &own_dir, laid)?;
+	for (server, names) in &held.servers {
+		let scope = EnvScope::Server { name: server.clone(), owner: owner.clone() };
+		declared_scope(places, &scope, names, &servers_dir, laid)?;
+	}
+	Ok(())
+}
+
+fn declared_scope(
+	places: &Places,
+	scope: &EnvScope,
+	names: &[String],
+	dir: &Path,
+	laid: &mut Laid,
+) -> Result<(), SpaceError> {
+	if names.is_empty() {
+		return Ok(());
+	}
+	laid.claim(dir).map_err(unwritable_bundle)?;
+	store::declare(&places.env, scope, names).map_err(|error| match error {
+		EnvError::InvalidName { .. } | EnvError::InvalidScope { .. } => {
+			unreadable_archive("the archive names a secret this host refuses")
+		}
+		other => SpaceError::UnwritableBundle {
+			detail: format!("the secret names could not be laid down: {other:?}"),
+		},
+	})
 }
 
 fn laid_avatar(

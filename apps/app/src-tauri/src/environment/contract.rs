@@ -111,6 +111,8 @@ pub struct EnvEntry {
 	pub name: String,
 	pub defined_in: EnvScope,
 	pub served_from: EnvScope,
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub is_unset: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -246,12 +248,33 @@ mod tests {
 				name: "TOKEN".to_owned(),
 				defined_in: EnvScope::Space { id: "s1".to_owned() },
 				served_from: EnvScope::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
+				is_unset: false,
 			})
 			.expect("the entry serializes"),
 			json!({
 				"name": "TOKEN",
 				"definedIn": { "kind": "space", "id": "s1" },
 				"servedFrom": { "kind": "bot", "id": "b1", "spaceId": "s1" }
+			})
+		);
+	}
+
+	#[test]
+	fn an_entry_declared_without_a_value_crosses_marked_unset() {
+		let space = EnvScope::Space { id: "s1".to_owned() };
+		assert_eq!(
+			to_value(EnvEntry {
+				name: "TOKEN".to_owned(),
+				defined_in: space.clone(),
+				served_from: space,
+				is_unset: true,
+			})
+			.expect("the entry serializes"),
+			json!({
+				"name": "TOKEN",
+				"definedIn": { "kind": "space", "id": "s1" },
+				"servedFrom": { "kind": "space", "id": "s1" },
+				"isUnset": true
 			})
 		);
 	}
