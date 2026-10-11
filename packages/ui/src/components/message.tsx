@@ -74,10 +74,9 @@ const capitalised = (label: string, language: string) =>
 
 const sentLabel = (at: number, now: number, language: string) => {
 	const days = calendarDaysBetween(at, now)
+	const shownAt = days < 1 ? Math.min(at, now) : now - days * DAY_MS
 
-	return days < 1
-		? formatClock(at)
-		: capitalised(toRelativeTime(now - days * DAY_MS, now), language)
+	return capitalised(toRelativeTime(shownAt, now), language)
 }
 
 export function Message({ from, children, className, ...props }: MessageProps) {
