@@ -2718,16 +2718,18 @@ mod tests {
 		}
 	}
 
-	pub(super) struct ReadOnlyObjects(Vec<(PathBuf, u32)>);
+	pub(super) struct ReadOnlyObjects {
+		objects: PathBuf,
+		mode: u32,
+	}
 
 	impl Drop for ReadOnlyObjects {
 		fn drop(&mut self) {
 			use std::os::unix::fs::PermissionsExt;
 
-			for (path, mode) in &self.0 {
-				if let Err(error) = fs::set_permissions(path, fs::Permissions::from_mode(*mode)) {
-					eprintln!("{} stayed read-only: {error}", path.display());
-				}
+			let restored = fs::Permissions::from_mode(self.mode);
+			if let Err(error) = fs::set_permissions(&self.objects, restored) {
+				eprintln!("{} stayed read-only: {error}", self.objects.display());
 			}
 		}
 	}
@@ -2735,22 +2737,12 @@ mod tests {
 	pub(super) fn read_only_objects(bundle: &Path) -> ReadOnlyObjects {
 		use std::os::unix::fs::PermissionsExt;
 
-		let mut held = Vec::new();
-		let mut pending = vec![bundle.join(".git").join("objects")];
-		while let Some(path) = pending.pop() {
-			let mode =
-				fs::metadata(&path).expect("the objects directory reads").permissions().mode();
-			for entry in fs::read_dir(&path).expect("the objects directory lists") {
-				let entry = entry.expect("the entry reads").path();
-				if entry.is_dir() {
-					pending.push(entry);
-				}
-			}
-			fs::set_permissions(&path, fs::Permissions::from_mode(0o500))
-				.expect("the objects directory turns read-only");
-			held.push((path, mode));
-		}
-		ReadOnlyObjects(held)
+		let objects = bundle.join(".git").join("objects");
+		let mode =
+			fs::metadata(&objects).expect("the objects directory reads").permissions().mode();
+		fs::set_permissions(&objects, fs::Permissions::from_mode(0o500))
+			.expect("the objects directory turns read-only");
+		ReadOnlyObjects { objects, mode }
 	}
 
 	fn a_locked_index(bundle: &Path) {
