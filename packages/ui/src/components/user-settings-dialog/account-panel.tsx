@@ -165,9 +165,4 @@ const AccountPanel = ({
 	)
 }
 
-export {
-	AccountPanel,
-	type AccountPanelProps,
-	type AccountPlan,
-	type AccountState,
-}
+export { AccountPanel, type AccountPanelProps, type AccountState }
