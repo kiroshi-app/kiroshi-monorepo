@@ -116,6 +116,21 @@ const UNREFRESHED_NOTICE = {
 	description: i18n.t("bots:applications.catalogue.unrefreshed.description"),
 }
 
+type PendingSearch = {
+	answer: (found: ApplicationSearch) => void
+	refuse: (reason: unknown) => void
+}
+
+const pendingSearchOn = (port: FakeApplicationPort): PendingSearch => {
+	const reading: PendingSearch = { answer: () => {}, refuse: () => {} }
+	port.search = () =>
+		new Promise((resolve, reject) => {
+			reading.answer = resolve
+			reading.refuse = reject
+		})
+	return reading
+}
+
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const searchesOf = (port: FakeApplicationPort) =>
@@ -433,7 +448,7 @@ describe("applications controller", () => {
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
 	})
 
-	it("leaves no partial failure behind a refused read", async () => {
+	it("keeps the partial failure of the held rows behind a refused read", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundFailure = { kind: "registryTimedOut" }
@@ -446,7 +461,80 @@ describe("applications controller", () => {
 		await settled()
 
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
+		expect(controller.getState().hasDirectoryPartlyFailed).toBe(true)
+	})
+
+	it("keeps the partial failure of the held rows until the re-read lands", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		port.foundFailure = { kind: "registryTimedOut" }
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		const reading = pendingSearchOn(port)
+		controller.browse()
+		expect(controller.getState().hasDirectoryPartlyFailed).toBe(true)
+
+		reading.answer({ applications: [LINEAR, SUPERSET] })
+		await settled()
+
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
+		expect(controller.getState().directory).toEqual([LINEAR, SUPERSET])
+	})
+
+	it("drops the partial failure of an empty directory as a re-read starts", async () => {
+		const port = createFakeApplicationPort()
+		port.foundFailure = { kind: "registryTimedOut" }
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+		expect(controller.getState().hasDirectoryPartlyFailed).toBe(true)
+
+		const reading = pendingSearchOn(port)
+		controller.browse()
+		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
+
+		reading.answer({ applications: [LINEAR] })
+		await settled()
+
+		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
+	})
+
+	it("keeps the stale mark of the held rows through a refused re-read", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		port.foundIsStale = true
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		const reading = pendingSearchOn(port)
+		controller.browse()
+		expect(controller.getState().isDirectoryStale).toBe(true)
+
+		reading.refuse({ kind: "registryTimedOut" })
+		await settled()
+
+		expect(controller.getState().isDirectoryStale).toBe(true)
+		expect(controller.getState().directory).toEqual([LINEAR])
+	})
+
+	it("drops the stale mark of an empty directory on a refused re-read", async () => {
+		const port = createFakeApplicationPort()
+		port.foundIsStale = true
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		const reading = pendingSearchOn(port)
+		controller.browse()
+		expect(controller.getState().isDirectoryStale).toBe(true)
+
+		reading.refuse({ kind: "registryTimedOut" })
+		await settled()
+
+		expect(controller.getState().isDirectoryStale).toBe(false)
 	})
 
 	it("declares a server for an install that asks nothing", async () => {
