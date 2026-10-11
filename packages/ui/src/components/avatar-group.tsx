@@ -9,18 +9,15 @@ import {
 	BotIdentityAvatar,
 	type BotIdentityAvatarProps,
 } from "@workspace/ui/components/bot-identity-avatar"
-import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import {
-	OUTER,
-	roundedHexagonPath,
-} from "@workspace/ui/components/kiroshi-hexagon"
+	HIVE_DEFAULT_SIZE,
+	type HiveCell,
+	type HiveOverflow,
+	hiveCellOrigin,
+	hiveLayout,
+} from "@workspace/ui/components/hive-layout"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { SPRING_LAYOUT, TRANSITION_NONE } from "@workspace/ui/lib/ease"
-
-const DEFAULT_SIZE = 40
-
-const ARTBOARD_SIZE = 96
-
-const CELL_LIMIT = 3
 
 const FRAME = "relative grid shrink-0"
 
@@ -32,23 +29,7 @@ const OVERFLOW_ART = "block size-full"
 
 const COUNTER_TEXT = "font-bold tabular-nums"
 
-const COLUMN_GAP_RATIO = 0.94
-
-const ROW_PITCH_RATIO = 1.087
-
-const CELL_HEIGHT_RATIO = 0.4775
-
-const COUNTER_FONT_RATIO = { small: 0.4605, large: 0.3589 }
-
-const CAP_CENTRE_RATIO = 0.36
-
 const OVERFLOW_EDGE_WIDTH = 2
-
-const FILL_ORDER = [
-	{ column: 0, row: 0 },
-	{ column: 1, row: 0.5 },
-	{ column: 0, row: 1 },
-]
 
 type ConversationParticipant = Pick<
 	BotIdentityAvatarProps,
@@ -61,129 +42,78 @@ type AvatarGroupProps = {
 	badge?: BotBadge
 }
 
-type CellShape = { halfWidth: number; halfHeight: number; path: string }
-
-type Spot = { x: number; y: number }
-
-const cellShapeOf = (cellHeight: number): CellShape => {
-	const scale = cellHeight / (OUTER.halfHeight * 2)
-	const hexagon = {
-		halfWidth: OUTER.halfWidth * scale,
-		halfHeight: OUTER.halfHeight * scale,
-	}
-	return { ...hexagon, path: roundedHexagonPath(hexagon) }
-}
-
-const middleOf = (values: number[]) =>
-	(Math.min(...values) + Math.max(...values)) / 2
-
-const clusterSpots = (count: number, cellHeight: number, size: number) => {
-	const spots = FILL_ORDER.slice(0, count).map(({ column, row }) => ({
-		x: column * COLUMN_GAP_RATIO * cellHeight,
-		y: row * ROW_PITCH_RATIO * cellHeight,
-	}))
-	const shiftX = size / 2 - middleOf(spots.map(({ x }) => x))
-	const shiftY = size / 2 - middleOf(spots.map(({ y }) => y))
-	return spots.map(({ x, y }): Spot => ({ x: x + shiftX, y: y + shiftY }))
-}
-
-const counterFontRatio = (size: number) => {
-	const progress = Math.min(
-		Math.max((size - DEFAULT_SIZE) / (ARTBOARD_SIZE - DEFAULT_SIZE), 0),
-		1,
-	)
-	return (
-		COUNTER_FONT_RATIO.small +
-		(COUNTER_FONT_RATIO.large - COUNTER_FONT_RATIO.small) * progress
-	)
-}
-
-const workingFirst = (participants: ConversationParticipant[]) => [
-	...participants.filter(({ working }) => working),
-	...participants.filter(({ working }) => !working),
-]
-
 type MemberCellProps = {
 	participant: ConversationParticipant
-	shape: CellShape
-	spot: Spot
+	cell: HiveCell
 	isStill: boolean
 }
 
-const MemberCell = ({ participant, shape, spot, isStill }: MemberCellProps) => {
-	const reach = participant.isPerson ? shape.halfHeight : shape.halfWidth
-	return (
-		<motion.span
-			className={MEMBER_CELL}
-			data-slot="conversation-avatar-member"
-			layout="position"
-			style={{ left: spot.x - reach, top: spot.y - reach }}
-			transition={isStill ? TRANSITION_NONE : SPRING_LAYOUT}
-		>
-			{participant.isPerson ? (
-				<InitialsAvatar
-					image={participant.image}
-					name={participant.name}
-					size={reach * 2}
-				/>
-			) : (
-				<BotIdentityAvatar
-					blot={participant.blot}
-					image={participant.image}
-					kind={participant.kind}
-					name={participant.name}
-					seed={participant.id}
-					size={reach * 2}
-					working={participant.working}
-				/>
-			)}
-		</motion.span>
-	)
-}
+const MemberCell = ({ participant, cell, isStill }: MemberCellProps) => (
+	<motion.span
+		className={MEMBER_CELL}
+		data-slot="conversation-avatar-member"
+		layout="position"
+		style={hiveCellOrigin(cell)}
+		transition={isStill ? TRANSITION_NONE : SPRING_LAYOUT}
+	>
+		{participant.isPerson ? (
+			<InitialsAvatar
+				image={participant.image}
+				name={participant.name}
+				size={cell.side}
+			/>
+		) : (
+			<BotIdentityAvatar
+				blot={participant.blot}
+				image={participant.image}
+				kind={participant.kind}
+				name={participant.name}
+				seed={participant.id}
+				size={cell.side}
+				working={participant.working}
+			/>
+		)}
+	</motion.span>
+)
 
 type OverflowCellProps = {
 	label: string
-	shape: CellShape
-	spot: Spot
-	size: number
+	overflow: HiveOverflow
 }
 
-const OverflowCell = ({ label, shape, spot, size }: OverflowCellProps) => {
-	const font = shape.halfHeight * 2 * counterFontRatio(size)
-	const side = shape.halfWidth * 2
+const OverflowCell = ({ label, overflow }: OverflowCellProps) => {
 	const edgeClipId = useId()
 	return (
 		<span
 			className={OVERFLOW_CELL}
 			data-slot="conversation-avatar-overflow"
 			style={{
-				left: spot.x - shape.halfWidth,
-				top: spot.y - shape.halfWidth,
-				width: side,
-				height: side,
+				...hiveCellOrigin(overflow),
+				width: overflow.side,
+				height: overflow.side,
 			}}
 		>
 			<svg
 				aria-hidden="true"
 				className={OVERFLOW_ART}
-				viewBox={`0 0 ${side} ${side}`}
+				viewBox={`0 0 ${overflow.side} ${overflow.side}`}
 			>
 				<path
 					clipPath={`url(#${edgeClipId})`}
-					d={shape.path}
+					d={overflow.path}
 					strokeWidth={OVERFLOW_EDGE_WIDTH}
 					style={{ fill: "var(--secondary)", stroke: "var(--image-outline)" }}
 				/>
 				<clipPath id={edgeClipId}>
-					<path d={shape.path} />
+					<path d={overflow.path} />
 				</clipPath>
 				<text
 					className={COUNTER_TEXT}
-					fontSize={font}
+					fontSize={overflow.fontSize}
 					style={{ fill: "var(--muted-foreground)" }}
 					textAnchor="middle"
-					x={shape.halfWidth}
-					y={shape.halfWidth + font * CAP_CENTRE_RATIO}
+					x="50%"
+					y={overflow.baseline}
 				>
 					{label}
 				</text>
@@ -194,51 +124,39 @@ const OverflowCell = ({ label, shape, spot, size }: OverflowCellProps) => {
 
 const AvatarGroup = ({
 	participants,
-	size = DEFAULT_SIZE,
+	size = HIVE_DEFAULT_SIZE,
 	badge,
 }: AvatarGroupProps) => {
 	const { t } = useTranslation("bots")
 	const isStill = useReducedMotionConfig() ?? false
-	const cellCount = Math.min(participants.length, CELL_LIMIT)
-	const cellHeight = CELL_HEIGHT_RATIO * size
-	const shape = cellShapeOf(cellHeight)
-	const spots = clusterSpots(cellCount, cellHeight, size)
-	const isOverflowing = participants.length > CELL_LIMIT
-	const shown = workingFirst(participants).slice(
-		0,
-		isOverflowing ? CELL_LIMIT - 1 : CELL_LIMIT,
-	)
-	const overflow = isOverflowing
-		? t("roster.conversation.others", {
-				count: participants.length - shown.length,
-			})
+	const layout = hiveLayout({ participants, size })
+	const overflowLabel = layout.overflow
+		? t("roster.conversation.others", { count: layout.overflow.hiddenCount })
 		: null
 
 	return (
 		<span
-			aria-hidden={overflow ? undefined : "true"}
-			aria-label={overflow ?? undefined}
+			aria-hidden={overflowLabel ? undefined : "true"}
+			aria-label={overflowLabel ?? undefined}
 			className={FRAME}
 			data-slot="conversation-avatar"
 			role="img"
 			style={{ width: size, height: size }}
 		>
-			{shown.map((participant, index) => (
+			{layout.cells.map((cell) => (
 				<MemberCell
+					cell={cell}
 					isStill={isStill}
-					key={participant.id}
-					participant={participant}
-					shape={shape}
-					spot={spots[index]}
+					key={cell.id}
+					participant={
+						participants.find(
+							({ id }) => id === cell.id,
+						) as ConversationParticipant
+					}
 				/>
 			))}
-			{overflow ? (
-				<OverflowCell
-					label={overflow}
-					shape={shape}
-					size={size}
-					spot={spots[CELL_LIMIT - 1]}
-				/>
+			{layout.overflow && overflowLabel ? (
+				<OverflowCell label={overflowLabel} overflow={layout.overflow} />
 			) : null}
 			{badge ? (
 				<BotBadgeDot
