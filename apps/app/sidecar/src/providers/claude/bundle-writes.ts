@@ -17,6 +17,7 @@ const RESERVED = new Set([
 	"hooks",
 	".git",
 	".mcp.json",
+	".applications.json",
 	"settings.json",
 ])
 

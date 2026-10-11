@@ -67,6 +67,10 @@ describe("isBundleWrite", () => {
 	it("holds the reserved entries of the person and space bundles", () => {
 		expect(writes(join(person, "settings.json"))).toBe(false)
 		expect(writes(join(space, ".mcp.json"))).toBe(false)
+		expect(writes(join(space, ".applications.json"))).toBe(false)
+		expect(writes(join(space, ".applications.json"), "Edit")).toBe(false)
+		expect(writes(join(person, ".applications.json"))).toBe(false)
+		expect(writes(join(person, ".applications.json"), "Edit")).toBe(false)
 		expect(writes(join(person, "notes", "reader.sh"))).toBe(false)
 	})
 
@@ -76,10 +80,12 @@ describe("isBundleWrite", () => {
 			join(bundle, "hooks", "hooks.json"),
 			join(bundle, ".git", "config"),
 			join(bundle, ".mcp.json"),
+			join(bundle, ".applications.json"),
 			join(bundle, "settings.json"),
 			bundle,
 		]) {
 			expect(writes(reserved)).toBe(false)
+			expect(writes(reserved, "Edit")).toBe(false)
 		}
 	})
 
