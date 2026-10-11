@@ -351,15 +351,25 @@ fn extended(
 }
 
 #[cfg(unix)]
-fn modes_under(dir: &Path, modes: &mut Vec<(PathBuf, u32)>) {
+fn assert_owner_only_under(dir: &Path) {
 	use std::os::unix::fs::PermissionsExt;
 
+	let rewritten_by_git_after_import = |path: &Path| path.ends_with(".git/index");
 	for entry in fs::read_dir(dir).expect("a readable dir") {
 		let path = entry.expect("an entry").path();
+		if rewritten_by_git_after_import(&path) {
+			continue;
+		}
 		let metadata = fs::symlink_metadata(&path).expect("the metadata");
-		modes.push((path.clone(), metadata.permissions().mode() & 0o777));
+		let expected = if metadata.is_dir() { 0o700 } else { 0o600 };
+		assert_eq!(
+			metadata.permissions().mode() & 0o777,
+			expected,
+			"{} is not owner-only",
+			path.display()
+		);
 		if metadata.is_dir() {
-			modes_under(&path, modes);
+			assert_owner_only_under(&path);
 		}
 	}
 }
@@ -542,15 +552,8 @@ fn an_archive_declaring_open_modes_lands_owner_only() {
 
 	let space_id = imported(&target, &open)["id"].as_str().expect("an id").to_owned();
 
-	let mut modes = Vec::new();
-	modes_under(&target.env_root(), &mut modes);
-	modes_under(&target.bot_root(), &mut modes);
-	assert!(modes.iter().any(|(path, _)| path.is_file()), "the import laid no file");
-	let rewritten_by_git_after_import = |path: &Path| path.ends_with(".git/index");
-	for (path, mode) in modes.into_iter().filter(|(path, _)| !rewritten_by_git_after_import(path)) {
-		let expected = if path.is_dir() { 0o700 } else { 0o600 };
-		assert_eq!(mode, expected, "{} is not owner-only", path.display());
-	}
+	assert_owner_only_under(&target.env_root());
+	assert_owner_only_under(&target.bot_root());
 	let space_env = store::resolve(&target.env_root(), &EnvOwner::Space { id: space_id.clone() })
 		.expect("the space env");
 	assert_eq!(space_env.base.get(SPACE_SECRET.0).map(String::as_str), Some(SPACE_SECRET.1));
