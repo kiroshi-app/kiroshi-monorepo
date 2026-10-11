@@ -4,6 +4,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Application, ApplicationSearch } from "./application-port"
 import {
+	catalogueStatusOf,
 	createApplicationsController,
 	DIRECTORY_READ_BOUND_MS,
 	type InstallTarget,
@@ -128,6 +129,19 @@ const pendingSearchOn = (port: FakeApplicationPort): PendingSearch => {
 		new Promise((resolve, reject) => {
 			reading.answer = resolve
 			reading.refuse = reject
+		})
+	return reading
+}
+
+const catalogueNeverAnswering = (port: FakeApplicationPort) => {
+	port.catalogue = () => new Promise(() => {})
+}
+
+const pendingCatalogueOn = (port: FakeApplicationPort) => {
+	const reading = { answer: (_curated: Application[]) => {} }
+	port.catalogue = () =>
+		new Promise((resolve) => {
+			reading.answer = resolve
 		})
 	return reading
 }
@@ -721,6 +735,78 @@ describe("applications controller", () => {
 			port.refreshDirectory()
 
 			expect(vi.getTimerCount()).toBe(0)
+		})
+	})
+
+	describe("with a curated read that never answers", () => {
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		it("stops showing skeletons once the bound passes with no curated rows", () => {
+			const port = createFakeApplicationPort()
+			catalogueNeverAnswering(port)
+			const controller = controllerOn(port)
+
+			void controller.open()
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 1)
+			expect(catalogueStatusOf(controller.getState()).isLoading).toBe(true)
+			vi.advanceTimersByTime(1)
+
+			expect(catalogueStatusOf(controller.getState()).isLoading).toBe(false)
+		})
+
+		it("shows the failure line with a retry reading the catalogue again once the bound passes", () => {
+			const port = createFakeApplicationPort()
+			catalogueNeverAnswering(port)
+			const catalogue = vi.spyOn(port, "catalogue")
+			const controller = controllerOn(port)
+			void controller.open()
+
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+			expect(catalogueStatusOf(controller.getState()).hasFailed).toBe(true)
+			controller.retry()
+
+			expect(catalogue).toHaveBeenCalledTimes(2)
+		})
+
+		it("lists the curated rows of a read answering after the bound", async () => {
+			const port = createFakeApplicationPort()
+			const reading = pendingCatalogueOn(port)
+			const controller = controllerOn(port)
+			void controller.open()
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+
+			reading.answer([PAPER])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(controller.getState().curated).toEqual([PAPER])
+			expect(catalogueStatusOf(controller.getState())).toEqual({
+				isLoading: false,
+				hasFailed: false,
+			})
+		})
+
+		it("shows the failure line once the directory bound passes with no curated rows", () => {
+			const port = createFakeApplicationPort()
+			catalogueNeverAnswering(port)
+			pendingSearchOn(port)
+			const controller = controllerOn(port)
+			controller.browse()
+			vi.advanceTimersByTime(5_000)
+			void controller.open()
+
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 5_000)
+
+			expect(controller.getState().isReadingCatalogue).toBe(true)
+			expect(catalogueStatusOf(controller.getState())).toEqual({
+				isLoading: false,
+				hasFailed: true,
+			})
 		})
 	})
 

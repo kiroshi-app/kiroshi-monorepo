@@ -141,6 +141,26 @@ const urlOf = (application: Application) =>
 
 export const DIRECTORY_READ_BOUND_MS = 15_000
 
+export type CatalogueStatus = {
+	isLoading: boolean
+	hasFailed: boolean
+}
+
+const holdsNoRows = ({ curated, directory }: ApplicationsState) =>
+	curated.length === 0 && directory.length === 0
+
+const isReadingWithNoRowsHeld = (state: ApplicationsState) =>
+	(state.isReadingCatalogue && state.curated.length === 0) ||
+	(state.isReadingDirectory && state.directory.length === 0)
+
+export const catalogueStatusOf = (
+	state: ApplicationsState,
+): CatalogueStatus => {
+	const hasFailed =
+		state.hasDirectoryFailed || (state.hasCatalogueFailed && holdsNoRows(state))
+	return { isLoading: !hasFailed && isReadingWithNoRowsHeld(state), hasFailed }
+}
+
 export type ApplicationsControllerOptions = {
 	reportFailure?: (notice: NoticeMessage) => void
 }
@@ -154,6 +174,7 @@ export const createApplicationsController = (
 	const current = stateStore.getState
 	let issuedRead = 0
 	let readBound: ReturnType<typeof setTimeout> | undefined
+	let catalogueBound: ReturnType<typeof setTimeout> | undefined
 	let unwatchDirectory: (() => void) | null = null
 	const askedNames = new Set<string>()
 
@@ -181,6 +202,39 @@ export const createApplicationsController = (
 			return
 		}
 		readBound = setTimeout(failUnansweredRead, DIRECTORY_READ_BOUND_MS)
+	}
+
+	const failUnansweredCatalogue = () =>
+		set({ isReadingCatalogue: false, hasCatalogueFailed: true })
+
+	const boundCatalogueWithNoRowsHeld = () => {
+		clearTimeout(catalogueBound)
+		if (current().curated.length > 0) {
+			return
+		}
+		catalogueBound = setTimeout(
+			failUnansweredCatalogue,
+			DIRECTORY_READ_BOUND_MS,
+		)
+	}
+
+	const readCatalogue = async () => {
+		if (current().isReadingCatalogue) {
+			return
+		}
+		set({ isReadingCatalogue: true, hasCatalogueFailed: false })
+		boundCatalogueWithNoRowsHeld()
+		try {
+			set({ curated: await port.catalogue(), hasCatalogueFailed: false })
+		} catch {
+			set({ hasCatalogueFailed: true })
+			reportFailure({
+				title: i18n.t("bots:applications.catalogue.unavailable"),
+			})
+		} finally {
+			clearTimeout(catalogueBound)
+			set({ isReadingCatalogue: false })
+		}
 	}
 
 	const directoryAnsweredBy = (found: ApplicationSearch) => {
@@ -399,22 +453,7 @@ export const createApplicationsController = (
 
 		subscribe: stateStore.subscribe,
 
-		open: async () => {
-			if (current().isReadingCatalogue) {
-				return
-			}
-			set({ isReadingCatalogue: true })
-			try {
-				set({ curated: await port.catalogue(), hasCatalogueFailed: false })
-			} catch {
-				set({ hasCatalogueFailed: true })
-				reportFailure({
-					title: i18n.t("bots:applications.catalogue.unavailable"),
-				})
-			} finally {
-				set({ isReadingCatalogue: false })
-			}
-		},
+		open: readCatalogue,
 
 		browse: () => {
 			watchDirectory()
@@ -430,7 +469,12 @@ export const createApplicationsController = (
 
 		pickCategory: (category: CatalogueCategory) => set({ category }),
 
-		retry: readDirectory,
+		retry: () => {
+			if (current().hasCatalogueFailed) {
+				void readCatalogue()
+			}
+			readDirectory()
+		},
 
 		pick: (id: string) => set({ picked: applicationNamed(id), failure: null }),
 
