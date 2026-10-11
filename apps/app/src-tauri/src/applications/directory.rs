@@ -353,7 +353,6 @@ impl Directory {
 				let mut held = self.keeping();
 				held.cached = Some(cached);
 				held.failure = None;
-				self.landed.send_replace(());
 			}
 			Err(failure) => {
 				eprintln!("the Kiroshi directory was not read: {failure:?}");
@@ -361,6 +360,7 @@ impl Directory {
 				self.keeping().failure = Some(Failure { error: failure, at });
 			}
 		}
+		self.landed.send_replace(());
 	}
 
 	async fn listed(&self, since: Option<&str>) -> Result<Listing, ApplicationsError> {
@@ -1673,16 +1673,74 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_refresh_that_fails_announces_nothing() {
-		let directory = Directory::timed(unreached().await, None, Box::new(Stopped(NOON + DAY_MS)));
+	async fn a_refused_refresh_is_announced_once_after_its_failure_is_held() {
+		let app = an_app_of_its_own("directory-refused", mock_builder());
+		let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
+		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
+			told.send(event.payload().to_owned()).expect("the test listens");
+		});
+		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
+		*held.refusals.lock().expect("the stub records") = 1;
+		let clock = Moving::at(NOON + REREAD_MS + 1);
+		let directory = Directory::timed(base, None, Box::new(clock.clone()));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
-		let landed = directory.landed.subscribe();
+		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
+		let announced = tokio::time::timeout(AT_ONCE, heard.recv()).await.expect("announced");
+		clock.set(NOON + REREAD_MS + 1 + RETRY_MS);
+		let reread = directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
+		let again = tokio::time::timeout(SHORT_BOUND, heard.recv()).await;
 
-		assert!(!landed.has_changed().expect("the directory is held"));
-		assert!(directory.kept().failure.is_some());
+		assert_eq!(announced.as_deref(), Some("null"));
+		assert_eq!(names(&reread.applications), ["one"]);
+		assert_eq!(reread.is_stale, Some(true));
+		assert_eq!(
+			reread.registry_failure,
+			Some(ApplicationsError::RegistryRefused { status: 500 })
+		);
+		assert_eq!(held.asked().len(), 1);
+		assert!(again.is_err(), "a read within the retry minute was announced");
+	}
+
+	#[tokio::test]
+	async fn a_refresh_past_its_bound_is_announced_once_after_its_failure_is_held() {
+		let app = an_app_of_its_own("directory-unlisted", mock_builder());
+		let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
+		app.listen_any(APPLICATION_DIRECTORY_REFRESHED.name(), move |event| {
+			told.send(event.payload().to_owned()).expect("the test listens");
+		});
+		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
+		held.hold_back();
+		let directory = bounded(
+			Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1))),
+			FIRST_READ_WAIT,
+			SHORT_BOUND,
+		);
+		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
+		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
+
+		directory.searched("").await.expect("the search answers");
+		let announced = tokio::time::timeout(AT_ONCE, heard.recv()).await.expect("announced");
+		let reread = directory.searched("").await.expect("the search answers");
+		settled(&directory).await;
+		let again = tokio::time::timeout(SHORT_BOUND, heard.recv()).await;
+		held.release();
+
+		assert_eq!(announced.as_deref(), Some("null"));
+		assert_eq!(names(&reread.applications), ["one"]);
+		assert_eq!(reread.is_stale, Some(true));
+		assert!(
+			matches!(
+				&reread.registry_failure,
+				Some(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within 100ms")
+			),
+			"got {:?}",
+			reread.registry_failure
+		);
+		assert_eq!(held.asked().len(), 1);
+		assert!(again.is_err(), "a read within the retry minute was announced");
 	}
 
 	#[tokio::test]
