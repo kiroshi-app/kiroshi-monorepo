@@ -4,6 +4,7 @@ import type { PermissionRequest } from "@/lib/agent/contract"
 import type { ChatController } from "@/lib/chat/chat-controller"
 import { type ChatState, initialChatState } from "@/lib/chat/chat-state"
 import {
+	faceOfBot,
 	factsOf,
 	type LoadedBotThread,
 	type LoadedConversationThread,
@@ -215,5 +216,15 @@ describe("factsOf canAttach", () => {
 
 		expect(factsOf(seated).canAttach).toBe(true)
 		expect(factsOf(empty).canAttach).toBe(true)
+	})
+})
+
+describe("faceOfBot", () => {
+	it("carries the bot title so the one-companion header can badge it", () => {
+		expect(faceOfBot(bot).title).toBe("Reviewer")
+	})
+
+	it("carries no title for a bot without one", () => {
+		expect(faceOfBot({ ...bot, title: "" }).title).toBeUndefined()
 	})
 })
