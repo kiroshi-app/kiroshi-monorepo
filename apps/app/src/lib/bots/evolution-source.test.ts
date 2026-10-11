@@ -19,8 +19,20 @@ const scopeOf = (botId: string): RuntimeScope => ({
 	epoch: 1,
 })
 
+const unrecorded = (bundle: EvolvedBundle): ScopedEvent["event"] => ({
+	type: "botEvolutionFailed",
+	bundle,
+	detail: "index.lock exists",
+})
+
 const createFakeDriver = () => {
 	const listeners = new Set<(event: ScopedEvent) => void>()
+
+	const emit = (event: ScopedEvent) => {
+		for (const listener of listeners) {
+			listener(event)
+		}
+	}
 
 	return {
 		subscribe: (onEvent: (event: ScopedEvent) => void) => {
@@ -29,43 +41,19 @@ const createFakeDriver = () => {
 				listeners.delete(onEvent)
 			})
 		},
-		evolve: (botId: string, bundle: EvolvedBundle) => {
-			for (const listener of listeners) {
-				listener({
-					scope: scopeOf(botId),
-					event: {
-						type: "botEvolved",
-						bundle,
-						commitId: "c-1",
-						title: "learned to count",
-					},
-				})
-			}
-		},
-		failToRecord: (botId: string, bundle: EvolvedBundle) => {
-			for (const listener of listeners) {
-				listener({
-					scope: scopeOf(botId),
-					event: {
-						type: "botEvolutionFailed",
-						bundle,
-						detail: "index.lock exists",
-					},
-				})
-			}
-		},
-		failUnscoped: () => {
-			for (const listener of listeners) {
-				listener({
-					scope: null,
-					event: {
-						type: "botEvolutionFailed",
-						bundle: "bot",
-						detail: "index.lock exists",
-					},
-				})
-			}
-		},
+		evolve: (botId: string, bundle: EvolvedBundle) =>
+			emit({
+				scope: scopeOf(botId),
+				event: {
+					type: "botEvolved",
+					bundle,
+					commitId: "c-1",
+					title: "learned to count",
+				},
+			}),
+		failToRecord: (botId: string, bundle: EvolvedBundle) =>
+			emit({ scope: scopeOf(botId), event: unrecorded(bundle) }),
+		failUnscoped: () => emit({ scope: null, event: unrecorded("bot") }),
 	}
 }
 
