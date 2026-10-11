@@ -57,7 +57,7 @@
 	--rail-item-selected: oklch(0 0 0 / 10%);
 	--rail-avatar: #e5e5e5;
 	--person-avatar: #e5e5e5;
-	--message-row-hover: var(--sidebar);
+	--message-row-hover: #f7f7f7;
 	--bot-avatar-field-lightness: 0.5;
 	--bot-avatar-ground-strength: 25%;
 	--user-bubble-tint-strength: 100%;
