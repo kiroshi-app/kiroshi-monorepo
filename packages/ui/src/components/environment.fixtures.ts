@@ -39,6 +39,7 @@ export const UNSET_NEEDS_VALUE_ENTRY: EnvironmentEntry = {
 	name: "NIGHTLY_INGESTION_PIPELINE_INSPECTOR_DEAD_LETTER_QUEUE_TOKEN",
 	definedIn: "bot",
 	servedFrom: "bot",
+	overrides: "space",
 	isUnset: true,
 }
 

@@ -167,7 +167,8 @@ const EnvironmentRow = ({
 	const isServedElsewhere = entry.servedFrom !== entry.definedIn
 	const hasNoValue = entry.isUnset && !isServedElsewhere
 	const overriddenBy = !entry.isUnset && isOwned && entry.servedFrom !== scope
-	const overriding = entry.servedFrom === scope ? entry.overrides : undefined
+	const overriding =
+		!entry.isUnset && entry.servedFrom === scope ? entry.overrides : undefined
 	const defined = t(`secrets.scope.${entry.definedIn}`)
 
 	return (

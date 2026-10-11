@@ -186,6 +186,9 @@ export const UnsetNeedsValue = meta.story({
 			canvas.getByText("Defined in Companion · No value"),
 		).toBeVisible()
 		await expect(canvas.queryByText("Unset here")).not.toBeInTheDocument()
+		const row = name.closest("li")
+		await expect(row).not.toBeNull()
+		await expect(row).not.toHaveTextContent("Overrides Space")
 		await expect(
 			canvas.getByRole("button", {
 				name: `Replace the value of ${UNSET_NEEDS_VALUE_ENTRY.name}`,
