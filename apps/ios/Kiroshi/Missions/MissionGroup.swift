@@ -1,5 +1,3 @@
-import Foundation
-
 enum MissionGroup: CaseIterable, Sendable {
     case needsYou
     case working
@@ -37,20 +35,6 @@ struct MissionSection: Identifiable, Equatable, Sendable {
         }
     }
 
-    static func sections(
-        _ sections: [MissionSection], matching query: String,
-        companions: [String: MissionCompanion]
-    ) -> [MissionSection] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return sections }
-        return sections.compactMap { section in
-            let missions = section.missions.filter {
-                $0.matches(query, companion: companions[$0.botId])
-            }
-            return missions.isEmpty ? nil : MissionSection(group: section.group, missions: missions)
-        }
-    }
-
     private static func movedLater(_ one: Mission, than other: Mission) -> Bool {
         let (oneMoved, otherMoved) = (one.lastMovedAt, other.lastMovedAt)
         return oneMoved == otherMoved ? one.id < other.id : oneMoved > otherMoved
@@ -76,11 +60,6 @@ extension Mission {
 
     func detailLine(companion: MissionCompanion?) -> String {
         [companion?.name, statusLine].compactMap(\.self).joined(separator: " · ")
-    }
-
-    func matches(_ query: String, companion: MissionCompanion?) -> Bool {
-        [objective, ticket.externalId, companion?.name].compactMap(\.self)
-            .contains { $0.localizedStandardContains(query) }
     }
 
     func moved(by changed: MissionChanged) -> Mission {

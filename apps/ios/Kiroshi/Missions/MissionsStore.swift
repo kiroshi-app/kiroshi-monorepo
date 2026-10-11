@@ -25,10 +25,6 @@ final class MissionsStore {
         companions[mission.botId]
     }
 
-    func sections(matching query: String) -> [MissionSection] {
-        MissionSection.sections(sections, matching: query, companions: companions)
-    }
-
     func follow(_ connection: RelayConnection) async {
         if instanceId != connection.instanceId {
             instanceId = connection.instanceId

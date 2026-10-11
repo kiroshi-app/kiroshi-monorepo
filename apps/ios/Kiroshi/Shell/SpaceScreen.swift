@@ -28,29 +28,7 @@ struct SpaceScreen: View {
     var body: some View {
         NavigationStack {
             content
-                .safeAreaInset(edge: .top) {
-                    if let offlineSpace = store.offlineSpace {
-                        HostOfflineLine(space: offlineSpace, email: store.email)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 10)
-                    }
-                }
-                .navigationTitle(store.currentSpace?.name ?? "")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarTitleMenu {
-                    SpaceMenu(store: store)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        SettingsButton(
-                            account: account, spaces: store.spaces, section: section
-                        ) {
-                            AccountInitial(initial: store.accountInitial)
-                        }
-                        .accessibilityLabel("Settings")
-                    }
-                    .sharedBackgroundVisibility(.hidden)
-                }
+                .spaceChrome(store: store, account: account, section: section)
         }
     }
 

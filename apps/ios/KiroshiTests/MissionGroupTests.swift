@@ -72,34 +72,6 @@ struct MissionGroupTests {
         #expect(mission.detailLine(companion: nil) == "Asked you which screen goes first.")
     }
 
-    @Test func searchKeepsTheMissionsWhoseObjectiveTicketOrCompanionMatches() {
-        let sections = MissionSection.sections(
-            of: [
-                MissionTesting.entry(
-                    MissionTesting.mission(id: "dictation", state: "waiting_human", botId: "b-1")),
-                MissionTesting.entry(MissionTesting.mission(id: "uploads", botId: "b-2")),
-                MissionTesting.entry(
-                    MissionTesting.mission(id: "settings", state: "ready_to_merge", botId: "b-3")),
-            ])
-        let companions = [
-            "b-1": Companion(id: "b-1", name: "Pico"), "b-2": Companion(id: "b-2", name: "Juniper"),
-        ]
-
-        let byObjective = MissionSection.sections(
-            sections, matching: "DICTATION", companions: companions)
-        let byCompanion = MissionSection.sections(
-            sections, matching: "junip", companions: companions)
-
-        #expect(byObjective.map(\.group) == [.needsYou])
-        #expect(byObjective.flatMap(\.missions).map(\.id) == ["dictation"])
-        #expect(byCompanion.flatMap(\.missions).map(\.id) == ["uploads"])
-        #expect(
-            MissionSection.sections(sections, matching: "ope-1", companions: companions)
-                .flatMap(\.missions).count == 3)
-        #expect(MissionSection.sections(sections, matching: "  ", companions: [:]) == sections)
-        #expect(MissionSection.sections(sections, matching: "nothing", companions: [:]).isEmpty)
-    }
-
     @Test func aChangeMovesTheMissionUnlessItIsStale() {
         let mission = MissionTesting.mission(state: "working", stateSeq: 4)
         let moved = mission.moved(

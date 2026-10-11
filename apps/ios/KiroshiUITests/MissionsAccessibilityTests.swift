@@ -90,18 +90,6 @@ final class MissionsAccessibilityTests: XCTestCase {
         try auditTheList(app, onScreenAtTheLargestSize: onScreen)
     }
 
-    func testSearchKeepsTheMissionsThatMatch() {
-        let app = launch("5.1")
-        XCTAssertTrue(row("Split the onboarding flow", in: app).waitForExistence(timeout: 10))
-
-        app.buttons["Search"].firstMatch.tap()
-        app.typeText("dictation")
-
-        XCTAssertTrue(
-            row("Split the onboarding flow", in: app).waitForNonExistence(timeout: 5))
-        XCTAssertTrue(row("Add dictation to the composer", in: app).exists)
-    }
-
     func testOpeningAMissionThenSwipingLeftShowsEachMessagesTime() {
         let app = launchInEnglish("5.1", "-holdsTimes", "YES")
         app.tabBars.buttons["Missions"].tap()

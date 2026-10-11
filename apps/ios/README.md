@@ -91,13 +91,13 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 The same fixtures feed the `#Preview`s.
 
-Page 5 "Missions" of "Kiroshi, iOS 2" opens on the Missions tab: `5.1` (the grouped list of Studio), `5.2` (the thread of OPE-212, in the bubbles of page 3, with the composer), `5.3` (no missions) and `5.4` (Side project answers its list, then its host leaves). The scripted socket answers `mission_space_feed`, `conversation_bots`, `conversation_message_page`, `chat_store_attachments` and `conversation_send_turn`, so sending in `5.2` goes through the real store and relay connection. The magnifying glass of the list searches the missions by objective, ticket and companion. A swipe left in the thread shows each message's time, and `-holdsTimes YES` keeps it slid as on page 3:
+Page 5 "Missions" of "Kiroshi, iOS 2" opens on the Missions tab: `5.1` (the grouped list of Studio), `5.2` (the thread of OPE-212, in the bubbles of page 3, with the composer), `5.3` (no missions) and `5.4` (Side project answers its list, then its host leaves). The scripted socket answers `mission_space_feed`, `conversation_bots`, `conversation_message_page`, `chat_store_attachments` and `conversation_send_turn`, so sending in `5.2` goes through the real store and relay connection. A swipe left in the thread shows each message's time, and `-holdsTimes YES` keeps it slid as on page 3:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 5.2 -AppleLocale en_US -holdsTimes YES
 ```
 
-`KiroshiUITests` runs the accessibility audit on `5.1` to `5.4`, searches `5.1`, and opens OPE-212 from `5.1` then swipes left to bring the times in.
+`KiroshiUITests` runs the accessibility audit on `5.1` to `5.4` and opens OPE-212 from `5.1` then swipes left to bring the times in.
 
 ## Settings and Sign out without the network
 

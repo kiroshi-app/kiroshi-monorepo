@@ -5,7 +5,6 @@ struct MissionsScreen: View {
     let account: SignInModel
     @State private var missions: MissionsStore
     @State private var path = MissionsRoute.atLaunch
-    @State private var query = ""
 
     init(store: SpaceStore, account: SignInModel, missions: MissionsStore = MissionsStore()) {
         self.store = store
@@ -17,9 +16,7 @@ struct MissionsScreen: View {
         NavigationStack(path: $path) {
             content
                 .background(Color(.systemBackground))
-                .spaceChrome(store: store, account: account)
-                .searchable(text: $query, prompt: "Search missions")
-                .searchToolbarBehavior(.minimize)
+                .spaceChrome(store: store, account: account, section: .missions)
                 .navigationDestination(for: MissionsRoute.self) { route in
                     switch route {
                     case .mission(let mission):
@@ -35,7 +32,7 @@ struct MissionsScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        let sections = missions.sections(matching: query)
+        let sections = missions.sections
         if !sections.isEmpty {
             List(sections) { section in
                 Section {
@@ -56,10 +53,6 @@ struct MissionsScreen: View {
             .listStyle(.plain)
             .listSectionSpacing(0)
             .environment(\.defaultMinListHeaderHeight, 0)
-        } else if !missions.sections.isEmpty {
-            ScrollingUnavailable {
-                ContentUnavailableView.search(text: query)
-            }
         } else if missions.hasLoaded {
             ScrollingUnavailable {
                 ContentUnavailableView {
