@@ -40,6 +40,9 @@ extension XCTestCase {
         app.launch()
         let transcript = app.scrollViews.firstMatch
         XCTAssertTrue(composer(in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Loading the conversation"]
+                .waitForNonExistence(timeout: 10))
         let pickerTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mention '"))
             .allElementsBoundByIndex.map(\.frame.minY).min()
         let visible = CGRect(
