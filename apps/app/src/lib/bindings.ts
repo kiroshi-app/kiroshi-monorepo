@@ -237,6 +237,8 @@ export type AccountError = { kind: "store"; detail: string } | { kind: "listener
 
 export type AccountFailure = "linkInvalid" | "serverError" | "timedOut";
 
+export type AccountPlan = "free" | "pro";
+
 export type AccountReport = AccountReport_Serialize | AccountReport_Deserialize;
 
 export type AccountReport_Deserialize = {
@@ -752,6 +754,7 @@ export type KiroshiAccount = {
 	id: string,
 	email: string,
 	createdAt: string,
+	plan: AccountPlan | null,
 };
 
 export type LaunchOutcome = {

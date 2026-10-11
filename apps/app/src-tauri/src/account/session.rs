@@ -213,6 +213,7 @@ mod tests {
 	use tauri::Listener;
 
 	use super::*;
+	use crate::account::contract::AccountPlan;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const BEARER: &str = "bearer-that-never-leaves";
@@ -226,6 +227,7 @@ mod tests {
 		link_lifetime: Option<Duration>,
 		expires_at: Option<&'static str>,
 		sign_out_status: Option<StatusCode>,
+		account: Option<Value>,
 		callbacks: Arc<Mutex<Vec<String>>>,
 		signed_out: Arc<Mutex<Vec<String>>>,
 	}
@@ -287,12 +289,15 @@ mod tests {
 		header.unwrap_or_default().trim_start_matches("Bearer ").to_owned()
 	}
 
-	async fn me(headers: HeaderMap) -> Answered {
+	fn account_answered() -> Value {
+		json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" })
+	}
+
+	async fn me(Served(cloudy): Served<Cloudy>, headers: HeaderMap) -> Answered {
 		match bearer_of(&headers).as_str() {
-			BEARER => answered_json(
-				StatusCode::OK,
-				json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z" }),
-			),
+			BEARER => {
+				answered_json(StatusCode::OK, cloudy.account.unwrap_or_else(account_answered))
+			}
 			FLAKY => answered_json(StatusCode::SERVICE_UNAVAILABLE, json!({})),
 			_ => answered_json(StatusCode::UNAUTHORIZED, json!({ "message": "no session" })),
 		}
@@ -384,6 +389,7 @@ mod tests {
 			id: "u1".to_owned(),
 			email: EMAIL.to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			plan: Some(AccountPlan::Pro),
 		})
 	}
 
@@ -442,6 +448,40 @@ mod tests {
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
 			assert!(is_closed(&callback).await);
 			harness.assert_the_bearer_was_never_heard();
+		});
+	}
+
+	#[test]
+	fn the_account_carries_the_plan_the_cloud_answers_and_none_it_does_not_know() {
+		run(async {
+			let mut planless = account_answered();
+			planless.as_object_mut().expect("an account object").remove("plan");
+			let plan_answered = |plan: Value| {
+				let mut account = account_answered();
+				account["plan"] = plan;
+				account
+			};
+			for (answered, plan) in [
+				(plan_answered(json!("pro")), Some(AccountPlan::Pro)),
+				(plan_answered(json!("free")), Some(AccountPlan::Free)),
+				(planless, None),
+				(plan_answered(Value::Null), None),
+				(plan_answered(json!("team")), None),
+				(plan_answered(json!("Pro")), None),
+				(plan_answered(json!(1)), None),
+				(plan_answered(json!({ "name": "pro" })), None),
+			] {
+				let cloudy = Cloudy { account: Some(answered.clone()), ..Cloudy::default() };
+				let cloud = Cloud::new(&stub(cloudy).await);
+
+				let account = cloud.me(BEARER).await.expect("the account parses");
+
+				assert_eq!(account.plan, plan, "{answered}");
+				assert_eq!(
+					(account.id.as_str(), account.email.as_str(), account.created_at.as_str()),
+					("u1", EMAIL, "2026-10-01T00:00:00.000Z")
+				);
+			}
 		});
 	}
 

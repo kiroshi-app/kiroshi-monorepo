@@ -64,7 +64,7 @@ async fn me(headers: HeaderMap) -> Answered {
 	}
 	answered(
 		StatusCode::OK,
-		json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z" }),
+		json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
 	)
 }
 
@@ -175,7 +175,8 @@ fn a_token_on_the_callback_signs_the_account_in_and_sign_out_deletes_the_bearer(
 				"kind": "signedIn",
 				"id": "u1",
 				"email": EMAIL,
-				"createdAt": "2026-10-01T00:00:00.000Z"
+				"createdAt": "2026-10-01T00:00:00.000Z",
+				"plan": "pro"
 			})
 		);
 		assert_eq!(host.stored().as_deref(), Some(BEARER));
