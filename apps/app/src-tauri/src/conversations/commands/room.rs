@@ -151,7 +151,8 @@ pub async fn conversation_set_lead<R: Runtime>(
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let led = drawn(&app, ready(&state)?.conversations().set_lead(conversation_id, bot_id).await?);
+	let led = ready(&state)?.conversations().set_lead(conversation_id, bot_id).await?;
+	let led = drawn(&app, led);
 	announce_stored(&app, CONVERSATION_UPDATED, &led);
 	Ok(led)
 }
