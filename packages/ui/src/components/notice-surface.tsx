@@ -22,6 +22,7 @@ import {
 	ToastViewport,
 	useToastManager,
 } from "@workspace/ui/components/ui/toast"
+import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import { cn } from "@workspace/ui/lib/utils"
 
 const TRANSIENT_NOTICE_DELAY = 5000
@@ -29,6 +30,7 @@ const NOTICE_LIMIT = 3
 
 type NoticeData = {
 	spaceColour?: BotAvatarBlot
+	reportText?: string
 }
 
 const noticeManager = createToastManager<NoticeData>()
@@ -53,7 +55,49 @@ type TransientNotice = NoticeMessage & {
 	type?: TransientNoticeType
 }
 
+type FailureReport = {
+	appVersion?: string
+	platform?: string
+	raisedAt?: string
+	command?: string
+	httpStatus?: number
+	side?: "host" | "member"
+	raisedIn?: string
+}
+
+type ReportedFailure = Pick<NoticeMessage, "title" | "description"> & {
+	report: FailureReport
+}
+
+const FAILURE_REPORT_HEADING = "Kiroshi failure report"
+
+const FAILURE_REPORT_LABELS = {
+	appVersion: "App version",
+	platform: "Platform",
+	raisedAt: "Time",
+	command: "Command",
+	httpStatus: "HTTP status",
+	side: "Side",
+	raisedIn: "Raised in",
+} satisfies Record<keyof FailureReport, string>
+
+const onOneLine = (text = "") => text.replace(/\s+/g, " ").trim()
+
+const formatFailureReport = ({ title, description, report }: ReportedFailure) =>
+	[
+		FAILURE_REPORT_HEADING,
+		onOneLine(title),
+		onOneLine(description),
+		...Object.entries(FAILURE_REPORT_LABELS).map(([field, label]) => {
+			const value = onOneLine(report[field as keyof FailureReport]?.toString())
+			return value && `${label}: ${value}`
+		}),
+	]
+		.filter(Boolean)
+		.join("\n")
+
 type FailureNotice = NoticeMessage & {
+	report?: FailureReport
 	onClose?: () => void
 }
 
@@ -65,7 +109,12 @@ type RaisedNotice = FailureNotice & {
 
 let raisedNoticeCount = 0
 
-const raiseNotice = ({ action, spaceColour, ...notice }: RaisedNotice) => {
+const raiseNotice = ({
+	action,
+	report,
+	spaceColour,
+	...notice
+}: RaisedNotice) => {
 	raisedNoticeCount += 1
 	const id = `notice-${raisedNoticeCount}`
 
@@ -78,7 +127,16 @@ const raiseNotice = ({ action, spaceColour, ...notice }: RaisedNotice) => {
 				endNotice(id)
 			},
 		},
-		data: { spaceColour },
+		data: {
+			reportText:
+				report &&
+				formatFailureReport({
+					description: notice.description,
+					report,
+					title: notice.title,
+				}),
+			spaceColour,
+		},
 		id,
 	})
 }
@@ -171,6 +229,47 @@ const NoticeMark = ({ type, spaceColour }: NoticeMarkProps) => {
 	)
 }
 
+type CopyLabelProps = {
+	isShown: boolean
+	children: string
+}
+
+const CopyLabel = ({ isShown, children }: CopyLabelProps) => (
+	<span
+		aria-hidden={!isShown}
+		className={cn("col-start-1 row-start-1", !isShown && "invisible")}
+	>
+		{children}
+	</span>
+)
+
+type NoticeCopyProps = {
+	text: string
+}
+
+const NoticeCopy = ({ text }: NoticeCopyProps) => {
+	const { t } = useTranslation("common")
+	const { copied, copy } = useCopyText(text)
+
+	return (
+		<Button
+			className="shrink-0"
+			onClick={() => {
+				copy().catch(() =>
+					raiseFailureNotice({ title: t("notice.copyFailed") }),
+				)
+			}}
+			size="sm"
+			variant="outline"
+		>
+			<span className="grid">
+				<CopyLabel isShown={!copied}>{t("notice.copy")}</CopyLabel>
+				<CopyLabel isShown={copied}>{t("notice.copied")}</CopyLabel>
+			</span>
+		</Button>
+	)
+}
+
 const NoticeList = () => {
 	const { t } = useTranslation("common")
 	const { toasts } = useToastManager<NoticeData>()
@@ -193,6 +292,9 @@ const NoticeList = () => {
 					<ToastDescription className="text-pretty break-words" />
 				</div>
 				<ToastAction />
+				{notice.data?.reportText ? (
+					<NoticeCopy text={notice.data.reportText} />
+				) : null}
 				<ToastClose
 					render={
 						<Button
@@ -240,6 +342,8 @@ const NoticeSurface = ({
 
 export {
 	endNotice,
+	type FailureReport,
+	formatFailureReport,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,

@@ -1063,9 +1063,13 @@ overlays-noticesurface--marks
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark
 overlays-noticesurface--repeated-failure
+overlays-noticesurface--report-copied
+overlays-noticesurface--report-copy-rejected
 overlays-noticesurface--stacked
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog
+overlays-noticesurface--with-report
+overlays-noticesurface--with-report-and-action
 overlays-popover--default
 overlays-popover--long-content
 overlays-popover--states

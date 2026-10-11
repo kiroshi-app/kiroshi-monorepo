@@ -47,6 +47,10 @@ const common = {
 	notice: {
 		label: "Avis",
 		close: "Fermer l’avis",
+		copy: "Copier",
+		copied: "Copié",
+		copyFailed:
+			"Impossible de copier le rapport. Appuyez à nouveau sur Copier.",
 	},
 	notification: {
 		question: "Vous a posé une question",

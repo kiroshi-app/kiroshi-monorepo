@@ -5,6 +5,7 @@ import {
 	fn,
 	isInaccessible,
 	screen,
+	spyOn,
 	type UserEventObject,
 	waitFor,
 	within,
@@ -20,6 +21,7 @@ import {
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
 	endNotice,
+	type FailureReport,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
@@ -69,6 +71,38 @@ const SHORT_DELAY = 700
 const SWIPE_DISTANCE = 80
 
 const RETRY_LABEL = "Try again"
+
+const COPY_LABEL = "Copy"
+
+const NARROW_WIDTH = 320
+
+const NARROW_VIEWPORT = {
+	narrow: {
+		name: "Narrow",
+		styles: { width: `${NARROW_WIDTH}px`, height: "844px" },
+	},
+}
+
+const REPORT: FailureReport = {
+	appVersion: "0.42.0",
+	platform: "macos-aarch64",
+	raisedAt: "2026-10-11T09:00:00.000Z",
+	command: "run_routine",
+	httpStatus: 503,
+	side: "host",
+}
+
+const REPORT_TEXT = [
+	"Kiroshi failure report",
+	FAILURE.title,
+	FAILURE.description,
+	"App version: 0.42.0",
+	"Platform: macos-aarch64",
+	"Time: 2026-10-11T09:00:00.000Z",
+	"Command: run_routine",
+	"HTTP status: 503",
+	"Side: host",
+].join("\n")
 
 type NoticeDemoProps = NoticeSurfaceProps & {
 	label: string
@@ -435,6 +469,256 @@ export const WithAction = meta.story({
 		await waitFor(() =>
 			expect(within(viewport()).queryByText(SAVED.title)).toBe(null),
 		)
+	},
+})
+
+const copyControl = (notice: HTMLElement) =>
+	within(notice).queryByRole("button", { name: COPY_LABEL, hidden: true })
+
+const pressedCopy = async (canvas: HTMLElement, userEvent: UserEventObject) => {
+	await userEvent.click(
+		within(canvas).getByRole("button", { name: "Run the routine" }),
+	)
+	await within(viewport()).findByText(FAILURE.title)
+	const notice = await opaque(cardCarrying(FAILURE.title))
+	const copy = copyControl(notice)
+	if (!copy) throw new window.Error("The notice carries no Copy control")
+	await userEvent.click(copy)
+
+	return { copy, notice }
+}
+
+const ReportedFailureDemo = () => (
+	<NoticeDemo
+		label="Run the routine"
+		raise={() => raiseFailureNotice({ ...FAILURE, report: REPORT })}
+	/>
+)
+
+export const WithReport = meta.story({
+	render: () => <ReportedFailureDemo />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A failure carrying a debug report, which draws a Copy control between the text and the close control. Pressing it puts the report on the clipboard as plain text a coding agent can read: a heading line, the notice title, its description, then one `Label: value` line per field the report holds, in a fixed order, the absent ones left out. The notice stays open after the copy. A failure raised without a report draws no Copy control at all. Pick `WithReportAndAction` for the same report beside a Retry, `ReportCopied` for the label the control wears right after a copy.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		raiseFailureNotice(OTHER_FAILURE)
+		await within(viewport()).findByText(OTHER_FAILURE.title)
+		await opaque(cardCarrying(OTHER_FAILURE.title))
+		await expect(copyControl(cardCarrying(OTHER_FAILURE.title))).toBe(null)
+
+		const { copy, notice } = await pressedCopy(canvasElement, userEvent)
+
+		await expect(writeText).toHaveBeenCalledOnce()
+		await expect(writeText).toHaveBeenCalledWith(REPORT_TEXT)
+
+		await expect(notice.querySelector("[data-slot=toast-action]")).toBe(null)
+		await expect(
+			within(notice).getByText(FAILURE.title).compareDocumentPosition(copy) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			copy.compareDocumentPosition(closeCardCarrying(FAILURE.title)) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+
+		writeText.mockRestore()
+	},
+})
+
+const retryReported = fn()
+
+const settledRing = async (control: HTMLElement) => {
+	await Promise.all(control.getAnimations().map(({ finished }) => finished))
+
+	return getComputedStyle(control).boxShadow
+}
+
+const LongReportedFailureDemo = () => (
+	<NoticeDemo
+		label="Run the routine"
+		raise={() =>
+			raiseFailureNotice({
+				...LONG_FAILURE,
+				action: { label: RETRY_LABEL, onPress: retryReported },
+				report: REPORT,
+			})
+		}
+	/>
+)
+
+export const WithReportAndAction = meta.story({
+	globals: { viewport: { value: "narrow" } },
+	render: () => <LongReportedFailureDemo />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		viewport: { options: NARROW_VIEWPORT },
+		docs: {
+			description: {
+				story:
+					"A failure carrying both a report and a Retry, on a 320px window with an unbreakable title and a several-sentence description. Check that the order runs Retry, Copy, close, that all three stay inside the notice and the window, that Copy wears the same outline button, height and focus ring as Retry and is reached by Tab between them, that Copy leaves the notice open, and that Retry still runs its handler and ends the notice. Pick `WithReport` for the report alone.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		retryReported.mockClear()
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await expect(window.innerWidth).toBe(NARROW_WIDTH)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+
+		const notice = await failureNotice()
+		const action = actionControl()
+		const copy = copyControl(notice)
+		const close = closeControl()
+		if (!action || !copy) throw new window.Error("A control is missing")
+
+		await expect(
+			action.compareDocumentPosition(copy) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+		await expect(
+			copy.compareDocumentPosition(close) &
+				window.Node.DOCUMENT_POSITION_FOLLOWING,
+		).toBeTruthy()
+
+		const noticeBox = notice.getBoundingClientRect()
+		for (const control of [action, copy, close]) {
+			const box = control.getBoundingClientRect()
+			await expect(box.left).toBeGreaterThanOrEqual(noticeBox.left)
+			await expect(box.right).toBeLessThanOrEqual(noticeBox.right)
+			await expect(box.right).toBeLessThanOrEqual(window.innerWidth)
+			await expect(box.width).toBeGreaterThanOrEqual(24)
+			await expect(box.height).toBeGreaterThanOrEqual(24)
+		}
+
+		await expect(copy).toHaveAttribute("data-slot", "button")
+		await expect(copy.offsetHeight).toBe(action.offsetHeight)
+		await expect(getComputedStyle(copy).fontSize).toBe(
+			getComputedStyle(action).fontSize,
+		)
+		await expect(getComputedStyle(copy).borderTopWidth).toBe(
+			getComputedStyle(action).borderTopWidth,
+		)
+
+		await waitFor(async () => {
+			await userEvent.tab()
+			await expect(action).toHaveFocus()
+		})
+		const actionRing = await settledRing(action)
+		await userEvent.tab()
+		await expect(copy).toHaveFocus()
+		await expect(copy.matches(":focus-visible")).toBe(true)
+		await expect(await settledRing(copy)).toBe(actionRing)
+
+		await userEvent.keyboard("{Enter}")
+		await expect(writeText).toHaveBeenCalledOnce()
+		await expect(within(viewport()).getByText(LONG_FAILURE.title)).toBeVisible()
+
+		await userEvent.click(action)
+		await expect(retryReported).toHaveBeenCalledOnce()
+		await waitFor(() =>
+			expect(within(viewport()).queryByText(LONG_FAILURE.title)).toBe(null),
+		)
+
+		writeText.mockRestore()
+	},
+})
+
+const copyLayout = (copy: HTMLElement, notice: HTMLElement) => ({
+	control: copy.getBoundingClientRect().width,
+	text:
+		within(notice)
+			.getByText(LONG_FAILURE.title)
+			.parentElement?.getBoundingClientRect().width ?? 0,
+	notice: notice.getBoundingClientRect().height,
+})
+
+export const ReportCopied = meta.story({
+	globals: { viewport: { value: "narrow" } },
+	render: () => <LongReportedFailureDemo />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		viewport: { options: NARROW_VIEWPORT },
+		docs: {
+			description: {
+				story:
+					"The Copy control right after a copy landed, on the 320px window of `WithReportAndAction`: it reads Copied for as long as the copy hook reports it, then goes back to Copy on its own, the notice open throughout. Both labels share one cell, so the control keeps the width of the longer one, and neither the text column nor the notice moves when it switches; the label not shown is hidden from assistive technology, so the control is named Copied and nothing else. Pick `WithReport` for the control at rest.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await expect(window.innerWidth).toBe(NARROW_WIDTH)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+		const notice = await failureNotice()
+		const copy = copyControl(notice)
+		if (!copy) throw new window.Error("The notice carries no Copy control")
+
+		const before = copyLayout(copy, notice)
+		await userEvent.click(copy)
+
+		await expect(copy).toHaveAccessibleName("Copied")
+		await expect(copyLayout(copy, notice)).toEqual(before)
+
+		await waitFor(() => expect(copy).toHaveAccessibleName(COPY_LABEL), {
+			timeout: 4000,
+		})
+		await expect(copyLayout(copy, notice)).toEqual(before)
+		await expect(within(viewport()).getByText(LONG_FAILURE.title)).toBeVisible()
+
+		writeText.mockRestore()
+	},
+})
+
+export const ReportCopyRejected = meta.story({
+	tags: ["test-only"],
+	render: () => <ReportedFailureDemo />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"The clipboard refuses the write. Check that the reported notice stays open, that its control still reads Copy, and that the refusal surfaces as its own failure notice rather than vanishing.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+			new window.Error("Clipboard write denied"),
+		)
+
+		const { copy } = await pressedCopy(canvasElement, userEvent)
+
+		const refusal = "Couldn’t copy the report. Press Copy again."
+		await within(viewport()).findByText(refusal)
+		await opaque(cardCarrying(refusal))
+		await expect(copy).toHaveAccessibleName(COPY_LABEL)
+		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+
+		writeText.mockRestore()
 	},
 })
 
