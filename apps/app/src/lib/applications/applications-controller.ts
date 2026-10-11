@@ -154,6 +154,14 @@ export const createApplicationsController = (
 	const set = (fields: Partial<ApplicationsState>) =>
 		stateStore.setState({ ...current(), ...fields })
 
+	const reportDirectoryUnrefreshed = () =>
+		reportFailure({
+			title: i18n.t("bots:applications.catalogue.unrefreshed.title"),
+			description: i18n.t(
+				"bots:applications.catalogue.unrefreshed.description",
+			),
+		})
+
 	const readDirectory = () => {
 		issuedRead += 1
 		const attempt = issuedRead
@@ -168,22 +176,30 @@ export const createApplicationsController = (
 				if (!isLastIssued()) {
 					return
 				}
+				const hasPartlyFailed = found.registryFailure !== undefined
 				set({
 					directory: found.applications,
 					isReadingDirectory: false,
-					hasDirectoryPartlyFailed: found.registryFailure !== undefined,
+					hasDirectoryPartlyFailed: hasPartlyFailed,
 					isDirectoryStale: found.isStale === true,
 				})
+				if (hasPartlyFailed) {
+					reportDirectoryUnrefreshed()
+				}
 			},
 			() => {
 				if (!isLastIssued()) {
 					return
 				}
+				const holdsDirectory = current().directory.length > 0
 				set({
 					isReadingDirectory: false,
-					hasDirectoryFailed: true,
+					hasDirectoryFailed: !holdsDirectory,
 					isDirectoryStale: false,
 				})
+				if (holdsDirectory) {
+					reportDirectoryUnrefreshed()
+				}
 			},
 		)
 	}
@@ -320,8 +336,7 @@ export const createApplicationsController = (
 		subscribe: stateStore.subscribe,
 
 		open: async () => {
-			const { isReadingCatalogue, curated } = current()
-			if (isReadingCatalogue || curated.length > 0) {
+			if (current().isReadingCatalogue) {
 				return
 			}
 			set({ isReadingCatalogue: true })
@@ -338,9 +353,7 @@ export const createApplicationsController = (
 		},
 
 		browse: () => {
-			const { directory, hasDirectoryFailed, isReadingDirectory } = current()
-			const holdsDirectory = directory.length > 0 && !hasDirectoryFailed
-			if (isReadingDirectory || holdsDirectory) {
+			if (current().isReadingDirectory) {
 				return
 			}
 			readDirectory()

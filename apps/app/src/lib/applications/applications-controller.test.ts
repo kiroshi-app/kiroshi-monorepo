@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { Application, ApplicationSearch } from "./application-port"
 import {
 	createApplicationsController,
@@ -99,6 +101,21 @@ const controllerOn = (
 		reportFailure: () => undefined,
 	})
 
+const reportingOn = (port: FakeApplicationPort) => {
+	const reportFailure = vi.fn()
+	const controller = createApplicationsController(
+		port,
+		createFakeTranscriptStore(),
+		{ reportFailure },
+	)
+	return { controller, reportFailure }
+}
+
+const UNREFRESHED_NOTICE = {
+	title: i18n.t("bots:applications.catalogue.unrefreshed.title"),
+	description: i18n.t("bots:applications.catalogue.unrefreshed.description"),
+}
+
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const searchesOf = (port: FakeApplicationPort) =>
@@ -115,15 +132,43 @@ describe("applications controller", () => {
 		expect(controller.getState().curated).toEqual([PAPER, SUPERSET])
 	})
 
-	it("reads the catalogue once for every panel that opens it", async () => {
+	it("reads the catalogue again for every panel that opens it", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
 		const controller = controllerOn(port)
 
 		await controller.open()
+		port.curated = [PAPER, SUPERSET]
 		await controller.open()
 
+		expect(port.calls).toEqual([
+			{ command: "catalogue" },
+			{ command: "catalogue" },
+		])
+		expect(controller.getState().curated).toEqual([PAPER, SUPERSET])
+	})
+
+	it("issues no second catalogue read while one is in flight", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [PAPER]
+		const controller = controllerOn(port)
+
+		await Promise.all([controller.open(), controller.open()])
+
 		expect(port.calls).toEqual([{ command: "catalogue" }])
+	})
+
+	it("keeps the curated rows it holds when a catalogue re-read is refused", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [PAPER]
+		const { controller, reportFailure } = reportingOn(port)
+		await controller.open()
+
+		port.refusals.catalogue = { kind: "catalogueUnreadable", detail: "gone" }
+		await controller.open()
+
+		expect(controller.getState().curated).toEqual([PAPER])
+		expect(reportFailure).toHaveBeenCalledTimes(1)
 	})
 
 	it("reports it is reading the catalogue until the read lands", async () => {
@@ -176,17 +221,48 @@ describe("applications controller", () => {
 		expect(controller.getState().isReadingDirectory).toBe(false)
 	})
 
-	it("reads the directory once for every page that opens it", async () => {
+	it("reads the directory again for every page that opens it", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		const controller = controllerOn(port)
 
 		controller.browse()
 		await settled()
+		port.found = [LINEAR, SUPERSET]
+		controller.browse()
+		await settled()
+
+		expect(searchesOf(port)).toHaveLength(2)
+		expect(controller.getState().directory).toEqual([LINEAR, SUPERSET])
+	})
+
+	it("issues no second directory read while one is in flight", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const controller = controllerOn(port)
+
+		controller.browse()
 		controller.browse()
 		await settled()
 
 		expect(searchesOf(port)).toEqual([{ command: "search", query: "" }])
+	})
+
+	it("keeps the held directory listed and raises a notice when a re-read is refused", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const { controller, reportFailure } = reportingOn(port)
+		controller.browse()
+		await settled()
+
+		port.refusals.search = { kind: "registryTimedOut" }
+		controller.browse()
+		await settled()
+
+		expect(controller.getState().directory).toEqual([LINEAR])
+		expect(controller.getState().hasDirectoryFailed).toBe(false)
+		expect(reportFailure).toHaveBeenCalledTimes(1)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
 	})
 
 	it("narrows what it holds on a keystroke without calling the port", async () => {
@@ -250,7 +326,7 @@ describe("applications controller", () => {
 		port.refusals.search = { kind: "registryTimedOut" }
 		controller.retry()
 		await settled()
-		expect(controller.getState().hasDirectoryFailed).toBe(true)
+		expect(controller.getState().hasDirectoryFailed).toBe(false)
 		expect(controller.getState().directory).toEqual([LINEAR])
 
 		port.refusals = {}
@@ -321,6 +397,31 @@ describe("applications controller", () => {
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
 	})
 
+	it("raises one notice for a directory read with a failed side", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		port.foundFailure = { kind: "registryTimedOut" }
+		const { controller, reportFailure } = reportingOn(port)
+
+		controller.browse()
+		await settled()
+
+		expect(controller.getState().directory).toEqual([LINEAR])
+		expect(reportFailure).toHaveBeenCalledTimes(1)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+	})
+
+	it("raises no notice for a directory read where both sides answered", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const { controller, reportFailure } = reportingOn(port)
+
+		controller.browse()
+		await settled()
+
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
 	it("reports no partial failure when both directory sides answered", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
@@ -344,7 +445,7 @@ describe("applications controller", () => {
 		controller.retry()
 		await settled()
 
-		expect(controller.getState().hasDirectoryFailed).toBe(true)
+		expect(controller.getState().hasDirectoryFailed).toBe(false)
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
 	})
 
