@@ -341,6 +341,28 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    @Test func aGroupDeletedWhileItsThreadIsOpenGoesBackToTheList() async throws {
+        let host = hostWithGroups
+        let (store, connection, following) = await follow(host)
+        let release = try #require(store.summaries.first { $0.id == "group-release" })
+        store.opened = release.subject
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-design"}"#)
+        await waitUntil { store.summaries.count == 4 }
+        #expect(store.opened == release.subject)
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-release"}"#)
+        await waitUntil { store.opened == nil }
+
+        #expect(!store.summaries.contains { $0.id == "group-release" })
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aCompanionWorkingInAGroupNamesItInTheRow() async {
         let host = hostWithGroups
         let (store, connection, following) = await follow(host)

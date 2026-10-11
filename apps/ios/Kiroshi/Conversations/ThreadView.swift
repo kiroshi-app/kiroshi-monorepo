@@ -84,6 +84,9 @@ struct ThreadView: View {
         .onChange(of: space.currentSpaceId) {
             dismiss()
         }
+        .onChange(of: thread.isDeleted) {
+            dismiss()
+        }
     }
 }
 

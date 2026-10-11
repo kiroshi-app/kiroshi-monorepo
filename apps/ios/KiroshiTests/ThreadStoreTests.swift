@@ -253,6 +253,64 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func anOpenGroupFollowsItsRenameOnTheMac() async throws {
+        let release = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper], createdAt: 0)
+        let design = FixtureHost.Group(
+            id: "group-design", title: "Design review", members: [juniper], createdAt: 0)
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let group = GroupConversation(
+            id: release.id, title: release.title, createdAt: 0,
+            participants: [.init(botId: juniper.id, name: "Juniper")])
+        let host = TestHost()
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(design.renamed("Design crit").json)}"#)
+        let renamed = FixtureHost.Group(
+            id: release.id, title: "Release train", members: [juniper, atlas], createdAt: 0)
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(renamed.json)}"#)
+        await waitUntil { store.subject.title != "Release crew" }
+
+        #expect(store.subject.title == "Release train")
+        #expect(store.subject.members.map(\.id) == [juniper.id, atlas.id])
+        #expect(store.conversationId == release.id)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anOpenGroupKnowsWhenItIsDeletedOnTheMac() async {
+        let group = GroupConversation(
+            id: "group-release", title: "Release crew", createdAt: 0,
+            participants: [.init(botId: juniper.id, name: "Juniper")])
+        let host = TestHost()
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-design"}"#)
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "r1", in: "group-release", seq: 1, isYours: false, "Still here.",
+                at: 1_790_900_000_000))
+        await waitUntil { store.entries.count == 1 }
+        #expect(!store.isDeleted)
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-release"}"#)
+        await waitUntil { store.isDeleted }
+
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aSentMessageSummonsTheCompanionAndTheThreadSettlesWhenItsTurnEnds() async throws {
         let host = TestHost { call in
             call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil

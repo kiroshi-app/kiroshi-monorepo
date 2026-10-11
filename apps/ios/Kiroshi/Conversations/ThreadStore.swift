@@ -12,7 +12,7 @@ final class ThreadStore {
 
     static let pageSize = 50
 
-    let subject: ConversationSubject
+    private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadEntry] = []
     private(set) var isWorking = false
@@ -21,6 +21,7 @@ final class ThreadStore {
     private(set) var runningScope: AgentEvent.Scope?
     private(set) var sendFailure: SendFailure?
     private(set) var stopFailed = false
+    private(set) var isDeleted = false
     var draft: String
 
     @ObservationIgnored private(set) var conversationId: String?
@@ -203,6 +204,10 @@ final class ThreadStore {
                 runningScope = scope
             }
             apply(agent.change)
+        case .groupUpdated(let group) where subject.isGroup(group.id):
+            subject = .group(group)
+        case .groupDeleted(let id) where subject.isGroup(id):
+            isDeleted = true
         case .messageStored, .agent, .companionsChanged, .groupCreated, .groupUpdated,
             .groupDeleted:
             break

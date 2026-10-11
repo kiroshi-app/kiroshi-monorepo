@@ -85,6 +85,23 @@ final class ConversationsAccessibilityTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Release crew"].exists)
     }
 
+    func testAnOpenGroupFollowsItsRenameThenGoesBackToTheListWhenDeleted() {
+        let app = launch("conversations-live")
+        let launchPlan = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Launch plan'"))
+            .firstMatch
+        XCTAssertTrue(launchPlan.waitForExistence(timeout: 15))
+
+        launchPlan.tap()
+
+        XCTAssertTrue(app.navigationBars["Launch plan"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Launch checklist"].waitForExistence(timeout: 10))
+        let releaseCrew = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Release crew'")
+        ).firstMatch
+        XCTAssertTrue(releaseCrew.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Launch checklist"].exists)
+    }
+
     func testTheThreadPassesTheAudit() throws {
         let app = launch("3.2")
         XCTAssertTrue(
