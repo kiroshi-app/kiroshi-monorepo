@@ -17,12 +17,9 @@ export type McpConfigFile = McpConfigPaths & {
 	remove: () => void
 }
 
-const removing = (directory: string) => () =>
-	rmSync(directory, { recursive: true, force: true })
-
 export const writeMcpConfigFile = (servers: Servers): McpConfigFile => {
 	const directory = mkdtempSync(join(tmpdir(), DIRECTORY_PREFIX))
-	const remove = removing(directory)
+	const remove = () => rmSync(directory, { recursive: true, force: true })
 	try {
 		const path = join(directory, FILE_NAME)
 		writeFileSync(path, JSON.stringify({ mcpServers: servers }), {
