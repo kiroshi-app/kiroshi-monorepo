@@ -315,6 +315,55 @@ fn rewritten(archive: &Path, into: &Path, change: impl Fn(&str, Vec<u8>) -> Vec<
 	target
 }
 
+fn copied(archive: &Path, adjust: impl Fn(&mut tar::Header)) -> tar::Builder<Vec<u8>> {
+	let mut read = tar::Archive::new(fs::File::open(archive).expect("the archive opens"));
+	let mut builder = tar::Builder::new(Vec::new());
+	for entry in read.entries().expect("entries") {
+		let mut entry = entry.expect("an entry");
+		let path = entry.path().expect("a path").to_string_lossy().into_owned();
+		let mut bytes = Vec::new();
+		entry.read_to_end(&mut bytes).expect("the entry reads");
+		let mut header = entry.header().clone();
+		adjust(&mut header);
+		builder.append_data(&mut header, &path, bytes.as_slice()).expect("the entry is written");
+	}
+	builder
+}
+
+fn finished(builder: tar::Builder<Vec<u8>>, target: PathBuf) -> PathBuf {
+	fs::write(&target, builder.into_inner().expect("the archive")).expect("written");
+	target
+}
+
+fn remodeled(archive: &Path, into: &Path, mode: u32) -> PathBuf {
+	let builder = copied(archive, |header| header.set_mode(mode));
+	finished(builder, into.join("remodeled.kiroshi"))
+}
+
+fn extended(
+	archive: &Path,
+	into: &Path,
+	extra: impl FnOnce(&mut tar::Builder<Vec<u8>>),
+) -> PathBuf {
+	let mut builder = copied(archive, |_| {});
+	extra(&mut builder);
+	finished(builder, into.join("extended.kiroshi"))
+}
+
+#[cfg(unix)]
+fn modes_under(dir: &Path, modes: &mut Vec<(PathBuf, u32)>) {
+	use std::os::unix::fs::PermissionsExt;
+
+	for entry in fs::read_dir(dir).expect("a readable dir") {
+		let path = entry.expect("an entry").path();
+		let metadata = fs::symlink_metadata(&path).expect("the metadata");
+		modes.push((path.clone(), metadata.permissions().mode() & 0o777));
+		if metadata.is_dir() {
+			modes_under(&path, modes);
+		}
+	}
+}
+
 fn scratch() -> PathBuf {
 	let dir = std::env::temp_dir().join(format!("kiroshi-space-bundle-{}", uuid::Uuid::new_v4()));
 	fs::create_dir_all(&dir).expect("a scratch dir");
@@ -478,6 +527,105 @@ fn an_archive_of_another_version_or_that_fails_midway_leaves_the_target_untouche
 	assert_eq!(target.files(), files);
 	assert_eq!(target.table_counts(), counts);
 
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_archive_declaring_open_modes_lands_owner_only() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let archive = exported(&source, &seeded.space_id, &scratch);
+	let open = remodeled(&archive, &scratch, 0o666);
+	let target = Home::new();
+
+	let space_id = imported(&target, &open)["id"].as_str().expect("an id").to_owned();
+
+	let mut modes = Vec::new();
+	modes_under(&target.env_root(), &mut modes);
+	modes_under(&target.bot_root(), &mut modes);
+	assert!(modes.iter().any(|(path, _)| path.is_file()), "the import laid no file");
+	let rewritten_by_git_after_import = |path: &Path| path.ends_with(".git/index");
+	for (path, mode) in modes.into_iter().filter(|(path, _)| !rewritten_by_git_after_import(path)) {
+		let expected = if path.is_dir() { 0o700 } else { 0o600 };
+		assert_eq!(mode, expected, "{} is not owner-only", path.display());
+	}
+	let space_env = store::resolve(&target.env_root(), &EnvOwner::Space { id: space_id.clone() })
+		.expect("the space env");
+	assert_eq!(space_env.base.get(SPACE_SECRET.0).map(String::as_str), Some(SPACE_SECRET.1));
+	let bot_env = store::resolve(
+		&target.env_root(),
+		&EnvOwner::Bot { id: seeded.bot_ids[0].clone(), space_id },
+	)
+	.expect("the bot env");
+	assert_eq!(bot_env.base.get(BOT_SECRET.0).map(String::as_str), Some(BOT_SECRET.1));
+
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn an_archive_holding_a_link_is_refused_before_anything_lands() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let archive = exported(&source, &seeded.space_id, &scratch);
+	let linked = extended(&archive, &scratch, |builder| {
+		let mut header = tar::Header::new_gnu();
+		header.set_entry_type(tar::EntryType::Symlink);
+		header.set_size(0);
+		header.set_mode(0o777);
+		builder
+			.append_link(&mut header, format!("bots/{}/escape", seeded.bot_ids[0]), "/etc/passwd")
+			.expect("the link is written");
+	});
+	let target = Home::new();
+	let files = target.files();
+	let counts = target.table_counts();
+
+	let refused = target
+		.call("space_import", json!({ "path": linked.to_string_lossy() }))
+		.expect_err("an archive holding a link is refused");
+
+	assert_eq!(
+		refused,
+		json!({ "kind": "unreadableArchive", "detail": "the archive holds a link or a device" })
+	);
+	assert_eq!(target.files(), files);
+	assert_eq!(target.table_counts(), counts);
+	let _ = fs::remove_dir_all(scratch);
+}
+
+#[test]
+fn an_archive_holding_a_path_outside_its_layout_is_refused() {
+	let source = Home::new();
+	let seeded = seeded(&source);
+	let scratch = scratch();
+	let archive = exported(&source, &seeded.space_id, &scratch);
+	let foreign = extended(&archive, &scratch, |builder| {
+		let token = b"a token the layout does not know";
+		let mut header = tar::Header::new_gnu();
+		header.set_entry_type(tar::EntryType::Regular);
+		header.set_size(token.len() as u64);
+		header.set_mode(0o600);
+		builder
+			.append_data(&mut header, "secrets/token", &token[..])
+			.expect("the entry is written");
+	});
+	let target = Home::new();
+	let files = target.files();
+	let counts = target.table_counts();
+
+	let refused = target
+		.call("space_import", json!({ "path": foreign.to_string_lossy() }))
+		.expect_err("an archive holding a foreign path is refused");
+
+	assert_eq!(
+		refused,
+		json!({ "kind": "unreadableArchive", "detail": "the archive holds a path outside its layout" })
+	);
+	assert_eq!(target.files(), files);
+	assert_eq!(target.table_counts(), counts);
 	let _ = fs::remove_dir_all(scratch);
 }
 
