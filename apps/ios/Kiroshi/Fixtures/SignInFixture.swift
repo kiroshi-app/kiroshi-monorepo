@@ -86,6 +86,8 @@
         case missionThread = "4.2"
         case noMissions = "4.3"
         case missionsHostOffline = "4.4"
+        case settings = "6.1"
+        case signOutAlert = "6.2"
 
         @MainActor static var opened: SignInFixture?
 
@@ -113,7 +115,7 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
-            case .keychain, .seededKeychain:
+            case .keychain, .seededKeychain, .settings, .signOutAlert:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
@@ -133,7 +135,9 @@
         fileprivate var isSignedIn: Bool {
             switch self {
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .space, .spaceMenu,
-                .hostOffline, .missions, .missionThread, .noMissions, .missionsHostOffline:
+                .hostOffline, .missions, .missionThread, .noMissions, .missionsHostOffline,
+                .settings,
+                .signOutAlert:
                 true
             case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
                 .emptyThread,
@@ -163,6 +167,10 @@
                 CloudFixture.sideProjectId
             default: nil
             }
+        }
+
+        var opensSettings: Bool {
+            [.settings, .signOutAlert].contains(self)
         }
 
         var opensOnMissions: Bool {
@@ -238,12 +246,14 @@
             case .tooManyCodes:
                 model.path = [.email, .code]
                 model.sendNewCodeTapped()
+            case .signOutAlert:
+                model.signOutTapped()
             case .opening, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .keychain,
                 .seededKeychain, .space, .spaceMenu, .hostOffline, .conversations,
                 .conversationsLive, .thread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .missions,
-                .missionThread, .noMissions, .missionsHostOffline:
+                .missionThread, .noMissions, .missionsHostOffline, .settings:
                 break
             }
             return model

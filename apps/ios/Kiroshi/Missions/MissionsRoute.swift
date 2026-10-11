@@ -1,5 +1,4 @@
 enum MissionsRoute: Hashable {
-    case settings
     case mission(Mission)
 }
 

@@ -3,38 +3,40 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var model: SignInModel
     let spaces: [Space]
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List {
             Section {
-                LabeledContent("Email") {
-                    Text(model.signedInEmail)
-                        .foregroundStyle(Color.kiroshi(.mutedForeground))
-                }
-                .foregroundStyle(Color.kiroshi(.foreground))
+                AccountRow(email: model.signedInEmail)
+            }
+            .listRowBackground(Color.kiroshi(.card))
+            Section {
                 Button("Sign out", role: .destructive, action: model.signOutTapped)
                     .foregroundStyle(Color.kiroshi(.destructive))
-            } header: {
-                Text("Account")
-                    .textCase(.uppercase)
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
             } footer: {
                 Text("Your spaces stop working on this iPhone until you sign in again.")
                     .foregroundStyle(Color.kiroshi(.mutedForeground))
             }
             .listRowBackground(Color.kiroshi(.card))
-            Section {
-            } footer: {
-                Text(Self.version)
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
-                    .frame(maxWidth: .infinity)
-            }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(22)
+        .contentMargins(.top, 0, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(Color.kiroshi(.background))
+        .safeAreaBar(edge: .bottom) {
+            BrandFooter()
+        }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(role: .close) {
+                    dismiss()
+                }
+            }
+        }
         .alert("Sign out of Kiroshi?", isPresented: $model.isConfirmingSignOut) {
             Button("Cancel", role: .cancel) {}
             Button("Sign out", role: .destructive, action: model.signOut)
@@ -55,6 +57,62 @@ struct SettingsView: View {
             return "\(listed) leave this iPhone until you sign in again."
         }
     }
+}
+
+private struct AccountRow: View {
+    let email: String
+    @ScaledMetric(relativeTo: .title2) private var avatarSide = 56
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        layout {
+            Text(initial)
+                .font(.title2.weight(.medium))
+                .foregroundStyle(Color.kiroshi(.foreground))
+                .frame(width: avatarSide, height: avatarSide)
+                .background(Color.kiroshi(.muted), in: .circle)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Email")
+                    .font(.footnote)
+                    .foregroundStyle(Color.kiroshi(.mutedForeground))
+                Text(email)
+                    .font(.headline)
+                    .foregroundStyle(Color.kiroshi(.foreground))
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+            : AnyLayout(HStackLayout(spacing: 14))
+    }
+
+    private var initial: String {
+        email.first.map { String($0).uppercased() } ?? ""
+    }
+}
+
+private struct BrandFooter: View {
+    @ScaledMetric(relativeTo: .footnote) private var markWidth = 32
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image("Hexagon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: markWidth)
+                .accessibilityHidden(true)
+            Text(Self.version)
+                .font(.footnote)
+                .foregroundStyle(Color.kiroshi(.mutedForeground))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 10)
+        .accessibilityElement(children: .combine)
+    }
 
     private static let version: String = {
         let info = Bundle.main.infoDictionary
@@ -65,17 +123,11 @@ struct SettingsView: View {
 }
 
 #if DEBUG
-    #Preview("5.1 Settings") {
-        NavigationStack {
-            SettingsView(model: .fixture(.spaces), spaces: CloudFixture.artboardSpaces)
-        }
+    #Preview("6.1 Settings · sheet") {
+        SignInRootView(model: .fixture(.settings))
     }
 
-    #Preview("5.2 Sign out · confirmation alert") {
-        @Previewable @State var model = SignInModel.fixture(.spaces)
-        NavigationStack {
-            SettingsView(model: model, spaces: CloudFixture.artboardSpaces)
-        }
-        .onAppear(perform: model.signOutTapped)
+    #Preview("6.2 Sign out · confirmation alert") {
+        SignInRootView(model: .fixture(.signOutAlert))
     }
 #endif
