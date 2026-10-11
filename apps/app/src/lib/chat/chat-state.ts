@@ -416,6 +416,7 @@ function applyEvent(state: ChatState, event: AgentEvent): ChatState {
 		case "turnEnded":
 			return applyTurnEnded(state, event.ended)
 		case "botEvolved":
+		case "botEvolutionFailed":
 			return state
 		case "failed":
 			return applyFailure(state, event.error)

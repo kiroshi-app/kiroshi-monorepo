@@ -236,33 +236,39 @@ impl<R: Runtime> RunSink<R> {
 		let scope = self.scope.clone();
 		let live = self.live.clone();
 		tauri::async_runtime::spawn(async move {
-			for (bundle, evolution) in evolutions(&app, &scope).await {
+			for (bundle, evolved) in evolutions(&app, &scope).await {
 				if !live.holds(&scope) {
 					return;
 				}
-				announce(
-					&app,
-					Some(scope.clone()),
-					AgentEvent::BotEvolved {
-						bundle,
-						commit_id: evolution.commit_id,
-						title: evolution.title,
-					},
-				);
+				if let Some(event) = evolution_announced(bundle, evolved) {
+					announce(&app, Some(scope.clone()), event);
+				}
 			}
 		});
+	}
+}
+
+fn evolution_announced(bundle: EvolvedBundle, evolved: bundles::Evolved) -> Option<AgentEvent> {
+	match evolved {
+		bundles::Evolved::Unchanged => None,
+		bundles::Evolved::Recorded(evolution) => Some(AgentEvent::BotEvolved {
+			bundle,
+			commit_id: evolution.commit_id,
+			title: evolution.title,
+		}),
+		bundles::Evolved::Failed(error) => {
+			Some(AgentEvent::BotEvolutionFailed { bundle, detail: error.message().to_owned() })
+		}
 	}
 }
 
 async fn evolutions<R: Runtime>(
 	app: &AppHandle<R>,
 	scope: &RuntimeScope,
-) -> Vec<(EvolvedBundle, bundles::Evolution)> {
+) -> Vec<(EvolvedBundle, bundles::Evolved)> {
 	let mut announced = Vec::new();
-	if let Some(evolution) =
-		bundles::user::laid_down(app).and_then(|path| bundles::user::evolve(&path))
-	{
-		announced.push((EvolvedBundle::User, evolution));
+	if let Some(path) = bundles::user::laid_down(app) {
+		announced.push((EvolvedBundle::User, bundles::user::evolve(&path)));
 	}
 	let Some(database) = bot_database(app) else {
 		return announced;
@@ -273,19 +279,18 @@ async fn evolutions<R: Runtime>(
 	if let Ok(space_id) =
 		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
 	{
-		if let Some(evolution) =
-			bundles::space::laid_down(app, &space_id).and_then(|path| bundles::space::evolve(&path))
-		{
-			announced.push((EvolvedBundle::Space, evolution));
+		if let Some(path) = bundles::space::laid_down(app, &space_id) {
+			announced.push((EvolvedBundle::Space, bundles::space::evolve(&path)));
 		}
 	}
 	let Some(root) = bundles::root(app) else {
 		return announced;
 	};
-	if let Some(evolution) = bundles::evolve(&root, &bot) {
+	let evolved = bundles::evolve(&root, &bot);
+	if matches!(evolved, bundles::Evolved::Recorded(_)) {
 		reconcile_bot(database, &root, &bot).await;
-		announced.push((EvolvedBundle::Bot, evolution));
 	}
+	announced.push((EvolvedBundle::Bot, evolved));
 	announced
 }
 
@@ -1033,6 +1038,40 @@ pub(crate) fn a_host_wide_announce<R: Runtime>(app: &AppHandle<R>, event: AgentE
 mod tests {
 	use super::*;
 	use crate::db::repositories::runtime_context::RuntimeSessionStatus;
+
+	#[test]
+	fn a_bundle_git_refused_is_announced_as_its_own_failure_and_not_as_a_failed_turn() {
+		let announced = evolution_announced(
+			EvolvedBundle::Space,
+			bundles::Evolved::Failed(git2::Error::from_str("the objects are read-only")),
+		);
+
+		assert_eq!(
+			announced,
+			Some(AgentEvent::BotEvolutionFailed {
+				bundle: EvolvedBundle::Space,
+				detail: "the objects are read-only".to_owned(),
+			})
+		);
+	}
+
+	#[test]
+	fn a_bundle_left_alone_announces_nothing_and_a_recorded_one_announces_its_commit() {
+		assert_eq!(evolution_announced(EvolvedBundle::Bot, bundles::Evolved::Unchanged), None);
+		let recorded = bundles::Evolved::Recorded(bundles::Evolution {
+			commit_id: "abc".to_owned(),
+			title: "Bean learned about figs".to_owned(),
+		});
+
+		assert_eq!(
+			evolution_announced(EvolvedBundle::User, recorded),
+			Some(AgentEvent::BotEvolved {
+				bundle: EvolvedBundle::User,
+				commit_id: "abc".to_owned(),
+				title: "Bean learned about figs".to_owned(),
+			})
+		);
+	}
 
 	fn a_source(name: &str, value: &str) -> Values {
 		Values::from([(name.to_owned(), value.to_owned())])
