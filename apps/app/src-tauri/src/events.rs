@@ -67,6 +67,7 @@ declared! {
 	SIGN_IN_STARTED: agent::contract::SignInStarted = agent::sign_in::SIGN_IN_STARTED_CHANNEL,
 	APPLICATION_INSTALLED: applications::contract::ApplicationInstalled =
 		applications::contract::INSTALLED_EVENT,
+	APPLICATION_DIRECTORY_REFRESHED: () = applications::contract::DIRECTORY_REFRESHED_EVENT,
 	COMPANION_CREATED: companions::contract::CompanionCreated = companions::contract::CREATED_EVENT,
 	COMPANION_UPDATED: companions::contract::CompanionUpdated = companions::contract::UPDATED_EVENT,
 	COMPANION_DELETED: companions::contract::CompanionDeleted = companions::contract::DELETED_EVENT,

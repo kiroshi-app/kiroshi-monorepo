@@ -333,6 +333,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	),
 	(crate::agent::sign_in::SIGN_IN_STARTED_CHANNEL, Audience::HostOnly),
 	(crate::applications::contract::INSTALLED_EVENT, IN_THE_CONVERSATION),
+	(crate::applications::contract::DIRECTORY_REFRESHED_EVENT, Audience::HostOnly),
 	(crate::companions::contract::CREATED_EVENT, Audience::Scoped(child(Bot, "/id"))),
 	(crate::companions::contract::DELETED_EVENT, IN_THE_SPACE),
 	(crate::companions::contract::SEED_REFUSED_EVENT, Audience::HostOnly),
