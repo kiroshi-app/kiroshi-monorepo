@@ -232,6 +232,7 @@
         }
 
         static let spaceId = "space-studio"
+        static let launchPlanId = "group-launch"
 
         static let picture: String = {
             let side = CGSize(width: 192, height: 192)
@@ -336,6 +337,7 @@
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
 
         private let listed: AsyncStream<Void>.Continuation
+        private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
 
         init(script: FixtureHost.Script) {
@@ -345,11 +347,14 @@
             self.inboundContinuation = inboundContinuation
             let (listing, listed) = AsyncStream.makeStream(of: Void.self)
             self.listed = listed
+            let (launchPlanOpening, launchPlanOpened) = AsyncStream.makeStream(of: Void.self)
+            self.launchPlanOpened = launchPlanOpened
             playingGroupChanges =
                 script.playsGroupChanges
                 ? Task {
                     for await _ in listing {
-                        await Self.playGroupChanges(into: inboundContinuation)
+                        await Self.playGroupChanges(
+                            into: inboundContinuation, once: launchPlanOpening)
                         return
                     }
                 } : nil
@@ -367,6 +372,12 @@
             else { return }
             let args = call["args"] as? [String: Any] ?? [:]
             answer(id, command, args)
+            if command == "conversation_message_page",
+                args["conversationId"] as? String == FixtureHost.launchPlanId,
+                args["limit"] as? Int != 1
+            {
+                launchPlanOpened.yield()
+            }
             guard command == "conversation_message_page", let leaving = script.hostLeavesAfter,
                 await pages.next() == script.companions.count + script.groups.count
             else { return }
@@ -392,6 +403,7 @@
         func close() {
             playingGroupChanges?.cancel()
             listed.finish()
+            launchPlanOpened.finish()
             push(.close(1000))
         }
 
@@ -454,28 +466,35 @@
         }
 
         private static func playGroupChanges(
-            into inbound: AsyncStream<Inbound>.Continuation
+            into inbound: AsyncStream<Inbound>.Continuation, once opening: AsyncStream<Void>
         ) async {
             let launchPlan = FixtureHost.Group(
-                id: "group-launch", title: "Launch plan",
+                id: FixtureHost.launchPlanId, title: "Launch plan",
                 members: [
                     Companion(id: "juniper-6", name: "Juniper", tint: .green),
                     Companion(id: "pico-6", name: "Pico", tint: .orange),
                 ],
                 createdAt: Date.now.milliseconds + 3000)
-            let frames = [
-                FixtureHost.groupEvent("conversation://created", launchPlan),
+            guard await pause() else { return }
+            inbound.yield(.frame(FixtureHost.groupEvent("conversation://created", launchPlan)))
+            for await _ in opening { break }
+            let changes = [
                 FixtureHost.groupEvent(
                     "conversation://updated", launchPlan.renamed("Launch checklist")),
                 FixtureHost.groupDeleted(launchPlan),
             ]
-            for frame in frames {
-                do {
-                    try await ContinuousClock().sleep(for: .seconds(3))
-                } catch {
-                    return
-                }
+            for frame in changes {
+                guard await pause() else { return }
                 inbound.yield(.frame(frame))
+            }
+        }
+
+        private static func pause() async -> Bool {
+            do {
+                try await ContinuousClock().sleep(for: .seconds(3))
+                return true
+            } catch {
+                return false
             }
         }
 

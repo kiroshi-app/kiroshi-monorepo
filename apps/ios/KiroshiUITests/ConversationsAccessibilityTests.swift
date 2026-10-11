@@ -148,9 +148,11 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
     func testAnOpenGroupFollowsItsRenameThenGoesBackToTheListWhenDeleted() {
         let app = launch("conversations-live")
-        let launchPlan = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Launch plan'"))
-            .firstMatch
+        let launchPlan = row("Launch plan", in: app)
         XCTAssertTrue(launchPlan.waitForExistence(timeout: 15))
+        let isHittable = expectation(
+            for: NSPredicate(format: "isHittable == true"), evaluatedWith: launchPlan)
+        wait(for: [isHittable], timeout: 5)
 
         launchPlan.tap()
 

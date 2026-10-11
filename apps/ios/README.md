@@ -40,7 +40,7 @@ Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 2.6
 ```
 
-The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan), a `conversation://updated` renaming it Launch checklist, and a `conversation://deleted`, three seconds apart:
+The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations-live
