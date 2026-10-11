@@ -4,12 +4,20 @@ use crate::environment::contract::EnvError;
 
 pub const CHANGED_EVENT: &str = "account://changed";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroshiAccount {
 	pub id: String,
 	pub email: String,
 	pub created_at: String,
+	pub plan: Option<AccountPlan>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum AccountPlan {
+	Free,
+	Pro,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
@@ -76,6 +84,7 @@ mod tests {
 			id: "u1".to_owned(),
 			email: "steve@example.com".to_owned(),
 			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			plan: Some(AccountPlan::Pro),
 		});
 
 		assert_eq!(
@@ -84,9 +93,22 @@ mod tests {
 				"kind": "signedIn",
 				"id": "u1",
 				"email": "steve@example.com",
-				"createdAt": "2026-10-01T00:00:00.000Z"
+				"createdAt": "2026-10-01T00:00:00.000Z",
+				"plan": "pro"
 			})
 		);
+	}
+
+	#[test]
+	fn an_account_without_a_plan_crosses_with_a_null_plan() {
+		let state = AccountState::SignedIn(KiroshiAccount {
+			id: "u1".to_owned(),
+			email: "steve@example.com".to_owned(),
+			created_at: "2026-10-01T00:00:00.000Z".to_owned(),
+			plan: None,
+		});
+
+		assert_eq!(to_value(state).expect("the state serializes")["plan"], json!(null));
 	}
 
 	#[test]

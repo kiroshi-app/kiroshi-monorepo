@@ -3,9 +3,9 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use reqwest::{Client, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
-use super::contract::KiroshiAccount;
+use super::contract::{AccountPlan, KiroshiAccount};
 use crate::invitations::contract::Invitation;
 use crate::missions::github::installed_tls_provider;
 
@@ -152,6 +152,29 @@ struct RefusalCode {
 	code: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Me {
+	id: String,
+	email: String,
+	created_at: String,
+	#[serde(default)]
+	plan: Option<Value>,
+}
+
+impl From<Me> for KiroshiAccount {
+	fn from(me: Me) -> Self {
+		let plan = me.plan.and_then(plan_read);
+		Self { id: me.id, email: me.email, created_at: me.created_at, plan }
+	}
+}
+
+fn plan_read(named: Value) -> Option<AccountPlan> {
+	serde_json::from_value(named.clone())
+		.inspect_err(|error| eprintln!("the cloud answered plan {named}, read as none: {error}"))
+		.ok()
+}
+
 #[derive(Debug, Clone)]
 pub struct Cloud {
 	base: String,
@@ -204,7 +227,7 @@ impl Cloud {
 			return Err(MeError::Revoked);
 		}
 		let answered = successful(answered).map_err(MeError::Unreachable)?;
-		answered.json::<KiroshiAccount>().await.map_err(|error| {
+		answered.json::<Me>().await.map(KiroshiAccount::from).map_err(|error| {
 			MeError::Unreachable(format!(
 				"the account answered by the cloud did not parse: {error}"
 			))

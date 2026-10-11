@@ -145,7 +145,7 @@ async fn member_removed(
 async fn me() -> Response {
 	answered_json(
 		StatusCode::OK,
-		json!({ "id": "owner", "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z" }),
+		json!({ "id": "owner", "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
 	)
 }
 

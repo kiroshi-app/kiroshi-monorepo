@@ -40,6 +40,7 @@ const SIGNED_IN: AccountState = {
 	id: "account-1",
 	email: EMAIL,
 	createdAt: "2026-10-01T00:00:00Z",
+	plan: "pro",
 }
 
 const COPY = en.settings.account

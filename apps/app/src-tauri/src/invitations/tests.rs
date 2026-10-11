@@ -101,7 +101,7 @@ async fn me(headers: HeaderMap) -> Response {
 	if !is_bearer(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
-	let account = json!({ "id": "u1", "email": "member@example.com", "createdAt": "2026-10-01T00:00:00.000Z" });
+	let account = json!({ "id": "u1", "email": "member@example.com", "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" });
 	answered_json(StatusCode::OK, &account)
 }
 
