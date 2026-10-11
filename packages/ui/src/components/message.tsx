@@ -54,6 +54,8 @@ const DATE_AND_TIME: Intl.DateTimeFormatOptions = {
 	hourCycle: "h23",
 }
 
+export const formatSentDate = (at: number) => formatDateTime(at, DATE_AND_TIME)
+
 const DAY_MS = 86_400_000
 
 const startOfLocalDay = (at: number) => new Date(at).setHours(0, 0, 0, 0)
@@ -175,7 +177,7 @@ export function MessageTime({ at, now }: MessageTimeProps) {
 	useTranslation()
 
 	return (
-		<TooltipHint content={formatDateTime(at, DATE_AND_TIME)}>
+		<TooltipHint content={formatSentDate(at)}>
 			<time
 				data-slot="message-time"
 				dateTime={new Date(at).toISOString()}

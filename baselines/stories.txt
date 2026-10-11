@@ -283,6 +283,7 @@ conversation-message-turn--reported-by-routine
 conversation-message-turn--reported-by-unnamed-trigger
 conversation-message-turn--run
 conversation-message-turn--run-of-three-timed-messages
+conversation-message-turn--run-timed-on-its-last-bubble
 conversation-message-turn--send-time-tooltip
 conversation-message-turn--sent-in-the-future
 conversation-message-turn--sent-just-after-midnight

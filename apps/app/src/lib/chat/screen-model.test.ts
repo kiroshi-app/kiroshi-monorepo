@@ -16,6 +16,7 @@ import {
 	opensNewDay,
 	quotedMessageIdsIn,
 	quotedTargetsIn,
+	type RunPresentation,
 	replyTargetOfReference,
 	runPresentationsOf,
 	sidebarActivityFor,
@@ -358,6 +359,29 @@ describe("day changes in Tokyo", () => {
 		])
 		expect(daySeparatorsIn(runs)).toBe(1)
 		expect(opensNewDay(runs, 1)).toBe(true)
+	})
+
+	it("keeps one time line on each side of local midnight", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({ id: "local-1", createdAt: TOKYO_MIDNIGHT - 2 * A_MINUTE }),
+				prompt({ id: "local-2", createdAt: TOKYO_MIDNIGHT - A_MINUTE }),
+				prompt({ id: "local-3", createdAt: TOKYO_MIDNIGHT + A_MINUTE }),
+			]),
+		)
+		const presentations = runPresentationsOf({
+			runs,
+			workingBotIds: [],
+			hasSingleBot: true,
+			isWorking: false,
+		})
+
+		expect(daySeparatorsIn(runs)).toBe(1)
+		expect(
+			runs.map(
+				(run, runIndex) => run[presentations[runIndex].timeLineIndex].messageId,
+			),
+		).toEqual(["local-2", "local-3"])
 	})
 
 	it("opens no new day between two messages of the same local day across UTC midnight", () => {
@@ -831,6 +855,75 @@ describe("runPresentationsOf", () => {
 		expect(presentations.map((run) => run.isMarked)).toEqual([true, false])
 		expect(presentations.map((run) => run.avatarIndex)).toEqual([-1, -1])
 		expect(presentations.some((run) => run.hasBareTables)).toBe(false)
+	})
+
+	describe("time line", () => {
+		const said = (id: string, authorBotId: string, minute: number) =>
+			message({
+				id,
+				authorBotId,
+				content: "Said.",
+				completion: "complete",
+				createdAt: minute * 60_000,
+			})
+		const timeLinesOf = (
+			runs: TranscriptRow[][],
+			presentations: RunPresentation[],
+		) =>
+			runs.map((run, runIndex) =>
+				run.map((_, index) => index === presentations[runIndex].timeLineIndex),
+			)
+		const timeLinesIn = (rows: TranscriptRow[], hasSingleBot: boolean) => {
+			const runs = toRuns(rows)
+			return timeLinesOf(
+				runs,
+				runPresentationsOf({
+					runs,
+					workingBotIds: [],
+					hasSingleBot,
+					isWorking: false,
+				}),
+			)
+		}
+
+		it.each([true, false])(
+			"puts one time line on the third of three same-author messages (single companion: %s)",
+			(hasSingleBot) => {
+				const rows = toTranscriptRows([
+					said("a", "bot-1", 0),
+					said("b", "bot-1", 1),
+					said("c", "bot-1", 2),
+				])
+
+				expect(timeLinesIn(rows, hasSingleBot)).toEqual([[false, false, true]])
+			},
+		)
+
+		it("puts one time line under each run of two authors", () => {
+			const rows = toTranscriptRows([
+				said("a", "bot-1", 0),
+				said("b", "bot-2", 1),
+			])
+
+			expect(timeLinesIn(rows, false)).toEqual([[true], [true]])
+		})
+
+		it("puts one time line on the last prompt of a user run", () => {
+			const rows = toTranscriptRows([
+				prompt({ id: "local-1", createdAt: 0 }),
+				prompt({ id: "local-2", createdAt: 60_000 }),
+			])
+
+			expect(timeLinesIn(rows, true)).toEqual([[false, true]])
+		})
+
+		it("keeps one time line in the newest run while the companion works", () => {
+			expect(timeLinesOf(soloRuns, solo(true))).toEqual([
+				[false, true],
+				[true],
+				[true],
+			])
+		})
 	})
 
 	it("returns nothing for an empty transcript", () => {

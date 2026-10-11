@@ -653,6 +653,7 @@ const ThreadRun = ({
 					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
 					cause={causes.get(row.turnId)}
+					hasTimeLine={index === presentation.timeLineIndex}
 					key={bubble}
 					now={now}
 					onPin={pins.toggle}

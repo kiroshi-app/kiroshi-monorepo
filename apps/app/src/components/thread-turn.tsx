@@ -24,6 +24,7 @@ import type { RefusedMessage } from "@/lib/conversations/conversation-controller
 
 type ThreadTurnProps = {
 	row: TranscriptRow
+	hasTimeLine: boolean
 	anchor: string
 	state: TurnState
 	run?: TurnRun
@@ -45,6 +46,7 @@ type ThreadTurnProps = {
 
 export const ThreadTurn = memo(function ThreadTurn({
 	row,
+	hasTimeLine,
 	anchor,
 	state,
 	run,
@@ -87,6 +89,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<PersonTurn
 				copyText={text}
+				hasTimeLine={hasTimeLine}
 				messageId={anchor}
 				name={person}
 				now={now}
@@ -106,6 +109,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<UserTurn
 				copyText={text}
+				hasTimeLine={hasTimeLine}
 				messageId={anchor}
 				now={now}
 				onPin={pin}
@@ -132,6 +136,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			carriesMark={carriesMark}
 			copyText={text}
 			fills={asking !== undefined}
+			hasTimeLine={hasTimeLine}
 			messageId={anchor}
 			now={now}
 			onPin={pin}
