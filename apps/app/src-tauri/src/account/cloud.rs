@@ -5,7 +5,7 @@ use reqwest::{Client, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::contract::{AccountPlan, KiroshiAccount};
+use super::contract::KiroshiAccount;
 use crate::invitations::contract::Invitation;
 use crate::missions::github::installed_tls_provider;
 
@@ -164,7 +164,7 @@ struct Me {
 
 impl From<Me> for KiroshiAccount {
 	fn from(me: Me) -> Self {
-		let plan = me.plan.and_then(|named| serde_json::from_value::<AccountPlan>(named).ok());
+		let plan = me.plan.and_then(|named| serde_json::from_value(named).ok());
 		Self { id: me.id, email: me.email, created_at: me.created_at, plan }
 	}
 }
