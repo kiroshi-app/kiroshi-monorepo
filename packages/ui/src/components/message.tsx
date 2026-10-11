@@ -138,7 +138,7 @@ export function MessageAuthor({
 		>
 			<span
 				className={cn(
-					"max-w-48 truncate font-semibold text-sm leading-5",
+					"max-w-48 truncate font-medium text-compact leading-5",
 					author.isDeleted ? "text-muted-foreground" : "text-foreground",
 				)}
 			>

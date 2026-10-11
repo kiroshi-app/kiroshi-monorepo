@@ -1782,8 +1782,8 @@ const expectRowAnatomy = async (article: HTMLElement) => {
 	await expect(name.getBoundingClientRect().left).toBe(
 		bubble.getBoundingClientRect().left + 14,
 	)
-	await expect(getComputedStyle(name).fontSize).toBe("14px")
-	await expect(getComputedStyle(name).fontWeight).toBe("600")
+	await expect(getComputedStyle(name).fontSize).toBe("13px")
+	await expect(getComputedStyle(name).fontWeight).toBe("500")
 	await expect(getComputedStyle(bubble).borderTopLeftRadius).toBe("18px")
 }
 
