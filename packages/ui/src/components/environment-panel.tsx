@@ -29,6 +29,7 @@ type EnvironmentEntry = {
 	definedIn: EnvironmentScope
 	servedFrom: EnvironmentScope
 	overrides?: EnvironmentScope
+	isUnset?: boolean
 }
 
 const ENVIRONMENT_NAME = /^[A-Z_][A-Z0-9_]*$/
@@ -163,8 +164,12 @@ const EnvironmentRow = ({
 }: EnvironmentRowProps) => {
 	const { t } = useTranslation("bots")
 	const isOwned = entry.definedIn === scope
-	const overriddenBy = isOwned && entry.servedFrom !== scope
-	const overriding = entry.servedFrom === scope ? entry.overrides : undefined
+	const isServedElsewhere = entry.servedFrom !== entry.definedIn
+	const hasNoValue = entry.isUnset && !isServedElsewhere
+	const overriddenBy = !entry.isUnset && isOwned && entry.servedFrom !== scope
+	const overriding =
+		!entry.isUnset && entry.servedFrom === scope ? entry.overrides : undefined
+	const defined = t(`secrets.scope.${entry.definedIn}`)
 
 	return (
 		<li className="flex items-center gap-3 rounded-xl border border-border py-2 pr-2 pl-3">
@@ -173,12 +178,25 @@ const EnvironmentRow = ({
 					{entry.name}
 				</span>
 				<span className="truncate text-muted-foreground text-xs">
-					{t("secrets.row.scopes", {
-						defined: t(`secrets.scope.${entry.definedIn}`),
-						served: t(`secrets.scope.${entry.servedFrom}`),
-					})}
+					{hasNoValue
+						? t("secrets.row.noValue", { defined })
+						: t("secrets.row.scopes", {
+								defined,
+								served: t(`secrets.scope.${entry.servedFrom}`),
+							})}
 				</span>
 			</span>
+
+			{hasNoValue ? (
+				<span className={cn(SETTINGS_TAG_CLASS, "text-foreground")}>
+					{t("secrets.row.needsValue")}
+				</span>
+			) : null}
+			{entry.isUnset && isServedElsewhere ? (
+				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>
+					{t("secrets.row.unsetHere")}
+				</span>
+			) : null}
 
 			{overriddenBy ? (
 				<span className={cn(SETTINGS_TAG_CLASS, "text-muted-foreground")}>

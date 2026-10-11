@@ -10,6 +10,8 @@ import {
 	LONG_ENVIRONMENT_ENTRY,
 	SERVER_ENVIRONMENT,
 	SPACE_ENVIRONMENT,
+	UNSET_NEEDS_VALUE_ENTRY,
+	UNSET_SERVED_ELSEWHERE_ENTRY,
 } from "@workspace/ui/components/environment.fixtures"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 
@@ -162,6 +164,60 @@ export const UnreadableWithEntries = meta.story({
 		await expect(canvas.getByText("BOT_SEED")).toBeVisible()
 		await expect(
 			canvas.getByRole("button", { name: "Add secret" }),
+		).toBeVisible()
+	},
+})
+
+export const UnsetNeedsValue = meta.story({
+	args: { entries: [UNSET_NEEDS_VALUE_ENTRY, ...BOT_ENVIRONMENT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A name the companion declares without a value, and no wider scope holding one either: nothing serves it. Check that the row says so in the foreground, above the muted scope marks, that the line under the name reads `No value` where a serving scope would be, and that `Replace` stays the way to give it one. The name is long on purpose: it truncates and leaves the mark in place.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const name = canvas.getByText(UNSET_NEEDS_VALUE_ENTRY.name)
+		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		await expect(canvas.getByText("Needs a value")).toBeVisible()
+		await expect(
+			canvas.getByText("Defined in Companion · No value"),
+		).toBeVisible()
+		await expect(canvas.queryByText("Unset here")).not.toBeInTheDocument()
+		const row = name.closest("li")
+		await expect(row).not.toBeNull()
+		await expect(row).not.toHaveTextContent("Overrides Space")
+		await expect(
+			canvas.getByRole("button", {
+				name: `Replace the value of ${UNSET_NEEDS_VALUE_ENTRY.name}`,
+			}),
+		).toBeVisible()
+	},
+})
+
+export const UnsetServedElsewhere = meta.story({
+	args: { entries: [UNSET_SERVED_ELSEWHERE_ENTRY, ...BOT_ENVIRONMENT] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A name the companion declares without a value while the space holds one. Reach for this over `UnsetNeedsValue` to check the calm reading: the mark stays muted like the scope marks, the line under the name still names the space serving it, and the row is not marked `Overridden by Space`, since an empty declaration overrides nothing.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.getByText("Unset here")).toBeVisible()
+		await expect(
+			canvas.getByText("Defined in Companion · Served from Space"),
+		).toBeVisible()
+		await expect(canvas.queryByText("Needs a value")).not.toBeInTheDocument()
+		await expect(
+			canvas.queryByText("Overridden by Space"),
+		).not.toBeInTheDocument()
+		await expect(
+			canvas.getByRole("button", { name: "Remove MAILER_API_KEY" }),
 		).toBeVisible()
 	},
 })
