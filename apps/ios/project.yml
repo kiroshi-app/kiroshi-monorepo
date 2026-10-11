@@ -46,6 +46,10 @@ targets:
           ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
       testTargets: [KiroshiTests, KiroshiUITests]
+      testPlans:
+        - path: Kiroshi.xctestplan
+          defaultPlan: true
+        - path: KiroshiUnit.xctestplan
   KiroshiTests:
     type: bundle.unit-test
     platform: iOS
