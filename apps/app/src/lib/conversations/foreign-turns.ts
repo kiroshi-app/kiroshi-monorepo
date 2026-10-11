@@ -12,6 +12,10 @@ import type {
 } from "../agent/contract"
 import { isTurnBusy } from "../chat/chat-state"
 import {
+	questionMessageIdOf,
+	questionMessageText,
+} from "../chat/question-message"
+import {
 	ENDING_FOR,
 	ENDING_FOR_OUTCOME,
 	isWorthKeeping,
@@ -117,8 +121,25 @@ export const createForeignTurns = (
 		reviseSpeaker(turn, (speaker) => ({ ...speaker, permission }))
 	}
 
+	const writeQuestionRow = (scope: RuntimeScope, question: QuestionRequest) =>
+		transcript.append({
+			id: questionMessageIdOf(question.id),
+			conversationId: scope.conversationId,
+			turnId: keyOf(scope),
+			role: "assistant",
+			content: questionMessageText(question),
+			completion: "complete",
+			createdAt: now(),
+			authorBotId: scope.botId,
+			authorAccountId: null,
+			authorName: null,
+			repliedToMessageId: null,
+			runtimeSessionId: scope.runtimeSessionId,
+		})
+
 	const askQuestion = (turn: ForeignTurn, question: QuestionRequest) => {
 		openSpeaker(turn)
+		writeQuestionRow(turn.scope, question)
 		reviseSpeaker(turn, (speaker) => ({ ...speaker, question }))
 	}
 
