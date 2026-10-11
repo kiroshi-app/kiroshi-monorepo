@@ -233,11 +233,10 @@ async fn sender_role<R: Runtime>(
 	user_id: &str,
 ) -> Result<SpaceRole, SpaceError> {
 	let database_state = app.state::<DatabaseState>();
-	let role = ready(&database_state)?
+	Ok(ready(&database_state)?
 		.space_hosting()
 		.member_role(shared_space_id.to_owned(), user_id.to_owned())
-		.await?;
-	Ok(role)
+		.await?)
 }
 
 async fn invoked(
