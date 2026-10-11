@@ -135,4 +135,20 @@ struct ConversationsView: View {
     #Preview("3.8 State · agent working (thread)") {
         SignInRootView(model: .fixture(.workingThread))
     }
+
+    #Preview("Group thread · two companions") {
+        SignInRootView(model: .fixture(.groupThread))
+    }
+
+    #Preview("Group thread · two companions working") {
+        SignInRootView(model: .fixture(.groupWorking))
+    }
+
+    #Preview("Group thread · failure") {
+        SignInRootView(model: .fixture(.groupFailed))
+    }
+
+    #Preview("Group thread · mention picker") {
+        SignInRootView(model: .fixture(.groupMention))
+    }
 #endif

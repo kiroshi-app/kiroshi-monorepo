@@ -8,7 +8,8 @@
         static var opening: Companion.ID?
 
         static var draft: String {
-            UserDefaults.standard.string(forKey: "draft") ?? ""
+            UserDefaults.standard.string(forKey: "draft")
+                ?? (SignInFixture.opened == .groupMention ? "@" : "")
         }
 
         static let juniper = Companion(
@@ -104,6 +105,26 @@
             ],
         ]) { _, home in home }
 
+        static let groupThread: [FixtureHost.Message] = [
+            .init(
+                id: "g-ask", isYours: true, content: "Can you two get 0.42 out today?",
+                daysAgo: 0, hour: 9, minute: 2),
+            .init(
+                id: "g-merged", isYours: false, content: "The changelog is merged.", daysAgo: 0,
+                hour: 9, minute: 4, author: juniper.id),
+            .init(
+                id: "g-tagging", isYours: false, content: "I’m tagging 0.42 next.", daysAgo: 0,
+                hour: 9, minute: 5, author: juniper.id),
+            .init(
+                id: "g-split", isYours: false,
+                content: "I’ll split the onboarding ticket once the tag is out.", daysAgo: 0,
+                hour: 9, minute: 6, author: atlas.id),
+            .init(
+                id: "g-ping", isYours: false,
+                content: "<@\(juniper.id)> ping me when it’s tagged.", daysAgo: 0, hour: 9,
+                minute: 7, author: atlas.id),
+        ]
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 4)
@@ -151,6 +172,19 @@
                 script.refusesCompanions = true
             case .threadFailed:
                 script.refusesThread = true
+            case .groupThread, .groupMention:
+                script.messages[releaseCrew.id] = groupThread
+            case .groupWorking:
+                script.messages[releaseCrew.id] =
+                    groupThread + [
+                        .init(
+                            id: "g-both", isYours: true,
+                            content: "<@\(juniper.id)> <@\(atlas.id)> is the tag out?", daysAgo: 0,
+                            hour: 9, minute: 9)
+                    ]
+                script.workingGroup = (releaseCrew.id, [juniper.id, atlas.id])
+            case .groupFailed:
+                script.refusesThread = true
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
@@ -164,6 +198,7 @@
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
             case .thread, .emptyThread, .workingThread, .threadFailed: juniper.id
+            case .groupThread, .groupWorking, .groupFailed, .groupMention: releaseCrew.id
             default: nil
             }
         }
@@ -228,6 +263,7 @@
             var playsGroupChanges = false
             var messages: [Companion.ID: [Message]] = [:]
             var workingCompanion: Companion.ID?
+            var workingGroup: (id: String, companions: [Companion.ID])?
             var workingActivities: [String] = []
             var hostLeavesAfter: Duration?
         }
@@ -264,14 +300,17 @@
             "chat-\(companionId)"
         }
 
-        static func scope(_ conversationId: String) -> String {
-            let companionId = conversationId.replacingOccurrences(of: "chat-", with: "")
+        static func scope(_ conversationId: String, by companionId: Companion.ID? = nil) -> String {
+            let companionId =
+                companionId ?? conversationId.replacingOccurrences(of: "chat-", with: "")
             return
                 #"{"conversationId":"\#(conversationId)","botId":"\#(companionId)","runtimeSessionId":"session-1","epoch":1}"#
         }
 
-        static func agentEvent(_ conversationId: String, _ event: String) -> String {
-            #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId)),"event":\#(event),"turn":null}}}"#
+        static func agentEvent(
+            _ conversationId: String, _ event: String, by companionId: Companion.ID? = nil
+        ) -> String {
+            #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId, by: companionId)),"event":\#(event),"turn":null}}}"#
         }
 
         static func activity(_ id: String, _ title: String, _ status: String) -> String {
@@ -456,7 +495,15 @@
             case "conversation_send_turn":
                 guard let message = args["message"] as? [String: Any] else { return }
                 reply(id, "1")
-                playTurn(after: message)
+                let conversationId = message["conversationId"] as? String
+                let groups = script.groups + created.withLock { $0 }
+                if let group = groups.first(where: { $0.id == conversationId }) {
+                    let summoned = args["summoned"] as? [String] ?? []
+                    let lead = group.members.prefix(1).map(\.id)
+                    playGroupTurn(after: message, by: summoned.isEmpty ? lead : summoned)
+                } else {
+                    playTurn(after: message)
+                }
             case "agent_cancel_turn":
                 reply(id, "null")
             case "conversation_create":
@@ -524,6 +571,15 @@
                 id,
                 #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":false}"#
             )
+            if let working = script.workingGroup, working.id == conversationId {
+                for companionId in working.companions {
+                    push(
+                        .frame(
+                            FixtureHost.agentEvent(
+                                conversationId, #"{"type":"turnChanged","state":"running"}"#,
+                                by: companionId)))
+                }
+            }
             guard companionId == script.workingCompanion else { return }
             push(
                 .frame(
@@ -538,13 +594,47 @@
             }
         }
 
-        private func playTurn(after sent: [String: Any]) {
+        private func pushStoredEcho(of sent: [String: Any]) {
             let conversationId = sent["conversationId"] as? String ?? ""
-            let event = { (event: String) in FixtureHost.agentEvent(conversationId, event) }
             push(
                 .frame(
                     #"{"event":{"event":"conversation://message-stored","payload":\#(FixtureHost.messageJSON(id: sent["id"] as? String ?? "", conversationId: conversationId, seq: 99, role: "user", content: sent["content"] as? String ?? "", createdAt: sent["createdAt"] as? Int ?? 0))}}"#
                 ))
+        }
+
+        private func playGroupTurn(after sent: [String: Any], by summoned: [Companion.ID]) {
+            let conversationId = sent["conversationId"] as? String ?? ""
+            pushStoredEcho(of: sent)
+            for companionId in summoned {
+                push(
+                    .frame(
+                        FixtureHost.agentEvent(
+                            conversationId, #"{"type":"turnChanged","state":"running"}"#,
+                            by: companionId), after: .milliseconds(300)))
+            }
+            for companionId in summoned {
+                let event = { (event: String) in
+                    FixtureHost.agentEvent(conversationId, event, by: companionId)
+                }
+                push(
+                    .frame(
+                        event(
+                            FixtureHost.chatMessage(
+                                "live-\(companionId)", "On it.", "messageCompleted")),
+                        after: .milliseconds(1500)))
+                push(
+                    .frame(
+                        event(
+                            #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#
+                        )))
+                push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
+            }
+        }
+
+        private func playTurn(after sent: [String: Any]) {
+            let conversationId = sent["conversationId"] as? String ?? ""
+            let event = { (event: String) in FixtureHost.agentEvent(conversationId, event) }
+            pushStoredEcho(of: sent)
             push(
                 .frame(
                     event(#"{"type":"turnChanged","state":"running"}"#), after: .milliseconds(300)))
