@@ -5,7 +5,7 @@ use reqwest::{Client, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use super::contract::KiroshiAccount;
+use super::contract::{AccountPlan, KiroshiAccount};
 use crate::invitations::contract::Invitation;
 use crate::missions::github::installed_tls_provider;
 
@@ -164,9 +164,15 @@ struct Me {
 
 impl From<Me> for KiroshiAccount {
 	fn from(me: Me) -> Self {
-		let plan = me.plan.and_then(|named| serde_json::from_value(named).ok());
+		let plan = me.plan.and_then(plan_read);
 		Self { id: me.id, email: me.email, created_at: me.created_at, plan }
 	}
+}
+
+fn plan_read(named: Value) -> Option<AccountPlan> {
+	serde_json::from_value(named.clone())
+		.inspect_err(|error| eprintln!("the cloud answered plan {named}, read as none: {error}"))
+		.ok()
 }
 
 #[derive(Debug, Clone)]
