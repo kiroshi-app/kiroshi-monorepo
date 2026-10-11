@@ -181,7 +181,11 @@ const RUN_RADIUS = {
 	last: "rounded-tl-md",
 } satisfies Record<TurnRun, string>
 
+const TURN_ROW_GRID = "grid grid-cols-[auto_minmax(0,1fr)] gap-y-1"
+
 const TURN_GUTTER = "flex w-10 shrink-0 justify-end"
+
+const TURN_AVATAR_GUTTER = cn(TURN_GUTTER, "self-end")
 
 const TURN_GUTTER_TIME =
 	"pt-3.5 text-[11px]/4 text-muted-foreground opacity-0 group-focus-within/message:opacity-100 group-hover/message:opacity-100"
@@ -192,6 +196,8 @@ const PERSON_INITIALS =
 	"grid size-full place-items-center bg-person-avatar font-medium text-foreground text-sm uppercase leading-none"
 
 const opensRun = (run: TurnRun) => run === "single" || run === "first"
+
+const closesRun = (run: TurnRun) => run === "single" || run === "last"
 
 const sentTimeOf = (sentAt?: number, now?: number) =>
 	sentAt === undefined || now === undefined ? null : (
@@ -218,7 +224,11 @@ interface PersonGutterProps {
 }
 
 const PersonGutter = ({ name, image }: PersonGutterProps) => (
-	<span data-slot="message-gutter" aria-hidden="true" className={TURN_GUTTER}>
+	<span
+		data-slot="message-gutter"
+		aria-hidden="true"
+		className={TURN_AVATAR_GUTTER}
+	>
 		<AvatarFrame
 			image={image}
 			shape="round"
@@ -237,6 +247,7 @@ type TurnRowProps = {
 	sentAt?: number
 	avatar: ReactNode
 	head: ReactNode
+	footer?: ReactNode
 	children: ReactNode
 	className?: string
 	"aria-label"?: string
@@ -249,12 +260,14 @@ const TurnRow = ({
 	sentAt,
 	avatar,
 	head,
+	footer,
 	children,
 	className,
 	...labelled
 }: TurnRowProps) => {
 	const anchor = useMessageAnchor(messageId)
 	const opens = opensRun(run)
+	const closes = closesRun(run)
 
 	return (
 		<Message
@@ -262,17 +275,21 @@ const TurnRow = ({
 			{...labelled}
 			{...anchor}
 			className={cn(
+				TURN_ROW_GRID,
 				ROW_BLEEDS_TO_TRANSCRIPT_EDGE,
 				ROW_HIGHLIGHT,
 				RUN_ROW_PADDING[run],
 				className,
 			)}
 		>
-			{opens ? avatar : <TurnGutterTime sentAt={sentAt} />}
-			<MessageContent className="gap-1">
-				{opens ? head : null}
-				{children}
-			</MessageContent>
+			{opens ? (
+				<MessageContent className="col-start-2">{head}</MessageContent>
+			) : null}
+			{closes ? avatar : <TurnGutterTime sentAt={opens ? undefined : sentAt} />}
+			<MessageContent>{children}</MessageContent>
+			{footer ? (
+				<MessageContent className="col-start-2">{footer}</MessageContent>
+			) : null}
 		</Message>
 	)
 }
@@ -491,6 +508,9 @@ function UserTurn({
 			className={className}
 			avatar={<PersonGutter name={name} image={image} />}
 			head={<PersonHead name={name} sentAt={sentAt} now={now} />}
+			footer={
+				footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : undefined
+			}
 		>
 			<MessageBubble variant={queued ? "tint" : "solid"}>
 				<MessageActions
@@ -525,7 +545,6 @@ function UserTurn({
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>
-			{footerKey ? <MessageFooter>{t(footerKey)}</MessageFooter> : null}
 		</TurnRow>
 	)
 }
@@ -645,7 +664,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 					<span
 						data-slot="message-gutter"
 						aria-hidden={control ? undefined : "true"}
-						className={TURN_GUTTER}
+						className={TURN_AVATAR_GUTTER}
 					>
 						{mark ? (
 							<SharedMark markId={markId}>{control ?? mark}</SharedMark>
@@ -664,6 +683,9 @@ function AssistantTurn(props: AssistantTurnProps) {
 				>
 					{sentTimeOf(sentAt, now)}
 				</TurnRunHeader>
+			}
+			footer={
+				shownFooter ? <MessageFooter>{shownFooter}</MessageFooter> : undefined
 			}
 		>
 			<MessageBubble
@@ -685,7 +707,6 @@ function AssistantTurn(props: AssistantTurnProps) {
 					</TurnBody>
 				</MessageActions>
 			</MessageBubble>
-			{shownFooter ? <MessageFooter>{shownFooter}</MessageFooter> : null}
 		</TurnRow>
 	)
 }

@@ -256,6 +256,7 @@ conversation-message-turn--companion-menu-on-gutter
 conversation-message-turn--companion-menu-unanswered
 conversation-message-turn--companion-message
 conversation-message-turn--companion-message-dark
+conversation-message-turn--companion-run-and-single
 conversation-message-turn--companion-select-from-gutter
 conversation-message-turn--companion-select-on-gutter
 conversation-message-turn--companion-select-on-gutter-focused
@@ -278,12 +279,14 @@ conversation-message-turn--pending
 conversation-message-turn--person-in-thread
 conversation-message-turn--person-picture
 conversation-message-turn--person-run
+conversation-message-turn--person-run-and-single
 conversation-message-turn--person-turn-with-time
 conversation-message-turn--picture-beside-blot
 conversation-message-turn--pinned
 conversation-message-turn--quoted
 conversation-message-turn--reader-message
 conversation-message-turn--reader-message-dark
+conversation-message-turn--reader-run-and-single
 conversation-message-turn--reply
 conversation-message-turn--reported-by-long-title
 conversation-message-turn--reported-by-routine

@@ -340,7 +340,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The transcript rows, one anatomy for every speaker. Every row reads from the same left edge: a 40px gutter, then a header line above the bubble on the row that opens a run, and nothing under the bubble but a state line. `sentAt` with `now` writes the send time after the name on that header line, hours and minutes today, Yesterday, then calendar days, with the full date on hover or keyboard focus of the time; a row inside a run shows its own hours and minutes in the gutter while the pointer rests on it, and a row without `sentAt` draws no time at all. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is the companion's bubble, with the companion's avatar in the gutter. The reader is named too: `UserTurn` takes the reader's `name` and draws their initials in a round avatar, as `PersonTurn` does for another person, while a companion keeps its hexagon. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass `identity` on the row that opens the run — a row with no `identity` falls back to the `author` it opens its run with, and both draw the same companion avatar on that head row. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. The gutter avatar never stops anything: the stop of a working companion rides its working row (`ActivityIndicator`) under the bubbles, so a wave is still ended one seat at a time and the avatar above stays the same companion control whether that companion is working or idle. `footer` puts a line of the screen's own under the bubble, in the very slot a completion label uses, so a row never carries two footers and the label wins whenever the state produces one. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The transcript rows, one anatomy for every speaker. Every row reads from the same left edge: a 40px gutter, then a header line above the bubble on the row that opens a run, and nothing under the bubble but a state line. The avatar sits in the gutter of the row that closes a run, its bottom edge level with that row's bubble, so a single row carries both the header above its bubble and the avatar beside it. `sentAt` with `now` writes the send time after the name on that header line, hours and minutes today, Yesterday, then calendar days, with the full date on hover or keyboard focus of the time; a row inside a run shows its own hours and minutes in the gutter while the pointer rests on it, and a row without `sentAt` draws no time at all. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is the companion's bubble, with the companion's avatar in the gutter. The reader is named too: `UserTurn` takes the reader's `name` and draws their initials in a round avatar, as `PersonTurn` does for another person, while a companion keeps its hexagon. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass `identity` on the rows that open and close the run — a row with no `identity` falls back to its `author`, the opening row names it in the header and the closing row draws the same companion avatar beside its bubble. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. The gutter avatar never stops anything: the stop of a working companion rides its working row (`ActivityIndicator`) under the bubbles, so a wave is still ended one seat at a time and the avatar above stays the same companion control whether that companion is working or idle. `footer` puts a line of the screen's own under the bubble, in the very slot a completion label uses, so a row never carries two footers and the label wins whenever the state produces one. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -383,12 +383,8 @@ export const Run = meta.story({
 				<UserTurn copyText="Keep it short.">Keep it short.</UserTurn>
 			</TurnGroup>
 			<TurnGroup>
-				{RUN.map((paragraph, index) => (
-					<AssistantTurn
-						key={paragraph}
-						identity={index === 0 ? BOT : undefined}
-						copyText={paragraph}
-					>
+				{RUN.map((paragraph) => (
+					<AssistantTurn key={paragraph} identity={BOT} copyText={paragraph}>
 						{paragraph}
 					</AssistantTurn>
 				))}
@@ -399,13 +395,16 @@ export const Run = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing, and the corner facing a neighbour pulled in to less than half the corner facing away, which is what makes the rows read as one bubble rather than three — and that a single avatar marks it from the head row while the rows under it keep the gutter empty. Every bubble carries its own copy, and copying one takes that paragraph alone: there is no action anywhere for the answer entire, because the reader points at the part they want. " +
+					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing, and the corner facing a neighbour pulled in to less than half the corner facing away, which is what makes the rows read as one bubble rather than three — and that a single avatar marks it from the last row while the rows above it keep it out of their gutter. Every bubble carries its own copy, and copying one takes that paragraph alone: there is no action anywhere for the answer entire, because the reader points at the part they want. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expect(canvas.getAllByLabelText("assistant message")).toHaveLength(3)
+		const answers = canvas.getAllByLabelText("assistant message")
+		await expect(answers).toHaveLength(3)
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(1)
+		await expect(botIdentityAvatars(answers[2])).toHaveLength(1)
 		await expect(canvas.getAllByRole("button", { name: "Copy" })).toHaveLength(
 			5,
 		)
@@ -501,7 +500,7 @@ export const PersonRun = meta.story({
 		await expect(turns).toHaveLength(3)
 		await expect(canvas.getAllByText(PERSON)).toHaveLength(1)
 		await expect(slotsIn(canvasElement, "user-avatar")).toHaveLength(1)
-		await expectPersonTurn(turns[0])
+		await expectPersonTurn(turns[2])
 
 		const middle = slotIn(turns[1], "message-bubble-content")
 		const corners = getComputedStyle(middle)
@@ -553,7 +552,7 @@ export const MarkAcrossRuns = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its head row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row, which appears at rest, while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
+					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its closing row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row, which appears at rest, while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -638,6 +637,7 @@ export const Table = meta.story({
 				<AssistantTurn
 					bare
 					copyText={TABLE}
+					identity={BOT}
 					sentAt={sentOn(10, 9, 22)}
 					now={READ_ON}
 				>
@@ -650,7 +650,7 @@ export const Table = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the row a table lands in. A table frames and fills itself, so the row is `bare`: no bubble behind it, no padding around it, and one box around the grid instead of two. Check that the sentence above it keeps its bubble and opens the run with the avatar, that the table sits flush against the gutter, that the row's copy stays beside the frame rather than out at the edge of the transcript, and that the table row keeps its own send time in the gutter, shown on hover. " +
+					"Reach for this for the row a table lands in. A table frames and fills itself, so the row is `bare`: no bubble behind it, no padding around it, and one box around the grid instead of two. Check that the sentence above it keeps its bubble and opens the run with the header, that the table sits flush against the gutter and closes the run with the avatar at its foot, and that the row's copy stays beside the frame rather than out at the edge of the transcript. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -665,7 +665,8 @@ export const Table = meta.story({
 		await expect(bubbleStyleOf(table).paddingLeft).toBe("0px")
 		const [, tableRow] = canvas.getAllByLabelText("assistant message")
 		await expect(slotsIn(canvasElement, "message-time-line")).toHaveLength(0)
-		await expect(timesIn(slotIn(tableRow, "message-gutter"))).toHaveLength(1)
+		await expect(timesIn(slotIn(tableRow, "message-gutter"))).toHaveLength(0)
+		await expect(botIdentityAvatars(tableRow)).toHaveLength(1)
 	},
 })
 
@@ -932,7 +933,7 @@ export const Authored = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name and the avatar are written once, on the row that opens it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `RosterProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this. " +
+					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name and the avatar are written once, the name on the row that opens it and the avatar on the row that closes it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `RosterProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -973,7 +974,7 @@ export const Authored = meta.story({
 			'[data-from="assistant"] [data-slot="message-author"]',
 		)
 		const [bubble] = canvasElement.querySelectorAll<HTMLElement>(
-			'[data-slot="message-content"]:has([data-slot="message-author"]) [data-slot="message-bubble-content"]',
+			'[data-slot="message"]:has([data-slot="message-author"]) [data-slot="message-bubble-content"]',
 		)
 		await expect(firstCharacterLeft(name)).toBeCloseTo(
 			firstCharacterLeft(bubble),
@@ -1431,7 +1432,7 @@ const deleteCompanion = fn()
 
 const COMPANION_MENU_LABEL = `Actions for ${BOT.name}`
 
-const HOSTLESS_GUTTER_PLACEMENT = { inlineStart: 24, blockStart: 8 }
+const HOSTLESS_GUTTER_PLACEMENT = { inlineStart: 24, blockEndToBubble: 0 }
 
 const companionMenuFor = (companionId: string) =>
 	companionId === BOT.id ? (
@@ -1455,13 +1456,14 @@ const GutterTurn = ({ identity }: { identity: RosterBot }) => (
 )
 
 const gutterPlacement = (gutter: HTMLElement) => {
-	const row = gutter.closest('[data-slot="message"]')
+	const row = gutter.closest<HTMLElement>('[data-slot="message"]')
 	if (!row) throw new globalThis.Error("This gutter sits in no row")
 	const placed = gutter.getBoundingClientRect()
 	const framed = row.getBoundingClientRect()
+	const bubble = slotIn(row, "message-bubble-content").getBoundingClientRect()
 	return {
 		inlineStart: placed.left - framed.left,
-		blockStart: placed.top - framed.top,
+		blockEndToBubble: bubble.bottom - placed.bottom,
 	}
 }
 
@@ -1771,7 +1773,8 @@ const expectRowAnatomy = async (article: HTMLElement) => {
 
 	await expect(gutter.left - row.left).toBe(24)
 	await expect(gutter.width).toBe(TURN_AVATAR_SIZE)
-	await expect(gutter.top - row.top).toBe(8)
+	await expect(header.getBoundingClientRect().top - row.top).toBe(8)
+	await expect(gutter.bottom).toBe(bubble.getBoundingClientRect().bottom)
 	await expect(header.getBoundingClientRect().height).toBe(20)
 	await expect(
 		bubble.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
@@ -1803,7 +1806,7 @@ export const ReaderMessage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the reader's own message. It reads from the same left edge as every other row: a round avatar with the reader's initials in the gutter, the reader's name and the send time on one line, and the solid bubble under them, with nothing below it. Check that the avatar is round and holds the initials, that the bubble is the user bubble with white text, and that hovering the bubble opens nothing.",
+					"Reach for this for the reader's own message. It reads from the same left edge as every other row: the reader's name and the send time on one line, the solid bubble under them with nothing below it, and a round avatar with the reader's initials in the gutter, its bottom edge level with the bubble's. Check that the avatar is round and holds the initials, that the bubble is the user bubble with white text, and that hovering the bubble opens nothing.",
 			},
 		},
 	},
@@ -1848,7 +1851,7 @@ export const CompanionMessage = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a companion message on its own. The dithered hexagon sits in the gutter on the head row, the name, the title badge and the send time share the line above the bubble, and nothing sits under it. Check that the badge is centred on the name line and that the time sits after it.",
+					"Reach for this for a companion message on its own. The dithered hexagon sits in the gutter, its bottom edge level with the bubble's, the name, the title badge and the send time share the line above the bubble, and nothing sits under it. Check that the badge is centred on the name line and that the time sits after it.",
 			},
 		},
 	},
@@ -1900,7 +1903,7 @@ export const RunOfThree = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for three messages a companion sent in a row. The avatar, the name and the time open the run once, on its head row; the two rows under it keep an empty gutter and no header, and their bubbles join the one above on the left corners. Check that nothing is written under any bubble and that the run reads as one block.",
+					"Reach for this for three messages a companion sent in a row. The name and the time open the run once, on its head row, and the avatar closes it once, beside the third bubble; the middle row keeps an empty gutter, the two rows under the head keep no header, and their bubbles join the one above on the left corners. Check that nothing is written under any bubble and that the run reads as one block.",
 			},
 		},
 	},
@@ -1912,7 +1915,7 @@ export const RunOfThree = meta.story({
 
 		await expect(canvas.getAllByText(SECOND.name)).toHaveLength(1)
 		await expect(botIdentityAvatars(canvasElement)).toHaveLength(1)
-		await expect(botIdentityAvatars(articles[0])).toHaveLength(1)
+		await expect(botIdentityAvatars(articles[2])).toHaveLength(1)
 		await expectTimeOnHeadLine(articles[0], sentOn(10, 9, 21), "09:21")
 		for (const [index, article] of articles.entries()) {
 			const style = getComputedStyle(article)
@@ -1923,10 +1926,10 @@ export const RunOfThree = meta.story({
 		}
 		for (const inner of articles.slice(1)) {
 			await expect(slotsIn(inner, "message-author")).toHaveLength(0)
-			await expect(
-				getComputedStyle(slotIn(inner, "message-gutter")).opacity,
-			).toBe("0")
 		}
+		await expect(
+			getComputedStyle(slotIn(articles[1], "message-gutter")).opacity,
+		).toBe("0")
 		await expect([
 			head.borderTopLeftRadius,
 			head.borderBottomLeftRadius,
@@ -1944,6 +1947,149 @@ export const RunOfThree = meta.story({
 
 export const RunOfThreeDark = RunOfThree.extend({
 	globals: { theme: "dark" },
+})
+
+const avatarsIn = (row: HTMLElement) => [
+	...Array.from(botIdentityAvatars(row)),
+	...slotsIn(row, "user-avatar"),
+]
+
+const expectAvatarAtRunFoot = async (rows: HTMLElement[]) => {
+	const [opening] = rows
+	const closing = rows[rows.length - 1]
+	const gutter = slotIn(closing, "message-gutter").getBoundingClientRect()
+	const bubble = slotIn(closing, "message-bubble-content")
+
+	await expect(slotsIn(opening, "message-author")).toHaveLength(1)
+	for (const row of rows) {
+		await expect(avatarsIn(row)).toHaveLength(row === closing ? 1 : 0)
+		if (row !== opening)
+			await expect(slotsIn(row, "message-author")).toHaveLength(0)
+	}
+	await expect(gutter.bottom).toBe(bubble.getBoundingClientRect().bottom)
+}
+
+const expectRunAndSingle = async (rows: HTMLElement[]) => {
+	await expect(rows).toHaveLength(4)
+	await expectAvatarAtRunFoot(rows.slice(0, 3))
+	await expectAvatarAtRunFoot(rows.slice(3))
+}
+
+const RUN_AND_SINGLE_STORY =
+	"Check that the run names its speaker once, above its first bubble, and draws the avatar once, beside its last bubble with both bottom edges level, and that the single row carries the header above its bubble and the avatar beside that same bubble."
+
+export const ReaderRunAndSingle = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6 px-6">
+			<TurnGroup>
+				{RUN.map((paragraph, index) => (
+					<UserTurn
+						key={paragraph}
+						name={READER}
+						copyText={paragraph}
+						sentAt={sentOn(10, 9, 21 + index)}
+						now={READ_ON}
+					>
+						{paragraph}
+					</UserTurn>
+				))}
+			</TurnGroup>
+			<UserTurn
+				name={READER}
+				copyText={QUESTION}
+				sentAt={sentOn(10, 9, 28)}
+				now={READ_ON}
+			>
+				{QUESTION}
+			</UserTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `Reach for this for where the reader's round avatar sits, in a run of three and on its own. ${RUN_AND_SINGLE_STORY}`,
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expectRunAndSingle(canvas.getAllByLabelText("user message"))
+	},
+})
+
+export const PersonRunAndSingle = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6 px-6">
+			<TurnGroup>
+				{RUN.map((paragraph, index) => (
+					<PersonTurn
+						key={paragraph}
+						name={PERSON}
+						copyText={paragraph}
+						sentAt={sentOn(10, 9, 21 + index)}
+						now={READ_ON}
+					>
+						{paragraph}
+					</PersonTurn>
+				))}
+			</TurnGroup>
+			<PersonTurn
+				name={PERSON}
+				copyText={QUESTION}
+				sentAt={sentOn(10, 9, 28)}
+				now={READ_ON}
+			>
+				{QUESTION}
+			</PersonTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `Reach for this for where another person's round avatar sits, in a run of three and on its own. ${RUN_AND_SINGLE_STORY}`,
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expectRunAndSingle(canvas.getAllByLabelText(`message from ${PERSON}`))
+	},
+})
+
+export const CompanionRunAndSingle = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6 px-6">
+			<TurnGroup>
+				{RUN.map((paragraph, index) => (
+					<AssistantTurn
+						key={paragraph}
+						author={SECOND}
+						copyText={paragraph}
+						sentAt={sentOn(10, 9, 21 + index)}
+						now={READ_ON}
+					>
+						{paragraph}
+					</AssistantTurn>
+				))}
+			</TurnGroup>
+			<AssistantTurn
+				author={SECOND}
+				copyText={ANSWER}
+				sentAt={sentOn(10, 9, 28)}
+				now={READ_ON}
+			>
+				{ANSWER}
+			</AssistantTurn>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story: `Reach for this for where a companion's hexagon sits, in a run of three and on its own. ${RUN_AND_SINGLE_STORY}`,
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expectRunAndSingle(canvas.getAllByLabelText("assistant message"))
+	},
 })
 
 export const InnerRowHovered = meta.story({
@@ -2239,8 +2385,9 @@ export const NoSendTime = meta.story({
 	play: async ({ canvasElement }) => {
 		await expect(timesIn(canvasElement)).toHaveLength(0)
 		await expect(slotsIn(canvasElement, "message-time-line")).toHaveLength(0)
-		for (const content of slotsIn(canvasElement, "message-content")) {
-			const bubble = slotIn(content, "message-bubble-content")
+		for (const bubble of slotsIn(canvasElement, "message-bubble-content")) {
+			const content = bubble.closest('[data-slot="message-content"]')
+			if (!content) throw new globalThis.Error("This bubble sits in no content")
 			await expect(content.getBoundingClientRect().bottom).toBeCloseTo(
 				bubble.getBoundingClientRect().bottom,
 				0,
