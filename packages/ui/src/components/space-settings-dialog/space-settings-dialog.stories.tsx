@@ -733,6 +733,7 @@ const MEMBER_LINE =
 const roleRadiosIn = (panel: HTMLElement) => {
 	const group = within(panel).getByRole("radiogroup", { name: "Role" })
 	return {
+		group,
 		guest: within(group).getByRole("radio", { name: "Guest" }),
 		member: within(group).getByRole("radio", { name: "Member" }),
 	}
@@ -818,8 +819,7 @@ export const MembersInviteRoleGuest = meta.story({
 	},
 	play: async () => {
 		const panel = await membersPanelIn()
-		const group = within(panel).getByRole("radiogroup", { name: "Role" })
-		const { guest, member } = roleRadiosIn(panel)
+		const { group, guest, member } = roleRadiosIn(panel)
 		await expect(within(group).getAllByRole("radio")).toEqual([guest, member])
 		await expect(guest).toBeChecked()
 		await expect(member).not.toBeChecked()
