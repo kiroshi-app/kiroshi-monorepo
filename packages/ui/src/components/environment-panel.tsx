@@ -168,6 +168,7 @@ const EnvironmentRow = ({
 	const hasNoValue = entry.isUnset && !isServedElsewhere
 	const overriddenBy = !entry.isUnset && isOwned && entry.servedFrom !== scope
 	const overriding = entry.servedFrom === scope ? entry.overrides : undefined
+	const defined = t(`secrets.scope.${entry.definedIn}`)
 
 	return (
 		<li className="flex items-center gap-3 rounded-xl border border-border py-2 pr-2 pl-3">
@@ -177,11 +178,9 @@ const EnvironmentRow = ({
 				</span>
 				<span className="truncate text-muted-foreground text-xs">
 					{hasNoValue
-						? t("secrets.row.noValue", {
-								defined: t(`secrets.scope.${entry.definedIn}`),
-							})
+						? t("secrets.row.noValue", { defined })
 						: t("secrets.row.scopes", {
-								defined: t(`secrets.scope.${entry.definedIn}`),
+								defined,
 								served: t(`secrets.scope.${entry.servedFrom}`),
 							})}
 				</span>
