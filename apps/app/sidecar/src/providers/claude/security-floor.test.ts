@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { type FloorScope, securityFloor } from "./security-floor"
+import { deniesRead, type FloorScope, securityFloor } from "./security-floor"
 
 const APP_DATA = "/app-data/kiroshi"
 
@@ -121,10 +121,33 @@ describe("securityFloor", () => {
 			"conversations.sqlite3",
 			"conversations.sqlite3-wal",
 			"conversations.sqlite3-shm",
+			"host/token",
+			"missions/*/hook/agent-hook.json",
 		]) {
 			expect(deny).toContain(`Read(/${join(APP_DATA, file)})`)
 			expect(denyRead).toContain(join(APP_DATA, file))
 		}
+	})
+
+	it("refuses the host API token and every mission hook key, not the hook script", () => {
+		const scope: FloorScope = {
+			appDataDir: APP_DATA,
+			home: homedir(),
+			platform: "darwin",
+			pluginPaths: [],
+			writablePaths: [],
+		}
+
+		expect(deniesRead(scope, join(APP_DATA, "host/token"))).toBe(true)
+		expect(
+			deniesRead(scope, join(APP_DATA, "missions/m-1/hook/agent-hook.json")),
+		).toBe(true)
+		expect(
+			deniesRead(
+				scope,
+				join(APP_DATA, "missions/m-1/hook/kiroshi-agent-hook.sh"),
+			),
+		).toBe(false)
 	})
 
 	it("denies reads of what the reader dropped into any conversation", () => {
@@ -282,6 +305,8 @@ describe("securityFloor", () => {
 					join(APP_DATA, "conversations.sqlite3"),
 					join(APP_DATA, "conversations.sqlite3-wal"),
 					join(APP_DATA, "conversations.sqlite3-shm"),
+					join(APP_DATA, "host/token"),
+					join(APP_DATA, "missions/*/hook/agent-hook.json"),
 					join(APP_DATA, "bots"),
 					join(APP_DATA, "spaces"),
 					join(APP_DATA, "attachments"),
@@ -322,6 +347,8 @@ describe("securityFloor", () => {
 					join(WINDOWS_APP_DATA, "conversations.sqlite3"),
 					join(WINDOWS_APP_DATA, "conversations.sqlite3-wal"),
 					join(WINDOWS_APP_DATA, "conversations.sqlite3-shm"),
+					join(WINDOWS_APP_DATA, "host/token"),
+					join(WINDOWS_APP_DATA, "missions/*/hook/agent-hook.json"),
 					join(WINDOWS_APP_DATA, "bots"),
 					join(WINDOWS_APP_DATA, "spaces"),
 					join(WINDOWS_APP_DATA, "attachments"),
@@ -358,6 +385,8 @@ describe("securityFloor", () => {
 			"Read(//c/data/kiroshi/conversations.sqlite3)",
 			"Read(//c/data/kiroshi/conversations.sqlite3-wal)",
 			"Read(//c/data/kiroshi/conversations.sqlite3-shm)",
+			"Read(//c/data/kiroshi/host/token)",
+			"Read(//c/data/kiroshi/missions/*/hook/agent-hook.json)",
 			"Read(//c/data/kiroshi/attachments/**)",
 			"Edit(//c/Users/alice/.claude/**)",
 			"Edit(//c/Users/alice/Library/LaunchAgents/**)",
@@ -388,6 +417,8 @@ describe("securityFloor", () => {
 			`Read(/${join(APP_DATA, "conversations.sqlite3")})`,
 			`Read(/${join(APP_DATA, "conversations.sqlite3-wal")})`,
 			`Read(/${join(APP_DATA, "conversations.sqlite3-shm")})`,
+			`Read(/${join(APP_DATA, "host/token")})`,
+			`Read(/${join(APP_DATA, "missions/*/hook/agent-hook.json")})`,
 			`Read(/${join(APP_DATA, "attachments")}/**)`,
 			`Edit(/${home(".claude")}/**)`,
 			`Edit(/${home("Library/LaunchAgents")}/**)`,

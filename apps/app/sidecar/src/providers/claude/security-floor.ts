@@ -26,10 +26,16 @@ const WRITE_FILES = [".zshrc", ".bashrc", ".zprofile", ".zshenv"]
 
 const ENVIRONMENT_FILES = ["/**/.env", "/**/.env.*"]
 
+const HOST_API_TOKEN = "host/token"
+
+const MISSION_HOOK_KEYS = "missions/*/hook/agent-hook.json"
+
 const APP_DATA_FILES = [
 	"conversations.sqlite3",
 	"conversations.sqlite3-wal",
 	"conversations.sqlite3-shm",
+	HOST_API_TOKEN,
+	MISSION_HOOK_KEYS,
 ]
 
 const ATTACHMENTS_DIRECTORY = "attachments"
