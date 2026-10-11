@@ -42,7 +42,9 @@ struct SpaceScreen: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        SettingsButton(account: account, spaces: store.spaces) {
+                        SettingsButton(
+                            account: account, spaces: store.spaces, section: section
+                        ) {
                             Label("Settings", systemImage: "gearshape")
                         }
                     }

@@ -53,13 +53,13 @@ Page 4 "Missions" opens on the Missions tab: `4.1` (the grouped list of Studio),
 
 ## Settings and Sign out without the network
 
-Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet the gear of the Conversations tab presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
+Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet the gear of either tab presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
 ```
 
-`KiroshiUITests` opens the sheet from `2.1`, cancels and confirms Sign out from `6.1`, and runs the accessibility audit on `6.1` and `6.2`.
+`KiroshiUITests` opens the sheet from `2.1` and `4.1`, checks `6.1` opens it once, on Conversations only, cancels and confirms Sign out from `6.1`, and runs the accessibility audit on `6.1` and `6.2`.
 
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 

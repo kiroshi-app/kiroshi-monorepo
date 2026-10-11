@@ -6,11 +6,14 @@ struct SettingsButton<Label: View>: View {
     let label: Label
     @State private var isPresented: Bool
 
-    init(account: SignInModel, spaces: [Space], @ViewBuilder label: () -> Label) {
+    init(
+        account: SignInModel, spaces: [Space], section: SpaceSection,
+        @ViewBuilder label: () -> Label
+    ) {
         self.account = account
         self.spaces = spaces
         self.label = label()
-        _isPresented = State(initialValue: Self.isPresentedAtLaunch)
+        _isPresented = State(initialValue: Self.isPresentedAtLaunch(in: section))
     }
 
     var body: some View {
@@ -26,9 +29,9 @@ struct SettingsButton<Label: View>: View {
         }
     }
 
-    private static var isPresentedAtLaunch: Bool {
+    private static func isPresentedAtLaunch(in section: SpaceSection) -> Bool {
         #if DEBUG
-            SignInFixture.opened?.opensSettings == true
+            SignInFixture.opened?.opensSettings == true && section == SpaceSection.atLaunch
         #else
             false
         #endif

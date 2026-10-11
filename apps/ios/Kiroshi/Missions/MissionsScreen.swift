@@ -17,11 +17,9 @@ struct MissionsScreen: View {
             content
                 .scrollContentBackground(.hidden)
                 .background(Color.kiroshi(.background))
-                .spaceChrome(store: store, settings: MissionsRoute.settings)
+                .spaceChrome(store: store, account: account)
                 .navigationDestination(for: MissionsRoute.self) { route in
                     switch route {
-                    case .settings:
-                        SettingsView(model: account, spaces: store.spaces)
                     case .mission(let mission):
                         MissionThreadView(mission: mission, missions: missions, space: store)
                     }

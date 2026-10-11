@@ -28,6 +28,31 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertTrue(settings.isHittable)
     }
 
+    func testMissionsOpensTheSameSheet() {
+        let app = launch("4.1")
+        let settings = app.navigationBars.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+
+        settings.tap()
+
+        XCTAssertTrue(app.staticTexts[Self.footer].waitForExistence(timeout: 5))
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
+    }
+
+    func testTheFixtureOpensOneSheetOnlyOnConversations() {
+        let app = launch("6.1")
+        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts.matching(identifier: Self.footer).count, 1)
+
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
+        app.tabBars.buttons["Missions"].tap()
+
+        XCTAssertTrue(app.navigationBars.buttons["Settings"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts[Self.footer].waitForExistence(timeout: 3))
+    }
+
     func testTheSheetPassesTheAudit() throws {
         let app = launch("6.1")
         XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))

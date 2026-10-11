@@ -1,8 +1,8 @@
 import SwiftUI
 
-struct SpaceChrome<Route: Hashable>: ViewModifier {
+struct SpaceChrome: ViewModifier {
     let store: SpaceStore
-    let settings: Route
+    let account: SignInModel
 
     func body(content: Content) -> some View {
         content
@@ -20,7 +20,7 @@ struct SpaceChrome<Route: Hashable>: ViewModifier {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(value: settings) {
+                    SettingsButton(account: account, spaces: store.spaces, section: .missions) {
                         Label("Settings", systemImage: "gearshape")
                     }
                 }
@@ -29,7 +29,7 @@ struct SpaceChrome<Route: Hashable>: ViewModifier {
 }
 
 extension View {
-    func spaceChrome<Route: Hashable>(store: SpaceStore, settings: Route) -> some View {
-        modifier(SpaceChrome(store: store, settings: settings))
+    func spaceChrome(store: SpaceStore, account: SignInModel) -> some View {
+        modifier(SpaceChrome(store: store, account: account))
     }
 }
