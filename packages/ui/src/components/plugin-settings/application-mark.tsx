@@ -37,13 +37,13 @@ const ApplicationMark = ({
 }: ApplicationMarkProps) => {
 	const style = APPLICATION_MARK_STYLE[size]
 	const [unreachableMark, setUnreachableMark] = useState<string>()
-	const drawing =
-		mark !== undefined && isDrawing(mark) ? allowedSvgMark(mark) : null
+	const isDrawingMark = mark !== undefined && isDrawing(mark)
+	const drawing = isDrawingMark ? allowedSvgMark(mark) : null
 	const isDrawn = drawing !== null
 	const isGlyph =
 		mark === undefined ||
 		unreachableMark === mark ||
-		(isDrawing(mark) && drawing === null)
+		(isDrawingMark && !isDrawn)
 
 	const content = () => {
 		if (isGlyph) {
