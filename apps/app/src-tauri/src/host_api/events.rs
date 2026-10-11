@@ -73,16 +73,8 @@ async fn caught_up_then_relayed(
 	heard: Receiver<Frame>,
 ) {
 	for frame in pending {
-		match sent_in_time(&mut socket, Message::Text(frame.as_ref().into())).await {
-			Ok(Ok(())) => {}
-			Ok(Err(failure)) => {
-				return eprintln!("a host api event client left mid pending question: {failure}");
-			}
-			Err(_) => {
-				return eprintln!(
-					"a host api event client was dropped: it stalled on a pending question for {SEND_PATIENCE:?}"
-				);
-			}
+		if !delivered(&mut socket, &frame).await {
+			return;
 		}
 	}
 	relayed(socket, heard).await
@@ -92,17 +84,11 @@ pub(crate) async fn relayed(mut socket: WebSocket, mut heard: Receiver<Frame>) {
 	loop {
 		tokio::select! {
 			frame = heard.recv() => match frame {
-				Ok(frame) => match sent_in_time(&mut socket, Message::Text(frame.as_ref().into())).await {
-					Ok(Ok(())) => {}
-					Ok(Err(failure)) => {
-						return eprintln!("a host api event client left mid frame: {failure}");
+				Ok(frame) => {
+					if !delivered(&mut socket, &frame).await {
+						return;
 					}
-					Err(_) => {
-						return eprintln!(
-							"a host api event client was dropped: it stalled on a frame for {SEND_PATIENCE:?}"
-						);
-					}
-				},
+				}
 				Err(RecvError::Lagged(missed)) => return fell_behind(socket, missed).await,
 				Err(RecvError::Closed) => return,
 			},
@@ -111,6 +97,22 @@ pub(crate) async fn relayed(mut socket: WebSocket, mut heard: Receiver<Frame>) {
 					return;
 				}
 			}
+		}
+	}
+}
+
+async fn delivered(socket: &mut WebSocket, frame: &Frame) -> bool {
+	match sent_in_time(socket, Message::Text(frame.as_ref().into())).await {
+		Ok(Ok(())) => true,
+		Ok(Err(failure)) => {
+			eprintln!("a host api event client left mid frame: {failure}");
+			false
+		}
+		Err(_) => {
+			eprintln!(
+				"a host api event client was dropped: it stalled on a frame for {SEND_PATIENCE:?}"
+			);
+			false
 		}
 	}
 }
