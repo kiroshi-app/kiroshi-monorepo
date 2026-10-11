@@ -1,3 +1,9 @@
+import {
+	type NoticeMessage,
+	raiseFailureNotice,
+} from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
+
 import type { EvolvedBundle, RuntimeScope } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 import {
@@ -24,6 +30,7 @@ export type EvolutionSourceOptions = {
 	companionPlugin: PluginPanel
 	userPlugin: Pick<PluginPanel, "reload">
 	spacePlugin: PluginPanel
+	reportFailure?: (notice: NoticeMessage) => void
 }
 
 export const startEvolutionSource = ({
@@ -32,6 +39,7 @@ export const startEvolutionSource = ({
 	companionPlugin,
 	userPlugin,
 	spacePlugin,
+	reportFailure = raiseFailureNotice,
 }: EvolutionSourceOptions): (() => void) => {
 	const readOpenPanel = (panel: PluginPanel, scope: PluginScope) => {
 		if (isSamePluginScope(panel.getState().scope, scope)) {
@@ -64,10 +72,24 @@ export const startEvolutionSource = ({
 		return readCompanionPanels(scope.botId)
 	}
 
+	const reportUnrecorded = (bundle: EvolvedBundle, detail: string) =>
+		reportFailure({
+			title: i18n.t(`bots:history.recordFailed.title.${bundle}`),
+			description: i18n.t("bots:history.recordFailed.description", {
+				detail,
+			}),
+		})
+
 	const detach = driver
 		.subscribe(({ scope, event }) => {
-			if (scope && event.type === "botEvolved") {
+			if (!scope) {
+				return
+			}
+			if (event.type === "botEvolved") {
 				readPanels(scope, event.bundle)
+			}
+			if (event.type === "botEvolutionFailed") {
+				reportUnrecorded(event.bundle, event.detail)
 			}
 		})
 		.catch(() => undefined)
