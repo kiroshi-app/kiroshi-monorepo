@@ -17,7 +17,7 @@ use crate::json::JsonValue;
 pub async fn application_catalogue(
 	directory: State<'_, Arc<Directory>>,
 ) -> Result<Vec<Application>, ApplicationsError> {
-	directory.curated().await
+	directory.catalogue().await
 }
 
 #[tauri::command]
