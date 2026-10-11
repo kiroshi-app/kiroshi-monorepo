@@ -227,15 +227,10 @@ impl Directory {
 	}
 
 	pub async fn curated(&self) -> Result<Vec<Application>, ApplicationsError> {
-		self.answered(|cached, _| curated_of(cached)).await
-	}
-
-	pub async fn catalogue(&self) -> Result<Vec<Application>, ApplicationsError> {
-		self.answered(|cached, failure| match failure {
-			Some(failure) => Err(failure.clone()),
-			None => Ok(curated_of(cached)),
+		self.answered(|cached, _| {
+			distinct(cached.rows.iter().filter(|row| row.tier == Tier::Curated)).cloned().collect()
 		})
-		.await?
+		.await
 	}
 
 	pub async fn refreshed(&self) {
@@ -381,10 +376,6 @@ fn instant(ms: i64) -> Option<String> {
 fn distinct<'a>(rows: impl Iterator<Item = &'a Row>) -> impl Iterator<Item = &'a Application> {
 	let mut seen = HashSet::new();
 	rows.map(|row| &row.application).filter(move |held| seen.insert(held.name.as_str()))
-}
-
-fn curated_of(cached: &Cached) -> Vec<Application> {
-	distinct(cached.rows.iter().filter(|row| row.tier == Tier::Curated)).cloned().collect()
 }
 
 fn matched(rows: &[Row], query: &str) -> Vec<Application> {
@@ -1227,7 +1218,7 @@ pub(crate) mod tests {
 
 		let answered = directory.searched("").await.expect("the search answers");
 		let named = directory.named("one").await.expect("the name resolves");
-		directory.catalogue().await.expect("the catalogue reads");
+		directory.curated().await.expect("the catalogue reads");
 
 		assert!(held.asked().is_empty(), "the directory was read");
 		assert_eq!(names(&answered.applications), ["one"]);
@@ -1344,8 +1335,7 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_failed_refresh_fails_the_catalogue_and_the_search_on_the_same_read_serves_the_rows()
-	{
+	async fn a_failed_refresh_keeps_the_catalogue_rows_and_the_search_reports_the_failure() {
 		let (base, held) = serving(vec![json!([a_row("superset", "curated", 1)])]).await;
 		*held.refusals.lock().expect("the stub records") = 1;
 		let clock = Moving::at(NOON);
@@ -1353,12 +1343,12 @@ pub(crate) mod tests {
 		let seed = json!([a_row("paper", "curated", 1)]);
 		planted(&directory, feed_stale(a_cache_of(&a_directory_over(vec![seed]).await)));
 
-		let failed = directory.catalogue().await;
+		let kept = directory.curated().await.expect("the catalogue reads");
 		let searched = directory.searched("").await.expect("the search answers");
 		clock.set(NOON + RETRY_MS + 1);
-		let retried = directory.catalogue().await.expect("the catalogue reads");
+		let retried = directory.curated().await.expect("the catalogue reads");
 
-		assert_eq!(failed, Err(ApplicationsError::RegistryRefused { status: 500 }));
+		assert_eq!(names(&kept), ["paper"]);
 		assert_eq!(names(&searched.applications), ["paper"]);
 		assert_eq!(
 			searched.registry_failure,
