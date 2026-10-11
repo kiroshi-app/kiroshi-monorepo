@@ -36,7 +36,7 @@ pub struct ApplicationHost<R: Runtime> {
 fn held_directory<R: Runtime>(app: &AppHandle<R>) -> Arc<Directory> {
 	match app.try_state::<Arc<Directory>>() {
 		Some(state) => state.inner().clone(),
-		None => Arc::new(Directory::at(api_url(), None)),
+		None => Directory::at(api_url(), None),
 	}
 }
 
@@ -373,7 +373,7 @@ mod tests {
 			conversation_id: conversation_id.to_owned(),
 			bot_id: "b1".to_owned(),
 			runners: runners_carrying(&[NPX, UVX]),
-			directory: Arc::new(directory_stub::holding(rows)),
+			directory: directory_stub::holding(rows),
 		}
 	}
 
@@ -619,16 +619,21 @@ mod tests {
 	async fn a_search_while_the_cloud_is_down_answers_the_cached_curated_matches_and_the_failure() {
 		let app = a_host("cloud-down").await;
 		let file = directory_stub::a_cache_file_read_long_ago(the_catalogue()).await;
-		let host = ApplicationHost {
-			directory: Arc::new(Directory::at(directory_stub::unreached().await, Some(file))),
-			..reading(&app, "c1")
-		};
+		let directory = Directory::at(directory_stub::unreached().await, Some(file));
+		let host = ApplicationHost { directory: directory.clone(), ..reading(&app, "c1") };
 
+		let refreshing = host
+			.answer(asking("search", json!({ "query": "superset" })))
+			.await
+			.expect("the search answers");
+		directory_stub::settled(&directory).await;
 		let answer = host
 			.answer(asking("search", json!({ "query": "superset" })))
 			.await
 			.expect("the search answers");
 
+		assert_eq!(names(&refreshing), ["superset"]);
+		assert_eq!(refreshing["registryFailure"], Value::Null);
 		assert_eq!(names(&answer), ["superset"]);
 		assert_eq!(answer["registryFailure"]["kind"], "registryUnreached");
 	}
@@ -637,7 +642,7 @@ mod tests {
 	async fn a_search_while_the_cloud_is_down_and_nothing_is_cached_answers_only_the_failure() {
 		let app = a_host("cloud-down-uncached").await;
 		let host = ApplicationHost {
-			directory: Arc::new(Directory::at(directory_stub::unreached().await, None)),
+			directory: Directory::at(directory_stub::unreached().await, None),
 			..reading(&app, "c1")
 		};
 

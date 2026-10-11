@@ -222,6 +222,8 @@ pub enum ApplicationsError {
 
 pub const INSTALLED_EVENT: &str = "application://installed";
 
+pub const DIRECTORY_REFRESHED_EVENT: &str = "application://directory-refreshed";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum Destination {
