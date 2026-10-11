@@ -31,7 +31,7 @@
         }
 
         private static let companions = #"""
-            [{"id":"bot-atlas","name":"Atlas","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","avatarBlot":"purple"}]
+            [{"id":"bot-atlas","name":"Atlas","title":"Planner","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","title":"Builder","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","title":"Writer","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","title":"Designer","avatarBlot":"purple"}]
             """#
 
         private static var feed: String {

@@ -26,11 +26,9 @@
         static let pico = Companion(id: "pico-6", name: "Pico", role: "Builder", tint: .orange)
         static let mira = Companion(id: "mira-9", name: "Mira", role: "Designer", tint: .purple)
         static let otto = Companion(id: "otto-5", name: "Otto", role: "Digest")
-        static let companions = [
-            juniper, atlas, pico,
-            Companion(id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png"),
-            mira, otto,
-        ]
+        static let shoto = Companion(
+            id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png")
+        static let companions = [juniper, atlas, pico, shoto, mira, otto]
 
         static let listMessages: [Companion.ID: [FixtureHost.Message]] = [
             "juniper-6": [

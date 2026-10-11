@@ -6,6 +6,7 @@ struct CompanionAvatar: View {
         case title
         case message
         case row
+        case header
         case hero
 
         var points: CGFloat {
@@ -14,6 +15,7 @@ struct CompanionAvatar: View {
             case .title: 28
             case .message: 40
             case .row: 52
+            case .header: 52
             case .hero: 88
             }
         }
@@ -24,6 +26,7 @@ struct CompanionAvatar: View {
             case .title: .caption2
             case .message: .body
             case .row: .subheadline
+            case .header: .footnote
             case .hero: .title3
             }
         }

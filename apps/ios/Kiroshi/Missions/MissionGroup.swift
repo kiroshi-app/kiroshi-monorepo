@@ -55,7 +55,8 @@ extension Mission {
     }
 
     func titleLine(companion: MissionCompanion?) -> String {
-        [ticket.externalId, companion?.name].compactMap(\.self).joined(separator: " · ")
+        [ticket.externalId, companion?.name, companion?.role].compactMap(\.self).joined(
+            separator: " · ")
     }
 
     func detailLine(companion: MissionCompanion?) -> String {
