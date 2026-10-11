@@ -3,6 +3,7 @@
 import { useState } from "react"
 
 import { Icons } from "@workspace/ui/components/icons"
+import { allowedSvgMark } from "@workspace/ui/lib/svg-mark"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ApplicationMarkSize = "md" | "card" | "sm" | "xsm" | "inline" | "xs"
@@ -36,8 +37,13 @@ const ApplicationMark = ({
 }: ApplicationMarkProps) => {
 	const style = APPLICATION_MARK_STYLE[size]
 	const [unreachableMark, setUnreachableMark] = useState<string>()
-	const isDrawn = mark !== undefined && isDrawing(mark)
-	const isGlyph = mark === undefined || unreachableMark === mark
+	const isDrawingMark = mark !== undefined && isDrawing(mark)
+	const drawing = isDrawingMark ? allowedSvgMark(mark) : null
+	const isDrawn = drawing !== null
+	const isGlyph =
+		mark === undefined ||
+		unreachableMark === mark ||
+		(isDrawingMark && !isDrawn)
 
 	const content = () => {
 		if (isGlyph) {
@@ -48,7 +54,7 @@ const ApplicationMark = ({
 			return (
 				<span
 					className={cn(style.glyph, "[&>svg]:size-full")}
-					dangerouslySetInnerHTML={{ __html: mark }}
+					dangerouslySetInnerHTML={{ __html: drawing }}
 				/>
 			)
 		}
