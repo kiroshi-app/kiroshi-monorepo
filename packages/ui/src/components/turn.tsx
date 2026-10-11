@@ -20,6 +20,7 @@ import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { useMarkId } from "@workspace/ui/components/mark-context"
 import {
+	formatSentDate,
 	Message,
 	MessageAuthor,
 	MessageContent,
@@ -44,6 +45,7 @@ import {
 } from "@workspace/ui/components/message-quote"
 import { SharedMark } from "@workspace/ui/components/motion/shared-mark"
 import type { RosterBot } from "@workspace/ui/components/roster"
+import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import {
 	ContextMenuItem,
 	ContextMenuSeparator,
@@ -92,6 +94,7 @@ interface UserTurnProps {
 	state?: UserTurnState
 	run?: TurnRun
 	sentAt?: number
+	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -109,6 +112,7 @@ type AssistantTurnProps = {
 	state?: TurnState
 	run?: TurnRun
 	sentAt?: number
+	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -133,6 +137,7 @@ type PersonTurnProps = {
 	image?: string
 	run?: TurnRun
 	sentAt?: number
+	hasTimeLine?: boolean
 	now?: number
 	copyText?: string
 	messageId?: string
@@ -213,6 +218,7 @@ interface TurnActionListProps {
 
 interface TurnBodyProps {
 	repliedTo?: QuotedMessage
+	sentAt?: number
 	className?: string
 	children: ReactNode
 }
@@ -299,12 +305,21 @@ function turnMenuOf(actions: TurnAction[]) {
 	return actions.length > 0 ? <TurnActionMenu actions={actions} /> : undefined
 }
 
-function TurnBody({ repliedTo, className, children }: TurnBodyProps) {
-	const body = (
-		<MessageBubbleContent className={cn("whitespace-pre-wrap", className)}>
+function TurnBody({ repliedTo, sentAt, className, children }: TurnBodyProps) {
+	const content = (
+		<MessageBubbleContent
+			data-slot="message-bubble-content"
+			className={cn("whitespace-pre-wrap", className)}
+		>
 			{children}
 		</MessageBubbleContent>
 	)
+	const body =
+		sentAt === undefined ? (
+			content
+		) : (
+			<TooltipHint content={formatSentDate(sentAt)}>{content}</TooltipHint>
+		)
 
 	return repliedTo ? <MessageQuote {...repliedTo}>{body}</MessageQuote> : body
 }
@@ -351,6 +366,7 @@ function UserTurn({
 	state = "complete",
 	run = "single",
 	sentAt,
+	hasTimeLine = true,
 	now,
 	copyText,
 	messageId,
@@ -403,13 +419,17 @@ function UserTurn({
 						}
 						menu={turnMenuOf(actions)}
 					>
-						<TurnBody repliedTo={repliedTo} className={RUN_RADIUS.user[run]}>
+						<TurnBody
+							repliedTo={repliedTo}
+							sentAt={sentAt}
+							className={RUN_RADIUS.user[run]}
+						>
 							{children}
 						</TurnBody>
 					</MessageActions>
 				</MessageBubble>
 				<TurnTimeLine
-					sentAt={sentAt}
+					sentAt={hasTimeLine ? sentAt : undefined}
 					now={now}
 					className={MESSAGE_BUBBLE_INLINE_PADDING}
 				/>
@@ -458,6 +478,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 		state = "complete",
 		run = "single",
 		sentAt,
+		hasTimeLine = true,
 		now,
 		copyText,
 		messageId,
@@ -549,6 +570,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 					>
 						<TurnBody
 							repliedTo={repliedTo}
+							sentAt={sentAt}
 							className={cn(
 								bare ? undefined : RUN_RADIUS.assistant[run],
 								fills && "w-full",
@@ -559,7 +581,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 					</MessageActions>
 				</MessageBubble>
 				<TurnTimeLine
-					sentAt={sentAt}
+					sentAt={hasTimeLine ? sentAt : undefined}
 					now={now}
 					className={cn(
 						"col-start-2 row-start-3 pt-1.5",
@@ -582,6 +604,7 @@ const PersonTurn = ({
 	image,
 	run = "single",
 	sentAt,
+	hasTimeLine = true,
 	now,
 	copyText,
 	messageId,
@@ -638,6 +661,7 @@ const PersonTurn = ({
 					>
 						<TurnBody
 							repliedTo={repliedTo}
+							sentAt={sentAt}
 							className={RUN_RADIUS.assistant[run]}
 						>
 							{children}
@@ -645,7 +669,7 @@ const PersonTurn = ({
 					</MessageActions>
 				</MessageBubble>
 				<TurnTimeLine
-					sentAt={sentAt}
+					sentAt={hasTimeLine ? sentAt : undefined}
 					now={now}
 					className={cn(
 						"col-start-2 row-start-3 pt-1.5",

@@ -1878,6 +1878,49 @@ export const RunOfThreeTimedMessages = meta.story({
 	},
 })
 
+export const RunTimedOnItsLastBubble = meta.story({
+	render: () => (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<TurnGroup>
+				{RUN.map((paragraph, index) => (
+					<AssistantTurn
+						key={paragraph}
+						author={SECOND}
+						copyText={paragraph}
+						sentAt={sentOn(10, 9, 21 + index)}
+						hasTimeLine={index === RUN.length - 1}
+						now={READ_ON}
+					>
+						{paragraph}
+					</AssistantTurn>
+				))}
+			</TurnGroup>
+		</div>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a run as a transcript draws it: every bubble carries its `sentAt`, and only the closing one takes `hasTimeLine`, so the send time is written once under the run. Check that a single time line sits under the third bubble, and that resting the pointer on any bubble, the first included, opens the house tooltip with that message's own full date and time. `apps/app/src/components/thread-screen.tsx` draws the line on the run's last row only.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const articles = canvas.getAllByLabelText("assistant message")
+		const [opening] = articles
+
+		await expect(articles.map((article) => timesIn(article).length)).toEqual([
+			0, 0, 1,
+		])
+		await expectTimeBelowBubble(articles[2], sentOn(10, 9, 23), "7 minutes ago")
+
+		await userEvent.hover(slotIn(opening, "message-bubble-content"))
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
+			"Saturday, October 10, 2026 at 09:21",
+		)
+	},
+})
+
 export const SentSecondsAgo = meta.story({
 	render: () => (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
