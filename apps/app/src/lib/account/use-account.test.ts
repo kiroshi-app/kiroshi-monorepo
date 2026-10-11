@@ -49,6 +49,7 @@ const signedInPanel = (name: string) => ({
 	status: "signedIn",
 	name,
 	email: EMAIL,
+	plan: SIGNED_IN.plan,
 })
 
 const OK = { status: "ok", data: null } as const

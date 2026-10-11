@@ -29,6 +29,7 @@ const toPanelState = (
 			status: "signedIn",
 			name: displayName || localPartOf(state.email),
 			email: state.email,
+			plan: state.plan,
 		}
 	}
 	if (state.kind === "waiting") {
