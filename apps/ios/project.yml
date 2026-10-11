@@ -29,7 +29,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kiroshi.app.ios
         MARKETING_VERSION: "0.1.0"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: BBE5V2JL5H
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_CFBundleDisplayName: Kiroshi
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: primary
