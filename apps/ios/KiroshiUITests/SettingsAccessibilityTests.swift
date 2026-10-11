@@ -29,7 +29,7 @@ final class SettingsAccessibilityTests: XCTestCase {
     }
 
     func testMissionsOpensTheSameSheet() {
-        let app = launch("4.1")
+        let app = launch("5.1")
         let settings = app.navigationBars.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
 
