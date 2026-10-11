@@ -47,6 +47,9 @@ const common = {
 	notice: {
 		label: "Notices",
 		close: "Close notice",
+		copy: "Copy",
+		copied: "Copied",
+		copyFailed: "Couldn’t copy the report. Press Copy again.",
 	},
 	notification: {
 		question: "Asked you a question",
