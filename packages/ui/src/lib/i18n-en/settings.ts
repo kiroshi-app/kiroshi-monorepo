@@ -158,6 +158,18 @@ const settings = {
 					malformed: "Enter an email address, like sam@example.com.",
 				},
 				notShared: "Turn on Share {{name}} to invite someone.",
+				role: {
+					label: "Role",
+					guest: {
+						label: "Guest",
+						description: "Reads conversations, can’t send messages.",
+					},
+					member: {
+						label: "Member",
+						description:
+							"Can do everything you can, including starting the agent and answering approvals.",
+					},
+				},
 			},
 			status: {
 				host: "Host",

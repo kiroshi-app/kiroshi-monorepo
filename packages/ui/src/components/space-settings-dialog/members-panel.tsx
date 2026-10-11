@@ -10,9 +10,14 @@ import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
+	FIELD_OPTION_MARKS_CLASS,
 	SETTINGS_TAG_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
+import {
+	RadioGroup,
+	RadioGroupItem,
+} from "@workspace/ui/components/ui/radio-group"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SpaceMemberStatus = "host" | "joined" | "pending"
@@ -23,6 +28,15 @@ type SpaceMember = {
 	email: string
 	status: SpaceMemberStatus
 }
+
+type SpaceInviteRole = "guest" | "member"
+
+const INVITE_ROLES: SpaceInviteRole[] = ["guest", "member"]
+
+const ROLE_OPTION_CLASS = "flex items-start gap-3 border border-border p-3"
+
+const ROLE_OPTION_BLOCKED_CLASS =
+	"rounded-xl opacity-50 has-[:checked]:bg-muted"
 
 type InviteRefusal = "invited" | "self" | "malformed"
 
@@ -56,6 +70,8 @@ type MembersPanelProps = {
 	email: string
 	onEmailChange: (email: string) => void
 	onInvite: (email: string) => void
+	role?: SpaceInviteRole
+	onRoleChange?: (role: SpaceInviteRole) => void
 	refusal?: InviteRefusal
 	failure?: MembersFailure
 	isHosted: boolean
@@ -96,9 +112,53 @@ const useFailureText = (failure: MembersFailure | undefined, space: string) => {
 	})
 }
 
+type RoleOptionProps = {
+	role: SpaceInviteRole
+	isHosted: boolean
+}
+
+const RoleOption = ({ role, isHosted }: RoleOptionProps) => {
+	const { t } = useTranslation("settings")
+	const id = useId()
+	const nameId = `${id}-name`
+	const descriptionId = `${id}-description`
+
+	return (
+		<label
+			className={cn(
+				ROLE_OPTION_CLASS,
+				isHosted ? FIELD_OPTION_MARKS_CLASS : ROLE_OPTION_BLOCKED_CLASS,
+			)}
+			htmlFor={id}
+		>
+			<RadioGroupItem
+				aria-describedby={descriptionId}
+				aria-labelledby={nameId}
+				id={id}
+				value={role}
+			/>
+			<span className="grid gap-0.5">
+				<span className="font-medium text-foreground leading-5" id={nameId}>
+					{t(`space.members.invite.role.${role}.label`)}
+				</span>
+				<span className="text-muted-foreground text-xs" id={descriptionId}>
+					{t(`space.members.invite.role.${role}.description`)}
+				</span>
+			</span>
+		</label>
+	)
+}
+
 type InviteFieldProps = Pick<
 	MembersPanelProps,
-	"space" | "email" | "onEmailChange" | "onInvite" | "refusal" | "isHosted"
+	| "space"
+	| "email"
+	| "onEmailChange"
+	| "onInvite"
+	| "role"
+	| "onRoleChange"
+	| "refusal"
+	| "isHosted"
 > & {
 	failure?: MembersFailure
 }
@@ -108,6 +168,8 @@ const InviteField = ({
 	email,
 	onEmailChange,
 	onInvite,
+	role,
+	onRoleChange,
 	refusal,
 	failure,
 	isHosted,
@@ -115,6 +177,9 @@ const InviteField = ({
 	const { t } = useTranslation("settings")
 	const id = useId()
 	const helperId = `${id}-helper`
+	const roleLabelId = `${id}-role`
+	const [pickedRole, setPickedRole] = useState<SpaceInviteRole>("guest")
+	const selectedRole = role ?? pickedRole
 	const [resentFailure, setResentFailure] = useState<MembersFailure>()
 	const failureText = useFailureText(
 		refusal || failure === resentFailure ? undefined : failure,
@@ -133,52 +198,80 @@ const InviteField = ({
 		}
 	}
 
+	const pickRole = (next: SpaceInviteRole) => {
+		setPickedRole(next)
+		onRoleChange?.(next)
+	}
+
 	return (
-		<form className="flex flex-col gap-1.5" noValidate onSubmit={submit}>
-			<label
-				className={cn(FIELD_LABEL_CLASS, !isHosted && "opacity-50")}
-				htmlFor={id}
-			>
-				{t("space.members.invite.label")}
-			</label>
-			<div className="flex gap-1.5">
-				<input
-					aria-describedby={helperId}
-					aria-invalid={refusal ? true : undefined}
-					autoComplete="email"
+		<form className="flex flex-col gap-4" noValidate onSubmit={submit}>
+			<div className="flex flex-col gap-1.5">
+				<label
+					className={cn(FIELD_LABEL_CLASS, !isHosted && "opacity-50")}
+					htmlFor={id}
+				>
+					{t("space.members.invite.label")}
+				</label>
+				<div className="flex gap-1.5">
+					<input
+						aria-describedby={helperId}
+						aria-invalid={refusal ? true : undefined}
+						autoComplete="email"
+						className={cn(
+							FIELD_CONTROL_CLASS,
+							"min-w-0 flex-1 disabled:opacity-50",
+							refusal && [
+								FIELD_CONTROL_INVALID_CLASS,
+								"ring-3 ring-destructive/20",
+							],
+						)}
+						id={id}
+						inputMode="email"
+						onChange={(event) => onEmailChange(event.target.value)}
+						placeholder={t("space.members.invite.placeholder")}
+						spellCheck={false}
+						type="email"
+						disabled={!isHosted}
+						value={email}
+					/>
+					<Button disabled={!isHosted || isEmpty} type="submit">
+						{t("space.members.invite.action")}
+					</Button>
+				</div>
+				<p
 					className={cn(
-						FIELD_CONTROL_CLASS,
-						"min-w-0 flex-1 disabled:opacity-50",
-						refusal && [
-							FIELD_CONTROL_INVALID_CLASS,
-							"ring-3 ring-destructive/20",
-						],
+						"break-words text-xs",
+						refusal || failureText
+							? "text-destructive"
+							: "text-muted-foreground",
 					)}
-					id={id}
-					inputMode="email"
-					onChange={(event) => onEmailChange(event.target.value)}
-					placeholder={t("space.members.invite.placeholder")}
-					spellCheck={false}
-					type="email"
-					disabled={!isHosted}
-					value={email}
-				/>
-				<Button disabled={!isHosted || isEmpty} type="submit">
-					{t("space.members.invite.action")}
-				</Button>
+					id={helperId}
+				>
+					{refusal
+						? t(`space.members.invite.refusal.${refusal}`, { email })
+						: !failureText && hint}
+					<span role="status">{failureText}</span>
+				</p>
 			</div>
-			<p
-				className={cn(
-					"break-words text-xs",
-					refusal || failureText ? "text-destructive" : "text-muted-foreground",
-				)}
-				id={helperId}
-			>
-				{refusal
-					? t(`space.members.invite.refusal.${refusal}`, { email })
-					: !failureText && hint}
-				<span role="status">{failureText}</span>
-			</p>
+			<div className="flex flex-col gap-1.5">
+				<span
+					className={cn(FIELD_LABEL_CLASS, !isHosted && "opacity-50")}
+					id={roleLabelId}
+				>
+					{t("space.members.invite.role.label")}
+				</span>
+				<RadioGroup
+					aria-labelledby={roleLabelId}
+					className="gap-2"
+					disabled={!isHosted}
+					onValueChange={pickRole}
+					value={selectedRole}
+				>
+					{INVITE_ROLES.map((option) => (
+						<RoleOption isHosted={isHosted} key={option} role={option} />
+					))}
+				</RadioGroup>
+			</div>
 		</form>
 	)
 }
@@ -269,6 +362,8 @@ const MembersPanel = ({
 	email,
 	onEmailChange,
 	onInvite,
+	role,
+	onRoleChange,
 	refusal,
 	failure,
 	isHosted,
@@ -310,7 +405,9 @@ const MembersPanel = ({
 				isHosted={isHosted}
 				onEmailChange={onEmailChange}
 				onInvite={onInvite}
+				onRoleChange={onRoleChange}
 				refusal={refusal}
+				role={role}
 				space={space}
 			/>
 			<ul className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2.5 divide-y divide-border rounded-xl border border-border">
@@ -343,6 +440,7 @@ export {
 	type MembersFailure,
 	MembersPanel,
 	type MembersPanelProps,
+	type SpaceInviteRole,
 	type SpaceMember,
 	type SpaceMemberStatus,
 }
