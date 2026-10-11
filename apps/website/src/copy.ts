@@ -62,6 +62,37 @@ export const WEBSITE_COPY = {
 			},
 		],
 	},
+	pricing: {
+		title: "Free on your machine.",
+		subtitle: "Pro takes it online, free during the beta.",
+		local: {
+			name: "Local",
+			description: "Everything Kiroshi does, on your machine.",
+			price: "Free",
+			features: [
+				"Companions, skills and conversations",
+				"Rooms, missions and routines",
+				"Applications, Secrets and Approvals",
+				"Spaces shared on your own network",
+			],
+		},
+		pro: {
+			name: "Pro",
+			betaTag: "Free during the beta",
+			description: "Your spaces, from anywhere you are.",
+			monthlyPrice: "$20",
+			price: "$15",
+			period: "/ user / month",
+			billing: "Billed yearly. $20 / user / month when billed monthly.",
+			features: [
+				"Everything in Local",
+				"Host a space for people who aren’t on your network",
+				"Join a space someone hosts for you",
+				"Kiroshi on your iPhone",
+			],
+			fineprint: "Sign in from Kiroshi’s settings",
+		},
+	},
 	faq: {
 		title: "Questions? Answers.",
 		items: [
@@ -73,7 +104,7 @@ export const WEBSITE_COPY = {
 			{
 				question: "Do I need a subscription?",
 				answer:
-					"Yes, a Claude subscription you’re signed in to. Kiroshi ships the agent that answers and runs it on your own sign-in, so there’s no API key to paste. Kiroshi itself is free.",
+					"Yes, a Claude subscription you’re signed in to. Kiroshi ships the agent that answers and runs it on your own sign-in, so there’s no API key to paste. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
 			},
 			{
 				question: "Where do my conversations live?",
