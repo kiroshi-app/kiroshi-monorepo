@@ -9,6 +9,7 @@ lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: url: "${BASE_URL}/mcp",
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: { dated: { command: "run", args: ["--at", "${WHEN:-noon}"] } },
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/server-env.test.ts :: { remote: { type: "http" as const, url: "${BASE_URL}/mcp" } },
+lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/session-mcp-config.test.ts :: mcpServers: { clock: { command: "run", env: { TOKEN: "${TOKEN}" } } },
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/session.test.ts :: clock: { command: "run", args: ["--token", "${TOKEN}"] },
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/providers/claude/session.test.ts :: probe: { command: "${RUNNER}" },
 lint/suspicious/noTemplateCurlyInString :: apps/app/sidecar/src/serve.test.ts :: mcpServers: { clock: { command: "run", args: ["--token", "${TOKEN}"] } },

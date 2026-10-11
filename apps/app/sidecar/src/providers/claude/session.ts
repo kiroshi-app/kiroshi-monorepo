@@ -11,6 +11,11 @@ import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import type { BundleScope } from "./bundle-writes"
 import { resolveExecutable } from "./executable"
 import { KIROSHI_SERVER, kiroshiServer } from "./kiroshi-server"
+import {
+	type McpConfigPaths,
+	mcpConfigFileFor,
+	readPathsOf,
+} from "./mcp-config-file"
 import { createMissionStatusReminder } from "./mission-status-reminder"
 import { createPermissionGate } from "./permissions"
 import { createPromptStream } from "./prompt-stream"
@@ -27,6 +32,7 @@ import {
 import {
 	type ResolvedServers,
 	resolvedServers,
+	type Servers,
 	serverNamed,
 } from "./server-env"
 import { declaringGrants, renewGrant } from "./server-renewal"
@@ -83,6 +89,9 @@ const writablePaths = ({
 	spacePath,
 }: BundleScope): string[] => definedPaths([botPath, userPath, spacePath])
 
+const handsServers = (request: SessionRequest): boolean =>
+	Boolean(request.pluginPath && request.agent)
+
 const localPlugins = (paths: string[]): NonNullable<Options["plugins"]> =>
 	paths.map((path) => ({ type: "local" as const, path }))
 
@@ -92,11 +101,13 @@ export const buildOptions = (
 	settings: SettingsOptions = readBotSettings(request).options,
 	resolved: ResolvedServers = resolvedServers(request),
 	stop?: HookCallback,
+	mcpConfig?: McpConfigPaths,
 ): Options => {
 	const floor: FloorScope = {
 		appDataDir: request.appDataDir,
 		conversationId: request.conversationId,
 		home: homedir(),
+		mcpConfigPaths: readPathsOf(mcpConfig),
 		platform: process.platform,
 		pluginPaths: pluginPaths(request),
 		writablePaths: writablePaths(writeScope(request)),
@@ -108,19 +119,17 @@ export const buildOptions = (
 		includePartialMessages: request.partialMessages,
 		canUseTool,
 		...settings,
-		...(request.pluginPath && request.agent
+		...(handsServers(request)
 			? {
 					plugins: localPlugins(pluginPaths(request)),
 					agent: request.agent,
-					mcpServers: {
-						...resolved.servers,
-						...kiroshiServer({
-							cwd: request.cwd,
-							floor,
-							managedSettings,
-							session: request.session,
-						}),
-					},
+					mcpServers: kiroshiServer({
+						cwd: request.cwd,
+						floor,
+						managedSettings,
+						session: request.session,
+					}),
+					...(mcpConfig ? { extraArgs: { "mcp-config": mcpConfig.path } } : {}),
 				}
 			: {}),
 		...(request.outputSchema
@@ -148,10 +157,13 @@ export const buildOptions = (
 	}
 }
 
-export const dialledServers = (options: Options): string[] =>
-	Object.keys(options.mcpServers ?? {}).filter(
-		(name) => name !== KIROSHI_SERVER,
-	)
+export const declaredServers = (
+	options: Options,
+	resolved: Servers,
+): Servers => (options.mcpServers ? { ...resolved, ...options.mcpServers } : {})
+
+export const dialledServers = (declared: Servers): string[] =>
+	Object.keys(declared).filter((name) => name !== KIROSHI_SERVER)
 
 export type StopRequest = {
 	dropped: boolean
@@ -295,6 +307,15 @@ export const reportConnections = ({
 	}
 }
 
+const removedOnThrow = <T>(launch: () => T, remove?: () => void): T => {
+	try {
+		return launch()
+	} catch (error) {
+		remove?.()
+		throw error
+	}
+}
+
 export const openClaudeSession = async (
 	request: SessionRequest,
 	emit: EmitFrame,
@@ -312,14 +333,22 @@ export const openClaudeSession = async (
 		record(line)
 	}
 	const reminder = createMissionStatusReminder()
-	const options = buildOptions(
-		request,
-		permissions.canUseTool,
-		botSettings.options,
-		resolved,
-		reminder.stop,
-	)
-	const run = query({ prompt: prompts.stream, options })
+	const mcpConfig = handsServers(request)
+		? mcpConfigFileFor(resolved.servers)
+		: undefined
+	const launch = () => {
+		const options = buildOptions(
+			request,
+			permissions.canUseTool,
+			botSettings.options,
+			resolved,
+			reminder.stop,
+			mcpConfig,
+		)
+		return { options, run: query({ prompt: prompts.stream, options }) }
+	}
+	const { options, run } = removedOnThrow(launch, mcpConfig?.remove)
+	const declared = declaredServers(options, resolved.servers)
 
 	let closing = false
 
@@ -340,6 +369,7 @@ export const openClaudeSession = async (
 		if (!closing) {
 			emit({ type: "closed", detail })
 		}
+		mcpConfig?.remove()
 		return detail
 	})
 	const collapsed = drained.then((detail) => {
@@ -354,7 +384,7 @@ export const openClaudeSession = async (
 
 	emit({ type: "commands", commands: described(initialized.commands) })
 
-	const declare = declaringGrants(options.mcpServers ?? {}, (servers) =>
+	const declare = declaringGrants(declared, (servers) =>
 		run.setMcpServers(servers),
 	)
 
@@ -362,7 +392,7 @@ export const openClaudeSession = async (
 		emit,
 		push: prompts.push,
 		pass: {
-			names: dialledServers(options),
+			names: dialledServers(declared),
 			port: {
 				status: () => run.mcpServerStatus(),
 				reconnect: (name) => run.reconnectMcpServer(name),
