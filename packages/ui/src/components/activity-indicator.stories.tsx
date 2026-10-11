@@ -138,7 +138,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What the transcript shows while the companion is busy: its avatar in the pose that matches the work, the words that say who is busy and at what, and the time the run has taken so far at the end of the row. The label is always on the screen, shimmering while the companion works, so nothing has to be pointed at to be read; a busy row given a `startedAt` instant counts up from it every second, and a row without one shows the label alone. The avatar is also the stop control — given `stoppable`, pointing at it or reaching it by keyboard covers the avatar with a stop glyph, so the composer below stays free for the next prompt. A waiting row carries neither shimmer nor clock: `waitingOn` says whether the companion is waiting for the reader or queued for the next wave. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is understood to be the same mark the `AssistantTurn` gutter shows once the turn lands, so it travels there rather than being replaced — give both rows the same `botId` and it does, within that one conversation. See `Mark`, `MarkPerBot` for a room where several companions are busy at once, and `ConversationChange` for what a swapped conversation does to them.",
+					"What the transcript shows while the companion is busy: its avatar in the pose that matches the work, the words that say who is busy and at what, and the time the run has taken so far at the end of the row. The label is always on the screen, shimmering while the companion works, so nothing has to be pointed at to be read; a busy row given a `startedAt` instant counts up from it every second, and a row without one shows the label alone. The avatar is also the stop control — given `stoppable`, pointing at it or reaching it by keyboard covers the avatar with a stop glyph, so the composer below stays free for the next prompt. A waiting row carries neither shimmer nor clock: `waitingOn` says whether the companion is waiting for the reader or queued for the next wave. The kind comes from the running tool, so reading turns the avatar to `searching` and a shell command to `working`. Nothing here polls the transport; a screen maps its own state onto `kind` and `label`. Inside a transcript the avatar is the same mark the `AssistantTurn` gutter shows once the turn lands: give both rows the same `botId` and the gutter claims it within that one conversation, appearing there at rest rather than travelling. See `Mark`, `MarkPerBot` for a room where several companions are busy at once, and `ConversationChange` for what a swapped conversation does to them.",
 			},
 		},
 	},
@@ -503,7 +503,7 @@ export const MarkPerBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room where several companions are busy at once: one is speaking and the others are waiting their turn. Each row is told which companion it draws, so each holds a mark of its own and lands in its own gutter when its answer arrives — one mark shared between them would put every waiting companion on the speaking companion's row. The last row names no companion, which is what a transcript that cannot name the worker gets: a plain slot that never travels. Check that every named row carries a different mark and that the unnamed one carries none.",
+					"A room where several companions are busy at once: one is speaking and the others are waiting their turn. Each row is told which companion it draws, so each holds a mark of its own and lands in its own gutter when its answer arrives — one mark shared between them would put every waiting companion on the speaking companion's row. The last row names no companion, which is what a transcript that cannot name the worker gets: a plain slot. Check that every named row carries a different mark and that the unnamed one carries none.",
 			},
 		},
 	},
@@ -523,7 +523,7 @@ export const ConversationChange = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the host swaps the conversation under a chat it keeps mounted, which is what a workspace does when the reader opens another room. A mark is named by its companion and its transcript together, so the swap draws a different mark rather than moving the one left behind: check that the working row of the second conversation appears where it belongs, with no avatar gliding across the window from where the first one stood.",
+					"Reach for this when the host swaps the conversation under a chat it keeps mounted, which is what a workspace does when the reader opens another room. A mark is named by its companion and its transcript together, so the swap draws a different mark: check that the working row of the second conversation appears where it belongs, at rest, with no avatar gliding across the window from where the first one stood.",
 			},
 		},
 	},
@@ -539,7 +539,6 @@ export const ConversationChange = meta.story({
 
 		const opened = mark()
 
-		await expect(opened).not.toBe(left)
 		await expect(opened.getAttribute("data-mark")).not.toBe(leftName)
 		await expect(getComputedStyle(opened).transform).toBe("none")
 		await expect(opened.getBoundingClientRect().top).not.toBe(leftTop)

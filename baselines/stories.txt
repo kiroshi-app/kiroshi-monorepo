@@ -228,6 +228,7 @@ conversation-message-pinnedmessages--empty
 conversation-message-pinnedmessages--overflowing
 conversation-message-pinnedmessages--unpinning
 conversation-message-transcript--anchors-the-sent-message
+conversation-message-transcript--appends-rows-at-rest
 conversation-message-transcript--conversation-rests-without-a-band
 conversation-message-transcript--default
 conversation-message-transcript--disengages

@@ -518,7 +518,7 @@ export const Mark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this to watch the companion's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same companion: the mark is that companion's, inside this transcript — `ThreadLayout` names the transcript for a real screen — and whichever of the two is on screen claims it, so it travels instead of blinking. Check that the avatar never disappears mid-move, that the bubble simply appears beside it while the row itself holds still, and that with reduced motion the mark simply arrives. " +
+					"Reach for this to watch the companion's mark change homes. While the turn runs the mark belongs to the working row; when the turn lands that row goes and the closing `AssistantTurn` claims it in the gutter. Both name the same companion: the mark is that companion's, inside this transcript (`ThreadLayout` names the transcript for a real screen), and whichever of the two is on screen claims it. Check that the avatar, the header line and the bubble all appear at rest on the frame the row lands: nothing slides, fades or scales in, with or without reduced motion. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -554,7 +554,7 @@ export const MarkAcrossRuns = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its head row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
+					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its head row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row, which appears at rest, while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
