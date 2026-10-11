@@ -513,7 +513,8 @@ export const WithReport = meta.story({
 		).mockResolvedValue()
 
 		raiseFailureNotice(OTHER_FAILURE)
-		await opaque(await within(viewport()).findByText(OTHER_FAILURE.title))
+		await within(viewport()).findByText(OTHER_FAILURE.title)
+		await opaque(cardCarrying(OTHER_FAILURE.title))
 		await expect(copyControl(cardCarrying(OTHER_FAILURE.title))).toBe(null)
 
 		const { copy, notice } = await pressedCopy(canvasElement, userEvent)
