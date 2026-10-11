@@ -18,7 +18,7 @@ const result = await Bun.build({
 					namespace: GLOBAL_ENTRY,
 				}))
 				build.onLoad({ filter: /.*/, namespace: GLOBAL_ENTRY }, () => ({
-					contents: `import { companionAvatar } from "${join(COMPONENTS, "companion-avatar.ts")}"\nglobalThis.companionAvatar = companionAvatar\n`,
+					contents: `import { companionAvatar } from "${join(COMPONENTS, "companion-avatar.ts")}"\nimport { hiveLayout } from "${join(COMPONENTS, "hive-layout.ts")}"\nglobalThis.companionAvatar = companionAvatar\nglobalThis.hiveLayout = hiveLayout\n`,
 					loader: "ts",
 				}))
 			},
