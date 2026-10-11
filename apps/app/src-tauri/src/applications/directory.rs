@@ -273,10 +273,7 @@ impl Directory {
 		let Some(cached) = held.cached.as_ref() else {
 			return Err(failure.cloned().unwrap_or_else(unread_directory));
 		};
-		let is_stale = failure.is_some()
-			|| cached.is_feed_stale
-			|| is_stale(cached.read_at, now)
-			|| is_due(&held, now);
+		let is_stale = failure.is_some() || is_due(&held, now);
 		Ok(answer(cached, failure, is_stale))
 	}
 
