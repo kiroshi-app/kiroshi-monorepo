@@ -686,6 +686,7 @@ const MEMBERS_PANEL = {
 	email: "",
 	onEmailChange: fn(),
 	onInvite: fn(),
+	onRoleChange: fn(),
 	isHosted: true,
 	onRemove: fn(),
 	onWithdraw: fn(),
@@ -723,6 +724,19 @@ const memberRowsIn = (panel: HTMLElement) =>
 
 const inviteFieldIn = (panel: HTMLElement) =>
 	within(panel).getByRole("textbox", { name: "Invite people" })
+
+const GUEST_LINE = "Reads conversations, can’t send messages."
+
+const MEMBER_LINE =
+	"Can do everything you can, including starting the agent and answering approvals."
+
+const roleRadiosIn = (panel: HTMLElement) => {
+	const group = within(panel).getByRole("radiogroup", { name: "Role" })
+	return {
+		guest: within(group).getByRole("radio", { name: "Guest" }),
+		member: within(group).getByRole("radio", { name: "Member" }),
+	}
+}
 
 const expectRefusal = async (panel: HTMLElement, message: string) => {
 	const field = inviteFieldIn(panel)
@@ -789,6 +803,57 @@ export const MembersI2 = meta.story({
 			"sam@example.com",
 		)
 		await expect(field).toHaveFocus()
+	},
+})
+
+export const MembersInviteRoleGuest = meta.story({
+	args: membersArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The invite form offers a role, Guest then Member, each with one line on what it allows. With no `role` given, Guest is picked.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		const group = within(panel).getByRole("radiogroup", { name: "Role" })
+		const { guest, member } = roleRadiosIn(panel)
+		await expect(within(group).getAllByRole("radio")).toEqual([guest, member])
+		await expect(guest).toBeChecked()
+		await expect(member).not.toBeChecked()
+		await expect(guest).toHaveAccessibleDescription(GUEST_LINE)
+		await expect(member).toHaveAccessibleDescription(MEMBER_LINE)
+	},
+})
+
+export const MembersInviteRoleMember = meta.story({
+	args: membersArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Picking Member by pointer, then moving between the options with the arrow keys, reports each pick through `onRoleChange`.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const panel = await membersPanelIn()
+		const { guest, member } = roleRadiosIn(panel)
+
+		await userEvent.click(within(panel).getByText("Member"))
+		await expect(member).toBeChecked()
+		await expect(guest).not.toBeChecked()
+		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("member")
+
+		await userEvent.keyboard("{ArrowUp}")
+		await expect(guest).toBeChecked()
+		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("guest")
+
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(member).toBeChecked()
+		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("member")
 	},
 })
 
@@ -1424,6 +1489,9 @@ const expectInviteBlocked = async (panel: HTMLElement) => {
 	await expect(getComputedStyle(label).opacity).toBe("0.5")
 	await expect(getComputedStyle(field).opacity).toBe("0.5")
 	await expect(getComputedStyle(helper).opacity).toBe("1")
+	const { guest, member } = roleRadiosIn(panel)
+	await expect(guest).toHaveAttribute("aria-disabled", "true")
+	await expect(member).toHaveAttribute("aria-disabled", "true")
 }
 
 const notSharedArgs = (hosting: SpaceHosting) =>
