@@ -82,9 +82,11 @@ struct ThreadMessage: Identifiable, Equatable {
 }
 
 enum ThreadLayout {
-    static func mark(_ entries: [ThreadEntry], time: ConversationTime) -> [ThreadEntry] {
+    static func mark(
+        _ entries: [ThreadEntry], time: ConversationTime, shownDay: Date? = nil
+    ) -> [ThreadEntry] {
         var marked = entries
-        var shownDay: Date?
+        var shownDay = shownDay
         var previous: ThreadMessage?
         for index in marked.indices {
             guard case .message(var message) = marked[index] else {
