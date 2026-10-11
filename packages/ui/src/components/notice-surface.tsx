@@ -81,14 +81,16 @@ const FAILURE_REPORT_LABELS = {
 	raisedIn: "Raised in",
 } satisfies Record<keyof FailureReport, string>
 
+const onOneLine = (text = "") => text.replace(/\s+/g, " ").trim()
+
 const formatFailureReport = ({ title, description, report }: ReportedFailure) =>
 	[
 		FAILURE_REPORT_HEADING,
-		title,
-		description,
+		onOneLine(title),
+		onOneLine(description),
 		...Object.entries(FAILURE_REPORT_LABELS).map(([field, label]) => {
-			const value = report[field as keyof FailureReport]
-			return value === undefined || value === "" ? "" : `${label}: ${value}`
+			const value = onOneLine(report[field as keyof FailureReport]?.toString())
+			return value && `${label}: ${value}`
 		}),
 	]
 		.filter(Boolean)
@@ -227,6 +229,20 @@ const NoticeMark = ({ type, spaceColour }: NoticeMarkProps) => {
 	)
 }
 
+type CopyLabelProps = {
+	isShown: boolean
+	children: string
+}
+
+const CopyLabel = ({ isShown, children }: CopyLabelProps) => (
+	<span
+		aria-hidden={!isShown}
+		className={cn("col-start-1 row-start-1", !isShown && "invisible")}
+	>
+		{children}
+	</span>
+)
+
 type NoticeCopyProps = {
 	text: string
 }
@@ -246,7 +262,10 @@ const NoticeCopy = ({ text }: NoticeCopyProps) => {
 			size="sm"
 			variant="outline"
 		>
-			{copied ? t("notice.copied") : t("notice.copy")}
+			<span className="grid">
+				<CopyLabel isShown={!copied}>{t("notice.copy")}</CopyLabel>
+				<CopyLabel isShown={copied}>{t("notice.copied")}</CopyLabel>
+			</span>
 		</Button>
 	)
 }

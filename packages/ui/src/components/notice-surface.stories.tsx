@@ -545,20 +545,22 @@ const settledRing = async (control: HTMLElement) => {
 	return getComputedStyle(control).boxShadow
 }
 
+const LongReportedFailureDemo = () => (
+	<NoticeDemo
+		label="Run the routine"
+		raise={() =>
+			raiseFailureNotice({
+				...LONG_FAILURE,
+				action: { label: RETRY_LABEL, onPress: retryReported },
+				report: REPORT,
+			})
+		}
+	/>
+)
+
 export const WithReportAndAction = meta.story({
 	globals: { viewport: { value: "narrow" } },
-	render: () => (
-		<NoticeDemo
-			label="Run the routine"
-			raise={() =>
-				raiseFailureNotice({
-					...LONG_FAILURE,
-					action: { label: RETRY_LABEL, onPress: retryReported },
-					report: REPORT,
-				})
-			}
-		/>
-	),
+	render: () => <LongReportedFailureDemo />,
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		viewport: { options: NARROW_VIEWPORT },
@@ -639,30 +641,59 @@ export const WithReportAndAction = meta.story({
 	},
 })
 
+type CopyLayout = {
+	control: number
+	text: number
+	notice: number
+}
+
+const copyLayout = (copy: HTMLElement, notice: HTMLElement): CopyLayout => ({
+	control: copy.getBoundingClientRect().width,
+	text:
+		within(notice)
+			.getByText(LONG_FAILURE.title)
+			.parentElement?.getBoundingClientRect().width ?? 0,
+	notice: notice.getBoundingClientRect().height,
+})
+
 export const ReportCopied = meta.story({
-	render: () => <ReportedFailureDemo />,
+	globals: { viewport: { value: "narrow" } },
+	render: () => <LongReportedFailureDemo />,
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		viewport: { options: NARROW_VIEWPORT },
 		docs: {
 			description: {
 				story:
-					"The Copy control right after a copy landed: it reads Copied for as long as the copy hook reports it, then goes back to Copy on its own, the notice open throughout. Pick `WithReport` for the control at rest.",
+					"The Copy control right after a copy landed, on the 320px window of `WithReportAndAction`: it reads Copied for as long as the copy hook reports it, then goes back to Copy on its own, the notice open throughout. Both labels share one cell, so the control keeps the width of the longer one, and neither the text column nor the notice moves when it switches; the label not shown is hidden from assistive technology, so the control is named Copied and nothing else. Pick `WithReport` for the control at rest.",
 			},
 		},
 	},
-	play: async ({ canvasElement, userEvent }) => {
+	play: async ({ canvas, userEvent }) => {
 		const writeText = spyOn(
 			navigator.clipboard,
 			"writeText",
 		).mockResolvedValue()
 
-		const { copy } = await pressedCopy(canvasElement, userEvent)
+		await expect(window.innerWidth).toBe(NARROW_WIDTH)
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Run the routine" }),
+		)
+		const notice = await failureNotice()
+		const copy = copyControl(notice)
+		if (!copy) throw new window.Error("The notice carries no Copy control")
+
+		const before = copyLayout(copy, notice)
+		await userEvent.click(copy)
 
 		await expect(copy).toHaveAccessibleName("Copied")
+		await expect(copyLayout(copy, notice)).toEqual(before)
+
 		await waitFor(() => expect(copy).toHaveAccessibleName(COPY_LABEL), {
 			timeout: 4000,
 		})
-		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+		await expect(copyLayout(copy, notice)).toEqual(before)
+		await expect(within(viewport()).getByText(LONG_FAILURE.title)).toBeVisible()
 
 		writeText.mockRestore()
 	},
