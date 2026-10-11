@@ -1275,13 +1275,6 @@ describe("createConversationController", () => {
 			expect(harness.controller.getState().pendingPrompt).toBeNull()
 		})
 
-		const answerRowsIn = async (harness: Harness) => {
-			const page = await harness.store.loadPage(harness.conversation.id, null)
-			return page.messages.filter(
-				(message) => message.repliedToMessageId === "question-ask-1",
-			)
-		}
-
 		it("keeps the question and holds the failure of the companion when its runtime rejects the answer", async () => {
 			const nyx = await askedIn(harness)
 			vi.spyOn(harness.driver, "answerQuestion").mockRejectedValue(
@@ -1300,7 +1293,12 @@ describe("createConversationController", () => {
 				kind: "question",
 				request: { id: "ask-1" },
 			})
-			expect(await answerRowsIn(harness)).toEqual([])
+			const page = await harness.store.loadPage(harness.conversation.id, null)
+			expect(
+				page.messages.filter(
+					(message) => message.repliedToMessageId === "question-ask-1",
+				),
+			).toEqual([])
 		})
 
 		it("releases the question and holds the failure when only the answer row is refused", async () => {
