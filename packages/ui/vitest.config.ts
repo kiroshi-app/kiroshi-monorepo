@@ -19,9 +19,6 @@ export default defineConfig({
 				resolve: {
 					alias: {
 						"@workspace/ui": fileURLToPath(new URL("./src", import.meta.url)),
-						"lucide-react": fileURLToPath(
-							new URL("./src/shims/lucide-react.ts", import.meta.url),
-						),
 					},
 				},
 				test: {

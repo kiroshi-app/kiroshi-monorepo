@@ -6,8 +6,7 @@
 		"jsx": "react-jsx",
 		"paths": {
 			"@workspace/ui/*": ["./src/*"],
-			"@workspace/storybook/*": ["./.storybook/*"],
-			"lucide-react": ["./src/shims/lucide-react.ts"]
+			"@workspace/storybook/*": ["./.storybook/*"]
 		}
 	},
 	"include": [

@@ -15,6 +15,9 @@
 	--color-frame-edge-dark: rgb(255 255 255 / 0.16);
 	--color-edge-drop: rgb(20 20 24 / 0.08);
 
+	--color-struck-price: #a3a3a3;
+	--color-struck-price-dark: #6b6b6b;
+
 	--shadow-frame:
 		0 0 0 1px var(--color-border), 0 -2px 60px -14px var(--color-frame-glow);
 	--shadow-frame-dark:

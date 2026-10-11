@@ -8,8 +8,7 @@
 		"jsx": "react-jsx",
 		"paths": {
 			"@/*": ["./src/*"],
-			"@workspace/ui/*": ["../../packages/ui/src/*"],
-			"lucide-react": ["../../packages/ui/src/shims/lucide-react.ts"]
+			"@workspace/ui/*": ["../../packages/ui/src/*"]
 		}
 	},
 	"include": ["src"],

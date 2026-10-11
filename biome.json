@@ -181,17 +181,10 @@
 			}
 		},
 		{
-			"includes": ["packages/ui/src/shims/lucide-react.ts"],
-			"linter": {
-				"rules": {
-					"style": {
-						"noRestrictedImports": "off"
-					}
-				}
-			}
-		},
-		{
-			"includes": ["packages/ui/src/components/icons.tsx"],
+			"includes": [
+				"packages/ui/src/components/icons.tsx",
+				"packages/ui/src/foundations/icon-stroke.stories.tsx"
+			],
 			"linter": {
 				"rules": {
 					"style": {

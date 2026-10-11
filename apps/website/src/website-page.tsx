@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { FaqList } from "@workspace/ui/components/faq-list"
 import { Icons } from "@workspace/ui/components/icons"
 import { SkipLink } from "@workspace/ui/components/skip-link"
+import { Badge } from "@workspace/ui/components/ui/badge"
 
 import { AUTHOR_URL, AUTHOR_X_URL, REPOSITORY_URL, WEBSITE_COPY } from "./copy"
 import { DownloadMark } from "./page-marks"
@@ -147,6 +148,118 @@ const FeatureSection = ({
 	</section>
 )
 
+const PLAN_CARD =
+	"flex flex-col gap-6 rounded-[16px] bg-card p-6 shadow-edge lg:gap-7 lg:p-7"
+
+const PLAN_NAME = "text-reading font-medium text-foreground"
+
+const PLAN_NOTE = "text-reading text-muted-foreground"
+
+const PRICE_FIGURE = "text-[44px] leading-12 tracking-[-0.03em]"
+
+type PlanFeaturesProps = {
+	features: readonly string[]
+}
+
+const PlanFeatures = ({ features }: PlanFeaturesProps) => (
+	<ul className="flex grow flex-col gap-2.5 border-t border-border pt-6">
+		{features.map((feature) => (
+			<li
+				className="flex items-start gap-2.5 text-reading text-foreground"
+				key={feature}
+			>
+				<span className="flex h-[22px] w-4 shrink-0 items-center">
+					<Icons.Check
+						aria-hidden="true"
+						className="size-4 text-muted-foreground"
+					/>
+				</span>
+				{feature}
+			</li>
+		))}
+	</ul>
+)
+
+const LocalPlan = () => {
+	const { name, description, price, features } = WEBSITE_COPY.pricing.local
+
+	return (
+		<article className={PLAN_CARD}>
+			<header className="flex flex-col gap-1">
+				<h3 className={PLAN_NAME}>{name}</h3>
+				<p className={PLAN_NOTE}>{description}</p>
+			</header>
+			<p className={`${PRICE_FIGURE} h-12 font-medium text-foreground lg:h-19`}>
+				{price}
+			</p>
+			<PlanFeatures features={features} />
+			<div className="hidden lg:flex">
+				<DownloadAction />
+			</div>
+		</article>
+	)
+}
+
+const ProPlan = () => {
+	const {
+		name,
+		betaTag,
+		description,
+		monthlyPrice,
+		price,
+		period,
+		billing,
+		features,
+		fineprint,
+	} = WEBSITE_COPY.pricing.pro
+
+	return (
+		<article className={PLAN_CARD}>
+			<header className="flex flex-col gap-1">
+				<div className="flex items-center gap-1">
+					<h3 className={PLAN_NAME}>{name}</h3>
+					<Badge variant="secondary">{betaTag}</Badge>
+				</div>
+				<p className={PLAN_NOTE}>{description}</p>
+			</header>
+			<div className="flex flex-col gap-1.5">
+				<p className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5">
+					<del
+						className={`${PRICE_FIGURE} text-struck-price decoration-1 dark:text-struck-price-dark`}
+					>
+						{monthlyPrice}
+					</del>
+					<span className={`${PRICE_FIGURE} font-medium text-foreground`}>
+						{price}
+					</span>
+					<span className={`${PLAN_NOTE} whitespace-nowrap`}>{period}</span>
+				</p>
+				<p className={PLAN_NOTE}>{billing}</p>
+			</div>
+			<PlanFeatures features={features} />
+			<p className="flex items-center font-mono text-xs leading-4 tracking-[0.08em] text-muted-foreground uppercase lg:h-11.5">
+				{fineprint}
+			</p>
+		</article>
+	)
+}
+
+const PricingSection = () => (
+	<section
+		className={`${PAGE_COLUMN} flex flex-col gap-10 pt-32 wrap-break-word`}
+		id="pricing"
+	>
+		<SectionTitle
+			subtitle={WEBSITE_COPY.pricing.subtitle}
+			title={WEBSITE_COPY.pricing.title}
+		/>
+		<div className="grid gap-4 lg:grid-cols-2">
+			<LocalPlan />
+			<ProPlan />
+		</div>
+	</section>
+)
+
 const FAQ_OPEN_ON_LOAD = WEBSITE_COPY.faq.items.map(({ question }) => question)
 
 const FaqSection = () => (
@@ -207,6 +320,7 @@ export const WebsitePage = ({ children }: WebsitePageProps) => (
 				id="three-ways"
 			/>
 			<FeatureSection {...WEBSITE_COPY.yours} className="pt-32" id="yours" />
+			<PricingSection />
 			<FaqSection />
 			<Credit />
 		</main>
