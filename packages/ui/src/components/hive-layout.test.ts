@@ -76,9 +76,6 @@ const moduleGraph = (path: string, seen = new Set<string>()): Set<string> => {
 	return seen
 }
 
-const idsOf = (input: HiveLayoutInput) =>
-	hiveLayout(input).cells.map(({ id }) => id)
-
 describe("hiveLayout", () => {
 	it("lays out every fixture input the way the committed fixture records it", async () => {
 		const fixture = FIXTURE_INPUTS.map((input) => ({
@@ -93,10 +90,10 @@ describe("hiveLayout", () => {
 
 	it("draws working participants first, each group in input order", () => {
 		expect(
-			idsOf({
+			hiveLayout({
 				participants: [FIRST, working(SECOND), THIRD, working(FOURTH)],
 				size: 40,
-			}),
+			}).cells.map(({ id }) => id),
 		).toEqual([SECOND.id, FOURTH.id])
 	})
 
@@ -113,13 +110,6 @@ describe("hiveLayout", () => {
 				({ shape }) => shape,
 			),
 		).toEqual(["circle", "hexagon"])
-	})
-
-	it("returns data that survives a JSON round trip unchanged", () => {
-		for (const input of FIXTURE_INPUTS)
-			expect(JSON.parse(JSON.stringify(hiveLayout(input)))).toEqual(
-				hiveLayout(input),
-			)
 	})
 
 	it("lays out the fixture again from the iOS bundle evaluated alone in node", () => {

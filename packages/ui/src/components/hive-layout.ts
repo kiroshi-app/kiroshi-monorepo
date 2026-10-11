@@ -31,13 +31,11 @@ type HiveLayoutInput = { participants: HiveParticipant[]; size: number }
 
 type HivePoint = { x: number; y: number }
 
-type HiveCellShape = "hexagon" | "circle"
-
 type HiveCell = {
 	id: string
 	centre: HivePoint
 	side: number
-	shape: HiveCellShape
+	shape: "hexagon" | "circle"
 }
 
 type HiveOverflow = {
