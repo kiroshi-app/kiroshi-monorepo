@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::plugin::{self, Descriptor};
-use super::Evolution;
+use super::Evolved;
 
 pub(super) const PLUGIN: Descriptor = Descriptor {
 	dir_name: "spaces",
@@ -46,6 +46,6 @@ pub fn remove<R: Runtime>(app: &AppHandle<R>, space_id: &str) {
 	let _ = fs::remove_dir_all(path);
 }
 
-pub fn evolve(path: &Path) -> Option<Evolution> {
+pub fn evolve(path: &Path) -> Evolved {
 	plugin::evolve(&PLUGIN, path)
 }

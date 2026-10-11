@@ -133,4 +133,5 @@ export type AgentEvent =
 			commitId: string
 			title: string
 	  }
+	| { type: "botEvolutionFailed"; bundle: EvolvedBundle; detail: string }
 	| { type: "failed"; error: TransportError }

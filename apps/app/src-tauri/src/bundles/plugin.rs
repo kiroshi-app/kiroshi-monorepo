@@ -1,9 +1,8 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::{
-	bot_recorded, drafted, git, learned, unrecorded, ApplicationMark, Author, ChangedFile,
-	Evolution, HistoryEntry, McpServer, Skill, SkillDraft, SkillFront, KIROSHI_KEY, LEARNED_NAME,
+	bot_recorded, bot_write_failed, drafted, git, learned, unrecorded, ApplicationMark, Author,
+	ChangedFile, Evolved, HistoryEntry, McpServer, Skill, SkillDraft, SkillFront, KIROSHI_KEY,
 	MANIFEST_DIR, MANIFEST_NAME, PRELOAD_KEY, SERVER_SUBJECT, SKILLS_DIR, SKILL_NAME, VERSION,
 };
 use crate::private_files;
@@ -29,17 +28,18 @@ pub fn laid_down(path: Option<PathBuf>) -> Option<PathBuf> {
 	path.filter(|path| manifest_file(path).is_file())
 }
 
-pub fn evolve(descriptor: &Descriptor, path: &Path) -> Option<Evolution> {
+pub fn evolve(descriptor: &Descriptor, path: &Path) -> Evolved {
 	let _serialised = super::serialised(path);
-	let changed = git::changes(path);
+	let changed = match git::changes(path) {
+		Ok(changed) => changed,
+		Err(error) => return bot_write_failed(path, error),
+	};
 	if changed.is_empty() {
-		return None;
+		return Evolved::Unchanged;
 	}
 	let (title, body) =
 		learned(path).unwrap_or_else(|| (descriptor.written_title.to_owned(), changed.join("\n")));
-	let commit_id = bot_recorded(path, &title, &body)?;
-	let _ = fs::remove_file(path.join(LEARNED_NAME));
-	Some(Evolution { commit_id, title })
+	bot_recorded(path, title, &body)
 }
 
 pub fn skills(path: &Path) -> Vec<Skill> {
@@ -169,9 +169,11 @@ fn about(descriptor: &Descriptor) -> std::io::Result<String> {
 #[cfg(test)]
 mod tests {
 	use super::super::space::PLUGIN;
+	use super::super::tests::{an_unreadable_index, read_only_objects, recorded};
 	use super::super::user;
-	use super::super::INVOCATION_KEY;
+	use super::super::{INVOCATION_KEY, LEARNED_NAME};
 	use super::*;
+	use std::fs;
 	use std::thread;
 
 	fn a_path(name: &str) -> PathBuf {
@@ -252,7 +254,7 @@ mod tests {
 		let path = a_path("quiet");
 		lay_down(&PLUGIN, &path).expect("the plugin is laid down");
 
-		assert_eq!(evolve(&PLUGIN, &path), None);
+		assert_eq!(evolve(&PLUGIN, &path), Evolved::Unchanged);
 
 		assert_eq!(git::history(&path).expect("the history reads").len(), 1);
 
@@ -271,7 +273,7 @@ mod tests {
 		)
 		.expect("the note lands");
 
-		let evolution = evolve(&PLUGIN, &path).expect("the turn is recorded");
+		let evolution = recorded(evolve(&PLUGIN, &path)).expect("the turn is recorded");
 
 		let history = git::history(&path).expect("the history reads");
 		assert_eq!(evolution.commit_id, history[0].id);
@@ -279,7 +281,66 @@ mod tests {
 		assert_eq!(history[0].title, "I noted where the API lives");
 		assert_eq!(history[0].author, Author::Bot);
 		assert!(!path.join(LEARNED_NAME).exists(), "the note is cleared");
-		assert!(git::changes(&path).is_empty(), "the plugin is left committed");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the plugin is left committed"
+		);
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_turn_git_refuses_reports_the_error_and_is_recorded_once_git_is_repaired() {
+		let path = a_path("objects-read-only");
+		lay_down(&PLUGIN, &path).expect("the plugin is laid down");
+		let skill = path.join(SKILLS_DIR).join("api").join(SKILL_NAME);
+		private_files::replace(&skill, b"The API lives in apps/api.").expect("the write lands");
+		private_files::replace(&path.join(LEARNED_NAME), b"I noted where the API lives\n")
+			.expect("the note lands");
+
+		let read_only = read_only_objects(&path);
+		let refused = evolve(&PLUGIN, &path);
+		drop(read_only);
+
+		let Evolved::Failed(error) = refused else {
+			panic!("the commit went through: {refused:?}");
+		};
+		assert!(!error.message().is_empty(), "the git error is carried");
+		assert!(skill.is_file(), "the skill was thrown away");
+		assert!(path.join(LEARNED_NAME).is_file(), "the note was thrown away");
+
+		let evolution = recorded(evolve(&PLUGIN, &path)).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, "I noted where the API lives");
+		assert_eq!(git::history(&path).expect("the history reads")[0].id, evolution.commit_id);
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the plugin is left committed"
+		);
+
+		let _ = fs::remove_dir_all(&path);
+	}
+
+	#[test]
+	fn a_turn_whose_status_git_cannot_read_reports_the_error_and_is_recorded_once_repaired() {
+		let path = a_path("index-unreadable");
+		lay_down(&PLUGIN, &path).expect("the plugin is laid down");
+		let skill = path.join(SKILLS_DIR).join("api").join(SKILL_NAME);
+		private_files::replace(&skill, b"The API lives in apps/api.").expect("the write lands");
+		private_files::replace(&path.join(LEARNED_NAME), b"I noted where the API lives\n")
+			.expect("the note lands");
+
+		let index = an_unreadable_index(&path);
+		let refused = evolve(&PLUGIN, &path);
+		index.restore();
+
+		assert!(matches!(refused, Evolved::Failed(_)), "got {refused:?}");
+		assert!(skill.is_file(), "the skill was thrown away");
+		assert!(path.join(LEARNED_NAME).is_file(), "the note was thrown away");
+
+		let evolution = recorded(evolve(&PLUGIN, &path)).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, "I noted where the API lives");
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -303,7 +364,10 @@ mod tests {
 
 		assert_eq!(created.id, "how-we-ship");
 		assert!(skills(&path).iter().any(|skill| skill.id == created.id));
-		assert!(git::changes(&path).is_empty(), "the skill reached the history");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the skill reached the history"
+		);
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -337,7 +401,10 @@ mod tests {
 		remove_skill(&path, "passing").expect("the skill is removed");
 
 		assert!(!skills(&path).iter().any(|skill| skill.id == "passing"));
-		assert!(git::changes(&path).is_empty(), "the removal reached the history");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the removal reached the history"
+		);
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -363,7 +430,10 @@ mod tests {
 		assert_eq!(written.name, "clock");
 		assert_eq!(mcp_servers(&path).len(), 1);
 		assert_eq!(declared_manifest(&path)["mcpServers"], "./.mcp.json");
-		assert!(git::changes(&path).is_empty(), "the write reached the history");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the write reached the history"
+		);
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -399,7 +469,10 @@ mod tests {
 		assert!(mcp_servers(&path).is_empty());
 		assert!(!mcp_file(&path).exists(), "the file is gone");
 		assert!(declared_manifest(&path).get("mcpServers").is_none());
-		assert!(git::changes(&path).is_empty(), "the removal reached the history");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"the removal reached the history"
+		);
 
 		let _ = fs::remove_dir_all(&path);
 	}
@@ -460,7 +533,10 @@ mod tests {
 			writer.join().expect("the session ends");
 		}
 
-		assert!(git::changes(&path).is_empty(), "every change reached the history");
+		assert!(
+			git::changes(&path).expect("the status reads").is_empty(),
+			"every change reached the history"
+		);
 
 		let _ = fs::remove_dir_all(&path);
 	}

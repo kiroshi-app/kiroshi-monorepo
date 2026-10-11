@@ -307,6 +307,25 @@
         },
         {
           "properties": {
+            "bundle": {
+              "$ref": "#/$defs/EvolvedBundle"
+            },
+            "detail": {
+              "type": "string"
+            },
+            "type": {
+              "const": "botEvolutionFailed"
+            }
+          },
+          "required": [
+            "type",
+            "bundle",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "error": {
               "$ref": "#/$defs/TransportError"
             },

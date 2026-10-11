@@ -119,19 +119,15 @@ fn written(
 	Ok(Some(id.to_string()))
 }
 
-pub fn changes(bundle: &Path) -> Vec<String> {
-	let Ok(repository) = Repository::open(bundle) else {
-		return Vec::new();
-	};
+pub fn changes(bundle: &Path) -> Result<Vec<String>, git2::Error> {
+	let repository = Repository::open(bundle)?;
 	let mut options = StatusOptions::new();
 	options.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
-	let Ok(statuses) = repository.statuses(Some(&mut options)) else {
-		return Vec::new();
-	};
+	let statuses = repository.statuses(Some(&mut options))?;
 	let mut paths: Vec<String> =
 		statuses.iter().filter_map(|status| status.path().map(str::to_owned).ok()).collect();
 	paths.sort();
-	paths
+	Ok(paths)
 }
 
 pub fn history(bundle: &Path) -> Result<Vec<HistoryEntry>, git2::Error> {

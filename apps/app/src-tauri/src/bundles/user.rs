@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::plugin::{self, Descriptor};
-use super::Evolution;
+use super::Evolved;
 
 pub(super) const PLUGIN: Descriptor = Descriptor {
 	dir_name: "user",
@@ -27,6 +27,6 @@ pub fn laid_down<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	plugin::laid_down(path(app))
 }
 
-pub fn evolve(path: &Path) -> Option<Evolution> {
+pub fn evolve(path: &Path) -> Evolved {
 	plugin::evolve(&PLUGIN, path)
 }

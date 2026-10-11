@@ -457,5 +457,7 @@ pub enum AgentEvent {
 	#[serde(rename_all = "camelCase")]
 	BotEvolved { bundle: EvolvedBundle, commit_id: String, title: String },
 	#[serde(rename_all = "camelCase")]
+	BotEvolutionFailed { bundle: EvolvedBundle, detail: String },
+	#[serde(rename_all = "camelCase")]
 	Failed { error: TransportError },
 }
