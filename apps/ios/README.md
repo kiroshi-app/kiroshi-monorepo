@@ -79,6 +79,12 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
 ```
 
+The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens on it, each companion's messages under its name and avatar, `group-mention` opens it with `@` typed so the mention picker shows, `group-working` with Juniper and Atlas both at work, and `group-failed` on the thread refused. Picking a companion in the picker writes `@Name`, sent to the host as `<@botId>` with that companion in `summoned`; with no mention, `summoned` stays empty and the host summons the lead, as the desktop does. The scripted host answers a group send with an `On it.` from each companion summoned:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture group-mention
+```
+
 `KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2 and 3.8, opens the menu of Spaces on 2.2, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.

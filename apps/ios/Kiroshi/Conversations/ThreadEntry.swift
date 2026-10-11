@@ -13,36 +13,57 @@ enum ThreadEntry: Identifiable, Equatable {
 }
 
 struct ThreadMessage: Identifiable, Equatable {
+    static let runGap: TimeInterval = 5 * 60
+
     let id: String
     let isYours: Bool
     let sentAt: Date
+    let authorId: Companion.ID?
+    let author: Companion?
+    private let authors: [Companion]
     private(set) var text: String
     private(set) var rendered: AttributedString
     var dayLabel: String?
+    var opensRun = true
 
-    init(id: String, isYours: Bool, text: String, sentAt: Date) {
+    init(
+        id: String, isYours: Bool, text: String, sentAt: Date, authorId: Companion.ID? = nil,
+        authors: [Companion] = []
+    ) {
         self.id = id
         self.isYours = isYours
         self.sentAt = sentAt
+        self.authorId = isYours ? nil : authorId
+        self.authors = authors
+        author = isYours ? nil : authors.first { $0.id == authorId }
         self.text = text
-        rendered = Self.render(text, isYours: isYours)
+        rendered = Self.render(text, isYours: isYours, authors: authors)
     }
 
     mutating func replaceText(_ text: String) {
         guard text != self.text else { return }
         self.text = text
-        rendered = Self.render(text, isYours: isYours)
+        rendered = Self.render(text, isYours: isYours, authors: authors)
     }
 
     mutating func append(_ delta: String) {
         replaceText(text + delta)
     }
 
-    private static func render(_ text: String, isYours: Bool) -> AttributedString {
-        guard !isYours else { return AttributedString(text) }
+    func continues(_ previous: ThreadMessage, calendar: Calendar) -> Bool {
+        previous.isYours == isYours && previous.authorId == authorId
+            && sentAt.timeIntervalSince(previous.sentAt) <= Self.runGap
+            && calendar.isDate(previous.sentAt, inSameDayAs: sentAt)
+    }
+
+    private static func render(_ text: String, isYours: Bool, authors: [Companion])
+        -> AttributedString
+    {
+        let shown = authors.isEmpty ? text : Mentions.names(in: text, among: authors)
+        guard !isYours else { return AttributedString(shown) }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        return (try? AttributedString(markdown: shown, options: options)) ?? AttributedString(shown)
     }
 }
 

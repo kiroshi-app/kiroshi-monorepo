@@ -18,7 +18,8 @@ final class ThreadStore {
     private(set) var isWorking = false
     private(set) var isReachable = false
     private(set) var isSending = false
-    private(set) var runningScope: AgentEvent.Scope?
+    private(set) var runningScopes: [AgentEvent.Scope] = []
+    private(set) var summoning: [Companion.ID] = []
     private(set) var sendFailure: SendFailure?
     private(set) var stopFailed = false
     private(set) var isDeleted = false
@@ -49,8 +50,29 @@ final class ThreadStore {
         self.calendar = calendar
     }
 
+    var runningScope: AgentEvent.Scope? {
+        runningScopes.last
+    }
+
+    var workingCompanions: [Companion] {
+        let ids = runningScopes.isEmpty ? summoning : runningScopes.map(\.botId)
+        return ids.compactMap { id in subject.members.first { $0.id == id } }
+    }
+
     var workingName: String {
-        subject.members.first { $0.id == runningScope?.botId }?.name ?? subject.title
+        let names = workingCompanions.map(\.name)
+        return names.isEmpty ? subject.title : names.formatted(.list(type: .and))
+    }
+
+    var mentionCandidates: [Companion] {
+        guard case .group(let group) = subject, let query = Mentions.query(in: draft) else {
+            return []
+        }
+        return Mentions.candidates(for: query, among: group.members)
+    }
+
+    func mention(_ companion: Companion) {
+        draft = Mentions.picking(companion, in: draft)
     }
 
     var canSend: Bool {
@@ -94,59 +116,85 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
+        let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let message = SentMessage(
             id: makeId(), conversationId: conversationId, turnId: makeId(),
-            content: draft.trimmingCharacters(in: .whitespacesAndNewlines),
-            createdAt: now().milliseconds, repliedToMessageId: nil)
+            content: content(of: written), createdAt: now().milliseconds,
+            repliedToMessageId: nil)
         draft = ""
         sendFailure = nil
         isSending = true
-        let task = Task { await deliver(message, through: relay) }
+        let task = Task { await deliver(message, written: written, through: relay) }
         sending = task
         return task
     }
 
     @discardableResult
     func stop() -> Task<Void, Never>? {
-        guard let relay, let runningScope else { return nil }
+        guard let relay, !runningScopes.isEmpty else { return nil }
+        let scopes = runningScopes
         stopFailed = false
         let task = Task {
-            do {
-                try await relay.cancelTurn(runningScope)
-            } catch is CancellationError {
-                return
-            } catch {
-                stopFailed = true
+            for scope in scopes {
+                do {
+                    try await relay.cancelTurn(scope)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    stopFailed = true
+                }
             }
         }
         stopping = task
         return task
     }
 
-    private func deliver(_ message: SentMessage, through relay: ConversationRelay) async {
+    private func deliver(
+        _ message: SentMessage, written: String, through relay: ConversationRelay
+    ) async {
         defer { isSending = false }
+        let summoned = summoned(by: message.content)
         do {
             try await relay.sendTurn(message, summoning: summoned)
             insert(
-                ThreadMessage(
+                threadMessage(
                     id: message.id, isYours: true, text: message.content,
-                    sentAt: Date(milliseconds: message.createdAt)))
+                    sentAt: message.createdAt))
+            summoning = summoned.isEmpty ? answering : summoned
             isWorking = true
         } catch is CancellationError {
             return
         } catch {
             if draft.isEmpty {
-                draft = message.content
+                draft = written
             }
             sendFailure = SendFailure(error)
         }
     }
 
-    private var summoned: [Companion.ID] {
+    private func content(of written: String) -> String {
+        guard case .group(let group) = subject else { return written }
+        return Mentions.tokens(in: written, among: group.members)
+    }
+
+    private func summoned(by content: String) -> [Companion.ID] {
         switch subject {
         case .companion(let companion): [companion.id]
-        case .group: []
+        case .group(let group): Mentions.summoned(in: content, among: group.members)
         }
+    }
+
+    private var answering: [Companion.ID] {
+        guard case .group(let group) = subject else { return [] }
+        return group.leadId.map { [$0] } ?? []
+    }
+
+    private func threadMessage(
+        id: String, isYours: Bool, text: String, sentAt: Int, authorId: Companion.ID? = nil
+    ) -> ThreadMessage {
+        ThreadMessage(
+            id: id, isYours: isYours, text: text, sentAt: Date(milliseconds: sentAt),
+            authorId: authorId, authors: subject.namedAuthors)
     }
 
     private func load(in spaceId: String, through relay: ConversationRelay) async {
@@ -180,9 +228,9 @@ final class ThreadStore {
     private func merge(_ messages: [TranscriptMessage], droppingAnyOf shownBeforeLoad: Set<String>)
     {
         let paged = messages.map { message in
-            ThreadMessage(
+            threadMessage(
                 id: message.id, isYours: message.role == .user, text: message.content,
-                sentAt: Date(milliseconds: message.createdAt))
+                sentAt: message.createdAt, authorId: message.authorBotId)
         }
         let pagedIds = Set(paged.map(\.id))
         let heardDuringLoad = entries.filter {
@@ -196,14 +244,14 @@ final class ThreadStore {
         switch event {
         case .messageStored(let message) where message.conversationId == conversationId:
             insert(
-                ThreadMessage(
+                threadMessage(
                     id: message.id, isYours: message.role == .user, text: message.content,
-                    sentAt: Date(milliseconds: message.createdAt)))
+                    sentAt: message.createdAt, authorId: message.authorBotId))
         case .agent(let agent) where agent.scope?.conversationId == conversationId:
             if let scope = agent.scope {
-                runningScope = scope
+                track(scope, through: agent.change)
             }
-            apply(agent.change)
+            apply(agent.change, by: agent.scope?.botId)
         case .groupUpdated(let group) where subject.isGroup(group.id):
             subject = .group(group)
         case .groupDeleted(let id) where subject.isGroup(id):
@@ -214,39 +262,64 @@ final class ThreadStore {
         }
     }
 
-    private func apply(_ change: AgentEvent.Change) {
+    private func track(_ scope: AgentEvent.Scope, through change: AgentEvent.Change) {
+        let index = runningScopes.firstIndex { $0.botId == scope.botId }
+        let ends =
+            switch change {
+            case .turnEnded: true
+            case .turn(let state): !state.isWorking
+            default: false
+            }
+        if ends {
+            if let index {
+                runningScopes.remove(at: index)
+            }
+        } else if let index {
+            runningScopes[index] = scope
+        } else {
+            runningScopes.append(scope)
+        }
+    }
+
+    private func apply(_ change: AgentEvent.Change, by authorId: Companion.ID?) {
         heardTurnWhileLoading = true
         switch change {
         case .turn(let state):
-            isWorking = state.isWorking
-            if !state.isWorking {
-                stopFailed = false
+            isWorking = state.isWorking || !runningScopes.isEmpty
+            if !isWorking {
+                settle()
             }
         case .messageStarted(let message):
             isWorking = true
             insert(
-                ThreadMessage(
+                threadMessage(
                     id: message.id, isYours: message.role == .user, text: message.text,
-                    sentAt: Date(milliseconds: message.timestamp)))
+                    sentAt: message.timestamp, authorId: authorId))
         case .messageDelta(let id, let text):
             updateMessage(id) { $0.append(text) }
         case .messageCompleted(let message):
             if !updateMessage(message.id, { $0.replaceText(message.text) }) {
                 insert(
-                    ThreadMessage(
+                    threadMessage(
                         id: message.id, isYours: message.role == .user, text: message.text,
-                        sentAt: Date(milliseconds: message.timestamp)))
+                        sentAt: message.timestamp, authorId: authorId))
             }
         case .activity(let activity) where activity.kind == .tool:
             isWorking = true
             record(ActivityGroup.Activity(id: activity.id, title: activity.title))
         case .turnEnded:
-            isWorking = false
-            runningScope = nil
-            stopFailed = false
+            isWorking = !runningScopes.isEmpty
+            if !isWorking {
+                settle()
+            }
         case .activity, .other:
             break
         }
+    }
+
+    private func settle() {
+        stopFailed = false
+        summoning = []
     }
 
     private func insert(_ message: ThreadMessage) {
@@ -282,15 +355,17 @@ final class ThreadStore {
 
     private func markDays() {
         let time = ConversationTime(now: now(), calendar: calendar)
-        var previous: Date?
+        var previous: ThreadMessage?
         for index in entries.indices {
             guard case .message(var message) = entries[index] else { continue }
             let opensDay =
-                previous.map { !calendar.isDate($0, inSameDayAs: message.sentAt) } ?? true
-            previous = message.sentAt
+                previous.map { !calendar.isDate($0.sentAt, inSameDayAs: message.sentAt) } ?? true
+            let opensRun = !(previous.map { message.continues($0, calendar: calendar) } ?? false)
+            previous = message
             let dayLabel = opensDay ? time.threadLabel(for: message.sentAt) : nil
-            if message.dayLabel != dayLabel {
+            if message.dayLabel != dayLabel || message.opensRun != opensRun {
                 message.dayLabel = dayLabel
+                message.opensRun = opensRun
                 entries[index] = .message(message)
             }
         }

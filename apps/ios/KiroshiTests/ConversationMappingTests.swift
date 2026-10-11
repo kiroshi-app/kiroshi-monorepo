@@ -62,7 +62,7 @@ struct ConversationMappingTests {
         let stored = #"{"spaceId":"s1","conversation":\#(group.json)}"#
         let decoded = GroupConversation(
             id: "g1", title: "Release crew", createdAt: 1,
-            participants: [.init(botId: "a", name: "Atlas")])
+            participants: [.init(botId: "a", name: "Atlas", isLead: true)])
 
         #expect(event("conversation://created", stored) == .groupCreated(decoded))
         #expect(event("conversation://updated", stored) == .groupUpdated(decoded))
