@@ -100,7 +100,7 @@ final class CompanionAvatarEngine {
         let key = HiveKey(members: members, side: side)
         if let cached = hives[key] { return cached }
         let participants = members.map { member -> [String: Any] in
-            ["id": member.id, "isPerson": member.isPerson, "working": member.isWorking]
+            ["id": member.id, "working": member.isWorking]
         }
         let layout = try HiveLayout.decode(
             hiveJSON(["participants": participants, "size": side]))

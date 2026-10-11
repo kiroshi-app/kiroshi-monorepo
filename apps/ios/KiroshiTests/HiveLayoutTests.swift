@@ -40,7 +40,7 @@ struct HiveLayoutTests {
 
     @Test func putsTheWorkingCompanionFirstAndCountsTheOthers() throws {
         let members = ["a", "b", "c", "d", "e"].map {
-            HiveLayout.Member(id: $0, isPerson: false, isWorking: $0 == "d")
+            HiveLayout.Member(id: $0, isWorking: $0 == "d")
         }
 
         let layout = try engine().hiveLayout(of: members, side: 52)
