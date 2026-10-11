@@ -95,6 +95,12 @@ Only **technical composition** — it places things, it does not draw them:
 - Two tabs: Conversations, then Missions.
 - Sign in happens inside the app (email, then a code by mail), never in a browser. The session bearer lives only in the Keychain.
 
+### Colour
+
+- Chrome wears the iOS system colours, by their semantic names: backgrounds (`systemBackground`, `systemGroupedBackground`, `secondarySystemBackground`…), labels (`.primary`, `.secondary`), separators, fills and grays, `systemRed` for errors and Sign out, `systemBlue` for the text cursor, the tab bar tinted with the label colour. No hex, no `Color(red:)`.
+- The Kiroshi catalogue (`Color.kiroshi`, `Colors.xcassets`) paints only what an artboard draws in a Kiroshi colour. On Sign in, Home and Settings it still feeds the companion avatars and the Hive (with its `+N` counter), your initial top left of Home and in Settings, and the online dot of the menu of Spaces.
+- The app's global accent is still the catalogue's `primary`. Missions and the Conversation thread still wear the catalogue until their own tickets move them.
+
 ### Vocabulary
 
 - Carried over from the desktop app: Companion, Conversation (never Chat), Message, Send, "the agent" (never "Claude Code" on screen), Applications, Secrets, Approvals, the Space name shown.
