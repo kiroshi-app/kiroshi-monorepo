@@ -58,7 +58,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One row of a conversation: the assistant reads from the start edge, the user from the end edge, with a single content column holding metadata above the text and a status line under it. `packages/ui/src/components/turn.tsx:464` and `packages/ui/src/components/application-install-turn.tsx:72` are the two callers, and both hand it one `MessageContent` and nothing else. Reach for it whenever a transcript needs a speaker, never to lay out a single standalone block of copy.",
+					"One row of a conversation: every row reads from the start edge, the user's included, with a single content column holding metadata above the text and a status line under it. `packages/ui/src/components/turn.tsx:464` and `packages/ui/src/components/application-install-turn.tsx:72` are the two callers, and both hand it one `MessageContent` and nothing else. Reach for it whenever a transcript needs a speaker, never to lay out a single standalone block of copy.",
 			},
 		},
 	},
@@ -87,7 +87,7 @@ export const Variants = meta.story({
 		docs: {
 			description: {
 				story:
-					"The only visual axis of the component: `from`. `packages/ui/src/components/turn.tsx:334` mounts the reader row and `packages/ui/src/components/turn.tsx:464` the companion one. Check that the assistant row hugs the start edge and the user row mirrors to the end edge — metadata and text flip together, so a transcript stays readable without any per-message alignment prop.",
+					"The only visual axis of the component: `from`. `packages/ui/src/components/turn.tsx:334` mounts the reader row and `packages/ui/src/components/turn.tsx:464` the companion one. Check that both rows hug the start edge: `from` names the speaker for assistive technology and no longer flips the row.",
 			},
 		},
 	},

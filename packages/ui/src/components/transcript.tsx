@@ -32,6 +32,9 @@ import {
 } from "@workspace/ui/lib/scroll-trace"
 import { cn } from "@workspace/ui/lib/utils"
 
+const RUN_AFTER_RUN_JOINS =
+	"[[data-slot=message-scroller-item]:has(>[data-slot=chat-turn-group]:only-child)+&:has(>[data-slot=chat-turn-group]:only-child)]:-mt-6"
+
 export interface TranscriptItem {
 	key: string
 	messageIds?: string[]
@@ -377,7 +380,7 @@ const TranscriptBody = ({
 					<MessageHighlightProvider messageId={highlightedMessageId}>
 						{rows.map((row) => (
 							<MessageScrollerItem
-								className="flex flex-col gap-6"
+								className={cn("flex flex-col gap-6", RUN_AFTER_RUN_JOINS)}
 								key={row.key}
 								messageId={row.key}
 								scrollAnchor={row.key === anchorKey}

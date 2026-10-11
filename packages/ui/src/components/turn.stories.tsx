@@ -6,9 +6,12 @@ import {
 	botIdentityAvatars,
 	expectCompanionPictureShape,
 	glyphIn,
+	isInBrowserRunner,
+	realPointer,
 	shown,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 	UPLOADED_AVATAR_IMAGE,
 } from "@workspace/storybook/story-utils"
 import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
@@ -25,6 +28,7 @@ import type { MessageAuthor } from "@workspace/ui/components/message"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import type { RosterMenuSection } from "@workspace/ui/components/roster-menu-items"
 import type { Space } from "@workspace/ui/components/space"
+import { HOVER_INTENT_DELAY_MS } from "@workspace/ui/components/tooltip-hint"
 import {
 	AssistantTurn,
 	PersonTurn,
@@ -337,7 +341,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The two transcript rows, one per side. `sentAt` with `now` writes the send time on a muted line under the bubble as relative wording, the full date on hover; a row without `sentAt` draws no line at all. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is a bubble on the other side with a gutter for the companion's avatar. Only the companions are named here — the reader's side carries no avatar at all. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass `identity` on the row that closes the run — a row with no `identity` falls back to the `author` it closes its run with, and both draw the same companion avatar. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. The gutter avatar never stops anything: the stop of a working companion rides its working row (`ActivityIndicator`) under the bubbles, so a wave is still ended one seat at a time and the avatar above stays the same companion control whether that companion is working or idle. `footer` puts a line of the screen's own under the bubble, in the very slot a completion label uses, so a row never carries two footers and the label wins whenever the state produces one. Neither scrolls or animates the list — that belongs to the scroller around them.",
+					"The transcript rows, one anatomy for every speaker. Every row reads from the same left edge: a 40px gutter, then a header line above the bubble on the row that opens a run, and nothing under the bubble but a state line. `sentAt` with `now` writes the send time after the name on that header line, hours and minutes today, Yesterday, then calendar days, with the full date on hover or keyboard focus of the time; a row inside a run shows its own hours and minutes in the gutter while the pointer rests on it, and a row without `sentAt` draws no time at all. `UserTurn` is a bubble that can offer a retry when the prompt never reached Claude, and that holds the wait for a prompt written while another turn runs — `queued` draws it a step back from a sent prompt, with its own way out; `AssistantTurn` is the companion's bubble, with the companion's avatar in the gutter. The reader is named too: `UserTurn` takes the reader's `name` and draws their initials in a round avatar, as `PersonTurn` does for another person, while a companion keeps its hexagon. A long answer arrives as a run of rows, one per paragraph: wrap those in `TurnGroup` and it tells each row where it sits, so nothing counts rows by hand, and pass `identity` on the row that opens the run — a row with no `identity` falls back to the `author` it opens its run with, and both draw the same companion avatar on that head row. A block that already draws its own frame — a table — takes `bare`, which drops the bubble behind it rather than boxing the same grid twice. `copyText` is per bubble and holds that bubble's own words — a row handed an empty one, as a turn that stopped before writing is, offers no copy at all. Both take the transport's completion verbatim as `state`, so a screen maps nothing. A row given `onReply` reveals a second action ahead of copy, and a row given `repliedTo` is wrapped in the quote of the message it answers — both report to the screen and neither knows what is being quoted. `messageId` anchors the row so the scroller can be asked to bring it back, and it is set once per message: a message split into a run puts it on the group instead of on every paragraph. The gutter avatar never stops anything: the stop of a working companion rides its working row (`ActivityIndicator`) under the bubbles, so a wave is still ended one seat at a time and the avatar above stays the same companion control whether that companion is working or idle. `footer` puts a line of the screen's own under the bubble, in the very slot a completion label uses, so a row never carries two footers and the label wins whenever the state produces one. Neither scrolls or animates the list — that belongs to the scroller around them.",
 			},
 		},
 	},
@@ -383,7 +387,7 @@ export const Run = meta.story({
 				{RUN.map((paragraph, index) => (
 					<AssistantTurn
 						key={paragraph}
-						identity={index === RUN.length - 1 ? BOT : undefined}
+						identity={index === 0 ? BOT : undefined}
 						copyText={paragraph}
 					>
 						{paragraph}
@@ -396,7 +400,7 @@ export const Run = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing, and the corner facing a neighbour pulled in to less than half the corner facing away, which is what makes the rows read as one bubble rather than three — and that a single avatar marks it from the last row while the rows above keep the gutter empty. Every bubble carries its own copy, and copying one takes that paragraph alone: there is no action anywhere for the answer entire, because the reader points at the part they want. " +
+					"Reach for this for the shape a real answer takes: one paragraph per row, published as each one closes. Check that the run reads as one block — tight spacing, and the corner facing a neighbour pulled in to less than half the corner facing away, which is what makes the rows read as one bubble rather than three — and that a single avatar marks it from the head row while the rows under it keep the gutter empty. Every bubble carries its own copy, and copying one takes that paragraph alone: there is no action anywhere for the answer entire, because the reader points at the part they want. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -411,9 +415,9 @@ export const Run = meta.story({
 			'[data-slot="message-bubble-content"]',
 		)[1]
 		const corners = getComputedStyle(closing)
-		await expect(Number.parseFloat(corners.borderEndEndRadius)).toBeGreaterThan(
-			Number.parseFloat(corners.borderStartEndRadius) * 2,
-		)
+		await expect(
+			Number.parseFloat(corners.borderEndStartRadius),
+		).toBeGreaterThan(Number.parseFloat(corners.borderStartStartRadius) * 2)
 	},
 })
 
@@ -498,7 +502,7 @@ export const PersonRun = meta.story({
 		await expect(turns).toHaveLength(3)
 		await expect(canvas.getAllByText(PERSON)).toHaveLength(1)
 		await expect(slotsIn(canvasElement, "user-avatar")).toHaveLength(1)
-		await expectPersonTurn(turns[2])
+		await expectPersonTurn(turns[0])
 
 		const middle = slotIn(turns[1], "message-bubble-content")
 		const corners = getComputedStyle(middle)
@@ -550,14 +554,16 @@ export const MarkAcrossRuns = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its closing row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
+					"Reach for this once the transcript has history: every answered run keeps its own avatar, but only the newest group is told `carriesMark`, so only its head row answers to the transcript's mark. Start a new turn and check that the mark leaves the newest gutter for the working row while the avatar above it does not budge. Pick `Mark` for the handoff itself, and `Primitives/SharedMark` for the invariant underneath it. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement, userEvent }) => {
 		const gutterAvatars = () =>
-			canvasElement.querySelectorAll('[data-slot="message-gutter"] > *')
+			canvasElement.querySelectorAll(
+				'[data-from="assistant"] [data-slot="message-gutter"] > *',
+			)
 		const marked = () => canvasElement.querySelectorAll('[data-state="marked"]')
 
 		await expect(gutterAvatars()).toHaveLength(2)
@@ -622,12 +628,18 @@ export const Table = meta.story({
 				What does the guide cover?
 			</UserTurn>
 			<TurnGroup>
-				<AssistantTurn copyText={TABLE_INTRO}>{TABLE_INTRO}</AssistantTurn>
+				<AssistantTurn
+					copyText={TABLE_INTRO}
+					identity={BOT}
+					sentAt={sentOn(10, 9, 21)}
+					now={READ_ON}
+				>
+					{TABLE_INTRO}
+				</AssistantTurn>
 				<AssistantTurn
 					bare
 					copyText={TABLE}
-					identity={BOT}
-					sentAt={sentOn(10, 9, 21)}
+					sentAt={sentOn(10, 9, 22)}
 					now={READ_ON}
 				>
 					<Markdown>{TABLE}</Markdown>
@@ -639,7 +651,7 @@ export const Table = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the row a table lands in. A table frames and fills itself, so the row is `bare`: no bubble behind it, no padding around it, and one box around the grid instead of two. Check that the sentence above it keeps its bubble, that the table sits flush against the gutter and still marks the run with its avatar, and that the row's copy stays beside the frame rather than out at the edge of the transcript, and that its send time drops the bubble padding as a bare row's name does. " +
+					"Reach for this for the row a table lands in. A table frames and fills itself, so the row is `bare`: no bubble behind it, no padding around it, and one box around the grid instead of two. Check that the sentence above it keeps its bubble and opens the run with the avatar, that the table sits flush against the gutter, that the row's copy stays beside the frame rather than out at the edge of the transcript, and that the table row keeps its own send time in the gutter, shown on hover. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -652,11 +664,9 @@ export const Table = meta.story({
 			bubbleStyleOf(canvas.getByText(TABLE_INTRO)).paddingLeft,
 		).not.toBe("0px")
 		await expect(bubbleStyleOf(table).paddingLeft).toBe("0px")
-		const timeLine = slotIn(canvasElement, "message-time-line")
-		await expect(timesIn(canvasElement)[0].getBoundingClientRect().left).toBe(
-			table.getBoundingClientRect().left +
-				Number.parseFloat(getComputedStyle(timeLine).paddingLeft),
-		)
+		const [, tableRow] = canvas.getAllByLabelText("assistant message")
+		await expect(slotsIn(canvasElement, "message-time-line")).toHaveLength(0)
+		await expect(timesIn(slotIn(tableRow, "message-gutter"))).toHaveLength(1)
 	},
 })
 
@@ -923,7 +933,7 @@ export const Authored = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name is written once, on the row that opens it, while the avatar stays on the row that closes it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `RosterProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this. " +
+					"A conversation held by several bots, where every row has to say who wrote it. Hand `AssistantTurn` an `author` and it names the bot above the bubble and draws that bot's avatar in the gutter — the row keeps the gutter it always had, so nothing is passed twice. The bot that leads wears a crown beside its name. In a run the name and the avatar are written once, on the row that opens it: the block reads as one bot speaking, not as the same name repeated. `<@bot-id>` in the text is drawn as a chip by `Markdown`, resolved against `RosterProvider`, and an id the conversation does not know still draws as an unknown bot rather than leaking the raw text. Check that Atlas is named once over its two rows, that the crown is on Atlas alone, and that a message from a conversation with a single bot — every other story here — is untouched by all of this. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -947,7 +957,9 @@ export const Authored = meta.story({
 	),
 	play: async ({ canvas, canvasElement }) => {
 		const named = [
-			...canvasElement.querySelectorAll('[data-slot="message-author"]'),
+			...canvasElement.querySelectorAll(
+				'[data-from="assistant"] [data-slot="message-author"]',
+			),
 		].map((header) => header.textContent)
 
 		await expect(named).toHaveLength(2)
@@ -959,7 +971,7 @@ export const Authored = meta.story({
 		await expect(canvas.getByText("Unknown companion")).toBeVisible()
 
 		const [name] = canvasElement.querySelectorAll<HTMLElement>(
-			'[data-slot="message-author"]',
+			'[data-from="assistant"] [data-slot="message-author"]',
 		)
 		const [bubble] = canvasElement.querySelectorAll<HTMLElement>(
 			'[data-slot="message-content"]:has([data-slot="message-author"]) [data-slot="message-bubble-content"]',
@@ -982,7 +994,7 @@ export const Titled = meta.story({
 		},
 	},
 	render: () => (
-		<div className="flex w-80 flex-col gap-6">
+		<div className="flex w-92 flex-col gap-6 px-6">
 			{TITLED_ROOM.map(({ author, message }) => (
 				<AssistantTurn author={author} copyText={message} key={author.id}>
 					{message}
@@ -1169,7 +1181,7 @@ export const NamedByIdentity = meta.story({
 		docs: {
 			description: {
 				story:
-					"A row that names its gutter through `identity` rather than `author`: the screen hands the face it draws. Check that the gutter draws that companion and that the bubble carries no name line above it, since naming the row above the bubble is the author's job alone. " +
+					"A row that names its gutter through `identity` rather than `author`: the screen hands the face it draws, as a thread with a single companion does. Check that the gutter draws that companion and that the header line above the bubble names it too, with no title badge since the face carries none. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -1178,7 +1190,9 @@ export const NamedByIdentity = meta.story({
 		await expect(
 			canvas.getByRole("img", { hidden: true, name: BOT.name }),
 		).toBeVisible()
-		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
+		await expect(slotIn(canvasElement, "message-author")).toHaveTextContent(
+			BOT.name,
+		)
 	},
 })
 
@@ -1315,7 +1329,7 @@ export const ReportedByLongTitle = meta.story({
 		},
 	},
 	render: () => (
-		<div className="flex max-w-xs flex-col gap-6">
+		<div className="flex max-w-xs flex-col gap-6 px-6">
 			<AssistantTurn author={LEAD} cause={LONG_CAUSE} copyText={REPORT}>
 				{REPORT}
 			</AssistantTurn>
@@ -1389,7 +1403,7 @@ export const FootnotedSqueezed = meta.story({
 		},
 	},
 	render: () => (
-		<div className="w-[320px]">
+		<div className="w-[320px] px-6">
 			<AssistantTurn copyText={ANSWER} footer={KEPT_SKILL} identity={BOT}>
 				{ANSWER}
 			</AssistantTurn>
@@ -1418,7 +1432,7 @@ const deleteCompanion = fn()
 
 const COMPANION_MENU_LABEL = `Actions for ${BOT.name}`
 
-const HOSTLESS_GUTTER_PLACEMENT = { gridColumnStart: "1", gridRowStart: "2" }
+const HOSTLESS_GUTTER_PLACEMENT = { inlineStart: 24, blockStart: 8 }
 
 const companionMenuFor = (companionId: string) =>
 	companionId === BOT.id ? (
@@ -1442,8 +1456,14 @@ const GutterTurn = ({ identity }: { identity: RosterBot }) => (
 )
 
 const gutterPlacement = (gutter: HTMLElement) => {
-	const { gridColumnStart, gridRowStart } = getComputedStyle(gutter)
-	return { gridColumnStart, gridRowStart }
+	const row = gutter.closest('[data-slot="message"]')
+	if (!row) throw new globalThis.Error("This gutter sits in no row")
+	const placed = gutter.getBoundingClientRect()
+	const framed = row.getBoundingClientRect()
+	return {
+		inlineStart: placed.left - framed.left,
+		blockStart: placed.top - framed.top,
+	}
 }
 
 export const CompanionMenuOnGutter = meta.story({
@@ -1715,96 +1735,268 @@ export const WorkingCompanionStopsFromItsRow = meta.story({
 	},
 })
 
-const expectTimeOnNameEdge = async (root: HTMLElement) => {
-	const name = slotIn(root, "message-author").firstElementChild as HTMLElement
-	const nameEdge = name.getBoundingClientRect().left
+const READER = "Shoto Puget"
 
-	for (const time of timesIn(root)) {
-		await expect(time.getBoundingClientRect().left).toBeCloseTo(nameEdge, 0)
-	}
-}
-
-const expectTimeBelowBubble = async (
+const expectTimeOnHeadLine = async (
 	article: HTMLElement,
 	at: number,
 	wording: string,
 ) => {
 	const [time] = timesIn(article)
 	const bubble = slotIn(article, "message-bubble-content")
-	const below = bubble.getBoundingClientRect()
-	const edge = time.getBoundingClientRect()
-	const padding = getComputedStyle(bubble)
-	const textEdgeGap =
-		article.dataset.from === "user"
-			? below.right - Number.parseFloat(padding.paddingRight) - edge.right
-			: edge.left - below.left - Number.parseFloat(padding.paddingLeft)
+	const name = slotIn(article, "message-author").firstElementChild
+	const label = time.getBoundingClientRect()
 
-	await expect(time).toHaveTextContent(wording)
+	await expect(time).toHaveTextContent(new RegExp(`^${wording}$`))
 	await expect(time).toHaveAttribute("datetime", new Date(at).toISOString())
 	await expect(time).not.toHaveAttribute("title")
-	await expect(
-		bubble.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING,
-	).toBeTruthy()
-	await expect(edge.top).toBeGreaterThanOrEqual(below.bottom)
-	await expect(textEdgeGap).toBeCloseTo(0, 0)
-	await expect(slotIn(article, "message-time-line")).toHaveClass(
-		"text-xs",
-		"text-muted-foreground",
+	await expect(getComputedStyle(time).fontSize).toBe("12px")
+	await expect(getComputedStyle(time).fontVariantNumeric).toBe("tabular-nums")
+	await expect(label.bottom).toBeLessThanOrEqual(
+		bubble.getBoundingClientRect().top,
 	)
+	if (name) {
+		const named = name.getBoundingClientRect()
+		await expect(label.left).toBeGreaterThan(named.right)
+		await expect(label.top).toBeLessThan(named.bottom)
+	}
+	await expect(slotsIn(article, "message-time-line")).toHaveLength(0)
 }
 
-export const BotTurnWithTime = meta.story({
-	render: () => (
-		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<AssistantTurn
-				author={SECOND}
-				copyText={ANSWER}
-				sentAt={sentOn(10, 9, 21)}
-				now={READ_ON}
-			>
-				{ANSWER}
-			</AssistantTurn>
-		</div>
-	),
+const expectRowAnatomy = async (article: HTMLElement) => {
+	const row = article.getBoundingClientRect()
+	const gutter = slotIn(article, "message-gutter").getBoundingClientRect()
+	const header = slotIn(article, "message-author")
+	const bubble = slotIn(article, "message-bubble-content")
+	const name = header.firstElementChild as HTMLElement
+
+	await expect(gutter.left - row.left).toBe(24)
+	await expect(gutter.width).toBe(TURN_AVATAR_SIZE)
+	await expect(gutter.top - row.top).toBe(8)
+	await expect(header.getBoundingClientRect().height).toBe(20)
+	await expect(
+		bubble.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
+	).toBe(4)
+	await expect(name.getBoundingClientRect().left).toBe(
+		bubble.getBoundingClientRect().left + 14,
+	)
+	await expect(getComputedStyle(name).fontSize).toBe("14px")
+	await expect(getComputedStyle(name).fontWeight).toBe("600")
+	await expect(getComputedStyle(bubble).borderTopLeftRadius).toBe("18px")
+}
+
+const ReaderMessageRow = () => (
+	<div className="mx-auto flex max-w-2xl flex-col px-6">
+		<UserTurn
+			name={READER}
+			copyText={QUESTION}
+			sentAt={sentOn(10, 9, 28)}
+			now={READ_ON}
+		>
+			{QUESTION}
+		</UserTurn>
+	</div>
+)
+
+export const ReaderMessage = meta.story({
+	render: () => <ReaderMessageRow />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this for a companion message with its send time. Check that the time reads as relative wording on a muted line under the bubble, on the bubble's leading edge, and that hovering it shows the full date and time.",
+					"Reach for this for the reader's own message. It reads from the same left edge as every other row: a round avatar with the reader's initials in the gutter, the reader's name and the send time on one line, and the solid bubble under them, with nothing below it. Check that the avatar is round and holds the initials, that the bubble is the user bubble with white text, and that hovering the bubble opens nothing.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const article = canvas.getByLabelText("user message")
+		const avatar = slotIn(article, "user-avatar")
+
+		await expectRowAnatomy(article)
+		await expectTimeOnHeadLine(article, sentOn(10, 9, 28), "09:28")
+		await expect(within(article).getByText(READER)).toBeVisible()
+		await expect(within(avatar).getByText("SP")).toBeInTheDocument()
+		await expect(
+			Number.parseFloat(getComputedStyle(avatar).borderTopLeftRadius),
+		).toBeGreaterThanOrEqual(TURN_AVATAR_SIZE / 2)
+		await expect(slotIn(article, "message-bubble")).toHaveAttribute(
+			"data-variant",
+			"solid",
+		)
+	},
+})
+
+export const ReaderMessageDark = ReaderMessage.extend({
+	globals: { theme: "dark" },
+})
+
+const CompanionMessageRow = () => (
+	<div className="mx-auto flex max-w-2xl flex-col px-6">
+		<AssistantTurn
+			author={{ ...SECOND, title: "Ops" }}
+			copyText={ANSWER}
+			sentAt={sentOn(10, 9, 21)}
+			now={READ_ON}
+		>
+			{ANSWER}
+		</AssistantTurn>
+	</div>
+)
+
+export const CompanionMessage = meta.story({
+	render: () => <CompanionMessageRow />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this for a companion message on its own. The dithered hexagon sits in the gutter on the head row, the name, the title badge and the send time share the line above the bubble, and nothing sits under it. Check that the badge is centred on the name line and that the time sits after it.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		const article = canvas.getByLabelText("assistant message")
+		const badge = slotIn(article, "bot-title-badge").getBoundingClientRect()
+		const header = slotIn(article, "message-author").getBoundingClientRect()
 
-		await expectTimeBelowBubble(article, sentOn(10, 9, 21), "9 minutes ago")
-		await expectTimeOnNameEdge(article)
+		await expectRowAnatomy(article)
+		await expectTimeOnHeadLine(article, sentOn(10, 9, 21), "09:21")
+		await expect(botIdentityAvatars(article)).toHaveLength(1)
+		await expect(
+			Math.abs(badge.top + badge.height / 2 - (header.top + header.height / 2)),
+		).toBeLessThanOrEqual(1)
 	},
 })
 
-export const UserTurnWithTime = meta.story({
-	render: () => (
-		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<UserTurn copyText={QUESTION} sentAt={sentOn(10, 9, 28)} now={READ_ON}>
-				{QUESTION}
-			</UserTurn>
-		</div>
-	),
+export const CompanionMessageDark = CompanionMessage.extend({
+	globals: { theme: "dark" },
+})
+
+const RunOfThreeRows = () => (
+	<div className="mx-auto flex max-w-2xl flex-col px-6">
+		<TurnGroup>
+			{RUN.map((paragraph, index) => (
+				<AssistantTurn
+					key={paragraph}
+					author={SECOND}
+					copyText={paragraph}
+					sentAt={sentOn(10, 9, 21 + index)}
+					now={READ_ON}
+				>
+					{paragraph}
+				</AssistantTurn>
+			))}
+		</TurnGroup>
+	</div>
+)
+
+const RUN_ROW_INSETS = [
+	{ top: 8, bottom: 2 },
+	{ top: 2, bottom: 2 },
+	{ top: 2, bottom: 4 },
+]
+
+export const RunOfThree = meta.story({
+	render: () => <RunOfThreeRows />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this for the reader's own message with its send time. Check that the time sits under the bubble on the bubble's trailing edge.",
+					"Reach for this for three messages a companion sent in a row. The avatar, the name and the time open the run once, on its head row; the two rows under it keep an empty gutter and no header, and their bubbles join the one above on the left corners. Check that nothing is written under any bubble and that the run reads as one block.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const articles = canvas.getAllByLabelText("assistant message")
+		const [head, middle, last] = articles.map((article) =>
+			getComputedStyle(slotIn(article, "message-bubble-content")),
+		)
+
+		await expect(canvas.getAllByText(SECOND.name)).toHaveLength(1)
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(1)
+		await expect(botIdentityAvatars(articles[0])).toHaveLength(1)
+		await expectTimeOnHeadLine(articles[0], sentOn(10, 9, 21), "09:21")
+		for (const [index, article] of articles.entries()) {
+			const style = getComputedStyle(article)
+			await expect({
+				top: Number.parseFloat(style.paddingTop),
+				bottom: Number.parseFloat(style.paddingBottom),
+			}).toEqual(RUN_ROW_INSETS[index])
+		}
+		for (const inner of articles.slice(1)) {
+			await expect(slotsIn(inner, "message-author")).toHaveLength(0)
+			await expect(
+				getComputedStyle(slotIn(inner, "message-gutter")).opacity,
+			).toBe("0")
+		}
+		await expect([
+			head.borderTopLeftRadius,
+			head.borderBottomLeftRadius,
+		]).toEqual(["18px", "8px"])
+		await expect([
+			middle.borderTopLeftRadius,
+			middle.borderBottomLeftRadius,
+		]).toEqual(["8px", "8px"])
+		await expect([
+			last.borderTopLeftRadius,
+			last.borderBottomLeftRadius,
+		]).toEqual(["8px", "18px"])
+	},
+})
+
+export const RunOfThreeDark = RunOfThree.extend({
+	globals: { theme: "dark" },
+})
+
+export const InnerRowHovered = meta.story({
+	render: () => <RunOfThreeRows />,
+	parameters: {
+		pseudo: { hover: '[data-slot="message"]:nth-child(2)' },
+		docs: {
+			description: {
+				story:
+					"Reach for this for the pointer resting on a row inside a run. The row paints its highlight across the transcript width and writes its own hours and minutes in the empty gutter, level with the first line of its bubble; the head row paints the same highlight and keeps its header. Check the highlight and the gutter time in the light and the dark theme, and that the gutter time opens the full date on hover.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expectTimeBelowBubble(
-			canvas.getByLabelText("user message"),
-			sentOn(10, 9, 28),
-			"2 minutes ago",
+		if (!isInBrowserRunner()) return
+		const pointer = await realPointer()
+		const [head, middle] = canvas.getAllByLabelText("assistant message")
+		const gutter = slotIn(middle, "message-gutter")
+		const [clock] = timesIn(gutter)
+		const bubble = slotIn(middle, "message-bubble-content")
+		const highlight = tokenStyleIn(
+			middle,
+			"bg-message-row-hover",
+			"backgroundColor",
 		)
+
+		await pointer.hover(bubble)
+		await waitFor(() => expect(getComputedStyle(gutter).opacity).toBe("1"))
+		await expect(clock).toHaveTextContent(/^09:22$/)
+		await expect(getComputedStyle(clock).fontSize).toBe("11px")
+		await expect(clock.getBoundingClientRect().right).toBeCloseTo(
+			gutter.getBoundingClientRect().right,
+			0,
+		)
+		await waitFor(() =>
+			expect(getComputedStyle(middle).backgroundColor).toBe(highlight),
+		)
+		await expect(middle.getBoundingClientRect().width).toBe(
+			head.getBoundingClientRect().width,
+		)
+
+		await pointer.hover(head)
+		await waitFor(() =>
+			expect(getComputedStyle(head).backgroundColor).toBe(highlight),
+		)
+		await expect(getComputedStyle(gutter).opacity).toBe("0")
+		await pointer.unhover(head)
 	},
+})
+
+export const InnerRowHoveredDark = InnerRowHovered.extend({
+	globals: { theme: "dark" },
 })
 
 export const PersonTurnWithTime = meta.story({
@@ -1824,101 +2016,14 @@ export const PersonTurnWithTime = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a message another person wrote, with its send time. Check that the time sits under the bubble on the bubble's leading edge.",
+					"Reach for this for a message another person wrote, with its send time. Check that the time follows the person's name on the line above the grey bubble.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		const article = canvas.getByLabelText(`message from ${PERSON}`)
 
-		await expectTimeBelowBubble(article, sentOn(10, 9, 0), "30 minutes ago")
-		await expectTimeOnNameEdge(article)
-	},
-})
-
-export const RunOfThreeTimedMessages = meta.story({
-	tags: ["test-only"],
-	render: () => (
-		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<TurnGroup>
-				{RUN.map((paragraph, index) => (
-					<AssistantTurn
-						key={paragraph}
-						author={SECOND}
-						copyText={paragraph}
-						sentAt={sentOn(10, 9, 21 + index)}
-						now={READ_ON}
-					>
-						{paragraph}
-					</AssistantTurn>
-				))}
-			</TurnGroup>
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this for three messages a companion sent in a row. Check that the name opens the run once and that each bubble still carries its own time underneath.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		const articles = canvas.getAllByLabelText("assistant message")
-		const wordings = ["9 minutes ago", "8 minutes ago", "7 minutes ago"]
-
-		await expect(canvas.getAllByText(SECOND.name)).toHaveLength(1)
-		for (const [index, article] of articles.entries()) {
-			await expectTimeBelowBubble(
-				article,
-				sentOn(10, 9, 21 + index),
-				wordings[index],
-			)
-		}
-		await expectTimeOnNameEdge(canvasElement)
-	},
-})
-
-export const RunTimedOnItsLastBubble = meta.story({
-	render: () => (
-		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<TurnGroup>
-				{RUN.map((paragraph, index) => (
-					<AssistantTurn
-						key={paragraph}
-						author={SECOND}
-						copyText={paragraph}
-						sentAt={sentOn(10, 9, 21 + index)}
-						hasTimeLine={index === RUN.length - 1}
-						now={READ_ON}
-					>
-						{paragraph}
-					</AssistantTurn>
-				))}
-			</TurnGroup>
-		</div>
-	),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Reach for this for a run as a transcript draws it: every bubble carries its `sentAt`, and only the closing one takes `hasTimeLine`, so the send time is written once under the run. Check that a single time line sits under the third bubble, and that resting the pointer on any bubble, the first included, opens the house tooltip with that message's own full date and time. `apps/app/src/components/thread-screen.tsx` draws the line on the run's last row only.",
-			},
-		},
-	},
-	play: async ({ canvas, userEvent }) => {
-		const articles = canvas.getAllByLabelText("assistant message")
-		const [opening] = articles
-
-		await expect(articles.map((article) => timesIn(article).length)).toEqual([
-			0, 0, 1,
-		])
-		await expectTimeBelowBubble(articles[2], sentOn(10, 9, 23), "7 minutes ago")
-
-		await userEvent.hover(slotIn(opening, "message-bubble-content"))
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"Saturday, October 10, 2026 at 09:21",
-		)
+		await expectTimeOnHeadLine(article, sentOn(10, 9, 0), "09:00")
 	},
 })
 
@@ -1939,15 +2044,15 @@ export const SentSecondsAgo = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a message that just landed. Check that its time reads now rather than a count of seconds.",
+					"Reach for this for a message that just landed. Check that its time reads the hours and minutes it was sent at, 09:29, rather than a count of seconds.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expectTimeBelowBubble(
+		await expectTimeOnHeadLine(
 			canvas.getByLabelText("assistant message"),
 			READ_ON - 20_000,
-			"now",
+			"09:29",
 		)
 	},
 })
@@ -1969,15 +2074,15 @@ export const SentYesterday = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a message sent the day before. Check that its time reads yesterday, with the full date on hover.",
+					"Reach for this for a message sent the day before. Check that its time reads Yesterday, capitalised, with the full date on hover.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expectTimeBelowBubble(
+		await expectTimeOnHeadLine(
 			canvas.getByLabelText("assistant message"),
 			sentOn(9, 7, 0),
-			"yesterday",
+			"Yesterday",
 		)
 	},
 })
@@ -2002,7 +2107,7 @@ export const SentJustAfterMidnight = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a message sent just after midnight, read the next morning. Check that its time reads yesterday, the same day the separator above it names.",
+					"Reach for this for a message sent just after midnight, read the next morning. Check that its time reads Yesterday, the same day the separator above it names.",
 			},
 		},
 	},
@@ -2010,10 +2115,10 @@ export const SentJustAfterMidnight = meta.story({
 		await expect(slotIn(canvasElement, "day-separator")).toHaveTextContent(
 			"Yesterday",
 		)
-		await expectTimeBelowBubble(
+		await expectTimeOnHeadLine(
 			canvas.getByLabelText("assistant message"),
 			AFTER_MIDNIGHT.sentAt,
-			"yesterday",
+			"Yesterday",
 		)
 	},
 })
@@ -2033,7 +2138,7 @@ export const SentTwentySixHoursAgo = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a message sent 26 hours ago, late in the evening two calendar days back. Check that its time counts calendar days and reads 2 days ago under a dated separator, never yesterday.",
+					"Reach for this for a message sent 26 hours ago, late in the evening two calendar days back. Check that its time counts calendar days and reads 2 days ago under a dated separator, never Yesterday.",
 			},
 		},
 	},
@@ -2041,7 +2146,7 @@ export const SentTwentySixHoursAgo = meta.story({
 		await expect(slotIn(canvasElement, "day-separator")).toHaveTextContent(
 			"October 8",
 		)
-		await expectTimeBelowBubble(
+		await expectTimeOnHeadLine(
 			canvas.getByLabelText("assistant message"),
 			ACROSS_TWO_DAYS.sentAt,
 			"2 days ago",
@@ -2066,15 +2171,15 @@ export const SentInTheFuture = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for a send time two minutes ahead of the reader's clock, as a skewed host clock produces. Check that it reads now rather than a future phrase.",
+					"Reach for this for a send time two minutes ahead of the reader's clock, as a skewed host clock produces. Check that it reads its own hours and minutes, 09:32, rather than a future phrase.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		await expectTimeBelowBubble(
+		await expectTimeOnHeadLine(
 			canvas.getByLabelText("assistant message"),
 			READ_ON + 120_000,
-			"now",
+			"09:32",
 		)
 	},
 })
@@ -2096,17 +2201,27 @@ export const SendTimeTooltip = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the exact send time. Check that resting the pointer on the relative time opens the house tooltip with the full date and time in the reader's time zone.",
+					"Reach for this for the exact send time. The full date lives on the time alone: resting the pointer on the bubble opens nothing. Check that resting the pointer on the time, or reaching it with Tab, opens the house tooltip with the full date and time in the reader's time zone.",
 			},
 		},
 	},
 	play: async ({ canvasElement, userEvent }) => {
 		const [time] = timesIn(canvasElement)
+		const bubble = slotIn(canvasElement, "message-bubble-content")
+		const fullDate = "Friday, October 9, 2026 at 23:48"
+
+		await userEvent.hover(bubble)
+		await new Promise((settle) => setTimeout(settle, HOVER_INTENT_DELAY_MS * 3))
+		await expect(screen.queryByRole("tooltip")).toBeNull()
 
 		await userEvent.hover(time)
-		await expect(await screen.findByRole("tooltip")).toHaveTextContent(
-			"Friday, October 9, 2026 at 23:48",
-		)
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(fullDate)
+		await userEvent.unhover(time)
+		await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+
+		await userEvent.tab()
+		await expect(time).toHaveFocus()
+		await expect(await screen.findByRole("tooltip")).toHaveTextContent(fullDate)
 	},
 })
 
@@ -2125,7 +2240,7 @@ export const NoSendTime = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for messages that carry no send time. Check that no time line renders and that nothing is held open under either bubble.",
+					"Reach for this for messages that carry no send time. Check that no time renders, on the header line or in the gutter, and that nothing is held open under either bubble.",
 			},
 		},
 	},
@@ -2155,7 +2270,7 @@ const TimeFollowsNowHarness = () => {
 			>
 				{ANSWER}
 			</AssistantTurn>
-			<Button onClick={() => setNow(now + 3_600_000)}>One hour later</Button>
+			<Button onClick={() => setNow(now + 86_400_000)}>One day later</Button>
 		</div>
 	)
 }
@@ -2166,12 +2281,10 @@ export const TimeFollowsNow = meta.story({
 	play: async ({ canvas, userEvent }) => {
 		const article = canvas.getByLabelText("assistant message")
 
-		await expect(timesIn(article)[0]).toHaveTextContent("now")
-		await userEvent.click(
-			canvas.getByRole("button", { name: "One hour later" }),
-		)
+		await expect(timesIn(article)[0]).toHaveTextContent("09:30")
+		await userEvent.click(canvas.getByRole("button", { name: "One day later" }))
 		await expect(canvas.getByLabelText("assistant message")).toBe(article)
-		await expect(timesIn(article)[0]).toHaveTextContent("1 hour ago")
+		await expect(timesIn(article)[0]).toHaveTextContent("Yesterday")
 	},
 })
 
@@ -2242,6 +2355,6 @@ export const ThreadCrossingADay = meta.story({
 		await expect(canvas.queryAllByRole("separator")).toHaveLength(0)
 		await expect(
 			timesIn(canvasElement).map((time) => time.textContent),
-		).toEqual(["10 hours ago", "10 hours ago", "9 hours ago"])
+		).toEqual(["Yesterday", "Yesterday", "00:03"])
 	},
 })

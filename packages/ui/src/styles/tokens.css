@@ -56,6 +56,8 @@
 	--shell-divider: oklch(0 0 0 / 8%);
 	--rail-item-selected: oklch(0 0 0 / 10%);
 	--rail-avatar: #e5e5e5;
+	--person-avatar: #e5e5e5;
+	--message-row-hover: #f7f7f7;
 	--bot-avatar-field-lightness: 0.5;
 	--bot-avatar-ground-strength: 25%;
 	--user-bubble-tint-strength: 100%;
@@ -106,6 +108,8 @@
 	--shell-divider: oklch(1 0 0 / 8%);
 	--rail-item-selected: oklch(1 0 0 / 12%);
 	--rail-avatar: #3a3a3a;
+	--person-avatar: #333333;
+	--message-row-hover: #1c1c1d;
 	--bot-avatar-field-lightness: 0.8;
 	--bot-avatar-ground-strength: 35%;
 	--user-bubble-tint-strength: 50%;

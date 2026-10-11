@@ -266,7 +266,7 @@ export const InASoloThread = meta.story({
 		docs: {
 			description: {
 				story:
-					"A thread with a single companion names it once, in the header, so no assistant row carries an author line. Check that the mission turn drops its own line rather than being the only row that names the companion, that the avatar stays in the gutter, and that the bubble still opens on the state. Pick `UnderTheTurnThatOpenedIt` for a thread that names its speakers. `apps/app/src/components/thread-screen.tsx:885` passes no author when the thread holds a single companion, and `apps/app/src/components/thread-screen.tsx:883` places the row all the same.",
+					"A thread with a single companion names it on the head row of each of its runs, through the face the screen hands `identity`, and the mission card under it carries no author line of its own. Check that the mission turn drops its line, that its avatar stays in the gutter, and that the bubble still opens on the state. Pick `UnderTheTurnThatOpenedIt` for a thread that names its speakers. `apps/app/src/components/thread-screen.tsx:885` passes no author when the thread holds a single companion, and `apps/app/src/components/thread-screen.tsx:883` places the row all the same.",
 			},
 		},
 	},
@@ -280,8 +280,10 @@ export const InASoloThread = meta.story({
 			<MissionTurn {...args} />
 		</div>
 	),
-	play: async ({ canvasElement }) => {
-		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
+	play: async ({ canvas }) => {
+		const card = canvas.getByRole("article", { name: "mission opened" })
+
+		await expect(slotsIn(card, "message-author")).toHaveLength(0)
 	},
 })
 

@@ -338,7 +338,7 @@ export const Narrow = meta.story({
 		},
 	},
 	render: (args) => (
-		<div className="w-[320px]" data-testid="column">
+		<div className="w-[320px] px-6" data-testid="column">
 			<ToolQuestion {...args} />
 		</div>
 	),
@@ -381,7 +381,7 @@ export const LongHeaderScrolls = meta.story({
 		},
 	},
 	render: (args) => (
-		<div className="w-[320px]" data-testid="column">
+		<div className="w-[320px] px-6" data-testid="column">
 			<ToolQuestion {...args} />
 		</div>
 	),
@@ -812,7 +812,7 @@ export const StepSignInFailed = meta.story({
 export const StepApiKeyFailed = meta.story({
 	args: { questions: [KEY_FAILED_STEP] },
 	render: (args) => (
-		<div className="w-[320px]" data-testid="column">
+		<div className="w-[320px] px-6" data-testid="column">
 			<TurnGroup>
 				<AssistantTurn author={SHOTO}>{KEY_FAILED.sentence}</AssistantTurn>
 				<AssistantTurn fills>
@@ -1098,7 +1098,7 @@ export const Failure = meta.story({
 export const EntryNarrow = meta.story({
 	args: { questions: [KEY_STEP] },
 	render: (args) => (
-		<div className="w-[320px]" data-testid="column">
+		<div className="w-[320px] px-6" data-testid="column">
 			<ToolQuestion {...args} />
 		</div>
 	),

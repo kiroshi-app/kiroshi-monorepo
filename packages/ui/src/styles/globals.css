@@ -56,6 +56,8 @@
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);
 	--color-rail-avatar: var(--rail-avatar);
+	--color-person-avatar: var(--person-avatar);
+	--color-message-row-hover: var(--message-row-hover);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
 	--color-bot-badge-attention: var(--bot-badge-attention);
