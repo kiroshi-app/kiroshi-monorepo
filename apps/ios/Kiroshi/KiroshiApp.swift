@@ -1,8 +1,17 @@
 import SwiftUI
+import UIKit
 
 @main
 struct KiroshiApp: App {
     @State private var model = KiroshiApp.makeModel()
+
+    init() {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "disablesAnimations") {
+                UIView.setAnimationsEnabled(false)
+            }
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
