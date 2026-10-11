@@ -3,3 +3,4 @@ build/
 DerivedData/
 xcuserdata/
 Kiroshi/Info.plist
+BuildNumber.xcconfig

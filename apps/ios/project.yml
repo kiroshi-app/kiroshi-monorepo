@@ -2,6 +2,8 @@ name: Kiroshi
 options:
   deploymentTarget:
     iOS: "27.0"
+  # Build number: Xcode Cloud's CI_BUILD_NUMBER when set, else the commit count of HEAD, written to BuildNumber.xcconfig on every generate.
+  preGenCommand: echo "CURRENT_PROJECT_VERSION = ${CI_BUILD_NUMBER:-$(git rev-list --count HEAD)}" > BuildNumber.xcconfig
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -20,11 +22,13 @@ targets:
         UILaunchScreen:
           UIImageName: Hexagon
           UIColorName: background
+    configFiles:
+      Debug: BuildNumber.xcconfig
+      Release: BuildNumber.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kiroshi.app.ios
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Kiroshi
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
