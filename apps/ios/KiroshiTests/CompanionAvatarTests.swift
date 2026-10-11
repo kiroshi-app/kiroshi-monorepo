@@ -108,8 +108,7 @@ struct CompanionAvatarTests {
             theme: scheme == .dark ? .dark : .light)
         let renderer = ImageRenderer(
             content: CompanionAvatar(companion, size: .hero).environment(\.colorScheme, scheme))
-        renderer.scale = 1
-        let image = try #require(renderer.cgImage)
+        let image = try #require(Self.rasterisedOnTheCPU(renderer))
         let pixels = try RenderedPixels(image)
         let png = URL.temporaryDirectory.appending(path: "companion-avatar-\(scheme).png")
         try UIImage(cgImage: image).pngData()?.write(to: png)
@@ -119,6 +118,22 @@ struct CompanionAvatarTests {
         #expect(pixels.alpha(x: 0, y: 0) == 0)
         #expect(pixels.count(near: drawing.groundColour) > 200)
         #expect(pixels.count(near: drawing.cellColour) > 50)
+    }
+
+    static func rasterisedOnTheCPU(_ renderer: ImageRenderer<some View>) -> CGImage? {
+        var image: CGImage?
+        renderer.render(rasterizationScale: 1) { size, draw in
+            guard
+                let space = CGColorSpace(name: CGColorSpace.sRGB),
+                let context = CGContext(
+                    data: nil, width: Int(size.width), height: Int(size.height),
+                    bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return }
+            draw(context)
+            image = context.makeImage()
+        }
+        return image
     }
 
     static func matches(_ drawn: Any, _ recorded: Any, drift: Double) -> Bool {
