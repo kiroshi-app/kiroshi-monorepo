@@ -162,16 +162,17 @@ export const createApplicationsController = (
 			),
 		})
 
+	const holdsDirectory = () => current().directory.length > 0
+
 	const readDirectory = () => {
 		issuedRead += 1
 		const attempt = issuedRead
 		const isLastIssued = () => attempt === issuedRead
-		const { directory, hasDirectoryPartlyFailed } = current()
 		set({
 			isReadingDirectory: true,
 			hasDirectoryFailed: false,
 			hasDirectoryPartlyFailed:
-				directory.length > 0 && hasDirectoryPartlyFailed,
+				holdsDirectory() && current().hasDirectoryPartlyFailed,
 		})
 		void port.search("").then(
 			(found) => {
@@ -193,14 +194,13 @@ export const createApplicationsController = (
 				if (!isLastIssued()) {
 					return
 				}
-				const { directory: held, isDirectoryStale } = current()
-				const holdsDirectory = held.length > 0
+				const isKeepingRows = holdsDirectory()
 				set({
 					isReadingDirectory: false,
-					hasDirectoryFailed: !holdsDirectory,
-					isDirectoryStale: holdsDirectory && isDirectoryStale,
+					hasDirectoryFailed: !isKeepingRows,
+					isDirectoryStale: isKeepingRows && current().isDirectoryStale,
 				})
-				if (holdsDirectory) {
+				if (isKeepingRows) {
 					reportDirectoryUnrefreshed()
 				}
 			},
