@@ -1255,6 +1255,8 @@ settings-environment--server-scope
 settings-environment--space-scope
 settings-environment--unreadable
 settings-environment--unreadable-with-entries
+settings-environment--unset-needs-value
+settings-environment--unset-served-elsewhere
 settings-plugins-applicationidentity--hosted-result
 settings-plugins-applicationidentity--nothing-to-say
 settings-plugins-applicationidentity--one-use

@@ -34,3 +34,17 @@ export const LONG_ENVIRONMENT_ENTRY: EnvironmentEntry = {
 	definedIn: "bot",
 	servedFrom: "server",
 }
+
+export const UNSET_NEEDS_VALUE_ENTRY: EnvironmentEntry = {
+	name: "NIGHTLY_INGESTION_PIPELINE_INSPECTOR_DEAD_LETTER_QUEUE_TOKEN",
+	definedIn: "bot",
+	servedFrom: "bot",
+	isUnset: true,
+}
+
+export const UNSET_SERVED_ELSEWHERE_ENTRY: EnvironmentEntry = {
+	name: "MAILER_API_KEY",
+	definedIn: "bot",
+	servedFrom: "space",
+	isUnset: true,
+}
