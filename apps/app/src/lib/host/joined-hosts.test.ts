@@ -18,6 +18,7 @@ import {
 	type JoinedSpaceError,
 	type JoinedSpaceReconnected,
 } from "../bindings"
+import reachSource from "../../../src-tauri/src/hosting/reach.rs?raw"
 
 const HOST = "http://192.168.1.20:45367"
 
@@ -445,11 +446,11 @@ describe("the active host", () => {
 
 		await hosts.activate("garage")
 
-		await expect(hosts.invoke("mission_board")).resolves.toBe("joined")
+		await expect(hosts.invoke("mission_space_feed")).resolves.toBe("joined")
 		expect(hosts.getState().active).toBe("garage")
 		expect(local.invoke).not.toHaveBeenCalled()
 		expect(fetch).toHaveBeenCalledWith(
-			new URL(`${HOST}/api/invoke/mission_board`),
+			new URL(`${HOST}/api/invoke/mission_space_feed`),
 			expect.objectContaining({
 				headers: expect.objectContaining({ authorization: "Bearer joined" }),
 			}),
@@ -1454,14 +1455,18 @@ describe("a bot or a Space only this Mac holds", () => {
 	)
 
 	it.each(botOwned("shared-bot"))(
-		"relays %s when its owner is a companion the active host holds",
+		"keeps %s off the host when its owner is a companion the active host holds",
 		async (command, args) => {
-			const { hosts, local, fetch } = await onGarageAfterLocalReads()
+			const { hosts, local, fetch, reportFailure } =
+				await onGarageAfterLocalReads()
 
-			await hosts.invoke(command, args)
+			await expect(hosts.invoke(command, args)).rejects.toThrow(
+				`${command} of a joined space stays on its host`,
+			)
 
-			expect(relayedCommands(fetch)).toEqual([command])
+			expect(relayedCommands(fetch)).toEqual([])
 			expect(local.invoke).not.toHaveBeenCalled()
+			expect(reportFailure).not.toHaveBeenCalled()
 		},
 	)
 
@@ -1522,6 +1527,16 @@ describe("personal Settings while a joined Space is active", () => {
 	it.each([
 		["plugin_skills", { scope: { kind: "bot", id: "shared-bot" } }],
 		["plugin_history", { scope: JOINED_SPACE }],
+	])("relays %s of the joined Space", async (command, args) => {
+		const { hosts, local, fetch } = await onGarage()
+
+		await hosts.invoke(command, args)
+
+		expect(relayedCommands(fetch)).toEqual([command])
+		expect(localCommands(local)).not.toContain(command)
+	})
+
+	it.each([
 		["env_list", { scope: JOINED_BOT }],
 		["env_set", { scope: JOINED_SPACE, name: "TOKEN", value: "v" }],
 		[
@@ -1531,14 +1546,20 @@ describe("personal Settings while a joined Space is active", () => {
 		["mcp_application_status", { owner: JOINED_BOT }],
 		["mcp_oauth_connect", { owner: JOINED_SPACE, name: "linear" }],
 		["mcp_oauth_disconnect", { owner: JOINED_BOT, name: "linear" }],
-	])("relays %s of the joined Space", async (command, args) => {
-		const { hosts, local, fetch } = await onGarage()
+	])(
+		"keeps %s of the joined Space off the host and raises no notice",
+		async (command, args) => {
+			const { hosts, local, fetch, reportFailure } = await onGarage()
 
-		await hosts.invoke(command, args)
+			await expect(hosts.invoke(command, args)).rejects.toThrow(
+				`${command} of a joined space stays on its host`,
+			)
 
-		expect(relayedCommands(fetch)).toEqual([command])
-		expect(localCommands(local)).not.toContain(command)
-	})
+			expect(relayedCommands(fetch)).toEqual([])
+			expect(localCommands(local)).not.toContain(command)
+			expect(reportFailure).not.toHaveBeenCalled()
+		},
+	)
 
 	it("cancels a connect on this Mac when this Mac received it", async () => {
 		const { hosts, local, fetch } = await onGarage()
@@ -1550,20 +1571,6 @@ describe("personal Settings while a joined Space is active", () => {
 		expect(relayedCommands(fetch)).toEqual([])
 	})
 
-	it("cancels a connect on the joined host when the joined host received it", async () => {
-		const { hosts, local, fetch } = await onGarage()
-
-		await hosts.invoke("mcp_oauth_connect", { owner: JOINED_SPACE })
-		await hosts.activate(null)
-		await hosts.invoke("mcp_oauth_cancel")
-
-		expect(relayedCommands(fetch)).toEqual([
-			"mcp_oauth_connect",
-			"mcp_oauth_cancel",
-		])
-		expect(localCommands(local)).not.toContain("mcp_oauth_cancel")
-	})
-
 	it("raises one notice when the joined host refuses a relayed call", async () => {
 		const { hosts, fetch, reportFailure } = await onGarage()
 		fetch.mockImplementation(
@@ -1571,7 +1578,10 @@ describe("personal Settings while a joined Space is active", () => {
 		)
 
 		await expect(
-			hosts.invoke("env_set", { scope: JOINED_SPACE, name: "T", value: "v" }),
+			hosts.invoke("plugin_set_mcp_server", {
+				scope: JOINED_SPACE,
+				name: "linear",
+			}),
 		).rejects.toBe(MEMBER_REFUSAL)
 
 		expect(reportFailure).toHaveBeenCalledTimes(1)
@@ -1635,4 +1645,49 @@ describe("Space Settings of a joined Space", () => {
 		expect(local.invoke).toHaveBeenLastCalledWith(command, args)
 		expect(fetch).not.toHaveBeenCalled()
 	})
+})
+
+describe("the commands reach.rs keeps on the host", () => {
+	const HOST_ONLY_ENTRY = /\("([a-z_]+)",\s*Reach::HostOnly\)/g
+	const JOINED_SPACE = { kind: "space", id: "garage" }
+	const JOINED_BOT = { kind: "bot", id: "shared-bot", spaceId: "garage" }
+
+	const hostOnlyCommands = [...reachSource.matchAll(HOST_ONLY_ENTRY)].map(
+		([, command = ""]) => command,
+	)
+
+	const ARGUMENTS_OF_THE_JOINED_SPACE = [
+		undefined,
+		{ scope: JOINED_SPACE, owner: JOINED_SPACE, spaceId: "garage" },
+		{ scope: JOINED_BOT, owner: JOINED_BOT, botId: "shared-bot" },
+		{
+			scope: { kind: "server", name: "linear", owner: JOINED_SPACE },
+			name: "linear",
+		},
+		{ query: { text: "walls", spaceId: "garage", allSpaces: false } },
+	]
+
+	it("reads the HostOnly entries out of reach.rs", () => {
+		expect(hostOnlyCommands).toEqual(
+			expect.arrayContaining(["mission_board", "agent_shutdown", "env_set"]),
+		)
+	})
+
+	it.each(hostOnlyCommands)(
+		"sends %s nowhere near the joined host and raises no notice",
+		async (command) => {
+			const { hosts, fetch, reportFailure } = joinedHostsOf()
+			await hosts.activate("garage")
+			fetch.mockClear()
+
+			await Promise.allSettled(
+				ARGUMENTS_OF_THE_JOINED_SPACE.map((args) =>
+					hosts.invoke(command, args),
+				),
+			)
+
+			expect(fetch).not.toHaveBeenCalled()
+			expect(reportFailure).not.toHaveBeenCalled()
+		},
+	)
 })

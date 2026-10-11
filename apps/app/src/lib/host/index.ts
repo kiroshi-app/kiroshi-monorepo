@@ -44,6 +44,8 @@ export const listen = joinedHosts.listen
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 
+export const onJoinedSpaceChange = joinedHosts.subscribe
+
 export const listenToActiveHost = joinedHosts.listenToActiveHost
 
 export const onHostReconnected = joinedHosts.onReconnected

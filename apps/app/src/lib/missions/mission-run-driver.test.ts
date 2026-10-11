@@ -70,6 +70,7 @@ type Harness = {
 	soloTail: () => ChatState
 	openSolo: () => Promise<void>
 	speakInThread: (text: string) => Promise<void>
+	announceJoinedSpace: () => Promise<void>
 }
 
 type HarnessSeed = {
@@ -155,6 +156,8 @@ const createHarness = async ({
 	const chat = createChatController(driver, store)
 	const soloChat = await base.mainChat(bot.id)
 	const missions = createFakeMissions()
+	vi.spyOn(missions, "board")
+	vi.spyOn(missions, "unreported")
 	const reportFailure = vi.fn()
 	const mission = aMission({
 		botId: bot.id,
@@ -200,6 +203,14 @@ const createHarness = async ({
 		missions.refuseReported()
 	}
 
+	const joinedSpaceWatchers = new Set<() => void>()
+	const watchJoinedSpace = (watcher: () => void) => {
+		joinedSpaceWatchers.add(watcher)
+		return () => {
+			joinedSpaceWatchers.delete(watcher)
+		}
+	}
+
 	const stop = startMissionRunDriver({
 		driver,
 		store,
@@ -208,6 +219,7 @@ const createHarness = async ({
 		missions,
 		reportFailure,
 		joinedSpaceId,
+		watchJoinedSpace,
 		now: () => 7,
 	})
 	await settled()
@@ -280,6 +292,13 @@ const createHarness = async ({
 
 	const soloTail = () => chat.stateFor(bot.id)
 
+	const announceJoinedSpace = async () => {
+		for (const watcher of [...joinedSpaceWatchers]) {
+			watcher()
+		}
+		await settled()
+	}
+
 	return {
 		driver,
 		store,
@@ -305,6 +324,7 @@ const createHarness = async ({
 		soloTail,
 		openSolo,
 		speakInThread,
+		announceJoinedSpace,
 	}
 }
 
@@ -1350,69 +1370,144 @@ describe("startMissionRunDriver", () => {
 	})
 })
 
-describe("startMissionRunDriver on a guest of a shared space", () => {
-	let harness: Harness
+describe("startMissionRunDriver while a joined space is active", () => {
+	const JOINED_SPACE = "garage"
 	let activeSpaceId: string | null
+	let harness: Harness
 
-	const leaveTheSpaceOnRead = () => {
-		const { detail } = harness.missions
-		vi.spyOn(harness.missions, "detail").mockImplementation((missionId) => {
-			activeSpaceId = null
-			return detail(missionId)
-		})
+	const hostTurnEnded: AgentEvent = {
+		type: "turnEnded",
+		ended: { sessionId: null, outcome: "completed" },
 	}
 
-	beforeEach(async () => {
-		activeSpaceId = SPACE
+	const sentToTheMissions = () => ({
+		boards: vi.mocked(harness.missions.board).mock.calls.length,
+		unreported: vi.mocked(harness.missions.unreported).mock.calls.length,
+		details: harness.missions.detailCalls.length,
+		reports: harness.missions.reports.length,
+		answers: harness.missions.answers.length,
+	})
+
+	const endTurnInThread = async () => {
+		harness.driver.emit(
+			{
+				conversationId: harness.thread.id,
+				botId: harness.mission.botId,
+				runtimeSessionId: "a-host-session",
+				epoch: 1,
+			},
+			hostTurnEnded,
+		)
+		await settled()
+	}
+
+	const joinTheSpace = async () => {
+		activeSpaceId = JOINED_SPACE
+		await harness.announceJoinedSpace()
+	}
+
+	const leaveForALocalSpace = async () => {
+		activeSpaceId = null
+		await harness.announceJoinedSpace()
+	}
+
+	const startOn = async (spaceId: string | null, open?: MissionState) => {
+		activeSpaceId = spaceId
 		harness = await createHarness({
-			soloOrigin: true,
+			open,
+			openEvents: open === "done" ? closedBy("poller") : AGENT_ASKED,
 			joinedSpaceId: () => activeSpaceId,
 		})
-	})
+	}
 
 	afterEach(() => {
 		harness.stop()
 		vi.restoreAllMocks()
 	})
 
-	it("reads the mission companion in the host space", async () => {
-		const bots = vi.spyOn(harness.store, "bots")
+	it("reads no board and no unreported mission on start", async () => {
+		await startOn(JOINED_SPACE, "done")
 
-		await harness.enter("working")
-
-		expect(bots).toHaveBeenCalledWith(SPACE)
+		expect(sentToTheMissions().boards).toBe(0)
+		expect(sentToTheMissions().unreported).toBe(0)
+		expect(harness.starts).toEqual([])
 	})
 
-	it("asks the main chat of the host space for the report", async () => {
-		const mainChat = vi.spyOn(harness.store, "mainChat")
+	it("sends nothing when a host mission changes and a turn ends in its thread", async () => {
+		await startOn(JOINED_SPACE)
+		const before = sentToTheMissions()
 
 		await harness.enter("done", closedBy("poller"))
-		await harness.endTurn(reported("The walls stand, handing over."))
+		await harness.enter("waiting_bot")
+		await endTurnInThread()
 
-		expect(mainChat).toHaveBeenCalledWith(harness.mission.botId, SPACE)
-	})
-
-	it("skips reading the companion when the space was left since the change", async () => {
-		const bots = vi.spyOn(harness.store, "bots")
-		leaveTheSpaceOnRead()
-
-		await harness.enter("working")
-
-		expect(bots).not.toHaveBeenCalled()
+		expect(sentToTheMissions()).toEqual(before)
+		expect(harness.missions.rosterCalls).toEqual([])
+		expect(harness.starts).toEqual([])
+		expect(harness.agentCalls).toEqual([])
 		expect(spoken(harness.tail())).toEqual([])
 		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
 
-	it("skips the report when the space was left since the run ended", async () => {
-		await harness.openSolo()
-		await harness.enter("done", closedBy("poller"))
-		const mainChat = vi.spyOn(harness.store, "mainChat")
-		leaveTheSpaceOnRead()
+	it("opens no status run on a thread it learned before joining", async () => {
+		await startOn(null, "working")
+		await joinTheSpace()
+		const before = sentToTheMissions()
 
+		await endTurnInThread()
+
+		expect(sentToTheMissions()).toEqual(before)
+		expect(harness.originStarts()).toEqual([])
+	})
+
+	it("catches up on the open and unreported local missions when leaving for a local space", async () => {
+		await startOn(JOINED_SPACE, "done")
+
+		await leaveForALocalSpace()
+
+		expect(sentToTheMissions().boards).toBe(1)
+		expect(sentToTheMissions().unreported).toBe(1)
+		expect(harness.originStarts()).toHaveLength(1)
+	})
+
+	it("drives local mission changes again once back on a local space", async () => {
+		await startOn(JOINED_SPACE)
+		await leaveForALocalSpace()
+
+		await harness.enter("done", closedBy("poller"))
+
+		expect(harness.originStarts()).toHaveLength(1)
+	})
+
+	it("ends a held local run on this Mac when a joined space becomes active", async () => {
+		await startOn(null, "done")
+		expect(harness.originStarts()).toHaveLength(1)
+
+		await joinTheSpace()
 		await harness.endTurn(reported("The walls stand, handing over."))
 
-		expect(mainChat).not.toHaveBeenCalled()
-		expect(harness.soloTail().messages).toEqual([])
+		expect(harness.agentCalls).toEqual(["shutdown"])
+		expect(harness.missions.reports).toEqual([])
 		expect(harness.reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("runs the ended local mission again once back on a local space", async () => {
+		await startOn(null, "done")
+		await joinTheSpace()
+
+		await leaveForALocalSpace()
+
+		expect(harness.originStarts()).toHaveLength(2)
+	})
+
+	it("does nothing when switching from one joined space to another", async () => {
+		await startOn(JOINED_SPACE, "done")
+
+		activeSpaceId = "workshop"
+		await harness.announceJoinedSpace()
+
+		expect(sentToTheMissions().boards).toBe(0)
+		expect(sentToTheMissions().unreported).toBe(0)
+		expect(harness.starts).toEqual([])
 	})
 })
