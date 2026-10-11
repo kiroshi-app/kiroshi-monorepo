@@ -21,8 +21,8 @@ struct ConversationsView: View {
                 guard let connection = space.connection else { return }
                 await store.follow(connection)
             }
-            .navigationDestination(item: $store.opened) { companion in
-                ThreadView(companion: companion, space: space)
+            .navigationDestination(item: $store.opened) { subject in
+                ThreadView(subject: subject, space: space)
             }
     }
 
@@ -31,8 +31,8 @@ struct ConversationsView: View {
         case .loading where space.offlineSpace != nil:
             Color.kiroshi(.background)
         case .loading:
-            List(CompanionSummary.placeholders) { summary in
-                CompanionRow(summary: summary)
+            List(ConversationSummary.placeholders) { summary in
+                ConversationRow(summary: summary)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.kiroshi(.background))
             }
@@ -61,9 +61,9 @@ struct ConversationsView: View {
         case .loaded:
             List(store.summaries) { summary in
                 Button {
-                    store.opened = summary.companion
+                    store.opened = summary.subject
                 } label: {
-                    CompanionRow(summary: summary)
+                    ConversationRow(summary: summary)
                 }
                 .listRowSeparator(.hidden, edges: .top)
                 .listRowSeparatorTint(Color.kiroshi(.border))

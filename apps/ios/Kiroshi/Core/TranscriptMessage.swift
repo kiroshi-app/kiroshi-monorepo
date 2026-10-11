@@ -24,4 +24,5 @@ struct TranscriptMessage: Decodable, Equatable, Sendable {
     let content: String
     let completion: Completion
     let createdAt: Int
+    let authorBotId: String?
 }

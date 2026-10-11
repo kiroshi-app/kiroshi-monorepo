@@ -30,7 +30,7 @@ struct ThreadStoreTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         return ThreadStore(
-            companion: juniper, now: { [sentAt] in sentAt }, makeId: { ids.next()! },
+            subject: .companion(juniper), now: { [sentAt] in sentAt }, makeId: { ids.next()! },
             calendar: calendar)
     }
 
@@ -209,6 +209,104 @@ struct ThreadStoreTests {
         #expect(store.draft.isEmpty)
         #expect(store.isWorking)
         #expect(store.sendFailure == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aGroupOpensOnItsOwnConversationAndLetsTheHostPickWhoAnswers() async throws {
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let group = GroupConversation(
+            id: "group-release", title: "Release crew", createdAt: 0,
+            participants: [
+                .init(botId: juniper.id, name: "Juniper"), .init(botId: "atlas", name: "Atlas"),
+            ])
+        let host = TestHost(
+            messages: [
+                "group-release": [
+                    TestHost.message(
+                        "r1", in: "group-release", seq: 1, isYours: false, "Tagging 0.42 next.",
+                        at: 1_790_900_000_000, by: juniper.id)
+                ]
+            ]
+        ) { call in
+            call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil
+        }
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+        #expect(texts(store) == ["Tagging 0.42 next."])
+
+        store.draft = "Ship it."
+        await store.send()?.value
+        let call = try #require(await host.nextCall("conversation_send_turn"))
+        let args = try call.args(as: SendTurnArgs.self)
+        #expect(args.summoned.isEmpty)
+        #expect(args.message.conversationId == "group-release")
+
+        host.push(
+            event: "agent://event",
+            payload:
+                #"{"scope":{"conversationId":"group-release","botId":"\#(atlas.id)","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":null}"#
+        )
+        await waitUntil { store.runningScope != nil }
+        #expect(store.workingName == "Atlas")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anOpenGroupFollowsItsRenameOnTheMac() async throws {
+        let release = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper], createdAt: 0)
+        let design = FixtureHost.Group(
+            id: "group-design", title: "Design review", members: [juniper], createdAt: 0)
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let group = GroupConversation(
+            id: release.id, title: release.title, createdAt: 0,
+            participants: [.init(botId: juniper.id, name: "Juniper")])
+        let host = TestHost()
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(design.renamed("Design crit").json)}"#)
+        let renamed = FixtureHost.Group(
+            id: release.id, title: "Release train", members: [juniper, atlas], createdAt: 0)
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(renamed.json)}"#)
+        await waitUntil { store.subject.title != "Release crew" }
+
+        #expect(store.subject.title == "Release train")
+        #expect(store.subject.members.map(\.id) == [juniper.id, atlas.id])
+        #expect(store.conversationId == release.id)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anOpenGroupKnowsWhenItIsDeletedOnTheMac() async {
+        let group = GroupConversation(
+            id: "group-release", title: "Release crew", createdAt: 0,
+            participants: [.init(botId: juniper.id, name: "Juniper")])
+        let host = TestHost()
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-design"}"#)
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "r1", in: "group-release", seq: 1, isYours: false, "Still here.",
+                at: 1_790_900_000_000))
+        await waitUntil { store.entries.count == 1 }
+        #expect(!store.isDeleted)
+
+        host.push(
+            event: "conversation://deleted",
+            payload: #"{"spaceId":"s-1","conversationId":"group-release"}"#)
+        await waitUntil { store.isDeleted }
+
         following.cancel()
         await connection.stop()
     }

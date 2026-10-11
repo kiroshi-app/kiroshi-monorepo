@@ -44,15 +44,9 @@ struct CompanionAvatar: View {
 }
 
 private struct ScaledAvatar: View {
-    static let frameInterval = 1.0 / 30
-    static let placeholderName = "Companion"
-
     let companion: Companion?
     let isWorking: Bool
     @ScaledMetric private var side: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(CompanionPictures.self) private var pictures: CompanionPictures?
 
     init(companion: Companion?, size: CompanionAvatar.Size, isWorking: Bool) {
         self.companion = companion
@@ -61,8 +55,23 @@ private struct ScaledAvatar: View {
     }
 
     var body: some View {
-        content
+        CompanionAvatarArt(companion: companion, isWorking: isWorking)
             .frame(width: side, height: side)
+    }
+}
+
+struct CompanionAvatarArt: View {
+    static let frameInterval = 1.0 / 30
+    static let placeholderName = "Companion"
+
+    let companion: Companion?
+    let isWorking: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(CompanionPictures.self) private var pictures: CompanionPictures?
+
+    var body: some View {
+        content
             .task(id: pictureRequest) {
                 guard let file = pictureRequest?.file else { return }
                 await pictures?.load(file)

@@ -59,13 +59,40 @@
             ],
         ]
 
+        static let releaseCrew = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper, companions[1]],
+            createdAt: 0)
+        static let designReview = FixtureHost.Group(
+            id: "group-design", title: "Design review",
+            members: [companions[4], companions[2], companions[3], companions[5], companions[1]],
+            createdAt: 0)
+
+        static let groupMessages: [String: [FixtureHost.Message]] = [
+            releaseCrew.id: [
+                .init(
+                    id: "m-release", isYours: false,
+                    content: "The changelog is merged, I’m tagging 0.42 next.", daysAgo: 0,
+                    hour: 9, minute: 30, author: juniper.id)
+            ],
+            designReview.id: [
+                .init(
+                    id: "m-design", isYours: true,
+                    content: "Let’s keep the grouped inset list for settings.", daysAgo: 3,
+                    hour: 14, minute: 15)
+            ],
+        ]
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 4)
 
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
-            var script = FixtureHost.Script(companions: companions, messages: listMessages)
+            var script = FixtureHost.Script(
+                companions: companions, groups: [releaseCrew, designReview],
+                messages: listMessages.merging(groupMessages) { listed, _ in listed })
             switch fixture {
+            case .conversationsLive:
+                script.playsGroupChanges = true
             case .thread:
                 script.messages[juniper.id] = [
                     releaseNotesAsk,
@@ -80,6 +107,7 @@
                 ]
             case .noCompanion:
                 script.companions = []
+                script.groups = []
             case .loadingCompanions:
                 script.answersCompanions = false
             case .emptyThread:
@@ -123,6 +151,7 @@
             let daysAgo: Int
             let hour: Int
             let minute: Int
+            var author: Companion.ID?
 
             func json(in conversationId: String, seq: Int) -> String {
                 let calendar = Calendar.current
@@ -132,7 +161,30 @@
                 return FixtureHost.messageJSON(
                     id: id, conversationId: conversationId, seq: seq,
                     role: isYours ? "user" : "assistant", content: content,
-                    createdAt: at.milliseconds)
+                    createdAt: at.milliseconds, authorBotId: author)
+            }
+        }
+
+        struct Group: Sendable {
+            let id: String
+            let title: String
+            let members: [Companion]
+            let createdAt: Int
+
+            func renamed(_ title: String) -> Group {
+                Group(id: id, title: title, members: members, createdAt: createdAt)
+            }
+
+            var json: String {
+                let participants = members.enumerated().map { index, companion in
+                    let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
+                    let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
+                    let role = index == 0 ? "lead" : "assistant"
+                    return
+                        #"{"botId":"\#(companion.id)","role":"\#(role)","joinedAt":\#(index),"leftAt":null,"name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path),"isDeleted":false}"#
+                }
+                return
+                    #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":null,"title":"\#(title)","instructions":"","createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
             }
         }
 
@@ -141,6 +193,8 @@
             var refusesCompanions = false
             var refusesThread = false
             var companions: [Companion] = []
+            var groups: [Group] = []
+            var playsGroupChanges = false
             var messages: [Companion.ID: [Message]] = [:]
             var workingCompanion: Companion.ID?
             var workingActivities: [String] = []
@@ -196,11 +250,21 @@
             #"{"type":"\#(type)","message":{"id":"\#(id)","role":"assistant","text":"\#(text)","completion":"streaming","timestamp":\#(Date.now.milliseconds)}}"#
         }
 
+        static func groupEvent(_ name: String, _ group: Group) -> String {
+            #"{"event":{"event":"\#(name)","payload":{"spaceId":"\#(spaceId)","conversation":\#(group.json)}}}"#
+        }
+
+        static func groupDeleted(_ group: Group) -> String {
+            #"{"event":{"event":"conversation://deleted","payload":{"spaceId":"\#(spaceId)","conversationId":"\#(group.id)"}}}"#
+        }
+
         static func messageJSON(
             id: String, conversationId: String, seq: Int, role: String, content: String,
-            createdAt: Int
+            createdAt: Int, authorBotId: String? = nil
         ) -> String {
-            #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content)","completion":"complete","createdAt":\#(createdAt),"authorBotId":null,"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
+            let author = authorBotId.map { #""\#($0)""# } ?? "null"
+            return
+                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content)","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
         }
     }
 
@@ -241,9 +305,24 @@
         private let inbound: AsyncStream<Inbound>
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
 
+        private let listed: AsyncStream<Void>.Continuation
+        private let playingGroupChanges: Task<Void, Never>?
+
         init(script: FixtureHost.Script) {
             self.script = script
-            (inbound, inboundContinuation) = AsyncStream.makeStream()
+            let (inbound, inboundContinuation) = AsyncStream.makeStream(of: Inbound.self)
+            self.inbound = inbound
+            self.inboundContinuation = inboundContinuation
+            let (listing, listed) = AsyncStream.makeStream(of: Void.self)
+            self.listed = listed
+            playingGroupChanges =
+                script.playsGroupChanges
+                ? Task {
+                    for await _ in listing {
+                        await Self.playGroupChanges(into: inboundContinuation)
+                        return
+                    }
+                } : nil
         }
 
         func push(_ message: Inbound) {
@@ -259,7 +338,7 @@
             let args = call["args"] as? [String: Any] ?? [:]
             answer(id, command, args)
             guard command == "conversation_message_page", let leaving = script.hostLeavesAfter,
-                await pages.next() == script.companions.count
+                await pages.next() == script.companions.count + script.groups.count
             else { return }
             push(.close(RelayClosure.hostOffline, after: leaving))
         }
@@ -281,6 +360,8 @@
         func ping() async throws {}
 
         func close() {
+            playingGroupChanges?.cancel()
+            listed.finish()
             push(.close(1000))
         }
 
@@ -315,6 +396,9 @@
                                 FixtureHost.chat(of: working),
                                 #"{"type":"turnChanged","state":"running"}"#)))
                 }
+            case "conversation_list":
+                reply(id, "[\(script.groups.map(\.json).joined(separator: ","))]")
+                listed.yield()
             case "conversation_main_chat":
                 let companionId = args["botId"] as? String ?? ""
                 reply(
@@ -336,6 +420,32 @@
                 push(
                     .frame(#"{"id":\#(id),"status":403,"body":"this command belongs to the host"}"#)
                 )
+            }
+        }
+
+        private static func playGroupChanges(
+            into inbound: AsyncStream<Inbound>.Continuation
+        ) async {
+            let launchPlan = FixtureHost.Group(
+                id: "group-launch", title: "Launch plan",
+                members: [
+                    Companion(id: "juniper-6", name: "Juniper", tint: .green),
+                    Companion(id: "pico-6", name: "Pico", tint: .orange),
+                ],
+                createdAt: Date.now.milliseconds + 3000)
+            let frames = [
+                FixtureHost.groupEvent("conversation://created", launchPlan),
+                FixtureHost.groupEvent(
+                    "conversation://updated", launchPlan.renamed("Launch checklist")),
+                FixtureHost.groupDeleted(launchPlan),
+            ]
+            for frame in frames {
+                do {
+                    try await ContinuousClock().sleep(for: .seconds(3))
+                } catch {
+                    return
+                }
+                inbound.yield(.frame(frame))
             }
         }
 

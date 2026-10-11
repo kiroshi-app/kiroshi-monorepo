@@ -25,6 +25,42 @@ struct ConversationMappingTests {
         #expect(MessagePreview(message).line == "You: Hi")
     }
 
+    @Test func readsAGroupNamedAfterItsPresentMembersWhenUntitled() throws {
+        let json = #"""
+            {"id":"g1","spaceId":"s1","sectionId":null,"pinPosition":2,"title":"  ","instructions":"","createdAt":7,"updatedAt":7,"participants":[
+             {"botId":"a","role":"lead","joinedAt":1,"leftAt":null,"name":"Atlas","avatarBlot":"blue","avatarImagePath":null,"isDeleted":false},
+             {"botId":"b","role":"assistant","joinedAt":2,"leftAt":5,"name":"Pico","avatarBlot":null,"avatarImagePath":null,"isDeleted":false},
+             {"botId":"c","role":"assistant","joinedAt":3,"leftAt":null,"name":"Mira","avatarBlot":"teal","avatarImagePath":"/p/mira.png","isDeleted":false},
+             {"botId":"d","role":"assistant","joinedAt":4,"leftAt":null,"name":"Otto","avatarBlot":null,"avatarImagePath":null,"isDeleted":true}]}
+            """#
+        let group = try JSONDecoder().decode(GroupConversation.self, from: Data(json.utf8))
+
+        #expect(group.name == "Atlas, Mira")
+        #expect(group.members.map(\.id) == ["a", "c"])
+        #expect(group.members.map(\.tint) == [.blue, nil])
+        #expect(group.members.map(\.pictureFile) == [nil, "mira.png"])
+        #expect(group.createdAt == 7)
+        #expect(
+            GroupConversation(id: "g2", title: "", createdAt: 0, participants: []).name
+                == "Untitled conversation")
+    }
+
+    @Test func readsTheGroupEventsOfTheSpace() {
+        let group = FixtureHost.Group(
+            id: "g1", title: "Release crew", members: [Companion(id: "a", name: "Atlas")],
+            createdAt: 1)
+        let stored = #"{"spaceId":"s1","conversation":\#(group.json)}"#
+        let decoded = GroupConversation(
+            id: "g1", title: "Release crew", createdAt: 1,
+            participants: [.init(botId: "a", name: "Atlas")])
+
+        #expect(event("conversation://created", stored) == .groupCreated(decoded))
+        #expect(event("conversation://updated", stored) == .groupUpdated(decoded))
+        #expect(
+            event("conversation://deleted", #"{"spaceId":"s1","conversationId":"g1"}"#)
+                == .groupDeleted(id: "g1"))
+    }
+
     @Test func readsAScopedAgentEvent() {
         let agent = event(
             "agent://event",

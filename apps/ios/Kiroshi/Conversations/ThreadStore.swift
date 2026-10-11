@@ -12,7 +12,7 @@ final class ThreadStore {
 
     static let pageSize = 50
 
-    let companion: Companion
+    private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadEntry] = []
     private(set) var isWorking = false
@@ -21,6 +21,7 @@ final class ThreadStore {
     private(set) var runningScope: AgentEvent.Scope?
     private(set) var sendFailure: SendFailure?
     private(set) var stopFailed = false
+    private(set) var isDeleted = false
     var draft: String
 
     @ObservationIgnored private(set) var conversationId: String?
@@ -35,17 +36,21 @@ final class ThreadStore {
     @ObservationIgnored private let calendar: Calendar
 
     init(
-        companion: Companion,
+        subject: ConversationSubject,
         draft: String = "",
         now: @escaping () -> Date = Date.init,
         makeId: @escaping () -> String = { UUID().uuidString.lowercased() },
         calendar: Calendar = .current
     ) {
-        self.companion = companion
+        self.subject = subject
         self.draft = draft
         self.now = now
         self.makeId = makeId
         self.calendar = calendar
+    }
+
+    var workingName: String {
+        subject.members.first { $0.id == runningScope?.botId }?.name ?? subject.title
     }
 
     var canSend: Bool {
@@ -121,7 +126,7 @@ final class ThreadStore {
     private func deliver(_ message: SentMessage, through relay: ConversationRelay) async {
         defer { isSending = false }
         do {
-            try await relay.sendTurn(message, summoning: companion.id)
+            try await relay.sendTurn(message, summoning: summoned)
             insert(
                 ThreadMessage(
                     id: message.id, isYours: true, text: message.content,
@@ -137,11 +142,23 @@ final class ThreadStore {
         }
     }
 
+    private var summoned: [Companion.ID] {
+        switch subject {
+        case .companion(let companion): [companion.id]
+        case .group: []
+        }
+    }
+
     private func load(in spaceId: String, through relay: ConversationRelay) async {
         heardTurnWhileLoading = false
         let shownBeforeLoad = Set(entries.map(\.id))
         do {
-            let conversationId = try await relay.mainChat(of: companion.id, in: spaceId)
+            let conversationId =
+                switch subject {
+                case .companion(let companion):
+                    try await relay.mainChat(of: companion.id, in: spaceId)
+                case .group(let group): group.id
+                }
             guard !Task.isCancelled else { return }
             self.conversationId = conversationId
             let messages = try await relay.latestMessages(
@@ -187,7 +204,12 @@ final class ThreadStore {
                 runningScope = scope
             }
             apply(agent.change)
-        case .messageStored, .agent, .companionsChanged:
+        case .groupUpdated(let group) where subject.isGroup(group.id):
+            subject = .group(group)
+        case .groupDeleted(let id) where subject.isGroup(id):
+            isDeleted = true
+        case .messageStored, .agent, .companionsChanged, .groupCreated, .groupUpdated,
+            .groupDeleted:
             break
         }
     }

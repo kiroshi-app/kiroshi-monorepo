@@ -137,6 +137,8 @@ struct CompanionAvatarTests {
             return drawn == recorded
         case (let drawn as NSNumber, let recorded as NSNumber):
             return abs(drawn.doubleValue - recorded.doubleValue) <= drift
+        case (is NSNull, is NSNull):
+            return true
         default:
             return false
         }

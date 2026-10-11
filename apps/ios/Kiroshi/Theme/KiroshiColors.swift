@@ -11,11 +11,13 @@ enum KiroshiColor: String, CaseIterable, Sendable {
     case ring
     case primary
     case primaryForeground = "primary-foreground"
+    case secondary
     case secondaryForeground = "secondary-foreground"
     case destructive
     case presenceOnline = "presence-online"
     case presenceOffline = "presence-offline"
     case railAvatar = "rail-avatar"
+    case imageOutline = "image-outline"
     case userBubble = "user-bubble"
     case userBubbleForeground = "user-bubble-foreground"
 }

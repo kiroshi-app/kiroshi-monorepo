@@ -10,6 +10,11 @@ struct ConversationRelay: Sendable {
         try await ask("conversation_bots", SpaceArgs(spaceId: spaceId), as: [Companion].self)
     }
 
+    func groups(in spaceId: String) async throws -> [GroupConversation] {
+        try await ask(
+            "conversation_list", SpaceArgs(spaceId: spaceId), as: [GroupConversation].self)
+    }
+
     func mainChat(of companionId: Companion.ID, in spaceId: String) async throws -> String {
         let args = MainChatArgs(botId: companionId, spaceId: spaceId)
         return try await ask("conversation_main_chat", args, as: MainChat.self).id
@@ -21,8 +26,8 @@ struct ConversationRelay: Sendable {
         return page.messages.sorted { $0.seq < $1.seq }
     }
 
-    func sendTurn(_ message: SentMessage, summoning companionId: Companion.ID) async throws {
-        let args = SendTurnArgs(message: message, summoned: [companionId])
+    func sendTurn(_ message: SentMessage, summoning companionIds: [Companion.ID]) async throws {
+        let args = SendTurnArgs(message: message, summoned: companionIds)
         _ = try await ask("conversation_send_turn", args, as: Int.self)
     }
 
