@@ -28,7 +28,9 @@ const declaringUnset = (
 			...(await store.environmentVariables(asked)),
 		],
 		setEnvironmentVariable: (written, writtenName, value) => {
-			isUnset = isUnset && writtenName !== name
+			if (writtenName === name) {
+				isUnset = false
+			}
 			return store.setEnvironmentVariable(written, writtenName, value)
 		},
 	}
