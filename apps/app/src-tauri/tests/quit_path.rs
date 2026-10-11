@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-#[path = "common/removed_on_drop.rs"]
+#[path = "../src/removed_on_drop.rs"]
 mod removed_on_drop;
 
 use std::path::{Path, PathBuf};

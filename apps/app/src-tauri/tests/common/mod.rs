@@ -1,3 +1,4 @@
+#[path = "../../src/removed_on_drop.rs"]
 pub mod removed_on_drop;
 
 use std::ops::Deref;

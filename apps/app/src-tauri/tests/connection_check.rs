@@ -1,4 +1,4 @@
-#[path = "common/removed_on_drop.rs"]
+#[path = "../src/removed_on_drop.rs"]
 mod removed_on_drop;
 
 use kiroshi_app::agent::commands::{account, check, terminate_session, ENV_UNREADABLE};
