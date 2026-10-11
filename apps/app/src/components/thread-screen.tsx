@@ -610,6 +610,7 @@ type ThreadRunProps = {
 	quotes: ThreadQuotes
 	pins: PinnedBubbles
 	now: number
+	readerName: string
 	toQuote: ThreadNaming["toQuote"]
 	onReply: (target: ReplyTarget) => void
 	onRetry?: (messageId: string) => void
@@ -627,6 +628,7 @@ const ThreadRun = ({
 	quotes,
 	pins,
 	now,
+	readerName,
 	toQuote,
 	onReply,
 	onRetry,
@@ -653,7 +655,6 @@ const ThreadRun = ({
 					bare={presentation.hasBareTables && isTableBlock(row.text)}
 					botId={botFace?.id}
 					cause={causes.get(row.turnId)}
-					hasTimeLine={index === presentation.timeLineIndex}
 					key={bubble}
 					now={now}
 					onPin={pins.toggle}
@@ -663,6 +664,7 @@ const ThreadRun = ({
 					quoted={
 						row.quotedMessageId ? quotes.get(row.quotedMessageId) : undefined
 					}
+					readerName={readerName}
 					row={row}
 					state={row.messageId === rejectedPromptId ? "failed" : row.completion}
 					toQuote={toQuote}
@@ -980,6 +982,7 @@ type BotThreadTailProps = {
 	face: ThreadFace
 	botWork: WorkingState | null
 	onboarding: OnboardingTail | null
+	readerName: string
 	onStop: () => void
 }
 
@@ -988,6 +991,7 @@ const BotThreadTail = ({
 	face,
 	botWork,
 	onboarding,
+	readerName,
 	onStop,
 }: BotThreadTailProps) => {
 	const stop: BotStopProps = canStopTurn(thread.state.turn)
@@ -1010,6 +1014,7 @@ const BotThreadTail = ({
 							controller={thread.controller}
 							entry={entry}
 							key={entry.id}
+							readerName={readerName}
 						/>
 					))}
 				</TurnGroup>
@@ -1044,12 +1049,14 @@ const waitingRowsIn = (
 type ConversationThreadTailProps = {
 	thread: LoadedConversationThread
 	bots: RosterBot[]
+	readerName: string
 	refusedQuote?: QuotedMessage
 }
 
 const ConversationThreadTail = ({
 	thread,
 	bots,
+	readerName,
 	refusedQuote,
 }: ConversationThreadTailProps) => {
 	const { refusedMessage, speakers, waitingBotIds } = thread.state
@@ -1060,6 +1067,7 @@ const ConversationThreadTail = ({
 				<RefusedTurn
 					message={refusedMessage}
 					onSendAgain={thread.controller.sendAgain}
+					readerName={readerName}
 					repliedTo={refusedQuote}
 				/>
 			) : null}
@@ -1104,6 +1112,7 @@ type ThreadTailProps = {
 	botWork: WorkingState | null
 	bots: RosterBot[]
 	onboarding: OnboardingTail | null
+	readerName: string
 	refusedQuote?: QuotedMessage
 	onStop: () => void
 }
@@ -1113,6 +1122,7 @@ const ThreadTail = ({
 	botWork,
 	bots,
 	onboarding,
+	readerName,
 	refusedQuote,
 	onStop,
 }: ThreadTailProps) =>
@@ -1122,11 +1132,13 @@ const ThreadTail = ({
 			face={faceOfBot(thread.bot)}
 			onboarding={onboarding}
 			onStop={onStop}
+			readerName={readerName}
 			thread={thread}
 		/>
 	) : (
 		<ConversationThreadTail
 			bots={bots}
+			readerName={readerName}
 			refusedQuote={refusedQuote}
 			thread={thread}
 		/>
@@ -1490,6 +1502,7 @@ const threadRowsOf = (
 		missionSeat,
 		present,
 		promptResponder,
+		reader,
 		state,
 	} = seats
 	const {
@@ -1528,6 +1541,7 @@ const threadRowsOf = (
 		pins,
 		presentations,
 		quotes,
+		readerName: reader,
 		rejectedPromptId: facts.rejectedPromptId,
 		responder: promptResponder,
 		runs,
@@ -1711,6 +1725,7 @@ function ThreadView(props: ThreadViewProps) {
 				bots={view.bots}
 				onboarding={view.onboardingTail}
 				onStop={view.stop}
+				readerName={view.reader}
 				refusedQuote={
 					view.refusedTarget ? view.toQuote(view.refusedTarget) : undefined
 				}

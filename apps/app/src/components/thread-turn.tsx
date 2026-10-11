@@ -24,7 +24,7 @@ import type { RefusedMessage } from "@/lib/conversations/conversation-controller
 
 type ThreadTurnProps = {
 	row: TranscriptRow
-	hasTimeLine: boolean
+	readerName: string
 	anchor: string
 	state: TurnState
 	run?: TurnRun
@@ -46,7 +46,7 @@ type ThreadTurnProps = {
 
 export const ThreadTurn = memo(function ThreadTurn({
 	row,
-	hasTimeLine,
+	readerName,
 	anchor,
 	state,
 	run,
@@ -89,7 +89,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<PersonTurn
 				copyText={text}
-				hasTimeLine={hasTimeLine}
 				messageId={anchor}
 				name={person}
 				now={now}
@@ -109,8 +108,8 @@ export const ThreadTurn = memo(function ThreadTurn({
 		return (
 			<UserTurn
 				copyText={text}
-				hasTimeLine={hasTimeLine}
 				messageId={anchor}
+				name={readerName}
 				now={now}
 				onPin={pin}
 				onReply={reply}
@@ -136,7 +135,6 @@ export const ThreadTurn = memo(function ThreadTurn({
 			carriesMark={carriesMark}
 			copyText={text}
 			fills={asking !== undefined}
-			hasTimeLine={hasTimeLine}
 			messageId={anchor}
 			now={now}
 			onPin={pin}
@@ -155,12 +153,14 @@ export const ThreadTurn = memo(function ThreadTurn({
 type QueuedTurnProps = {
 	entry: OutboxEntry
 	controller: ChatController
+	readerName: string
 	run?: TurnRun
 }
 
 export const QueuedTurn = memo(function QueuedTurn({
 	entry,
 	controller,
+	readerName,
 	run,
 }: QueuedTurnProps) {
 	const { text, attachments } = messageWithAttachments(entry.text)
@@ -168,6 +168,7 @@ export const QueuedTurn = memo(function QueuedTurn({
 	return (
 		<UserTurn
 			copyText={text}
+			name={readerName}
 			onCancel={() => {
 				controller.discard(entry.id)
 			}}
@@ -181,18 +182,21 @@ export const QueuedTurn = memo(function QueuedTurn({
 
 type RefusedTurnProps = {
 	message: RefusedMessage
+	readerName: string
 	repliedTo?: QuotedMessage
 	onSendAgain: (messageId: string) => void
 }
 
 export const RefusedTurn = ({
 	message,
+	readerName,
 	repliedTo,
 	onSendAgain,
 }: RefusedTurnProps) => (
 	<TurnGroup>
 		<UserTurn
 			copyText={message.text}
+			name={readerName}
 			onRetry={() => onSendAgain(message.id)}
 			repliedTo={repliedTo}
 			state="failed"

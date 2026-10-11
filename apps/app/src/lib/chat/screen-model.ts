@@ -395,6 +395,8 @@ export type RunPresentationInput = {
 
 const NO_AVATAR = -1
 
+const HEAD_ROW_INDEX = 0
+
 const lastRowIndexOf = (run: TranscriptRow[]) => run.length - 1
 
 export function runPresentationsOf({
@@ -418,7 +420,7 @@ export function runPresentationsOf({
 		const isNewest = index === newestIndex
 		return {
 			isMarked: isNewest,
-			avatarIndex: isWorking && isNewest ? NO_AVATAR : lastRowIndexOf(run),
+			avatarIndex: isWorking && isNewest ? NO_AVATAR : HEAD_ROW_INDEX,
 			timeLineIndex: lastRowIndexOf(run),
 			hasBareTables: true,
 		}
