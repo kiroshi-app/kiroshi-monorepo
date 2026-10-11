@@ -5,8 +5,7 @@ const URL_WITH_SCHEME = /\b(?:https?|wss?|file|tauri|asset):\/\/[^\s"'`<>()]*/gi
 const HOST_WITH_PORT =
 	/(?:\[[\dA-Fa-f:]+\]|\b(?:\d{1,3}(?:\.\d{1,3}){3}|localhost|[A-Za-z\d-]+(?:\.[A-Za-z\d-]+)+)):\d{1,5}\b/g
 
-const UUID =
-	/\b[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}\b/g
+const UUID = /\b[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}\b/gi
 
 const HOME_DIRECTORY =
 	/(?:\/Users|\/home)\/[^/\s"'`]+|[A-Za-z]:\\Users\\[^\\\s"'`]+/g
