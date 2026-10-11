@@ -11,19 +11,22 @@ struct ConversationRow: View {
                 .unredacted()
             VStack(alignment: .leading, spacing: 2) {
                 headerLayout {
-                    Text(summary.subject.title)
-                        .font(.headline)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(summary.subject.title)
+                            .font(.headline)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let role = summary.role {
+                            RoleBadge(role: role)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if let label = summary.timeLabel {
                         Text(label)
                             .font(.subheadline)
                             .foregroundStyle(Color.kiroshi(.mutedForeground))
                     }
                 }
-                if let workingName = summary.workingName {
-                    WorkingLabel(name: workingName, font: .subheadline)
-                } else if let preview = summary.preview {
+                if let preview = summary.preview {
                     Text(preview)
                         .font(.subheadline)
                         .foregroundStyle(Color.kiroshi(.mutedForeground))
@@ -32,7 +35,8 @@ struct ConversationRow: View {
             }
             .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 12)
+        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] + 16 }
         .foregroundStyle(Color.kiroshi(.foreground))
         .accessibilityElement(children: .combine)
         .accessibilityValue(memberNames)
@@ -40,10 +44,10 @@ struct ConversationRow: View {
 
     @ViewBuilder private var avatar: some View {
         switch summary.subject {
+        case .companion where !redactionReasons.isEmpty:
+            CompanionPlaceholder(size: .row)
         case .companion(let companion):
-            CompanionAvatar(
-                redactionReasons.isEmpty ? companion : nil, size: .row,
-                isWorking: summary.isWorking)
+            CompanionAvatar(companion, size: .row, isWorking: summary.isWorking)
         case .group(let group):
             GroupAvatar(group: group, size: .row, working: summary.workingCompanionIds)
         }
@@ -58,6 +62,19 @@ struct ConversationRow: View {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    }
+}
+
+private struct RoleBadge: View {
+    let role: String
+
+    var body: some View {
+        Text(role)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(Color.kiroshi(.mutedForeground))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 1)
+            .background(Color.kiroshi(.muted), in: .rect(cornerRadius: 6))
     }
 }
 

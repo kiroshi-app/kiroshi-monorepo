@@ -46,6 +46,10 @@ final class SpaceStore {
         spaces.first { $0.id == currentSpaceId }
     }
 
+    var accountInitial: String {
+        email.first.map { String($0).uppercased() } ?? ""
+    }
+
     var offlineSpace: Space? {
         currentSpace.flatMap { $0.isHostOnline ? nil : $0 }
     }

@@ -31,23 +31,35 @@ struct SpaceScreen: View {
                 .safeAreaInset(edge: .top) {
                     if let offlineSpace = store.offlineSpace {
                         HostOfflineLine(space: offlineSpace, email: store.email)
-                            .padding(.horizontal)
-                            .padding(.top, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
                     }
                 }
                 .navigationTitle(store.currentSpace?.name ?? "")
-                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarTitleDisplayMode(.large)
                 .toolbarTitleMenu {
                     SpaceMenu(store: store)
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .largeTitle) {
+                        Menu {
+                            SpaceMenu(store: store)
+                        } label: {
+                            SpaceTitle(name: store.currentSpace?.name ?? "")
+                                .unredacted()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                    ToolbarItem(placement: .topBarLeading) {
                         SettingsButton(
                             account: account, spaces: store.spaces, section: section
                         ) {
-                            Label("Settings", systemImage: "gearshape")
+                            AccountInitial(initial: store.accountInitial)
                         }
+                        .accessibilityLabel("Settings")
                     }
+                    .sharedBackgroundVisibility(.hidden)
                 }
         }
     }
@@ -59,6 +71,37 @@ struct SpaceScreen: View {
         case .missions:
             ContentUnavailableView(section.title, systemImage: section.systemImage)
         }
+    }
+}
+
+private struct SpaceTitle: View {
+    let name: String
+    @ScaledMetric(relativeTo: .largeTitle) private var chevronSide = 24
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(name)
+                .font(.largeTitle.bold())
+                .foregroundStyle(Color.kiroshi(.foreground))
+            Image(systemName: "chevron.down")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .frame(width: chevronSide, height: chevronSide)
+                .background(Color.kiroshi(.muted), in: .circle)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct AccountInitial: View {
+    let initial: String
+
+    var body: some View {
+        Text(initial)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(Color.kiroshi(.foreground))
+            .frame(width: 40, height: 40)
+            .background(Color.kiroshi(.muted), in: .circle)
     }
 }
 

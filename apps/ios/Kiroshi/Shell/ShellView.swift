@@ -14,7 +14,7 @@ struct ShellView: View {
             ) {
                 SpaceScreen(store: store, account: account, section: .conversations)
             }
-            Tab("Missions", systemImage: "target", value: SpaceSection.missions) {
+            Tab("Missions", systemImage: "flag", value: SpaceSection.missions) {
                 MissionsScreen(store: store, account: account)
             }
         }
@@ -47,17 +47,3 @@ private struct RelayFollow: Hashable {
     let spaceId: Space.ID
     let isInForeground: Bool
 }
-
-#if DEBUG
-    #Preview("2.1 Space · title closed") {
-        SignInRootView(model: .fixture(.space))
-    }
-
-    #Preview("2.2 Space · menu open") {
-        SignInRootView(model: .fixture(.spaceMenu))
-    }
-
-    #Preview("2.3 Space · host offline") {
-        SignInRootView(model: .fixture(.hostOffline))
-    }
-#endif

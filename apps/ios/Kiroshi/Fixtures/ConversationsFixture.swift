@@ -10,14 +10,16 @@
             UserDefaults.standard.string(forKey: "draft") ?? ""
         }
 
-        static let juniper = Companion(id: "juniper-6", name: "Juniper", tint: .green)
+        static let juniper = Companion(
+            id: "juniper-6", name: "Juniper", role: "Writer", tint: .green)
+        static let atlas = Companion(id: "atlas-3", name: "Atlas", role: "Planner", tint: .blue)
+        static let pico = Companion(id: "pico-6", name: "Pico", role: "Builder", tint: .orange)
+        static let mira = Companion(id: "mira-9", name: "Mira", role: "Designer", tint: .purple)
+        static let otto = Companion(id: "otto-5", name: "Otto", role: "Digest")
         static let companions = [
-            juniper,
-            Companion(id: "atlas-3", name: "Atlas", tint: .blue),
-            Companion(id: "pico-6", name: "Pico", tint: .orange),
+            juniper, atlas, pico,
             Companion(id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png"),
-            Companion(id: "mira-9", name: "Mira", tint: .purple),
-            Companion(id: "otto-5", name: "Otto"),
+            mira, otto,
         ]
 
         static let listMessages: [Companion.ID: [FixtureHost.Message]] = [
@@ -82,14 +84,42 @@
             ],
         ]
 
+        static let release042 = FixtureHost.Group(
+            id: "group-release-042", title: "Release 0.42", members: [juniper, pico, mira],
+            createdAt: 0)
+
+        static let homeMessages: [String: [FixtureHost.Message]] = listMessages.merging([
+            pico.id: [
+                .init(
+                    id: "m-pico", isYours: false,
+                    content: "All checks passed, the pull request is ready for review.",
+                    daysAgo: 1, hour: 18, minute: 20)
+            ],
+            release042.id: [
+                .init(
+                    id: "m-release-042", isYours: false,
+                    content: "All checks passed, the pull request is ready.", daysAgo: 0,
+                    hour: 8, minute: 58, author: pico.id)
+            ],
+        ]) { _, home in home }
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 4)
 
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
-            var script = FixtureHost.Script(
-                companions: companions, groups: [releaseCrew, designReview],
-                messages: listMessages.merging(groupMessages) { listed, _ in listed })
+            var script =
+                fixture.rawValue.hasPrefix("2.")
+                ? FixtureHost.Script(
+                    companions: [
+                        juniper, atlas, pico, mira,
+                        Companion(id: otto.id, name: otto.name, role: otto.role, tint: .cyan),
+                    ],
+                    groups: [release042],
+                    messages: homeMessages)
+                : FixtureHost.Script(
+                    companions: companions, groups: [releaseCrew, designReview],
+                    messages: listMessages.merging(groupMessages) { listed, _ in listed })
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
@@ -225,7 +255,7 @@
             let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
             let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
             return
-                #"{"id":"\#(companion.id)","name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
+                #"{"id":"\#(companion.id)","name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
         }
 
         static func chat(of companionId: Companion.ID) -> String {

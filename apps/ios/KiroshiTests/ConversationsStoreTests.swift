@@ -231,6 +231,7 @@ struct ConversationsStoreTests {
         await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == true }
 
         #expect(store.summaries.first { $0.id == "pico" }?.timeLabel == "Now")
+        #expect(store.summaries.first { $0.id == "pico" }?.preview == "working…")
         following.cancel()
         await connection.stop()
     }
@@ -353,7 +354,7 @@ struct ConversationsStoreTests {
         await waitUntil { store.summaries.first { $0.id == "group-release" }?.isWorking == true }
 
         let release = store.summaries.first { $0.id == "group-release" }
-        #expect(release?.workingName == "Atlas")
+        #expect(release?.preview == "Atlas: working…")
         #expect(release?.workingCompanionIds == ["atlas"])
         #expect(release?.timeLabel == "Now")
         following.cancel()

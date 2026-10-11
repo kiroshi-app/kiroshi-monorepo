@@ -13,7 +13,7 @@ struct HostOfflineLine: View {
                 .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .foregroundStyle(Color.kiroshi(.foreground))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 4)
