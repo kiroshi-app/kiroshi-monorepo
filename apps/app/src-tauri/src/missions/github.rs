@@ -552,7 +552,6 @@ fn headers() -> HeaderMap {
 #[cfg(test)]
 mod tests {
 	use std::net::{Ipv4Addr, SocketAddr};
-	use std::path::PathBuf;
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::mpsc::channel;
 	use std::sync::Arc;
@@ -574,6 +573,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const NOON: i64 = 1_800_000_000_000;
@@ -786,7 +786,7 @@ mod tests {
 		json!({ "check_runs": [{ "name": name, "status": status, "conclusion": conclusion }] })
 	}
 
-	async fn planted() -> (Database, PathBuf) {
+	async fn planted() -> (Database, RemovedOnDrop) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

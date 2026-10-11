@@ -723,6 +723,7 @@ pub(crate) mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const NOON: i64 = 1_700_000_000_000;
@@ -990,11 +991,12 @@ pub(crate) mod tests {
 		directory
 	}
 
-	pub(crate) async fn a_cache_file_read_long_ago(rows: Vec<Value>) -> PathBuf {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+	pub(crate) async fn a_cache_file_read_long_ago(rows: Vec<Value>) -> (PathBuf, RemovedOnDrop) {
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		let (base, _) = serving(vec![Value::Array(rows)]).await;
 		Directory::timed(base, Some(file.clone()), Box::new(Stopped(0))).refreshed().await;
-		file
+		(file, dir)
 	}
 
 	#[tokio::test]
@@ -1068,7 +1070,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_community_row_of_a_cache_written_before_is_never_answered() {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		let written = a_cache_of(&*a_directory_over(vec![a_page(&["one"])]).await);
 		let odd = row(a_row("odd", "community", 1)).expect("the row reads");
 		to_file(&file, &Cached { rows: [written.rows, vec![odd]].concat(), ..written });
@@ -1975,7 +1978,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_full_read_answering_no_row_is_held_as_a_failure_and_writes_nothing() {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		let (base, held) = serving(vec![json!([])]).await;
 		let directory = Directory::timed(base, Some(file.clone()), Box::new(Stopped(NOON)));
 
@@ -1991,7 +1995,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_read_writes_the_rows_the_moment_and_the_schema_and_reads_them_back() {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		let (base, held) = serving(vec![a_page(&["one", "two"])]).await;
 		let directory = Directory::timed(base.clone(), Some(file.clone()), Box::new(Stopped(NOON)));
 		directory.refreshed().await;
@@ -2014,7 +2019,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_file_written_by_the_previous_build_reads_as_no_cache() {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		fs::create_dir_all(file.parent().expect("the cache has a home")).expect("the home is made");
 		let previous = json!({ "schema": 1, "readAt": NOON, "applications": [] });
 		fs::write(&file, previous.to_string()).expect("the cache is written");
@@ -2029,7 +2035,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_file_carrying_another_schema_reads_as_no_cache() {
-		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let dir = temp_dir();
+		let file = dir.join(CACHE_DIR).join(CACHE_FILE);
 		fs::create_dir_all(file.parent().expect("the cache has a home")).expect("the home is made");
 		let other = json!({ "schema": SCHEMA + 1, "readAt": NOON, "listedAt": NOON, "isFeedStale": false, "rows": [] });
 		fs::write(&file, other.to_string()).expect("the cache is written");
@@ -2043,7 +2050,8 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_cache_that_cannot_be_written_leaves_the_rows_held_in_memory() {
-		let occupied = temp_dir().join(CACHE_DIR);
+		let dir = temp_dir();
+		let occupied = dir.join(CACHE_DIR);
 		fs::write(&occupied, "not a directory").expect("the path is taken");
 		let (base, _) = serving(vec![a_page(&["one"])]).await;
 

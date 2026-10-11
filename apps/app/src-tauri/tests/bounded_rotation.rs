@@ -3,6 +3,7 @@ mod common;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TransportError};
@@ -149,11 +150,13 @@ impl Harness {
 	}
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id()));
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id())),
+	);
 	std::fs::write(&path, name).expect("the scenario is written");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 fn turn_ended(seen: &[AgentEvent]) -> Option<()> {
@@ -251,7 +254,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	let before = harness.page(&conversation);
 	assert_eq!(before.len(), SPOKEN, "the history was not written as it was told");
 
-	scenario("resume_crash");
+	let _scenario = scenario("resume_crash");
 	let refused_run = harness.open_run(&conversation, 1, None, None);
 	assert_eq!(
 		harness.start(&refused_run, Some("a session that is gone")),
@@ -277,7 +280,7 @@ fn a_refused_provider_session_is_rotated_and_the_same_chat_carries_on() {
 	assert_eq!(checkpoint["runtimeSessionId"], json!(refused_run.runtime_session_id));
 	assert!(checkpoint["tokenCount"].as_i64().is_some_and(|count| count > 0));
 
-	scenario("normal");
+	let _scenario = scenario("normal");
 	let live = harness.open_run(
 		&conversation,
 		3,

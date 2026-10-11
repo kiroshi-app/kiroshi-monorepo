@@ -314,6 +314,7 @@ mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailureKind, OauthStep};
 	use crate::environment::contract::{OAUTH_EXPIRES_AT, OAUTH_REASON};
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const NOW: i64 = 1_800_000_000_000;
 	const REFUSED_DETAIL: &str = "the token endpoint answered 400: invalid_grant";
@@ -337,8 +338,8 @@ mod tests {
 		renewals(root, owner, urls, now, exchange).await.map(awaiting)
 	}
 
-	fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-mcp-refresh-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-mcp-refresh-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}

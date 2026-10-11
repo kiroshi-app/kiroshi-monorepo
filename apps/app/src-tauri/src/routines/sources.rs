@@ -48,9 +48,10 @@ mod tests {
 	use serde_json::json;
 
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn a_bundle(name: &str) -> PathBuf {
-		let path = std::env::temp_dir().join(format!("kiroshi-triggers-{name}"));
+	fn a_bundle(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-triggers-{name}")));
 		let _ = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).expect("the bundle directory is there");
 		path
@@ -138,7 +139,8 @@ mod tests {
 		declaring_source(&space, "space-inbox", "Space");
 		declaring_source(&bot, "bot-mail", "Bot");
 
-		let stacked = stacked(&[system.clone(), space.clone(), bot.clone()]).expect("it reads");
+		let stacked = stacked(&[system.to_path_buf(), space.to_path_buf(), bot.to_path_buf()])
+			.expect("it reads");
 
 		assert_eq!(ids(&stacked), ["schedule", "space-inbox", "bot-mail"]);
 
@@ -154,7 +156,7 @@ mod tests {
 		declaring_source(&system, "schedule", "System");
 		declaring_source(&bot, "schedule", "Bot");
 
-		let stacked = stacked(&[system.clone(), bot.clone()]).expect("it reads");
+		let stacked = stacked(&[system.to_path_buf(), bot.to_path_buf()]).expect("it reads");
 
 		assert_eq!(ids(&stacked), ["schedule"]);
 		assert_eq!(stacked[0].title, "Bot");
@@ -171,7 +173,8 @@ mod tests {
 		declaring_source(&system, "schedule", "System");
 		declaring(&bot, "not json");
 
-		let failure = stacked(&[system.clone(), bot.clone()]).expect_err("the read fails");
+		let failure =
+			stacked(&[system.to_path_buf(), bot.to_path_buf()]).expect_err("the read fails");
 
 		assert!(
 			matches!(failure, TranscriptStoreError::UnreadableSources { .. }),

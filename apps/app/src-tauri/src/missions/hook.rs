@@ -172,6 +172,7 @@ mod tests {
 	use tokio::net::TcpListener;
 
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const A_URL: &str = "http://127.0.0.1:45367/missions/call";
 
@@ -179,8 +180,10 @@ mod tests {
 
 	const ANOTHER_HOOK: &str = "./scripts/another-hook.sh";
 
-	fn a_dir(name: &str) -> PathBuf {
-		let path = std::env::temp_dir().join(format!("kiroshi-hook-{name}-{}", std::process::id()));
+	fn a_dir(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-hook-{name}-{}", std::process::id())),
+		);
 		let _ = fs::remove_dir_all(&path);
 		fs::create_dir_all(path.join("workspace").join(GIT_ENTRY)).expect("the workspace is there");
 		path
@@ -521,7 +524,7 @@ mod tests {
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
-	async fn a_listening_hook(name: &str) -> (PathBuf, PathBuf, TcpListener) {
+	async fn a_listening_hook(name: &str) -> (RemovedOnDrop, PathBuf, TcpListener) {
 		let dir = a_dir(name);
 		let hook_dir = dir.join("hook");
 		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");

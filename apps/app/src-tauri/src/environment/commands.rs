@@ -73,9 +73,10 @@ mod tests {
 		EnvOwner, CONNECTION_NAMES, OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, RESERVED_NAMES,
 	};
 	use crate::mcp_oauth::credentials;
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-env-set-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-env-set-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}

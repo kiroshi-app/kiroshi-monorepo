@@ -127,13 +127,13 @@ fn rolled_back(root: &Path, scope: &EnvScope, refused: EnvError) -> EnvError {
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::path::PathBuf;
 
 	use super::*;
 	use crate::environment::contract::EnvOwner;
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-mcp-oauth-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-mcp-oauth-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}

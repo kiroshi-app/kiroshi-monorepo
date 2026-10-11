@@ -105,6 +105,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::routines::contract::{
 		FieldType, Filter, FilterMatchMode, PayloadField, RoutineDraft, RunCause, RunRequested,
 		TriggerDecision,
@@ -165,7 +166,7 @@ mod tests {
 		}
 	}
 
-	async fn a_scheduled_routine(expression: &str) -> (Database, std::path::PathBuf, String) {
+	async fn a_scheduled_routine(expression: &str) -> (Database, RemovedOnDrop, String) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

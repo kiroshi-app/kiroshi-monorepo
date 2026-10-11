@@ -67,9 +67,11 @@ fn unwritable(error: std::io::Error) -> Rejection {
 mod tests {
 	use super::picture::fixtures::a_png;
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn temp_dir() -> PathBuf {
-		let dir = std::env::temp_dir().join(format!("kiroshi-avatars-{}", Uuid::new_v4()));
+	fn temp_dir() -> RemovedOnDrop {
+		let dir =
+			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-avatars-{}", Uuid::new_v4())));
 		fs::create_dir_all(&dir).expect("temp dir");
 		dir
 	}
@@ -240,7 +242,8 @@ mod tests {
 
 	#[test]
 	fn the_first_picture_makes_the_directory_that_no_read_created() {
-		let dir = temp_dir().join("not-yet");
+		let parent = temp_dir();
+		let dir = parent.join("not-yet");
 
 		assert_eq!(readable(&dir, "anything.png"), None, "a read of a missing directory failed");
 		Avatars::sweep(&dir, &[]);

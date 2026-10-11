@@ -5,6 +5,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::avatars::{self, Avatars};
 use kiroshi_app::bundles;
@@ -370,8 +371,10 @@ fn assert_owner_only_under(dir: &Path) {
 	}
 }
 
-fn scratch() -> PathBuf {
-	let dir = std::env::temp_dir().join(format!("kiroshi-space-bundle-{}", uuid::Uuid::new_v4()));
+fn scratch() -> RemovedOnDrop {
+	let dir = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-space-bundle-{}", uuid::Uuid::new_v4())),
+	);
 	fs::create_dir_all(&dir).expect("a scratch dir");
 	dir
 }

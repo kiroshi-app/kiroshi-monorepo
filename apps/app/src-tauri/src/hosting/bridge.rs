@@ -364,6 +364,7 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering};
 
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn status_of(answer: &str) -> (Value, Value) {
 		let answer: Value = serde_json::from_str(answer).expect("a json answer");
@@ -443,8 +444,9 @@ mod tests {
 	}
 
 	fn registered_commands() -> Vec<String> {
-		let bindings =
-			std::env::temp_dir().join(format!("kiroshi-host-only-{}.ts", uuid::Uuid::new_v4()));
+		let bindings = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-host-only-{}.ts", uuid::Uuid::new_v4())),
+		);
 		crate::commands::builder()
 			.dangerously_cast_bigints_to_number()
 			.export(specta_typescript::Typescript::default(), &bindings)
@@ -678,7 +680,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_crosses_only_when_a_companion_of_the_space_wears_it_and_it_fits() {
-		let database = crate::db::open(&crate::db::connection::temp_dir());
+		let database_dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&database_dir);
 		let shared = database.spaces().create("Shared".to_owned()).await.expect("a space").id;
 		let other = database.spaces().create("Other".to_owned()).await.expect("a space").id;
 		let dir = Path::new("/avatars");
@@ -722,7 +725,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn avatars_asked_at_once_are_read_one_at_a_time_and_all_answered() {
-		let database = crate::db::open(&crate::db::connection::temp_dir());
+		let database_dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&database_dir);
 		let shared = database.spaces().create("Shared".to_owned()).await.expect("a space").id;
 		let dir = Path::new("/avatars");
 		let files = ["held.png", "also.png", "third.png"];

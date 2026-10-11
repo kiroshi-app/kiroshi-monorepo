@@ -4,6 +4,7 @@ use std::fs;
 use std::sync::Mutex;
 
 use common::an_app_of_its_own;
+use common::removed_on_drop::RemovedOnDrop;
 use kiroshi_app::agent::commands::terminate_session;
 use kiroshi_app::agent::protocol::OauthCredentials;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
@@ -72,11 +73,13 @@ fn connected_holding(
 	registration_settles: Option<&str>,
 ) -> Connected {
 	let _one = ONE_SIDECAR_AT_A_TIME.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-	let log = std::env::temp_dir().join(format!("kiroshi-connect-{case}-{}", std::process::id()));
+	let log = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-connect-{case}-{}", std::process::id())),
+	);
 	let _ = fs::remove_file(&log);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var(HANDED_CLIENT_SETTLES, handed_settles);
-	std::env::set_var(AUTHORIZE_LOG, &log);
+	std::env::set_var(AUTHORIZE_LOG, &*log);
 	match registration_settles {
 		Some(settles) => std::env::set_var(REGISTRATION_SETTLES, settles),
 		None => std::env::remove_var(REGISTRATION_SETTLES),

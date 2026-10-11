@@ -150,6 +150,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
 
 	const A_PARTICIPANT: &str = "
@@ -199,7 +200,7 @@ mod tests {
 		checkout
 	}
 
-	async fn planted() -> (Database, PathBuf) {
+	async fn planted() -> (Database, RemovedOnDrop) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

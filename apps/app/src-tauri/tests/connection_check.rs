@@ -1,9 +1,13 @@
+#[path = "../src/removed_on_drop.rs"]
+mod removed_on_drop;
+
 use kiroshi_app::agent::commands::{account, check, terminate_session, ENV_UNREADABLE};
 use kiroshi_app::agent::contract::{Account, CheckReport, ConnectionState, TransportError};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::environment::connection;
 use kiroshi_app::environment::contract::ConnectionKind;
+use removed_on_drop::RemovedOnDrop;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 
@@ -240,8 +244,8 @@ fn a_probe_that_could_not_run_is_reported_apart_from_a_refusal() {
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }
 
-fn a_root(name: &str) -> std::path::PathBuf {
-	let root = std::env::temp_dir().join(format!("kiroshi-connection-check-{name}"));
+fn a_root(name: &str) -> RemovedOnDrop {
+	let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-connection-check-{name}")));
 	let _ = std::fs::remove_dir_all(&root);
 	root
 }

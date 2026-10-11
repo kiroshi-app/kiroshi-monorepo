@@ -433,6 +433,7 @@ fn committed_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const REGENERATE: &str = "bun run snapshots";
 
@@ -442,8 +443,10 @@ mod tests {
 	}
 
 	fn generated() -> String {
-		let path = std::env::temp_dir()
-			.join(format!("kiroshi-member-socket-{}.schema.json", uuid::Uuid::new_v4()));
+		let path = RemovedOnDrop(
+			std::env::temp_dir()
+				.join(format!("kiroshi-member-socket-{}.schema.json", uuid::Uuid::new_v4())),
+		);
 		crate::commands::builder()
 			.export(MemberSocketSchema, &path)
 			.unwrap_or_else(|error| panic!("the member socket schema is not generated: {error}"));

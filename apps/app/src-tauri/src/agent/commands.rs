@@ -1038,6 +1038,7 @@ pub(crate) fn a_host_wide_announce<R: Runtime>(app: &AppHandle<R>, event: AgentE
 mod tests {
 	use super::*;
 	use crate::db::repositories::runtime_context::RuntimeSessionStatus;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[test]
 	fn a_bundle_git_refused_is_announced_as_its_own_failure_and_not_as_a_failed_turn() {
@@ -1144,8 +1145,8 @@ mod tests {
 		assert_eq!(served.failure, None);
 	}
 
-	fn a_fresh_app_data(name: &str) -> PathBuf {
-		let app_data = std::env::temp_dir().join(format!("kiroshi-app-data-{name}"));
+	fn a_fresh_app_data(name: &str) -> RemovedOnDrop {
+		let app_data = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-app-data-{name}")));
 		let _ = std::fs::remove_dir_all(&app_data);
 		std::fs::create_dir_all(&app_data).expect("the app data directory is there");
 		app_data
@@ -1155,7 +1156,7 @@ mod tests {
 	fn a_bot_with_no_directory_runs_in_one_reserved_for_it_inside_the_app_data() {
 		let app_data = a_fresh_app_data("reserved");
 
-		let running_in = reserved_directory(app_data.clone(), "bot-a");
+		let running_in = reserved_directory(app_data.to_path_buf(), "bot-a");
 
 		assert_eq!(running_in, app_data.join(RUNS_DIR).join("bot-a"));
 		assert!(running_in.is_dir(), "the reserved directory was not created");
@@ -1166,8 +1167,8 @@ mod tests {
 	fn two_bots_with_no_directory_never_share_one() {
 		let app_data = a_fresh_app_data("distinct");
 
-		let first = reserved_directory(app_data.clone(), "bot-a");
-		let second = reserved_directory(app_data.clone(), "bot-b");
+		let first = reserved_directory(app_data.to_path_buf(), "bot-a");
+		let second = reserved_directory(app_data.to_path_buf(), "bot-b");
 
 		assert_ne!(first, second);
 		assert!(first.is_dir() && second.is_dir());
@@ -1179,9 +1180,9 @@ mod tests {
 		let app_data = a_fresh_app_data("blocked");
 		std::fs::write(app_data.join(RUNS_DIR), b"i am a file").expect("the file is written");
 
-		let running_in = reserved_directory(app_data.clone(), "bot-a");
+		let running_in = reserved_directory(app_data.to_path_buf(), "bot-a");
 
-		assert_eq!(running_in, app_data);
+		assert_eq!(running_in, *app_data);
 		std::fs::remove_dir_all(&app_data).expect("cleanup");
 	}
 
@@ -1204,8 +1205,9 @@ mod tests {
 		}
 	}
 
-	fn a_fresh_bundle_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-session-rules-{name}"));
+	fn a_fresh_bundle_root(name: &str) -> RemovedOnDrop {
+		let root =
+			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-session-rules-{name}")));
 		let _ = std::fs::remove_dir_all(&root);
 		root
 	}
@@ -1664,8 +1666,9 @@ mod tests {
 			VALUES ('c1', 'b1', 'assistant', 1, 0);
 	";
 
-	async fn a_database_resuming(provider_session_id: &str) -> db::DatabaseState {
-		let database = crate::db::open(&crate::db::connection::temp_dir());
+	async fn a_database_resuming(provider_session_id: &str) -> (db::DatabaseState, RemovedOnDrop) {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
 			.await
@@ -1681,7 +1684,7 @@ mod tests {
 			.record_provider_session(participant, session.id, provider_session_id.to_owned())
 			.await
 			.expect("the provider session is recorded");
-		Ok(database)
+		(Ok(database), dir)
 	}
 
 	async fn stored_id(state: &db::DatabaseState) -> Option<String> {
@@ -1695,8 +1698,10 @@ mod tests {
 			.and_then(|session| session.provider_session_id)
 	}
 
-	async fn a_conversation_of_two_instances() -> (db::DatabaseState, RuntimeScope, RuntimeScope) {
-		let database = crate::db::open(&crate::db::connection::temp_dir());
+	async fn a_conversation_of_two_instances(
+	) -> (db::DatabaseState, RuntimeScope, RuntimeScope, RemovedOnDrop) {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
 			.await
@@ -1711,12 +1716,13 @@ mod tests {
 			.expect("the lineage is recorded");
 		let scope_of =
 			|id: String, seq: i64| RuntimeScope { runtime_session_id: id, epoch: seq, ..a_scope() };
-		(Ok(database), scope_of(first.id, first.seq), scope_of(second.id, second.seq))
+		(Ok(database), scope_of(first.id, first.seq), scope_of(second.id, second.seq), dir)
 	}
 
 	#[tokio::test]
 	async fn only_a_mission_conversation_opens_on_a_mission_thread() {
-		let database = crate::db::open(&crate::db::connection::temp_dir());
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
 		database
 			.call_mut(|connection| {
 				Ok(connection.execute_batch(
@@ -1737,7 +1743,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_second_instance_starts_cold_and_records_its_own_provider_session() {
-		let (state, lineage, beside_it) = a_conversation_of_two_instances().await;
+		let (state, lineage, beside_it, _dir) = a_conversation_of_two_instances().await;
 		let live = Live::<&str>::default();
 
 		let holder = live.take_over(lineage.clone());
@@ -1780,7 +1786,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_timed_out_resume_keeps_the_stored_id_and_a_crashed_one_spends_it() {
-		let state = a_database_resuming("session-1").await;
+		let (state, _dir) = a_database_resuming("session-1").await;
 
 		let spent = forget_the_id_a_refusal_blames(
 			&state,

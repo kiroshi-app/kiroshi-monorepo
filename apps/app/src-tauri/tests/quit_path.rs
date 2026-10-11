@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+#[path = "../src/removed_on_drop.rs"]
+mod removed_on_drop;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,6 +12,7 @@ use kiroshi_app::agent::session::{EventSink, Session, SessionOptions};
 use kiroshi_app::agent::sidecar::{Sidecar, SidecarOptions};
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::termination::termination_requested;
+use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
@@ -33,8 +37,10 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-fn probe_file() -> PathBuf {
-	let path = std::env::temp_dir().join(format!("kiroshi-quit-path-{}.pid", std::process::id()));
+fn probe_file() -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-quit-path-{}.pid", std::process::id())),
+	);
 	let _ = std::fs::remove_file(&path);
 	path
 }

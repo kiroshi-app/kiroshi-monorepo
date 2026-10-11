@@ -173,11 +173,12 @@ mod tests {
 	use super::super::user;
 	use super::super::{INVOCATION_KEY, LEARNED_NAME};
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use std::fs;
 	use std::thread;
 
-	fn a_path(name: &str) -> PathBuf {
-		let path = std::env::temp_dir().join(format!("kiroshi-plugin-{name}"));
+	fn a_path(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-plugin-{name}")));
 		let _ = fs::remove_dir_all(&path);
 		path
 	}
@@ -518,7 +519,7 @@ mod tests {
 		let writers: Vec<_> = ["one", "two"]
 			.into_iter()
 			.map(|name| {
-				let path = path.clone();
+				let path = path.to_path_buf();
 				thread::spawn(move || {
 					private_files::replace(
 						&path.join(SKILLS_DIR).join(name).join(SKILL_NAME),

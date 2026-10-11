@@ -1,7 +1,7 @@
 mod common;
 
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,6 +10,7 @@ use axum::extract::State;
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::Router;
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::account::session::AccountSession;
 use kiroshi_app::commands::invoke_handler;
@@ -77,16 +78,17 @@ struct Host {
 	_app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
 	root: PathBuf,
+	_folder: Option<RemovedOnDrop>,
 }
 
 impl Host {
 	fn new(api_url: &str) -> Self {
 		static CLAIMED: AtomicUsize = AtomicUsize::new(0);
-		let root = std::env::temp_dir().join(format!(
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!(
 			"kiroshi-account-it-{}-{}",
 			std::process::id(),
 			CLAIMED.fetch_add(1, Ordering::Relaxed)
-		));
+		)));
 		Self::holding(Ok(root), api_url)
 	}
 
@@ -97,7 +99,8 @@ impl Host {
 		Self::holding(Err(unavailable), api_url)
 	}
 
-	fn holding(root: Result<PathBuf, EnvError>, api_url: &str) -> Self {
+	fn holding(folder: Result<RemovedOnDrop, EnvError>, api_url: &str) -> Self {
+		let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
 		let app = an_app_of_its_own(
 			"account",
 			mock_builder()
@@ -107,7 +110,7 @@ impl Host {
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("window builds");
-		Self { _app: app, window, root: root.unwrap_or_default() }
+		Self { _app: app, window, root: root.unwrap_or_default(), _folder: folder.ok() }
 	}
 
 	fn call(&self, cmd: &str, body: Value) -> Result<Value, Value> {

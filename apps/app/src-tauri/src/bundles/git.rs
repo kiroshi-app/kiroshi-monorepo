@@ -463,10 +463,11 @@ fn touched(repository: &Repository, commit: &Commit) -> Result<Vec<String>, git2
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use git2::{DiffFormat, DiffOptions};
 
-	fn a_bundle(name: &str) -> std::path::PathBuf {
-		let bundle = std::env::temp_dir().join(format!("kiroshi-git-{name}"));
+	fn a_bundle(name: &str) -> RemovedOnDrop {
+		let bundle = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-git-{name}")));
 		let _ = fs::remove_dir_all(&bundle);
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
 		bundle

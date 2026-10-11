@@ -970,6 +970,7 @@ mod tests {
 	use super::front::parts;
 	use super::*;
 	use crate::db::repositories::conversations::Bot;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	pub(super) fn a_bot(name: &str, instructions: &str) -> Bot {
 		Bot {
@@ -1005,8 +1006,8 @@ mod tests {
 		generated(root, bot_id)?.blot
 	}
 
-	pub(super) fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-bundle-{name}"));
+	pub(super) fn a_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-bundle-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}
@@ -1457,7 +1458,8 @@ mod tests {
 
 		assert_eq!(front_output_style(&styleless), DEFAULT_OUTPUT_STYLE);
 		assert_eq!(styled("  "), DEFAULT_OUTPUT_STYLE);
-		assert_eq!(output_style(&a_root("styleless"), "b1"), DEFAULT_OUTPUT_STYLE);
+		let root = a_root("styleless");
+		assert_eq!(output_style(&root, "b1"), DEFAULT_OUTPUT_STYLE);
 	}
 
 	#[test]
@@ -2486,7 +2488,7 @@ mod tests {
 
 		let held = serialised(&dir(&root, &bot.id));
 		let (written, waited) = std::sync::mpsc::channel();
-		let space_path = elsewhere.clone();
+		let space_path = elsewhere.to_path_buf();
 		let writer = std::thread::spawn(move || {
 			plugin::create_skill(&space_path, &a_draft("figs", "What it is for.", "How it goes."))
 				.expect("the skill is created");
@@ -2519,7 +2521,7 @@ mod tests {
 		let writers: Vec<_> = AT_ONCE
 			.into_iter()
 			.map(|label| {
-				let root = root.clone();
+				let root = root.to_path_buf();
 				let ready = std::sync::Arc::clone(&ready);
 				std::thread::spawn(move || {
 					ready.wait();
@@ -2655,7 +2657,7 @@ mod tests {
 		let turns: Vec<_> = AT_ONCE
 			.into_iter()
 			.map(|_| {
-				let root = root.clone();
+				let root = root.to_path_buf();
 				let ready = std::sync::Arc::clone(&ready);
 				std::thread::spawn(move || {
 					ready.wait();
@@ -2689,7 +2691,7 @@ mod tests {
 			let before = titles(&root, &bot.id).len();
 			let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
 			let turn = std::thread::spawn({
-				let root = root.clone();
+				let root = root.to_path_buf();
 				let ready = std::sync::Arc::clone(&ready);
 				move || {
 					ready.wait();
@@ -2697,7 +2699,7 @@ mod tests {
 				}
 			});
 			let saved = std::thread::spawn({
-				let root = root.clone();
+				let root = root.to_path_buf();
 				let ready = std::sync::Arc::clone(&ready);
 				move || {
 					ready.wait();
@@ -2815,7 +2817,8 @@ mod tests {
 
 		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
 		let copying = std::thread::spawn({
-			let (root, source_id, bot_id) = (root.clone(), source_id.to_owned(), bot.id.clone());
+			let (root, source_id, bot_id) =
+				(root.to_path_buf(), source_id.to_owned(), bot.id.clone());
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2823,7 +2826,7 @@ mod tests {
 			}
 		});
 		let saving = std::thread::spawn({
-			let root = root.clone();
+			let root = root.to_path_buf();
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2856,7 +2859,8 @@ mod tests {
 
 		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
 		let copying = std::thread::spawn({
-			let (root, source_id, bot_id) = (root.clone(), source_id.to_owned(), bot.id.clone());
+			let (root, source_id, bot_id) =
+				(root.to_path_buf(), source_id.to_owned(), bot.id.clone());
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2864,7 +2868,7 @@ mod tests {
 			}
 		});
 		let turn = std::thread::spawn({
-			let root = root.clone();
+			let root = root.to_path_buf();
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2896,7 +2900,7 @@ mod tests {
 
 		let ready = std::sync::Arc::new(std::sync::Barrier::new(2));
 		let saving = std::thread::spawn({
-			let (root, bot_id) = (root.clone(), bot.id.clone());
+			let (root, bot_id) = (root.to_path_buf(), bot.id.clone());
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2907,7 +2911,7 @@ mod tests {
 			}
 		});
 		let undoing = std::thread::spawn({
-			let (root, bot_id) = (root.clone(), bot.id.clone());
+			let (root, bot_id) = (root.to_path_buf(), bot.id.clone());
 			let ready = std::sync::Arc::clone(&ready);
 			move || {
 				ready.wait();
@@ -2943,7 +2947,7 @@ mod tests {
 		let undoing: Vec<_> = undone
 			.into_iter()
 			.map(|commit_id| {
-				let (root, bot_id) = (root.clone(), bot.id.clone());
+				let (root, bot_id) = (root.to_path_buf(), bot.id.clone());
 				let ready = std::sync::Arc::clone(&ready);
 				std::thread::spawn(move || {
 					ready.wait();

@@ -1,3 +1,6 @@
+#[path = "../src/removed_on_drop.rs"]
+mod removed_on_drop;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,6 +16,7 @@ use kiroshi_app::agent::protocol::AuthorizeRequest;
 use kiroshi_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
 use kiroshi_app::agent::sidecar::{self, Opening, Sidecar, SidecarOptions, SHUTDOWN_GRACE};
 use kiroshi_app::environment::contract::Values;
+use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
@@ -767,9 +771,11 @@ async fn a_sidecar_that_closes_stdout_and_keeps_running_is_reported_and_still_te
 }
 
 #[cfg(unix)]
-fn probe_file(label: &str) -> PathBuf {
-	let path = std::env::temp_dir()
-		.join(format!("kiroshi-orphan-probe-{}-{label}.pid", std::process::id()));
+fn probe_file(label: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir()
+			.join(format!("kiroshi-orphan-probe-{}-{label}.pid", std::process::id())),
+	);
 	let _ = std::fs::remove_file(&path);
 	path
 }
@@ -925,9 +931,10 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-fn a_cancel_file(name: &str) -> PathBuf {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-oauth-cancel-{name}-{}", std::process::id()));
+fn a_cancel_file(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-oauth-cancel-{name}-{}", std::process::id())),
+	);
 	let _ = std::fs::remove_file(&path);
 	path
 }

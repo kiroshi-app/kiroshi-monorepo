@@ -460,6 +460,7 @@ mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
 	use crate::mcp_oauth::status::ApplicationStatus;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
 	use tauri::test::mock_builder;
 
@@ -619,7 +620,7 @@ mod tests {
 
 	#[test]
 	fn a_server_a_session_reported_waiting_reads_connected_once_the_person_authorizes_it() {
-		let root = std::env::temp_dir().join("kiroshi-mcp-oauth-connect-clears");
+		let root = RemovedOnDrop(std::env::temp_dir().join("kiroshi-mcp-oauth-connect-clears"));
 		let _ = std::fs::remove_dir_all(&root);
 		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 		let reports = ApplicationReports::default();
@@ -684,8 +685,9 @@ mod tests {
 		assert_eq!(authorize_request("https://a".to_owned(), &orphan), registering);
 	}
 
-	fn a_root(name: &str) -> std::path::PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-mcp-oauth-commands-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root =
+			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-mcp-oauth-commands-{name}")));
 		let _ = std::fs::remove_dir_all(&root);
 		root
 	}
@@ -1033,8 +1035,9 @@ mod tests {
 		let answers = AuthorizationAnswers::default();
 		answers.answered("http://127.0.0.1:29979/mcp", true, now_ms());
 
+		let root = a_root("loopback-unasked");
 		let rows = renewed_rows(
-			&a_root("loopback-unasked"),
+			&root,
 			&EnvOwner::User,
 			vec![paper],
 			&McpOauthState::default(),
@@ -1105,8 +1108,9 @@ mod tests {
 		left_out_by_a_session(&reports);
 		let answers = AuthorizationAnswers::default();
 		answers.answered(GRANOLA_URL, asks, now_ms());
+		let root = a_root(root_name);
 		renewed_rows(
-			&a_root(root_name),
+			&root,
 			&a_bot(),
 			granola_declared(),
 			&McpOauthState::default(),
