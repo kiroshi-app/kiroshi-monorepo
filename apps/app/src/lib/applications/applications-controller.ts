@@ -154,7 +154,7 @@ export const createApplicationsController = (
 	const current = stateStore.getState
 	let issuedRead = 0
 	let readBound: ReturnType<typeof setTimeout> | undefined
-	let stopListeningToDirectory: (() => void) | null = null
+	let unwatchDirectory: (() => void) | null = null
 	const askedNames = new Set<string>()
 
 	const set = (fields: Partial<ApplicationsState>) =>
@@ -243,8 +243,8 @@ export const createApplicationsController = (
 		)
 	}
 
-	const listenToDirectory = () => {
-		if (stopListeningToDirectory) {
+	const watchDirectory = () => {
+		if (unwatchDirectory) {
 			return
 		}
 		let isListening = true
@@ -261,9 +261,9 @@ export const createApplicationsController = (
 				)
 				return () => undefined
 			})
-		stopListeningToDirectory = () => {
+		unwatchDirectory = () => {
 			isListening = false
-			stopListeningToDirectory = null
+			unwatchDirectory = null
 			void listening.then((unlisten) => unlisten())
 		}
 	}
@@ -417,14 +417,14 @@ export const createApplicationsController = (
 		},
 
 		browse: () => {
-			listenToDirectory()
+			watchDirectory()
 			if (current().isReadingDirectory) {
 				return
 			}
 			readDirectory()
 		},
 
-		stopWatchingDirectory: () => stopListeningToDirectory?.(),
+		stopWatchingDirectory: () => unwatchDirectory?.(),
 
 		search: (query: string) => set({ query }),
 
