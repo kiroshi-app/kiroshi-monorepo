@@ -18,6 +18,7 @@ import {
 	type ApplicationsController,
 	type ApplicationsState,
 	applicationMarkOf,
+	catalogueStatusOf,
 	type InstallTarget,
 	serverScopeOf,
 } from "./applications-controller"
@@ -194,10 +195,6 @@ const narrowed = (applications: Application[], narrowing: CatalogueNarrowing) =>
 		narrowing.needle,
 	)
 
-const isReadingWithNoRowsHeld = (state: ApplicationsState) =>
-	(state.isReadingCatalogue && state.curated.length === 0) ||
-	(state.isReadingDirectory && state.directory.length === 0)
-
 type ApplicationsCatalogueSource = {
 	state: ApplicationsState
 	controller: ApplicationsController
@@ -229,8 +226,7 @@ const toApplicationsCatalogue = ({
 			...narrowed(state.curated, narrowing).map(toCatalogueApplication),
 			...narrowed(beyondCurated, narrowing).map(toRegistryApplication),
 		],
-		isLoading: isReadingWithNoRowsHeld(state),
-		hasFailed: state.hasDirectoryFailed,
+		...catalogueStatusOf(state),
 		hasPartlyFailed: state.hasDirectoryPartlyFailed,
 		isStale: state.isDirectoryStale,
 		onRetry: controller.retry,

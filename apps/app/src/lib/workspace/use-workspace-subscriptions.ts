@@ -10,6 +10,7 @@ import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { USER_OWNER } from "./user-owner"
 
+import { useDirectoryWatch } from "../applications/use-directory-watch"
 import { useCompanionSettings } from "../bots/use-companion-settings"
 import { useRosterReloads } from "../bots/use-roster-reloads"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
@@ -118,6 +119,11 @@ export const useWorkspaceSubscriptions = ({
 		userConnections.controller,
 		user.state.isSettingsOpen,
 	])
+
+	useDirectoryWatch(
+		applications.controller,
+		user.state.isSettingsOpen || isEditing || isSpaceEditing,
+	)
 
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
 

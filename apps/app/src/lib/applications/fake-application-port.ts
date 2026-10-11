@@ -34,10 +34,13 @@ export type FakeApplicationPort = ApplicationPort & {
 	refusals: Partial<Record<ApplicationCommand, ApplicationsError>>
 	announce: (installed: ApplicationInstalled) => void
 	isListening: () => boolean
+	refreshDirectory: () => void
+	isListeningToDirectory: () => boolean
 }
 
 export const createFakeApplicationPort = (): FakeApplicationPort => {
 	const listeners = new Set<(installed: ApplicationInstalled) => void>()
+	const directoryListeners = new Set<() => void>()
 
 	const answer = (call: ApplicationCall) => {
 		fake.calls.push(call)
@@ -104,6 +107,21 @@ export const createFakeApplicationPort = (): FakeApplicationPort => {
 		},
 
 		isListening: () => listeners.size > 0,
+
+		onDirectoryRefreshed: async (listener) => {
+			directoryListeners.add(listener)
+			return () => {
+				directoryListeners.delete(listener)
+			}
+		},
+
+		refreshDirectory: () => {
+			for (const listener of directoryListeners) {
+				listener()
+			}
+		},
+
+		isListeningToDirectory: () => directoryListeners.size > 0,
 	}
 
 	return fake

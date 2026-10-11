@@ -12,6 +12,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import type {
 	Application,
 	ApplicationPort,
+	ApplicationSearch,
 	InstallField,
 } from "./application-port"
 
@@ -69,6 +70,7 @@ export type ApplicationsController = {
 	subscribe: (listener: () => void) => () => void
 	open: () => Promise<void>
 	browse: () => void
+	stopWatchingDirectory: () => void
 	search: (query: string) => void
 	pickCategory: (category: CatalogueCategory) => void
 	retry: () => void
@@ -137,6 +139,28 @@ const typedValuesOf = (
 const urlOf = (application: Application) =>
 	readMcpServerLaunch(application.config).url ?? ""
 
+export const DIRECTORY_READ_BOUND_MS = 15_000
+
+type CatalogueStatus = {
+	isLoading: boolean
+	hasFailed: boolean
+}
+
+const holdsNoRows = ({ curated, directory }: ApplicationsState) =>
+	curated.length === 0 && directory.length === 0
+
+const isReadingWithNoRowsHeld = (state: ApplicationsState) =>
+	(state.isReadingCatalogue && state.curated.length === 0) ||
+	(state.isReadingDirectory && state.directory.length === 0)
+
+export const catalogueStatusOf = (
+	state: ApplicationsState,
+): CatalogueStatus => {
+	const hasFailed =
+		state.hasDirectoryFailed || (state.hasCatalogueFailed && holdsNoRows(state))
+	return { isLoading: !hasFailed && isReadingWithNoRowsHeld(state), hasFailed }
+}
+
 export type ApplicationsControllerOptions = {
 	reportFailure?: (notice: NoticeMessage) => void
 }
@@ -149,6 +173,9 @@ export const createApplicationsController = (
 	const stateStore = createStore(initialApplicationsState)
 	const current = stateStore.getState
 	let issuedRead = 0
+	let readBound: ReturnType<typeof setTimeout> | undefined
+	let catalogueBound: ReturnType<typeof setTimeout> | undefined
+	let unwatchDirectory: (() => void) | null = null
 	const askedNames = new Set<string>()
 
 	const set = (fields: Partial<ApplicationsState>) =>
@@ -164,6 +191,66 @@ export const createApplicationsController = (
 
 	const holdsDirectory = () => current().directory.length > 0
 
+	const cancelReadBound = () => clearTimeout(readBound)
+
+	const failUnansweredRead = () =>
+		set({ isReadingDirectory: false, hasDirectoryFailed: true })
+
+	const boundReadWithNoRowsHeld = () => {
+		cancelReadBound()
+		if (holdsDirectory()) {
+			return
+		}
+		readBound = setTimeout(failUnansweredRead, DIRECTORY_READ_BOUND_MS)
+	}
+
+	const failUnansweredCatalogue = () =>
+		set({ isReadingCatalogue: false, hasCatalogueFailed: true })
+
+	const boundCatalogueWithNoRowsHeld = () => {
+		clearTimeout(catalogueBound)
+		if (current().curated.length > 0) {
+			return
+		}
+		catalogueBound = setTimeout(
+			failUnansweredCatalogue,
+			DIRECTORY_READ_BOUND_MS,
+		)
+	}
+
+	const readCatalogue = async () => {
+		if (current().isReadingCatalogue) {
+			return
+		}
+		set({ isReadingCatalogue: true, hasCatalogueFailed: false })
+		boundCatalogueWithNoRowsHeld()
+		try {
+			set({ curated: await port.catalogue(), hasCatalogueFailed: false })
+		} catch {
+			set({ hasCatalogueFailed: true })
+			reportFailure({
+				title: i18n.t("bots:applications.catalogue.unavailable"),
+			})
+		} finally {
+			clearTimeout(catalogueBound)
+			set({ isReadingCatalogue: false })
+		}
+	}
+
+	const directoryAnsweredBy = (found: ApplicationSearch) => {
+		const isKeepingHeldRows =
+			found.registryFailure !== undefined && holdsDirectory()
+		return isKeepingHeldRows
+			? {
+					directory: current().directory,
+					isDirectoryStale: current().isDirectoryStale,
+				}
+			: {
+					directory: found.applications,
+					isDirectoryStale: found.isStale === true,
+				}
+	}
+
 	const readDirectory = () => {
 		issuedRead += 1
 		const attempt = issuedRead
@@ -174,17 +261,19 @@ export const createApplicationsController = (
 			hasDirectoryPartlyFailed:
 				holdsDirectory() && current().hasDirectoryPartlyFailed,
 		})
+		boundReadWithNoRowsHeld()
 		void port.search("").then(
 			(found) => {
 				if (!isLastIssued()) {
 					return
 				}
+				cancelReadBound()
 				const hasPartlyFailed = found.registryFailure !== undefined
 				set({
-					directory: found.applications,
+					...directoryAnsweredBy(found),
 					isReadingDirectory: false,
+					hasDirectoryFailed: false,
 					hasDirectoryPartlyFailed: hasPartlyFailed,
-					isDirectoryStale: found.isStale === true,
 				})
 				if (hasPartlyFailed) {
 					reportDirectoryUnrefreshed()
@@ -194,6 +283,7 @@ export const createApplicationsController = (
 				if (!isLastIssued()) {
 					return
 				}
+				cancelReadBound()
 				const isKeepingRows = holdsDirectory()
 				set({
 					isReadingDirectory: false,
@@ -205,6 +295,31 @@ export const createApplicationsController = (
 				}
 			},
 		)
+	}
+
+	const watchDirectory = () => {
+		if (unwatchDirectory) {
+			return
+		}
+		let isListening = true
+		const listening = port
+			.onDirectoryRefreshed(() => {
+				if (isListening) {
+					readDirectory()
+				}
+			})
+			.catch((reason) => {
+				console.error(
+					"applications: directory refreshes could not be listened to",
+					reason,
+				)
+				return () => undefined
+			})
+		unwatchDirectory = () => {
+			isListening = false
+			unwatchDirectory = null
+			void listening.then((unlisten) => unlisten())
+		}
 	}
 
 	const recordMark = (name: string, found: Application | null) => {
@@ -338,35 +453,28 @@ export const createApplicationsController = (
 
 		subscribe: stateStore.subscribe,
 
-		open: async () => {
-			if (current().isReadingCatalogue) {
-				return
-			}
-			set({ isReadingCatalogue: true })
-			try {
-				set({ curated: await port.catalogue(), hasCatalogueFailed: false })
-			} catch {
-				set({ hasCatalogueFailed: true })
-				reportFailure({
-					title: i18n.t("bots:applications.catalogue.unavailable"),
-				})
-			} finally {
-				set({ isReadingCatalogue: false })
-			}
-		},
+		open: readCatalogue,
 
 		browse: () => {
+			watchDirectory()
 			if (current().isReadingDirectory) {
 				return
 			}
 			readDirectory()
 		},
 
+		stopWatchingDirectory: () => unwatchDirectory?.(),
+
 		search: (query: string) => set({ query }),
 
 		pickCategory: (category: CatalogueCategory) => set({ category }),
 
-		retry: readDirectory,
+		retry: () => {
+			if (current().hasCatalogueFailed) {
+				void readCatalogue()
+			}
+			readDirectory()
+		},
 
 		pick: (id: string) => set({ picked: applicationNamed(id), failure: null }),
 

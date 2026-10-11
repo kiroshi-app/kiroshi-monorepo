@@ -27,4 +27,5 @@ export type ApplicationPort = {
 	onInstalled: (
 		listener: (installed: ApplicationInstalled) => void,
 	) => Promise<() => void>
+	onDirectoryRefreshed: (listener: () => void) => Promise<() => void>
 }
