@@ -40,7 +40,7 @@ Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 2.6
 ```
 
-The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
+The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn`, `agent_cancel_turn` and `conversation_create`, and plays the host's events. The + at the top right of the Conversations tab opens New Conversation, the companions of the Space to pick from: Create sends `conversation_create` and opens the new group conversation, which the scripted host then lists and announces with `conversation://created`. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations-live
@@ -51,7 +51,7 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2 and 3.8, and opens the menu of Spaces on 2.2, as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2 and 3.8, opens the menu of Spaces on 2.2, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 
