@@ -354,12 +354,8 @@ fn extended(
 fn assert_owner_only_under(dir: &Path) {
 	use std::os::unix::fs::PermissionsExt;
 
-	let rewritten_by_git_after_import = |path: &Path| path.ends_with(".git/index");
 	for entry in fs::read_dir(dir).expect("a readable dir") {
 		let path = entry.expect("an entry").path();
-		if rewritten_by_git_after_import(&path) {
-			continue;
-		}
 		let metadata = fs::symlink_metadata(&path).expect("the metadata");
 		let expected = if metadata.is_dir() { 0o700 } else { 0o600 };
 		assert_eq!(

@@ -521,9 +521,17 @@ fn evolve_serialised(root: &Path, bot: &Bot) -> Option<Evolution> {
 	let _ = rewrite_agent(root, bot);
 	let (title, body) =
 		learned(&bundle).unwrap_or_else(|| (EVOLVED_TITLE.to_owned(), changed.join("\n")));
-	let commit_id = git::commit(&bundle, Author::Bot, &title, &body).ok().flatten()?;
+	let commit_id = bot_recorded(&bundle, &title, &body)?;
 	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
 	Some(Evolution { commit_id, title })
+}
+
+fn bot_recorded(bundle: &Path, title: &str, body: &str) -> Option<String> {
+	let recorded = git::record(bundle, Author::Bot, title, body).ok()?;
+	if let Err(error) = recorded.tightened {
+		eprintln!("the bot write recorded under {} was left open: {error}", bundle.display());
+	}
+	recorded.id
 }
 
 fn learned(bundle: &Path) -> Option<(String, String)> {
@@ -2367,6 +2375,28 @@ mod tests {
 		assert_eq!(entry.id, evolution.commit_id);
 		assert_eq!(entry.author, Author::Bot);
 		assert_eq!(entry.body, "They said figs, not dates.");
+		assert!(!dir(&root, &bot.id).join(LEARNED_NAME).exists(), "the note is still there");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_bot_write_keeps_its_evolution_when_the_owner_only_walk_fails() {
+		let root = a_root("evolve-walk-stopped");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		private_files::replace(
+			&dir(&root, &bot.id).join(LEARNED_NAME),
+			b"Bean learned about figs\n",
+		)
+		.expect("the note lands");
+
+		git::stop_the_next_owner_only_walk();
+		let evolution = evolve(&root, &bot).expect("the turn is recorded");
+
+		let entry = &history(&root, &bot.id).expect("the history reads")[0];
+		assert_eq!(entry.id, evolution.commit_id);
 		assert!(!dir(&root, &bot.id).join(LEARNED_NAME).exists(), "the note is still there");
 
 		let _ = fs::remove_dir_all(&root);

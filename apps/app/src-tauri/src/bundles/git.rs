@@ -24,12 +24,16 @@ const EVERYTHING: &str = "*";
 
 const HEAD: &str = "HEAD";
 
+const OWNER_DIR_MODE: u32 = 0o700;
+const OWNER_FILE_MODE: u32 = 0o600;
+
 const UNDONE: &str = "Change undone";
 
 const NOT_CONSECUTIVE: &str = "these two changes do not follow one another";
 const UNNAMED: &str = "this change holds a file with no path";
 const NOTHING_TO_UNDO: &str = "this bundle has no write to undo";
 const CONFLICTED: &str = "this write cannot be undone on top of the later ones";
+const LEFT_OPEN: &str = "the history of this bundle could not be made owner-only";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Author {
@@ -63,15 +67,42 @@ pub struct ChangedFile {
 	pub patch: String,
 }
 
+pub struct Recorded {
+	pub id: Option<String>,
+	pub tightened: Result<(), git2::Error>,
+}
+
 pub fn commit(
 	bundle: &Path,
 	author: Author,
 	title: &str,
 	body: &str,
 ) -> Result<Option<String>, git2::Error> {
+	let recorded = record(bundle, author, title, body)?;
+	recorded.tightened?;
+	Ok(recorded.id)
+}
+
+pub fn record(
+	bundle: &Path,
+	author: Author,
+	title: &str,
+	body: &str,
+) -> Result<Recorded, git2::Error> {
 	let repository = opened(bundle)?;
-	let tree = staged(&repository)?;
-	let parent = head(&repository);
+	let written = written(&repository, author, title, body);
+	let tightened = tightened(repository.path());
+	Ok(Recorded { id: written?, tightened })
+}
+
+fn written(
+	repository: &Repository,
+	author: Author,
+	title: &str,
+	body: &str,
+) -> Result<Option<String>, git2::Error> {
+	let tree = staged(repository)?;
+	let parent = head(repository);
 	if parent.as_ref().is_some_and(|found| found.tree_id() == tree.id()) {
 		return Ok(None);
 	}
@@ -131,19 +162,31 @@ pub fn changed_files(
 
 pub fn revert(bundle: &Path, oldest_id: &str, newest_id: &str) -> Result<String, git2::Error> {
 	let repository = Repository::open(bundle)?;
-	let run = run(&repository, oldest_id, newest_id)?;
+	let reverted = reverted(&repository, oldest_id, newest_id);
+	let tightened = tightened(repository.workdir().unwrap_or(repository.path()));
+	let id = reverted?;
+	tightened?;
+	Ok(id)
+}
+
+fn reverted(
+	repository: &Repository,
+	oldest_id: &str,
+	newest_id: &str,
+) -> Result<String, git2::Error> {
+	let run = run(repository, oldest_id, newest_id)?;
 	let (newest, oldest) = ends(&run)?;
-	let head = head(&repository).ok_or_else(|| git2::Error::from_str(NOTHING_TO_UNDO))?;
+	let head = head(repository).ok_or_else(|| git2::Error::from_str(NOTHING_TO_UNDO))?;
 	let mut index = repository.merge_trees(
 		&newest.tree()?,
 		&head.tree()?,
-		&before(&repository, oldest)?,
+		&before(repository, oldest)?,
 		None,
 	)?;
 	if index.has_conflicts() {
 		return Err(git2::Error::from_str(CONFLICTED));
 	}
-	let tree = repository.find_tree(index.write_tree_to(&repository)?)?;
+	let tree = repository.find_tree(index.write_tree_to(repository)?)?;
 	let signature = signed(Author::User)?;
 	let id = repository.commit(
 		Some(HEAD),
@@ -281,6 +324,60 @@ fn opened(bundle: &Path) -> Result<Repository, git2::Error> {
 	};
 	exclude(&repository);
 	Ok(repository)
+}
+
+#[cfg(unix)]
+fn owner_only(path: &Path) -> std::io::Result<()> {
+	use std::os::unix::fs::PermissionsExt;
+
+	let metadata = fs::symlink_metadata(path)?;
+	if metadata.is_file() {
+		return fs::set_permissions(path, fs::Permissions::from_mode(OWNER_FILE_MODE));
+	}
+	if !metadata.is_dir() {
+		return Ok(());
+	}
+	fs::set_permissions(path, fs::Permissions::from_mode(OWNER_DIR_MODE))?;
+	for entry in fs::read_dir(path)? {
+		owner_only(&entry?.path())?;
+	}
+	Ok(())
+}
+
+#[cfg(not(unix))]
+fn owner_only(_path: &Path) -> std::io::Result<()> {
+	Ok(())
+}
+
+fn tightened(path: &Path) -> Result<(), git2::Error> {
+	if walk_stopped() {
+		return Err(left_open(std::io::Error::other("the walk was stopped")));
+	}
+	owner_only(path).map_err(left_open)
+}
+
+#[cfg(test)]
+thread_local! {
+	static WALK_STOPPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub fn stop_the_next_owner_only_walk() {
+	WALK_STOPPED.with(|stopped| stopped.set(true));
+}
+
+#[cfg(test)]
+fn walk_stopped() -> bool {
+	WALK_STOPPED.with(|stopped| stopped.replace(false))
+}
+
+#[cfg(not(test))]
+fn walk_stopped() -> bool {
+	false
+}
+
+fn left_open(error: std::io::Error) -> git2::Error {
+	git2::Error::from_str(&format!("{LEFT_OPEN}: {error}"))
 }
 
 fn exclude(repository: &Repository) {
@@ -652,6 +749,89 @@ mod tests {
 
 		assert_eq!(listed[0].paths, vec!["about.md", "profile.md"]);
 		assert_eq!(listed[1].paths, vec!["about.md"]);
+
+		let _ = fs::remove_dir_all(&bundle);
+	}
+
+	#[cfg(unix)]
+	fn assert_git_owner_only(bundle: &Path) {
+		use std::os::unix::fs::PermissionsExt;
+
+		let mode_of =
+			|path: &Path| fs::metadata(path).expect("the metadata").permissions().mode() & 0o777;
+		let git = bundle.join(".git");
+		let mut files = vec![git.join("index")];
+		let mut pending = vec![git.clone()];
+		while let Some(dir) = pending.pop() {
+			assert_eq!(mode_of(&dir), 0o700, "{} is not owner-only", dir.display());
+			for entry in fs::read_dir(&dir).expect("a readable dir") {
+				let path = entry.expect("an entry").path();
+				match path.is_dir() {
+					true => pending.push(path),
+					false if path.starts_with(git.join("objects")) => files.push(path),
+					false => {}
+				}
+			}
+		}
+		assert!(files.len() > 1, "git wrote loose objects");
+		for file in files {
+			assert_eq!(mode_of(&file), 0o600, "{} is not owner-only", file.display());
+		}
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_commit_leaves_every_git_file_owner_only() {
+		let bundle = a_bundle("owner-only");
+		writes(&bundle, &[("notes.md", "first")], "First");
+
+		assert_git_owner_only(&bundle);
+
+		let _ = fs::remove_dir_all(&bundle);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn an_undo_leaves_every_git_file_and_the_restored_file_owner_only() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let bundle = a_bundle("undo-owner-only");
+		writes(&bundle, &[("about.md", "Figs.\n")], "The first write");
+		let only = writes(&bundle, &[("about.md", "Dates.\n")], "The second write");
+
+		revert(&bundle, &only, &only).expect("the change is undone");
+
+		assert_git_owner_only(&bundle);
+		let restored = fs::metadata(bundle.join("about.md")).expect("the metadata");
+		assert_eq!(restored.permissions().mode() & 0o777, 0o600);
+
+		let _ = fs::remove_dir_all(&bundle);
+	}
+
+	#[test]
+	fn a_stopped_walk_after_a_commit_is_returned() {
+		let bundle = a_bundle("commit-walk-stopped");
+		fs::write(bundle.join("about.md"), "Figs.\n").expect("the file lands");
+
+		stop_the_next_owner_only_walk();
+		let refused = commit(&bundle, Author::User, "The first write", "");
+
+		assert!(refused.is_err(), "the walk failure was dropped");
+
+		let _ = fs::remove_dir_all(&bundle);
+	}
+
+	#[test]
+	fn a_stopped_walk_after_an_undo_is_returned() {
+		let bundle = a_bundle("undo-walk-stopped");
+		writes(&bundle, &[("about.md", "Figs.\n")], "The first write");
+		let only = writes(&bundle, &[("about.md", "Dates.\n")], "The second write");
+
+		stop_the_next_owner_only_walk();
+		let refused = revert(&bundle, &only, &only);
+
+		assert!(refused.is_err(), "the walk failure was dropped");
+		assert_eq!(history(&bundle).expect("the history reads").len(), 3, "the undo was recorded");
 
 		let _ = fs::remove_dir_all(&bundle);
 	}

@@ -2,8 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::{
-	drafted, git, learned, unrecorded, ApplicationMark, Author, ChangedFile, Evolution,
-	HistoryEntry, McpServer, Skill, SkillDraft, SkillFront, KIROSHI_KEY, LEARNED_NAME,
+	bot_recorded, drafted, git, learned, unrecorded, ApplicationMark, Author, ChangedFile,
+	Evolution, HistoryEntry, McpServer, Skill, SkillDraft, SkillFront, KIROSHI_KEY, LEARNED_NAME,
 	MANIFEST_DIR, MANIFEST_NAME, PRELOAD_KEY, SERVER_SUBJECT, SKILLS_DIR, SKILL_NAME, VERSION,
 };
 use crate::private_files;
@@ -37,7 +37,7 @@ pub fn evolve(descriptor: &Descriptor, path: &Path) -> Option<Evolution> {
 	}
 	let (title, body) =
 		learned(path).unwrap_or_else(|| (descriptor.written_title.to_owned(), changed.join("\n")));
-	let commit_id = git::commit(path, Author::Bot, &title, &body).ok().flatten()?;
+	let commit_id = bot_recorded(path, &title, &body)?;
 	let _ = fs::remove_file(path.join(LEARNED_NAME));
 	Some(Evolution { commit_id, title })
 }
