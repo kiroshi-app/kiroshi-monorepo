@@ -20,6 +20,8 @@ bun run ios:test      # Generate, then run the tests on an iPhone 17 simulator (
 bun run ios:run       # Generate, build, then launch the app on the booted iOS 27 iPhone, else an iPhone 17, and open DeviceHub (IOS_SIMULATOR="iPhone 18 Pro" picks another)
 ```
 
+Every generate writes the build number to `BuildNumber.xcconfig` (not committed): Xcode Cloud's `CI_BUILD_NUMBER` when set, else `git rev-list --count HEAD`. The version stays `MARKETING_VERSION` in `project.yml`.
+
 Format Swift with the toolchain's `swift format`, configured by the root `.swift-format`:
 
 ```bash
