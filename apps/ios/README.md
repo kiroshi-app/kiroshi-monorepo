@@ -28,7 +28,7 @@ swift format lint --recursive apps/ios
 
 ## States without the network
 
-A Debug build opens straight on one state of the Paper file "Kiroshi, iOS", fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number: page 1 "Sign in" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`) and page 2 "Space switcher" (`2.1`, `2.2` opens on the same screen as `2.1`: tap the title to open the menu, `2.3`):
+A Debug build opens straight on one state of the Paper files, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number: page 1 "Sign in" of "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards) and, in "Kiroshi, iOS", page 2 "Space switcher" (`2.1`, `2.2` opens on the same screen as `2.1`: tap the title to open the menu, `2.3`):
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.7
@@ -45,7 +45,7 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
 ```
 
-`KiroshiUITests` runs the accessibility audit on 3.1, 3.2 and 3.8 as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`) and on 3.1, 3.2 and 3.8 as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 

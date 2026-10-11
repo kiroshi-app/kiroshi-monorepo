@@ -45,9 +45,9 @@ private struct CodeBox: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: 16)
-            .fill(Color.kiroshi(isOutlined ? .background : .card))
+            .fill(Color.kiroshi(isOutlined ? .card : .muted))
             .strokeBorder(
-                Color.kiroshi(isWrong ? .destructive : .ring), lineWidth: isOutlined ? 2 : 0
+                Color.kiroshi(isWrong ? .destructive : .foreground), lineWidth: isOutlined ? 2 : 0
             )
             .frame(minHeight: 60)
             .overlay {

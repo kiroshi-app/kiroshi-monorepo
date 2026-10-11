@@ -5,15 +5,11 @@ struct OpeningView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(Color.kiroshi(.card))
-                .frame(width: 96, height: 96)
-                .overlay {
-                    Image(systemName: "hare.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(Color.kiroshi(.mutedForeground))
-                }
-                .accessibilityHidden(true)
+            Image("Hexagon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88, height: 80)
+                .accessibilityLabel("Kiroshi")
             Text("Your companions, away from your Mac.")
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -21,7 +17,7 @@ struct OpeningView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.kiroshi(.background))
+        .signInGround()
         .safeAreaBar(edge: .bottom) {
             Button("Sign in", action: model.start)
                 .primaryAction()
