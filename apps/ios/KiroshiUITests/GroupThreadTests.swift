@@ -2,13 +2,6 @@ import XCTest
 
 @MainActor
 final class GroupThreadTests: XCTestCase {
-    static let transcriptScrolledAwayAtLargerSizes: Set<String> = [
-        "Today 9:02",
-        "Can you two get 0.42 out today?",
-        "Juniper, The changelog is merged.",
-        "Juniper, I’m tagging 0.42 next.",
-    ]
-
     override func setUp() async throws {
         continueAfterFailure = false
     }
@@ -23,18 +16,48 @@ final class GroupThreadTests: XCTestCase {
         return field.exists ? field : app.textFields.firstMatch
     }
 
-    func auditTheGroup(_ app: XCUIApplication) throws {
+    func labelsFullyOnScreenAtTheLargestSize(of fixture: String) -> Set<String> {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-fixture", fixture,
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launch()
+        let transcript = app.scrollViews.firstMatch
+        XCTAssertTrue(composer(in: app).waitForExistence(timeout: 10))
+        let pickerTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mention '"))
+            .allElementsBoundByIndex.map(\.frame.minY).min()
+        let visible = CGRect(
+            x: transcript.frame.minX, y: app.navigationBars.firstMatch.frame.maxY,
+            width: transcript.frame.width,
+            height: min(pickerTop ?? .infinity, composer(in: app).frame.minY)
+                - app.navigationBars.firstMatch.frame.maxY)
+        let shown = transcript.descendants(matching: .any).allElementsBoundByIndex
+            .filter { visible.contains($0.frame) }
+            .map(\.label)
+        app.terminate()
+        return Set(shown)
+    }
+
+    func auditTheGroup(_ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>) throws {
         let navigationBar = app.navigationBars["Release crew"].frame
+        let transcript = app.scrollViews.firstMatch.frame
         try audit(app) { issue in
-            guard issue.auditType == .dynamicType, let element = issue.element else {
-                return false
+            guard let element = issue.element else { return false }
+            let isUnderTheNavigationBar = element.frame.minY < navigationBar.maxY
+            let isScrolledOffScreenAtTheLargestSize =
+                transcript.contains(element.frame)
+                && !onScreenAtTheLargestSize.contains(element.label)
+            return switch issue.auditType {
+            case .contrast: isUnderTheNavigationBar
+            case .dynamicType: isUnderTheNavigationBar || isScrolledOffScreenAtTheLargestSize
+            default: false
             }
-            return element.frame.intersects(navigationBar)
-                || Self.transcriptScrolledAwayAtLargerSizes.contains(element.label)
         }
     }
 
     func testAGroupNamesEachAuthorAndSendsAMentionToThePickedCompanion() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "group-thread")
         let app = launch("group-thread")
         XCTAssertTrue(
             element("Juniper, The changelog is merged.", in: app).waitForExistence(timeout: 10))
@@ -43,7 +66,7 @@ final class GroupThreadTests: XCTestCase {
             element("Atlas, I’ll split the onboarding ticket once the tag is out.", in: app).exists)
         XCTAssertTrue(element("Atlas, @Juniper ping me when it’s tagged.", in: app).exists)
         XCTAssertTrue(app.navigationBars["Release crew"].exists)
-        try auditTheGroup(app)
+        try auditTheGroup(app, onScreenAtTheLargestSize: onScreen)
 
         let field = composer(in: app)
         field.tap()
@@ -62,19 +85,21 @@ final class GroupThreadTests: XCTestCase {
     }
 
     func testTheMentionPickerPassesTheAudit() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "group-mention")
         let app = launch("group-mention")
         XCTAssertTrue(app.buttons["Mention Juniper"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Mention Atlas"].exists)
 
-        try auditTheGroup(app)
+        try auditTheGroup(app, onScreenAtTheLargestSize: onScreen)
     }
 
     func testTwoCompanionsAtWorkAreBothNamed() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "group-working")
         let app = launch("group-working")
         XCTAssertTrue(
             app.staticTexts["Juniper and Atlas are working…"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Stop"].exists)
 
-        try auditTheGroup(app)
+        try auditTheGroup(app, onScreenAtTheLargestSize: onScreen)
     }
 }
