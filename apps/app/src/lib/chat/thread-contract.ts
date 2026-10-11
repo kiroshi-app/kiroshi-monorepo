@@ -74,6 +74,7 @@ export type LoadedThread = LoadedBotThread | LoadedConversationThread
 export const faceOfBot = (bot: Bot): ThreadFace => ({
 	id: bot.id,
 	name: bot.name,
+	title: bot.title || undefined,
 	blot: bot.avatarBlot ?? undefined,
 	image: avatarSrc(bot.avatarImagePath),
 })

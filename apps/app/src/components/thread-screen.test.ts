@@ -1937,8 +1937,8 @@ describe("ThreadScreen", () => {
 
 		expect(nameLineOf(ADA_OPENS.text)).toContain("Ada")
 		expect(nameLineOf(ADA_CLOSES.text)).toBeNull()
-		expect(gutterAvatarOf(ADA_OPENS.text)).not.toBeNull()
-		expect(gutterAvatarOf(ADA_CLOSES.text)).toBeNull()
+		expect(gutterAvatarOf(ADA_OPENS.text)).toBeNull()
+		expect(gutterAvatarOf(ADA_CLOSES.text)).not.toBeNull()
 	})
 
 	it("opens a second run with its own name line and gutter avatar when the author changes", async () => {
@@ -1953,13 +1953,13 @@ describe("ThreadScreen", () => {
 		expect(gutterAvatarOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 
-	it("carries the mark of a run on the message that opens it", async () => {
+	it("carries the mark of a run on the message that closes it", async () => {
 		const room = await runRoomOf()
 		render(screenOf(room.thread))
 		await settle()
 
-		expect(markOf(ADA_OPENS.text)).not.toBeNull()
-		expect(markOf(ADA_CLOSES.text)).toBeNull()
+		expect(markOf(ADA_OPENS.text)).toBeNull()
+		expect(markOf(ADA_CLOSES.text)).not.toBeNull()
 		expect(markOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 

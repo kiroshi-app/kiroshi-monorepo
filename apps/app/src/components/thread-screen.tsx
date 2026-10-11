@@ -648,7 +648,7 @@ const ThreadRun = ({
 					}
 					author={row.authorBotId ? authors.get(row.authorBotId) : undefined}
 					avatarFace={
-						index === presentation.avatarIndex
+						presentation.faceIndexes.includes(index)
 							? (botFace ?? undefined)
 							: undefined
 					}

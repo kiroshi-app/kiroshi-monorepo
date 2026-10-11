@@ -378,7 +378,8 @@ describe("day changes in Tokyo", () => {
 		expect(daySeparatorsIn(runs)).toBe(1)
 		expect(
 			runs.map(
-				(run, runIndex) => run[presentations[runIndex].avatarIndex].messageId,
+				(run, runIndex) =>
+					run[presentations[runIndex].faceIndexes[0]].messageId,
 			),
 		).toEqual(["local-1", "local-3"])
 	})
@@ -825,12 +826,39 @@ describe("runPresentationsOf", () => {
 		expect(solo(false).map((run) => run.isMarked)).toEqual([false, false, true])
 	})
 
-	it("places the avatar on the head row of a settled run", () => {
-		expect(solo(false).map((run) => run.avatarIndex)).toEqual([0, 0, 0])
+	it("hands the face to the first and the last row of a settled run", () => {
+		expect(solo(false).map((run) => run.faceIndexes)).toEqual([
+			[0, 1],
+			[0],
+			[0],
+		])
 	})
 
-	it("drops the avatar of the newest run while the companion works", () => {
-		expect(solo(true).map((run) => run.avatarIndex)).toEqual([0, 0, -1])
+	it("hands the face to the first and the last row of a run of three, not the middle one", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				message({
+					id: "a",
+					content: "One.\n\nTwo.\n\nThree.",
+					completion: "complete",
+				}),
+			]),
+		)
+		const [presentation] = runPresentationsOf({
+			runs,
+			workingBotIds: [],
+			hasSingleBot: true,
+			isWorking: false,
+		})
+
+		expect(runs[0]).toHaveLength(3)
+		expect(
+			runs[0].map((_, index) => presentation.faceIndexes.includes(index)),
+		).toEqual([true, false, true])
+	})
+
+	it("drops the face of the newest run while the companion works", () => {
+		expect(solo(true).map((run) => run.faceIndexes)).toEqual([[0, 1], [0], []])
 	})
 
 	it("renders tables bare in a single companion thread", () => {
@@ -852,7 +880,7 @@ describe("runPresentationsOf", () => {
 		})
 
 		expect(presentations.map((run) => run.isMarked)).toEqual([true, false])
-		expect(presentations.map((run) => run.avatarIndex)).toEqual([-1, -1])
+		expect(presentations.map((run) => run.faceIndexes)).toEqual([[], []])
 		expect(presentations.some((run) => run.hasBareTables)).toBe(false)
 	})
 
@@ -897,9 +925,13 @@ describe("runPresentationsOf", () => {
 			expect(headRowsIn(rows)).toEqual([[true, false]])
 		})
 
-		it("keeps the head row of the newest run while the companion works, its avatar alone dropped", () => {
+		it("keeps the head row of the newest run while the companion works, its face alone dropped", () => {
 			expect(headRowsOf(soloRuns)).toEqual([[true, false], [true], [true]])
-			expect(solo(true).map((run) => run.avatarIndex)).toEqual([0, 0, -1])
+			expect(solo(true).map((run) => run.faceIndexes)).toEqual([
+				[0, 1],
+				[0],
+				[],
+			])
 		})
 	})
 
