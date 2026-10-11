@@ -111,10 +111,6 @@ const HOST_ONLY_REFUSAL = "this command belongs to the host"
 const isHostOnlyRefusal = (message: string, status?: number) =>
 	status === HOST_ONLY_STATUS && message.includes(HOST_ONLY_REFUSAL)
 
-const REFUSAL_RAISED_IN = "host-refusal"
-
-const HOST_OFFLINE_RAISED_IN = "host-offline"
-
 const hostOnlyNotice = (): NoticeMessage => ({
 	title: i18n.t("chat:screen.notice.failed"),
 	description: i18n.t("chat:screen.notice.hostOnly"),
@@ -135,7 +131,7 @@ const refusalNoticeOf = ({ message, status }: HostRefusal): NoticeMessage => {
 
 export const raiseRefusalNotice = (refusal: HostRefusal) =>
 	raiseReportedFailure(refusalNoticeOf(refusal), {
-		raisedIn: REFUSAL_RAISED_IN,
+		raisedIn: "host-refusal",
 		command: refusal.command,
 		httpStatus: refusal.status,
 		side: refusal.side,
@@ -147,7 +143,7 @@ export const raiseHostOfflineNotice = () =>
 			title: i18n.t("chat:screen.notice.hostOffline.title"),
 			description: i18n.t("chat:screen.notice.hostOffline.description"),
 		},
-		{ raisedIn: HOST_OFFLINE_RAISED_IN, side: "member" },
+		{ raisedIn: "host-offline", side: "member" },
 	)
 
 const isFrame = (value: unknown): value is Frame =>
