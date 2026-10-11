@@ -13,6 +13,7 @@ use tauri::webview::InvokeRequest;
 use tauri::{AppHandle, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::oneshot;
 
+use super::cors::WINDOW_ORIGIN;
 use super::token::HostToken;
 use crate::routines::webhook::{named_here, Calls};
 
@@ -28,12 +29,6 @@ pub(crate) const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
 
 const BLANK_PAGE: &str = "about:blank";
-
-const LOCAL_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) {
-	"http://tauri.localhost"
-} else {
-	"tauri://localhost"
-};
 
 static DISPATCHER_OPENING: Mutex<()> = Mutex::new(());
 
@@ -157,7 +152,7 @@ async fn dispatched<R: Runtime>(
 	arguments: Value,
 	relayed_member: HeaderValue,
 ) -> Option<InvokeResponse> {
-	let url = match LOCAL_ORIGIN.parse::<Url>() {
+	let url = match WINDOW_ORIGIN.parse::<Url>() {
 		Ok(url) => url,
 		Err(failure) => {
 			eprintln!("the host gave no local address to invoke {command} from: {failure}");
