@@ -1950,7 +1950,7 @@ export const RunOfThreeDark = RunOfThree.extend({
 })
 
 const avatarsIn = (row: HTMLElement) => [
-	...Array.from(botIdentityAvatars(row)),
+	...botIdentityAvatars(row),
 	...slotsIn(row, "user-avatar"),
 ]
 
