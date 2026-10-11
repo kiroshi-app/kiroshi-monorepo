@@ -12,6 +12,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import type {
 	Application,
 	ApplicationPort,
+	ApplicationSearch,
 	InstallField,
 } from "./application-port"
 
@@ -69,6 +70,7 @@ export type ApplicationsController = {
 	subscribe: (listener: () => void) => () => void
 	open: () => Promise<void>
 	browse: () => void
+	stopWatchingDirectory: () => void
 	search: (query: string) => void
 	pickCategory: (category: CatalogueCategory) => void
 	retry: () => void
@@ -137,6 +139,8 @@ const typedValuesOf = (
 const urlOf = (application: Application) =>
 	readMcpServerLaunch(application.config).url ?? ""
 
+export const DIRECTORY_READ_BOUND_MS = 15_000
+
 export type ApplicationsControllerOptions = {
 	reportFailure?: (notice: NoticeMessage) => void
 }
@@ -149,6 +153,8 @@ export const createApplicationsController = (
 	const stateStore = createStore(initialApplicationsState)
 	const current = stateStore.getState
 	let issuedRead = 0
+	let readBound: ReturnType<typeof setTimeout> | undefined
+	let stopListeningToDirectory: (() => void) | null = null
 	const askedNames = new Set<string>()
 
 	const set = (fields: Partial<ApplicationsState>) =>
@@ -164,6 +170,33 @@ export const createApplicationsController = (
 
 	const holdsDirectory = () => current().directory.length > 0
 
+	const cancelReadBound = () => clearTimeout(readBound)
+
+	const failUnansweredRead = () =>
+		set({ isReadingDirectory: false, hasDirectoryFailed: true })
+
+	const boundReadWithNoRowsHeld = () => {
+		cancelReadBound()
+		if (holdsDirectory()) {
+			return
+		}
+		readBound = setTimeout(failUnansweredRead, DIRECTORY_READ_BOUND_MS)
+	}
+
+	const directoryAnsweredBy = (found: ApplicationSearch) => {
+		const isKeepingHeldRows =
+			found.registryFailure !== undefined && holdsDirectory()
+		return isKeepingHeldRows
+			? {
+					directory: current().directory,
+					isDirectoryStale: current().isDirectoryStale,
+				}
+			: {
+					directory: found.applications,
+					isDirectoryStale: found.isStale === true,
+				}
+	}
+
 	const readDirectory = () => {
 		issuedRead += 1
 		const attempt = issuedRead
@@ -174,17 +207,19 @@ export const createApplicationsController = (
 			hasDirectoryPartlyFailed:
 				holdsDirectory() && current().hasDirectoryPartlyFailed,
 		})
+		boundReadWithNoRowsHeld()
 		void port.search("").then(
 			(found) => {
 				if (!isLastIssued()) {
 					return
 				}
+				cancelReadBound()
 				const hasPartlyFailed = found.registryFailure !== undefined
 				set({
-					directory: found.applications,
+					...directoryAnsweredBy(found),
 					isReadingDirectory: false,
+					hasDirectoryFailed: false,
 					hasDirectoryPartlyFailed: hasPartlyFailed,
-					isDirectoryStale: found.isStale === true,
 				})
 				if (hasPartlyFailed) {
 					reportDirectoryUnrefreshed()
@@ -194,6 +229,7 @@ export const createApplicationsController = (
 				if (!isLastIssued()) {
 					return
 				}
+				cancelReadBound()
 				const isKeepingRows = holdsDirectory()
 				set({
 					isReadingDirectory: false,
@@ -205,6 +241,31 @@ export const createApplicationsController = (
 				}
 			},
 		)
+	}
+
+	const listenToDirectory = () => {
+		if (stopListeningToDirectory) {
+			return
+		}
+		let isListening = true
+		const listening = port
+			.onDirectoryRefreshed(() => {
+				if (isListening) {
+					readDirectory()
+				}
+			})
+			.catch((reason) => {
+				console.error(
+					"applications: directory refreshes could not be listened to",
+					reason,
+				)
+				return () => undefined
+			})
+		stopListeningToDirectory = () => {
+			isListening = false
+			stopListeningToDirectory = null
+			void listening.then((unlisten) => unlisten())
+		}
 	}
 
 	const recordMark = (name: string, found: Application | null) => {
@@ -356,11 +417,14 @@ export const createApplicationsController = (
 		},
 
 		browse: () => {
+			listenToDirectory()
 			if (current().isReadingDirectory) {
 				return
 			}
 			readDirectory()
 		},
+
+		stopWatchingDirectory: () => stopListeningToDirectory?.(),
 
 		search: (query: string) => set({ query }),
 

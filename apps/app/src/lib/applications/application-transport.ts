@@ -11,6 +11,8 @@ import { invoke, listen } from "../host"
 
 export const INSTALLED_EVENT = "application://installed"
 
+export const DIRECTORY_REFRESHED_EVENT = "application://directory-refreshed"
+
 export const applicationTransport: ApplicationPort = {
 	catalogue: () => invoke<Application[]>("application_catalogue"),
 
@@ -28,4 +30,7 @@ export const applicationTransport: ApplicationPort = {
 		listen<ApplicationInstalled>(INSTALLED_EVENT, ({ payload }) =>
 			listener(payload),
 		),
+
+	onDirectoryRefreshed: (listener) =>
+		listen(DIRECTORY_REFRESHED_EVENT, () => listener()),
 }

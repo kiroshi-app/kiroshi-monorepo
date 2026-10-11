@@ -7,7 +7,11 @@ import type {
 	ApplicationInstall,
 	ApplicationsError,
 } from "./application-port"
-import { applicationTransport, INSTALLED_EVENT } from "./application-transport"
+import {
+	applicationTransport,
+	DIRECTORY_REFRESHED_EVENT,
+	INSTALLED_EVENT,
+} from "./application-transport"
 import { createFakeApplicationPort } from "./fake-application-port"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
@@ -136,6 +140,21 @@ describe("applicationTransport", () => {
 			application: "linear",
 			scope: "user",
 		})
+		stop()
+		expect(unsubscribe).toHaveBeenCalledOnce()
+	})
+
+	it("hands on every directory refresh the host announced", async () => {
+		const unsubscribe = vi.fn()
+		hostListen.mockResolvedValue(unsubscribe)
+		const onRefreshed = vi.fn()
+
+		const stop = await applicationTransport.onDirectoryRefreshed(onRefreshed)
+		const [event, handler] = hostListen.mock.calls[0] ?? []
+		handler?.({ event: DIRECTORY_REFRESHED_EVENT, id: 1, payload: null })
+
+		expect(event).toBe("application://directory-refreshed")
+		expect(onRefreshed).toHaveBeenCalledOnce()
 		stop()
 		expect(unsubscribe).toHaveBeenCalledOnce()
 	})

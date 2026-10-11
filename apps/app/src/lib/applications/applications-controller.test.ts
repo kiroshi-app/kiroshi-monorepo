@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Application, ApplicationSearch } from "./application-port"
 import {
 	createApplicationsController,
+	DIRECTORY_READ_BOUND_MS,
 	type InstallTarget,
 } from "./applications-controller"
 import {
@@ -535,6 +536,192 @@ describe("applications controller", () => {
 		await settled()
 
 		expect(controller.getState().isDirectoryStale).toBe(false)
+	})
+
+	it("listens to directory refreshes once however many times the catalogue opens", async () => {
+		const port = createFakeApplicationPort()
+		const onDirectoryRefreshed = vi.spyOn(port, "onDirectoryRefreshed")
+		const controller = controllerOn(port)
+
+		controller.browse()
+		await settled()
+		controller.browse()
+		await settled()
+
+		expect(onDirectoryRefreshed).toHaveBeenCalledOnce()
+		expect(port.isListeningToDirectory()).toBe(true)
+	})
+
+	it("lists the rows of a refreshed directory keeping the query and the category", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+		controller.search("lin")
+		controller.pickCategory("on-this-machine")
+
+		port.found = [LINEAR, SUPERSET]
+		port.refreshDirectory()
+		await settled()
+
+		expect(searchesOf(port)).toHaveLength(2)
+		expect(controller.getState().directory).toEqual([LINEAR, SUPERSET])
+		expect(controller.getState().query).toBe("lin")
+		expect(controller.getState().category).toBe("on-this-machine")
+	})
+
+	it("keeps the held rows listed while a refreshed directory is read", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		pendingSearchOn(port)
+		port.refreshDirectory()
+
+		expect(controller.getState().isReadingDirectory).toBe(true)
+		expect(controller.getState().directory).toEqual([LINEAR])
+	})
+
+	it("drops the stale mark once a refreshed directory answers fresh", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		port.foundIsStale = true
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		port.foundIsStale = false
+		port.refreshDirectory()
+		await settled()
+
+		expect(controller.getState().isDirectoryStale).toBe(false)
+	})
+
+	it("keeps the held rows and raises a notice when a refresh answers a failed side", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const { controller, reportFailure } = reportingOn(port)
+		controller.browse()
+		await settled()
+
+		port.found = []
+		port.foundFailure = { kind: "registryUnreached", detail: "offline" }
+		port.refreshDirectory()
+		await settled()
+
+		expect(controller.getState().directory).toEqual([LINEAR])
+		expect(controller.getState().hasDirectoryFailed).toBe(false)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+	})
+
+	it("keeps the held rows and raises a notice when a refresh read is refused", async () => {
+		const port = createFakeApplicationPort()
+		port.found = [LINEAR]
+		const { controller, reportFailure } = reportingOn(port)
+		controller.browse()
+		await settled()
+
+		port.refusals.search = { kind: "registryTimedOut" }
+		port.refreshDirectory()
+		await settled()
+
+		expect(controller.getState().directory).toEqual([LINEAR])
+		expect(controller.getState().hasDirectoryFailed).toBe(false)
+		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
+	})
+
+	it("stops reading on directory refreshes once it stops watching", async () => {
+		const port = createFakeApplicationPort()
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+
+		controller.stopWatchingDirectory()
+		port.refreshDirectory()
+		await settled()
+
+		expect(port.isListeningToDirectory()).toBe(false)
+		expect(searchesOf(port)).toHaveLength(1)
+	})
+
+	it("listens again when the catalogue opens after it stopped watching", async () => {
+		const port = createFakeApplicationPort()
+		const controller = controllerOn(port)
+		controller.browse()
+		await settled()
+		controller.stopWatchingDirectory()
+
+		controller.browse()
+		await settled()
+
+		expect(port.isListeningToDirectory()).toBe(true)
+	})
+
+	describe("with a directory read that never answers", () => {
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		it("shows the failure state once the bound passes with no rows held", () => {
+			const port = createFakeApplicationPort()
+			pendingSearchOn(port)
+			const controller = controllerOn(port)
+
+			controller.browse()
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 1)
+			expect(controller.getState().hasDirectoryFailed).toBe(false)
+			vi.advanceTimersByTime(1)
+
+			expect(controller.getState().isReadingDirectory).toBe(false)
+			expect(controller.getState().hasDirectoryFailed).toBe(true)
+		})
+
+		it("lists the rows of a read answering after the bound", async () => {
+			const port = createFakeApplicationPort()
+			const reading = pendingSearchOn(port)
+			const controller = controllerOn(port)
+			controller.browse()
+			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+
+			reading.answer({ applications: [LINEAR] })
+			await vi.runAllTimersAsync()
+
+			expect(controller.getState().directory).toEqual([LINEAR])
+			expect(controller.getState().hasDirectoryFailed).toBe(false)
+		})
+
+		it("cancels the bound once a read answers before it", async () => {
+			const port = createFakeApplicationPort()
+			const reading = pendingSearchOn(port)
+			const controller = controllerOn(port)
+			controller.browse()
+
+			reading.answer({ applications: [] })
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(vi.getTimerCount()).toBe(0)
+			expect(controller.getState().hasDirectoryFailed).toBe(false)
+		})
+
+		it("sets no bound on a re-read while rows are held", async () => {
+			const port = createFakeApplicationPort()
+			port.found = [LINEAR]
+			const controller = controllerOn(port)
+			controller.browse()
+			await vi.advanceTimersByTimeAsync(0)
+
+			pendingSearchOn(port)
+			port.refreshDirectory()
+
+			expect(vi.getTimerCount()).toBe(0)
+		})
 	})
 
 	it("declares a server for an install that asks nothing", async () => {
