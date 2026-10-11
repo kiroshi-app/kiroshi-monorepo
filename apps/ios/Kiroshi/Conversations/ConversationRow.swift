@@ -71,7 +71,7 @@ struct ConversationRow: View {
     }
 }
 
-private struct RoleBadge: View {
+struct RoleBadge: View {
     let role: String
 
     var body: some View {
@@ -81,26 +81,5 @@ private struct RoleBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
             .background(Color(.systemGray5), in: .rect(cornerRadius: 6))
-    }
-}
-
-struct WorkingLabel: View {
-    let name: String
-    var isSeveral = false
-    let font: Font
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "ellipsis")
-                .symbolEffect(.variableColor.iterative.dimInactiveLayers.nonReversing)
-                .accessibilityHidden(true)
-            if isSeveral {
-                Text("\(name) are working…")
-            } else {
-                Text("\(name) is working…")
-            }
-        }
-        .font(font)
-        .foregroundStyle(Color.kiroshi(.foreground))
     }
 }

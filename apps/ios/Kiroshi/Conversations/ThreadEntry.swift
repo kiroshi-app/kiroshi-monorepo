@@ -23,8 +23,11 @@ struct ThreadMessage: Identifiable, Equatable {
     private let authors: [Companion]
     private(set) var text: String
     private(set) var rendered: AttributedString
+    var bubbles: [Bubble]
     var dayLabel: String?
+    var time = ""
     var opensRun = true
+    var closesRun = true
 
     init(
         id: String, isYours: Bool, text: String, sentAt: Date, authorId: Companion.ID? = nil,
@@ -38,12 +41,14 @@ struct ThreadMessage: Identifiable, Equatable {
         author = isYours ? nil : authors.first { $0.id == authorId }
         self.text = text
         rendered = Self.render(text, isYours: isYours, authors: authors)
+        bubbles = Self.bubbles(of: text, id: id, isYours: isYours, authors: authors)
     }
 
     mutating func replaceText(_ text: String) {
         guard text != self.text else { return }
         self.text = text
         rendered = Self.render(text, isYours: isYours, authors: authors)
+        bubbles = Self.bubbles(of: text, id: id, isYours: isYours, authors: authors)
     }
 
     mutating func append(_ delta: String) {
@@ -56,6 +61,15 @@ struct ThreadMessage: Identifiable, Equatable {
             && calendar.isDate(previous.sentAt, inSameDayAs: sentAt)
     }
 
+    private static func bubbles(
+        of text: String, id: String, isYours: Bool, authors: [Companion]
+    ) -> [Bubble] {
+        Paragraphs.split(text).enumerated().map { index, paragraph in
+            Bubble(
+                id: "\(id)-\(index)", text: render(paragraph, isYours: isYours, authors: authors))
+        }
+    }
+
     private static func render(_ text: String, isYours: Bool, authors: [Companion])
         -> AttributedString
     {
@@ -64,6 +78,58 @@ struct ThreadMessage: Identifiable, Equatable {
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: shown, options: options)) ?? AttributedString(shown)
+    }
+}
+
+enum ThreadLayout {
+    static func mark(_ entries: [ThreadEntry], time: ConversationTime) -> [ThreadEntry] {
+        var marked = entries
+        var shownDay: Date?
+        var previous: ThreadMessage?
+        for index in marked.indices {
+            guard case .message(var message) = marked[index] else {
+                previous = nil
+                continue
+            }
+            guard !message.bubbles.isEmpty else { continue }
+            let opensDay =
+                shownDay.map { !time.calendar.isDate($0, inSameDayAs: message.sentAt) }
+                ?? true
+            message.dayLabel = opensDay ? time.dayLabel(for: message.sentAt) : nil
+            message.time = time.timeLabel(for: message.sentAt)
+            message.opensRun =
+                !(previous.map { message.continues($0, calendar: time.calendar) } ?? false)
+            shownDay = message.sentAt
+            previous = message
+            marked[index] = .message(message)
+        }
+        var nextOpensRun = true
+        for index in marked.indices.reversed() {
+            guard case .message(var message) = marked[index] else {
+                nextOpensRun = true
+                continue
+            }
+            guard !message.bubbles.isEmpty else { continue }
+            message.closesRun = nextOpensRun
+            nextOpensRun = message.opensRun
+            marked[index] = .message(message)
+        }
+        var run: [(entry: Int, bubble: Int)] = []
+        for index in marked.indices {
+            guard case .message(let message) = marked[index], !message.bubbles.isEmpty else {
+                continue
+            }
+            run += message.bubbles.indices.map { (index, $0) }
+            guard message.closesRun else { continue }
+            for (position, place) in run.enumerated() {
+                guard case .message(var member) = marked[place.entry] else { continue }
+                member.bubbles[place.bubble].position = Bubble.Position(
+                    index: position, count: run.count)
+                marked[place.entry] = .message(member)
+            }
+            run = []
+        }
+        return marked
     }
 }
 

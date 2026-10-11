@@ -7,6 +7,14 @@
     enum ConversationsFixture {
         static var opening: Companion.ID?
 
+        static var showsTimes: Bool {
+            SignInFixture.opened == .swipedThread
+        }
+
+        static var holdsTimes: Bool {
+            UserDefaults.standard.bool(forKey: "holdsTimes")
+        }
+
         static var draft: String {
             UserDefaults.standard.string(forKey: "draft")
                 ?? (SignInFixture.opened == .groupMention ? "@" : "")
@@ -155,7 +163,19 @@
 
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
-            daysAgo: 0, hour: 9, minute: 4)
+            daysAgo: 0, hour: 9, minute: 38)
+
+        static let releaseNotes = [
+            releaseNotesAsk,
+            .init(
+                id: "m-drafted", isYours: false,
+                content:
+                    "Drafted. Three sections: new, fixed, under the hood.\n\nApplications get the top spot, it’s what people notice first.",
+                daysAgo: 0, hour: 9, minute: 39),
+            .init(
+                id: "m-waiting", isYours: false, content: "They’re waiting for your read.",
+                daysAgo: 0, hour: 9, minute: 40),
+        ]
 
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
@@ -173,18 +193,12 @@
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
-            case .thread:
-                script.messages[juniper.id] = [
-                    releaseNotesAsk,
-                    .init(
-                        id: "m-drafted", isYours: false,
-                        content:
-                            "Drafted. Three sections: new, fixed, under the hood. Applications get the top spot, it’s what people notice first.",
-                        daysAgo: 0, hour: 9, minute: 12),
-                    .init(
-                        id: "m-waiting", isYours: false, content: "They’re waiting for your read.",
-                        daysAgo: 0, hour: 9, minute: 12),
-                ]
+            case .thread, .swipedThread:
+                script.messages[juniper.id] = releaseNotes
+            case .threadHostOffline:
+                script.messages[juniper.id] = releaseNotes
+                script.hostLeavesAfter = .seconds(2)
+                script.hostLeavesAfterThread = true
             case .noCompanion:
                 script.companions = []
                 script.groups = []
@@ -218,7 +232,6 @@
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
-                script.workingActivities = (1...6).map { "Read · notes/source-\($0).md" }
             default:
                 break
             }
@@ -227,7 +240,9 @@
 
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
-            case .thread, .emptyThread, .workingThread, .threadFailed: juniper.id
+            case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
+                .threadFailed:
+                juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention: releaseCrew.id
             default: nil
             }
@@ -294,8 +309,8 @@
             var messages: [Companion.ID: [Message]] = [:]
             var workingCompanion: Companion.ID?
             var workingGroup: (id: String, companions: [Companion.ID])?
-            var workingActivities: [String] = []
             var hostLeavesAfter: Duration?
+            var hostLeavesAfterThread = false
         }
 
         static let spaceId = "space-studio"
@@ -365,7 +380,7 @@
         ) -> String {
             let author = authorBotId.map { #""\#($0)""# } ?? "null"
             return
-                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content)","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
+                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
         }
     }
 
@@ -449,9 +464,13 @@
             {
                 launchPlanOpened.yield()
             }
-            guard command == "conversation_message_page", let leaving = script.hostLeavesAfter,
-                await pages.next() == script.companions.count + script.groups.count
+            guard command == "conversation_message_page", let leaving = script.hostLeavesAfter
             else { return }
+            let leaves =
+                script.hostLeavesAfterThread
+                ? args["limit"] as? Int != 1
+                : await pages.next() == script.companions.count + script.groups.count
+            guard leaves else { return }
             push(.close(RelayClosure.hostOffline, after: leaving))
         }
 
@@ -615,13 +634,6 @@
                 .frame(
                     FixtureHost.agentEvent(
                         conversationId, #"{"type":"turnChanged","state":"running"}"#)))
-            for (index, title) in script.workingActivities.enumerated() {
-                push(
-                    .frame(
-                        FixtureHost.agentEvent(
-                            conversationId, FixtureHost.activity("tool-\(index)", title, "running")),
-                        after: .milliseconds(150)))
-            }
         }
 
         private func pushStoredEcho(of sent: [String: Any]) {

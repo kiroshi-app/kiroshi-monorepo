@@ -15,7 +15,14 @@ final class ThreadStore {
     private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadEntry] = []
-    private(set) var isWorking = false
+    private(set) var isWorking = false {
+        didSet {
+            if isWorking != oldValue {
+                workingSince = isWorking ? now() : nil
+            }
+        }
+    }
+    private(set) var workingSince: Date?
     private(set) var isReachable = false
     private(set) var isSending = false
     private(set) var runningScopes: [AgentEvent.Scope] = []
@@ -237,7 +244,7 @@ final class ThreadStore {
             !pagedIds.contains($0.id) && !shownBeforeLoad.contains($0.id)
         }
         entries = paged.map(ThreadEntry.message) + heardDuringLoad
-        markDays()
+        layOut()
     }
 
     private func apply(_ event: ConversationEvent) {
@@ -325,7 +332,7 @@ final class ThreadStore {
     private func insert(_ message: ThreadMessage) {
         guard !updateMessage(message.id, { $0.replaceText(message.text) }) else { return }
         entries.append(.message(message))
-        markDays()
+        layOut()
     }
 
     @discardableResult
@@ -335,6 +342,7 @@ final class ThreadStore {
         else { return false }
         change(&message)
         entries[index] = .message(message)
+        layOut()
         return true
     }
 
@@ -343,6 +351,7 @@ final class ThreadStore {
             entries.append(
                 .activities(
                     ActivityGroup(id: "activities-\(activity.id)", activities: [activity])))
+            layOut()
             return
         }
         if let index = group.activities.firstIndex(where: { $0.id == activity.id }) {
@@ -353,21 +362,7 @@ final class ThreadStore {
         entries[entries.count - 1] = .activities(group)
     }
 
-    private func markDays() {
-        let time = ConversationTime(now: now(), calendar: calendar)
-        var previous: ThreadMessage?
-        for index in entries.indices {
-            guard case .message(var message) = entries[index] else { continue }
-            let opensDay =
-                previous.map { !calendar.isDate($0.sentAt, inSameDayAs: message.sentAt) } ?? true
-            let opensRun = !(previous.map { message.continues($0, calendar: calendar) } ?? false)
-            previous = message
-            let dayLabel = opensDay ? time.threadLabel(for: message.sentAt) : nil
-            if message.dayLabel != dayLabel || message.opensRun != opensRun {
-                message.dayLabel = dayLabel
-                message.opensRun = opensRun
-                entries[index] = .message(message)
-            }
-        }
+    private func layOut() {
+        entries = ThreadLayout.mark(entries, time: ConversationTime(now: now(), calendar: calendar))
     }
 }

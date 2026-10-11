@@ -74,11 +74,13 @@
         case loadingCompanions = "2.4"
         case conversationsHostOffline = "2.5"
         case workingList = "2.6"
-        case conversations = "3.1"
+        case conversations
         case conversationsLive = "conversations-live"
-        case thread = "3.2"
-        case emptyThread = "3.5"
-        case workingThread = "3.8"
+        case thread = "3.1"
+        case emptyThread = "3.2"
+        case workingThread = "3.3"
+        case threadHostOffline = "3.4"
+        case swipedThread = "3.5"
         case conversationsFailed = "conversations-failed"
         case threadFailed = "thread-failed"
         case groupThread = "group-thread"
@@ -125,7 +127,8 @@
                 ]
             case .missions, .missionThread, .noMissions, .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+                .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
@@ -139,7 +142,8 @@
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .missions, .missionThread,
                 .noMissions, .missionsHostOffline, .settings, .signOutAlert:
                 true
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+                .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
@@ -163,7 +167,7 @@
 
         fileprivate var lastSpaceId: Space.ID? {
             switch self {
-            case .conversationsHostOffline, .missionsHostOffline:
+            case .conversationsHostOffline, .missionsHostOffline, .threadHostOffline:
                 CloudFixture.sideProjectId
             default: nil
             }
@@ -180,7 +184,8 @@
         @MainActor fileprivate var relay: RelayEnvironment {
             let online: Set<Space.ID> = [CloudFixture.studioId, CloudFixture.homeLabId]
             switch self {
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+                .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
@@ -250,7 +255,7 @@
                 model.signOutTapped()
             case .opening, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
-                .conversationsLive, .thread,
+                .conversationsLive, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
                 .groupWorking,

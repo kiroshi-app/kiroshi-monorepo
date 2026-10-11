@@ -114,7 +114,7 @@ struct CompanionAvatarTests {
         try UIImage(cgImage: image).pngData()?.write(to: png)
         print("companion-avatar rendered: \(png.path)")
 
-        #expect(image.width == 72)
+        #expect(image.width == 88)
         #expect(pixels.alpha(x: 0, y: 0) == 0)
         #expect(pixels.count(near: drawing.groundColour) > 200)
         #expect(pixels.count(near: drawing.cellColour) > 50)
