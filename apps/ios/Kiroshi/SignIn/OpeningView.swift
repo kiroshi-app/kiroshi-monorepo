@@ -21,7 +21,7 @@ struct OpeningView: View {
         }
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.kiroshi(.background))
+        .signInGround()
         .safeAreaBar(edge: .bottom) {
             Button("Sign in", action: model.start)
                 .primaryAction()

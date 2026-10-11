@@ -7,17 +7,18 @@ struct CodeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text("Enter the six-digit code we sent to \(model.email).")
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
+                SignInHeader(
+                    title: "Check your email",
+                    message: "Enter the six-digit code we sent to \(model.email).")
                 VStack(alignment: .leading, spacing: 16) {
                     CodeField(
-                        code: $model.code,
+                        code: model.isSigningIn ? .constant(model.code) : $model.code,
                         focus: $isCodeFocused,
                         isWrong: model.codeProblem == .wrongCode
                             || model.codeProblem == .tooManyWrongCodes
                     )
                     .opacity(model.isSigningIn ? 0.5 : 1)
-                    .disabled(model.isSigningIn || model.needsNewCode)
+                    .disabled(model.needsNewCode)
                     footer
                 }
                 if !model.needsNewCode {
@@ -35,19 +36,21 @@ struct CodeView: View {
                     .disabled(model.isSigningIn || model.isRequestingCode)
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 24)
             .padding(.top, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Color.kiroshi(.background))
-        .navigationTitle("Check your email")
-        .navigationBarTitleDisplayMode(.large)
+        .signInGround()
         .safeAreaBar(edge: .bottom) {
             if model.needsNewCode {
                 VStack(spacing: 0) {
-                    Button("Send a new code", action: model.sendNewCodeTapped)
-                        .primaryAction()
-                        .disabled(model.isRequestingCode)
+                    Button(action: model.sendNewCodeTapped) {
+                        Text("Send a new code")
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .primaryAction()
+                    .disabled(model.isRequestingCode)
                     Button("Use a different email", action: model.useDifferentEmail)
                         .plainAction()
                 }

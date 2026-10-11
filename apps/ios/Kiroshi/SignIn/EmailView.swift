@@ -11,10 +11,12 @@ struct EmailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text("Enter your email and we’ll send you a code to sign in.")
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
+                SignInHeader(
+                    title: "Sign in",
+                    message: "Enter your email and we’ll send you a code to sign in.")
                 VStack(alignment: .leading, spacing: 8) {
                     TextField("Email", text: $model.email)
+                        .accessibilityLabel("Email")
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -27,9 +29,10 @@ struct EmailView: View {
                         .foregroundStyle(Color.kiroshi(.foreground))
                         .padding(.horizontal, 16)
                         .frame(minHeight: 52)
-                        .background(Color.kiroshi(.card), in: .capsule)
+                        .background(Color.kiroshi(.muted), in: .capsule)
                     if let problem = model.emailProblem {
                         ProblemLabel(message: problem.message)
+                            .padding(.horizontal, 12)
                     } else {
                         Text("No account yet? This creates one.")
                             .font(.footnote)
@@ -38,13 +41,11 @@ struct EmailView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 24)
             .padding(.top, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Color.kiroshi(.background))
-        .navigationTitle("Sign in")
-        .navigationBarTitleDisplayMode(.large)
+        .signInGround()
         .safeAreaBar(edge: .bottom) {
             Button(action: model.continueWithEmail) {
                 if model.isRequestingCode {

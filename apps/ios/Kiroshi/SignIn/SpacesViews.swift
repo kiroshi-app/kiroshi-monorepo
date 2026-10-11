@@ -4,13 +4,16 @@ struct LoadingSpacesView: View {
     let model: SignInModel
 
     var body: some View {
-        ProgressView {
+        VStack(spacing: 24) {
+            ProgressView()
+                .controlSize(.large)
             Text("Loading your spaces…")
                 .foregroundStyle(Color.kiroshi(.mutedForeground))
         }
-        .controlSize(.large)
+        .accessibilityElement(children: .combine)
+        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.kiroshi(.background))
+        .signInGround()
         .task { await model.loadSpaces() }
     }
 }
@@ -19,36 +22,44 @@ struct NoSpaceView: View {
     let model: SignInModel
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            noSpaces
-            ScrollView { noSpaces }
-        }
-        .background(Color.kiroshi(.background))
-        .safeAreaBar(edge: .bottom) {
-            VStack(spacing: 4) {
-                Button("Check again", action: model.checkAgain)
-                    .secondaryAction()
-                Button("Use another account", action: model.useAnotherAccount)
-                    .fontWeight(.medium)
-                    .plainAction()
+        ScrollView { noSpaces }
+            .defaultScrollAnchor(.center, for: .alignment)
+            .scrollBounceBehavior(.basedOnSize)
+            .signInGround()
+            .safeAreaBar(edge: .bottom) {
+                VStack(spacing: 4) {
+                    Button("Check again", action: model.checkAgain)
+                        .secondaryAction()
+                    Button("Use another account", action: model.useAnotherAccount)
+                        .fontWeight(.medium)
+                        .plainAction()
+                }
+                .bottomActions()
             }
-            .bottomActions()
-        }
     }
 
     private var noSpaces: some View {
-        ContentUnavailableView {
-            Label("No spaces yet", systemImage: "square.stack")
-        } description: {
-            VStack(spacing: 14) {
-                Text(
-                    "Turn on hosting for a space on your Mac, or ask someone to invite you. It shows up here."
-                )
-                Text("Signed in as \(model.signedInEmail)")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
-            }
+        VStack(spacing: 14) {
+            Image(systemName: "square.stack")
+                .font(.largeTitle)
+                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .accessibilityHidden(true)
+            Text("No spaces yet")
+                .font(.title2.bold())
+                .foregroundStyle(Color.kiroshi(.foreground))
+                .accessibilityAddTraits(.isHeader)
+            Text(
+                "Turn on hosting for a space on your Mac, or ask someone to invite you. It shows up here."
+            )
+            .foregroundStyle(Color.kiroshi(.mutedForeground))
+            Text("Signed in as \(model.signedInEmail)")
+                .font(.subheadline)
+                .foregroundStyle(Color.kiroshi(.mutedForeground))
+                .padding(.top, 6)
         }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 40)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -61,7 +72,7 @@ struct SpacesUnreachableView: View {
         } description: {
             Text("Couldn’t reach Kiroshi. Check your connection and try again.")
         }
-        .background(Color.kiroshi(.background))
+        .signInGround()
         .safeAreaBar(edge: .bottom) {
             Button("Check again", action: model.checkAgain)
                 .secondaryAction()
