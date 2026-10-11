@@ -51,7 +51,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The box a travelling mark occupies. Give the same `markId` to two places a mark can live and Motion moves it between them rather than letting it disappear from one and reappear in the other. Two rules make that work, and both are load-bearing: exactly one node may hold a given id at a time — the places must be mutually exclusive, never two rows of one list — and the box measures the same wherever it lands, which is why it is a block box rather than an inline one. An id is a name rather than a handle: hand the slot another one and it draws another mark, which lands where it belongs instead of travelling from where the first one stood — this is how a chat swapped to another conversation keeps its marks at home. Without an id it is a plain span with nothing to travel to, and pays nothing for the possibility. `AI/Turn → Mark` shows it carrying the companion's avatar across a real transcript.",
+					"The box that says which of two places holds a companion's mark right now. Give the same `markId` to the places a mark can live: whichever one is on screen carries `data-state=\"marked\"` and the id in `data-mark`, and the mark appears there outright, with no travel, fade or scale, because a row that moves in reads as latency. Exactly one node may hold a given id at a time, so the places must be mutually exclusive, never two rows of one list, and the box measures the same wherever it lands, which is why it is a block box rather than an inline one. Without an id it is a plain span. `AI/Turn → Mark` shows it on the companion's avatar in a real transcript.",
 			},
 		},
 	},
@@ -63,7 +63,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Send the mark across and back. Check that it never blinks — one node leaves, the other arrives, and the same box travels between them — and that with reduced motion it simply appears at the destination.",
+					"Send the mark across and back. Check that it leaves one place and appears at the other on the same frame, already at rest: nothing glides between them, with or without reduced motion.",
 			},
 		},
 	},
@@ -77,6 +77,10 @@ export const Default = meta.story({
 		)
 
 		await expect(held()).toHaveLength(1)
+		await expect(
+			canvas.getByTestId("destination").querySelector('[data-state="marked"]'),
+		).toBeInTheDocument()
+		await expect(getComputedStyle(held()[0]).transform).toBe("none")
 	},
 })
 
@@ -109,7 +113,7 @@ export const StableBox = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same mark under two formatting contexts, each tinted so any slack shows. An inline box would sit on the second parent's text baseline and leave the line's descender under it, so a mark travelling between the two would land short of where it belongs by exactly that much. Check that neither parent is taller than the mark inside it.",
+					"The same mark under two formatting contexts, each tinted so any slack shows. An inline box would sit on the second parent's text baseline and leave the line's descender under it, so a mark moving from one to the other would shift the row by exactly that much. Check that neither parent is taller than the mark inside it.",
 			},
 		},
 	},
@@ -132,7 +136,7 @@ export const Plain = meta.story({
 		docs: {
 			description: {
 				story:
-					"Without a `markId` the slot is a plain span: nothing to travel to, no layout animation, no projection node. Reach for this wherever a mark is drawn but is not the one currently travelling — the older rows of a transcript, for instance.",
+					"Without a `markId` the slot is a plain span marked `plain`. Reach for this wherever a mark is drawn but is not the one the transcript currently names, the older rows of a transcript for instance.",
 			},
 		},
 	},

@@ -2,8 +2,16 @@ import { useState } from "react"
 import { expect, fn, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { FRAME_POLL, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	FRAME_POLL,
+	isInBrowserRunner,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
+import { ActivityIndicator } from "@workspace/ui/components/activity-indicator"
 import { DaySeparator } from "@workspace/ui/components/day-separator"
+import { MarkProvider } from "@workspace/ui/components/mark-context"
+import type { RosterBot } from "@workspace/ui/components/roster"
 import {
 	Transcript,
 	type TranscriptItem,
@@ -1018,5 +1026,144 @@ export const JoinsConsecutiveRuns = meta.story({
 		await expect(answered.top - asked.bottom).toBe(0)
 		await expect(day.top - answered.bottom).toBe(24)
 		await expect(followedUp.top - day.bottom).toBe(24)
+	},
+})
+
+const AT_REST_BOT: RosterBot = { id: "bot-lyra", name: "Lyra", blot: "purple" }
+
+type AtRestStage = "answered" | "sent" | "replied"
+
+const NEXT_STAGE: Record<AtRestStage, AtRestStage> = {
+	answered: "sent",
+	sent: "replied",
+	replied: "replied",
+}
+
+const assistantRun = (key: string, text: string, isMarked: boolean) => ({
+	key,
+	render: () => (
+		<TurnGroup carriesMark={isMarked}>
+			<AssistantTurn botId={AT_REST_BOT.id} identity={AT_REST_BOT}>
+				{text}
+			</AssistantTurn>
+		</TurnGroup>
+	),
+})
+
+const userRun = (key: string, text: string) => ({
+	key,
+	render: () => (
+		<TurnGroup>
+			<UserTurn>{text}</UserTurn>
+		</TurnGroup>
+	),
+})
+
+const atRestRowsOf = (stage: AtRestStage): TranscriptItem[] => [
+	userRun("asked", "Walk me through the rollout."),
+	assistantRun("answered", "The index build goes first.", stage === "answered"),
+	...(stage === "answered"
+		? []
+		: [userRun("sent", "Is any of that destructive?")]),
+	...(stage === "replied"
+		? [assistantRun("replied", "Nothing is deleted.", true)]
+		: []),
+]
+
+const AtRestDemo = (args: TranscriptProps) => {
+	const [stage, setStage] = useState<AtRestStage>("answered")
+
+	return (
+		<MarkProvider transcriptKey="at-rest">
+			<div className="flex flex-col items-start gap-3">
+				<Button
+					onClick={() => setStage(NEXT_STAGE[stage])}
+					size="sm"
+					variant="outline"
+				>
+					{stage === "answered" ? "Send" : "Reply"}
+				</Button>
+				<div className={FRAME_CLASS}>
+					<Transcript
+						{...args}
+						className="flex-1"
+						contentClassName="flex flex-col px-6 py-3"
+						rows={atRestRowsOf(stage)}
+					>
+						{stage === "sent" ? (
+							<ActivityIndicator
+								blot={AT_REST_BOT.blot}
+								botId={AT_REST_BOT.id}
+								kind="thinking"
+								name={AT_REST_BOT.name}
+								seed={AT_REST_BOT.id}
+							/>
+						) : null}
+					</Transcript>
+				</div>
+			</div>
+		</MarkProvider>
+	)
+}
+
+const emulateMotion = async (value: "no-preference" | "reduce") => {
+	const { cdp } = await import("vitest/browser")
+	await cdp().send("Emulation.setEmulatedMedia", {
+		features: [{ name: "prefers-reduced-motion", value }],
+	})
+}
+
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+const motionIn = (root: HTMLElement) =>
+	[root, ...root.querySelectorAll<HTMLElement>("*")].flatMap((node) => {
+		const style = getComputedStyle(node)
+		const running = node.getAnimations().length
+		const isAtRest =
+			style.opacity === "1" && style.transform === "none" && running === 0
+		return isAtRest
+			? []
+			: [
+					`${node.dataset.slot ?? node.tagName}: opacity ${style.opacity}, transform ${style.transform}, ${running} animations`,
+				]
+	})
+
+const rowOf = (canvasElement: HTMLElement, key: string) => {
+	const row = canvasElement.querySelector<HTMLElement>(
+		`[data-message-id="${key}"]`,
+	)
+	if (!row) throw new Error(`No row holds ${key}`)
+	return row
+}
+
+export const AppendsRowsAtRest = meta.story({
+	tags: ["test-only"],
+	render: (args) => <AtRestDemo {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A solo thread with full motion allowed: the reader sends, the working row takes the companion's mark, then the reply lands and its gutter claims it back. Each row the transcript gains, with its header line, avatar and bubble, and the working row's avatar, sit at full opacity with no transform and no running animation on the frame they mount: nothing fades, slides or scales in. " +
+					MOUNTED_BY_THE_LAYOUT,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		await emulateMotion("no-preference")
+		try {
+			await userEvent.click(canvas.getByRole("button", { name: "Send" }))
+			await nextFrame()
+			await expect(motionIn(rowOf(canvasElement, "sent"))).toEqual([])
+			await expect(
+				motionIn(slotIn(slotIn(canvasElement, "bot-working"), "shared-mark")),
+			).toEqual([])
+
+			await userEvent.click(canvas.getByRole("button", { name: "Reply" }))
+			await nextFrame()
+			await expect(motionIn(rowOf(canvasElement, "replied"))).toEqual([])
+		} finally {
+			await emulateMotion("reduce")
+		}
 	},
 })
