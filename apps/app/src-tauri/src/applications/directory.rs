@@ -34,6 +34,8 @@ const WEEK_MS: i64 = 7 * DAY_MS;
 
 const RETRY_MS: i64 = 60 * 1000;
 
+const REREAD_MS: i64 = 10 * 60 * 1000;
+
 const TICK: Duration = Duration::from_secs(60 * 60);
 
 const CACHE_DIR: &str = "applications";
@@ -245,7 +247,7 @@ impl Directory {
 		answer: impl FnOnce(&Cached, Option<&ApplicationsError>) -> T,
 	) -> Result<T, ApplicationsError> {
 		if self.is_due() {
-			self.refreshed().await;
+			self.renewed().await;
 		}
 		let held = self.kept();
 		let failure = held.failure.as_ref().map(|failure| &failure.error);
@@ -253,6 +255,15 @@ impl Directory {
 			return Err(failure.cloned().unwrap_or_else(unread_directory));
 		};
 		Ok(answer(cached, failure))
+	}
+
+	async fn renewed(&self) {
+		let _reading = self.reading.lock().await;
+		self.kept_file();
+		if !self.is_due() {
+			return;
+		}
+		self.fetched().await;
 	}
 
 	fn kept(&self) -> RwLockReadGuard<'_, Held> {
@@ -266,8 +277,11 @@ impl Directory {
 	fn is_due(&self) -> bool {
 		let now = self.clock.now_ms();
 		let held = self.kept();
-		held.cached.is_none()
-			&& held.failure.as_ref().is_none_or(|failure| now - failure.at > RETRY_MS)
+		held.failure.as_ref().is_none_or(|failure| now - failure.at > RETRY_MS)
+			&& held
+				.cached
+				.as_ref()
+				.is_none_or(|cached| cached.is_feed_stale || now - cached.read_at > REREAD_MS)
 	}
 
 	fn is_fresh(&self) -> bool {
@@ -281,15 +295,18 @@ impl Directory {
 		if self.kept().is_disk_read {
 			return;
 		}
-		let cached = self.file.as_deref().and_then(from_file);
+		let cached = self.file.as_deref().and_then(from_file).map(without_community);
 		let mut held = self.keeping();
 		held.is_disk_read = true;
 		held.cached = cached;
 	}
 
 	fn mergeable(&self, now: i64) -> Option<(String, Cached)> {
-		let cached =
-			self.kept().cached.clone().filter(|cached| !is_unlisted(cached.listed_at, now))?;
+		let cached = self
+			.kept()
+			.cached
+			.clone()
+			.filter(|cached| !cached.is_feed_stale && !is_unlisted(cached.listed_at, now))?;
 		Some((instant(cached.read_at)?, cached))
 	}
 
@@ -301,7 +318,7 @@ impl Directory {
 			}
 			None => listed(&self.base, None).await.and_then(|listing| replaced(listing, now)),
 		};
-		match read {
+		match read.map(without_community) {
 			Ok(cached) => {
 				if let Some(file) = self.file.as_deref() {
 					to_file(file, &cached);
@@ -475,6 +492,11 @@ fn merged(cached: Cached, listing: Listing, now: i64) -> Cached {
 	}
 }
 
+fn without_community(mut cached: Cached) -> Cached {
+	cached.rows.retain(|row| row.tier != Tier::Community);
+	cached
+}
+
 fn position(row: &Row) -> (Tier, bool, Option<i64>, &str) {
 	(row.tier, row.rank.is_none(), row.rank, row.id.as_str())
 }
@@ -572,7 +594,10 @@ fn bucketed(categories: Vec<String>) -> Vec<String> {
 }
 
 fn bucket(value: &str) -> &'static str {
-	BUCKETS.iter().find(|(_, values)| values.contains(&value)).map_or(OTHER, |(name, _)| *name)
+	BUCKETS
+		.iter()
+		.find(|(name, values)| name.eq_ignore_ascii_case(value) || values.contains(&value))
+		.map_or(OTHER, |(name, _)| *name)
 }
 
 fn described(one_liner: Option<String>, description: Option<String>) -> String {
@@ -911,7 +936,7 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_curated_or_partner_row_is_verified_and_a_community_row_is_not_said_to_be() {
+	async fn a_curated_or_partner_row_is_verified_and_a_community_row_is_dropped() {
 		let read = read_from(vec![
 			a_row("one", "curated", 1),
 			a_row("two", "partner", 1),
@@ -919,10 +944,38 @@ pub(crate) mod tests {
 		])
 		.await;
 
-		assert_eq!(names(&read), ["one", "two", "three"]);
+		assert_eq!(names(&read), ["one", "two"]);
 		assert_eq!(read[0].verified, Some(true));
 		assert_eq!(read[1].verified, Some(true));
-		assert_eq!(read[2].verified, None);
+	}
+
+	#[tokio::test]
+	async fn a_read_answering_only_community_rows_caches_no_row_and_no_failure() {
+		let (base, _) = serving(vec![json!([a_row("odd", "community", 1)])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+
+		let answered = directory.searched("").await.expect("the search answers");
+
+		assert!(answered.applications.is_empty());
+		assert_eq!(answered.registry_failure, None);
+		assert!(a_cache_of(&directory).rows.is_empty());
+	}
+
+	#[tokio::test]
+	async fn a_community_row_of_a_cache_written_before_is_never_answered() {
+		let file = temp_dir().join(CACHE_DIR).join(CACHE_FILE);
+		let written = a_cache_of(&a_directory_over(vec![a_page(&["one"])]).await);
+		let odd = row(a_row("odd", "community", 1)).expect("the row reads");
+		to_file(&file, &Cached { rows: [written.rows, vec![odd]].concat(), ..written });
+		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
+		let directory = Directory::timed(base, Some(file), Box::new(Stopped(NOON)));
+
+		let answered = directory.searched("").await.expect("the search answers");
+		let named = directory.named("odd").await.expect("the name resolves");
+
+		assert!(held.asked().is_empty(), "the directory was read");
+		assert_eq!(names(&answered.applications), ["one"]);
+		assert_eq!(named, None);
 	}
 
 	#[tokio::test]
@@ -1065,7 +1118,7 @@ pub(crate) mod tests {
 	async fn the_read_follows_the_cursor_until_it_is_null_and_keeps_the_cloud_order() {
 		let (base, held) = serving(vec![
 			json!([a_row("first", "curated", 1), a_row("second", "partner", 1)]),
-			json!([a_row("third", "community", 1)]),
+			json!([a_row("third", "partner", 1)]),
 		])
 		.await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
@@ -1179,18 +1232,180 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_cache_read_less_than_a_day_ago_is_answered_fresh_and_sends_no_request() {
+	async fn the_hourly_refresh_leaves_a_cache_read_less_than_a_day_ago_without_a_request() {
 		let (base, held) = serving(vec![a_page(&["one"])]).await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + DAY_MS)));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
 
 		directory.refreshed().await;
-		let answered = directory.searched("").await.expect("the search answers");
 
 		assert!(held.asked().is_empty(), "the directory was read");
+		assert_eq!(a_cache_of(&directory).read_at, NOON);
+	}
+
+	#[tokio::test]
+	async fn a_read_within_ten_minutes_of_the_last_one_answers_the_cache_without_a_request() {
+		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS)));
+		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
+
+		let answered = directory.searched("").await.expect("the search answers");
+		let named = directory.named("one").await.expect("the name resolves");
+		directory.curated().await.expect("the catalogue reads");
+
+		assert!(held.asked().is_empty(), "the directory was read");
+		assert_eq!(names(&answered.applications), ["one"]);
 		assert_eq!(answered.read_at, Some(NOON));
 		assert_eq!(answered.is_stale, Some(false));
+		assert!(named.is_some());
+	}
+
+	#[tokio::test]
+	async fn a_search_more_than_ten_minutes_after_the_last_read_merges_what_changed_first() {
+		let (base, held) = serving(vec![json!([a_row("fresh", "curated", 1)])]).await;
+		let now = NOON + REREAD_MS + 1;
+		let directory = Directory::timed(base, None, Box::new(Stopped(now)));
+		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
+
+		let answered = directory.searched("").await.expect("the search answers");
+
+		let queried = held.queried();
+		assert_eq!(queried.len(), 1, "got {queried:?}");
+		assert_eq!(asked_pair(&queried[0], "updated_since").as_deref(), Some(NOON_INSTANT));
+		assert_eq!(names(&answered.applications), ["fresh", "one"]);
+		assert_eq!(answered.read_at, Some(now));
+		assert_eq!(answered.is_stale, Some(false));
+	}
+
+	#[tokio::test]
+	async fn a_name_or_the_catalogue_asked_more_than_ten_minutes_after_the_last_read_reads_first() {
+		let (base, held) = serving(vec![json!([a_row("fresh", "curated", 1)])]).await;
+		let clock = Moving::at(NOON + REREAD_MS + 1);
+		let directory = Directory::timed(base, None, Box::new(clock.clone()));
+		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
+
+		let named = directory.named("fresh").await.expect("the name resolves");
+		clock.set(NOON + 2 * (REREAD_MS + 1));
+		let curated = directory.curated().await.expect("the catalogue reads");
+
+		assert_eq!(named.map(|application| application.name), Some("fresh".to_owned()));
+		assert_eq!(names(&curated), ["fresh"]);
+		assert_eq!(held.queried().len(), 2);
+	}
+
+	fn feed_stale(cached: Cached) -> Cached {
+		Cached { is_feed_stale: true, ..cached }
+	}
+
+	#[tokio::test]
+	async fn a_feed_stale_cache_of_the_seed_is_read_again_in_full_and_replaced_whatever_its_age() {
+		let notion =
+			carrying(a_row("notion", "partner", 1), json!({ "categories": ["Productivity"] }));
+		let (base, held) = serving(vec![json!([notion]), a_page(&["linear"])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+		let seed = json!([a_row("superset", "curated", 1), a_row("paper", "curated", 2)]);
+		let seeded = a_directory_over(vec![seed]).await;
+		planted(&directory, feed_stale(a_cache_of(&seeded)));
+
+		let answered = directory.searched("notion").await.expect("the search answers");
+
+		let queried = held.queried();
+		assert_eq!(queried.len(), 2, "got {queried:?}");
+		assert!(queried.iter().all(|query| asked_pair(query, "updated_since").is_none()));
+		assert_eq!(names(&answered.applications), ["notion"]);
+		assert_eq!(answered.applications[0].categories, ["Productivity"]);
+		assert_eq!(answered.is_stale, Some(false));
 		assert_eq!(answered.registry_failure, None);
+		let held_rows: Vec<String> =
+			a_cache_of(&directory).rows.into_iter().map(|row| row.application.name).collect();
+		assert_eq!(held_rows, ["notion", "linear"]);
+	}
+
+	#[tokio::test]
+	async fn a_feed_stale_cache_answered_no_row_by_a_full_read_is_kept_with_the_failure() {
+		let (base, _) = serving(vec![json!([])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+		planted(&directory, feed_stale(a_cache_read_at(NOON, &["one"]).await));
+
+		let answered = directory.searched("").await.expect("the search answers");
+
+		assert_eq!(names(&answered.applications), ["one"]);
+		assert_eq!(answered.is_stale, Some(true));
+		assert!(
+			matches!(answered.registry_failure, Some(ApplicationsError::RegistryUnreadable { .. })),
+			"got {:?}",
+			answered.registry_failure
+		);
+	}
+
+	#[tokio::test]
+	async fn a_refresh_failed_while_a_cache_is_held_answers_it_stale_and_waits_a_minute_to_retry() {
+		let (base, held) = serving(vec![a_page(&["one"])]).await;
+		*held.refusals.lock().expect("the stub records") = 1;
+		let failed_at = NOON + REREAD_MS + 1;
+		let clock = Moving::at(failed_at);
+		let directory = Directory::timed(base, None, Box::new(clock.clone()));
+		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
+
+		let failed = directory.searched("").await.expect("the search answers");
+		clock.set(failed_at + RETRY_MS);
+		let held_back = directory.searched("").await.expect("the search answers");
+		let asked_within_the_minute = held.asked().len();
+		clock.set(failed_at + RETRY_MS + 1);
+		let retried = directory.searched("").await.expect("the search answers");
+
+		assert_eq!(
+			failed.registry_failure,
+			Some(ApplicationsError::RegistryRefused { status: 500 })
+		);
+		assert_eq!(failed.is_stale, Some(true));
+		assert_eq!(names(&failed.applications), ["one"]);
+		assert_eq!(held_back.registry_failure, failed.registry_failure);
+		assert_eq!(asked_within_the_minute, 1);
+		assert_eq!(held.asked().len(), 2);
+		assert_eq!(retried.registry_failure, None);
+		assert_eq!(retried.is_stale, Some(false));
+	}
+
+	#[tokio::test]
+	async fn a_failed_refresh_keeps_the_catalogue_rows_and_the_search_reports_the_failure() {
+		let (base, held) = serving(vec![json!([a_row("superset", "curated", 1)])]).await;
+		*held.refusals.lock().expect("the stub records") = 1;
+		let clock = Moving::at(NOON);
+		let directory = Directory::timed(base, None, Box::new(clock.clone()));
+		let seed = json!([a_row("paper", "curated", 1)]);
+		planted(&directory, feed_stale(a_cache_of(&a_directory_over(vec![seed]).await)));
+
+		let kept = directory.curated().await.expect("the catalogue reads");
+		let searched = directory.searched("").await.expect("the search answers");
+		clock.set(NOON + RETRY_MS + 1);
+		let retried = directory.curated().await.expect("the catalogue reads");
+
+		assert_eq!(names(&kept), ["paper"]);
+		assert_eq!(names(&searched.applications), ["paper"]);
+		assert_eq!(
+			searched.registry_failure,
+			Some(ApplicationsError::RegistryRefused { status: 500 })
+		);
+		assert_eq!(searched.is_stale, Some(true));
+		assert_eq!(held.asked().len(), 2);
+		assert_eq!(names(&retried), ["superset"]);
+	}
+
+	#[tokio::test]
+	async fn reads_arriving_while_a_refresh_runs_send_no_second_request_sequence() {
+		let (base, held) = serving(vec![a_page(&["one"]), a_page(&["two"])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+		planted(&directory, feed_stale(a_cache_read_at(NOON, &["seed"]).await));
+
+		let (searched, named, curated) =
+			tokio::join!(directory.searched(""), directory.named("two"), directory.curated());
+
+		let queried = held.queried();
+		assert_eq!(queried.len(), 2, "got {queried:?}");
+		assert_eq!(names(&searched.expect("the search answers").applications), ["one", "two"]);
+		assert!(named.expect("the name resolves").is_some());
+		curated.expect("the catalogue reads");
 	}
 
 	#[tokio::test]
@@ -1538,6 +1753,15 @@ pub(crate) mod tests {
 		for (name, values) in BUCKETS {
 			for value in values {
 				assert_eq!(bucketed(vec![(*value).to_owned()]), [name], "{value} folds elsewhere");
+			}
+		}
+	}
+
+	#[test]
+	fn a_bucket_display_name_in_any_case_folds_into_that_bucket() {
+		for (name, _) in BUCKETS {
+			for value in [name.to_owned(), name.to_lowercase(), name.to_uppercase()] {
+				assert_eq!(bucketed(vec![value.clone()]), [name], "{value} folds elsewhere");
 			}
 		}
 	}

@@ -414,7 +414,7 @@ mod tests {
 				json!({ "config": { "type": "http", "url": "https://mcp.notion.test/mcp" } }),
 			),
 			carrying(
-				a_row("io.github.Digital-Defiance/mcp-filesystem", "community", 1),
+				a_row("io.github.Digital-Defiance/mcp-filesystem", "partner", 1),
 				json!({
 					"type": "local",
 					"remote": null,
@@ -433,7 +433,7 @@ mod tests {
 
 	fn a_collapsed_row(name: &str) -> Value {
 		carrying(
-			a_row(name, "community", 2),
+			a_row(name, "partner", 2),
 			json!({
 				"config": {
 					"type": "http",
