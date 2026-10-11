@@ -177,6 +177,21 @@
                 daysAgo: 0, hour: 9, minute: 40),
         ]
 
+        static let longThread: [FixtureHost.Message] =
+            (0..<30).map { index in
+                FixtureHost.Message(
+                    id: "long-\(index)", isYours: index.isMultiple(of: 3),
+                    content: index.isMultiple(of: 4)
+                        ? "Step \(index + 1) of the 0.42 checklist is done. The notes, the changelog and the tag all agree on what ships, and nothing moved since this morning.\n\nNext one up."
+                        : "Step \(index + 1) is done.",
+                    daysAgo: index < 20 ? 1 : 0, hour: 8, minute: index)
+            } + [
+                .init(
+                    id: "long-last", isYours: false,
+                    content: "That’s the whole checklist, 0.42 is ready to tag.", daysAgo: 0,
+                    hour: 8, minute: 30)
+            ]
+
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
                 fixture.rawValue.hasPrefix("2.")
@@ -229,6 +244,9 @@
                 script.workingGroup = (releaseCrew.id, [juniper.id, atlas.id])
             case .groupFailed:
                 script.refusesThread = true
+            case .slowThread:
+                script.messages[juniper.id] = longThread
+                script.threadAnswersAfter = .seconds(2)
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
@@ -241,7 +259,7 @@
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
             case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
-                .threadFailed:
+                .threadFailed, .slowThread:
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention: releaseCrew.id
             default: nil
@@ -311,6 +329,7 @@
             var workingGroup: (id: String, companions: [Companion.ID])?
             var hostLeavesAfter: Duration?
             var hostLeavesAfterThread = false
+            var threadAnswersAfter = Duration.zero
         }
 
         static let spaceId = "space-studio"
@@ -497,8 +516,8 @@
             push(.close(1000))
         }
 
-        private func reply(_ id: Int, _ body: String) {
-            push(.frame(#"{"id":\#(id),"status":200,"body":\#(body)}"#))
+        private func reply(_ id: Int, _ body: String, after delay: Duration = .zero) {
+            push(.frame(#"{"id":\#(id),"status":200,"body":\#(body)}"#, after: delay))
         }
 
         private func refuse(_ id: Int) {
@@ -618,7 +637,8 @@
                 .suffix(limit)
             reply(
                 id,
-                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":false}"#
+                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":false}"#,
+                after: limit == 1 ? .zero : script.threadAnswersAfter
             )
             if let working = script.workingGroup, working.id == conversationId {
                 for companionId in working.companions {
