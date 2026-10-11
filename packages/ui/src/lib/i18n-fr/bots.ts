@@ -192,6 +192,16 @@ const bots = {
 		retouches_many: "({{count}} fois)",
 		retouches_other: "({{count}} fois)",
 		undone: "Annulée plus haut",
+		recordFailed: {
+			title: {
+				bot: "Impossible d’ajouter la modification d’un compagnon à l’historique",
+				user: "Impossible d’ajouter une modification de votre profil à l’historique",
+				space:
+					"Impossible d’ajouter une modification de l’espace à l’historique",
+			},
+			description:
+				"La modification reste enregistrée, mais vous ne pouvez pas l’annuler depuis l’historique ({{detail}}). Ouvrez les réglages pour la vérifier.",
+		},
 		day: {
 			today: "Aujourd’hui",
 			yesterday: "Hier",

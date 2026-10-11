@@ -19,8 +19,20 @@ const scopeOf = (botId: string): RuntimeScope => ({
 	epoch: 1,
 })
 
+const unrecorded = (bundle: EvolvedBundle): ScopedEvent["event"] => ({
+	type: "botEvolutionFailed",
+	bundle,
+	detail: "index.lock exists",
+})
+
 const createFakeDriver = () => {
 	const listeners = new Set<(event: ScopedEvent) => void>()
+
+	const emit = (event: ScopedEvent) => {
+		for (const listener of listeners) {
+			listener(event)
+		}
+	}
 
 	return {
 		subscribe: (onEvent: (event: ScopedEvent) => void) => {
@@ -29,19 +41,19 @@ const createFakeDriver = () => {
 				listeners.delete(onEvent)
 			})
 		},
-		evolve: (botId: string, bundle: EvolvedBundle) => {
-			for (const listener of listeners) {
-				listener({
-					scope: scopeOf(botId),
-					event: {
-						type: "botEvolved",
-						bundle,
-						commitId: "c-1",
-						title: "learned to count",
-					},
-				})
-			}
-		},
+		evolve: (botId: string, bundle: EvolvedBundle) =>
+			emit({
+				scope: scopeOf(botId),
+				event: {
+					type: "botEvolved",
+					bundle,
+					commitId: "c-1",
+					title: "learned to count",
+				},
+			}),
+		failToRecord: (botId: string, bundle: EvolvedBundle) =>
+			emit({ scope: scopeOf(botId), event: unrecorded(bundle) }),
+		failUnscoped: () => emit({ scope: null, event: unrecorded("bot") }),
 	}
 }
 
@@ -80,8 +92,16 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const start = (panels: Panels) => {
 	const driver = createFakeDriver()
-	const stop = startEvolutionSource({ driver, ...panels })
-	return { driver, stop }
+	const reportFailure = vi.fn()
+	const stop = startEvolutionSource({ driver, reportFailure, ...panels })
+	return { driver, stop, reportFailure }
+}
+
+const expectNoReload = (panels: Panels) => {
+	expect(panels.roster.reload).not.toHaveBeenCalled()
+	expect(panels.companionPlugin.reload).not.toHaveBeenCalled()
+	expect(panels.userPlugin.reload).not.toHaveBeenCalled()
+	expect(panels.spacePlugin.reload).not.toHaveBeenCalled()
 }
 
 describe("evolution source", () => {
@@ -130,6 +150,56 @@ describe("evolution source", () => {
 		driver.evolve("bot-1", "space")
 
 		expect(panels.spacePlugin.reload).not.toHaveBeenCalled()
+	})
+
+	it("raises no notice when a change is recorded", () => {
+		const panels = createPanels({ botId: "bot-1" })
+		const { driver, reportFailure } = start(panels)
+
+		driver.evolve("bot-1", "bot")
+
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		["bot", "Couldn’t add a companion’s change to History"],
+		["user", "Couldn’t add a change to your profile to History"],
+		["space", "Couldn’t add a change to the space to History"],
+	] as const)(
+		"reports a %s change that couldn't be recorded",
+		(bundle, title) => {
+			const panels = createPanels({ botId: "bot-1", spaceId: "space-1" })
+			const { driver, reportFailure } = start(panels)
+
+			driver.failToRecord("bot-1", bundle)
+
+			expect(reportFailure).toHaveBeenCalledTimes(1)
+			expect(reportFailure).toHaveBeenCalledWith({
+				title,
+				description:
+					"The change is still saved, but you can’t undo it from History (index.lock exists). Open settings to review it.",
+			})
+		},
+	)
+
+	it("reloads nothing when a change couldn't be recorded", () => {
+		const panels = createPanels({ botId: "bot-1", spaceId: "space-1" })
+		const { driver } = start(panels)
+
+		driver.failToRecord("bot-1", "bot")
+		driver.failToRecord("bot-1", "user")
+		driver.failToRecord("bot-1", "space")
+
+		expectNoReload(panels)
+	})
+
+	it("ignores an unrecorded change without a runtime scope", () => {
+		const panels = createPanels({ botId: "bot-1" })
+		const { driver, reportFailure } = start(panels)
+
+		driver.failUnscoped()
+
+		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
 	it("stops reading once detached", async () => {

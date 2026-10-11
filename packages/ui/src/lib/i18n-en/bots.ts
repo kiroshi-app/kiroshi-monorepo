@@ -189,6 +189,15 @@ const bots = {
 		retouches_one: "(1 go)",
 		retouches_other: "({{count}} goes)",
 		undone: "Undone above",
+		recordFailed: {
+			title: {
+				bot: "Couldn’t add a companion’s change to History",
+				user: "Couldn’t add a change to your profile to History",
+				space: "Couldn’t add a change to the space to History",
+			},
+			description:
+				"The change is still saved, but you can’t undo it from History ({{detail}}). Open settings to review it.",
+		},
 		day: {
 			today: "Today",
 			yesterday: "Yesterday",
