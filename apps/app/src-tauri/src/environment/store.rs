@@ -22,6 +22,7 @@ const ACCOUNT_DIR: &str = "account";
 static WRITES: Mutex<()> = Mutex::new(());
 
 type Assignments = Vec<(String, String)>;
+type Entries = Vec<(String, Option<String>)>;
 
 pub fn root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 	Some(app.path().app_data_dir().ok()?.join(DIR_NAME))
@@ -31,10 +32,28 @@ pub fn set(root: &Path, scope: &EnvScope, name: &str, value: &str) -> Result<(),
 	admitted(scope, name)?;
 	let path = file(root, scope)?;
 	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
-	let mut kept = stored(&path)?;
+	let mut kept = held(&path)?;
 	match kept.iter_mut().find(|(defined, _)| defined == name) {
-		Some((_, held)) => *held = value.to_owned(),
-		None => kept.push((name.to_owned(), value.to_owned())),
+		Some((_, held)) => *held = Some(value.to_owned()),
+		None => kept.push((name.to_owned(), Some(value.to_owned()))),
+	}
+	written(&path, &kept)
+}
+
+pub fn declare(root: &Path, scope: &EnvScope, names: &[String]) -> Result<(), EnvError> {
+	for name in names {
+		admitted(scope, name)?;
+		if is_reserved(name) {
+			return Err(EnvError::InvalidName { name: name.clone() });
+		}
+	}
+	let path = file(root, scope)?;
+	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
+	let mut kept = held(&path)?;
+	for name in names {
+		if kept.iter().all(|(defined, _)| defined != name) {
+			kept.push((name.clone(), None));
+		}
 	}
 	written(&path, &kept)
 }
@@ -49,9 +68,9 @@ pub fn set_one_of(
 	admitted(scope, name)?;
 	let path = file(root, scope)?;
 	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
-	let mut kept = stored(&path)?;
+	let mut kept = held(&path)?;
 	kept.retain(|(defined, _)| !family.contains(&defined.as_str()));
-	kept.push((name.to_owned(), value.to_owned()));
+	kept.push((name.to_owned(), Some(value.to_owned())));
 	written(&path, &kept)
 }
 
@@ -62,10 +81,10 @@ pub fn delete(root: &Path, scope: &EnvScope, name: &str) -> Result<(), EnvError>
 pub fn delete_all(root: &Path, scope: &EnvScope, names: &[&str]) -> Result<(), EnvError> {
 	let path = file(root, scope)?;
 	let _serialised = WRITES.lock().unwrap_or_else(PoisonError::into_inner);
-	let mut kept = stored(&path)?;
-	let held = kept.len();
+	let mut kept = held(&path)?;
+	let before = kept.len();
 	kept.retain(|(defined, _)| !names.contains(&defined.as_str()));
-	if kept.len() == held {
+	if kept.len() == before {
 		return Ok(());
 	}
 	written(&path, &kept)
@@ -88,18 +107,37 @@ pub fn values(root: &Path, scope: &EnvScope) -> Result<Values, EnvError> {
 }
 
 pub fn list(root: &Path, scope: &EnvScope) -> Result<Vec<EnvEntry>, EnvError> {
-	let mut entries: Vec<EnvEntry> = Vec::new();
+	let mut defined: Vec<(String, EnvScope, bool)> = Vec::new();
 	for step in chain(scope) {
-		for (name, _) in stored(&file(root, &step)?)? {
-			if is_reserved(&name) {
-				continue;
+		for (name, value) in held(&file(root, &step)?)? {
+			if !is_reserved(&name) {
+				defined.push((name, step.clone(), value.is_none()));
 			}
-			let served_from = serving(&entries, &name).unwrap_or_else(|| step.clone());
-			entries.push(EnvEntry { name, defined_in: step.clone(), served_from });
 		}
 	}
+	let mut entries: Vec<EnvEntry> = defined
+		.iter()
+		.map(|(name, step, is_unset)| EnvEntry {
+			name: name.clone(),
+			defined_in: step.clone(),
+			served_from: serving(&defined, name).unwrap_or_else(|| step.clone()),
+			is_unset: *is_unset,
+		})
+		.collect();
 	entries.sort_by(|left, right| left.name.cmp(&right.name));
 	Ok(entries)
+}
+
+pub fn names(root: &Path, scope: &EnvScope) -> Result<Vec<String>, EnvError> {
+	Ok(unreserved_names(held(&file(root, scope)?)?))
+}
+
+pub fn names_in(text: &str) -> Result<Vec<String>, EnvError> {
+	Ok(unreserved_names(parsed(text)?))
+}
+
+fn unreserved_names(entries: Entries) -> Vec<String> {
+	entries.into_iter().map(|(name, _)| name).filter(|name| !is_reserved(name)).collect()
 }
 
 pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
@@ -146,10 +184,17 @@ pub fn copy_owner(root: &Path, source: &EnvOwner, target: &EnvOwner) -> Result<(
 }
 
 fn copied_scope(root: &Path, source: &EnvScope, target: &EnvScope) -> Result<(), EnvError> {
-	for (name, value) in stored(&file(root, source)?)? {
-		set(root, target, &name, &value)?;
+	let mut unset = Vec::new();
+	for (name, value) in held(&file(root, source)?)? {
+		match value {
+			Some(value) => set(root, target, &name, &value)?,
+			None => unset.push(name),
+		}
 	}
-	Ok(())
+	if unset.is_empty() {
+		return Ok(());
+	}
+	declare(root, target, &unset)
 }
 
 pub fn owner_dirs(root: &Path, owner: &EnvOwner) -> Result<[PathBuf; 2], EnvError> {
@@ -165,7 +210,7 @@ fn owners(owner: &EnvOwner) -> Vec<EnvOwner> {
 	}
 }
 
-fn server_names(root: &Path, owner: &EnvOwner) -> Result<Vec<String>, EnvError> {
+pub fn server_names(root: &Path, owner: &EnvOwner) -> Result<Vec<String>, EnvError> {
 	let Ok(listed) = fs::read_dir(servers_dir(root, owner)?) else {
 		return Ok(Vec::new());
 	};
@@ -216,8 +261,11 @@ fn forget_owner_at(root: &Path, kind: &str, id: &str) {
 	let _ = fs::remove_dir_all(root.join(SERVER_DIR).join(kind).join(id));
 }
 
-fn serving(narrower: &[EnvEntry], name: &str) -> Option<EnvScope> {
-	narrower.iter().find(|entry| entry.name == name).map(|entry| entry.served_from.clone())
+fn serving(chained: &[(String, EnvScope, bool)], name: &str) -> Option<EnvScope> {
+	chained
+		.iter()
+		.find(|(defined, _, is_unset)| defined == name && !is_unset)
+		.map(|(_, step, _)| step.clone())
 }
 
 fn chain(scope: &EnvScope) -> Vec<EnvScope> {
@@ -273,20 +321,30 @@ fn segment(value: &str) -> Result<&str, EnvError> {
 }
 
 fn stored(path: &Path) -> Result<Assignments, EnvError> {
+	Ok(held(path)?.into_iter().filter_map(|(name, value)| Some((name, value?))).collect())
+}
+
+fn held(path: &Path) -> Result<Entries, EnvError> {
 	match fs::read_to_string(path) {
 		Ok(text) => parsed(&text),
-		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Assignments::new()),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Entries::new()),
 		Err(error) => Err(EnvError::Unreadable { detail: error.to_string() }),
 	}
 }
 
-fn written(path: &Path, assignments: &Assignments) -> Result<(), EnvError> {
-	private_files::replace_atomically(path, rendered(assignments).as_bytes())
+fn written(path: &Path, entries: &Entries) -> Result<(), EnvError> {
+	private_files::replace_atomically(path, rendered(entries).as_bytes())
 		.map_err(|error| EnvError::Unwritable { detail: error.to_string() })
 }
 
-fn rendered(assignments: &Assignments) -> String {
-	assignments.iter().map(|(name, value)| format!("{name}={}\n", quoted(value))).collect()
+fn rendered(entries: &Entries) -> String {
+	entries
+		.iter()
+		.map(|(name, value)| match value {
+			Some(value) => format!("{name}={}\n", quoted(value)),
+			None => format!("{name}\n"),
+		})
+		.collect()
 }
 
 fn quoted(value: &str) -> String {
@@ -304,24 +362,24 @@ fn quoted(value: &str) -> String {
 	written
 }
 
-fn parsed(text: &str) -> Result<Assignments, EnvError> {
-	let mut assignments = Assignments::new();
+fn parsed(text: &str) -> Result<Entries, EnvError> {
+	let mut entries = Entries::new();
 	for (index, line) in text.lines().enumerate() {
 		let trimmed = line.trim();
 		if trimmed.is_empty() || trimmed.starts_with('#') {
 			continue;
 		}
 		let at = index + 1;
-		let Some((name, rest)) = trimmed.split_once('=') else {
-			return Err(malformed(at));
+		let (name, value) = match trimmed.split_once('=') {
+			Some((name, rest)) => (name.trim_end(), Some(value_of(rest, at)?)),
+			None => (trimmed, None),
 		};
-		let name = name.trim_end();
 		if !is_a_name(name) {
 			return Err(malformed(at));
 		}
-		assignments.push((name.to_owned(), value_of(rest, at)?));
+		entries.push((name.to_owned(), value));
 	}
-	Ok(assignments)
+	Ok(entries)
 }
 
 fn value_of(rest: &str, at: usize) -> Result<String, EnvError> {
@@ -367,6 +425,7 @@ fn is_a_name_character(character: char) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::environment::contract::{API_KEY, OAUTH_ACCESS_TOKEN};
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
@@ -641,6 +700,52 @@ mod tests {
 	}
 
 	#[test]
+	fn a_copy_declares_unset_what_the_bot_and_its_servers_hold_unset() {
+		let root = a_root("copy-owner-unset");
+		let copy = EnvOwner::Bot { id: "b2".to_owned(), space_id: "s1".to_owned() };
+		let copied_server = EnvScope::Server { name: "clock".to_owned(), owner: copy.clone() };
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+		declare(&root, &a_bot(), &["PENDING".to_owned()]).expect("the bot declares it");
+		declare(&root, &a_server(), &["REGION".to_owned()]).expect("the server declares it");
+
+		copy_owner(&root, &an_owner(), &copy).expect("the store copies");
+
+		assert_eq!(
+			unset_names(&list(&root, &EnvScope::from(&copy)).expect("the chain reads")),
+			vec![("PENDING", &EnvScope::from(&copy), &EnvScope::from(&copy))]
+		);
+		assert_eq!(
+			unset_names(&list(&root, &copied_server).expect("the chain reads")),
+			vec![
+				("PENDING", &EnvScope::from(&copy), &EnvScope::from(&copy)),
+				("REGION", &copied_server, &copied_server),
+			]
+		);
+		assert_eq!(
+			resolve(&root, &copy).expect("the store reads").base,
+			holding(&[("TOKEN", "bot")])
+		);
+	}
+
+	#[test]
+	fn a_copy_keeps_the_value_the_target_holds_for_a_name_the_source_holds_unset() {
+		let root = a_root("copy-owner-kept");
+		let copy = EnvOwner::Bot { id: "b2".to_owned(), space_id: "s1".to_owned() };
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("the bot declares it");
+		set(&root, &EnvScope::from(&copy), "TOKEN", "held").expect("the copy keeps it");
+
+		copy_owner(&root, &an_owner(), &copy).expect("the store copies");
+
+		assert_eq!(
+			resolve(&root, &copy).expect("the store reads").base,
+			holding(&[("TOKEN", "held")])
+		);
+		assert!(
+			unset_names(&list(&root, &EnvScope::from(&copy)).expect("the chain reads")).is_empty()
+		);
+	}
+
+	#[test]
 	fn resolution_of_an_empty_store_carries_nothing() {
 		let root = a_root("resolve-empty");
 		assert_eq!(resolve(&root, &an_owner()).expect("the store reads"), ResolvedEnv::default());
@@ -832,6 +937,89 @@ mod tests {
 		assert_eq!(
 			values(&root, &EnvScope::Account).expect("the store reads").get(ACCOUNT_BEARER),
 			Some(&"bearer".to_owned())
+		);
+	}
+
+	fn unset_names(entries: &[EnvEntry]) -> Vec<(&str, &EnvScope, &EnvScope)> {
+		entries
+			.iter()
+			.filter(|entry| entry.is_unset)
+			.map(|entry| (entry.name.as_str(), &entry.defined_in, &entry.served_from))
+			.collect()
+	}
+
+	#[test]
+	fn a_declared_name_is_listed_unset_and_never_resolved() {
+		let root = a_root("declared");
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("the bot declares it");
+
+		let listed = list(&root, &a_bot()).expect("the chain reads");
+		assert_eq!(unset_names(&listed), vec![("TOKEN", &a_bot(), &a_bot())]);
+		assert_eq!(listed.len(), 1);
+		assert_eq!(resolve(&root, &an_owner()).expect("the store reads"), ResolvedEnv::default());
+		assert_eq!(super::names(&root, &a_bot()).expect("the scope reads"), vec!["TOKEN"]);
+	}
+
+	#[test]
+	fn a_declared_name_is_served_by_a_wider_scope_that_holds_a_value() {
+		let root = a_root("declared-under-value");
+		set(&root, &a_space(), "TOKEN", "space").expect("the space keeps it");
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("the bot declares it");
+
+		let listed = list(&root, &a_bot()).expect("the chain reads");
+		assert_eq!(unset_names(&listed), vec![("TOKEN", &a_bot(), &a_space())]);
+		let resolved = resolve(&root, &an_owner()).expect("the store reads");
+		assert_eq!(resolved.base, holding(&[("TOKEN", "space")]));
+	}
+
+	#[test]
+	fn a_value_written_for_a_declared_name_is_served_and_no_longer_unset() {
+		let root = a_root("declared-then-set");
+		declare(&root, &a_bot(), &["TOKEN".to_owned(), "KEPT".to_owned()]).expect("declared");
+		set(&root, &a_bot(), "TOKEN", "bot").expect("the bot keeps it");
+
+		let listed = list(&root, &a_bot()).expect("the chain reads");
+		assert_eq!(unset_names(&listed), vec![("KEPT", &a_bot(), &a_bot())]);
+		assert_eq!(
+			resolve(&root, &an_owner()).expect("the store reads").base,
+			holding(&[("TOKEN", "bot")])
+		);
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("declared again");
+		assert_eq!(
+			resolve(&root, &an_owner()).expect("the store reads").base,
+			holding(&[("TOKEN", "bot")]),
+			"declaring a held name leaves its value"
+		);
+	}
+
+	#[test]
+	fn a_deleted_declared_name_leaves_the_listing() {
+		let root = a_root("declared-then-deleted");
+		declare(&root, &a_bot(), &["TOKEN".to_owned()]).expect("the bot declares it");
+
+		delete(&root, &a_bot(), "TOKEN").expect("the bot drops it");
+
+		assert_eq!(list(&root, &a_bot()).expect("the chain reads"), Vec::new());
+	}
+
+	#[test]
+	fn a_reserved_or_malformed_name_is_never_declared() {
+		let root = a_root("declared-refused");
+		for refused in [OAUTH_ACCESS_TOKEN, API_KEY, "lower"] {
+			assert_eq!(
+				declare(&root, &a_bot(), &[refused.to_owned()]),
+				Err(EnvError::InvalidName { name: refused.to_owned() })
+			);
+		}
+		assert!(!file(&root, &a_bot()).expect("the path").exists());
+	}
+
+	#[test]
+	fn the_names_of_an_env_text_leave_its_values_and_its_reserved_names_out() {
+		let text = format!("TOKEN=\"held\"\nDECLARED\n{OAUTH_ACCESS_TOKEN}=\"grant\"\n");
+		assert_eq!(
+			names_in(&text).expect("the text parses"),
+			vec!["TOKEN".to_owned(), "DECLARED".to_owned()]
 		);
 	}
 
