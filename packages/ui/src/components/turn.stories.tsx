@@ -1181,7 +1181,7 @@ export const NamedByIdentity = meta.story({
 		docs: {
 			description: {
 				story:
-					"A row that names its gutter through `identity` rather than `author`: the screen hands the face it draws. Check that the gutter draws that companion and that the bubble carries no name line above it, since naming the row above the bubble is the author's job alone. " +
+					"A row that names its gutter through `identity` rather than `author`: the screen hands the face it draws, as a thread with a single companion does. Check that the gutter draws that companion and that the header line above the bubble names it too, with no title badge since the face carries none. " +
 					RENDERED_BY_THE_THREAD,
 			},
 		},
@@ -1190,7 +1190,9 @@ export const NamedByIdentity = meta.story({
 		await expect(
 			canvas.getByRole("img", { hidden: true, name: BOT.name }),
 		).toBeVisible()
-		await expect(slotsIn(canvasElement, "message-author")).toHaveLength(0)
+		await expect(slotIn(canvasElement, "message-author")).toHaveTextContent(
+			BOT.name,
+		)
 	},
 })
 

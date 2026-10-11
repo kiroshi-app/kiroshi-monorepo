@@ -655,7 +655,7 @@ function AssistantTurn(props: AssistantTurnProps) {
 			}
 			head={
 				<TurnRunHeader
-					author={author}
+					author={author ?? identity}
 					cause={cause}
 					className={cn(
 						TURN_HEAD,
