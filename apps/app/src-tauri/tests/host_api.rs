@@ -788,8 +788,8 @@ async fn a_directory_answers_not_found() {
 	assert_eq!(server.fetched("/api/files/attachments/c1/inner", &token).await.status, 404);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn exactly_the_dev_server_and_the_packaged_window_origins_are_accepted() {
+#[test]
+fn exactly_the_dev_server_and_the_packaged_window_origins_are_accepted() {
 	let window = if cfg!(any(windows, target_os = "android")) {
 		"http://tauri.localhost"
 	} else {
