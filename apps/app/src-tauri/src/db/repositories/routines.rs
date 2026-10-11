@@ -708,6 +708,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{count_of, open, Database};
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::routines::contract::{
 		FieldType, Filter, FilterMatchMode, FilterOperator, FilterRow, PayloadField, Refusal,
 		ReportedRun, TriggerSource,
@@ -743,7 +744,7 @@ mod tests {
 			VALUES ('t2', 'c2', 1, 1);
 	";
 
-	async fn planted() -> (Database, std::path::PathBuf) {
+	async fn planted() -> (Database, RemovedOnDrop) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

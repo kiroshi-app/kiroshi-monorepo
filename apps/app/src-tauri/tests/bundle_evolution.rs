@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, EvolvedBundle, RuntimeScope, ScopedEvent};
@@ -203,11 +204,13 @@ fn an_identity() -> Value {
 	})
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id()));
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id())),
+	);
 	std::fs::write(&path, name).expect("the scenario is written");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 fn user_plugin(harness: &Harness) -> PathBuf {
@@ -242,7 +245,7 @@ fn rewrite_the_brief(agent: &Path, brief: &str) {
 #[test]
 fn every_bundle_the_turn_changed_is_announced_once() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	scenario("evolution");
+	let _scenario = scenario("evolution");
 
 	let harness = launch();
 	let bot = harness.create_bot();

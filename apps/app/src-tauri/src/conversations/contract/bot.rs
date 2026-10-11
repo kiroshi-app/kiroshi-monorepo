@@ -337,6 +337,7 @@ mod tests {
 	use super::super::tests::assert_crosses_as;
 	use super::super::Chat;
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[test]
 	fn a_bot_and_the_chat_it_holds_cross_as_camel_case() {
@@ -489,8 +490,8 @@ mod tests {
 		}
 	}
 
-	fn a_bundle_root(name: &str) -> std::path::PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-contract-{name}"));
+	fn a_bundle_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-contract-{name}")));
 		let _ = std::fs::remove_dir_all(&root);
 		root
 	}

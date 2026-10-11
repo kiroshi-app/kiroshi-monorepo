@@ -2,9 +2,10 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{
 	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, shutdown_session,
@@ -106,8 +107,10 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
-fn probe_file() -> PathBuf {
-	let path = std::env::temp_dir().join(format!("kiroshi-lifecycle-{}.pid", std::process::id()));
+fn probe_file() -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-lifecycle-{}.pid", std::process::id())),
+	);
 	let _ = std::fs::remove_file(&path);
 	path
 }
@@ -169,7 +172,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_AGENT_SCENARIO", "startup_timeout");
 	std::env::set_var("FAKE_AGENT_ORPHAN_AT_STARTUP", "1");
-	std::env::set_var("FAKE_AGENT_PID_FILE", &pid_file);
+	std::env::set_var("FAKE_AGENT_PID_FILE", &*pid_file);
 
 	let app = app();
 	runtime().block_on(async {

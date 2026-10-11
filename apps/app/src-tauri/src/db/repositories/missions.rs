@@ -979,7 +979,6 @@ fn now() -> i64 {
 
 #[cfg(test)]
 mod tests {
-	use std::path::PathBuf;
 
 	use serde_json::json;
 
@@ -987,6 +986,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{count_of, open, Database};
 	use crate::missions::contract::{MissionNote, MissionOutcome};
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
@@ -1002,7 +1002,7 @@ mod tests {
 			VALUES ('c1', 'b1', 'lead', 1, 0), ('c2', 'b2', 'lead', 1, 0);
 	";
 
-	async fn planted() -> (Database, PathBuf) {
+	async fn planted() -> (Database, RemovedOnDrop) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

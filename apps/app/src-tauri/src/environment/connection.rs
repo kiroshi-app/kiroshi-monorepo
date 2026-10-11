@@ -25,13 +25,13 @@ pub fn held(root: &Path) -> Result<Values, EnvError> {
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::path::PathBuf;
 
 	use super::*;
 	use crate::environment::contract::{EnvOwner, API_KEY, SUBSCRIPTION_TOKEN};
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-connection-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-connection-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}

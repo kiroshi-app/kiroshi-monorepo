@@ -3,6 +3,7 @@ mod common;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
@@ -37,6 +38,7 @@ struct Host {
 	conversation_id: String,
 	routine: Routine,
 	changed: Arc<Mutex<Vec<String>>>,
+	_scenario: RemovedOnDrop,
 }
 
 fn serial() -> MutexGuard<'static, ()> {
@@ -44,11 +46,13 @@ fn serial() -> MutexGuard<'static, ()> {
 	SIDECAR_SETTINGS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-routine-scenario-{}.txt", std::process::id()));
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-routine-scenario-{}.txt", std::process::id())),
+	);
 	std::fs::write(&path, name).expect("the scenario is written");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 const A_ROOM: &str = "
@@ -68,17 +72,19 @@ const REFUSED_TURNS: &str = "
 ";
 
 fn launch(name: &str, played: &str) -> Host {
-	let app = booted(name, played);
+	let scenario = scenario(played);
+	let app = booted(name);
 	let chat = block_on(conversation_main_chat(app.state(), BOT.to_owned(), None))
 		.expect("the main chat opens");
-	hosting(app, name, chat.id)
+	hosting(app, scenario, name, chat.id)
 }
 
 fn launch_in_a_room(name: &str, played: &str) -> Host {
-	let app = booted(name, played);
+	let scenario = scenario(played);
+	let app = booted(name);
 	block_on(database_of(&app).conversations().ensure_default_bot()).expect("the default bot");
 	planted(&app, A_ROOM);
-	hosting(app, name, "room-1".to_owned())
+	hosting(app, scenario, name, "room-1".to_owned())
 }
 
 fn planted(app: &App<MockRuntime>, statements: &'static str) {
@@ -88,9 +94,8 @@ fn planted(app: &App<MockRuntime>, statements: &'static str) {
 	.expect("the fixture is planted");
 }
 
-fn booted(name: &str, played: &str) -> AppOfItsOwn {
+fn booted(name: &str) -> AppOfItsOwn {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	scenario(played);
 	let app = an_app_of_its_own(
 		&format!("routine-runs-{name}"),
 		mock_builder().manage(AgentState::default()),
@@ -99,7 +104,7 @@ fn booted(name: &str, played: &str) -> AppOfItsOwn {
 	app
 }
 
-fn hosting(app: AppOfItsOwn, name: &str, conversation_id: String) -> Host {
+fn hosting(app: AppOfItsOwn, scenario: RemovedOnDrop, name: &str, conversation_id: String) -> Host {
 	let changed: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 	let heard = changed.clone();
 	app.listen(CHANGED_EVENT, move |event| {
@@ -123,7 +128,7 @@ fn hosting(app: AppOfItsOwn, name: &str, conversation_id: String) -> Host {
 		SystemClock.now_ms(),
 	))
 	.expect("the routine is stored");
-	Host { app, conversation_id, routine, changed }
+	Host { app, conversation_id, routine, changed, _scenario: scenario }
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {

@@ -214,6 +214,7 @@ mod tests {
 
 	use super::*;
 	use crate::account::contract::AccountPlan;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const BEARER: &str = "bearer-that-never-leaves";
@@ -312,11 +313,12 @@ mod tests {
 		app: AppOfItsOwn,
 		root: PathBuf,
 		heard: Arc<Mutex<Vec<String>>>,
+		_folder: Option<RemovedOnDrop>,
 	}
 
 	impl Harness {
 		fn new(name: &str, api_url: &str) -> Self {
-			let root = std::env::temp_dir().join(format!("kiroshi-account-{name}"));
+			let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-account-{name}")));
 			let _ = std::fs::remove_dir_all(&root);
 			Self::holding(Ok(root), api_url)
 		}
@@ -328,8 +330,9 @@ mod tests {
 			Self::holding(Err(unavailable), api_url)
 		}
 
-		fn holding(root: Result<PathBuf, EnvError>, api_url: &str) -> Self {
+		fn holding(folder: Result<RemovedOnDrop, EnvError>, api_url: &str) -> Self {
 			let app = an_app_of_its_own("account-session", mock_builder());
+			let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
 			app.manage(AccountSession::new(root.clone(), api_url));
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
@@ -337,7 +340,7 @@ mod tests {
 			app.listen(ACCOUNT_CHANGED.name(), move |event| {
 				hearing.lock().expect("the events").push(event.payload().to_owned());
 			});
-			Self { app, root, heard }
+			Self { app, root, heard, _folder: folder.ok() }
 		}
 
 		fn state(&self) -> AccountState {

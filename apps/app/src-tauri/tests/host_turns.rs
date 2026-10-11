@@ -1,3 +1,6 @@
+#[path = "common/removed_on_drop.rs"]
+mod removed_on_drop;
+
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -20,6 +23,7 @@ use kiroshi_app::environment::store;
 use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::{local_api, Hosting};
 use kiroshi_app::routines::webhook::{self, Webhook};
+use removed_on_drop::RemovedOnDrop;
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime};
@@ -112,11 +116,13 @@ fn serial() -> MutexGuard<'static, ()> {
 	SIDECAR_SETTINGS.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-host-turn-scenario-{}.txt", std::process::id()));
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-host-turn-scenario-{}.txt", std::process::id())),
+	);
 	std::fs::write(&path, name).expect("the scenario is written");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 fn sent(id: &str, turn_id: &str, content: &str) -> Value {
@@ -136,12 +142,13 @@ struct Host {
 	member: WebSocket,
 	frames: Vec<Value>,
 	calls: u64,
+	_scenario: RemovedOnDrop,
 }
 
 impl Host {
 	async fn hosting(name: &str, played: &str) -> Self {
 		std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-		scenario(played);
+		let scenario = scenario(played);
 		let (sockets_in, mut sockets) = mpsc::unbounded_channel();
 		let cloud = served(
 			Router::new()
@@ -184,7 +191,7 @@ impl Host {
 			.await
 			.expect("the host reached the relay in time")
 			.expect("the relay is up");
-		Self { app, _window: window, member, frames: Vec::new(), calls: 0 }
+		Self { app, _window: window, member, frames: Vec::new(), calls: 0, _scenario: scenario }
 	}
 
 	async fn send_turn(&mut self, message: Value, summoned: &[&str]) -> Value {

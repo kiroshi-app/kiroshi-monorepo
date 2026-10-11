@@ -102,7 +102,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_space_never_hosted_reads_its_name_and_no_instance() {
-		let database = open(&temp_dir());
+		let dir = temp_dir();
+		let database = open(&dir);
 
 		let read = database.space_hosting().registration(PERSONAL.to_owned()).await;
 
@@ -114,7 +115,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_unknown_space_is_named_as_unknown() {
-		let database = open(&temp_dir());
+		let dir = temp_dir();
+		let database = open(&dir);
 
 		let read = database.space_hosting().registration("missing".to_owned()).await;
 
@@ -123,7 +125,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_cleared_flag_survives_a_replaced_instance() {
-		let database = open(&temp_dir());
+		let dir = temp_dir();
+		let database = open(&dir);
 		let hosting = database.space_hosting();
 
 		hosting.registered(PERSONAL.to_owned(), "i1".to_owned()).await.expect("stored");
@@ -143,7 +146,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_intent_is_hosted_without_an_instance_until_one_is_registered() {
-		let database = open(&temp_dir());
+		let dir = temp_dir();
+		let database = open(&dir);
 		let hosting = database.space_hosting();
 
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the intent is kept");
@@ -160,7 +164,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn only_a_space_with_a_registered_instance_lists_its_instance() {
-		let database = open(&temp_dir());
+		let dir = temp_dir();
+		let database = open(&dir);
 		let hosting = database.space_hosting();
 
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the intent is kept");

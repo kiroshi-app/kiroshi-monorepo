@@ -460,6 +460,7 @@ mod tests {
 
 	use super::super::contract::{MissionOutcome, Ticket};
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const TWO_SPACES: &str = "
@@ -873,15 +874,17 @@ mod tests {
 		);
 	}
 
-	fn a_workspace(name: &str) -> std::path::PathBuf {
-		let path = std::env::temp_dir()
-			.join(format!("kiroshi-mission-hook-{name}-{}", std::process::id()));
+	fn a_workspace(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(
+			std::env::temp_dir()
+				.join(format!("kiroshi-mission-hook-{name}-{}", std::process::id())),
+		);
 		let _ = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).expect("the workspace is there");
 		path
 	}
 
-	fn a_checkout(name: &str) -> std::path::PathBuf {
+	fn a_checkout(name: &str) -> RemovedOnDrop {
 		let path = a_workspace(name);
 		fs::write(path.join(".git"), "gitdir: /elsewhere/.git/worktrees/one")
 			.expect("the git file lands");
@@ -958,7 +961,7 @@ mod tests {
 		fs::remove_dir_all(&workspace).expect("cleanup");
 	}
 
-	fn a_repository(name: &str) -> std::path::PathBuf {
+	fn a_repository(name: &str) -> RemovedOnDrop {
 		let path = a_workspace(name);
 		for arguments in [
 			&["init", "--quiet", "--initial-branch", "main"][..],
@@ -968,7 +971,7 @@ mod tests {
 		] {
 			let ran = std::process::Command::new("git")
 				.arg("-C")
-				.arg(&path)
+				.arg(&*path)
 				.args(arguments)
 				.env("GIT_AUTHOR_NAME", "Kiroshi")
 				.env("GIT_AUTHOR_EMAIL", "kiroshi@kiroshi.test")

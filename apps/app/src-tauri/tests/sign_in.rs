@@ -1,8 +1,9 @@
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::terminate_session;
 use kiroshi_app::agent::contract::SignInError;
@@ -84,9 +85,11 @@ async fn wind_down(app: &App<MockRuntime>) {
 	terminate_session(app.state::<AgentState>().inner()).await;
 }
 
-fn a_received_file(name: &str) -> PathBuf {
-	let path = std::env::temp_dir()
-		.join(format!("kiroshi-sign-in-received-{name}-{}", std::process::id()));
+fn a_received_file(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir()
+			.join(format!("kiroshi-sign-in-received-{name}-{}", std::process::id())),
+	);
 	let _ = std::fs::remove_file(&path);
 	path
 }

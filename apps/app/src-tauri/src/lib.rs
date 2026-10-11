@@ -21,6 +21,8 @@ pub mod missions;
 pub mod notifications;
 pub mod plugins;
 mod private_files;
+#[cfg(test)]
+mod removed_on_drop;
 pub mod routines;
 pub mod search;
 pub mod sections;

@@ -105,6 +105,7 @@ mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const TWO_SPACES: &str = "
 		INSERT INTO spaces (id, name, colour, position, created_at)
@@ -142,18 +143,19 @@ mod tests {
 			VALUES ('run1', 'r1', 1, 1), ('run2', 'r2', 1, 1);
 	";
 
-	async fn planted() -> Database {
-		let database = open(&temp_dir());
+	async fn planted() -> (Database, RemovedOnDrop) {
+		let dir = temp_dir();
+		let database = open(&dir);
 		database
 			.call_mut(|connection| Ok(connection.execute_batch(TWO_SPACES)?))
 			.await
 			.expect("the two spaces are planted");
-		database
+		(database, dir)
 	}
 
 	#[tokio::test]
 	async fn a_child_is_held_by_its_own_space_only_and_an_unknown_one_by_none() {
-		let database = planted().await;
+		let (database, _dir) = planted().await;
 		let holds = |space: &str, child: SpaceChild, id: &str| {
 			database.space_children().holds(space.to_owned(), child, id.to_owned())
 		};
@@ -177,7 +179,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_bot_is_held_alone_only_by_the_one_space_it_belongs_to() {
-		let database = planted().await;
+		let (database, _dir) = planted().await;
 		let held_alone = |space: &str, bot_id: &str| {
 			database.space_children().holds(
 				space.to_owned(),
@@ -196,7 +198,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_bot_without_any_space_row_is_held_alone_by_none() {
-		let database = planted().await;
+		let (database, _dir) = planted().await;
 		database
 			.call_mut(|connection| {
 				Ok(connection.execute_batch(
@@ -216,7 +218,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_bot_added_to_a_second_space_is_held_by_both() {
-		let database = planted().await;
+		let (database, _dir) = planted().await;
 		let children = database.space_children();
 
 		for space in ["personal", "work"] {
@@ -227,7 +229,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_is_held_by_every_space_its_companion_belongs_to_and_no_other() {
-		let database = planted().await;
+		let (database, _dir) = planted().await;
 		database
 			.call_mut(|connection| {
 				Ok(connection.execute_batch(

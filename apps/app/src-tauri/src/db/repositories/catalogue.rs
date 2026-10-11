@@ -363,7 +363,6 @@ pub(crate) fn folded(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-	use std::path::PathBuf;
 
 	use rusqlite::params;
 	use uuid::Uuid;
@@ -372,6 +371,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
 	use crate::missions::contract::{MissionDraft, MissionState, Ticket};
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const PERSONAL: &str = "personal";
 	const WORK: &str = "work";
@@ -447,7 +447,7 @@ mod tests {
 		}
 	}
 
-	async fn planted() -> (Database, PathBuf) {
+	async fn planted() -> (Database, RemovedOnDrop) {
 		let dir = temp_dir();
 		let database = open(&dir);
 		database

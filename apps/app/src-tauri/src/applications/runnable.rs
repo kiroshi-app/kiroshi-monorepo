@@ -161,6 +161,8 @@ pub(crate) mod tests {
 	use serde_json::json;
 
 	use super::*;
+	use crate::db::connection::temp_dir;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const ABSENT: &str = "a-command-kiroshi-would-never-find";
 
@@ -169,12 +171,8 @@ pub(crate) mod tests {
 		pub(crate) asked: Mutex<Vec<String>>,
 	}
 
-	pub(crate) fn a_path_carrying(commands: &[&str]) -> OsString {
-		let directory = env::temp_dir().join(format!(
-			"kiroshi-runners-{}-{}",
-			commands.join("-"),
-			std::process::id()
-		));
+	pub(crate) fn a_path_carrying(home: &Path, commands: &[&str]) -> OsString {
+		let directory = home.join(format!("kiroshi-runners-{}", commands.join("-")));
 		fs::create_dir_all(&directory).expect("the runner directory is made");
 		for command in commands {
 			let held = directory.join(command);
@@ -195,7 +193,7 @@ pub(crate) mod tests {
 	#[cfg(not(unix))]
 	fn runnable_from_now_on(_held: &Path) {}
 
-	pub(crate) async fn serving(status: StatusCode) -> (Runners, Arc<Held>) {
+	pub(crate) async fn serving(status: StatusCode) -> (Runners, Arc<Held>, RemovedOnDrop) {
 		let held = Arc::new(Held { status, asked: Mutex::new(Vec::new()) });
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
@@ -203,7 +201,9 @@ pub(crate) mod tests {
 		let router = Router::new().fallback(any(asked_of)).with_state(held.clone());
 		tokio::spawn(async move { axum::serve(listener, router).await.expect("the stub serves") });
 		let base = format!("http://{address}");
-		(Runners { path: a_path_carrying(&[NPX, UVX]), npm: base.clone(), pypi: base }, held)
+		let home = temp_dir();
+		let path = a_path_carrying(&home, &[NPX, UVX]);
+		(Runners { path, npm: base.clone(), pypi: base }, held, home)
 	}
 
 	async fn asked_of(Extracted(held): Extracted<Arc<Held>>, uri: Uri) -> Answered {
@@ -211,13 +211,15 @@ pub(crate) mod tests {
 		held.status.into_response()
 	}
 
-	async fn unreached() -> Runners {
+	async fn unreached() -> (Runners, RemovedOnDrop) {
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
 		let address = listener.local_addr().expect("the port is named");
 		drop(listener);
 		let base = format!("http://{address}");
-		Runners { path: a_path_carrying(&[NPX]), npm: base.clone(), pypi: base }
+		let home = temp_dir();
+		let path = a_path_carrying(&home, &[NPX]);
+		(Runners { path, npm: base.clone(), pypi: base }, home)
 	}
 
 	fn an_npm_config(identifier: &str) -> Value {
@@ -237,7 +239,7 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_config_naming_no_command_runs_and_reads_no_package_registry() {
-		let (runners, held) = serving(StatusCode::NOT_FOUND).await;
+		let (runners, held, _home) = serving(StatusCode::NOT_FOUND).await;
 
 		let answered =
 			refusal(&runners, &json!({ "type": "http", "url": "https://remote.test/mcp" })).await;
@@ -248,7 +250,7 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_command_no_directory_of_path_carries_is_refused_under_its_own_name() {
-		let (runners, held) = serving(StatusCode::OK).await;
+		let (runners, held, _home) = serving(StatusCode::OK).await;
 
 		let answered = refusal(
 			&runners,
@@ -264,7 +266,7 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn an_npm_identifier_the_registry_serves_runs_and_is_asked_for_under_its_own_name() {
-		let (runners, held) = serving(StatusCode::OK).await;
+		let (runners, held, _home) = serving(StatusCode::OK).await;
 
 		let answered = refusal(&runners, &an_npm_config("@owner/mcp")).await;
 
@@ -274,7 +276,7 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn a_pypi_identifier_is_asked_of_the_pypi_route_and_not_of_the_npm_one() {
-		let (runners, held) = serving(StatusCode::OK).await;
+		let (runners, held, _home) = serving(StatusCode::OK).await;
 		let pypi = Runners { npm: "https://npm.unused.test".to_owned(), ..runners };
 
 		let answered =
@@ -291,7 +293,7 @@ pub(crate) mod tests {
 	#[tokio::test]
 	async fn an_identifier_the_package_registry_publishes_no_more_is_refused_under_that_status() {
 		for status in [StatusCode::NOT_FOUND, StatusCode::GONE] {
-			let (runners, _) = serving(status).await;
+			let (runners, _, _home) = serving(status).await;
 
 			let answered = refusal(&runners, &an_npm_config("no-such-package"))
 				.await
@@ -306,7 +308,7 @@ pub(crate) mod tests {
 	#[tokio::test]
 	async fn a_package_registry_answering_neither_ok_nor_unpublished_leaves_the_config_running() {
 		for status in [StatusCode::UNAUTHORIZED, StatusCode::SERVICE_UNAVAILABLE] {
-			let (runners, held) = serving(status).await;
+			let (runners, held, _home) = serving(status).await;
 
 			assert_eq!(refusal(&runners, &an_npm_config("a-package")).await, None);
 			assert_eq!(held.asked.lock().expect("the stub records").clone(), ["/a-package"]);
@@ -315,12 +317,13 @@ pub(crate) mod tests {
 
 	#[tokio::test]
 	async fn an_unreached_package_registry_leaves_the_config_running() {
-		assert_eq!(refusal(&unreached().await, &an_npm_config("a-package")).await, None);
+		let (runners, _home) = unreached().await;
+		assert_eq!(refusal(&runners, &an_npm_config("a-package")).await, None);
 	}
 
 	#[tokio::test]
 	async fn a_command_of_path_naming_no_package_runs_and_reads_no_package_registry() {
-		let (runners, held) = serving(StatusCode::NOT_FOUND).await;
+		let (runners, held, _home) = serving(StatusCode::NOT_FOUND).await;
 
 		let answered =
 			refusal(&runners, &json!({ "type": "stdio", "command": NPX, "args": ["-y"] })).await;

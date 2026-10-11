@@ -59,6 +59,7 @@ use crate::events::{self, Event};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::mcp_oauth::credentials;
+use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
 use crate::spaces::commands::{
@@ -299,6 +300,7 @@ struct Harness {
 	sockets: mpsc::UnboundedReceiver<WebSocket>,
 	heard: Arc<Mutex<Vec<Value>>>,
 	heard_members: Arc<Mutex<Vec<Value>>>,
+	_temporary: Vec<RemovedOnDrop>,
 }
 
 impl Harness {
@@ -320,24 +322,28 @@ impl Harness {
 		let database = temp_dir();
 		let local = Router::new()
 			.route(INVOKE_ROUTE, post(joined_space_connected))
-			.with_state(database.clone());
+			.with_state(database.to_path_buf());
 		Self::serving(name, None, Some(BEARER), super::members::MEMBERS_EVERY, database, local)
 			.await
 	}
 
 	async fn applying_host_effects(name: &str) -> (Self, HostEffects) {
-		let effects = HostEffects {
-			database: temp_dir(),
-			env_root: std::env::temp_dir()
+		let database = temp_dir();
+		let env_root = RemovedOnDrop(
+			std::env::temp_dir()
 				.join(format!("kiroshi-hosting-env-{name}-{}", uuid::Uuid::new_v4())),
+		);
+		let effects = HostEffects {
+			database: database.to_path_buf(),
+			env_root: env_root.to_path_buf(),
 			reached: Arc::default(),
 		};
 		let local = Router::new()
 			.route(INVOKE_ROUTE, post(host_effect_applied))
 			.with_state(effects.clone());
-		let database = effects.database.clone();
 		let every = super::members::MEMBERS_EVERY;
-		let harness = Self::serving(name, None, Some(BEARER), every, database, local).await;
+		let mut harness = Self::serving(name, None, Some(BEARER), every, database, local).await;
+		harness._temporary.push(env_root);
 		(harness, effects)
 	}
 
@@ -346,7 +352,7 @@ impl Harness {
 		refusal: Option<StatusCode>,
 		bearer: Option<&str>,
 		members_every: Duration,
-		database: PathBuf,
+		database: RemovedOnDrop,
 		local: Router,
 	) -> Self {
 		let (sockets_in, sockets) = mpsc::unbounded_channel();
@@ -378,15 +384,16 @@ impl Harness {
 		)
 		.await;
 		let local = served(local).await;
-		let root =
-			std::env::temp_dir().join(format!("kiroshi-hosting-{name}-{}", uuid::Uuid::new_v4()));
+		let root = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-hosting-{name}-{}", uuid::Uuid::new_v4())),
+		);
 		if let Some(bearer) = bearer {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
 		let app = an_app_of_its_own(&format!("hosting-{name}"), mock_builder());
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		app.manage(RelayGuests::new(&cloud));
 		app.manage(
 			Hosting::new(
@@ -409,7 +416,7 @@ impl Harness {
 			let payload = serde_json::from_str(event.payload()).expect("a json payload");
 			hearing_members.lock().expect("the events").push(payload);
 		});
-		Self { app, relay, sockets, heard, heard_members }
+		Self { app, relay, sockets, heard, heard_members, _temporary: vec![database, root] }
 	}
 
 	async fn signed_in(name: &str) -> Self {
@@ -757,14 +764,14 @@ fn a_member_frame_naming_a_host_member_command_is_refused_and_others_still_forwa
 }
 
 async fn a_relay_guest_is_refused(command: &str) {
-	refused_on(Harness::signed_in(command).await, command).await;
+	refused_on(&mut Harness::signed_in(command).await, command).await;
 }
 
-async fn refused_on(harness: Harness, command: &str) -> Value {
+async fn refused_on(harness: &mut Harness, command: &str) -> Value {
 	refused_with(harness, command, json!({ "spaceId": PERSONAL })).await.1
 }
 
-async fn refused_with(mut harness: Harness, command: &str, args: Value) -> (Value, Value) {
+async fn refused_with(harness: &mut Harness, command: &str, args: Value) -> (Value, Value) {
 	assert!(belongs_to_the_host(command, &args), "{command} is not host only");
 	restore(harness.app.handle().clone()).await;
 	harness.started().await;
@@ -825,9 +832,9 @@ fn a_relay_guest_cannot_cancel_the_host_agent_sign_in() {
 }
 
 async fn a_relay_guest_is_refused_before_the_local_api(command: &str) {
-	let (harness, effects) = Harness::applying_host_effects(command).await;
+	let (mut harness, effects) = Harness::applying_host_effects(command).await;
 
-	refused_on(harness, command).await;
+	refused_on(&mut harness, command).await;
 
 	assert_eq!(effects.reached(), ["agent_models"]);
 }
@@ -845,9 +852,9 @@ fn a_relay_guest_cannot_read_the_host_preferences() {
 #[test]
 fn a_relay_guest_cannot_delete_a_space_and_its_instance_registration() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("space_delete").await;
+		let (mut harness, effects) = Harness::applying_host_effects("space_delete").await;
 
-		refused_on(harness, "space_delete").await;
+		refused_on(&mut harness, "space_delete").await;
 
 		let spaces = db::open(&effects.database).spaces().list().await.expect("the host lists");
 		assert!(spaces.iter().any(|space| space.id == PERSONAL), "{spaces:?}");
@@ -858,11 +865,11 @@ fn a_relay_guest_cannot_delete_a_space_and_its_instance_registration() {
 #[test]
 fn a_relay_guest_cannot_read_the_stored_token_of_a_joined_space() {
 	run(async {
-		let harness = Harness::connecting_joined_spaces("joined-connect").await;
+		let mut harness = Harness::connecting_joined_spaces("joined-connect").await;
 		let joined = harness.joined_a_space().await;
 
 		let (refused, _) =
-			refused_with(harness, "joined_space_connect", json!({ "id": joined.id })).await;
+			refused_with(&mut harness, "joined_space_connect", json!({ "id": joined.id })).await;
 
 		assert!(!refused.to_string().contains(JOINED_SPACE_TOKEN), "{refused}");
 	});
@@ -871,10 +878,10 @@ fn a_relay_guest_cannot_read_the_stored_token_of_a_joined_space() {
 #[test]
 fn a_relay_guest_cannot_remove_a_joined_space_of_the_host() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("joined-remove").await;
+		let (mut harness, effects) = Harness::applying_host_effects("joined-remove").await;
 		let joined = harness.joined_a_space().await;
 
-		refused_with(harness, "joined_space_remove", json!({ "id": joined.id })).await;
+		refused_with(&mut harness, "joined_space_remove", json!({ "id": joined.id })).await;
 
 		let listed = db::open(&effects.database).joined_spaces().list().await.expect("listed");
 		assert!(listed.iter().any(|kept| kept.id == joined.id), "{listed:?}");
@@ -896,12 +903,12 @@ fn a_space_scope() -> EnvScope {
 }
 
 async fn an_env_entry_kept_from(command: &str, args: Value) {
-	let (harness, effects) = Harness::applying_host_effects(command).await;
+	let (mut harness, effects) = Harness::applying_host_effects(command).await;
 	let scope = a_space_scope();
 	store::set(&effects.env_root, &scope, "GREETING", "host-value").expect("the host sets");
 	let before = store::values(&effects.env_root, &scope).expect("the host reads");
 
-	refused_with(harness, command, args).await;
+	refused_with(&mut harness, command, args).await;
 
 	assert_eq!(store::values(&effects.env_root, &scope).expect("the host reads"), before);
 }
@@ -930,13 +937,17 @@ fn a_relay_guest_cannot_list_the_host_env() {
 #[test]
 fn a_relay_guest_cannot_replace_the_host_agent_connection() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("connection-set").await;
+		let (mut harness, effects) = Harness::applying_host_effects("connection-set").await;
 		connection::hold(&effects.env_root, ConnectionKind::ApiKey, "host-key")
 			.expect("the host connects");
 		let before = connection::held(&effects.env_root).expect("the host reads");
 
-		refused_with(harness, "connection_set", json!({ "kind": "apiKey", "value": "guest-key" }))
-			.await;
+		refused_with(
+			&mut harness,
+			"connection_set",
+			json!({ "kind": "apiKey", "value": "guest-key" }),
+		)
+		.await;
 
 		assert_eq!(connection::held(&effects.env_root).expect("the host reads"), before);
 	});
@@ -950,7 +961,7 @@ fn a_relay_guest_cannot_connect_an_application_with_the_host_identity() {
 #[test]
 fn a_relay_guest_cannot_disconnect_a_host_application() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("oauth-disconnect").await;
+		let (mut harness, effects) = Harness::applying_host_effects("oauth-disconnect").await;
 		let owner = EnvOwner::Space { id: PERSONAL.to_owned() };
 		let scope = EnvScope::Server { name: "granola".to_owned(), owner: owner.clone() };
 		let grant = OauthCredentials {
@@ -965,7 +976,7 @@ fn a_relay_guest_cannot_disconnect_a_host_application() {
 		let before = store::values(&effects.env_root, &scope).expect("the host reads");
 
 		refused_with(
-			harness,
+			&mut harness,
 			"mcp_oauth_disconnect",
 			json!({ "owner": owner, "name": "granola", "url": "https://granola.test/mcp" }),
 		)
@@ -988,10 +999,14 @@ fn a_relay_guest_cannot_read_or_renew_the_host_application_grants() {
 #[test]
 fn a_relay_guest_cannot_shut_the_host_agent_down() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("agent-shutdown").await;
+		let (mut harness, effects) = Harness::applying_host_effects("agent-shutdown").await;
 
-		refused_with(harness, "agent_shutdown", json!({ "scope": { "conversationId": "c1" } }))
-			.await;
+		refused_with(
+			&mut harness,
+			"agent_shutdown",
+			json!({ "scope": { "conversationId": "c1" } }),
+		)
+		.await;
 
 		assert_eq!(effects.reached(), ["agent_models"]);
 	});
@@ -1039,10 +1054,10 @@ fn a_stdio_server_on(scope: Value) -> Value {
 #[test]
 fn a_relay_guest_cannot_add_a_server_to_the_host_person_plugin() {
 	run(async {
-		let (harness, effects) = Harness::applying_host_effects("plugin-person").await;
+		let (mut harness, effects) = Harness::applying_host_effects("plugin-person").await;
 		let args = a_stdio_server_on(json!({ "kind": "user" }));
 
-		refused_with(harness, "plugin_set_mcp_server", args).await;
+		refused_with(&mut harness, "plugin_set_mcp_server", args).await;
 
 		assert_eq!(effects.reached(), ["agent_models"]);
 	});
@@ -1564,13 +1579,15 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
 		let address = closed.local_addr().expect("the port is named");
 		drop(closed);
-		let root =
-			std::env::temp_dir().join(format!("kiroshi-hosting-down-{}", uuid::Uuid::new_v4()));
+		let root = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-hosting-down-{}", uuid::Uuid::new_v4())),
+		);
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
 		let cloud = format!("http://{address}");
+		let database = temp_dir();
 		let app = an_app_of_its_own("hosting-down", mock_builder());
-		app.manage::<DatabaseState>(Ok(db::open(&temp_dir())));
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
+		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		app.manage(Hosting::new(&cloud, None));
 		let state = app.state::<DatabaseState>();
 		let hosting = state.as_ref().expect("the database").space_hosting();
@@ -2784,6 +2801,7 @@ struct Authoring {
 	window: WebviewWindow<MockRuntime>,
 	local: LocalApi,
 	conversation_id: String,
+	_root: RemovedOnDrop,
 }
 
 impl Authoring {
@@ -2794,13 +2812,15 @@ impl Authoring {
 			mock_builder().invoke_handler(crate::commands::invoke_handler()),
 		);
 		app.manage(db::bootstrap(app.handle()));
-		let root = std::env::temp_dir()
-			.join(format!("kiroshi-hosting-authorship-{}", uuid::Uuid::new_v4()));
+		let root = RemovedOnDrop(
+			std::env::temp_dir()
+				.join(format!("kiroshi-hosting-authorship-{}", uuid::Uuid::new_v4())),
+		);
 		if let Some(bearer) = bearer {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		restore(app.handle().clone()).await;
 		app.manage(webhook::start(app.handle().clone()));
 		let local = super::local_api(app.handle()).expect("the local host api listens");
@@ -2820,7 +2840,7 @@ impl Authoring {
 		direct(&window, "user_set_preferences", json!({ "preferences": preferences }));
 		let chat = direct(&window, "conversation_main_chat", json!({ "botId": "default" }));
 		let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
-		Self { app, window, local, conversation_id }
+		Self { app, window, local, conversation_id, _root: root }
 	}
 
 	fn turn(&self, turn_id: &str) {

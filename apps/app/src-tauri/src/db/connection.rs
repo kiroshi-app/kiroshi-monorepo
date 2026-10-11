@@ -61,9 +61,11 @@ fn restrict_to_owner(_path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-pub fn temp_dir() -> PathBuf {
-	let dir = std::env::temp_dir().join(format!("kiroshi-db-{}", uuid::Uuid::new_v4()));
-	fs::create_dir_all(&dir).expect("temp dir");
+pub fn temp_dir() -> crate::removed_on_drop::RemovedOnDrop {
+	let dir = crate::removed_on_drop::RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-db-{}", uuid::Uuid::new_v4())),
+	);
+	fs::create_dir_all(&*dir).expect("temp dir");
 	dir
 }
 

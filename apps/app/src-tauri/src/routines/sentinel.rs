@@ -290,8 +290,8 @@ mod tests {
 		let mut watched = Watched::new(&settled);
 		let dir = temp_dir();
 
-		watched.settle_on(BTreeMap::from([(dir.clone(), "r1".to_owned())]));
-		assert_eq!(watched.paths, BTreeSet::from([dir.clone()]));
+		watched.settle_on(BTreeMap::from([(dir.to_path_buf(), "r1".to_owned())]));
+		assert_eq!(watched.paths, BTreeSet::from([dir.to_path_buf()]));
 
 		watched.settle_on(BTreeMap::new());
 
@@ -307,11 +307,11 @@ mod tests {
 		let missing = dir.join("gone");
 
 		watched.settle_on(BTreeMap::from([
-			(dir.clone(), "r1".to_owned()),
+			(dir.to_path_buf(), "r1".to_owned()),
 			(missing, "r2".to_owned()),
 		]));
 
-		assert_eq!(watched.paths, BTreeSet::from([dir.clone()]));
+		assert_eq!(watched.paths, BTreeSet::from([dir.to_path_buf()]));
 		let _ = fs::remove_dir_all(&dir);
 	}
 }

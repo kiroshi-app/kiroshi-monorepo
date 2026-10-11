@@ -187,12 +187,14 @@ mod tests {
 
 	use super::*;
 	use crate::db::repositories::conversations::BotIdentity;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 	use tauri::test::mock_builder;
 	use tauri::Manager;
 
-	fn a_root(name: &str) -> PathBuf {
-		let root = std::env::temp_dir().join(format!("kiroshi-space-bundles-{name}"));
+	fn a_root(name: &str) -> RemovedOnDrop {
+		let root =
+			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-space-bundles-{name}")));
 		let _ = fs::remove_dir_all(&root);
 		root
 	}

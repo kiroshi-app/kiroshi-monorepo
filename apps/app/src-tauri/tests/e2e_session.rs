@@ -3,6 +3,7 @@ mod common;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{terminate_session, EVENT_CHANNEL};
 use kiroshi_app::agent::contract::{
@@ -147,11 +148,13 @@ impl Harness {
 	}
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id()));
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id())),
+	);
 	std::fs::write(&path, name).expect("the scenario is written");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 fn turn_outcome(seen: &[AgentEvent]) -> Option<TurnOutcome> {
@@ -209,8 +212,10 @@ fn deltas(seen: &[AgentEvent]) -> String {
 		.collect()
 }
 
-fn orphan_pid_file() -> std::path::PathBuf {
-	std::env::temp_dir().join(format!("kiroshi-e2e-orphan-{}.pid", std::process::id()))
+fn orphan_pid_file() -> RemovedOnDrop {
+	RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-e2e-orphan-{}.pid", std::process::id())),
+	)
 }
 
 #[cfg(unix)]
@@ -223,7 +228,7 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 	let pid_file = orphan_pid_file();
 	let _ = std::fs::remove_file(&pid_file);
 
-	scenario("orphan");
+	let _scenario = scenario("orphan");
 	assert_eq!(harness.start(None), Ok(json!({ "resumed": false })));
 	harness.forget_events();
 	harness.prompt("lance un enfant").expect("prompt accepted");
@@ -259,8 +264,9 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	let _serial = serial();
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	std::env::set_var("FAKE_AGENT_PID_FILE", orphan_pid_file());
-	scenario("normal");
+	let pid_file = orphan_pid_file();
+	std::env::set_var("FAKE_AGENT_PID_FILE", &*pid_file);
+	let _scenario = scenario("normal");
 
 	let first = launch();
 
@@ -290,7 +296,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 		first.scoped_events()
 	);
 
-	scenario("permission");
+	let _scenario = scenario("permission");
 	assert_eq!(first.start(None), Ok(json!({ "resumed": false })));
 	first.forget_events();
 	first.prompt("ecris un fichier").expect("prompt accepted");
@@ -309,7 +315,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 		vec![(request.id, PermissionDecision::AllowOnce)]
 	);
 
-	scenario("slow");
+	let _scenario = scenario("slow");
 	assert_eq!(first.start(None), Ok(json!({ "resumed": false })));
 	first.forget_events();
 	first.prompt("compte jusqu'a mille").expect("prompt accepted");
@@ -321,7 +327,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	shut_down_leaving_no_orphan(&first);
 	drop(first);
 
-	scenario("normal");
+	let _scenario = scenario("normal");
 	let second = launch();
 	assert_eq!(second.start(Some(&session_id)), Ok(json!({ "resumed": true })));
 	second.forget_events();
@@ -329,7 +335,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	assert_eq!(second.wait_for("the resumed turn to end", turn_outcome), TurnOutcome::Completed);
 	assert_eq!(deltas(&second.events()), format!("resumed {session_id} :: et avant ?"));
 
-	scenario("resume_crash");
+	let _scenario = scenario("resume_crash");
 	second.forget_events();
 	assert_eq!(second.start(Some(&session_id)), Ok(json!({ "resumed": false })));
 	assert!(
@@ -348,11 +354,12 @@ struct Stored {
 	app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
 	conversation_id: String,
+	_scenario: RemovedOnDrop,
 }
 
 fn launch_stored(name: &str, played: &str) -> Stored {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	scenario(played);
+	let scenario = scenario(played);
 	let app = an_app_of_its_own(
 		&format!("e2e-{name}"),
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
@@ -364,7 +371,7 @@ fn launch_stored(name: &str, played: &str) -> Stored {
 	let chat =
 		invoke(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
-	Stored { app, window, conversation_id }
+	Stored { app, window, conversation_id, _scenario: scenario }
 }
 
 impl Stored {

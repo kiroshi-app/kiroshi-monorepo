@@ -1,9 +1,10 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent};
@@ -301,19 +302,27 @@ fn told() -> String {
 	format!("told<You are {NAME}.")
 }
 
-fn scenario(name: &str) {
-	let path =
-		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id()));
+fn serial() -> MutexGuard<'static, ()> {
+	static SIDECAR_SETTINGS: Mutex<()> = Mutex::new(());
+	SIDECAR_SETTINGS.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn scenario(name: &str) -> RemovedOnDrop {
+	let path = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-fake-scenario-{}.txt", std::process::id())),
+	);
 	let staged = path.with_extension(format!("{:?}.staging", std::thread::current().id()));
 	std::fs::write(&staged, name).expect("the scenario is written");
 	std::fs::rename(&staged, &path).expect("the scenario is put in place");
-	std::env::set_var(SCENARIO_ENV, path);
+	std::env::set_var(SCENARIO_ENV, &*path);
+	path
 }
 
 #[test]
 fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
+	let _serial = serial();
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	scenario("identity");
+	let _scenario = scenario("identity");
 
 	let harness = launch();
 	let bot = harness.create_bot();
@@ -439,8 +448,9 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 
 #[test]
 fn a_run_stacks_the_space_of_the_thread_it_speaks_in() {
+	let _serial = serial();
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
-	scenario("identity");
+	let _scenario = scenario("identity");
 
 	let harness = launch_as("runtime-identity-spaces");
 	let bot = harness.create_bot();

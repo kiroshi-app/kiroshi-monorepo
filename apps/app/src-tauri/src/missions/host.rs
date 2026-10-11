@@ -238,7 +238,7 @@ fn listed(mission: Mission) -> Listed {
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::path::{Path, PathBuf};
+	use std::path::Path;
 
 	use serde_json::json;
 	use std::sync::mpsc::channel;
@@ -249,6 +249,7 @@ mod tests {
 	use super::super::commands::{mission_detail, mission_open as opened};
 	use super::super::contract::{MissionEvent, MissionState};
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const A_SPACE: &str = "
@@ -364,9 +365,11 @@ mod tests {
 		)
 	}
 
-	fn a_workspace(name: &str) -> PathBuf {
-		let path = std::env::temp_dir()
-			.join(format!("kiroshi-mission-host-{name}-{}", std::process::id()));
+	fn a_workspace(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(
+			std::env::temp_dir()
+				.join(format!("kiroshi-mission-host-{name}-{}", std::process::id())),
+		);
 		let _ = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).expect("the workspace is there");
 		fs::write(path.join(".git"), "gitdir: /elsewhere/.git/worktrees/one")

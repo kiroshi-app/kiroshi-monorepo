@@ -155,11 +155,12 @@ fn unwritable(error: std::io::Error) -> Rejection {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
 	const CONVERSATION: &str = "c1";
 
-	fn temp_root() -> PathBuf {
-		std::env::temp_dir().join(format!("kiroshi-attachments-{}", Uuid::new_v4()))
+	fn temp_root() -> RemovedOnDrop {
+		RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-attachments-{}", Uuid::new_v4())))
 	}
 
 	fn an_attachment(name: &str, bytes: &[u8]) -> SubmittedAttachment {

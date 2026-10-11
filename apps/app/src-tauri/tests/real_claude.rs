@@ -1,3 +1,6 @@
+#[path = "common/removed_on_drop.rs"]
+mod removed_on_drop;
+
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -16,6 +19,7 @@ use kiroshi_app::db::repositories::conversations::Bot;
 use kiroshi_app::environment::connection;
 use kiroshi_app::environment::contract::{ConnectionKind, EnvOwner, ResolvedEnv, Values, API_KEY};
 use kiroshi_app::environment::store;
+use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
@@ -79,14 +83,16 @@ async fn opened(
 
 struct LiveFolder {
 	root: PathBuf,
+	_folder: RemovedOnDrop,
 }
 
 impl LiveFolder {
 	fn of(test: &str) -> Self {
-		let root =
-			std::env::temp_dir().join(format!("kiroshi-real-{test}-{}", uuid::Uuid::new_v4()));
-		std::fs::create_dir_all(&root).expect("the test folder is created");
-		Self { root: root.canonicalize().expect("the test folder resolves") }
+		let folder = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-real-{test}-{}", uuid::Uuid::new_v4())),
+		);
+		std::fs::create_dir_all(&folder).expect("the test folder is created");
+		Self { root: folder.canonicalize().expect("the test folder resolves"), _folder: folder }
 	}
 
 	fn directory(&self, name: &str) -> PathBuf {

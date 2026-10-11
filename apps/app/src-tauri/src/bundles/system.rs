@@ -84,9 +84,10 @@ fn prune(dir: &Path, embedded: &HashSet<PathBuf>) {
 mod tests {
 	use super::super::{MEMORY_CLOSE, MEMORY_OPEN, SKILL_NAME};
 	use super::*;
+	use crate::removed_on_drop::RemovedOnDrop;
 
-	fn a_path(name: &str) -> PathBuf {
-		let path = std::env::temp_dir().join(format!("kiroshi-system-{name}"));
+	fn a_path(name: &str) -> RemovedOnDrop {
+		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-system-{name}")));
 		let _ = fs::remove_dir_all(&path);
 		path
 	}

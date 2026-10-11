@@ -30,6 +30,7 @@ use crate::joined_spaces::commands::{
 };
 use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError};
 use crate::joined_spaces::relay::{reconciled, RelayGuests};
+use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const BEARER: &str = "bearer-that-never-leaves";
@@ -167,7 +168,8 @@ struct Harness {
 	cloud: Cloud,
 	members: mpsc::UnboundedReceiver<WebSocket>,
 	heard: Arc<Mutex<Vec<(String, String)>>>,
-	root: PathBuf,
+	root: RemovedOnDrop,
+	_database: RemovedOnDrop,
 }
 
 impl Harness {
@@ -218,16 +220,18 @@ impl Harness {
 		)
 		.await;
 		let api_url = api_url.unwrap_or(served_url);
-		let root =
-			std::env::temp_dir().join(format!("kiroshi-invitations-{}", uuid::Uuid::new_v4()));
+		let root = RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-invitations-{}", uuid::Uuid::new_v4())),
+		);
 		if let Some(bearer) = bearer {
 			store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, bearer)
 				.expect("the bearer is kept");
 		}
 		let app = an_app_of_its_own("invitations", mock_builder());
-		let database = database.map(|()| db::open(&temp_dir()));
+		let database_dir = temp_dir();
+		let database = database.map(|()| db::open(&database_dir));
 		app.manage::<DatabaseState>(database);
-		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.clone()), &api_url));
+		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		app.manage(Invitations::new(&api_url).polling_every(every));
 		app.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
@@ -238,7 +242,7 @@ impl Harness {
 				hearing.lock().expect("the events").push((event.to_owned(), payload));
 			});
 		}
-		Self { app, cloud, members, heard, root }
+		Self { app, cloud, members, heard, root, _database: database_dir }
 	}
 
 	fn heard(&self, event: &str) -> Vec<Value> {

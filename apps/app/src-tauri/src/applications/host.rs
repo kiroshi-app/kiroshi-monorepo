@@ -372,7 +372,7 @@ mod tests {
 			app: app.handle().clone(),
 			conversation_id: conversation_id.to_owned(),
 			bot_id: "b1".to_owned(),
-			runners: runners_carrying(&[NPX, UVX]),
+			runners: runners_carrying(app, &[NPX, UVX]),
 			directory: directory_stub::holding(rows),
 		}
 	}
@@ -451,9 +451,10 @@ mod tests {
 		)
 	}
 
-	fn runners_carrying(commands: &[&str]) -> Runners {
+	fn runners_carrying(app: &App<MockRuntime>, commands: &[&str]) -> Runners {
+		let home = app.path().app_data_dir().expect("the data folder resolves");
 		Runners {
-			path: a_path_carrying(commands),
+			path: a_path_carrying(&home, commands),
 			npm: NO_PACKAGE_REGISTRY.to_owned(),
 			pypi: NO_PACKAGE_REGISTRY.to_owned(),
 		}
@@ -618,7 +619,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_search_while_the_cloud_is_down_answers_the_cached_curated_matches_and_the_failure() {
 		let app = a_host("cloud-down").await;
-		let file = directory_stub::a_cache_file_read_long_ago(the_catalogue()).await;
+		let (file, _cache_dir) = directory_stub::a_cache_file_read_long_ago(the_catalogue()).await;
 		let directory = Directory::at(directory_stub::unreached().await, Some(file));
 		let host = ApplicationHost { directory: directory.clone(), ..reading(&app, "c1") };
 
@@ -1013,7 +1014,8 @@ mod tests {
 	async fn an_install_of_a_config_no_runner_of_this_machine_runs_is_refused_and_writes_nothing() {
 		let app = a_host("no-runner").await;
 		let arriving = heard(&app);
-		let host = ApplicationHost { runners: runners_carrying(&[UVX]), ..reading(&app, "c1") };
+		let host =
+			ApplicationHost { runners: runners_carrying(&app, &[UVX]), ..reading(&app, "c1") };
 
 		let refusal = host
 			.answer(an_install("io.github.Digital-Defiance/mcp-filesystem", "space"))
