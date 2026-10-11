@@ -24,12 +24,16 @@ const EVERYTHING: &str = "*";
 
 const HEAD: &str = "HEAD";
 
+const OWNER_DIR_MODE: u32 = 0o700;
+const OWNER_FILE_MODE: u32 = 0o600;
+
 const UNDONE: &str = "Change undone";
 
 const NOT_CONSECUTIVE: &str = "these two changes do not follow one another";
 const UNNAMED: &str = "this change holds a file with no path";
 const NOTHING_TO_UNDO: &str = "this bundle has no write to undo";
 const CONFLICTED: &str = "this write cannot be undone on top of the later ones";
+const LEFT_OPEN: &str = "the history of this bundle could not be made owner-only";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Author {
@@ -70,8 +74,21 @@ pub fn commit(
 	body: &str,
 ) -> Result<Option<String>, git2::Error> {
 	let repository = opened(bundle)?;
-	let tree = staged(&repository)?;
-	let parent = head(&repository);
+	let recorded = recorded(&repository, author, title, body);
+	let tightened = owner_only(repository.path()).map_err(left_open);
+	let id = recorded?;
+	tightened?;
+	Ok(id)
+}
+
+fn recorded(
+	repository: &Repository,
+	author: Author,
+	title: &str,
+	body: &str,
+) -> Result<Option<String>, git2::Error> {
+	let tree = staged(repository)?;
+	let parent = head(repository);
 	if parent.as_ref().is_some_and(|found| found.tree_id() == tree.id()) {
 		return Ok(None);
 	}
@@ -281,6 +298,33 @@ fn opened(bundle: &Path) -> Result<Repository, git2::Error> {
 	};
 	exclude(&repository);
 	Ok(repository)
+}
+
+#[cfg(unix)]
+fn owner_only(path: &Path) -> std::io::Result<()> {
+	use std::os::unix::fs::PermissionsExt;
+
+	let metadata = fs::symlink_metadata(path)?;
+	if metadata.is_file() {
+		return fs::set_permissions(path, fs::Permissions::from_mode(OWNER_FILE_MODE));
+	}
+	if !metadata.is_dir() {
+		return Ok(());
+	}
+	fs::set_permissions(path, fs::Permissions::from_mode(OWNER_DIR_MODE))?;
+	for entry in fs::read_dir(path)? {
+		owner_only(&entry?.path())?;
+	}
+	Ok(())
+}
+
+#[cfg(not(unix))]
+fn owner_only(_path: &Path) -> std::io::Result<()> {
+	Ok(())
+}
+
+fn left_open(error: std::io::Error) -> git2::Error {
+	git2::Error::from_str(&format!("{LEFT_OPEN}: {error}"))
 }
 
 fn exclude(repository: &Repository) {
@@ -652,6 +696,35 @@ mod tests {
 
 		assert_eq!(listed[0].paths, vec!["about.md", "profile.md"]);
 		assert_eq!(listed[1].paths, vec!["about.md"]);
+
+		let _ = fs::remove_dir_all(&bundle);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_commit_leaves_every_git_file_owner_only() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let bundle = a_bundle("owner-only");
+		writes(&bundle, &[("notes.md", "first")], "First");
+		let git = bundle.join(".git");
+		let mut files = vec![git.join("index")];
+		let mut pending = vec![git.join("objects")];
+		while let Some(dir) = pending.pop() {
+			for entry in fs::read_dir(&dir).expect("a readable dir") {
+				let path = entry.expect("an entry").path();
+				match path.is_dir() {
+					true => pending.push(path),
+					false => files.push(path),
+				}
+			}
+		}
+
+		assert!(files.len() > 1, "the commit wrote loose objects");
+		for file in files {
+			let mode = fs::metadata(&file).expect("the metadata").permissions().mode() & 0o777;
+			assert_eq!(mode, 0o600, "{} is not owner-only", file.display());
+		}
 
 		let _ = fs::remove_dir_all(&bundle);
 	}
