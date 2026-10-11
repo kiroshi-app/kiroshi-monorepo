@@ -1062,6 +1062,7 @@ overlays-noticesurface--m-8-removed-from-space
 overlays-noticesurface--marks
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark
+overlays-noticesurface--repeated-failure
 overlays-noticesurface--stacked
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog

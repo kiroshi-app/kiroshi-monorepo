@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -87,8 +88,27 @@ const raiseTransientNotice = ({
 	...message
 }: TransientNotice) => raiseNotice({ ...message, priority: "low", type })
 
-const raiseFailureNotice = (message: FailureNotice) =>
-	raiseNotice({ ...message, priority: "high", timeout: 0, type: "error" })
+const failuresOnSurface = new Map<string, string>()
+
+const raiseFailureNotice = ({ onClose, ...message }: FailureNotice) => {
+	const failure = JSON.stringify([message.title, message.description])
+	const shown = failuresOnSurface.get(failure)
+	if (shown) return shown
+
+	const id = raiseNotice({
+		...message,
+		onClose: () => {
+			failuresOnSurface.delete(failure)
+			onClose?.()
+		},
+		priority: "high",
+		timeout: 0,
+		type: "error",
+	})
+	failuresOnSurface.set(failure, id)
+
+	return id
+}
 
 const endNotice = (id: string) => noticeManager.close(id)
 
@@ -195,6 +215,10 @@ const NoticeSurface = ({
 	transientDelay = TRANSIENT_NOTICE_DELAY,
 }: NoticeSurfaceProps) => {
 	const { t } = useTranslation("common")
+
+	useEffect(() => {
+		failuresOnSurface.clear()
+	}, [])
 
 	return (
 		<ToastProvider

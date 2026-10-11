@@ -295,6 +295,96 @@ export const Error = meta.story({
 	},
 })
 
+const OTHER_FAILURE: NoticeMessage = {
+	title: "Routine could not save",
+	description: "The disk was full. Nothing was written.",
+}
+
+const closedRepeatedFailure = fn()
+
+const cardsOnSurface = () =>
+	viewport().querySelectorAll<HTMLElement>("[data-slot=toast]")
+
+const cardCarrying = (title: string) => {
+	const card = within(viewport())
+		.getByText(title)
+		.closest<HTMLElement>("[data-slot=toast]")
+	if (!card) throw new window.Error(`No notice carries ${title}`)
+
+	return card
+}
+
+const closeCardCarrying = (title: string) => {
+	const close = cardCarrying(title).querySelector<HTMLElement>(
+		"[data-slot=toast-close]",
+	)
+	if (!close) throw new window.Error(`The ${title} notice has no close control`)
+
+	return close
+}
+
+export const RepeatedFailure = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() =>
+				raiseFailureNotice({ ...FAILURE, onClose: closedRepeatedFailure })
+			}
+			transientDelay={SHORT_DELAY}
+		/>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The same failure raised again while its card is still on the surface. The story clicks the trigger five times and keeps one card, its repeats handing back the identifier of that card; a failure differing in its text adds a second card; closing the first runs the `onClose` of the first raise once, and raising it again brings the card back. A failure is only matched against failures: two identical transients still add two cards, and a failure carrying the same text as a transient adds its own card.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const trigger = canvas.getByRole("button", { name: "Run the routine" })
+		for (const _ of [1, 2, 3, 4, 5]) await userEvent.click(trigger)
+
+		await opaque(cardCarrying(FAILURE.title))
+		await expect(cardsOnSurface()).toHaveLength(1)
+
+		const kept = raiseFailureNotice(FAILURE)
+		await expect(raiseFailureNotice(FAILURE)).toBe(kept)
+		await expect(cardsOnSurface()).toHaveLength(1)
+
+		raiseFailureNotice(OTHER_FAILURE)
+		await within(viewport()).findByText(OTHER_FAILURE.title)
+		await expect(cardsOnSurface()).toHaveLength(2)
+
+		await userEvent.click(closeCardCarrying(FAILURE.title))
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(1))
+		await expect(closedRepeatedFailure).toHaveBeenCalledOnce()
+
+		await userEvent.click(trigger)
+		await within(viewport()).findByText(FAILURE.title)
+		await expect(cardsOnSurface()).toHaveLength(2)
+
+		await userEvent.click(closeCardCarrying(FAILURE.title))
+		await userEvent.click(closeCardCarrying(OTHER_FAILURE.title))
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(0))
+
+		raiseTransientNotice(SAVED)
+		raiseTransientNotice(SAVED)
+		raiseFailureNotice(SAVED)
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(3))
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(1), {
+			timeout: SHORT_DELAY + 4000,
+		})
+		await expect(cardCarrying(SAVED.title)).toHaveAttribute(
+			"data-type",
+			"error",
+		)
+
+		await userEvent.click(closeCardCarrying(SAVED.title))
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(0))
+	},
+})
+
 const retry = fn()
 
 export const WithAction = meta.story({
