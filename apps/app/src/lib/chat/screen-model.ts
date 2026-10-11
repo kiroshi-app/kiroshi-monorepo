@@ -381,7 +381,7 @@ export function markedRunsOf(
 
 export type RunPresentation = {
 	isMarked: boolean
-	avatarIndex: number
+	faceIndexes: number[]
 	hasBareTables: boolean
 }
 
@@ -392,9 +392,10 @@ export type RunPresentationInput = {
 	isWorking: boolean
 }
 
-const NO_AVATAR = -1
+const NO_FACE: number[] = []
 
-const HEAD_ROW_INDEX = 0
+const opensAndClosesRun = (run: TranscriptRow[]) =>
+	run.length > 1 ? [0, run.length - 1] : [0]
 
 export function runPresentationsOf({
 	runs,
@@ -406,17 +407,17 @@ export function runPresentationsOf({
 		const marked = markedRunsOf(runs, workingBotIds)
 		return runs.map((_, index) => ({
 			isMarked: marked.has(index),
-			avatarIndex: NO_AVATAR,
+			faceIndexes: NO_FACE,
 			hasBareTables: false,
 		}))
 	}
 
 	const newestIndex = runs.length - 1
-	return runs.map((_, index) => {
+	return runs.map((run, index) => {
 		const isNewest = index === newestIndex
 		return {
 			isMarked: isNewest,
-			avatarIndex: isWorking && isNewest ? NO_AVATAR : HEAD_ROW_INDEX,
+			faceIndexes: isWorking && isNewest ? NO_FACE : opensAndClosesRun(run),
 			hasBareTables: true,
 		}
 	})
