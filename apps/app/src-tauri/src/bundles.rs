@@ -521,7 +521,10 @@ pub fn evolve(root: &Path, bot: &Bot) -> Evolved {
 
 fn evolve_serialised(root: &Path, bot: &Bot) -> Evolved {
 	let bundle = dir(root, &bot.id);
-	let changed = git::changes(&bundle);
+	let changed = match git::changes(&bundle) {
+		Ok(changed) => changed,
+		Err(error) => return bot_write_failed(&bundle, error),
+	};
 	if changed.is_empty() {
 		return Evolved::Unchanged;
 	}
@@ -534,10 +537,7 @@ fn evolve_serialised(root: &Path, bot: &Bot) -> Evolved {
 fn bot_recorded(bundle: &Path, title: String, body: &str) -> Evolved {
 	let recorded = match git::record(bundle, Author::Bot, &title, body) {
 		Ok(recorded) => recorded,
-		Err(error) => {
-			eprintln!("the bot write under {} was not recorded: {error}", bundle.display());
-			return Evolved::Failed(error);
-		}
+		Err(error) => return bot_write_failed(bundle, error),
 	};
 	if let Err(error) = recorded.tightened {
 		eprintln!("the bot write recorded under {} was left open: {error}", bundle.display());
@@ -547,6 +547,11 @@ fn bot_recorded(bundle: &Path, title: String, body: &str) -> Evolved {
 	};
 	let _ = fs::remove_file(bundle.join(LEARNED_NAME));
 	Evolved::Recorded(Evolution { commit_id, title })
+}
+
+fn bot_write_failed(bundle: &Path, error: git2::Error) -> Evolved {
+	eprintln!("the bot write under {} was not recorded: {error}", bundle.display());
+	Evolved::Failed(error)
 }
 
 fn learned(bundle: &Path) -> Option<(String, String)> {
@@ -2427,7 +2432,10 @@ mod tests {
 		recorded(evolve(&root, &bot)).expect("the turn is recorded");
 
 		assert!(written_agent(&root, &bot.id).contains("Bean likes figs."));
-		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+		assert!(
+			git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
+			"the bundle is left uncommitted"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -2529,7 +2537,7 @@ mod tests {
 			"{root_name} lost a commit"
 		);
 		assert!(
-			git::changes(&dir(&root, &bot.id)).is_empty(),
+			git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
 			"{root_name} left the bundle uncommitted"
 		);
 
@@ -2662,7 +2670,10 @@ mod tests {
 
 		assert_eq!(recorded.len(), 1, "got {recorded:?}");
 		assert_eq!(titles(&root, &bot.id).len(), before + recorded.len());
-		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is uncommitted");
+		assert!(
+			git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
+			"the bundle is uncommitted"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -2702,7 +2713,10 @@ mod tests {
 			saved.join().expect("the skill was saved");
 
 			assert_eq!(titles(&root, &bot.id).len(), before + evolved + 1, "{label} lost a commit");
-			assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "{label} left work behind");
+			assert!(
+				git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
+				"{label} left work behind"
+			);
 		}
 
 		let _ = fs::remove_dir_all(&root);
@@ -2743,6 +2757,24 @@ mod tests {
 		fs::set_permissions(&objects, fs::Permissions::from_mode(0o500))
 			.expect("the objects directory turns read-only");
 		ReadOnlyObjects { objects, mode }
+	}
+
+	pub(super) struct UnreadableIndex {
+		path: PathBuf,
+		valid: Vec<u8>,
+	}
+
+	impl UnreadableIndex {
+		pub(super) fn restore(self) {
+			fs::write(&self.path, &self.valid).expect("the valid index is back");
+		}
+	}
+
+	pub(super) fn an_unreadable_index(bundle: &Path) -> UnreadableIndex {
+		let path = bundle.join(".git").join("index");
+		let valid = fs::read(&path).expect("the index reads");
+		fs::write(&path, b"not an index").expect("the index is overwritten");
+		UnreadableIndex { path, valid }
 	}
 
 	fn a_locked_index(bundle: &Path) {
@@ -2886,7 +2918,10 @@ mod tests {
 		undoing.join().expect("the undo ran");
 
 		assert_eq!(titles(&root, &bot.id).len(), before + saved.len() + 1);
-		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+		assert!(
+			git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
+			"the bundle is left uncommitted"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -2921,7 +2956,10 @@ mod tests {
 		}
 
 		assert_eq!(titles(&root, &bot.id).len(), before + 2);
-		assert!(git::changes(&dir(&root, &bot.id)).is_empty(), "the bundle is left uncommitted");
+		assert!(
+			git::changes(&dir(&root, &bot.id)).expect("the status reads").is_empty(),
+			"the bundle is left uncommitted"
+		);
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -3010,7 +3048,35 @@ They said figs, not dates.
 
 		assert_eq!(evolution.title, "Bean learned about figs");
 		assert_eq!(history(&root, &bot.id).expect("the history reads")[0].id, evolution.commit_id);
-		assert!(git::changes(&bundle).is_empty(), "the bundle is left uncommitted");
+		assert!(
+			git::changes(&bundle).expect("the status reads").is_empty(),
+			"the bundle is left uncommitted"
+		);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_turn_whose_status_git_cannot_read_reports_the_error_and_is_recorded_once_repaired() {
+		let root = a_root("evolve-index-unreadable");
+		let bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		a_bot_writes(&root, &bot.id, "figs", "Bean likes figs.");
+		let bundle = dir(&root, &bot.id);
+		private_files::replace(&bundle.join(LEARNED_NAME), b"Bean learned about figs\n")
+			.expect("the note lands");
+
+		let index = an_unreadable_index(&bundle);
+		let refused = evolve(&root, &bot);
+		index.restore();
+
+		assert!(matches!(refused, Evolved::Failed(_)), "got {refused:?}");
+		assert!(bundle.join(SKILLS_DIR).join("figs").join(SKILL_NAME).is_file());
+		assert!(bundle.join(LEARNED_NAME).is_file(), "the note was thrown away");
+
+		let evolution = recorded(evolve(&root, &bot)).expect("the turn is recorded");
+
+		assert_eq!(evolution.title, "Bean learned about figs");
 
 		let _ = fs::remove_dir_all(&root);
 	}
