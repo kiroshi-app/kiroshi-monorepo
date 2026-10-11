@@ -615,6 +615,12 @@ type ThreadRunProps = {
 	onRetry?: (messageId: string) => void
 }
 
+const sentAtShownFor = (
+	row: TranscriptRow,
+	index: number,
+	presentation: RunPresentation,
+) => (index === presentation.timeLineIndex ? row.timestamp : undefined)
+
 const ThreadRun = ({
 	run,
 	presentation,
@@ -663,6 +669,7 @@ const ThreadRun = ({
 						row.quotedMessageId ? quotes.get(row.quotedMessageId) : undefined
 					}
 					row={row}
+					sentAt={sentAtShownFor(row, index, presentation)}
 					state={row.messageId === rejectedPromptId ? "failed" : row.completion}
 					toQuote={toQuote}
 				/>
