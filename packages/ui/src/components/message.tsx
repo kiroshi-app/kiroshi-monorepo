@@ -114,7 +114,7 @@ export function MessageHeader({ className, ...props }: MessageHeaderProps) {
 		<div
 			data-slot="message-header"
 			className={cn(
-				"flex items-center justify-start gap-1.5 px-1 text-xs leading-none text-muted-foreground",
+				"flex items-center gap-1.5 px-1 text-xs leading-none text-muted-foreground",
 				className,
 			)}
 			{...props}
@@ -184,7 +184,7 @@ const SentTime = ({ at, label, className }: SentTimeProps) => (
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: the full date tooltip opens on keyboard focus
 			tabIndex={0}
 			className={cn(
-				"whitespace-nowrap font-normal tabular-nums outline-offset-2",
+				"whitespace-nowrap tabular-nums outline-offset-2",
 				className,
 			)}
 		>
@@ -216,7 +216,7 @@ export function MessageFooter({ className, ...props }: MessageFooterProps) {
 		<div
 			data-slot="message-footer"
 			className={cn(
-				"flex min-h-5 items-center justify-start gap-1 px-1 text-xs text-muted-foreground",
+				"flex min-h-5 items-center gap-1 px-1 text-xs text-muted-foreground",
 				className,
 			)}
 			{...props}
