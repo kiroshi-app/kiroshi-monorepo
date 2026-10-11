@@ -641,13 +641,7 @@ export const WithReportAndAction = meta.story({
 	},
 })
 
-type CopyLayout = {
-	control: number
-	text: number
-	notice: number
-}
-
-const copyLayout = (copy: HTMLElement, notice: HTMLElement): CopyLayout => ({
+const copyLayout = (copy: HTMLElement, notice: HTMLElement) => ({
 	control: copy.getBoundingClientRect().width,
 	text:
 		within(notice)
