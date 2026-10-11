@@ -45,10 +45,14 @@ struct ConversationSummary: Identifiable, Equatable {
     var workingCompanionIds: Set<Companion.ID> = []
     var timeLabel: String?
     var preview: String?
-    var workingName: String?
 
     var id: String {
         subject.id
+    }
+
+    var role: String? {
+        guard case .companion(let companion) = subject else { return nil }
+        return companion.role
     }
 
     var isWorking: Bool {
@@ -59,10 +63,17 @@ struct ConversationSummary: Identifiable, Equatable {
         lastMessage?.sentAt ?? Date(milliseconds: subject.createdAt)
     }
 
-    static let placeholders = (1...5).map { index in
+    static let placeholders = [
+        ("Juniper Wren", "The release notes are drafted, they’re"),
+        ("Atlas", "Can you split the onboarding ticket in two, please?"),
+        ("Pico Marlowe", "All checks passed, the pull"),
+        ("Mira Lee", "Here are three directions for the settings sheet"),
+        ("Otto", "Morning digest: two new issues"),
+        ("Sol Navarro", "The build is green on every"),
+    ].enumerated().map { index, line in
         ConversationSummary(
-            subject: .companion(Companion(id: "placeholder-\(index)", name: "Companion")),
-            timeLabel: "00:00", preview: "A message from the companion")
+            subject: .companion(Companion(id: "placeholder-\(index)", name: line.0)),
+            timeLabel: "00:00", preview: line.1)
     }
 }
 

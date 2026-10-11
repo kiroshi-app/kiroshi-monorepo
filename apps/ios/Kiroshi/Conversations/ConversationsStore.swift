@@ -209,14 +209,15 @@ final class ConversationsStore {
                 summary.isWorking
                 ? String(localized: "Now")
                 : summary.lastMessage.map { time.listLabel(for: $0.sentAt) }
+            let working = String(localized: "working…")
             switch summary.subject {
-            case .companion(let companion):
-                summary.preview = summary.lastMessage?.line
-                summary.workingName = summary.isWorking ? companion.name : nil
+            case .companion:
+                summary.preview = summary.isWorking ? working : summary.lastMessage?.line
             case .group(let group):
-                summary.preview = summary.lastMessage?.line(among: group.members)
-                summary.workingName =
-                    group.members.first { summary.workingCompanionIds.contains($0.id) }?.name
+                let worker = group.members.first { summary.workingCompanionIds.contains($0.id) }
+                summary.preview =
+                    worker.map { "\($0.name): \(working)" }
+                    ?? summary.lastMessage?.line(among: group.members)
             }
             return summary
         }

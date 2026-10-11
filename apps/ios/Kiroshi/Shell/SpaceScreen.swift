@@ -31,8 +31,8 @@ struct SpaceScreen: View {
                 .safeAreaInset(edge: .top) {
                     if let offlineSpace = store.offlineSpace {
                         HostOfflineLine(space: offlineSpace, email: store.email)
-                            .padding(.horizontal)
-                            .padding(.top, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 10)
                     }
                 }
                 .navigationTitle(store.currentSpace?.name ?? "")
@@ -41,13 +41,15 @@ struct SpaceScreen: View {
                     SpaceMenu(store: store)
                 }
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         SettingsButton(
                             account: account, spaces: store.spaces, section: section
                         ) {
-                            Label("Settings", systemImage: "gearshape")
+                            AccountInitial(initial: store.accountInitial)
                         }
+                        .accessibilityLabel("Settings")
                     }
+                    .sharedBackgroundVisibility(.hidden)
                 }
         }
     }
@@ -59,6 +61,18 @@ struct SpaceScreen: View {
         case .missions:
             ContentUnavailableView(section.title, systemImage: section.systemImage)
         }
+    }
+}
+
+private struct AccountInitial: View {
+    let initial: String
+
+    var body: some View {
+        Text(initial)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(Color.kiroshi(.foreground))
+            .frame(width: 40, height: 40)
+            .background(Color.kiroshi(.muted), in: .circle)
     }
 }
 

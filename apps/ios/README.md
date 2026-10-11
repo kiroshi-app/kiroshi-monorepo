@@ -28,24 +28,30 @@ swift format lint --recursive apps/ios
 
 ## States without the network
 
-A Debug build opens straight on one state of the Paper files, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number: page 1 "Sign in" of "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards) and, in "Kiroshi, iOS", page 2 "Space switcher" (`2.1`, `2.2` opens on the same screen as `2.1`: tap the title to open the menu, `2.3`):
+A Debug build opens straight on one state, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number. Page 1 "Sign in" of the Paper file "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards):
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.7
 ```
 
-Page 3 "Conversations" (`3.1` to `3.8`) is fed by a scripted host on the relay: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. Beside the six companions, `3.1` lists two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan), a `conversation://updated` renaming it Launch checklist, and a `conversation://deleted`, three seconds apart:
+Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on the relay, with the artboards' Studio: Juniper, Atlas, Pico, Mira and Otto with their roles, and the group conversation Release 0.42 (Juniper, Pico and Mira). `2.1` opens on the list, `2.2` on the same screen (tap the Space name in the navigation bar to open the menu of Spaces), `2.3` on a Space without companions, `2.4` on the list still loading, `2.5` on Side project, whose host leaves two seconds after the list loads, and `2.6` on the list while Juniper works:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 2.6
+```
+
+The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations-live
 ```
- `3.2`, `3.5` and `3.8` open on Juniper's thread. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `3.6` goes online, loads the list, then hears the host leave two seconds later, as when the Mac app quits. `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
+ `3.2`, `3.5` and `3.8` open on Juniper's thread. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`) and on 3.1, 3.2 and 3.8 as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2 and 3.8, and opens the menu of Spaces on 2.2, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 
@@ -53,7 +59,7 @@ Page 4 "Missions" opens on the Missions tab: `4.1` (the grouped list of Studio),
 
 ## Settings and Sign out without the network
 
-Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet the gear of either tab presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
+Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations tab, and the gear of the Missions tab present. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2

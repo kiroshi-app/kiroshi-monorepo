@@ -10,14 +10,16 @@
             UserDefaults.standard.string(forKey: "draft") ?? ""
         }
 
-        static let juniper = Companion(id: "juniper-6", name: "Juniper", tint: .green)
+        static let juniper = Companion(
+            id: "juniper-6", name: "Juniper", role: "Writer", tint: .green)
+        static let atlas = Companion(id: "atlas-3", name: "Atlas", role: "Planner", tint: .blue)
+        static let pico = Companion(id: "pico-6", name: "Pico", role: "Builder", tint: .orange)
+        static let mira = Companion(id: "mira-9", name: "Mira", role: "Designer", tint: .purple)
+        static let otto = Companion(id: "otto-5", name: "Otto", role: "Digest")
         static let companions = [
-            juniper,
-            Companion(id: "atlas-3", name: "Atlas", tint: .blue),
-            Companion(id: "pico-6", name: "Pico", tint: .orange),
+            juniper, atlas, pico,
             Companion(id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png"),
-            Companion(id: "mira-9", name: "Mira", tint: .purple),
-            Companion(id: "otto-5", name: "Otto"),
+            mira, otto,
         ]
 
         static let listMessages: [Companion.ID: [FixtureHost.Message]] = [
@@ -82,14 +84,42 @@
             ],
         ]
 
+        static let release042 = FixtureHost.Group(
+            id: "group-release-042", title: "Release 0.42", members: [juniper, pico, mira],
+            createdAt: 0)
+
+        static let homeMessages: [String: [FixtureHost.Message]] = listMessages.merging([
+            pico.id: [
+                .init(
+                    id: "m-pico", isYours: false,
+                    content: "All checks passed, the pull request is ready for review.",
+                    daysAgo: 1, hour: 18, minute: 20)
+            ],
+            release042.id: [
+                .init(
+                    id: "m-release-042", isYours: false,
+                    content: "All checks passed, the pull request is ready.", daysAgo: 0,
+                    hour: 8, minute: 58, author: pico.id)
+            ],
+        ]) { _, home in home }
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 4)
 
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
-            var script = FixtureHost.Script(
-                companions: companions, groups: [releaseCrew, designReview],
-                messages: listMessages.merging(groupMessages) { listed, _ in listed })
+            var script =
+                fixture.rawValue.hasPrefix("2.")
+                ? FixtureHost.Script(
+                    companions: [
+                        juniper, atlas, pico, mira,
+                        Companion(id: otto.id, name: otto.name, role: otto.role, tint: .cyan),
+                    ],
+                    groups: [release042],
+                    messages: homeMessages)
+                : FixtureHost.Script(
+                    companions: companions, groups: [releaseCrew, designReview],
+                    messages: listMessages.merging(groupMessages) { listed, _ in listed })
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
@@ -202,6 +232,7 @@
         }
 
         static let spaceId = "space-studio"
+        static let launchPlanId = "group-launch"
 
         static let picture: String = {
             let side = CGSize(width: 192, height: 192)
@@ -225,7 +256,7 @@
             let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
             let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
             return
-                #"{"id":"\#(companion.id)","name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
+                #"{"id":"\#(companion.id)","name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
         }
 
         static func chat(of companionId: Companion.ID) -> String {
@@ -306,6 +337,7 @@
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
 
         private let listed: AsyncStream<Void>.Continuation
+        private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
 
         init(script: FixtureHost.Script) {
@@ -315,11 +347,14 @@
             self.inboundContinuation = inboundContinuation
             let (listing, listed) = AsyncStream.makeStream(of: Void.self)
             self.listed = listed
+            let (launchPlanOpening, launchPlanOpened) = AsyncStream.makeStream(of: Void.self)
+            self.launchPlanOpened = launchPlanOpened
             playingGroupChanges =
                 script.playsGroupChanges
                 ? Task {
                     for await _ in listing {
-                        await Self.playGroupChanges(into: inboundContinuation)
+                        await Self.playGroupChanges(
+                            into: inboundContinuation, once: launchPlanOpening)
                         return
                     }
                 } : nil
@@ -337,6 +372,12 @@
             else { return }
             let args = call["args"] as? [String: Any] ?? [:]
             answer(id, command, args)
+            if command == "conversation_message_page",
+                args["conversationId"] as? String == FixtureHost.launchPlanId,
+                args["limit"] as? Int != 1
+            {
+                launchPlanOpened.yield()
+            }
             guard command == "conversation_message_page", let leaving = script.hostLeavesAfter,
                 await pages.next() == script.companions.count + script.groups.count
             else { return }
@@ -362,6 +403,7 @@
         func close() {
             playingGroupChanges?.cancel()
             listed.finish()
+            launchPlanOpened.finish()
             push(.close(1000))
         }
 
@@ -424,28 +466,35 @@
         }
 
         private static func playGroupChanges(
-            into inbound: AsyncStream<Inbound>.Continuation
+            into inbound: AsyncStream<Inbound>.Continuation, once opening: AsyncStream<Void>
         ) async {
             let launchPlan = FixtureHost.Group(
-                id: "group-launch", title: "Launch plan",
+                id: FixtureHost.launchPlanId, title: "Launch plan",
                 members: [
                     Companion(id: "juniper-6", name: "Juniper", tint: .green),
                     Companion(id: "pico-6", name: "Pico", tint: .orange),
                 ],
                 createdAt: Date.now.milliseconds + 3000)
-            let frames = [
-                FixtureHost.groupEvent("conversation://created", launchPlan),
+            guard await pause() else { return }
+            inbound.yield(.frame(FixtureHost.groupEvent("conversation://created", launchPlan)))
+            for await _ in opening { break }
+            let changes = [
                 FixtureHost.groupEvent(
                     "conversation://updated", launchPlan.renamed("Launch checklist")),
                 FixtureHost.groupDeleted(launchPlan),
             ]
-            for frame in frames {
-                do {
-                    try await ContinuousClock().sleep(for: .seconds(3))
-                } catch {
-                    return
-                }
+            for frame in changes {
+                guard await pause() else { return }
                 inbound.yield(.frame(frame))
+            }
+        }
+
+        private static func pause() async -> Bool {
+            do {
+                try await ContinuousClock().sleep(for: .seconds(3))
+                return true
+            } catch {
+                return false
             }
         }
 

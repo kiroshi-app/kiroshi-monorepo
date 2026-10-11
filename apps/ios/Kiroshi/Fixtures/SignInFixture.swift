@@ -68,17 +68,16 @@
         case spacesUnreachable = "spaces-unreachable"
         case keychain
         case seededKeychain = "keychain-seeded"
-        case space = "2.1"
-        case spaceMenu = "2.2"
-        case hostOffline = "2.3"
+        case home = "2.1"
+        case homeMenu = "2.2"
+        case noCompanion = "2.3"
+        case loadingCompanions = "2.4"
+        case conversationsHostOffline = "2.5"
+        case workingList = "2.6"
         case conversations = "3.1"
         case conversationsLive = "conversations-live"
         case thread = "3.2"
-        case noCompanion = "3.3"
-        case loadingCompanions = "3.4"
         case emptyThread = "3.5"
-        case conversationsHostOffline = "3.6"
-        case workingList = "3.7"
         case workingThread = "3.8"
         case conversationsFailed = "conversations-failed"
         case threadFailed = "thread-failed"
@@ -120,11 +119,10 @@
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
                 ]
-            case .space, .spaceMenu, .hostOffline, .missions, .missionThread, .noMissions,
-                .missionsHostOffline:
+            case .missions, .missionThread, .noMissions, .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
-            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
-                .emptyThread,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+                .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
@@ -134,13 +132,11 @@
 
         fileprivate var isSignedIn: Bool {
             switch self {
-            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .space, .spaceMenu,
-                .hostOffline, .missions, .missionThread, .noMissions, .missionsHostOffline,
-                .settings,
-                .signOutAlert:
+            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .missions, .missionThread,
+                .noMissions, .missionsHostOffline, .settings, .signOutAlert:
                 true
-            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
-                .emptyThread,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+                .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 true
@@ -163,7 +159,7 @@
 
         fileprivate var lastSpaceId: Space.ID? {
             switch self {
-            case .hostOffline, .conversationsHostOffline, .missionsHostOffline:
+            case .conversationsHostOffline, .missionsHostOffline:
                 CloudFixture.sideProjectId
             default: nil
             }
@@ -180,8 +176,8 @@
         @MainActor fileprivate var relay: RelayEnvironment {
             let online: Set<Space.ID> = [CloudFixture.studioId, CloudFixture.homeLabId]
             switch self {
-            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
-                .emptyThread,
+            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .noCompanion,
+                .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
@@ -249,7 +245,7 @@
             case .signOutAlert:
                 model.signOutTapped()
             case .opening, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .keychain,
-                .seededKeychain, .space, .spaceMenu, .hostOffline, .conversations,
+                .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .thread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .missions,

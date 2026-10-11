@@ -60,6 +60,49 @@ private struct ScaledAvatar: View {
     }
 }
 
+struct CompanionPlaceholder: View {
+    let size: CompanionAvatar.Size
+
+    var body: some View {
+        ScaledPlaceholder(size: size)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct ScaledPlaceholder: View {
+    @ScaledMetric private var side: CGFloat
+
+    init(size: CompanionAvatar.Size) {
+        _side = ScaledMetric(wrappedValue: size.points, relativeTo: size.textStyle)
+    }
+
+    var body: some View {
+        FlatHexagon(isDashed: false)
+            .frame(width: side, height: side)
+    }
+}
+
+struct FlatHexagon: View {
+    let isDashed: Bool
+
+    var body: some View {
+        let outline = CompanionOutline(drawing: Self.ground)
+        if isDashed {
+            outline
+                .stroke(
+                    Color.kiroshi(.mutedForeground), style: StrokeStyle(lineWidth: 2, dash: [5, 4])
+                )
+                .padding(1)
+        } else {
+            outline.fill(Color.kiroshi(.muted))
+        }
+    }
+
+    private static let ground: CompanionDrawing? = try? CompanionAvatarEngine.shared?.drawing(
+        name: CompanionAvatarArt.placeholderName, tint: nil, pose: .idle, time: 0, theme: .light)
+}
+
 struct CompanionAvatarArt: View {
     static let frameInterval = 1.0 / 30
     static let placeholderName = "Companion"
@@ -167,7 +210,7 @@ private struct CompanionField: View {
     }
 }
 
-private struct CompanionOutline: Shape {
+struct CompanionOutline: Shape {
     let drawing: CompanionDrawing?
 
     func path(in rect: CGRect) -> Path {
