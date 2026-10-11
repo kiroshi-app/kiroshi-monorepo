@@ -87,6 +87,7 @@
         case groupWorking = "group-working"
         case groupFailed = "group-failed"
         case groupMention = "group-mention"
+        case slowThread = "slow-thread"
         case missions = "5.1"
         case missionThread = "5.2"
         case noMissions = "5.3"
@@ -131,7 +132,8 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
-                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
+                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
+                .slowThread:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -146,7 +148,8 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
-                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
+                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
+                .slowThread:
                 true
             default: false
             }
@@ -188,7 +191,8 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
-                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention:
+                .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
+                .slowThread:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -259,7 +263,7 @@
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
                 .groupWorking,
-                .groupFailed, .groupMention, .missions,
+                .groupFailed, .groupMention, .slowThread, .missions,
                 .missionThread, .noMissions, .missionsHostOffline, .settings:
                 break
             }

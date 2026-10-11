@@ -56,6 +56,11 @@ struct ThreadView: View {
                 .background(Color(.systemBackground))
             } else if thread.phase == .loaded, thread.entries.isEmpty, !thread.isWorking {
                 EmptyThread(subject: thread.subject)
+            } else if thread.phase == .loading, thread.entries.isEmpty, !thread.isWorking,
+                space.offlineSpace == nil
+            {
+                ProgressView()
+                    .accessibilityLabel("Loading the conversation")
             }
         }
         .safeAreaBar(edge: .bottom) {
