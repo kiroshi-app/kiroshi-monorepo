@@ -16,7 +16,6 @@ import {
 	opensNewDay,
 	quotedMessageIdsIn,
 	quotedTargetsIn,
-	type RunPresentation,
 	replyTargetOfReference,
 	runPresentationsOf,
 	sidebarActivityFor,
@@ -361,7 +360,7 @@ describe("day changes in Tokyo", () => {
 		expect(opensNewDay(runs, 1)).toBe(true)
 	})
 
-	it("keeps one time line on each side of local midnight", () => {
+	it("opens one head row on each side of local midnight", () => {
 		const runs = toRuns(
 			toTranscriptRows([
 				prompt({ id: "local-1", createdAt: TOKYO_MIDNIGHT - 2 * A_MINUTE }),
@@ -379,9 +378,9 @@ describe("day changes in Tokyo", () => {
 		expect(daySeparatorsIn(runs)).toBe(1)
 		expect(
 			runs.map(
-				(run, runIndex) => run[presentations[runIndex].timeLineIndex].messageId,
+				(run, runIndex) => run[presentations[runIndex].avatarIndex].messageId,
 			),
-		).toEqual(["local-2", "local-3"])
+		).toEqual(["local-1", "local-3"])
 	})
 
 	it("opens no new day between two messages of the same local day across UTC midnight", () => {
@@ -826,12 +825,12 @@ describe("runPresentationsOf", () => {
 		expect(solo(false).map((run) => run.isMarked)).toEqual([false, false, true])
 	})
 
-	it("places the avatar on the last row of a settled run", () => {
-		expect(solo(false).map((run) => run.avatarIndex)).toEqual([1, 0, 0])
+	it("places the avatar on the head row of a settled run", () => {
+		expect(solo(false).map((run) => run.avatarIndex)).toEqual([0, 0, 0])
 	})
 
 	it("drops the avatar of the newest run while the companion works", () => {
-		expect(solo(true).map((run) => run.avatarIndex)).toEqual([1, 0, -1])
+		expect(solo(true).map((run) => run.avatarIndex)).toEqual([0, 0, -1])
 	})
 
 	it("renders tables bare in a single companion thread", () => {
@@ -857,7 +856,7 @@ describe("runPresentationsOf", () => {
 		expect(presentations.some((run) => run.hasBareTables)).toBe(false)
 	})
 
-	describe("time line", () => {
+	describe("head row", () => {
 		const said = (id: string, authorBotId: string, minute: number) =>
 			message({
 				id,
@@ -866,63 +865,41 @@ describe("runPresentationsOf", () => {
 				completion: "complete",
 				createdAt: minute * 60_000,
 			})
-		const timeLinesOf = (
-			runs: TranscriptRow[][],
-			presentations: RunPresentation[],
-		) =>
-			runs.map((run, runIndex) =>
-				run.map((_, index) => index === presentations[runIndex].timeLineIndex),
-			)
-		const timeLinesIn = (rows: TranscriptRow[], hasSingleBot: boolean) => {
-			const runs = toRuns(rows)
-			return timeLinesOf(
-				runs,
-				runPresentationsOf({
-					runs,
-					workingBotIds: [],
-					hasSingleBot,
-					isWorking: false,
-				}),
-			)
-		}
+		const headRowsOf = (runs: TranscriptRow[][]) =>
+			runs.map((run) => run.map((row) => row === run[0]))
+		const headRowsIn = (rows: TranscriptRow[]) => headRowsOf(toRuns(rows))
 
-		it.each([true, false])(
-			"puts one time line on the third of three same-author messages (single companion: %s)",
-			(hasSingleBot) => {
-				const rows = toTranscriptRows([
-					said("a", "bot-1", 0),
-					said("b", "bot-1", 1),
-					said("c", "bot-1", 2),
-				])
+		it("opens one head row on the first of three same-author messages", () => {
+			const rows = toTranscriptRows([
+				said("a", "bot-1", 0),
+				said("b", "bot-1", 1),
+				said("c", "bot-1", 2),
+			])
 
-				expect(timeLinesIn(rows, hasSingleBot)).toEqual([[false, false, true]])
-			},
-		)
+			expect(headRowsIn(rows)).toEqual([[true, false, false]])
+		})
 
-		it("puts one time line under each run of two authors", () => {
+		it("opens one head row for each run of two authors", () => {
 			const rows = toTranscriptRows([
 				said("a", "bot-1", 0),
 				said("b", "bot-2", 1),
 			])
 
-			expect(timeLinesIn(rows, false)).toEqual([[true], [true]])
+			expect(headRowsIn(rows)).toEqual([[true], [true]])
 		})
 
-		it("puts one time line on the last prompt of a user run", () => {
+		it("opens one head row on the first prompt of a user run", () => {
 			const rows = toTranscriptRows([
 				prompt({ id: "local-1", createdAt: 0 }),
 				prompt({ id: "local-2", createdAt: 60_000 }),
 			])
 
-			expect(timeLinesIn(rows, true)).toEqual([[false, true]])
+			expect(headRowsIn(rows)).toEqual([[true, false]])
 		})
 
-		it("keeps one time line in the newest run while the companion works", () => {
-			expect(timeLinesOf(soloRuns, solo(true))).toEqual([
-				[false, true],
-				[true],
-				[true],
-			])
+		it("keeps the head row of the newest run while the companion works, its avatar alone dropped", () => {
+			expect(headRowsOf(soloRuns)).toEqual([[true, false], [true], [true]])
+			expect(solo(true).map((run) => run.avatarIndex)).toEqual([0, 0, -1])
 		})
 	})
 

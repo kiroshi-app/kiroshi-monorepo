@@ -382,7 +382,6 @@ export function markedRunsOf(
 export type RunPresentation = {
 	isMarked: boolean
 	avatarIndex: number
-	timeLineIndex: number
 	hasBareTables: boolean
 }
 
@@ -397,8 +396,6 @@ const NO_AVATAR = -1
 
 const HEAD_ROW_INDEX = 0
 
-const lastRowIndexOf = (run: TranscriptRow[]) => run.length - 1
-
 export function runPresentationsOf({
 	runs,
 	workingBotIds,
@@ -407,21 +404,19 @@ export function runPresentationsOf({
 }: RunPresentationInput): RunPresentation[] {
 	if (!hasSingleBot) {
 		const marked = markedRunsOf(runs, workingBotIds)
-		return runs.map((run, index) => ({
+		return runs.map((_, index) => ({
 			isMarked: marked.has(index),
 			avatarIndex: NO_AVATAR,
-			timeLineIndex: lastRowIndexOf(run),
 			hasBareTables: false,
 		}))
 	}
 
 	const newestIndex = runs.length - 1
-	return runs.map((run, index) => {
+	return runs.map((_, index) => {
 		const isNewest = index === newestIndex
 		return {
 			isMarked: isNewest,
 			avatarIndex: isWorking && isNewest ? NO_AVATAR : HEAD_ROW_INDEX,
-			timeLineIndex: lastRowIndexOf(run),
 			hasBareTables: true,
 		}
 	})

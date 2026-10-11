@@ -1115,14 +1115,16 @@ const runRoomOf = () =>
 	})
 
 const turnOf = (text: string) =>
-	screen.getByText(text).closest('[data-slot="message-content"]')
+	screen.getByText(text).closest('[data-slot="message"]')
 
 const nameLineOf = (text: string) =>
 	turnOf(text)?.querySelector('[data-slot="message-author"]')?.textContent ??
 	null
 
 const gutterAvatarOf = (text: string) =>
-	turnOf(text)?.querySelector('[data-slot="message-gutter"] > *') ?? null
+	turnOf(text)?.querySelector(
+		'[data-slot="message-gutter"] :is([data-slot="bot-identity-avatar"], [data-slot="user-avatar"])',
+	) ?? null
 
 const gutterOf = (text: string) =>
 	turnOf(text)?.querySelector('[data-slot="message-gutter"]') ?? null
@@ -1935,8 +1937,8 @@ describe("ThreadScreen", () => {
 
 		expect(nameLineOf(ADA_OPENS.text)).toContain("Ada")
 		expect(nameLineOf(ADA_CLOSES.text)).toBeNull()
-		expect(gutterAvatarOf(ADA_OPENS.text)).toBeNull()
-		expect(gutterAvatarOf(ADA_CLOSES.text)).not.toBeNull()
+		expect(gutterAvatarOf(ADA_OPENS.text)).not.toBeNull()
+		expect(gutterAvatarOf(ADA_CLOSES.text)).toBeNull()
 	})
 
 	it("opens a second run with its own name line and gutter avatar when the author changes", async () => {
@@ -1951,13 +1953,13 @@ describe("ThreadScreen", () => {
 		expect(gutterAvatarOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 
-	it("carries the mark of a run on the message that closes it", async () => {
+	it("carries the mark of a run on the message that opens it", async () => {
 		const room = await runRoomOf()
 		render(screenOf(room.thread))
 		await settle()
 
-		expect(markOf(ADA_OPENS.text)).toBeNull()
-		expect(markOf(ADA_CLOSES.text)).not.toBeNull()
+		expect(markOf(ADA_OPENS.text)).not.toBeNull()
+		expect(markOf(ADA_CLOSES.text)).toBeNull()
 		expect(markOf(NYX_ANSWERS.text)).not.toBeNull()
 	})
 
@@ -4297,12 +4299,22 @@ describe("ThreadScreen dating its messages in Tokyo", () => {
 		layout.restore()
 	})
 
-	it("shows the send time under every message", async () => {
+	it("shows the send time on the header line of every run, never under a bubble", async () => {
 		await renderAdaSaying(TOKYO_MIDNIGHT - A_MINUTE, TOKYO_MIDNIGHT)
 
+		const headerTimes = [
+			...document.querySelectorAll(
+				'[data-slot="message-author"] [data-slot="message-time"]',
+			),
+		].map((time) => time.getAttribute("datetime"))
+
+		expect(headerTimes).toEqual([
+			new Date(TOKYO_MIDNIGHT - A_MINUTE).toISOString(),
+			new Date(TOKYO_MIDNIGHT).toISOString(),
+		])
 		expect(
 			document.querySelectorAll('[data-slot="message-time-line"]'),
-		).toHaveLength(2)
+		).toHaveLength(0)
 	})
 
 	it("parts two messages across local midnight with one day separator between two runs", async () => {
