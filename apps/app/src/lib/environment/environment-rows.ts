@@ -24,7 +24,12 @@ export const toEnvironmentRows = (entries: EnvEntry[]): EnvironmentEntry[] => {
 			narrower.overrides ??= definedIn
 			continue
 		}
-		rows.set(entry.name, { name: entry.name, definedIn, servedFrom })
+		rows.set(entry.name, {
+			name: entry.name,
+			definedIn,
+			servedFrom,
+			...(entry.isUnset && { isUnset: true }),
+		})
 	}
 
 	return [...rows.values()]
