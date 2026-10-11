@@ -15,7 +15,7 @@ enum SpaceSection {
     var systemImage: String {
         switch self {
         case .conversations: "bubble.left.and.bubble.right"
-        case .missions: "target"
+        case .missions: "flag"
         }
     }
 }
@@ -64,7 +64,7 @@ struct SpaceScreen: View {
     }
 }
 
-private struct AccountInitial: View {
+struct AccountInitial: View {
     let initial: String
 
     var body: some View {

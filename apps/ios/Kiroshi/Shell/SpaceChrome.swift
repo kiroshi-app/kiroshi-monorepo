@@ -14,17 +14,47 @@ struct SpaceChrome: ViewModifier {
                 }
             }
             .navigationTitle(store.currentSpace?.name ?? "")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbarTitleMenu {
                 SpaceMenu(store: store)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    SettingsButton(account: account, spaces: store.spaces, section: .missions) {
-                        Label("Settings", systemImage: "gearshape")
-                    }
+                ToolbarItem(placement: .largeTitle) {
+                    SpaceTitleMenu(store: store)
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    SettingsButton(account: account, spaces: store.spaces, section: .missions) {
+                        AccountInitial(initial: store.accountInitial)
+                    }
+                    .accessibilityLabel("Settings")
+                }
+                .sharedBackgroundVisibility(.hidden)
             }
+    }
+}
+
+struct SpaceTitleMenu: View {
+    let store: SpaceStore
+    @ScaledMetric(relativeTo: .largeTitle) private var chevronSide: CGFloat = 24
+
+    var body: some View {
+        Menu {
+            SpaceMenu(store: store)
+        } label: {
+            HStack(spacing: 6) {
+                Text(store.currentSpace?.name ?? "")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: chevronSide, height: chevronSide)
+                    .background(Color(.systemGray5), in: .circle)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint("Shows your spaces")
     }
 }
 
