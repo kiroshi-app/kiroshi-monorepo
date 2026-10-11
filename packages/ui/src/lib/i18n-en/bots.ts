@@ -618,6 +618,11 @@ const bots = {
 				other: "Other",
 			},
 			unavailable: "Couldn’t read the applications Kiroshi knows.",
+			unrefreshed: {
+				title: "Couldn’t refresh the applications directory",
+				description:
+					"You’re seeing the last listing read. Open the catalogue again to retry.",
+			},
 			nothing: "Nothing matched {{query}}. Try another name.",
 			setup: {
 				signIn: "Signs you in",

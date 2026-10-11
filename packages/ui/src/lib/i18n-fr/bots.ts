@@ -633,6 +633,11 @@ const bots = {
 				other: "Autre",
 			},
 			unavailable: "Impossible de lire les applications que Kiroshi connaît.",
+			unrefreshed: {
+				title: "Impossible d’actualiser l’annuaire des applications",
+				description:
+					"Vous voyez la dernière liste lue. Rouvrez le catalogue pour réessayer.",
+			},
 			nothing: "Aucun résultat pour {{query}}. Essayez un autre nom.",
 			setup: {
 				signIn: "Vous connecte",

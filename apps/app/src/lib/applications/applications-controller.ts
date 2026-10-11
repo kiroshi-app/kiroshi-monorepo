@@ -154,6 +154,16 @@ export const createApplicationsController = (
 	const set = (fields: Partial<ApplicationsState>) =>
 		stateStore.setState({ ...current(), ...fields })
 
+	const reportDirectoryUnrefreshed = () =>
+		reportFailure({
+			title: i18n.t("bots:applications.catalogue.unrefreshed.title"),
+			description: i18n.t(
+				"bots:applications.catalogue.unrefreshed.description",
+			),
+		})
+
+	const holdsDirectory = () => current().directory.length > 0
+
 	const readDirectory = () => {
 		issuedRead += 1
 		const attempt = issuedRead
@@ -161,29 +171,38 @@ export const createApplicationsController = (
 		set({
 			isReadingDirectory: true,
 			hasDirectoryFailed: false,
-			hasDirectoryPartlyFailed: false,
+			hasDirectoryPartlyFailed:
+				holdsDirectory() && current().hasDirectoryPartlyFailed,
 		})
 		void port.search("").then(
 			(found) => {
 				if (!isLastIssued()) {
 					return
 				}
+				const hasPartlyFailed = found.registryFailure !== undefined
 				set({
 					directory: found.applications,
 					isReadingDirectory: false,
-					hasDirectoryPartlyFailed: found.registryFailure !== undefined,
+					hasDirectoryPartlyFailed: hasPartlyFailed,
 					isDirectoryStale: found.isStale === true,
 				})
+				if (hasPartlyFailed) {
+					reportDirectoryUnrefreshed()
+				}
 			},
 			() => {
 				if (!isLastIssued()) {
 					return
 				}
+				const isKeepingRows = holdsDirectory()
 				set({
 					isReadingDirectory: false,
-					hasDirectoryFailed: true,
-					isDirectoryStale: false,
+					hasDirectoryFailed: !isKeepingRows,
+					isDirectoryStale: isKeepingRows && current().isDirectoryStale,
 				})
+				if (isKeepingRows) {
+					reportDirectoryUnrefreshed()
+				}
 			},
 		)
 	}
@@ -320,8 +339,7 @@ export const createApplicationsController = (
 		subscribe: stateStore.subscribe,
 
 		open: async () => {
-			const { isReadingCatalogue, curated } = current()
-			if (isReadingCatalogue || curated.length > 0) {
+			if (current().isReadingCatalogue) {
 				return
 			}
 			set({ isReadingCatalogue: true })
@@ -338,9 +356,7 @@ export const createApplicationsController = (
 		},
 
 		browse: () => {
-			const { directory, hasDirectoryFailed, isReadingDirectory } = current()
-			const holdsDirectory = directory.length > 0 && !hasDirectoryFailed
-			if (isReadingDirectory || holdsDirectory) {
+			if (current().isReadingDirectory) {
 				return
 			}
 			readDirectory()

@@ -443,6 +443,23 @@ describe("toApplicationScope", () => {
 		expect(scope.mcpCatalogue?.isLoading).toBe(true)
 	})
 
+	it("keeps listing the held rows while it reads them again", () => {
+		const { scope } = scopeOf(
+			applicationsWith({
+				curated: [LINEAR],
+				directory: [HOSTED],
+				isReadingCatalogue: true,
+				isReadingDirectory: true,
+			}),
+		)
+
+		expect(scope.mcpCatalogue?.isLoading).toBe(false)
+		expect(scope.mcpCatalogue?.applications.map((held) => held.id)).toEqual([
+			LINEAR.name,
+			HOSTED.name,
+		])
+	})
+
 	it("keeps only what the typed query matches among the curated ones", () => {
 		const { scope } = scopeOf(
 			applicationsWith({ curated: [LINEAR, REGISTERED], query: "tasklog" }),
