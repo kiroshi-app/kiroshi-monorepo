@@ -68,15 +68,17 @@ Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 2.6
 ```
 
-The thread fixtures come from page 3 "Conversations" of the older file and play through the same scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn`, `agent_cancel_turn` and `conversation_create`, and plays the host's events. The + at the top right of the Conversations tab opens New Conversation, the companions of the Space to pick from: Create sends `conversation_create` and opens the new group conversation, which the scripted host then lists and announces with `conversation://created`. `3.1` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
+The Conversations list plays through a scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn`, `agent_cancel_turn` and `conversation_create`, and plays the host's events. The + at the top right of the Conversations tab opens New Conversation, the companions of the Space to pick from: Create sends `conversation_create` and opens the new group conversation, which the scripted host then lists and announces with `conversation://created`. `conversations` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations-live
 ```
- `3.2`, `3.5` and `3.8` open on Juniper's thread. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
+
+Page 3 "Fil" of "Kiroshi, iOS 2" opens on Juniper's thread: `3.1` (the conversation: one bubble per paragraph, the avatar under the last bubble of a run, a `Today` separator), `3.2` (empty), `3.3` (Juniper at work, the clock counting), `3.4` (Side project, whose host leaves two seconds after the thread loads) and `3.5` (the times shown, as a swipe left shows them). Each message's time is drawn only while a swipe left slides the thread; launched with `-holdsTimes YES`, the thread stays slid after the finger lifts, which is how `KiroshiUITests` checks the gesture. The times follow the simulator's locale: `-AppleLocale en_US` gives the artboards' `9:38 AM`. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
 
 ```bash
-xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.5 -AppleLocale en_US
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -draft $'Line one\nLine two'
 ```
 
 The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens on it, each companion's messages under its name and avatar, `group-mention` opens it with `@` typed so the mention picker shows, `group-working` with Juniper and Atlas both at work, and `group-failed` on the thread refused. Picking a companion in the picker writes `@Name`, sent to the host as `<@botId>` with that companion in `summoned`; with no mention, `summoned` stays empty and the host summons the lead, as the desktop does. The scripted host answers a group send with an `On it.` from each companion summoned:
@@ -85,7 +87,7 @@ The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture group-mention
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, 3.1, 3.2 and 3.8, opens the menu of Spaces on 2.2, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens the menu of Spaces on 2.2, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 

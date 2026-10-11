@@ -3,38 +3,52 @@ import SwiftUI
 struct ThreadView: View {
     let space: SpaceStore
     @State private var thread: ThreadStore
+    @State private var revealDrag: CGFloat
+    @ScaledMetric(relativeTo: .footnote) private var timeWidth = MessageBubbles.timeWidth
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
 
     init(subject: ConversationSubject, space: SpaceStore) {
         self.space = space
         #if DEBUG
             let draft = ConversationsFixture.draft
+            let revealDrag: CGFloat = ConversationsFixture.showsTimes ? .infinity : 0
         #else
             let draft = ""
+            let revealDrag: CGFloat = 0
         #endif
         _thread = State(initialValue: ThreadStore(subject: subject, draft: draft))
+        _revealDrag = State(initialValue: revealDrag)
     }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(thread.entries) { entry in
-                    ThreadEntryView(entry: entry)
+                    ThreadEntryView(entry: entry, subject: thread.subject)
                 }
                 if thread.isWorking {
-                    WorkingLabel(
-                        name: thread.workingName,
-                        isSeveral: thread.workingCompanions.count > 1, font: .subheadline
+                    WorkingLine(
+                        companion: thread.workingCompanions.first ?? thread.subject.members.first,
+                        name: thread.workingName, isSeveral: thread.workingCompanions.count > 1,
+                        since: thread.workingSince
                     )
-                    .padding(.vertical, 4)
+                    .padding(.top, 20)
+                }
+                if let offlineSpace = space.offlineSpace {
+                    HostOfflineLine(space: offlineSpace, email: space.email)
+                        .padding(.top, 20)
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 12)
+            .padding(.bottom, 12)
+            .offset(x: -revealed)
+            .environment(\.areTimesShown, revealed > 0)
         }
+        .gesture(TimesReveal(reveal: { revealDrag = $0 }, release: hideTimes))
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .background(Color.kiroshi(.card))
+        .background(Color(.systemBackground))
         .overlay {
             if thread.phase == .failed {
                 ContentUnavailableView {
@@ -48,30 +62,9 @@ struct ThreadView: View {
                     }
                     .buttonStyle(.bordered)
                 }
-                .background(Color.kiroshi(.card))
+                .background(Color(.systemBackground))
             } else if thread.phase == .loaded, thread.entries.isEmpty, !thread.isWorking {
-                ContentUnavailableView {
-                    Label {
-                        Text(thread.subject.title)
-                    } icon: {
-                        switch thread.subject {
-                        case .companion(let companion):
-                            CompanionAvatar(companion, size: .hero)
-                        case .group(let group):
-                            GroupAvatar(group: group, size: .hero)
-                        }
-                    }
-                } description: {
-                    Text("Nothing here yet. Your first message starts the conversation.")
-                }
-            }
-        }
-        .safeAreaInset(edge: .top) {
-            if let offlineSpace = space.offlineSpace {
-                HostOfflineLine(space: offlineSpace, email: space.email)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(.bar)
+                EmptyThread(subject: thread.subject)
             }
         }
         .safeAreaBar(edge: .bottom) {
@@ -80,12 +73,10 @@ struct ThreadView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(thread.subject.title)
         .toolbar {
-            if case .group(let group) = thread.subject {
-                ToolbarItem(placement: .principal) {
-                    GroupTitle(
-                        group: group,
-                        working: thread.isWorking ? Set(thread.workingCompanions.map(\.id)) : [])
-                }
+            ToolbarItem(placement: .principal) {
+                ThreadTitle(
+                    subject: thread.subject,
+                    working: thread.isWorking ? Set(thread.workingCompanions.map(\.id)) : [])
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -100,88 +91,176 @@ struct ThreadView: View {
             dismiss()
         }
     }
-}
 
-struct ThreadEntryView: View {
-    let entry: ThreadEntry
+    private var revealed: CGFloat {
+        min(revealDrag, timeWidth + MessageBubbles.timeGap)
+    }
 
-    var body: some View {
-        switch entry {
-        case .message(let message):
-            if let dayLabel = message.dayLabel {
-                Text(dayLabel)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(Color.kiroshi(.mutedForeground))
-                    .frame(maxWidth: .infinity)
-            }
-            if let author = message.author {
-                CompanionMessageView(message: message, author: author)
-            } else if message.isYours {
-                Text(message.rendered)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.kiroshi(.userBubble), in: .rect(cornerRadius: 20))
-                    .foregroundStyle(Color.kiroshi(.userBubbleForeground))
-                    .padding(.leading, 64)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .textSelection(.enabled)
-            } else {
-                Text(message.rendered)
-                    .lineSpacing(2)
-                    .foregroundStyle(Color.kiroshi(.foreground))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-        case .activities(let group):
-            ActivityGroupView(group: group)
+    private func hideTimes() {
+        #if DEBUG
+            guard !ConversationsFixture.holdsTimes else { return }
+        #endif
+        withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) {
+            revealDrag = 0
         }
     }
 }
 
-struct GroupTitle: View {
-    let group: GroupConversation
+struct ThreadEntryView: View {
+    let entry: ThreadEntry
+    let subject: ConversationSubject
+
+    var body: some View {
+        switch entry {
+        case .message(let message) where !message.bubbles.isEmpty:
+            VStack(spacing: 20) {
+                if let dayLabel = message.dayLabel {
+                    DaySeparator(label: dayLabel)
+                }
+                MessageBubbles(
+                    isYours: message.isYours, bubbles: message.bubbles,
+                    author: message.author ?? soloCompanion,
+                    showsAvatar: message.closesRun,
+                    name: message.opensRun ? message.author?.name : nil, time: message.time,
+                    accessibilityText: accessibilityText(of: message))
+            }
+            .padding(.top, message.opensRun ? 20 : 4)
+        case .message:
+            EmptyView()
+        case .activities(let group):
+            ActivityGroupView(group: group)
+                .padding(.top, 20)
+        }
+    }
+
+    private var soloCompanion: Companion? {
+        guard case .companion(let companion) = subject else { return nil }
+        return companion
+    }
+
+    private func accessibilityText(of message: ThreadMessage) -> Text {
+        guard let author = message.author else { return Text(message.rendered) }
+        return Text("\(author.name), \(message.rendered)")
+    }
+}
+
+struct ThreadTitle: View {
+    let subject: ConversationSubject
     let working: Set<Companion.ID>
 
     var body: some View {
         HStack(spacing: 8) {
-            GroupAvatar(group: group, size: .title, working: working)
-            Text(group.name)
-                .font(.headline)
-                .lineLimit(1)
+            switch subject {
+            case .companion(let companion):
+                CompanionAvatar(companion, size: .title, isWorking: !working.isEmpty)
+            case .group(let group):
+                GroupAvatar(group: group, size: .title, working: working)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(subject.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                if case .companion(let companion) = subject, let role = companion.role {
+                    Text(role)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .background(Color(.systemGray5), in: .rect(cornerRadius: 5))
+                }
+            }
         }
+        .padding(.leading, 8)
+        .padding(.trailing, 16)
+        .frame(minHeight: 44)
+        .glassEffect(in: .capsule)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityShowsLargeContentViewer()
     }
 }
 
-struct CompanionMessageView: View {
-    let message: ThreadMessage
-    let author: Companion
+struct EmptyThread: View {
+    let subject: ConversationSubject
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            if message.opensRun {
-                CompanionAvatar(author, size: .title)
-            } else {
-                CompanionPlaceholder(size: .title)
-                    .hidden()
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                if message.opensRun {
-                    Text(author.name)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color.kiroshi(.mutedForeground))
+        ContentUnavailableView {
+            Label {
+                HStack(spacing: 6) {
+                    Text(subject.title)
+                    if case .companion(let companion) = subject, let role = companion.role {
+                        RoleBadge(role: role)
+                    }
                 }
-                Text(message.rendered)
-                    .lineSpacing(2)
-                    .foregroundStyle(Color.kiroshi(.foreground))
-                    .textSelection(.enabled)
+            } icon: {
+                switch subject {
+                case .companion(let companion):
+                    CompanionAvatar(companion, size: .hero)
+                case .group(let group):
+                    GroupAvatar(group: group, size: .hero)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        } description: {
+            Text("Nothing here yet. Your first message starts the conversation.")
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(author.name), \(message.rendered)"))
+    }
+}
+
+struct WorkingLine: View {
+    let companion: Companion?
+    let name: String
+    let isSeveral: Bool
+    let since: Date?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            CompanionAvatar(companion, size: .message, isWorking: true)
+            Group {
+                if isSeveral {
+                    Text("\(name) are working…")
+                } else {
+                    Text("\(name) is working…")
+                }
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
+            .modifier(Shimmer())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let since {
+                TimelineView(.periodic(from: since, by: 1)) { timeline in
+                    Text(ConversationTime.elapsed(since: since, at: timeline.date))
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
+private struct Shimmer: ViewModifier {
+    static let period = 2.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.overlay {
+                TimelineView(.animation) { timeline in
+                    let phase =
+                        timeline.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: Self.period) / Self.period
+                    LinearGradient(
+                        colors: [.clear, .primary.opacity(0.6), .clear],
+                        startPoint: UnitPoint(x: phase * 3 - 1.5, y: 0.5),
+                        endPoint: UnitPoint(x: phase * 3 - 0.5, y: 0.5))
+                }
+                .mask(content)
+                .accessibilityHidden(true)
+            }
+        }
     }
 }
 
@@ -251,6 +330,7 @@ struct ActivityGroupView: View {
 struct ThreadComposer: View {
     @Bindable var thread: ThreadStore
     let isHostOffline: Bool
+    @ScaledMetric(relativeTo: .body) private var control: CGFloat = 32
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -270,15 +350,13 @@ struct ThreadComposer: View {
             HStack(alignment: .bottom, spacing: 8) {
                 TextField(placeholder, text: $thread.draft, axis: .vertical)
                     .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 3 : 6))
-                    .padding(.vertical, 9)
-                    .foregroundStyle(Color.kiroshi(.foreground))
+                    .padding(.vertical, 11)
                     .disabled(isHostOffline)
                 if thread.isWorking {
                     Button {
                         thread.stop()
                     } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.title)
+                        controlButton(systemImage: "stop.fill", font: .caption2)
                     }
                     .disabled(thread.runningScope == nil)
                     .accessibilityLabel("Stop")
@@ -286,27 +364,38 @@ struct ThreadComposer: View {
                     Button {
                         thread.send()
                     } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title)
+                        controlButton(systemImage: "arrow.up", font: .subheadline.weight(.semibold))
+                            .opacity(thread.canSend && !isHostOffline ? 1 : 0.3)
                     }
                     .disabled(!thread.canSend || isHostOffline)
                     .accessibilityLabel("Send")
                 }
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 4)
-            .padding(.vertical, 2)
+            .buttonStyle(.plain)
+            .padding(.leading, 16)
+            .padding(.trailing, 6)
+            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 22))
             .overlay {
-                RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(Color.kiroshi(.border))
+                RoundedRectangle(cornerRadius: 22)
+                    .strokeBorder(Color(.systemGray5))
             }
+            .opacity(isHostOffline ? 0.4 : 1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
+    private func controlButton(systemImage: String, font: Font) -> some View {
+        Image(systemName: systemImage)
+            .font(font)
+            .foregroundStyle(Color(.systemBackground))
+            .frame(width: control, height: control)
+            .background(.primary, in: .circle)
+            .padding(.vertical, 6)
+    }
+
     private var placeholder: String {
-        thread.entries.isEmpty ? "Message \(thread.subject.title)" : String(localized: "Message")
+        String(localized: "Message \(thread.subject.title)")
     }
 }
 
@@ -321,3 +410,29 @@ extension SendFailure {
         }
     }
 }
+
+#if DEBUG
+    #Preview("3.1 Thread · conversation") {
+        SignInRootView(model: .fixture(.thread))
+    }
+
+    #Preview("3.2 State · empty thread") {
+        SignInRootView(model: .fixture(.emptyThread))
+    }
+
+    #Preview("3.3 State · agent working") {
+        SignInRootView(model: .fixture(.workingThread))
+    }
+
+    #Preview("3.4 State · host offline") {
+        SignInRootView(model: .fixture(.threadHostOffline))
+    }
+
+    #Preview("3.5 Gesture · swipe left shows times") {
+        SignInRootView(model: .fixture(.swipedThread))
+    }
+
+    #Preview("Group thread") {
+        SignInRootView(model: .fixture(.groupThread))
+    }
+#endif

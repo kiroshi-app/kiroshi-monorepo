@@ -11,34 +11,6 @@ final class GroupThreadTests: XCTestCase {
             .firstMatch
     }
 
-    func composer(in app: XCUIApplication) -> XCUIElement {
-        let field = app.textViews.firstMatch
-        return field.exists ? field : app.textFields.firstMatch
-    }
-
-    func labelsFullyOnScreenAtTheLargestSize(of fixture: String) -> Set<String> {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-fixture", fixture,
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
-        ]
-        app.launch()
-        let transcript = app.scrollViews.firstMatch
-        XCTAssertTrue(composer(in: app).waitForExistence(timeout: 10))
-        let pickerTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mention '"))
-            .allElementsBoundByIndex.map(\.frame.minY).min()
-        let visible = CGRect(
-            x: transcript.frame.minX, y: app.navigationBars.firstMatch.frame.maxY,
-            width: transcript.frame.width,
-            height: min(pickerTop ?? .infinity, composer(in: app).frame.minY)
-                - app.navigationBars.firstMatch.frame.maxY)
-        let shown = transcript.descendants(matching: .any).allElementsBoundByIndex
-            .filter { visible.contains($0.frame) }
-            .map(\.label)
-        app.terminate()
-        return Set(shown)
-    }
-
     func auditTheGroup(_ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>) throws {
         let navigationBar = app.navigationBars["Release crew"].frame
         let transcript = app.scrollViews.firstMatch.frame

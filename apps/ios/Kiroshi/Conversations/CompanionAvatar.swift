@@ -4,6 +4,7 @@ struct CompanionAvatar: View {
     enum Size {
         case inline
         case title
+        case message
         case row
         case hero
 
@@ -11,8 +12,9 @@ struct CompanionAvatar: View {
             switch self {
             case .inline: 20
             case .title: 28
+            case .message: 40
             case .row: 52
-            case .hero: 72
+            case .hero: 88
             }
         }
 
@@ -20,6 +22,7 @@ struct CompanionAvatar: View {
             switch self {
             case .inline: .subheadline
             case .title: .caption2
+            case .message: .body
             case .row: .subheadline
             case .hero: .title3
             }
