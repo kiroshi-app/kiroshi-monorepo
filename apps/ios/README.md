@@ -28,6 +28,32 @@ Format Swift with the toolchain's `swift format`, configured by the root `.swift
 swift format lint --recursive apps/ios
 ```
 
+## Xcode Cloud to TestFlight
+
+Every merge on `main` that touches `apps/ios` or `.xcode-version` is archived by Xcode Cloud and lands in TestFlight for the internal group. Nobody opens Xcode for it.
+
+The repo holds one piece: `ci_scripts/ci_post_clone.sh`, next to where `Kiroshi.xcodeproj` is generated, as Xcode Cloud expects. After the clone it downloads XcodeGen 2.46.0 from its GitHub release (sha256 checked, the version `brew install xcodegen` gives locally), then runs `xcodegen generate --spec project.yml` from `apps/ios`, like `bun run ios:generate`. The build number is `CI_BUILD_NUMBER`. Xcode Cloud clones shallow, so the script stops when that variable is missing instead of counting commits. It prints `xcodebuild -version` and warns, without failing, when it differs from `.xcode-version`. Xcode Cloud picks Xcode in the workflow, not from that file: when `.xcode-version` moves, move the workflow's Environment with it.
+
+Everything else lives in App Store Connect. Apple asks for the first workflow to be created in Xcode.
+
+Once, in App Store Connect and GitHub:
+
+1. The app record for `com.kiroshi.app.ios` (team `BBE5V2JL5H`, iOS). Xcode offers to create it during step 4 below if it's missing.
+2. In TestFlight, an internal group (Internal Testing, +), with every tester in it.
+3. Xcode Cloud's access to `shoto290/kiroshi-monorepo`, granted with a GitHub admin of the repo when Xcode asks.
+
+The workflow, from Xcode:
+
+4. `bun run ios:generate`, open `apps/ios/Kiroshi.xcodeproj`, Report navigator, Cloud, Get Started. Product: Kiroshi. Then Edit Workflow.
+5. General: name it `TestFlight from main`. The project is `apps/ios/Kiroshi.xcodeproj`, the scheme `Kiroshi`.
+6. Environment: Xcode `27.0`, the version in `.xcode-version`, not Latest Release. macOS: the one Xcode Cloud recommends for it. Clean: off (only external testing needs it).
+7. Start Conditions: delete the suggested Pull Request Changes. Branch Changes: Source Branch, Custom Branches, `main`. Files and Folders, Custom Conditions: Start a Build, Any File, in the folder `apps/ios`, then Start a Build, Filename `.xcode-version`, in any folder. Auto-cancel Builds: off, so each merge gets its own build.
+8. Actions: one Archive, platform iOS, scheme `Kiroshi`, Deployment Preparation TestFlight (Internal Testing Only).
+9. Post-Actions: TestFlight Internal Testing, with the internal group from step 2. No TestFlight External Testing.
+10. Save, grant access to the repository, then Start Build on `main`.
+
+Xcode Cloud numbers builds from 1. If TestFlight already holds a `0.1.0` build uploaded by hand, set App Store Connect, Xcode Cloud, Settings, Build Number, Next Build Number above it.
+
 ## States without the network
 
 A Debug build opens straight on one state, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number. Page 1 "Sign in" of the Paper file "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards):
