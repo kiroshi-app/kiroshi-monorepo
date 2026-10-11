@@ -395,7 +395,7 @@ export type RunPresentationInput = {
 
 const NO_AVATAR = -1
 
-const lastIndexOf = (run: TranscriptRow[]) => run.length - 1
+const lastRowIndexOf = (run: TranscriptRow[]) => run.length - 1
 
 export function runPresentationsOf({
 	runs,
@@ -408,7 +408,7 @@ export function runPresentationsOf({
 		return runs.map((run, index) => ({
 			isMarked: marked.has(index),
 			avatarIndex: NO_AVATAR,
-			timeLineIndex: lastIndexOf(run),
+			timeLineIndex: lastRowIndexOf(run),
 			hasBareTables: false,
 		}))
 	}
@@ -418,8 +418,8 @@ export function runPresentationsOf({
 		const isNewest = index === newestIndex
 		return {
 			isMarked: isNewest,
-			avatarIndex: isWorking && isNewest ? NO_AVATAR : lastIndexOf(run),
-			timeLineIndex: lastIndexOf(run),
+			avatarIndex: isWorking && isNewest ? NO_AVATAR : lastRowIndexOf(run),
+			timeLineIndex: lastRowIndexOf(run),
 			hasBareTables: true,
 		}
 	})

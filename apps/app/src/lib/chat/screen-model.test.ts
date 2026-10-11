@@ -378,8 +378,10 @@ describe("day changes in Tokyo", () => {
 
 		expect(daySeparatorsIn(runs)).toBe(1)
 		expect(
-			runs.map((run, runIndex) => run[presentations[runIndex].timeLineIndex]),
-		).toEqual([runs[0][1], runs[1][0]])
+			runs.map(
+				(run, runIndex) => run[presentations[runIndex].timeLineIndex].messageId,
+			),
+		).toEqual(["local-2", "local-3"])
 	})
 
 	it("opens no new day between two messages of the same local day across UTC midnight", () => {
