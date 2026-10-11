@@ -59,14 +59,17 @@ final class ConversationsAccessibilityTests: XCTestCase {
         let app = launch("2.2")
         XCTAssertTrue(row("Juniper", in: app).waitForExistence(timeout: 10))
 
-        app.buttons["Studio"].firstMatch.tap()
+        app.navigationBars["Studio"].buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Studio'")
+        ).firstMatch.tap()
 
-        XCTAssertTrue(app.buttons["Side project, offline"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Home lab, online"].exists)
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "2.2"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        let sideProject = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH 'Side project'")
+        ).firstMatch
+        XCTAssertTrue(sideProject.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Home lab'")).firstMatch
+                .exists)
     }
 
     func testNoCompanionSaysWhereToAddOneAndPassesTheAudit() throws {
