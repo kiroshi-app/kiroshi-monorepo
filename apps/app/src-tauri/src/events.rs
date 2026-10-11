@@ -113,6 +113,10 @@ pub fn emit<R: Runtime, P: Serialize + Clone>(
 	app.emit(event.name(), payload)
 }
 
+pub fn frame<P: Serialize>(event: Event<P>, payload: &P) -> serde_json::Result<Frame> {
+	framed(event.name(), payload)
+}
+
 pub fn subscribed<R: Runtime>(app: &AppHandle<R>) -> broadcast::Receiver<Frame> {
 	relay(app).0.subscribe()
 }

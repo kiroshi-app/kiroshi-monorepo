@@ -24,8 +24,8 @@ use super::reach;
 use super::{entered, members, Hosting};
 use crate::account::cloud::RegisterError;
 use crate::account::session::AccountSession;
+use crate::agent::commands::subscribed_with_pending_questions;
 use crate::db;
-use crate::events;
 use crate::host_api::events::SEND_PATIENCE;
 use crate::missions::github::installed_tls_provider;
 use crate::spaces::commands::ready;
@@ -257,8 +257,16 @@ async fn online<R: Runtime>(
 	ids: Ids<'_>,
 ) -> Ended {
 	let (mut sink, mut stream) = socket.split();
-	let mut heard = events::subscribed(app);
+	let (pending, mut heard) = subscribed_with_pending_questions(app);
 	let mut guest_events = reach::GuestEvents::new(ids.space_id);
+	for frame in pending {
+		if !guest_events.reach_the_guest(app, &frame).await {
+			continue;
+		}
+		if let Err(reason) = sent(&mut sink, Message::text(bridge::forwarded(&frame))).await {
+			return Ended::Dropped(reason);
+		}
+	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
 	let mut avatars = JoinSet::new();
