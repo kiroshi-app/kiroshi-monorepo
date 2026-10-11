@@ -129,15 +129,15 @@ pub fn list(root: &Path, scope: &EnvScope) -> Result<Vec<EnvEntry>, EnvError> {
 }
 
 pub fn names(root: &Path, scope: &EnvScope) -> Result<Vec<String>, EnvError> {
-	Ok(held(&file(root, scope)?)?
-		.into_iter()
-		.map(|(name, _)| name)
-		.filter(|name| !is_reserved(name))
-		.collect())
+	Ok(unreserved_names(held(&file(root, scope)?)?))
 }
 
 pub fn names_in(text: &str) -> Result<Vec<String>, EnvError> {
-	Ok(parsed(text)?.into_iter().map(|(name, _)| name).filter(|name| !is_reserved(name)).collect())
+	Ok(unreserved_names(parsed(text)?))
+}
+
+fn unreserved_names(entries: Entries) -> Vec<String> {
+	entries.into_iter().map(|(name, _)| name).filter(|name| !is_reserved(name)).collect()
 }
 
 pub fn resolve(root: &Path, owner: &EnvOwner) -> Result<ResolvedEnv, EnvError> {
