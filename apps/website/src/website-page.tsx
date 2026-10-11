@@ -225,7 +225,7 @@ const ProPlan = () => {
 			<div className="flex flex-col gap-1.5">
 				<p className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5">
 					<del
-						className={`${PRICE_FIGURE} text-struck-price line-through decoration-1 dark:text-struck-price-dark`}
+						className={`${PRICE_FIGURE} text-struck-price decoration-1 dark:text-struck-price-dark`}
 					>
 						{monthlyPrice}
 					</del>
