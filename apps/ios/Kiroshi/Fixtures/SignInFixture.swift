@@ -72,6 +72,7 @@
         case spaceMenu = "2.2"
         case hostOffline = "2.3"
         case conversations = "3.1"
+        case conversationsLive = "conversations-live"
         case thread = "3.2"
         case noCompanion = "3.3"
         case loadingCompanions = "3.4"
@@ -120,7 +121,8 @@
             case .space, .spaceMenu, .hostOffline, .missions, .missionThread, .noMissions,
                 .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
-            case .conversations, .thread, .noCompanion, .loadingCompanions, .emptyThread,
+            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
+                .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
@@ -133,7 +135,8 @@
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .space, .spaceMenu,
                 .hostOffline, .missions, .missionThread, .noMissions, .missionsHostOffline:
                 true
-            case .conversations, .thread, .noCompanion, .loadingCompanions, .emptyThread,
+            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
+                .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 true
@@ -169,7 +172,8 @@
         @MainActor fileprivate var relay: RelayEnvironment {
             let online: Set<Space.ID> = [CloudFixture.studioId, CloudFixture.homeLabId]
             switch self {
-            case .conversations, .thread, .noCompanion, .loadingCompanions, .emptyThread,
+            case .conversations, .conversationsLive, .thread, .noCompanion, .loadingCompanions,
+                .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
@@ -235,7 +239,8 @@
                 model.path = [.email, .code]
                 model.sendNewCodeTapped()
             case .opening, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .keychain,
-                .seededKeychain, .space, .spaceMenu, .hostOffline, .conversations, .thread,
+                .seededKeychain, .space, .spaceMenu, .hostOffline, .conversations,
+                .conversationsLive, .thread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .missions,
                 .missionThread, .noMissions, .missionsHostOffline:

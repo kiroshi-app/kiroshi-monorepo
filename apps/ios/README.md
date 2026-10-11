@@ -34,7 +34,12 @@ A Debug build opens straight on one state of the Paper file "Kiroshi, iOS", fed 
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.7
 ```
 
-Page 3 "Conversations" (`3.1` to `3.8`) is fed by a scripted host on the relay: it answers `conversation_bots`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. `3.2`, `3.5` and `3.8` open on Juniper's thread. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `3.6` goes online, loads the list, then hears the host leave two seconds later, as when the Mac app quits. `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
+Page 3 "Conversations" (`3.1` to `3.8`) is fed by a scripted host on the relay: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn` and `agent_cancel_turn`, and plays the host's events. Beside the six companions, `3.1` lists two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan), a `conversation://updated` renaming it Launch checklist, and a `conversation://deleted`, three seconds apart:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations-live
+```
+ `3.2`, `3.5` and `3.8` open on Juniper's thread. Sending from any thread plays a whole turn (tools, a streamed reply, then the end of the turn). `3.6` goes online, loads the list, then hears the host leave two seconds later, as when the Mac app quits. `conversations-failed` and `thread-failed` open on the screens shown when the host refuses the list or the thread. `-draft` fills the composer of the thread a fixture opens:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.8 -draft $'Line one\nLine two'
@@ -68,3 +73,5 @@ The Missions tab reads `mission_space_feed` for the shared Space and places each
 ## Companion avatars
 
 `CompanionAvatar` draws what the desktop draws: `CompanionAvatarEngine` runs `Kiroshi/Resources/companion-avatar.js` (built from `packages/ui` by `bun run avatar:build`, never edited by hand) in JavaScriptCore, caches the idle drawing per name, tint and theme, and computes a frame at 30 fps while the companion works, idle under Reduce Motion. A companion with a picture shows it once `relay_avatar` answers; until then, or when it fails, the drawn avatar stays. `CompanionAvatarTests` replays every case of `packages/ui/src/components/companion-avatar.fixture.jsonl` from the repo, so `bun run ios:test` fails when the bundle and the fixture part ways. In the Conversations fixtures, Shoto has a picture and Otto no tint.
+
+A group conversation's icon is the desktop Hive: `CompanionAvatarEngine` calls `hiveLayout` from the same bundle for every cell's centre and side and the `+N` counter, and each cell is the companion's own avatar. `HiveLayoutTests` replays `packages/ui/src/components/hive-layout.fixture.jsonl` from the repo the same way.

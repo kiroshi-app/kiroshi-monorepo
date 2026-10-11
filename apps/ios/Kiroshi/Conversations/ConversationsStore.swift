@@ -11,14 +11,14 @@ final class ConversationsStore {
     }
 
     private(set) var phase = Phase.loading
-    private(set) var summaries: [CompanionSummary] = []
-    var opened: Companion?
+    private(set) var summaries: [ConversationSummary] = []
+    var opened: ConversationSubject?
 
     @ObservationIgnored private var instanceId: Space.ID?
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var opening: Companion.ID?
-    @ObservationIgnored private var working: Set<String> = []
+    @ObservationIgnored private var working: [String: Set<Companion.ID>] = [:]
     @ObservationIgnored private var loading: Task<Void, Never>?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
@@ -38,7 +38,7 @@ final class ConversationsStore {
             spaceId = nil
             phase = .loading
             summaries = []
-            working = []
+            working = [:]
             opened = nil
         }
         relay = ConversationRelay(connection: connection)
@@ -79,38 +79,59 @@ final class ConversationsStore {
         case .messageStored(let message):
             update(message.conversationId) { $0.lastMessage = MessagePreview(message) }
         case .agent(let agent):
-            guard let conversationId = agent.scope?.conversationId else { return }
-            apply(agent.change, to: conversationId)
+            guard let scope = agent.scope else { return }
+            apply(agent.change, by: scope.botId, in: scope.conversationId)
         case .companionsChanged:
             reload()
+        case .groupCreated(let group):
+            guard phase == .loaded, !summaries.contains(where: { $0.id == group.id }) else {
+                return
+            }
+            publish(summaries + [summary(of: group, lastMessage: nil)])
+        case .groupUpdated(let group):
+            guard let index = summaries.firstIndex(where: { $0.subject.isGroup(group.id) })
+            else { return }
+            var changed = summaries
+            changed[index].subject = .group(group)
+            publish(changed)
+        case .groupDeleted(let id):
+            guard summaries.contains(where: { $0.subject.isGroup(id) }) else { return }
+            working[id] = nil
+            publish(summaries.filter { !$0.subject.isGroup(id) })
         }
     }
 
-    private func apply(_ change: AgentEvent.Change, to conversationId: String) {
+    private func apply(
+        _ change: AgentEvent.Change, by companionId: Companion.ID, in conversationId: String
+    ) {
         switch change {
         case .turn(let state):
-            setWorking(state.isWorking, in: conversationId)
+            setWorking(state.isWorking, companionId, in: conversationId)
         case .messageStarted:
-            setWorking(true, in: conversationId)
+            setWorking(true, companionId, in: conversationId)
         case .messageCompleted(let message):
-            update(conversationId) { $0.lastMessage = MessagePreview(message) }
+            update(conversationId) { $0.lastMessage = MessagePreview(message, by: companionId) }
         case .turnEnded:
-            setWorking(false, in: conversationId)
+            setWorking(false, companionId, in: conversationId)
         case .messageDelta, .activity, .other:
             break
         }
     }
 
-    private func setWorking(_ isWorking: Bool, in conversationId: String) {
+    private func setWorking(
+        _ isWorking: Bool, _ companionId: Companion.ID, in conversationId: String
+    ) {
+        var companionIds = working[conversationId, default: []]
         if isWorking {
-            working.insert(conversationId)
+            companionIds.insert(companionId)
         } else {
-            working.remove(conversationId)
+            companionIds.remove(companionId)
         }
-        update(conversationId) { $0.isWorking = isWorking }
+        working[conversationId] = companionIds.isEmpty ? nil : companionIds
+        update(conversationId) { $0.workingCompanionIds = companionIds }
     }
 
-    private func update(_ conversationId: String, _ change: (inout CompanionSummary) -> Void) {
+    private func update(_ conversationId: String, _ change: (inout ConversationSummary) -> Void) {
         guard let index = summaries.firstIndex(where: { $0.conversationId == conversationId })
         else { return }
         var changed = summaries
@@ -118,32 +139,45 @@ final class ConversationsStore {
         publish(changed)
     }
 
+    private func summary(of group: GroupConversation, lastMessage: MessagePreview?)
+        -> ConversationSummary
+    {
+        ConversationSummary(
+            subject: .group(group), conversationId: group.id, lastMessage: lastMessage,
+            workingCompanionIds: working[group.id] ?? [])
+    }
+
     private func load(_ spaceId: String, through relay: ConversationRelay) async {
         do {
-            let companions = try await relay.companions(in: spaceId)
-            let loaded = try await withThrowingTaskGroup(of: CompanionSummary.self) { group in
-                for companion in companions {
-                    group.addTask {
-                        try await Self.summary(of: companion, in: spaceId, through: relay)
+            async let companions = relay.companions(in: spaceId)
+            async let groups = relay.groups(in: spaceId)
+            let subjects =
+                try await groups.map(ConversationSubject.group)
+                + companions.map(ConversationSubject.companion)
+            let loaded = try await withThrowingTaskGroup(of: ConversationSummary.self) { tasks in
+                for subject in subjects {
+                    tasks.addTask {
+                        try await Self.summary(of: subject, in: spaceId, through: relay)
                     }
                 }
-                var loaded: [CompanionSummary] = []
-                for try await summary in group {
-                    loaded.append(summary)
+                var loaded: [String: ConversationSummary] = [:]
+                for try await summary in tasks {
+                    loaded[summary.id] = summary
                 }
                 return loaded
             }
             guard !Task.isCancelled else { return }
             publish(
-                loaded.map { summary in
+                subjects.compactMap { loaded[$0.id] }.map { summary in
                     var summary = summary
-                    summary.isWorking = summary.conversationId.map(working.contains) ?? false
+                    summary.workingCompanionIds =
+                        summary.conversationId.flatMap { working[$0] } ?? []
                     return summary
                 })
             phase = .loaded
-            if let opening, let companion = companions.first(where: { $0.id == opening }) {
+            if let opening, let subject = subjects.first(where: { $0.id == opening }) {
                 self.opening = nil
-                opened = companion
+                opened = subject
             }
         } catch is CancellationError {
             return
@@ -154,16 +188,20 @@ final class ConversationsStore {
     }
 
     private nonisolated static func summary(
-        of companion: Companion, in spaceId: String, through relay: ConversationRelay
-    ) async throws -> CompanionSummary {
-        let conversationId = try await relay.mainChat(of: companion.id, in: spaceId)
+        of subject: ConversationSubject, in spaceId: String, through relay: ConversationRelay
+    ) async throws -> ConversationSummary {
+        let conversationId =
+            switch subject {
+            case .companion(let companion): try await relay.mainChat(of: companion.id, in: spaceId)
+            case .group(let group): group.id
+            }
         let last = try await relay.latestMessages(in: conversationId, limit: 1).last
-        return CompanionSummary(
-            companion: companion, conversationId: conversationId,
+        return ConversationSummary(
+            subject: subject, conversationId: conversationId,
             lastMessage: last.map(MessagePreview.init))
     }
 
-    private func publish(_ changed: [CompanionSummary]) {
+    private func publish(_ changed: [ConversationSummary]) {
         let time = ConversationTime(now: now(), calendar: calendar)
         summaries = Self.ordered(changed).map { summary in
             var summary = summary
@@ -171,20 +209,25 @@ final class ConversationsStore {
                 summary.isWorking
                 ? String(localized: "Now")
                 : summary.lastMessage.map { time.listLabel(for: $0.sentAt) }
+            switch summary.subject {
+            case .companion(let companion):
+                summary.preview = summary.lastMessage?.line
+                summary.workingName = summary.isWorking ? companion.name : nil
+            case .group(let group):
+                summary.preview = summary.lastMessage?.line(among: group.members)
+                summary.workingName =
+                    group.members.first { summary.workingCompanionIds.contains($0.id) }?.name
+            }
             return summary
         }
     }
 
-    private static func ordered(_ summaries: [CompanionSummary]) -> [CompanionSummary] {
-        summaries.sorted { left, right in
-            switch (left.lastMessage?.sentAt, right.lastMessage?.sentAt) {
-            case (let left?, let right?) where left != right: left > right
-            case (.some, .none): true
-            case (.none, .some): false
-            default:
-                left.companion.name.localizedStandardCompare(right.companion.name)
-                    == .orderedAscending
+    private static func ordered(_ summaries: [ConversationSummary]) -> [ConversationSummary] {
+        summaries.enumerated().sorted { left, right in
+            if left.element.lastActivity != right.element.lastActivity {
+                return left.element.lastActivity > right.element.lastActivity
             }
-        }
+            return left.offset < right.offset
+        }.map(\.element)
     }
 }

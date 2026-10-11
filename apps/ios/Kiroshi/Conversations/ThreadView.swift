@@ -5,14 +5,14 @@ struct ThreadView: View {
     @State private var thread: ThreadStore
     @Environment(\.dismiss) private var dismiss
 
-    init(companion: Companion, space: SpaceStore) {
+    init(subject: ConversationSubject, space: SpaceStore) {
         self.space = space
         #if DEBUG
             let draft = ConversationsFixture.draft
         #else
             let draft = ""
         #endif
-        _thread = State(initialValue: ThreadStore(companion: companion, draft: draft))
+        _thread = State(initialValue: ThreadStore(subject: subject, draft: draft))
     }
 
     var body: some View {
@@ -22,7 +22,7 @@ struct ThreadView: View {
                     ThreadEntryView(entry: entry)
                 }
                 if thread.isWorking {
-                    WorkingLabel(name: thread.companion.name, font: .subheadline)
+                    WorkingLabel(name: thread.workingName, font: .subheadline)
                         .padding(.vertical, 4)
                 }
             }
@@ -49,9 +49,14 @@ struct ThreadView: View {
             } else if thread.phase == .loaded, thread.entries.isEmpty, !thread.isWorking {
                 ContentUnavailableView {
                     Label {
-                        Text(thread.companion.name)
+                        Text(thread.subject.title)
                     } icon: {
-                        CompanionAvatar(thread.companion, size: .hero)
+                        switch thread.subject {
+                        case .companion(let companion):
+                            CompanionAvatar(companion, size: .hero)
+                        case .group(let group):
+                            GroupAvatar(group: group, size: .hero)
+                        }
                     }
                 } description: {
                     Text("Nothing here yet. Your first message starts the conversation.")
@@ -70,7 +75,7 @@ struct ThreadView: View {
             ThreadComposer(thread: thread, isHostOffline: space.offlineSpace != nil)
         }
         .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle(thread.companion.name)
+        .navigationTitle(thread.subject.title)
         .toolbar(.hidden, for: .tabBar)
         .task(id: space.connection.map(ObjectIdentifier.init)) {
             guard let connection = space.connection else { return }
@@ -151,11 +156,11 @@ struct ThreadComposer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let failure = thread.sendFailure {
-                ProblemLabel(message: failure.message(name: thread.companion.name))
+                ProblemLabel(message: failure.message(name: thread.workingName))
             }
             if thread.stopFailed {
                 ProblemLabel(
-                    message: "Couldn’t stop \(thread.companion.name). Tap Stop to try again.")
+                    message: "Couldn’t stop \(thread.workingName). Tap Stop to try again.")
             }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField(placeholder, text: $thread.draft, axis: .vertical)
@@ -196,7 +201,7 @@ struct ThreadComposer: View {
     }
 
     private var placeholder: String {
-        thread.entries.isEmpty ? "Message \(thread.companion.name)" : String(localized: "Message")
+        thread.entries.isEmpty ? "Message \(thread.subject.title)" : String(localized: "Message")
     }
 }
 

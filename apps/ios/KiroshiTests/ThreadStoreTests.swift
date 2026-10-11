@@ -30,7 +30,7 @@ struct ThreadStoreTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         return ThreadStore(
-            companion: juniper, now: { [sentAt] in sentAt }, makeId: { ids.next()! },
+            subject: .companion(juniper), now: { [sentAt] in sentAt }, makeId: { ids.next()! },
             calendar: calendar)
     }
 
@@ -209,6 +209,46 @@ struct ThreadStoreTests {
         #expect(store.draft.isEmpty)
         #expect(store.isWorking)
         #expect(store.sendFailure == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aGroupOpensOnItsOwnConversationAndLetsTheHostPickWhoAnswers() async throws {
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let group = GroupConversation(
+            id: "group-release", title: "Release crew", createdAt: 0,
+            participants: [
+                .init(botId: juniper.id, name: "Juniper"), .init(botId: "atlas", name: "Atlas"),
+            ])
+        let host = TestHost(
+            messages: [
+                "group-release": [
+                    TestHost.message(
+                        "r1", in: "group-release", seq: 1, isYours: false, "Tagging 0.42 next.",
+                        at: 1_790_900_000_000, by: juniper.id)
+                ]
+            ]
+        ) { call in
+            call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil
+        }
+        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+        #expect(texts(store) == ["Tagging 0.42 next."])
+
+        store.draft = "Ship it."
+        await store.send()?.value
+        let call = try #require(await host.nextCall("conversation_send_turn"))
+        let args = try call.args(as: SendTurnArgs.self)
+        #expect(args.summoned.isEmpty)
+        #expect(args.message.conversationId == "group-release")
+
+        host.push(
+            event: "agent://event",
+            payload:
+                #"{"scope":{"conversationId":"group-release","botId":"\#(atlas.id)","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":null}"#
+        )
+        await waitUntil { store.runningScope != nil }
+        #expect(store.workingName == "Atlas")
         following.cancel()
         await connection.stop()
     }

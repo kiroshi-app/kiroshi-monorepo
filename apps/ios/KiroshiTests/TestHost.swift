@@ -26,6 +26,7 @@ final class TestHost: Sendable {
 
     init(
         companions: [Companion] = [],
+        groups: [FixtureHost.Group] = [],
         messages: [String: [String]] = [:],
         holding: Set<String> = [],
         answer: @escaping Answer = { _ in nil }
@@ -44,7 +45,8 @@ final class TestHost: Sendable {
                 guard !holding.contains(call.command) else { continue }
                 let body =
                     answer(call)
-                    ?? Self.standard(call, companions: companions, messages: messages)
+                    ?? Self.standard(
+                        call, companions: companions, groups: groups, messages: messages)
                 if let body {
                     socket.push(.frame(body))
                 }
@@ -91,17 +93,21 @@ final class TestHost: Sendable {
 
     static func message(
         _ id: String, in conversationId: String, seq: Int, isYours: Bool, _ content: String,
-        at createdAt: Int
+        at createdAt: Int, by author: Companion.ID? = nil
     ) -> String {
         FixtureHost.messageJSON(
             id: id, conversationId: conversationId, seq: seq,
-            role: isYours ? "user" : "assistant", content: content, createdAt: createdAt)
+            role: isYours ? "user" : "assistant", content: content, createdAt: createdAt,
+            authorBotId: author)
     }
 
     private static func standard(
-        _ call: TestCall, companions: [Companion], messages: [String: [String]]
+        _ call: TestCall, companions: [Companion], groups: [FixtureHost.Group],
+        messages: [String: [String]]
     ) -> String? {
         switch call.command {
+        case "conversation_list":
+            return ok(call, "[\(groups.map(\.json).joined(separator: ","))]")
         case "conversation_bots":
             let bots = companions.map { #"{"id":"\#($0.id)","name":"\#($0.name)"}"# }
             return ok(call, "[\(bots.joined(separator: ","))]")
