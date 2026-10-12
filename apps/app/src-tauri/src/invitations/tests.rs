@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 
 use super::contract::{InvitationError, CHANGED_EVENT};
 use super::{accept, decline, read, resumed, Invitations};
+use crate::account::contract::{AccountState, SignedOutReason};
 use crate::account::session::{restore, sign_out, AccountSession};
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -958,7 +959,7 @@ fn a_guest_left_without_an_account_ends_closes_its_proxy_and_keeps_the_entry() {
 }
 
 #[test]
-fn a_guest_refused_401_ends_and_a_connect_after_a_new_sign_in_starts_a_new_one() {
+fn a_guest_refused_401_signs_the_account_out_on_site_and_a_new_sign_in_connects_anew() {
 	run(async {
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
@@ -969,12 +970,23 @@ fn a_guest_refused_401_ends_and_a_connect_after_a_new_sign_in_starts_a_new_one()
 
 		assert!(guest_ended(&harness, &id).await, "the guest still runs");
 		assert!(proxy_closed(&first).await, "the proxy still answers");
-		assert_eq!(harness.stored().await.len(), 1);
-		assert!(harness.heard(REMOVED_EVENT).is_empty());
+		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
+		let session = harness.app.state::<AccountSession>();
+		let signed_out_on_site =
+			AccountState::SignedOut { reason: Some(SignedOutReason::SignedOutOnSite) };
+		for _ in 0..500 {
+			if session.current() == signed_out_on_site {
+				break;
+			}
+			tokio::time::sleep(Duration::from_millis(10)).await;
+		}
+		assert_eq!(session.current(), signed_out_on_site);
+		assert!(session.bearer().expect("the store reads").is_none());
 
 		harness.cloud.is_refusing_members.store(false, Ordering::SeqCst);
-		let second = harness.connect(&id).await.expect("the new connection");
-		let _reopened = harness.member().await;
+		store::set(&harness.root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("signed in");
+		let id = harness.accepted().await;
+		let (second, _reopened) = connected(&mut harness, &id).await;
 
 		assert!(is_guest_running(&harness, &id));
 		assert_ne!(second.host_url, first.host_url);
@@ -1150,7 +1162,7 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 				.await
 				.err()
 				.expect("the listing fails");
-			assert!(!failure.contains(BEARER), "{failure}");
+			assert!(!format!("{failure:?}").contains(BEARER), "{failure:?}");
 		}
 		let offline = Harness::over(Some(BEARER), Some(a_closed_port().await), Ok(())).await;
 		let failure = offline
@@ -1163,7 +1175,7 @@ fn a_failed_listing_leaves_the_entries_unchanged_and_its_failure_carries_no_bear
 			.expect("the listing fails");
 		reconciled(offline.app.handle()).await;
 
-		assert!(!failure.contains(BEARER), "{failure}");
+		assert!(!format!("{failure:?}").contains(BEARER), "{failure:?}");
 		assert_eq!(harness.stored().await, held);
 		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": id })]);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());

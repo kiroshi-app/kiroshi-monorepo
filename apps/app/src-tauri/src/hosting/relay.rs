@@ -23,7 +23,7 @@ use super::contract::HostingState;
 use super::reach;
 use super::{entered, members, Hosting};
 use crate::account::cloud::RegisterError;
-use crate::account::session::AccountSession;
+use crate::account::session::{self, AccountSession};
 use crate::agent::commands::subscribed_with_pending_questions;
 use crate::db;
 use crate::host_api::events::SEND_PATIENCE;
@@ -169,7 +169,10 @@ async fn attempted<R: Runtime>(
 				Ended::Dropped(reason) => Next::Retry(reason),
 			}
 		}
-		Some(Opened::Revoked) => Next::Settled(HostingState::NeedsSignIn),
+		Some(Opened::Revoked) => {
+			session::revoked(app, &bearer);
+			Next::Settled(HostingState::NeedsSignIn)
+		}
 		Some(Opened::Forbidden) => Next::Settled(HostingState::Failed {
 			reason: "the account does not own this instance (relay answered 403)".to_owned(),
 		}),
@@ -194,7 +197,10 @@ async fn registered<R: Runtime>(
 	let cloud = &app.state::<Hosting>().cloud;
 	let instance_id = match cloud.register_instance(bearer, &hosted.name).await {
 		Ok(instance_id) => instance_id,
-		Err(RegisterError::Revoked) => return Err(Next::Settled(HostingState::NeedsSignIn)),
+		Err(RegisterError::Revoked) => {
+			session::revoked(app, bearer);
+			return Err(Next::Settled(HostingState::NeedsSignIn));
+		}
 		Err(RegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
 	let state = app.state::<db::DatabaseState>();

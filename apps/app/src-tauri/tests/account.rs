@@ -24,6 +24,10 @@ use tokio::net::TcpListener;
 
 const BEARER: &str = "integration-bearer";
 const EMAIL: &str = "steve@example.com";
+const REQUEST_ID: &str = "0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
+const VERIFICATION_URL: &str =
+	"https://kiroshi.app/authorize?request=0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
+const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
 
 type Callbacks = Arc<Mutex<Vec<String>>>;
 
@@ -31,7 +35,16 @@ async fn cloud(callbacks: Callbacks) -> String {
 	let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
 	let address = listener.local_addr().expect("the stub is named");
 	let router = Router::new()
-		.route("/api/auth/sign-in/magic-link", post(magic_link))
+		.route("/authorization-requests", post(created))
+		.route(
+			"/authorization-requests/{id}/poll",
+			post(|| async {
+				answered(
+					StatusCode::OK,
+					json!({ "status": "approved", "token": BEARER, "user": account() }),
+				)
+			}),
+		)
 		.route("/me", get(me))
 		.route(
 			"/api/auth/sign-out",
@@ -50,12 +63,24 @@ fn answered(status: StatusCode, body: Value) -> Answered {
 	(status, [(header::CONTENT_TYPE, "application/json")], body.to_string())
 }
 
-async fn magic_link(State(callbacks): State<Callbacks>, body: String) -> Answered {
+async fn created(State(callbacks): State<Callbacks>, body: String) -> Answered {
 	let body: Value = serde_json::from_str(&body).expect("a json body");
 	let callback = body["callbackURL"].as_str().expect("a callback url").to_owned();
 	callbacks.lock().expect("the stub").push(callback);
-	let expires_at = (chrono::Utc::now() + Duration::from_secs(300)).to_rfc3339();
-	answered(StatusCode::OK, json!({ "status": true, "expiresAt": expires_at }))
+	answered(
+		StatusCode::CREATED,
+		json!({
+			"id": REQUEST_ID,
+			"pollSecret": "integration-poll-secret",
+			"verificationURL": VERIFICATION_URL,
+			"expiresAt": EXPIRES_AT,
+			"interval": 600
+		}),
+	)
+}
+
+fn account() -> Value {
+	json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" })
 }
 
 async fn me(headers: HeaderMap) -> Answered {
@@ -63,10 +88,7 @@ async fn me(headers: HeaderMap) -> Answered {
 	if presented != Some(&format!("Bearer {BEARER}")) {
 		return answered(StatusCode::UNAUTHORIZED, json!({ "message": "no session" }));
 	}
-	answered(
-		StatusCode::OK,
-		json!({ "id": "u1", "email": EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
-	)
+	answered(StatusCode::OK, account())
 }
 
 async fn closed_port() -> String {
@@ -159,18 +181,22 @@ impl Drop for Host {
 }
 
 #[test]
-fn a_token_on_the_callback_signs_the_account_in_and_sign_out_deletes_the_bearer() {
+fn the_callback_polls_signs_the_account_in_and_sign_out_deletes_the_bearer() {
 	tauri::async_runtime::block_on(async {
 		let callbacks = Callbacks::default();
 		let host = Host::new(&cloud(Arc::clone(&callbacks)).await);
-		assert_eq!(host.state(), json!({ "kind": "signedOut" }));
+		assert_eq!(host.state(), json!({ "kind": "signedOut", "reason": null }));
 
-		host.call("account_sign_in", json!({ "email": EMAIL })).expect("the sign-in starts");
-		assert_eq!(host.state(), json!({ "kind": "waiting", "email": EMAIL }));
+		host.call("account_sign_in", json!({})).expect("the sign-in starts");
+		assert_eq!(
+			host.state(),
+			json!({ "kind": "waiting", "verificationUrl": VERIFICATION_URL, "expiresAt": EXPIRES_AT })
+		);
 		let callback =
-			callbacks.lock().expect("the stub").last().cloned().expect("a link was asked");
+			callbacks.lock().expect("the stub").last().cloned().expect("a request was created");
 
-		let page = reqwest::get(format!("{callback}&token={BEARER}")).await.expect("the callback");
+		let page =
+			reqwest::get(format!("{callback}&request={REQUEST_ID}")).await.expect("the callback");
 		assert_eq!(page.status(), StatusCode::OK);
 		assert_eq!(
 			host.settled().await,
@@ -186,20 +212,18 @@ fn a_token_on_the_callback_signs_the_account_in_and_sign_out_deletes_the_bearer(
 
 		host.call("account_sign_out", json!({})).expect("the sign-out settles");
 		assert_eq!(host.stored(), None);
-		assert_eq!(host.state(), json!({ "kind": "signedOut" }));
+		assert_eq!(host.state(), json!({ "kind": "signedOut", "reason": null }));
 	});
 }
 
 #[test]
-fn a_cloud_that_is_down_leaves_the_account_unreachable() {
+fn a_cloud_that_is_down_fails_the_sign_in_unreachable() {
 	tauri::async_runtime::block_on(async {
 		let host = Host::new(&closed_port().await);
 
-		host.call("account_sign_in", json!({ "email": EMAIL })).expect("the sign-in settles");
+		host.call("account_sign_in", json!({})).expect("the sign-in settles");
 
-		let state = host.state();
-		assert_eq!(state["kind"], "unreachable");
-		assert!(state["reason"].as_str().is_some_and(|reason| !reason.is_empty()));
+		assert_eq!(host.state(), json!({ "kind": "failed", "failure": "unreachable" }));
 		assert_eq!(host.stored(), None);
 	});
 }
@@ -213,7 +237,7 @@ fn without_a_store_the_three_commands_answer_naming_the_store() {
 		let state = host.state();
 		assert_eq!(state["kind"], "unreachable");
 		assert!(state["reason"].as_str().is_some_and(|reason| reason.contains("store")));
-		let signing_in = host.call("account_sign_in", json!({ "email": EMAIL }));
+		let signing_in = host.call("account_sign_in", json!({}));
 		assert_eq!(signing_in.expect_err("the sign-in is refused")["kind"], "store");
 		let signing_out = host.call("account_sign_out", json!({}));
 		assert_eq!(signing_out.expect_err("the sign-out is refused")["kind"], "store");

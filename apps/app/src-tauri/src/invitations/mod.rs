@@ -9,7 +9,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::account::cloud::{Cloud, InvitationCallError};
-use crate::account::session::AccountSession;
+use crate::account::session::{self, AccountSession};
 use crate::events::{self, INVITATION_CHANGED};
 use crate::joined_spaces;
 use crate::joined_spaces::contract::JoinedSpace;
@@ -63,7 +63,11 @@ pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, Inv
 	let invitations = app.state::<Invitations>();
 	let _turn = invitations.turn.lock().await;
 	let bearer = bearer_of(app)?;
-	let listed = invitations.cloud.invitations(&bearer).await?;
+	let listed = invitations
+		.cloud
+		.invitations(&bearer)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	if invitations.last().as_ref() != Some(&listed) {
 		announced(app, &invitations, listed.clone());
 	}
@@ -79,7 +83,10 @@ pub async fn accept<R: Runtime>(
 	let name = match invitations.cloud.accept_invitation(&bearer, &instance_id).await {
 		Ok(joined) => Some(joined.name),
 		Err(InvitationCallError::AlreadyJoined) => invitations.invited_name(&instance_id),
-		Err(error) => return Err(error.into()),
+		Err(error) => {
+			signed_out_if_revoked(app, &bearer, &error);
+			return Err(error.into());
+		}
 	};
 	let joined =
 		joined_spaces::relay::joined(app, instance_id, name).await.map_err(
@@ -100,7 +107,11 @@ pub async fn decline<R: Runtime>(
 	instance_id: String,
 ) -> Result<(), InvitationError> {
 	let bearer = bearer_of(app)?;
-	app.state::<Invitations>().cloud.decline_invitation(&bearer, &instance_id).await?;
+	app.state::<Invitations>()
+		.cloud
+		.decline_invitation(&bearer, &instance_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	reread(app).await;
 	Ok(())
 }
@@ -148,6 +159,16 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 	}
 	let _turn = invitations.turn.lock().await;
 	announced(app, &invitations, Vec::new());
+}
+
+fn signed_out_if_revoked<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	failure: &InvitationCallError,
+) {
+	if matches!(failure, InvitationCallError::Revoked) {
+		session::revoked(app, bearer);
+	}
 }
 
 fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, InvitationError> {
