@@ -156,6 +156,19 @@ jobs:
     if: needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        tests:
+          - KiroshiTests
+          - KiroshiUITests/ConversationsAccessibilityTests
+          - KiroshiUITests/GroupThreadTests
+          - KiroshiUITests/MissionsAccessibilityTests
+          - KiroshiUITests/NewConversationTests
+          - KiroshiUITests/SettingsAccessibilityTests
+          - KiroshiUITests/SignInAccessibilityTests
+          - KiroshiUITests/ThreadAccessibilityTests
+          - KiroshiUITests/ThreadOpeningTests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -183,9 +196,17 @@ jobs:
 
       - name: Test on the simulator
         timeout-minutes: 25
-        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:${{ matrix.tests }} test-without-building
+
+      - name: Every UI test class has exactly one ios entry
+        if: matrix.tests == 'KiroshiTests'
+        run: |
+          diff \
+            <(grep -ohE 'class +[A-Za-z0-9_]+ *: *XCTestCase' apps/ios/KiroshiUITests/*.swift | sed -E 's/class +([A-Za-z0-9_]+).*/\1/' | sort) \
+            <(grep -oE 'KiroshiUITests/[A-Za-z0-9_]+' .github/workflows/ci.yml | cut -d/ -f2 | sort)
 
       - name: Swift format
+        if: matrix.tests == 'KiroshiTests'
         run: swift format lint --recursive --strict apps/ios
 
   verify:
