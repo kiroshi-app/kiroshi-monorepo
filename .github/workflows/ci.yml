@@ -194,6 +194,14 @@ jobs:
       - name: Build for testing
         run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
 
+      - name: Wait for the simulator, then launch the app once so the first UI test doesn't pay the cold launch
+        run: |
+          xcrun simctl bootstatus "$SIMULATOR" -b
+          xcrun simctl install "$SIMULATOR" apps/ios/build/Build/Products/Debug-iphonesimulator/Kiroshi.app
+          xcrun simctl launch "$SIMULATOR" com.kiroshi.app.ios
+          sleep 5
+          xcrun simctl terminate "$SIMULATOR" com.kiroshi.app.ios
+
       - name: Test on the simulator
         timeout-minutes: 25
         run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never -only-testing:${{ matrix.tests }} test-without-building
