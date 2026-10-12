@@ -124,6 +124,7 @@ const offlineRejection = async (): Promise<unknown> => {
 			close: () => undefined,
 		}),
 		onDown: vi.fn(),
+		onReconnectFailed: vi.fn(),
 		onUp: vi.fn(),
 		onRefused: vi.fn(),
 	})

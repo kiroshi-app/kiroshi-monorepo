@@ -10,7 +10,6 @@ import {
 } from "./conversation-provenance"
 import {
 	createHttpHost,
-	FIRST_RECONNECT_DELAY,
 	type HostRefusal,
 	type HostSocket,
 	type HttpHost,
@@ -162,6 +161,8 @@ type UnpairedReopen = { signal: ReopenSignal; heardAt: number }
 
 const REOPEN_PAIRING_MS = 10_000
 
+export const LONGEST_DOWN_GRACE = 3000
+
 type Subscription = {
 	event: string
 	handler: EventCallback<unknown>
@@ -289,11 +290,13 @@ export const createJoinedHosts = ({
 		downGraces.delete(id)
 	}
 
+	const endGraceAndReport = (id: string) => {
+		endDownGrace(id)
+		reportIfActiveDown(id)
+	}
+
 	const reportOnceGraceEnds = (id: string) => {
-		const grace = setTimeout(() => {
-			downGraces.delete(id)
-			reportIfActiveDown(id)
-		}, FIRST_RECONNECT_DELAY)
+		const grace = setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE)
 		downGraces.set(id, grace)
 	}
 
@@ -398,6 +401,7 @@ export const createJoinedHosts = ({
 				record(id, { status: "down" })
 				reportOnceGraceEnds(id)
 			},
+			onReconnectFailed: () => endGraceAndReport(id),
 			onRefused: reportFailure,
 		})
 		hosts.set(id, host)

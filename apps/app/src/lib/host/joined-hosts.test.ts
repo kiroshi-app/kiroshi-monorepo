@@ -11,6 +11,7 @@ import {
 	type JoinedHosts,
 	type JoinedHostsOptions,
 	LOCAL_COMMANDS,
+	LONGEST_DOWN_GRACE,
 } from "./joined-hosts"
 
 import {
@@ -684,10 +685,9 @@ describe("a joined space event", () => {
 	})
 })
 
-const outlastGrace = () => vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY)
+const reachFirstRetry = () => vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY)
 
-const fallShortOfGrace = () =>
-	vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY - 1)
+const outlastGrace = () => vi.advanceTimersByTimeAsync(LONGEST_DOWN_GRACE)
 
 const answerOffline = () =>
 	new Response("the host of this space is offline", { status: 503 })
@@ -701,34 +701,52 @@ describe("a failing selected host", () => {
 		vi.useRealTimers()
 	})
 
-	it("raises no notice when the socket reopens before the first reconnection delay has elapsed", async () => {
+	it("raises no notice when the first retry reopens the socket", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.activate("garage")
 		sockets[0]?.open()
 
 		sockets[0]?.drop()
-		await fallShortOfGrace()
-		sockets[0]?.open()
+		await reachFirstRetry()
+		sockets[1]?.open()
 		await outlastGrace()
 
 		expect(hosts.getState().connections.garage).toEqual({ status: "up" })
 		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
-	it("raises exactly one notice when the socket is still closed once the first reconnection delay has elapsed", async () => {
+	it("raises exactly one notice as soon as the first retry fails", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.activate("garage")
 		sockets[0]?.open()
 
 		sockets[0]?.drop()
-		await fallShortOfGrace()
+		await reachFirstRetry()
 		expect(reportHostDown).not.toHaveBeenCalled()
 
-		await outlastGrace()
 		sockets[1]?.drop()
-		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 4)
+		expect(reportHostDown).toHaveBeenCalledOnce()
+
+		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 2)
+		sockets[2]?.drop()
+		await outlastGrace()
 
 		expect(hosts.getState().connections.garage).toEqual({ status: "down" })
+		expect(reportHostDown).toHaveBeenCalledOnce()
+	})
+
+	it("raises exactly one notice at the ceiling when the first retry hangs", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf()
+		await hosts.activate("garage")
+		sockets[0]?.open()
+
+		sockets[0]?.drop()
+		await vi.advanceTimersByTimeAsync(LONGEST_DOWN_GRACE - 1)
+		expect(reportHostDown).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(1)
+		await outlastGrace()
+
 		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
 
@@ -737,16 +755,18 @@ describe("a failing selected host", () => {
 		await hosts.activate("garage")
 		sockets[0]?.open()
 		sockets[0]?.drop()
-		await outlastGrace()
+		await reachFirstRetry()
+		sockets[1]?.drop()
 
-		sockets[1]?.open()
+		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 2)
+		sockets[2]?.open()
 
 		expect(endHostDown).toHaveBeenCalledExactlyOnceWith(
 			reportHostDown.mock.results[0]?.value,
 		)
 	})
 
-	it("raises no notice when the proxy answers 503 within the first reconnection delay after a socket close", async () => {
+	it("raises no notice when the proxy answers 503 after a socket close and the first retry reopens", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf({
 			answer: answerOffline,
 		})
@@ -755,11 +775,48 @@ describe("a failing selected host", () => {
 
 		sockets[0]?.drop()
 		await Promise.allSettled([hosts.invoke("bot_list")])
-		await fallShortOfGrace()
-		sockets[0]?.open()
+		await reachFirstRetry()
+		sockets[1]?.open()
 		await outlastGrace()
 
 		expect(reportHostDown).not.toHaveBeenCalled()
+	})
+
+	it("raises the notice for a 503 on an open socket at the ceiling, not before", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf({
+			answer: answerOffline,
+		})
+		await hosts.activate("garage")
+		sockets[0]?.open()
+
+		await Promise.allSettled([hosts.invoke("bot_list")])
+		await vi.advanceTimersByTimeAsync(LONGEST_DOWN_GRACE - 1)
+		expect(reportHostDown).not.toHaveBeenCalled()
+
+		await vi.advanceTimersByTimeAsync(1)
+
+		expect(reportHostDown).toHaveBeenCalledOnce()
+	})
+
+	it("raises one notice, when the retry fails, for a 503 then a socket close within one grace", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf({
+			answer: answerOffline,
+		})
+		await hosts.activate("garage")
+		sockets[0]?.open()
+
+		await Promise.allSettled([hosts.invoke("bot_list")])
+		await vi.advanceTimersByTimeAsync(100)
+		sockets[0]?.drop()
+		await reachFirstRetry()
+		expect(reportHostDown).not.toHaveBeenCalled()
+
+		sockets[1]?.drop()
+		expect(reportHostDown).toHaveBeenCalledOnce()
+
+		await outlastGrace()
+
+		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
 
 	it("raises no notice when a joined host that is not selected goes down", async () => {
@@ -767,6 +824,8 @@ describe("a failing selected host", () => {
 		await hosts.connect("garage")
 
 		sockets[0]?.drop()
+		await reachFirstRetry()
+		sockets[1]?.drop()
 		await outlastGrace()
 
 		expect(hosts.getState().connections.garage).toEqual({ status: "down" })
@@ -777,7 +836,7 @@ describe("a failing selected host", () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.connect("garage")
 		sockets[0]?.drop()
-		await outlastGrace()
+		await reachFirstRetry()
 		sockets[1]?.open()
 
 		await hosts.activate("garage")
@@ -786,32 +845,34 @@ describe("a failing selected host", () => {
 		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
-	it("raises exactly one notice when the user switches to a joined space still closed past the first reconnection delay", async () => {
+	it("raises exactly one notice when the user switches to a joined space whose first retry failed", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.connect("garage")
 		sockets[0]?.drop()
-		await outlastGrace()
+		await reachFirstRetry()
+		sockets[1]?.drop()
 
 		await hosts.activate("garage")
-		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 4)
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
 
-	it("raises no notice when the user switches to a joined space within the first reconnection delay and it reopens", async () => {
+	it("raises no notice when the user switches to a joined space during its grace and the retry reopens", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.connect("garage")
 		sockets[0]?.open()
 		sockets[0]?.drop()
 
 		await hosts.activate("garage")
-		sockets[0]?.open()
+		await reachFirstRetry()
+		sockets[1]?.open()
 		await outlastGrace()
 
 		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
-	it("raises no notice for a joined host forgotten while its grace delay is pending", async () => {
+	it("raises no notice for a joined host forgotten while its grace is pending", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.activate("garage")
 		sockets[0]?.open()
