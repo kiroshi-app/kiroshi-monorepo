@@ -28,6 +28,7 @@ enum Check {
 	Space,
 	Child(SpaceChild),
 	PluginScope(SpaceChild),
+	EnvOwner(SpaceChild),
 	NotAllSpaces,
 	Absent,
 }
@@ -37,6 +38,7 @@ impl Check {
 		match self {
 			Check::Child(kind) => format!("{kind:?}"),
 			Check::PluginScope(_) => "PluginScope".to_owned(),
+			Check::EnvOwner(_) => "EnvOwner".to_owned(),
 			check => format!("{check:?}"),
 		}
 	}
@@ -50,6 +52,10 @@ const fn child(kind: SpaceChild, argument: &'static str) -> Held {
 	Held { argument, check: Check::Child(kind), is_optional: false }
 }
 
+const fn env_owner(kind: SpaceChild, argument: &'static str) -> Held {
+	Held { argument, check: Check::EnvOwner(kind), is_optional: false }
+}
+
 const fn optional_child(kind: SpaceChild, argument: &'static str) -> Held {
 	Held { argument, check: Check::Child(kind), is_optional: true }
 }
@@ -59,6 +65,12 @@ const SPACE_FILTER: &[Held] = &[
 	space("/spaceId"),
 	Held { argument: "/allSpaces", check: Check::NotAllSpaces, is_optional: false },
 ];
+const QUERY_FILTER: &[Held] = &[
+	space("/query/spaceId"),
+	Held { argument: "/query/allSpaces", check: Check::NotAllSpaces, is_optional: false },
+];
+const ENV_SCOPE: &[Held] = &[env_owner(Bot, "/scope")];
+const ENV_WRITE_SCOPE: &[Held] = &[env_owner(BotHeldAlone, "/scope")];
 const PLUGIN_SCOPE: &[Held] =
 	&[Held { argument: "/scope", check: Check::PluginScope(Bot), is_optional: false }];
 const PLUGIN_WRITE_SCOPE: &[Held] =
@@ -131,8 +143,9 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("agent_cancel_turn", Reach::Scoped(RUNTIME_SCOPE)),
 	("agent_respond_to_permission", Reach::Scoped(RUNTIME_SCOPE)),
 	("agent_answer_question", Reach::Scoped(RUNTIME_SCOPE)),
-	("agent_shutdown", Reach::HostOnly),
+	("agent_shutdown", Reach::Scoped(RUNTIME_SCOPE)),
 	("agent_live_sessions", Reach::HostOnly),
+	("agent_live_sessions_in_space", Reach::Scoped(SPACE_ID)),
 	("agent_pending_questions", Reach::Scoped(CONVERSATION_ID)),
 	("conversation_bots", Reach::Scoped(SPACE_ID)),
 	(
@@ -217,17 +230,17 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_open_assistant_message", Reach::Scoped(NEW_MESSAGE)),
 	("conversation_append_text", Reach::Scoped(MESSAGE_AS_ID)),
 	("conversation_finalize_message", Reach::Scoped(MESSAGE_AS_ID)),
-	("env_set", Reach::HostOnly),
-	("env_delete", Reach::HostOnly),
-	("env_list", Reach::HostOnly),
+	("env_set", Reach::Scoped(ENV_WRITE_SCOPE)),
+	("env_delete", Reach::Scoped(ENV_WRITE_SCOPE)),
+	("env_list", Reach::Scoped(ENV_SCOPE)),
 	("connection_set", Reach::HostOnly),
 	("hosting_start", Reach::HostOnly),
 	("hosting_stop", Reach::HostOnly),
 	("hosting_state", Reach::Scoped(SPACE_ID)),
-	("hosting_members", Reach::HostOnly),
-	("hosting_invite_member", Reach::HostOnly),
-	("hosting_withdraw_invitation", Reach::HostOnly),
-	("hosting_remove_member", Reach::HostOnly),
+	("hosting_members", Reach::Scoped(SPACE_ID)),
+	("hosting_invite_member", Reach::Scoped(SPACE_ID)),
+	("hosting_withdraw_invitation", Reach::Scoped(SPACE_ID)),
+	("hosting_remove_member", Reach::Scoped(SPACE_ID)),
 	("invitations_list", Reach::HostOnly),
 	("invitation_accept", Reach::HostOnly),
 	("invitation_decline", Reach::HostOnly),
@@ -236,8 +249,8 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("joined_space_remove", Reach::HostOnly),
 	("mcp_oauth_connect", Reach::HostOnly),
 	("mcp_oauth_cancel", Reach::HostOnly),
-	("mcp_oauth_disconnect", Reach::HostOnly),
-	("mcp_application_status", Reach::HostOnly),
+	("mcp_oauth_disconnect", Reach::Scoped(&[env_owner(BotHeldAlone, "/owner")])),
+	("mcp_application_status", Reach::Scoped(&[env_owner(Bot, "/owner")])),
 	("mission_close", Reach::Scoped(MISSION_ID)),
 	("mission_reopen", Reach::Scoped(MISSION_ID)),
 	("mission_list", Reach::Scoped(CONVERSATION_ID)),
@@ -277,7 +290,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("routine_close_run", Reach::Scoped(ROUTINE_RUN_ID)),
 	("routine_key", Reach::Scoped(ROUTINE_AS_ID)),
 	("search_catalogue", Reach::Scoped(SPACE_FILTER)),
-	("search_messages", Reach::HostOnly),
+	("search_messages", Reach::Scoped(QUERY_FILTER)),
 	("search_recent", Reach::Scoped(SPACE_FILTER)),
 	("section_list", Reach::Scoped(SPACE_ID)),
 	("section_create", Reach::Scoped(SPACE_ID)),
@@ -346,7 +359,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::conversations::contract::MESSAGE_STORED_EVENT, IN_THE_CONVERSATION),
 	(crate::conversations::contract::UPDATED_EVENT, IN_THE_SPACE),
 	(super::contract::CHANGED_EVENT, Audience::Scoped(space("/spaceId"))),
-	(super::contract::MEMBERS_CHANGED_EVENT, Audience::HostOnly),
+	(super::contract::MEMBERS_CHANGED_EVENT, IN_THE_SPACE),
 	(crate::invitations::contract::CHANGED_EVENT, Audience::HostOnly),
 	(crate::joined_spaces::commands::CHANGED_EVENT, Audience::HostOnly),
 	(crate::joined_spaces::commands::RECONNECTED_EVENT, Audience::HostOnly),
@@ -549,6 +562,16 @@ impl<R: Runtime> Lookup<'_, R> {
 				match (scope["kind"].as_str(), scope["id"].as_str()) {
 					(Some("space"), Some(space_id)) => space_id == self.shared_space_id,
 					(Some("bot"), Some(bot_id)) => self.holds_child(bot_kind, bot_id).await,
+					_ => false,
+				}
+			}
+			(Check::EnvOwner(bot_kind), scope) => {
+				match (scope["kind"].as_str(), scope["id"].as_str()) {
+					(Some("space"), Some(space_id)) => space_id == self.shared_space_id,
+					(Some("bot"), Some(bot_id)) => {
+						scope["spaceId"] == self.shared_space_id
+							&& self.holds_child(bot_kind, bot_id).await
+					}
 					_ => false,
 				}
 			}

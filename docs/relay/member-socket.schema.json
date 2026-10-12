@@ -698,6 +698,34 @@
       "required": [],
       "type": "object"
     },
+    "ApplicationRow_Serialize": {
+      "allOf": [
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "scope": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EnvScope_Serialize"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ApplicationStatus_Serialize"
+        }
+      ]
+    },
     "ApplicationSearch_Serialize": {
       "properties": {
         "applications": {
@@ -720,6 +748,85 @@
         "applications"
       ],
       "type": "object"
+    },
+    "ApplicationStatus_Serialize": {
+      "anyOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "connected"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "const": "needsAuthorization"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "connecting"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "unknown"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Application_Serialize": {
       "properties": {
@@ -1017,6 +1124,14 @@
       "enum": [
         "authRequired",
         "noAuth"
+      ]
+    },
+    "AuthorizationWithheld": {
+      "enum": [
+        "servedOverNoUrl",
+        "loopbackAddress",
+        "ownAuthorizationHeader",
+        "unexpandedPlaceholder"
       ]
     },
     "AvatarBlot": {
@@ -2043,6 +2158,27 @@
         "user"
       ]
     },
+    "Disconnected_Serialize": {
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revoked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "revoked"
+      ],
+      "type": "object"
+    },
     "EffortLevel": {
       "enum": [
         "low",
@@ -2051,6 +2187,28 @@
         "xhigh",
         "max"
       ]
+    },
+    "EnvEntry_Serialize": {
+      "properties": {
+        "definedIn": {
+          "$ref": "#/$defs/EnvScope_Serialize"
+        },
+        "isUnset": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "servedFrom": {
+          "$ref": "#/$defs/EnvScope_Serialize"
+        }
+      },
+      "required": [
+        "name",
+        "definedIn",
+        "servedFrom"
+      ],
+      "type": "object"
     },
     "EnvError": {
       "anyOf": [
@@ -2118,6 +2276,213 @@
           "properties": {
             "kind": {
               "const": "emptyValue"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnvOwner": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "user"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "space"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "bot"
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "spaceId"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnvScope_Deserialize": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "user"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "space"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "bot"
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "spaceId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "server"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/EnvOwner"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "owner"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EnvScope_Serialize": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "user"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "space"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "bot"
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "spaceId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "server"
+            },
+            "name": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/EnvOwner"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "owner"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "person"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "account"
             }
           },
           "required": [
@@ -2577,6 +2942,29 @@
       ],
       "type": "object"
     },
+    "LiveSession": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "conversationId": {
+          "type": "string"
+        },
+        "runtimeSessionId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "botId",
+        "conversationId",
+        "runtimeSessionId",
+        "startedAt"
+      ],
+      "type": "object"
+    },
     "McpServer_Serialize": {
       "allOf": [
         {
@@ -2599,6 +2987,231 @@
         }
       ]
     },
+    "Member": {
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/MemberStatus"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "email",
+        "status"
+      ],
+      "type": "object"
+    },
+    "MemberStatus": {
+      "enum": [
+        "host",
+        "pending",
+        "joined"
+      ]
+    },
+    "MembersChanged": {
+      "properties": {
+        "members": {
+          "items": {
+            "$ref": "#/$defs/Member"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "spaceId",
+        "members"
+      ],
+      "type": "object"
+    },
+    "MembersError": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "notHosting"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notAnEmail"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "ownAccount"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "alreadyInvited"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "limitReached"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unknownMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notPending"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notJoined"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "hostNotRemovable"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notOwner"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "needsSignIn"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unreachable"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "sessionStore"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/SpaceError"
+            },
+            "kind": {
+              "const": "space"
+            }
+          },
+          "required": [
+            "kind",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "MessageCompletion": {
       "enum": [
         "streaming",
@@ -2606,6 +3219,66 @@
         "cancelled",
         "failed"
       ]
+    },
+    "MessageHit": {
+      "properties": {
+        "authorBotId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conversationId": {
+          "type": "string"
+        },
+        "conversationKind": {
+          "$ref": "#/$defs/ConversationKind"
+        },
+        "conversationTitle": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "integer"
+        },
+        "messageId": {
+          "type": "string"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "snippet": {
+          "items": {
+            "$ref": "#/$defs/SnippetPart"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageId",
+        "seq",
+        "conversationId",
+        "conversationKind",
+        "conversationTitle",
+        "authorBotId",
+        "createdAt",
+        "spaceId",
+        "snippet"
+      ],
+      "type": "object"
     },
     "MessageReference": {
       "properties": {
@@ -2669,6 +3342,75 @@
         "user",
         "assistant"
       ]
+    },
+    "MessageSearchError": {
+      "anyOf": [
+        {
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/StorageFailure"
+            },
+            "kind": {
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "kind",
+            "failure"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/StorageFailure"
+            },
+            "kind": {
+              "const": "storage"
+            }
+          },
+          "required": [
+            "kind",
+            "failure"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "queryTooLong"
+            },
+            "limit": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "limit"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "MessageSearchQuery": {
+      "properties": {
+        "allSpaces": {
+          "type": "boolean"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "spaceId",
+        "allSpaces"
+      ],
+      "type": "object"
     },
     "Mission": {
       "properties": {
@@ -3393,6 +4135,206 @@
         "createdAt"
       ],
       "type": "object"
+    },
+    "OauthError_Serialize": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "alreadyRunning"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "timedOut"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "denied"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "browserRefused"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "carries": {
+              "$ref": "#/$defs/AuthorizationWithheld"
+            },
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "notAuthorizable"
+            }
+          },
+          "required": [
+            "kind",
+            "carries",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "refusedUrl"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "flowTimedOut"
+            },
+            "timeoutMs": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "timeoutMs"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "body": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "failed"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "step": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/OauthStep"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/TransportError"
+            },
+            "kind": {
+              "const": "transport"
+            }
+          },
+          "required": [
+            "kind",
+            "error"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/EnvError"
+            },
+            "kind": {
+              "const": "store"
+            }
+          },
+          "required": [
+            "kind",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OauthStep": {
+      "enum": [
+        "discovery",
+        "registration",
+        "tokenExchange"
+      ]
     },
     "OfferedModel_Serialize": {
       "properties": {
@@ -4914,6 +5856,21 @@
         "backingOff"
       ]
     },
+    "SnippetPart": {
+      "properties": {
+        "matched": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "matched"
+      ],
+      "type": "object"
+    },
     "Space": {
       "properties": {
         "colour": {
@@ -6305,6 +7262,28 @@
         "$ref": "#/$defs/CheckReport_Serialize"
       }
     },
+    "agent_live_sessions_in_space": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/LiveSession"
+        },
+        "type": "array"
+      }
+    },
     "agent_models": {
       "args": {
         "properties": {},
@@ -6357,6 +7336,25 @@
           "scope",
           "id",
           "decision"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TransportError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
+    "agent_shutdown": {
+      "args": {
+        "properties": {
+          "scope": {
+            "$ref": "#/$defs/RuntimeScope"
+          }
+        },
+        "required": [
+          "scope"
         ],
         "type": "object"
       },
@@ -7827,6 +8825,149 @@
         "$ref": "#/$defs/Bot"
       }
     },
+    "env_delete": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/EnvScope_Deserialize"
+          }
+        },
+        "required": [
+          "scope",
+          "name"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/EnvError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
+    "env_list": {
+      "args": {
+        "properties": {
+          "scope": {
+            "$ref": "#/$defs/EnvScope_Deserialize"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/EnvError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/EnvEntry_Serialize"
+        },
+        "type": "array"
+      }
+    },
+    "env_set": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/EnvScope_Deserialize"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "name",
+          "value"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/EnvError"
+      },
+      "ok": {
+        "type": "null"
+      }
+    },
+    "hosting_invite_member": {
+      "args": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "email"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "$ref": "#/$defs/Member"
+      }
+    },
+    "hosting_members": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/Member"
+        },
+        "type": "array"
+      }
+    },
+    "hosting_remove_member": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/Member"
+        },
+        "type": "array"
+      }
+    },
     "hosting_state": {
       "args": {
         "properties": {
@@ -7841,6 +8982,81 @@
       },
       "ok": {
         "$ref": "#/$defs/HostingState"
+      }
+    },
+    "hosting_withdraw_invitation": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/Member"
+        },
+        "type": "array"
+      }
+    },
+    "mcp_application_status": {
+      "args": {
+        "properties": {
+          "owner": {
+            "$ref": "#/$defs/EnvOwner"
+          }
+        },
+        "required": [
+          "owner"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/EnvError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/ApplicationRow_Serialize"
+        },
+        "type": "array"
+      }
+    },
+    "mcp_oauth_disconnect": {
+      "args": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/$defs/EnvOwner"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/OauthError_Serialize"
+      },
+      "ok": {
+        "$ref": "#/$defs/Disconnected_Serialize"
       }
     },
     "mission_answered": {
@@ -8655,6 +9871,28 @@
         "$ref": "#/$defs/Catalogue"
       }
     },
+    "search_messages": {
+      "args": {
+        "properties": {
+          "query": {
+            "$ref": "#/$defs/MessageSearchQuery"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MessageSearchError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/MessageHit"
+        },
+        "type": "array"
+      }
+    },
     "search_recent": {
       "args": {
         "properties": {
@@ -8904,6 +10142,11 @@
     "hosting://changed": {
       "payload": {
         "$ref": "#/$defs/HostingChanged"
+      }
+    },
+    "hosting://members-changed": {
+      "payload": {
+        "$ref": "#/$defs/MembersChanged"
       }
     },
     "mission://changed": {

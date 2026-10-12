@@ -1870,7 +1870,11 @@ describe("the commands reach.rs keeps on the host", () => {
 
 	it("reads the HostOnly entries out of reach.rs", () => {
 		expect(hostOnlyCommands).toEqual(
-			expect.arrayContaining(["mission_board", "agent_shutdown", "env_set"]),
+			expect.arrayContaining([
+				"mission_board",
+				"agent_live_sessions",
+				"connection_set",
+			]),
 		)
 	})
 

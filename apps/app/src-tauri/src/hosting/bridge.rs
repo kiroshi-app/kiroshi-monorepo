@@ -40,6 +40,10 @@ const AVATAR_TOO_LARGE: &str = "the avatar is too large to cross the relay";
 
 const AVATAR_UNREAD: &str = "the avatar was not read";
 
+const ENV_LIST_COMMAND: &str = "env_list";
+
+const ENV_LIST_UNREAD: &str = "the env list answered by the host was not a list";
+
 #[derive(Clone)]
 pub struct LocalApi {
 	origin: String,
@@ -179,9 +183,28 @@ pub(super) async fn bridged<R: Runtime>(
 		hosting.relayed.vouch(RelayedMember { space_id: shared_space_id.clone(), user_id })
 	});
 	match invoked(&local, &call, vouched.as_ref().map(|vouched| vouched.nonce.as_str())).await {
-		Ok((status, body)) => answer(call.id, status, body),
+		Ok((status, body)) => {
+			let (status, body) = without_the_host_person(&call.command, status, body);
+			answer(call.id, status, body)
+		}
 		Err(reason) => answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
 	}
+}
+
+fn without_the_host_person(command: &str, status: StatusCode, body: Value) -> (StatusCode, Value) {
+	if command != ENV_LIST_COMMAND || !status.is_success() {
+		return (status, body);
+	}
+	let Value::Array(entries) = body else {
+		eprintln!("{ENV_LIST_UNREAD}: {status}");
+		return (StatusCode::BAD_GATEWAY, json!(ENV_LIST_UNREAD));
+	};
+	let kept = entries.into_iter().filter(|entry| !names_the_host_person(entry)).collect();
+	(status, Value::Array(kept))
+}
+
+fn names_the_host_person(entry: &Value) -> bool {
+	["definedIn", "servedFrom"].iter().any(|scope| entry[scope]["kind"] == "user")
 }
 
 async fn invoked(

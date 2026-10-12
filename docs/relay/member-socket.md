@@ -151,6 +151,38 @@ reaches a member.
 - Each write fires its event once, after it is stored. Seating a companion
   already seated fires nothing, and a write that fails fires nothing.
 
+### Space-level commands
+
+A member holds the same rights as the host on the shared space. These commands
+are open to it, each kept inside the shared space:
+
+| Command | Kept in the shared space by |
+|---|---|
+| `hosting_members` | `spaceId` |
+| `hosting_invite_member` | `spaceId` |
+| `hosting_withdraw_invitation` | `spaceId` |
+| `hosting_remove_member` | `spaceId` |
+| `search_messages` | `query.spaceId`, with `query.allSpaces` `false` |
+| `agent_shutdown` | `scope.conversationId` and `scope.botId` |
+| `agent_live_sessions_in_space` | `spaceId` |
+| `env_list` | `scope` |
+| `env_set` | `scope` |
+| `env_delete` | `scope` |
+| `mcp_application_status` | `owner` |
+| `mcp_oauth_disconnect` | `owner` |
+
+- `scope` and `owner` are `{ "kind": "space", "id" }` with the shared space id, or
+  `{ "kind": "bot", "id", "spaceId" }` with a companion of the shared space and the
+  shared space id. Any other kind, `user` included, answers 403.
+- `env_set`, `env_delete` and `mcp_oauth_disconnect` on a companion also held by
+  another space of the host answer 403: its env is one file for every space.
+- `env_list` never answers an entry whose `definedIn` or `servedFrom` has kind
+  `user`.
+- `agent_live_sessions_in_space` answers the live sessions whose conversation
+  belongs to `spaceId`, each `{ "botId", "conversationId", "runtimeSessionId", "startedAt" }`.
+- `hosting://members-changed` reaches a member only when its `spaceId` is the
+  shared space.
+
 ### The avatar frame
 
 A member reads the avatar picture of a bot through the socket. It is a call frame

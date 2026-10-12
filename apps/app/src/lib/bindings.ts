@@ -56,6 +56,7 @@ export const commands = {
 	agentAnswerQuestion: (scope: RuntimeScope, id: string, answers: { [key in string]: string }, annotations: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null) => typedError<null, TransportError>(__TAURI_INVOKE("agent_answer_question", { scope, id, answers, annotations })),
 	agentShutdown: (scope: RuntimeScope) => typedError<null, TransportError>(__TAURI_INVOKE("agent_shutdown", { scope })),
 	agentLiveSessions: () => typedError<LiveSession[], TransportError>(__TAURI_INVOKE("agent_live_sessions")),
+	agentLiveSessionsInSpace: (spaceId: string) => typedError<LiveSession[], TranscriptStoreError>(__TAURI_INVOKE("agent_live_sessions_in_space", { spaceId })),
 	agentPendingQuestions: (conversationId: string) => typedError<ScopedEvent_Serialize[], TransportError>(__TAURI_INVOKE("agent_pending_questions", { conversationId })),
 	conversationBots: (spaceId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots", { spaceId })),
 	conversationBotsByPresence: (spaceId: string, excludedConversationId: string | null) => typedError<Bot[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bots_by_presence", { spaceId, excludedConversationId })),

@@ -31,7 +31,6 @@ use crate::account::session::restore;
 use crate::account::session::AccountSession;
 use crate::agent::commands;
 use crate::agent::contract as agent;
-use crate::agent::protocol::OauthCredentials;
 use crate::agent::reply_writer::TurnSink;
 use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
@@ -55,7 +54,7 @@ use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{MessagePageQuery, MessageRole, NewTurn};
 use crate::db::{self, DatabaseState};
 use crate::environment::connection;
-use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope, ACCOUNT_BEARER};
+use crate::environment::contract::{ConnectionKind, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, Event};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
@@ -270,6 +269,10 @@ async fn host_effect_applied(
 			.expect("the host sets"),
 		"env_delete" => {
 			store::delete(root, &typed(&args, "scope"), &text("name")).expect("the host deletes")
+		}
+		"env_list" => {
+			let listed = store::list(root, &typed(&args, "scope")).expect("the host lists");
+			return answered_json(StatusCode::OK, json!(listed));
 		}
 		"connection_set" => {
 			connection::hold(root, typed(&args, "kind"), &text("value")).expect("the host connects")
@@ -539,6 +542,10 @@ async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> V
 	}
 }
 
+async fn members_heard(member: &mut WebSocket) -> Value {
+	next_text(member, |frame| frame["event"]["event"] == MEMBERS_CHANGED_EVENT).await
+}
+
 async fn answer(member: &mut WebSocket) -> Value {
 	next_text(member, |frame| frame.get("event").is_none()).await
 }
@@ -729,42 +736,6 @@ fn a_malformed_member_frame_is_answered_400_and_the_socket_stays_open() {
 	});
 }
 
-#[test]
-fn a_member_frame_naming_a_host_member_command_is_refused_and_others_still_forwarded() {
-	run(async {
-		let mut harness = Harness::signed_in("host-only").await;
-		harness.started().await;
-		let mut member = harness.member().await;
-
-		for command in [
-			"hosting_members",
-			"hosting_invite_member",
-			"hosting_withdraw_invitation",
-			"hosting_remove_member",
-		] {
-			let frame =
-				json!({ "id": command, "command": command, "args": { "spaceId": PERSONAL } });
-			send(&mut member, &frame.to_string()).await;
-			assert_eq!(
-				answer(&mut member).await,
-				json!({ "id": command, "status": 403, "body": "this command belongs to the host" })
-			);
-		}
-		send(&mut member, r#"{"id": "after", "command": "agent_models"}"#).await;
-		let answered = answer(&mut member).await;
-
-		assert_eq!(
-			(answered["id"].clone(), answered["status"].clone()),
-			(json!("after"), json!(200))
-		);
-		assert!(
-			harness.member_calls().iter().all(|call| call == "GET"),
-			"{:?}",
-			harness.member_calls()
-		);
-	});
-}
-
 async fn a_relay_guest_is_refused(command: &str) {
 	refused_on(&mut Harness::signed_in(command).await, command).await;
 }
@@ -900,42 +871,6 @@ fn a_relay_guest_cannot_read_the_conversation_ids_of_the_host() {
 	run(a_relay_guest_is_refused("conversation_local_ids"));
 }
 
-fn a_space_scope() -> EnvScope {
-	EnvScope::Space { id: PERSONAL.to_owned() }
-}
-
-async fn an_env_entry_kept_from(command: &str, args: Value) {
-	let (mut harness, effects) = Harness::applying_host_effects(command).await;
-	let scope = a_space_scope();
-	store::set(&effects.env_root, &scope, "GREETING", "host-value").expect("the host sets");
-	let before = store::values(&effects.env_root, &scope).expect("the host reads");
-
-	refused_with(&mut harness, command, args).await;
-
-	assert_eq!(store::values(&effects.env_root, &scope).expect("the host reads"), before);
-}
-
-#[test]
-fn a_relay_guest_cannot_set_a_host_env_entry() {
-	run(an_env_entry_kept_from(
-		"env_set",
-		json!({ "scope": a_space_scope(), "name": "GREETING", "value": "guest-value" }),
-	));
-}
-
-#[test]
-fn a_relay_guest_cannot_delete_a_host_env_entry() {
-	run(an_env_entry_kept_from(
-		"env_delete",
-		json!({ "scope": a_space_scope(), "name": "GREETING" }),
-	));
-}
-
-#[test]
-fn a_relay_guest_cannot_list_the_host_env() {
-	run(a_relay_guest_is_refused("env_list"));
-}
-
 #[test]
 fn a_relay_guest_cannot_replace_the_host_agent_connection() {
 	run(async {
@@ -961,57 +896,8 @@ fn a_relay_guest_cannot_connect_an_application_with_the_host_identity() {
 }
 
 #[test]
-fn a_relay_guest_cannot_disconnect_a_host_application() {
-	run(async {
-		let (mut harness, effects) = Harness::applying_host_effects("oauth-disconnect").await;
-		let owner = EnvOwner::Space { id: PERSONAL.to_owned() };
-		let scope = EnvScope::Server { name: "granola".to_owned(), owner: owner.clone() };
-		let grant = OauthCredentials {
-			access_token: "host-access".to_owned(),
-			refresh_token: Some("host-refresh".to_owned()),
-			expires_at: None,
-			client_id: "registered".to_owned(),
-			client_secret: None,
-			redirect_uri: None,
-		};
-		credentials::store(&effects.env_root, &scope, &grant).expect("the host connects");
-		let before = store::values(&effects.env_root, &scope).expect("the host reads");
-
-		refused_with(
-			&mut harness,
-			"mcp_oauth_disconnect",
-			json!({ "owner": owner, "name": "granola", "url": "https://granola.test/mcp" }),
-		)
-		.await;
-
-		assert_eq!(store::values(&effects.env_root, &scope).expect("the host reads"), before);
-	});
-}
-
-#[test]
 fn a_relay_guest_cannot_cancel_a_host_application_connection() {
 	run(a_relay_guest_is_refused("mcp_oauth_cancel"));
-}
-
-#[test]
-fn a_relay_guest_cannot_read_or_renew_the_host_application_grants() {
-	run(a_relay_guest_is_refused("mcp_application_status"));
-}
-
-#[test]
-fn a_relay_guest_cannot_shut_the_host_agent_down() {
-	run(async {
-		let (mut harness, effects) = Harness::applying_host_effects("agent-shutdown").await;
-
-		refused_with(
-			&mut harness,
-			"agent_shutdown",
-			json!({ "scope": { "conversationId": "c1" } }),
-		)
-		.await;
-
-		assert_eq!(effects.reached(), ["agent_models"]);
-	});
 }
 
 #[test]
@@ -1107,26 +993,19 @@ fn a_local_event_is_forwarded_to_the_relay() {
 }
 
 #[test]
-fn the_first_member_announcement_of_an_online_space_sends_nothing_on_the_relay() {
+fn the_first_member_announcement_of_an_online_space_crosses_the_relay() {
 	run(async {
 		let mut harness = Harness::signed_in("members-local").await;
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
-		for _ in 0..500 {
-			if !harness.heard_member_lists().is_empty() {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		assert_eq!(harness.heard_member_lists().len(), 1);
 
-		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::untyped(CHANGED_EVENT), payload.clone())
-			.expect("emitted");
 		let first = next_text(&mut member, |_| true).await;
 
-		assert_eq!(first, json!({ "event": { "event": CHANGED_EVENT, "payload": payload } }));
+		let announced = harness.heard_member_lists();
+		assert_eq!(announced.len(), 1);
+		let payload = json!({ "spaceId": PERSONAL, "members": announced[0] });
+		assert_eq!(first, as_forwarded((MEMBERS_CHANGED_EVENT, payload)));
 	});
 }
 
@@ -1137,6 +1016,7 @@ fn stopping_closes_with_1000_clears_the_flag_and_keeps_the_instance() {
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 		let (registered, _) = harness.stored().await;
 
 		assert_eq!(harness.stopped().await, HostingState::Off);
@@ -1175,6 +1055,7 @@ fn signing_out_closes_the_relay_and_needs_a_sign_in_keeping_the_flag() {
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 
 		signed_out(harness.app.handle()).await;
 		let closed = tokio::time::timeout(PATIENCE, member.recv()).await.expect("a frame in time");
@@ -1252,6 +1133,7 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 		start(harness.app.handle(), work.clone()).await.expect("the hosting starts");
 		let mut member = harness.member().await;
 		harness.reached_by(&work, HostingState::Online).await;
+		members_heard(&mut member).await;
 
 		space_delete(harness.app.handle().clone(), harness.app.state(), work.clone())
 			.await
@@ -1724,8 +1606,9 @@ impl Guest {
 			.await
 			.expect("the two spaces are planted");
 		harness.started().await;
-		let member = harness.member().await;
+		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 		let mut guest = Self { harness, effects, member };
 		guest.relay_listens().await;
 		guest
@@ -1842,6 +1725,211 @@ fn a_write_without_a_sender_reaches_the_local_api() {
 
 		assert_eq!(answered["status"], json!(200), "{answered}");
 		assert_eq!(guest.effects.reached(), ["conversation_send_turn"]);
+	});
+}
+
+fn an_env_scope_of(space_id: &str) -> Value {
+	json!({ "kind": "space", "id": space_id })
+}
+
+fn a_bot_env_scope(bot_id: &str, space_id: &str) -> Value {
+	json!({ "kind": "bot", "id": bot_id, "spaceId": space_id })
+}
+
+fn a_search_of(space_id: &str) -> Value {
+	json!({ "query": { "text": "mine", "spaceId": space_id, "allSpaces": false } })
+}
+
+#[test]
+fn a_member_lists_the_members_of_the_shared_space_only() {
+	run(kept_in_the_space_named("hosting_members", space_named));
+}
+
+#[test]
+fn a_member_invites_into_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_invite_member",
+		|space_id| json!({ "spaceId": space_id, "email": "friend@example.com" }),
+	));
+}
+
+#[test]
+fn a_member_withdraws_an_invitation_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_withdraw_invitation",
+		|space_id| json!({ "spaceId": space_id, "userId": "pending" }),
+	));
+}
+
+#[test]
+fn a_member_removes_a_member_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_remove_member",
+		|space_id| json!({ "spaceId": space_id, "userId": "joined" }),
+	));
+}
+
+#[test]
+fn a_member_searches_the_messages_of_the_shared_space_only() {
+	run(async {
+		let command = "search_messages";
+		let mut guest = Guest::of_two_spaces(command).await;
+		let mut every_space = a_search_of(PERSONAL);
+		every_space["query"]["allSpaces"] = json!(true);
+
+		guest.refused(command, a_search_of(ELSEWHERE)).await;
+		guest.refused(command, every_space).await;
+		guest.forwarded(command, a_search_of(PERSONAL)).await;
+
+		assert_eq!(guest.effects.reached(), [command]);
+	});
+}
+
+#[test]
+fn a_member_shuts_down_a_session_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"agent_shutdown",
+		json!({ "scope": a_runtime_scope("c-theirs") }),
+		json!({ "scope": a_runtime_scope("c-mine") }),
+	));
+}
+
+#[test]
+fn a_member_reads_the_live_sessions_of_the_shared_space_only() {
+	run(kept_in_the_space_named("agent_live_sessions_in_space", space_named));
+}
+
+#[test]
+fn a_member_lists_the_env_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_list",
+		json!({ "scope": an_env_scope_of(ELSEWHERE) }),
+		json!({ "scope": an_env_scope_of(PERSONAL) }),
+	));
+}
+
+#[test]
+fn a_member_sets_an_env_entry_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_set",
+		json!({ "scope": an_env_scope_of(ELSEWHERE), "name": "GREETING", "value": "member" }),
+		json!({ "scope": an_env_scope_of(PERSONAL), "name": "GREETING", "value": "member" }),
+	));
+}
+
+#[test]
+fn a_member_deletes_an_env_entry_of_a_bot_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_delete",
+		json!({ "scope": a_bot_env_scope("b-theirs", ELSEWHERE), "name": "GREETING" }),
+		json!({ "scope": a_bot_env_scope("b-mine", PERSONAL), "name": "GREETING" }),
+	));
+}
+
+#[test]
+fn a_member_reads_the_application_status_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"mcp_application_status",
+		json!({ "owner": an_env_scope_of(ELSEWHERE) }),
+		json!({ "owner": an_env_scope_of(PERSONAL) }),
+	));
+}
+
+#[test]
+fn a_member_disconnects_an_application_of_the_shared_space_only() {
+	let disconnect = |owner: Value| json!({ "owner": owner, "name": "granola", "url": "https://granola.test/mcp" });
+	run(kept_in_the_shared_space(
+		"mcp_oauth_disconnect",
+		disconnect(an_env_scope_of(ELSEWHERE)),
+		disconnect(an_env_scope_of(PERSONAL)),
+	));
+}
+
+#[test]
+fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("env-outside").await;
+		let outside = [
+			json!({ "kind": "user" }),
+			a_bot_env_scope("b-theirs", PERSONAL),
+			a_bot_env_scope("b-mine", ELSEWHERE),
+			json!({ "kind": "server", "name": "clock", "owner": an_env_scope_of(PERSONAL) }),
+		];
+		let held_with_another_space = a_bot_env_scope("b-shared", PERSONAL);
+
+		for scope in outside.clone() {
+			guest.refused("env_list", json!({ "scope": scope })).await;
+			guest.refused("mcp_application_status", json!({ "owner": scope })).await;
+		}
+		for scope in outside.into_iter().chain([held_with_another_space]) {
+			guest.refused("env_set", json!({ "scope": scope, "name": "A", "value": "b" })).await;
+			guest.refused("env_delete", json!({ "scope": scope, "name": "A" })).await;
+			guest
+				.refused(
+					"mcp_oauth_disconnect",
+					json!({ "owner": scope, "name": "granola", "url": "https://granola.test/mcp" }),
+				)
+				.await;
+		}
+
+		assert!(guest.effects.reached().is_empty(), "{:?}", guest.effects.reached());
+	});
+}
+
+#[test]
+fn a_member_lists_a_bot_env_of_the_shared_space_without_the_host_person_entries() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("env-without-person").await;
+		let root = guest.effects.env_root.clone();
+		let bot = EnvScope::Bot { id: "b-mine".to_owned(), space_id: PERSONAL.to_owned() };
+		store::set(&root, &EnvScope::User, "HOST_ONLY", "person").expect("the host sets");
+		store::set(&root, &EnvScope::User, "SHADOWED", "person").expect("the host sets");
+		store::set(&root, &a_space_scope(), "SHARED", "space").expect("the host sets");
+		store::set(&root, &bot, "SHADOWED", "bot").expect("the host sets");
+
+		let answered =
+			guest.called("env_list", json!({ "scope": a_bot_env_scope("b-mine", PERSONAL) })).await;
+
+		assert_eq!(answered["status"], json!(200), "{answered}");
+		assert_eq!(
+			answered["body"],
+			json!([
+				{ "name": "SHADOWED", "definedIn": bot, "servedFrom": bot },
+				{ "name": "SHARED", "definedIn": a_space_scope(), "servedFrom": a_space_scope() },
+			])
+		);
+	});
+}
+
+fn a_space_scope() -> EnvScope {
+	EnvScope::Space { id: PERSONAL.to_owned() }
+}
+
+#[test]
+fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
+	run(async {
+		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
+		let app = guest.harness.app.handle();
+		let scope_in = |conversation_id: &str, bot_id: &str| agent::RuntimeScope {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: format!("r-{conversation_id}"),
+			epoch: 0,
+		};
+		commands::a_run_held_by_the_app(app, scope_in("c-mine", "b-mine"));
+		commands::a_run_held_by_the_app(app, scope_in("c-theirs", "b-theirs"));
+		commands::a_run_held_by_the_app(app, scope_in("c-shared", "b-shared"));
+
+		let listed =
+			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
+				.await
+				.expect("the sessions read");
+
+		let conversations: Vec<&str> =
+			listed.iter().map(|session| session.conversation_id.as_str()).collect();
+		assert_eq!(conversations, ["c-mine"]);
+		assert_eq!(listed[0].bot_id, "b-mine");
+		assert_eq!(listed[0].runtime_session_id, "r-c-mine");
 	});
 }
 
@@ -2684,6 +2772,13 @@ fn a_relay_guest_hears_a_routine_change_of_the_shared_space_only() {
 fn a_relay_guest_hears_a_hosting_change_of_the_shared_space_only() {
 	run(only_the_shared_space_frame_is_heard(|space_id| {
 		(CHANGED_EVENT, json!({ "spaceId": space_id, "state": "online" }))
+	}));
+}
+
+#[test]
+fn a_relay_guest_hears_a_members_change_of_the_shared_space_only() {
+	run(only_the_shared_space_frame_is_heard(|space_id| {
+		(MEMBERS_CHANGED_EVENT, json!({ "spaceId": space_id, "members": [] }))
 	}));
 }
 
