@@ -6,7 +6,7 @@ use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 
 use chrono::{DateTime, SecondsFormat};
-use reqwest::Url;
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, Runtime};
@@ -26,6 +26,8 @@ use crate::routines::core::{Clock, SystemClock};
 const SEGMENTS: [&str; 3] = ["api", "directory", "servers"];
 
 const LIMIT: &str = "100";
+
+const SERVED_TIERS: [Tier; 2] = [Tier::Curated, Tier::Partner];
 
 const SCHEMA: u32 = 3;
 
@@ -133,6 +135,16 @@ enum Tier {
 	Curated,
 	Partner,
 	Community,
+}
+
+impl Tier {
+	fn named(self) -> &'static str {
+		match self {
+			Tier::Curated => "curated",
+			Tier::Partner => "partner",
+			Tier::Community => "community",
+		}
+	}
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -475,10 +487,25 @@ async fn listed(base: &str, since: Option<&str>) -> Result<Listing, Applications
 	let client = client()?;
 	let base = parsed(base)?;
 	let mut listing = Listing::default();
+	for tier in SERVED_TIERS {
+		let walked = walked(&client, &base, tier, since).await?;
+		listing.is_feed_stale |= walked.is_feed_stale;
+		listing.rows.extend(walked.rows);
+	}
+	Ok(listing)
+}
+
+async fn walked(
+	client: &Client,
+	base: &Url,
+	tier: Tier,
+	since: Option<&str>,
+) -> Result<Listing, ApplicationsError> {
+	let mut listing = Listing::default();
 	let mut asked = HashSet::new();
 	let mut cursor: Option<String> = None;
 	loop {
-		let page: Page = read(&client, page_url(&base, since, cursor.as_deref())?).await?;
+		let page: Page = read(client, page_url(base, tier, since, cursor.as_deref())?).await?;
 		listing.is_feed_stale |= !page.stale_feeds.is_empty();
 		listing.rows.extend(page.servers.into_iter().filter_map(row));
 		let Some(next) = page.next_cursor else {
@@ -505,12 +532,14 @@ fn answered_nothing() -> ApplicationsError {
 
 fn page_url(
 	base: &Url,
+	tier: Tier,
 	since: Option<&str>,
 	cursor: Option<&str>,
 ) -> Result<Url, ApplicationsError> {
 	let mut url = endpoint(base, &SEGMENTS)?;
 	{
 		let mut query = url.query_pairs_mut();
+		query.append_pair("tier", tier.named());
 		query.append_pair("limit", LIMIT);
 		if let Some(since) = since {
 			query.append_pair("updated_since", since);
@@ -762,12 +791,13 @@ pub(crate) mod tests {
 	}
 
 	pub(crate) struct Served {
-		pages: Recorded<Vec<Value>>,
+		curated: Recorded<Vec<Value>>,
+		partner: Recorded<Vec<Value>>,
 		stale_feeds: Recorded<Vec<String>>,
 		refusals: Recorded<usize>,
 		is_broken: Recorded<bool>,
 		is_looping: Recorded<bool>,
-		asked: Recorded<Vec<String>>,
+		asked: Recorded<Vec<(String, String)>>,
 		queried: Recorded<Vec<String>>,
 		is_open: signal::Sender<bool>,
 	}
@@ -789,15 +819,31 @@ pub(crate) mod tests {
 		}
 
 		fn serves(&self, pages: Vec<Value>) {
-			*self.pages.lock().expect("the stub records") = pages;
+			*self.partner.lock().expect("the stub records") = pages;
 		}
 
-		fn asked(&self) -> Vec<String> {
+		fn tier(&self, tier: &str) -> Option<&Recorded<Vec<Value>>> {
+			match tier {
+				"curated" => Some(&self.curated),
+				"partner" => Some(&self.partner),
+				_ => None,
+			}
+		}
+
+		fn asked(&self) -> Vec<(String, String)> {
 			self.asked.lock().expect("the stub records").clone()
 		}
 
 		fn queried(&self) -> Vec<String> {
 			self.queried.lock().expect("the stub records").clone()
+		}
+
+		fn reads(&self) -> Vec<String> {
+			let opening = |query: &String| {
+				asked_pair(query, "tier").as_deref() == Some("curated")
+					&& asked_pair(query, "cursor").is_none()
+			};
+			self.queried().into_iter().filter(opening).collect()
 		}
 
 		fn forget(&self) {
@@ -807,8 +853,13 @@ pub(crate) mod tests {
 	}
 
 	pub(crate) async fn serving(pages: Vec<Value>) -> (String, Arc<Served>) {
+		serving_tiers(Vec::new(), pages).await
+	}
+
+	async fn serving_tiers(curated: Vec<Value>, partner: Vec<Value>) -> (String, Arc<Served>) {
 		let held = Arc::new(Served {
-			pages: Recorded::new(pages),
+			curated: Recorded::new(curated),
+			partner: Recorded::new(partner),
 			stale_feeds: Recorded::new(Vec::new()),
 			refusals: Recorded::new(0),
 			is_broken: Recorded::new(false),
@@ -829,7 +880,9 @@ pub(crate) mod tests {
 	async fn page_of(Extracted(held): Extracted<Arc<Served>>, uri: Uri) -> Answered {
 		let query = uri.query().unwrap_or_default().to_owned();
 		let cursor = asked_pair(&query, "cursor");
-		held.asked.lock().expect("the stub records").push(cursor.clone().unwrap_or_default());
+		let tier = asked_pair(&query, "tier").unwrap_or_default();
+		let asked = (tier.clone(), cursor.clone().unwrap_or_default());
+		held.asked.lock().expect("the stub records").push(asked);
 		held.queried.lock().expect("the stub records").push(query);
 		held.is_open.subscribe().wait_for(|is_open| *is_open).await.expect("the stub opens");
 		if held.refuses_once() {
@@ -838,7 +891,10 @@ pub(crate) mod tests {
 		if *held.is_broken.lock().expect("the stub records") {
 			return as_json(&json!({ "rows": [] }));
 		}
-		let pages = held.pages.lock().expect("the stub records").clone();
+		let Some(pages) = held.tier(&tier) else {
+			return StatusCode::BAD_REQUEST.into_response();
+		};
+		let pages = pages.lock().expect("the stub records").clone();
 		let index = cursor.and_then(|held| held.parse::<usize>().ok()).unwrap_or(0);
 		let servers = pages.get(index).cloned().unwrap_or_else(|| json!([]));
 		let next = match *held.is_looping.lock().expect("the stub records") {
@@ -849,6 +905,10 @@ pub(crate) mod tests {
 		as_json(&json!({
 			"servers": servers, "total": 0, "next_cursor": next, "stale_feeds": stale_feeds,
 		}))
+	}
+
+	fn pairs(asked: &[(&str, &str)]) -> Vec<(String, String)> {
+		asked.iter().map(|(tier, cursor)| (tier.to_string(), cursor.to_string())).collect()
 	}
 
 	fn asked_pair(query: &str, name: &str) -> Option<String> {
@@ -1223,23 +1283,52 @@ pub(crate) mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_read_follows_the_cursor_until_it_is_null_and_keeps_the_cloud_order() {
-		let (base, held) = serving(vec![
-			json!([a_row("first", "curated", 1), a_row("second", "partner", 1)]),
-			json!([a_row("third", "partner", 1)]),
-		])
+	async fn the_read_walks_the_curated_then_the_partner_tier_to_its_null_cursor_in_cloud_order() {
+		let (base, held) = serving_tiers(
+			vec![json!([a_row("first", "curated", 1)]), json!([a_row("second", "curated", 2)])],
+			vec![json!([a_row("third", "partner", 1)]), json!([a_row("fourth", "partner", 2)])],
+		)
 		.await;
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
 
 		let read = directory.searched("").await.expect("the directory reads");
 
-		assert_eq!(names(&read.applications), ["first", "second", "third"]);
-		assert_eq!(held.asked(), ["", "1"]);
+		assert_eq!(names(&read.applications), ["first", "second", "third", "fourth"]);
+		assert_eq!(
+			held.asked(),
+			pairs(&[("curated", ""), ("curated", "1"), ("partner", ""), ("partner", "1")])
+		);
 		for query in held.queried() {
 			assert_eq!(asked_pair(&query, "limit").as_deref(), Some("100"), "got {query}");
 			assert_eq!(asked_pair(&query, "updated_since"), None, "got {query}");
-			assert_eq!(asked_pair(&query, "tier"), None, "got {query}");
 		}
+	}
+
+	#[tokio::test]
+	async fn a_curated_tier_answering_no_row_stores_the_partner_rows_without_a_failure() {
+		let (base, _) = serving_tiers(vec![json!([])], vec![a_page(&["one"])]).await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+
+		let read = directory.searched("").await.expect("the directory reads");
+
+		assert_eq!(names(&read.applications), ["one"]);
+		assert!(directory.kept().failure.is_none(), "a failure was recorded");
+	}
+
+	#[tokio::test]
+	async fn a_partner_walk_that_fails_stores_no_row_of_the_read_and_records_the_failure() {
+		let (base, held) = serving_tiers(
+			vec![json!([a_row("first", "curated", 1)])],
+			vec![a_page(&["one"]), json!("not a page")],
+		)
+		.await;
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
+
+		directory.refreshed().await;
+
+		assert!(directory.kept().cached.is_none(), "rows of the failed read were stored");
+		assert!(directory.kept().failure.is_some(), "the failure was not recorded");
+		assert_eq!(held.asked(), pairs(&[("curated", ""), ("partner", ""), ("partner", "1")]));
 	}
 
 	#[tokio::test]
@@ -1253,7 +1342,7 @@ pub(crate) mod tests {
 			matches!(&read, Err(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("cursor 1")),
 			"got {read:?}"
 		);
-		assert_eq!(held.asked(), ["", "1"]);
+		assert_eq!(held.asked(), pairs(&[("curated", ""), ("curated", "1")]));
 	}
 
 	#[tokio::test]
@@ -1383,7 +1472,7 @@ pub(crate) mod tests {
 		assert_eq!(names(&cached.applications), ["one"]);
 		assert_eq!(cached.is_stale, Some(true));
 		assert_eq!(cached.registry_failure, None);
-		let queried = held.queried();
+		let queried = held.reads();
 		assert_eq!(queried.len(), 1, "got {queried:?}");
 		assert_eq!(asked_pair(&queried[0], "updated_since").as_deref(), Some(NOON_INSTANT));
 		assert_eq!(names(&answered.applications), ["fresh", "one"]);
@@ -1410,7 +1499,7 @@ pub(crate) mod tests {
 		assert_eq!(unmerged, None);
 		assert_eq!(named.map(|application| application.name), Some("fresh".to_owned()));
 		assert_eq!(names(&curated), ["fresh"]);
-		assert_eq!(held.queried().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 	}
 
 	fn feed_stale(cached: Cached) -> Cached {
@@ -1433,9 +1522,8 @@ pub(crate) mod tests {
 
 		assert_eq!(names(&seed_answered.applications), Vec::<&str>::new());
 		assert_eq!(seed_answered.is_stale, Some(true));
-		let queried = held.queried();
-		assert_eq!(queried.len(), 2, "got {queried:?}");
-		assert!(queried.iter().all(|query| asked_pair(query, "updated_since").is_none()));
+		assert_eq!(held.asked(), pairs(&[("curated", ""), ("partner", ""), ("partner", "1")]));
+		assert!(held.queried().iter().all(|query| asked_pair(query, "updated_since").is_none()));
 		assert_eq!(names(&answered.applications), ["notion"]);
 		assert_eq!(answered.applications[0].categories, ["Productivity"]);
 		assert_eq!(answered.is_stale, Some(false));
@@ -1478,7 +1566,7 @@ pub(crate) mod tests {
 		let failed = directory.searched("").await.expect("the search answers");
 		clock.set(failed_at + RETRY_MS);
 		let held_back = directory.searched("").await.expect("the search answers");
-		let asked_within_the_minute = held.asked().len();
+		let asked_within_the_minute = held.reads().len();
 		clock.set(failed_at + RETRY_MS + 1);
 		let retrying = directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
@@ -1494,7 +1582,7 @@ pub(crate) mod tests {
 		assert_eq!(asked_within_the_minute, 1);
 		assert_eq!(retrying.registry_failure, failed.registry_failure);
 		assert_eq!(retrying.is_stale, Some(true));
-		assert_eq!(held.asked().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 		assert_eq!(retried.registry_failure, None);
 		assert_eq!(retried.is_stale, Some(false));
 	}
@@ -1523,7 +1611,7 @@ pub(crate) mod tests {
 			Some(ApplicationsError::RegistryRefused { status: 500 })
 		);
 		assert_eq!(searched.is_stale, Some(true));
-		assert_eq!(held.asked().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 		assert_eq!(names(&retried), ["superset"]);
 	}
 
@@ -1544,8 +1632,7 @@ pub(crate) mod tests {
 		settled(&directory).await;
 		let refreshed = directory.searched("").await.expect("the search answers");
 
-		let queried = held.queried();
-		assert_eq!(queried.len(), 2, "got {queried:?}");
+		assert_eq!(held.asked(), pairs(&[("curated", ""), ("partner", ""), ("partner", "1")]));
 		assert_eq!(names(&searched.expect("the search answers").applications), ["seed"]);
 		assert_eq!(named.expect("the name resolves"), None);
 		curated.expect("the catalogue reads");
@@ -1596,7 +1683,7 @@ pub(crate) mod tests {
 		let passed = directory.searched("").await.expect("the search answers");
 		clock.set(passed_at + RETRY_MS);
 		directory.searched("").await.expect("the search answers");
-		let asked_within_the_minute = held.asked().len();
+		let asked_within_the_minute = held.reads().len();
 		held.release();
 		clock.set(passed_at + RETRY_MS + 1);
 		directory.searched("").await.expect("the search answers");
@@ -1614,7 +1701,7 @@ pub(crate) mod tests {
 			passed.registry_failure
 		);
 		assert_eq!(asked_within_the_minute, 1);
-		assert_eq!(held.asked().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 		assert_eq!(names(&retried.applications), ["fresh", "one"]);
 		assert_eq!(retried.registry_failure, None);
 	}
@@ -1644,7 +1731,7 @@ pub(crate) mod tests {
 			"got {waited:?}"
 		);
 		assert_eq!(names(&landed.applications), ["one"]);
-		assert_eq!(held.queried().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 	}
 
 	#[tokio::test]
@@ -1657,7 +1744,7 @@ pub(crate) mod tests {
 		directory.searched("").await.expect("the search answers");
 		tokio::join!(directory.refreshed(), async { held.release() });
 
-		assert_eq!(held.queried().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 		assert_eq!(a_cache_of(&directory).read_at, NOON + 2 * DAY_MS);
 	}
 
@@ -1705,7 +1792,7 @@ pub(crate) mod tests {
 			reread.registry_failure,
 			Some(ApplicationsError::RegistryRefused { status: 500 })
 		);
-		assert_eq!(held.asked().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 		assert!(again.is_err(), "a read within the retry minute was announced");
 	}
 
@@ -1741,16 +1828,16 @@ pub(crate) mod tests {
 			"got {:?}",
 			reread.registry_failure
 		);
-		assert_eq!(held.asked().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 		assert!(again.is_err(), "a read within the retry minute was announced");
 	}
 
 	#[tokio::test]
 	async fn a_cache_read_days_ago_asks_what_changed_since_and_merges_it_by_id() {
-		let (base, held) = serving(vec![json!([
-			a_row_carrying("one", json!({ "one_liner": "One, renamed." })),
-			a_row("fresh", "curated", 1),
-		])])
+		let (base, held) = serving_tiers(
+			vec![json!([a_row("fresh", "curated", 1)])],
+			vec![json!([a_row_carrying("one", json!({ "one_liner": "One, renamed." }))])],
+		)
 		.await;
 		let now = NOON + 3 * DAY_MS;
 		let directory = Directory::timed(base, None, Box::new(Stopped(now)));
@@ -1759,9 +1846,10 @@ pub(crate) mod tests {
 		directory.refreshed().await;
 		let answered = directory.searched("").await.expect("the search answers");
 
-		let queried = held.queried();
-		assert_eq!(queried.len(), 1, "got {queried:?}");
-		assert_eq!(asked_pair(&queried[0], "updated_since").as_deref(), Some(NOON_INSTANT));
+		assert_eq!(held.asked(), pairs(&[("curated", ""), ("partner", "")]));
+		for query in held.queried() {
+			assert_eq!(asked_pair(&query, "updated_since").as_deref(), Some(NOON_INSTANT));
+		}
 		assert_eq!(names(&answered.applications), ["fresh", "one", "two"]);
 		assert_eq!(answered.applications[1].description, "One, renamed.");
 		assert_eq!(answered.read_at, Some(now));
@@ -1793,7 +1881,7 @@ pub(crate) mod tests {
 		directory.refreshed().await;
 		let answered = directory.searched("").await.expect("the search answers");
 
-		assert_eq!(asked_pair(&held.queried()[0], "updated_since"), None);
+		assert_eq!(asked_pair(&held.reads()[0], "updated_since"), None);
 		assert_eq!(names(&answered.applications), ["fresh"]);
 		assert_eq!(answered.read_at, Some(now));
 	}
@@ -1812,7 +1900,7 @@ pub(crate) mod tests {
 			clock.set(at);
 			directory.refreshed().await;
 		}
-		let merges = held.queried();
+		let merges = held.reads();
 		let merged = directory.searched("").await.expect("the search answers");
 		held.forget();
 		let listed_again = NOON + 7 * DAY_MS + hour;
@@ -1826,7 +1914,7 @@ pub(crate) mod tests {
 		}
 		assert_eq!(names(&merged.applications), ["kept", "gone"]);
 		assert_eq!(merged.is_stale, Some(false));
-		let queried = held.queried();
+		let queried = held.reads();
 		assert_eq!(queried.len(), 1, "got {queried:?}");
 		assert_eq!(asked_pair(&queried[0], "updated_since"), None);
 		assert_eq!(names(&listed.applications), ["kept"]);
@@ -1857,7 +1945,7 @@ pub(crate) mod tests {
 		let first = directory.searched("").await;
 		clock.set(NOON + 30 * 1000);
 		let held_back = directory.named("one").await;
-		let asked_within_the_minute = held.asked().len();
+		let asked_within_the_minute = held.reads().len();
 		clock.set(NOON + 61 * 1000);
 		let retried = directory.searched("").await.expect("the search answers");
 
@@ -1867,7 +1955,7 @@ pub(crate) mod tests {
 			"got {held_back:?}"
 		);
 		assert_eq!(asked_within_the_minute, 1);
-		assert_eq!(held.asked().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 		assert_eq!(names(&retried.applications), ["one"]);
 		assert_eq!(retried.registry_failure, None);
 	}
@@ -1946,7 +2034,7 @@ pub(crate) mod tests {
 
 		assert!(matches!(first, Err(ApplicationsError::RegistryRefused { .. })), "got {first:?}");
 		assert!(matches!(second, Err(ApplicationsError::RegistryRefused { .. })), "got {second:?}");
-		assert_eq!(held.asked().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 	}
 
 	#[tokio::test]
@@ -1958,7 +2046,7 @@ pub(crate) mod tests {
 
 		directory.refreshed().await;
 
-		assert_eq!(held.asked().len(), 2);
+		assert_eq!(held.reads().len(), 2);
 		let answered = directory.searched("").await.expect("the search answers");
 		assert_eq!(names(&answered.applications), ["one"]);
 		assert_eq!(answered.registry_failure, None);
@@ -1990,7 +2078,7 @@ pub(crate) mod tests {
 			"got {answered:?}"
 		);
 		assert!(!file.exists(), "a cache was written");
-		assert_eq!(held.asked().len(), 1);
+		assert_eq!(held.reads().len(), 1);
 	}
 
 	#[tokio::test]
@@ -2030,7 +2118,7 @@ pub(crate) mod tests {
 		let answered = directory.searched("").await.expect("the search answers");
 
 		assert_eq!(names(&answered.applications), ["one"]);
-		assert_eq!(asked_pair(&held.queried()[0], "updated_since"), None);
+		assert_eq!(asked_pair(&held.reads()[0], "updated_since"), None);
 	}
 
 	#[tokio::test]
@@ -2042,10 +2130,13 @@ pub(crate) mod tests {
 		fs::write(&file, other.to_string()).expect("the cache is written");
 		let (base, _) = serving(vec![a_page(&["one"])]).await;
 
-		let directory = Directory::timed(base, Some(file), Box::new(Stopped(NOON)));
+		let directory = Directory::timed(base, Some(file.clone()), Box::new(Stopped(NOON)));
 		let answered = directory.searched("").await.expect("the search answers");
 
 		assert_eq!(names(&answered.applications), ["one"]);
+		let written: Value =
+			serde_json::from_slice(&fs::read(&file).expect("the cache reads")).expect("it is json");
+		assert_eq!(written["schema"], json!(SCHEMA));
 	}
 
 	#[tokio::test]
