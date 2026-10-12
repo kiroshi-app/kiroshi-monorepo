@@ -428,6 +428,11 @@ fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 			Err(InvitationError::ServersUnreachable { .. })
 		));
 
+		harness.answering(StatusCode::BAD_GATEWAY, json!({}));
+		assert!(matches!(
+			decline(harness.app.handle(), INSTANCE.to_owned()).await,
+			Err(InvitationError::ServersUnreachable { .. })
+		));
 		for (answer, expected) in [
 			(refusal(StatusCode::GONE, "INVITATION_WITHDRAWN"), InvitationError::Withdrawn),
 			(refusal(StatusCode::NOT_FOUND, "NOT_FOUND"), InvitationError::UnknownInvitation),
@@ -440,11 +445,6 @@ fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 			);
 			assert_eq!(decline(harness.app.handle(), INSTANCE.to_owned()).await, Err(expected));
 		}
-		harness.answering(StatusCode::BAD_GATEWAY, json!({}));
-		assert!(matches!(
-			decline(harness.app.handle(), INSTANCE.to_owned()).await,
-			Err(InvitationError::ServersUnreachable { .. })
-		));
 		assert!(harness.stored().await.is_empty());
 		assert!(harness.heard(JOINED_CHANGED).is_empty());
 	});
