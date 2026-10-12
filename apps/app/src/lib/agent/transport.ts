@@ -9,7 +9,7 @@ import type {
 	SubmittedTurn,
 } from "./contract"
 
-import { invoke, listen } from "../host"
+import { activeJoinedSpaceId, invoke, listen } from "../host"
 import type { SubmittedAttachment } from "../chat/attachments-contract"
 import type { ChatDriver } from "../chat/driver"
 
@@ -77,4 +77,9 @@ export const agentTransport: ChatDriver = {
 		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => onEvent(payload)),
 }
 
-export const liveSessions = () => invoke<LiveSession[]>("agent_live_sessions")
+export const liveSessions = () => {
+	const spaceId = activeJoinedSpaceId()
+	return spaceId === null
+		? invoke<LiveSession[]>("agent_live_sessions")
+		: invoke<LiveSession[]>("agent_live_sessions_in_space", { spaceId })
+}

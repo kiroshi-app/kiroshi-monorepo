@@ -47,14 +47,18 @@ export const SpaceSettingsHost = ({
 		isSpaceEditing && selectedSpace
 			? { id: selectedSpace.id, name: selectedSpace.name }
 			: null
-	const hosting = useHosting(editedSpace)
-	const isHosted = hosting?.hosting === "online"
-	const members = useMembers(editedSpace, isHosted)
 	const joinedSpace = openJoinedSpaceOf(
 		joinedSpaces.state.joinedSpaces,
 		joinedSpaces.state.openId,
 		selectedSpaceId,
 	)
+	const editedJoinedSpace =
+		isSpaceEditing && joinedSpace && selectedSpaceId
+			? { id: selectedSpaceId, name: joinedSpace.name }
+			: null
+	const hosting = useHosting(editedSpace)
+	const isHosted = hosting?.hosting === "online" || editedJoinedSpace !== null
+	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted)
 
 	if (!selectedSpaceId) {
 		return null
@@ -81,15 +85,11 @@ export const SpaceSettingsHost = ({
 
 	const hostingProps = hosting ? { ...hosting, onSignIn: signIn } : {}
 
-	const membersProps =
-		members && selectedSpace
+	const membersPropsOf = (spaceName: string) =>
+		members
 			? {
 					members: (
-						<MembersPanel
-							{...members}
-							isHosted={isHosted}
-							space={selectedSpace.name}
-						/>
+						<MembersPanel {...members} isHosted={isHosted} space={spaceName} />
 					),
 				}
 			: {}
@@ -132,7 +132,7 @@ export const SpaceSettingsHost = ({
 			<SpaceSettingsDialog
 				{...sharedProps}
 				{...hostingProps}
-				{...membersProps}
+				{...membersPropsOf(selectedSpace.name)}
 				isDeletable={spaces.state.spaces.length > 1}
 				onDelete={() => {
 					void spaces.controller
@@ -153,6 +153,7 @@ export const SpaceSettingsHost = ({
 	return joinedSpace ? (
 		<SpaceSettingsDialog
 			{...sharedProps}
+			{...membersPropsOf(joinedSpace.name)}
 			host={joinedSpace.hostUrl}
 			onLeave={() => joinedSpaces.controller.leave(joinedSpace.id).then(close)}
 			value={{ name: joinedSpace.name }}

@@ -112,6 +112,15 @@ const joinedHostsOf = ({ join, answer = answerJoined }: Seed = {}) => {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const HOST_ONLY_REFUSAL = "this command belongs to the host"
+
+const hostOnlyRefusalOf = (command: string) => ({
+	message: HOST_ONLY_REFUSAL,
+	command,
+	status: 403,
+	side: "member",
+})
+
 const STORAGE_FAILURE = {
 	kind: "sqlite",
 	detail: "database is locked",
@@ -1621,7 +1630,6 @@ describe("a bot or a Space only this Mac holds", () => {
 		const owner = { kind: "bot", id: botId, spaceId: "personal" }
 		return [
 			["mcp_application_status", { owner }],
-			["mcp_oauth_connect", { owner, name: "linear" }],
 			[
 				"env_set",
 				{
@@ -1632,6 +1640,19 @@ describe("a bot or a Space only this Mac holds", () => {
 			],
 		] as const
 	}
+
+	it("serves mcp_oauth_connect locally when its owner is a companion only this Mac holds", async () => {
+		const { hosts, local, fetch } = await onGarageAfterLocalReads()
+		const args = {
+			owner: { kind: "bot", id: "own-bot", spaceId: "personal" },
+			name: "linear",
+		}
+
+		await hosts.invoke("mcp_oauth_connect", args)
+
+		expect(local.invoke).toHaveBeenLastCalledWith("mcp_oauth_connect", args)
+		expect(relayedCommands(fetch)).toEqual([])
+	})
 
 	it.each(botOwned("own-bot"))(
 		"serves %s locally when its owner is a companion only this Mac holds",
@@ -1646,18 +1667,14 @@ describe("a bot or a Space only this Mac holds", () => {
 	)
 
 	it.each(botOwned("shared-bot"))(
-		"keeps %s off the host when its owner is a companion the active host holds",
+		"relays %s when its owner is a companion the active host holds",
 		async (command, args) => {
-			const { hosts, local, fetch, reportFailure } =
-				await onGarageAfterLocalReads()
+			const { hosts, local, fetch } = await onGarageAfterLocalReads()
 
-			await expect(hosts.invoke(command, args)).rejects.toThrow(
-				`${command} of a joined space stays on its host`,
-			)
+			await hosts.invoke(command, args)
 
-			expect(relayedCommands(fetch)).toEqual([])
+			expect(relayedCommands(fetch)).toEqual([command])
 			expect(local.invoke).not.toHaveBeenCalled()
-			expect(reportFailure).not.toHaveBeenCalled()
 		},
 	)
 
@@ -1740,20 +1757,33 @@ describe("personal Settings while a joined Space is active", () => {
 			{ scope: { kind: "server", name: "linear", owner: JOINED_SPACE } },
 		],
 		["mcp_application_status", { owner: JOINED_BOT }],
-		["mcp_oauth_connect", { owner: JOINED_SPACE, name: "linear" }],
 		["mcp_oauth_disconnect", { owner: JOINED_BOT, name: "linear" }],
+	])("relays %s of the joined Space to its host", async (command, args) => {
+		const { hosts, local, fetch, reportFailure } = await onGarage()
+
+		await hosts.invoke(command, args)
+
+		expect(relayedCommands(fetch)).toEqual([command])
+		expect(localCommands(local)).not.toContain(command)
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
+	it.each([
+		["mcp_oauth_connect", { owner: JOINED_SPACE, name: "linear" }],
+		["mcp_oauth_connect", { owner: JOINED_BOT, name: "linear" }],
 	])(
-		"keeps %s of the joined Space off the host and raises no notice",
+		"starts %s nowhere and raises the hostOnly notice",
 		async (command, args) => {
 			const { hosts, local, fetch, reportFailure } = await onGarage()
 
 			await expect(hosts.invoke(command, args)).rejects.toThrow(
-				`${command} of a joined space stays on its host`,
+				HOST_ONLY_REFUSAL,
 			)
 
 			expect(relayedCommands(fetch)).toEqual([])
 			expect(localCommands(local)).not.toContain(command)
-			expect(reportFailure).not.toHaveBeenCalled()
+			expect(reportFailure).toHaveBeenCalledOnce()
+			expect(reportFailure).toHaveBeenCalledWith(hostOnlyRefusalOf(command))
 		},
 	)
 
@@ -1822,22 +1852,36 @@ describe("Space Settings of a joined Space", () => {
 	it.each([
 		["env_list", { scope: JOINED_SPACE }],
 		["env_list", { scope: JOINED_SERVER }],
+		["env_set", { scope: JOINED_SPACE, name: "TOKEN", value: "v" }],
+		["env_delete", { scope: JOINED_SPACE, name: "TOKEN" }],
 		["mcp_application_status", { owner: JOINED_SPACE }],
-	])("fires %s nowhere and raises no notice", async (command, args) => {
+		["hosting_members", { spaceId: "garage" }],
+		["hosting_invite_member", { spaceId: "garage", email: "a@example.com" }],
+		["hosting_withdraw_invitation", { spaceId: "garage", userId: "ana" }],
+		["hosting_remove_member", { spaceId: "garage", userId: "ana" }],
+		[
+			"search_messages",
+			{ query: { text: "walls", spaceId: "garage", allSpaces: false } },
+		],
+		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],
+		["agent_live_sessions_in_space", { spaceId: "garage" }],
+	])("relays %s to the host", async (command, args) => {
 		const { hosts, local, fetch, reportFailure } = await onGarage()
 
-		await expect(hosts.invoke(command, args)).rejects.toThrow(
-			`${command} of a joined space stays on its host`,
-		)
+		await hosts.invoke(command, args)
 
-		expect(relayedCommands(fetch)).toEqual([])
-		expect(localCommands(local)).toEqual([])
+		expect(relayedCommands(fetch)).toEqual([command])
+		expect(localCommands(local)).not.toContain(command)
 		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
 	it.each([
 		["env_list", { scope: { kind: "space", id: "personal" } }],
 		["mcp_application_status", { owner: { kind: "space", id: "personal" } }],
+		["mcp_oauth_connect", { owner: { kind: "space", id: "personal" } }],
+		["hosting_members", { spaceId: "personal" }],
+		["hosting_remove_member", { spaceId: "personal", userId: "ana" }],
+		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],
 	])("serves %s of a local Space on this Mac", async (command, args) => {
 		const { hosts, local, fetch } = joinedHostsOf()
 
@@ -1879,20 +1923,26 @@ describe("the commands reach.rs keeps on the host", () => {
 	})
 
 	it.each(hostOnlyCommands)(
-		"sends %s nowhere near the joined host and raises no notice",
+		"sends %s nowhere near the joined host and raises no notice but the hostOnly one",
 		async (command) => {
 			const { hosts, fetch, reportFailure } = joinedHostsOf()
 			await hosts.activate("garage")
 			fetch.mockClear()
 
-			await Promise.allSettled(
+			const answers = await Promise.allSettled(
 				ARGUMENTS_OF_THE_JOINED_SPACE.map((args) =>
 					hosts.invoke(command, args),
 				),
 			)
 
 			expect(fetch).not.toHaveBeenCalled()
-			expect(reportFailure).not.toHaveBeenCalled()
+			for (const [refusal] of reportFailure.mock.calls) {
+				expect(refusal).toEqual(hostOnlyRefusalOf(command))
+			}
+			const reasons = answers.flatMap((answer) =>
+				answer.status === "rejected" ? [(answer.reason as Error).message] : [],
+			)
+			expect(reasons.join("\n")).not.toContain("stays on its host")
 		},
 	)
 })

@@ -17,9 +17,15 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { APPLICATIONS_TAB } from "@/lib/applications/connection-settings"
-import { commands, type JoinedSpace, type Member } from "@/lib/bindings"
+import {
+	commands,
+	HOSTING_MEMBERS_CHANGED_EVENT,
+	type JoinedSpace,
+	type Member,
+	type MembersChanged,
+} from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
-import { isDesktopHost } from "@/lib/host/index"
+import { invoke, isDesktopHost, listen } from "@/lib/host/index"
 import {
 	createJoinedSpacesController,
 	type JoinedSpacesController,
@@ -39,6 +45,7 @@ import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 vi.mock("@/lib/host/index", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host/index")>()),
 	isDesktopHost: vi.fn(() => false),
+	invoke: vi.fn(async () => []),
 	listen: vi.fn(async () => () => undefined),
 }))
 
@@ -51,10 +58,6 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 			hostingState: vi.fn(),
 			hostingStart: vi.fn(),
 			hostingStop: vi.fn(),
-			hostingMembers: vi.fn(async () => ({ status: "ok", data: [] })),
-			hostingInviteMember: vi.fn(),
-			hostingWithdrawInvitation: vi.fn(),
-			hostingRemoveMember: vi.fn(),
 		},
 	}
 })
@@ -219,6 +222,20 @@ describe("SpaceSettingsHost on a joined space", () => {
 		]) {
 			expect(within(dialog).queryByText(localOnly)).toBeNull()
 		}
+	})
+
+	it("keeps the name of a joined space and writes no rename", async () => {
+		const gear = await gearWithGarage()
+		const dialog = openSettingsOf(gear, GARAGE_ROW)
+
+		await act(async () => {
+			fireEvent.change(within(dialog).getByDisplayValue("Garage"), {
+				target: { value: "Atelier" },
+			})
+		})
+
+		expect(within(dialog).getByDisplayValue("Garage")).toBeTruthy()
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
 	it("leaves through the roster path, closes the dialog and selects the first local space", async () => {
@@ -485,14 +502,21 @@ const removeSamOf = (dialog: HTMLElement) =>
 		name: i18n.t("settings:space.members.removeLabel", { name: "Sam Carter" }),
 	})
 
+const answerMembers = (answers: Record<string, Member[]>) =>
+	vi
+		.mocked(invoke)
+		.mockImplementation(async (command: string) => answers[command] as never)
+
+const membersCalls = () =>
+	vi
+		.mocked(invoke)
+		.mock.calls.filter(([command]) => command.startsWith("hosting_"))
+
 describe("SpaceSettingsHost members on the desktop", () => {
 	const hostOnline = () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
-		vi.mocked(commands.hostingMembers).mockResolvedValue({
-			status: "ok",
-			data: [SAM_JOINED, HOST_ROW],
-		})
+		answerMembers({ hosting_members: [SAM_JOINED, HOST_ROW] })
 	}
 
 	it("lists the members read for the open space, the host row first", async () => {
@@ -502,7 +526,9 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		const dialog = await openMembersOf(gear)
 
 		await within(dialog).findByText("Sam Carter")
-		expect(commands.hostingMembers).toHaveBeenCalledWith(gear.home.id)
+		expect(invoke).toHaveBeenCalledWith("hosting_members", {
+			spaceId: gear.home.id,
+		})
 		const names = within(dialog)
 			.getAllByText(/Steve Puget|Sam Carter/)
 			.map((node) => node.textContent)
@@ -536,17 +562,21 @@ describe("SpaceSettingsHost members on the desktop", () => {
 	})
 
 	it("removes a joined member only on confirm", async () => {
-		hostOnline()
-		vi.mocked(commands.hostingRemoveMember).mockResolvedValue({
-			status: "ok",
-			data: [HOST_ROW],
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
+		answerMembers({
+			hosting_members: [SAM_JOINED, HOST_ROW],
+			hosting_remove_member: [HOST_ROW],
 		})
 		const gear = await gearWithGarage()
 		const dialog = await openMembersOf(gear)
 
 		fireEvent.click(await removeSamOf(dialog))
 		const confirm = await screen.findByRole("alertdialog")
-		expect(commands.hostingRemoveMember).not.toHaveBeenCalled()
+		expect(invoke).not.toHaveBeenCalledWith(
+			"hosting_remove_member",
+			expect.anything(),
+		)
 		await act(async () => {
 			fireEvent.click(
 				within(confirm).getByRole("button", {
@@ -555,10 +585,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 			)
 		})
 
-		expect(commands.hostingRemoveMember).toHaveBeenCalledWith(
-			gear.home.id,
-			"sam",
-		)
+		expect(invoke).toHaveBeenCalledWith("hosting_remove_member", {
+			spaceId: gear.home.id,
+			userId: "sam",
+		})
 		await waitFor(() =>
 			expect(within(dialog).queryByText("Sam Carter")).toBeNull(),
 		)
@@ -578,7 +608,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		)
 
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
-		expect(commands.hostingRemoveMember).not.toHaveBeenCalled()
+		expect(invoke).not.toHaveBeenCalledWith(
+			"hosting_remove_member",
+			expect.anything(),
+		)
 	})
 
 	it("disables the invite field and reads no members while hosting is off", async () => {
@@ -600,19 +633,114 @@ describe("SpaceSettingsHost members on the desktop", () => {
 				})
 				.hasAttribute("disabled"),
 		).toBe(true)
-		expect(commands.hostingMembers).not.toHaveBeenCalled()
+		expect(membersCalls()).toEqual([])
 	})
 
-	it("shows no Members entry on a joined space", async () => {
+	it("lists the host first, then the members read from the host, on a joined space", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
+		answerMembers({ hosting_members: [SAM_JOINED, HOST_ROW] })
 		const gear = await gearWithGarage()
 
-		const dialog = openSettingsOf(gear, GARAGE_ROW)
-		await act(async () => undefined)
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+
+		await within(dialog).findByText("Sam Carter")
+		expect(invoke).toHaveBeenCalledWith("hosting_members", {
+			spaceId: "garage",
+		})
+		const names = within(dialog)
+			.getAllByText(/Steve Puget|Sam Carter/)
+			.map((node) => node.textContent)
+		expect(names).toEqual(["Steve Puget", "Sam Carter"])
+		expect(
+			within(dialog)
+				.getByRole("textbox", {
+					name: i18n.t("settings:space.members.invite.label"),
+				})
+				.hasAttribute("disabled"),
+		).toBe(false)
+	})
+
+	it("invites on the host of a joined space", async () => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		vi.mocked(invoke).mockImplementation(async (command: string) =>
+			command === "hosting_invite_member"
+				? ({ ...SAM_JOINED, status: "invited" } as never)
+				: ([HOST_ROW] as never),
+		)
+		const gear = await gearWithGarage()
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+		const field = within(dialog).getByRole("textbox", {
+			name: i18n.t("settings:space.members.invite.label"),
+		})
+
+		fireEvent.change(field, { target: { value: "ana@example.com" } })
+		await act(async () => {
+			fireEvent.click(
+				within(dialog).getByRole("button", {
+					name: i18n.t("settings:space.members.invite.action"),
+				}),
+			)
+		})
+
+		expect(invoke).toHaveBeenCalledWith("hosting_invite_member", {
+			spaceId: "garage",
+			email: "ana@example.com",
+		})
+	})
+
+	it("shows the refusal the host of a joined space answers to an invite", async () => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		vi.mocked(invoke).mockImplementation(async (command: string) => {
+			if (command === "hosting_invite_member") {
+				throw { kind: "alreadyInvited" }
+			}
+			return [HOST_ROW] as never
+		})
+		const gear = await gearWithGarage()
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+
+		fireEvent.change(
+			within(dialog).getByRole("textbox", {
+				name: i18n.t("settings:space.members.invite.label"),
+			}),
+			{ target: { value: "sam@example.com" } },
+		)
+		await act(async () => {
+			fireEvent.click(
+				within(dialog).getByRole("button", {
+					name: i18n.t("settings:space.members.invite.action"),
+				}),
+			)
+		})
 
 		expect(
-			within(dialog).queryByRole("tab", { name: MEMBERS_TAB_NAME }),
-		).toBeNull()
-		expect(commands.hostingMembers).not.toHaveBeenCalled()
+			await within(dialog).findByText(
+				i18n.t("settings:space.members.invite.refusal.invited", {
+					email: "sam@example.com",
+				}),
+			),
+		).toBeTruthy()
+	})
+
+	it("refreshes the members of a joined space when its host announces a change", async () => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		answerMembers({ hosting_members: [SAM_JOINED, HOST_ROW] })
+		let announce: (changed: MembersChanged) => void = () => undefined
+		vi.mocked(listen).mockImplementation(async (event, handler) => {
+			if (event === HOSTING_MEMBERS_CHANGED_EVENT) {
+				announce = (payload) => handler({ event, id: 0, payload } as never)
+			}
+			return () => undefined
+		})
+		const gear = await gearWithGarage()
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+		await within(dialog).findByText("Sam Carter")
+
+		act(() => announce({ spaceId: "garage", members: [HOST_ROW] }))
+
+		await waitFor(() =>
+			expect(within(dialog).queryByText("Sam Carter")).toBeNull(),
+		)
+		expect(within(dialog).getByText("Steve Puget")).toBeTruthy()
 	})
 })

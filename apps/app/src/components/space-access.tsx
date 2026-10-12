@@ -13,7 +13,12 @@ type SpaceAccess = {
 
 const spaceAccessOf = ({ joinedHost, isOwnSpace, onShare }: SpaceAccess) => {
 	if (joinedHost) {
-		return <HostPill isOnline={joinedHost.isOnline} />
+		return (
+			<>
+				<HostPill isOnline={joinedHost.isOnline} />
+				<ShareButton onShare={onShare} />
+			</>
+		)
 	}
 	return isOwnSpace ? <ShareButton onShare={onShare} /> : undefined
 }
