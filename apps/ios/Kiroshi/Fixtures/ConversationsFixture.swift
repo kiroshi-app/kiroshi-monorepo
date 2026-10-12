@@ -205,6 +205,18 @@
                 return message
             }
 
+        static let twoAsks: [FixtureHost.Message] = [
+            .init(
+                id: "m-compare", isYours: true,
+                content:
+                    "Before we tag, compare the last two releases for me.\n\nI want three things:\n- what shipped\n- what broke\n- what we pushed back\n\nKeep each one to a line.",
+                daysAgo: 0, hour: 9, minute: 42),
+            .init(
+                id: "m-figures", isYours: true,
+                content: "Use the real numbers from the last 30 days.", daysAgo: 0, hour: 9,
+                minute: 43),
+        ]
+
         static let releaseHistory: [FixtureHost.Message] = [
             .init(
                 id: "m-tone", isYours: false,
@@ -240,6 +252,8 @@
                 script.playsGroupChanges = true
             case .thread, .swipedThread:
                 script.messages[juniper.id] = (hasHistory ? releaseHistory : []) + releaseNotes
+            case .twoAsks:
+                script.messages[juniper.id] = releaseNotes + twoAsks
             case .threadHostOffline:
                 script.messages[juniper.id] = releaseNotes
                 script.hostLeavesAfter = .seconds(2)
@@ -301,7 +315,7 @@
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
             case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
-                .threadFailed, .slowThread, .longName:
+                .threadFailed, .slowThread, .longName, .twoAsks:
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
                 releaseCrew.id

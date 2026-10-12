@@ -91,6 +91,7 @@
         case slowGroup = "slow-group"
         case longName = "long-name"
         case longGroup = "long-group"
+        case twoAsks = "two-asks"
         case missions = "5.1"
         case missionThread = "5.2"
         case slowMission = "slow-mission"
@@ -137,7 +138,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -153,7 +154,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 true
             default: false
             }
@@ -197,7 +198,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -275,6 +276,7 @@
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,
+                .twoAsks,
                 .missions,
                 .missionThread, .slowMission, .noMissions, .missionsHostOffline, .settings:
                 break
