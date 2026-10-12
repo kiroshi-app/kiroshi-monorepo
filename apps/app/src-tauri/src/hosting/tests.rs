@@ -4042,13 +4042,6 @@ impl Authoring {
 			json!({ "scope": plugin, "name": name, "config": { "command": name }, "mark": null }),
 		);
 	}
-
-	async fn member_call(&self, command: &str, args: Value) -> Value {
-		self.answered(
-			json!({ "id": 1, "command": command, "sender": guest_sender(), "args": args }),
-		)
-		.await
-	}
 }
 
 fn names_of(listed: &Value) -> Vec<&str> {
@@ -4159,14 +4152,16 @@ fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_
 		let before = store::values(&root, &grant).expect("the grant reads");
 
 		let answered = host
-			.member_call(
-				"mcp_oauth_disconnect",
-				json!({
+			.answered(json!({
+				"id": 1,
+				"command": "mcp_oauth_disconnect",
+				"sender": guest_sender(),
+				"args": {
 					"owner": the_default_bot(),
 					"name": "granola",
 					"url": "https://granola.test/mcp",
-				}),
-			)
+				},
+			}))
 			.await;
 
 		assert_eq!(answered["status"], json!(403), "{answered}");
