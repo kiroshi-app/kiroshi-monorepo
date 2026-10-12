@@ -4,9 +4,9 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
-use super::contract::{Member, MemberStatus, MembersChanged, MembersError, SpaceRole};
+use super::contract::{Member, MemberStatus, MembersChanged, MembersError};
 use super::Hosting;
-use crate::account::cloud::{CloudMember, MemberCallError};
+use crate::account::cloud::MemberCallError;
 use crate::account::contract::AccountState;
 use crate::account::session::{self, AccountSession};
 use crate::db::DatabaseState;
@@ -23,7 +23,7 @@ pub async fn list<R: Runtime>(
 	let instance_id = instance_of(app, &space_id).await?;
 	let hosting = app.state::<Hosting>();
 	let _turn = hosting.members_turn.lock().await;
-	let members = listed(app, &space_id, &instance_id).await?;
+	let members = listed(app, &instance_id).await?;
 	announced_if_changed(app, &space_id, members.clone());
 	Ok(members)
 }
@@ -32,7 +32,6 @@ pub async fn invite<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: String,
 	email: String,
-	role: SpaceRole,
 ) -> Result<Member, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
 	let email = normalized_email(&email).ok_or(MembersError::NotAnEmail)?;
@@ -47,65 +46,12 @@ pub async fn invite<R: Runtime>(
 		.invite_member(&bearer, &instance_id, &email)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	let cloud_members = hosting
-		.cloud
-		.members(&bearer, &instance_id)
-		.await
-		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))
-		.map_err(|failure| unread_back(failure.into()))?;
-	let invited = cloud_members
-		.iter()
-		.position(|member| member.email.eq_ignore_ascii_case(&email))
-		.ok_or_else(missing_invitee)?;
-	let invitation = Invitation { space_id: &space_id, instance_id: &instance_id, bearer: &bearer };
-	role_kept(app, &invitation, &cloud_members[invited].user_id, role).await?;
-	let members = with_roles(app, &space_id, cloud_members).await?;
-	announced(app, &space_id, members.clone());
-	members.into_iter().nth(invited).ok_or_else(missing_invitee)
-}
-
-fn missing_invitee() -> MembersError {
-	MembersError::Unreachable {
-		reason: "the invited email is missing from the member list read back".to_owned(),
-	}
-}
-
-struct Invitation<'a> {
-	space_id: &'a str,
-	instance_id: &'a str,
-	bearer: &'a str,
-}
-
-async fn role_kept<R: Runtime>(
-	app: &AppHandle<R>,
-	invitation: &Invitation<'_>,
-	user_id: &str,
-	role: SpaceRole,
-) -> Result<(), MembersError> {
-	let space_id = invitation.space_id;
-	let database_state = app.state::<DatabaseState>();
-	let stored = match ready(&database_state) {
-		Ok(database) => database
-			.space_hosting()
-			.set_member_role(space_id.to_owned(), user_id.to_owned(), role)
-			.await
-			.map_err(SpaceError::from),
-		Err(failure) => Err(failure),
-	};
-	let Err(failure) = stored else {
-		return Ok(());
-	};
-	let cloud = &app.state::<Hosting>().cloud;
-	if let Err(undone) = cloud
-		.remove_member(invitation.bearer, invitation.instance_id, user_id)
-		.await
-		.inspect_err(|failure| signed_out_if_revoked(app, invitation.bearer, failure))
-	{
-		eprintln!(
-			"an invitation to space {space_id} stands without its {role:?} role, which was not stored: {undone:?}"
-		);
-	}
-	Err(failure.into())
+	let members = read_back(app, &space_id, &instance_id).await?;
+	members.into_iter().find(|member| member.email.eq_ignore_ascii_case(&email)).ok_or_else(|| {
+		MembersError::Unreachable {
+			reason: "the invited email is missing from the member list read back".to_owned(),
+		}
+	})
 }
 
 pub async fn withdraw<R: Runtime>(
@@ -133,7 +79,7 @@ async fn ended<R: Runtime>(
 	let instance_id = instance_of(app, &space_id).await?;
 	let hosting = app.state::<Hosting>();
 	let _turn = hosting.members_turn.lock().await;
-	let members = listed(app, &space_id, &instance_id).await?;
+	let members = listed(app, &instance_id).await?;
 	let status = members
 		.iter()
 		.find(|member| member.user_id == user_id)
@@ -151,22 +97,7 @@ async fn ended<R: Runtime>(
 		.remove_member(&bearer, &instance_id, &user_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	role_forgotten(app, &space_id, user_id).await?;
 	read_back(app, &space_id, &instance_id).await
-}
-
-async fn role_forgotten<R: Runtime>(
-	app: &AppHandle<R>,
-	space_id: &str,
-	user_id: String,
-) -> Result<(), MembersError> {
-	let database_state = app.state::<DatabaseState>();
-	ready(&database_state)?
-		.space_hosting()
-		.forget_member_role(space_id.to_owned(), user_id)
-		.await
-		.map_err(SpaceError::from)?;
-	Ok(())
 }
 
 pub(super) async fn polled<R: Runtime>(
@@ -180,7 +111,7 @@ pub(super) async fn polled<R: Runtime>(
 	loop {
 		polls.tick().await;
 		let _turn = hosting.members_turn.lock().await;
-		match listed(app, space_id, instance_id).await {
+		match listed(app, instance_id).await {
 			Ok(members) => announced_if_changed(app, space_id, members),
 			Err(failure) => {
 				eprintln!("the members of hosted space {space_id} were not polled: {failure:?}");
@@ -236,7 +167,6 @@ fn normalized_email(raw: &str) -> Option<String> {
 
 async fn listed<R: Runtime>(
 	app: &AppHandle<R>,
-	space_id: &str,
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
 	let bearer = bearer_of(app)?;
@@ -246,27 +176,7 @@ async fn listed<R: Runtime>(
 		.members(&bearer, instance_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	with_roles(app, space_id, members).await
-}
-
-async fn with_roles<R: Runtime>(
-	app: &AppHandle<R>,
-	space_id: &str,
-	members: Vec<CloudMember>,
-) -> Result<Vec<Member>, MembersError> {
-	let database_state = app.state::<DatabaseState>();
-	let roles = ready(&database_state)?
-		.space_hosting()
-		.member_roles(space_id.to_owned())
-		.await
-		.map_err(SpaceError::from)?;
-	Ok(members
-		.into_iter()
-		.map(|member| {
-			let role = roles.get(&member.user_id).copied().unwrap_or(SpaceRole::Member);
-			Member::of(member, role)
-		})
-		.collect())
+	Ok(members.into_iter().map(Member::from).collect())
 }
 
 async fn read_back<R: Runtime>(
@@ -274,18 +184,14 @@ async fn read_back<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
-	let members = listed(app, space_id, instance_id).await.map_err(unread_back)?;
-	announced(app, space_id, members.clone());
-	Ok(members)
-}
-
-fn unread_back(failure: MembersError) -> MembersError {
-	match failure {
+	let members = listed(app, instance_id).await.map_err(|failure| match failure {
 		MembersError::Unreachable { reason } => MembersError::Unreachable {
 			reason: format!("the change landed but the member list did not read back: {reason}"),
 		},
 		failure => failure,
-	}
+	})?;
+	announced(app, space_id, members.clone());
+	Ok(members)
 }
 
 fn announced_if_changed<R: Runtime>(app: &AppHandle<R>, space_id: &str, members: Vec<Member>) {

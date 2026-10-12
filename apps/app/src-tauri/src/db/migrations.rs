@@ -55,6 +55,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 46, statements: SPACE_HOSTING },
 	Migration { version: 47, statements: MESSAGE_ACCOUNT_AUTHOR },
 	Migration { version: 48, statements: SPACE_MEMBER_ROLES },
+	Migration { version: 49, statements: SPACE_MEMBER_ROLES_DROPPED },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1075,6 +1076,10 @@ CREATE TABLE space_member_roles (
 );
 ";
 
+const SPACE_MEMBER_ROLES_DROPPED: &str = "
+DROP TABLE space_member_roles;
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1176,6 +1181,8 @@ mod tests {
 	const BOT_EFFORT_STEP: u32 = 45;
 	const SPACE_HOSTING_STEP: u32 = 46;
 	const MESSAGE_ACCOUNT_AUTHOR_STEP: u32 = 47;
+	const SPACE_MEMBER_ROLES_STEP: u32 = 48;
+	const SPACE_MEMBER_ROLES_DROPPED_STEP: u32 = 49;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3669,9 +3676,12 @@ mod tests {
 	}
 
 	#[test]
-	fn a_member_role_is_guest_or_member_once_per_member_and_leaves_with_its_space() {
+	fn a_file_holding_member_roles_comes_up_without_them_and_keeps_its_space() {
 		let dir = temp_dir();
-		let connection = migrated(&dir);
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SPACE_MEMBER_ROLES_DROPPED_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), SPACE_MEMBER_ROLES_STEP);
 		write(
 			&connection,
 			"INSERT INTO spaces (id, name, position, created_at) VALUES ('work', 'Work', 1, 1)",
@@ -3683,19 +3693,11 @@ mod tests {
 		)
 		.expect("the role is inserted");
 
-		let owner = write(
-			&connection,
-			"INSERT INTO space_member_roles (space_id, user_id, role) VALUES ('work', 'u2', 'owner')",
-		);
-		let second_role = write(
-			&connection,
-			"INSERT INTO space_member_roles (space_id, user_id, role) VALUES ('work', 'u1', 'member')",
-		);
-		write(&connection, "DELETE FROM spaces WHERE id = 'work'").expect("the space leaves");
+		apply(&mut connection).expect("the file comes up to this build");
 
-		assert!(owner.is_err(), "a role outside guest and member reached the file");
-		assert!(second_role.is_err(), "a member held two roles in one space");
-		assert_eq!(count(&connection, "space_member_roles"), 0);
+		assert_eq!(version(&connection).expect("version"), SPACE_MEMBER_ROLES_DROPPED_STEP);
+		assert!(!has_table(&connection, "space_member_roles"), "the member roles survived");
+		assert_eq!(count(&connection, "spaces"), 2);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

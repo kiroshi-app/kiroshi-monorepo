@@ -467,7 +467,6 @@ const HOST_ROW: Member = {
 	name: "Steve Puget",
 	email: "steve@example.com",
 	status: "host",
-	role: "member",
 }
 
 const SAM_JOINED: Member = {
@@ -475,7 +474,6 @@ const SAM_JOINED: Member = {
 	name: "Sam Carter",
 	email: "sam@example.com",
 	status: "joined",
-	role: "member",
 }
 
 const openMembersOf = async (

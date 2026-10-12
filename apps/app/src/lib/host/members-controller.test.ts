@@ -19,7 +19,6 @@ const STEVE: Member = {
 	name: "Steve Puget",
 	email: "steve@example.com",
 	status: "host",
-	role: "member",
 }
 
 const SAM_PENDING: Member = {
@@ -27,7 +26,6 @@ const SAM_PENDING: Member = {
 	name: null,
 	email: "sam@example.com",
 	status: "pending",
-	role: "member",
 }
 
 const ALEX_JOINED: Member = {
@@ -35,7 +33,6 @@ const ALEX_JOINED: Member = {
 	name: "Alex Moreau",
 	email: "alex@example.com",
 	status: "joined",
-	role: "member",
 }
 
 const SAM_PENDING_ROW = {
@@ -120,28 +117,9 @@ describe("createMembersController", () => {
 		controller.invite("sam@example.com")
 		await settle()
 
-		expect(transport.invite).toHaveBeenCalledWith(
-			"home",
-			"sam@example.com",
-			"member",
-		)
+		expect(transport.invite).toHaveBeenCalledWith("home", "sam@example.com")
 		expect(controller.getState().members).toEqual([STEVE, SAM_PENDING])
 		expect(controller.getState().email).toBe("")
-	})
-
-	it("invites with the guest role it is given", async () => {
-		const { controller, transport } = await watchHome({
-			list: vi.fn(async () => ok([STEVE])),
-		})
-
-		controller.invite("sam@example.com", "guest")
-		await settle()
-
-		expect(transport.invite).toHaveBeenCalledWith(
-			"home",
-			"sam@example.com",
-			"guest",
-		)
 	})
 
 	it.each([

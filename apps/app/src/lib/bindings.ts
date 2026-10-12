@@ -131,8 +131,7 @@ export const commands = {
 	hostingStop: (spaceId: string) => typedError<HostingState, SpaceError>(__TAURI_INVOKE("hosting_stop", { spaceId })),
 	hostingState: (spaceId: string) => __TAURI_INVOKE<HostingState>("hosting_state", { spaceId }),
 	hostingMembers: (spaceId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_members", { spaceId })),
-	hostingInviteMember: (spaceId: string, email: string, role: SpaceRole) => typedError<Member, MembersError>(__TAURI_INVOKE("hosting_invite_member", { spaceId, email, role })),
-	hostingCallerRole: () => typedError<SpaceRole, SpaceError>(__TAURI_INVOKE("hosting_caller_role")),
+	hostingInviteMember: (spaceId: string, email: string) => typedError<Member, MembersError>(__TAURI_INVOKE("hosting_invite_member", { spaceId, email })),
 	hostingWithdrawInvitation: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_withdraw_invitation", { spaceId, userId })),
 	hostingRemoveMember: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_remove_member", { spaceId, userId })),
 	invitationsList: () => typedError<Invitation[], InvitationError>(__TAURI_INVOKE("invitations_list")),
@@ -837,7 +836,6 @@ export type Member = {
 	name: string | null,
 	email: string,
 	status: MemberStatus,
-	role: SpaceRole,
 };
 
 export type MemberStatus = "host" | "pending" | "joined";
@@ -1340,8 +1338,6 @@ export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { ki
 export type SpacePreferences = {
 	collapsedSectionIds?: string[],
 };
-
-export type SpaceRole = "guest" | "member";
 
 export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mode: string } | { kind: "poisonedConnection" } | { kind: "callInterrupted" } | { kind: "staleWrite" } | { kind: "sqlite"; detail: string };
 
