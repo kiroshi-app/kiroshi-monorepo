@@ -753,7 +753,9 @@ export const ReportFromLocalSide = meta.story({
 		await pressedCopy(canvasElement, userEvent)
 
 		await expect(writeText).toHaveBeenCalledOnce()
-		await expect(writeText.mock.calls[0]?.[0]).toContain("Side: local")
+		await expect(writeText).toHaveBeenCalledWith(
+			expect.stringContaining("Side: local"),
+		)
 
 		writeText.mockRestore()
 	},
@@ -792,7 +794,9 @@ export const ReportWithoutCompanionName = meta.story({
 		await pressedCopy(canvasElement, userEvent, COMPANION_FAILURE.title)
 
 		await expect(writeText).toHaveBeenCalledOnce()
-		await expect(writeText.mock.calls[0]?.[0]).not.toContain(COMPANION_NAME)
+		await expect(writeText).not.toHaveBeenCalledWith(
+			expect.stringContaining(COMPANION_NAME),
+		)
 		await expect(
 			within(viewport()).getByText(COMPANION_FAILURE.title),
 		).toBeVisible()
