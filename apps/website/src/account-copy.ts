@@ -4,8 +4,6 @@ import { WEBSITE_COPY } from "./copy"
 const { local, pro } = WEBSITE_COPY.pricing
 
 export const ACCOUNT_COPY = {
-	title: "Your account",
-	lead: "Your plan and the devices signed in to Kiroshi.",
 	planHeading: "Plan",
 	plans: {
 		free: { name: local.name, price: local.price },
@@ -18,6 +16,7 @@ export const ACCOUNT_COPY = {
 	devicesHeading: "Signed-in devices",
 	thisDevice: "This device",
 	unknownDevice: "Unknown device",
+	signedInJustNow: "Signed in just now",
 	sessionCaption: (platform: string | null, lastSeen: string) =>
 		[platform && PLATFORM_APPS[platform], lastSeen].filter(Boolean).join(" · "),
 	signOut: "Sign out",

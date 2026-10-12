@@ -15,14 +15,16 @@ import { ACCOUNT_COPY } from "./account-copy"
 import { LOGIN_COPY } from "./login-copy"
 import { createSiteRouter } from "./router"
 
-const EMAIL = "ada@example.com"
-const NAME = "Ada Lovelace"
+const EMAIL = "alex@example.com"
+const NAME = "Alex Rivera"
 const BEARER = "bearer-of-the-site"
 const BEARER_KEY = "kiroshi.relay.bearer"
 const ACCOUNT_PATH = "/account"
 const HOUR_MS = 3_600_000
-const MAC = "Ada’s MacBook Pro"
-const IPHONE = "Ada’s iPhone"
+const MINI = "Alex’s Mac mini"
+const MAC = "Alex’s MacBook Pro"
+const IPHONE = "Alex’s iPhone"
+const DAY_MS = 24 * HOUR_MS
 const ME = "GET /me"
 const SESSIONS = "GET /me/sessions"
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
@@ -58,15 +60,15 @@ type SessionFixture = {
 
 const sessionBody = ({ lastSeenAgo, ...session }: SessionFixture) => ({
 	...session,
-	createdAt: new Date(Date.now() - 30 * 24 * HOUR_MS).toISOString(),
+	createdAt: new Date(Date.now() - 30 * DAY_MS).toISOString(),
 	lastSeenAt: new Date(Date.now() - lastSeenAgo).toISOString(),
 })
 
 const SESSION_FIXTURES: SessionFixture[] = [
 	{
-		id: "browser",
-		deviceName: null,
-		platform: null,
+		id: "mini",
+		deviceName: MINI,
+		platform: "macos",
 		lastSeenAgo: 0,
 		current: true,
 	},
@@ -74,14 +76,21 @@ const SESSION_FIXTURES: SessionFixture[] = [
 		id: "mac",
 		deviceName: MAC,
 		platform: "macos",
-		lastSeenAgo: 2 * HOUR_MS,
+		lastSeenAgo: 3 * DAY_MS,
 		current: false,
 	},
 	{
 		id: "iphone",
 		deviceName: IPHONE,
 		platform: "ios",
-		lastSeenAgo: 3 * 24 * HOUR_MS,
+		lastSeenAgo: DAY_MS,
+		current: false,
+	},
+	{
+		id: "unnamed",
+		deviceName: null,
+		platform: null,
+		lastSeenAgo: 2 * HOUR_MS,
 		current: false,
 	},
 ]
@@ -93,7 +102,8 @@ const relayRoutes = (): RelayRoutes => ({
 	[SESSIONS]: { body: { sessions: SESSION_FIXTURES.map(sessionBody) } },
 	[signOutOf("mac")]: NO_CONTENT,
 	[signOutOf("iphone")]: NO_CONTENT,
-	[signOutOf("browser")]: NO_CONTENT,
+	[signOutOf("mini")]: NO_CONTENT,
+	[signOutOf("unnamed")]: NO_CONTENT,
 	[SIGN_OUT_EVERYWHERE]: NO_CONTENT,
 	[SIGN_OUT_SITE]: { body: { success: true } },
 })
@@ -158,7 +168,7 @@ const leftSignedOut = async (router: Router) => {
 const openAccount = async () => {
 	signedIn()
 	const router = renderSite(ACCOUNT_PATH)
-	await heading(ACCOUNT_COPY.title)
+	await heading(NAME)
 	return router
 }
 
@@ -173,7 +183,7 @@ const rowOf = (name: string) => {
 	return row
 }
 
-const rowSignOut = (name: string) => `${ACCOUNT_COPY.signOut} ${name}`
+const rowSignOut = (name: string) => `Sign out ${name}`
 
 const confirmation = () => screen.findByRole("alertdialog")
 
@@ -241,7 +251,7 @@ describe("the account page, signed out", () => {
 			target: { value: "123456" },
 		})
 
-		await heading(ACCOUNT_COPY.title)
+		await heading(NAME)
 		expect(router.state.location.pathname).toBe(ACCOUNT_PATH)
 		expect(callsTo(ME)[0]?.authorization).toBe(`Bearer ${BEARER}`)
 	})
@@ -260,19 +270,29 @@ describe("the account page, signed out", () => {
 })
 
 describe("the account", () => {
-	it("shows the name and the email of the account", async () => {
+	it("titles the page with the name, the email and the initials under it", async () => {
 		await openAccount()
 
-		expect(screen.getByText(NAME)).toBeTruthy()
+		expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(NAME)
 		expect(screen.getByText(EMAIL)).toBeTruthy()
+		expect(screen.getByText("AR")).toBeTruthy()
 	})
 
-	it("shows Pro with its price and Free during the beta", async () => {
+	it("names the plan and devices sections", async () => {
 		await openAccount()
 
-		expect(screen.getByText(ACCOUNT_COPY.plans.pro.name)).toBeTruthy()
-		expect(screen.getByText(ACCOUNT_COPY.plans.pro.price)).toBeTruthy()
+		expect(
+			screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+		).toEqual(["Plan", "Signed-in devices"])
+	})
+
+	it("shows Pro, Free during the beta and the price struck through", async () => {
+		await openAccount()
+
+		expect(screen.getByText("Pro")).toBeTruthy()
 		expect(screen.getByText("Free during the beta")).toBeTruthy()
+		expect(screen.getByText("$15 / user / month").tagName).toBe("S")
+		expect(screen.queryByText(/\$20/)).toBeNull()
 	})
 
 	it("shows the free plan without the beta tag", async () => {
@@ -281,6 +301,9 @@ describe("the account", () => {
 
 		expect(screen.getByText(ACCOUNT_COPY.plans.free.name)).toBeTruthy()
 		expect(screen.queryByText("Free during the beta")).toBeNull()
+		expect(screen.getByText(ACCOUNT_COPY.plans.free.price).tagName).not.toBe(
+			"S",
+		)
 	})
 })
 
@@ -288,17 +311,20 @@ describe("the signed-in devices", () => {
 	it("lists one row per session in the order the relay answers", async () => {
 		await openAccount()
 
-		expect(rowNames()).toEqual([ACCOUNT_COPY.unknownDevice, MAC, IPHONE])
+		expect(rowNames()).toEqual([MINI, MAC, IPHONE, ACCOUNT_COPY.unknownDevice])
 	})
 
 	it("names each row with its platform and last seen time", async () => {
 		await openAccount()
 
 		expect(
-			within(rowOf(MAC)).getByText("Kiroshi for Mac · 2 hours ago"),
+			within(rowOf(MINI)).getByText("Kiroshi for Mac · Signed in just now"),
 		).toBeTruthy()
 		expect(
-			within(rowOf(IPHONE)).getByText("Kiroshi for iPhone · 3 days ago"),
+			within(rowOf(MAC)).getByText("Kiroshi for Mac · 3 days ago"),
+		).toBeTruthy()
+		expect(
+			within(rowOf(IPHONE)).getByText("Kiroshi for iPhone · Yesterday"),
 		).toBeTruthy()
 	})
 
@@ -306,7 +332,7 @@ describe("the signed-in devices", () => {
 		await openAccount()
 
 		expect(
-			within(rowOf(ACCOUNT_COPY.unknownDevice)).getByText("now"),
+			within(rowOf(ACCOUNT_COPY.unknownDevice)).getByText("2 hours ago"),
 		).toBeTruthy()
 	})
 
@@ -314,21 +340,14 @@ describe("the signed-in devices", () => {
 		await openAccount()
 
 		expect(screen.getAllByText(ACCOUNT_COPY.thisDevice)).toHaveLength(1)
-		expect(
-			within(rowOf(ACCOUNT_COPY.unknownDevice)).getByText(
-				ACCOUNT_COPY.thisDevice,
-			),
-		).toBeTruthy()
+		expect(within(rowOf(MINI)).getByText(ACCOUNT_COPY.thisDevice)).toBeTruthy()
 	})
 })
 
 describe("the confirmation", () => {
 	it.each([
 		[rowSignOut(MAC), ACCOUNT_COPY.signOutDeviceTitle(MAC)],
-		[
-			rowSignOut(ACCOUNT_COPY.unknownDevice),
-			ACCOUNT_COPY.signOutThisDeviceTitle,
-		],
+		[rowSignOut(MINI), ACCOUNT_COPY.signOutThisDeviceTitle],
 		[ACCOUNT_COPY.signOutEverywhere, ACCOUNT_COPY.signOutEverywhereTitle],
 		[ACCOUNT_COPY.signOut, ACCOUNT_COPY.signOutSiteTitle],
 	])("asks before %s and sends nothing on Cancel", async (label, title) => {
@@ -359,7 +378,7 @@ describe("Sign out on a row", () => {
 		expect(rowOf(MAC)).toBeTruthy()
 		reply.resolve(NO_CONTENT)
 		await waitFor(() => expect(screen.queryByText(MAC)).toBeNull())
-		expect(rowNames()).toEqual([ACCOUNT_COPY.unknownDevice, IPHONE])
+		expect(rowNames()).toEqual([MINI, IPHONE, ACCOUNT_COPY.unknownDevice])
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 	})
 
@@ -411,10 +430,10 @@ describe("Sign out on a row", () => {
 	it("on the current row clears the bearer and leaves the site signed out", async () => {
 		const router = await openAccount()
 
-		await pressAndConfirm(rowSignOut(ACCOUNT_COPY.unknownDevice))
+		await pressAndConfirm(rowSignOut(MINI))
 
 		await leftSignedOut(router)
-		expect(callsTo(signOutOf("browser"))).toHaveLength(1)
+		expect(callsTo(signOutOf("mini"))).toHaveLength(1)
 	})
 })
 
@@ -442,7 +461,7 @@ describe("Sign out everywhere", () => {
 		reply.resolve(relayError(503, "UNAVAILABLE"))
 		await screen.findByRole("alert")
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
-		expect(rowNames()).toHaveLength(3)
+		expect(rowNames()).toHaveLength(4)
 		routes[SIGN_OUT_EVERYWHERE] = NO_CONTENT
 		press(RETRY_LABEL)
 		await waitFor(() => expect(callsTo(SIGN_OUT_EVERYWHERE)).toHaveLength(2))

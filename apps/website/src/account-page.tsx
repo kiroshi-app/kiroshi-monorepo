@@ -8,13 +8,15 @@ import { ACCOUNT_COPY } from "./account-copy"
 import {
 	AccountActions,
 	AccountSection,
-	PlanLine,
+	AccountShell,
+	type DeviceKind,
+	Identity,
+	PlanCard,
 	SessionList,
 	SessionRow,
 	SignOutButton,
 } from "./account-parts"
 import { RelayFailureLine } from "./login-page"
-import { AccountCard, CardHeading, LoginShell } from "./login-parts"
 import {
 	type Account,
 	clearBearer,
@@ -69,6 +71,23 @@ const signOutKnownSession = async (id: string) => {
 const sessionNameOf = (session: Session) =>
 	session.deviceName ?? ACCOUNT_COPY.unknownDevice
 
+const MINUTE_MS = 60_000
+
+const sentenceCase = (text: string) =>
+	text.charAt(0).toUpperCase() + text.slice(1)
+
+const lastSeenOf = (lastSeenAt: number) => {
+	const now = Date.now()
+	if (now - lastSeenAt < MINUTE_MS) return ACCOUNT_COPY.signedInJustNow
+	return sentenceCase(toRelativeTime(lastSeenAt, now))
+}
+
+const deviceKindOf = (session: Session): DeviceKind => {
+	if (session.platform === "ios") return "phone"
+	if (/macbook/i.test(session.deviceName ?? "")) return "laptop"
+	return "desktop"
+}
+
 type SessionItemProps = {
 	session: Session
 	onSignedOut: (id: string) => void
@@ -103,15 +122,15 @@ const SessionItem = ({ session, onSignedOut }: SessionItemProps) => {
 							? ACCOUNT_COPY.signOutThisDeviceTitle
 							: ACCOUNT_COPY.signOutDeviceTitle(name)
 					}
-					tone="row"
 				/>
 			}
 			caption={ACCOUNT_COPY.sessionCaption(
 				session.platform,
-				toRelativeTime(session.lastSeenAt, Date.now()),
+				lastSeenOf(session.lastSeenAt),
 			)}
 			currentTag={session.isCurrent ? ACCOUNT_COPY.thisDevice : undefined}
 			failure={<RelayFailureLine failure={call.failure} onRetry={call.retry} />}
+			kind={deviceKindOf(session)}
 			name={name}
 		/>
 	)
@@ -167,14 +186,13 @@ const AccountSignOut = ({
 				label={label}
 				onConfirm={() => call.signOut(request, call.leaveSignedOut)}
 				title={title}
-				tone="ghost"
 			/>
 			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
 		</>
 	)
 }
 
-const planLineOf = (account: Account) =>
+const planOf = (account: Account) =>
 	account.plan === "pro" ? ACCOUNT_COPY.plans.pro : ACCOUNT_COPY.plans.free
 
 export const AccountPage = () => {
@@ -182,33 +200,32 @@ export const AccountPage = () => {
 	const displayName = account.name ?? account.email
 
 	return (
-		<LoginShell width="wide">
-			<CardHeading lead={ACCOUNT_COPY.lead} title={ACCOUNT_COPY.title} />
-			<AccountCard
+		<AccountShell>
+			<Identity
 				email={account.name ? account.email : undefined}
 				initials={initialsOf(displayName)}
 				name={displayName}
 			/>
 			<AccountSection heading={ACCOUNT_COPY.planHeading}>
-				<PlanLine {...planLineOf(account)} />
+				<PlanCard {...planOf(account)} />
 			</AccountSection>
 			<AccountSection heading={ACCOUNT_COPY.devicesHeading}>
 				<Sessions sessions={sessions} />
+				<AccountActions>
+					<AccountSignOut
+						description={ACCOUNT_COPY.signOutEverywhereLead}
+						label={ACCOUNT_COPY.signOutEverywhere}
+						request={signOutEverywhere}
+						title={ACCOUNT_COPY.signOutEverywhereTitle}
+					/>
+					<AccountSignOut
+						description={ACCOUNT_COPY.signOutSiteLead}
+						label={ACCOUNT_COPY.signOut}
+						request={signOutSite}
+						title={ACCOUNT_COPY.signOutSiteTitle}
+					/>
+				</AccountActions>
 			</AccountSection>
-			<AccountActions>
-				<AccountSignOut
-					description={ACCOUNT_COPY.signOutEverywhereLead}
-					label={ACCOUNT_COPY.signOutEverywhere}
-					request={signOutEverywhere}
-					title={ACCOUNT_COPY.signOutEverywhereTitle}
-				/>
-				<AccountSignOut
-					description={ACCOUNT_COPY.signOutSiteLead}
-					label={ACCOUNT_COPY.signOut}
-					request={signOutSite}
-					title={ACCOUNT_COPY.signOutSiteTitle}
-				/>
-			</AccountActions>
-		</LoginShell>
+		</AccountShell>
 	)
 }
