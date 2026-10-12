@@ -290,7 +290,6 @@ export const createJoinedHosts = ({
 	}
 
 	const reportOnceGraceEnds = (id: string) => {
-		endDownGrace(id)
 		const grace = setTimeout(() => {
 			downGraces.delete(id)
 			reportIfActiveDown(id)
