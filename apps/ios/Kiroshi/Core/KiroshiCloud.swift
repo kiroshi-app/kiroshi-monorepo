@@ -50,7 +50,10 @@ struct KiroshiCloud: Sendable {
             guard let granted = try? JSONDecoder().decode(GrantedSession.self, from: data) else {
                 return .unreachable
             }
-            return .signedIn(Session(bearer: granted.token, email: granted.user.email))
+            return .signedIn(
+                Session(
+                    bearer: granted.token, email: granted.user.email,
+                    deviceName: granted.session?.deviceName, platform: granted.session?.platform))
         case 400, 401:
             return refusal(of: data)
         default:
@@ -127,8 +130,14 @@ private struct GrantedSession: Decodable {
         let email: String
     }
 
+    struct Device: Decodable {
+        let deviceName: String?
+        let platform: String?
+    }
+
     let token: String
     let user: User
+    let session: Device?
 }
 
 private struct ErrorBody: Decodable {

@@ -15,7 +15,9 @@ struct KeychainSessionStoreTests {
         try store.save(CloudFixture.session)
         #expect(store.load() == CloudFixture.session)
 
-        let next = Session(bearer: "next-bearer", email: "sam@example.com")
+        let next = Session(
+            bearer: "next-bearer", email: "sam@example.com", deviceName: "Sam's iPhone",
+            platform: "ios")
         try store.save(next)
         #expect(store.load() == next)
 

@@ -107,7 +107,11 @@ struct SignInModelTests {
 
         await model.signIn()
 
-        #expect(sessions.saved == CloudFixture.session)
+        #expect(
+            sessions.saved
+                == Session(
+                    bearer: "fixture-bearer", email: CloudFixture.email, deviceName: "iPhone",
+                    platform: "ios"))
         #expect(model.stage == .loadingSpaces)
         #expect(model.signedInEmail == CloudFixture.email)
         #expect(model.path.isEmpty)
@@ -120,7 +124,12 @@ struct SignInModelTests {
     }
 
     @Test func aSignInNamesTheSessionAfterTheIPhone() async throws {
-        await transport.answer(CloudFixture.signInPath, with: CloudFixture.signedIn)
+        await transport.answer(
+            CloudFixture.signInPath,
+            with: .status(
+                200,
+                #"{"token":"fixture-bearer","user":{"email":"sam@example.com"},"session":{"deviceName":"Sam's iPhone","platform":"ios"}}"#
+            ))
         let model = SignInModel(
             cloud: KiroshiCloud(
                 baseURL: KiroshiCloud.productionURL, transport: transport,
@@ -134,7 +143,23 @@ struct SignInModelTests {
         let body = try await lastRequestBody()
         #expect(body["deviceName"] == "Sam's iPhone")
         #expect(body["platform"] == "ios")
+        #expect(sessions.saved?.deviceName == "Sam's iPhone")
+        #expect(sessions.saved?.platform == "ios")
+    }
+
+    @Test func aSignInAnsweredWithoutTheSessionNameStillSignsIn() async {
+        await transport.answer(
+            CloudFixture.signInPath,
+            with: .status(
+                200,
+                #"{"token":"fixture-bearer","user":{"email":"sam@example.com"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z"}}"#
+            ))
+        let model = modelOnCodeScreen()
+
+        await model.signIn()
+
         #expect(sessions.saved == CloudFixture.session)
+        #expect(model.stage == .loadingSpaces)
     }
 
     @Test(
