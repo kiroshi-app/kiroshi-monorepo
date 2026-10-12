@@ -15,10 +15,20 @@ struct URLSessionRelayTransport: RelayTransport {
 }
 
 final class URLSessionRelaySocket: RelaySocket {
-    let task: URLSessionWebSocketTask
+    typealias PongHandler = @Sendable ((any Error)?) -> Void
 
-    init(task: URLSessionWebSocketTask) {
+    let task: URLSessionWebSocketTask
+    private let sendPing: @Sendable (@escaping PongHandler) -> Void
+
+    convenience init(task: URLSessionWebSocketTask) {
+        self.init(task: task) { task.sendPing(pongReceiveHandler: $0) }
+    }
+
+    init(
+        task: URLSessionWebSocketTask, sendPing: @escaping @Sendable (@escaping PongHandler) -> Void
+    ) {
         self.task = task
+        self.sendPing = sendPing
     }
 
     func send(_ text: String) async throws {
@@ -49,7 +59,7 @@ final class URLSessionRelaySocket: RelaySocket {
     func ping() async throws {
         let failure = await withTaskCancellationHandler {
             await withCheckedContinuation { (answered: CheckedContinuation<(any Error)?, Never>) in
-                task.sendPing { error in answered.resume(returning: error) }
+                sendPing { error in answered.resume(returning: error) }
             }
         } onCancel: { [task] in
             task.cancel()
