@@ -22,6 +22,15 @@ type UnreportedFailureNotice = Omit<
 	"report"
 >
 
+let isThisMacAlone: () => boolean = () => false
+
+export const reportLocalWhen = (isAlone: () => boolean) => {
+	isThisMacAlone = isAlone
+}
+
+const sideOf = (side: FailureFacts["side"]): FailureFacts["side"] =>
+	side ?? (isThisMacAlone() ? "local" : undefined)
+
 const platformName = (): string | undefined =>
 	hasTauriInternals() ? platform() : undefined
 
@@ -36,7 +45,7 @@ export const buildFailureReport = ({
 	raisedAt: new Date().toISOString(),
 	command,
 	httpStatus,
-	side,
+	side: sideOf(side),
 	raisedIn,
 })
 

@@ -5,12 +5,15 @@ import {
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 
+import type { HostingChanged, HostingState } from "./bindings"
 import {
 	buildFailureReport,
 	type FailureFacts,
 	raiseReportedFailure,
+	reportLocalWhen,
 } from "./failure-report"
 
+import { createHostedSpaces } from "./host/hosted-spaces"
 import { createHttpHost, raiseRefusalNotice } from "./host/http"
 
 vi.mock("@tauri-apps/plugin-os", () => ({ platform: () => "macos" }))
@@ -71,6 +74,7 @@ beforeEach(() => {
 afterEach(() => {
 	vi.useRealTimers()
 	vi.unstubAllGlobals()
+	reportLocalWhen(() => false)
 })
 
 describe("buildFailureReport", () => {
@@ -205,4 +209,99 @@ describe("a refused joined-space request", () => {
 		expect(copiedText).toContain("Side: member")
 		expect(copiedText).not.toContain("HTTP status")
 	})
+})
+
+describe("the side of a failure raised on this Mac", () => {
+	const SPACE_ID = "space-garage"
+
+	const settled = () => new Promise((resolve) => setTimeout(resolve))
+
+	let joinedSpaceId: string | null
+	let announceHosting: (changed: HostingChanged) => void
+
+	const thisMacHosting = async (seededState: HostingState) => {
+		const hostedSpaces = createHostedSpaces({
+			spaceIds: async () => [SPACE_ID],
+			read: async () => seededState,
+			onChanged: async (listener) => {
+				announceHosting = listener
+				return () => undefined
+			},
+		})
+		reportLocalWhen(() => joinedSpaceId === null && hostedSpaces.isNoneHosted())
+		await settled()
+	}
+
+	const sideOfRaisedFailure = (side?: FailureFacts["side"]) => {
+		raiseReportedFailure(
+			{ title: "Couldn’t read the models this machine offers." },
+			{ raisedIn: "use-model-catalogue", side },
+		)
+		return failureNotice.mock.lastCall?.[0].report?.side
+	}
+
+	beforeEach(() => {
+		joinedSpaceId = null
+	})
+
+	it("reports local while no space is hosted and no joined space is active", async () => {
+		await thisMacHosting({ kind: "off" })
+
+		expect(sideOfRaisedFailure()).toBe("local")
+		expect(copiedTextOfRaisedNotice()).toContain("Side: local")
+	})
+
+	it("leaves the side unset while a space of this Mac is hosted", async () => {
+		await thisMacHosting({ kind: "online" })
+
+		expect(sideOfRaisedFailure()).toBeUndefined()
+	})
+
+	it("follows the hosting of a space as it starts and stops", async () => {
+		await thisMacHosting({ kind: "off" })
+
+		announceHosting({ spaceId: SPACE_ID, state: { kind: "connecting" } })
+		expect(sideOfRaisedFailure()).toBeUndefined()
+
+		announceHosting({ spaceId: SPACE_ID, state: { kind: "off" } })
+		expect(sideOfRaisedFailure()).toBe("local")
+	})
+
+	it("leaves the side unset while a joined space is active", async () => {
+		await thisMacHosting({ kind: "off" })
+		joinedSpaceId = SPACE_ID
+
+		expect(sideOfRaisedFailure()).toBeUndefined()
+	})
+
+	it("leaves the side unset while the hosted spaces could not be read", async () => {
+		const unread = vi.spyOn(console, "error").mockImplementation(() => {})
+		const hostedSpaces = createHostedSpaces({
+			spaceIds: async () => {
+				throw new Error("database unavailable")
+			},
+			read: async () => ({ kind: "off" }),
+			onChanged: async () => () => undefined,
+		})
+		reportLocalWhen(() => hostedSpaces.isNoneHosted())
+
+		await vi.waitFor(() => expect(unread).toHaveBeenCalled())
+		expect(sideOfRaisedFailure()).toBeUndefined()
+		unread.mockRestore()
+	})
+
+	it.each([
+		["nothing is shared", { kind: "off" }, null],
+		["a space is hosted", { kind: "online" }, null],
+		["a joined space is active", { kind: "off" }, SPACE_ID],
+	] as const)(
+		"keeps the side a call site names while %s",
+		async (_state, seededState, joined) => {
+			await thisMacHosting(seededState)
+			joinedSpaceId = joined
+
+			expect(sideOfRaisedFailure("host")).toBe("host")
+			expect(sideOfRaisedFailure("member")).toBe("member")
+		},
+	)
 })
