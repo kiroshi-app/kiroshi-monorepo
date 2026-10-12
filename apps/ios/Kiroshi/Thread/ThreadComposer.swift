@@ -78,6 +78,7 @@ struct ThreadComposer<Model: ThreadModel>: View {
     private var field: some View {
         TextField(model.placeholder, text: $model.draft, axis: .vertical)
             .lineLimit(1...(dynamicTypeSize.isAccessibilitySize ? 3 : 6))
+            .id(dynamicTypeSize)
             .padding(.vertical, 11)
             .padding(.leading, 16)
             .padding(.trailing, control + 14)
