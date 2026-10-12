@@ -132,6 +132,11 @@ const endRaisedNotice = () => () => {
 	if (raisedNotice) endNotice(raisedNotice)
 }
 
+const UNDER_A_NOTICE = {
+	render: (args: UserSettingsDialogProps) => <NoticeHost {...args} />,
+	beforeEach: endRaisedNotice,
+} as const
+
 const dialogIn = async () => {
 	const dialog = await screen.findByRole("dialog")
 	await waitFor(() => expect(dialog).toBeVisible())
@@ -729,8 +734,7 @@ export const SignedInWithoutAPlan = meta.story({
 
 export const CantReachKiroshi = meta.story({
 	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
-	render: (args) => <NoticeHost {...args} />,
-	beforeEach: endRaisedNotice,
+	...UNDER_A_NOTICE,
 	parameters: {
 		docs: {
 			description: {
@@ -754,8 +758,7 @@ export const CantReachKiroshi = meta.story({
 
 export const RequestExpired = meta.story({
 	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
-	render: (args) => <NoticeHost {...args} />,
-	beforeEach: endRaisedNotice,
+	...UNDER_A_NOTICE,
 	parameters: {
 		docs: {
 			description: {
@@ -782,8 +785,7 @@ export const RequestExpired = meta.story({
 
 export const SignedOutFromTheSite = meta.story({
 	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
-	render: (args) => <NoticeHost {...args} />,
-	beforeEach: endRaisedNotice,
+	...UNDER_A_NOTICE,
 	parameters: {
 		docs: {
 			description: {
