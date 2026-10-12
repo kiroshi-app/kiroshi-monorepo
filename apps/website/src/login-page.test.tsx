@@ -23,6 +23,7 @@ const ME = "GET /me"
 const SESSION = "GET /api/auth/get-session"
 const SAVE_NAME = "POST /api/auth/update-user"
 const SOCIAL_SIGN_IN = "POST /api/auth/sign-in/social"
+const RETRY_LABEL = "Retry"
 
 type Reply = { status?: number; body?: unknown }
 
@@ -206,7 +207,7 @@ describe("the sign-in page", () => {
 			screen.getByRole("button", { name: LOGIN_COPY.emailSubmit }),
 		).toHaveProperty("disabled", false)
 		routes = namedAccount("Ada")
-		fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+		fireEvent.click(screen.getByRole("button", { name: RETRY_LABEL }))
 		await screen.findByRole("heading", { name: LOGIN_COPY.codeTitle })
 	})
 
@@ -218,7 +219,7 @@ describe("the sign-in page", () => {
 		enterCode("123456")
 
 		await screen.findByText(LOGIN_COPY.failures.server)
-		expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy()
+		expect(screen.getByRole("button", { name: RETRY_LABEL })).toBeTruthy()
 		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
 	})
 
@@ -274,7 +275,7 @@ describe("the sign-in page", () => {
 		)
 
 		await screen.findByText(LOGIN_COPY.failures.unavailable)
-		expect(screen.queryByRole("button", { name: "Retry" })).toBeNull()
+		expect(screen.queryByRole("button", { name: RETRY_LABEL })).toBeNull()
 		expect(callsTo(SOCIAL_SIGN_IN)[0]?.body).toMatchObject({
 			provider: "google",
 		})
