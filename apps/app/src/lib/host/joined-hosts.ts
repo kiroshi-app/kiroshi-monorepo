@@ -94,8 +94,6 @@ const COMMANDS_ONLY_THE_HOST_RUNS: ReadonlySet<string> = new Set([
 	"mcp_oauth_connect",
 ])
 
-const SPACE_UPDATE_COMMAND = "space_update"
-
 const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
 	"user",
 	"person",
@@ -584,7 +582,7 @@ export const createJoinedHosts = ({
 	}
 
 	const updatesAnotherSpace = (command: string, args?: InvokeArgs) =>
-		command === SPACE_UPDATE_COMMAND && fieldsOf(args).id !== activeSpaceId()
+		command === "space_update" && fieldsOf(args).id !== activeSpaceId()
 
 	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
 		const refusal = hostOnlyRefusalOf(command)

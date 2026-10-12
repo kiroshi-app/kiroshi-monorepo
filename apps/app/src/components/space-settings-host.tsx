@@ -156,7 +156,7 @@ export const SpaceSettingsHost = ({
 			{...membersPropsOf(joinedSpace.name)}
 			host={joinedSpace.hostUrl}
 			onLeave={() => joinedSpaces.controller.leave(joinedSpace.id).then(close)}
-			onValueChange={({ name }: SpaceSettingsValue) =>
+			onValueChange={({ name }) =>
 				joinedSpaces.controller.rename(joinedSpace.id, name)
 			}
 			value={{ name: joinedSpace.name }}
