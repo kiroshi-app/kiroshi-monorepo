@@ -36,21 +36,25 @@ type LoginShellProps = ChildrenProps & {
 	width?: keyof typeof CARD_WIDTHS
 }
 
+export const SiteHeader = () => (
+	<header className="flex items-center gap-2 text-[15px] leading-[18px] font-semibold tracking-[-0.01em]">
+		<img
+			alt=""
+			className="h-5 w-[22px] dark:invert"
+			height={20}
+			src="/kiroshi-mark.svg"
+			width={22}
+		/>
+		{LOGIN_COPY.brand}
+	</header>
+)
+
 export const LoginShell = ({
 	children,
 	width = "regular",
 }: LoginShellProps) => (
 	<div className="flex min-h-dvh flex-col bg-background px-8 py-7 text-foreground [font-synthesis:none]">
-		<header className="flex items-center gap-2 text-[15px] leading-[18px] font-semibold tracking-[-0.01em]">
-			<img
-				alt=""
-				className="h-5 w-[22px] dark:invert"
-				height={20}
-				src="/kiroshi-mark.svg"
-				width={22}
-			/>
-			{LOGIN_COPY.brand}
-		</header>
+		<SiteHeader />
 		<main className="flex flex-1 items-center justify-center pb-15">
 			<section
 				className={cn(

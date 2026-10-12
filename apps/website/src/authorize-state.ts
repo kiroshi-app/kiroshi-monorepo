@@ -145,5 +145,6 @@ export {
 	loadAuthorizeState,
 	loadDoneState,
 	requireAuthorizeBearer,
+	signInAgainOnUnauthorized,
 	validateAuthorizeSearch,
 }

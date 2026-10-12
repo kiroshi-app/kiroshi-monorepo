@@ -100,6 +100,27 @@ export const DeviceMark = () => (
 	</StrokeMark>
 )
 
+export const DesktopMark = () => (
+	<StrokeMark className="size-[18px]" strokeWidth={1.8}>
+		<rect height={12} rx={1.5} width={18} x={3} y={4} />
+		<path d="M9 20h6M12 16v4" />
+	</StrokeMark>
+)
+
+export const LaptopMark = () => (
+	<StrokeMark className="size-[18px]" strokeWidth={1.8}>
+		<rect height={11} rx={1.5} width={16} x={4} y={5} />
+		<path d="M2 19h20" />
+	</StrokeMark>
+)
+
+export const PhoneMark = () => (
+	<StrokeMark className="size-[18px]" strokeWidth={1.8}>
+		<rect height={18} rx={2.5} width={11} x={6.5} y={3} />
+		<path d="M11 18h2" />
+	</StrokeMark>
+)
+
 export const BenefitMark = () => (
 	<StrokeMark className="size-4" strokeWidth={2}>
 		<path d="M5 12l5 5 9-10" />

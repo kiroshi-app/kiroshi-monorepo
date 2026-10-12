@@ -1,4 +1,7 @@
-const PLATFORM_APPS: Record<string, string> = { macos: "Kiroshi for Mac" }
+export const PLATFORM_APPS: Record<string, string> = {
+	macos: "Kiroshi for Mac",
+	ios: "Kiroshi for iPhone",
+}
 
 export const AUTHORIZE_COPY = {
 	continueAsTitle: "Sign in to Kiroshi on your Mac",
