@@ -50,7 +50,6 @@ const settings = {
 			description: "Check your connection and sign in again.",
 		},
 		failed: {
-			linkInvalid: "That sign-in link didn’t work",
 			serverError: "Kiroshi couldn’t sign you in",
 			timedOut: "Signing in took too long",
 			description: "Press Sign in with your browser to try again.",
@@ -58,6 +57,8 @@ const settings = {
 		readFailed: "Couldn’t read your Kiroshi account",
 		signInFailed: "Couldn’t start signing in to Kiroshi",
 		cancelFailed: "Couldn’t cancel signing in",
+		copySignInLinkFailed: "Couldn’t copy the sign-in link",
+		manageAccountFailed: "Couldn’t open your account on kiroshi.app",
 		signOutFailed: "Couldn’t sign out of Kiroshi",
 	},
 	plugin: {

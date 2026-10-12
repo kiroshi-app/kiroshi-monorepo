@@ -15,6 +15,7 @@ import {
 import { raiseReportedFailure } from "../failure-report"
 import { listen } from "../host"
 import { createStore } from "../store"
+import { openInBrowser } from "../links/use-external-links"
 
 type AccountCommand = () => ReturnType<typeof commands.accountSignOut>
 
@@ -24,9 +25,13 @@ export type AccountController = {
 	watch: () => () => void
 	signIn: () => void
 	cancel: () => void
+	copySignInLink: () => void
+	manageAccount: () => void
 	signOut: () => void
 	signOutLeaving: (spaceNames: string) => Promise<void>
 }
+
+const ACCOUNT_PAGE_URL = "https://kiroshi.app/account"
 
 const SIGNED_OUT: AccountState = { kind: "signedOut", reason: null }
 
@@ -36,8 +41,11 @@ const FAILURE_TITLE_KEYS = {
 	unreachable: "settings:account.failed.serverError",
 } as const satisfies Record<AccountFailure, string>
 
-const transitionOf = (state: AccountState) =>
-	state.kind === "failed" ? `failed:${state.failure}` : state.kind
+const transitionOf = (state: AccountState) => {
+	if (state.kind === "failed") return `failed:${state.failure}`
+	if (state.kind === "signedOut") return `signedOut:${state.reason}`
+	return state.kind
+}
 
 const noticeFor = (state: AccountState): NoticeMessage | null => {
 	if (state.kind === "unreachable") {
@@ -50,6 +58,12 @@ const noticeFor = (state: AccountState): NoticeMessage | null => {
 		return {
 			title: i18n.t(FAILURE_TITLE_KEYS[state.failure]),
 			description: i18n.t("settings:account.failed.description"),
+		}
+	}
+	if (state.kind === "signedOut" && state.reason === "signedOutOnSite") {
+		return {
+			title: i18n.t("settings:account.signedOutFromTheSite.title"),
+			description: i18n.t("settings:account.signedOutFromTheSite.description"),
 		}
 	}
 	return null
@@ -68,6 +82,9 @@ const perform = async (command: AccountCommand) => {
 const attempt = (command: AccountCommand, failureTitle: string) => {
 	perform(command).catch(() => reportFailure(failureTitle))
 }
+
+const writeToClipboard = async (text: string) =>
+	navigator.clipboard.writeText(text)
 
 const signOutLeaving = async (spaceNames: string) => {
 	await perform(commands.accountSignOut).catch((reason: unknown) => {
@@ -126,6 +143,18 @@ export const createAccountController = (): AccountController => {
 			attempt(commands.accountSignIn, i18n.t("settings:account.signInFailed")),
 		cancel: () =>
 			attempt(commands.accountSignOut, i18n.t("settings:account.cancelFailed")),
+		copySignInLink: () => {
+			const state = stateStore.getState()
+			if (state.kind !== "waiting") return
+			writeToClipboard(state.verificationUrl).catch(() =>
+				reportFailure(i18n.t("settings:account.copySignInLinkFailed")),
+			)
+		},
+		manageAccount: () => {
+			openInBrowser(ACCOUNT_PAGE_URL).catch(() =>
+				reportFailure(i18n.t("settings:account.manageAccountFailed")),
+			)
+		},
 		signOut: () =>
 			attempt(
 				commands.accountSignOut,

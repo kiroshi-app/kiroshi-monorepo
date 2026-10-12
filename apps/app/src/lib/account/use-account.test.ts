@@ -15,8 +15,11 @@ import { signOutLeavingOf, useAccount, useWatchedAccount } from "./use-account"
 
 import { ACCOUNT_CHANGED_EVENT, type AccountState, commands } from "../bindings"
 import { listen } from "../host"
+import { openInBrowser } from "../links/use-external-links"
 
 vi.mock("../host", () => ({ listen: vi.fn() }))
+
+vi.mock("../links/use-external-links", () => ({ openInBrowser: vi.fn() }))
 
 vi.mock("../bindings", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../bindings")>()),
@@ -51,6 +54,13 @@ const WAITING: AccountState = {
 }
 
 const COPY = en.settings.account
+
+const ACCOUNT_PAGE_URL = "https://kiroshi.app/account"
+
+const SIGNED_OUT_ON_SITE: AccountState = {
+	kind: "signedOut",
+	reason: "signedOutOnSite",
+}
 
 const signedInPanel = (name: string) => ({
 	status: "signedIn",
@@ -107,6 +117,8 @@ beforeEach(() => {
 	})
 	vi.mocked(commands.accountSignIn).mockResolvedValue(OK)
 	vi.mocked(commands.accountSignOut).mockResolvedValue(OK)
+	vi.mocked(openInBrowser).mockResolvedValue()
+	vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue()
 	vi.mocked(listen).mockImplementation(async (event, handler) => {
 		if (event === ACCOUNT_CHANGED_EVENT) {
 			changes.announce = handler as unknown as ChangeHandler
@@ -188,7 +200,7 @@ describe("useAccount", () => {
 	it("signs in without an email", async () => {
 		const { result } = await mountAccount()
 
-		act(() => result.current.onSignIn(EMAIL))
+		act(() => result.current.onSignIn())
 		await settling()
 
 		expect(commands.accountSignIn).toHaveBeenCalledWith()
@@ -203,6 +215,51 @@ describe("useAccount", () => {
 		await settling()
 
 		expect(commands.accountSignOut).toHaveBeenCalledOnce()
+	})
+
+	it("copies the sign-in link of the wait when Copy the sign-in link is pressed", async () => {
+		vi.mocked(commands.accountState).mockResolvedValue(WAITING)
+		const { result } = await mountAccount()
+
+		act(() => result.current.onCopySignInLink())
+		await settling()
+
+		expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(
+			WAITING.verificationUrl,
+		)
+		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it("opens the account page on kiroshi.app when Manage account is pressed", async () => {
+		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
+		const { result } = await mountAccount()
+
+		act(() => result.current.onManageAccount())
+		await settling()
+
+		expect(openInBrowser).toHaveBeenCalledExactlyOnceWith(ACCOUNT_PAGE_URL)
+		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it("names what failed when the account page or the sign-in link cannot be reached", async () => {
+		vi.mocked(commands.accountState).mockResolvedValue(WAITING)
+		vi.mocked(openInBrowser).mockRejectedValue(new Error("opener"))
+		vi.mocked(navigator.clipboard.writeText).mockRejectedValue(
+			new Error("denied"),
+		)
+		const { result } = await mountAccount()
+
+		act(() => result.current.onCopySignInLink())
+		act(() => result.current.onManageAccount())
+		await settling()
+
+		expect(failureNotice).toHaveBeenCalledTimes(2)
+		expect(failureNotice).toHaveBeenCalledWith(
+			reported({ title: COPY.copySignInLinkFailed }),
+		)
+		expect(failureNotice).toHaveBeenCalledWith(
+			reported({ title: COPY.manageAccountFailed }),
+		)
 	})
 
 	it("asks before signing out of a joined relay space, then signs out and raises the notice", async () => {
@@ -311,6 +368,36 @@ describe("useAccount", () => {
 		},
 	)
 
+	it("raises the signed out on the site notice once per transition", async () => {
+		const { result, rerender } = await mountAccount()
+
+		announce(SIGNED_IN)
+		announce(SIGNED_OUT_ON_SITE)
+		rerender({ displayName: PROFILE_NAME })
+		announce(SIGNED_OUT_ON_SITE)
+
+		expect(result.current.account).toEqual({ status: "signedOut" })
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith(
+			reported(COPY.signedOutFromTheSite),
+		)
+
+		announce(SIGNED_IN)
+		announce(SIGNED_OUT_ON_SITE)
+
+		expect(failureNotice).toHaveBeenCalledTimes(2)
+	})
+
+	it("raises no notice when the account signs out without a reason", async () => {
+		await mountAccount()
+
+		announce(SIGNED_IN)
+		announce({ kind: "signedOut", reason: null })
+		announce(SIGNED_OUT_ON_SITE)
+		announce({ kind: "signedOut", reason: null })
+
+		expect(failureNotice).toHaveBeenCalledOnce()
+	})
+
 	it("raises the notice again on a new transition into the same failure", async () => {
 		await mountAccount()
 
@@ -342,7 +429,7 @@ describe("useAccount", () => {
 			vi.mocked(commands.accountSignOut).mockImplementation(outcome)
 			const { result } = await mountAccount()
 
-			act(() => result.current.onSignIn(EMAIL))
+			act(() => result.current.onSignIn())
 			act(() => result.current.onCancel())
 			act(() => result.current.onSignOut())
 			await settling()

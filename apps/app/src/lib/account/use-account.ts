@@ -114,6 +114,8 @@ export const useAccount = (
 		account: toPanelState(state, displayName),
 		onSignIn: controller.signIn,
 		onCancel: controller.cancel,
+		onCopySignInLink: controller.copySignInLink,
+		onManageAccount: controller.manageAccount,
 		onSignOut: leaving ? () => setSignOutAsked(true) : controller.signOut,
 		signOutConfirmation:
 			leaving &&
