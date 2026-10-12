@@ -35,6 +35,14 @@ extension XCTestCase {
         try app.performAccessibilityAudit(for: .all.subtracting(.contrast), handle)
     }
 
+    @MainActor func assertNoDaySeparatorWhile(
+        _ loading: XCUIElement, in app: XCUIApplication,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let isSeparatorShown = ["Today", "Yesterday"].contains { app.staticTexts[$0].exists }
+        XCTAssertFalse(isSeparatorShown && loading.exists, file: file, line: line)
+    }
+
     @MainActor func titleBottom(in app: XCUIApplication) -> CGFloat {
         let bar = app.navigationBars.firstMatch
         return bar.staticTexts.allElementsBoundByIndex.map(\.frame.maxY).reduce(

@@ -26,6 +26,7 @@ final class MissionOpeningTests: XCTestCase {
         split.tap()
 
         XCTAssertTrue(loading.waitForExistence(timeout: 10))
+        assertNoDaySeparatorWhile(loading, in: app)
         XCTAssertTrue(question(in: app).waitForExistence(timeout: 10))
         XCTAssertTrue(question(in: app).isHittable)
         XCTAssertFalse(loading.exists)
