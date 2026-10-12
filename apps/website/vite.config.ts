@@ -7,7 +7,7 @@ import { defineConfig } from "vite"
 
 // biome-ignore lint/style/noDefaultExport: Vite requires a default export
 export default defineConfig({
-	base: "./",
+	base: "/",
 	plugins: [
 		react(),
 		babel({ presets: [reactCompilerPreset()] }),

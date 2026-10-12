@@ -111,6 +111,7 @@ type VitestSuite = { name: string; filter: string; script: string }
 const VITEST_SUITES: VitestSuite[] = [
 	{ name: "app", filter: "app", script: "test:unit" },
 	{ name: "ui", filter: "@workspace/ui", script: "test" },
+	{ name: "website", filter: "website", script: "test" },
 ]
 
 type Run = { command: string[]; cwd: string }
