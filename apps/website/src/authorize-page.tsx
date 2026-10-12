@@ -72,8 +72,7 @@ const ClosedPage = ({ kind }: ClosedPageProps) => (
 
 const displayNameOf = (account: Account) => account.name ?? account.email
 
-const firstNameOf = (account: Account) =>
-	account.name?.split(/\s+/)[0] ?? account.email
+const firstNameOf = (account: Account) => displayNameOf(account).split(/\s+/)[0]
 
 type ContinueAsCardProps = {
 	state: PendingState
