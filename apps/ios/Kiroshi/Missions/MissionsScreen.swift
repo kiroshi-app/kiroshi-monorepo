@@ -23,6 +23,7 @@ struct MissionsScreen: View {
                         MissionThreadView(mission: mission, missions: missions, space: store)
                     }
                 }
+                .toolbarVisibility(path.isEmpty ? .visible : .hidden, for: .tabBar)
         }
         .task(id: store.connection.map(ObjectIdentifier.init)) {
             guard let connection = store.connection else { return }
