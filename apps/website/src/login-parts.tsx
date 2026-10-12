@@ -50,7 +50,7 @@ export const CardHeading = ({ title, lead }: CardHeadingProps) => (
 		<h1 className="font-sans text-[22px] leading-7 font-semibold tracking-[-0.015em]">
 			{title}
 		</h1>
-		<p className="text-sm leading-5 wrap-anywhere text-muted-foreground">
+		<p className="text-sm leading-5 text-pretty wrap-anywhere text-muted-foreground">
 			{lead}
 		</p>
 	</div>
@@ -235,7 +235,7 @@ export const OrDivider = () => (
 )
 
 export const Footnote = ({ children }: ChildrenProps) => (
-	<p className="text-xs text-muted-foreground">{children}</p>
+	<p className="text-xs text-pretty text-muted-foreground">{children}</p>
 )
 
 export const TextLinkRow = ({ children }: ChildrenProps) => (
