@@ -824,12 +824,16 @@ export const createConversationController = (
 		}
 	}
 
+	const routeOpen = (conversationId: string, pending: ScopedEvent[]) => {
+		if (isOpenConversation(conversationId)) {
+			pending.forEach(route)
+		}
+	}
+
 	const routePendingQuestions = async (conversationId: string) => {
 		try {
 			const pending = await driver.pendingQuestions(conversationId)
-			if (isOpenConversation(conversationId)) {
-				pending.forEach(route)
-			}
+			await enqueue(async () => routeOpen(conversationId, pending))
 		} catch (reason) {
 			noteFailure(toReadError(reason))
 			sync()

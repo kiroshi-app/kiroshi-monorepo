@@ -277,11 +277,24 @@ const liveDriver = (store: TranscriptStore) => {
 	}
 }
 
-const openSoloChat = async () => {
+type Opening = {
+	store: TranscriptStore
+	driver: ReturnType<typeof liveDriver>["driver"]
+	conversationId: string
+	botId: string
+}
+
+type Prepare = (opening: Opening) => Promise<void>
+
+const NOTHING_TO_PREPARE: Prepare = async () => undefined
+
+const openSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const controller = createChatController(driver, store)
 	const detach = controller.attach()
+	const chat = await store.mainChat(BOT, null)
+	await prepare({ store, driver, conversationId: chat.id, botId: BOT })
 	await act(() => controller.open(BOT, null).then(() => undefined))
 	await settled()
 	const conversationId = controller.getState().conversationId ?? ""
@@ -296,7 +309,7 @@ const openSoloChat = async () => {
 	}
 }
 
-const openRoom = async () => {
+const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const [bot] = await seatBots(store, "personal", ["Ada"])
@@ -306,8 +319,10 @@ const openRoom = async () => {
 		title: "Walls",
 		botIds: [bot?.id ?? ""],
 	})
+	const botId = bot?.id ?? ""
 	const controller = createConversationController(driver, store)
 	const detach = controller.attach()
+	await prepare({ store, driver, conversationId: conversation.id, botId })
 	await act(() => controller.open(conversation))
 	await settled()
 	return {
@@ -316,7 +331,7 @@ const openRoom = async () => {
 		driver,
 		controller,
 		detach,
-		botId: bot?.id ?? "",
+		botId,
 		conversationId: conversation.id,
 	}
 }
@@ -1144,8 +1159,8 @@ type QuestionShown = {
 
 const QUESTION_ROW_ID = questionMessageIdOf(QUESTION.id)
 
-const openAskedRoom = async () => {
-	const room = await openRoom()
+const openAskedRoom = async (prepare = NOTHING_TO_PREPARE) => {
+	const room = await openRoom(prepare)
 	const shown = (): QuestionShown => {
 		const { messages, pendingPrompt } = room.controller.getState()
 		const question =
@@ -1155,8 +1170,8 @@ const openAskedRoom = async () => {
 	return { ...room, shown }
 }
 
-const openAskedSoloChat = async () => {
-	const solo = await openSoloChat()
+const openAskedSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
+	const solo = await openSoloChat(prepare)
 	const shown = (): QuestionShown => {
 		const { messages, foreignTurn } = solo.controller.stateFor(solo.botId)
 		return { messages, question: foreignTurn?.question ?? null }
@@ -1448,5 +1463,66 @@ describe.each([
 				detach()
 			},
 		)
+	},
+)
+
+type EarlyRead = {
+	isRowInPage: boolean
+}
+
+const answerBeforePage =
+	({ isRowInPage }: EarlyRead): Prepare =>
+	async ({ store, driver, conversationId, botId }) => {
+		await writtenElsewhere(store, conversationId, "First")
+		await writtenElsewhere(store, conversationId, "Second")
+		if (isRowInPage) {
+			await repliedElsewhere(store, {
+				conversationId,
+				botId,
+				replyId: QUESTION_ROW_ID,
+				text: questionMessageText(QUESTION),
+			})
+		}
+		const scope = { ...foreignScope(conversationId), botId }
+		vi.spyOn(driver, "pendingQuestions").mockResolvedValueOnce([
+			{ scope, turn: storedTurn(conversationId), event: ASKED_QUESTION },
+		])
+		const loadPage = store.loadPage
+		vi.spyOn(store, "loadPage").mockImplementationOnce(async (...page) => {
+			await settled()
+			return loadPage(...page)
+		})
+	}
+
+describe.each([
+	["a room", openAskedRoom],
+	["a solo conversation", openAskedSoloChat],
+] as const)(
+	"a question still waiting read before the page of %s",
+	(_, open) => {
+		it("shows its row once, after every message of the page, and its card", async () => {
+			const { shown, detach } = await open(
+				answerBeforePage({ isRowInPage: false }),
+			)
+
+			expect(contentsOf(shown())).toEqual([
+				"First",
+				"Second",
+				questionMessageText(QUESTION),
+			])
+			expect(askedIn(shown())).toEqual(ASKED_CARD)
+			detach()
+		})
+
+		it("shows its row once and its card when the page carries the row too", async () => {
+			const { shown, detach } = await open(
+				answerBeforePage({ isRowInPage: true }),
+			)
+
+			expect(questionRowsIn(shown())).toHaveLength(1)
+			expect(contentsOf(shown()).at(-1)).toBe(questionMessageText(QUESTION))
+			expect(askedIn(shown())).toEqual(ASKED_CARD)
+			detach()
+		})
 	},
 )
