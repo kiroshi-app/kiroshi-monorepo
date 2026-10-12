@@ -23,6 +23,7 @@ struct ThreadMessage: Identifiable, Equatable {
     private let authors: [Companion]
     private(set) var text: String
     private(set) var rendered: AttributedString
+    private(set) var attachedFiles: [String]
     var bubbles: [Bubble]
     var dayLabel: String?
     var time = ""
@@ -40,15 +41,19 @@ struct ThreadMessage: Identifiable, Equatable {
         self.authors = authors
         author = isYours ? nil : authors.first { $0.id == authorId }
         self.text = text
-        rendered = Self.render(text, isYours: isYours, authors: authors)
-        bubbles = Self.bubbles(of: text, id: id, isYours: isYours, authors: authors)
+        let shown = Self.shown(text, isYours: isYours)
+        attachedFiles = shown.files
+        rendered = Self.render(shown.text, isYours: isYours, authors: authors)
+        bubbles = Self.bubbles(of: shown.text, id: id, isYours: isYours, authors: authors)
     }
 
     mutating func replaceText(_ text: String) {
         guard text != self.text else { return }
         self.text = text
-        rendered = Self.render(text, isYours: isYours, authors: authors)
-        bubbles = Self.bubbles(of: text, id: id, isYours: isYours, authors: authors)
+        let shown = Self.shown(text, isYours: isYours)
+        attachedFiles = shown.files
+        rendered = Self.render(shown.text, isYours: isYours, authors: authors)
+        bubbles = Self.bubbles(of: shown.text, id: id, isYours: isYours, authors: authors)
     }
 
     mutating func append(_ delta: String) {
@@ -59,6 +64,13 @@ struct ThreadMessage: Identifiable, Equatable {
         previous.isYours == isYours && previous.authorId == authorId
             && sentAt.timeIntervalSince(previous.sentAt) <= Self.runGap
             && calendar.isDate(previous.sentAt, inSameDayAs: sentAt)
+    }
+
+    private static func shown(_ text: String, isYours: Bool) -> (text: String, files: [String]) {
+        guard isYours else { return (text, []) }
+        let split = AttachmentBlock.split(text)
+        guard !split.text.isEmpty else { return (split.names.joined(separator: "\n\n"), []) }
+        return (split.text, split.names)
     }
 
     private static func bubbles(

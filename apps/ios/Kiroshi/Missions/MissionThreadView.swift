@@ -12,92 +12,20 @@ struct MissionThreadView: View {
     }
 
     var body: some View {
-        TimesRevealingScroll {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                VStack(spacing: 20) {
-                    DaySeparator(label: thread.transcript.openedDay)
-                    MachineLine(text: MissionTranscript.openedLine(by: companion))
-                }
-                .padding(.top, 20)
-                ForEach(thread.transcript.entries) { entry in
-                    ThreadEntryView(entry: entry, soloCompanion: companion)
-                    if let names = thread.transcript.attachments[entry.id] {
-                        AttachedFiles(names: names)
-                            .padding(.top, 4)
-                    }
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 12)
-        }
-        .defaultScrollAnchor(.bottom)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .background(Color(.systemBackground))
-        .overlay {
-            if thread.hasFailed {
-                ContentUnavailableView {
-                    Label("Couldn’t load this mission", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(
-                        "The mission is still there; only this view didn’t load. Go back and open it again."
-                    )
-                }
-                .background(Color(.systemBackground))
-            } else if thread.isLoading, space.offlineSpace == nil {
-                ProgressView()
-                    .accessibilityLabel("Loading the mission")
-            }
-        }
-        .safeAreaBar(edge: .bottom) {
-            MissionComposer(thread: thread)
-        }
-        .navigationTitle(thread.mission.objective)
-        .navigationBarTitleDisplayMode(.inline)
-        .threadHeader(companion: companion, isWorking: thread.mission.isAgentRunning) {
-            MissionHeaderLines(mission: thread.mission, companion: companion)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .task(id: space.connection.map(ObjectIdentifier.init)) {
-            guard let connection = space.connection else { return }
-            await thread.follow(connection)
-        }
-    }
-
-    private var companion: MissionCompanion? {
-        missions.companion(of: thread.mission)
+        let companion = missions.companion(of: thread.mission)
+        ThreadScreen(
+            model: thread, heading: thread.mission.heading(companion: companion),
+            opening: ThreadOpening(
+                day: thread.transcript.openedDay,
+                line: MissionTranscript.openedLine(by: companion)),
+            space: space)
     }
 }
 
-struct MachineLine: View {
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(.tertiary)
-                .frame(width: 5, height: 5)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 4)
-    }
-}
-
-struct AttachedFiles: View {
-    let names: [String]
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            ForEach(names, id: \.self) { name in
-                Label(name, systemImage: "paperclip")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .padding(.trailing, 4)
+extension Mission {
+    func heading(companion: MissionCompanion?) -> ThreadHeading {
+        ThreadHeading(
+            avatar: .companion(companion), working: isAgentRunning ? [botId] : [],
+            overline: titleLine(companion: companion), title: objective)
     }
 }

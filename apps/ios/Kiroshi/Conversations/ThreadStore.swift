@@ -31,6 +31,7 @@ final class ThreadStore {
     private(set) var stopFailed = false
     private(set) var isDeleted = false
     var draft: String
+    var attachments: [PickedAttachment] = []
 
     @ObservationIgnored private(set) var conversationId: String?
     @ObservationIgnored private var spaceId: String?
@@ -84,7 +85,8 @@ final class ThreadStore {
 
     var canSend: Bool {
         isReachable && conversationId != nil && !isSending && !isWorking
-            && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !attachments.isEmpty)
     }
 
     func follow(_ connection: RelayConnection) async {
@@ -123,15 +125,15 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
-        let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = SentMessage(
-            id: makeId(), conversationId: conversationId, turnId: makeId(),
-            content: content(of: written), createdAt: now().milliseconds,
-            repliedToMessageId: nil)
+        let outgoing = Outgoing(
+            id: makeId(), turnId: makeId(), conversationId: conversationId,
+            written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
+            sentAt: now())
         draft = ""
+        attachments = []
         sendFailure = nil
         isSending = true
-        let task = Task { await deliver(message, written: written, through: relay) }
+        let task = Task { await deliver(outgoing, through: relay) }
         sending = task
         return task
     }
@@ -156,12 +158,25 @@ final class ThreadStore {
         return task
     }
 
-    private func deliver(
-        _ message: SentMessage, written: String, through relay: ConversationRelay
-    ) async {
+    private func deliver(_ outgoing: Outgoing, through relay: ConversationRelay) async {
         defer { isSending = false }
-        let summoned = summoned(by: message.content)
         do {
+            var content = content(of: outgoing.written)
+            if !outgoing.picked.isEmpty {
+                let paths = try await relay.storeAttachments(
+                    ConversationAttachments(
+                        conversationId: outgoing.conversationId,
+                        attachments: outgoing.picked.map {
+                            .init(name: $0.name, bytes: Array($0.data))
+                        }))
+                content = AttachmentBlock.prompt(
+                    text: content, paths: paths, sentAt: outgoing.sentAt)
+            }
+            let message = SentMessage(
+                id: outgoing.id, conversationId: outgoing.conversationId, turnId: outgoing.turnId,
+                content: content, createdAt: outgoing.sentAt.milliseconds,
+                repliedToMessageId: nil)
+            let summoned = summoned(by: message.content)
             try await relay.sendTurn(message, summoning: summoned)
             insert(
                 threadMessage(
@@ -173,7 +188,10 @@ final class ThreadStore {
             return
         } catch {
             if draft.isEmpty {
-                draft = written
+                draft = outgoing.written
+            }
+            if attachments.isEmpty {
+                attachments = outgoing.picked
             }
             sendFailure = SendFailure(error)
         }
@@ -364,5 +382,66 @@ final class ThreadStore {
 
     private func layOut() {
         entries = ThreadLayout.mark(entries, time: ConversationTime(now: now(), calendar: calendar))
+    }
+}
+
+private struct Outgoing {
+    let id: String
+    let turnId: String
+    let conversationId: String
+    let written: String
+    let picked: [PickedAttachment]
+    let sentAt: Date
+}
+
+extension ThreadStore: ThreadModel {
+    var kind: ThreadKind { .conversation }
+
+    var state: ThreadState {
+        switch phase {
+        case .failed: .failed
+        case _ where !entries.isEmpty || isWorking: .shown
+        case .loading: .loading
+        case .loaded: .empty
+        }
+    }
+
+    var working: ThreadWorking? {
+        guard isWorking else { return nil }
+        return ThreadWorking(
+            companion: workingCompanions.first ?? subject.members.first, name: workingName,
+            isSeveral: workingCompanions.count > 1, since: workingSince)
+    }
+
+    var placeholder: String {
+        String(localized: "Message \(subject.title)")
+    }
+
+    var problem: String? {
+        if stopFailed {
+            return String(localized: "Couldn’t stop \(workingName). Tap Stop to try again.")
+        }
+        return switch sendFailure {
+        case .hostOffline:
+            String(
+                localized:
+                    "Couldn’t send, the Mac hosting this Space is offline. Tap Send again once it’s back."
+            )
+        case .stillWorking:
+            String(
+                localized:
+                    "Couldn’t send, \(workingName) is still working. Tap Send again once it answers."
+            )
+        case .tooLarge:
+            String(
+                localized:
+                    "Couldn’t send your files, they’re too large. Remove one and tap Send again.")
+        case .refused: String(localized: "Couldn’t send. Tap Send to try again.")
+        case nil: nil
+        }
+    }
+
+    var canStop: Bool {
+        runningScope != nil
     }
 }

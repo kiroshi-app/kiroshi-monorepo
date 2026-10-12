@@ -227,4 +227,12 @@ extension ThreadStoreTests {
         #expect(group.members.map(\.id) == ["a", "b"])
         #expect(group.authors.map(\.id) == ["a", "b", "c"])
     }
+
+    @Test func aGroupHeaderShowsTheGroupWhereAConversationShowsItsCompanion() {
+        let store = makeGroupStore()
+
+        #expect(store.heading == ThreadHeading(avatar: .group(releaseCrew), title: "Release crew"))
+        #expect(store.heading.companion == nil)
+        #expect(store.placeholder == "Message Release crew")
+    }
 }

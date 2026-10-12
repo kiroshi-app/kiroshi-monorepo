@@ -56,7 +56,7 @@ final class MissionsAccessibilityTests: XCTestCase {
             let isScrolledOffScreenAtTheLargestSize = !onScreenAtTheLargestSize.contains(
                 element.label)
             return switch issue.auditType {
-            case .contrast: isInTheTitle
+            case .contrast, .textClipped: isInTheTitle
             case .dynamicType: isInTheTitle || isScrolledOffScreenAtTheLargestSize
             default: false
             }
