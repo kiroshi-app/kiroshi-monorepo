@@ -33,6 +33,9 @@
         static let shoto = Companion(
             id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png")
         static let companions = [juniper, atlas, pico, shoto, mira, otto]
+        static let longNamed = Companion(
+            id: juniper.id, name: "Juniper Wilhelmina Fitzgerald-Montgomery",
+            role: "Release notes and changelog archivist", tint: .green)
 
         static let listMessages: [Companion.ID: [FixtureHost.Message]] = [
             "juniper-6": [
@@ -269,6 +272,15 @@
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
+            case .longName:
+                script.companions = [longNamed] + companions.dropFirst()
+                script.messages[juniper.id] = releaseNotes
+            case .longGroup:
+                script.groups = [
+                    releaseCrew.renamed(
+                        "Release crew for 0.42, the onboarding split and the settings sheet")
+                ]
+                script.messages[releaseCrew.id] = groupThread
             default:
                 break
             }
@@ -278,9 +290,10 @@
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
             case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
-                .threadFailed, .slowThread:
+                .threadFailed, .slowThread, .longName:
                 juniper.id
-            case .groupThread, .groupWorking, .groupFailed, .groupMention: releaseCrew.id
+            case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup:
+                releaseCrew.id
             default: nil
             }
         }
@@ -318,6 +331,10 @@
             let title: String
             let members: [Companion]
             let createdAt: Int
+
+            var conversation: GroupConversation {
+                try! JSONDecoder().decode(GroupConversation.self, from: Data(json.utf8))
+            }
 
             func renamed(_ title: String) -> Group {
                 Group(id: id, title: title, members: members, createdAt: createdAt)
@@ -591,6 +608,15 @@
                 } else {
                     playTurn(after: message)
                 }
+            case "chat_store_attachments":
+                let conversationId = args["conversationId"] as? String ?? ""
+                let names = (args["attachments"] as? [[String: Any]] ?? []).compactMap {
+                    $0["name"] as? String
+                }
+                let paths = names.map {
+                    #""/Users/sam/Library/Application Support/app.kiroshi/attachments/\#(conversationId)/\#($0)""#
+                }
+                reply(id, "[\(paths.joined(separator: ","))]")
             case "agent_cancel_turn":
                 reply(id, "null")
             case "conversation_create":

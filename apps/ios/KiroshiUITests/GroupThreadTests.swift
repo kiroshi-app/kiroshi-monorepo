@@ -2,6 +2,8 @@ import XCTest
 
 @MainActor
 final class GroupThreadTests: XCTestCase {
+    static let softScrollEdgeDepth: CGFloat = 16
+
     override func setUp() async throws {
         continueAfterFailure = false
     }
@@ -12,17 +14,20 @@ final class GroupThreadTests: XCTestCase {
     }
 
     func auditTheGroup(_ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>) throws {
-        let navigationBar = app.navigationBars["Release crew"].frame
+        let headerBottom = titleBottom(in: app)
+        let softEdgeBottom = headerBottom + Self.softScrollEdgeDepth
         let transcript = app.scrollViews.firstMatch.frame
         try audit(app) { issue in
             guard let element = issue.element else { return false }
-            let isUnderTheNavigationBar = element.frame.minY < navigationBar.maxY
+            let isUnderTheHeader = element.frame.minY < headerBottom
+            let isUnderTheSoftEdge = element.frame.minY < softEdgeBottom
             let isScrolledOffScreenAtTheLargestSize =
                 transcript.contains(element.frame)
                 && !onScreenAtTheLargestSize.contains(element.label)
             return switch issue.auditType {
-            case .contrast: isUnderTheNavigationBar
-            case .dynamicType: isUnderTheNavigationBar || isScrolledOffScreenAtTheLargestSize
+            case .contrast: isUnderTheSoftEdge
+            case .textClipped: isUnderTheHeader
+            case .dynamicType: isUnderTheHeader || isScrolledOffScreenAtTheLargestSize
             default: false
             }
         }

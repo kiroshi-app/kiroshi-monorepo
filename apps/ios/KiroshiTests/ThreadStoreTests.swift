@@ -213,6 +213,75 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func attachedFilesAreStoredBeforeTheTurnNamesThem() async throws {
+        let host = TestHost { call in
+            switch call.command {
+            case "chat_store_attachments":
+                TestHost.ok(call, #"["/d/attachments/chat-juniper/flow.png"]"#)
+            case "conversation_send_turn": TestHost.ok(call, "4")
+            default: nil
+            }
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+
+        store.draft = "Look at this"
+        store.attachments = [PickedAttachment(id: UUID(), name: "flow.png", data: Data([1, 2]))]
+        await store.send()?.value
+        let stored = try #require(await host.nextCall("chat_store_attachments"))
+        let sent = try #require(await host.nextCall("conversation_send_turn"))
+
+        let storeArgs = try stored.args(as: StoreArgs.self)
+        #expect(storeArgs.conversationId == "chat-juniper")
+        #expect(storeArgs.attachments.map(\.name) == ["flow.png"])
+        #expect(storeArgs.attachments.map(\.bytes) == [[1, 2]])
+        #expect(
+            try sent.args(as: SendTurnArgs.self).message.content == """
+                Look at this
+                Attached to this message, sent 2026-10-03T04:00:00.000Z, 1 file:
+                1/1 /d/attachments/chat-juniper/flow.png
+                """)
+        let shown = try #require(messages(store).last)
+        #expect(shown.bubbles.map { String($0.text.characters) } == ["Look at this"])
+        #expect(shown.attachedFiles == ["flow.png"])
+        #expect(store.attachments.isEmpty)
+        #expect(store.draft.isEmpty)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func filesTooLargeToStoreStayPickedAndSaySo() async {
+        let host = TestHost { call in
+            guard call.command == "chat_store_attachments" else { return nil }
+            return TestHost.refused(call, status: 413, #""too large""#)
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        let picked = [PickedAttachment(id: UUID(), name: "flow.png", data: Data([1, 2]))]
+
+        store.attachments = picked
+        #expect(store.canSend)
+        await store.send()?.value
+
+        #expect(store.sendFailure == .tooLarge)
+        #expect(store.attachments == picked)
+        #expect(store.entries.isEmpty)
+        #expect(store.problem?.hasPrefix("Couldn’t send your files") == true)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func theHeaderNamesTheCompanionThenItsTitle() {
+        let writer = Companion(id: "juniper", name: "Juniper", role: "Writer")
+        let store = ThreadStore(subject: .companion(writer))
+
+        #expect(
+            store.heading
+                == ThreadHeading(avatar: .companion(writer), title: "Juniper", subtitle: "Writer"))
+        #expect(store.state == .loading)
+        #expect(store.placeholder == "Message Juniper")
+    }
+
     @Test func aGroupOpensOnItsOwnConversationAndLetsTheHostPickWhoAnswers() async throws {
         let atlas = Companion(id: "atlas", name: "Atlas")
         let group = GroupConversation(
@@ -603,6 +672,16 @@ struct ThreadStoreTests {
         #expect(!store.stopFailed)
         following.cancel()
         await connection.stop()
+    }
+
+    struct StoreArgs: Decodable {
+        struct Attachment: Decodable {
+            let name: String
+            let bytes: [UInt8]
+        }
+
+        let conversationId: String
+        let attachments: [Attachment]
     }
 
     struct SendTurnArgs: Decodable {

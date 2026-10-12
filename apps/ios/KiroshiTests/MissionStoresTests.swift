@@ -313,4 +313,46 @@ struct MissionStoresTests {
         #expect(!store.hasFailed)
         #expect(store.isLoading)
     }
+
+    @Test func theHeaderAndTheOpeningDayAreKnownBeforeTheThreadLoads() {
+        let atlas = Companion(id: "bot-1", name: "Atlas", role: "Planner")
+        let mission = MissionTesting.mission(isAgentRunning: true)
+        let store = MissionThreadStore(mission: mission)
+
+        #expect(
+            mission.heading(companion: atlas)
+                == ThreadHeading(
+                    avatar: .companion(atlas), working: ["bot-1"],
+                    overline: "OPE-1 · Atlas · Planner", title: "Objective mission-1"))
+        #expect(!store.transcript.openedDay.isEmpty)
+        #expect(store.state == .loading)
+        #expect(store.placeholder == "Answer this mission…")
+    }
+
+    @Test func tryingAgainAfterAFailureLoadsTheThread() async {
+        let connection = makeConnection()
+        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        let refused = await nextCall("conversation_message_page", on: socket)
+        socket.push(
+            .frame(#"{"id":\#(refused["id"] as? Int ?? 0),"status":500,"body":"host busy"}"#))
+        await waitUntil { store.state == .failed }
+
+        store.reload()
+        #expect(store.state == .loading)
+        let page = await nextCall("conversation_message_page", on: socket)
+        socket.push(
+            .frame(
+                #"{"id":\#(page["id"] as? Int ?? 0),"status":200,"body":{"conversationId":"thread-mission-1","hasMore":false,"arrivals":[],"messages":[\#(MissionTesting.message(id: "m-1", seq: 1, content: "Go"))]}}"#
+            ))
+        await waitUntil { store.hasLoaded }
+
+        #expect(store.state == .shown)
+        #expect(MissionTesting.shown(store.transcript).map(\.id) == ["m-1"])
+        following.cancel()
+        await connection.stop()
+    }
 }

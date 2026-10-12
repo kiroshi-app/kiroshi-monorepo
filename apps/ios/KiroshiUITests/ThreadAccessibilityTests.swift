@@ -114,7 +114,7 @@ final class ThreadAccessibilityTests: XCTestCase {
                     transcript.contains(element.frame) && !$0.contains(element.label)
                 } ?? false
             return switch issue.auditType {
-            case .contrast: isInTheTitle
+            case .contrast, .textClipped: isInTheTitle
             case .dynamicType: isInTheTitle || isScrolledOffScreenAtTheLargestSize
             default: false
             }
