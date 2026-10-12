@@ -113,6 +113,13 @@ const HOST_ONLY_REFUSAL = "this command belongs to the host"
 const isHostOnlyRefusal = (message: string, status?: number) =>
 	status === HOST_ONLY_STATUS && message.includes(HOST_ONLY_REFUSAL)
 
+export const hostOnlyRefusalOf = (command: string): HostRefusal => ({
+	message: HOST_ONLY_REFUSAL,
+	command,
+	status: HOST_ONLY_STATUS,
+	side: "member",
+})
+
 const hostOnlyNotice = (): NoticeMessage => ({
 	title: i18n.t("chat:screen.notice.failed"),
 	description: i18n.t("chat:screen.notice.hostOnly"),

@@ -8,11 +8,13 @@ import {
 	createConversationProvenance,
 	LOCAL_IDS_COMMAND,
 } from "./conversation-provenance"
+import { HostRefused } from "./host-refused"
 import {
 	createHttpHost,
 	type HostRefusal,
 	type HostSocket,
 	type HttpHost,
+	hostOnlyRefusalOf,
 } from "./http"
 import {
 	isJoinedSpaceError,
@@ -35,7 +37,6 @@ import { createStore } from "../store"
 export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"space_list",
 	"space_create",
-	"space_update",
 	"space_reorder",
 	"space_delete",
 	"space_export",
@@ -50,10 +51,6 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"hosting_state",
 	"hosting_start",
 	"hosting_stop",
-	"hosting_members",
-	"hosting_invite_member",
-	"hosting_withdraw_invitation",
-	"hosting_remove_member",
 	"mcp_oauth_cancel",
 	"mission_board",
 	"mission_unreported",
@@ -66,7 +63,6 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"agent_sign_in",
 	"agent_sign_in_code",
 	"agent_sign_in_cancel",
-	"agent_shutdown",
 	"agent_live_sessions",
 	"connection_set",
 	"invitations_list",
@@ -94,20 +90,11 @@ const LOCAL_EVENTS: ReadonlySet<string> = new Set([
 
 const TAURI_PLUGIN_PREFIX = "plugin:"
 
-const SPACE_READS_THE_HOST_KEEPS: ReadonlySet<string> = new Set([
-	"env_list",
-	"mcp_application_status",
+const COMMANDS_ONLY_THE_HOST_RUNS: ReadonlySet<string> = new Set([
+	"mcp_oauth_connect",
 ])
 
-const COMMANDS_THE_HOST_REFUSES: ReadonlySet<string> = new Set([
-	"env_list",
-	"env_set",
-	"env_delete",
-	"mcp_application_status",
-	"mcp_oauth_connect",
-	"mcp_oauth_disconnect",
-	"search_messages",
-])
+const SPACE_UPDATE_COMMAND = "space_update"
 
 const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
 	"user",
@@ -176,7 +163,12 @@ const unheard: Listen = async () => () => undefined
 const isLocalCommand = (command: string): boolean =>
 	command.startsWith(TAURI_PLUGIN_PREFIX) || LOCAL_COMMANDS.has(command)
 
-type ScopeFields = { kind?: unknown; owner?: unknown; scope?: unknown }
+type ScopeFields = {
+	id?: unknown
+	kind?: unknown
+	owner?: unknown
+	scope?: unknown
+}
 
 const fieldsOf = (value: unknown): ScopeFields =>
 	typeof value === "object" && value !== null ? value : {}
@@ -197,27 +189,8 @@ const carriesPersonalScope = (args?: InvokeArgs): boolean => {
 	return isPersonalScope(scope) || isPersonalOwner(owner)
 }
 
-const isSpaceOwner = (owner: unknown): boolean =>
-	fieldsOf(owner).kind === "space"
-
-const isSpaceScope = (scope: unknown): boolean => {
-	const { kind, owner } = fieldsOf(scope)
-	return kind === "space" || (kind === "server" && isSpaceOwner(owner))
-}
-
-const readsWhatTheHostKeeps = (command: string, args?: InvokeArgs): boolean => {
-	const { scope, owner } = fieldsOf(args)
-	return (
-		SPACE_READS_THE_HOST_KEEPS.has(command) &&
-		(isSpaceScope(scope) || isSpaceOwner(owner))
-	)
-}
-
 const describeRejection = (reason: unknown): string =>
 	reason instanceof Error ? reason.message : String(reason)
-
-const keepOnTheHost = <T>(command: string): Promise<T> =>
-	Promise.reject(new Error(`${command} of a joined space stays on its host`))
 
 export const createJoinedHosts = ({
 	local,
@@ -610,23 +583,30 @@ export const createJoinedHosts = ({
 		)
 	}
 
+	const updatesAnotherSpace = (command: string, args?: InvokeArgs) =>
+		command === SPACE_UPDATE_COMMAND && fieldsOf(args).id !== activeSpaceId()
+
+	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
+		const refusal = hostOnlyRefusalOf(command)
+		reportFailure(refusal)
+		return Promise.reject(new HostRefused(refusal.message, refusal))
+	}
+
 	const invoke: Invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {
 		const [command, args] = call
 		const { active } = store.getState()
 		if (
 			isLocalCommand(command) ||
 			active === null ||
-			carriesPersonalScope(args)
+			carriesPersonalScope(args) ||
+			updatesAnotherSpace(command, args)
 		) {
 			return sendTo<T>(null, call)
 		}
-		if (readsWhatTheHostKeeps(command, args)) {
-			return keepOnTheHost<T>(command)
-		}
 		const route = () => {
 			const target = ownerOf(active, args)
-			return target !== null && COMMANDS_THE_HOST_REFUSES.has(command)
-				? keepOnTheHost<T>(command)
+			return target !== null && COMMANDS_ONLY_THE_HOST_RUNS.has(command)
+				? refuseAsTheHostWould<T>(command)
 				: sendTo<T>(target, call)
 		}
 		return provenance.namesConversation(args)

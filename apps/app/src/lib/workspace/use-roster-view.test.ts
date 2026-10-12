@@ -138,6 +138,7 @@ const transportOf = (listed: JoinedSpace[]) => ({
 	list: vi.fn(async () => listed),
 	add: vi.fn(),
 	remove: vi.fn(async () => undefined),
+	rename: vi.fn(),
 	onChanged: vi.fn(async () => () => undefined),
 	onRemoved: vi.fn(async () => () => undefined),
 })

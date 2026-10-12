@@ -10,10 +10,9 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { HostedSpace } from "./hosting-controller"
-import { listen } from "./index"
+import { invoke, listen } from "./index"
 
 import {
-	commands,
 	HOSTING_MEMBERS_CHANGED_EVENT,
 	type Member,
 	type MembersChanged,
@@ -65,11 +64,25 @@ type MembersControllerOptions = {
 	reportSuccess?: (message: NoticeMessage) => void
 }
 
+const answerOf = <Data>(call: Promise<Data>): Promise<MembersAnswer<Data>> =>
+	call.then(
+		(data) => ({ status: "ok", data }),
+		(error: unknown) => {
+			if (error instanceof Error) throw error
+			return { status: "error", error: error as MembersError }
+		},
+	)
+
 const membersTransport: MembersTransport = {
-	list: commands.hostingMembers,
-	invite: commands.hostingInviteMember,
-	withdraw: commands.hostingWithdrawInvitation,
-	remove: commands.hostingRemoveMember,
+	list: (spaceId) => answerOf(invoke<Member[]>("hosting_members", { spaceId })),
+	invite: (spaceId, email) =>
+		answerOf(invoke<Member>("hosting_invite_member", { spaceId, email })),
+	withdraw: (spaceId, userId) =>
+		answerOf(
+			invoke<Member[]>("hosting_withdraw_invitation", { spaceId, userId }),
+		),
+	remove: (spaceId, userId) =>
+		answerOf(invoke<Member[]>("hosting_remove_member", { spaceId, userId })),
 	onChanged: (listener) =>
 		listen<MembersChanged>(HOSTING_MEMBERS_CHANGED_EVENT, (event) =>
 			listener(event.payload),
