@@ -1,9 +1,16 @@
-import { type ReactNode, useId } from "react"
+import { type FormEvent, type ReactNode, useId } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
 import { LOGIN_COPY } from "./login-copy"
-import { MailMark } from "./page-marks"
+import {
+	BenefitMark,
+	CancelledMark,
+	DeviceMark,
+	ExpiredMark,
+	MailMark,
+	SignedInMark,
+} from "./page-marks"
 
 const FOCUS_HALO = "outline-none focus-visible:shadow-field-focus"
 
@@ -20,7 +27,19 @@ type ChildrenProps = {
 	children: ReactNode
 }
 
-export const LoginShell = ({ children }: ChildrenProps) => (
+const CARD_WIDTHS = {
+	regular: "w-95",
+	wide: "w-100",
+}
+
+type LoginShellProps = ChildrenProps & {
+	width?: keyof typeof CARD_WIDTHS
+}
+
+export const LoginShell = ({
+	children,
+	width = "regular",
+}: LoginShellProps) => (
 	<div className="flex min-h-dvh flex-col bg-background px-8 py-7 text-foreground [font-synthesis:none]">
 		<header className="flex items-center gap-2 text-[15px] leading-[18px] font-semibold tracking-[-0.01em]">
 			<img
@@ -33,7 +52,12 @@ export const LoginShell = ({ children }: ChildrenProps) => (
 			{LOGIN_COPY.brand}
 		</header>
 		<main className="flex flex-1 items-center justify-center pb-15">
-			<section className="flex w-95 max-w-full flex-col gap-6 rounded-[18px] bg-card p-8 shadow-edge">
+			<section
+				className={cn(
+					"flex max-w-full flex-col gap-6 rounded-[18px] bg-card p-8 shadow-edge",
+					CARD_WIDTHS[width],
+				)}
+			>
 				{children}
 			</section>
 		</main>
@@ -205,19 +229,15 @@ export const PrimaryButton = ({ label, isBusy }: PrimaryButtonProps) => (
 	</button>
 )
 
-type SecondaryButtonProps = {
+type GhostButtonProps = {
 	label: string
 	isBusy: boolean
 	onClick: () => void
 }
 
-export const SecondaryButton = ({
-	label,
-	isBusy,
-	onClick,
-}: SecondaryButtonProps) => (
+export const GhostButton = ({ label, isBusy, onClick }: GhostButtonProps) => (
 	<button
-		className={`${ACTION} bg-card shadow-field hover:bg-accent`}
+		className={`${ACTION} hover:bg-accent`}
 		disabled={isBusy}
 		onClick={onClick}
 		type="button"
@@ -276,4 +296,118 @@ export const TextLink = ({ children, onClick }: TextLinkProps) => (
 	>
 		{children}
 	</button>
+)
+
+type ActionStackProps = ChildrenProps & {
+	onSubmit: () => void
+}
+
+export const ActionStack = ({ children, onSubmit }: ActionStackProps) => {
+	const submit = (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault()
+		onSubmit()
+	}
+
+	return (
+		<form className="flex flex-col gap-2" noValidate onSubmit={submit}>
+			{children}
+		</form>
+	)
+}
+
+type AccountCardProps = {
+	initials: string
+	name: string
+	email?: string
+	plan?: string
+}
+
+export const AccountCard = ({
+	initials,
+	name,
+	email,
+	plan,
+}: AccountCardProps) => (
+	<div className="flex items-center gap-3 rounded-[14px] border border-primary px-3.5 py-3 ring-3 ring-primary/20">
+		<span
+			aria-hidden="true"
+			className="flex size-9 shrink-0 items-center justify-center rounded-full bg-initials-tile text-[13px] leading-4 font-semibold text-initials-glyph uppercase"
+		>
+			{initials}
+		</span>
+		<div className="flex min-w-0 flex-1 flex-col">
+			<p className="text-sm leading-5 font-medium wrap-anywhere">{name}</p>
+			{email ? (
+				<p className="text-[13px] leading-[18px] wrap-anywhere text-muted-foreground">
+					{email}
+				</p>
+			) : null}
+		</div>
+		{plan ? (
+			<span className="rounded-full bg-muted px-2 py-0.5 text-xs leading-4 font-medium">
+				{plan}
+			</span>
+		) : null}
+	</div>
+)
+
+type DeviceLineProps = {
+	name: string
+	caption: string
+}
+
+export const DeviceLine = ({ name, caption }: DeviceLineProps) => (
+	<div className="flex items-center gap-3">
+		<span className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-muted text-foreground">
+			<DeviceMark />
+		</span>
+		<div className="flex min-w-0 flex-col gap-0.5">
+			<p className="text-sm leading-[18px] font-medium wrap-anywhere">{name}</p>
+			<p className="text-xs leading-4 text-muted-foreground">{caption}</p>
+		</div>
+	</div>
+)
+
+type BenefitListProps = {
+	benefits: readonly string[]
+}
+
+export const BenefitList = ({ benefits }: BenefitListProps) => (
+	<ul className="flex flex-col gap-2.5 rounded-[12px] bg-background p-3.5">
+		{benefits.map((benefit) => (
+			<li className="flex gap-2 text-[13px] leading-[18px]" key={benefit}>
+				<span className="text-muted-foreground">
+					<BenefitMark />
+				</span>
+				{benefit}
+			</li>
+		))}
+	</ul>
+)
+
+const STATUS_CHIPS = {
+	"signed-in": {
+		tone: "bg-signed-in-tile text-signed-in-glyph",
+		mark: <SignedInMark />,
+	},
+	expired: { tone: "bg-expired-tile text-destructive", mark: <ExpiredMark /> },
+	cancelled: {
+		tone: "bg-cancelled-tile text-muted-foreground",
+		mark: <CancelledMark />,
+	},
+}
+
+type StatusChipProps = {
+	status: keyof typeof STATUS_CHIPS
+}
+
+export const StatusChip = ({ status }: StatusChipProps) => (
+	<span
+		className={cn(
+			"flex size-10 shrink-0 items-center justify-center rounded-full",
+			STATUS_CHIPS[status].tone,
+		)}
+	>
+		{STATUS_CHIPS[status].mark}
+	</span>
 )

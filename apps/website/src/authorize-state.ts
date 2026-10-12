@@ -26,6 +26,7 @@ type AuthorizeState =
 			request: string
 			device: AuthorizationRequest
 			account: Account
+			askedMinutesAgo: number
 			isJustSignedIn: boolean
 	  }
 
@@ -66,6 +67,15 @@ const consumeJustSignedIn = (request: string) => {
 	return isJustSignedIn
 }
 
+const MINUTE_MS = 60_000
+
+const minutesSince = (instant: string) => {
+	const elapsed = Date.now() - Date.parse(instant)
+	return Number.isFinite(elapsed)
+		? Math.max(0, Math.floor(elapsed / MINUTE_MS))
+		: 0
+}
+
 const readKnownRequest = async (request: string) => {
 	try {
 		return await readAuthorizationRequest(request)
@@ -87,6 +97,7 @@ const loadRequestState = async (request: string): Promise<AuthorizeState> => {
 		request,
 		device,
 		account,
+		askedMinutesAgo: minutesSince(device.requestedAt),
 		isJustSignedIn: consumeJustSignedIn(request),
 	}
 }

@@ -1,23 +1,39 @@
-const PLATFORM_NAMES: Record<string, string> = { macos: "macOS" }
+import type { Plan } from "./relay"
+
+const PLATFORM_APPS: Record<string, string> = { macos: "Kiroshi for Mac" }
+
+const askedWhen = (minutesAgo: number) => {
+	if (minutesAgo < 1) return "just now"
+	if (minutesAgo === 1) return "1 minute ago"
+	return `${minutesAgo} minutes ago`
+}
 
 export const AUTHORIZE_COPY = {
-	continueAsTitle: (name: string) => `Continue as ${name}`,
-	continueAsLead: (email: string) => `You’re signed in to Kiroshi as ${email}.`,
-	continueAs: "Continue",
+	continueAsTitle: "Sign in to Kiroshi on your Mac",
+	continueAsLead: (deviceName: string) =>
+		`You’re already signed in here. Pick the account Kiroshi on ${deviceName} should use.`,
+	plans: { free: "Free", pro: "Pro" } satisfies Record<Plan, string>,
+	continueAs: (firstName: string) => `Continue as ${firstName}`,
 	anotherAccount: "Use another account",
 	approveTitle: "Sign in to Kiroshi on this Mac?",
 	approveLead: (email: string) =>
-		`The Kiroshi app on this device asks to sign in as ${email}.`,
-	device: (deviceName: string, platform: string) =>
-		`${deviceName} · ${PLATFORM_NAMES[platform] ?? platform}`,
+		`Kiroshi on this Mac asked to use your account, ${email}.`,
+	deviceCaption: (platform: string, minutesAgo: number) =>
+		`${PLATFORM_APPS[platform] ?? "Kiroshi"} · asked ${askedWhen(minutesAgo)}`,
+	benefits: [
+		"Host spaces for people who aren’t on your network",
+		"Join the spaces they host for you",
+	],
 	approve: "Sign in",
 	cancel: "Cancel",
-	approveFootnote: "Only sign in if you just asked to from the Kiroshi app.",
-	doneTitle: "Back to the app",
-	doneLead: "You’re signed in on your Mac. You can close this tab.",
-	expiredTitle: "Request expired",
+	approveFootnote: "Didn’t start this from Kiroshi? Press Cancel.",
+	doneTitle: "You’re signed in",
+	doneLead: (deviceName: string, email: string) =>
+		`Kiroshi on ${deviceName} is signed in as ${email}. You can close this tab and go back to Kiroshi.`,
+	expiredTitle: "This sign-in request expired",
 	expiredLead:
-		"This sign-in request is no longer valid. Sign in again from the Kiroshi app on your Mac.",
+		"Kiroshi on your Mac stopped waiting. Go back to Kiroshi and press Sign in with your browser again.",
 	cancelledTitle: "Sign-in cancelled",
-	cancelledLead: "Nothing was signed in on your Mac. You can close this tab.",
+	cancelledLead:
+		"Kiroshi on your Mac stays signed out. You can close this tab.",
 }

@@ -20,7 +20,8 @@ const BEARER = "bearer-of-the-site"
 const BEARER_KEY = "kiroshi.relay.bearer"
 const REQUEST_ID = "6f1c2a4e-8b3d-4c5e-9a7f-0123456789ab"
 const AUTHORIZE_PATH = `/authorize?request=${REQUEST_ID}`
-const DEVICE_LINE = AUTHORIZE_COPY.device("Ada’s MacBook Pro", "macos")
+const DEVICE_NAME = "Ada’s MacBook Pro"
+const DEVICE_CAPTION = AUTHORIZE_COPY.deviceCaption("macos", 0)
 const ME = "GET /me"
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
@@ -45,9 +46,9 @@ const relayError = (status: number, code: string): Reply => ({
 const requestWith = (status: string): Reply => ({
 	body: {
 		id: REQUEST_ID,
-		deviceName: "Ada’s MacBook Pro",
+		deviceName: DEVICE_NAME,
 		platform: "macos",
-		requestedAt: "2026-10-12T10:00:00Z",
+		requestedAt: new Date().toISOString(),
 		expiresAt: "2026-10-12T10:10:00Z",
 		status,
 	},
@@ -56,7 +57,7 @@ const requestWith = (status: string): Reply => ({
 const relayRoutes = (): RelayRoutes => ({
 	[SEND_CODE]: { body: { status: true } },
 	[SIGN_IN]: { body: { token: BEARER, user: { email: EMAIL } } },
-	[ME]: { body: { email: EMAIL, name: NAME } },
+	[ME]: { body: { email: EMAIL, name: NAME, plan: "pro" } },
 	[READ_REQUEST]: requestWith("pending"),
 	[APPROVE]: {
 		body: {
@@ -126,13 +127,13 @@ const signInByCode = async () => {
 const openContinueAs = async (path = AUTHORIZE_PATH) => {
 	signedIn()
 	const router = renderSite(path)
-	await heading(AUTHORIZE_COPY.continueAsTitle(NAME))
+	await heading(AUTHORIZE_COPY.continueAsTitle)
 	return router
 }
 
 const openApproval = async () => {
 	const router = await openContinueAs()
-	press(AUTHORIZE_COPY.continueAs)
+	press(AUTHORIZE_COPY.continueAs("Ada"))
 	await heading(AUTHORIZE_COPY.approveTitle)
 	return router
 }
@@ -174,10 +175,11 @@ describe("the authorize page, signed out", () => {
 
 		await heading(AUTHORIZE_COPY.approveTitle)
 		expect(router.state.location.href).toBe(AUTHORIZE_PATH)
-		expect(screen.getByText(DEVICE_LINE)).toBeTruthy()
+		expect(screen.getByText(DEVICE_NAME)).toBeTruthy()
+		expect(screen.getByText(DEVICE_CAPTION)).toBeTruthy()
 		expect(
 			screen.queryByRole("heading", {
-				name: AUTHORIZE_COPY.continueAsTitle(NAME),
+				name: AUTHORIZE_COPY.continueAsTitle,
 			}),
 		).toBeNull()
 	})
@@ -191,7 +193,7 @@ describe("the authorize page, signed out", () => {
 
 		renderSite(AUTHORIZE_PATH)
 
-		await heading(AUTHORIZE_COPY.continueAsTitle(NAME))
+		await heading(AUTHORIZE_COPY.continueAsTitle)
 	})
 })
 
@@ -199,8 +201,13 @@ describe("Continue as", () => {
 	it("names the signed-in account with Continue and Use another account", async () => {
 		await openContinueAs()
 
-		expect(screen.getByText(AUTHORIZE_COPY.continueAsLead(EMAIL))).toBeTruthy()
-		expect(button(AUTHORIZE_COPY.continueAs)).toBeTruthy()
+		expect(
+			screen.getByText(AUTHORIZE_COPY.continueAsLead(DEVICE_NAME)),
+		).toBeTruthy()
+		expect(screen.getByText(NAME)).toBeTruthy()
+		expect(screen.getByText(EMAIL)).toBeTruthy()
+		expect(screen.getByText(AUTHORIZE_COPY.plans.pro)).toBeTruthy()
+		expect(button(AUTHORIZE_COPY.continueAs("Ada"))).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.anotherAccount)).toBeTruthy()
 		expectNoAppLink()
 	})
@@ -210,7 +217,8 @@ describe("Continue as", () => {
 		signedIn()
 		renderSite(AUTHORIZE_PATH)
 
-		await heading(AUTHORIZE_COPY.continueAsTitle(EMAIL))
+		await heading(AUTHORIZE_COPY.continueAsTitle)
+		expect(button(AUTHORIZE_COPY.continueAs(EMAIL))).toBeTruthy()
 	})
 
 	it("ends the site session on Use another account and comes back to the request", async () => {
@@ -230,7 +238,8 @@ describe("the authorization page", () => {
 	it("shows the device and platform the relay answers, Sign in and Cancel", async () => {
 		await openApproval()
 
-		expect(screen.getByText(DEVICE_LINE)).toBeTruthy()
+		expect(screen.getByText(DEVICE_NAME)).toBeTruthy()
+		expect(screen.getByText(DEVICE_CAPTION)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.approve)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.cancel)).toBeTruthy()
 		expect(callsTo(READ_REQUEST)[0]?.authorization).toBe(`Bearer ${BEARER}`)
@@ -245,6 +254,9 @@ describe("the authorization page", () => {
 
 		await landedOn(router, "/authorize/done")
 		await heading(AUTHORIZE_COPY.doneTitle)
+		expect(
+			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
+		).toBeTruthy()
 		expect(callsTo(APPROVE)[0]?.authorization).toBe(`Bearer ${BEARER}`)
 		expect(assign).not.toHaveBeenCalled()
 		expectNoAppLink()
@@ -298,6 +310,13 @@ describe("the cancelled card", () => {
 })
 
 describe("the expired page", () => {
+	it("shows on /authorize/done reached without an approval", async () => {
+		renderSite("/authorize/done")
+
+		await heading(AUTHORIZE_COPY.expiredTitle)
+		expect(calls).toHaveLength(0)
+	})
+
 	it.each([
 		["the request param is missing", "/authorize"],
 		["the request param is not a uuid", "/authorize?request=not-a-uuid"],
@@ -390,7 +409,7 @@ describe("a network or server failure", () => {
 			routes[READ_REQUEST] = requestWith("pending")
 			press(RETRY_LABEL)
 
-			await heading(AUTHORIZE_COPY.continueAsTitle(NAME))
+			await heading(AUTHORIZE_COPY.continueAsTitle)
 		},
 	)
 

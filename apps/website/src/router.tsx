@@ -8,7 +8,11 @@ import {
 } from "@tanstack/react-router"
 
 import { AppScene } from "./app-scene"
-import { AuthorizeDonePage, AuthorizePage } from "./authorize-page"
+import {
+	type Approval,
+	AuthorizeDonePage,
+	AuthorizePage,
+} from "./authorize-page"
 import {
 	loadAuthorizeState,
 	requireAuthorizeBearer,
@@ -132,5 +136,8 @@ export const createSiteRouter = (history?: RouterHistory) =>
 declare module "@tanstack/react-router" {
 	interface Register {
 		router: ReturnType<typeof createSiteRouter>
+	}
+	interface HistoryState {
+		approval?: Approval
 	}
 }

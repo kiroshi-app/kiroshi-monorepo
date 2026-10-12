@@ -31,11 +31,19 @@ const CODE_FAILURES = new Map<string, CodeFailure>([
 
 type SocialProvider = "google" | "apple"
 
-type Account = { email: string; name: string | null; isNamed: boolean }
+type Plan = "free" | "pro"
+
+type Account = {
+	email: string
+	name: string | null
+	plan: Plan | null
+	isNamed: boolean
+}
 
 type AuthorizationRequest = {
 	deviceName: string
 	platform: string
+	requestedAt: string
 	status: string
 }
 
@@ -152,11 +160,20 @@ const nameOf = (me: unknown) => {
 	return typeof name === "string" && name.trim().length > 0 ? name : null
 }
 
+const isPlan = (value: unknown): value is Plan =>
+	value === "free" || value === "pro"
+
+const planOf = (me: unknown) => {
+	const plan = fieldOf(me, "plan")
+	return isPlan(plan) ? plan : null
+}
+
 const readAccount = async (): Promise<Account> => {
 	const me = await send({ path: "/me" })
 	return {
 		email: stringField(me, "email"),
 		name: nameOf(me),
+		plan: planOf(me),
 		isNamed: isNamedIn(me),
 	}
 }
@@ -171,6 +188,7 @@ const readAuthorizationRequest = async (
 	return {
 		deviceName: stringField(answer, "deviceName"),
 		platform: stringField(answer, "platform"),
+		requestedAt: stringField(answer, "requestedAt"),
 		status: stringField(answer, "status"),
 	}
 }
@@ -191,6 +209,7 @@ export {
 	cancelAuthorizationRequest,
 	clearBearer,
 	isRelayFailure,
+	type Plan,
 	RelayError,
 	type RelayFailure,
 	readAccount,

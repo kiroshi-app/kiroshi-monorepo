@@ -1,17 +1,27 @@
-import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router"
-import { type FormEvent, useState } from "react"
+import {
+	getRouteApi,
+	useLocation,
+	useNavigate,
+	useRouter,
+} from "@tanstack/react-router"
+import { useState } from "react"
+
+import { initialsOf } from "@workspace/ui/components/initials-avatar"
 
 import { AUTHORIZE_COPY } from "./authorize-copy"
 import type { AuthorizeState, ClosedKind } from "./authorize-state"
 import { RelayFailureLine } from "./login-page"
 import {
+	AccountCard,
+	ActionStack,
+	BenefitList,
 	CardHeading,
+	DeviceLine,
 	Footnote,
+	GhostButton,
 	LoginShell,
 	PrimaryButton,
-	SecondaryButton,
-	TextLink,
-	TextLinkRow,
+	StatusChip,
 } from "./login-parts"
 import {
 	type Account,
@@ -27,6 +37,8 @@ const authorizeRoute = getRouteApi("/authorize")
 type PendingState = Extract<AuthorizeState, { kind: "pending" }>
 
 type Decision = (request: string) => Promise<void>
+
+export type Approval = { deviceName: string; email: string }
 
 const useSignInAgain = () => {
 	const router = useRouter()
@@ -47,41 +59,54 @@ const CLOSED_HEADINGS = {
 	},
 } satisfies Record<ClosedKind, { title: string; lead: string }>
 
-type ClosedCardProps = {
+type ClosedPageProps = {
 	kind: ClosedKind
 }
 
-const ClosedCard = ({ kind }: ClosedCardProps) => (
-	<CardHeading {...CLOSED_HEADINGS[kind]} />
+const ClosedPage = ({ kind }: ClosedPageProps) => (
+	<LoginShell>
+		<StatusChip status={kind} />
+		<CardHeading {...CLOSED_HEADINGS[kind]} />
+	</LoginShell>
 )
 
+const displayNameOf = (account: Account) => account.name ?? account.email
+
+const firstNameOf = (account: Account) =>
+	account.name?.split(/\s+/)[0] ?? account.email
+
 type ContinueAsCardProps = {
-	account: Account
+	state: PendingState
 	onContinue: () => void
 }
 
-const ContinueAsCard = ({ account, onContinue }: ContinueAsCardProps) => {
+const ContinueAsCard = ({ state, onContinue }: ContinueAsCardProps) => {
 	const signInAgain = useSignInAgain()
-
-	const submit = (event: FormEvent<HTMLFormElement>) => {
-		event.preventDefault()
-		onContinue()
-	}
+	const { account } = state
 
 	return (
 		<>
 			<CardHeading
-				lead={AUTHORIZE_COPY.continueAsLead(account.email)}
-				title={AUTHORIZE_COPY.continueAsTitle(account.name ?? account.email)}
+				lead={AUTHORIZE_COPY.continueAsLead(state.device.deviceName)}
+				title={AUTHORIZE_COPY.continueAsTitle}
 			/>
-			<form className="contents" noValidate onSubmit={submit}>
-				<PrimaryButton isBusy={false} label={AUTHORIZE_COPY.continueAs} />
-			</form>
-			<TextLinkRow>
-				<TextLink onClick={() => void signInAgain()}>
-					{AUTHORIZE_COPY.anotherAccount}
-				</TextLink>
-			</TextLinkRow>
+			<AccountCard
+				email={account.name ? account.email : undefined}
+				initials={initialsOf(displayNameOf(account))}
+				name={displayNameOf(account)}
+				plan={account.plan ? AUTHORIZE_COPY.plans[account.plan] : undefined}
+			/>
+			<ActionStack onSubmit={onContinue}>
+				<PrimaryButton
+					isBusy={false}
+					label={AUTHORIZE_COPY.continueAs(firstNameOf(account))}
+				/>
+				<GhostButton
+					isBusy={false}
+					label={AUTHORIZE_COPY.anotherAccount}
+					onClick={() => void signInAgain()}
+				/>
+			</ActionStack>
 		</>
 	)
 }
@@ -112,10 +137,13 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 		})
 	}
 
-	const approve = (event: FormEvent<HTMLFormElement>) => {
-		event.preventDefault()
+	const approve = () => {
+		const approval = {
+			deviceName: state.device.deviceName,
+			email: state.account.email,
+		}
 		decide(approveAuthorizationRequest, () =>
-			navigate({ to: "/authorize/done", replace: true }),
+			navigate({ to: "/authorize/done", replace: true, state: { approval } }),
 		)
 	}
 
@@ -128,17 +156,22 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 				lead={AUTHORIZE_COPY.approveLead(state.account.email)}
 				title={AUTHORIZE_COPY.approveTitle}
 			/>
-			<Footnote>
-				{AUTHORIZE_COPY.device(state.device.deviceName, state.device.platform)}
-			</Footnote>
-			<form className="contents" noValidate onSubmit={approve}>
+			<DeviceLine
+				caption={AUTHORIZE_COPY.deviceCaption(
+					state.device.platform,
+					state.askedMinutesAgo,
+				)}
+				name={state.device.deviceName}
+			/>
+			<BenefitList benefits={AUTHORIZE_COPY.benefits} />
+			<ActionStack onSubmit={approve}>
 				<PrimaryButton isBusy={call.isPending} label={AUTHORIZE_COPY.approve} />
-				<SecondaryButton
+				<GhostButton
 					isBusy={call.isPending}
 					label={AUTHORIZE_COPY.cancel}
 					onClick={cancel}
 				/>
-			</form>
+			</ActionStack>
 			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
 			<Footnote>{AUTHORIZE_COPY.approveFootnote}</Footnote>
 		</>
@@ -153,37 +186,41 @@ const PendingAuthorization = ({ state }: PendingAuthorizationProps) => {
 	const [hasContinued, setHasContinued] = useState(false)
 	const [closedAs, setClosedAs] = useState<ClosedKind | null>(null)
 
-	if (closedAs) return <ClosedCard kind={closedAs} />
-	if (!hasContinued && !state.isJustSignedIn) {
-		return (
-			<ContinueAsCard
-				account={state.account}
-				onContinue={() => setHasContinued(true)}
-			/>
-		)
-	}
-	return <ApproveCard onClosed={setClosedAs} state={state} />
-}
-
-export const AuthorizePage = () => {
-	const state = authorizeRoute.useLoaderData()
-
+	if (closedAs) return <ClosedPage kind={closedAs} />
 	return (
-		<LoginShell>
-			{state.kind === "pending" ? (
-				<PendingAuthorization key={state.request} state={state} />
+		<LoginShell width="wide">
+			{hasContinued || state.isJustSignedIn ? (
+				<ApproveCard onClosed={setClosedAs} state={state} />
 			) : (
-				<ClosedCard kind={state.kind} />
+				<ContinueAsCard
+					onContinue={() => setHasContinued(true)}
+					state={state}
+				/>
 			)}
 		</LoginShell>
 	)
 }
 
-export const AuthorizeDonePage = () => (
-	<LoginShell>
-		<CardHeading
-			lead={AUTHORIZE_COPY.doneLead}
-			title={AUTHORIZE_COPY.doneTitle}
-		/>
-	</LoginShell>
-)
+export const AuthorizePage = () => {
+	const state = authorizeRoute.useLoaderData()
+
+	if (state.kind !== "pending") return <ClosedPage kind={state.kind} />
+	return <PendingAuthorization key={state.request} state={state} />
+}
+
+export const AuthorizeDonePage = () => {
+	const approval = useLocation({
+		select: (location) => location.state.approval,
+	})
+
+	if (!approval) return <ClosedPage kind="expired" />
+	return (
+		<LoginShell>
+			<StatusChip status="signed-in" />
+			<CardHeading
+				lead={AUTHORIZE_COPY.doneLead(approval.deviceName, approval.email)}
+				title={AUTHORIZE_COPY.doneTitle}
+			/>
+		</LoginShell>
+	)
+}
