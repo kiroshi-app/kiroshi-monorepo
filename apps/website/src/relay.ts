@@ -227,10 +227,6 @@ const signOutEverywhere = async () => {
 	await send({ path: "/me/sessions", method: "DELETE" })
 }
 
-const signOutSite = async () => {
-	await send({ path: "/api/auth/sign-out", method: "POST" })
-}
-
 const authorizationPath = (request: string) =>
 	`/authorization-requests/${encodeURIComponent(request)}`
 
@@ -277,5 +273,4 @@ export {
 	signInWithCode,
 	signOutEverywhere,
 	signOutSession,
-	signOutSite,
 }

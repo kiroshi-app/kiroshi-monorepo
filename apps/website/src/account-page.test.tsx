@@ -30,7 +30,6 @@ const SESSIONS = "GET /me/sessions"
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const SIGN_OUT_EVERYWHERE = "DELETE /me/sessions"
-const SIGN_OUT_SITE = "POST /api/auth/sign-out"
 const RETRY_LABEL = "Retry"
 
 const signOutOf = (id: string) => `DELETE /me/sessions/${id}`
@@ -105,7 +104,6 @@ const relayRoutes = (): RelayRoutes => ({
 	[signOutOf("mini")]: NO_CONTENT,
 	[signOutOf("unnamed")]: NO_CONTENT,
 	[SIGN_OUT_EVERYWHERE]: NO_CONTENT,
-	[SIGN_OUT_SITE]: { body: { success: true } },
 })
 
 let routes: RelayRoutes = {}
@@ -316,11 +314,18 @@ describe("the signed-in devices", () => {
 		expect(rowNames()).toEqual([MINI, MAC, IPHONE, ACCOUNT_COPY.unknownDevice])
 	})
 
+	it("captions a session seen under a minute ago Active now", async () => {
+		await openAccount()
+
+		expect(within(rowOf(MINI)).getByText(/· Active now$/)).toBeTruthy()
+		expect(screen.queryByText(/Signed in just now/)).toBeNull()
+	})
+
 	it("names each row with its platform and last seen time", async () => {
 		await openAccount()
 
 		expect(
-			within(rowOf(MINI)).getByText("Kiroshi for Mac · Signed in just now"),
+			within(rowOf(MINI)).getByText("Kiroshi for Mac · Active now"),
 		).toBeTruthy()
 		expect(
 			within(rowOf(MAC)).getByText("Kiroshi for Mac · 3 days ago"),
@@ -351,7 +356,6 @@ describe("the confirmation", () => {
 		[rowSignOut(MAC), ACCOUNT_COPY.signOutDeviceTitle(MAC)],
 		[rowSignOut(MINI), ACCOUNT_COPY.signOutThisDeviceTitle],
 		[ACCOUNT_COPY.signOutEverywhere, ACCOUNT_COPY.signOutEverywhereTitle],
-		[ACCOUNT_COPY.signOut, ACCOUNT_COPY.signOutSiteTitle],
 	])("asks before %s and sends nothing on Cancel", async (label, title) => {
 		await openAccount()
 		const callsBefore = calls.length
@@ -365,6 +369,37 @@ describe("the confirmation", () => {
 		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
 		expect(calls).toHaveLength(callsBefore)
 	})
+})
+
+describe("the confirmation copy", () => {
+	it.each([
+		[
+			rowSignOut(MAC),
+			"Sign out Alex’s MacBook Pro?",
+			"You’ll need to sign in again on Alex’s MacBook Pro.",
+		],
+		[
+			rowSignOut(MINI),
+			"Sign out this device?",
+			"You’ll need to sign in again to come back here.",
+		],
+		[
+			"Sign out everywhere",
+			"Sign out everywhere?",
+			"Every device signed in to your account signs out, this one included. Sign in again on each one to come back.",
+		],
+	])(
+		"before %s reads its title and description",
+		async (label, title, description) => {
+			await openAccount()
+
+			press(label)
+
+			const dialog = await confirmation()
+			expect(within(dialog).getByRole("heading", { name: title })).toBeTruthy()
+			expect(within(dialog).getByText(description)).toBeTruthy()
+		},
+	)
 })
 
 describe("Sign out on a row", () => {
@@ -471,38 +506,19 @@ describe("Sign out everywhere", () => {
 	})
 })
 
-describe("the site sign-out", () => {
-	it("signs the bearer session out, clears it and leaves the site signed out", async () => {
-		const router = await openAccount()
-
-		await pressAndConfirm(ACCOUNT_COPY.signOut)
-
-		await leftSignedOut(router)
-		expect(callsTo(SIGN_OUT_SITE)).toHaveLength(1)
-		expect(callsTo(SIGN_OUT_EVERYWHERE)).toHaveLength(0)
-	})
-
-	it("disables itself while pending, then shows what failed with a Retry", async () => {
-		const reply = deferredReply()
-		routes[SIGN_OUT_SITE] = reply.promise
+describe("the actions under the device list", () => {
+	it("offer Sign out everywhere and no standalone Sign out", async () => {
 		await openAccount()
 
-		await pressAndConfirm(ACCOUNT_COPY.signOut)
-
-		await expectPending(ACCOUNT_COPY.signOut)
-		reply.resolve(relayError(500, "INTERNAL"))
-		await screen.findByRole("alert")
-		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
-		routes[SIGN_OUT_SITE] = { body: { success: true } }
-		press(RETRY_LABEL)
-		await waitFor(() => expect(callsTo(SIGN_OUT_SITE)).toHaveLength(2))
+		expect(button("Sign out everywhere")).toBeTruthy()
+		expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull()
 	})
 
-	it("leaves the site signed out when the bearer is already rejected", async () => {
-		routes[SIGN_OUT_SITE] = relayError(401, "UNAUTHENTICATED")
+	it("leave the site signed out when the bearer is already rejected", async () => {
+		routes[SIGN_OUT_EVERYWHERE] = relayError(401, "UNAUTHENTICATED")
 		const router = await openAccount()
 
-		await pressAndConfirm(ACCOUNT_COPY.signOut)
+		await pressAndConfirm(ACCOUNT_COPY.signOutEverywhere)
 
 		await leftSignedOut(router)
 	})

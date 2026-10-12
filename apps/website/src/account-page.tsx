@@ -24,7 +24,6 @@ import {
 	type Session,
 	signOutEverywhere,
 	signOutSession,
-	signOutSite,
 } from "./relay"
 import { useRelayCall } from "./use-relay-call"
 
@@ -78,7 +77,7 @@ const sentenceCase = (text: string) =>
 
 const lastSeenOf = (lastSeenAt: number) => {
 	const now = Date.now()
-	if (now - lastSeenAt < MINUTE_MS) return ACCOUNT_COPY.signedInJustNow
+	if (now - lastSeenAt < MINUTE_MS) return ACCOUNT_COPY.activeNow
 	return sentenceCase(toRelativeTime(lastSeenAt, now))
 }
 
@@ -111,7 +110,7 @@ const SessionItem = ({ session, onSignedOut }: SessionItemProps) => {
 					description={
 						session.isCurrent
 							? ACCOUNT_COPY.signOutThisDeviceLead
-							: ACCOUNT_COPY.signOutDeviceLead
+							: ACCOUNT_COPY.signOutDeviceLead(name)
 					}
 					isBusy={call.isPending}
 					label={ACCOUNT_COPY.signOut}
@@ -162,30 +161,18 @@ const Sessions = ({ sessions }: SessionsProps) => {
 	)
 }
 
-type AccountSignOutProps = {
-	label: string
-	title: string
-	description: string
-	request: SignOutRequest
-}
-
-const AccountSignOut = ({
-	label,
-	title,
-	description,
-	request,
-}: AccountSignOutProps) => {
+const SignOutEverywhere = () => {
 	const call = useSignOutCall()
 
 	return (
 		<>
 			<SignOutButton
 				confirmLabel={ACCOUNT_COPY.signOut}
-				description={description}
+				description={ACCOUNT_COPY.signOutEverywhereLead}
 				isBusy={call.isPending}
-				label={label}
-				onConfirm={() => call.signOut(request, call.leaveSignedOut)}
-				title={title}
+				label={ACCOUNT_COPY.signOutEverywhere}
+				onConfirm={() => call.signOut(signOutEverywhere, call.leaveSignedOut)}
+				title={ACCOUNT_COPY.signOutEverywhereTitle}
 			/>
 			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
 		</>
@@ -212,18 +199,7 @@ export const AccountPage = () => {
 			<AccountSection heading={ACCOUNT_COPY.devicesHeading}>
 				<Sessions sessions={sessions} />
 				<AccountActions>
-					<AccountSignOut
-						description={ACCOUNT_COPY.signOutEverywhereLead}
-						label={ACCOUNT_COPY.signOutEverywhere}
-						request={signOutEverywhere}
-						title={ACCOUNT_COPY.signOutEverywhereTitle}
-					/>
-					<AccountSignOut
-						description={ACCOUNT_COPY.signOutSiteLead}
-						label={ACCOUNT_COPY.signOut}
-						request={signOutSite}
-						title={ACCOUNT_COPY.signOutSiteTitle}
-					/>
+					<SignOutEverywhere />
 				</AccountActions>
 			</AccountSection>
 		</AccountShell>
