@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	opaque,
 	PICKED_PICTURE_FILE,
+	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
@@ -671,9 +672,9 @@ export const SignedIn = meta.story({
 		const panel = await accountPanelIn(dialog)
 
 		await expect(within(panel).queryByRole("heading")).toBeNull()
-		const avatar = panel.querySelector('[data-slot="user-avatar"]')
+		const avatar = slotIn(panel, "user-avatar")
 		await expect(avatar).toBeVisible()
-		await expect(avatar?.querySelector("img")).toBeNull()
+		await expect(avatar.querySelector("img")).toBeNull()
 		await expect(avatar).toHaveTextContent("AM")
 		await expect(within(panel).getByText(SIGNED_IN.name)).toBeVisible()
 		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
@@ -716,9 +717,9 @@ export const SignedInWithPicture = meta.story({
 		const dialog = await dialogIn()
 		const panel = await accountPanelIn(dialog)
 
-		const avatar = panel.querySelector('[data-slot="user-avatar"]')
+		const avatar = slotIn(panel, "user-avatar")
 		await waitFor(() =>
-			expect(avatar?.querySelector("img")).toHaveAttribute(
+			expect(avatar.querySelector("img")).toHaveAttribute(
 				"src",
 				UPLOADED_AVATAR_IMAGE,
 			),
