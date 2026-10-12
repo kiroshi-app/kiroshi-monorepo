@@ -82,13 +82,6 @@ const garageTransport = () =>
 	({
 		list: async () => [GARAGE],
 		remove: vi.fn(async (_id: string) => undefined),
-		rename: vi.fn(async (spaceId: string, name: string) => ({
-			id: spaceId,
-			name,
-			colour: null,
-			position: 0,
-			createdAt: 0,
-		})),
 		onChanged: async () => () => undefined,
 		onRemoved: async () => () => undefined,
 	}) satisfies JoinedSpacesTransport
@@ -231,7 +224,7 @@ describe("SpaceSettingsHost on a joined space", () => {
 		}
 	})
 
-	it("renames the joined space on its host and shows the new name", async () => {
+	it("keeps the name of a joined space and writes no rename", async () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
@@ -241,11 +234,9 @@ describe("SpaceSettingsHost on a joined space", () => {
 			})
 		})
 
-		expect(gear.transport.rename).toHaveBeenLastCalledWith("garage", "Atelier")
-		expect(within(dialog).getByDisplayValue("Atelier")).toBeTruthy()
-		expect(gear.joined.getState().joinedSpaces).toEqual([
-			{ ...GARAGE, name: "Atelier" },
-		])
+		expect(within(dialog).getByDisplayValue("Garage")).toBeTruthy()
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
+		expect(invoke).not.toHaveBeenCalledWith("space_update", expect.anything())
 	})
 
 	it("leaves through the roster path, closes the dialog and selects the first local space", async () => {

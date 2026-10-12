@@ -1865,7 +1865,6 @@ describe("Space Settings of a joined Space", () => {
 		],
 		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],
 		["agent_live_sessions_in_space", { spaceId: "garage" }],
-		["space_update", { id: "garage", name: "Atelier", colour: null }],
 	])("relays %s to the host", async (command, args) => {
 		const { hosts, local, fetch, reportFailure } = await onGarage()
 
@@ -1876,16 +1875,6 @@ describe("Space Settings of a joined Space", () => {
 		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
-	it("serves space_update of another Space on this Mac", async () => {
-		const { hosts, local, fetch } = await onGarage()
-		const args = { id: "personal", name: "Home", colour: null }
-
-		await hosts.invoke("space_update", args)
-
-		expect(local.invoke).toHaveBeenLastCalledWith("space_update", args)
-		expect(fetch).not.toHaveBeenCalled()
-	})
-
 	it.each([
 		["env_list", { scope: { kind: "space", id: "personal" } }],
 		["mcp_application_status", { owner: { kind: "space", id: "personal" } }],
@@ -1893,7 +1882,6 @@ describe("Space Settings of a joined Space", () => {
 		["hosting_members", { spaceId: "personal" }],
 		["hosting_remove_member", { spaceId: "personal", userId: "ana" }],
 		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],
-		["space_update", { id: "personal", name: "Home", colour: null }],
 	])("serves %s of a local Space on this Mac", async (command, args) => {
 		const { hosts, local, fetch } = joinedHostsOf()
 

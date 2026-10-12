@@ -17,10 +17,8 @@ import {
 	type JoinedSpaceRemoved,
 } from "../bindings"
 import { failureReporterIn } from "../failure-report"
-import { invoke, joinedHosts, listen } from "../host"
-import { createQueue } from "../queue"
+import { joinedHosts, listen } from "../host"
 import { createStore } from "../store"
-import { createWriteLoop } from "../write-loop"
 import type { RosterSpace } from "../bots/roster-controller"
 import type { Space } from "../conversations/store-contract"
 import { joinRejectionNoticeOf } from "../host/join-refusal"
@@ -47,7 +45,6 @@ export type JoinedSpacesController = {
 	askToLeave: () => void
 	setLeaveOpen: (isLeaveOpen: boolean) => void
 	leave: (id: string) => Promise<void>
-	rename: (id: string, name: string) => void
 	admit: (joined: JoinedSpace, hostEmail: string) => Promise<void>
 	hostEmailOf: (id: string) => string
 }
@@ -55,7 +52,6 @@ export type JoinedSpacesController = {
 export type JoinedSpacesTransport = {
 	list: () => Promise<JoinedSpace[]>
 	remove: (id: string) => Promise<void>
-	rename: (spaceId: string, name: string) => Promise<Space>
 	onChanged: (listener: () => void) => Promise<() => void>
 	onRemoved: (
 		listener: (removed: JoinedSpaceRemoved) => void,
@@ -92,8 +88,6 @@ const joinedSpacesTransport: JoinedSpacesTransport = {
 	remove: async (id) => {
 		dataOf(await commands.joinedSpaceRemove(id))
 	},
-	rename: (spaceId, name) =>
-		invoke<Space>("space_update", { id: spaceId, name, colour: null }),
 	onChanged: (listener) => listen(JOINED_SPACE_CHANGED_EVENT, () => listener()),
 	onRemoved: (listener) =>
 		listen<JoinedSpaceRemoved>(JOINED_SPACE_REMOVED_EVENT, ({ payload }) =>
@@ -211,20 +205,9 @@ export const createJoinedSpacesController = ({
 	let hasRead = false
 	let pendingRowId: string | null = null
 	let awaitedRowId: string | null = null
-	const writtenNames = new Map<string, string>()
 
 	const set = (fields: Partial<JoinedSpacesState>) =>
 		stateStore.setState({ ...current(), ...fields })
-
-	const withWrittenName = (joined: JoinedSpace): JoinedSpace => {
-		const name = writtenNames.get(joined.id)
-		return name === undefined ? joined : { ...joined, name }
-	}
-
-	const named = (id: string, name: string) =>
-		current().joinedSpaces.map((joined) =>
-			joined.id === id ? { ...joined, name } : joined,
-		)
 
 	const reportRefusal = (reason: unknown) =>
 		reportFailure(joinRejectionNoticeOf(reason))
@@ -261,7 +244,7 @@ export const createJoinedSpacesController = ({
 		latestRead += 1
 		const ticket = latestRead
 		try {
-			const joinedSpaces = (await transport.list()).map(withWrittenName)
+			const joinedSpaces = await transport.list()
 			if (ticket === latestRead) {
 				const gone = vanishedFrom(joinedSpaces)
 				set({ joinedSpaces, hasFailedToLoad: false })
@@ -394,27 +377,6 @@ export const createJoinedSpacesController = ({
 		selectSpace(rowIdOf(learned ?? joined))
 	}
 
-	const writeName = (id: string, name: string) => {
-		const joined = current().joinedSpaces.find((held) => held.id === id)
-		return joined
-			? transport.rename(hostSpaceIdOf(joined), name)
-			: Promise.resolve(null)
-	}
-
-	const nameWrites = createWriteLoop<string, Space>({
-		enqueue: createQueue(),
-		write: writeName,
-		apply: (id, written) => writtenNames.set(id, written.name),
-		onRefused: () => {
-			void read()
-		},
-	})
-
-	const rename = (id: string, name: string) => {
-		set({ joinedSpaces: named(id, name) })
-		nameWrites.push(id, name)
-	}
-
 	const leave = async (id: string) => {
 		const leaving = current().joinedSpaces.find((joined) => joined.id === id)
 		if (!leaving) {
@@ -448,7 +410,6 @@ export const createJoinedSpacesController = ({
 			}),
 		setLeaveOpen: (isLeaveOpen: boolean) => set({ isLeaveOpen }),
 		leave,
-		rename,
 		admit,
 		hostEmailOf: inviters.of,
 	}

@@ -37,6 +37,7 @@ import { createStore } from "../store"
 export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"space_list",
 	"space_create",
+	"space_update",
 	"space_reorder",
 	"space_delete",
 	"space_export",
@@ -161,12 +162,7 @@ const unheard: Listen = async () => () => undefined
 const isLocalCommand = (command: string): boolean =>
 	command.startsWith(TAURI_PLUGIN_PREFIX) || LOCAL_COMMANDS.has(command)
 
-type ScopeFields = {
-	id?: unknown
-	kind?: unknown
-	owner?: unknown
-	scope?: unknown
-}
+type ScopeFields = { kind?: unknown; owner?: unknown; scope?: unknown }
 
 const fieldsOf = (value: unknown): ScopeFields =>
 	typeof value === "object" && value !== null ? value : {}
@@ -581,9 +577,6 @@ export const createJoinedHosts = ({
 		)
 	}
 
-	const updatesAnotherSpace = (command: string, args?: InvokeArgs) =>
-		command === "space_update" && fieldsOf(args).id !== activeSpaceId()
-
 	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
 		const refusal = hostOnlyRefusalOf(command)
 		reportFailure(refusal)
@@ -596,8 +589,7 @@ export const createJoinedHosts = ({
 		if (
 			isLocalCommand(command) ||
 			active === null ||
-			carriesPersonalScope(args) ||
-			updatesAnotherSpace(command, args)
+			carriesPersonalScope(args)
 		) {
 			return sendTo<T>(null, call)
 		}

@@ -65,13 +65,6 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 		remove: vi.fn(async (id: string) => {
 			held = held.filter((joined) => joined.id !== id)
 		}),
-		rename: vi.fn(async (spaceId: string, name: string) => ({
-			id: spaceId,
-			name,
-			colour: null,
-			position: 0,
-			createdAt: 0,
-		})),
 		onChanged: vi.fn(async (listener: () => void) => {
 			announce = listener
 			return () => undefined
@@ -437,51 +430,6 @@ describe("accepting an invited space", () => {
 			STUDIO.remoteSpaceId,
 		)
 		expect(gear.joined.hostEmailOf(STUDIO.id)).toBe(HOST_EMAIL)
-	})
-})
-
-describe("renaming a joined space", () => {
-	const watchedGarage = async () => {
-		const gear = await gearFor([GARAGE])
-		gear.joined.watch()
-		await settle()
-		return gear
-	}
-
-	it("writes the name on the host under the shared space id and shows it at once", async () => {
-		const gear = await watchedGarage()
-
-		gear.joined.rename(GARAGE.id, "Atelier")
-
-		expect(gear.joined.getState().joinedSpaces).toEqual([
-			{ ...GARAGE, name: "Atelier" },
-		])
-		await settle()
-		expect(gear.wire.transport.rename).toHaveBeenCalledWith("garage", "Atelier")
-	})
-
-	it("keeps the written name across a later read of the joined spaces", async () => {
-		const gear = await watchedGarage()
-		gear.joined.rename(GARAGE.id, "Atelier")
-		await settle()
-
-		gear.wire.announce()
-		await settle()
-
-		expect(gear.joined.getState().joinedSpaces).toEqual([
-			{ ...GARAGE, name: "Atelier" },
-		])
-	})
-
-	it("reads the held name back when the host refuses the rename", async () => {
-		const gear = await watchedGarage()
-		gear.wire.transport.rename.mockRejectedValueOnce(new Error("refused"))
-
-		gear.joined.rename(GARAGE.id, "Atelier")
-		await settle()
-		await settle()
-
-		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 })
 

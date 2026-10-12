@@ -108,7 +108,6 @@ const openStudio = async () => {
 		transport: {
 			list: async () => [STUDIO_SPACE],
 			remove: async () => undefined,
-			rename: vi.fn(),
 			onChanged: async () => () => undefined,
 			onRemoved: async () => () => undefined,
 		},
