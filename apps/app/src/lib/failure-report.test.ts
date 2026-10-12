@@ -114,7 +114,6 @@ describe("raiseReportedFailure", () => {
 
 		expect(copiedTextOfRaisedNotice().split("\n")).toEqual([
 			"Kiroshi failure report",
-			"Couldn’t read the models this machine offers.",
 			expect.stringMatching(/^App version: \d+\.\d+\.\d+/),
 			"Platform: macos",
 			`Time: ${RAISED_AT}`,
