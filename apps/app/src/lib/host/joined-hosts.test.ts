@@ -1797,6 +1797,36 @@ describe("personal Settings while a joined Space is active", () => {
 		expect(relayedCommands(fetch)).toEqual([])
 	})
 
+	it("cancels a connect on this Mac only once its joined host is forgotten", async () => {
+		const { hosts, local, fetch, sockets, reportFailure } = await onGarage()
+		await hosts.invoke("mcp_oauth_connect", { owner: { kind: "user" } })
+		const socketsBeforeForget = sockets.length
+
+		hosts.forget("garage")
+		await hosts.invoke("mcp_oauth_cancel")
+
+		expect(
+			localCommands(local).filter((command) => command === "mcp_oauth_cancel"),
+		).toHaveLength(1)
+		expect(relayedCommands(fetch)).toEqual([])
+		expect(sockets).toHaveLength(socketsBeforeForget)
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("cancels on this Mac a connect its forgotten host refused", async () => {
+		const { hosts, fetch, sockets } = await onGarage()
+		await expect(
+			hosts.invoke("mcp_oauth_connect", { owner: JOINED_SPACE }),
+		).rejects.toThrow(HOST_ONLY_REFUSAL)
+		const socketsBeforeForget = sockets.length
+
+		hosts.forget("garage")
+		await expect(hosts.invoke("mcp_oauth_cancel")).resolves.toBe("local")
+
+		expect(relayedCommands(fetch)).toEqual([])
+		expect(sockets).toHaveLength(socketsBeforeForget)
+	})
+
 	it("raises one notice when the joined host refuses a relayed call", async () => {
 		const { hosts, fetch, reportFailure } = await onGarage()
 		fetch.mockImplementation(
