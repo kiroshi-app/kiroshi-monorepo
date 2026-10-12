@@ -15,6 +15,10 @@
             UserDefaults.standard.bool(forKey: "holdsTimes")
         }
 
+        static var hasHistory: Bool {
+            UserDefaults.standard.bool(forKey: "history")
+        }
+
         static var draft: String {
             UserDefaults.standard.string(forKey: "draft")
                 ?? (SignInFixture.opened == .groupMention ? "@" : "")
@@ -26,11 +30,9 @@
         static let pico = Companion(id: "pico-6", name: "Pico", role: "Builder", tint: .orange)
         static let mira = Companion(id: "mira-9", name: "Mira", role: "Designer", tint: .purple)
         static let otto = Companion(id: "otto-5", name: "Otto", role: "Digest")
-        static let companions = [
-            juniper, atlas, pico,
-            Companion(id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png"),
-            mira, otto,
-        ]
+        static let shoto = Companion(
+            id: "shoto-1", name: "Shoto", tint: .pink, picturePath: "/avatars/shoto.png")
+        static let companions = [juniper, atlas, pico, shoto, mira, otto]
 
         static let listMessages: [Companion.ID: [FixtureHost.Message]] = [
             "juniper-6": [
@@ -192,6 +194,23 @@
                     hour: 8, minute: 30)
             ]
 
+        static let releaseHistory: [FixtureHost.Message] = [
+            .init(
+                id: "m-tone", isYours: false,
+                content:
+                    "I kept the tone close to the last two releases: short, one line per change, no jargon.\n\nWant me to add the screenshots?",
+                daysAgo: 1, hour: 17, minute: 2),
+            .init(
+                id: "m-headlines", isYours: true,
+                content: "What changed since 0.41? Just the headlines.", daysAgo: 1, hour: 17,
+                minute: 10),
+            .init(
+                id: "m-landed", isYours: false,
+                content:
+                    "Applications landed, the roster scrolls per space, and notifications respect focus now.\n\nEleven fixes on top. I’d lead with the first one.",
+                daysAgo: 1, hour: 17, minute: 12),
+        ]
+
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
                 fixture.rawValue.hasPrefix("2.")
@@ -209,7 +228,7 @@
             case .conversationsLive:
                 script.playsGroupChanges = true
             case .thread, .swipedThread:
-                script.messages[juniper.id] = releaseNotes
+                script.messages[juniper.id] = (hasHistory ? releaseHistory : []) + releaseNotes
             case .threadHostOffline:
                 script.messages[juniper.id] = releaseNotes
                 script.hostLeavesAfter = .seconds(2)

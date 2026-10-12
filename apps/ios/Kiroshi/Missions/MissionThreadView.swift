@@ -50,10 +50,8 @@ struct MissionThreadView: View {
         }
         .navigationTitle(thread.mission.objective)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                MissionTitle(mission: thread.mission, companion: companion)
-            }
+        .threadHeader(companion: companion, isWorking: thread.mission.isAgentRunning) {
+            MissionHeaderLines(mission: thread.mission, companion: companion)
         }
         .toolbar(.hidden, for: .tabBar)
         .task(id: space.connection.map(ObjectIdentifier.init)) {
@@ -64,33 +62,6 @@ struct MissionThreadView: View {
 
     private var companion: MissionCompanion? {
         missions.companion(of: thread.mission)
-    }
-}
-
-struct MissionTitle: View {
-    let mission: Mission
-    let companion: MissionCompanion?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            CompanionAvatar(companion, size: .title, isWorking: mission.isAgentRunning)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(mission.titleLine(companion: companion))
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Text(mission.objective)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-            }
-        }
-        .padding(.leading, 8)
-        .padding(.trailing, 16)
-        .frame(minHeight: 44)
-        .glassEffect(in: .capsule)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityShowsLargeContentViewer()
     }
 }
 

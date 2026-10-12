@@ -90,6 +90,12 @@ The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture group-mention
 ```
 
+A thread's header is variant A of the page "Header, explorations": the companion's avatar over a glass capsule, its name then its title (the `title` of `conversation_bots`) in a Conversation, `ticket · companion · title` over the mission in a Mission, the thread blurring under it through the system scroll edge effect. A companion without a title shows its name alone. `-history YES` gives `3.1` and `5.2` the earlier messages the `scrolled` artboards draw, so the thread runs under the header:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -history YES
+```
+
 `KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and checks each open shows the loading then lands on the last message with no scroll, opens the menu of Spaces on 2.1, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
@@ -100,7 +106,7 @@ Page 5 "Missions" of "Kiroshi, iOS 2" opens on the Missions tab: `5.1` (the grou
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 5.2 -AppleLocale en_US -holdsTimes YES
 ```
 
-`KiroshiUITests` runs the accessibility audit on `5.1`, `5.3` and `5.4`, opens OPE-212 from `5.1` and audits it as `5.2` draws it, then swipes left to bring the times in.
+`KiroshiUITests` runs the accessibility audit on `5.1`, `5.3` and `5.4`, opens OPE-212 from `5.1` and audits it as `5.2` draws it, then swipes left to bring the times in. `ThreadHeaderTests` opens Juniper, Shoto and OPE-212 from their lists and reads each header: `Juniper, Writer`, `Shoto`, `OPE-212 · Atlas · Planner, Split the onboarding flow`.
 
 ## Settings and Sign out without the network
 

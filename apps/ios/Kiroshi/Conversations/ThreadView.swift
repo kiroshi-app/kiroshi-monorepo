@@ -68,13 +68,7 @@ struct ThreadView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(thread.subject.title)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                ThreadTitle(
-                    subject: thread.subject,
-                    working: thread.isWorking ? Set(thread.workingCompanions.map(\.id)) : [])
-            }
-        }
+        .modifier(ThreadSubjectHeader(subject: thread.subject, working: working))
         .toolbar(.hidden, for: .tabBar)
         .task(id: space.connection.map(ObjectIdentifier.init)) {
             guard let connection = space.connection else { return }
@@ -91,6 +85,30 @@ struct ThreadView: View {
     private var soloCompanion: Companion? {
         guard case .companion(let companion) = thread.subject else { return nil }
         return companion
+    }
+
+    private var working: Set<Companion.ID> {
+        thread.isWorking ? Set(thread.workingCompanions.map(\.id)) : []
+    }
+}
+
+private struct ThreadSubjectHeader: ViewModifier {
+    let subject: ConversationSubject
+    let working: Set<Companion.ID>
+
+    func body(content: Content) -> some View {
+        switch subject {
+        case .companion(let companion):
+            content.threadHeader(companion: companion, isWorking: !working.isEmpty) {
+                CompanionHeaderLines(companion: companion)
+            }
+        case .group(let group):
+            content.toolbar {
+                ToolbarItem(placement: .principal) {
+                    GroupThreadTitle(group: group, working: working)
+                }
+            }
+        }
     }
 }
 
@@ -127,31 +145,16 @@ struct ThreadEntryView: View {
     }
 }
 
-struct ThreadTitle: View {
-    let subject: ConversationSubject
+struct GroupThreadTitle: View {
+    let group: GroupConversation
     let working: Set<Companion.ID>
 
     var body: some View {
         HStack(spacing: 8) {
-            switch subject {
-            case .companion(let companion):
-                CompanionAvatar(companion, size: .title, isWorking: !working.isEmpty)
-            case .group(let group):
-                GroupAvatar(group: group, size: .title, working: working)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(subject.title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if case .companion(let companion) = subject, let role = companion.role {
-                    Text(role)
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .padding(.horizontal, 6)
-                        .background(Color(.systemGray5), in: .rect(cornerRadius: 5))
-                }
-            }
+            GroupAvatar(group: group, size: .title, working: working)
+            Text(group.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
         }
         .padding(.leading, 8)
         .padding(.trailing, 16)

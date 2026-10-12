@@ -69,6 +69,9 @@ struct MissionGroupTests {
         #expect(
             mission.detailLine(companion: atlas) == "Atlas · Asked you which screen goes first.")
         #expect(mission.titleLine(companion: atlas) == "OPE-1 · Atlas")
+        #expect(
+            mission.titleLine(companion: Companion(id: "bot-1", name: "Atlas", role: "Planner"))
+                == "OPE-1 · Atlas · Planner")
         #expect(mission.detailLine(companion: nil) == "Asked you which screen goes first.")
     }
 

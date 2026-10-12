@@ -31,7 +31,7 @@
         }
 
         private static let companions = #"""
-            [{"id":"bot-atlas","name":"Atlas","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","avatarBlot":"purple"}]
+            [{"id":"bot-atlas","name":"Atlas","title":"Planner","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","title":"Builder","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","title":"Writer","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","title":"Designer","avatarBlot":"purple"}]
             """#
 
         private static var feed: String {
@@ -62,12 +62,26 @@
                 .joined(separator: ",") + "]"
         }
 
+        private static var hasHistory: Bool {
+            UserDefaults.standard.bool(forKey: "history")
+        }
+
+        private static var history: String {
+            guard hasHistory else { return "" }
+            let askedAt = at(hour: 8, minute: 20)
+            let answeredAt = at(hour: 8, minute: 22)
+            return #"""
+                \#(message(id: "message-h1", seq: 1, role: "user", content: "Look at where people leave the onboarding and tell me what you’d cut.", createdAt: askedAt, botId: nil)),\#(message(id: "message-h2", seq: 2, role: "assistant", content: "The onboarding is one long screen today: account, space, first companion.\\n\\nAccount and first companion hold up fine.\\n\\nPeople drop on the space step. That’s the one to split out.", createdAt: answeredAt, botId: "bot-atlas")),
+                """#
+        }
+
         private static var thread: String {
             let summonedAt = at(hour: 8, minute: 30)
             let askedAt = at(hour: 8, minute: 31)
             let answeredAt = at(hour: 8, minute: 32)
+            let seq = hasHistory ? 2 : 0
             return #"""
-                {"conversationId":"\#(threadConversationId)","hasMore":false,"arrivals":[],"messages":[\#(message(id: "message-1", seq: 1, role: "user", content: "Carry out this mission.", createdAt: summonedAt, botId: nil)),\#(message(id: "message-2", seq: 2, role: "user", content: "Split OPE-212 in two, one ticket per screen.", createdAt: askedAt, botId: nil)),\#(message(id: "message-3", seq: 3, role: "assistant", content: "Done. OPE‑212 keeps the account step, OPE‑219 takes the space picker. Both are in Linear.\\n\\nWhich one goes first? The space picker needs the account step, so I’d start there.", createdAt: answeredAt, botId: "bot-atlas"))]}
+                {"conversationId":"\#(threadConversationId)","hasMore":false,"arrivals":[],"messages":[\#(history)\#(message(id: "message-1", seq: seq + 1, role: "user", content: "Carry out this mission.", createdAt: summonedAt, botId: nil)),\#(message(id: "message-2", seq: seq + 2, role: "user", content: "Split OPE-212 in two, one ticket per screen.", createdAt: askedAt, botId: nil)),\#(message(id: "message-3", seq: seq + 3, role: "assistant", content: "Done. OPE‑212 keeps the account step, OPE‑219 takes the space picker. Both are in Linear.\\n\\nWhich one goes first? The space picker needs the account step, so I’d start there.", createdAt: answeredAt, botId: "bot-atlas"))]}
                 """#
         }
 

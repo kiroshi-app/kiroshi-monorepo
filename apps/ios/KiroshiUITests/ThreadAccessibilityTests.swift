@@ -104,11 +104,11 @@ final class ThreadAccessibilityTests: XCTestCase {
     func auditTheThread(
         _ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>? = nil
     ) throws {
-        let navigationBar = app.navigationBars.firstMatch.frame
+        let titleBottom = titleBottom(in: app)
         let transcript = app.scrollViews.firstMatch.frame
         try audit(app) { issue in
             guard let element = issue.element else { return false }
-            let isInTheTitle = element.frame.minY < navigationBar.maxY
+            let isInTheTitle = element.frame.minY < titleBottom
             let isScrolledOffScreenAtTheLargestSize =
                 onScreenAtTheLargestSize.map {
                     transcript.contains(element.frame) && !$0.contains(element.label)
