@@ -6,7 +6,12 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { storedOwnAccounts } from "./own-accounts"
 
-import { ACCOUNT_CHANGED_EVENT, type AccountState, commands } from "../bindings"
+import {
+	ACCOUNT_CHANGED_EVENT,
+	type AccountFailure,
+	type AccountState,
+	commands,
+} from "../bindings"
 import { raiseReportedFailure } from "../failure-report"
 import { listen } from "../host"
 import { createStore } from "../store"
@@ -17,13 +22,19 @@ export type AccountController = {
 	getState: () => AccountState
 	subscribe: (listener: () => void) => () => void
 	watch: () => () => void
-	signIn: (email: string) => void
+	signIn: () => void
 	cancel: () => void
 	signOut: () => void
 	signOutLeaving: (spaceNames: string) => Promise<void>
 }
 
-const SIGNED_OUT: AccountState = { kind: "signedOut" }
+const SIGNED_OUT: AccountState = { kind: "signedOut", reason: null }
+
+const FAILURE_TITLE_KEYS = {
+	expired: "settings:account.failed.timedOut",
+	cancelled: "settings:account.failed.serverError",
+	unreachable: "settings:account.failed.serverError",
+} as const satisfies Record<AccountFailure, string>
 
 const transitionOf = (state: AccountState) =>
 	state.kind === "failed" ? `failed:${state.failure}` : state.kind
@@ -37,7 +48,7 @@ const noticeFor = (state: AccountState): NoticeMessage | null => {
 	}
 	if (state.kind === "failed") {
 		return {
-			title: i18n.t(`settings:account.failed.${state.failure}`),
+			title: i18n.t(FAILURE_TITLE_KEYS[state.failure]),
 			description: i18n.t("settings:account.failed.description"),
 		}
 	}
@@ -111,11 +122,8 @@ export const createAccountController = (): AccountController => {
 		getState: stateStore.getState,
 		subscribe: stateStore.subscribe,
 		watch,
-		signIn: (email) =>
-			attempt(
-				() => commands.accountSignIn(email),
-				i18n.t("settings:account.signInFailed"),
-			),
+		signIn: () =>
+			attempt(commands.accountSignIn, i18n.t("settings:account.signInFailed")),
 		cancel: () =>
 			attempt(commands.accountSignOut, i18n.t("settings:account.cancelFailed")),
 		signOut: () =>

@@ -15,8 +15,8 @@ use super::commands::{announce_change, announce_reconnection, announce_removal, 
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::member_link::{MemberLink, Presence, LEARN_BOUND};
 use super::proxy;
-use crate::account::cloud::{Cloud, CloudInstance};
-use crate::account::session::AccountSession;
+use crate::account::cloud::{Cloud, CloudInstance, InstancesError};
+use crate::account::session::{self, AccountSession};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::host_api::token::HostToken;
@@ -183,7 +183,14 @@ async fn memberships_followed<R: Runtime>(
 	let Some(bearer) = bearer else {
 		return Ok(());
 	};
-	let listed = guests.cloud.instances(&bearer).await?;
+	let listed = match guests.cloud.instances(&bearer).await {
+		Ok(listed) => listed,
+		Err(InstancesError::Revoked) => {
+			session::revoked(app, &bearer);
+			return Err("the cloud refused the account (401)".to_owned());
+		}
+		Err(InstancesError::Unreachable(reason)) => return Err(reason),
+	};
 	let state = app.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(described)?;
 	let hosted = database.space_hosting().registered_instance_ids().await.map_err(described)?;
@@ -415,7 +422,10 @@ async fn attempted<R: Runtime>(
 			online(app, *socket, linked, stop).await
 		}
 		Some(Opened::Unknown) => Ended::Evicted,
-		Some(Opened::Revoked) => Ended::SignedOut("the relay refused the account (401)"),
+		Some(Opened::Revoked) => {
+			session::revoked(app, &bearer);
+			Ended::SignedOut("the relay refused the account (401)")
+		}
 		Some(Opened::Forbidden) => {
 			Ended::Dropped("the account is not a member of this instance (403)".to_owned())
 		}

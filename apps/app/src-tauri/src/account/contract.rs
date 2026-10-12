@@ -23,19 +23,28 @@ pub enum AccountPlan {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum AccountFailure {
-	LinkInvalid,
-	ServerError,
-	TimedOut,
+	Expired,
+	Cancelled,
+	Unreachable,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SignedOutReason {
+	SignedOutOnSite,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AccountState {
-	#[default]
-	SignedOut,
+	#[serde(rename_all = "camelCase")]
+	SignedOut {
+		reason: Option<SignedOutReason>,
+	},
 	#[serde(rename_all = "camelCase")]
 	Waiting {
-		email: String,
+		verification_url: String,
+		expires_at: String,
 	},
 	SignedIn(KiroshiAccount),
 	#[serde(rename_all = "camelCase")]
@@ -58,10 +67,6 @@ pub enum AccountError {
 	#[serde(rename_all = "camelCase")]
 	Listener {
 		detail: String,
-	},
-	#[serde(rename_all = "camelCase")]
-	Rejected {
-		code: String,
 	},
 	SignedIn,
 }
@@ -114,14 +119,34 @@ mod tests {
 	#[test]
 	fn a_failed_state_names_its_failure_in_camel_case() {
 		assert_eq!(
-			to_value(AccountState::Failed { failure: AccountFailure::LinkInvalid })
+			to_value(AccountState::Failed { failure: AccountFailure::Expired })
 				.expect("the state serializes"),
-			json!({ "kind": "failed", "failure": "linkInvalid" })
+			json!({ "kind": "failed", "failure": "expired" })
 		);
 		assert_eq!(
-			to_value(AccountState::Waiting { email: "steve@example.com".to_owned() })
+			to_value(AccountState::Waiting {
+				verification_url: "https://kiroshi.app/authorize?request=r1".to_owned(),
+				expires_at: "2026-10-12T10:10:00.000Z".to_owned(),
+			})
+			.expect("the state serializes"),
+			json!({
+				"kind": "waiting",
+				"verificationUrl": "https://kiroshi.app/authorize?request=r1",
+				"expiresAt": "2026-10-12T10:10:00.000Z"
+			})
+		);
+	}
+
+	#[test]
+	fn a_signed_out_state_carries_its_reason_or_null() {
+		assert_eq!(
+			to_value(AccountState::SignedOut { reason: None }).expect("the state serializes"),
+			json!({ "kind": "signedOut", "reason": null })
+		);
+		assert_eq!(
+			to_value(AccountState::SignedOut { reason: Some(SignedOutReason::SignedOutOnSite) })
 				.expect("the state serializes"),
-			json!({ "kind": "waiting", "email": "steve@example.com" })
+			json!({ "kind": "signedOut", "reason": "signedOutOnSite" })
 		);
 	}
 }

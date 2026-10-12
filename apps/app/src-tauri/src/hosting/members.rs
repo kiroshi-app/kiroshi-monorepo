@@ -6,9 +6,9 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use super::contract::{Member, MemberStatus, MembersChanged, MembersError, SpaceRole};
 use super::Hosting;
-use crate::account::cloud::CloudMember;
+use crate::account::cloud::{CloudMember, MemberCallError};
 use crate::account::contract::AccountState;
-use crate::account::session::AccountSession;
+use crate::account::session::{self, AccountSession};
 use crate::db::DatabaseState;
 use crate::events::{self, MEMBERS_CHANGED};
 use crate::spaces::commands::ready;
@@ -42,11 +42,16 @@ pub async fn invite<R: Runtime>(
 	let bearer = bearer_of(app)?;
 	let hosting = app.state::<Hosting>();
 	let _turn = hosting.members_turn.lock().await;
-	hosting.cloud.invite_member(&bearer, &instance_id, &email).await?;
+	hosting
+		.cloud
+		.invite_member(&bearer, &instance_id, &email)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	let cloud_members = hosting
 		.cloud
 		.members(&bearer, &instance_id)
 		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))
 		.map_err(|failure| unread_back(failure.into()))?;
 	let invited = cloud_members
 		.iter()
@@ -91,8 +96,10 @@ async fn role_kept<R: Runtime>(
 		return Ok(());
 	};
 	let cloud = &app.state::<Hosting>().cloud;
-	if let Err(undone) =
-		cloud.remove_member(invitation.bearer, invitation.instance_id, user_id).await
+	if let Err(undone) = cloud
+		.remove_member(invitation.bearer, invitation.instance_id, user_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, invitation.bearer, failure))
 	{
 		eprintln!(
 			"an invitation to space {space_id} stands without its {role:?} role, which was not stored: {undone:?}"
@@ -139,7 +146,11 @@ async fn ended<R: Runtime>(
 		_ => {}
 	}
 	let bearer = bearer_of(app)?;
-	hosting.cloud.remove_member(&bearer, &instance_id, &user_id).await?;
+	hosting
+		.cloud
+		.remove_member(&bearer, &instance_id, &user_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	role_forgotten(app, &space_id, user_id).await?;
 	read_back(app, &space_id, &instance_id).await
 }
@@ -199,6 +210,12 @@ fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, MembersError> {
 	}
 }
 
+fn signed_out_if_revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str, failure: &MemberCallError) {
+	if matches!(failure, MemberCallError::Revoked) {
+		session::revoked(app, bearer);
+	}
+}
+
 fn is_own_account<R: Runtime>(app: &AppHandle<R>, email: &str) -> bool {
 	matches!(
 		app.state::<AccountSession>().current(),
@@ -223,7 +240,12 @@ async fn listed<R: Runtime>(
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
 	let bearer = bearer_of(app)?;
-	let members = app.state::<Hosting>().cloud.members(&bearer, instance_id).await?;
+	let members = app
+		.state::<Hosting>()
+		.cloud
+		.members(&bearer, instance_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	with_roles(app, space_id, members).await
 }
 

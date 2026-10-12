@@ -44,6 +44,12 @@ const SIGNED_IN: AccountState = {
 	plan: "pro",
 }
 
+const WAITING: AccountState = {
+	kind: "waiting",
+	verificationUrl: "https://kiroshi.app/authorize?request=request-1",
+	expiresAt: "2026-10-12T10:10:00.000Z",
+}
+
 const COPY = en.settings.account
 
 const signedInPanel = (name: string) => ({
@@ -95,7 +101,10 @@ const announce = (payload: AccountState) =>
 	})
 
 beforeEach(() => {
-	vi.mocked(commands.accountState).mockResolvedValue({ kind: "signedOut" })
+	vi.mocked(commands.accountState).mockResolvedValue({
+		kind: "signedOut",
+		reason: null,
+	})
 	vi.mocked(commands.accountSignIn).mockResolvedValue(OK)
 	vi.mocked(commands.accountSignOut).mockResolvedValue(OK)
 	vi.mocked(listen).mockImplementation(async (event, handler) => {
@@ -133,7 +142,7 @@ describe("useAccount", () => {
 	it("re-renders the panel from the state an account change carries", async () => {
 		const { result } = await mountAccount()
 
-		announce({ kind: "waiting", email: EMAIL })
+		announce(WAITING)
 
 		expect(result.current.account).toEqual({ status: "waiting" })
 
@@ -152,7 +161,7 @@ describe("useAccount", () => {
 		const { result } = await mountAccount()
 
 		announce(SIGNED_IN)
-		answerRead({ kind: "signedOut" })
+		answerRead({ kind: "signedOut", reason: null })
 		await settling()
 
 		expect(result.current.account.status).toBe("signedIn")
@@ -176,21 +185,18 @@ describe("useAccount", () => {
 		expect(commands.accountState).toHaveBeenCalledOnce()
 	})
 
-	it("signs in with the submitted email", async () => {
+	it("signs in without an email", async () => {
 		const { result } = await mountAccount()
 
 		act(() => result.current.onSignIn(EMAIL))
 		await settling()
 
-		expect(commands.accountSignIn).toHaveBeenCalledWith(EMAIL)
+		expect(commands.accountSignIn).toHaveBeenCalledWith()
 		expect(failureNotice).not.toHaveBeenCalled()
 	})
 
 	it("signs out when Cancel is pressed while waiting", async () => {
-		vi.mocked(commands.accountState).mockResolvedValue({
-			kind: "waiting",
-			email: EMAIL,
-		})
+		vi.mocked(commands.accountState).mockResolvedValue(WAITING)
 		const { result } = await mountAccount()
 
 		act(() => result.current.onCancel())
@@ -270,7 +276,7 @@ describe("useAccount", () => {
 	it("raises the unreachable notice once and renders the signed-out panel", async () => {
 		const { result, rerender } = await mountAccount()
 
-		announce({ kind: "waiting", email: EMAIL })
+		announce(WAITING)
 		announce({ kind: "unreachable", reason: "offline" })
 		rerender({ displayName: PROFILE_NAME })
 		announce({ kind: "unreachable", reason: "offline" })
@@ -281,9 +287,13 @@ describe("useAccount", () => {
 		expect(failureNotice).toHaveBeenCalledWith(reported(COPY.unreachable))
 	})
 
-	it.each(["linkInvalid", "serverError", "timedOut"] as const)(
+	it.each([
+		["expired", "timedOut"],
+		["cancelled", "serverError"],
+		["unreachable", "serverError"],
+	] as const)(
 		"raises the %s notice once and renders the signed-out panel",
-		async (failure) => {
+		async (failure, title) => {
 			const { result, rerender } = await mountAccount()
 
 			announce({ kind: "failed", failure })
@@ -294,7 +304,7 @@ describe("useAccount", () => {
 			expect(failureNotice).toHaveBeenCalledOnce()
 			expect(failureNotice).toHaveBeenCalledWith(
 				reported({
-					title: COPY.failed[failure],
+					title: COPY.failed[title],
 					description: COPY.failed.description,
 				}),
 			)
@@ -304,9 +314,9 @@ describe("useAccount", () => {
 	it("raises the notice again on a new transition into the same failure", async () => {
 		await mountAccount()
 
-		announce({ kind: "failed", failure: "timedOut" })
-		announce({ kind: "waiting", email: EMAIL })
-		announce({ kind: "failed", failure: "timedOut" })
+		announce({ kind: "failed", failure: "expired" })
+		announce(WAITING)
+		announce({ kind: "failed", failure: "expired" })
 
 		expect(failureNotice).toHaveBeenCalledTimes(2)
 	})

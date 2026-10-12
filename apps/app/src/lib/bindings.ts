@@ -8,7 +8,7 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	accountState: () => __TAURI_INVOKE<AccountState>("account_state"),
-	accountSignIn: (email: string) => typedError<null, AccountError>(__TAURI_INVOKE("account_sign_in", { email })),
+	accountSignIn: () => typedError<null, AccountError>(__TAURI_INVOKE("account_sign_in")),
 	accountSignOut: () => typedError<null, AccountError>(__TAURI_INVOKE("account_sign_out")),
 	applicationCatalogue: () => typedError<Application_Serialize[], ApplicationsError>(__TAURI_INVOKE("application_catalogue")),
 	applicationSearch: (query: string) => typedError<ApplicationSearch_Serialize, ApplicationsError>(__TAURI_INVOKE("application_search", { query })),
@@ -235,9 +235,9 @@ export type Account = {
 	plan: string | null,
 };
 
-export type AccountError = { kind: "store"; detail: string } | { kind: "listener"; detail: string } | { kind: "rejected"; code: string } | { kind: "signedIn" };
+export type AccountError = { kind: "store"; detail: string } | { kind: "listener"; detail: string } | { kind: "signedIn" };
 
-export type AccountFailure = "linkInvalid" | "serverError" | "timedOut";
+export type AccountFailure = "expired" | "cancelled" | "unreachable";
 
 export type AccountPlan = "free" | "pro";
 
@@ -251,9 +251,9 @@ export type AccountReport_Serialize = {
 	account: Account | null,
 } & CheckReport_Serialize;
 
-export type AccountState = ({ kind: "signedOut" }) & { email?: never; failure?: never; reason?: never } | ({ kind: "waiting"; email: string }) & { failure?: never; reason?: never } | {
+export type AccountState = ({ kind: "signedOut"; reason: SignedOutReason | null }) & { expiresAt?: never; failure?: never; verificationUrl?: never } | ({ kind: "waiting"; verificationUrl: string; expiresAt: string }) & { failure?: never; reason?: never } | {
 	kind: "signedIn",
-} & KiroshiAccount | ({ kind: "unreachable"; reason: string }) & { email?: never; failure?: never } | ({ kind: "failed"; failure: AccountFailure }) & { email?: never; reason?: never };
+} & KiroshiAccount | ({ kind: "unreachable"; reason: string }) & { expiresAt?: never; failure?: never; verificationUrl?: never } | ({ kind: "failed"; failure: AccountFailure }) & { expiresAt?: never; reason?: never; verificationUrl?: never };
 
 export type ActivityEvent = {
 	id: string,
@@ -1280,6 +1280,8 @@ export type SessionHandle = {
 export type SidebarTab = "conversations" | "missions" | "companions" | "applications";
 
 export type SignInError = { kind: "alreadyRunning" } | { kind: "notRunning" } | { kind: "cancelled" } | { kind: "timedOut" } | { kind: "refusedUrl"; url: string } | { kind: "flowTimedOut"; timeoutMs: number } | { kind: "failed"; detail: string } | { kind: "transport"; error: TransportError };
+
+export type SignedOutReason = "signedOutOnSite";
 
 export type Skill = {
 	id: string,

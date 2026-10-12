@@ -7,11 +7,14 @@ use serde_json::{json, Value};
 
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::invitations::contract::Invitation;
+use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
 
 const API_URL_OVERRIDE: &str = "KIROSHI_API_URL";
 
-const MAGIC_LINK_PATH: &str = "/api/auth/sign-in/magic-link";
+const AUTHORIZATION_REQUESTS_PATH: &str = "/authorization-requests";
+
+const PLATFORM: &str = "macos";
 
 const ME_PATH: &str = "/me";
 
@@ -40,9 +43,32 @@ pub enum MeError {
 	Unreachable(String),
 }
 
+pub struct AuthorizationRequest {
+	pub id: String,
+	pub poll_secret: String,
+	pub verification_url: String,
+	pub expires_at: String,
+	pub deadline: DateTime<Utc>,
+	pub interval: Duration,
+}
+
+pub enum Polled {
+	Pending { interval: Duration },
+	Approved { token: String },
+	Expired,
+	Cancelled,
+	SlowedDown,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MagicLinkError {
-	Rejected(String),
+pub enum PollError {
+	Unanswered(String),
+	Unexpected(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstancesError {
+	Revoked,
 	Unreachable(String),
 }
 
@@ -138,8 +164,58 @@ struct Registered {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MagicLinkSent {
+struct CreatedRequest {
+	id: String,
+	poll_secret: String,
+	#[serde(rename = "verificationURL")]
+	verification_url: String,
 	expires_at: String,
+	interval: u64,
+}
+
+impl TryFrom<CreatedRequest> for AuthorizationRequest {
+	type Error = String;
+
+	fn try_from(created: CreatedRequest) -> Result<Self, String> {
+		let id = uuid::Uuid::parse_str(&created.id)
+			.map_err(|error| format!("the authorization request id is not a uuid: {error}"))?;
+		if !is_openable(&created.verification_url) {
+			return Err("the authorization request carried no web verificationURL".to_owned());
+		}
+		let deadline = DateTime::parse_from_rfc3339(&created.expires_at)
+			.map_err(|error| format!("the authorization request expiresAt is unreadable: {error}"))?
+			.with_timezone(&Utc);
+		Ok(Self {
+			id: id.to_string(),
+			poll_secret: created.poll_secret,
+			verification_url: created.verification_url,
+			expires_at: created.expires_at,
+			deadline,
+			interval: Duration::from_secs(created.interval),
+		})
+	}
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+enum PollAnswer {
+	Pending { interval: u64 },
+	Approved { token: String },
+	Expired,
+	Cancelled,
+}
+
+impl From<PollAnswer> for Polled {
+	fn from(answer: PollAnswer) -> Self {
+		match answer {
+			PollAnswer::Pending { interval } => {
+				Polled::Pending { interval: Duration::from_secs(interval) }
+			}
+			PollAnswer::Approved { token } => Polled::Approved { token },
+			PollAnswer::Expired => Polled::Expired,
+			PollAnswer::Cancelled => Polled::Cancelled,
+		}
+	}
 }
 
 #[derive(Deserialize)]
@@ -185,37 +261,47 @@ impl Cloud {
 		Self { base: base.trim_end_matches('/').to_owned() }
 	}
 
-	pub async fn request_magic_link(
+	pub async fn create_authorization_request(
 		&self,
-		email: &str,
+		device_name: &str,
 		callback_url: &str,
-	) -> Result<DateTime<Utc>, MagicLinkError> {
-		let body = json!({ "email": email, "callbackURL": callback_url });
+	) -> Result<AuthorizationRequest, String> {
+		let body =
+			json!({ "deviceName": device_name, "platform": PLATFORM, "callbackURL": callback_url });
 		let answered = self
-			.answered(|client| client.post(self.at(MAGIC_LINK_PATH)).json(&body))
-			.await
-			.map_err(MagicLinkError::Unreachable)?;
-		if answered.status() == StatusCode::BAD_REQUEST {
-			let refusal = answered.json::<Refusal>().await.map_err(|error| {
-				MagicLinkError::Unreachable(format!(
-					"the cloud refused the magic link with an unreadable answer: {error}"
-				))
-			})?;
-			return Err(MagicLinkError::Rejected(refusal.error.code));
+			.answered(|client| client.post(self.at(AUTHORIZATION_REQUESTS_PATH)).json(&body))
+			.await?;
+		if answered.status() != StatusCode::CREATED {
+			return Err(format!(
+				"the cloud answered {} to the authorization request",
+				answered.status()
+			));
 		}
-		let answered = successful(answered).map_err(MagicLinkError::Unreachable)?;
-		let unreadable = |detail: String| {
-			MagicLinkError::Unreachable(format!(
-				"the magic link answer carried no readable expiresAt: {detail}"
-			))
-		};
-		let sent = answered
-			.json::<MagicLinkSent>()
+		let created = answered.json::<CreatedRequest>().await.map_err(|error| {
+			format!("the authorization request answered by the cloud did not parse: {error}")
+		})?;
+		AuthorizationRequest::try_from(created)
+	}
+
+	pub async fn poll_authorization_request(
+		&self,
+		request: &AuthorizationRequest,
+	) -> Result<Polled, PollError> {
+		let poll = self.at(&format!("{AUTHORIZATION_REQUESTS_PATH}/{}/poll", request.id));
+		let body = json!({ "pollSecret": request.poll_secret });
+		let answered = self
+			.reached(|client| client.post(poll).json(&body))
 			.await
-			.map_err(|error| unreadable(error.to_string()))?;
-		DateTime::parse_from_rfc3339(&sent.expires_at)
-			.map(|expires_at| expires_at.with_timezone(&Utc))
-			.map_err(|error| unreadable(error.to_string()))
+			.map_err(|unanswered| PollError::Unanswered(unanswered.into()))?;
+		match answered.status() {
+			StatusCode::NOT_FOUND | StatusCode::GONE => return Ok(Polled::Expired),
+			StatusCode::TOO_MANY_REQUESTS => return Ok(Polled::SlowedDown),
+			_ => {}
+		}
+		let answered = successful(answered).map_err(PollError::Unexpected)?;
+		answered.json::<PollAnswer>().await.map(Polled::from).map_err(|error| {
+			PollError::Unexpected(format!("the poll answered by the cloud did not parse: {error}"))
+		})
 	}
 
 	pub async fn me(&self, bearer: &str) -> Result<KiroshiAccount, MeError> {
@@ -321,11 +407,19 @@ impl Cloud {
 		member_call_answered(answered).await.map(drop)
 	}
 
-	pub async fn instances(&self, bearer: &str) -> Result<Vec<CloudInstance>, String> {
-		let answered =
-			self.sent(|client| client.get(self.at(INSTANCES_PATH)).bearer_auth(bearer)).await?;
+	pub async fn instances(&self, bearer: &str) -> Result<Vec<CloudInstance>, InstancesError> {
+		let answered = self
+			.answered(|client| client.get(self.at(INSTANCES_PATH)).bearer_auth(bearer))
+			.await
+			.map_err(InstancesError::Unreachable)?;
+		if answered.status() == StatusCode::UNAUTHORIZED {
+			return Err(InstancesError::Revoked);
+		}
+		let answered = successful(answered).map_err(InstancesError::Unreachable)?;
 		answered.json::<Vec<CloudInstance>>().await.map_err(|error| {
-			format!("the instance list answered by the cloud did not parse: {error}")
+			InstancesError::Unreachable(format!(
+				"the instance list answered by the cloud did not parse: {error}"
+			))
 		})
 	}
 
