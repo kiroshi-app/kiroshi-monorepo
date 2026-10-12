@@ -3,6 +3,11 @@ import SwiftUI
 struct DaySeparator: View {
     let label: String
 
+    init?(label: String?) {
+        guard let label, !label.isEmpty else { return nil }
+        self.label = label
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             line

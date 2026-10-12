@@ -61,6 +61,14 @@ extension ThreadStore {
         SignInRootView(model: .fixture(.swipedThread))
     }
 
+    #Preview("State · thread loading") {
+        SignInRootView(model: .fixture(.slowThread))
+    }
+
+    #Preview("State · group thread loading") {
+        SignInRootView(model: .fixture(.slowGroup))
+    }
+
     #Preview("Group thread") {
         SignInRootView(model: .fixture(.groupThread))
     }

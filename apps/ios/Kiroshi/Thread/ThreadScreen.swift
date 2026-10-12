@@ -7,11 +7,60 @@ struct ThreadScreen<Model: ThreadModel>: View {
     let space: SpaceStore
 
     var body: some View {
+        transcript
+            .background(Color(.systemBackground))
+            .overlay {
+                switch model.state {
+                case .failed:
+                    ContentUnavailableView {
+                        Label(failedTitle, systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text("Check that your Mac is on, then try again.")
+                    } actions: {
+                        Button("Try Again") {
+                            model.reload()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .background(Color(.systemBackground))
+                case .empty:
+                    EmptyThread(heading: heading)
+                case .loading, .shown:
+                    EmptyView()
+                }
+            }
+            .safeAreaBar(edge: .bottom) {
+                ThreadComposer(model: model, isHostOffline: space.offlineSpace != nil)
+            }
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationTitle(heading.title)
+            .threadHeader(heading)
+            .toolbar(.hidden, for: .tabBar)
+            .task(id: space.connection.map(ObjectIdentifier.init)) {
+                guard let connection = space.connection else { return }
+                await model.follow(connection)
+            }
+    }
+
+    @ViewBuilder private var transcript: some View {
+        if model.state == .loading, space.offlineSpace == nil {
+            ProgressView()
+                .accessibilityLabel(loadingLabel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            messages
+        }
+    }
+
+    private var messages: some View {
         TimesRevealingScroll {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if let opening {
                     VStack(spacing: 20) {
-                        DaySeparator(label: opening.day)
+                        if let separator = DaySeparator(label: opening.day) {
+                            separator
+                        }
                         MachineLine(text: opening.line)
                     }
                     .padding(.top, 20)
@@ -33,42 +82,6 @@ struct ThreadScreen<Model: ThreadModel>: View {
         }
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .background(Color(.systemBackground))
-        .overlay {
-            switch model.state {
-            case .failed:
-                ContentUnavailableView {
-                    Label(failedTitle, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text("Check that your Mac is on, then try again.")
-                } actions: {
-                    Button("Try Again") {
-                        model.reload()
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .background(Color(.systemBackground))
-            case .empty:
-                EmptyThread(heading: heading)
-            case .loading where space.offlineSpace == nil:
-                ProgressView()
-                    .accessibilityLabel(loadingLabel)
-            case .loading, .shown:
-                EmptyView()
-            }
-        }
-        .safeAreaBar(edge: .bottom) {
-            ThreadComposer(model: model, isHostOffline: space.offlineSpace != nil)
-        }
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle(heading.title)
-        .threadHeader(heading)
-        .toolbar(.hidden, for: .tabBar)
-        .task(id: space.connection.map(ObjectIdentifier.init)) {
-            guard let connection = space.connection else { return }
-            await model.follow(connection)
-        }
     }
 
     private var failedTitle: LocalizedStringKey {
