@@ -94,6 +94,12 @@ const reachCodeStep = async () => {
 	await screen.findByRole("heading", { name: LOGIN_COPY.codeTitle })
 }
 
+const reachNameStep = async () => {
+	await reachCodeStep()
+	enterCode("123456")
+	await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+}
+
 const codeEntry = () =>
 	screen.getByLabelText<HTMLInputElement>(LOGIN_COPY.codeLabel)
 
@@ -257,10 +263,7 @@ describe("the sign-in page", () => {
 		async (name) => {
 			routes = namedAccount(name)
 			const router = await openLogin()
-			await reachCodeStep()
-
-			enterCode("123456")
-			await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+			await reachNameStep()
 			fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
 				target: { value: "  Ada Lovelace " },
 			})
@@ -279,9 +282,7 @@ describe("the sign-in page", () => {
 	it("refuses an empty name without calling the relay", async () => {
 		routes = namedAccount("")
 		await openLogin()
-		await reachCodeStep()
-		enterCode("123456")
-		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+		await reachNameStep()
 
 		fireEvent.click(screen.getByRole("button", { name: LOGIN_COPY.nameSubmit }))
 
@@ -292,9 +293,7 @@ describe("the sign-in page", () => {
 	it("refuses a name over 80 characters without calling the relay", async () => {
 		routes = namedAccount(null)
 		await openLogin()
-		await reachCodeStep()
-		enterCode("123456")
-		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+		await reachNameStep()
 
 		fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
 			target: { value: ` ${"a".repeat(81)} ` },
@@ -309,9 +308,7 @@ describe("the sign-in page", () => {
 		routes = namedAccount(null)
 		routes[SAVE_NAME] = relayError(404, "Not Found")
 		await openLogin()
-		await reachCodeStep()
-		enterCode("123456")
-		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+		await reachNameStep()
 
 		fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
 			target: { value: "Ada Lovelace" },
