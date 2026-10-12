@@ -3,6 +3,7 @@ import { platform } from "@tauri-apps/plugin-os"
 
 import { endNotice } from "@workspace/ui/components/notice-surface"
 
+import { createHostedSpaces } from "./hosted-spaces"
 import { raiseHostOfflineNotice, raiseRefusalNotice } from "./http"
 import { createJoinedHosts } from "./joined-hosts"
 import {
@@ -18,6 +19,7 @@ import {
 	type MaximizeButtonPointer,
 	type MaximizeButtonState,
 } from "../bindings"
+import { reportLocalWhen } from "../failure-report"
 
 const localFileSrc = (path: string): string =>
 	isDesktopHost() ? convertFileSrc(path) : path
@@ -41,6 +43,13 @@ export const invoke: typeof tauriInvoke = joinedHosts.invoke
 export const listen = joinedHosts.listen
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
+
+const hostedSpaces = isDesktopHost() ? createHostedSpaces() : undefined
+
+reportLocalWhen(
+	() =>
+		activeJoinedSpaceId() === null && (hostedSpaces?.isNoneHosted() ?? false),
+)
 
 export const onJoinedSpaceChange = joinedHosts.subscribe
 

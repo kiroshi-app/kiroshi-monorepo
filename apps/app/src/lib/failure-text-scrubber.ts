@@ -3,9 +3,11 @@ const MASK = "[redacted]"
 const URL_WITH_SCHEME = /\b(?:https?|wss?|file|tauri|asset):\/\/[^\s"'`<>()]*/gi
 
 const HOST_WITH_PORT =
-	/(?:\[[\dA-Fa-f:]+\]|\b(?:\d{1,3}(?:\.\d{1,3}){3}|localhost|[A-Za-z\d-]+(?:\.[A-Za-z\d-]+)+)):\d{1,5}\b/g
+	/(?:\[[\dA-Fa-f:]+\]|\b\d{1,3}(?:\.\d{1,3}){3}|(?<![\w.-])[A-Za-z][A-Za-z\d-]*(?:\.[A-Za-z\d-]+)*(?<!\.(?:[cm]?[jt]sx?|rs|swift|json|css|html))):\d{1,5}\b(?!:\d)/g
 
 const UUID = /\b[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}\b/gi
+
+const PREFIXED_ID = /(?<![A-Za-z\d])[a-z]+_(?=[A-Za-z\d]*\d)[A-Za-z\d]{16,}\b/g
 
 const HOME_DIRECTORY =
 	/(?:\/Users|\/home)\/[^/\s"'`]+|[A-Za-z]:\\Users\\[^\\\s"'`]+/g
@@ -31,6 +33,7 @@ export const scrubFailureText = (text: string): string =>
 		.replace(EMAIL, MASK)
 		.replace(HOST_WITH_PORT, MASK)
 		.replace(UUID, MASK)
+		.replace(PREFIXED_ID, MASK)
 		.replace(BEARER, `$1 ${MASK}`)
 		.replace(NAMED_SECRET, `$1$2${MASK}`)
 		.replace(PREFIXED_KEY, MASK)
