@@ -197,6 +197,14 @@
                     hour: 8, minute: 30)
             ]
 
+        static let longGroupThread: [FixtureHost.Message] =
+            longThread.enumerated().map { index, message in
+                var message = message
+                message.author =
+                    message.isYours ? nil : index.isMultiple(of: 2) ? juniper.id : atlas.id
+                return message
+            }
+
         static let releaseHistory: [FixtureHost.Message] = [
             .init(
                 id: "m-tone", isYours: false,
@@ -269,6 +277,9 @@
             case .slowThread:
                 script.messages[juniper.id] = longThread
                 script.threadAnswersAfter = .seconds(2)
+            case .slowGroup:
+                script.messages[releaseCrew.id] = longGroupThread
+                script.threadAnswersAfter = .seconds(2)
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
@@ -292,7 +303,7 @@
             case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
                 .threadFailed, .slowThread, .longName:
                 juniper.id
-            case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup:
+            case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
                 releaseCrew.id
             default: nil
             }

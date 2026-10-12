@@ -8,8 +8,8 @@ struct ThreadEntryView: View {
         switch entry {
         case .message(let message) where !message.bubbles.isEmpty:
             VStack(spacing: 20) {
-                if let dayLabel = message.dayLabel {
-                    DaySeparator(label: dayLabel)
+                if let separator = DaySeparator(label: message.dayLabel) {
+                    separator
                 }
                 VStack(spacing: 4) {
                     MessageBubbles(

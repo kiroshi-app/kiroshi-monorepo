@@ -102,6 +102,10 @@ private struct ScrollingUnavailable<Content: View>: View {
         SignInRootView(model: .fixture(.missionThread))
     }
 
+    #Preview("State · mission loading") {
+        SignInRootView(model: .fixture(.slowMission))
+    }
+
     #Preview("5.3 State · no missions") {
         SignInRootView(model: .fixture(.noMissions))
     }

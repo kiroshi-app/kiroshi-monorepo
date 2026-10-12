@@ -7,12 +7,13 @@ final class ThreadOpeningTests: XCTestCase {
     }
 
     func message(_ text: String, in app: XCUIApplication) -> XCUIElement {
-        app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", text)).firstMatch
+        app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
     }
 
     func assertTheThreadOpensOnItsLastMessage(_ app: XCUIApplication) {
         let loading = app.descendants(matching: .any)["Loading the conversation"]
         XCTAssertTrue(loading.waitForExistence(timeout: 10))
+        assertNoDaySeparatorWhile(loading, in: app)
         let last = message("That’s the whole checklist", in: app)
         XCTAssertTrue(last.waitForExistence(timeout: 10))
         XCTAssertTrue(last.isHittable)
@@ -21,15 +22,28 @@ final class ThreadOpeningTests: XCTestCase {
         XCTAssertFalse(loading.exists)
     }
 
+    func reopen(_ name: String, in app: XCUIApplication) {
+        app.navigationBars.buttons.firstMatch.tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name))
+            .firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+    }
+
     func testALateThreadShowsItsLoadingThenOpensOnItsLastMessageWithoutAScroll() {
         let app = launch("slow-thread")
         assertTheThreadOpensOnItsLastMessage(app)
 
-        app.navigationBars.buttons.firstMatch.tap()
-        let juniper = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Juniper'"))
-            .firstMatch
-        XCTAssertTrue(juniper.waitForExistence(timeout: 10))
-        juniper.tap()
+        reopen("Juniper", in: app)
+
+        assertTheThreadOpensOnItsLastMessage(app)
+    }
+
+    func testALateGroupThreadShowsItsLoadingThenOpensOnItsLastMessageWithoutAScroll() {
+        let app = launch("slow-group")
+        XCTAssertTrue(message("That’s the whole checklist", in: app).waitForExistence(timeout: 15))
+
+        reopen("Release crew", in: app)
 
         assertTheThreadOpensOnItsLastMessage(app)
     }
