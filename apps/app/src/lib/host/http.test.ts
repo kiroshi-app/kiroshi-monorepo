@@ -10,6 +10,8 @@ import {
 	raiseRefusalNotice,
 } from "./http"
 
+import { toTransportError } from "../chat/chat-state"
+
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
 }))
@@ -146,7 +148,7 @@ describe("invoke over http", () => {
 			answer: { status: 500, body: "the host broke" },
 		})
 
-		await expect(host.invoke("agent_models")).rejects.toBe("the host broke")
+		await expect(host.invoke("agent_models")).rejects.toThrow("the host broke")
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
 			message: "the host broke",
 			command: "agent_models",
@@ -170,12 +172,50 @@ describe("invoke over http", () => {
 		expect(onRefused).not.toHaveBeenCalled()
 	})
 
+	it("hands a relayed command error to the chat with its own kind", async () => {
+		const { host } = hostOf({
+			answer: {
+				status: 500,
+				body: '{"kind":"spawnFailed","detail":"no agent binary"}',
+				type: "application/json",
+			},
+		})
+
+		const reason = await host
+			.invoke("agent_start_or_resume_session")
+			.catch((reason: unknown) => reason)
+
+		expect(toTransportError(reason)).toEqual({
+			kind: "spawnFailed",
+			detail: "no agent binary",
+		})
+	})
+
+	it("reads a plain text refusal as its text alone", async () => {
+		const { host } = hostOf({
+			answer: {
+				status: 403,
+				body: "this command reaches outside the shared space",
+			},
+		})
+
+		const reason = await host
+			.invoke("mission_space_feed")
+			.catch((reason: unknown) => reason)
+
+		expect(String(reason)).toBe("this command reaches outside the shared space")
+		expect(toTransportError(reason)).toEqual({
+			kind: "unknownFailure",
+			detail: "this command reaches outside the shared space",
+		})
+	})
+
 	it("rejects a call carrying a bad token", async () => {
 		const { host, onRefused } = hostOf({
 			answer: { status: 401, body: "the call carried no valid bearer token" },
 		})
 
-		await expect(host.invoke("agent_models")).rejects.toBe(
+		await expect(host.invoke("agent_models")).rejects.toThrow(
 			"the call carried no valid bearer token",
 		)
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
@@ -253,7 +293,7 @@ describe("a host that is offline", () => {
 			answer: { status: 502, body: "the host broke" },
 		})
 
-		await expect(host.invoke("bot_list")).rejects.toBe("the host broke")
+		await expect(host.invoke("bot_list")).rejects.toThrow("the host broke")
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
 			message: "the host broke",
 			command: "bot_list",

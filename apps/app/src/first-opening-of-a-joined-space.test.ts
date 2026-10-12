@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, screen } from "@testing-library/react"
-import { createElement } from "react"
-import { afterEach, expect, it, vi } from "vitest"
+import { createElement, StrictMode } from "react"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
+import type { FailureFacts } from "@/lib/failure-report"
 
 type Fields = Record<string, unknown>
 
@@ -21,6 +22,7 @@ const wire = vi.hoisted(() => {
 			args: Record<string, unknown>
 		}) => Promise<unknown>,
 		refusalNotices: [] as unknown[][],
+		raisedNotices: [] as unknown[],
 		invokeHere: (command: string, args?: Record<string, unknown>) =>
 			held.answerHere({ command, args: args ?? {} }),
 	}
@@ -48,6 +50,14 @@ vi.mock("@tauri-apps/plugin-os", () => ({ platform: () => "macos" }))
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () =>
 		new Proxy({}, { get: () => async () => () => undefined }),
+}))
+
+vi.mock("@/lib/failure-report", async (original) => ({
+	...(await original<object>()),
+	raiseReportedFailure: (_notice: unknown, facts: FailureFacts) => {
+		wire.raisedNotices.push(facts)
+		return `notice-${wire.raisedNotices.length}`
+	},
 }))
 
 vi.mock("@/lib/host/http", async (original) => ({
@@ -257,8 +267,15 @@ const firstOpeningOfGarage = async () => {
 	return { relayed, onlyOnMac, sharedChatId: sharedChat.id }
 }
 
+beforeEach(() => {
+	vi.resetModules()
+	wire.refusalNotices.length = 0
+	wire.raisedNotices.length = 0
+})
+
 afterEach(() => {
 	cleanup()
+	window.localStorage.clear()
 	vi.unstubAllGlobals()
 })
 
@@ -277,3 +294,96 @@ it("opens a joined Space for the first time after launch without a refused call"
 			.map(({ args }) => (args.scope as Fields).conversationId),
 	).toEqual([sharedChatId])
 }, 60_000)
+
+const sharedSpaceCheck =
+	(sharedSpaceId: string, answerOnHost: Answer, relayed: Call[]) =>
+	async (url: URL, init?: RequestInit) => {
+		const call = {
+			command: decodeURIComponent(String(url).split("/").at(-1) ?? ""),
+			args: JSON.parse(String(init?.body ?? "{}")) as Fields,
+		}
+		relayed.push(call)
+		if ("spaceId" in call.args && call.args.spaceId !== sharedSpaceId) {
+			return new Response(OTHER_SPACE_REFUSAL, { status: 403 })
+		}
+		return new Response(JSON.stringify(await answerOnHost(call)), {
+			headers: { "content-type": "application/json" },
+		})
+	}
+
+const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
+	const mac = await macWithLocalSpace()
+	const host = await hostSharingGarage()
+	const joined = {
+		id: "garage",
+		hostUrl: HOST_URL,
+		remoteSpaceId: host.shared.id,
+		name: "Garage",
+	}
+	let isSharedSpaceLearned = listedRemoteSpaceId === "known"
+	const answerOnMac = storeAnswer(mac.store, {
+		joined_space_connect: { ...joined, token: "guest" },
+		user_preferences: preferencesFor("joined:garage", {
+			[mac.space.id]: mac.bot.id,
+			"joined:garage": host.bot.id,
+		}),
+		account_state: { kind: "signedOut" },
+		conversation_local_ids: [],
+		hosting_state: { kind: "stopped" },
+	})
+	wire.answerHere = async (call) => {
+		if (call.command === "joined_spaces_list") {
+			return [
+				isSharedSpaceLearned ? joined : { ...joined, remoteSpaceId: null },
+			]
+		}
+		if (call.command === "joined_space_connect") {
+			isSharedSpaceLearned = true
+		}
+		return answerOnMac(call)
+	}
+	const relayed: Call[] = []
+	vi.stubGlobal("WebSocket", OpeningSocket)
+	vi.stubGlobal(
+		"fetch",
+		sharedSpaceCheck(host.shared.id, storeAnswer(host.store, {}), relayed),
+	)
+	window.localStorage.setItem("lastSpaceId", "joined:garage")
+	window.localStorage.setItem("firstRunDone", "on")
+	Object.assign(window, { __TAURI_INTERNALS__: {} })
+	const { App } = await import("@/App")
+	render(createElement(StrictMode, null, createElement(App)))
+	await vi.waitFor(
+		() =>
+			expect(relayed.map(({ command }) => command)).toContain(
+				"agent_start_or_resume_session",
+			),
+		{ timeout: 10_000 },
+	)
+	await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+	return { relayed, sharedSpaceId: host.shared.id }
+}
+
+const spaceIdsIn = (calls: Call[]) => [
+	...new Set(
+		calls
+			.filter(({ args }) => "spaceId" in args)
+			.map(({ args }) => args.spaceId),
+	),
+]
+
+const feedReadsIn = (calls: Call[]) =>
+	calls.filter(({ command }) => command === "mission_space_feed")
+
+it.each(["unknown", "known"] as const)(
+	"launches on a joined Space whose shared Space id is %s to the Mac without a call outside it, nor a notice",
+	async (listedRemoteSpaceId) => {
+		const { relayed, sharedSpaceId } = await launchOnGarage(listedRemoteSpaceId)
+
+		expect(spaceIdsIn(feedReadsIn(relayed))).toEqual([sharedSpaceId])
+		expect(spaceIdsIn(relayed)).toEqual([sharedSpaceId])
+		expect(wire.refusalNotices).toEqual([])
+		expect(wire.raisedNotices).toEqual([])
+	},
+	60_000,
+)

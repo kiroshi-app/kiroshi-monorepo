@@ -86,7 +86,7 @@ export const useSidebarMissions = ({
 	const { now } = rosterLines
 	const feed = useSpaceMissions(spaces.state.selectedSpaceId)
 	const { spaceRowId } = roster.state
-	useSpaceMissionsFailure(feed.hasFailed, feed.reload)
+	useSpaceMissionsFailure(feed)
 
 	const entries = useMemo(() => entriesOf(feed), [feed])
 	const missions = useMemo(

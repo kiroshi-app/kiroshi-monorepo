@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react"
 
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
+import type { SpaceMissionsView } from "./use-space-missions"
+
 import type { RefusedMessage } from "@/lib/conversations/conversation-controller"
 import { raiseReportedFailure } from "@/lib/failure-report"
 
@@ -45,18 +47,20 @@ export const useMissionReadFailure = (hasFailedToRead: boolean): void => {
 	}, [hasFailedToRead, t])
 }
 
-export const useSpaceMissionsFailure = (
-	hasFailed: boolean,
-	reload: () => void,
-): void => {
+export const useSpaceMissionsFailure = ({
+	hasFailed,
+	isFailureRaised,
+	reload,
+}: SpaceMissionsView): void => {
 	const t = useChatCopy()
 	const wasFailing = useRef(false)
+	const hasUnraisedFailure = hasFailed && !isFailureRaised
 
 	useEffect(() => {
 		const wasReported = wasFailing.current
-		wasFailing.current = hasFailed
+		wasFailing.current = hasUnraisedFailure
 
-		if (!hasFailed || wasReported) {
+		if (!hasUnraisedFailure || wasReported) {
 			return
 		}
 		raiseReportedFailure(
@@ -67,5 +71,5 @@ export const useSpaceMissionsFailure = (
 			},
 			{ raisedIn: "use-mission-failure-notices" },
 		)
-	}, [hasFailed, reload, t])
+	}, [hasUnraisedFailure, reload, t])
 }

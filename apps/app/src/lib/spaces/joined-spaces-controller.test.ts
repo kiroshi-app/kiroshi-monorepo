@@ -283,6 +283,58 @@ describe("selecting a space", () => {
 		expect(spaces.getState().selectedSpaceId).toBe(home.id)
 		expect(hosts.activate).toHaveBeenLastCalledWith(null)
 	})
+
+	it("opens a remote row once its connection learned the shared Space id", async () => {
+		const unlearned = { ...GARAGE, remoteSpaceId: null }
+		const { joined, spaces, hosts, home, wire } = await gearFor([unlearned])
+		hosts.connect.mockImplementation(async () => wire.hold([GARAGE]))
+		joined.watch()
+		await settle()
+
+		joined.selectSpace(GARAGE_ROW)
+
+		expect(spaces.getState().selectedSpaceId).toBe(home.id)
+		expect(hosts.activate).not.toHaveBeenCalled()
+		await settle()
+		expect(spaces.getState().selectedSpaceId).toBe(GARAGE.remoteSpaceId)
+		expect(hosts.activate).toHaveBeenCalledExactlyOnceWith(
+			GARAGE.id,
+			GARAGE.remoteSpaceId,
+		)
+	})
+
+	it("raises a refused connection of a remote row waiting for its shared Space id and keeps the Space picked", async () => {
+		const unlearned = { ...GARAGE, remoteSpaceId: null }
+		const { joined, spaces, hosts, home, reportFailure } = await gearFor([
+			unlearned,
+		])
+		hosts.connect.mockRejectedValue(new Error("the relay closed"))
+		joined.watch()
+		await settle()
+		reportFailure.mockClear()
+
+		joined.selectSpace(GARAGE_ROW)
+		await settle()
+
+		expect(reportFailure).toHaveBeenCalledOnce()
+		expect(spaces.getState().selectedSpaceId).toBe(home.id)
+		expect(hosts.activate).not.toHaveBeenCalled()
+	})
+
+	it("keeps the Space picked while a remote row waits for its shared Space id", async () => {
+		const unlearned = { ...GARAGE, remoteSpaceId: null }
+		const { joined, spaces, hosts, home, wire } = await gearFor([unlearned])
+		hosts.connect.mockImplementation(async () => wire.hold([GARAGE]))
+		joined.watch()
+		await settle()
+
+		joined.selectSpace(GARAGE_ROW)
+		joined.selectSpace(home.id)
+		await settle()
+
+		expect(spaces.getState().selectedSpaceId).toBe(home.id)
+		expect(hosts.activate).toHaveBeenCalledExactlyOnceWith(null)
+	})
 })
 
 describe("leaving a space", () => {

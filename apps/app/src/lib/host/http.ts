@@ -8,6 +8,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { hostOfflineOf } from "./host-offline"
+import { HostRefused } from "./host-refused"
 
 import { raiseReportedFailure } from "../failure-report"
 
@@ -212,8 +213,9 @@ export const createHttpHost = ({
 	let isClosed = false
 
 	const refuse = (command: string, reason: unknown, status?: number): never => {
-		onRefused({ message: messageOf(reason), command, status, side: "member" })
-		throw reason
+		const message = messageOf(reason)
+		onRefused({ message, command, status, side: "member" })
+		throw new HostRefused(message, reason)
 	}
 
 	const post = (command: string, args: InvokeArgs) =>

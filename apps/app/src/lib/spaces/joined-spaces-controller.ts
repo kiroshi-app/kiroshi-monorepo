@@ -103,6 +103,9 @@ const JOINED_ROW_PREFIX = "joined:"
 const rowIdOf = (joined: JoinedSpace): string =>
 	`${JOINED_ROW_PREFIX}${joined.id}`
 
+const isSharedSpaceKnown = (joined: JoinedSpace) =>
+	joined.remoteSpaceId !== null
+
 const hostSpaceIdOf = (joined: JoinedSpace): string =>
 	joined.remoteSpaceId ?? joined.id
 
@@ -201,6 +204,7 @@ export const createJoinedSpacesController = ({
 	let previousLocalId: string | null = null
 	let hasRead = false
 	let pendingRowId: string | null = null
+	let awaitedRowId: string | null = null
 
 	const set = (fields: Partial<JoinedSpacesState>) =>
 		stateStore.setState({ ...current(), ...fields })
@@ -323,10 +327,26 @@ export const createJoinedSpacesController = ({
 		if (wasOpen && back) selectSpace(back)
 	}
 
+	const selectOnceSharedSpaceKnown = async (joined: JoinedSpace) => {
+		const rowId = rowIdOf(joined)
+		awaitedRowId = rowId
+		await hosts.connect(joined.id)
+		await read()
+		const learned = joinedOfRow(rowId)
+		if (awaitedRowId === rowId && learned && isSharedSpaceKnown(learned)) {
+			selectSpace(rowId)
+		}
+	}
+
 	const selectSpace = (id: string) => {
+		awaitedRowId = null
+		const joined = joinedOfRow(id)
+		if (joined && !isSharedSpaceKnown(joined)) {
+			void selectOnceSharedSpaceKnown(joined).catch(reportRefusal)
+			return
+		}
 		notePreviousLocal()
 		pendingRowId = null
-		const joined = joinedOfRow(id)
 		set({ openId: joined?.id ?? null })
 		spaces.select(joined ? hostSpaceIdOf(joined) : id)
 		void (joined

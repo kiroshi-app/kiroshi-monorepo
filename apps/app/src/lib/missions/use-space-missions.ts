@@ -10,8 +10,14 @@ import {
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
+import { isHostRefused } from "@/lib/host/host-refused"
 import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
+
+type FailedRead = {
+	spaceId: string
+	isRaised: boolean
+}
 
 type HeldSpaceMissions = {
 	spaceId: string
@@ -43,18 +49,19 @@ export type SpaceMissionsView = SpaceMissionGroups & {
 	waitingCount: number
 	hasLoaded: boolean
 	hasFailed: boolean
+	isFailureRaised: boolean
 	reload: () => void
 }
 
 export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 	const [held, setHeld] = useState<HeldSpaceMissions | null>(null)
-	const [failedSpaceId, setFailedSpaceId] = useState<string | null>(null)
+	const [failed, setFailed] = useState<FailedRead | null>(null)
 	const reads = useRef(0)
 	const host = useReachableHost()
 
 	const reload = useCallback(() => {
 		reads.current += 1
-		setFailedSpaceId(null)
+		setFailed(null)
 		if (!spaceId || !host) {
 			return
 		}
@@ -69,11 +76,11 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 				}
 
 				setHeld({ spaceId, closedSince, entries })
-				setFailedSpaceId(null)
+				setFailed(null)
 			},
-			() => {
+			(reason) => {
 				if (ticket === reads.current) {
-					setFailedSpaceId(spaceId)
+					setFailed({ spaceId, isRaised: isHostRefused(reason) })
 				}
 			},
 		)
@@ -110,7 +117,8 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		() => (hasLoaded && held ? toSpaceMissionGroups(held) : NO_GROUPS),
 		[hasLoaded, held],
 	)
-	const hasFailed = spaceId !== null && failedSpaceId === spaceId
+	const hasFailed = spaceId !== null && failed?.spaceId === spaceId
+	const isFailureRaised = hasFailed && failed?.isRaised === true
 
 	return useMemo(
 		() => ({
@@ -118,8 +126,9 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 			waitingCount: groups.waitingOnYou.length,
 			hasLoaded,
 			hasFailed,
+			isFailureRaised,
 			reload,
 		}),
-		[groups, hasLoaded, hasFailed, reload],
+		[groups, hasLoaded, hasFailed, isFailureRaised, reload],
 	)
 }

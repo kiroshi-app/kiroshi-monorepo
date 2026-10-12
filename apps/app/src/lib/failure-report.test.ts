@@ -162,9 +162,9 @@ describe("a refused joined-space request", () => {
 			async () => new Response(OTHER_SPACE_REFUSAL, { status: 403 }),
 		)
 
-		await expect(host.invoke("conversation_list", RELAYED_ARGS)).rejects.toBe(
-			OTHER_SPACE_REFUSAL,
-		)
+		await expect(
+			host.invoke("conversation_list", RELAYED_ARGS),
+		).rejects.toThrow(OTHER_SPACE_REFUSAL)
 
 		const copiedText = copiedTextOfRaisedNotice()
 		expect(copiedText).toContain("Command: conversation_list")
@@ -179,9 +179,9 @@ describe("a refused joined-space request", () => {
 			async () => new Response(OTHER_SPACE_REFUSAL, { status: 403 }),
 		)
 
-		await expect(host.invoke("conversation_list", RELAYED_ARGS)).rejects.toBe(
-			OTHER_SPACE_REFUSAL,
-		)
+		await expect(
+			host.invoke("conversation_list", RELAYED_ARGS),
+		).rejects.toThrow(OTHER_SPACE_REFUSAL)
 
 		const copiedText = copiedTextOfRaisedNotice()
 		expect(copiedText).not.toContain(HOST_TOKEN)
