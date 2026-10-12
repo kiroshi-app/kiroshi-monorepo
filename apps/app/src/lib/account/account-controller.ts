@@ -1,6 +1,5 @@
 import {
 	type NoticeMessage,
-	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -8,6 +7,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { storedOwnAccounts } from "./own-accounts"
 
 import { ACCOUNT_CHANGED_EVENT, type AccountState, commands } from "../bindings"
+import { raiseReportedFailure } from "../failure-report"
 import { listen } from "../host"
 import { createStore } from "../store"
 
@@ -44,7 +44,8 @@ const noticeFor = (state: AccountState): NoticeMessage | null => {
 	return null
 }
 
-const reportFailure = (title: string) => raiseFailureNotice({ title })
+const reportFailure = (title: string) =>
+	raiseReportedFailure({ title }, { raisedIn: "account-controller" })
 
 const perform = async (command: AccountCommand) => {
 	const result = await command()
@@ -79,7 +80,7 @@ export const createAccountController = (): AccountController => {
 			return
 		}
 		const notice = noticeFor(next)
-		if (notice) raiseFailureNotice(notice)
+		if (notice) raiseReportedFailure(notice, { raisedIn: "account-controller" })
 	}
 
 	const watch = () => {

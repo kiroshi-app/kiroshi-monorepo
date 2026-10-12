@@ -4,6 +4,7 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import {
 	createHttpHost,
+	type HostRefusal,
 	type HostSocket,
 	raiseHostOfflineNotice,
 	raiseRefusalNotice,
@@ -135,7 +136,12 @@ describe("invoke over http", () => {
 		})
 
 		await expect(host.invoke("agent_models")).rejects.toBe("the host broke")
-		expect(onRefused).toHaveBeenCalledExactlyOnceWith("the host broke", 500)
+		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
+			message: "the host broke",
+			command: "agent_models",
+			status: 500,
+			side: "member",
+		})
 	})
 
 	it("rejects with the command error the host relayed", async () => {
@@ -161,20 +167,24 @@ describe("invoke over http", () => {
 		await expect(host.invoke("agent_models")).rejects.toBe(
 			"the call carried no valid bearer token",
 		)
-		expect(onRefused).toHaveBeenCalledExactlyOnceWith(
-			"the call carried no valid bearer token",
-			401,
-		)
+		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
+			message: "the call carried no valid bearer token",
+			command: "agent_models",
+			status: 401,
+			side: "member",
+		})
 	})
 
 	it("rejects and raises one notice when the host cannot be reached", async () => {
 		const { host, onRefused } = hostOf({ unreachable: true })
 
 		await expect(host.invoke("agent_models")).rejects.toThrow("Failed to fetch")
-		expect(onRefused).toHaveBeenCalledExactlyOnceWith(
-			"Failed to fetch",
-			undefined,
-		)
+		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
+			message: "Failed to fetch",
+			command: "agent_models",
+			status: undefined,
+			side: "member",
+		})
 	})
 })
 
@@ -233,7 +243,12 @@ describe("a host that is offline", () => {
 		})
 
 		await expect(host.invoke("bot_list")).rejects.toBe("the host broke")
-		expect(onRefused).toHaveBeenCalledExactlyOnceWith("the host broke", 502)
+		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
+			message: "the host broke",
+			command: "bot_list",
+			status: 502,
+			side: "member",
+		})
 		expect(onDown).not.toHaveBeenCalled()
 	})
 })
@@ -247,47 +262,82 @@ describe("the host-offline notice", () => {
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t reach the host of this space",
 			description: "Its Mac is offline. Try again once it’s back online.",
+			report: expect.objectContaining({
+				raisedIn: "host-offline",
+				side: "member",
+			}),
 		})
 	})
 })
 
 describe("the refusal notice", () => {
+	const memberRefusal = (message: string, status?: number): HostRefusal => ({
+		message,
+		command: "bot_list",
+		status,
+		side: "member",
+	})
+
+	const refusalReport = (httpStatus: number | undefined) =>
+		expect.objectContaining({
+			raisedIn: "host-refusal",
+			command: "bot_list",
+			httpStatus,
+			side: "member",
+		})
+
 	beforeEach(() => failureNotice.mockClear())
 
 	it("asks to reopen the link when the host answers 401", () => {
-		raiseRefusalNotice("no valid bearer token", 401)
+		raiseRefusalNotice(memberRefusal("no valid bearer token", 401))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "The host refused this call.",
 			description: "Open the link from the desktop app again.",
+			report: refusalReport(401),
 		})
 	})
 
 	it("names the host as the one to ask when the host keeps the command", () => {
-		raiseRefusalNotice("this command belongs to the host", 403)
+		raiseRefusalNotice(memberRefusal("this command belongs to the host", 403))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",
 			description:
 				"Only the host of this space can do that. Ask them to do it from their Kiroshi.",
+			report: refusalReport(403),
+		})
+	})
+
+	it("names the shared space when the host keeps the command outside it", () => {
+		raiseRefusalNotice(
+			memberRefusal("this command reaches outside the shared space", 403),
+		)
+
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t send that request",
+			description: "this command reaches outside the shared space",
+			report: refusalReport(403),
 		})
 	})
 
 	it("shows the host text when the host answers another status", () => {
-		raiseRefusalNotice("the host broke", 500)
+		raiseRefusalNotice(memberRefusal("the host broke", 500))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",
 			description: "the host broke",
+			report: refusalReport(500),
 		})
 	})
 
 	it("shows the host text when the host could not be reached", () => {
-		raiseRefusalNotice("Failed to fetch")
+		raiseRefusalNotice(memberRefusal("Failed to fetch"))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",
 			description: "Failed to fetch",
+			report: refusalReport(undefined),
 		})
 	})
 })

@@ -862,7 +862,12 @@ describe("an offline joined host", () => {
 		await requestsOf(hosts, 2)
 
 		expect(reportFailure).toHaveBeenCalledTimes(2)
-		expect(reportFailure).toHaveBeenCalledWith("the host broke", 502)
+		expect(reportFailure).toHaveBeenCalledWith({
+			message: "the host broke",
+			command: "bot_list",
+			status: 502,
+			side: "member",
+		})
 		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
@@ -1288,9 +1293,10 @@ describe("a cold start on a joined space", () => {
 		await hosts.invoke("application_installs", { conversationId: "fresh" })
 		await hosts.invoke("mission_list", { conversationId: "fresh" })
 
-		expect(reportFailure).toHaveBeenCalledWith(
-			"the transcript store refused it",
-		)
+		expect(reportFailure).toHaveBeenCalledWith({
+			message: "the transcript store refused it",
+			command: "conversation_local_ids",
+		})
 		expect(fetch).not.toHaveBeenCalled()
 		expect(local.invoke).toHaveBeenCalledWith("application_installs", {
 			conversationId: "fresh",
@@ -1481,7 +1487,12 @@ describe("a bot or a Space only this Mac holds", () => {
 		).rejects.toBe(OTHER_SPACE_REFUSAL)
 
 		expect(reportFailure).toHaveBeenCalledTimes(1)
-		expect(reportFailure).toHaveBeenCalledWith(OTHER_SPACE_REFUSAL, 403)
+		expect(reportFailure).toHaveBeenCalledWith({
+			message: OTHER_SPACE_REFUSAL,
+			command: "section_list",
+			status: 403,
+			side: "member",
+		})
 	})
 })
 
@@ -1585,7 +1596,12 @@ describe("personal Settings while a joined Space is active", () => {
 		).rejects.toBe(MEMBER_REFUSAL)
 
 		expect(reportFailure).toHaveBeenCalledTimes(1)
-		expect(reportFailure).toHaveBeenCalledWith(MEMBER_REFUSAL, 403)
+		expect(reportFailure).toHaveBeenCalledWith({
+			message: MEMBER_REFUSAL,
+			command: "plugin_set_mcp_server",
+			status: 403,
+			side: "member",
+		})
 	})
 })
 

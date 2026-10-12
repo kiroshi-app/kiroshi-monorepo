@@ -10,6 +10,7 @@ import {
 	invoke as tauriInvoke,
 	listen as tauriListen,
 } from "./tauri"
+import { hasTauriInternals } from "./tauri-internals"
 
 import {
 	commands,
@@ -17,9 +18,6 @@ import {
 	type MaximizeButtonPointer,
 	type MaximizeButtonState,
 } from "../bindings"
-
-const hasTauriInternals = (): boolean =>
-	typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 const localFileSrc = (path: string): string =>
 	isDesktopHost() ? convertFileSrc(path) : path

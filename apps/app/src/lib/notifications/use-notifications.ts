@@ -1,11 +1,10 @@
 import { useEffect } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
-
 import { createNotifications } from "./create-notifications"
 import { createChime } from "./notification-chime"
 import { startNotificationSource } from "./notification-source"
 
+import { failureReporterIn } from "../failure-report"
 import { revealWindow, watchWindowFocus } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 import type { ChatController } from "../chat/chat-controller"
@@ -55,7 +54,7 @@ export const useNotifications = ({
 				watchFocus: watchWindowFocus,
 				raiseWindow: () => revealWindow({ withFocus: true }),
 				playChime: createChime(),
-				reportFailure: raiseFailureNotice,
+				reportFailure: failureReporterIn("notification-source"),
 			}),
 		[chat, runtimes, roster, spaces, missions, spokenWords, user],
 	)

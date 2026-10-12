@@ -4,6 +4,7 @@ import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+	type NoticeMessage,
 	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
@@ -66,6 +67,11 @@ const changes: { announce: ChangeHandler } = { announce: () => undefined }
 const unlisten = vi.fn()
 
 const failureNotice = vi.mocked(raiseFailureNotice)
+
+const reported = (notice: NoticeMessage) => ({
+	...notice,
+	report: expect.objectContaining({ raisedIn: "account-controller" }),
+})
 
 const settling = () =>
 	act(async () => {
@@ -272,7 +278,7 @@ describe("useAccount", () => {
 
 		expect(result.current.account).toEqual({ status: "signedOut" })
 		expect(failureNotice).toHaveBeenCalledOnce()
-		expect(failureNotice).toHaveBeenCalledWith(COPY.unreachable)
+		expect(failureNotice).toHaveBeenCalledWith(reported(COPY.unreachable))
 	})
 
 	it.each(["linkInvalid", "serverError", "timedOut"] as const)(
@@ -286,10 +292,12 @@ describe("useAccount", () => {
 
 			expect(result.current.account).toEqual({ status: "signedOut" })
 			expect(failureNotice).toHaveBeenCalledOnce()
-			expect(failureNotice).toHaveBeenCalledWith({
-				title: COPY.failed[failure],
-				description: COPY.failed.description,
-			})
+			expect(failureNotice).toHaveBeenCalledWith(
+				reported({
+					title: COPY.failed[failure],
+					description: COPY.failed.description,
+				}),
+			)
 		},
 	)
 
@@ -309,7 +317,9 @@ describe("useAccount", () => {
 		const { result } = await mountAccount()
 
 		expect(result.current.account).toEqual({ status: "signedOut" })
-		expect(failureNotice).toHaveBeenCalledWith({ title: COPY.readFailed })
+		expect(failureNotice).toHaveBeenCalledWith(
+			reported({ title: COPY.readFailed }),
+		)
 	})
 
 	it.each([
@@ -328,9 +338,9 @@ describe("useAccount", () => {
 			await settling()
 
 			expect(failureNotice.mock.calls).toEqual([
-				[{ title: COPY.signInFailed }],
-				[{ title: COPY.cancelFailed }],
-				[{ title: COPY.signOutFailed }],
+				[reported({ title: COPY.signInFailed })],
+				[reported({ title: COPY.cancelFailed })],
+				[reported({ title: COPY.signOutFailed })],
 			])
 		},
 	)

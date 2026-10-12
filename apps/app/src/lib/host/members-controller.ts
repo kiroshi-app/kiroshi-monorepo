@@ -1,6 +1,5 @@
 import {
 	type NoticeMessage,
-	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import type {
@@ -21,6 +20,7 @@ import {
 	type MembersError,
 	type SpaceRole,
 } from "../bindings"
+import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
 type MembersAnswer<Data> =
@@ -161,7 +161,7 @@ type Session = {
 
 export const createMembersController = ({
 	transport = membersTransport,
-	reportFailure = raiseFailureNotice,
+	reportFailure = failureReporterIn("members-controller"),
 	reportSuccess = raiseTransientNotice,
 }: MembersControllerOptions = {}): MembersController => {
 	const stateStore = createStore<MembersControllerState>(EMPTY_STATE)

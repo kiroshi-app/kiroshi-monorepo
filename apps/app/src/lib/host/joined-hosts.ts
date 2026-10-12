@@ -1,17 +1,19 @@
 import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core"
 import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
 
-import {
-	type NoticeMessage,
-	raiseFailureNotice,
-} from "@workspace/ui/components/notice-surface"
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
 import {
 	type ConversationSource,
 	createConversationProvenance,
 	LOCAL_IDS_COMMAND,
 } from "./conversation-provenance"
-import { createHttpHost, type HostSocket, type HttpHost } from "./http"
+import {
+	createHttpHost,
+	type HostRefusal,
+	type HostSocket,
+	type HttpHost,
+} from "./http"
 import {
 	isJoinedSpaceError,
 	joinRefusalNoticeOf,
@@ -27,6 +29,7 @@ import {
 	type JoinedSpaceError,
 	type JoinedSpaceReconnected,
 } from "../bindings"
+import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
 export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
@@ -144,7 +147,7 @@ export type JoinedHostsOptions = {
 	join: (id: string) => Promise<JoinOutcome>
 	fetch: typeof fetch
 	openSocket: (url: string) => HostSocket
-	reportFailure: (message: string, status?: number) => void
+	reportFailure: (refusal: HostRefusal) => void
 	reportJoinRefusal?: (notice: NoticeMessage) => void
 	reportHostDown: () => string
 	endHostDown: (noticeId: string) => void
@@ -220,7 +223,7 @@ export const createJoinedHosts = ({
 	fetch,
 	openSocket,
 	reportFailure,
-	reportJoinRefusal = raiseFailureNotice,
+	reportJoinRefusal = failureReporterIn("joined-hosts"),
 	reportHostDown,
 	endHostDown,
 }: JoinedHostsOptions) => {
@@ -334,7 +337,7 @@ export const createJoinedHosts = ({
 	}
 
 	const reportListenFailure = (reason: unknown): UnlistenFn => {
-		reportFailure(describeRejection(reason))
+		reportFailure({ message: describeRejection(reason) })
 		return () => undefined
 	}
 
@@ -524,7 +527,10 @@ export const createJoinedHosts = ({
 
 	const forgetLocalIdsRecall = (reason: unknown) => {
 		localIdsRecall = null
-		reportFailure(describeRejection(reason))
+		reportFailure({
+			message: describeRejection(reason),
+			command: LOCAL_IDS_COMMAND,
+		})
 	}
 
 	const recallLocalIds = (): Promise<void> => {

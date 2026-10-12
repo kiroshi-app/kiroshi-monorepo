@@ -5,8 +5,11 @@ import tailwindcss from "@tailwindcss/vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+import { version } from "./package.json" with { type: "json" }
+
 // biome-ignore lint/style/noDefaultExport: Vite requires a default export
 export default defineConfig({
+	define: { __APP_VERSION__: JSON.stringify(version) },
 	clearScreen: false,
 	plugins: [
 		react(),

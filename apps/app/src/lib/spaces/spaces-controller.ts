@@ -1,6 +1,5 @@
 import {
 	type NoticeMessage,
-	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
@@ -13,6 +12,7 @@ import {
 } from "./archive-pickers"
 import { newSpaceName } from "./space-settings"
 
+import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
@@ -97,7 +97,7 @@ export const createSpacesController = (
 	{
 		pickers = nativeArchivePickers,
 		reportSuccess = raiseTransientNotice,
-		reportFailure = raiseFailureNotice,
+		reportFailure = failureReporterIn("spaces-controller"),
 	}: SpacesControllerOptions = {},
 ): SpacesController => {
 	const stateStore = createStore(initialSpacesState)

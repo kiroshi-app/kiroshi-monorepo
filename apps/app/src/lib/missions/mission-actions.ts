@@ -2,13 +2,12 @@ import type {
 	MissionCopyKind,
 	MissionMenuActions,
 } from "@workspace/ui/components/mission-menu"
-import {
-	raiseFailureNotice,
-	raiseTransientNotice,
-} from "@workspace/ui/components/notice-surface"
+import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { Mission } from "./mission-contract"
+
+import { raiseReportedFailure } from "../failure-report"
 
 export type MissionLanding = "composer"
 
@@ -33,7 +32,10 @@ type FailedAction =
 
 const reportFailure = (action: FailedAction) => (reason: unknown) => {
 	console.error(`mission menu: ${action} failed`, reason)
-	raiseFailureNotice({ title: i18n.t(`chat:missions.menu.failed.${action}`) })
+	raiseReportedFailure(
+		{ title: i18n.t(`chat:missions.menu.failed.${action}`) },
+		{ raisedIn: "mission-actions" },
+	)
 }
 
 const copiedValueOf = (

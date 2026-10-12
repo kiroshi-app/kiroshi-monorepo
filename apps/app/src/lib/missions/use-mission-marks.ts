@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { coalescedRead } from "./coalesced-read"
 import type { MissionEntry } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
+import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
 import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { LOCAL_HOST, useReachableHost } from "@/lib/host/use-reachable-host"
@@ -40,10 +40,13 @@ const marksReadOf = (
 }
 
 const raiseUnavailableNotice = () =>
-	raiseFailureNotice({
-		title: i18n.t("bots:roster.mission.unavailable.title"),
-		description: i18n.t("bots:roster.mission.unavailable.description"),
-	})
+	raiseReportedFailure(
+		{
+			title: i18n.t("bots:roster.mission.unavailable.title"),
+			description: i18n.t("bots:roster.mission.unavailable.description"),
+		},
+		{ raisedIn: "use-mission-marks" },
+	)
 
 export const useMissionMarks = (
 	shownSpaceId: string | null,

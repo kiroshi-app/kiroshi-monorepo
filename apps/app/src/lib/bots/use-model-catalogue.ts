@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { readModelCatalogue } from "./model-catalogue"
 
 import type { OfferedModel_Serialize } from "@/lib/bindings"
+import { raiseReportedFailure } from "@/lib/failure-report"
 
 type ModelCatalogue = {
 	models: OfferedModel_Serialize[]
@@ -26,7 +26,10 @@ export const useModelCatalogue = (): ModelCatalogue => {
 			() => {
 				if (!listening) return
 				setCatalogue({ models: [], hasFailedToLoad: true })
-				raiseFailureNotice({ title: i18n.t("bots:runtime.model.unreadable") })
+				raiseReportedFailure(
+					{ title: i18n.t("bots:runtime.model.unreadable") },
+					{ raisedIn: "use-model-catalogue" },
+				)
 			},
 		)
 		return () => {

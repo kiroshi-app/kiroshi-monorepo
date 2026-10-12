@@ -1,6 +1,5 @@
 import {
 	type NoticeMessage,
-	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
@@ -17,6 +16,7 @@ import {
 	type JoinedSpaceError,
 	type JoinedSpaceRemoved,
 } from "../bindings"
+import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createStore } from "../store"
 import type { RosterSpace } from "../bots/roster-controller"
@@ -191,7 +191,7 @@ export const createJoinedSpacesController = ({
 	spaces,
 	hosts = joinedHosts,
 	transport = joinedSpacesTransport,
-	reportFailure = raiseFailureNotice,
+	reportFailure = failureReporterIn("joined-spaces-controller"),
 	reportRemoval = raiseRemovalNotice,
 	inviters = storedInviters,
 }: JoinedSpacesControllerOptions): JoinedSpacesController => {

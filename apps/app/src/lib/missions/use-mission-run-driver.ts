@@ -1,10 +1,9 @@
 import { useEffect } from "react"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
-
 import { startMissionRunDriver } from "./mission-run-driver"
 import { missionsTransport } from "./missions-transport"
 
+import { failureReporterIn } from "../failure-report"
 import { activeJoinedSpaceId, onJoinedSpaceChange } from "../host"
 import type { ChatController } from "../chat/chat-controller"
 import type { ChatDriver } from "../chat/driver"
@@ -32,7 +31,7 @@ export const useMissionRunDriver = ({
 				runtimes,
 				chat,
 				missions: missionsTransport,
-				reportFailure: raiseFailureNotice,
+				reportFailure: failureReporterIn("mission-run-driver"),
 				joinedSpaceId: activeJoinedSpaceId,
 				watchJoinedSpace: onJoinedSpaceChange,
 			}),
