@@ -2,7 +2,7 @@ import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router"
 import { type FormEvent, useState } from "react"
 
 import { AUTHORIZE_COPY } from "./authorize-copy"
-import type { AuthorizeState } from "./authorize-state"
+import type { AuthorizeState, ClosedKind } from "./authorize-state"
 import { RelayFailureLine } from "./login-page"
 import {
 	CardHeading,
@@ -36,11 +36,23 @@ const useSignInAgain = () => {
 	}
 }
 
-const ExpiredCard = () => (
-	<CardHeading
-		lead={AUTHORIZE_COPY.expiredLead}
-		title={AUTHORIZE_COPY.expiredTitle}
-	/>
+const CLOSED_HEADINGS = {
+	expired: {
+		title: AUTHORIZE_COPY.expiredTitle,
+		lead: AUTHORIZE_COPY.expiredLead,
+	},
+	cancelled: {
+		title: AUTHORIZE_COPY.cancelledTitle,
+		lead: AUTHORIZE_COPY.cancelledLead,
+	},
+} satisfies Record<ClosedKind, { title: string; lead: string }>
+
+type ClosedCardProps = {
+	kind: ClosedKind
+}
+
+const ClosedCard = ({ kind }: ClosedCardProps) => (
+	<CardHeading {...CLOSED_HEADINGS[kind]} />
 )
 
 type ContinueAsCardProps = {
@@ -76,7 +88,7 @@ const ContinueAsCard = ({ account, onContinue }: ContinueAsCardProps) => {
 
 type ApproveCardProps = {
 	state: PendingState
-	onClosed: () => void
+	onClosed: (kind: ClosedKind) => void
 }
 
 const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
@@ -93,7 +105,7 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 				await decision(state.request)
 			} catch (error) {
 				if (isRelayFailure(error, "unauthorized")) return signInAgain()
-				if (isRelayFailure(error, "unavailable")) return onClosed()
+				if (isRelayFailure(error, "unavailable")) return onClosed("expired")
 				throw error
 			}
 			await onDecided()
@@ -107,7 +119,8 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 		)
 	}
 
-	const cancel = () => decide(cancelAuthorizationRequest, onClosed)
+	const cancel = () =>
+		decide(cancelAuthorizationRequest, () => onClosed("cancelled"))
 
 	return (
 		<>
@@ -138,9 +151,9 @@ type PendingAuthorizationProps = {
 
 const PendingAuthorization = ({ state }: PendingAuthorizationProps) => {
 	const [hasContinued, setHasContinued] = useState(false)
-	const [isClosed, setIsClosed] = useState(false)
+	const [closedAs, setClosedAs] = useState<ClosedKind | null>(null)
 
-	if (isClosed) return <ExpiredCard />
+	if (closedAs) return <ClosedCard kind={closedAs} />
 	if (!hasContinued && !state.isJustSignedIn) {
 		return (
 			<ContinueAsCard
@@ -149,7 +162,7 @@ const PendingAuthorization = ({ state }: PendingAuthorizationProps) => {
 			/>
 		)
 	}
-	return <ApproveCard onClosed={() => setIsClosed(true)} state={state} />
+	return <ApproveCard onClosed={setClosedAs} state={state} />
 }
 
 export const AuthorizePage = () => {
@@ -160,7 +173,7 @@ export const AuthorizePage = () => {
 			{state.kind === "pending" ? (
 				<PendingAuthorization key={state.request} state={state} />
 			) : (
-				<ExpiredCard />
+				<ClosedCard kind={state.kind} />
 			)}
 		</LoginShell>
 	)

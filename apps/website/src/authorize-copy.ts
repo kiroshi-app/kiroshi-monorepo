@@ -18,4 +18,6 @@ export const AUTHORIZE_COPY = {
 	expiredTitle: "Request expired",
 	expiredLead:
 		"This sign-in request is no longer valid. Sign in again from the Kiroshi app on your Mac.",
+	cancelledTitle: "Sign-in cancelled",
+	cancelledLead: "Nothing was signed in on your Mac. You can close this tab.",
 }

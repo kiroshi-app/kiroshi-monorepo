@@ -17,8 +17,10 @@ const SIGNED_IN_FOR_KEY = "kiroshi.authorize.signed-in-for"
 
 type AuthorizeSearch = { request?: string }
 
+type ClosedKind = "expired" | "cancelled"
+
 type AuthorizeState =
-	| { kind: "expired" }
+	| { kind: ClosedKind }
 	| {
 			kind: "pending"
 			request: string
@@ -28,6 +30,8 @@ type AuthorizeState =
 	  }
 
 const EXPIRED: AuthorizeState = { kind: "expired" }
+
+const CANCELLED: AuthorizeState = { kind: "cancelled" }
 
 const validateAuthorizeSearch = (
 	search: Record<string, unknown>,
@@ -64,10 +68,9 @@ const consumeJustSignedIn = (request: string) => {
 	return isJustSignedIn
 }
 
-const readPendingRequest = async (request: string) => {
+const readKnownRequest = async (request: string) => {
 	try {
-		const device = await readAuthorizationRequest(request)
-		return device.status === "pending" ? device : null
+		return await readAuthorizationRequest(request)
 	} catch (error) {
 		if (isRelayFailure(error, "unavailable")) return null
 		throw error
@@ -76,10 +79,11 @@ const readPendingRequest = async (request: string) => {
 
 const loadPendingState = async (request: string): Promise<AuthorizeState> => {
 	const [device, account] = await Promise.all([
-		readPendingRequest(request),
+		readKnownRequest(request),
 		readAccount(),
 	])
-	if (!device) return EXPIRED
+	if (device?.status === "cancelled") return CANCELLED
+	if (device?.status !== "pending") return EXPIRED
 	return {
 		kind: "pending",
 		request,
@@ -105,6 +109,7 @@ const loadAuthorizeState = async ({
 
 export {
 	type AuthorizeState,
+	type ClosedKind,
 	loadAuthorizeState,
 	requireAuthorizeBearer,
 	validateAuthorizeSearch,

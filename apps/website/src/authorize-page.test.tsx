@@ -137,6 +137,15 @@ const openApproval = async () => {
 	return router
 }
 
+const expectCancelledCard = async () => {
+	await heading(AUTHORIZE_COPY.cancelledTitle)
+	expect(screen.getByText(AUTHORIZE_COPY.cancelledLead)).toBeTruthy()
+	expect(screen.queryAllByRole("button")).toHaveLength(0)
+	expect(
+		screen.queryByRole("heading", { name: AUTHORIZE_COPY.expiredTitle }),
+	).toBeNull()
+}
+
 const expectNoAppLink = () => {
 	expect(document.querySelector('a[href^="kiroshi:"]')).toBeNull()
 	expect(screen.queryByText(/open kiroshi/i)).toBeNull()
@@ -241,12 +250,12 @@ describe("the authorization page", () => {
 		expectNoAppLink()
 	})
 
-	it("cancels the request and shows the expired page", async () => {
+	it("cancels the request and shows the cancelled card on the same URL", async () => {
 		const router = await openApproval()
 
 		press(AUTHORIZE_COPY.cancel)
 
-		await heading(AUTHORIZE_COPY.expiredTitle)
+		await expectCancelledCard()
 		expect(callsTo(CANCEL)).toHaveLength(1)
 		expect(callsTo(APPROVE)).toHaveLength(0)
 		expect(router.state.location.href).toBe(AUTHORIZE_PATH)
@@ -277,6 +286,17 @@ describe("the authorization page", () => {
 	)
 })
 
+describe("the cancelled card", () => {
+	it("shows when the request is cancelled", async () => {
+		routes[READ_REQUEST] = requestWith("cancelled")
+		signedIn()
+		renderSite(AUTHORIZE_PATH)
+
+		await expectCancelledCard()
+		expectNoAppLink()
+	})
+})
+
 describe("the expired page", () => {
 	it.each([
 		["the request param is missing", "/authorize"],
@@ -298,7 +318,7 @@ describe("the expired page", () => {
 		await heading(AUTHORIZE_COPY.expiredTitle)
 	})
 
-	it.each(["approved", "cancelled", "expired"])(
+	it.each(["approved", "expired"])(
 		"shows when the request is %s",
 		async (status) => {
 			routes[READ_REQUEST] = requestWith(status)
