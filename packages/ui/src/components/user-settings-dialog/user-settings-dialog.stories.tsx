@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	opaque,
 	PICKED_PICTURE_FILE,
+	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
 	widthInRems,
@@ -56,24 +57,29 @@ const SIGNED_IN: AccountState = {
 	plan: "pro",
 }
 
-const PLAN = en.settings.account.signedIn.plan
+const ACCOUNT = en.settings.account
+
+const PLAN = ACCOUNT.signedIn.plan
+
+const LONG_NAME =
+	"Adaeze Oluwaseun Martin-Castellanos de la Fuente y Rodríguez-Villanueva"
 
 const LONG_EMAIL =
 	"ada.martin.who.signed.up.with.her.whole.department.address.for.every.space@kiroshi-research-laboratories.example.com"
-
-const UNREACHABLE = en.settings.account.unreachable
 
 const accountIn = (account: AccountState) => ({
 	account,
 	onSignIn: fn(),
 	onCancel: fn(),
+	onCopySignInLink: fn(),
+	onManageAccount: fn(),
 	onSignOut: fn(),
 })
 
 const accountPanelIn = async (dialog: HTMLElement) =>
 	within(dialog).findByRole("tabpanel", { name: "Account" })
 
-let unreachableNotice: string | undefined
+let raisedNotice: string | undefined
 
 const DialogHost = (props: UserSettingsDialogProps) => {
 	const [value, setValue] = useState(props.value)
@@ -102,20 +108,35 @@ const DialogHost = (props: UserSettingsDialogProps) => {
 	)
 }
 
-const SignInRoundTripHost = (props: UserSettingsDialogProps) => {
-	const [account, setAccount] = useState<AccountState>({ status: "signedOut" })
+const NoticeHost = (props: UserSettingsDialogProps) => (
+	<>
+		<DialogHost {...props} />
+		<NoticeSurface />
+	</>
+)
 
-	return (
-		<DialogHost
-			{...props}
-			account={{
-				...accountIn(account),
-				onSignIn: () => setAccount({ status: "waiting" }),
-				onCancel: () => setAccount({ status: "signedOut" }),
-			}}
-		/>
-	)
+type NoticeCopy = {
+	title: string
+	description: string
 }
+
+const raiseNotice = async (copy: NoticeCopy) => {
+	raisedNotice = raiseFailureNotice(copy)
+	const notice = await opaque(
+		await screen.findByRole("alertdialog", { hidden: true }),
+	)
+	await expect(within(notice).getByText(copy.title)).toBeVisible()
+	await expect(within(notice).getByText(copy.description)).toBeVisible()
+}
+
+const endRaisedNotice = () => () => {
+	if (raisedNotice) endNotice(raisedNotice)
+}
+
+const UNDER_A_NOTICE = {
+	render: (args: UserSettingsDialogProps) => <NoticeHost {...args} />,
+	beforeEach: endRaisedNotice,
+} as const
 
 const dialogIn = async () => {
 	const dialog = await screen.findByRole("dialog")
@@ -557,7 +578,7 @@ export const SignedOut = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard S1: a reader who never signed in to Kiroshi. Check that Account sits second on the rail with the cloud, that the panel explains what signing in buys and that it happens in the browser, that the email field sits between the explanation and Sign in on the same width, and that Sign in carries the external link mark and calls back with the trimmed address, on a press or on Enter in the field. An empty field or an address that is not one calls nothing and says nothing. Pick `Waiting` for the moment after the press.",
+					"Artboard 3.1: a reader who never signed in to Kiroshi. Check that Account sits second on the rail, that the panel explains what signing in buys, that there is no field to fill, and that Sign in with your browser carries the external link mark and calls back once. Pick `Waiting` for the moment after the press.",
 			},
 		},
 	},
@@ -568,30 +589,18 @@ export const SignedOut = meta.story({
 
 		const panel = await accountPanelIn(dialog)
 		await expect(
-			within(panel).getByRole("heading", { name: "Sign in to Kiroshi" }),
+			within(panel).getByRole("heading", { name: ACCOUNT.signedOut.title }),
 		).toBeVisible()
+		await expect(within(panel).getByText(ACCOUNT.signedOut.body)).toBeVisible()
+		await expect(
+			within(panel).getByText(ACCOUNT.signedOut.caption),
+		).toBeVisible()
+		await expect(within(panel).queryByRole("textbox")).toBeNull()
 
-		const field = within(panel).getByLabelText("Email")
-		await expect(field).toHaveAttribute("type", "email")
-		await expect(field).toHaveAttribute("autocomplete", "email")
-		const signIn = within(panel).getByRole("button", { name: "Sign in" })
-
-		await userEvent.click(signIn)
-		await userEvent.type(field, "ada.martin")
-		await userEvent.click(signIn)
-		await expect(args.account?.onSignIn).not.toHaveBeenCalled()
-
-		await userEvent.clear(field)
-		await userEvent.type(field, ` ${SIGNED_IN.email} `)
-		await userEvent.click(signIn)
-		await expect(args.account?.onSignIn).toHaveBeenCalledOnce()
-		await expect(args.account?.onSignIn).toHaveBeenCalledWith(SIGNED_IN.email)
-
-		await userEvent.type(field, "{Enter}")
-		await expect(args.account?.onSignIn).toHaveBeenCalledTimes(2)
-		await expect(args.account?.onSignIn).toHaveBeenLastCalledWith(
-			SIGNED_IN.email,
+		await userEvent.click(
+			within(panel).getByRole("button", { name: ACCOUNT.signedOut.signIn }),
 		)
+		await expect(args.account?.onSignIn).toHaveBeenCalledOnce()
 	},
 })
 
@@ -601,7 +610,7 @@ export const Waiting = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard S2: the browser is open and the panel waits for it. Check that the primary button is dimmed, spins its mark and names the wait, so a screen reader landing on it hears the state, that it stays in the tab order without calling back, that Cancel calls back, and that the caption says where to finish. The mark holds still for a reader who asked for reduced motion.",
+					"Artboard 3.2: the browser is open and the panel waits for it. Check that the primary button is dimmed, spins its mark and names the wait, so a screen reader landing on it hears the state, that it stays in the tab order without calling back, that Cancel calls back, that the caption says where to finish, and that Copy the sign-in link is a button the keyboard reaches with a visible ring. The mark holds still for a reader who asked for reduced motion.",
 			},
 		},
 	},
@@ -610,7 +619,7 @@ export const Waiting = meta.story({
 		const panel = await accountPanelIn(dialog)
 
 		const waiting = within(panel).getByRole("button", {
-			name: "Waiting for your browser…",
+			name: ACCOUNT.waiting.label,
 		})
 		await expect(waiting).toHaveAttribute("aria-disabled", "true")
 		waiting.focus()
@@ -626,14 +635,25 @@ export const Waiting = meta.story({
 			asksForStillness ? "none" : "spin",
 		)
 
+		await expect(within(panel).getByText(ACCOUNT.waiting.caption)).toBeVisible()
 		await expect(
-			within(panel).getByText(
-				"Finish signing in in your browser. Kiroshi picks it up from there.",
-			),
+			within(panel).getByText(ACCOUNT.waiting.browserDidNotOpen),
 		).toBeVisible()
 
-		await userEvent.click(within(panel).getByRole("button", { name: "Cancel" }))
+		const cancel = within(panel).getByRole("button", {
+			name: ACCOUNT.waiting.cancel,
+		})
+		await userEvent.click(cancel)
 		await expect(args.account?.onCancel).toHaveBeenCalledOnce()
+
+		await userEvent.tab()
+		const copyLink = within(panel).getByRole("button", {
+			name: ACCOUNT.waiting.copySignInLink,
+		})
+		await expect(copyLink).toHaveFocus()
+		await expect(getComputedStyle(copyLink).outlineStyle).not.toBe("none")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.account?.onCopySignInLink).toHaveBeenCalledOnce()
 	},
 })
 
@@ -643,7 +663,7 @@ export const SignedIn = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboards S5, A1 and A2: a reader signed in to Kiroshi on the Pro plan. Check that the card names them, their email as handed in and their plan behind the Free during the beta badge, that Sign out calls back, and that the caption warns what stops working. Pick `WithALongEmail` for an address wider than the card.",
+					"Artboard 3.9: a reader signed in to Kiroshi on the Pro plan. Check that the card wears their initials, names them, shows their email as handed in and their plan behind the Free during the beta badge, that Manage account carries the external link mark and calls back, that Sign out calls back, and that the caption says where the account is managed. Pick `WithALongEmail` for an address wider than the card.",
 			},
 		},
 	},
@@ -651,19 +671,59 @@ export const SignedIn = meta.story({
 		const dialog = await dialogIn()
 		const panel = await accountPanelIn(dialog)
 
-		await expect(
-			within(panel).getByRole("heading", { name: "Signed in" }),
-		).toBeVisible()
+		await expect(within(panel).queryByRole("heading")).toBeNull()
+		const avatar = slotIn(panel, "user-avatar")
+		await expect(avatar).toBeVisible()
+		await expect(avatar.querySelector("img")).toBeNull()
+		await expect(avatar).toHaveTextContent("AM")
 		await expect(within(panel).getByText(SIGNED_IN.name)).toBeVisible()
 		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
-		await expect(within(panel).getByText(PLAN.label)).toBeVisible()
-		await expect(within(panel).getByText(PLAN.beta)).toBeVisible()
+		const badge = within(panel).getByText(PLAN.beta)
+		await expect(badge).toBeVisible()
+		await expect(getComputedStyle(badge).fontSize).toBe("12px")
+		await expect(getComputedStyle(badge).lineHeight).toBe("16px")
 		await expect(within(panel).getByText(PLAN.pro)).toBeVisible()
+		await expect(
+			within(panel).getByText(ACCOUNT.signedIn.caption),
+		).toBeVisible()
 
 		await userEvent.click(
-			within(panel).getByRole("button", { name: "Sign out" }),
+			within(panel).getByRole("button", { name: ACCOUNT.signedIn.manage }),
+		)
+		await expect(args.account?.onManageAccount).toHaveBeenCalledOnce()
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: ACCOUNT.signedIn.signOut }),
 		)
 		await expect(args.account?.onSignOut).toHaveBeenCalledOnce()
+	},
+})
+
+export const SignedInWithPicture = meta.story({
+	args: {
+		tab: "account",
+		value: PICTURED_USER,
+		account: accountIn(SIGNED_IN),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader signed in who set a picture on Profile: the card's avatar wears that picture, the same one the breadcrumb shows, instead of their initials.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const panel = await accountPanelIn(dialog)
+
+		const avatar = slotIn(panel, "user-avatar")
+		await waitFor(() =>
+			expect(avatar.querySelector("img")).toHaveAttribute(
+				"src",
+				UPLOADED_AVATAR_IMAGE,
+			),
+		)
 	},
 })
 
@@ -673,7 +733,7 @@ export const SignedInOnTheFreePlan = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader signed in on the Free plan: the Plan row names it, with no beta badge.",
+					"A reader signed in on the Free plan: the card names it, with no beta badge.",
 			},
 		},
 	},
@@ -681,7 +741,6 @@ export const SignedInOnTheFreePlan = meta.story({
 		const dialog = await dialogIn()
 		const panel = await accountPanelIn(dialog)
 
-		await expect(within(panel).getByText(PLAN.label)).toBeVisible()
 		await expect(within(panel).getByText(PLAN.free)).toBeVisible()
 		await expect(within(panel).queryByText(PLAN.beta)).toBeNull()
 	},
@@ -693,7 +752,7 @@ export const SignedInWithoutAPlan = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader signed in whose account carries no plan: the card stops at Email, with no Plan row and no badge.",
+					"A reader signed in whose account carries no plan: the card stops at their email, with no plan and no badge.",
 			},
 		},
 	},
@@ -702,27 +761,20 @@ export const SignedInWithoutAPlan = meta.story({
 		const panel = await accountPanelIn(dialog)
 
 		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
-		await expect(within(panel).queryByText(PLAN.label)).toBeNull()
+		await expect(within(panel).queryByText(PLAN.pro)).toBeNull()
+		await expect(within(panel).queryByText(PLAN.free)).toBeNull()
 		await expect(within(panel).queryByText(PLAN.beta)).toBeNull()
 	},
 })
 
 export const CantReachKiroshi = meta.story({
 	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
-	render: (args) => (
-		<>
-			<DialogHost {...args} />
-			<NoticeSurface />
-		</>
-	),
-	beforeEach: () => () => {
-		if (unreachableNotice) endNotice(unreachableNotice)
-	},
+	...UNDER_A_NOTICE,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard S6: signing in failed to reach Kiroshi. The panel is the signed out one unchanged, and the host raises a failure notice at the top of the window with the copy the catalogue holds under `account.unreachable`. Pressing Sign in again is the retry.",
+					"Signing in failed to reach Kiroshi. The panel is the signed out one unchanged, and the host raises a failure notice at the top of the window with the copy the catalogue holds under `account.unreachable`. Pressing Sign in with your browser again is the retry.",
 			},
 		},
 	},
@@ -730,44 +782,75 @@ export const CantReachKiroshi = meta.story({
 		const dialog = await dialogIn()
 		const panel = await accountPanelIn(dialog)
 
-		unreachableNotice = raiseFailureNotice(UNREACHABLE)
-		const notice = await opaque(
-			await screen.findByRole("alertdialog", { hidden: true }),
-		)
-		await expect(within(notice).getByText(UNREACHABLE.title)).toBeVisible()
-		await expect(
-			within(notice).getByText(UNREACHABLE.description),
-		).toBeVisible()
+		await raiseNotice(ACCOUNT.unreachable)
 
-		await userEvent.type(within(panel).getByLabelText("Email"), SIGNED_IN.email)
 		await userEvent.click(
-			within(panel).getByRole("button", { name: "Sign in" }),
+			within(panel).getByRole("button", { name: ACCOUNT.signedOut.signIn }),
 		)
 		await expect(args.account?.onSignIn).toHaveBeenCalledOnce()
-		await expect(args.account?.onSignIn).toHaveBeenCalledWith(SIGNED_IN.email)
 	},
 })
 
-export const KeepsTheAddressThroughAWait = meta.story({
-	tags: ["test-only"],
-	args: { tab: "account" },
-	render: (args) => <SignInRoundTripHost {...args} />,
-	play: async ({ userEvent }) => {
+export const RequestExpired = meta.story({
+	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
+	...UNDER_A_NOTICE,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 3.12: the browser never finished and the request expired. The panel is the signed out one unchanged, and the host raises a failure notice with `account.failed.timedOut` over `account.failed.description`. Pressing Sign in with your browser again is the retry.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
 		const dialog = await dialogIn()
 		const panel = await accountPanelIn(dialog)
 
-		await userEvent.type(within(panel).getByLabelText("Email"), SIGNED_IN.email)
-		await userEvent.click(
-			within(panel).getByRole("button", { name: "Sign in" }),
-		)
-		await expect(within(panel).queryByLabelText("Email")).toBeNull()
+		await raiseNotice({
+			title: ACCOUNT.failed.timedOut,
+			description: ACCOUNT.failed.description,
+		})
 
-		await userEvent.click(within(panel).getByRole("button", { name: "Cancel" }))
-		await expect(within(panel).getByLabelText("Email")).toHaveValue(
-			SIGNED_IN.email,
+		await userEvent.click(
+			within(panel).getByRole("button", { name: ACCOUNT.signedOut.signIn }),
 		)
+		await expect(args.account?.onSignIn).toHaveBeenCalledOnce()
 	},
 })
+
+export const SignedOutFromTheSite = meta.story({
+	args: { tab: "account", account: accountIn({ status: "signedOut" }) },
+	...UNDER_A_NOTICE,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 3.13: this Mac was signed out from Devices on kiroshi.app. The panel is the signed out one unchanged, and the host raises a failure notice with the copy the catalogue holds under `account.signedOutFromTheSite`. Pressing Sign in with your browser signs in again.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const panel = await accountPanelIn(dialog)
+
+		await raiseNotice(ACCOUNT.signedOutFromTheSite)
+
+		await userEvent.click(
+			within(panel).getByRole("button", { name: ACCOUNT.signedOut.signIn }),
+		)
+		await expect(args.account?.onSignIn).toHaveBeenCalledOnce()
+	},
+})
+
+const expectWithinTheCard = async (panel: HTMLElement, text: string) => {
+	const line = within(panel).getByText(text)
+	const card = line.parentElement?.parentElement as HTMLElement
+	await expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth)
+	await expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(
+		panel.getBoundingClientRect().right,
+	)
+	await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth)
+}
 
 export const WithALongEmail = meta.story({
 	tags: ["test-only"],
@@ -777,14 +860,18 @@ export const WithALongEmail = meta.story({
 	},
 	play: async () => {
 		const dialog = await dialogIn()
-		const panel = await accountPanelIn(dialog)
+		await expectWithinTheCard(await accountPanelIn(dialog), LONG_EMAIL)
+	},
+})
 
-		const email = within(panel).getByText(LONG_EMAIL)
-		const card = email.closest("dl") as HTMLElement
-		await expect(email.scrollWidth).toBeLessThanOrEqual(email.clientWidth)
-		await expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(
-			panel.getBoundingClientRect().right,
-		)
-		await expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth)
+export const WithALongName = meta.story({
+	tags: ["test-only"],
+	args: {
+		tab: "account",
+		account: accountIn({ ...SIGNED_IN, name: LONG_NAME }),
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		await expectWithinTheCard(await accountPanelIn(dialog), LONG_NAME)
 	},
 })
