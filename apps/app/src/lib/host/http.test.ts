@@ -18,14 +18,6 @@ vi.mock("@workspace/ui/components/notice-surface", () => ({
 
 const failureNotice = vi.mocked(raiseFailureNotice)
 
-const rejectionOf = (answer: Promise<unknown>): Promise<unknown> =>
-	answer.then(
-		() => {
-			throw new Error("the call was answered")
-		},
-		(reason: unknown) => reason,
-	)
-
 const HOST = "http://127.0.0.1:45367"
 
 type Answer = {
@@ -189,9 +181,9 @@ describe("invoke over http", () => {
 			},
 		})
 
-		const reason = await rejectionOf(
-			host.invoke("agent_start_or_resume_session"),
-		)
+		const reason = await host
+			.invoke("agent_start_or_resume_session")
+			.catch((reason: unknown) => reason)
 
 		expect(toTransportError(reason)).toEqual({
 			kind: "spawnFailed",
@@ -207,7 +199,9 @@ describe("invoke over http", () => {
 			},
 		})
 
-		const reason = await rejectionOf(host.invoke("mission_space_feed"))
+		const reason = await host
+			.invoke("mission_space_feed")
+			.catch((reason: unknown) => reason)
 
 		expect(String(reason)).toBe("this command reaches outside the shared space")
 		expect(toTransportError(reason)).toEqual({
