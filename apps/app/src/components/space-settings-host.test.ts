@@ -212,7 +212,8 @@ describe("SpaceSettingsHost on a joined space", () => {
 
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
-		expect(within(dialog).getByDisplayValue("Garage")).toBeTruthy()
+		expect(within(dialog).getByRole("definition").textContent).toBe("Garage")
+		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
 		expect(within(dialog).getByDisplayValue(GARAGE.hostUrl)).toBeTruthy()
 		for (const localOnly of [
 			i18n.t("settings:space.colour.label"),
@@ -228,13 +229,8 @@ describe("SpaceSettingsHost on a joined space", () => {
 		const gear = await gearWithGarage()
 		const dialog = openSettingsOf(gear, GARAGE_ROW)
 
-		await act(async () => {
-			fireEvent.change(within(dialog).getByDisplayValue("Garage"), {
-				target: { value: "Atelier" },
-			})
-		})
-
-		expect(within(dialog).getByDisplayValue("Garage")).toBeTruthy()
+		expect(within(dialog).getByRole("definition").textContent).toBe("Garage")
+		expect(within(dialog).queryByDisplayValue("Garage")).toBeNull()
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
 	})
 
