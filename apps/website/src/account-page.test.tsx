@@ -282,7 +282,9 @@ describe("the account", () => {
 		await openAccount()
 
 		expect(
-			screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+			screen
+				.getAllByRole("heading", { level: 2 })
+				.map((sectionHeading) => sectionHeading.textContent),
 		).toEqual(["Plan", "Signed-in devices"])
 	})
 
