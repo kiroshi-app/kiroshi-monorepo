@@ -342,7 +342,7 @@ export const createJoinedSpacesController = ({
 		awaitedRowId = null
 		const joined = joinedOfRow(id)
 		if (joined && !isSharedSpaceKnown(joined)) {
-			void selectOnceSharedSpaceKnown(joined)
+			void selectOnceSharedSpaceKnown(joined).catch(reportRefusal)
 			return
 		}
 		notePreviousLocal()

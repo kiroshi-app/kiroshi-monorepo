@@ -303,6 +303,24 @@ describe("selecting a space", () => {
 		)
 	})
 
+	it("raises a refused connection of a remote row waiting for its shared Space id and keeps the Space picked", async () => {
+		const unlearned = { ...GARAGE, remoteSpaceId: null }
+		const { joined, spaces, hosts, home, reportFailure } = await gearFor([
+			unlearned,
+		])
+		hosts.connect.mockRejectedValue(new Error("the relay closed"))
+		joined.watch()
+		await settle()
+		reportFailure.mockClear()
+
+		joined.selectSpace(GARAGE_ROW)
+		await settle()
+
+		expect(reportFailure).toHaveBeenCalledOnce()
+		expect(spaces.getState().selectedSpaceId).toBe(home.id)
+		expect(hosts.activate).not.toHaveBeenCalled()
+	})
+
 	it("keeps the Space picked while a remote row waits for its shared Space id", async () => {
 		const unlearned = { ...GARAGE, remoteSpaceId: null }
 		const { joined, spaces, hosts, home, wire } = await gearFor([unlearned])
