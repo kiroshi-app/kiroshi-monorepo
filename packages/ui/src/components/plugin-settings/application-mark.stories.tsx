@@ -8,6 +8,7 @@ import {
 	DRAWN_MARK,
 	HOSTILE_MARK,
 	UNREACHABLE_MARK,
+	VIEWPORT_PINNED_MARK,
 } from "@workspace/ui/components/plugin-settings/applications.fixtures"
 
 const meta = preview.meta({
@@ -109,6 +110,28 @@ export const WithHostileMark = meta.story({
 			"bg-muted",
 			"text-muted-foreground",
 		)
+	},
+})
+
+export const WithMarkPinnedToTheViewport = meta.story({
+	tags: ["test-only", "!autodocs"],
+	args: { mark: VIEWPORT_PINNED_MARK },
+	play: async ({ canvasElement }) => {
+		const slot = slotIn(canvasElement, "application-mark")
+		const drawing = slot.querySelector("svg")
+		const slotBox = slot.getBoundingClientRect()
+		const drawingBox = drawing?.getBoundingClientRect()
+		const outsideTheSlot = document.elementFromPoint(
+			window.innerWidth - 1,
+			window.innerHeight - 1,
+		)
+
+		await expect(drawingBox).toBeDefined()
+		await expect(drawingBox?.left).toBeGreaterThanOrEqual(slotBox.left)
+		await expect(drawingBox?.top).toBeGreaterThanOrEqual(slotBox.top)
+		await expect(drawingBox?.right).toBeLessThanOrEqual(slotBox.right)
+		await expect(drawingBox?.bottom).toBeLessThanOrEqual(slotBox.bottom)
+		await expect(slot.contains(outsideTheSlot)).toBe(false)
 	},
 })
 

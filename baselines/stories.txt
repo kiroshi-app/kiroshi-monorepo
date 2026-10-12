@@ -1300,6 +1300,7 @@ settings-plugins-applicationmark--small
 settings-plugins-applicationmark--with-drawn-mark
 settings-plugins-applicationmark--with-hostile-mark
 settings-plugins-applicationmark--with-mark
+settings-plugins-applicationmark--with-mark-pinned-to-the-viewport
 settings-plugins-applicationmark--with-unreachable-mark
 settings-plugins-applicationmark--without-mark
 settings-plugins-applicationscatalogue--at-rest
