@@ -225,7 +225,6 @@ afterEach(() => {
 	vi.unstubAllGlobals()
 	vi.restoreAllMocks()
 	localStorage.clear()
-	sessionStorage.clear()
 })
 
 describe("the account page, signed out", () => {

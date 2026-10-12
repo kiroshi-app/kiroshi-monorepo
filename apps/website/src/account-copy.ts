@@ -8,7 +8,7 @@ export const ACCOUNT_COPY = {
 	lead: "Your plan and the devices signed in to Kiroshi.",
 	planHeading: "Plan",
 	plans: {
-		free: { name: local.name, price: local.price, betaTag: undefined },
+		free: { name: local.name, price: local.price },
 		pro: {
 			name: pro.name,
 			price: `${pro.price} ${pro.period}`,

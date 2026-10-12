@@ -9,6 +9,12 @@ type ChildrenProps = {
 	children: ReactNode
 }
 
+const Tag = ({ children }: ChildrenProps) => (
+	<span className="rounded-full bg-muted px-2 py-0.5 text-xs leading-4 font-medium">
+		{children}
+	</span>
+)
+
 type AccountSectionProps = ChildrenProps & {
 	heading: string
 }
@@ -32,11 +38,7 @@ export const PlanLine = ({ name, price, betaTag }: PlanLineProps) => (
 	<div className="flex flex-wrap items-center gap-x-2 gap-y-1">
 		<p className="text-sm leading-5 font-medium">{name}</p>
 		<p className="text-[13px] leading-[18px] text-muted-foreground">{price}</p>
-		{betaTag ? (
-			<span className="rounded-full bg-muted px-2 py-0.5 text-xs leading-4 font-medium">
-				{betaTag}
-			</span>
-		) : null}
+		{betaTag ? <Tag>{betaTag}</Tag> : null}
 	</div>
 )
 
@@ -69,11 +71,7 @@ export const SessionRow = ({
 					<p className="text-sm leading-[18px] font-medium wrap-anywhere">
 						{name}
 					</p>
-					{currentTag ? (
-						<span className="rounded-full bg-muted px-2 py-0.5 text-xs leading-4 font-medium">
-							{currentTag}
-						</span>
-					) : null}
+					{currentTag ? <Tag>{currentTag}</Tag> : null}
 				</div>
 				<p className="text-xs leading-4 text-muted-foreground">{caption}</p>
 			</div>
