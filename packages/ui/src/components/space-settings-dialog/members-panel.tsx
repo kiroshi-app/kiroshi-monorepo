@@ -134,55 +134,51 @@ const InviteField = ({
 	}
 
 	return (
-		<form className="flex flex-col gap-4" noValidate onSubmit={submit}>
-			<div className="flex flex-col gap-1.5">
-				<label
-					className={cn(FIELD_LABEL_CLASS, !isHosted && "opacity-50")}
-					htmlFor={id}
-				>
-					{t("space.members.invite.label")}
-				</label>
-				<div className="flex gap-1.5">
-					<input
-						aria-describedby={helperId}
-						aria-invalid={refusal ? true : undefined}
-						autoComplete="email"
-						className={cn(
-							FIELD_CONTROL_CLASS,
-							"min-w-0 flex-1 disabled:opacity-50",
-							refusal && [
-								FIELD_CONTROL_INVALID_CLASS,
-								"ring-3 ring-destructive/20",
-							],
-						)}
-						id={id}
-						inputMode="email"
-						onChange={(event) => onEmailChange(event.target.value)}
-						placeholder={t("space.members.invite.placeholder")}
-						spellCheck={false}
-						type="email"
-						disabled={!isHosted}
-						value={email}
-					/>
-					<Button disabled={!isHosted || isEmpty} type="submit">
-						{t("space.members.invite.action")}
-					</Button>
-				</div>
-				<p
+		<form className="flex flex-col gap-1.5" noValidate onSubmit={submit}>
+			<label
+				className={cn(FIELD_LABEL_CLASS, !isHosted && "opacity-50")}
+				htmlFor={id}
+			>
+				{t("space.members.invite.label")}
+			</label>
+			<div className="flex gap-1.5">
+				<input
+					aria-describedby={helperId}
+					aria-invalid={refusal ? true : undefined}
+					autoComplete="email"
 					className={cn(
-						"break-words text-xs",
-						refusal || failureText
-							? "text-destructive"
-							: "text-muted-foreground",
+						FIELD_CONTROL_CLASS,
+						"min-w-0 flex-1 disabled:opacity-50",
+						refusal && [
+							FIELD_CONTROL_INVALID_CLASS,
+							"ring-3 ring-destructive/20",
+						],
 					)}
-					id={helperId}
-				>
-					{refusal
-						? t(`space.members.invite.refusal.${refusal}`, { email })
-						: !failureText && hint}
-					<span role="status">{failureText}</span>
-				</p>
+					id={id}
+					inputMode="email"
+					onChange={(event) => onEmailChange(event.target.value)}
+					placeholder={t("space.members.invite.placeholder")}
+					spellCheck={false}
+					type="email"
+					disabled={!isHosted}
+					value={email}
+				/>
+				<Button disabled={!isHosted || isEmpty} type="submit">
+					{t("space.members.invite.action")}
+				</Button>
 			</div>
+			<p
+				className={cn(
+					"break-words text-xs",
+					refusal || failureText ? "text-destructive" : "text-muted-foreground",
+				)}
+				id={helperId}
+			>
+				{refusal
+					? t(`space.members.invite.refusal.${refusal}`, { email })
+					: !failureText && hint}
+				<span role="status">{failureText}</span>
+			</p>
 		</form>
 	)
 }
