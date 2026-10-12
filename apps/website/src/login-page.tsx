@@ -54,7 +54,10 @@ type RelayFailureLineProps = {
 	onRetry: () => void
 }
 
-const RelayFailureLine = ({ failure, onRetry }: RelayFailureLineProps) => {
+export const RelayFailureLine = ({
+	failure,
+	onRetry,
+}: RelayFailureLineProps) => {
 	if (!failure || isCodeFailure(failure)) return null
 
 	return (

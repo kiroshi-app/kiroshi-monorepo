@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 export const DownloadMark = () => (
 	<svg
 		aria-hidden="true"
@@ -67,4 +69,59 @@ export const AppleMark = () => (
 	>
 		<path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09ZM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
 	</svg>
+)
+
+type StrokeMarkProps = {
+	className: string
+	strokeWidth: number
+	children: ReactNode
+}
+
+const StrokeMark = ({ className, strokeWidth, children }: StrokeMarkProps) => (
+	<svg
+		aria-hidden="true"
+		className={`${className} shrink-0`}
+		fill="none"
+		stroke="currentColor"
+		strokeLinecap="round"
+		strokeLinejoin="round"
+		strokeWidth={strokeWidth}
+		viewBox="0 0 24 24"
+		xmlns="http://www.w3.org/2000/svg"
+	>
+		{children}
+	</svg>
+)
+
+export const DeviceMark = () => (
+	<StrokeMark className="size-5" strokeWidth={1.8}>
+		<rect height={12} rx={1.5} width={18} x={3} y={4} />
+		<path d="M9 20h6M12 16v4" />
+	</StrokeMark>
+)
+
+export const BenefitMark = () => (
+	<StrokeMark className="size-4" strokeWidth={2}>
+		<path d="M5 12l5 5 9-10" />
+	</StrokeMark>
+)
+
+export const SignedInMark = () => (
+	<StrokeMark className="size-5" strokeWidth={2.2}>
+		<path d="M5 12l5 5 9-10" />
+	</StrokeMark>
+)
+
+export const ExpiredMark = () => (
+	<StrokeMark className="size-5" strokeWidth={2}>
+		<circle cx={12} cy={12} r={9} />
+		<path d="M12 7.5v5.5M12 16.5v.01" />
+	</StrokeMark>
+)
+
+export const CancelledMark = () => (
+	<StrokeMark className="size-5" strokeWidth={2}>
+		<circle cx={12} cy={12} r={9} />
+		<path d="m9 9 6 6M15 9l-6 6" />
+	</StrokeMark>
 )

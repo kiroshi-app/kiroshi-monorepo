@@ -29,6 +29,13 @@
 	--color-mail-tile: #eef2f9;
 	--color-mail-glyph: #3d5a8a;
 
+	--color-initials-tile: #dbe3f1;
+	--color-initials-glyph: #3d5a8a;
+	--color-signed-in-tile: #d2fae5;
+	--color-signed-in-glyph: oklch(55% 0.15 162.5);
+	--color-expired-tile: oklch(96% 0.03 27.3);
+	--color-cancelled-tile: #f0f0f0;
+
 	--shadow-field: 0 0 0 1px var(--color-border);
 	--shadow-field-focus:
 		0 0 0 1px var(--color-ring),
