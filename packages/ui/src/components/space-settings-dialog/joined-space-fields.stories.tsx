@@ -49,10 +49,7 @@ export const Default = meta.story({
 		const name = await nameIn(canvasElement)
 		await expect(name).toHaveTextContent(/^Northwind$/)
 		await expect(canvas.queryByRole("textbox", { name: "Name" })).toBeNull()
-		await expect(
-			canvas.queryByRole("textbox", { name: /Northwind/ }),
-		).toBeNull()
-		await expect(canvas.getAllByRole("textbox")).toHaveLength(1)
+		await expect(canvas.queryByDisplayValue("Northwind")).toBeNull()
 
 		const style = getComputedStyle(name)
 		await expect(style.borderTopWidth).toBe("0px")

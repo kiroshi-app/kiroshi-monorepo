@@ -515,11 +515,10 @@ export const JoinedSpace = meta.story({
 				.map((tab) => tab.textContent),
 		).toEqual(RAIL)
 
+		const label = within(dialog).getByRole("term")
+		await expect(label).toHaveTextContent(/^Name$/)
 		const name = within(dialog).getByRole("definition")
-		await expect(name.previousElementSibling).toBe(
-			within(dialog).getByRole("term"),
-		)
-		await expect(name.previousElementSibling).toHaveTextContent(/^Name$/)
+		await expect(name.previousElementSibling).toBe(label)
 		await expect(name).toBeVisible()
 		await expect(name).toHaveTextContent(/^Northwind$/)
 		await expect(
