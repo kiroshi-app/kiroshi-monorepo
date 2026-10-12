@@ -14,7 +14,7 @@ import {
 
 const FOCUS_HALO = "outline-none focus-visible:shadow-field-focus"
 
-const ACTION = `${FOCUS_HALO} h-9 w-full rounded-[12px] text-sm leading-[18px] font-medium`
+export const ACTION = `${FOCUS_HALO} h-9 w-full rounded-[12px] text-sm leading-[18px] font-medium`
 
 const FIELD_CONTROL =
 	"h-9 rounded-lg bg-card px-3 text-sm leading-[18px] shadow-field outline-none placeholder:text-muted-foreground focus:shadow-field-focus"

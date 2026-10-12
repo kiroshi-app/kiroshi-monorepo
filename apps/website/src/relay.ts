@@ -40,6 +40,14 @@ type Account = {
 	isNamed: boolean
 }
 
+type Session = {
+	id: string
+	deviceName: string | null
+	platform: string | null
+	lastSeenAt: number
+	isCurrent: boolean
+}
+
 type AuthorizationRequest = {
 	deviceName: string
 	platform: string
@@ -49,9 +57,11 @@ type AuthorizationRequest = {
 
 type RelayRequest = {
 	path: string
-	method?: "GET" | "POST" | "PATCH"
+	method?: "GET" | "POST" | "PATCH" | "DELETE"
 	body?: unknown
 }
+
+const NO_CONTENT = 204
 
 const GONE_STATUSES: ReadonlySet<number> = new Set([404, 409, 410])
 
@@ -101,6 +111,7 @@ const send = async ({ path, method = "GET", body }: RelayRequest) => {
 		throw new RelayError("network", { cause })
 	})
 	if (!response.ok) throw new RelayError(await failureOf(response))
+	if (response.status === NO_CONTENT) return null
 	return readJson(response)
 }
 
@@ -184,6 +195,42 @@ const readAccount = async (): Promise<Account> => {
 	}
 }
 
+const nullableStringField = (body: unknown, field: string) => {
+	const value = fieldOf(body, field)
+	if (value === null) return null
+	if (typeof value !== "string") throw new RelayError("server")
+	return value
+}
+
+const sessionOf = (body: unknown): Session => ({
+	id: stringField(body, "id"),
+	deviceName: nullableStringField(body, "deviceName"),
+	platform: nullableStringField(body, "platform"),
+	lastSeenAt: timeField(body, "lastSeenAt"),
+	isCurrent: fieldOf(body, "current") === true,
+})
+
+const readSessions = async () => {
+	const sessions = fieldOf(await send({ path: "/me/sessions" }), "sessions")
+	if (!Array.isArray(sessions)) throw new RelayError("server")
+	return sessions.map(sessionOf)
+}
+
+const signOutSession = async (id: string) => {
+	await send({
+		path: `/me/sessions/${encodeURIComponent(id)}`,
+		method: "DELETE",
+	})
+}
+
+const signOutEverywhere = async () => {
+	await send({ path: "/me/sessions", method: "DELETE" })
+}
+
+const signOutSite = async () => {
+	await send({ path: "/api/auth/sign-out", method: "POST" })
+}
+
 const authorizationPath = (request: string) =>
 	`/authorization-requests/${encodeURIComponent(request)}`
 
@@ -220,10 +267,15 @@ export {
 	readAccount,
 	readAuthorizationRequest,
 	readBearer,
+	readSessions,
 	requestSocialSignIn,
+	type Session,
 	type SocialProvider,
 	saveBearer,
 	saveName,
 	sendCode,
 	signInWithCode,
+	signOutEverywhere,
+	signOutSession,
+	signOutSite,
 }

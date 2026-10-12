@@ -7,6 +7,8 @@ import {
 	redirect,
 } from "@tanstack/react-router"
 
+import { AccountPage } from "./account-page"
+import { loadAccountState } from "./account-state"
 import { AppScene } from "./app-scene"
 import { AuthorizeDonePage, AuthorizePage } from "./authorize-page"
 import {
@@ -123,6 +125,9 @@ const accountRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/account",
 	beforeLoad: requireBearer,
+	loader: ({ location }) => loadAccountState(location.href),
+	component: AccountPage,
+	errorComponent: LoginLoadFailure,
 })
 
 const routeTree = rootRoute.addChildren([
