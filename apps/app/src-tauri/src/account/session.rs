@@ -165,7 +165,9 @@ async fn device_name() -> String {
 	let read =
 		tokio::process::Command::new("scutil").args(["--get", "ComputerName"]).output().await;
 	let named = match read {
-		Ok(output) if output.status.success() => String::from_utf8(output.stdout).ok(),
+		Ok(output) if output.status.success() => {
+			Some(String::from_utf8_lossy(&output.stdout).into_owned())
+		}
 		Ok(output) => {
 			eprintln!("scutil did not read the computer name: {}", output.status);
 			None
