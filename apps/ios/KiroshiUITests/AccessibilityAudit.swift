@@ -26,7 +26,7 @@ extension XCTestCase {
                 issue.auditType == .contrast && issue.compactDescription == "Contrast nearly passed"
             let accepted = isSecondaryLabelNearlyPassing || isAccepted(issue)
             print(
-                "audit:", accepted ? "accepted" : "failed", "|", issue.auditType.rawValue, issue.compactDescription, "|",
+                "audit:", accepted ? "accepted" : "failed", "|", issue.compactDescription, "|",
                 issue.element?.label ?? "no element", "|",
                 issue.element.map { "\($0.frame)" } ?? "")
             return accepted
