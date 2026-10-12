@@ -1,3 +1,5 @@
+import Foundation
+import Security
 import Testing
 
 @testable import Kiroshi
@@ -19,5 +21,20 @@ struct KeychainSessionStoreTests {
 
         store.clear()
         #expect(store.load() == nil)
+    }
+
+    @Test func loadsTheSessionAnEarlierBuildSaved() throws {
+        store.clear()
+        let item: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: store.service,
+            kSecAttrAccount as String: "session",
+            kSecValueData as String: Data(
+                #"{"bearer":"fixture-bearer","email":"sam@example.com"}"#.utf8),
+        ]
+        try #require(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
+
+        #expect(store.load() == CloudFixture.session)
+        store.clear()
     }
 }

@@ -26,6 +26,7 @@ struct KiroshiCloud: Sendable {
 
     let baseURL: URL
     let transport: any HTTPTransport
+    var deviceName = "iPhone"
 
     func requestCode(for email: String) async throws -> CodeRequestAnswer {
         let request = post(
@@ -40,7 +41,9 @@ struct KiroshiCloud: Sendable {
     }
 
     func signIn(email: String, code: String) async throws -> CodeSignInAnswer {
-        let request = post("api/auth/sign-in/email-otp", body: CodeSignIn(email: email, otp: code))
+        let request = post(
+            "api/auth/sign-in/email-otp",
+            body: CodeSignIn(email: email, otp: code, deviceName: deviceName))
         guard let (status, data) = try await send(request) else { return .unreachable }
         switch status {
         case 200:
@@ -115,6 +118,8 @@ private struct CodeRequest: Encodable {
 private struct CodeSignIn: Encodable {
     let email: String
     let otp: String
+    let deviceName: String
+    let platform = "ios"
 }
 
 private struct GrantedSession: Decodable {

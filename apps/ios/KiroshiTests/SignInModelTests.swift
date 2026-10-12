@@ -112,7 +112,29 @@ struct SignInModelTests {
         #expect(model.signedInEmail == CloudFixture.email)
         #expect(model.path.isEmpty)
         #expect(model.isSigningIn == false)
-        #expect(try await lastRequestBody() == ["email": CloudFixture.email, "otp": "482913"])
+        #expect(
+            try await lastRequestBody() == [
+                "email": CloudFixture.email, "otp": "482913", "deviceName": "iPhone",
+                "platform": "ios",
+            ])
+    }
+
+    @Test func aSignInNamesTheSessionAfterTheIPhone() async throws {
+        await transport.answer(CloudFixture.signInPath, with: CloudFixture.signedIn)
+        let model = SignInModel(
+            cloud: KiroshiCloud(
+                baseURL: KiroshiCloud.productionURL, transport: transport,
+                deviceName: "Sam's iPhone"),
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+        model.email = CloudFixture.email
+        model.code = "482913"
+
+        await model.signIn()
+
+        let body = try await lastRequestBody()
+        #expect(body["deviceName"] == "Sam's iPhone")
+        #expect(body["platform"] == "ios")
+        #expect(sessions.saved == CloudFixture.session)
     }
 
     @Test(

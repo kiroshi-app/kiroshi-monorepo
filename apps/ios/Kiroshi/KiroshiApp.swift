@@ -27,7 +27,9 @@ struct KiroshiApp: App {
         #endif
         return SignInModel(
             cloud: KiroshiCloud(
-                baseURL: KiroshiCloud.productionURL, transport: URLSessionTransport()),
+                baseURL: KiroshiCloud.productionURL, transport: URLSessionTransport(),
+                deviceName: DeviceName.of(
+                    name: UIDevice.current.name, model: UIDevice.current.model)),
             sessions: KeychainSessionStore(),
             lastSpace: UserDefaultsLastSpaceStore(),
             relay: .live)
