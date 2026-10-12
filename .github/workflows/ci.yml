@@ -184,7 +184,7 @@ jobs:
 
       - name: Test on the simulator
         timeout-minutes: 20
-        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath apps/ios/build -parallel-testing-worker-count 3 test-without-building
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath apps/ios/build -parallel-testing-worker-count 2 test-without-building
 
       - name: Swift format
         run: swift format lint --recursive --strict apps/ios
