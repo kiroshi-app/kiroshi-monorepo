@@ -135,7 +135,9 @@ export function createChatController(
 	})
 	const carried = createCarriedContext(context)
 	const rotation = createRunRotation(context, session, carried)
-	const opening = createConversationOpening(context)
+	const opening = createConversationOpening(context, {
+		routePendingQuestions: routing.routePendingQuestions,
+	})
 	const selection = createBotTransitions(context, {
 		openConversation: opening.openConversation,
 		openedFor: session.openedFor,

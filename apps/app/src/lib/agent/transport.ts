@@ -70,6 +70,9 @@ export const agentTransport: ChatDriver = {
 
 	shutdown: (scope: RuntimeScope) => invoke<void>("agent_shutdown", { scope }),
 
+	pendingQuestions: (conversationId: string) =>
+		invoke<ScopedEvent[]>("agent_pending_questions", { conversationId }),
+
 	subscribe: (onEvent: (event: ScopedEvent) => void) =>
 		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => onEvent(payload)),
 }

@@ -60,6 +60,7 @@ export const createForeignTurns = (
 	now: () => number,
 ): ForeignTurns => {
 	const claimed = new Set<string>()
+	const resolved = new Set<string>()
 	const turns = new Map<string, ForeignTurn>()
 
 	const turnAt = (scope: RuntimeScope): ForeignTurn => {
@@ -138,17 +139,22 @@ export const createForeignTurns = (
 		})
 
 	const askQuestion = (turn: ForeignTurn, question: QuestionRequest) => {
+		if (resolved.has(question.id)) {
+			return
+		}
 		openSpeaker(turn)
 		writeQuestionRow(turn.scope, question)
 		reviseSpeaker(turn, (speaker) => ({ ...speaker, question }))
 	}
 
-	const releasePrompt = (turn: ForeignTurn, id: string) =>
+	const releasePrompt = (turn: ForeignTurn, id: string) => {
+		resolved.add(id)
 		reviseSpeaker(turn, (speaker) => ({
 			...speaker,
 			permission: speaker.permission?.id === id ? null : speaker.permission,
 			question: speaker.question?.id === id ? null : speaker.question,
 		}))
+	}
 
 	const noteActivity = (turn: ForeignTurn, activity: ActivityEvent) => {
 		openSpeaker(turn)

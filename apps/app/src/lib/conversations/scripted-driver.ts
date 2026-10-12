@@ -102,6 +102,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 			shutdowns.push(scope.botId)
 			return Promise.resolve()
 		},
+		pendingQuestions: () => Promise.resolve([]),
 		subscribe: (onEvent) => {
 			listeners.add(onEvent)
 			return Promise.resolve(() => listeners.delete(onEvent))

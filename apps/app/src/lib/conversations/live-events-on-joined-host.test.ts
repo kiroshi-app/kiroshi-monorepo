@@ -39,17 +39,34 @@ import { useLiveMissions } from "../missions/use-live-missions"
 
 type Handler = (event: { event: string; id: number; payload: unknown }) => void
 
+const PENDING_QUESTIONS = "agent_pending_questions"
+
 const wire = vi.hoisted(() => ({
 	sockets: [] as HostSocket[],
 	local: new Map<string, Set<Handler>>(),
+	pendingQuestions: (): Promise<unknown> => Promise.resolve([]),
 }))
+
+const asJson = (body: unknown, status = 200) =>
+	new Response(JSON.stringify(body), {
+		status,
+		headers: { "content-type": "application/json" },
+	})
+
+const answerOnHost = (input: RequestInfo | URL) =>
+	String(input).endsWith(PENDING_QUESTIONS)
+		? wire.pendingQuestions().then(asJson, (reason) => asJson(reason, 500))
+		: Promise.resolve(asJson(null))
 
 vi.mock("../host", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../host")>()
 	const { createJoinedHosts } = await import("../host/joined-hosts")
 	const joinedHosts = createJoinedHosts({
 		local: {
-			invoke: (async () => null) as never,
+			invoke: (async (command: string) =>
+				command === PENDING_QUESTIONS
+					? wire.pendingQuestions()
+					: null) as never,
 			listen: async (event, handler) => {
 				const heard = wire.local.get(event) ?? new Set<Handler>()
 				heard.add(handler as Handler)
@@ -70,10 +87,7 @@ vi.mock("../host", async (importOriginal) => {
 				name: id,
 			},
 		}),
-		fetch: async () =>
-			new Response("null", {
-				headers: { "content-type": "application/json" },
-			}),
+		fetch: (input) => answerOnHost(input),
 		openSocket: () => {
 			const socket: HostSocket = {
 				onopen: null,
@@ -253,17 +267,34 @@ const liveDriver = (store: TranscriptStore) => {
 	return {
 		scripted,
 		driver: withFakeHostWrites(
-			{ ...scripted, subscribe: agentTransport.subscribe },
+			{
+				...scripted,
+				subscribe: agentTransport.subscribe,
+				pendingQuestions: agentTransport.pendingQuestions,
+			},
 			store,
 		),
 	}
 }
 
-const openSoloChat = async () => {
+type Opening = {
+	store: TranscriptStore
+	driver: ReturnType<typeof liveDriver>["driver"]
+	conversationId: string
+	botId: string
+}
+
+type Prepare = (opening: Opening) => Promise<void>
+
+const NOTHING_TO_PREPARE: Prepare = async () => undefined
+
+const openSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const controller = createChatController(driver, store)
 	const detach = controller.attach()
+	const chat = await store.mainChat(BOT, null)
+	await prepare({ store, driver, conversationId: chat.id, botId: BOT })
 	await act(() => controller.open(BOT, null).then(() => undefined))
 	await settled()
 	const conversationId = controller.getState().conversationId ?? ""
@@ -278,7 +309,7 @@ const openSoloChat = async () => {
 	}
 }
 
-const openRoom = async () => {
+const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const [bot] = await seatBots(store, "personal", ["Ada"])
@@ -288,8 +319,10 @@ const openRoom = async () => {
 		title: "Walls",
 		botIds: [bot?.id ?? ""],
 	})
+	const botId = bot?.id ?? ""
 	const controller = createConversationController(driver, store)
 	const detach = controller.attach()
+	await prepare({ store, driver, conversationId: conversation.id, botId })
 	await act(() => controller.open(conversation))
 	await settled()
 	return {
@@ -298,7 +331,7 @@ const openRoom = async () => {
 		driver,
 		controller,
 		detach,
-		botId: bot?.id ?? "",
+		botId,
 		conversationId: conversation.id,
 	}
 }
@@ -306,6 +339,7 @@ const openRoom = async () => {
 beforeEach(async () => {
 	await joinedHosts.activate(null)
 	wire.sockets.length = 0
+	wire.pendingQuestions = () => Promise.resolve([])
 })
 
 afterEach(() => {
@@ -1125,8 +1159,8 @@ type QuestionShown = {
 
 const QUESTION_ROW_ID = questionMessageIdOf(QUESTION.id)
 
-const openAskedRoom = async () => {
-	const room = await openRoom()
+const openAskedRoom = async (prepare = NOTHING_TO_PREPARE) => {
+	const room = await openRoom(prepare)
 	const shown = (): QuestionShown => {
 		const { messages, pendingPrompt } = room.controller.getState()
 		const question =
@@ -1136,8 +1170,8 @@ const openAskedRoom = async () => {
 	return { ...room, shown }
 }
 
-const openAskedSoloChat = async () => {
-	const solo = await openSoloChat()
+const openAskedSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
+	const solo = await openSoloChat(prepare)
 	const shown = (): QuestionShown => {
 		const { messages, foreignTurn } = solo.controller.stateFor(solo.botId)
 		return { messages, question: foreignTurn?.question ?? null }
@@ -1249,5 +1283,247 @@ describe.each([
 				detach()
 			},
 		)
+	},
+)
+
+type HeldRead = {
+	answer: (questions: unknown[]) => Promise<void>
+	refuse: () => Promise<void>
+}
+
+const holdPendingQuestions = (): HeldRead => {
+	let answer: (questions: unknown) => void = () => undefined
+	let refuse: (reason: unknown) => void = () => undefined
+	wire.pendingQuestions = () =>
+		new Promise((resolve, reject) => {
+			answer = resolve
+			refuse = reject
+		})
+	return {
+		answer: async (questions) => {
+			answer(questions)
+			await settled()
+		},
+		refuse: async () => {
+			refuse("host unreachable")
+			await settled()
+		},
+	}
+}
+
+type WaitingView = {
+	shownConversationId: () => string | null
+	hasFailed: () => boolean
+	switchAway: () => Promise<() => QuestionShown>
+}
+
+const openWaitingRoom = async () => {
+	const room = await openAskedRoom()
+	const { controller, store, botId } = room
+	const view: WaitingView = {
+		shownConversationId: () => controller.getState().conversationId,
+		hasFailed: () => controller.getState().latestError !== null,
+		switchAway: async () => {
+			const other = await store.createConversation({
+				spaceId: "personal",
+				sectionId: null,
+				title: "Floors",
+				botIds: [botId],
+			})
+			await act(() => controller.open(other))
+			return room.shown
+		},
+	}
+	return { ...room, ...view }
+}
+
+const OTHER_BOT = "other"
+
+const openWaitingSoloChat = async () => {
+	const solo = await openAskedSoloChat()
+	const { controller, botId } = solo
+	const view: WaitingView = {
+		shownConversationId: () => controller.stateFor(botId).conversationId,
+		hasFailed: () => controller.stateFor(botId).errors.length > 0,
+		switchAway: async () => {
+			await act(() => controller.open(OTHER_BOT, null).then(() => undefined))
+			await settled()
+			return () => {
+				const { messages, foreignTurn } = controller.stateFor(OTHER_BOT)
+				return { messages, question: foreignTurn?.question ?? null }
+			}
+		},
+	}
+	return { ...solo, ...view }
+}
+
+describe.each([
+	["a room", openWaitingRoom],
+	["a solo conversation", openWaitingSoloChat],
+] as const)(
+	"the questions still waiting when %s opens or reloads",
+	(_, open) => {
+		const openWaiting = async (join: () => Promise<void>) => {
+			const read = holdPendingQuestions()
+			await join()
+			const opened = await open()
+			const scope = {
+				...foreignScope(opened.conversationId),
+				botId: opened.botId,
+			}
+			const turn = storedTurn(opened.conversationId)
+			const waiting = { scope, turn, event: ASKED_QUESTION }
+			return { ...opened, read, scope, turn, waiting }
+		}
+
+		it.each(sides)(
+			"shows one card and one question row for each on %s",
+			async (_, _emit, join) => {
+				const { read, waiting, shown, detach } = await openWaiting(join)
+
+				await read.answer([waiting])
+
+				expect(questionRowsIn(shown())).toMatchObject([
+					{ content: questionMessageText(QUESTION), completion: "complete" },
+				])
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"keeps one card and one row on %s when the live replay brings the question too",
+			async (_, emit: Emit, join) => {
+				const { read, waiting, shown, detach } = await openWaiting(join)
+
+				await emit("agent://event", waiting)
+				await read.answer([waiting])
+				await emit("agent://event", waiting)
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"shows no card on %s for a question resolved before the read returns",
+			async (_, emit: Emit, join) => {
+				const { read, waiting, scope, turn, shown, detach } =
+					await openWaiting(join)
+
+				await emit("agent://event", waiting)
+				await emit("agent://event", { scope, turn, event: QUESTION_RESOLVED })
+				await read.answer([waiting])
+
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"sends the answer given on %s to the turn that asked and closes the card",
+			async (_, _emit, join) => {
+				const { read, waiting, scope, driver, controller, shown, detach } =
+					await openWaiting(join)
+				const answer = vi.spyOn(driver, "answerQuestion").mockResolvedValue()
+				await read.answer([waiting])
+
+				await act(() => controller.answer(QUESTION.id, ANSWERS))
+
+				expect(answer).toHaveBeenCalledWith(scope, QUESTION.id, ANSWERS)
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"raises a notice on %s and keeps the conversation open when the read is refused",
+			async (_, _emit, join) => {
+				const opened = await openWaiting(join)
+
+				await opened.read.refuse()
+
+				expect(opened.hasFailed()).toBe(true)
+				expect(opened.shownConversationId()).toBe(opened.conversationId)
+				opened.detach()
+			},
+		)
+
+		it.each(sides)(
+			"renders none of its questions on %s in the conversation shown instead",
+			async (_, _emit, join) => {
+				const { read, waiting, switchAway, detach } = await openWaiting(join)
+				const shownInstead = await switchAway()
+
+				await read.answer([waiting])
+
+				expect(questionRowsIn(shownInstead())).toEqual([])
+				expect(askedIn(shownInstead())).toBeNull()
+				detach()
+			},
+		)
+	},
+)
+
+const writeHistory: Prepare = async ({ store, conversationId }) => {
+	await writtenElsewhere(store, conversationId, "First")
+	await writtenElsewhere(store, conversationId, "Second")
+}
+
+const writeHistoryAndQuestionRow: Prepare = async (opening) => {
+	await writeHistory(opening)
+	await repliedElsewhere(opening.store, {
+		conversationId: opening.conversationId,
+		botId: opening.botId,
+		replyId: QUESTION_ROW_ID,
+		text: questionMessageText(QUESTION),
+	})
+}
+
+const answerBeforePage =
+	(writePage: Prepare): Prepare =>
+	async (opening) => {
+		await writePage(opening)
+		const { store, driver, conversationId, botId } = opening
+		const scope = { ...foreignScope(conversationId), botId }
+		vi.spyOn(driver, "pendingQuestions").mockResolvedValueOnce([
+			{ scope, turn: storedTurn(conversationId), event: ASKED_QUESTION },
+		])
+		const loadPage = store.loadPage
+		vi.spyOn(store, "loadPage").mockImplementationOnce(async (...page) => {
+			await settled()
+			return loadPage(...page)
+		})
+	}
+
+describe.each([
+	["a room", openAskedRoom],
+	["a solo conversation", openAskedSoloChat],
+] as const)(
+	"a question still waiting read before the page of %s",
+	(_, open) => {
+		it("shows its row once, after every message of the page, and its card", async () => {
+			const { shown, detach } = await open(answerBeforePage(writeHistory))
+
+			expect(contentsOf(shown())).toEqual([
+				"First",
+				"Second",
+				questionMessageText(QUESTION),
+			])
+			expect(askedIn(shown())).toEqual(ASKED_CARD)
+			detach()
+		})
+
+		it("shows its row once and its card when the page carries the row too", async () => {
+			const { shown, detach } = await open(
+				answerBeforePage(writeHistoryAndQuestionRow),
+			)
+
+			expect(questionRowsIn(shown())).toHaveLength(1)
+			expect(contentsOf(shown()).at(-1)).toBe(questionMessageText(QUESTION))
+			expect(askedIn(shown())).toEqual(ASKED_CARD)
+			detach()
+		})
 	},
 )

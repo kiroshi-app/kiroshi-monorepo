@@ -288,6 +288,8 @@ export const withFakeHostWrites = (
 			driver.respondToPermission(scope, id, decision),
 		answerQuestion: (...answering) => driver.answerQuestion(...answering),
 		shutdown: (scope) => driver.shutdown(scope),
+		pendingQuestions: (conversationId) =>
+			driver.pendingQuestions(conversationId),
 		subscribe: (onEvent) =>
 			driver.subscribe((scoped) => {
 				if (scoped.scope) {
