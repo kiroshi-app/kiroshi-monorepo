@@ -33,7 +33,7 @@ const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 
 const TITLE_BAR_WINDOW_CONTROLS = "ms-auto flex shrink-0 self-stretch"
 
-const TITLE_BAR_SPACE_ACCESS = "flex shrink-0 items-center"
+const TITLE_BAR_SPACE_ACCESS = "flex shrink-0 items-center gap-2"
 
 const FOOTER_INSET = "px-2 py-0 not-has-[*:not(:empty)]:hidden"
 
