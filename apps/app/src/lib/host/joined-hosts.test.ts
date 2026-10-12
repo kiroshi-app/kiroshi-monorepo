@@ -1669,7 +1669,7 @@ describe("a bot or a Space only this Mac holds", () => {
 
 		await expect(
 			hosts.invoke("section_list", { spaceId: "elsewhere" }),
-		).rejects.toBe(OTHER_SPACE_REFUSAL)
+		).rejects.toThrow(OTHER_SPACE_REFUSAL)
 
 		expect(reportFailure).toHaveBeenCalledTimes(1)
 		expect(reportFailure).toHaveBeenCalledWith({
@@ -1778,7 +1778,7 @@ describe("personal Settings while a joined Space is active", () => {
 				scope: JOINED_SPACE,
 				name: "linear",
 			}),
-		).rejects.toBe(MEMBER_REFUSAL)
+		).rejects.toThrow(MEMBER_REFUSAL)
 
 		expect(reportFailure).toHaveBeenCalledTimes(1)
 		expect(reportFailure).toHaveBeenCalledWith({

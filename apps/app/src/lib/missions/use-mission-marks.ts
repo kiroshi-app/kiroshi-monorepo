@@ -8,6 +8,7 @@ import { missionsTransport } from "./missions-transport"
 
 import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
+import { isHostRefused } from "@/lib/host/host-refused"
 import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { LOCAL_HOST, useReachableHost } from "@/lib/host/use-reachable-host"
 
@@ -78,7 +79,11 @@ export const useMissionMarks = (
 					return
 				}
 				setHeld(null)
-				if (isHostOffline(reason) || isFailureReported.current) {
+				if (
+					isHostOffline(reason) ||
+					isHostRefused(reason) ||
+					isFailureReported.current
+				) {
 					return
 				}
 				isFailureReported.current = true

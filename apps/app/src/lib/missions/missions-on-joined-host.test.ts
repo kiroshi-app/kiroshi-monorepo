@@ -2,10 +2,12 @@
 
 import type { EventCallback } from "@tauri-apps/api/event"
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
+import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Mission, MissionInSpace } from "./mission-contract"
 import { missionsTransport } from "./missions-transport"
+import { useSpaceMissionsFailure } from "./use-mission-failure-notices"
 import { useMissionMarks } from "./use-mission-marks"
 import { useMissions } from "./use-missions"
 import { useSpaceMissions } from "./use-space-missions"
@@ -14,12 +16,18 @@ import {
 	JOINED_SPACE_RECONNECTED_EVENT,
 	type JoinedSpaceReconnected,
 } from "../bindings"
-import type { HostSocket } from "../host/http"
+import type { FailureFacts } from "../failure-report"
+import { type HostSocket, raiseRefusalNotice } from "../host/http"
 import { createJoinedHosts, type JoinedHosts } from "../host/joined-hosts"
 
 const HOST = "http://192.168.1.20:45367"
 
 type Answer = (command: string) => Promise<unknown>
+
+type RaisedNotice = {
+	title: string
+	facts: FailureFacts
+}
 
 const wire = vi.hoisted(() => ({
 	localAnswer: (async (command) =>
@@ -28,7 +36,17 @@ const wire = vi.hoisted(() => ({
 	sockets: [] as HostSocket[],
 	relays: new Set<EventCallback<JoinedSpaceReconnected>>(),
 	hostReads: [] as string[],
+	failedReads: new Map<string, () => Response>(),
+	raised: [] as RaisedNotice[],
 	joinedHosts: null as JoinedHosts | null,
+}))
+
+vi.mock("../failure-report", async (original) => ({
+	...(await original<object>()),
+	raiseReportedFailure: (notice: { title: string }, facts: FailureFacts) => {
+		wire.raised.push({ title: notice.title, facts })
+		return `notice-${wire.raised.length}`
+	},
 }))
 
 vi.mock("../host", () => {
@@ -75,6 +93,10 @@ const buildJoinedHosts = (): JoinedHosts =>
 		fetch: async (input) => {
 			const command = decodeURIComponent(String(input).split("/").pop() ?? "")
 			wire.hostReads.push(command)
+			const failedRead = wire.failedReads.get(command)
+			if (failedRead) {
+				return failedRead()
+			}
 			return new Response(JSON.stringify(await wire.hostAnswer(command)), {
 				headers: { "content-type": "application/json" },
 			})
@@ -89,7 +111,7 @@ const buildJoinedHosts = (): JoinedHosts =>
 			wire.sockets.push(socket)
 			return socket
 		},
-		reportFailure: () => undefined,
+		reportFailure: raiseRefusalNotice,
 		reportHostDown: () => "notice",
 		endHostDown: () => undefined,
 	})
@@ -488,5 +510,92 @@ describe("missions read on a joined host", () => {
 		await settled()
 
 		expect(readsOf("mission_list")).toBe(before)
+	})
+})
+
+const OTHER_SPACE_REFUSAL = "this command reaches outside the shared space"
+
+const refusedByTheHost = () =>
+	new Response(OTHER_SPACE_REFUSAL, { status: 403 })
+
+const failedOnTheHost = () =>
+	new Response('{"kind":"storage"}', {
+		status: 500,
+		headers: { "content-type": "application/json" },
+	})
+
+const useMissionFeedSubscriber = () => {
+	const feed = useSpaceMissions("space-on-host")
+	useSpaceMissionsFailure(feed)
+	useMissionMarks("space-on-host")
+	return feed
+}
+
+const useTwoMissionFeedSubscribers = () => [
+	useMissionFeedSubscriber(),
+	useMissionFeedSubscriber(),
+]
+
+const feedsOnGarageInStrictMode = async () => {
+	await joinGarage()
+	const rendered = renderHook(useTwoMissionFeedSubscribers, {
+		wrapper: StrictMode,
+	})
+	await waitFor(() =>
+		expect(rendered.result.current.every(({ hasFailed }) => hasFailed)).toBe(
+			true,
+		),
+	)
+	rendered.rerender()
+	await settled()
+	return rendered
+}
+
+const distinctNotices = (raised: RaisedNotice[]) => [
+	...new Map(raised.map((notice) => [JSON.stringify(notice), notice])).values(),
+]
+
+describe("a mission feed read that fails on a joined host", () => {
+	beforeEach(() => {
+		wire.joinedHosts = buildJoinedHosts()
+		wire.sockets.length = 0
+		wire.relays.clear()
+		wire.hostReads.length = 0
+		wire.raised.length = 0
+		wire.hostAnswer = hostAnswers
+	})
+
+	afterEach(() => {
+		cleanup()
+		wire.failedReads.clear()
+		joinedHosts.forget("garage")
+	})
+
+	it("raises only the host refusal, with its command, status and side, whatever the number of subscribers", async () => {
+		wire.failedReads.set("mission_space_feed", refusedByTheHost)
+
+		await feedsOnGarageInStrictMode()
+
+		expect(distinctNotices(wire.raised)).toEqual([
+			{
+				title: "Couldn’t send that request",
+				facts: {
+					raisedIn: "host-refusal",
+					command: "mission_space_feed",
+					httpStatus: 403,
+					side: "member",
+				},
+			},
+		])
+	})
+
+	it("still raises the missions notices for a failure the host did not report", async () => {
+		wire.failedReads.set("mission_space_feed", failedOnTheHost)
+
+		await feedsOnGarageInStrictMode()
+
+		expect(
+			distinctNotices(wire.raised).map(({ facts }) => facts.raisedIn),
+		).toEqual(["use-mission-marks", "use-mission-failure-notices"])
 	})
 })

@@ -146,7 +146,7 @@ describe("invoke over http", () => {
 			answer: { status: 500, body: "the host broke" },
 		})
 
-		await expect(host.invoke("agent_models")).rejects.toBe("the host broke")
+		await expect(host.invoke("agent_models")).rejects.toThrow("the host broke")
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
 			message: "the host broke",
 			command: "agent_models",
@@ -175,7 +175,7 @@ describe("invoke over http", () => {
 			answer: { status: 401, body: "the call carried no valid bearer token" },
 		})
 
-		await expect(host.invoke("agent_models")).rejects.toBe(
+		await expect(host.invoke("agent_models")).rejects.toThrow(
 			"the call carried no valid bearer token",
 		)
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
@@ -253,7 +253,7 @@ describe("a host that is offline", () => {
 			answer: { status: 502, body: "the host broke" },
 		})
 
-		await expect(host.invoke("bot_list")).rejects.toBe("the host broke")
+		await expect(host.invoke("bot_list")).rejects.toThrow("the host broke")
 		expect(onRefused).toHaveBeenCalledExactlyOnceWith({
 			message: "the host broke",
 			command: "bot_list",
