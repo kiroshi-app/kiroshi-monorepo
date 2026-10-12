@@ -860,6 +860,7 @@ navigation-appsidebar--spaces-without-rosters
 navigation-appsidebar--title-bar-guest-narrow-window
 navigation-appsidebar--title-bar-guest-offline
 navigation-appsidebar--title-bar-guest-online
+navigation-appsidebar--title-bar-guest-share
 navigation-appsidebar--title-bar-host-share
 navigation-appsidebar--unreadable-roster
 navigation-appsidebar--uploaded-pictures
@@ -1409,6 +1410,7 @@ settings-settingsdialogshell--rail-icons-only
 settings-settingsdialogshell--skill-page-wording
 settings-settingsdialogshell--without-session-closes-unasked
 settings-space-joinedspacefields--default
+settings-space-joinedspacefields--long-name
 settings-space-spacefields--colourless
 settings-space-spacefields--default
 settings-space-spacefields--empty

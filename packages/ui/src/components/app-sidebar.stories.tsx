@@ -3954,6 +3954,42 @@ export const TitleBarGuestOnline = meta.story({
 	},
 })
 
+export const TitleBarGuestShare = meta.story({
+	globals: { theme: "dark" },
+	args: {
+		...STUDIO_ARGS,
+		spaceAccess: (
+			<>
+				<HostPill isOnline />
+				<ShareButton onShare={sharedSpace} />
+			</>
+		),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A guest who may share the joined space: the pill reading `Connected` and `Share` side by side in the slot after the switcher. No artboard draws this pair, so the gap between them is the title bar's own gap between its children. Check both are present, that the pill keeps its place 8px after the switcher, and that `Share` sits one title bar gap after the pill. Pick `TitleBarGuestOnline` for the pill alone.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectRightAfterSwitcher(canvasElement)
+		const pill = slotIn(spaceAccessIn(canvasElement), "host-pill")
+		const share = canvas.getByRole("button", { name: "Share" })
+		await expect(pill).toHaveTextContent("Connected")
+		await expect(share).toBeVisible()
+
+		const titleBarGap = Number.parseFloat(
+			getComputedStyle(titleBarIn(canvasElement)).columnGap,
+		)
+		await expect(titleBarGap).toBe(TITLE_BAR_GAP)
+		await expect(
+			share.getBoundingClientRect().left - pill.getBoundingClientRect().right,
+		).toBe(titleBarGap)
+	},
+})
+
 export const TitleBarGuestOffline = meta.story({
 	globals: { theme: "dark" },
 	args: {

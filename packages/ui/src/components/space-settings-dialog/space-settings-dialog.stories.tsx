@@ -503,11 +503,11 @@ export const JoinedSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"A space joined from another Kiroshi, artboard J10. Its rail is the local one, Members included, and the Members panel is the one a local space shows. Its name is editable and reported on every keystroke; the host it lives on is read-only, its hint saying the space lives there. It has no colour, no share link and nothing to export or import: the props type refuses them once a host is set. The danger zone offers Leave space and no Delete. Pick `JoinedDanger` for the way out, `JoinedThemes` for both panels in light and dark.",
+					"A space joined from another Kiroshi, artboard J10. Its rail is the local one, Members included, and the Members panel is the one a local space shows. Its name reads as plain text under its label, a member cannot rename it; the host it lives on is read-only, its hint saying the space lives there. It has no colour, no share link and nothing to export or import: the props type refuses them once a host is set. The danger zone offers Leave space and no Delete. Pick `JoinedDanger` for the way out, `JoinedThemes` for both panels in light and dark.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
+	play: async ({ userEvent }) => {
 		const dialog = await dialogIn()
 		await expect(
 			within(dialog)
@@ -515,14 +515,19 @@ export const JoinedSpace = meta.story({
 				.map((tab) => tab.textContent),
 		).toEqual(RAIL)
 
-		const name = within(dialog).getByLabelText("Name")
-		await expect(name).toHaveValue("Northwind")
-		await expect(name).not.toHaveAttribute("readonly")
-		await userEvent.type(name, "!")
-		await expect(name).toHaveValue("Northwind!")
-		await expect(args.onValueChange).toHaveBeenLastCalledWith({
-			name: "Northwind!",
-		})
+		const name = within(dialog).getByRole("definition")
+		await expect(name.previousElementSibling).toBe(
+			within(dialog).getByRole("term"),
+		)
+		await expect(name.previousElementSibling).toHaveTextContent(/^Name$/)
+		await expect(name).toBeVisible()
+		await expect(name).toHaveTextContent(/^Northwind$/)
+		await expect(
+			within(dialog).queryByRole("textbox", { name: "Name" }),
+		).toBeNull()
+		await expect(
+			within(dialog).queryByDisplayValue(JOINED_SPACE.name),
+		).toBeNull()
 
 		const host = within(dialog).getByLabelText("Host")
 		await expect(host).toHaveValue(JOINED_HOST)
@@ -612,11 +617,7 @@ const JoinedPanels = () => {
 
 	return (
 		<div className="flex flex-col gap-5">
-			<JoinedSpaceFields
-				host={JOINED_HOST}
-				onValueChange={fn()}
-				value={JOINED_SPACE}
-			/>
+			<JoinedSpaceFields host={JOINED_HOST} value={JOINED_SPACE} />
 			<DangerZone
 				confirmTitle={t("spaces.leave.title", { name: JOINED_SPACE.name })}
 				actionLabel={t("spaces.leave.action")}
@@ -634,7 +635,7 @@ export const JoinedThemes = meta.story({
 		docs: {
 			description: {
 				story:
-					"Both joined panels, the Space tab over the Danger zone, in light and dark side by side as artboard J11 lays them. Name is an editable field on the `muted` fill. The read-only Host keeps the box of an editable field, a 1px `input` outline at 14px / 20px inside 8px block and 12px inline padding, with the `muted` fill dropped. The hint sits under Host at 12px / 16px in `muted-foreground`.",
+					"Both joined panels, the Space tab over the Danger zone, in light and dark side by side as artboard J11 lays them. Name is plain `foreground` text with no field box. The read-only Host keeps the box of an editable field, a 1px `input` outline at 14px / 20px inside 8px block and 12px inline padding, with the `muted` fill dropped. The hint sits under Host at 12px / 16px in `muted-foreground`.",
 			},
 		},
 	},
@@ -645,9 +646,13 @@ export const JoinedThemes = meta.story({
 
 		for (const fields of columns) {
 			const theme = fields.parentElement?.parentElement ?? canvasElement
-			await expect(
-				getComputedStyle(within(fields).getByLabelText("Name")).backgroundColor,
-			).toBe(probedStyleOf("bg-muted", "backgroundColor", theme))
+			const name = within(fields).getByRole("definition")
+			await expect(getComputedStyle(name).backgroundColor).toBe(
+				"rgba(0, 0, 0, 0)",
+			)
+			await expect(getComputedStyle(name).color).toBe(
+				probedStyleOf("text-foreground", "color", theme),
+			)
 
 			const style = getComputedStyle(within(fields).getByLabelText("Host"))
 			await expect(style.borderTopWidth).toBe("1px")
