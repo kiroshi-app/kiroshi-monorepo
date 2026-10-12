@@ -1,12 +1,6 @@
 import Foundation
 import Observation
 
-struct PickedAttachment: Identifiable, Equatable, Sendable {
-    let id: UUID
-    let name: String
-    let data: Data
-}
-
 enum MissionSendProblem: Equatable {
     case couldNotSend
     case tooLarge
@@ -20,12 +14,7 @@ final class MissionThreadStore {
     var draft = ""
     var attachments: [PickedAttachment] = []
     private(set) var messages: [MissionThreadMessage] = [] {
-        didSet {
-            transcript = MissionTranscript(
-                of: messages,
-                openedAt: Date(timeIntervalSince1970: TimeInterval(mission.openedAt) / 1000),
-                time: ConversationTime(now: now(), calendar: calendar))
-        }
+        didSet { transcribe() }
     }
     private(set) var transcript = MissionTranscript()
     private(set) var hasLoaded = false
@@ -51,6 +40,7 @@ final class MissionThreadStore {
         self.now = now
         self.newId = newId
         self.calendar = calendar
+        transcribe()
     }
 
     var isLoading: Bool {
@@ -81,10 +71,27 @@ final class MissionThreadStore {
         isOnline = false
     }
 
-    func send() {
-        guard canSend, let relay else { return }
+    @discardableResult
+    func send() -> Task<Void, Never>? {
+        guard canSend, let relay else { return nil }
         isSending = true
-        sending = Task { await deliver(through: relay) }
+        let task = Task { await deliver(through: relay) }
+        sending = task
+        return task
+    }
+
+    @discardableResult
+    func reload() -> Task<Void, Never>? {
+        hasFailed = false
+        rereads?.yield()
+        return nil
+    }
+
+    private func transcribe() {
+        transcript = MissionTranscript(
+            of: messages,
+            openedAt: Date(timeIntervalSince1970: TimeInterval(mission.openedAt) / 1000),
+            time: ConversationTime(now: now(), calendar: calendar))
     }
 
     private func deliver(through relay: MissionsRelay) async {
@@ -97,10 +104,10 @@ final class MissionThreadStore {
             var content = text
             if !picked.isEmpty {
                 let paths = try await relay.store(
-                    MissionAttachments(
+                    ConversationAttachments(
                         conversationId: mission.threadConversationId,
                         attachments: picked.map { .init(name: $0.name, bytes: Array($0.data)) }))
-                content = MissionAttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
+                content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
             }
             let message = MissionAnswer.Message(
                 id: newId(), conversationId: mission.threadConversationId, turnId: newId(),
@@ -158,4 +165,50 @@ final class MissionThreadStore {
             }
         }
     }
+}
+
+extension MissionThreadStore: ThreadModel {
+    var kind: ThreadKind { .mission }
+
+    var state: ThreadState {
+        if hasFailed { return .failed }
+        return isLoading ? .loading : .shown
+    }
+
+    var entries: [ThreadEntry] {
+        transcript.entries
+    }
+
+    var working: ThreadWorking? { nil }
+
+    var placeholder: String {
+        String(localized: "Answer this mission…")
+    }
+
+    var problem: String? {
+        if !isOnline, hasLoaded {
+            return String(
+                localized: "The host’s Mac is offline. You can send again once it’s back.")
+        }
+        return switch sendProblem {
+        case .couldNotSend: String(localized: "Couldn’t send your answer. Send it again.")
+        case .tooLarge:
+            String(
+                localized:
+                    "Couldn’t send your files: they’re too large. Remove one and send again.")
+        case .offline:
+            String(
+                localized: "Couldn’t send: the host’s Mac is offline. Send again once it’s back.")
+        case nil: nil
+        }
+    }
+
+    var canStop: Bool { false }
+
+    var mentionCandidates: [Companion] { [] }
+
+    func mention(_ companion: Companion) {}
+
+    @discardableResult
+    func stop() -> Task<Void, Never>? { nil }
 }
