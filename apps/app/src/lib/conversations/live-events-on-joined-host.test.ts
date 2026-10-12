@@ -53,8 +53,8 @@ const asJson = (body: unknown, status = 200) =>
 		headers: { "content-type": "application/json" },
 	})
 
-const answerOnHost = (url: string) =>
-	url.endsWith(PENDING_QUESTIONS)
+const answerOnHost = (input: RequestInfo | URL) =>
+	String(input).endsWith(PENDING_QUESTIONS)
 		? wire.pendingQuestions().then(asJson, (reason) => asJson(reason, 500))
 		: Promise.resolve(asJson(null))
 
@@ -87,7 +87,7 @@ vi.mock("../host", async (importOriginal) => {
 				name: id,
 			},
 		}),
-		fetch: (input) => answerOnHost(String(input)),
+		fetch: (input) => answerOnHost(input),
 		openSocket: () => {
 			const socket: HostSocket = {
 				onopen: null,
@@ -1296,7 +1296,7 @@ const holdPendingQuestions = (): HeldRead => {
 	}
 }
 
-type Reopened = {
+type WaitingView = {
 	shownConversationId: () => string | null
 	hasFailed: () => boolean
 	switchAway: () => Promise<() => QuestionShown>
@@ -1305,7 +1305,7 @@ type Reopened = {
 const openWaitingRoom = async () => {
 	const room = await openAskedRoom()
 	const { controller, store, botId } = room
-	const reopened: Reopened = {
+	const view: WaitingView = {
 		shownConversationId: () => controller.getState().conversationId,
 		hasFailed: () => controller.getState().latestError !== null,
 		switchAway: async () => {
@@ -1319,7 +1319,7 @@ const openWaitingRoom = async () => {
 			return room.shown
 		},
 	}
-	return { ...room, ...reopened }
+	return { ...room, ...view }
 }
 
 const OTHER_BOT = "other"
@@ -1327,7 +1327,7 @@ const OTHER_BOT = "other"
 const openWaitingSoloChat = async () => {
 	const solo = await openAskedSoloChat()
 	const { controller, botId } = solo
-	const reopened: Reopened = {
+	const view: WaitingView = {
 		shownConversationId: () => controller.stateFor(botId).conversationId,
 		hasFailed: () => controller.stateFor(botId).errors.length > 0,
 		switchAway: async () => {
@@ -1339,7 +1339,7 @@ const openWaitingSoloChat = async () => {
 			}
 		},
 	}
-	return { ...solo, ...reopened }
+	return { ...solo, ...view }
 }
 
 describe.each([
