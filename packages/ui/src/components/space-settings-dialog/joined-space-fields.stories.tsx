@@ -1,7 +1,26 @@
-import { expect } from "storybook/test"
+import { useState } from "react"
+import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { JoinedSpaceFields } from "@workspace/ui/components/space-settings-dialog/joined-space-fields"
+import {
+	JoinedSpaceFields,
+	type JoinedSpaceFieldsProps,
+} from "@workspace/ui/components/space-settings-dialog/joined-space-fields"
+
+const FieldsHost = (props: JoinedSpaceFieldsProps) => {
+	const [value, setValue] = useState(props.value)
+
+	return (
+		<JoinedSpaceFields
+			{...props}
+			onValueChange={(next) => {
+				setValue(next)
+				props.onValueChange(next)
+			}}
+			value={value}
+		/>
+	)
+}
 
 const meta = preview.meta({
 	title: "Settings/Space/JoinedSpaceFields",
@@ -11,7 +30,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The Space entry of a space joined from another Kiroshi: its name and the host it lives on, both read-only because the host owns them. The host carries the reason as its hint, so a reader looking for where to rename it is told where. No colour, no share link, nothing to move between machines. Pick `SpaceFields` for a space this machine owns.",
+					"The Space entry of a space joined from another Kiroshi: its name, editable and reported on every keystroke as on a local space, and the host it lives on, read-only with a hint saying the space lives there. No colour, no share link, nothing to move between machines. Pick `SpaceFields` for a space this machine owns.",
 			},
 		},
 	},
@@ -23,9 +42,11 @@ const meta = preview.meta({
 		),
 	],
 	args: {
-		name: "Northwind",
+		value: { name: "Northwind" },
+		onValueChange: fn(),
 		host: "http://192.168.1.24:45367",
 	},
+	render: (args) => <FieldsHost {...args} />,
 })
 
 export const Default = meta.story({
@@ -33,20 +54,26 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Name and Host on a joined space. Check that neither takes an edit, that both still take focus so the host can be selected and copied, and that the hint under Host is read as its description.",
+					"Name and Host on a joined space. Check that typing in Name reports the edited name through `onValueChange`, that Host takes no edit but still takes focus so it can be selected and copied, and that the hint under Host is read as its description.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ args, canvas, userEvent }) => {
 		const name = canvas.getByLabelText("Name")
 		const host = canvas.getByLabelText("Host")
 
 		await userEvent.type(name, "!")
-		await expect(name).toHaveValue("Northwind")
-		await expect(name).toHaveFocus()
+		await expect(name).toHaveValue("Northwind!")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Northwind!",
+		})
+
+		await userEvent.type(host, "!")
+		await expect(host).toHaveValue("http://192.168.1.24:45367")
+		await expect(host).toHaveFocus()
 		await expect(host).toHaveAttribute("readonly")
 		await expect(host).toHaveAccessibleDescription(
-			"This space lives on another Kiroshi. Its name is set there.",
+			"This space lives on another Kiroshi.",
 		)
 	},
 })

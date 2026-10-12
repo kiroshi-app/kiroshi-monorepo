@@ -122,7 +122,7 @@ const settings = {
 		},
 		host: {
 			label: "Hôte",
-			hint: "Cet espace vit sur un autre Kiroshi. Son nom se règle là-bas.",
+			hint: "Cet espace vit sur un autre Kiroshi.",
 		},
 		colour: {
 			label: "Couleur",
@@ -158,23 +158,10 @@ const settings = {
 					malformed: "Saisissez une adresse e-mail, comme sam@example.com.",
 				},
 				notShared: "Activez Partager {{name}} pour inviter quelqu’un.",
-				role: {
-					label: "Rôle",
-					guest: {
-						label: "Invité",
-						description:
-							"Lit les conversations, ne peut pas envoyer de message.",
-					},
-					member: {
-						label: "Membre",
-						description:
-							"Peut faire tout ce que vous pouvez faire, y compris démarrer l’agent et répondre aux demandes d’autorisation.",
-					},
-				},
 			},
 			status: {
 				host: "Hôte",
-				joined: "Membre",
+				joined: "A rejoint",
 				pending: "En attente",
 			},
 			remove: "Retirer",

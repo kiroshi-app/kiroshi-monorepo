@@ -434,18 +434,38 @@ export const LastSpace = meta.story({
 	},
 })
 
+const STEVE: SpaceMember = {
+	id: "steve",
+	name: "Steve",
+	email: "steve@example.com",
+	status: "host",
+}
+
+const MEMBERS_PANEL = {
+	space: "Personal",
+	members: [STEVE],
+	email: "",
+	onEmailChange: fn(),
+	onInvite: fn(),
+	isHosted: true,
+	onRemove: fn(),
+	onWithdraw: fn(),
+	onRemoveConfirm: fn(),
+	onRemoveCancel: fn(),
+} satisfies MembersPanelProps
+
 const JOINED_SPACE: SpaceSettingsValue = { name: "Northwind" }
 
 const JOINED_HOST = "http://192.168.1.24:45367"
 
-const JOINED_HINT =
-	"This space lives on another Kiroshi. Its name is set there."
+const JOINED_HINT = "This space lives on another Kiroshi."
 
 const LEAVE_DESCRIPTION =
 	"Nothing is deleted on the host. You can join again with its link."
 
 const RAIL = [
 	"Space",
+	"Members",
 	"Secrets",
 	"Skills",
 	"Applications",
@@ -475,12 +495,15 @@ const leaveConfirmation = async () => {
 }
 
 export const JoinedSpace = meta.story({
-	args: JOINED_ARGS,
+	args: {
+		...JOINED_ARGS,
+		members: <MembersPanel {...MEMBERS_PANEL} space={JOINED_SPACE.name} />,
+	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The space tab of a space joined from another Kiroshi, artboard J10. It lives on the host, so its name and the host it lives on are read-only here, the host carrying why. It has no colour, no share link and nothing to export or import: the props type refuses them once a host is set. The rail is the local one, entry for entry. Pick `JoinedDanger` for the way out, `JoinedThemes` for both panels in light and dark.",
+					"A space joined from another Kiroshi, artboard J10. Its rail is the local one, Members included, and the Members panel is the one a local space shows. Its name is editable and reported on every keystroke; the host it lives on is read-only, its hint saying the space lives there. It has no colour, no share link and nothing to export or import: the props type refuses them once a host is set. The danger zone offers Leave space and no Delete. Pick `JoinedDanger` for the way out, `JoinedThemes` for both panels in light and dark.",
 			},
 		},
 	},
@@ -494,10 +517,12 @@ export const JoinedSpace = meta.story({
 
 		const name = within(dialog).getByLabelText("Name")
 		await expect(name).toHaveValue("Northwind")
-		await expect(name).toHaveAttribute("readonly")
+		await expect(name).not.toHaveAttribute("readonly")
 		await userEvent.type(name, "!")
-		await expect(name).toHaveValue("Northwind")
-		await expect(args.onValueChange).not.toHaveBeenCalled()
+		await expect(name).toHaveValue("Northwind!")
+		await expect(args.onValueChange).toHaveBeenLastCalledWith({
+			name: "Northwind!",
+		})
 
 		const host = within(dialog).getByLabelText("Host")
 		await expect(host).toHaveValue(JOINED_HOST)
@@ -512,6 +537,26 @@ export const JoinedSpace = meta.story({
 		).toBe(null)
 		await expect(
 			within(dialog).queryByRole("button", { name: "Import a space" }),
+		).toBe(null)
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Members" }))
+		const members = await membersPanelIn()
+		await expect(inviteFieldIn(members)).toBeVisible()
+		await expect(memberRowsIn(members)).toEqual([
+			["S", "Steve", "steve@example.com", "Host"],
+		])
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "Danger zone" }),
+		)
+		const danger = await within(dialog).findByRole("tabpanel", {
+			name: "Danger zone",
+		})
+		await expect(
+			within(danger).getByRole("button", { name: "Leave space" }),
+		).toBeVisible()
+		await expect(
+			within(danger).queryByRole("button", { name: "Delete space" }),
 		).toBe(null)
 	},
 })
@@ -567,7 +612,11 @@ const JoinedPanels = () => {
 
 	return (
 		<div className="flex flex-col gap-5">
-			<JoinedSpaceFields host={JOINED_HOST} name={JOINED_SPACE.name} />
+			<JoinedSpaceFields
+				host={JOINED_HOST}
+				onValueChange={fn()}
+				value={JOINED_SPACE}
+			/>
 			<DangerZone
 				confirmTitle={t("spaces.leave.title", { name: JOINED_SPACE.name })}
 				actionLabel={t("spaces.leave.action")}
@@ -585,7 +634,7 @@ export const JoinedThemes = meta.story({
 		docs: {
 			description: {
 				story:
-					"Both joined panels, the Space tab over the Danger zone, in light and dark side by side as artboard J11 lays them. Each read-only control keeps the box of an editable field, a 1px `input` outline at 14px / 20px inside 8px block and 12px inline padding, with the `muted` fill dropped. The hint sits under Host at 12px / 16px in `muted-foreground`.",
+					"Both joined panels, the Space tab over the Danger zone, in light and dark side by side as artboard J11 lays them. Name is an editable field on the `muted` fill. The read-only Host keeps the box of an editable field, a 1px `input` outline at 14px / 20px inside 8px block and 12px inline padding, with the `muted` fill dropped. The hint sits under Host at 12px / 16px in `muted-foreground`.",
 			},
 		},
 	},
@@ -596,18 +645,20 @@ export const JoinedThemes = meta.story({
 
 		for (const fields of columns) {
 			const theme = fields.parentElement?.parentElement ?? canvasElement
-			for (const control of fields.querySelectorAll("input")) {
-				const style = getComputedStyle(control)
-				await expect(style.borderTopWidth).toBe("1px")
-				await expect(style.borderTopColor).toBe(
-					probedStyleOf("border-input", "borderTopColor", theme),
-				)
-				await expect(style.paddingBlockStart).toBe("8px")
-				await expect(style.paddingInlineStart).toBe("12px")
-				await expect(style.fontSize).toBe("14px")
-				await expect(style.lineHeight).toBe("20px")
-				await expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)")
-			}
+			await expect(
+				getComputedStyle(within(fields).getByLabelText("Name")).backgroundColor,
+			).toBe(probedStyleOf("bg-muted", "backgroundColor", theme))
+
+			const style = getComputedStyle(within(fields).getByLabelText("Host"))
+			await expect(style.borderTopWidth).toBe("1px")
+			await expect(style.borderTopColor).toBe(
+				probedStyleOf("border-input", "borderTopColor", theme),
+			)
+			await expect(style.paddingBlockStart).toBe("8px")
+			await expect(style.paddingInlineStart).toBe("12px")
+			await expect(style.fontSize).toBe("14px")
+			await expect(style.lineHeight).toBe("20px")
+			await expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)")
 
 			const hint = within(fields).getByText(JOINED_HINT)
 			await expect(getComputedStyle(hint).fontSize).toBe("12px")
@@ -651,13 +702,6 @@ const ShareFailureNotice = () => {
 	return null
 }
 
-const STEVE: SpaceMember = {
-	id: "steve",
-	name: "Steve",
-	email: "steve@example.com",
-	status: "host",
-}
-
 const SAM_PENDING: SpaceMember = {
 	id: "sam",
 	email: "sam@example.com",
@@ -679,20 +723,6 @@ const SAM_CARTER: SpaceMember = {
 	email: "sam@example.com",
 	status: "joined",
 }
-
-const MEMBERS_PANEL = {
-	space: "Personal",
-	members: [STEVE],
-	email: "",
-	onEmailChange: fn(),
-	onInvite: fn(),
-	onRoleChange: fn(),
-	isHosted: true,
-	onRemove: fn(),
-	onWithdraw: fn(),
-	onRemoveConfirm: fn(),
-	onRemoveCancel: fn(),
-} satisfies MembersPanelProps
 
 const membersArgs = (
 	panel: Partial<MembersPanelProps> = {},
@@ -724,20 +754,6 @@ const memberRowsIn = (panel: HTMLElement) =>
 
 const inviteFieldIn = (panel: HTMLElement) =>
 	within(panel).getByRole("textbox", { name: "Invite people" })
-
-const GUEST_LINE = "Reads conversations, can’t send messages."
-
-const MEMBER_LINE =
-	"Can do everything you can, including starting the agent and answering approvals."
-
-const roleRadiosIn = (panel: HTMLElement) => {
-	const group = within(panel).getByRole("radiogroup", { name: "Role" })
-	return {
-		group,
-		guest: within(group).getByRole("radio", { name: "Guest" }),
-		member: within(group).getByRole("radio", { name: "Member" }),
-	}
-}
 
 const expectRefusal = async (panel: HTMLElement, message: string) => {
 	const field = inviteFieldIn(panel)
@@ -804,56 +820,6 @@ export const MembersI2 = meta.story({
 			"sam@example.com",
 		)
 		await expect(field).toHaveFocus()
-	},
-})
-
-export const MembersInviteRoleGuest = meta.story({
-	args: membersArgs(),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The invite form offers a role, Guest then Member, each with one line on what it allows. With no `role` given, Guest is picked.",
-			},
-		},
-	},
-	play: async () => {
-		const panel = await membersPanelIn()
-		const { group, guest, member } = roleRadiosIn(panel)
-		await expect(within(group).getAllByRole("radio")).toEqual([guest, member])
-		await expect(guest).toBeChecked()
-		await expect(member).not.toBeChecked()
-		await expect(guest).toHaveAccessibleDescription(GUEST_LINE)
-		await expect(member).toHaveAccessibleDescription(MEMBER_LINE)
-	},
-})
-
-export const MembersInviteRoleMember = meta.story({
-	args: membersArgs(),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Picking Member by pointer, then moving between the options with the arrow keys, reports each pick through `onRoleChange`.",
-			},
-		},
-	},
-	play: async ({ userEvent }) => {
-		const panel = await membersPanelIn()
-		const { guest, member } = roleRadiosIn(panel)
-
-		await userEvent.click(within(panel).getByText("Member"))
-		await expect(member).toBeChecked()
-		await expect(guest).not.toBeChecked()
-		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("member")
-
-		await userEvent.keyboard("{ArrowUp}")
-		await expect(guest).toBeChecked()
-		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("guest")
-
-		await userEvent.keyboard("{ArrowDown}")
-		await expect(member).toBeChecked()
-		await expect(MEMBERS_PANEL.onRoleChange).toHaveBeenLastCalledWith("member")
 	},
 })
 
@@ -1489,9 +1455,6 @@ const expectInviteBlocked = async (panel: HTMLElement) => {
 	await expect(getComputedStyle(label).opacity).toBe("0.5")
 	await expect(getComputedStyle(field).opacity).toBe("0.5")
 	await expect(getComputedStyle(helper).opacity).toBe("1")
-	const { guest, member } = roleRadiosIn(panel)
-	await expect(guest).toHaveAttribute("aria-disabled", "true")
-	await expect(member).toHaveAttribute("aria-disabled", "true")
 }
 
 const notSharedArgs = (hosting: SpaceHosting) =>
