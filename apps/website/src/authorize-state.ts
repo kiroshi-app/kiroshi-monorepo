@@ -31,8 +31,6 @@ type AuthorizeState =
 
 const EXPIRED: AuthorizeState = { kind: "expired" }
 
-const CANCELLED: AuthorizeState = { kind: "cancelled" }
-
 const validateAuthorizeSearch = (
 	search: Record<string, unknown>,
 ): AuthorizeSearch => ({
@@ -77,12 +75,12 @@ const readKnownRequest = async (request: string) => {
 	}
 }
 
-const loadPendingState = async (request: string): Promise<AuthorizeState> => {
+const loadRequestState = async (request: string): Promise<AuthorizeState> => {
 	const [device, account] = await Promise.all([
 		readKnownRequest(request),
 		readAccount(),
 	])
-	if (device?.status === "cancelled") return CANCELLED
+	if (device?.status === "cancelled") return { kind: "cancelled" }
 	if (device?.status !== "pending") return EXPIRED
 	return {
 		kind: "pending",
@@ -99,7 +97,7 @@ const loadAuthorizeState = async ({
 }: SignInReturn): Promise<AuthorizeState> => {
 	if (!request) return EXPIRED
 	try {
-		return await loadPendingState(request)
+		return await loadRequestState(request)
 	} catch (error) {
 		if (!isRelayFailure(error, "unauthorized")) throw error
 		clearBearer()
