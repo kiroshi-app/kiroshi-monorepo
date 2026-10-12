@@ -33,7 +33,11 @@ type SocialProvider = "google" | "apple"
 
 type Account = { email: string; isNamed: boolean }
 
-type RelayRequest = { path: string; method?: "GET" | "POST"; body?: unknown }
+type RelayRequest = {
+	path: string
+	method?: "GET" | "POST" | "PATCH"
+	body?: unknown
+}
 
 const readBearer = () => localStorage.getItem(BEARER_KEY)
 
@@ -121,28 +125,20 @@ const requestSocialSignIn = async ({ provider, callbackURL }: SocialSignIn) => {
 	return stringField(answer, "url")
 }
 
-// TODO: the relay route /api/auth/get-session is pending, until it lands its 404 counts as a named account.
-const readIsNamed = async () => {
-	try {
-		const session = await send({ path: "/api/auth/get-session" })
-		const name = fieldOf(fieldOf(session, "user"), "name")
-		return typeof name === "string" && name.trim().length > 0
-	} catch (error) {
-		if (error instanceof RelayError && error.failure === "unavailable") {
-			return true
-		}
-		throw error
-	}
+const isNamedIn = (me: unknown) => {
+	const name = fieldOf(me, "name")
+	return (
+		name === undefined || (typeof name === "string" && name.trim().length > 0)
+	)
 }
 
-// TODO: the relay route /api/auth/update-user is pending.
 const saveName = async (name: string) => {
-	await send({ path: "/api/auth/update-user", method: "POST", body: { name } })
+	await send({ path: "/me", method: "PATCH", body: { name } })
 }
 
 const readAccount = async (): Promise<Account> => {
 	const me = await send({ path: "/me" })
-	return { email: stringField(me, "email"), isNamed: await readIsNamed() }
+	return { email: stringField(me, "email"), isNamed: isNamedIn(me) }
 }
 
 export {

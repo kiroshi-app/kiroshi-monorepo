@@ -187,6 +187,14 @@ const CodeStep = ({ email, onSignedIn, onOtherEmail }: CodeStepProps) => {
 	)
 }
 
+const NAME_MAX_LENGTH = 80
+
+const nameProblemOf = (name: string) => {
+	if (name.length === 0) return LOGIN_COPY.nameMissing
+	if (name.length > NAME_MAX_LENGTH) return LOGIN_COPY.nameTooLong
+	return undefined
+}
+
 type NameStepProps = {
 	email: string
 	onNamed: () => Promise<void>
@@ -196,13 +204,13 @@ const NameStep = ({ email, onNamed }: NameStepProps) => {
 	const [name, setName] = useState("")
 	const [hasSubmitted, setHasSubmitted] = useState(false)
 	const call = useRelayCall()
-	const isMissing = hasSubmitted && name.trim().length === 0
+	const nameProblem = hasSubmitted ? nameProblemOf(name.trim()) : undefined
 
 	const submit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
 		setHasSubmitted(true)
 		const trimmed = name.trim()
-		if (trimmed.length === 0) return
+		if (nameProblemOf(trimmed)) return
 		void call.run(async () => {
 			await saveName(trimmed)
 			await onNamed()
@@ -218,7 +226,7 @@ const NameStep = ({ email, onNamed }: NameStepProps) => {
 			<form className="contents" noValidate onSubmit={submit}>
 				<TextField
 					autoComplete="name"
-					error={isMissing ? LOGIN_COPY.nameMissing : undefined}
+					error={nameProblem}
 					label={LOGIN_COPY.nameLabel}
 					onValueChange={setName}
 					type="text"

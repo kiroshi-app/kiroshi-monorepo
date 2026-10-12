@@ -25,6 +25,7 @@ export const LOGIN_COPY = {
 	nameFootnote:
 		"People in your spaces see this name. You can change it later on kiroshi.app.",
 	nameMissing: "Enter your name.",
+	nameTooLong: "Keep your name to 80 characters.",
 	retry: "Retry",
 	failures: {
 		network: "Couldn't reach Kiroshi. Check your connection, then try again.",

@@ -20,8 +20,11 @@ const CODE_SENT_LINE = LOGIN_COPY.codeLead(EMAIL)
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
-const SESSION = "GET /api/auth/get-session"
-const SAVE_NAME = "POST /api/auth/update-user"
+const SAVE_NAME = "PATCH /me"
+const RETIRED_NAME_ROUTES = [
+	"GET /api/auth/get-session",
+	"POST /api/auth/update-user",
+]
 const SOCIAL_SIGN_IN = "POST /api/auth/sign-in/social"
 const RETRY_LABEL = "Retry"
 
@@ -36,12 +39,11 @@ const relayError = (status: number, message: string): Reply => ({
 	body: { error: { code: "UNAUTHENTICATED", message } },
 })
 
-const namedAccount = (name: string): RelayRoutes => ({
+const namedAccount = (name: string | null): RelayRoutes => ({
 	[SEND_CODE]: { body: { status: true, expiresAt: "2026-10-12T10:00:00Z" } },
 	[SIGN_IN]: { body: { token: BEARER, user: { email: EMAIL } } },
-	[ME]: { body: { email: EMAIL } },
-	[SESSION]: { body: { user: { email: EMAIL, name } } },
-	[SAVE_NAME]: { body: { status: true } },
+	[ME]: { body: { email: EMAIL, name } },
+	[SAVE_NAME]: { body: { email: EMAIL, name: "Ada Lovelace" } },
 })
 
 let routes: RelayRoutes = {}
@@ -250,21 +252,29 @@ describe("the sign-in page", () => {
 		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
 	})
 
-	it("asks the name the first time, saves it, then lands on /account", async () => {
-		routes = namedAccount("")
-		const router = await openLogin()
-		await reachCodeStep()
+	it.each([null, ""])(
+		"asks the name when /me answers %j, saves it, then lands on /account",
+		async (name) => {
+			routes = namedAccount(name)
+			const router = await openLogin()
+			await reachCodeStep()
 
-		enterCode("123456")
-		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
-		fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
-			target: { value: "  Ada Lovelace " },
-		})
-		fireEvent.click(screen.getByRole("button", { name: LOGIN_COPY.nameSubmit }))
+			enterCode("123456")
+			await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+			fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
+				target: { value: "  Ada Lovelace " },
+			})
+			fireEvent.click(
+				screen.getByRole("button", { name: LOGIN_COPY.nameSubmit }),
+			)
 
-		await landedOn(router, "/account")
-		expect(callsTo(SAVE_NAME)[0]?.body).toEqual({ name: "Ada Lovelace" })
-	})
+			await landedOn(router, "/account")
+			expect(callsTo(SAVE_NAME)[0]?.body).toEqual({ name: "Ada Lovelace" })
+			for (const route of RETIRED_NAME_ROUTES) {
+				expect(callsTo(route)).toHaveLength(0)
+			}
+		},
+	)
 
 	it("refuses an empty name without calling the relay", async () => {
 		routes = namedAccount("")
@@ -279,8 +289,41 @@ describe("the sign-in page", () => {
 		expect(callsTo(SAVE_NAME)).toHaveLength(0)
 	})
 
-	it("lands without a name step while the relay answers 404 to get-session", async () => {
-		routes[SESSION] = relayError(404, "Not Found")
+	it("refuses a name over 80 characters without calling the relay", async () => {
+		routes = namedAccount(null)
+		await openLogin()
+		await reachCodeStep()
+		enterCode("123456")
+		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+
+		fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
+			target: { value: ` ${"a".repeat(81)} ` },
+		})
+		fireEvent.click(screen.getByRole("button", { name: LOGIN_COPY.nameSubmit }))
+
+		expect(await screen.findByText(LOGIN_COPY.nameTooLong)).toBeTruthy()
+		expect(callsTo(SAVE_NAME)).toHaveLength(0)
+	})
+
+	it("shows the unavailable failure when PATCH /me answers 404", async () => {
+		routes = namedAccount(null)
+		routes[SAVE_NAME] = relayError(404, "Not Found")
+		await openLogin()
+		await reachCodeStep()
+		enterCode("123456")
+		await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
+
+		fireEvent.change(screen.getByLabelText(LOGIN_COPY.nameLabel), {
+			target: { value: "Ada Lovelace" },
+		})
+		fireEvent.click(screen.getByRole("button", { name: LOGIN_COPY.nameSubmit }))
+
+		await screen.findByText(LOGIN_COPY.failures.unavailable)
+		expect(screen.queryByRole("button", { name: RETRY_LABEL })).toBeNull()
+	})
+
+	it("lands without a name step while /me answers without a name field", async () => {
+		routes[ME] = { body: { email: EMAIL } }
 		const router = await openLogin("/login?redirect=%2Fauthorize")
 		await reachCodeStep()
 
