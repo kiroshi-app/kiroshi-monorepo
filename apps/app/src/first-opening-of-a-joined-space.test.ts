@@ -364,24 +364,24 @@ const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
 	return { relayed, sharedSpaceId: host.shared.id }
 }
 
-const spaceIdsSentBy = (relayed: Call[], command?: string) => [
+const spaceIdsIn = (calls: Call[]) => [
 	...new Set(
-		relayed
-			.filter((call) => !command || call.command === command)
+		calls
 			.filter(({ args }) => "spaceId" in args)
 			.map(({ args }) => args.spaceId),
 	),
 ]
+
+const feedReadsIn = (calls: Call[]) =>
+	calls.filter(({ command }) => command === "mission_space_feed")
 
 it.each(["unknown", "known"] as const)(
 	"launches on a joined Space whose shared Space id is %s to the Mac without a call outside it, nor a notice",
 	async (listedRemoteSpaceId) => {
 		const { relayed, sharedSpaceId } = await launchOnGarage(listedRemoteSpaceId)
 
-		expect(spaceIdsSentBy(relayed, "mission_space_feed")).toEqual([
-			sharedSpaceId,
-		])
-		expect(spaceIdsSentBy(relayed)).toEqual([sharedSpaceId])
+		expect(spaceIdsIn(feedReadsIn(relayed))).toEqual([sharedSpaceId])
+		expect(spaceIdsIn(relayed)).toEqual([sharedSpaceId])
 		expect(wire.refusalNotices).toEqual([])
 		expect(wire.raisedNotices).toEqual([])
 	},
