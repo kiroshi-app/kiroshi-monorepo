@@ -1165,10 +1165,29 @@ export const createConversationController = (
 		}
 	}
 
-	const openReportTurn = (reported: TranscriptMessage) => {
-		if (speakers.size === 0) {
-			activeTurn = { id: newId(), promptId: reported.id }
+	const openReportTurn = async (reported: TranscriptMessage) => {
+		if (speakers.size > 0) {
+			return true
 		}
+		const previous = activeTurn
+		const turn: OpenTurn = { id: newId(), promptId: reported.id }
+		try {
+			await enqueue(() =>
+				store.startTurn({
+					id: turn.id,
+					conversationId: reported.conversationId,
+					startedAt: now(),
+				}),
+			)
+		} catch (reason) {
+			noteFailure(toReadError(reason))
+			sync()
+			return false
+		}
+		if (activeTurn === previous) {
+			activeTurn = turn
+		}
+		return true
 	}
 
 	const relayReport = async (reported: TranscriptMessage) => {
@@ -1186,10 +1205,9 @@ export const createConversationController = (
 				mentionsHandedBy(author, reported.id, unresolved),
 			)),
 		]
-		if (summoned.length === 0) {
+		if (summoned.length === 0 || !(await openReportTurn(reported))) {
 			return
 		}
-		openReportTurn(reported)
 		handOver(summoned)
 		sync()
 		drive()

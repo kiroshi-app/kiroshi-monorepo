@@ -52,8 +52,8 @@ type Room = {
 
 const createRoom = async (
 	store: TranscriptStore = createFakeTranscriptStore(),
+	driver: ScriptedDriver = createScriptedDriver(),
 ): Promise<Room> => {
-	const driver = createScriptedDriver()
 	const bots = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
 	const conversation = await store.createConversation({
 		spaceId: SPACE,
@@ -501,5 +501,61 @@ describe("a companion speaking in a room the front never opened", () => {
 		).toEqual(["Gates are up."])
 		expect(notices).toHaveLength(1)
 		expect(spoken).toEqual([])
+	})
+})
+
+type MemberMac = {
+	store: TranscriptStore
+	driver: ScriptedDriver
+	storedTurnIds: Set<string>
+}
+
+const createMemberMac = (): MemberMac => {
+	const host = createFakeTranscriptStore()
+	const storedTurnIds = new Set<string>()
+	const store: TranscriptStore = {
+		...host,
+		startTurn: (turn) => {
+			storedTurnIds.add(turn.id)
+			return host.startTurn(turn)
+		},
+	}
+	const scripted = createScriptedDriver()
+	const driver: ScriptedDriver = {
+		...scripted,
+		submitPrompt: (scope, prompt, turn) =>
+			turn && storedTurnIds.has(turn.turnId)
+				? scripted.submitPrompt(scope, prompt, turn)
+				: Promise.reject(
+						new Error("this command reaches outside the shared space"),
+					),
+	}
+	return { store, driver, storedTurnIds }
+}
+
+describe("a room a companion opens on a member Mac", () => {
+	it("prompts the companion it names under a turn the host stored", async () => {
+		const member = createMemberMac()
+		const { driver, runtimes, conversation, notices, announce } =
+			await createRoom(member.store, member.driver)
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: ada,
+			text: "Walls are up. @Nyx, read it.",
+		})
+
+		expect(
+			driver.submissions.map(({ scope, turn }) => [
+				scope.botId,
+				member.storedTurnIds.has(turn?.turnId ?? ""),
+			]),
+		).toEqual([[nyx, true]])
+		expect(runtimes.runtimeFor(conversation.id).getState().latestError).toBe(
+			null,
+		)
+		expect(notices).toEqual([])
 	})
 })
