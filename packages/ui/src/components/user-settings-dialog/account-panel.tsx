@@ -29,6 +29,10 @@ type AccountPanelProps = {
 	onSignOut: () => void
 }
 
+type AccountPictureProps = {
+	image?: string
+}
+
 const ACCOUNT_AVATAR_SIZE = 40
 
 const PANEL_CLASS = "flex flex-col gap-5 px-3 py-2"
@@ -76,7 +80,8 @@ const AccountPanel = ({
 	onCopySignInLink,
 	onManageAccount,
 	onSignOut,
-}: AccountPanelProps) => {
+	image,
+}: AccountPanelProps & AccountPictureProps) => {
 	const { t } = useTranslation("settings")
 
 	if (account.status === "signedIn") {
@@ -85,6 +90,7 @@ const AccountPanel = ({
 				<div className="flex items-center gap-3 rounded-xl border border-border p-3.5">
 					<InitialsAvatar
 						className="shrink-0"
+						image={image}
 						name={account.name}
 						size={ACCOUNT_AVATAR_SIZE}
 					/>

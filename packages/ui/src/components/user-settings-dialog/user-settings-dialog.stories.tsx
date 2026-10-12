@@ -671,10 +671,16 @@ export const SignedIn = meta.story({
 		const panel = await accountPanelIn(dialog)
 
 		await expect(within(panel).queryByRole("heading")).toBeNull()
-		await expect(panel.querySelector('[data-slot="user-avatar"]')).toBeVisible()
+		const avatar = panel.querySelector('[data-slot="user-avatar"]')
+		await expect(avatar).toBeVisible()
+		await expect(avatar?.querySelector("img")).toBeNull()
+		await expect(avatar).toHaveTextContent("AM")
 		await expect(within(panel).getByText(SIGNED_IN.name)).toBeVisible()
 		await expect(within(panel).getByText(SIGNED_IN.email)).toBeVisible()
-		await expect(within(panel).getByText(PLAN.beta)).toBeVisible()
+		const badge = within(panel).getByText(PLAN.beta)
+		await expect(badge).toBeVisible()
+		await expect(getComputedStyle(badge).fontSize).toBe("12px")
+		await expect(getComputedStyle(badge).lineHeight).toBe("16px")
 		await expect(within(panel).getByText(PLAN.pro)).toBeVisible()
 		await expect(
 			within(panel).getByText(ACCOUNT.signedIn.caption),
@@ -689,6 +695,34 @@ export const SignedIn = meta.story({
 			within(panel).getByRole("button", { name: ACCOUNT.signedIn.signOut }),
 		)
 		await expect(args.account?.onSignOut).toHaveBeenCalledOnce()
+	},
+})
+
+export const SignedInWithPicture = meta.story({
+	args: {
+		tab: "account",
+		value: PICTURED_USER,
+		account: accountIn(SIGNED_IN),
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A reader signed in who set a picture on Profile: the card's avatar wears that picture, the same one the breadcrumb shows, instead of their initials.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const panel = await accountPanelIn(dialog)
+
+		const avatar = panel.querySelector('[data-slot="user-avatar"]')
+		await waitFor(() =>
+			expect(avatar?.querySelector("img")).toHaveAttribute(
+				"src",
+				UPLOADED_AVATAR_IMAGE,
+			),
+		)
 	},
 })
 

@@ -236,7 +236,7 @@ const UserSettingsDialog = ({
 
 			{account ? (
 				<SettingsScrollingPanel value={ACCOUNT_TAB}>
-					<AccountPanel {...account} />
+					<AccountPanel {...account} image={value.image} />
 				</SettingsScrollingPanel>
 			) : null}
 
