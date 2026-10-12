@@ -10,11 +10,21 @@ import {
 	raiseRefusalNotice,
 } from "./http"
 
+import { toTransportError } from "../chat/chat-state"
+
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
 }))
 
 const failureNotice = vi.mocked(raiseFailureNotice)
+
+const rejectionOf = (answer: Promise<unknown>): Promise<unknown> =>
+	answer.then(
+		() => {
+			throw new Error("the call was answered")
+		},
+		(reason: unknown) => reason,
+	)
 
 const HOST = "http://127.0.0.1:45367"
 
@@ -168,6 +178,42 @@ describe("invoke over http", () => {
 			kind: "notFound",
 		})
 		expect(onRefused).not.toHaveBeenCalled()
+	})
+
+	it("hands a relayed command error to the chat with its own kind", async () => {
+		const { host } = hostOf({
+			answer: {
+				status: 500,
+				body: '{"kind":"spawnFailed","detail":"no agent binary"}',
+				type: "application/json",
+			},
+		})
+
+		const reason = await rejectionOf(
+			host.invoke("agent_start_or_resume_session"),
+		)
+
+		expect(toTransportError(reason)).toEqual({
+			kind: "spawnFailed",
+			detail: "no agent binary",
+		})
+	})
+
+	it("reads a plain text refusal as its text alone", async () => {
+		const { host } = hostOf({
+			answer: {
+				status: 403,
+				body: "this command reaches outside the shared space",
+			},
+		})
+
+		const reason = await rejectionOf(host.invoke("mission_space_feed"))
+
+		expect(String(reason)).toBe("this command reaches outside the shared space")
+		expect(toTransportError(reason)).toEqual({
+			kind: "unknownFailure",
+			detail: "this command reaches outside the shared space",
+		})
 	})
 
 	it("rejects a call carrying a bad token", async () => {

@@ -1,7 +1,10 @@
 export class HostRefused extends Error {
 	constructor(message: string, cause: unknown) {
 		super(message, { cause })
-		this.name = "HostRefused"
+	}
+
+	override toString(): string {
+		return String(this.cause)
 	}
 }
 
