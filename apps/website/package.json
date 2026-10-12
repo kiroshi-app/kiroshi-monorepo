@@ -12,22 +12,27 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"serve": "vite preview",
+		"test": "vitest run",
 		"types": "tsc -b",
 		"lint": "biome lint",
 		"lint:fix": "biome check --assist-enabled=true --unsafe --write ."
 	},
 	"dependencies": {
 		"@fontsource-variable/roboto-mono": "5.3.0",
+		"@tanstack/react-router": "^1.170.42",
 		"@workspace/ui": "workspace:*",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4",
+		"@testing-library/react": "^16.3.3",
 		"@types/node": "^24",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"@vitejs/plugin-react": "^6",
-		"vite": "^8"
+		"happy-dom": "^20.14.6",
+		"vite": "^8",
+		"vitest": "5.0.3"
 	}
 }
