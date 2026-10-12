@@ -35,11 +35,24 @@ const ACCOUNT_PAGE_URL = "https://kiroshi.app/account"
 
 const SIGNED_OUT: AccountState = { kind: "signedOut", reason: null }
 
-const FAILURE_TITLE_KEYS = {
-	expired: "settings:account.failed.timedOut",
-	cancelled: "settings:account.failed.serverError",
-	unreachable: "settings:account.failed.serverError",
-} as const satisfies Record<AccountFailure, string>
+const UNREACHABLE_NOTICE_KEYS = {
+	title: "settings:account.unreachable.title",
+	description: "settings:account.unreachable.description",
+} as const
+
+const FAILURE_NOTICE_KEYS = {
+	expired: {
+		title: "settings:account.failed.timedOut",
+		description: "settings:account.failed.description",
+	},
+	cancelled: {
+		title: "settings:account.failed.cancelled",
+		description: "settings:account.failed.description",
+	},
+	unreachable: UNREACHABLE_NOTICE_KEYS,
+} as const
+
+type NoticeKeys = (typeof FAILURE_NOTICE_KEYS)[AccountFailure]
 
 const transitionOf = (state: AccountState) => {
 	if (state.kind === "failed") return `failed:${state.failure}`
@@ -47,18 +60,17 @@ const transitionOf = (state: AccountState) => {
 	return state.kind
 }
 
+const translatedNotice = (keys: NoticeKeys): NoticeMessage => ({
+	title: i18n.t(keys.title),
+	description: i18n.t(keys.description),
+})
+
 const noticeFor = (state: AccountState): NoticeMessage | null => {
 	if (state.kind === "unreachable") {
-		return {
-			title: i18n.t("settings:account.unreachable.title"),
-			description: i18n.t("settings:account.unreachable.description"),
-		}
+		return translatedNotice(UNREACHABLE_NOTICE_KEYS)
 	}
 	if (state.kind === "failed") {
-		return {
-			title: i18n.t(FAILURE_TITLE_KEYS[state.failure]),
-			description: i18n.t("settings:account.failed.description"),
-		}
+		return translatedNotice(FAILURE_NOTICE_KEYS[state.failure])
 	}
 	if (state.kind === "signedOut" && state.reason === "signedOutOnSite") {
 		return {
@@ -146,8 +158,13 @@ export const createAccountController = (): AccountController => {
 		copySignInLink: () => {
 			const state = stateStore.getState()
 			if (state.kind !== "waiting") return
-			writeToClipboard(state.verificationUrl).catch(() =>
-				reportFailure(i18n.t("settings:account.copySignInLinkFailed")),
+			writeToClipboard(state.verificationUrl).then(
+				() =>
+					raiseTransientNotice({
+						type: "info",
+						title: i18n.t("settings:account.signInLinkCopied"),
+					}),
+				() => reportFailure(i18n.t("settings:account.copySignInLinkFailed")),
 			)
 		},
 		manageAccount: () => {

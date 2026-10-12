@@ -227,6 +227,21 @@ describe("useAccount", () => {
 		expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(
 			WAITING.verificationUrl,
 		)
+		expect(raiseTransientNotice).toHaveBeenCalledExactlyOnceWith({
+			type: "info",
+			title: COPY.signInLinkCopied,
+		})
+		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it("copies nothing and raises no notice when Copy the sign-in link is pressed outside a wait", async () => {
+		const { result } = await mountAccount()
+
+		act(() => result.current.onCopySignInLink())
+		await settling()
+
+		expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 		expect(failureNotice).not.toHaveBeenCalled()
 	})
 
@@ -260,6 +275,7 @@ describe("useAccount", () => {
 		expect(failureNotice).toHaveBeenCalledWith(
 			reported({ title: COPY.manageAccountFailed }),
 		)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 
 	it("asks before signing out of a joined relay space, then signs out and raises the notice", async () => {
@@ -345,26 +361,27 @@ describe("useAccount", () => {
 	})
 
 	it.each([
-		["expired", "timedOut"],
-		["cancelled", "serverError"],
-		["unreachable", "serverError"],
+		[
+			"expired",
+			{ title: COPY.failed.timedOut, description: COPY.failed.description },
+		],
+		[
+			"cancelled",
+			{ title: COPY.failed.cancelled, description: COPY.failed.description },
+		],
+		["unreachable", COPY.unreachable],
 	] as const)(
 		"raises the %s notice once and renders the signed-out panel",
-		async (failure, title) => {
+		async (failure, notice) => {
 			const { result, rerender } = await mountAccount()
 
 			announce({ kind: "failed", failure })
 			rerender({ displayName: PROFILE_NAME })
+			announce({ kind: "failed", failure })
 			rerender({ displayName: PROFILE_NAME })
 
 			expect(result.current.account).toEqual({ status: "signedOut" })
-			expect(failureNotice).toHaveBeenCalledOnce()
-			expect(failureNotice).toHaveBeenCalledWith(
-				reported({
-					title: COPY.failed[title],
-					description: COPY.failed.description,
-				}),
-			)
+			expect(failureNotice).toHaveBeenCalledExactlyOnceWith(reported(notice))
 		},
 	)
 
