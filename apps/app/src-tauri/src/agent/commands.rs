@@ -26,6 +26,7 @@ use crate::conversations::host_turn::HostTurns;
 use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, MISSION_KIND};
 use crate::db::repositories::runtime_context::ParticipantKey;
+use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
@@ -1096,6 +1097,24 @@ pub async fn agent_live_sessions(
 	state: State<'_, AgentState>,
 ) -> Result<Vec<LiveSession>, TransportError> {
 	Ok(state.live.report())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_live_sessions_in_space(
+	state: State<'_, AgentState>,
+	database: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<LiveSession>, TranscriptStoreError> {
+	let children = ready(&database)?.space_children();
+	let mut in_the_space = Vec::new();
+	for session in state.live.report() {
+		let conversation_id = session.conversation_id.clone();
+		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+			in_the_space.push(session);
+		}
+	}
+	Ok(in_the_space)
 }
 
 #[tauri::command]

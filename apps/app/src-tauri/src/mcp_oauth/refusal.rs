@@ -90,6 +90,7 @@ fn reason(error: &OauthError) -> String {
 		OauthError::FlowTimedOut { timeout_ms } => format!("no answer within {timeout_ms}ms"),
 		OauthError::Transport { error } => format!("{error:?}"),
 		OauthError::Store { error } => format!("{error:?}"),
+		OauthError::RefusedToAMember => "the grant belongs to the host".to_owned(),
 	}
 }
 

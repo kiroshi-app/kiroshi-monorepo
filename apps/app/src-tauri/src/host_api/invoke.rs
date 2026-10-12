@@ -28,6 +28,8 @@ pub(crate) const DISPATCHER_WEBVIEW: &str = "dispatcher";
 pub(crate) const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
 
+pub(crate) const REFUSED_TO_A_MEMBER: &str = "refusedToAMember";
+
 const BLANK_PAGE: &str = "about:blank";
 
 static DISPATCHER_OPENING: Mutex<()> = Mutex::new(());
@@ -219,6 +221,10 @@ fn answered(command: &str, response: InvokeResponse) -> Response {
 		}
 		InvokeResponse::Err(InvokeError(error)) if error == unregistered(command) => {
 			UNREGISTERED.into_response()
+		}
+		InvokeResponse::Err(InvokeError(error)) if error["kind"] == REFUSED_TO_A_MEMBER => {
+			(StatusCode::FORBIDDEN, [(header::CONTENT_TYPE, JSON)], error.to_string())
+				.into_response()
 		}
 		InvokeResponse::Err(InvokeError(error)) => {
 			(StatusCode::INTERNAL_SERVER_ERROR, [(header::CONTENT_TYPE, JSON)], error.to_string())

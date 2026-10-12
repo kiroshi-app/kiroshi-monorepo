@@ -113,6 +113,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 400 | `{ "error": "<reason>" }`, `id` null: the relay refused the frame (see [Frames the relay refuses](#frames-the-relay-refuses)) |
 | 403 | `"this command belongs to the host"`: the command is not open to members, or no command bears this name |
 | 403 | `"this command reaches outside the shared space"`: an id in `args` names something outside the shared space |
+| 403 | `{ "kind": "refusedToAMember" }`: the command would reach what belongs to the host person |
 | 413 | a string: the call is larger than the host accepts |
 | 502 | a string: the host could not run the call on its side |
 
@@ -150,6 +151,44 @@ reaches a member.
   left. The lead is the seat whose `role` is `"lead"`.
 - Each write fires its event once, after it is stored. Seating a companion
   already seated fires nothing, and a write that fails fires nothing.
+
+### Space-level commands
+
+A member holds the same rights as the host on the shared space. These commands
+are open to it, each kept inside the shared space:
+
+| Command | Kept in the shared space by |
+|---|---|
+| `hosting_members` | `spaceId` |
+| `hosting_invite_member` | `spaceId` |
+| `hosting_withdraw_invitation` | `spaceId` |
+| `hosting_remove_member` | `spaceId` |
+| `search_messages` | `query.spaceId`, with `query.allSpaces` `false` |
+| `agent_shutdown` | `scope.conversationId` and `scope.botId` |
+| `agent_live_sessions_in_space` | `spaceId` |
+| `env_list` | `scope` |
+| `env_set` | `scope` |
+| `env_delete` | `scope` |
+| `mcp_application_status` | `owner` |
+| `mcp_oauth_disconnect` | `owner` |
+
+- `scope` and `owner` are `{ "kind": "space", "id" }` with the shared space id, or
+  `{ "kind": "bot", "id", "spaceId" }` with a companion of the shared space and the
+  shared space id. Any other kind, `user` included, answers 403.
+- `env_set`, `env_delete` and `mcp_oauth_disconnect` on a companion also held by
+  another space of the host answer 403: its env is one file for every space.
+- A scope of the host person is one of kind `user`, `person` or `account`, or a
+  `server` scope whose `owner` has kind `user`.
+- `env_list` never answers an entry whose `definedIn` or `servedFrom` is a scope
+  of the host person.
+- `mcp_application_status` never answers a row whose `scope` is a scope of the
+  host person, nor a server only the plugin of the host person declares.
+- `mcp_oauth_disconnect` on a server whose grant is a scope of the host person
+  answers 403 with `{ "kind": "refusedToAMember" }` and keeps the grant.
+- `agent_live_sessions_in_space` answers the live sessions whose conversation
+  belongs to `spaceId`, each `{ "botId", "conversationId", "runtimeSessionId", "startedAt" }`.
+- `hosting://members-changed` reaches a member only when its `spaceId` is the
+  shared space.
 
 ### The avatar frame
 

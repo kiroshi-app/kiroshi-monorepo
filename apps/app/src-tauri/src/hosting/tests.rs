@@ -33,7 +33,7 @@ use crate::agent::commands;
 use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
 use crate::agent::reply_writer::TurnSink;
-use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
+use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
 	CREATED_EVENT as COMPANION_CREATED_EVENT, DELETED_EVENT as COMPANION_DELETED_EVENT,
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
@@ -54,13 +54,17 @@ use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{MessagePageQuery, MessageRole, NewTurn};
 use crate::db::{self, DatabaseState};
+use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, Event};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
+use crate::mcp_oauth::asking::AuthorizationAnswers;
+use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
+use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -539,6 +543,10 @@ async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> V
 	}
 }
 
+async fn members_heard(member: &mut WebSocket) -> Value {
+	next_text(member, |frame| frame["event"]["event"] == MEMBERS_CHANGED_EVENT).await
+}
+
 async fn answer(member: &mut WebSocket) -> Value {
 	next_text(member, |frame| frame.get("event").is_none()).await
 }
@@ -729,42 +737,6 @@ fn a_malformed_member_frame_is_answered_400_and_the_socket_stays_open() {
 	});
 }
 
-#[test]
-fn a_member_frame_naming_a_host_member_command_is_refused_and_others_still_forwarded() {
-	run(async {
-		let mut harness = Harness::signed_in("host-only").await;
-		harness.started().await;
-		let mut member = harness.member().await;
-
-		for command in [
-			"hosting_members",
-			"hosting_invite_member",
-			"hosting_withdraw_invitation",
-			"hosting_remove_member",
-		] {
-			let frame =
-				json!({ "id": command, "command": command, "args": { "spaceId": PERSONAL } });
-			send(&mut member, &frame.to_string()).await;
-			assert_eq!(
-				answer(&mut member).await,
-				json!({ "id": command, "status": 403, "body": "this command belongs to the host" })
-			);
-		}
-		send(&mut member, r#"{"id": "after", "command": "agent_models"}"#).await;
-		let answered = answer(&mut member).await;
-
-		assert_eq!(
-			(answered["id"].clone(), answered["status"].clone()),
-			(json!("after"), json!(200))
-		);
-		assert!(
-			harness.member_calls().iter().all(|call| call == "GET"),
-			"{:?}",
-			harness.member_calls()
-		);
-	});
-}
-
 async fn a_relay_guest_is_refused(command: &str) {
 	refused_on(&mut Harness::signed_in(command).await, command).await;
 }
@@ -900,42 +872,6 @@ fn a_relay_guest_cannot_read_the_conversation_ids_of_the_host() {
 	run(a_relay_guest_is_refused("conversation_local_ids"));
 }
 
-fn a_space_scope() -> EnvScope {
-	EnvScope::Space { id: PERSONAL.to_owned() }
-}
-
-async fn an_env_entry_kept_from(command: &str, args: Value) {
-	let (mut harness, effects) = Harness::applying_host_effects(command).await;
-	let scope = a_space_scope();
-	store::set(&effects.env_root, &scope, "GREETING", "host-value").expect("the host sets");
-	let before = store::values(&effects.env_root, &scope).expect("the host reads");
-
-	refused_with(&mut harness, command, args).await;
-
-	assert_eq!(store::values(&effects.env_root, &scope).expect("the host reads"), before);
-}
-
-#[test]
-fn a_relay_guest_cannot_set_a_host_env_entry() {
-	run(an_env_entry_kept_from(
-		"env_set",
-		json!({ "scope": a_space_scope(), "name": "GREETING", "value": "guest-value" }),
-	));
-}
-
-#[test]
-fn a_relay_guest_cannot_delete_a_host_env_entry() {
-	run(an_env_entry_kept_from(
-		"env_delete",
-		json!({ "scope": a_space_scope(), "name": "GREETING" }),
-	));
-}
-
-#[test]
-fn a_relay_guest_cannot_list_the_host_env() {
-	run(a_relay_guest_is_refused("env_list"));
-}
-
 #[test]
 fn a_relay_guest_cannot_replace_the_host_agent_connection() {
 	run(async {
@@ -961,57 +897,8 @@ fn a_relay_guest_cannot_connect_an_application_with_the_host_identity() {
 }
 
 #[test]
-fn a_relay_guest_cannot_disconnect_a_host_application() {
-	run(async {
-		let (mut harness, effects) = Harness::applying_host_effects("oauth-disconnect").await;
-		let owner = EnvOwner::Space { id: PERSONAL.to_owned() };
-		let scope = EnvScope::Server { name: "granola".to_owned(), owner: owner.clone() };
-		let grant = OauthCredentials {
-			access_token: "host-access".to_owned(),
-			refresh_token: Some("host-refresh".to_owned()),
-			expires_at: None,
-			client_id: "registered".to_owned(),
-			client_secret: None,
-			redirect_uri: None,
-		};
-		credentials::store(&effects.env_root, &scope, &grant).expect("the host connects");
-		let before = store::values(&effects.env_root, &scope).expect("the host reads");
-
-		refused_with(
-			&mut harness,
-			"mcp_oauth_disconnect",
-			json!({ "owner": owner, "name": "granola", "url": "https://granola.test/mcp" }),
-		)
-		.await;
-
-		assert_eq!(store::values(&effects.env_root, &scope).expect("the host reads"), before);
-	});
-}
-
-#[test]
 fn a_relay_guest_cannot_cancel_a_host_application_connection() {
 	run(a_relay_guest_is_refused("mcp_oauth_cancel"));
-}
-
-#[test]
-fn a_relay_guest_cannot_read_or_renew_the_host_application_grants() {
-	run(a_relay_guest_is_refused("mcp_application_status"));
-}
-
-#[test]
-fn a_relay_guest_cannot_shut_the_host_agent_down() {
-	run(async {
-		let (mut harness, effects) = Harness::applying_host_effects("agent-shutdown").await;
-
-		refused_with(
-			&mut harness,
-			"agent_shutdown",
-			json!({ "scope": { "conversationId": "c1" } }),
-		)
-		.await;
-
-		assert_eq!(effects.reached(), ["agent_models"]);
-	});
 }
 
 #[test]
@@ -1107,26 +994,19 @@ fn a_local_event_is_forwarded_to_the_relay() {
 }
 
 #[test]
-fn the_first_member_announcement_of_an_online_space_sends_nothing_on_the_relay() {
+fn the_first_member_announcement_of_an_online_space_crosses_the_relay() {
 	run(async {
 		let mut harness = Harness::signed_in("members-local").await;
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
-		for _ in 0..500 {
-			if !harness.heard_member_lists().is_empty() {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		assert_eq!(harness.heard_member_lists().len(), 1);
 
-		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
-		events::emit(harness.app.handle(), Event::untyped(CHANGED_EVENT), payload.clone())
-			.expect("emitted");
 		let first = next_text(&mut member, |_| true).await;
 
-		assert_eq!(first, json!({ "event": { "event": CHANGED_EVENT, "payload": payload } }));
+		let announced = harness.heard_member_lists();
+		assert_eq!(announced.len(), 1);
+		let payload = json!({ "spaceId": PERSONAL, "members": announced[0] });
+		assert_eq!(first, as_forwarded((MEMBERS_CHANGED_EVENT, payload)));
 	});
 }
 
@@ -1137,6 +1017,7 @@ fn stopping_closes_with_1000_clears_the_flag_and_keeps_the_instance() {
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 		let (registered, _) = harness.stored().await;
 
 		assert_eq!(harness.stopped().await, HostingState::Off);
@@ -1175,6 +1056,7 @@ fn signing_out_closes_the_relay_and_needs_a_sign_in_keeping_the_flag() {
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 
 		signed_out(harness.app.handle()).await;
 		let closed = tokio::time::timeout(PATIENCE, member.recv()).await.expect("a frame in time");
@@ -1252,6 +1134,7 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 		start(harness.app.handle(), work.clone()).await.expect("the hosting starts");
 		let mut member = harness.member().await;
 		harness.reached_by(&work, HostingState::Online).await;
+		members_heard(&mut member).await;
 
 		space_delete(harness.app.handle().clone(), harness.app.state(), work.clone())
 			.await
@@ -1724,8 +1607,9 @@ impl Guest {
 			.await
 			.expect("the two spaces are planted");
 		harness.started().await;
-		let member = harness.member().await;
+		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
+		members_heard(&mut member).await;
 		let mut guest = Self { harness, effects, member };
 		guest.relay_listens().await;
 		guest
@@ -1842,6 +1726,182 @@ fn a_write_without_a_sender_reaches_the_local_api() {
 
 		assert_eq!(answered["status"], json!(200), "{answered}");
 		assert_eq!(guest.effects.reached(), ["conversation_send_turn"]);
+	});
+}
+
+fn an_env_scope_of(space_id: &str) -> Value {
+	json!({ "kind": "space", "id": space_id })
+}
+
+fn a_bot_env_scope(bot_id: &str, space_id: &str) -> Value {
+	json!({ "kind": "bot", "id": bot_id, "spaceId": space_id })
+}
+
+fn a_search_of(space_id: &str) -> Value {
+	json!({ "query": { "text": "mine", "spaceId": space_id, "allSpaces": false } })
+}
+
+#[test]
+fn a_member_lists_the_members_of_the_shared_space_only() {
+	run(kept_in_the_space_named("hosting_members", space_named));
+}
+
+#[test]
+fn a_member_invites_into_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_invite_member",
+		|space_id| json!({ "spaceId": space_id, "email": "friend@example.com" }),
+	));
+}
+
+#[test]
+fn a_member_withdraws_an_invitation_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_withdraw_invitation",
+		|space_id| json!({ "spaceId": space_id, "userId": "pending" }),
+	));
+}
+
+#[test]
+fn a_member_removes_a_member_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_remove_member",
+		|space_id| json!({ "spaceId": space_id, "userId": "joined" }),
+	));
+}
+
+#[test]
+fn a_member_searches_the_messages_of_the_shared_space_only() {
+	run(async {
+		let command = "search_messages";
+		let mut guest = Guest::of_two_spaces(command).await;
+		let mut every_space = a_search_of(PERSONAL);
+		every_space["query"]["allSpaces"] = json!(true);
+
+		guest.refused(command, a_search_of(ELSEWHERE)).await;
+		guest.refused(command, every_space).await;
+		guest.forwarded(command, a_search_of(PERSONAL)).await;
+
+		assert_eq!(guest.effects.reached(), [command]);
+	});
+}
+
+#[test]
+fn a_member_shuts_down_a_session_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"agent_shutdown",
+		json!({ "scope": a_runtime_scope("c-theirs") }),
+		json!({ "scope": a_runtime_scope("c-mine") }),
+	));
+}
+
+#[test]
+fn a_member_reads_the_live_sessions_of_the_shared_space_only() {
+	run(kept_in_the_space_named("agent_live_sessions_in_space", space_named));
+}
+
+#[test]
+fn a_member_lists_the_env_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_list",
+		json!({ "scope": an_env_scope_of(ELSEWHERE) }),
+		json!({ "scope": an_env_scope_of(PERSONAL) }),
+	));
+}
+
+#[test]
+fn a_member_sets_an_env_entry_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_set",
+		json!({ "scope": an_env_scope_of(ELSEWHERE), "name": "GREETING", "value": "member" }),
+		json!({ "scope": an_env_scope_of(PERSONAL), "name": "GREETING", "value": "member" }),
+	));
+}
+
+#[test]
+fn a_member_deletes_an_env_entry_of_a_bot_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"env_delete",
+		json!({ "scope": a_bot_env_scope("b-theirs", ELSEWHERE), "name": "GREETING" }),
+		json!({ "scope": a_bot_env_scope("b-mine", PERSONAL), "name": "GREETING" }),
+	));
+}
+
+#[test]
+fn a_member_reads_the_application_status_of_the_shared_space_only() {
+	run(kept_in_the_shared_space(
+		"mcp_application_status",
+		json!({ "owner": an_env_scope_of(ELSEWHERE) }),
+		json!({ "owner": an_env_scope_of(PERSONAL) }),
+	));
+}
+
+#[test]
+fn a_member_disconnects_an_application_of_the_shared_space_only() {
+	let disconnect = |owner: Value| json!({ "owner": owner, "name": "granola", "url": "https://granola.test/mcp" });
+	run(kept_in_the_shared_space(
+		"mcp_oauth_disconnect",
+		disconnect(an_env_scope_of(ELSEWHERE)),
+		disconnect(an_env_scope_of(PERSONAL)),
+	));
+}
+
+#[test]
+fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("env-outside").await;
+		let outside = [
+			json!({ "kind": "user" }),
+			a_bot_env_scope("b-theirs", PERSONAL),
+			a_bot_env_scope("b-mine", ELSEWHERE),
+			json!({ "kind": "server", "name": "clock", "owner": an_env_scope_of(PERSONAL) }),
+		];
+		let held_with_another_space = a_bot_env_scope("b-shared", PERSONAL);
+
+		for scope in outside.clone() {
+			guest.refused("env_list", json!({ "scope": scope })).await;
+			guest.refused("mcp_application_status", json!({ "owner": scope })).await;
+		}
+		for scope in outside.into_iter().chain([held_with_another_space]) {
+			guest.refused("env_set", json!({ "scope": scope, "name": "A", "value": "b" })).await;
+			guest.refused("env_delete", json!({ "scope": scope, "name": "A" })).await;
+			guest
+				.refused(
+					"mcp_oauth_disconnect",
+					json!({ "owner": scope, "name": "granola", "url": "https://granola.test/mcp" }),
+				)
+				.await;
+		}
+
+		assert!(guest.effects.reached().is_empty(), "{:?}", guest.effects.reached());
+	});
+}
+
+#[test]
+fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
+	run(async {
+		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
+		let app = guest.harness.app.handle();
+		let scope_in = |conversation_id: &str, bot_id: &str| agent::RuntimeScope {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: format!("r-{conversation_id}"),
+			epoch: 0,
+		};
+		commands::a_run_held_by_the_app(app, scope_in("c-mine", "b-mine"));
+		commands::a_run_held_by_the_app(app, scope_in("c-theirs", "b-theirs"));
+		commands::a_run_held_by_the_app(app, scope_in("c-shared", "b-shared"));
+
+		let listed =
+			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
+				.await
+				.expect("the sessions read");
+
+		let conversations: Vec<&str> =
+			listed.iter().map(|session| session.conversation_id.as_str()).collect();
+		assert_eq!(conversations, ["c-mine"]);
+		assert_eq!(listed[0].bot_id, "b-mine");
+		assert_eq!(listed[0].runtime_session_id, "r-c-mine");
 	});
 }
 
@@ -2684,6 +2744,13 @@ fn a_relay_guest_hears_a_routine_change_of_the_shared_space_only() {
 fn a_relay_guest_hears_a_hosting_change_of_the_shared_space_only() {
 	run(only_the_shared_space_frame_is_heard(|space_id| {
 		(CHANGED_EVENT, json!({ "spaceId": space_id, "state": "online" }))
+	}));
+}
+
+#[test]
+fn a_relay_guest_hears_a_members_change_of_the_shared_space_only() {
+	run(only_the_shared_space_frame_is_heard(|space_id| {
+		(MEMBERS_CHANGED_EVENT, json!({ "spaceId": space_id, "members": [] }))
 	}));
 }
 
@@ -3931,5 +3998,175 @@ fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 				 \"{GUEST_LOCAL_CONVERSATION}\""
 			)
 		);
+	});
+}
+
+const DEFAULT_BOT: &str = "default";
+
+fn the_default_bot() -> EnvOwner {
+	EnvOwner::Bot { id: DEFAULT_BOT.to_owned(), space_id: PERSONAL.to_owned() }
+}
+
+fn a_host_grant() -> OauthCredentials {
+	OauthCredentials {
+		access_token: "host-access".to_owned(),
+		refresh_token: Some("host-refresh".to_owned()),
+		expires_at: None,
+		client_id: "registered".to_owned(),
+		client_secret: None,
+		redirect_uri: None,
+	}
+}
+
+fn granted_to_the_host_person(name: &str) -> EnvScope {
+	EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
+}
+
+impl Authoring {
+	fn env_root(&self) -> PathBuf {
+		writable_root(self.app.handle()).expect("the env root is writable")
+	}
+
+	fn reading_applications(&self) {
+		let person = bundles::user::path(self.app.handle()).expect("the plugin has a home");
+		bundles::user::lay_down(&person).expect("the plugin is laid down");
+		self.app.manage(McpOauthState::default());
+		self.app.manage(ApplicationReports::default());
+		self.app.manage(AuthorizationAnswers::default());
+	}
+
+	fn declared(&self, plugin: Value, name: &str) {
+		direct(
+			&self.window,
+			"plugin_set_mcp_server",
+			json!({ "scope": plugin, "name": name, "config": { "command": name }, "mark": null }),
+		);
+	}
+}
+
+fn names_of(listed: &Value) -> Vec<&str> {
+	listed
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|item| item["name"].as_str().expect("a name"))
+		.collect()
+}
+
+#[test]
+fn a_member_lists_a_bot_env_without_any_entry_defined_in_or_served_from_the_host_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let root = host.env_root();
+		let bot = EnvScope::from(&the_default_bot());
+		store::set(&root, &EnvScope::User, "HOST_ONLY", "person").expect("the host sets");
+		store::set(&root, &EnvScope::User, "SHADOWED", "person").expect("the host sets");
+		store::set(&root, &EnvScope::Space { id: PERSONAL.to_owned() }, "SHARED", "space")
+			.expect("the host sets");
+		store::set(&root, &bot, "SHADOWED", "bot").expect("the host sets");
+		let args = json!({ "scope": bot });
+
+		let relayed = host.relayed(json!({ "id": 1, "command": "env_list", "args": args })).await;
+		let on_the_host = direct(&host.window, "env_list", args);
+
+		assert_eq!(names_of(&relayed), ["SHADOWED", "SHARED"]);
+		for entry in relayed.as_array().expect("a list") {
+			assert_ne!(entry["definedIn"]["kind"], "user", "{entry}");
+			assert_ne!(entry["servedFrom"]["kind"], "user", "{entry}");
+		}
+		assert_eq!(names_of(&on_the_host), ["HOST_ONLY", "SHADOWED", "SHADOWED", "SHARED"]);
+	});
+}
+
+#[test]
+fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let scope = granted_to_the_host_person("granola");
+		store::set(&host.env_root(), &scope, "PLANTED", "host").expect("the host sets");
+		let listed = |caller| env_list(host.app.handle().clone(), caller, scope.clone());
+
+		let relayed = listed(Caller::Relayed(None)).await.expect("the list reads");
+		let on_the_host = listed(Caller::Host).await.expect("the list reads");
+
+		assert_eq!(relayed, Vec::new());
+		assert_eq!(
+			on_the_host.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(),
+			["PLANTED"]
+		);
+	});
+}
+
+#[test]
+fn a_member_reads_no_application_served_by_a_grant_of_the_host_person_nor_one_of_its_plugin() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		let root = host.env_root();
+		let bot = json!({ "kind": "bot", "id": DEFAULT_BOT });
+		host.declared(bot.clone(), "granola");
+		host.declared(bot, "clock");
+		host.declared(json!({ "kind": "user" }), "notion");
+		credentials::store(&root, &granted_to_the_host_person("granola"), &a_host_grant())
+			.expect("the host connects granola");
+		credentials::store(&root, &granted_to_the_host_person("notion"), &a_host_grant())
+			.expect("the host connects notion");
+		let args = json!({ "owner": the_default_bot() });
+
+		let relayed = host
+			.relayed(json!({ "id": 1, "command": "mcp_application_status", "args": args }))
+			.await;
+		let on_the_host = direct(&host.window, "mcp_application_status", args);
+
+		assert_eq!(names_of(&relayed), ["clock"]);
+		assert_eq!(names_of(&on_the_host), ["clock", "granola"]);
+		assert_eq!(on_the_host[1]["scope"], json!(granted_to_the_host_person("granola")));
+	});
+}
+
+#[test]
+fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		host.declared(json!({ "kind": "user" }), "notion");
+		let status =
+			|caller| mcp_application_status(host.app.handle().clone(), caller, EnvOwner::User);
+
+		let relayed = status(Caller::Relayed(None)).await.expect("the status reads");
+		let on_the_host = status(Caller::Host).await.expect("the status reads");
+
+		assert_eq!(relayed, Vec::new());
+		assert_eq!(on_the_host.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(), ["notion"]);
+	});
+}
+
+#[test]
+fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_refused() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		let root = host.env_root();
+		let grant = granted_to_the_host_person("granola");
+		credentials::store(&root, &grant, &a_host_grant()).expect("the host connects");
+		let before = store::values(&root, &grant).expect("the grant reads");
+
+		let answered = host
+			.answered(json!({
+				"id": 1,
+				"command": "mcp_oauth_disconnect",
+				"sender": guest_sender(),
+				"args": {
+					"owner": the_default_bot(),
+					"name": "granola",
+					"url": "https://granola.test/mcp",
+				},
+			}))
+			.await;
+
+		assert_eq!(answered["status"], json!(403), "{answered}");
+		assert_eq!(answered["body"], json!({ "kind": "refusedToAMember" }));
+		assert!(!before.is_empty());
+		assert_eq!(store::values(&root, &grant).expect("the grant reads"), before);
 	});
 }

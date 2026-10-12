@@ -28,6 +28,7 @@ use crate::environment::contract::{
 	OAUTH_REDIRECT_URI, OAUTH_REFRESH_TOKEN,
 };
 use crate::environment::store;
+use crate::hosting::authorship::Caller;
 
 const NOTHING_STORED: &str = "no access token was stored for that server";
 
@@ -260,10 +261,14 @@ pub async fn mcp_oauth_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), Oauth
 #[specta::specta]
 pub async fn mcp_oauth_disconnect<R: Runtime>(
 	app: AppHandle<R>,
+	caller: Caller,
 	owner: EnvOwner,
 	name: String,
 	url: String,
 ) -> Result<Disconnected, OauthError> {
+	if caller.is_relayed() && held_at(&writable_root(&app)?, &owner, &name)?.is_personal() {
+		return Err(OauthError::RefusedToAMember);
+	}
 	let state = app.state::<McpOauthState>();
 	let _running = state.begin(Flow::Revoking)?;
 	let settled = disconnected(&app, &owner, &name, &url).await;
@@ -296,6 +301,24 @@ fn held_at(root: &Path, owner: &EnvOwner, name: &str) -> Result<EnvScope, EnvErr
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_application_status<R: Runtime>(
+	app: AppHandle<R>,
+	caller: Caller,
+	owner: EnvOwner,
+) -> Result<Vec<ApplicationRow>, EnvError> {
+	if !caller.is_relayed() {
+		return application_rows(app, owner).await;
+	}
+	if owner == EnvOwner::User {
+		return Ok(Vec::new());
+	}
+	let rows = application_rows(app, owner).await?;
+	Ok(rows
+		.into_iter()
+		.filter(|row| !row.scope.as_ref().is_some_and(EnvScope::is_personal))
+		.collect())
+}
+
+pub async fn application_rows<R: Runtime>(
 	app: AppHandle<R>,
 	owner: EnvOwner,
 ) -> Result<Vec<ApplicationRow>, EnvError> {
@@ -495,7 +518,7 @@ mod tests {
 		credentials::store(&root, &notion, &an_aging_grant(Some("held-refresh")))
 			.expect("the grant is written");
 
-		let rows = mcp_application_status(app.handle().clone(), EnvOwner::User)
+		let rows = mcp_application_status(app.handle().clone(), Caller::Host, EnvOwner::User)
 			.await
 			.expect("the status reads");
 
@@ -777,6 +800,7 @@ mod tests {
 
 		let settled = mcp_oauth_disconnect(
 			app.handle().clone(),
+			Caller::Host,
 			owner,
 			"granola".to_owned(),
 			"https://mcp.granola.test/mcp".to_owned(),

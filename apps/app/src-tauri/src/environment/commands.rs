@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Runtime};
 
+use crate::hosting::authorship::Caller;
+
 use super::contract::{is_reserved, ConnectionKind, EnvEntry, EnvError, EnvScope};
 use super::{connection, store};
 
@@ -48,9 +50,17 @@ pub async fn env_delete<R: Runtime>(
 #[specta::specta]
 pub async fn env_list<R: Runtime>(
 	app: AppHandle<R>,
+	caller: Caller,
 	scope: EnvScope,
 ) -> Result<Vec<EnvEntry>, EnvError> {
-	store::list(&writable_root(&app)?, &scope)
+	let listed = store::list(&writable_root(&app)?, &scope)?;
+	if !caller.is_relayed() {
+		return Ok(listed);
+	}
+	Ok(listed
+		.into_iter()
+		.filter(|entry| !entry.defined_in.is_personal() && !entry.served_from.is_personal())
+		.collect())
 }
 
 #[tauri::command]

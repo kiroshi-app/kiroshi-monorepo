@@ -84,6 +84,10 @@ impl FunctionArg for Caller {
 }
 
 impl Caller {
+	pub fn is_relayed(&self) -> bool {
+		matches!(self, Caller::Relayed(_))
+	}
+
 	pub async fn author<R: Runtime>(
 		self,
 		app: &AppHandle<R>,
