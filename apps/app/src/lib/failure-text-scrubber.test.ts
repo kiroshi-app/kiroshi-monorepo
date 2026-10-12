@@ -82,8 +82,54 @@ describe("scrubFailureText", () => {
 			"connection refused by [redacted]",
 		],
 		["connection refused by [::1]:45367", "connection refused by [redacted]"],
+		[
+			"connection refused by mac-mini:45367",
+			"connection refused by [redacted]",
+		],
+		["connection refused by studio:45367", "connection refused by [redacted]"],
 	])("masks the bare host with its port in %s", (text, scrubbed) => {
 		expect(scrubFailureText(text)).toBe(scrubbed)
+	})
+
+	it.each([
+		"file.ts:42",
+		"src/app.tsx:120:7",
+		"chat-controller.ts:88",
+		"src-tauri/src/hosting/mod.rs:240",
+		"at <anonymous>:1:2",
+		"at 2026-10-11T09:30:00.000Z",
+	])("keeps the source reference %s", (reference) => {
+		expect(scrubFailureText(`thrown from ${reference}`)).toBe(
+			`thrown from ${reference}`,
+		)
+	})
+
+	it.each([
+		["the Anthropic message id", "msg_01XFDUDYJgAACzvnptvVoYEL"],
+		["the Anthropic tool use id", "toolu_01A09q90qw90lq917835lq9"],
+		["the Anthropic server tool use id", "srvtoolu_01ABCdefGHIjklMNOpqr"],
+		["the Anthropic request id", "req_011CSHoEeqs5C35K2UUqR7Fy"],
+		["a hyphenless UUID", "4f1c2e9a7b3d4c8e9a1f2b6d8e0c4a7f"],
+	])("masks %s", (_shape, id) => {
+		expect(scrubFailureText(`the agent refused ${id} (overloaded)`)).toBe(
+			"the agent refused [redacted] (overloaded)",
+		)
+	})
+
+	it("masks an id quoted in a relayed JSON error", () => {
+		expect(
+			scrubFailureText(
+				'{"error":"overloaded","request_id":"req_011CSHoEeqs5C35K2UUqR7Fy"}',
+			),
+		).toBe('{"error":"overloaded","request_id":"[redacted]"}')
+	})
+
+	it.each([
+		"reopen_session failed",
+		"bot_list answered 500 after 3 retries",
+		"conversation_list_v2 is unknown",
+	])("leaves the command names, words and numbers of %s untouched", (text) => {
+		expect(scrubFailureText(text)).toBe(text)
 	})
 
 	it.each([
