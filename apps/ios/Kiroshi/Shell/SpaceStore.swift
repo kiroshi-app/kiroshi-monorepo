@@ -89,7 +89,7 @@ final class SpaceStore {
     }
 
     func refreshSpaces() async {
-        guard let answer = try? await cloud.spaces(bearer: bearer) else { return }
+        guard let answer = try? await cloud.spaces(bearer: bearer), !hasLeft else { return }
         switch answer {
         case .spaces(let fresh) where fresh.isEmpty:
             exit(.noSpaceLeft)
@@ -106,6 +106,7 @@ final class SpaceStore {
     }
 
     private func apply(_ state: RelayState, to spaceId: Space.ID) {
+        guard !hasLeft else { return }
         switch state {
         case .online: setHost(of: spaceId, online: true)
         case .hostOffline: setHost(of: spaceId, online: false)

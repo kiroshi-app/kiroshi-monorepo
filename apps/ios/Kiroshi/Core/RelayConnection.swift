@@ -296,6 +296,7 @@ private struct RelayEnding: Sendable {
         switch closeCode {
         case RelayClosure.hostOffline: self.init(.hostOffline, retries: true)
         case RelayClosure.membershipEnded: self.init(.membershipEnded, retries: false)
+        case RelayClosure.sessionRevoked: self.init(.signedOut, retries: false)
         default: self.init(.unreachable, retries: true)
         }
     }

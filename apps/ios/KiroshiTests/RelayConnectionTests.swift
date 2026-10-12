@@ -131,6 +131,31 @@ struct RelayConnectionTests {
         #expect(await connection.isRunning == false)
     }
 
+    @Test func aRevokedSessionClosesForGood() async {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+
+        socket.push(.close(RelayClosure.sessionRevoked))
+
+        await waitFor(.signedOut, in: updates)
+        #expect(await connection.isRunning == false)
+    }
+
+    @Test func aSessionRevokedDuringTheUpgradeStops() async {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+
+        await transport.nextOpening().close(RelayClosure.sessionRevoked)
+
+        await waitFor(.signedOut, in: updates)
+        #expect(await connection.isRunning == false)
+    }
+
     @Test func hostPresenceFollowsTheRelay() async {
         let connection = makeConnection()
         let updates = await connection.updates()
