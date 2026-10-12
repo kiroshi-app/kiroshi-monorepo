@@ -25,6 +25,14 @@
 	--shadow-edge:
 		0 0 0 1px var(--color-border), 0 1px 2px -1px var(--color-edge-drop);
 	--shadow-focus-edge: 0 0 0 1px var(--color-ring);
+
+	--color-mail-tile: #eef2f9;
+	--color-mail-glyph: #3d5a8a;
+
+	--shadow-field: 0 0 0 1px var(--color-border);
+	--shadow-field-focus:
+		0 0 0 1px var(--color-ring),
+		0 0 0 4px color-mix(in srgb, var(--color-ring) 25%, transparent);
 }
 
 @layer base {

@@ -31,7 +31,7 @@ const CODE_FAILURES = new Map<string, CodeFailure>([
 
 type SocialProvider = "google" | "apple"
 
-type Account = { isNamed: boolean }
+type Account = { email: string; isNamed: boolean }
 
 type RelayRequest = { path: string; method?: "GET" | "POST"; body?: unknown }
 
@@ -141,8 +141,8 @@ const saveName = async (name: string) => {
 }
 
 const readAccount = async (): Promise<Account> => {
-	await send({ path: "/me" })
-	return { isNamed: await readIsNamed() }
+	const me = await send({ path: "/me" })
+	return { email: stringField(me, "email"), isNamed: await readIsNamed() }
 }
 
 export {

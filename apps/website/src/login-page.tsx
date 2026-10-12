@@ -5,14 +5,26 @@ import {
 	useNavigate,
 	useRouter,
 } from "@tanstack/react-router"
-import { type FormEvent, useState } from "react"
-
-import { Notice } from "@workspace/ui/components/notice"
-import { SettingsField } from "@workspace/ui/components/settings-field"
-import { Button } from "@workspace/ui/components/ui/button"
+import { type FormEvent, type ReactNode, useState } from "react"
 
 import { LOGIN_COPY } from "./login-copy"
+import {
+	ActionGroup,
+	CardHeading,
+	CodeEntry,
+	FailureLine,
+	Footnote,
+	LoginShell,
+	MailTile,
+	OrDivider,
+	PrimaryButton,
+	SocialButton,
+	TextField,
+	TextLink,
+	TextLinkRow,
+} from "./login-parts"
 import { landingOf } from "./login-search"
+import { AppleMark, GoogleMark } from "./page-marks"
 import {
 	type CodeFailure,
 	RelayError,
@@ -27,7 +39,7 @@ import { useRelayCall } from "./use-relay-call"
 
 const loginRoute = getRouteApi("/login")
 
-const CODE_LENGTH = 6
+const CODE_POSITIONS = [0, 1, 2, 3, 4, 5] as const
 
 const RETRYABLE_FAILURES: ReadonlySet<RelayFailure> = new Set([
 	"network",
@@ -37,52 +49,60 @@ const RETRYABLE_FAILURES: ReadonlySet<RelayFailure> = new Set([
 const isCodeFailure = (failure: RelayFailure | null): failure is CodeFailure =>
 	failure?.startsWith("code-") ?? false
 
-type FailureNoticeProps = {
+type RelayFailureLineProps = {
 	failure: RelayFailure | null
-	isRetrying: boolean
 	onRetry: () => void
 }
 
-const FailureNotice = ({
-	failure,
-	isRetrying,
-	onRetry,
-}: FailureNoticeProps) => {
+const RelayFailureLine = ({ failure, onRetry }: RelayFailureLineProps) => {
 	if (!failure || isCodeFailure(failure)) return null
 
 	return (
-		<Notice
-			retry={
-				RETRYABLE_FAILURES.has(failure)
-					? { onRetry, isBusy: isRetrying }
-					: undefined
-			}
-			title={LOGIN_COPY.failures[failure]}
+		<FailureLine
+			message={LOGIN_COPY.failures[failure]}
+			onRetry={RETRYABLE_FAILURES.has(failure) ? onRetry : undefined}
 		/>
 	)
 }
 
-const SOCIAL_LABEL: Record<SocialProvider, string> = {
-	google: LOGIN_COPY.continueWithGoogle,
-	apple: LOGIN_COPY.continueWithApple,
+type SocialEntry = {
+	provider: SocialProvider
+	mark: ReactNode
+	label: string
 }
 
+const SOCIAL_ENTRIES: SocialEntry[] = [
+	{
+		provider: "google",
+		mark: <GoogleMark />,
+		label: LOGIN_COPY.continueWithGoogle,
+	},
+	{
+		provider: "apple",
+		mark: <AppleMark />,
+		label: LOGIN_COPY.continueWithApple,
+	},
+]
+
 type EmailStepProps = {
+	initialEmail: string
 	onCodeSent: (email: string) => void
 }
 
-const EmailStep = ({ onCodeSent }: EmailStepProps) => {
-	const [email, setEmail] = useState("")
+const EmailStep = ({ initialEmail, onCodeSent }: EmailStepProps) => {
+	const [email, setEmail] = useState(initialEmail)
 	const loginHref = useLocation({ select: (location) => location.href })
 	const call = useRelayCall()
 
-	const continueWith = (provider: SocialProvider) =>
-		call.run(async () => {
+	const continueWith = (provider: SocialProvider) => {
+		if (call.isPending) return
+		void call.run(async () => {
 			const callbackURL = new URL(loginHref, window.location.origin).href
 			window.location.assign(
 				await requestSocialSignIn({ provider, callbackURL }),
 			)
 		})
+	}
 
 	const submit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault()
@@ -95,34 +115,34 @@ const EmailStep = ({ onCodeSent }: EmailStepProps) => {
 
 	return (
 		<>
-			<h1>{LOGIN_COPY.signInTitle}</h1>
-			{(["google", "apple"] as const).map((provider) => (
-				<Button
-					disabled={call.isPending}
-					key={provider}
-					onClick={() => void continueWith(provider)}
-					type="button"
-					variant="outline"
-				>
-					{SOCIAL_LABEL[provider]}
-				</Button>
-			))}
-			<form noValidate onSubmit={submit}>
-				<SettingsField
-					kind="email"
+			<CardHeading
+				lead={LOGIN_COPY.signInLead}
+				title={LOGIN_COPY.signInTitle}
+			/>
+			<form className="contents" noValidate onSubmit={submit}>
+				<TextField
+					autoComplete="email"
 					label={LOGIN_COPY.emailLabel}
 					onValueChange={setEmail}
+					placeholder={LOGIN_COPY.emailPlaceholder}
+					type="email"
 					value={email}
 				/>
-				<Button disabled={call.isPending} type="submit">
-					{LOGIN_COPY.emailSubmit}
-				</Button>
+				<PrimaryButton isBusy={call.isPending} label={LOGIN_COPY.emailSubmit} />
 			</form>
-			<FailureNotice
-				failure={call.failure}
-				isRetrying={call.isPending}
-				onRetry={call.retry}
-			/>
+			<ActionGroup>
+				<OrDivider />
+				{SOCIAL_ENTRIES.map(({ provider, mark, label }) => (
+					<SocialButton
+						key={provider}
+						label={label}
+						mark={mark}
+						onClick={() => continueWith(provider)}
+					/>
+				))}
+			</ActionGroup>
+			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+			<Footnote>{LOGIN_COPY.signInFootnote}</Footnote>
 		</>
 	)
 }
@@ -130,9 +150,10 @@ const EmailStep = ({ onCodeSent }: EmailStepProps) => {
 type CodeStepProps = {
 	email: string
 	onSignedIn: () => Promise<void>
+	onOtherEmail: () => void
 }
 
-const CodeStep = ({ email, onSignedIn }: CodeStepProps) => {
+const CodeStep = ({ email, onSignedIn, onOtherEmail }: CodeStepProps) => {
 	const [code, setCode] = useState("")
 	const call = useRelayCall()
 
@@ -143,9 +164,11 @@ const CodeStep = ({ email, onSignedIn }: CodeStepProps) => {
 		})
 
 	const enter = (value: string) => {
-		const digits = value.replace(/\D/g, "").slice(0, CODE_LENGTH)
+		const digits = value.replace(/\D/g, "").slice(0, CODE_POSITIONS.length)
 		setCode(digits)
-		if (digits.length === CODE_LENGTH && !call.isPending) void verify(digits)
+		if (digits.length === CODE_POSITIONS.length && !call.isPending) {
+			void verify(digits)
+		}
 	}
 
 	const askNewCode = () => {
@@ -155,41 +178,38 @@ const CodeStep = ({ email, onSignedIn }: CodeStepProps) => {
 
 	return (
 		<>
-			<h1>{LOGIN_COPY.codeTitle}</h1>
-			<p>{`${LOGIN_COPY.codeSentTo} ${email}`}</p>
-			<SettingsField
+			<MailTile />
+			<CardHeading
+				lead={LOGIN_COPY.codeLead(email)}
+				title={LOGIN_COPY.codeTitle}
+			/>
+			<CodeEntry
+				code={code}
 				error={
 					isCodeFailure(call.failure)
 						? LOGIN_COPY.failures[call.failure]
 						: undefined
 				}
+				isBusy={call.isPending}
 				label={LOGIN_COPY.codeLabel}
-				onValueChange={enter}
-				readOnly={call.isPending}
-				value={code}
+				onCodeChange={enter}
+				positions={CODE_POSITIONS}
 			/>
-			<Button
-				disabled={call.isPending}
-				onClick={askNewCode}
-				type="button"
-				variant="link"
-			>
-				{LOGIN_COPY.newCode}
-			</Button>
-			<FailureNotice
-				failure={call.failure}
-				isRetrying={call.isPending}
-				onRetry={call.retry}
-			/>
+			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+			<TextLinkRow>
+				<TextLink onClick={askNewCode}>{LOGIN_COPY.newCode}</TextLink>
+				<TextLink onClick={onOtherEmail}>{LOGIN_COPY.anotherEmail}</TextLink>
+			</TextLinkRow>
 		</>
 	)
 }
 
 type NameStepProps = {
+	email: string
 	onNamed: () => Promise<void>
 }
 
-const NameStep = ({ onNamed }: NameStepProps) => {
+const NameStep = ({ email, onNamed }: NameStepProps) => {
 	const [name, setName] = useState("")
 	const [hasSubmitted, setHasSubmitted] = useState(false)
 	const call = useRelayCall()
@@ -207,46 +227,65 @@ const NameStep = ({ onNamed }: NameStepProps) => {
 	}
 
 	return (
-		<form noValidate onSubmit={submit}>
-			<h1>{LOGIN_COPY.nameTitle}</h1>
-			<SettingsField
-				error={isMissing ? LOGIN_COPY.nameMissing : undefined}
-				label={LOGIN_COPY.nameLabel}
-				onValueChange={setName}
-				value={name}
+		<>
+			<CardHeading
+				lead={LOGIN_COPY.nameLead(email)}
+				title={LOGIN_COPY.nameTitle}
 			/>
-			<Button disabled={call.isPending} type="submit">
-				{LOGIN_COPY.nameSubmit}
-			</Button>
-			<FailureNotice
-				failure={call.failure}
-				isRetrying={call.isPending}
-				onRetry={call.retry}
-			/>
-		</form>
+			<form className="contents" noValidate onSubmit={submit}>
+				<TextField
+					autoComplete="name"
+					error={isMissing ? LOGIN_COPY.nameMissing : undefined}
+					label={LOGIN_COPY.nameLabel}
+					onValueChange={setName}
+					type="text"
+					value={name}
+				/>
+				<PrimaryButton isBusy={call.isPending} label={LOGIN_COPY.nameSubmit} />
+			</form>
+			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+			<Footnote>{LOGIN_COPY.nameFootnote}</Footnote>
+		</>
 	)
 }
 
 const LoginStep = () => {
-	const { isSignedIn } = loginRoute.useLoaderData()
+	const { unnamedEmail } = loginRoute.useLoaderData()
 	const search = loginRoute.useSearch()
 	const router = useRouter()
 	const navigate = useNavigate()
-	const [email, setEmail] = useState<string | null>(null)
+	const [email, setEmail] = useState("")
+	const [isCodeSent, setIsCodeSent] = useState(false)
 
-	if (isSignedIn) {
-		return <NameStep onNamed={() => navigate({ href: landingOf(search) })} />
+	const showCodeStep = (address: string) => {
+		setEmail(address)
+		setIsCodeSent(true)
 	}
-	if (email) {
-		return <CodeStep email={email} onSignedIn={() => router.invalidate()} />
+
+	if (unnamedEmail) {
+		return (
+			<NameStep
+				email={unnamedEmail}
+				onNamed={() => navigate({ href: landingOf(search) })}
+			/>
+		)
 	}
-	return <EmailStep onCodeSent={setEmail} />
+	if (isCodeSent) {
+		return (
+			<CodeStep
+				email={email}
+				onOtherEmail={() => setIsCodeSent(false)}
+				onSignedIn={() => router.invalidate()}
+			/>
+		)
+	}
+	return <EmailStep initialEmail={email} onCodeSent={showCodeStep} />
 }
 
 export const LoginPage = () => (
-	<main>
+	<LoginShell>
 		<LoginStep />
-	</main>
+	</LoginShell>
 )
 
 export const LoginLoadFailure = ({ error }: ErrorComponentProps) => {
@@ -254,11 +293,11 @@ export const LoginLoadFailure = ({ error }: ErrorComponentProps) => {
 	const failure = error instanceof RelayError ? error.failure : "server"
 
 	return (
-		<main>
-			<Notice
-				retry={{ onRetry: () => void router.invalidate() }}
-				title={LOGIN_COPY.failures[failure]}
+		<LoginShell>
+			<FailureLine
+				message={LOGIN_COPY.failures[failure]}
+				onRetry={() => void router.invalidate()}
 			/>
-		</main>
+		</LoginShell>
 	)
 }

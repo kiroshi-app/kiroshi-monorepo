@@ -16,7 +16,7 @@ import { createSiteRouter } from "./router"
 const EMAIL = "ada@example.com"
 const BEARER = "bearer-from-the-relay"
 const BEARER_KEY = "kiroshi.relay.bearer"
-const CODE_SENT_LINE = `${LOGIN_COPY.codeSentTo} ${EMAIL}`
+const CODE_SENT_LINE = LOGIN_COPY.codeLead(EMAIL)
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
@@ -116,16 +116,16 @@ afterEach(() => {
 })
 
 describe("the sign-in page", () => {
-	it("offers Google, Apple, then the email in that order", async () => {
+	it("offers the email and its Continue, then Google and Apple, in that order", async () => {
 		await openLogin()
 
 		const buttons = screen
 			.getAllByRole("button")
 			.map((button) => button.textContent)
 		expect(buttons).toEqual([
+			LOGIN_COPY.emailSubmit,
 			LOGIN_COPY.continueWithGoogle,
 			LOGIN_COPY.continueWithApple,
-			LOGIN_COPY.emailSubmit,
 		])
 		expect(screen.getByLabelText(LOGIN_COPY.emailLabel)).toBeTruthy()
 	})
@@ -149,6 +149,33 @@ describe("the sign-in page", () => {
 		expect(callsTo(SIGN_IN)[0]?.body).toEqual({ email: EMAIL, otp: "123456" })
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		expect(callsTo(ME)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+	})
+
+	it("draws each digit in its own cell over a one-time-code input", async () => {
+		await openLogin()
+		await reachCodeStep()
+
+		enterCode("481")
+
+		for (const digit of ["4", "8", "1"]) {
+			expect(screen.getByText(digit)).toBeTruthy()
+		}
+		expect(codeEntry().autocomplete).toBe("one-time-code")
+		expect(codeEntry().inputMode).toBe("numeric")
+	})
+
+	it("goes back to the email, kept, on Use another email", async () => {
+		await openLogin()
+		await reachCodeStep()
+
+		fireEvent.click(
+			screen.getByRole("button", { name: LOGIN_COPY.anotherEmail }),
+		)
+
+		await screen.findByRole("heading", { name: LOGIN_COPY.signInTitle })
+		expect(
+			screen.getByLabelText<HTMLInputElement>(LOGIN_COPY.emailLabel).value,
+		).toBe(EMAIL)
 	})
 
 	it("waits for the sixth digit before verifying", async () => {
@@ -276,6 +303,9 @@ describe("the sign-in page", () => {
 
 		await screen.findByText(LOGIN_COPY.failures.unavailable)
 		expect(screen.queryByRole("button", { name: RETRY_LABEL })).toBeNull()
+		expect(
+			screen.getByRole("button", { name: LOGIN_COPY.continueWithGoogle }),
+		).toHaveProperty("disabled", false)
 		expect(callsTo(SOCIAL_SIGN_IN)[0]?.body).toMatchObject({
 			provider: "google",
 		})

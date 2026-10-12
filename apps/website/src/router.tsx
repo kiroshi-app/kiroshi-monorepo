@@ -48,12 +48,16 @@ const readSignedInAccount = async () => {
 	}
 }
 
-const loadLoginState = async (search: LoginSearch) => {
-	if (!readBearer()) return { isSignedIn: false }
+type LoginState = { unnamedEmail: string | null }
+
+const SIGNED_OUT: LoginState = { unnamedEmail: null }
+
+const loadLoginState = async (search: LoginSearch): Promise<LoginState> => {
+	if (!readBearer()) return SIGNED_OUT
 	const account = await readSignedInAccount()
-	if (!account) return { isSignedIn: false }
+	if (!account) return SIGNED_OUT
 	if (account.isNamed) throw redirect({ href: landingOf(search) })
-	return { isSignedIn: true }
+	return { unnamedEmail: account.email }
 }
 
 const rootRoute = createRootRoute()
