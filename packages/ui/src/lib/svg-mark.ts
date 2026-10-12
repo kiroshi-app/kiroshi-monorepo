@@ -16,8 +16,11 @@ const ALLOWED_ELEMENTS = new Set([
 
 const TEXT_HOLDERS = new Set(["title", "desc"])
 
+const ROOT_ONLY_ATTRIBUTES = new Set(["version", "xmlns:xlink"])
+
 const ALLOWED_ATTRIBUTES = new Set([
 	"xmlns",
+	"class",
 	"viewBox",
 	"width",
 	"height",
@@ -67,8 +70,11 @@ const isAllowedElement = (
 ): boolean =>
 	ALLOWED_ELEMENTS.has(element.localName) &&
 	element.namespaceURI === namespace &&
-	Array.from(element.attributes).every((attribute) =>
-		ALLOWED_ATTRIBUTES.has(attribute.name),
+	Array.from(element.attributes).every(
+		(attribute) =>
+			ALLOWED_ATTRIBUTES.has(attribute.name) ||
+			(element === element.ownerDocument.documentElement &&
+				ROOT_ONLY_ATTRIBUTES.has(attribute.name)),
 	) &&
 	Array.from(element.childNodes).every((child) =>
 		isAllowedChild(child, element, namespace),
