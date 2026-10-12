@@ -2314,6 +2314,43 @@ describe("a run report relaying the companions it names", () => {
 		expect(controller.getState().waitingBotIds).toEqual([])
 	})
 
+	it("keeps the turn of a send that lands while the turn of the summons is stored", async () => {
+		const base = createFakeTranscriptStore()
+		let releaseReport = () => {}
+		const { driver, controller, conversation } = await createReporting({
+			...base,
+			completeTurn: (id, completedAt) =>
+				new Promise((resolve) => {
+					releaseReport = () => resolve(base.completeTurn(id, completedAt))
+				}),
+		})
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		await controller.open(conversation)
+
+		const reporting = controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+		const sending = controller.send("@Ada take the walls")
+		await settled()
+		releaseReport()
+		await Promise.all([reporting, sending])
+		await settled()
+		driver.pushTo(ada, spoke(ada, "walls done"))
+		await settled()
+
+		const sent = controller
+			.getState()
+			.messages.find(({ role }) => role === "user")
+		expect(
+			driver.submissions.map(({ scope, turn }) => [scope.botId, turn?.turnId]),
+		).toEqual([
+			[ada, sent?.turnId],
+			[nyx, sent?.turnId],
+		])
+	})
+
 	it("holds the summons of a report for the wave after the one running", async () => {
 		const { driver, controller, conversation } = await createReporting()
 		const ada = idOf(conversation, "Ada")

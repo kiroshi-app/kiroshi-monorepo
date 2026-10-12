@@ -1169,6 +1169,7 @@ export const createConversationController = (
 		if (speakers.size > 0) {
 			return true
 		}
+		const previous = activeTurn
 		const turn: OpenTurn = { id: newId(), promptId: reported.id }
 		try {
 			await enqueue(() =>
@@ -1183,7 +1184,9 @@ export const createConversationController = (
 			sync()
 			return false
 		}
-		activeTurn = turn
+		if (activeTurn === previous) {
+			activeTurn = turn
+		}
 		return true
 	}
 
