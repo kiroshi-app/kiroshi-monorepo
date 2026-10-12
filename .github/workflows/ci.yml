@@ -175,13 +175,6 @@ jobs:
           echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
 
-      - name: Restore the derived data
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: apps/ios/build
-          key: ios-derived-data-${{ hashFiles('.xcode-version') }}-${{ hashFiles('apps/ios/project.yml', 'apps/ios/**/Package.resolved', 'apps/ios/**/*.swift', 'apps/ios/*.xctestplan') }}
-          restore-keys: ios-derived-data-${{ hashFiles('.xcode-version') }}-
-
       - name: Generate
         run: bun run ios:generate
 
