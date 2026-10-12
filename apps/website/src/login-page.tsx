@@ -5,7 +5,7 @@ import {
 	useNavigate,
 	useRouter,
 } from "@tanstack/react-router"
-import { type FormEvent, type ReactNode, useState } from "react"
+import { type FormEvent, useState } from "react"
 
 import { LOGIN_COPY } from "./login-copy"
 import {
@@ -65,25 +65,6 @@ const RelayFailureLine = ({ failure, onRetry }: RelayFailureLineProps) => {
 	)
 }
 
-type SocialEntry = {
-	provider: SocialProvider
-	mark: ReactNode
-	label: string
-}
-
-const SOCIAL_ENTRIES: SocialEntry[] = [
-	{
-		provider: "google",
-		mark: <GoogleMark />,
-		label: LOGIN_COPY.continueWithGoogle,
-	},
-	{
-		provider: "apple",
-		mark: <AppleMark />,
-		label: LOGIN_COPY.continueWithApple,
-	},
-]
-
 type EmailStepProps = {
 	initialEmail: string
 	onCodeSent: (email: string) => void
@@ -132,14 +113,16 @@ const EmailStep = ({ initialEmail, onCodeSent }: EmailStepProps) => {
 			</form>
 			<ActionGroup>
 				<OrDivider />
-				{SOCIAL_ENTRIES.map(({ provider, mark, label }) => (
-					<SocialButton
-						key={provider}
-						label={label}
-						mark={mark}
-						onClick={() => continueWith(provider)}
-					/>
-				))}
+				<SocialButton
+					label={LOGIN_COPY.continueWithGoogle}
+					mark={<GoogleMark />}
+					onClick={() => continueWith("google")}
+				/>
+				<SocialButton
+					label={LOGIN_COPY.continueWithApple}
+					mark={<AppleMark />}
+					onClick={() => continueWith("apple")}
+				/>
 			</ActionGroup>
 			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
 			<Footnote>{LOGIN_COPY.signInFootnote}</Footnote>
