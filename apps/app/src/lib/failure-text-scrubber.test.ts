@@ -97,7 +97,6 @@ describe("scrubFailureText", () => {
 		"chat-controller.ts:88",
 		"src-tauri/src/hosting/mod.rs:240",
 		"at <anonymous>:1:2",
-		"at 2026-10-11T09:30:00.000Z",
 	])("keeps the source reference %s", (reference) => {
 		expect(scrubFailureText(`thrown from ${reference}`)).toBe(
 			`thrown from ${reference}`,
@@ -128,6 +127,7 @@ describe("scrubFailureText", () => {
 		"reopen_session failed",
 		"bot_list answered 500 after 3 retries",
 		"conversation_list_v2 is unknown",
+		"retried at 2026-10-11T09:30:00.000Z",
 	])("leaves the command names, words and numbers of %s untouched", (text) => {
 		expect(scrubFailureText(text)).toBe(text)
 	})
