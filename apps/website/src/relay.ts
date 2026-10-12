@@ -31,13 +31,21 @@ const CODE_FAILURES = new Map<string, CodeFailure>([
 
 type SocialProvider = "google" | "apple"
 
-type Account = { email: string; isNamed: boolean }
+type Account = { email: string; name: string | null; isNamed: boolean }
+
+type AuthorizationRequest = {
+	deviceName: string
+	platform: string
+	status: string
+}
 
 type RelayRequest = {
 	path: string
 	method?: "GET" | "POST" | "PATCH"
 	body?: unknown
 }
+
+const GONE_STATUSES: ReadonlySet<number> = new Set([404, 409, 410])
 
 const readBearer = () => localStorage.getItem(BEARER_KEY)
 
@@ -62,7 +70,7 @@ const messageOf = (body: unknown) => {
 
 const failureOf = async (response: Response): Promise<RelayFailure> => {
 	if (response.status >= 500) return "server"
-	if (response.status === 404) return "unavailable"
+	if (GONE_STATUSES.has(response.status)) return "unavailable"
 	if (response.status !== 401) return "rejected"
 	const message = messageOf(await readJson(response))
 	return (message && CODE_FAILURES.get(message)) || "unauthorized"
@@ -125,6 +133,9 @@ const requestSocialSignIn = async ({ provider, callbackURL }: SocialSignIn) => {
 	return stringField(answer, "url")
 }
 
+const isRelayFailure = (error: unknown, failure: RelayFailure) =>
+	error instanceof RelayError && error.failure === failure
+
 const isNamedIn = (me: unknown) => {
 	const name = fieldOf(me, "name")
 	return (
@@ -136,17 +147,54 @@ const saveName = async (name: string) => {
 	await send({ path: "/me", method: "PATCH", body: { name } })
 }
 
+const nameOf = (me: unknown) => {
+	const name = fieldOf(me, "name")
+	return typeof name === "string" && name.trim().length > 0 ? name : null
+}
+
 const readAccount = async (): Promise<Account> => {
 	const me = await send({ path: "/me" })
-	return { email: stringField(me, "email"), isNamed: isNamedIn(me) }
+	return {
+		email: stringField(me, "email"),
+		name: nameOf(me),
+		isNamed: isNamedIn(me),
+	}
+}
+
+const authorizationPath = (request: string) =>
+	`/authorization-requests/${encodeURIComponent(request)}`
+
+const readAuthorizationRequest = async (
+	request: string,
+): Promise<AuthorizationRequest> => {
+	const answer = await send({ path: authorizationPath(request) })
+	return {
+		deviceName: stringField(answer, "deviceName"),
+		platform: stringField(answer, "platform"),
+		status: stringField(answer, "status"),
+	}
+}
+
+const approveAuthorizationRequest = async (request: string) => {
+	await send({ path: `${authorizationPath(request)}/approve`, method: "POST" })
+}
+
+const cancelAuthorizationRequest = async (request: string) => {
+	await send({ path: `${authorizationPath(request)}/cancel`, method: "POST" })
 }
 
 export {
+	type Account,
+	type AuthorizationRequest,
+	approveAuthorizationRequest,
 	type CodeFailure,
+	cancelAuthorizationRequest,
 	clearBearer,
+	isRelayFailure,
 	RelayError,
 	type RelayFailure,
 	readAccount,
+	readAuthorizationRequest,
 	readBearer,
 	requestSocialSignIn,
 	type SocialProvider,

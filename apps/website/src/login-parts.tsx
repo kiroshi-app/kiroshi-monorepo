@@ -205,6 +205,27 @@ export const PrimaryButton = ({ label, isBusy }: PrimaryButtonProps) => (
 	</button>
 )
 
+type SecondaryButtonProps = {
+	label: string
+	isBusy: boolean
+	onClick: () => void
+}
+
+export const SecondaryButton = ({
+	label,
+	isBusy,
+	onClick,
+}: SecondaryButtonProps) => (
+	<button
+		className={`${ACTION} bg-card shadow-field hover:bg-accent`}
+		disabled={isBusy}
+		onClick={onClick}
+		type="button"
+	>
+		{label}
+	</button>
+)
+
 type SocialButtonProps = {
 	mark: ReactNode
 	label: string

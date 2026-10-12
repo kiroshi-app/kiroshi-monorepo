@@ -8,6 +8,12 @@ import {
 } from "@tanstack/react-router"
 
 import { AppScene } from "./app-scene"
+import { AuthorizeDonePage, AuthorizePage } from "./authorize-page"
+import {
+	loadAuthorizeState,
+	requireAuthorizeBearer,
+	validateAuthorizeSearch,
+} from "./authorize-state"
 import { LoginLoadFailure, LoginPage } from "./login-page"
 import {
 	type LoginSearch,
@@ -90,7 +96,20 @@ const loginRoute = createRoute({
 const authorizeRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/authorize",
-	beforeLoad: requireBearer,
+	validateSearch: validateAuthorizeSearch,
+	beforeLoad: requireAuthorizeBearer,
+	loaderDeps: ({ search }) => ({ request: search.request }),
+	loader: ({ deps, location }) =>
+		loadAuthorizeState({ request: deps.request, href: location.href }),
+	gcTime: 0,
+	component: AuthorizePage,
+	errorComponent: LoginLoadFailure,
+})
+
+const authorizeDoneRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/authorize/done",
+	component: AuthorizeDonePage,
 })
 
 const accountRoute = createRoute({
@@ -103,6 +122,7 @@ const routeTree = rootRoute.addChildren([
 	homeRoute,
 	loginRoute,
 	authorizeRoute,
+	authorizeDoneRoute,
 	accountRoute,
 ])
 
