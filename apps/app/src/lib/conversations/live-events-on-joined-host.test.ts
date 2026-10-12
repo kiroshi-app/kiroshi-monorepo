@@ -1466,23 +1466,26 @@ describe.each([
 	},
 )
 
-type EarlyRead = {
-	isRowInPage: boolean
+const writeHistory: Prepare = async ({ store, conversationId }) => {
+	await writtenElsewhere(store, conversationId, "First")
+	await writtenElsewhere(store, conversationId, "Second")
+}
+
+const writeHistoryAndQuestionRow: Prepare = async (opening) => {
+	await writeHistory(opening)
+	await repliedElsewhere(opening.store, {
+		conversationId: opening.conversationId,
+		botId: opening.botId,
+		replyId: QUESTION_ROW_ID,
+		text: questionMessageText(QUESTION),
+	})
 }
 
 const answerBeforePage =
-	({ isRowInPage }: EarlyRead): Prepare =>
-	async ({ store, driver, conversationId, botId }) => {
-		await writtenElsewhere(store, conversationId, "First")
-		await writtenElsewhere(store, conversationId, "Second")
-		if (isRowInPage) {
-			await repliedElsewhere(store, {
-				conversationId,
-				botId,
-				replyId: QUESTION_ROW_ID,
-				text: questionMessageText(QUESTION),
-			})
-		}
+	(writePage: Prepare): Prepare =>
+	async (opening) => {
+		await writePage(opening)
+		const { store, driver, conversationId, botId } = opening
 		const scope = { ...foreignScope(conversationId), botId }
 		vi.spyOn(driver, "pendingQuestions").mockResolvedValueOnce([
 			{ scope, turn: storedTurn(conversationId), event: ASKED_QUESTION },
@@ -1501,9 +1504,7 @@ describe.each([
 	"a question still waiting read before the page of %s",
 	(_, open) => {
 		it("shows its row once, after every message of the page, and its card", async () => {
-			const { shown, detach } = await open(
-				answerBeforePage({ isRowInPage: false }),
-			)
+			const { shown, detach } = await open(answerBeforePage(writeHistory))
 
 			expect(contentsOf(shown())).toEqual([
 				"First",
@@ -1516,7 +1517,7 @@ describe.each([
 
 		it("shows its row once and its card when the page carries the row too", async () => {
 			const { shown, detach } = await open(
-				answerBeforePage({ isRowInPage: true }),
+				answerBeforePage(writeHistoryAndQuestionRow),
 			)
 
 			expect(questionRowsIn(shown())).toHaveLength(1)
