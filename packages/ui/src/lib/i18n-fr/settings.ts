@@ -53,7 +53,7 @@ const settings = {
 			description: "Vérifiez votre connexion et reconnectez-vous.",
 		},
 		failed: {
-			serverError: "Kiroshi n’a pas pu vous connecter",
+			cancelled: "Connexion annulée",
 			timedOut: "La connexion a pris trop de temps",
 			description:
 				"Appuyez sur Se connecter avec votre navigateur pour réessayer.",
@@ -61,6 +61,7 @@ const settings = {
 		readFailed: "Impossible de lire votre compte Kiroshi",
 		signInFailed: "Impossible de lancer la connexion à Kiroshi",
 		cancelFailed: "Impossible d’annuler la connexion",
+		signInLinkCopied: "Lien de connexion copié",
 		copySignInLinkFailed: "Impossible de copier le lien de connexion",
 		manageAccountFailed: "Impossible d’ouvrir votre compte sur kiroshi.app",
 		signOutFailed: "Impossible de se déconnecter de Kiroshi",
