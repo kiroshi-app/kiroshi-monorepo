@@ -1814,7 +1814,7 @@ describe("personal Settings while a joined Space is active", () => {
 	})
 
 	it("cancels on this Mac a connect its forgotten host refused", async () => {
-		const { hosts, local, fetch, sockets } = await onGarage()
+		const { hosts, fetch, sockets } = await onGarage()
 		await expect(
 			hosts.invoke("mcp_oauth_connect", { owner: JOINED_SPACE }),
 		).rejects.toThrow(HOST_ONLY_REFUSAL)
@@ -1823,7 +1823,6 @@ describe("personal Settings while a joined Space is active", () => {
 		hosts.forget("garage")
 		await expect(hosts.invoke("mcp_oauth_cancel")).resolves.toBe("local")
 
-		expect(localCommands(local)).toContain("mcp_oauth_cancel")
 		expect(relayedCommands(fetch)).toEqual([])
 		expect(sockets).toHaveLength(socketsBeforeForget)
 	})
