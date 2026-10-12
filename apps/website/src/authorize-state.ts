@@ -29,7 +29,7 @@ type AuthorizeState =
 			isJustSignedIn: boolean
 	  }
 
-const EXPIRED: AuthorizeState = { kind: "expired" }
+const EXPIRED = { kind: "expired" } as const
 
 const validateAuthorizeSearch = (
 	search: Record<string, unknown>,
@@ -123,7 +123,7 @@ const loadApprovedState = async (request: string): Promise<DoneState> => {
 		readKnownRequest(request),
 		readAccount(),
 	])
-	if (device?.status !== "approved") return { kind: "expired" }
+	if (device?.status !== "approved") return EXPIRED
 	return {
 		kind: "signed-in",
 		deviceName: device.deviceName,
@@ -135,7 +135,7 @@ const loadDoneState = async ({
 	request,
 	href,
 }: SignInReturn): Promise<DoneState> => {
-	if (!request) return { kind: "expired" }
+	if (!request) return EXPIRED
 	return signInAgainOnUnauthorized({ href }, () => loadApprovedState(request))
 }
 
