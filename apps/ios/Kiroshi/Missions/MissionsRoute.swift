@@ -5,7 +5,7 @@ enum MissionsRoute: Hashable {
 extension MissionsRoute {
     @MainActor static var atLaunch: [MissionsRoute] {
         #if DEBUG
-            if SignInFixture.opened == .missionThread {
+            if [.missionThread, .slowMission].contains(SignInFixture.opened) {
                 return [.mission(MissionsFixture.splitOnboarding)]
             }
         #endif

@@ -14,11 +14,12 @@
         private let sharedSpaceId: String?
         private let answersPings: Bool
         private let answers: [String: String]
+        private let answersAfter: [String: Duration]
         private let hostLeavesAfter: String?
 
         init(
             sharedSpaceId: String? = nil, answersPings: Bool = true,
-            answers: [String: String] = [:],
+            answers: [String: String] = [:], answersAfter: [String: Duration] = [:],
             hostLeavesAfter: String? = nil
         ) {
             (sent, sentContinuation) = AsyncStream.makeStream()
@@ -26,6 +27,7 @@
             self.sharedSpaceId = sharedSpaceId
             self.answersPings = answersPings
             self.answers = answers
+            self.answersAfter = answersAfter
             self.hostLeavesAfter = hostLeavesAfter
         }
 
@@ -43,6 +45,9 @@
                     .frame(
                         #"{"id":\#(call.id),"status":200,"body":{"spaceId":"\#(sharedSpaceId)"}}"#))
             } else if let body = answers[call.command] {
+                if let delay = answersAfter[call.command] {
+                    try await Task.sleep(for: delay)
+                }
                 push(.frame(#"{"id":\#(call.id),"status":200,"body":\#(body)}"#))
                 if call.command == hostLeavesAfter {
                     push(.close(RelayClosure.hostOffline))

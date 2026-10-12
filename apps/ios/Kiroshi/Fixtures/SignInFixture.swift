@@ -90,6 +90,7 @@
         case slowThread = "slow-thread"
         case missions = "5.1"
         case missionThread = "5.2"
+        case slowMission = "slow-mission"
         case noMissions = "5.3"
         case missionsHostOffline = "5.4"
         case settings = "6.1"
@@ -126,7 +127,7 @@
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
                 ]
-            case .missions, .missionThread, .noMissions, .missionsHostOffline:
+            case .missions, .missionThread, .slowMission, .noMissions, .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
@@ -142,7 +143,7 @@
         fileprivate var isSignedIn: Bool {
             switch self {
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .missions, .missionThread,
-                .noMissions, .missionsHostOffline, .settings, .signOutAlert:
+                .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
@@ -181,7 +182,8 @@
         }
 
         var opensOnMissions: Bool {
-            [.missions, .missionThread, .noMissions, .missionsHostOffline].contains(self)
+            [.missions, .missionThread, .slowMission, .noMissions, .missionsHostOffline].contains(
+                self)
         }
 
         @MainActor fileprivate var relay: RelayEnvironment {
@@ -198,6 +200,12 @@
                 return RelayEnvironment(
                     transport: FixtureRelayTransport(
                         onlineSpaceIds: online, answers: MissionsFixture.answers),
+                    clock: ContinuousRelayClock())
+            case .slowMission:
+                return RelayEnvironment(
+                    transport: FixtureRelayTransport(
+                        onlineSpaceIds: online, answers: MissionsFixture.answers,
+                        answersAfter: ["conversation_message_page": .seconds(2)]),
                     clock: ContinuousRelayClock())
             case .noMissions:
                 return RelayEnvironment(
@@ -264,7 +272,7 @@
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .missions,
-                .missionThread, .noMissions, .missionsHostOffline, .settings:
+                .missionThread, .slowMission, .noMissions, .missionsHostOffline, .settings:
                 break
             }
             return model
