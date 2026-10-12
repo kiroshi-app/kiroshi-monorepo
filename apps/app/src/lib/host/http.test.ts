@@ -73,6 +73,7 @@ const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
 	const sockets: ReturnType<typeof socketStub>[] = []
 	const socketUrls: string[] = []
 	const onDown = vi.fn()
+	const onReconnectFailed = vi.fn()
 	const onUp = vi.fn()
 	const onRefused = vi.fn()
 	const host = createHttpHost({
@@ -86,10 +87,20 @@ const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
 			return stub.socket
 		},
 		onDown,
+		onReconnectFailed,
 		onUp,
 		onRefused,
 	})
-	return { host, fetch, sockets, socketUrls, onDown, onUp, onRefused }
+	return {
+		host,
+		fetch,
+		sockets,
+		socketUrls,
+		onDown,
+		onReconnectFailed,
+		onUp,
+		onRefused,
+	}
 }
 
 describe("invoke over http", () => {
@@ -455,6 +466,30 @@ describe("reconnecting the event socket", () => {
 
 		sockets[2]?.open()
 		expect(onUp).toHaveBeenCalledOnce()
+	})
+
+	it("signals a failed reconnection when a retry closes, not on the first drop", async () => {
+		const { host, sockets, onReconnectFailed } = hostOf()
+		await host.listen("mission://changed", () => undefined)
+
+		sockets[0]?.drop()
+		expect(onReconnectFailed).not.toHaveBeenCalled()
+		vi.advanceTimersByTime(500)
+		sockets[1]?.drop()
+
+		expect(onReconnectFailed).toHaveBeenCalledOnce()
+	})
+
+	it("signals no failed reconnection when a reopened socket drops", async () => {
+		const { host, sockets, onReconnectFailed } = hostOf()
+		await host.listen("mission://changed", () => undefined)
+
+		sockets[0]?.drop()
+		vi.advanceTimersByTime(500)
+		sockets[1]?.open()
+		sockets[1]?.drop()
+
+		expect(onReconnectFailed).not.toHaveBeenCalled()
 	})
 
 	it("delivers frames on the reconnected socket", async () => {

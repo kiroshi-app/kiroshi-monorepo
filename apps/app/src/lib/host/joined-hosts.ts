@@ -161,6 +161,8 @@ type UnpairedReopen = { signal: ReopenSignal; heardAt: number }
 
 const REOPEN_PAIRING_MS = 10_000
 
+export const LONGEST_DOWN_GRACE = 3000
+
 type Subscription = {
 	event: string
 	handler: EventCallback<unknown>
@@ -233,6 +235,7 @@ export const createJoinedHosts = ({
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
 	const subscriptions = new Set<Subscription>()
 	const downNotices = new Map<string, string>()
+	const downGraces = new Map<string, ReturnType<typeof setTimeout>>()
 	const reconnectionListeners = new Set<() => void>()
 	const unpairedReopens = new Map<string, UnpairedReopen>()
 	let isHearingRelayReopens = false
@@ -272,9 +275,31 @@ export const createJoinedHosts = ({
 		store.getState().connections[id]?.status === "down"
 
 	const reportIfActiveDown = (id: string) => {
-		if (store.getState().active === id && isDown(id) && !downNotices.has(id)) {
+		if (
+			store.getState().active === id &&
+			isDown(id) &&
+			!downGraces.has(id) &&
+			!downNotices.has(id)
+		) {
 			downNotices.set(id, reportHostDown())
 		}
+	}
+
+	const endDownGrace = (id: string) => {
+		clearTimeout(downGraces.get(id))
+		downGraces.delete(id)
+	}
+
+	const endGraceAndReport = (id: string) => {
+		endDownGrace(id)
+		reportIfActiveDown(id)
+	}
+
+	const startDownGrace = (id: string) => {
+		downGraces.set(
+			id,
+			setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE),
+		)
 	}
 
 	const endDownNotice = (id: string) => {
@@ -330,6 +355,7 @@ export const createJoinedHosts = ({
 	const markUp = (id: string) => {
 		const wasDown = isDown(id)
 		record(id, { status: "up" })
+		endDownGrace(id)
 		endDownNotice(id)
 		if (wasDown) {
 			catchUpOnSocketReopen(id)
@@ -375,8 +401,9 @@ export const createJoinedHosts = ({
 			onUp: () => markUp(id),
 			onDown: () => {
 				record(id, { status: "down" })
-				reportIfActiveDown(id)
+				startDownGrace(id)
 			},
+			onReconnectFailed: () => endGraceAndReport(id),
 			onRefused: reportFailure,
 		})
 		hosts.set(id, host)
@@ -495,6 +522,7 @@ export const createJoinedHosts = ({
 		hosts.delete(id)
 		sharedSpaceIds.delete(id)
 		unpairedReopens.delete(id)
+		endDownGrace(id)
 		endDownNotice(id)
 		const { [id]: _forgotten, ...connections } = store.getState().connections
 		store.setState({ ...store.getState(), connections })

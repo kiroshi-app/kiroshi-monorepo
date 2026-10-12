@@ -32,6 +32,7 @@ export type HttpHostOptions = HostConnection & {
 	fetch: typeof fetch
 	openSocket: (url: string) => HostSocket
 	onDown: () => void
+	onReconnectFailed: () => void
 	onUp: () => void
 	onRefused: (refusal: HostRefusal) => void
 }
@@ -56,7 +57,7 @@ type Frame = {
 	payload: unknown
 }
 
-const FIRST_RECONNECT_DELAY = 500
+export const FIRST_RECONNECT_DELAY = 500
 
 const LONGEST_RECONNECT_DELAY = 30_000
 
@@ -200,6 +201,7 @@ export const createHttpHost = ({
 	fetch,
 	openSocket,
 	onDown,
+	onReconnectFailed,
 	onUp,
 	onRefused,
 }: HttpHostOptions): HttpHost => {
@@ -283,6 +285,9 @@ export const createHttpHost = ({
 		opened.onclose = () => {
 			if (isClosed) {
 				return
+			}
+			if (failedAttempts > 0) {
+				onReconnectFailed()
 			}
 			markDown()
 			setTimeout(connect, reconnectDelay(failedAttempts))
