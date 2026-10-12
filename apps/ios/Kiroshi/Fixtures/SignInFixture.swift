@@ -88,6 +88,7 @@
         case groupFailed = "group-failed"
         case groupMention = "group-mention"
         case slowThread = "slow-thread"
+        case slowGroup = "slow-group"
         case longName = "long-name"
         case longGroup = "long-group"
         case missions = "5.1"
@@ -136,7 +137,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -152,7 +153,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup:
                 true
             default: false
             }
@@ -196,7 +197,7 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .longName, .longGroup:
+                .slowThread, .slowGroup, .longName, .longGroup:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -273,7 +274,8 @@
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
                 .groupWorking,
-                .groupFailed, .groupMention, .slowThread, .longName, .longGroup, .missions,
+                .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,
+                .missions,
                 .missionThread, .slowMission, .noMissions, .missionsHostOffline, .settings:
                 break
             }
