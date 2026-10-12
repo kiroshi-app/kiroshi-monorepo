@@ -3,12 +3,14 @@ import type {
 	PermissionDecision,
 	QuestionAnswers,
 	RuntimeScope,
+	SubmittedTurn,
 } from "../agent/contract"
 import type { ChatDriver } from "../chat/driver"
 
 type Submission = {
 	scope: RuntimeScope
 	prompt: string
+	turn?: SubmittedTurn
 }
 
 type Answered = {
@@ -81,8 +83,8 @@ export const createScriptedDriver = (): ScriptedDriver => {
 			}),
 		titleFor: () => Promise.resolve(null),
 		startOrResumeSession: () => Promise.resolve({ resumed: false }),
-		submitPrompt: (scope, prompt) => {
-			submissions.push({ scope, prompt })
+		submitPrompt: (scope, prompt, turn) => {
+			submissions.push({ scope, prompt, turn })
 			return Promise.resolve()
 		},
 		storeAttachments: () => Promise.resolve([]),

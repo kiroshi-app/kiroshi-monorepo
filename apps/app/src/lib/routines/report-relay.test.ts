@@ -117,6 +117,27 @@ describe("a routine run report announced by the host", () => {
 		expect(driver.submissions.map(({ scope }) => scope.botId)).toEqual([nyx])
 	})
 
+	it("summons the companion the report names under a turn the store holds", async () => {
+		const base = createFakeTranscriptStore()
+		const startedTurnIds: string[] = []
+		const { driver, conversation, announce } = await createRelaying({
+			...base,
+			startTurn: (turn) => {
+				startedTurnIds.push(turn.id)
+				return base.startTurn(turn)
+			},
+		})
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+		const scope = runScopeOf(conversation.id, ada)
+
+		endRun(driver, scope)
+		await announce(scope, `Walls are up. <@${nyx}>, read it.`)
+
+		const [summons] = driver.submissions
+		expect(startedTurnIds).toContain(summons.turn?.turnId)
+	})
+
 	it("summons once per ended run", async () => {
 		const { driver, conversation, announce } = await createRelaying()
 		const ada = idOf(conversation, "Ada")

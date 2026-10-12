@@ -2217,6 +2217,56 @@ describe("a run report relaying the companions it names", () => {
 		expect(answer?.turnId).not.toBe(reportTurnId)
 	})
 
+	it("summons the companion a report names under a turn it stored and writes its answer there", async () => {
+		const base = createFakeTranscriptStore()
+		const startedTurnIds: string[] = []
+		const { driver, store, controller, conversation } = await createReporting({
+			...base,
+			startTurn: (turn) => {
+				startedTurnIds.push(turn.id)
+				return base.startTurn(turn)
+			},
+		})
+		const ada = idOf(conversation, "Ada")
+		const nyx = idOf(conversation, "Nyx")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+		driver.pushTo(nyx, spoke(nyx, "read and noted"))
+		await settled()
+
+		const summonedTurnId = driver.submissions[0].turn?.turnId
+		const page = await store.loadPage(conversation.id, null)
+		const answer = page.messages.find(({ authorBotId }) => authorBotId === nyx)
+		expect(startedTurnIds).toContain(summonedTurnId)
+		expect(answer?.turnId).toBe(summonedTurnId)
+	})
+
+	it("summons nobody and shows the failure when the turn of the summons cannot be stored", async () => {
+		const base = createFakeTranscriptStore()
+		let starts = 0
+		const { driver, controller, conversation } = await createReporting({
+			...base,
+			startTurn: (turn) => {
+				starts += 1
+				return starts === 1
+					? base.startTurn(turn)
+					: Promise.reject(new Error("refused"))
+			},
+		})
+		const ada = idOf(conversation, "Ada")
+
+		await controller.reportRun(
+			draftFor(conversation.id, ada, "Walls are up. @Nyx, read it."),
+		)
+		await settled()
+
+		expect(driver.submissions).toHaveLength(0)
+		expect(controller.getState().latestError).not.toBe(null)
+	})
+
 	it("stores the report carrying the tokens of the companions it names", async () => {
 		const { store, controller, conversation } = await createReporting()
 		const ada = idOf(conversation, "Ada")
