@@ -519,10 +519,6 @@ const createMemberMac = (): MemberMac => {
 			storedTurnIds.add(turn.id)
 			return host.startTurn(turn)
 		},
-		sendUserMessage: (message, summoned) => {
-			storedTurnIds.add(message.turnId)
-			return host.sendUserMessage(message, summoned)
-		},
 	}
 	const scripted = createScriptedDriver()
 	const driver: ScriptedDriver = {
