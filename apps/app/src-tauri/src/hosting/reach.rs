@@ -248,7 +248,6 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("hosting_start", Reach::HostOnly),
 	("hosting_stop", Reach::HostOnly),
 	("hosting_state", Reach::Scoped(Read, SPACE_ID)),
-	("hosting_caller_role", Reach::Free(Read)),
 	("hosting_members", Reach::HostOnly),
 	("hosting_invite_member", Reach::HostOnly),
 	("hosting_withdraw_invitation", Reach::HostOnly),
@@ -394,6 +393,7 @@ pub(super) fn reach_of(command: &str) -> Option<Reach> {
 	REACHES.iter().find(|(name, _)| *name == command).map(|(_, reach)| *reach)
 }
 
+#[cfg(test)]
 pub(super) fn access_of(command: &str) -> Option<Access> {
 	match reach_of(command)? {
 		Reach::Free(access) | Reach::Scoped(access, _) => Some(access),

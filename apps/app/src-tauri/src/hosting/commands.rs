@@ -1,10 +1,7 @@
 use tauri::{AppHandle, Runtime, State};
 
-use super::authorship::Caller;
-use super::contract::{HostingState, Member, MembersError, SpaceRole};
+use super::contract::{HostingState, Member, MembersError};
 use super::{members, Hosting};
-use crate::db::DatabaseState;
-use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
 
 #[tauri::command]
@@ -46,24 +43,8 @@ pub async fn hosting_invite_member<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 	email: String,
-	role: SpaceRole,
 ) -> Result<Member, MembersError> {
-	members::invite(&app, space_id, email, role).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn hosting_caller_role(
-	state: State<'_, DatabaseState>,
-	caller: Caller,
-) -> Result<SpaceRole, SpaceError> {
-	match caller {
-		Caller::Host => Ok(SpaceRole::Member),
-		Caller::Relayed(None) => Ok(SpaceRole::Guest),
-		Caller::Relayed(Some(member)) => {
-			Ok(ready(&state)?.space_hosting().member_role(member.space_id, member.user_id).await?)
-		}
-	}
+	members::invite(&app, space_id, email).await
 }
 
 #[tauri::command]

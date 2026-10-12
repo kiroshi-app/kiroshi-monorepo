@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::account::cloud::{CloudMember, MemberCallError, MemberRole, MembershipState};
 use crate::spaces::contract::SpaceError;
@@ -42,30 +42,6 @@ pub enum MemberStatus {
 	Joined,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum SpaceRole {
-	Guest,
-	Member,
-}
-
-impl SpaceRole {
-	pub(crate) fn as_sql(self) -> &'static str {
-		match self {
-			SpaceRole::Guest => "guest",
-			SpaceRole::Member => "member",
-		}
-	}
-
-	pub(crate) fn parse(text: &str) -> Option<Self> {
-		match text {
-			"guest" => Some(SpaceRole::Guest),
-			"member" => Some(SpaceRole::Member),
-			_ => None,
-		}
-	}
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Member {
@@ -73,17 +49,16 @@ pub struct Member {
 	pub name: Option<String>,
 	pub email: String,
 	pub status: MemberStatus,
-	pub role: SpaceRole,
 }
 
-impl Member {
-	pub fn of(member: CloudMember, role: SpaceRole) -> Self {
+impl From<CloudMember> for Member {
+	fn from(member: CloudMember) -> Self {
 		let status = match (member.role, member.state) {
 			(MemberRole::Owner, _) => MemberStatus::Host,
 			(MemberRole::Member, MembershipState::Pending) => MemberStatus::Pending,
 			(MemberRole::Member, MembershipState::Joined) => MemberStatus::Joined,
 		};
-		Self { user_id: member.user_id, name: member.name, email: member.email, status, role }
+		Self { user_id: member.user_id, name: member.name, email: member.email, status }
 	}
 }
 
@@ -175,7 +150,6 @@ mod tests {
 				name: None,
 				email: "ada@example.com".to_owned(),
 				status: MemberStatus::Pending,
-				role: SpaceRole::Guest,
 			}],
 		};
 
@@ -183,7 +157,7 @@ mod tests {
 			to_value(changed).expect("the change serializes"),
 			json!({
 				"spaceId": "personal",
-				"members": [{ "userId": "u1", "name": null, "email": "ada@example.com", "status": "pending", "role": "guest" }]
+				"members": [{ "userId": "u1", "name": null, "email": "ada@example.com", "status": "pending" }]
 			})
 		);
 	}

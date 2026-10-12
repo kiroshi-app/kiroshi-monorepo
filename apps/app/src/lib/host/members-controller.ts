@@ -18,7 +18,6 @@ import {
 	type Member,
 	type MembersChanged,
 	type MembersError,
-	type SpaceRole,
 } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
@@ -29,11 +28,7 @@ type MembersAnswer<Data> =
 
 export type MembersTransport = {
 	list: (spaceId: string) => Promise<MembersAnswer<Member[]>>
-	invite: (
-		spaceId: string,
-		email: string,
-		role: SpaceRole,
-	) => Promise<MembersAnswer<Member>>
+	invite: (spaceId: string, email: string) => Promise<MembersAnswer<Member>>
 	withdraw: (
 		spaceId: string,
 		userId: string,
@@ -57,7 +52,7 @@ type MembersController = {
 	subscribe: (listener: () => void) => () => void
 	watch: (space: HostedSpace) => () => void
 	setEmail: (email: string) => void
-	invite: (email: string, role?: SpaceRole) => void
+	invite: (email: string) => void
 	withdraw: (userId: string) => void
 	askRemove: (userId: string) => void
 	confirmRemove: () => void
@@ -236,10 +231,10 @@ export const createMembersController = ({
 		)
 	}
 
-	const invite = (email: string, role: SpaceRole = "member") => {
+	const invite = (email: string) => {
 		patch({ refusal: undefined, failure: undefined })
 		run(
-			(spaceId) => transport.invite(spaceId, email, role),
+			(spaceId) => transport.invite(spaceId, email),
 			(member) =>
 				patch({
 					members: withMember(stateStore.getState().members, member),
