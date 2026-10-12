@@ -26,6 +26,7 @@ struct KiroshiCloud: Sendable {
 
     let baseURL: URL
     let transport: any HTTPTransport
+    var deviceName = "iPhone"
 
     func requestCode(for email: String) async throws -> CodeRequestAnswer {
         let request = post(
@@ -40,14 +41,19 @@ struct KiroshiCloud: Sendable {
     }
 
     func signIn(email: String, code: String) async throws -> CodeSignInAnswer {
-        let request = post("api/auth/sign-in/email-otp", body: CodeSignIn(email: email, otp: code))
+        let request = post(
+            "api/auth/sign-in/email-otp",
+            body: CodeSignIn(email: email, otp: code, deviceName: deviceName))
         guard let (status, data) = try await send(request) else { return .unreachable }
         switch status {
         case 200:
             guard let granted = try? JSONDecoder().decode(GrantedSession.self, from: data) else {
                 return .unreachable
             }
-            return .signedIn(Session(bearer: granted.token, email: granted.user.email))
+            return .signedIn(
+                Session(
+                    bearer: granted.token, email: granted.user.email,
+                    deviceName: granted.session?.deviceName, platform: granted.session?.platform))
         case 400, 401:
             return refusal(of: data)
         default:
@@ -115,6 +121,8 @@ private struct CodeRequest: Encodable {
 private struct CodeSignIn: Encodable {
     let email: String
     let otp: String
+    let deviceName: String
+    let platform = "ios"
 }
 
 private struct GrantedSession: Decodable {
@@ -122,8 +130,14 @@ private struct GrantedSession: Decodable {
         let email: String
     }
 
+    struct Device: Decodable {
+        let deviceName: String?
+        let platform: String?
+    }
+
     let token: String
     let user: User
+    let session: Device?
 }
 
 private struct ErrorBody: Decodable {

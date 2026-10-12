@@ -13,7 +13,7 @@
         static let signedIn = ScriptedTransport.Answer.status(
             200,
             #"""
-            {"token":"fixture-bearer","user":{"id":"7d3f1c2a-0000-4000-8000-000000000001","email":"sam@example.com","createdAt":"2026-10-10T12:00:00.000Z"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z"}}
+            {"token":"fixture-bearer","user":{"id":"7d3f1c2a-0000-4000-8000-000000000001","email":"sam@example.com","createdAt":"2026-10-10T12:00:00.000Z"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z","deviceName":"iPhone","platform":"ios"}}
             """#)
         static let noSpaces = ScriptedTransport.Answer.status(200, "[]")
         static let twoSpaces = ScriptedTransport.Answer.status(

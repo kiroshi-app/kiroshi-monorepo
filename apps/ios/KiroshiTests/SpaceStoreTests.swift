@@ -111,6 +111,18 @@ struct SpaceStoreTests {
         following.cancel()
     }
 
+    @Test func aShellThatLeftIgnoresALateRefusal() async {
+        await http.answer(
+            CloudFixture.spacesPath, with: CloudFixture.refused("Authentication required"))
+        var exits: [ShellExit] = []
+        let store = makeStore { exits.append($0) }
+
+        store.leave()
+        await store.refreshSpaces()
+
+        #expect(exits.isEmpty)
+    }
+
     @Test func anEndedMembershipForgetsTheSpace() async {
         lastSpace.save("studio")
         let store = makeStore()
