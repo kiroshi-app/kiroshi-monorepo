@@ -824,6 +824,18 @@ export const createConversationController = (
 		}
 	}
 
+	const routePendingQuestions = async (conversationId: string) => {
+		try {
+			const pending = await driver.pendingQuestions(conversationId)
+			if (isOpenConversation(conversationId)) {
+				pending.forEach(route)
+			}
+		} catch (reason) {
+			noteFailure(toReadError(reason))
+			sync()
+		}
+	}
+
 	const seatArrival = (botId: string) => {
 		if (arrivedBotIds.includes(botId)) {
 			return
@@ -1430,6 +1442,7 @@ export const createConversationController = (
 		unresolvedMentions = NO_UNRESOLVED_MENTIONS
 		forgetFailure()
 		sync()
+		void routePendingQuestions(next.id)
 		await Promise.all([
 			enqueue(() => transcript.load(next.id)).catch((reason) => {
 				noteFailure(toReadError(reason))

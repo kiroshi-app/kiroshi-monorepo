@@ -43,6 +43,7 @@ export type ChatDriver = {
 		annotations?: Record<string, unknown>,
 	) => Promise<void>
 	shutdown: (scope: RuntimeScope) => Promise<void>
+	pendingQuestions: (conversationId: string) => Promise<ScopedEvent[]>
 	subscribe: (
 		onEvent: (event: ScopedEvent) => void,
 	) => Promise<ChatDriverUnsubscribe>

@@ -39,17 +39,34 @@ import { useLiveMissions } from "../missions/use-live-missions"
 
 type Handler = (event: { event: string; id: number; payload: unknown }) => void
 
+const PENDING_QUESTIONS = "agent_pending_questions"
+
 const wire = vi.hoisted(() => ({
 	sockets: [] as HostSocket[],
 	local: new Map<string, Set<Handler>>(),
+	pendingQuestions: (): Promise<unknown> => Promise.resolve([]),
 }))
+
+const asJson = (body: unknown, status = 200) =>
+	new Response(JSON.stringify(body), {
+		status,
+		headers: { "content-type": "application/json" },
+	})
+
+const answerOnHost = (url: string) =>
+	url.endsWith(PENDING_QUESTIONS)
+		? wire.pendingQuestions().then(asJson, (reason) => asJson(reason, 500))
+		: Promise.resolve(asJson(null))
 
 vi.mock("../host", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../host")>()
 	const { createJoinedHosts } = await import("../host/joined-hosts")
 	const joinedHosts = createJoinedHosts({
 		local: {
-			invoke: (async () => null) as never,
+			invoke: (async (command: string) =>
+				command === PENDING_QUESTIONS
+					? wire.pendingQuestions()
+					: null) as never,
 			listen: async (event, handler) => {
 				const heard = wire.local.get(event) ?? new Set<Handler>()
 				heard.add(handler as Handler)
@@ -70,10 +87,7 @@ vi.mock("../host", async (importOriginal) => {
 				name: id,
 			},
 		}),
-		fetch: async () =>
-			new Response("null", {
-				headers: { "content-type": "application/json" },
-			}),
+		fetch: (input) => answerOnHost(String(input)),
 		openSocket: () => {
 			const socket: HostSocket = {
 				onopen: null,
@@ -253,7 +267,11 @@ const liveDriver = (store: TranscriptStore) => {
 	return {
 		scripted,
 		driver: withFakeHostWrites(
-			{ ...scripted, subscribe: agentTransport.subscribe },
+			{
+				...scripted,
+				subscribe: agentTransport.subscribe,
+				pendingQuestions: agentTransport.pendingQuestions,
+			},
 			store,
 		),
 	}
@@ -306,6 +324,7 @@ const openRoom = async () => {
 beforeEach(async () => {
 	await joinedHosts.activate(null)
 	wire.sockets.length = 0
+	wire.pendingQuestions = () => Promise.resolve([])
 })
 
 afterEach(() => {
@@ -1246,6 +1265,186 @@ describe.each([
 
 				expect(questionRowsIn(shown())).toHaveLength(1)
 				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+	},
+)
+
+type HeldRead = {
+	answer: (questions: unknown[]) => Promise<void>
+	refuse: () => Promise<void>
+}
+
+const holdPendingQuestions = (): HeldRead => {
+	let answer: (questions: unknown) => void = () => undefined
+	let refuse: (reason: unknown) => void = () => undefined
+	wire.pendingQuestions = () =>
+		new Promise((resolve, reject) => {
+			answer = resolve
+			refuse = reject
+		})
+	return {
+		answer: async (questions) => {
+			answer(questions)
+			await settled()
+		},
+		refuse: async () => {
+			refuse("host unreachable")
+			await settled()
+		},
+	}
+}
+
+type Reopened = {
+	shownConversationId: () => string | null
+	hasFailed: () => boolean
+	switchAway: () => Promise<() => QuestionShown>
+}
+
+const openWaitingRoom = async () => {
+	const room = await openAskedRoom()
+	const { controller, store, botId } = room
+	const reopened: Reopened = {
+		shownConversationId: () => controller.getState().conversationId,
+		hasFailed: () => controller.getState().latestError !== null,
+		switchAway: async () => {
+			const other = await store.createConversation({
+				spaceId: "personal",
+				sectionId: null,
+				title: "Floors",
+				botIds: [botId],
+			})
+			await act(() => controller.open(other))
+			return room.shown
+		},
+	}
+	return { ...room, ...reopened }
+}
+
+const OTHER_BOT = "other"
+
+const openWaitingSoloChat = async () => {
+	const solo = await openAskedSoloChat()
+	const { controller, botId } = solo
+	const reopened: Reopened = {
+		shownConversationId: () => controller.stateFor(botId).conversationId,
+		hasFailed: () => controller.stateFor(botId).errors.length > 0,
+		switchAway: async () => {
+			await act(() => controller.open(OTHER_BOT, null).then(() => undefined))
+			await settled()
+			return () => {
+				const { messages, foreignTurn } = controller.stateFor(OTHER_BOT)
+				return { messages, question: foreignTurn?.question ?? null }
+			}
+		},
+	}
+	return { ...solo, ...reopened }
+}
+
+describe.each([
+	["a room", openWaitingRoom],
+	["a solo conversation", openWaitingSoloChat],
+] as const)(
+	"the questions still waiting when %s opens or reloads",
+	(_, open) => {
+		const openWaiting = async (join: () => Promise<void>) => {
+			const read = holdPendingQuestions()
+			await join()
+			const opened = await open()
+			const scope = {
+				...foreignScope(opened.conversationId),
+				botId: opened.botId,
+			}
+			const turn = storedTurn(opened.conversationId)
+			const waiting = { scope, turn, event: ASKED_QUESTION }
+			return { ...opened, read, scope, turn, waiting }
+		}
+
+		it.each(sides)(
+			"shows one card and one question row for each on %s",
+			async (_, _emit, join) => {
+				const { read, waiting, shown, detach } = await openWaiting(join)
+
+				await read.answer([waiting])
+
+				expect(questionRowsIn(shown())).toMatchObject([
+					{ content: questionMessageText(QUESTION), completion: "complete" },
+				])
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"keeps one card and one row on %s when the live replay brings the question too",
+			async (_, emit: Emit, join) => {
+				const { read, waiting, shown, detach } = await openWaiting(join)
+
+				await emit("agent://event", waiting)
+				await read.answer([waiting])
+				await emit("agent://event", waiting)
+
+				expect(questionRowsIn(shown())).toHaveLength(1)
+				expect(askedIn(shown())).toEqual(ASKED_CARD)
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"shows no card on %s for a question resolved before the read returns",
+			async (_, emit: Emit, join) => {
+				const { read, waiting, scope, turn, shown, detach } =
+					await openWaiting(join)
+
+				await emit("agent://event", waiting)
+				await emit("agent://event", { scope, turn, event: QUESTION_RESOLVED })
+				await read.answer([waiting])
+
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"sends the answer given on %s to the turn that asked and closes the card",
+			async (_, _emit, join) => {
+				const { read, waiting, scope, driver, controller, shown, detach } =
+					await openWaiting(join)
+				const answer = vi.spyOn(driver, "answerQuestion").mockResolvedValue()
+				await read.answer([waiting])
+
+				await act(() => controller.answer(QUESTION.id, ANSWERS))
+
+				expect(answer).toHaveBeenCalledWith(scope, QUESTION.id, ANSWERS)
+				expect(askedIn(shown())).toBeNull()
+				detach()
+			},
+		)
+
+		it.each(sides)(
+			"raises a notice on %s and keeps the conversation open when the read is refused",
+			async (_, _emit, join) => {
+				const opened = await openWaiting(join)
+
+				await opened.read.refuse()
+
+				expect(opened.hasFailed()).toBe(true)
+				expect(opened.shownConversationId()).toBe(opened.conversationId)
+				opened.detach()
+			},
+		)
+
+		it.each(sides)(
+			"renders none of its questions on %s in the conversation shown instead",
+			async (_, _emit, join) => {
+				const { read, waiting, switchAway, detach } = await openWaiting(join)
+				const shownInstead = await switchAway()
+
+				await read.answer([waiting])
+
+				expect(questionRowsIn(shownInstead())).toEqual([])
+				expect(askedIn(shownInstead())).toBeNull()
 				detach()
 			},
 		)

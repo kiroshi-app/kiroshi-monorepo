@@ -29,6 +29,7 @@ export const createEventRouting = (
 		showForeignTurn,
 		onMessageStored,
 		onReconnected,
+		reportRead,
 	}: ChatContext,
 	{ persist, reloadPage, pump }: EventRoutingParts,
 ) => {
@@ -77,6 +78,20 @@ export const createEventRouting = (
 		}
 	}
 
+	const routePendingQuestions = async (
+		bot: BotChat,
+		conversationId: string,
+	) => {
+		try {
+			const pending = await driver.pendingQuestions(conversationId)
+			if (bot.state.conversationId === conversationId) {
+				pending.forEach(route)
+			}
+		} catch (reason) {
+			reportRead(bot, reason)
+		}
+	}
+
 	const connect = () => {
 		disconnect()
 		stopStoredMessages = onMessageStored(({ conversationId }) =>
@@ -94,5 +109,5 @@ export const createEventRouting = (
 		return disconnect
 	}
 
-	return { connect, isAttached, attach }
+	return { connect, isAttached, attach, routePendingQuestions }
 }

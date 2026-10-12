@@ -2,6 +2,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { BotChat } from "./bot-chat"
 import type { ChatContext } from "./chat-context"
+import type { EventRouting } from "./event-routing"
 
 import type {
 	ReportedRun,
@@ -16,18 +17,25 @@ import {
 
 export type ConversationOpening = ReturnType<typeof createConversationOpening>
 
-export const createConversationOpening = ({
-	store,
-	transcript,
-	bots,
-	enqueue,
-	newId,
-	now,
-	readReportedRuns,
-	dispatch,
-	reportStore,
-	syncBot,
-}: ChatContext) => {
+type ConversationOpeningParts = {
+	routePendingQuestions: EventRouting["routePendingQuestions"]
+}
+
+export const createConversationOpening = (
+	{
+		store,
+		transcript,
+		bots,
+		enqueue,
+		newId,
+		now,
+		readReportedRuns,
+		dispatch,
+		reportStore,
+		syncBot,
+	}: ChatContext,
+	{ routePendingQuestions }: ConversationOpeningParts,
+) => {
 	const recallCommands = (bot: BotChat) =>
 		store.botCommands(bot.id).then(
 			(commands) => {
@@ -75,6 +83,7 @@ export const createConversationOpening = ({
 			dispatch(bot, { type: "conversationOpened", conversationId: chat.id })
 			void recallCommands(bot)
 			void readCauses(bot, chat.id)
+			void routePendingQuestions(bot, chat.id)
 			syncBot(bot)
 			await enqueue(() => transcript.load(chat.id))
 			syncBot(bot)

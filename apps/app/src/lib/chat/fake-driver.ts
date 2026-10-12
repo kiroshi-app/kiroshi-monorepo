@@ -403,6 +403,8 @@ export function createFakeChatDriver(
 		answerQuestion: (scope: RuntimeScope, id: string) =>
 			resolvePermission(scope, id, "allowOnce"),
 
+		pendingQuestions: () => Promise.resolve([]),
+
 		shutdown: (scope: RuntimeScope) => {
 			if (isForeign(scope)) {
 				return refuseStale(scope)
