@@ -8,7 +8,6 @@ struct MissionTranscript: Equatable {
 
     var openedDay = ""
     var entries: [ThreadEntry] = []
-    var attachments: [ThreadMessage.ID: [String]] = [:]
 
     init() {}
 
@@ -32,7 +31,7 @@ struct MissionTranscript: Equatable {
         (messages.filter { $0.id != message.id } + [message]).sorted { $0.seq < $1.seq }
     }
 
-    private mutating func shown(_ message: MissionThreadMessage) -> ThreadMessage? {
+    private func shown(_ message: MissionThreadMessage) -> ThreadMessage? {
         let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return nil }
         let sentAt = Date(timeIntervalSince1970: TimeInterval(message.createdAt) / 1000)
@@ -42,15 +41,6 @@ struct MissionTranscript: Equatable {
                 authorId: message.authorBotId)
         }
         guard !Self.summonses.contains(content) else { return nil }
-        let split = MissionAttachmentBlock.split(content)
-        guard !split.text.isEmpty else {
-            return ThreadMessage(
-                id: message.id, isYours: true, text: split.names.joined(separator: "\n\n"),
-                sentAt: sentAt)
-        }
-        if !split.names.isEmpty {
-            attachments[message.id] = split.names
-        }
-        return ThreadMessage(id: message.id, isYours: true, text: split.text, sentAt: sentAt)
+        return ThreadMessage(id: message.id, isYours: true, text: content, sentAt: sentAt)
     }
 }

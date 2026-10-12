@@ -94,7 +94,8 @@ struct MissionTranscriptTests {
                 .init(id: "with-text", isYours: true, bubbles: ["Here it is."]),
                 .init(id: "alone", isYours: true, bubbles: ["one.png", "two.pdf"]),
             ])
-        #expect(shown.attachments == ["with-text": ["flow.png"]])
+        #expect(message(shown.entries.first)?.attachedFiles == ["flow.png"])
+        #expect(message(shown.entries.last)?.attachedFiles == [])
     }
 
     @Test func theOpenedLineNamesTheCompanion() {

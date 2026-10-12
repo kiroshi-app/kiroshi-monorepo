@@ -1,6 +1,6 @@
 import Foundation
 
-enum MissionAttachmentBlock {
+enum AttachmentBlock {
     struct Split: Equatable {
         let text: String
         let names: [String]

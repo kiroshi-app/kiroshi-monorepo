@@ -24,7 +24,7 @@ struct MissionsRelay: Sendable {
             args: PageArgs(conversationId: conversationId, limit: Self.threadPageSize))
     }
 
-    func store(_ attachments: MissionAttachments) async throws -> [String] {
+    func store(_ attachments: ConversationAttachments) async throws -> [String] {
         try await ok("chat_store_attachments", args: attachments)
     }
 

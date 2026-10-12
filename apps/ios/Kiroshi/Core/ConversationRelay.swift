@@ -33,6 +33,10 @@ struct ConversationRelay: Sendable {
         return page.messages.sorted { $0.seq < $1.seq }
     }
 
+    func storeAttachments(_ attachments: ConversationAttachments) async throws -> [String] {
+        try await ask("chat_store_attachments", attachments, as: [String].self)
+    }
+
     func sendTurn(_ message: SentMessage, summoning companionIds: [Companion.ID]) async throws {
         let args = SendTurnArgs(message: message, summoned: companionIds)
         _ = try await ask("conversation_send_turn", args, as: Int.self)
