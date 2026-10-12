@@ -1,10 +1,10 @@
 "use client"
 
-import { type FormEvent, type ReactNode, useState } from "react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
-import { SettingsField } from "@workspace/ui/components/settings-field"
+import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { Button } from "@workspace/ui/components/ui/button"
 
@@ -22,10 +22,20 @@ type AccountState =
 
 type AccountPanelProps = {
 	account: AccountState
-	onSignIn: (email: string) => void
+	onSignIn: () => void
 	onCancel: () => void
+	onCopySignInLink: () => void
+	onManageAccount: () => void
 	onSignOut: () => void
 }
+
+const ACCOUNT_AVATAR_SIZE = 40
+
+const PANEL_CLASS = "flex flex-col gap-5 px-3 py-2"
+
+const ACTION_CLASS = "rounded-control px-3.5 leading-4.5"
+
+const ACTION_ICON_CLASS = "size-3.5"
 
 const CAPTION_CLASS = "text-muted-foreground text-xs"
 
@@ -41,17 +51,21 @@ const AccountIntro = ({ title, body }: AccountIntroProps) => (
 	</div>
 )
 
-type AccountRowProps = {
-	label: string
-	value: ReactNode
+type AccountActionsProps = {
+	buttons: ReactNode
+	caption: string
+	children?: ReactNode
 }
 
-const AccountRow = ({ label, value }: AccountRowProps) => (
-	<div className="flex items-start justify-between gap-4 px-3.5 py-3">
-		<dt className="shrink-0 text-muted-foreground">{label}</dt>
-		<dd className="min-w-0 wrap-break-word text-end text-foreground">
-			{value}
-		</dd>
+const AccountActions = ({
+	buttons,
+	caption,
+	children,
+}: AccountActionsProps) => (
+	<div className="flex flex-col items-start gap-2">
+		<div className="flex flex-wrap items-center gap-2">{buttons}</div>
+		<p className={CAPTION_CLASS}>{caption}</p>
+		{children}
 	</div>
 )
 
@@ -59,109 +73,137 @@ const AccountPanel = ({
 	account,
 	onSignIn,
 	onCancel,
+	onCopySignInLink,
+	onManageAccount,
 	onSignOut,
 }: AccountPanelProps) => {
 	const { t } = useTranslation("settings")
-	const [email, setEmail] = useState("")
 
 	if (account.status === "signedIn") {
 		return (
-			<div className="flex flex-col gap-5">
-				<AccountIntro
-					body={t("account.signedIn.body")}
-					title={t("account.signedIn.title")}
-				/>
-				<dl className="flex flex-col divide-y divide-border rounded-xl border border-border text-sm">
-					<AccountRow label={t("account.signedIn.name")} value={account.name} />
-					<AccountRow
-						label={t("account.signedIn.email")}
-						value={account.email}
+			<div className={PANEL_CLASS}>
+				<div className="flex items-center gap-3 rounded-xl border border-border p-3.5">
+					<InitialsAvatar
+						className="shrink-0"
+						name={account.name}
+						size={ACCOUNT_AVATAR_SIZE}
 					/>
+					<div className="flex min-w-0 flex-1 flex-col">
+						<p className="wrap-break-word font-medium text-foreground text-sm">
+							{account.name}
+						</p>
+						<p className="wrap-break-word text-compact text-muted-foreground leading-4.5">
+							{account.email}
+						</p>
+					</div>
 					{account.plan ? (
-						<AccountRow
-							label={t("account.signedIn.plan.label")}
-							value={
-								<span className="flex items-center justify-end gap-2">
-									{account.plan === "pro" ? (
-										<Badge variant="secondary">
-											{t("account.signedIn.plan.beta")}
-										</Badge>
-									) : null}
-									{t(`account.signedIn.plan.${account.plan}`)}
-								</span>
-							}
-						/>
+						<div className="flex shrink-0 items-center gap-1.5">
+							{account.plan === "pro" ? (
+								<Badge variant="secondary">
+									{t("account.signedIn.plan.beta")}
+								</Badge>
+							) : null}
+							<span className="text-foreground text-sm leading-4.5">
+								{t(`account.signedIn.plan.${account.plan}`)}
+							</span>
+						</div>
 					) : null}
-				</dl>
-				<div className="flex flex-col items-start gap-2">
-					<Button onClick={onSignOut} variant="outline">
-						{t("account.signedIn.signOut")}
-					</Button>
-					<p className={CAPTION_CLASS}>{t("account.signedIn.caption")}</p>
 				</div>
+				<AccountActions
+					buttons={
+						<>
+							<Button
+								className={ACTION_CLASS}
+								onClick={onManageAccount}
+								size="lg"
+								variant="outline"
+							>
+								{t("account.signedIn.manage")}
+								<Icons.ExternalLink
+									aria-hidden="true"
+									className={ACTION_ICON_CLASS}
+								/>
+							</Button>
+							<Button
+								className={ACTION_CLASS}
+								onClick={onSignOut}
+								size="lg"
+								variant="ghost"
+							>
+								{t("account.signedIn.signOut")}
+							</Button>
+						</>
+					}
+					caption={t("account.signedIn.caption")}
+				/>
 			</div>
 		)
 	}
 
 	const isWaiting = account.status === "waiting"
 
-	const submit = (event: FormEvent<HTMLFormElement>) => {
-		event.preventDefault()
-		const address = email.trim()
-		if (address && event.currentTarget.checkValidity()) onSignIn(address)
-	}
-
 	return (
-		<form className="flex flex-col gap-5" noValidate onSubmit={submit}>
+		<div className={PANEL_CLASS}>
 			<AccountIntro
 				body={t("account.signedOut.body")}
 				title={t("account.signedOut.title")}
 			/>
-			{isWaiting ? null : (
-				<div className="max-w-120">
-					<SettingsField
-						kind="email"
-						label={t("account.signedOut.email")}
-						onValueChange={setEmail}
-						value={email}
-					/>
-				</div>
-			)}
-			<div className="flex flex-col items-start gap-2">
-				<div className="flex flex-wrap items-center gap-2">
-					<Button
-						className="px-3.5 data-disabled:pointer-events-none data-disabled:opacity-60"
-						disabled={isWaiting}
-						focusableWhenDisabled
-						size="lg"
-						type={isWaiting ? "button" : "submit"}
-					>
-						{isWaiting ? (
-							<>
+			{isWaiting ? (
+				<AccountActions
+					buttons={
+						<>
+							<Button
+								className={`${ACTION_CLASS} data-disabled:pointer-events-none data-disabled:opacity-60`}
+								disabled
+								focusableWhenDisabled
+								size="lg"
+							>
 								<Icons.Loading
 									aria-hidden="true"
-									className="size-3.5 animate-spin motion-reduce:animate-none"
+									className={`${ACTION_ICON_CLASS} animate-spin motion-reduce:animate-none`}
 								/>
 								{t("account.waiting.label")}
-							</>
-						) : (
-							<>
-								{t("account.signedOut.signIn")}
-								<Icons.ExternalLink aria-hidden="true" className="size-3.5" />
-							</>
-						)}
-					</Button>
-					{isWaiting ? (
-						<Button onClick={onCancel} size="lg" variant="outline">
-							{t("account.waiting.cancel")}
+							</Button>
+							<Button
+								className={ACTION_CLASS}
+								onClick={onCancel}
+								size="lg"
+								variant="outline"
+							>
+								{t("account.waiting.cancel")}
+							</Button>
+						</>
+					}
+					caption={t("account.waiting.caption")}
+				>
+					<p className="flex flex-wrap items-center gap-1 text-xs">
+						<span className="text-muted-foreground">
+							{t("account.waiting.browserDidNotOpen")}
+						</span>
+						<button
+							className="relative rounded-xs text-foreground underline decoration-1 underline-offset-2 outline-offset-2 after:absolute after:-inset-1"
+							onClick={onCopySignInLink}
+							type="button"
+						>
+							{t("account.waiting.copySignInLink")}
+						</button>
+					</p>
+				</AccountActions>
+			) : (
+				<AccountActions
+					buttons={
+						<Button className={ACTION_CLASS} onClick={onSignIn} size="lg">
+							{t("account.signedOut.signIn")}
+							<Icons.ExternalLink
+								aria-hidden="true"
+								className={ACTION_ICON_CLASS}
+							/>
 						</Button>
-					) : null}
-				</div>
-				{isWaiting ? (
-					<p className={CAPTION_CLASS}>{t("account.waiting.caption")}</p>
-				) : null}
-			</div>
-		</form>
+					}
+					caption={t("account.signedOut.caption")}
+				/>
+			)}
+		</div>
 	)
 }
 

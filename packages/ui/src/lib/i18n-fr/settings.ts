@@ -19,30 +19,34 @@ const settings = {
 	account: {
 		signedOut: {
 			title: "Se connecter à Kiroshi",
-			body: "Hébergez un espace pour des personnes hors de votre réseau, ou rejoignez celui qu’on héberge pour vous. Kiroshi ouvre votre navigateur pour vous connecter.",
-			signIn: "Se connecter",
-			email: "E-mail",
+			body: "Hébergez un espace pour des personnes hors de votre réseau, ou rejoignez celui qu’on héberge pour vous.",
+			signIn: "Se connecter avec votre navigateur",
+			caption:
+				"Votre compte, votre offre et vos Mac connectés se trouvent sur kiroshi.app.",
 		},
 		waiting: {
 			label: "En attente de votre navigateur…",
 			cancel: "Annuler",
 			caption:
-				"Terminez la connexion dans votre navigateur. Kiroshi prend le relais ensuite.",
+				"Terminez dans votre navigateur. Kiroshi prend le relais ensuite.",
+			browserDidNotOpen: "Le navigateur ne s’est pas ouvert ?",
+			copySignInLink: "Copier le lien de connexion",
 		},
 		signedIn: {
-			title: "Connecté",
-			body: "Vous pouvez héberger des espaces pour des personnes hors de votre réseau, et rejoindre ceux qu’elles hébergent pour vous.",
-			name: "Nom",
-			email: "E-mail",
 			plan: {
-				label: "Offre",
 				beta: "Gratuit pendant la bêta",
 				pro: "Pro",
 				free: "Gratuit",
 			},
+			manage: "Gérer le compte",
 			signOut: "Se déconnecter",
 			caption:
-				"Les espaces que vous hébergez ou avez rejoints via Kiroshi cessent de fonctionner ici jusqu’à votre prochaine connexion.",
+				"Votre nom, votre offre et vos Mac connectés se gèrent sur kiroshi.app.",
+		},
+		signedOutFromTheSite: {
+			title: "Vous avez été déconnecté sur kiroshi.app",
+			description:
+				"Ce Mac a été déconnecté depuis Appareils. Reconnectez-vous pour utiliser vos espaces au-delà de votre réseau.",
 		},
 		unreachable: {
 			title: "Impossible de joindre Kiroshi",
@@ -52,7 +56,8 @@ const settings = {
 			linkInvalid: "Ce lien de connexion n’a pas fonctionné",
 			serverError: "Kiroshi n’a pas pu vous connecter",
 			timedOut: "La connexion a pris trop de temps",
-			description: "Appuyez sur Se connecter pour recevoir un nouveau lien.",
+			description:
+				"Appuyez sur Se connecter avec votre navigateur pour réessayer.",
 		},
 		readFailed: "Impossible de lire votre compte Kiroshi",
 		signInFailed: "Impossible de lancer la connexion à Kiroshi",

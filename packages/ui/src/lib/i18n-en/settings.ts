@@ -19,30 +19,31 @@ const settings = {
 	account: {
 		signedOut: {
 			title: "Sign in to Kiroshi",
-			body: "Host a space for people who aren’t on your network, or join one someone hosts for you. Kiroshi opens your browser to sign you in.",
-			signIn: "Sign in",
-			email: "Email",
+			body: "Host a space for people who aren’t on your network, or join one someone hosts for you.",
+			signIn: "Sign in with your browser",
+			caption: "Your account, plan and signed-in Macs live on kiroshi.app.",
 		},
 		waiting: {
 			label: "Waiting for your browser…",
 			cancel: "Cancel",
-			caption:
-				"Finish signing in in your browser. Kiroshi picks it up from there.",
+			caption: "Finish in your browser. Kiroshi picks it up from there.",
+			browserDidNotOpen: "Browser didn’t open?",
+			copySignInLink: "Copy the sign-in link",
 		},
 		signedIn: {
-			title: "Signed in",
-			body: "You can host spaces for people who aren’t on your network, and join the ones they host for you.",
-			name: "Name",
-			email: "Email",
 			plan: {
-				label: "Plan",
 				beta: "Free during the beta",
 				pro: "Pro",
 				free: "Free",
 			},
+			manage: "Manage account",
 			signOut: "Sign out",
-			caption:
-				"Spaces you host or joined through Kiroshi stop working here until you sign in again.",
+			caption: "Your name, plan and signed-in Macs are managed on kiroshi.app.",
+		},
+		signedOutFromTheSite: {
+			title: "You were signed out on kiroshi.app",
+			description:
+				"This Mac was signed out from Devices. Sign in again to use your spaces beyond your network.",
 		},
 		unreachable: {
 			title: "Couldn’t reach Kiroshi",
@@ -52,7 +53,7 @@ const settings = {
 			linkInvalid: "That sign-in link didn’t work",
 			serverError: "Kiroshi couldn’t sign you in",
 			timedOut: "Signing in took too long",
-			description: "Press Sign in to get a new link.",
+			description: "Press Sign in with your browser to try again.",
 		},
 		readFailed: "Couldn’t read your Kiroshi account",
 		signInFailed: "Couldn’t start signing in to Kiroshi",
