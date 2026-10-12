@@ -13,7 +13,7 @@ export const LOGIN_COPY = {
 	signInFootnote: "New to Kiroshi? Signing in creates your account.",
 	codeTitle: "Enter the code",
 	codeLead: (email: string) =>
-		`We sent a six-digit code to ${email}. It works for 10 minutes.`,
+		`We sent a six-digit code to ${email}. It\u00a0works for 10 minutes.`,
 	codeLabel: "Code",
 	newCode: "Send a new code",
 	anotherEmail: "Use another email",

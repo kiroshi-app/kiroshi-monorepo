@@ -2,6 +2,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
 import {
 	cleanup,
 	fireEvent,
+	getDefaultNormalizer,
 	render,
 	screen,
 	waitFor,
@@ -17,6 +18,7 @@ const EMAIL = "ada@example.com"
 const BEARER = "bearer-from-the-relay"
 const BEARER_KEY = "kiroshi.relay.bearer"
 const CODE_SENT_LINE = LOGIN_COPY.codeLead(EMAIL)
+const KEEP_SPACES = getDefaultNormalizer({ collapseWhitespace: false })
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
@@ -100,6 +102,9 @@ const reachNameStep = async () => {
 	await screen.findByRole("heading", { name: LOGIN_COPY.nameTitle })
 }
 
+const codeLead = () =>
+	screen.getByText(CODE_SENT_LINE, { normalizer: KEEP_SPACES })
+
 const codeEntry = () =>
 	screen.getByLabelText<HTMLInputElement>(LOGIN_COPY.codeLabel)
 
@@ -144,7 +149,7 @@ describe("the sign-in page", () => {
 		await reachCodeStep()
 
 		expect(callsTo(SEND_CODE)[0]?.body).toEqual({ email: EMAIL })
-		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
+		expect(codeLead().textContent).toContain("It\u00a0works")
 	})
 
 	it("verifies six digits without a submit press, keeps the bearer and lands on the redirect", async () => {
@@ -211,7 +216,7 @@ describe("the sign-in page", () => {
 			"textContent",
 			message,
 		)
-		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
+		expect(codeLead()).toBeTruthy()
 		expect(localStorage.getItem(BEARER_KEY)).toBeNull()
 	})
 
@@ -255,7 +260,7 @@ describe("the sign-in page", () => {
 
 		await screen.findByText(LOGIN_COPY.failures.server)
 		expect(screen.getByRole("button", { name: RETRY_LABEL })).toBeTruthy()
-		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
+		expect(codeLead()).toBeTruthy()
 	})
 
 	it.each([null, ""])(
