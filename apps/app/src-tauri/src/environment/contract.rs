@@ -93,6 +93,18 @@ pub enum EnvScope {
 	Account,
 }
 
+impl EnvScope {
+	pub fn is_personal(&self) -> bool {
+		matches!(
+			self,
+			EnvScope::User
+				| EnvScope::Person
+				| EnvScope::Account
+				| EnvScope::Server { owner: EnvOwner::User, .. }
+		)
+	}
+}
+
 impl From<&EnvOwner> for EnvScope {
 	fn from(owner: &EnvOwner) -> Self {
 		match owner {
@@ -166,6 +178,23 @@ mod tests {
 	use serde_json::{from_value, json, to_value};
 
 	use super::*;
+
+	#[test]
+	fn a_scope_of_the_host_person_is_personal_and_one_of_a_space_or_a_bot_is_not() {
+		let bot = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
+		let space = EnvOwner::Space { id: "s1".to_owned() };
+		let server_of = |owner: &EnvOwner| EnvScope::Server {
+			name: "granola".to_owned(),
+			owner: owner.clone(),
+		};
+		let personal =
+			[EnvScope::User, EnvScope::Person, EnvScope::Account, server_of(&EnvOwner::User)];
+		let shared =
+			[EnvScope::from(&space), EnvScope::from(&bot), server_of(&space), server_of(&bot)];
+
+		assert!(personal.iter().all(EnvScope::is_personal), "{personal:?}");
+		assert!(!shared.iter().any(EnvScope::is_personal), "{shared:?}");
+	}
 
 	#[test]
 	fn a_server_scope_crosses_to_the_front_carrying_its_owner() {

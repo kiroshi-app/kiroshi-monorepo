@@ -51,6 +51,7 @@ pub enum OauthError {
 	Store {
 		error: EnvError,
 	},
+	RefusedToAMember,
 }
 
 const NO_DETAIL: &str = "the authorization flow named no reason";
@@ -107,6 +108,14 @@ mod tests {
 	use serde_json::{json, to_value};
 
 	use super::*;
+
+	#[test]
+	fn a_refusal_to_a_member_crosses_with_the_kind_the_host_api_answers_403() {
+		assert_eq!(
+			to_value(OauthError::RefusedToAMember).expect("the error serializes"),
+			json!({ "kind": crate::host_api::invoke::REFUSED_TO_A_MEMBER })
+		);
+	}
 
 	#[test]
 	fn a_refusal_of_a_second_flow_crosses_as_its_own_kind() {

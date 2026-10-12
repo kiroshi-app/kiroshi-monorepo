@@ -19,7 +19,7 @@ use crate::conversations::commands::ready;
 use crate::conversations::contract::McpServer;
 use crate::environment::contract::EnvOwner;
 use crate::events::{self, APPLICATION_INSTALLED};
-use crate::mcp_oauth::commands::mcp_application_status;
+use crate::mcp_oauth::commands::application_rows;
 use crate::plugins::commands::{plugin_mcp_servers, plugin_set_mcp_server};
 
 const OFFERS: usize = 9;
@@ -121,7 +121,7 @@ impl<R: Runtime> ApplicationHost<R> {
 
 	async fn status(&self, asked: Named) -> Result<ApplicationState, ApplicationCallError> {
 		let owner = self.owner(destination(&asked.scope)?).await?;
-		let rows = mcp_application_status(self.app.clone(), owner).await?;
+		let rows = application_rows(self.app.clone(), owner).await?;
 		Ok(rows
 			.into_iter()
 			.find(|row| row.name == asked.application)

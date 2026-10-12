@@ -7,6 +7,7 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::environment::contract::{EnvOwner, EnvScope, RESERVED_NAMES};
 use kiroshi_app::environment::store;
+use kiroshi_app::hosting::authorship::Caller;
 use kiroshi_app::mcp_oauth::commands::{mcp_oauth_disconnect, McpOauthState};
 use kiroshi_app::mcp_oauth::contract::Disconnected;
 use kiroshi_app::mcp_oauth::credentials;
@@ -48,6 +49,7 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 
 	let settled = tauri::async_runtime::block_on(mcp_oauth_disconnect(
 		app.handle().clone(),
+		Caller::Host,
 		EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
 		"granola".to_owned(),
 		URL.to_owned(),
@@ -80,6 +82,7 @@ fn a_disconnect_of_a_scope_holding_a_client_and_no_token_deletes_every_reserved_
 
 	let settled = tauri::async_runtime::block_on(mcp_oauth_disconnect(
 		app.handle().clone(),
+		Caller::Host,
 		EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() },
 		"granola".to_owned(),
 		URL.to_owned(),

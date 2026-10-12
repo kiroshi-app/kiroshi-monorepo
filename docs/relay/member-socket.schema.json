@@ -4326,6 +4326,17 @@
             "error"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "refusedToAMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },

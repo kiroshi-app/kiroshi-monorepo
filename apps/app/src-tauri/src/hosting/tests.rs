@@ -31,8 +31,9 @@ use crate::account::session::restore;
 use crate::account::session::AccountSession;
 use crate::agent::commands;
 use crate::agent::contract as agent;
+use crate::agent::protocol::OauthCredentials;
 use crate::agent::reply_writer::TurnSink;
-use crate::bundles::{BotPermissions, DEFAULT_OUTPUT_STYLE};
+use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
 	CREATED_EVENT as COMPANION_CREATED_EVENT, DELETED_EVENT as COMPANION_DELETED_EVENT,
 	UPDATED_EVENT as COMPANION_UPDATED_EVENT,
@@ -53,13 +54,17 @@ use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{MessagePageQuery, MessageRole, NewTurn};
 use crate::db::{self, DatabaseState};
+use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
-use crate::environment::contract::{ConnectionKind, EnvScope, ACCOUNT_BEARER};
+use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, Event};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
+use crate::mcp_oauth::asking::AuthorizationAnswers;
+use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
+use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
@@ -269,10 +274,6 @@ async fn host_effect_applied(
 			.expect("the host sets"),
 		"env_delete" => {
 			store::delete(root, &typed(&args, "scope"), &text("name")).expect("the host deletes")
-		}
-		"env_list" => {
-			let listed = store::list(root, &typed(&args, "scope")).expect("the host lists");
-			return answered_json(StatusCode::OK, json!(listed));
 		}
 		"connection_set" => {
 			connection::hold(root, typed(&args, "kind"), &text("value")).expect("the host connects")
@@ -1873,32 +1874,6 @@ fn a_member_reaches_no_env_or_application_of_the_host_person_or_outside_the_shar
 		}
 
 		assert!(guest.effects.reached().is_empty(), "{:?}", guest.effects.reached());
-	});
-}
-
-#[test]
-fn a_member_lists_a_bot_env_of_the_shared_space_without_the_host_person_entries() {
-	run(async {
-		let mut guest = Guest::of_two_spaces("env-without-person").await;
-		let root = guest.effects.env_root.clone();
-		let space = EnvScope::Space { id: PERSONAL.to_owned() };
-		let bot = EnvScope::Bot { id: "b-mine".to_owned(), space_id: PERSONAL.to_owned() };
-		store::set(&root, &EnvScope::User, "HOST_ONLY", "person").expect("the host sets");
-		store::set(&root, &EnvScope::User, "SHADOWED", "person").expect("the host sets");
-		store::set(&root, &space, "SHARED", "space").expect("the host sets");
-		store::set(&root, &bot, "SHADOWED", "bot").expect("the host sets");
-
-		let answered =
-			guest.called("env_list", json!({ "scope": a_bot_env_scope("b-mine", PERSONAL) })).await;
-
-		assert_eq!(answered["status"], json!(200), "{answered}");
-		assert_eq!(
-			answered["body"],
-			json!([
-				{ "name": "SHADOWED", "definedIn": bot, "servedFrom": bot },
-				{ "name": "SHARED", "definedIn": space, "servedFrom": space },
-			])
-		);
 	});
 }
 
@@ -4023,5 +3998,180 @@ fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 				 \"{GUEST_LOCAL_CONVERSATION}\""
 			)
 		);
+	});
+}
+
+const DEFAULT_BOT: &str = "default";
+
+fn the_default_bot() -> EnvOwner {
+	EnvOwner::Bot { id: DEFAULT_BOT.to_owned(), space_id: PERSONAL.to_owned() }
+}
+
+fn a_host_grant() -> OauthCredentials {
+	OauthCredentials {
+		access_token: "host-access".to_owned(),
+		refresh_token: Some("host-refresh".to_owned()),
+		expires_at: None,
+		client_id: "registered".to_owned(),
+		client_secret: None,
+		redirect_uri: None,
+	}
+}
+
+fn granted_to_the_host_person(name: &str) -> EnvScope {
+	EnvScope::Server { name: name.to_owned(), owner: EnvOwner::User }
+}
+
+impl Authoring {
+	fn env_root(&self) -> PathBuf {
+		writable_root(self.app.handle()).expect("the env root is writable")
+	}
+
+	fn reading_applications(&self) {
+		let person = bundles::user::path(self.app.handle()).expect("the plugin has a home");
+		bundles::user::lay_down(&person).expect("the plugin is laid down");
+		self.app.manage(McpOauthState::default());
+		self.app.manage(ApplicationReports::default());
+		self.app.manage(AuthorizationAnswers::default());
+	}
+
+	fn declared(&self, plugin: Value, name: &str) {
+		direct(
+			&self.window,
+			"plugin_set_mcp_server",
+			json!({ "scope": plugin, "name": name, "config": { "command": name }, "mark": null }),
+		);
+	}
+
+	async fn member_call(&self, command: &str, args: Value) -> Value {
+		self.answered(
+			json!({ "id": 1, "command": command, "sender": guest_sender(), "args": args }),
+		)
+		.await
+	}
+}
+
+fn names_of(listed: &Value) -> Vec<&str> {
+	listed
+		.as_array()
+		.expect("a list")
+		.iter()
+		.map(|item| item["name"].as_str().expect("a name"))
+		.collect()
+}
+
+#[test]
+fn a_member_lists_a_bot_env_without_any_entry_defined_in_or_served_from_the_host_person() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let root = host.env_root();
+		let bot = EnvScope::from(&the_default_bot());
+		store::set(&root, &EnvScope::User, "HOST_ONLY", "person").expect("the host sets");
+		store::set(&root, &EnvScope::User, "SHADOWED", "person").expect("the host sets");
+		store::set(&root, &EnvScope::Space { id: PERSONAL.to_owned() }, "SHARED", "space")
+			.expect("the host sets");
+		store::set(&root, &bot, "SHADOWED", "bot").expect("the host sets");
+		let args = json!({ "scope": bot });
+
+		let relayed = host.relayed(json!({ "id": 1, "command": "env_list", "args": args })).await;
+		let on_the_host = direct(&host.window, "env_list", args);
+
+		assert_eq!(names_of(&relayed), ["SHADOWED", "SHARED"]);
+		for entry in relayed.as_array().expect("a list") {
+			assert_ne!(entry["definedIn"]["kind"], "user", "{entry}");
+			assert_ne!(entry["servedFrom"]["kind"], "user", "{entry}");
+		}
+		assert_eq!(names_of(&on_the_host), ["HOST_ONLY", "SHADOWED", "SHADOWED", "SHARED"]);
+	});
+}
+
+#[test]
+fn a_relayed_env_list_of_a_server_of_the_host_person_answers_no_entry() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let scope = granted_to_the_host_person("granola");
+		store::set(&host.env_root(), &scope, "PLANTED", "host").expect("the host sets");
+		let listed = |caller| env_list(host.app.handle().clone(), caller, scope.clone());
+
+		let relayed = listed(Caller::Relayed(None)).await.expect("the list reads");
+		let on_the_host = listed(Caller::Host).await.expect("the list reads");
+
+		assert_eq!(relayed, Vec::new());
+		assert_eq!(
+			on_the_host.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(),
+			["PLANTED"]
+		);
+	});
+}
+
+#[test]
+fn a_member_reads_no_application_served_by_a_grant_of_the_host_person_nor_one_of_its_plugin() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		let root = host.env_root();
+		let bot = json!({ "kind": "bot", "id": DEFAULT_BOT });
+		host.declared(bot.clone(), "granola");
+		host.declared(bot, "clock");
+		host.declared(json!({ "kind": "user" }), "notion");
+		credentials::store(&root, &granted_to_the_host_person("granola"), &a_host_grant())
+			.expect("the host connects granola");
+		credentials::store(&root, &granted_to_the_host_person("notion"), &a_host_grant())
+			.expect("the host connects notion");
+		let args = json!({ "owner": the_default_bot() });
+
+		let relayed = host
+			.relayed(json!({ "id": 1, "command": "mcp_application_status", "args": args }))
+			.await;
+		let on_the_host = direct(&host.window, "mcp_application_status", args);
+
+		assert_eq!(names_of(&relayed), ["clock"]);
+		assert_eq!(names_of(&on_the_host), ["clock", "granola"]);
+		assert_eq!(on_the_host[1]["scope"], json!(granted_to_the_host_person("granola")));
+	});
+}
+
+#[test]
+fn a_relayed_status_of_the_host_person_plugin_answers_no_row() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		host.declared(json!({ "kind": "user" }), "notion");
+		let status =
+			|caller| mcp_application_status(host.app.handle().clone(), caller, EnvOwner::User);
+
+		let relayed = status(Caller::Relayed(None)).await.expect("the status reads");
+		let on_the_host = status(Caller::Host).await.expect("the status reads");
+
+		assert_eq!(relayed, Vec::new());
+		assert_eq!(on_the_host.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(), ["notion"]);
+	});
+}
+
+#[test]
+fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_refused() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.reading_applications();
+		let root = host.env_root();
+		let grant = granted_to_the_host_person("granola");
+		credentials::store(&root, &grant, &a_host_grant()).expect("the host connects");
+		let before = store::values(&root, &grant).expect("the grant reads");
+
+		let answered = host
+			.member_call(
+				"mcp_oauth_disconnect",
+				json!({
+					"owner": the_default_bot(),
+					"name": "granola",
+					"url": "https://granola.test/mcp",
+				}),
+			)
+			.await;
+
+		assert_eq!(answered["status"], json!(403), "{answered}");
+		assert_eq!(answered["body"], json!({ "kind": "refusedToAMember" }));
+		assert!(!before.is_empty());
+		assert_eq!(store::values(&root, &grant).expect("the grant reads"), before);
 	});
 }
