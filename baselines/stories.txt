@@ -1065,6 +1065,8 @@ overlays-noticesurface--removed-with-space-mark
 overlays-noticesurface--repeated-failure
 overlays-noticesurface--report-copied
 overlays-noticesurface--report-copy-rejected
+overlays-noticesurface--report-from-local-side
+overlays-noticesurface--report-without-companion-name
 overlays-noticesurface--stacked
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog
