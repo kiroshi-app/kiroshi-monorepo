@@ -23,6 +23,7 @@ struct ConversationsView: View {
             .navigationDestination(item: $store.opened) { subject in
                 ThreadView(subject: subject, space: space)
             }
+            .toolbarVisibility(store.opened == nil ? .visible : .hidden, for: .tabBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

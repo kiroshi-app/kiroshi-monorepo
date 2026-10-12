@@ -36,7 +36,6 @@ struct ThreadScreen<Model: ThreadModel>: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(heading.title)
             .threadHeader(heading)
-            .toolbar(.hidden, for: .tabBar)
             .task(id: space.connection.map(ObjectIdentifier.init)) {
                 guard let connection = space.connection else { return }
                 await model.follow(connection)
