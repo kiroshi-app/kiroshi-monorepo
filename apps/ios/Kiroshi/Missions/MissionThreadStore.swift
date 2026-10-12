@@ -53,6 +53,10 @@ final class MissionThreadStore {
         self.calendar = calendar
     }
 
+    var isLoading: Bool {
+        !hasLoaded && !hasFailed && messages.isEmpty
+    }
+
     var canSend: Bool {
         isOnline && !isSending
             && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -149,6 +153,7 @@ final class MissionThreadStore {
                 hasLoaded = true
                 hasFailed = false
             } catch {
+                guard !Task.isCancelled else { return }
                 hasFailed = !hasLoaded
             }
         }

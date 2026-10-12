@@ -43,6 +43,9 @@ struct MissionThreadView: View {
                     )
                 }
                 .background(Color(.systemBackground))
+            } else if thread.isLoading, space.offlineSpace == nil {
+                ProgressView()
+                    .accessibilityLabel("Loading the mission")
             }
         }
         .safeAreaBar(edge: .bottom) {

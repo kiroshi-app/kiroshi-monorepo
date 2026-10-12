@@ -55,6 +55,9 @@ extension XCTestCase {
         XCTAssertTrue(
             app.descendants(matching: .any)["Loading the conversation"]
                 .waitForNonExistence(timeout: 10))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Loading the mission"]
+                .waitForNonExistence(timeout: 10))
         let top = titleBottom(in: app)
         let pickerTop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mention '"))
             .allElementsBoundByIndex.map(\.frame.minY).min()

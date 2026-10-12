@@ -273,4 +273,44 @@ struct MissionStoresTests {
         following.cancel()
         await connection.stop()
     }
+
+    @Test func theThreadLoadsUntilItsPageArrivesThenAnEmptyThreadIsNoLongerLoading() async {
+        let connection = makeConnection()
+        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        let call = await nextCall("conversation_message_page", on: socket)
+
+        #expect(store.isLoading)
+
+        socket.push(
+            .frame(
+                #"{"id":\#(call["id"] as? Int ?? 0),"status":200,"body":{"conversationId":"thread-mission-1","hasMore":false,"arrivals":[],"messages":[]}}"#
+            ))
+        await waitUntil { store.hasLoaded }
+
+        #expect(!store.isLoading)
+        #expect(store.transcript.entries.isEmpty)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func leavingTheThreadWhileItLoadsIsNotAFailure() async {
+        let connection = makeConnection()
+        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        _ = await nextCall("conversation_message_page", on: socket)
+
+        following.cancel()
+        await connection.stop()
+        await following.value
+
+        #expect(!store.hasFailed)
+        #expect(store.isLoading)
+    }
 }
