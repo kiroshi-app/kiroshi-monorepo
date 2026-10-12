@@ -309,7 +309,6 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering};
 
 	use super::*;
-	use crate::hosting::reach::Access;
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn status_of(answer: &str) -> (Value, Value) {
@@ -416,33 +415,6 @@ mod tests {
 		classified.sort();
 
 		assert_eq!(classified, registered);
-	}
-
-	#[test]
-	fn every_command_a_member_reaches_is_read_or_write_and_what_a_guest_may_not_do_writes() {
-		let unclassified: Vec<&str> = reach::REACHES
-			.iter()
-			.filter(|(command, reach)| {
-				*reach != Reach::HostOnly && reach::access_of(command).is_none()
-			})
-			.map(|(command, _)| *command)
-			.collect();
-		assert_eq!(unclassified, Vec::<&str>::new());
-		for command in [
-			"conversation_send_turn",
-			"conversation_send_user_message",
-			"conversation_append_user_message",
-			"conversation_add_participant",
-			"agent_submit_prompt",
-			"agent_start_or_resume_session",
-			"agent_check",
-			"agent_title",
-			"agent_respond_to_permission",
-			"agent_answer_question",
-			"routine_run_now",
-		] {
-			assert_eq!(reach::access_of(command), Some(Access::Write), "{command}");
-		}
 	}
 
 	fn declared_event_name(line: &str) -> Option<&str> {

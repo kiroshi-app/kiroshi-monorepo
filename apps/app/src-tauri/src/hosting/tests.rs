@@ -1847,7 +1847,7 @@ fn a_write_without_a_sender_reaches_the_local_api() {
 
 fn held_of(command: &str, index: usize) -> reach::Held {
 	match reach::reach_of(command) {
-		Some(reach::Reach::Scoped(_, helds)) => helds[index],
+		Some(reach::Reach::Scoped(helds)) => helds[index],
 		reach => panic!("{command} is not scoped: {reach:?}"),
 	}
 }
