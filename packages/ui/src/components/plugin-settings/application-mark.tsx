@@ -53,7 +53,7 @@ const ApplicationMark = ({
 		if (isDrawn) {
 			return (
 				<span
-					className={cn(style.glyph, "[&>svg]:size-full")}
+					className={cn(style.glyph, "contain-paint [&>svg]:size-full")}
 					dangerouslySetInnerHTML={{ __html: drawing }}
 				/>
 			)
