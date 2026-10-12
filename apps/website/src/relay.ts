@@ -43,7 +43,7 @@ type Account = {
 type AuthorizationRequest = {
 	deviceName: string
 	platform: string
-	requestedAt: string
+	requestedAt: number
 	status: string
 }
 
@@ -108,6 +108,12 @@ const stringField = (body: unknown, field: string) => {
 	const value = fieldOf(body, field)
 	if (typeof value !== "string") throw new RelayError("server")
 	return value
+}
+
+const timeField = (body: unknown, field: string) => {
+	const time = Date.parse(stringField(body, field))
+	if (Number.isNaN(time)) throw new RelayError("server")
+	return time
 }
 
 const sendCode = async (email: string) => {
@@ -188,7 +194,7 @@ const readAuthorizationRequest = async (
 	return {
 		deviceName: stringField(answer, "deviceName"),
 		platform: stringField(answer, "platform"),
-		requestedAt: stringField(answer, "requestedAt"),
+		requestedAt: timeField(answer, "requestedAt"),
 		status: stringField(answer, "status"),
 	}
 }

@@ -8,13 +8,10 @@ import {
 } from "@tanstack/react-router"
 
 import { AppScene } from "./app-scene"
-import {
-	type Approval,
-	AuthorizeDonePage,
-	AuthorizePage,
-} from "./authorize-page"
+import { AuthorizeDonePage, AuthorizePage } from "./authorize-page"
 import {
 	loadAuthorizeState,
+	loadDoneState,
 	requireAuthorizeBearer,
 	validateAuthorizeSearch,
 } from "./authorize-state"
@@ -113,7 +110,13 @@ const authorizeRoute = createRoute({
 const authorizeDoneRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/authorize/done",
+	validateSearch: validateAuthorizeSearch,
+	beforeLoad: requireBearer,
+	loaderDeps: ({ search }) => ({ request: search.request }),
+	loader: ({ deps, location }) =>
+		loadDoneState({ request: deps.request, href: location.href }),
 	component: AuthorizeDonePage,
+	errorComponent: LoginLoadFailure,
 })
 
 const accountRoute = createRoute({
@@ -136,8 +139,5 @@ export const createSiteRouter = (history?: RouterHistory) =>
 declare module "@tanstack/react-router" {
 	interface Register {
 		router: ReturnType<typeof createSiteRouter>
-	}
-	interface HistoryState {
-		approval?: Approval
 	}
 }

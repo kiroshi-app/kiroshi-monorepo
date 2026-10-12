@@ -26,7 +26,6 @@ type AuthorizeState =
 			request: string
 			device: AuthorizationRequest
 			account: Account
-			askedMinutesAgo: number
 			isJustSignedIn: boolean
 	  }
 
@@ -67,15 +66,6 @@ const consumeJustSignedIn = (request: string) => {
 	return isJustSignedIn
 }
 
-const MINUTE_MS = 60_000
-
-const minutesSince = (instant: string) => {
-	const elapsed = Date.now() - Date.parse(instant)
-	return Number.isFinite(elapsed)
-		? Math.max(0, Math.floor(elapsed / MINUTE_MS))
-		: 0
-}
-
 const readKnownRequest = async (request: string) => {
 	try {
 		return await readAuthorizationRequest(request)
@@ -97,8 +87,20 @@ const loadRequestState = async (request: string): Promise<AuthorizeState> => {
 		request,
 		device,
 		account,
-		askedMinutesAgo: minutesSince(device.requestedAt),
 		isJustSignedIn: consumeJustSignedIn(request),
+	}
+}
+
+const signInAgainOnUnauthorized = async <State>(
+	signInReturn: SignInReturn,
+	load: () => Promise<State>,
+) => {
+	try {
+		return await load()
+	} catch (error) {
+		if (!isRelayFailure(error, "unauthorized")) throw error
+		clearBearer()
+		throw signInThenReturn(signInReturn)
 	}
 }
 
@@ -107,19 +109,41 @@ const loadAuthorizeState = async ({
 	href,
 }: SignInReturn): Promise<AuthorizeState> => {
 	if (!request) return EXPIRED
-	try {
-		return await loadRequestState(request)
-	} catch (error) {
-		if (!isRelayFailure(error, "unauthorized")) throw error
-		clearBearer()
-		throw signInThenReturn({ request, href })
+	return signInAgainOnUnauthorized({ request, href }, () =>
+		loadRequestState(request),
+	)
+}
+
+type DoneState =
+	| { kind: "expired" }
+	| { kind: "signed-in"; deviceName: string; email: string }
+
+const loadApprovedState = async (request: string): Promise<DoneState> => {
+	const [device, account] = await Promise.all([
+		readKnownRequest(request),
+		readAccount(),
+	])
+	if (device?.status !== "approved") return { kind: "expired" }
+	return {
+		kind: "signed-in",
+		deviceName: device.deviceName,
+		email: account.email,
 	}
+}
+
+const loadDoneState = async ({
+	request,
+	href,
+}: SignInReturn): Promise<DoneState> => {
+	if (!request) return { kind: "expired" }
+	return signInAgainOnUnauthorized({ href }, () => loadApprovedState(request))
 }
 
 export {
 	type AuthorizeState,
 	type ClosedKind,
 	loadAuthorizeState,
+	loadDoneState,
 	requireAuthorizeBearer,
 	validateAuthorizeSearch,
 }

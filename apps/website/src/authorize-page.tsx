@@ -1,12 +1,8 @@
-import {
-	getRouteApi,
-	useLocation,
-	useNavigate,
-	useRouter,
-} from "@tanstack/react-router"
+import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { initialsOf } from "@workspace/ui/components/initials-avatar"
+import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import { AUTHORIZE_COPY } from "./authorize-copy"
 import type { AuthorizeState, ClosedKind } from "./authorize-state"
@@ -34,11 +30,11 @@ import { useRelayCall } from "./use-relay-call"
 
 const authorizeRoute = getRouteApi("/authorize")
 
+const authorizeDoneRoute = getRouteApi("/authorize/done")
+
 type PendingState = Extract<AuthorizeState, { kind: "pending" }>
 
 type Decision = (request: string) => Promise<void>
-
-export type Approval = { deviceName: string; email: string }
 
 const useSignInAgain = () => {
 	const router = useRouter()
@@ -93,7 +89,7 @@ const ContinueAsCard = ({ state, onContinue }: ContinueAsCardProps) => {
 				email={account.name ? account.email : undefined}
 				initials={initialsOf(displayNameOf(account))}
 				name={displayNameOf(account)}
-				plan={account.plan ? AUTHORIZE_COPY.plans[account.plan] : undefined}
+				plan={account.plan === "pro" ? AUTHORIZE_COPY.proBadge : undefined}
 			/>
 			<ActionStack onSubmit={onContinue}>
 				<PrimaryButton
@@ -137,12 +133,12 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 	}
 
 	const approve = () => {
-		const approval = {
-			deviceName: state.device.deviceName,
-			email: state.account.email,
-		}
 		decide(approveAuthorizationRequest, () =>
-			navigate({ to: "/authorize/done", replace: true, state: { approval } }),
+			navigate({
+				to: "/authorize/done",
+				search: { request: state.request },
+				replace: true,
+			}),
 		)
 	}
 
@@ -158,7 +154,7 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 			<DeviceLine
 				caption={AUTHORIZE_COPY.deviceCaption(
 					state.device.platform,
-					state.askedMinutesAgo,
+					toRelativeTime(state.device.requestedAt, Date.now()),
 				)}
 				name={state.device.deviceName}
 			/>
@@ -208,16 +204,14 @@ export const AuthorizePage = () => {
 }
 
 export const AuthorizeDonePage = () => {
-	const approval = useLocation({
-		select: (location) => location.state.approval,
-	})
+	const state = authorizeDoneRoute.useLoaderData()
 
-	if (!approval) return <ClosedPage kind="expired" />
+	if (state.kind === "expired") return <ClosedPage kind="expired" />
 	return (
 		<LoginShell>
 			<StatusChip status="signed-in" />
 			<CardHeading
-				lead={AUTHORIZE_COPY.doneLead(approval.deviceName, approval.email)}
+				lead={AUTHORIZE_COPY.doneLead(state.deviceName, state.email)}
 				title={AUTHORIZE_COPY.doneTitle}
 			/>
 		</LoginShell>

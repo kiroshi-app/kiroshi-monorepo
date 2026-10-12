@@ -1,25 +1,17 @@
-import type { Plan } from "./relay"
-
 const PLATFORM_APPS: Record<string, string> = { macos: "Kiroshi for Mac" }
-
-const askedWhen = (minutesAgo: number) => {
-	if (minutesAgo < 1) return "just now"
-	if (minutesAgo === 1) return "1 minute ago"
-	return `${minutesAgo} minutes ago`
-}
 
 export const AUTHORIZE_COPY = {
 	continueAsTitle: "Sign in to Kiroshi on your Mac",
 	continueAsLead: (deviceName: string) =>
 		`You’re already signed in here. Pick the account Kiroshi on ${deviceName} should use.`,
-	plans: { free: "Free", pro: "Pro" } satisfies Record<Plan, string>,
+	proBadge: "Pro",
 	continueAs: (firstName: string) => `Continue as ${firstName}`,
 	anotherAccount: "Use another account",
 	approveTitle: "Sign in to Kiroshi on this Mac?",
 	approveLead: (email: string) =>
 		`Kiroshi on this Mac asked to use your account, ${email}.`,
-	deviceCaption: (platform: string, minutesAgo: number) =>
-		`${PLATFORM_APPS[platform] ?? "Kiroshi"} · asked ${askedWhen(minutesAgo)}`,
+	deviceCaption: (platform: string, askedAgo: string) =>
+		`${PLATFORM_APPS[platform] ?? "Kiroshi"} · ${askedAgo}`,
 	benefits: [
 		"Host spaces for people who aren’t on your network",
 		"Join the spaces they host for you",

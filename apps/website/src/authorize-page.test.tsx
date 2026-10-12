@@ -20,8 +20,10 @@ const BEARER = "bearer-of-the-site"
 const BEARER_KEY = "kiroshi.relay.bearer"
 const REQUEST_ID = "6f1c2a4e-8b3d-4c5e-9a7f-0123456789ab"
 const AUTHORIZE_PATH = `/authorize?request=${REQUEST_ID}`
+const DONE_PATH = `/authorize/done?request=${REQUEST_ID}`
 const DEVICE_NAME = "Ada’s MacBook Pro"
-const DEVICE_CAPTION = AUTHORIZE_COPY.deviceCaption("macos", 0)
+const DEVICE_CAPTION = "Kiroshi for Mac · now"
+const DAY_MS = 86_400_000
 const ME = "GET /me"
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
@@ -43,12 +45,12 @@ const relayError = (status: number, code: string): Reply => ({
 	body: { error: { code, message: code, status } },
 })
 
-const requestWith = (status: string): Reply => ({
+const requestWith = (status: string, requestedAt = Date.now()): Reply => ({
 	body: {
 		id: REQUEST_ID,
 		deviceName: DEVICE_NAME,
 		platform: "macos",
-		requestedAt: new Date().toISOString(),
+		requestedAt: new Date(requestedAt).toISOString(),
 		expiresAt: "2026-10-12T10:10:00Z",
 		status,
 	},
@@ -206,10 +208,19 @@ describe("Continue as", () => {
 		).toBeTruthy()
 		expect(screen.getByText(NAME)).toBeTruthy()
 		expect(screen.getByText(EMAIL)).toBeTruthy()
-		expect(screen.getByText(AUTHORIZE_COPY.plans.pro)).toBeTruthy()
+		expect(screen.getByText(AUTHORIZE_COPY.proBadge)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.continueAs("Ada"))).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.anotherAccount)).toBeTruthy()
 		expectNoAppLink()
+	})
+
+	it("shows no plan badge on a free account", async () => {
+		routes[ME] = { body: { email: EMAIL, name: NAME, plan: "free" } }
+		await openContinueAs()
+
+		expect(screen.getByText(NAME)).toBeTruthy()
+		expect(screen.queryByText(AUTHORIZE_COPY.proBadge)).toBeNull()
+		expect(screen.queryByText("Free")).toBeNull()
 	})
 
 	it("names the account by its email while it has no name", async () => {
@@ -249,17 +260,26 @@ describe("the authorization page", () => {
 	it("approves with the site bearer and lands on /authorize/done", async () => {
 		const assign = vi.spyOn(window.location, "assign")
 		const router = await openApproval()
+		routes[READ_REQUEST] = requestWith("approved")
 
 		press(AUTHORIZE_COPY.approve)
 
 		await landedOn(router, "/authorize/done")
 		await heading(AUTHORIZE_COPY.doneTitle)
+		expect(router.state.location.search).toEqual({ request: REQUEST_ID })
 		expect(
 			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
 		).toBeTruthy()
 		expect(callsTo(APPROVE)[0]?.authorization).toBe(`Bearer ${BEARER}`)
 		expect(assign).not.toHaveBeenCalled()
 		expectNoAppLink()
+	})
+
+	it("tells how long ago the request was made, without the word asked", async () => {
+		routes[READ_REQUEST] = requestWith("pending", Date.now() - 3 * DAY_MS)
+		await openApproval()
+
+		expect(screen.getByText("Kiroshi for Mac · 3 days ago")).toBeTruthy()
 	})
 
 	it("cancels the request and shows the cancelled card on the same URL", async () => {
@@ -309,14 +329,65 @@ describe("the cancelled card", () => {
 	})
 })
 
-describe("the expired page", () => {
-	it("shows on /authorize/done reached without an approval", async () => {
+describe("the done page", () => {
+	const openDone = async () => {
+		routes[READ_REQUEST] = requestWith("approved")
+		signedIn()
+		const router = renderSite(DONE_PATH)
+		await heading(AUTHORIZE_COPY.doneTitle)
+		return router
+	}
+
+	it("reads an approved request from the relay on a fresh load", async () => {
+		await openDone()
+
+		expect(
+			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
+		).toBeTruthy()
+		expect(callsTo(READ_REQUEST)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+	})
+
+	it("shows the done page again on back navigation", async () => {
+		const router = await openDone()
+		await router.navigate({ to: "/account" })
+		await landedOn(router, "/account")
+
+		router.history.back()
+
+		await heading(AUTHORIZE_COPY.doneTitle)
+		expect(router.state.location.href).toBe(DONE_PATH)
+		expect(callsTo(READ_REQUEST)).toHaveLength(2)
+	})
+
+	it("shows the expired page without a request, without asking the relay", async () => {
+		signedIn()
 		renderSite("/authorize/done")
 
 		await heading(AUTHORIZE_COPY.expiredTitle)
-		expect(calls).toHaveLength(0)
+		expect(callsTo(READ_REQUEST)).toHaveLength(0)
 	})
 
+	it("shows the expired page for an unknown request", async () => {
+		routes[READ_REQUEST] = relayError(404, "NOT_FOUND")
+		signedIn()
+		renderSite(DONE_PATH)
+
+		await heading(AUTHORIZE_COPY.expiredTitle)
+	})
+
+	it.each(["pending", "cancelled", "expired"])(
+		"shows the expired page for a %s request",
+		async (status) => {
+			routes[READ_REQUEST] = requestWith(status)
+			signedIn()
+			renderSite(DONE_PATH)
+
+			await heading(AUTHORIZE_COPY.expiredTitle)
+		},
+	)
+})
+
+describe("the expired page", () => {
 	it.each([
 		["the request param is missing", "/authorize"],
 		["the request param is not a uuid", "/authorize?request=not-a-uuid"],
