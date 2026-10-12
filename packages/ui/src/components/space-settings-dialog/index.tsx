@@ -207,7 +207,11 @@ const SpaceSettingsDialog = ({
 						) : null}
 					</>
 				) : (
-					<JoinedSpaceFields host={host} name={spaceName} />
+					<JoinedSpaceFields
+						host={host}
+						onValueChange={onValueChange}
+						value={value}
+					/>
 				)}
 			</SettingsScrollingPanel>
 
