@@ -80,6 +80,42 @@ struct ThreadLayoutTests {
         #expect(shown.flatMap(\.bubbles).map(\.position) == [.first, .last, .alone])
     }
 
+    @Test func aPersonsMessageIsOneBubbleWhateverItHolds() {
+        let text =
+            "Compare the last two releases.\n\nI want three things:\n- what shipped\n- what broke\n\n```\nlet a = 1\n\nlet b = 2\n```\n\nKeep each one to a line.\n"
+        let shown = ThreadLayout.mark(
+            [message("ask", text, at: at(9, 0), isYours: true)], time: time)
+
+        #expect(shown[0].bubbles.map(\.id) == ["ask-0"])
+        #expect(
+            shown[0].bubbles.map { String($0.text.characters) } == [
+                text.trimmingCharacters(in: .whitespacesAndNewlines)
+            ])
+        #expect(shown[0].bubbles.map(\.position) == [.alone])
+    }
+
+    @Test func twoMessagesSentInARowAreTwoBubbles() {
+        let entries = [
+            message("compare", "Compare them.\n\nKeep it short.", at: at(9, 0), isYours: true),
+            message("figures", "Use the real numbers.", at: at(9, 1), isYours: true),
+        ]
+        let shown = ThreadLayout.mark(entries, time: time)
+
+        #expect(shown.map(\.bubbles.count) == [1, 1])
+        #expect(shown.flatMap(\.bubbles).map(\.position) == [.first, .last])
+    }
+
+    @Test func aCompanionsMessageStillSplitsIntoOneBubblePerParagraph() {
+        let text = "Drafted.\n\nThree sections.\n\n- new\n- fixed"
+        let shown = ThreadLayout.mark([message("reply", text, at: at(9, 0))], time: time)
+
+        #expect(
+            shown[0].bubbles.map { String($0.text.characters) } == [
+                "Drafted.", "Three sections.", "- new\n- fixed",
+            ])
+        #expect(shown[0].bubbles.map(\.position) == [.first, .middle, .last])
+    }
+
     @Test func eachDayOpensWithItsSeparatorAndEachMessageCarriesItsTime() {
         let entries = [
             message("old", "Last week.", at: at(14, 5, daysAgo: 9)),

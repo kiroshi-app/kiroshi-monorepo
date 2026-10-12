@@ -57,14 +57,19 @@ struct ThreadMessage: Identifiable, Equatable {
     private static func shown(_ text: String, isYours: Bool) -> (text: String, files: [String]) {
         guard isYours else { return (text, []) }
         let split = AttachmentBlock.split(text)
-        guard !split.text.isEmpty else { return (split.names.joined(separator: "\n\n"), []) }
+        guard !split.text.isEmpty else { return (split.names.joined(separator: "\n"), []) }
         return (split.text, split.names)
     }
 
     private static func bubbles(
         of text: String, id: String, isYours: Bool, authors: [Companion]
     ) -> [Bubble] {
-        Paragraphs.split(text).enumerated().map { index, paragraph in
+        guard !isYours else {
+            let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !whole.isEmpty else { return [] }
+            return [Bubble(id: "\(id)-0", text: render(whole, isYours: true, authors: authors))]
+        }
+        return Paragraphs.split(text).enumerated().map { index, paragraph in
             Bubble(
                 id: "\(id)-\(index)", text: render(paragraph, isYours: isYours, authors: authors))
         }

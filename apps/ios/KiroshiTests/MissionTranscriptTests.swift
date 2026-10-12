@@ -87,7 +87,7 @@ struct MissionTranscriptTests {
         #expect(
             MissionTesting.shown(shown) == [
                 .init(id: "with-text", isYours: true, bubbles: ["Here it is."]),
-                .init(id: "alone", isYours: true, bubbles: ["one.png", "two.pdf"]),
+                .init(id: "alone", isYours: true, bubbles: ["one.png\ntwo.pdf"]),
             ])
         #expect(shown.entries.first?.attachedFiles == ["flow.png"])
         #expect(shown.entries.last?.attachedFiles == [])

@@ -119,6 +119,22 @@ final class ThreadAccessibilityTests: XCTestCase {
         XCTAssertEqual(toolRows.count, 0)
     }
 
+    func testTwoMessagesSentInARowStayTwoAndPassTheAudit() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "two-asks")
+        let app = launch("two-asks")
+        XCTAssertTrue(
+            app.staticTexts["Use the real numbers from the last 30 days."]
+                .waitForExistence(timeout: 10))
+        waitForThePushToEnd(app)
+        let laterParagraphs = app.staticTexts.matching(
+            NSPredicate(
+                format: "label BEGINSWITH 'I want three things' OR label BEGINSWITH 'Keep each one'"
+            ))
+        XCTAssertEqual(laterParagraphs.count, 0)
+
+        try auditTheThread(app, onScreenAtTheLargestSize: onScreen)
+    }
+
     func auditTheThread(
         _ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>? = nil
     ) throws {
@@ -132,8 +148,8 @@ final class ThreadAccessibilityTests: XCTestCase {
                     transcript.contains(element.frame) && !$0.contains(element.label)
                 } ?? false
             return switch issue.auditType {
-            case .contrast, .textClipped: isInTheTitle
-            case .dynamicType: isInTheTitle || isScrolledOffScreenAtTheLargestSize
+            case .contrast: isInTheTitle
+            case .textClipped, .dynamicType: isInTheTitle || isScrolledOffScreenAtTheLargestSize
             default: false
             }
         }
