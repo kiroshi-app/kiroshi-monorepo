@@ -295,9 +295,11 @@ export const createJoinedHosts = ({
 		reportIfActiveDown(id)
 	}
 
-	const reportOnceGraceEnds = (id: string) => {
-		const grace = setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE)
-		downGraces.set(id, grace)
+	const startDownGrace = (id: string) => {
+		downGraces.set(
+			id,
+			setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE),
+		)
 	}
 
 	const endDownNotice = (id: string) => {
@@ -399,7 +401,7 @@ export const createJoinedHosts = ({
 			onUp: () => markUp(id),
 			onDown: () => {
 				record(id, { status: "down" })
-				reportOnceGraceEnds(id)
+				startDownGrace(id)
 			},
 			onReconnectFailed: () => endGraceAndReport(id),
 			onRefused: reportFailure,
