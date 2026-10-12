@@ -184,18 +184,14 @@ async fn read_back<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
-	let members = listed(app, instance_id).await.map_err(unread_back)?;
-	announced(app, space_id, members.clone());
-	Ok(members)
-}
-
-fn unread_back(failure: MembersError) -> MembersError {
-	match failure {
+	let members = listed(app, instance_id).await.map_err(|failure| match failure {
 		MembersError::Unreachable { reason } => MembersError::Unreachable {
 			reason: format!("the change landed but the member list did not read back: {reason}"),
 		},
 		failure => failure,
-	}
+	})?;
+	announced(app, space_id, members.clone());
+	Ok(members)
 }
 
 fn announced_if_changed<R: Runtime>(app: &AppHandle<R>, space_id: &str, members: Vec<Member>) {
