@@ -1410,6 +1410,7 @@ settings-settingsdialogshell--rail-icons-only
 settings-settingsdialogshell--skill-page-wording
 settings-settingsdialogshell--without-session-closes-unasked
 settings-space-joinedspacefields--default
+settings-space-joinedspacefields--empty-name
 settings-space-joinedspacefields--long-name
 settings-space-spacefields--colourless
 settings-space-spacefields--default

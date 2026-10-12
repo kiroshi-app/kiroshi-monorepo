@@ -19,6 +19,7 @@ const JoinedSpaceFields = ({
 	className,
 }: JoinedSpaceFieldsProps) => {
 	const { t } = useTranslation("settings")
+	const isUnnamed = value.name.trim() === ""
 
 	return (
 		<div
@@ -28,10 +29,13 @@ const JoinedSpaceFields = ({
 			<dl className="flex flex-col gap-1.5">
 				<dt className={FIELD_LABEL_CLASS}>{t("space.name.label")}</dt>
 				<dd
-					className="min-w-0 cursor-default break-words text-foreground text-sm"
+					className={cn(
+						"min-w-0 cursor-default break-words text-sm",
+						isUnnamed ? "text-muted-foreground" : "text-foreground",
+					)}
 					data-slot="joined-space-name"
 				>
-					{value.name}
+					{isUnnamed ? t("space.untitled") : value.name}
 				</dd>
 			</dl>
 			<SettingsField

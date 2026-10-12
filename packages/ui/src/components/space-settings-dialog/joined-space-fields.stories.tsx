@@ -1,6 +1,7 @@
 import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { probedStyleOf } from "@workspace/storybook/story-utils"
 import { JoinedSpaceFields } from "@workspace/ui/components/space-settings-dialog/joined-space-fields"
 
 const meta = preview.meta({
@@ -55,6 +56,7 @@ export const Default = meta.story({
 		await expect(style.borderTopWidth).toBe("0px")
 		await expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)")
 		await expect(style.cursor).toBe("default")
+		await expect(style.color).toBe(probedStyleOf("text-foreground", "color"))
 		await expect(name).not.toHaveAttribute("tabindex")
 
 		const host = canvas.getByLabelText("Host")
@@ -66,6 +68,27 @@ export const Default = meta.story({
 		await expect(host).toHaveAccessibleDescription(
 			"This space lives on another Kiroshi.",
 		)
+	},
+})
+
+export const EmptyName = meta.story({
+	args: { value: { name: "" } },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A joined space whose owner left its name empty. Check Name reads `Untitled space`, the fallback the dialog title shows, in `muted-foreground` so it does not pass for a chosen name, and that no textbox carries it. Pick `Default` for a named space.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const name = await nameIn(canvasElement)
+		await expect(name).toHaveTextContent(/^Untitled space$/)
+		await expect(getComputedStyle(name).color).toBe(
+			probedStyleOf("text-muted-foreground", "color"),
+		)
+		await expect(canvas.queryByRole("textbox", { name: "Name" })).toBeNull()
+		await expect(canvas.queryByDisplayValue("Untitled space")).toBeNull()
 	},
 })
 
