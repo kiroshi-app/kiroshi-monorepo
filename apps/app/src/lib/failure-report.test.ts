@@ -211,6 +211,29 @@ describe("a refused joined-space request", () => {
 	})
 })
 
+describe("the side of a failure raised outside the desktop app", () => {
+	it("leaves the side unset where there is no Mac", async () => {
+		vi.unstubAllGlobals()
+		vi.resetModules()
+		await import("./host/index")
+		const { raiseReportedFailure: raiseOutsideDesktop } = await import(
+			"./failure-report"
+		)
+		const { raiseFailureNotice: noticeOutsideDesktop } = await import(
+			"@workspace/ui/components/notice-surface"
+		)
+
+		raiseOutsideDesktop(
+			{ title: "Couldn’t read the models this machine offers." },
+			{ raisedIn: "use-model-catalogue" },
+		)
+
+		const [notice] = vi.mocked(noticeOutsideDesktop).mock.lastCall ?? []
+		expect(notice?.report).toBeDefined()
+		expect(notice?.report?.side).toBeUndefined()
+	})
+})
+
 describe("the side of a failure raised on this Mac", () => {
 	const SPACE_ID = "space-garage"
 

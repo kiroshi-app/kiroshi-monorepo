@@ -48,7 +48,7 @@ const hostedSpaces = isDesktopHost() ? createHostedSpaces() : undefined
 
 reportLocalWhen(
 	() =>
-		activeJoinedSpaceId() === null && (hostedSpaces?.isNoneHosted() ?? true),
+		activeJoinedSpaceId() === null && (hostedSpaces?.isNoneHosted() ?? false),
 )
 
 export const onJoinedSpaceChange = joinedHosts.subscribe
