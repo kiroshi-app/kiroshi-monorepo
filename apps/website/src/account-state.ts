@@ -14,4 +14,4 @@ const readAccountState = async (): Promise<AccountState> => {
 const loadAccountState = (href: string) =>
 	signInAgainOnUnauthorized({ href }, readAccountState)
 
-export { type AccountState, loadAccountState }
+export { loadAccountState }
