@@ -88,7 +88,6 @@ const ApproveCard = ({ state, onClosed }: ApproveCardProps) => {
 		decision: Decision,
 		onDecided: () => Promise<void> | void,
 	) => {
-		if (call.isPending) return
 		void call.run(async () => {
 			try {
 				await decision(state.request)
