@@ -104,21 +104,6 @@ struct ConversationMappingTests {
         #expect(event("mission://changed", "{}") == nil)
     }
 
-    @Test func toolsAreSummedUpByWhatTheAgentDid() {
-        let group = ActivityGroup(
-            id: "g",
-            activities: [
-                .init(id: "1", title: "Read · a.md"), .init(id: "2", title: "Bash · List tags"),
-                .init(id: "3", title: "Read · b.md"), .init(id: "4", title: "Edit · c.md"),
-                .init(id: "5", title: "Grep · TODO"), .init(id: "6", title: "Task"),
-            ])
-
-        #expect(
-            group.summary
-                == "The agent read 2 files, ran 1 command, edited 1 file, searched 1 time, used 1 tool"
-        )
-    }
-
     @Test func listTimesFollowTheDistanceFromToday() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!

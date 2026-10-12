@@ -20,11 +20,6 @@ struct MissionTranscriptTests {
             openedAt: Date(timeIntervalSince1970: TimeInterval(openedAt) / 1000), time: time)
     }
 
-    func message(_ entry: ThreadEntry?) -> ThreadMessage? {
-        guard case .message(let message) = entry else { return nil }
-        return message
-    }
-
     @Test func thePromptAndTheCompanionShowInBubblesAndTheSummonsIsHidden() {
         let shown = transcript([
             MissionTesting.message(
@@ -56,7 +51,7 @@ struct MissionTranscriptTests {
                 botId: "b-1")
         ])
 
-        let reply = message(shown.entries.first)
+        let reply = shown.entries.first
         #expect(reply?.bubbles.map(\.position) == [.first, .last])
         #expect(reply?.authorId == "b-1")
         #expect(reply?.closesRun == true)
@@ -71,8 +66,8 @@ struct MissionTranscriptTests {
         ])
 
         #expect(shown.openedDay == "Today")
-        #expect(message(shown.entries.first)?.dayLabel == nil)
-        #expect(message(shown.entries.last)?.dayLabel != nil)
+        #expect(shown.entries.first?.dayLabel == nil)
+        #expect(shown.entries.last?.dayLabel != nil)
     }
 
     @Test func attachedFilesAreNamedUnderTheTextTheyCameWith() {
@@ -94,8 +89,8 @@ struct MissionTranscriptTests {
                 .init(id: "with-text", isYours: true, bubbles: ["Here it is."]),
                 .init(id: "alone", isYours: true, bubbles: ["one.png", "two.pdf"]),
             ])
-        #expect(message(shown.entries.first)?.attachedFiles == ["flow.png"])
-        #expect(message(shown.entries.last)?.attachedFiles == [])
+        #expect(shown.entries.first?.attachedFiles == ["flow.png"])
+        #expect(shown.entries.last?.attachedFiles == [])
     }
 
     @Test func theOpenedLineNamesTheCompanion() {

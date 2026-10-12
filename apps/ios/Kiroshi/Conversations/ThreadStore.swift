@@ -14,7 +14,7 @@ final class ThreadStore {
 
     private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
-    private(set) var entries: [ThreadEntry] = []
+    private(set) var entries: [ThreadMessage] = []
     private(set) var isWorking = false {
         didSet {
             if isWorking != oldValue {
@@ -261,7 +261,7 @@ final class ThreadStore {
         let heardDuringLoad = entries.filter {
             !pagedIds.contains($0.id) && !shownBeforeLoad.contains($0.id)
         }
-        entries = paged.map(ThreadEntry.message) + heardDuringLoad
+        entries = paged + heardDuringLoad
         layOut()
     }
 
@@ -331,7 +331,6 @@ final class ThreadStore {
             }
         case .activity(let activity) where activity.kind == .tool:
             isWorking = true
-            record(ActivityGroup.Activity(id: activity.id, title: activity.title))
         case .turnEnded:
             isWorking = !runningScopes.isEmpty
             if !isWorking {
@@ -349,35 +348,16 @@ final class ThreadStore {
 
     private func insert(_ message: ThreadMessage) {
         guard !updateMessage(message.id, { $0.replaceText(message.text) }) else { return }
-        entries.append(.message(message))
+        entries.append(message)
         layOut()
     }
 
     @discardableResult
     private func updateMessage(_ id: String, _ change: (inout ThreadMessage) -> Void) -> Bool {
-        guard let index = entries.firstIndex(where: { $0.id == id }),
-            case .message(var message) = entries[index]
-        else { return false }
-        change(&message)
-        entries[index] = .message(message)
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return false }
+        change(&entries[index])
         layOut()
         return true
-    }
-
-    private func record(_ activity: ActivityGroup.Activity) {
-        guard case .activities(var group) = entries.last else {
-            entries.append(
-                .activities(
-                    ActivityGroup(id: "activities-\(activity.id)", activities: [activity])))
-            layOut()
-            return
-        }
-        if let index = group.activities.firstIndex(where: { $0.id == activity.id }) {
-            group.activities[index] = activity
-        } else {
-            group.activities.append(activity)
-        }
-        entries[entries.count - 1] = .activities(group)
     }
 
     private func layOut() {

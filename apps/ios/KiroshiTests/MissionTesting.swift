@@ -10,9 +10,8 @@ enum MissionTesting {
     }
 
     static func shown(_ transcript: MissionTranscript) -> [Shown] {
-        transcript.entries.compactMap { entry in
-            guard case .message(let message) = entry else { return nil }
-            return Shown(
+        transcript.entries.map { message in
+            Shown(
                 id: message.id, isYours: message.isYours,
                 bubbles: message.bubbles.map { String($0.text.characters) })
         }

@@ -751,6 +751,12 @@
                 push(
                     .frame(
                         event(
+                            FixtureHost.activity(
+                                "tool-\(companionId)", "Bash · Show the last tag", "running")),
+                        after: .milliseconds(300)))
+                push(
+                    .frame(
+                        event(
                             FixtureHost.chatMessage(
                                 "live-\(companionId)", "On it.", "messageCompleted")),
                         after: .milliseconds(1500)))

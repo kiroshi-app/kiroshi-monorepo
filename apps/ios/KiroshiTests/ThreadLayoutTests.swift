@@ -24,21 +24,13 @@ struct ThreadLayoutTests {
     func message(
         _ id: String, _ text: String, at date: Date, by author: Companion? = nil,
         isYours: Bool = false, inGroup: Bool = false
-    ) -> ThreadEntry {
-        .message(
-            ThreadMessage(
-                id: id, isYours: isYours, text: text, sentAt: date, authorId: author?.id,
-                authors: inGroup ? [juniper, atlas] : []))
+    ) -> ThreadMessage {
+        ThreadMessage(
+            id: id, isYours: isYours, text: text, sentAt: date, authorId: author?.id,
+            authors: inGroup ? [juniper, atlas] : [])
     }
 
-    func messages(_ entries: [ThreadEntry]) -> [ThreadMessage] {
-        entries.compactMap { entry in
-            guard case .message(let message) = entry else { return nil }
-            return message
-        }
-    }
-
-    var releaseNotes: [ThreadEntry] {
+    var releaseNotes: [ThreadMessage] {
         [
             message(
                 "ask", "Can you draft the release notes for 0.42?", at: at(9, 38), isYours: true),
@@ -64,7 +56,7 @@ struct ThreadLayoutTests {
     }
 
     @Test func aRunJoinsItsBubblesAndPutsTheAvatarUnderTheLastOne() {
-        let shown = messages(ThreadLayout.mark(releaseNotes, time: time))
+        let shown = ThreadLayout.mark(releaseNotes, time: time)
 
         #expect(shown.map(\.bubbles.count) == [1, 2, 1])
         #expect(shown.map(\.opensRun) == [true, true, false])
@@ -75,19 +67,17 @@ struct ThreadLayoutTests {
         #expect(shown[1].bubbles.map(\.id) == ["drafted-0", "drafted-1"])
     }
 
-    @Test func aToolGroupOrALongPauseClosesTheRun() {
+    @Test func aLongPauseClosesTheRun() {
         let entries = [
             message("a", "First.", at: at(9, 0)),
-            .activities(
-                ActivityGroup(id: "tools", activities: [.init(id: "t", title: "Read · a.md")])),
-            message("b", "After the tools.", at: at(9, 1)),
+            message("b", "Right after.", at: at(9, 1)),
             message("c", "Much later.", at: at(9, 30)),
         ]
-        let shown = messages(ThreadLayout.mark(entries, time: time))
+        let shown = ThreadLayout.mark(entries, time: time)
 
-        #expect(shown.map(\.opensRun) == [true, true, true])
-        #expect(shown.map(\.closesRun) == [true, true, true])
-        #expect(shown.flatMap(\.bubbles).map(\.position) == [.alone, .alone, .alone])
+        #expect(shown.map(\.opensRun) == [true, false, true])
+        #expect(shown.map(\.closesRun) == [false, true, true])
+        #expect(shown.flatMap(\.bubbles).map(\.position) == [.first, .last, .alone])
     }
 
     @Test func eachDayOpensWithItsSeparatorAndEachMessageCarriesItsTime() {
@@ -97,7 +87,7 @@ struct ThreadLayoutTests {
             message("today", "Today.", at: at(9, 38), isYours: true),
             message("again", "Still today.", at: at(9, 39), isYours: true),
         ]
-        let shown = messages(ThreadLayout.mark(entries, time: time))
+        let shown = ThreadLayout.mark(entries, time: time)
 
         #expect(shown.map(\.dayLabel) == ["10/01", "Yesterday", "Today", nil])
         #expect(
@@ -112,7 +102,7 @@ struct ThreadLayoutTests {
             message("m2", "Tagging next.", at: at(9, 5), by: juniper, inGroup: true),
             message("m3", "Splitting.", at: at(9, 6), by: atlas, inGroup: true),
         ]
-        let shown = messages(ThreadLayout.mark(entries, time: time))
+        let shown = ThreadLayout.mark(entries, time: time)
 
         #expect(shown.map(\.author?.name) == ["Juniper", "Juniper", "Atlas"])
         #expect(shown.map(\.opensRun) == [true, false, true])
@@ -120,7 +110,7 @@ struct ThreadLayoutTests {
     }
 
     @Test func aSoloReplyHasNoNamedAuthor() {
-        let shown = messages(ThreadLayout.mark(releaseNotes, time: time))
+        let shown = ThreadLayout.mark(releaseNotes, time: time)
 
         #expect(shown.map(\.author) == [nil, nil, nil])
     }
@@ -130,7 +120,7 @@ struct ThreadLayoutTests {
             message("a", "Before.", at: at(9, 0)),
             message("streaming", "", at: at(9, 1)),
         ]
-        let shown = messages(ThreadLayout.mark(entries, time: time))
+        let shown = ThreadLayout.mark(entries, time: time)
 
         #expect(shown[0].closesRun)
         #expect(shown[0].bubbles.map(\.position) == [.alone])
@@ -160,7 +150,7 @@ extension ThreadStoreTests {
         let store = makeStore()
         let (connection, following) = await follow(host, store)
 
-        let shown = messages(store)
+        let shown = store.entries
         #expect(
             shown.first?.bubbles.map { String($0.text.characters) } == [
                 "Drafted.", "Applications first.",
@@ -208,7 +198,7 @@ extension ThreadStoreTests {
         host.socket.push(.close(RelayClosure.hostOffline))
         await waitUntil { !store.isReachable }
 
-        #expect(messages(store).map(\.bubbles.count) == [1, 1, 1])
+        #expect(store.entries.map(\.bubbles.count) == [1, 1, 1])
         #expect(!store.canSend)
         following.cancel()
         await connection.stop()

@@ -65,8 +65,8 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     }
                     .padding(.top, 20)
                 }
-                ForEach(model.entries) { entry in
-                    ThreadEntryView(entry: entry, soloCompanion: heading.companion)
+                ForEach(model.entries) { message in
+                    ThreadMessageView(message: message, soloCompanion: heading.companion)
                 }
                 if let working = model.working {
                     WorkingLine(working: working)

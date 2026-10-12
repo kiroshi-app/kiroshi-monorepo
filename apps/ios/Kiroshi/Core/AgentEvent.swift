@@ -19,8 +19,6 @@ struct AgentEvent: Decodable, Equatable, Sendable {
             case permission
         }
 
-        let id: String
-        let title: String
         let kind: Kind
     }
 

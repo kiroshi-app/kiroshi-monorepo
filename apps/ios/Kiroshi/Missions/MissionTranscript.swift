@@ -7,18 +7,14 @@ struct MissionTranscript: Equatable {
     ]
 
     var openedDay = ""
-    var entries: [ThreadEntry] = []
+    var entries: [ThreadMessage] = []
 
     init() {}
 
     init(of messages: [MissionThreadMessage], openedAt: Date, time: ConversationTime) {
         openedDay = time.dayLabel(for: openedAt)
-        var entries: [ThreadEntry] = []
-        for message in messages.sorted(by: { $0.seq < $1.seq }) {
-            guard let shown = shown(message) else { continue }
-            entries.append(.message(shown))
-        }
-        self.entries = ThreadLayout.mark(entries, time: time, shownDay: openedAt)
+        let shown = messages.sorted(by: { $0.seq < $1.seq }).compactMap(shown)
+        entries = ThreadLayout.mark(shown, time: time, shownDay: openedAt)
     }
 
     static func openedLine(by companion: Companion?) -> String {

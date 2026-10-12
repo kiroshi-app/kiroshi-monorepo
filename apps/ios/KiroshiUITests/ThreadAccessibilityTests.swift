@@ -101,6 +101,24 @@ final class ThreadAccessibilityTests: XCTestCase {
         XCTAssertTrue(today.isHittable)
     }
 
+    func testATurnShowsNoRowForTheAgentsTools() {
+        let app = launch("3.1", "-draft", "Draft the notes for 0.43.")
+        let toolRows = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH 'The agent '"))
+        XCTAssertTrue(app.buttons["Send"].waitForExistence(timeout: 10))
+        waitForThePushToEnd(app)
+
+        app.buttons["Send"].tap()
+
+        XCTAssertTrue(app.staticTexts["Juniper is working…"].waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            app.staticTexts["Drafted. Three sections: new, fixed, under the hood."]
+                .waitForExistence(timeout: 15))
+        XCTAssertEqual(toolRows.count, 0)
+        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 15))
+        XCTAssertEqual(toolRows.count, 0)
+    }
+
     func auditTheThread(
         _ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>? = nil
     ) throws {
