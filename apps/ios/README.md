@@ -16,9 +16,12 @@ Run from the repo root:
 ```bash
 bun run ios:generate  # Generate apps/ios/Kiroshi.xcodeproj from project.yml
 bun run ios:build     # Generate, then build for the iOS Simulator
-bun run ios:test      # Generate, then run the tests on an iPhone 17 simulator (iOS 27.0)
+bun run ios:test      # Generate, then run every test (the Kiroshi plan) on an iPhone 17 simulator (iOS 27.0), UI tests on two clones of it
+bun run ios:test:unit # Generate, then run the unit tests only (the KiroshiUnit plan), for iterating
 bun run ios:run       # Generate, build, then launch the app on the booted iOS 27 iPhone, else an iPhone 17, and open DeviceHub (IOS_SIMULATOR="iPhone 18 Pro" picks another)
 ```
+
+The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes in parallel on two clones of the simulator (CI runs them one after the other, clones never start a UI test on its hosted runner), so a UI test never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
 
 Every generate writes the build number to `BuildNumber.xcconfig` (not committed): Xcode Cloud's `CI_BUILD_NUMBER` when set, else `git rev-list --count HEAD`. The version stays `MARKETING_VERSION` in `project.yml`.
 
@@ -87,7 +90,7 @@ The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture group-mention
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and checks each open shows the loading then lands on the last message with no scroll, opens the menu of Spaces on 2.2, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and checks each open shows the loading then lands on the last message with no scroll, opens the menu of Spaces on 2.1, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 
@@ -97,7 +100,7 @@ Page 5 "Missions" of "Kiroshi, iOS 2" opens on the Missions tab: `5.1` (the grou
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 5.2 -AppleLocale en_US -holdsTimes YES
 ```
 
-`KiroshiUITests` runs the accessibility audit on `5.1` to `5.4` and opens OPE-212 from `5.1` then swipes left to bring the times in.
+`KiroshiUITests` runs the accessibility audit on `5.1`, `5.3` and `5.4`, opens OPE-212 from `5.1` and audits it as `5.2` draws it, then swipes left to bring the times in.
 
 ## Settings and Sign out without the network
 
@@ -107,7 +110,7 @@ Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of th
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
 ```
 
-`KiroshiUITests` opens the sheet from `2.1` and `5.1`, checks `6.1` opens it once, on Conversations only, cancels and confirms Sign out from `6.1`, and runs the accessibility audit on `6.1` and `6.2`.
+`KiroshiUITests` opens the sheet from both tabs of `2.1`, checks `6.1` opens it once, on Conversations only, cancels then confirms Sign out from `6.2`, and runs the accessibility audit on `6.1` and `6.2`.
 
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 

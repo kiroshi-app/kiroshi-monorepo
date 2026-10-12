@@ -14,7 +14,7 @@ final class SettingsAccessibilityTests: XCTestCase {
         app.collectionViews.buttons["Sign out"]
     }
 
-    func testTheSettingsButtonOpensTheSheetAndCloseDismissesIt() {
+    func testTheSettingsButtonOfEachTabOpensTheSheetAndCloseDismissesIt() {
         let app = launch("2.1")
         let settings = app.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
@@ -26,24 +26,24 @@ final class SettingsAccessibilityTests: XCTestCase {
         app.buttons["Close"].tap()
         XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
         XCTAssertTrue(settings.isHittable)
-    }
 
-    func testMissionsOpensTheSameSheet() {
-        let app = launch("5.1")
-        let settings = app.navigationBars.buttons["Settings"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        app.tabBars.buttons["Missions"].tap()
+        let missionsSettings = app.navigationBars.buttons["Settings"]
+        XCTAssertTrue(missionsSettings.waitForExistence(timeout: 10))
 
-        settings.tap()
+        missionsSettings.tap()
 
         XCTAssertTrue(app.staticTexts[Self.footer].waitForExistence(timeout: 5))
         app.buttons["Close"].tap()
         XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
     }
 
-    func testTheFixtureOpensOneSheetOnlyOnConversations() {
+    func testTheSheetPassesTheAuditAndTheFixtureOpensItOnlyOnConversations() throws {
         let app = launch("6.1")
         XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts.matching(identifier: Self.footer).count, 1)
+
+        try audit(app)
 
         app.buttons["Close"].tap()
         XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
@@ -53,14 +53,9 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertFalse(app.staticTexts[Self.footer].waitForExistence(timeout: 3))
     }
 
-    func testTheSheetPassesTheAudit() throws {
-        let app = launch("6.1")
-        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
-
-        try audit(app)
-    }
-
-    func testTheConfirmationPassesTheAudit() throws {
+    func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensTheOpeningScreen()
+        throws
+    {
         let app = launch("6.2")
         let alert = app.alerts["Sign out of Kiroshi?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
@@ -71,28 +66,14 @@ final class SettingsAccessibilityTests: XCTestCase {
             let isInTheAlert = issue.element.map { alertFrame.contains($0.frame) } ?? true
             return issue.auditType == .dynamicType && isInTheAlert
         }
-    }
 
-    func testCancellingKeepsTheSheetOpen() {
-        let app = launch("6.1")
-        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
-
-        signOutRow(app).tap()
-        let alert = app.alerts["Sign out of Kiroshi?"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["Cancel"].tap()
 
         XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
         XCTAssertTrue(signOutRow(app).exists)
         XCTAssertTrue(app.staticTexts["sam@example.com"].exists)
-    }
-
-    func testConfirmingSignsOutAndOpensTheOpeningScreen() {
-        let app = launch("6.1")
-        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
 
         signOutRow(app).tap()
-        let alert = app.alerts["Sign out of Kiroshi?"]
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["Sign out"].tap()
 

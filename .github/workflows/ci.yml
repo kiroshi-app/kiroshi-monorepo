@@ -169,14 +169,21 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Boot the simulator while the app builds
+        run: |
+          simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
+          echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
+          nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
+
       - name: Generate
         run: bun run ios:generate
 
-      - name: Build
-        run: bun run ios:build
+      - name: Build for testing
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
 
       - name: Test on the simulator
-        run: bun run ios:test
+        timeout-minutes: 25
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building
 
       - name: Swift format
         run: swift format lint --recursive --strict apps/ios

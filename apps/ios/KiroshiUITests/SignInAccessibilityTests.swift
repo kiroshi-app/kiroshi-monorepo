@@ -28,18 +28,16 @@ final class SignInAccessibilityTests: XCTestCase {
         continueAfterFailure = true
     }
 
-    func testTheOpeningShowsTheKiroshiMark() {
-        let app = launch("1.1")
-        XCTAssertTrue(app.images["Kiroshi"].waitForExistence(timeout: 10))
-    }
-
-    func testEverySignInStatePassesTheAudit() throws {
+    func testEverySignInStatePassesTheAuditAndTheOpeningShowsTheKiroshiMark() throws {
         for (fixture, text) in Self.shownText.sorted(by: { $0.key < $1.key }) {
             try XCTContext.runActivity(named: fixture) { _ in
                 let app = launch(fixture)
                 let shown = app.descendants(matching: .any)
                     .matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
                 XCTAssertTrue(shown.waitForExistence(timeout: 10), "\(fixture) shows “\(text)”")
+                if fixture == "1.1" {
+                    XCTAssertTrue(app.images["Kiroshi"].exists)
+                }
                 try audit(app) { issue in
                     Self.isDimmedWhileSigningIn(issue) || Self.isScrollingTextField(issue)
                 }

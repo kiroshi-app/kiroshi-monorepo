@@ -41,22 +41,16 @@ final class NewConversationTests: XCTestCase {
                 .firstMatch.waitForExistence(timeout: 10))
     }
 
-    func testCancelClosesThePickerWithoutCreatingAnything() {
-        let app = openThePicker()
-        app.buttons["Juniper"].tap()
-
-        app.buttons["Cancel"].tap()
-
-        XCTAssertTrue(app.navigationBars["New Conversation"].waitForNonExistence(timeout: 5))
-        XCTAssertFalse(
-            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Juniper, Pico'"))
-                .firstMatch.exists)
-    }
-
-    func testThePickerPassesTheAudit() throws {
+    func testThePickerPassesTheAuditAndCancelClosesItWithoutCreatingAnything() throws {
         let app = openThePicker()
         app.buttons["Mira"].tap()
 
         try audit(app)
+
+        app.buttons["Cancel"].tap()
+
+        XCTAssertTrue(app.navigationBars["New Conversation"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Mira'")).count, 1)
     }
 }
