@@ -15,6 +15,8 @@ import { createSiteRouter } from "./router"
 
 const EMAIL = "ada@example.com"
 const BEARER = "bearer-from-the-relay"
+const BEARER_KEY = "kiroshi.relay.bearer"
+const CODE_SENT_LINE = `${LOGIN_COPY.codeSentTo} ${EMAIL}`
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
@@ -131,7 +133,7 @@ describe("the sign-in page", () => {
 		await reachCodeStep()
 
 		expect(callsTo(SEND_CODE)[0]?.body).toEqual({ email: EMAIL })
-		expect(screen.getByText(`${LOGIN_COPY.codeSentTo} ${EMAIL}`)).toBeTruthy()
+		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
 	})
 
 	it("verifies six digits without a submit press, keeps the bearer and lands on the redirect", async () => {
@@ -142,7 +144,7 @@ describe("the sign-in page", () => {
 
 		await landedOn(router, "/authorize")
 		expect(callsTo(SIGN_IN)[0]?.body).toEqual({ email: EMAIL, otp: "123456" })
-		expect(localStorage.getItem("kiroshi.relay.bearer")).toBe(BEARER)
+		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		expect(callsTo(ME)[0]?.authorization).toBe(`Bearer ${BEARER}`)
 	})
 
@@ -171,8 +173,8 @@ describe("the sign-in page", () => {
 			"textContent",
 			message,
 		)
-		expect(screen.getByText(`${LOGIN_COPY.codeSentTo} ${EMAIL}`)).toBeTruthy()
-		expect(localStorage.getItem("kiroshi.relay.bearer")).toBeNull()
+		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
+		expect(localStorage.getItem(BEARER_KEY)).toBeNull()
 	})
 
 	it("sends a new code and clears the entry", async () => {
@@ -215,7 +217,7 @@ describe("the sign-in page", () => {
 
 		await screen.findByText(LOGIN_COPY.failures.server)
 		expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy()
-		expect(screen.getByText(`${LOGIN_COPY.codeSentTo} ${EMAIL}`)).toBeTruthy()
+		expect(screen.getByText(CODE_SENT_LINE)).toBeTruthy()
 	})
 
 	it("asks the name the first time, saves it, then lands on /account", async () => {
@@ -274,7 +276,7 @@ describe("the sign-in page", () => {
 		const router = renderSite("/login?token=social-bearer")
 
 		await landedOn(router, "/account")
-		expect(localStorage.getItem("kiroshi.relay.bearer")).toBe("social-bearer")
+		expect(localStorage.getItem(BEARER_KEY)).toBe("social-bearer")
 	})
 })
 
