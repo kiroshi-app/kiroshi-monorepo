@@ -56,7 +56,7 @@ type Frame = {
 	payload: unknown
 }
 
-const FIRST_RECONNECT_DELAY = 500
+export const FIRST_RECONNECT_DELAY = 500
 
 const LONGEST_RECONNECT_DELAY = 30_000
 

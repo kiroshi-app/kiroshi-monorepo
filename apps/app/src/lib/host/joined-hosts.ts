@@ -10,6 +10,7 @@ import {
 } from "./conversation-provenance"
 import {
 	createHttpHost,
+	FIRST_RECONNECT_DELAY,
 	type HostRefusal,
 	type HostSocket,
 	type HttpHost,
@@ -233,6 +234,7 @@ export const createJoinedHosts = ({
 	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
 	const subscriptions = new Set<Subscription>()
 	const downNotices = new Map<string, string>()
+	const downGraces = new Map<string, ReturnType<typeof setTimeout>>()
 	const reconnectionListeners = new Set<() => void>()
 	const unpairedReopens = new Map<string, UnpairedReopen>()
 	let isHearingRelayReopens = false
@@ -272,9 +274,28 @@ export const createJoinedHosts = ({
 		store.getState().connections[id]?.status === "down"
 
 	const reportIfActiveDown = (id: string) => {
-		if (store.getState().active === id && isDown(id) && !downNotices.has(id)) {
+		if (
+			store.getState().active === id &&
+			isDown(id) &&
+			!downGraces.has(id) &&
+			!downNotices.has(id)
+		) {
 			downNotices.set(id, reportHostDown())
 		}
+	}
+
+	const endDownGrace = (id: string) => {
+		clearTimeout(downGraces.get(id))
+		downGraces.delete(id)
+	}
+
+	const reportOnceGraceEnds = (id: string) => {
+		endDownGrace(id)
+		const grace = setTimeout(() => {
+			downGraces.delete(id)
+			reportIfActiveDown(id)
+		}, FIRST_RECONNECT_DELAY)
+		downGraces.set(id, grace)
 	}
 
 	const endDownNotice = (id: string) => {
@@ -330,6 +351,7 @@ export const createJoinedHosts = ({
 	const markUp = (id: string) => {
 		const wasDown = isDown(id)
 		record(id, { status: "up" })
+		endDownGrace(id)
 		endDownNotice(id)
 		if (wasDown) {
 			catchUpOnSocketReopen(id)
@@ -375,7 +397,7 @@ export const createJoinedHosts = ({
 			onUp: () => markUp(id),
 			onDown: () => {
 				record(id, { status: "down" })
-				reportIfActiveDown(id)
+				reportOnceGraceEnds(id)
 			},
 			onRefused: reportFailure,
 		})
@@ -495,6 +517,7 @@ export const createJoinedHosts = ({
 		hosts.delete(id)
 		sharedSpaceIds.delete(id)
 		unpairedReopens.delete(id)
+		endDownGrace(id)
 		endDownNotice(id)
 		const { [id]: _forgotten, ...connections } = store.getState().connections
 		store.setState({ ...store.getState(), connections })

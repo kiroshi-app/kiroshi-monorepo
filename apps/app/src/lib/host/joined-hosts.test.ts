@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { activateLanguage, type Language } from "@workspace/ui/lib/i18n"
 
-import type { HostSocket } from "./http"
+import { FIRST_RECONNECT_DELAY, type HostSocket } from "./http"
 import {
 	createJoinedHosts,
 	JOINED_SPACE_CHANGED_EVENT,
@@ -684,15 +684,82 @@ describe("a joined space event", () => {
 	})
 })
 
+const outlastGrace = () => vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY)
+
+const fallShortOfGrace = () =>
+	vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY - 1)
+
+const answerOffline = () =>
+	new Response("the host of this space is offline", { status: 503 })
+
 describe("a failing selected host", () => {
-	it("raises a notice when the active joined host goes down", async () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("raises no notice when the socket reopens before the first reconnection delay has elapsed", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.activate("garage")
+		sockets[0]?.open()
 
 		sockets[0]?.drop()
+		await fallShortOfGrace()
+		sockets[0]?.open()
+		await outlastGrace()
+
+		expect(hosts.getState().connections.garage).toEqual({ status: "up" })
+		expect(reportHostDown).not.toHaveBeenCalled()
+	})
+
+	it("raises exactly one notice when the socket is still closed once the first reconnection delay has elapsed", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf()
+		await hosts.activate("garage")
+		sockets[0]?.open()
+
+		sockets[0]?.drop()
+		await fallShortOfGrace()
+		expect(reportHostDown).not.toHaveBeenCalled()
+
+		await outlastGrace()
+		sockets[1]?.drop()
+		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 4)
 
 		expect(hosts.getState().connections.garage).toEqual({ status: "down" })
 		expect(reportHostDown).toHaveBeenCalledOnce()
+	})
+
+	it("closes the raised notice when the socket reopens", async () => {
+		const { hosts, sockets, reportHostDown, endHostDown } = joinedHostsOf()
+		await hosts.activate("garage")
+		sockets[0]?.open()
+		sockets[0]?.drop()
+		await outlastGrace()
+
+		sockets[1]?.open()
+
+		expect(endHostDown).toHaveBeenCalledExactlyOnceWith(
+			reportHostDown.mock.results[0]?.value,
+		)
+	})
+
+	it("raises no notice when the proxy answers 503 within the first reconnection delay after a socket close", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf({
+			answer: answerOffline,
+		})
+		await hosts.activate("garage")
+		sockets[0]?.open()
+
+		sockets[0]?.drop()
+		await Promise.allSettled([hosts.invoke("bot_list")])
+		await fallShortOfGrace()
+		sockets[0]?.open()
+		await outlastGrace()
+
+		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
 	it("raises no notice when a joined host that is not selected goes down", async () => {
@@ -700,25 +767,71 @@ describe("a failing selected host", () => {
 		await hosts.connect("garage")
 
 		sockets[0]?.drop()
+		await outlastGrace()
 
 		expect(hosts.getState().connections.garage).toEqual({ status: "down" })
 		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 
-	it("raises a notice when an unreachable joined host is selected", async () => {
+	it("raises no notice when the user switches to a joined space whose socket has reopened", async () => {
 		const { hosts, sockets, reportHostDown } = joinedHostsOf()
 		await hosts.connect("garage")
 		sockets[0]?.drop()
+		await outlastGrace()
+		sockets[1]?.open()
 
 		await hosts.activate("garage")
+		await outlastGrace()
+
+		expect(reportHostDown).not.toHaveBeenCalled()
+	})
+
+	it("raises exactly one notice when the user switches to a joined space still closed past the first reconnection delay", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf()
+		await hosts.connect("garage")
+		sockets[0]?.drop()
+		await outlastGrace()
+
+		await hosts.activate("garage")
+		await vi.advanceTimersByTimeAsync(FIRST_RECONNECT_DELAY * 4)
 
 		expect(reportHostDown).toHaveBeenCalledOnce()
+	})
+
+	it("raises no notice when the user switches to a joined space within the first reconnection delay and it reopens", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf()
+		await hosts.connect("garage")
+		sockets[0]?.open()
+		sockets[0]?.drop()
+
+		await hosts.activate("garage")
+		sockets[0]?.open()
+		await outlastGrace()
+
+		expect(reportHostDown).not.toHaveBeenCalled()
+	})
+
+	it("raises no notice for a joined host forgotten while its grace delay is pending", async () => {
+		const { hosts, sockets, reportHostDown } = joinedHostsOf()
+		await hosts.activate("garage")
+		sockets[0]?.open()
+		sockets[0]?.drop()
+
+		hosts.forget("garage")
+		await outlastGrace()
+
+		expect(reportHostDown).not.toHaveBeenCalled()
 	})
 })
 
 describe("an offline joined host", () => {
-	const answerOffline = () =>
-		new Response("the host of this space is offline", { status: 503 })
+	beforeEach(() => {
+		vi.useFakeTimers()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
 
 	const requestsOf = (hosts: JoinedHosts, count: number) =>
 		Promise.allSettled(
@@ -730,7 +843,9 @@ describe("an offline joined host", () => {
 		await hosts.activate("garage")
 
 		await requestsOf(hosts, 4)
+		await outlastGrace()
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
@@ -744,6 +859,7 @@ describe("an offline joined host", () => {
 		await requestsOf(hosts, 2)
 		sockets[0]?.drop()
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
@@ -756,6 +872,7 @@ describe("an offline joined host", () => {
 
 		sockets[0]?.drop()
 		await requestsOf(hosts, 3)
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledOnce()
 	})
@@ -766,6 +883,7 @@ describe("an offline joined host", () => {
 		})
 		await hosts.activate("garage")
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 
 		await hosts.activate(null)
 
@@ -780,11 +898,13 @@ describe("an offline joined host", () => {
 		})
 		await hosts.activate("garage")
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 		await hosts.activate(null)
 
 		await hosts.activate("garage")
 		await requestsOf(hosts, 3)
 		sockets[0]?.drop()
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledTimes(2)
 	})
@@ -795,9 +915,10 @@ describe("an offline joined host", () => {
 		})
 		await hosts.activate("garage")
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 
 		hosts.forget("garage")
-		await settle()
+		await outlastGrace()
 
 		expect(endHostDown).toHaveBeenCalledExactlyOnceWith(
 			reportHostDown.mock.results[0]?.value,
@@ -805,6 +926,7 @@ describe("an offline joined host", () => {
 
 		await hosts.activate("garage")
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 
 		expect(reportHostDown).toHaveBeenCalledTimes(2)
 	})
@@ -818,6 +940,7 @@ describe("an offline joined host", () => {
 		sockets[0]?.open()
 
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 		await requestsOf(hosts, 1)
 
 		expect(endHostDown).toHaveBeenCalledExactlyOnceWith(
@@ -832,6 +955,7 @@ describe("an offline joined host", () => {
 		})
 		await hosts.activate("garage")
 		await requestsOf(hosts, 2)
+		await outlastGrace()
 		sockets[0]?.drop()
 
 		sockets[0]?.open()
