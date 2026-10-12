@@ -1881,10 +1881,11 @@ fn a_member_lists_a_bot_env_of_the_shared_space_without_the_host_person_entries(
 	run(async {
 		let mut guest = Guest::of_two_spaces("env-without-person").await;
 		let root = guest.effects.env_root.clone();
+		let space = EnvScope::Space { id: PERSONAL.to_owned() };
 		let bot = EnvScope::Bot { id: "b-mine".to_owned(), space_id: PERSONAL.to_owned() };
 		store::set(&root, &EnvScope::User, "HOST_ONLY", "person").expect("the host sets");
 		store::set(&root, &EnvScope::User, "SHADOWED", "person").expect("the host sets");
-		store::set(&root, &a_space_scope(), "SHARED", "space").expect("the host sets");
+		store::set(&root, &space, "SHARED", "space").expect("the host sets");
 		store::set(&root, &bot, "SHADOWED", "bot").expect("the host sets");
 
 		let answered =
@@ -1895,14 +1896,10 @@ fn a_member_lists_a_bot_env_of_the_shared_space_without_the_host_person_entries(
 			answered["body"],
 			json!([
 				{ "name": "SHADOWED", "definedIn": bot, "servedFrom": bot },
-				{ "name": "SHARED", "definedIn": a_space_scope(), "servedFrom": a_space_scope() },
+				{ "name": "SHARED", "definedIn": space, "servedFrom": space },
 			])
 		);
 	});
-}
-
-fn a_space_scope() -> EnvScope {
-	EnvScope::Space { id: PERSONAL.to_owned() }
 }
 
 #[test]
