@@ -52,7 +52,7 @@ const loadLoginState = async (search: LoginSearch) => {
 	if (!readBearer()) return { isSignedIn: false }
 	const account = await readSignedInAccount()
 	if (!account) return { isSignedIn: false }
-	if (account.name) throw redirect({ href: landingOf(search) })
+	if (account.isNamed) throw redirect({ href: landingOf(search) })
 	return { isSignedIn: true }
 }
 

@@ -19,6 +19,7 @@ export const LOGIN_COPY = {
 		server: "Kiroshi couldn't answer. Try again.",
 		rejected: "Kiroshi refused this. Check what you entered, then try again.",
 		unauthorized: "You're signed out. Sign in again.",
+		unavailable: "Kiroshi couldn't do this.",
 		"code-wrong": "Code is wrong",
 		"code-expired": "Code has expired",
 		"code-too-many": "Too many wrong codes, ask for a new one",

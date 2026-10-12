@@ -4,9 +4,10 @@ import { RelayError, type RelayFailure } from "./relay"
 
 type RelayCall = () => Promise<void>
 
-const failureOf = (error: unknown) => {
+const failureOf = (error: unknown): RelayFailure => {
 	if (error instanceof RelayError) return error.failure
-	throw error
+	console.error(error)
+	return "server"
 }
 
 export const useRelayCall = () => {

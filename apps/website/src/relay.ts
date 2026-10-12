@@ -6,6 +6,7 @@ type RelayFailure =
 	| "network"
 	| "server"
 	| "rejected"
+	| "unavailable"
 	| "unauthorized"
 	| "code-wrong"
 	| "code-expired"
@@ -30,7 +31,7 @@ const CODE_FAILURES = new Map<string, CodeFailure>([
 
 type SocialProvider = "google" | "apple"
 
-type Account = { name: string }
+type Account = { isNamed: boolean }
 
 type RelayRequest = { path: string; method?: "GET" | "POST"; body?: unknown }
 
@@ -57,6 +58,7 @@ const messageOf = (body: unknown) => {
 
 const failureOf = async (response: Response): Promise<RelayFailure> => {
 	if (response.status >= 500) return "server"
+	if (response.status === 404) return "unavailable"
 	if (response.status !== 401) return "rejected"
 	const message = messageOf(await readJson(response))
 	return (message && CODE_FAILURES.get(message)) || "unauthorized"
@@ -119,11 +121,18 @@ const requestSocialSignIn = async ({ provider, callbackURL }: SocialSignIn) => {
 	return stringField(answer, "url")
 }
 
-// TODO: the relay route /api/auth/get-session is pending.
-const readName = async () => {
-	const session = await send({ path: "/api/auth/get-session" })
-	const name = fieldOf(fieldOf(session, "user"), "name")
-	return typeof name === "string" ? name.trim() : ""
+// TODO: the relay route /api/auth/get-session is pending, until it lands its 404 counts as a named account.
+const readIsNamed = async () => {
+	try {
+		const session = await send({ path: "/api/auth/get-session" })
+		const name = fieldOf(fieldOf(session, "user"), "name")
+		return typeof name === "string" && name.trim().length > 0
+	} catch (error) {
+		if (error instanceof RelayError && error.failure === "unavailable") {
+			return true
+		}
+		throw error
+	}
 }
 
 // TODO: the relay route /api/auth/update-user is pending.
@@ -133,7 +142,7 @@ const saveName = async (name: string) => {
 
 const readAccount = async (): Promise<Account> => {
 	await send({ path: "/me" })
-	return { name: await readName() }
+	return { isNamed: await readIsNamed() }
 }
 
 export {

@@ -22,6 +22,7 @@ const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
 const SESSION = "GET /api/auth/get-session"
 const SAVE_NAME = "POST /api/auth/update-user"
+const SOCIAL_SIGN_IN = "POST /api/auth/sign-in/social"
 
 type Reply = { status?: number; body?: unknown }
 
@@ -108,8 +109,9 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup()
-	localStorage.clear()
 	vi.unstubAllGlobals()
+	vi.restoreAllMocks()
+	localStorage.clear()
 })
 
 describe("the sign-in page", () => {
@@ -247,6 +249,53 @@ describe("the sign-in page", () => {
 
 		expect(await screen.findByText(LOGIN_COPY.nameMissing)).toBeTruthy()
 		expect(callsTo(SAVE_NAME)).toHaveLength(0)
+	})
+
+	it("lands without a name step while the relay answers 404 to get-session", async () => {
+		routes[SESSION] = relayError(404, "Not Found")
+		const router = await openLogin("/login?redirect=%2Fauthorize")
+		await reachCodeStep()
+
+		enterCode("123456")
+
+		await landedOn(router, "/authorize")
+		expect(
+			screen.queryByRole("heading", { name: LOGIN_COPY.nameTitle }),
+		).toBeNull()
+		expect(screen.queryByRole("alert")).toBeNull()
+	})
+
+	it("shows a 404 on Google as a failure with no retry", async () => {
+		routes[SOCIAL_SIGN_IN] = relayError(404, "Not Found")
+		await openLogin()
+
+		fireEvent.click(
+			screen.getByRole("button", { name: LOGIN_COPY.continueWithGoogle }),
+		)
+
+		await screen.findByText(LOGIN_COPY.failures.unavailable)
+		expect(screen.queryByRole("button", { name: "Retry" })).toBeNull()
+		expect(callsTo(SOCIAL_SIGN_IN)[0]?.body).toMatchObject({
+			provider: "google",
+		})
+	})
+
+	it("shows the server failure and logs an error that is not the relay's", async () => {
+		await openLogin()
+		await reachCodeStep()
+		const refusal = new Error("The storage is full")
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => {
+				throw refusal
+			},
+		})
+		const logError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+		enterCode("123456")
+
+		await screen.findByText(LOGIN_COPY.failures.server)
+		expect(logError).toHaveBeenCalledWith(refusal)
 	})
 
 	it("skips the name step when the account has one", async () => {
