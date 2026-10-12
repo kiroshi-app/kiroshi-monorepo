@@ -169,6 +169,12 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Boot the simulator while the app builds
+        run: |
+          simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
+          echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
+          nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
+
       - name: Restore the derived data
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -180,11 +186,11 @@ jobs:
         run: bun run ios:generate
 
       - name: Build for testing
-        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath apps/ios/build build-for-testing
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
 
       - name: Test on the simulator
         timeout-minutes: 25
-        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination 'platform=iOS Simulator,name=iPhone 17,OS=27.0' -derivedDataPath apps/ios/build -parallel-testing-enabled NO test-without-building
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO test-without-building
 
       - name: Swift format
         run: swift format lint --recursive --strict apps/ios
