@@ -65,11 +65,13 @@ A Debug build opens straight on one state, fed by fixtures instead of the cloud 
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.7
 ```
 
-Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on the relay, with the artboards' Studio: Juniper, Atlas, Pico, Mira and Otto with their roles, and the group conversation Release 0.42 (Juniper, Pico and Mira). `2.1` opens on the list, `2.2` on the same screen (tap the Space name in the navigation bar to open the menu of Spaces), `2.3` on a Space without companions, `2.4` on the list still loading, `2.5` on Side project, whose host leaves two seconds after the list loads, and `2.6` on the list while Juniper works:
+Page 2 "Accueil" of the Paper file "Kiroshi, iOS 2" is fed by a scripted host on the relay, with the artboards' Studio: Juniper, Atlas, Pico, Mira and Otto with their roles, and the group conversation Release 0.42 (Juniper, Pico and Mira). `2.1` opens on the list, `2.2` on the same screen (tap the Space button, next to your initial, to open the menu of Spaces), `2.3` on a Space without companions, `2.4` on the list still loading, `2.5` on Side project, whose host leaves two seconds after the list loads, and `2.6` on the list while Juniper works:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 2.6
 ```
+
+Both lists, Conversations and Missions, share one header: your initial (it opens Settings) then the Space button (it opens the menu of Spaces), both system glass buttons at the top left, the list blurring under them through the system scroll edge effect, and the + of New Conversation top right on Conversations.
 
 The Conversations list plays through a scripted host: it answers `conversation_bots`, `conversation_list`, `conversation_main_chat`, `conversation_message_page`, `conversation_send_turn`, `agent_cancel_turn` and `conversation_create`, and plays the host's events. The + at the top right of the Conversations tab opens New Conversation, the companions of the Space to pick from: Create sends `conversation_create` and opens the new group conversation, which the scripted host then lists and announces with `conversation://created`. `conversations` lists the six companions beside two group conversations: Release crew (Juniper and Atlas) and Design review (five companions, so the Hive shows two cells and `+3`). `conversations-live` opens on the same list, then plays a `conversation://created` (Launch plan) three seconds later, and, once Launch plan's thread is open, a `conversation://updated` renaming it Launch checklist and a `conversation://deleted`, three seconds apart:
 
@@ -96,7 +98,7 @@ A thread's header is variant A of the page "Header, explorations": the companion
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -history YES
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and checks each open shows the loading then lands on the last message with no scroll, opens the menu of Spaces on 2.1, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and checks each open shows the loading then lands on the last message with no scroll, opens the menu of Spaces on 2.1, checks both tabs of 2.1 show the same header (your initial and the Space button, at the same place) and opens the menu of Spaces from Missions, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 
@@ -125,7 +127,7 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture keychain         # Opens on whatever the Keychain holds
 ```
 
-Tap the gear, then Sign out. Relaunched with `-fixture keychain` after confirming, the app opens on Sign in: no session is left on the device.
+Tap your initial, then Sign out. Relaunched with `-fixture keychain` after confirming, the app opens on Sign in: no session is left on the device.
 
 ## The relay
 

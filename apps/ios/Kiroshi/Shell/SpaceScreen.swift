@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 enum SpaceSection {
     case conversations
@@ -47,49 +46,7 @@ struct AccountInitial: View {
 
     var body: some View {
         Text(initial)
-            .font(.callout.weight(.medium))
+            .font(.headline)
             .foregroundStyle(Color.kiroshi(.foreground))
-            .frame(width: 40, height: 40)
-            .background(Color.kiroshi(.muted), in: .circle)
-    }
-}
-
-struct SpaceMenu: View {
-    let store: SpaceStore
-
-    var body: some View {
-        Picker(
-            "Space",
-            selection: Binding(get: { store.currentSpaceId }, set: { store.select($0) })
-        ) {
-            ForEach(store.spaces) { space in
-                Label {
-                    Text(space.name)
-                        .accessibilityLabel(Text(space.accessibilityName))
-                } icon: {
-                    Image(uiImage: space.isHostOnline ? .onlineDot : .offlineDot)
-                }
-                .tag(space.id)
-            }
-        }
-        .pickerStyle(.inline)
-    }
-}
-
-extension Space {
-    fileprivate var accessibilityName: String {
-        "\(name), \(isHostOnline ? "online" : "offline")"
-    }
-}
-
-extension UIImage {
-    fileprivate static let onlineDot = presenceDot(.kiroshi(.presenceOnline))
-    fileprivate static let offlineDot = presenceDot(.systemGray)
-
-    private static func presenceDot(_ color: UIColor) -> UIImage {
-        let dot = UIImage(
-            systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(scale: .small)
-        )
-        return dot?.withTintColor(color, renderingMode: .alwaysOriginal) ?? UIImage()
     }
 }

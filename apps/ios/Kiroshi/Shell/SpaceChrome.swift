@@ -7,18 +7,16 @@ struct SpaceChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .safeAreaInset(edge: .top) {
+            .safeAreaBar(edge: .top) {
                 if let offlineSpace = store.offlineSpace {
                     HostOfflineLine(space: offlineSpace, email: store.email)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
                 }
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .navigationTitle(store.currentSpace?.name ?? "")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarTitleMenu {
-                SpaceMenu(store: store)
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     SettingsButton(account: account, spaces: store.spaces, section: section) {
@@ -26,8 +24,12 @@ struct SpaceChrome: ViewModifier {
                     }
                     .accessibilityLabel("Settings")
                 }
-                .sharedBackgroundVisibility(.hidden)
+                ToolbarSpacer(.fixed, placement: .topBarLeading)
+                ToolbarItem(placement: .topBarLeading) {
+                    SpaceSelector(store: store)
+                }
             }
+            .toolbar(removing: .title)
     }
 }
 
@@ -36,3 +38,19 @@ extension View {
         modifier(SpaceChrome(store: store, account: account, section: section))
     }
 }
+
+#if DEBUG
+    #Preview("Header · Conversations · dark") {
+        SignInRootView(model: .fixture(.home))
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Header · Missions · dark") {
+        SignInRootView(model: .fixture(.missions))
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Header · host offline") {
+        SignInRootView(model: .fixture(.conversationsHostOffline))
+    }
+#endif

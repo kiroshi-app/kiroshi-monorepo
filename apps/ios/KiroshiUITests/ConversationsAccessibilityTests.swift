@@ -26,18 +26,22 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
     func auditTheHome(_ app: XCUIApplication) throws {
         let tabBar = app.tabBars.firstMatch.frame
+        let navigationBar = app.navigationBars.firstMatch.frame
         try audit(app) { issue in
             let label = issue.element?.label ?? ""
             let isUnderTheTabBar = issue.element.map { $0.frame.intersects(tabBar) } ?? false
+            let isInTheNavigationBar =
+                issue.element.map { navigationBar.contains($0.frame) } ?? false
             return switch issue.auditType {
             case .textClipped: Self.truncatedPreviews.contains(label)
             case .contrast: isUnderTheTabBar
+            case .dynamicType: isInTheNavigationBar
             default: false
             }
         }
     }
 
-    func testTheHomeListsEachCompanionPassesTheAuditAndItsTitleOpensTheMenuOfSpaces() throws {
+    func testTheHomeListsEachCompanionPassesTheAuditAndItsSpaceButtonOpensTheMenuOfSpaces() throws {
         let app = launch("2.1")
         let juniper = row("Juniper", in: app)
         XCTAssertTrue(juniper.waitForExistence(timeout: 10))
@@ -48,9 +52,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
         try auditTheHome(app)
 
-        app.navigationBars["Studio"].buttons.matching(
-            NSPredicate(format: "label BEGINSWITH 'Studio'")
-        ).firstMatch.tap()
+        app.navigationBars["Studio"].buttons["Space"].tap()
 
         let sideProject = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH 'Side project'")
@@ -105,13 +107,17 @@ final class ConversationsAccessibilityTests: XCTestCase {
             .firstMatch
         XCTAssertTrue(juniper.waitForExistence(timeout: 10))
         let tabBar = app.tabBars.firstMatch.frame
+        let navigationBar = app.navigationBars.firstMatch.frame
 
         try audit(app) { issue in
             let label = issue.element?.label ?? ""
             let isUnderTheTabBar = issue.element.map { $0.frame.intersects(tabBar) } ?? false
+            let isInTheNavigationBar =
+                issue.element.map { navigationBar.contains($0.frame) } ?? false
             return switch issue.auditType {
             case .textClipped: Self.truncatedPreviews.contains(label)
             case .contrast: Self.hiveCounters.contains(label) || isUnderTheTabBar
+            case .dynamicType: isInTheNavigationBar
             default: false
             }
         }
