@@ -94,7 +94,6 @@ const REPORT: FailureReport = {
 
 const REPORT_TEXT = [
 	"Kiroshi failure report",
-	FAILURE.title,
 	FAILURE.description,
 	"App version: 0.42.0",
 	"Platform: macos-aarch64",
@@ -475,12 +474,16 @@ export const WithAction = meta.story({
 const copyControl = (notice: HTMLElement) =>
 	within(notice).queryByRole("button", { name: COPY_LABEL, hidden: true })
 
-const pressedCopy = async (canvas: HTMLElement, userEvent: UserEventObject) => {
+const pressedCopy = async (
+	canvas: HTMLElement,
+	userEvent: UserEventObject,
+	title = FAILURE.title,
+) => {
 	await userEvent.click(
 		within(canvas).getByRole("button", { name: "Run the routine" }),
 	)
-	await within(viewport()).findByText(FAILURE.title)
-	const notice = await opaque(cardCarrying(FAILURE.title))
+	await within(viewport()).findByText(title)
+	const notice = await opaque(cardCarrying(title))
 	const copy = copyControl(notice)
 	if (!copy) throw new window.Error("The notice carries no Copy control")
 	await userEvent.click(copy)
@@ -502,7 +505,7 @@ export const WithReport = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure carrying a debug report, which draws a Copy control between the text and the close control. Pressing it puts the report on the clipboard as plain text a coding agent can read: a heading line, the notice title, its description, then one `Label: value` line per field the report holds, in a fixed order, the absent ones left out. The notice stays open after the copy. A failure raised without a report draws no Copy control at all. Pick `WithReportAndAction` for the same report beside a Retry, `ReportCopied` for the label the control wears right after a copy.",
+					"A failure carrying a debug report, which draws a Copy control between the text and the close control. Pressing it puts the report on the clipboard as plain text a coding agent can read: a heading line, the notice description, then one `Label: value` line per field the report holds, in a fixed order, the absent ones left out. The notice title stays on screen but never enters the copy, since it can carry a companion name. The notice stays open after the copy. A failure raised without a report draws no Copy control at all. Pick `WithReportAndAction` for the same report beside a Retry, `ReportCopied` for the label the control wears right after a copy.",
 			},
 		},
 	},
@@ -717,6 +720,86 @@ export const ReportCopyRejected = meta.story({
 		await opaque(cardCarrying(refusal))
 		await expect(copy).toHaveAccessibleName(COPY_LABEL)
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+
+		writeText.mockRestore()
+	},
+})
+
+export const ReportFromLocalSide = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() =>
+				raiseFailureNotice({ ...FAILURE, report: { ...REPORT, side: "local" } })
+			}
+		/>
+	),
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A failure raised on this machine rather than on a Space host or member. Check that the copied report reads `Side: local` on the line where the other side values land.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await pressedCopy(canvasElement, userEvent)
+
+		await expect(writeText).toHaveBeenCalledOnce()
+		await expect(writeText).toHaveBeenCalledWith(
+			expect.stringContaining("Side: local"),
+		)
+
+		writeText.mockRestore()
+	},
+})
+
+const COMPANION_NAME = "Ada"
+
+const COMPANION_FAILURE: NoticeMessage = {
+	title: `Couldn’t reopen ${COMPANION_NAME}’s session`,
+	description: "The session file was not readable. Nothing was changed.",
+}
+
+export const ReportWithoutCompanionName = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() => raiseFailureNotice({ ...COMPANION_FAILURE, report: REPORT })}
+		/>
+	),
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A failure whose title names a companion. Check that the title still reads in full on screen and that the copied report holds no occurrence of the companion name.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await pressedCopy(canvasElement, userEvent, COMPANION_FAILURE.title)
+
+		await expect(writeText).toHaveBeenCalledOnce()
+		await expect(writeText).not.toHaveBeenCalledWith(
+			expect.stringContaining(COMPANION_NAME),
+		)
+		await expect(
+			within(viewport()).getByText(COMPANION_FAILURE.title),
+		).toBeVisible()
 
 		writeText.mockRestore()
 	},

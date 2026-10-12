@@ -61,11 +61,11 @@ type FailureReport = {
 	raisedAt?: string
 	command?: string
 	httpStatus?: number
-	side?: "host" | "member"
+	side?: "host" | "member" | "local"
 	raisedIn?: string
 }
 
-type ReportedFailure = Pick<NoticeMessage, "title" | "description"> & {
+type ReportedFailure = Pick<NoticeMessage, "description"> & {
 	report: FailureReport
 }
 
@@ -83,10 +83,9 @@ const FAILURE_REPORT_LABELS = {
 
 const onOneLine = (text = "") => text.replace(/\s+/g, " ").trim()
 
-const formatFailureReport = ({ title, description, report }: ReportedFailure) =>
+const formatFailureReport = ({ description, report }: ReportedFailure) =>
 	[
 		FAILURE_REPORT_HEADING,
-		onOneLine(title),
 		onOneLine(description),
 		...Object.entries(FAILURE_REPORT_LABELS).map(([field, label]) => {
 			const value = onOneLine(report[field as keyof FailureReport]?.toString())
@@ -133,7 +132,6 @@ const raiseNotice = ({
 				formatFailureReport({
 					description: notice.description,
 					report,
-					title: notice.title,
 				}),
 			spaceColour,
 		},
