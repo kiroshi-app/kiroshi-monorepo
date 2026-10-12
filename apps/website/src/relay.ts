@@ -215,7 +215,6 @@ export {
 	cancelAuthorizationRequest,
 	clearBearer,
 	isRelayFailure,
-	type Plan,
 	RelayError,
 	type RelayFailure,
 	readAccount,
