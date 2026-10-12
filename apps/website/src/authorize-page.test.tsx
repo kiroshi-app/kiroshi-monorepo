@@ -172,6 +172,18 @@ describe("the authorize page, signed out", () => {
 			}),
 		).toBeNull()
 	})
+
+	it("shows Continue as on a reload of the same request after the sign-in", async () => {
+		const router = renderSite(AUTHORIZE_PATH)
+		await landedOnLoginFor(router)
+		await signInByCode()
+		await heading(AUTHORIZE_COPY.approveTitle)
+		cleanup()
+
+		renderSite(AUTHORIZE_PATH)
+
+		await heading(AUTHORIZE_COPY.continueAsTitle(NAME))
+	})
 })
 
 describe("Continue as", () => {

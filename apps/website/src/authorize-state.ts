@@ -58,6 +58,12 @@ const requireAuthorizeBearer = ({
 	throw signInThenReturn({ request: search.request, href: location.href })
 }
 
+const consumeSignedInFor = (request: string) => {
+	const isSignedInFor = sessionStorage.getItem(SIGNED_IN_FOR_KEY) === request
+	sessionStorage.removeItem(SIGNED_IN_FOR_KEY)
+	return isSignedInFor
+}
+
 const readPendingRequest = async (request: string) => {
 	try {
 		const device = await readAuthorizationRequest(request)
@@ -79,7 +85,7 @@ const loadPendingState = async (request: string): Promise<AuthorizeState> => {
 		request,
 		device,
 		account,
-		isJustSignedIn: sessionStorage.getItem(SIGNED_IN_FOR_KEY) === request,
+		isJustSignedIn: consumeSignedInFor(request),
 	}
 }
 
