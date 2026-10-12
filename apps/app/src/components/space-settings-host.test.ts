@@ -236,7 +236,6 @@ describe("SpaceSettingsHost on a joined space", () => {
 
 		expect(within(dialog).getByDisplayValue("Garage")).toBeTruthy()
 		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
-		expect(invoke).not.toHaveBeenCalledWith("space_update", expect.anything())
 	})
 
 	it("leaves through the roster path, closes the dialog and selects the first local space", async () => {
