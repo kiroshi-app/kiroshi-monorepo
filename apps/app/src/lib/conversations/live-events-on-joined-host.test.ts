@@ -326,7 +326,9 @@ const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 		botIds: [bot?.id ?? ""],
 	})
 	const botId = bot?.id ?? ""
-	const controller = createConversationController(driver, store)
+	const controller = createConversationController(driver, store, {
+		senderAccountId: () => MEMBER,
+	})
 	const detach = controller.attach()
 	await prepare({ store, driver, conversationId: conversation.id, botId })
 	await act(() => controller.open(conversation))
@@ -1162,7 +1164,7 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("records the answer to a question of a turn opened elsewhere and shows it in the thread", async () => {
-		const answered = await answerForeignQuestion(askLocally, ANSWERS)
+		const answered = await answerForeignQuestion({ open: openSoloChat })
 
 		expect(answered.append).toHaveBeenCalledWith(
 			answerStoredIn(answered.conversationId),
@@ -1171,7 +1173,10 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("records the answer of a member on the joined host and shows it in the thread", async () => {
-		const answered = await answerForeignQuestion(askOnJoinedHost, ANSWERS)
+		const answered = await answerForeignQuestion({
+			open: openSoloChat,
+			ask: askOnJoinedHost,
+		})
 
 		expect(answered.append).toHaveBeenCalledWith(
 			answerStoredIn(answered.conversationId),
@@ -1180,7 +1185,39 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("records nothing when the answer to a foreign question is empty", async () => {
-		const answered = await answerForeignQuestion(askLocally, {})
+		const answered = await answerForeignQuestion({
+			open: openSoloChat,
+			answers: {},
+		})
+
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
+	})
+
+	it("records the answer to a question of a turn opened elsewhere and shows it in the room", async () => {
+		const answered = await answerForeignQuestion({ open: openRoom })
+
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
+	})
+
+	it("records nothing in the room when the answer to a foreign question is refused", async () => {
+		const answered = await answerForeignQuestion({
+			open: openRoom,
+			deliver: REFUSED,
+		})
+
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
+	})
+
+	it("records nothing in the room when the answer to a foreign question is empty", async () => {
+		const answered = await answerForeignQuestion({
+			open: openRoom,
+			answers: {},
+		})
 
 		expect(answered.append).not.toHaveBeenCalled()
 		expect(answered.bubble).toBeUndefined()
@@ -1196,16 +1233,29 @@ const askOnJoinedHost: AskForeign = async (scoped) => {
 	await emitOnHost("agent://event", scoped)
 }
 
-const answerForeignQuestion = async (
-	ask: AskForeign,
-	answers: QuestionAnswers,
-) => {
-	const { store, controller, driver, detach, conversationId } =
-		await openSoloChat()
-	vi.spyOn(driver, "answerQuestion").mockResolvedValue()
+const ACCEPTED = () => Promise.resolve()
+
+const REFUSED = () => Promise.reject(new Error("relay down"))
+
+type ForeignAnswering = {
+	open: typeof openSoloChat | typeof openRoom
+	ask?: AskForeign
+	answers?: QuestionAnswers
+	deliver?: () => Promise<void>
+}
+
+const answerForeignQuestion = async ({
+	open,
+	ask = askLocally,
+	answers = ANSWERS,
+	deliver = ACCEPTED,
+}: ForeignAnswering) => {
+	const { store, controller, driver, detach, botId, conversationId } =
+		await open()
+	vi.spyOn(driver, "answerQuestion").mockImplementation(deliver)
 	const append = vi.spyOn(store, "appendUserMessage")
 	await ask({
-		scope: foreignScope(conversationId),
+		scope: { ...foreignScope(conversationId), botId },
 		turn: storedTurn(conversationId),
 		event: ASKED_QUESTION,
 	})
