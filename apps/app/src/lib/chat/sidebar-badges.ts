@@ -78,7 +78,7 @@ export const toRailSignals = ({
 			? NO_CONVERSATIONS
 			: (conversationsBySpaceId[spaceId] ?? NO_CONVERSATIONS)
 	return {
-		conversations: conversations.some((row) => row.badge),
-		missions: waitingMissionCount > 0,
+		conversations: strongestBadge(conversations),
+		missions: waitingMissionCount > 0 ? "attention" : undefined,
 	}
 }
