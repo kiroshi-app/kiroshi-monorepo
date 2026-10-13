@@ -75,8 +75,6 @@ vi.mock("@/lib/host", async (importOriginal) => {
 			close: () => undefined,
 		}),
 		reportFailure: () => undefined,
-		reportHostDown: () => "notice",
-		endHostDown: () => undefined,
 	})
 	return {
 		...actual,

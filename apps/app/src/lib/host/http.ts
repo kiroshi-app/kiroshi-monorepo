@@ -33,7 +33,6 @@ export type HttpHostOptions = HostConnection & {
 	fetch: typeof fetch
 	openSocket: (url: string) => HostSocket
 	onDown: () => void
-	onReconnectFailed: () => void
 	onUp: () => void
 	onRefused: (refusal: HostRefusal) => void
 }
@@ -146,15 +145,6 @@ export const raiseRefusalNotice = (refusal: HostRefusal) =>
 		side: refusal.side,
 	})
 
-export const raiseHostOfflineNotice = () =>
-	raiseReportedFailure(
-		{
-			title: i18n.t("chat:screen.notice.hostOffline.title"),
-			description: i18n.t("chat:screen.notice.hostOffline.description"),
-		},
-		{ raisedIn: "host-offline", side: "member" },
-	)
-
 const isFrame = (value: unknown): value is Frame =>
 	typeof value === "object" &&
 	value !== null &&
@@ -209,7 +199,6 @@ export const createHttpHost = ({
 	fetch,
 	openSocket,
 	onDown,
-	onReconnectFailed,
 	onUp,
 	onRefused,
 }: HttpHostOptions): HttpHost => {
@@ -233,7 +222,7 @@ export const createHttpHost = ({
 				"content-type": JSON_TYPE,
 			},
 			body: JSON.stringify(args, encodeArgument),
-		}).catch((reason: unknown) => refuse(command, reason))
+		}).catch((reason: unknown) => rejectNetworkFailure(command, reason))
 
 	const invoke = async <T>(command: string, args: InvokeArgs = {}) => {
 		const response = await post(command, args)
@@ -287,6 +276,9 @@ export const createHttpHost = ({
 		throw hostOfflineOf(messageOf(reason))
 	}
 
+	const rejectNetworkFailure = (command: string, reason: unknown): never =>
+		presence === "down" ? goOffline(reason) : refuse(command, reason)
+
 	const connect = () => {
 		const opened = openSocket(eventsUrlOf({ host, token }))
 		opened.onopen = markUp
@@ -294,9 +286,6 @@ export const createHttpHost = ({
 		opened.onclose = () => {
 			if (isClosed) {
 				return
-			}
-			if (failedAttempts > 0) {
-				onReconnectFailed()
 			}
 			markDown()
 			setTimeout(connect, reconnectDelay(failedAttempts))

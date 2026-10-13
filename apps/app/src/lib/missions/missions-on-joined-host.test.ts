@@ -122,8 +122,6 @@ const buildJoinedHosts = (): JoinedHosts =>
 			return socket
 		},
 		reportFailure: raiseRefusalNotice,
-		reportHostDown: () => "notice",
-		endHostDown: () => undefined,
 	})
 
 const { joinedHosts } = await import("../host")

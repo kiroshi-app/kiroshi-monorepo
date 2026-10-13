@@ -54,8 +54,6 @@ const fakeJoinedHosts = createJoinedHosts({
 		return socket
 	},
 	reportFailure: () => undefined,
-	reportHostDown: () => "notice",
-	endHostDown: () => undefined,
 })
 
 export const fakeHostModule = {

@@ -277,8 +277,6 @@ describe("reading installs while a joined Space is active", () => {
 				close: () => undefined,
 			}),
 			reportFailure: vi.fn(),
-			reportHostDown: () => "down",
-			endHostDown: vi.fn(),
 		})
 		await hosts.invoke("conversation_main_chat", {
 			botId: "b1",

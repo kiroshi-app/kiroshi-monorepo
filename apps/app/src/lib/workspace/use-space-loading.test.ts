@@ -379,8 +379,6 @@ const relaunchedOnJoinedSpace = async () => {
 		},
 		openSocket: silentSocket,
 		reportFailure: vi.fn(),
-		reportHostDown: () => "down",
-		endHostDown: vi.fn(),
 	})
 	const relayed = new Proxy({} as TranscriptStore, {
 		get:
