@@ -27,6 +27,7 @@ import {
 } from "@workspace/ui/components/message-quote"
 import type { MissionBot } from "@workspace/ui/components/mission"
 import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
+import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { MissionEventRow } from "@workspace/ui/components/mission-event-row"
 import { MissionHeader } from "@workspace/ui/components/mission-header"
 import { MissionTurn } from "@workspace/ui/components/mission-turn"
@@ -38,6 +39,7 @@ import {
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
+import { ThreadTranscriptSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
 import type {
 	TranscriptHandle,
 	TranscriptItem,
@@ -213,8 +215,13 @@ import {
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
+import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
+
+const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
+
+const MISSION_TRANSCRIPT_SKELETON = <MissionDetailSkeleton />
 
 type WorkingBotProps = BotStopProps & {
 	face: ThreadFace
@@ -1624,6 +1631,10 @@ const useThreadView = (props: ThreadViewProps) => {
 function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
 	const view = useThreadView(props)
+	const transcriptSkeleton = useSkeletonSlot(
+		view.facts.isFirstLoadPending && view.state.messages.length === 0,
+		view.missionSeat ? MISSION_TRANSCRIPT_SKELETON : THREAD_TRANSCRIPT_SKELETON,
+	)
 
 	const layout = (
 		<ThreadLayout
@@ -1707,6 +1718,7 @@ function ThreadView(props: ThreadViewProps) {
 			rootRef={view.rootRef}
 			rows={view.transcriptRows}
 			scrollerRef={view.scrollerRef}
+			skeleton={transcriptSkeleton}
 			transcriptKey={view.facts.id}
 		>
 			{showsEmptyState(

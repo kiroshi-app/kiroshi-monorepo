@@ -31,6 +31,8 @@ import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 const SIGNED_OUT: AccountState = { kind: "signedOut", reason: null }
 
+const UNREAD_ACCOUNT: AccountPanelState = { status: "signedOut" }
+
 type AccountCommandFailure =
 	| "settings:account.signInFailed"
 	| "settings:account.cancelFailed"
@@ -65,7 +67,7 @@ export type SignOutLeaving = {
 }
 
 type AccountSettings = {
-	panel: AccountPanelProps | undefined
+	panel: AccountPanelProps
 	signOutConfirmation: ConfirmDialogProps | null
 }
 
@@ -187,8 +189,9 @@ export const useAccount = (
 		})
 
 	return {
-		panel: state && {
-			account: toPanelState(state, displayName),
+		panel: {
+			account: state ? toPanelState(state, displayName) : UNREAD_ACCOUNT,
+			isPending: state === undefined,
 			onSignIn: () => signIn.mutate(),
 			onCancel: () => cancel.mutate(),
 			onCopySignInLink: copySignInLinkOf(state),

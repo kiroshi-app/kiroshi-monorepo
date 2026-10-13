@@ -67,6 +67,7 @@ const ThreadRoutines = ({
 	const now = useRosterClock()
 	const {
 		routines,
+		isPending,
 		reportedRuns,
 		failure,
 		reload,
@@ -120,6 +121,7 @@ const ThreadRoutines = ({
 			failure={activityFailure(failure, missions.hasFailed)}
 			form={form}
 			isOpen={activityPanel.isOpen}
+			isRoutinesPending={isPending}
 			missions={{ ...rows, onOpen: onOpenMission, wrap: wrapMissionCard }}
 			onDelete={remove}
 			onEnabledChange={setEnabled}

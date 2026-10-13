@@ -101,6 +101,17 @@ it("reads the recents and the catalogue of the space it opens on", async () => {
 	expect(port.messages).not.toHaveBeenCalled()
 })
 
+it("reports loading with nothing held while its first read is pending", () => {
+	const port = aPort()
+	port.messages.mockReturnValue(new Promise(() => undefined))
+
+	const { result } = renderReads(port, { query: "road" })
+
+	expect(result.current.isLoading).toBe(true)
+	expect(result.current.read.messages).toEqual([])
+	expect(result.current.landing).toBe(0)
+})
+
 it("reads the messages and the catalogue of a query", async () => {
 	const port = aPort()
 

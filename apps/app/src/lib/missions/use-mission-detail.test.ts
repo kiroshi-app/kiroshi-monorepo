@@ -229,3 +229,42 @@ describe("when changes arrive in a burst", () => {
 		expect(result.current.isReading).toBe(true)
 	})
 })
+
+describe("the skeleton of the mission detail", () => {
+	const mountDetail = () =>
+		renderHook(() => useMissionDetail("m-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+	it("waits on its first read while nothing is held", () => {
+		readDetail.mockReturnValue(new Promise(() => undefined))
+
+		const { result } = mountDetail()
+
+		expect(result.current.isPending).toBe(true)
+		expect(result.current.read).toBeNull()
+	})
+
+	it("keeps the mission it holds while it reads it again", async () => {
+		const { result } = mountDetail()
+		await waitFor(() => expect(result.current.read).not.toBeNull())
+		readDetail.mockReturnValue(new Promise(() => undefined))
+
+		act(() => result.current.onRetry())
+
+		expect(readDetail).toHaveBeenCalledTimes(2)
+		expect(result.current.isPending).toBe(false)
+	})
+
+	it("stops waiting once the read fails, retry included", async () => {
+		readDetail.mockRejectedValueOnce({ kind: "unknownMission", id: "m-1" })
+		const { result } = mountDetail()
+		await waitFor(() => expect(result.current.hasFailedToRead).toBe(true))
+		readDetail.mockReturnValue(new Promise(() => undefined))
+
+		act(() => result.current.onRetry())
+
+		expect(result.current.isPending).toBe(false)
+		expect(result.current.hasFailedToRead).toBe(true)
+	})
+})

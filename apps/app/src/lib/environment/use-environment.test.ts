@@ -250,7 +250,24 @@ describe("useEnvironment", () => {
 		const { result } = await opened(refusing(store, "environmentVariables"))
 
 		expect(result.current.hasFailedToRead).toBe(true)
+		expect(result.current.isPending).toBe(false)
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("keeps the names it holds, never waiting, while it reads them again", async () => {
+		const store = createFakeTranscriptStore()
+		await store.setEnvironmentVariable(BOT, "BOT_SEED", "1")
+		const { result } = await opened(store)
+		const read = vi.fn(() => new Promise<never>(() => undefined))
+		store.environmentVariables = read
+
+		act(() => {
+			void result.current.set("ATLAS_TOKEN", "sk-1")
+		})
+
+		await waitFor(() => expect(read).toHaveBeenCalledOnce())
+		expect(result.current.isPending).toBe(false)
+		expect(result.current.entries).toHaveLength(1)
 	})
 
 	it("keeps the names it already holds when a later read fails", async () => {
@@ -290,6 +307,7 @@ describe("useEnvironment", () => {
 
 		expect(read).not.toHaveBeenCalled()
 		expect(result.current.entries).toEqual([])
+		expect(result.current.isPending).toBe(false)
 		expect(await store.environmentVariables(BOT)).toEqual([])
 	})
 

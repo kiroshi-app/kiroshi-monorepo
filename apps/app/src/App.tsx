@@ -124,6 +124,7 @@ export function App() {
 						windowControls={titleBarWindowControls()}
 						bots={rosterLines.rosterBots}
 						haveBotsFailedToLoad={roster.state.hasFailedToLoad}
+						rosterSkeleton={rosterLists.rosterSkeleton}
 						botsBySpaceId={rosterLists.rosterBotsBySpace}
 						conversations={rosterLists.rosterConversations}
 						conversationsBySpaceId={rosterLists.rosterConversationsBySpace}

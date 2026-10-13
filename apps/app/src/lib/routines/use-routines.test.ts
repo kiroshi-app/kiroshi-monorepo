@@ -900,3 +900,37 @@ it("reads the routines once while their panel stays mounted", async () => {
 
 	expect(list).toHaveBeenCalledTimes(1)
 })
+
+it("waits on its first read of the routines while nothing is held", () => {
+	list.mockReturnValue(new Promise(() => undefined))
+	sources.mockResolvedValue([])
+
+	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+
+	expect(result.current.isPending).toBe(true)
+})
+
+it("keeps the routines it holds while it reads them again", async () => {
+	const result = await mountHeldRoutines()
+	list.mockReturnValue(new Promise(() => undefined))
+
+	act(() => result.current.reload())
+
+	expect(list).toHaveBeenCalledTimes(2)
+	expect(result.current.isPending).toBe(false)
+	expect(result.current.routines).toHaveLength(1)
+})
+
+it("stops waiting on the routines once their first read fails", async () => {
+	list.mockRejectedValueOnce(new Error("read refused"))
+	sources.mockResolvedValue([])
+
+	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await waitFor(() => expect(result.current.failure).toBe("routines"))
+
+	expect(result.current.isPending).toBe(false)
+})

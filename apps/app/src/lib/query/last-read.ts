@@ -12,3 +12,14 @@ export const hasLastReadFailed = ({
 	errorUpdatedAt,
 }: SettledRead): boolean =>
 	isError || (isPending && isFetching && errorUpdatedAt > 0)
+
+type FirstRead = Pick<
+	UseQueryResult,
+	"isPending" | "isFetching" | "errorUpdatedAt"
+>
+
+export const isFirstReadPending = ({
+	isPending,
+	isFetching,
+	errorUpdatedAt,
+}: FirstRead): boolean => isPending && isFetching && errorUpdatedAt === 0

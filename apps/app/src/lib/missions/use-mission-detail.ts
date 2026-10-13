@@ -10,7 +10,7 @@ import { toMissionEventModels } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { hasLastReadFailed } from "@/lib/query/last-read"
+import { hasLastReadFailed, isFirstReadPending } from "@/lib/query/last-read"
 
 export type MissionRead = {
 	mission: Mission
@@ -21,6 +21,7 @@ export type MissionRead = {
 export type MissionDetailRead = {
 	read: MissionRead | null
 	isReading: boolean
+	isPending: boolean
 	hasFailedToRead: boolean
 	onRetry: () => void
 }
@@ -49,6 +50,7 @@ export const useMissionDetail = (missionId: string): MissionDetailRead => {
 	const read = data ?? null
 	const hasFailedToRead = hasLastReadFailed(detail)
 	const isReading = isPending || isRetrying
+	const isFirstPending = isFirstReadPending(detail)
 
 	const onRetry = useCallback(() => {
 		if (!canRead) {
@@ -59,7 +61,13 @@ export const useMissionDetail = (missionId: string): MissionDetailRead => {
 	}, [canRead, refetch])
 
 	return useMemo(
-		() => ({ read, isReading, hasFailedToRead, onRetry }),
-		[read, isReading, hasFailedToRead, onRetry],
+		() => ({
+			read,
+			isReading,
+			isPending: isFirstPending,
+			hasFailedToRead,
+			onRetry,
+		}),
+		[read, isReading, isFirstPending, hasFailedToRead, onRetry],
 	)
 }

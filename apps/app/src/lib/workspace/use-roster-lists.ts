@@ -1,4 +1,6 @@
-import { useMemo } from "react"
+import { createElement, useMemo } from "react"
+
+import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 
 import { useRosterBotsBySpace } from "./use-roster-bots-by-space"
 import type { RosterLines } from "./use-roster-lines"
@@ -25,6 +27,9 @@ import {
 	missionsIn,
 	withMissions,
 } from "../missions/missions-model"
+import { useSkeletonSlot } from "../query/use-skeleton-slot"
+
+const ROSTER_SKELETON = createElement(SidebarListSkeleton)
 
 type RosterListsInput = {
 	core: WorkspaceCore
@@ -155,6 +160,11 @@ export const useRosterLists = ({
 		[rosterBotsBySpace, rosterConversationsBySpace],
 	)
 
+	const rosterSkeleton = useSkeletonSlot(
+		roster.state.isRosterPending,
+		ROSTER_SKELETON,
+	)
+
 	const railSignals = useMemo(
 		() =>
 			toRailSignals({
@@ -171,6 +181,7 @@ export const useRosterLists = ({
 		rosterBotsBySpace,
 		rosterConversations,
 		rosterConversationsBySpace,
+		rosterSkeleton,
 		seatedBots,
 	}
 }

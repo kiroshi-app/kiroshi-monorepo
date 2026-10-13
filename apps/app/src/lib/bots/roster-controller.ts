@@ -59,6 +59,7 @@ export type RosterState = {
 	isEditingConversation: boolean
 	hasLoaded: boolean
 	hasFailedToLoad: boolean
+	isRosterPending: boolean
 }
 
 export type RosterSpace = {
@@ -382,8 +383,12 @@ const rosterBaseOf = (
 	choice: RosterChoice,
 	reads: (RosterRead | undefined)[],
 	failures: boolean[],
+	pendings: boolean[],
 ): RosterBase => {
 	const spaceRowIds = heldSpaceRowIdsOf(choice)
+	const chosenIndex = choice.spaceRowId
+		? spaceRowIds.indexOf(choice.spaceRowId)
+		: -1
 	const rosters = Object.fromEntries(
 		spaceRowIds.map((id, index) => [id, reads[index]?.bots ?? NO_BOTS]),
 	)
@@ -405,6 +410,7 @@ const rosterBaseOf = (
 		...settingsStandingIn(choice, bots, conversations),
 		hasLoaded: choice.hasLoaded,
 		hasFailedToLoad: failures.includes(true),
+		isRosterPending: pendings[chosenIndex] ?? false,
 	}
 }
 
@@ -519,6 +525,15 @@ export const createRosterController = (
 		queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)?.status ===
 		"error"
 
+	const isRosterPendingIn = (spaceRowId: string) => {
+		const read = queryClient.getQueryState(rosterQuery(spaceRowId).queryKey)
+		return (
+			read?.fetchStatus === "fetching" &&
+			read.data === undefined &&
+			read.errorUpdatedAt === 0
+		)
+	}
+
 	const soloThreadIdOf = (line: RosterLine) =>
 		queryClient.getQueryData(soloThreadQuery(line).queryKey)
 
@@ -531,6 +546,7 @@ export const createRosterController = (
 			chosen(),
 			spaceRowIds.map(rosterReadIn),
 			spaceRowIds.map(hasRosterFailedIn),
+			spaceRowIds.map(isRosterPendingIn),
 		]
 	}, rosterBaseOf)
 

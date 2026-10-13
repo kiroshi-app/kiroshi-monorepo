@@ -4556,6 +4556,17 @@ const heldRoomOf = async (spoken: SpokenTurn[] = []) => {
 	}
 }
 
+const TRANSCRIPT_SKELETON_SLOT =
+	'[data-slot="thread-skeleton"] [data-slot="list-skeleton"]'
+
+const SKELETON_DELAY_MS = 300
+
+const drawsTranscriptSkeleton = () =>
+	document.querySelector(TRANSCRIPT_SKELETON_SLOT) !== null
+
+const pastTheSkeletonDelay = () =>
+	act(() => new Promise((resolve) => setTimeout(resolve, SKELETON_DELAY_MS)))
+
 const soloThreadWaitingOf = (isFirstLoadPending: boolean): BotThread => {
 	const sent = threadOf({ id: "bot-1", name: "Nyx", said: "" })
 	return {
@@ -4635,6 +4646,48 @@ describe("the first load of a thread transcript", () => {
 
 		expect(screen.getByText("anyone here?")).toBeTruthy()
 		expect(drawsEmptyState()).toBe(false)
+	})
+
+	it("draws the transcript skeleton while the first page is pending and nothing is held", async () => {
+		render(screenOf(soloThreadWaitingOf(true)), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(drawsTranscriptSkeleton()).toBe(false)
+		await pastTheSkeletonDelay()
+
+		expect(drawsTranscriptSkeleton()).toBe(true)
+		expect(drawsEmptyState()).toBe(false)
+	})
+
+	it("draws the messages it holds at once, and no skeleton, while the first page is pending", async () => {
+		const sent = threadOf({ id: "bot-1", name: "Nyx", said: "anyone here?" })
+		render(
+			screenOf({
+				...sent,
+				chat: {
+					...sent.chat,
+					state: { ...sent.chat.state, isFirstLoadPending: true },
+				},
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+		await pastTheSkeletonDelay()
+
+		expect(screen.getByText("anyone here?")).toBeTruthy()
+		expect(drawsTranscriptSkeleton()).toBe(false)
+	})
+
+	it("draws the empty state and no skeleton once the first page fails", async () => {
+		const room = await heldRoomOf()
+
+		await room.fail()
+		await pastTheSkeletonDelay()
+
+		expect(drawsTranscriptSkeleton()).toBe(false)
+		expect(document.querySelector(CONVERSATION_EMPTY_STATE_SLOT)).not.toBeNull()
 	})
 
 	it("draws no empty state in a solo bot thread while its first page is pending", async () => {

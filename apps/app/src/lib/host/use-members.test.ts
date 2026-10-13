@@ -484,4 +484,44 @@ describe("useMembers", () => {
 
 		expect(panel().failure).toBeUndefined()
 	})
+	it("waits on its first read of the members while nothing is held", () => {
+		const transport = createFakeTransport({
+			list: vi.fn(() => new Promise<never>(() => undefined)),
+		})
+
+		const { result } = renderHook(() => useMembers(HOME, true, { transport }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		expect(shown(result.current).isPending).toBe(true)
+	})
+
+	it("keeps the members it holds while it reads them again", async () => {
+		const list = vi
+			.fn<MembersTransport["list"]>()
+			.mockResolvedValueOnce(ok([STEVE, SAM_PENDING, ALEX_JOINED]))
+			.mockReturnValue(new Promise(() => undefined))
+		const { panel } = await watchHome({ list })
+
+		act(() => changeAnnounced())
+		await settle()
+
+		expect(list).toHaveBeenCalledTimes(2)
+		expect(panel().isPending).toBe(false)
+		expect(panel().members).toEqual([
+			STEVE_ROW,
+			SAM_PENDING_ROW,
+			ALEX_JOINED_ROW,
+		])
+	})
+
+	it("stops waiting on the members once their read fails", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () =>
+				refused({ kind: "unreachable", reason: "relay down" }),
+			),
+		})
+
+		expect(panel().isPending).toBe(false)
+	})
 })
