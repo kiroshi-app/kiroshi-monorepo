@@ -1,3 +1,5 @@
+import { QueryClientProvider } from "@tanstack/react-query"
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 
@@ -8,6 +10,8 @@ import { App } from "./App"
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
 import { revealWindow } from "@/lib/host"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
+import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
+import { createQueryClient } from "@/lib/query/query-client"
 import { applyLanguage, readMirror } from "@/lib/user/preferences-mirror"
 import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 
@@ -26,11 +30,17 @@ exposeScrollTrace()
 
 applyLanguage(readMirror().language)
 
+const queryClient = createQueryClient()
+invalidateOnHostReconnect(queryClient)
+
 createRoot(document.getElementById("root")!).render(
 	<StrictMode>
-		<I18nProvider>
-			<App />
-		</I18nProvider>
+		<QueryClientProvider client={queryClient}>
+			<I18nProvider>
+				<App />
+			</I18nProvider>
+			{import.meta.env.DEV && <ReactQueryDevtools />}
+		</QueryClientProvider>
 	</StrictMode>,
 )
 
