@@ -83,6 +83,7 @@
         case threadHostOffline = "3.4"
         case swipedThread = "3.5"
         case conversationsFailed = "conversations-failed"
+        case conversationsRecovering = "conversations-recovering"
         case threadFailed = "thread-failed"
         case groupThread = "group-thread"
         case groupWorking = "group-working"
@@ -143,7 +144,7 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
-                .conversationsFailed,
+                .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
                 .conversationMissions, .conversationNoMissions:
@@ -162,7 +163,7 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
-                .conversationsFailed,
+                .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
                 .conversationMissions, .conversationNoMissions:
@@ -219,7 +220,7 @@
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
-                .conversationsFailed,
+                .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
                 .conversationMissions, .conversationNoMissions:
@@ -308,6 +309,7 @@
                 .conversationsLive, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .workingAfterReply, .conversationsFailed,
+                .conversationsRecovering,
                 .threadFailed, .groupThread,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,

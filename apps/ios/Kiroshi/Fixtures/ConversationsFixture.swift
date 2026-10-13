@@ -317,6 +317,8 @@
                 script.workingCompanion = juniper.id
             case .conversationsFailed:
                 script.refusesCompanions = true
+            case .conversationsRecovering:
+                script.refusesCompanionsOnce = true
             case .threadFailed:
                 script.refusesThread = true
             case .groupThread:
@@ -435,6 +437,7 @@
         struct Script: Sendable {
             var answersCompanions = true
             var refusesCompanions = false
+            var refusesCompanionsOnce = false
             var refusesThread = false
             var companions: [Companion] = []
             var groups: [Group] = []
@@ -521,6 +524,7 @@
 
     actor FixtureHostTransport: RelayTransport {
         private let script: FixtureHost.Script
+        private let companionsRefusal = FixtureOnce()
         private var opened = 0
 
         init(script: FixtureHost.Script) {
@@ -532,7 +536,18 @@
                 throw RelayClosure(code: RelayClosure.hostOffline)
             }
             opened += 1
-            return FixtureHostSocket(script: script)
+            return FixtureHostSocket(script: script, companionsRefusal: companionsRefusal)
+        }
+    }
+
+    final class FixtureOnce: Sendable {
+        private let hasHappened = Mutex(false)
+
+        func take() -> Bool {
+            hasHappened.withLock { hasHappened in
+                defer { hasHappened = true }
+                return !hasHappened
+            }
         }
     }
 
@@ -552,6 +567,7 @@
         }
 
         private let script: FixtureHost.Script
+        private let companionsRefusal: FixtureOnce
         private let pages = FixturePageCount()
         private let created = Mutex<[FixtureHost.Group]>([])
         private let inbound: AsyncStream<Inbound>
@@ -561,8 +577,9 @@
         private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
 
-        init(script: FixtureHost.Script) {
+        init(script: FixtureHost.Script, companionsRefusal: FixtureOnce) {
             self.script = script
+            self.companionsRefusal = companionsRefusal
             let (inbound, inboundContinuation) = AsyncStream.makeStream(of: Inbound.self)
             self.inbound = inbound
             self.inboundContinuation = inboundContinuation
@@ -647,7 +664,9 @@
             switch command {
             case "relay_shared_space":
                 reply(id, #"{"spaceId":"\#(FixtureHost.spaceId)"}"#)
-            case "conversation_bots" where script.refusesCompanions:
+            case "conversation_bots"
+            where script.refusesCompanions
+                || (script.refusesCompanionsOnce && companionsRefusal.take()):
                 refuse(id)
             case "conversation_message_page"
             where script.refusesThread && args["limit"] as? Int != 1:
