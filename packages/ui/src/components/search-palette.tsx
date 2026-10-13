@@ -4,8 +4,14 @@ import { Dialog } from "@base-ui/react/dialog"
 import { type ReactNode, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
+import { COMPANION_SILHOUETTE } from "@workspace/ui/components/companion-picture"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
+import { ACTIVITY_ROW_CLASS } from "@workspace/ui/components/row-anatomy"
 import {
 	SearchResultRow,
 	type SearchResultRowProps,
@@ -16,7 +22,9 @@ import {
 } from "@workspace/ui/components/settings-styles"
 import { ToggleSwitch } from "@workspace/ui/components/toggle-switch"
 import { Button } from "@workspace/ui/components/ui/button"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SearchKind = "messages" | "chats" | "missions" | "routines"
@@ -110,8 +118,78 @@ const LIST_CLASS = "flex flex-col gap-0.5"
 
 const SECTION_HEAD_CLASS = "flex h-7 items-center gap-1.5 px-2"
 
+const CONVERSATION_SKELETON_ROWS = ["first", "second", "third"]
+
+const CONVERSATION_SKELETON_WIDTHS =
+	"[--skeleton-title:--spacing(14)] [--skeleton-sub:--spacing(62.5)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(53.5)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(12)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(45)]"
+
+const MISSION_SKELETON_WIDTHS =
+	"[--skeleton-title:--spacing(52.5)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(37.5)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(42.5)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(44)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(37.5)]"
+
 const SEE_ALL_CLASS =
 	"ms-auto rounded-md text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30"
+
+const ResultRowSkeleton = () => (
+	<div className={ACTIVITY_ROW_CLASS}>
+		<Skeleton
+			className="size-8 shrink-0 animate-none rounded-none bg-border"
+			style={COMPANION_SILHOUETTE}
+		/>
+		<div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
+			<div className="flex h-5 items-center justify-between gap-2">
+				<SkeletonBar className="w-(--skeleton-title)" />
+				<SkeletonBar className="w-7 shrink-0" isFaint />
+			</div>
+			<div className="flex h-4 items-center">
+				<SkeletonBar className="w-(--skeleton-sub)" isFaint />
+			</div>
+		</div>
+	</div>
+)
+
+type SkeletonSectionHeadProps = {
+	label: string
+}
+
+const SkeletonSectionHead = ({ label }: SkeletonSectionHeadProps) => (
+	<div className={SECTION_HEAD_CLASS}>
+		<span className="font-medium text-foreground text-xs">{label}</span>
+	</div>
+)
+
+const ResultsSkeleton = () => {
+	const { t } = useTranslation("search")
+
+	return (
+		<div
+			aria-hidden="true"
+			className="flex min-h-0 flex-1 flex-col"
+			data-slot="search-palette-skeleton"
+		>
+			<div className={LIST_CLASS}>
+				<SkeletonSectionHead label={t("rest.chats")} />
+				<div
+					className={cn(
+						LIST_CLASS,
+						CONVERSATION_SKELETON_WIDTHS,
+						"animate-pulse motion-reduce:animate-none",
+					)}
+				>
+					{CONVERSATION_SKELETON_ROWS.map((row) => (
+						<ResultRowSkeleton key={row} />
+					))}
+				</div>
+			</div>
+			<div className="flex min-h-0 flex-1 flex-col gap-0.5 pt-2">
+				<SkeletonSectionHead label={t("rest.missions")} />
+				<ListSkeleton
+					className={cn("gap-0.5", MISSION_SKELETON_WIDTHS)}
+					row={<ResultRowSkeleton />}
+				/>
+			</div>
+		</div>
+	)
+}
 
 const SearchPalette = ({
 	open,
@@ -171,7 +249,12 @@ const SearchPalette = ({
 				: { key: group.kind, results: group.results },
 		)
 
-	const sections = isRest ? restingSections : foundSections
+	const answered = isRest ? restingSections : foundSections
+	const isAwaitingRows =
+		isLoading && answered.length === 0 && !(isRest && tab === "messages")
+	const phase = useSkeletonTiming(isAwaitingRows)
+	const isSkeletonShown = phase === "skeleton"
+	const sections = isSkeletonShown ? [] : answered
 
 	const shown = sections.flatMap((section) => section.results)
 	const rowId = (id: string) => `${listId}-${id}`
@@ -237,6 +320,7 @@ const SearchPalette = ({
 
 	const panelOf = () => {
 		if (shown.length > 0) return null
+		if (isSkeletonShown) return <ResultsSkeleton />
 		if (!isRest) return isLoading ? null : foundPanel
 		if (tab === "messages") return instructionPanel()
 		if (isLoading) return null
@@ -318,7 +402,7 @@ const SearchPalette = ({
 					</div>
 
 					<div
-						aria-busy={isLoading}
+						aria-busy={isLoading || isSkeletonShown}
 						className={BODY_CLASS}
 						data-slot="search-palette-body"
 						// biome-ignore lint/a11y/noNoninteractiveTabindex: the body scrolls on its own and every row inside it is driven by aria-activedescendant, so this is the only handle a keyboard has on it

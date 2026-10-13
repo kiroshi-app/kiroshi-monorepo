@@ -5,8 +5,11 @@ import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import { SkeletonBar } from "@workspace/ui/components/list-skeleton"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { Button } from "@workspace/ui/components/ui/button"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 type AccountPlan = "free" | "pro"
 
@@ -22,6 +25,7 @@ type AccountState =
 
 type AccountPanelProps = {
 	account: AccountState
+	isPending?: boolean
 	onSignIn: () => void
 	onCancel: () => void
 	onCopySignInLink: () => void
@@ -73,8 +77,27 @@ const AccountActions = ({
 	</div>
 )
 
+const AccountCardSkeleton = () => (
+	<div
+		aria-hidden="true"
+		className="flex animate-pulse items-center gap-3 rounded-xl border border-border p-3.5 motion-reduce:animate-none"
+		data-slot="account-card-skeleton"
+	>
+		<Skeleton className="size-10 shrink-0 animate-none rounded-full bg-border" />
+		<div className="flex min-w-0 flex-1 flex-col">
+			<div className="flex h-5 items-center">
+				<SkeletonBar className="w-24" />
+			</div>
+			<div className="flex h-4.5 items-center">
+				<SkeletonBar className="w-34" isFaint />
+			</div>
+		</div>
+	</div>
+)
+
 const AccountPanel = ({
 	account,
+	isPending = false,
 	onSignIn,
 	onCancel,
 	onCopySignInLink,
@@ -83,6 +106,15 @@ const AccountPanel = ({
 	image,
 }: AccountPanelProps & AccountPictureProps) => {
 	const { t } = useTranslation("settings")
+	const phase = useSkeletonTiming(isPending)
+
+	if (phase === "delay" || phase === "skeleton") {
+		return (
+			<div aria-busy="true" className={PANEL_CLASS}>
+				{phase === "skeleton" ? <AccountCardSkeleton /> : null}
+			</div>
+		)
+	}
 
 	if (account.status === "signedIn") {
 		return (

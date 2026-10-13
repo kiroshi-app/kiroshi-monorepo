@@ -213,7 +213,7 @@ const SpaceSettingsDialog = ({
 
 			{members === undefined ? null : (
 				<SettingsScrollingPanel value={MEMBERS_TAB}>
-					<div className="flex flex-col gap-6">
+					<div className="flex flex-1 flex-col gap-6">
 						{hosting === undefined ? null : (
 							<ShareCard
 								hosting={hosting}

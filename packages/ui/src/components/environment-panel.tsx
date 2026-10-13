@@ -6,6 +6,10 @@ import { useTranslation } from "react-i18next"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
 import { Notice } from "@workspace/ui/components/notice"
 import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
@@ -18,6 +22,7 @@ import {
 	DialogDescription,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 const ENVIRONMENT_SCOPES = ["user", "space", "bot", "server"] as const
@@ -43,6 +48,7 @@ type EnvironmentWrite = {
 
 type EnvironmentSection = {
 	entries: EnvironmentEntry[]
+	isPending?: boolean
 	hasFailedToRead?: boolean
 	onSet: (write: EnvironmentWrite) => void | Promise<void>
 	onDelete: (name: string) => void | Promise<void>
@@ -59,6 +65,9 @@ type EnvironmentWriteDialogProps = {
 }
 
 const NEW_NAME = ""
+
+const SECRET_SKELETON_LIST =
+	"gap-2 [--skeleton-title:--spacing(27)] [--skeleton-sub:--spacing(51)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(31)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(59)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(23)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(54.5)]"
 
 const EnvironmentWriteDialog = ({
 	written,
@@ -237,9 +246,21 @@ const EnvironmentRow = ({
 	)
 }
 
+const SecretRowSkeleton = () => (
+	<div className="flex min-h-14 flex-col justify-center gap-0.5 rounded-xl border border-border py-2 ps-3 pe-2">
+		<div className="flex h-5 items-center">
+			<SkeletonBar className="w-(--skeleton-title)" />
+		</div>
+		<div className="flex h-4 items-center">
+			<SkeletonBar className="w-(--skeleton-sub)" isFaint />
+		</div>
+	</div>
+)
+
 const EnvironmentPanel = ({
 	scope,
 	entries,
+	isPending = false,
 	hasFailedToRead,
 	onSet,
 	onDelete,
@@ -247,6 +268,8 @@ const EnvironmentPanel = ({
 	const { t } = useTranslation("bots")
 	const [written, setWritten] = useState<string | null>(null)
 	const [removed, setRemoved] = useState<string | null>(null)
+	const phase = useSkeletonTiming(isPending)
+	const isAwaiting = phase === "delay" || phase === "skeleton"
 
 	const writeDialog =
 		written === null ? null : (
@@ -277,11 +300,11 @@ const EnvironmentPanel = ({
 		/>
 	) : null
 
-	if (entries.length === 0 && hasFailedToRead) {
+	if (!isAwaiting && entries.length === 0 && hasFailedToRead) {
 		return failureNotice
 	}
 
-	if (entries.length === 0) {
+	if (!isAwaiting && entries.length === 0) {
 		return (
 			<>
 				<div className={SETTINGS_EMPTY_CLASS}>
@@ -325,17 +348,32 @@ const EnvironmentPanel = ({
 				</Button>
 			</div>
 
-			<ul className="flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto p-0">
-				{entries.map((entry) => (
-					<EnvironmentRow
-						entry={entry}
-						key={entry.name}
-						onRemove={() => setRemoved(entry.name)}
-						onReplace={() => setWritten(entry.name)}
-						scope={scope}
-					/>
-				))}
-			</ul>
+			{isAwaiting ? (
+				<div
+					aria-busy="true"
+					className="flex min-h-0 flex-1 flex-col"
+					data-slot="secrets-pending"
+				>
+					{phase === "skeleton" ? (
+						<ListSkeleton
+							className={SECRET_SKELETON_LIST}
+							row={<SecretRowSkeleton />}
+						/>
+					) : null}
+				</div>
+			) : (
+				<ul className="flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto p-0">
+					{entries.map((entry) => (
+						<EnvironmentRow
+							entry={entry}
+							key={entry.name}
+							onRemove={() => setRemoved(entry.name)}
+							onReplace={() => setWritten(entry.name)}
+							scope={scope}
+						/>
+					))}
+				</ul>
+			)}
 
 			{writeDialog}
 			{removeDialog}

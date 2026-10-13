@@ -23,6 +23,10 @@ import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { ContentCard } from "@workspace/ui/components/content-card"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
 import type { MissionCardModel } from "@workspace/ui/components/mission"
 import {
 	MissionCard,
@@ -62,6 +66,7 @@ import {
 	SidebarHeader,
 } from "@workspace/ui/components/ui/sidebar"
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 const ROUTINES_PANEL_WIDTH = 320
 
@@ -71,6 +76,9 @@ const PANEL_SHELL =
 const PANEL_SURFACE = "relative min-h-0 border-s border-shell-divider bg-card"
 
 const PANEL_BODY = "gap-4 px-2 pt-1 pb-2"
+
+const ROUTINE_SKELETON_LIST =
+	"gap-2 [--skeleton-title:--spacing(28)] [--skeleton-sub:--spacing(24)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(35)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(32)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const PANEL_HEADER =
 	"h-12 shrink-0 flex-row items-center pt-0 pe-2.5 pb-0 ps-3.5"
@@ -136,6 +144,7 @@ type RoutinesPanelMissions = {
 type RoutinesPanelListProps = {
 	missions: RoutinesPanelMissions
 	routines: RoutineRowModel[]
+	isRoutinesPending?: boolean
 	failure: RoutinesFailure | null
 	onRetry: () => void
 	onEnabledChange: (id: string, isEnabled: boolean) => void
@@ -161,9 +170,25 @@ type RoutinesPanelBodyProps = RoutinesPanelListProps & {
 	onFormUnsavedChange: (isUnsaved: boolean) => void
 }
 
+const RoutineRowSkeleton = () => (
+	<div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 p-2.5">
+		<div className="flex min-w-0 flex-1 flex-col gap-1">
+			<div className="flex h-5 items-center">
+				<SkeletonBar className="w-(--skeleton-title)" />
+			</div>
+			<div className="flex h-4 items-center">
+				<SkeletonBar className="w-(--skeleton-sub)" isFaint />
+			</div>
+		</div>
+		<SkeletonBar className="h-5 w-8 shrink-0" isFaint />
+		<div className="size-7 shrink-0" />
+	</div>
+)
+
 const RoutinesPanelBody = ({
 	missions,
 	routines,
+	isRoutinesPending = false,
 	failure,
 	onRetry,
 	onEnabledChange,
@@ -177,6 +202,9 @@ const RoutinesPanelBody = ({
 }: RoutinesPanelBodyProps) => {
 	const { t } = useTranslation("chat")
 	const [isEarlierTodayOpen, setEarlierTodayOpen] = useState(false)
+	const routinesPhase = useSkeletonTiming(isRoutinesPending)
+	const isAwaitingRoutines =
+		routinesPhase === "delay" || routinesPhase === "skeleton"
 
 	const notice = failure ? (
 		<Notice
@@ -220,7 +248,20 @@ const RoutinesPanelBody = ({
 		return (
 			<>
 				{notice}
-				{routines.length > 0 ? (
+				{isAwaitingRoutines ? (
+					<div
+						aria-busy="true"
+						className="flex min-h-0 flex-1 flex-col"
+						data-slot="routines-pending"
+					>
+						{routinesPhase === "skeleton" ? (
+							<ListSkeleton
+								className={ROUTINE_SKELETON_LIST}
+								row={<RoutineRowSkeleton />}
+							/>
+						) : null}
+					</div>
+				) : routines.length > 0 ? (
 					<ul className="flex flex-col gap-2" data-slot="routines-list">
 						{routines.map((routine) => (
 							<RoutineRow

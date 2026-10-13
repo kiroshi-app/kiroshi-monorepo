@@ -522,6 +522,7 @@ conversation-routines-routinespanel--one-mission
 conversation-routines-routinespanel--opening
 conversation-routines-routinespanel--opening-a-mission
 conversation-routines-routinespanel--opening-the-routines
+conversation-routines-routinespanel--routines-loading
 conversation-routines-routinespanel--routines-read-failed
 conversation-routines-routinespanel--run-now-failed
 conversation-routines-routinespanel--saving
@@ -1281,6 +1282,7 @@ settings-conversation-participantspanel--long-content
 settings-environment--default
 settings-environment--empty
 settings-environment--error
+settings-environment--loading
 settings-environment--long-content
 settings-environment--refused-name
 settings-environment--rejected-delete
@@ -1459,6 +1461,7 @@ settings-space-spacesettingsdialog--members-i-8
 settings-space-spacesettingsdialog--members-i-9
 settings-space-spacesettingsdialog--members-invite-failed
 settings-space-spacesettingsdialog--members-joined-and-pending
+settings-space-spacesettingsdialog--members-loading
 settings-space-spacesettingsdialog--members-long-identity
 settings-space-spacesettingsdialog--members-not-shared
 settings-space-spacesettingsdialog--members-remove-confirm
@@ -1482,6 +1485,7 @@ settings-user-languagefields--following-the-machine
 settings-user-notificationfields--all-off
 settings-user-notificationfields--default
 settings-user-notificationfields--in-french
+settings-user-usersettingsdialog--account-loading
 settings-user-usersettingsdialog--appearance
 settings-user-usersettingsdialog--applications
 settings-user-usersettingsdialog--cant-reach-kiroshi

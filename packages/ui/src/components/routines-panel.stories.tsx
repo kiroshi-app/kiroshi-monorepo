@@ -6,6 +6,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectFont,
 	expectHeadingFont,
+	expectSkeletonClippedAtBottomOf,
 	FRAME_POLL,
 	probedStyleOf,
 	slotIn,
@@ -721,6 +722,38 @@ export const RoutinesReadFailed = meta.story({
 
 		await userEvent.click(canvas.getByRole("button", { name: "Retry" }))
 		await expect(args.onRetry).toHaveBeenCalled()
+	},
+})
+
+export const RoutinesLoading = meta.story({
+	args: { routines: NO_ROUTINES, isRoutinesPending: true },
+	decorators: [
+		(Story) => (
+			<div className="h-[36rem]">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The routines still on their way. Check that routine row skeletons run from under the header to the bottom of the panel, the last one cut by the edge, each at the height of a loaded routine row so nothing moves when the rows land, that the empty state stays away and that the region reads busy. " +
+					MOUNTED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await openRoutines(canvasElement, userEvent)
+		const pending = slotIn(canvasElement, "routines-pending")
+		await expect(pending).toHaveAttribute("aria-busy", "true")
+
+		const body = pending.parentElement as HTMLElement
+		const list = await expectSkeletonClippedAtBottomOf(body)
+		const [firstRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(62)
+		await expect(slotsIn(canvasElement, "routines-empty")).toHaveLength(0)
+		await expect(canvas.queryByText("Couldn’t load routines")).toBeNull()
 	},
 })
 

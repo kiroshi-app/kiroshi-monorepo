@@ -5,6 +5,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectSkeletonClippedAtBottomOf,
 	FRAME_POLL,
 	glyphIn,
 	probedStyleOf,
@@ -795,6 +796,38 @@ export const MembersI1 = meta.story({
 		await expect(memberRowsIn(panel)).toEqual([
 			["S", "Steve", "steve@example.com", "Host"],
 		])
+	},
+})
+
+export const MembersLoading = meta.story({
+	args: membersArgs({ members: [], isPending: true }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The member list still on its way. Check that the invite form stays rendered, that member row skeletons sit inside one bordered frame filling the panel below it to the bottom, the last one cut by the edge, each at the height of a loaded member row with its divider, and that the panel reads busy.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expect(inviteFieldIn(panel)).toBeVisible()
+		await expect(slotIn(panel, "members-panel")).toHaveAttribute(
+			"aria-busy",
+			"true",
+		)
+
+		const frame = await waitFor(() => slotIn(panel, "members-skeleton-frame"))
+		const list = await expectSkeletonClippedAtBottomOf(frame)
+		const panelBottom =
+			panel.getBoundingClientRect().bottom -
+			Number.parseFloat(getComputedStyle(panel).paddingBottom)
+		await expect(
+			Math.abs(frame.getBoundingClientRect().bottom - panelBottom),
+		).toBeLessThan(1)
+		const [firstRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(53)
+		await expect(slotsIn(panel, "space-member")).toHaveLength(0)
 	},
 })
 

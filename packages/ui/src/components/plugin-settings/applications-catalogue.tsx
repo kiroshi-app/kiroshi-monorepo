@@ -5,6 +5,10 @@ import { type ReactNode, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type Icon, Icons } from "@workspace/ui/components/icons"
+import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
 import { ApplicationsSearchField } from "@workspace/ui/components/plugin-settings/applications-search-field"
 import { SettingsPushedPage } from "@workspace/ui/components/settings-pushed-page"
@@ -15,6 +19,7 @@ import {
 import { Button } from "@workspace/ui/components/ui/button"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { useOverlayScrollbars } from "@workspace/ui/hooks/use-overlay-scrollbars"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ApplicationSetup = "signIn" | "apiKey" | "none" | "unavailable"
@@ -156,55 +161,22 @@ const CatalogueCards = ({ applications, onPick }: CatalogueCardsProps) => (
 	</ul>
 )
 
-type SkeletonBarProps = {
-	className: string
-	isFaint?: boolean
-}
+const APPLICATION_SKELETON_LIST =
+	"gap-2 [--skeleton-title:--spacing(16.5)] [--skeleton-sub:--spacing(19.5)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(12)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(27.5)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(18.5)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(21.5)]"
 
-const SkeletonBar = ({ className, isFaint = false }: SkeletonBarProps) => (
-	<Skeleton
-		className={cn(
-			"rounded-sm motion-reduce:animate-none",
-			isFaint ? "bg-border/60" : "bg-border",
-			className,
-		)}
-	/>
-)
-
-const CARD_SKELETONS = [
-	{ rank: "one", name: "w-16.5", description: "w-28", setup: "w-19.5" },
-	{ rank: "two", name: "w-12", description: "w-34.5", setup: "w-16.5" },
-	{ rank: "three", name: "w-18.5", description: "w-23", setup: "w-22.5" },
-	{ rank: "four", name: "w-13.5", description: "w-31.5", setup: "w-18" },
-	{ rank: "five", name: "w-15.5", description: "w-21", setup: "w-15" },
-	{ rank: "six", name: "w-11", description: "w-32.5", setup: "w-21.5" },
-]
-
-const CatalogueCardSkeletons = () => (
-	<ul aria-hidden="true" className={CARD_GRID_CLASS}>
-		{CARD_SKELETONS.map((card) => (
-			<li
-				className="flex min-w-0"
-				data-slot="catalogue-card-skeleton"
-				key={card.rank}
-			>
-				<div className={CARD_SHELL_CLASS}>
-					<div className="flex h-7 items-center gap-2">
-						<Skeleton className="size-7 shrink-0 rounded-md bg-border motion-reduce:animate-none" />
-						<SkeletonBar className={cn("h-3", card.name)} />
-					</div>
-					<div className="flex h-8 flex-col justify-center gap-1.5">
-						<SkeletonBar className="h-2.25 w-full" isFaint />
-						<SkeletonBar className={cn("h-2.25", card.description)} isFaint />
-					</div>
-					<div className="flex h-4 items-center gap-1.25">
-						<SkeletonBar className="size-3.25 shrink-0" isFaint />
-						<SkeletonBar className={cn("h-2.25", card.setup)} isFaint />
-					</div>
-				</div>
-			</li>
-		))}
-	</ul>
+const ApplicationRowSkeleton = () => (
+	<div className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
+		<Skeleton className="size-9 shrink-0 animate-none rounded-md bg-border" />
+		<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+			<div className="flex h-5 items-center">
+				<SkeletonBar className="w-(--skeleton-title)" />
+			</div>
+			<div className="flex h-4 items-center gap-1.5">
+				<SkeletonBar className="size-2 shrink-0" isFaint />
+				<SkeletonBar className="w-(--skeleton-sub)" isFaint />
+			</div>
+		</div>
+	</div>
 )
 
 type CatalogueLineProps = {
@@ -323,6 +295,8 @@ const ApplicationsCatalogue = ({
 	const panel = useRef<HTMLDivElement>(null)
 	useOverlayScrollbars(panel)
 	const typed = query.trim()
+	const phase = useSkeletonTiming(isLoading)
+	const isAwaiting = phase === "delay" || phase === "skeleton"
 
 	const retry = (
 		<Button onClick={onRetry} size="xs" variant="outline">
@@ -348,8 +322,13 @@ const ApplicationsCatalogue = ({
 	}
 
 	const body = () => {
-		if (isLoading) {
-			return <CatalogueCardSkeletons />
+		if (isAwaiting) {
+			return phase === "skeleton" ? (
+				<ListSkeleton
+					className={APPLICATION_SKELETON_LIST}
+					row={<ApplicationRowSkeleton />}
+				/>
+			) : null
 		}
 
 		if (hasFailed) {
@@ -390,7 +369,7 @@ const ApplicationsCatalogue = ({
 			onCategoryChange={onCategoryChange}
 		>
 			<Tabs.Panel
-				aria-busy={isLoading}
+				aria-busy={isAwaiting}
 				className={cn(SETTINGS_PANEL_CLASS, "gap-3.5 overflow-y-auto")}
 				ref={panel}
 				value={category}
@@ -401,7 +380,12 @@ const ApplicationsCatalogue = ({
 						value={query}
 					/>
 				</div>
-				<section className="flex shrink-0 flex-col gap-2">
+				<section
+					className={cn(
+						"flex flex-col gap-2",
+						isAwaiting ? "min-h-0 flex-1" : "shrink-0",
+					)}
+				>
 					{HEADLESS_CATEGORIES.includes(category) ? null : (
 						<CatalogueSectionHead category={category} />
 					)}

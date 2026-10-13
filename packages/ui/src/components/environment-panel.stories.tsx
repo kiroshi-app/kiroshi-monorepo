@@ -4,6 +4,9 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	expectHeadingFont,
+	expectSkeletonClippedAtBottomOf,
+	slotIn,
+	slotsIn,
 } from "@workspace/storybook/story-utils"
 import {
 	BOT_ENVIRONMENT,
@@ -128,6 +131,32 @@ export const Empty = meta.story({
 		const write = await screen.findByRole("dialog")
 		await expectHeadingFont(within(write).getByRole("heading", { level: 2 }))
 		await expect(within(write).getByLabelText("Value")).toHaveValue("")
+	},
+})
+
+export const Loading = meta.story({
+	args: { entries: [], isPending: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The secrets still on their way. Check that the head line and Add secret stay put, that secret row skeletons fill the panel below them to the bottom, the last one cut by the edge, each at the height of a loaded secret row, and that the empty state stays away while the region reads busy.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expect(
+			canvas.getByRole("button", { name: "Add secret" }),
+		).toBeVisible()
+		const pending = slotIn(canvasElement, "secrets-pending")
+		await expect(pending).toHaveAttribute("aria-busy", "true")
+
+		const list = await expectSkeletonClippedAtBottomOf(
+			pending.parentElement as HTMLElement,
+		)
+		const [firstRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(56)
+		await expect(canvas.queryByText("No secrets yet")).toBeNull()
 	},
 })
 

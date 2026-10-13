@@ -2,7 +2,11 @@ import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	expectSkeletonClippedAtBottomOf,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
@@ -661,7 +665,7 @@ export const RestingLoading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Conversations tab at rest while the resting rows are still being read. Check that the body stays bare: the panel states that nothing has ever been opened here, which is a claim the palette cannot make until the read comes back. Pick `RestingKindEmpty` for the same tab once it has. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"The Conversations tab at rest while the resting rows are still being read. Check that the body draws the results skeleton rather than the panel: the panel states that nothing has ever been opened here, which is a claim the palette cannot make until the read comes back. Pick `RestingKindEmpty` for the same tab once it has. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
@@ -749,19 +753,37 @@ export const LoadingFirstQuery = meta.story({
 		docs: {
 			description: {
 				story:
-					"The very first search of the session, still in flight, with nothing to keep on screen. Check that the body stays bare: the empty state claims nothing matches, which is a statement the palette cannot make until the search comes back. Pick `Empty` for the same bare body once it has. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"The very first search of the session, still in flight, with nothing to keep on screen. Check that the query line and the tabs stay put, that the body draws the Recent conversations head over three row skeletons, then the Recent missions head with row skeletons running to the bottom of the palette, the last one cut by the edge, each at the height of a loaded result row, and that the empty state stays away while the body reads busy: it claims nothing matches, which is a statement the palette cannot make until the search comes back. Pick `Empty` for the same body once it has. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
 	play: async () => {
-		const reader = within(await palette())
+		const popup = await palette()
+		const reader = within(popup)
+		const body = bodyOf(popup)
+
+		const list = await expectSkeletonClippedAtBottomOf(body)
+		const skeleton = slotIn(body, "search-palette-skeleton")
+		await expect(skeleton).toHaveAttribute("aria-hidden", "true")
+		await expect(
+			within(skeleton)
+				.getAllByText(/^Recent/)
+				.map((head) => head.textContent),
+		).toEqual(["Recent conversations", "Recent missions"])
+		await expect(
+			skeleton.firstElementChild?.lastElementChild?.children,
+		).toHaveLength(3)
+		const [firstRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(52)
 
 		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
 		await expect(reader.queryByText("Nothing here matches")).toBeNull()
+		await expect(body).toHaveAttribute("aria-busy", "true")
 		await expect(reader.getByRole("combobox")).toHaveAttribute(
 			"aria-expanded",
 			"true",
 		)
+		await expect(reader.getAllByRole("tab")).toHaveLength(5)
 	},
 })
 

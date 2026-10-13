@@ -4,6 +4,7 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	opaque,
+	probedStyleOf,
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
@@ -557,6 +558,38 @@ export const History = meta.story({
 
 		await expect(within(panel).getAllByText("You").length).toBeGreaterThan(0)
 		await expect(within(panel).getAllByRole("listitem")).toHaveLength(6)
+	},
+})
+
+export const AccountLoading = meta.story({
+	args: {
+		tab: "account",
+		account: { ...accountIn({ status: "signedOut" }), isPending: true },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The account not known yet. Check that the panel draws one account card skeleton, a round picture and two bars at the height of the signed-in card, with nothing below it, that neither the signed-in nor the signed-out content shows, and that the panel reads busy.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await accountPanelIn(await dialogIn())
+		const card = await waitFor(() => slotIn(panel, "account-card-skeleton"))
+		const wrapper = card.parentElement as HTMLElement
+
+		await expect(wrapper).toHaveAttribute("aria-busy", "true")
+		await expect(wrapper.children).toHaveLength(1)
+		await expect(card).toHaveAttribute("aria-hidden", "true")
+		await expect(card.getBoundingClientRect().height).toBe(70)
+		await expect(getComputedStyle(card).animationName).toBe("none")
+		await expect(
+			getComputedStyle(slotIn(card, "skeleton")).backgroundColor,
+		).toBe(probedStyleOf("bg-border", "backgroundColor", card))
+		await expect(within(panel).queryAllByRole("button")).toHaveLength(0)
+		await expect(panel).not.toHaveTextContent(ACCOUNT.signedOut.title)
+		await expect(panel).not.toHaveTextContent(ACCOUNT.signedIn.caption)
 	},
 })
 
