@@ -8,19 +8,31 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type ListSkeletonAnchor = "top" | "bottom"
 
+type ListSkeletonRowAt = (index: number) => ReactNode
+
 type ListSkeletonProps = {
-	row: ReactNode
+	row: ReactNode | ListSkeletonRowAt
 	anchor?: ListSkeletonAnchor
 	className?: string
 }
 
-const rowsToFill = (container: HTMLElement) => {
-	const firstRow = container.firstElementChild
-	if (!(firstRow instanceof HTMLElement)) return 1
-	const gap = Number.parseFloat(getComputedStyle(container).rowGap)
-	const pitch = firstRow.offsetHeight + gap
-	if (pitch <= 0) return 1
-	return Math.max(1, Math.ceil((container.clientHeight + gap) / pitch))
+const rowsToFill = (container: HTMLElement, anchor: ListSkeletonAnchor) => {
+	const style = getComputedStyle(container)
+	const gap = Number.parseFloat(style.rowGap) || 0
+	const inset =
+		Number.parseFloat(
+			anchor === "bottom" ? style.paddingBottom : style.paddingTop,
+		) || 0
+	const room = container.clientHeight - inset
+	const rows = Array.from(container.children)
+	let reach = -gap
+	for (const [index, row] of rows.entries()) {
+		reach += row.getBoundingClientRect().height + gap
+		if (reach >= room) return index + 1
+	}
+	const pitch = (reach + gap) / rows.length
+	if (pitch <= 0) return rows.length
+	return rows.length + Math.ceil((room - reach) / pitch)
 }
 
 const ListSkeleton = ({
@@ -34,13 +46,18 @@ const ListSkeleton = ({
 
 	useLayoutEffect(() => {
 		const container = containerRef.current
+		if (container) setRowCount(rowsToFill(container, anchor))
+	})
+
+	useLayoutEffect(() => {
+		const container = containerRef.current
 		if (!container) return
 		const observer = new ResizeObserver(() =>
-			setRowCount(rowsToFill(container)),
+			setRowCount(rowsToFill(container, anchor)),
 		)
 		observer.observe(container)
 		return () => observer.disconnect()
-	}, [])
+	}, [anchor])
 
 	return (
 		<div
@@ -53,9 +70,9 @@ const ListSkeleton = ({
 			data-slot="list-skeleton"
 			ref={containerRef}
 		>
-			{rowKeys.map((rowKey) => (
+			{rowKeys.map((rowKey, index) => (
 				<div className="shrink-0" data-slot="list-skeleton-row" key={rowKey}>
-					{row}
+					{typeof row === "function" ? row(index) : row}
 				</div>
 			))}
 		</div>
@@ -77,23 +94,63 @@ const SkeletonBar = ({ className, isFaint = false }: SkeletonBarProps) => (
 	/>
 )
 
-const GenericSkeletonRow = () => (
+type SkeletonHexagonProps = {
+	className: string
+}
+
+const SkeletonHexagon = ({ className }: SkeletonHexagonProps) => (
+	<Skeleton
+		className={cn("shrink-0 animate-none rounded-none bg-border", className)}
+		style={COMPANION_SILHOUETTE}
+	/>
+)
+
+type SkeletonRowProps = {
+	hexagonClassName: string
+	titleClassName: string
+	stampClassName: string
+	previewClassName: string
+}
+
+const SkeletonRow = ({
+	hexagonClassName,
+	titleClassName,
+	stampClassName,
+	previewClassName,
+}: SkeletonRowProps) => (
 	<div className="flex items-center gap-2.5 py-1.5 ps-1.5 pe-3">
-		<Skeleton
-			className="size-10 shrink-0 animate-none rounded-none bg-border"
-			style={COMPANION_SILHOUETTE}
-		/>
+		<SkeletonHexagon className={hexagonClassName} />
 		<div className="flex min-w-0 flex-1 flex-col">
 			<div className="flex h-5 items-center justify-between">
-				<SkeletonBar className="w-16.5" />
-				<SkeletonBar className="w-7.5" isFaint />
+				<SkeletonBar className={titleClassName} />
+				<SkeletonBar className={stampClassName} isFaint />
 			</div>
 			<div className="flex h-4 items-center">
-				<SkeletonBar className="w-43" isFaint />
+				<SkeletonBar className={previewClassName} isFaint />
 			</div>
 		</div>
 	</div>
 )
 
-export type { ListSkeletonAnchor, ListSkeletonProps }
-export { GenericSkeletonRow, ListSkeleton }
+const GenericSkeletonRow = () => (
+	<SkeletonRow
+		hexagonClassName="size-10"
+		previewClassName="w-43"
+		stampClassName="w-7.5"
+		titleClassName="w-16.5"
+	/>
+)
+
+export type {
+	ListSkeletonAnchor,
+	ListSkeletonProps,
+	ListSkeletonRowAt,
+	SkeletonRowProps,
+}
+export {
+	GenericSkeletonRow,
+	ListSkeleton,
+	SkeletonBar,
+	SkeletonHexagon,
+	SkeletonRow,
+}

@@ -19,6 +19,7 @@ interface ThreadLayoutProps {
 	notice?: ReactNode
 	pending?: ReactNode
 	composer?: ReactNode
+	skeleton?: ReactNode
 	reply?: ReplyQuote
 	highlightedMessageId?: string
 	transcriptKey?: string
@@ -44,6 +45,7 @@ function ThreadLayout({
 	notice,
 	pending,
 	composer,
+	skeleton,
 	reply,
 	highlightedMessageId,
 	transcriptKey,
@@ -74,30 +76,36 @@ function ThreadLayout({
 		>
 			{header}
 
-			<MarkProvider transcriptKey={transcriptKey}>
-				<Transcript
-					className="flex-1"
-					transcriptKey={transcriptKey}
-					autoScroll={autoScroll}
-					busy={busy}
-					label={label}
-					anchorOnSend={anchorOnSend}
-					marksNewMessages={marksNewMessages}
-					countsNewMessages={countsNewMessages}
-					older={older}
-					newer={newer}
-					rows={rows}
-					onFollowChange={onFollowChange}
-					highlightedMessageId={highlightedMessageId}
-					scrollerRef={scrollerRef}
-					contentClassName={cn(
-						"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
-						contentClassName,
-					)}
-				>
-					{children}
-				</Transcript>
-			</MarkProvider>
+			{skeleton ? (
+				<div className="min-h-0 flex-1" data-slot="thread-skeleton">
+					{skeleton}
+				</div>
+			) : (
+				<MarkProvider transcriptKey={transcriptKey}>
+					<Transcript
+						className="flex-1"
+						transcriptKey={transcriptKey}
+						autoScroll={autoScroll}
+						busy={busy}
+						label={label}
+						anchorOnSend={anchorOnSend}
+						marksNewMessages={marksNewMessages}
+						countsNewMessages={countsNewMessages}
+						older={older}
+						newer={newer}
+						rows={rows}
+						onFollowChange={onFollowChange}
+						highlightedMessageId={highlightedMessageId}
+						scrollerRef={scrollerRef}
+						contentClassName={cn(
+							"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
+							contentClassName,
+						)}
+					>
+						{children}
+					</Transcript>
+				</MarkProvider>
+			)}
 
 			{notice || pending || composer ? (
 				<div className="flex w-full shrink-0 flex-col gap-3 px-(--shell-inset) pb-(--shell-inset)">
