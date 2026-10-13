@@ -71,6 +71,39 @@ struct MissionStoresTests {
         await connection.stop()
     }
 
+    @Test func aConversationShowsOnlyTheMissionsOpenedInIt() async {
+        let connection = makeConnection()
+        let store = MissionsStore()
+        let opened = { (conversationId: String, id: String, state: String) in
+            #"{"conversationId":"\#(conversationId)","conversationTitle":"","mission":\#(MissionTesting.missionJSON(id: id, state: state))}"#
+        }
+        let socket = ScriptedRelaySocket(
+            sharedSpaceId: "s-1",
+            answers: [
+                "conversation_bots": companions,
+                "mission_space_feed": "["
+                    + [
+                        opened("release", "asks", "waiting_human"),
+                        opened("roadmap", "works", "working"),
+                        opened("release", "merges", "ready_to_merge"),
+                    ].joined(separator: ",") + "]",
+            ])
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        await waitUntil { store.hasLoaded }
+
+        let release = store.sections(in: "release")
+        #expect(release.map(\.group) == [.needsYou, .review])
+        #expect(release.flatMap(\.missions).map(\.id) == ["asks", "merges"])
+        #expect(store.sections(in: "roadmap").flatMap(\.missions).map(\.id) == ["works"])
+        #expect(store.sections(in: "elsewhere").isEmpty)
+        #expect(store.sections(in: nil) == store.sections)
+        #expect(store.sections.map(\.group) == [.needsYou, .working, .review])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func theListStaysWhenTheHostGoesOffline() async {
         let connection = makeConnection()
         let store = MissionsStore()

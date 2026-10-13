@@ -5,9 +5,14 @@ import Observation
 @Observable
 final class MissionsStore {
     private(set) var entries: [MissionInSpace] = [] {
-        didSet { sections = MissionSection.sections(of: entries) }
+        didSet {
+            sections = MissionSection.sections(of: entries)
+            sectionsByConversation = Dictionary(grouping: entries, by: \.conversationId)
+                .mapValues(MissionSection.sections(of:))
+        }
     }
     private(set) var sections: [MissionSection] = []
+    private var sectionsByConversation: [String: [MissionSection]] = [:]
     private(set) var companions: [String: MissionCompanion] = [:]
     private(set) var hasLoaded = false
     private(set) var hasFailed = false
@@ -19,6 +24,11 @@ final class MissionsStore {
 
     init(now: @escaping () -> Date = Date.init) {
         self.now = now
+    }
+
+    func sections(in conversationId: String?) -> [MissionSection] {
+        guard let conversationId else { return sections }
+        return sectionsByConversation[conversationId] ?? []
     }
 
     func companion(of mission: Mission) -> MissionCompanion? {
