@@ -46,8 +46,8 @@
                 push(
                     .frame(
                         #"{"id":\#(call.id),"status":200,"body":{"spaceId":"\#(sharedSpaceId)"}}"#))
-            } else if let body = answers[call.command] {
-                if let delay = answersAfter[call.command] {
+            } else if let body = answers[call.answerKey] {
+                if let delay = answersAfter[call.answerKey] {
                     try await Task.sleep(for: delay)
                 }
                 push(.frame(#"{"id":\#(call.id),"status":200,"body":\#(body)}"#))
@@ -80,8 +80,17 @@
         }
 
         private struct Call: Decodable {
+            struct Args: Decodable {
+                let cursor: String?
+            }
+
             let id: Int
             let command: String
+            let args: Args?
+
+            var answerKey: String {
+                args?.cursor.map { "\(command) \($0)" } ?? command
+            }
         }
     }
 #endif

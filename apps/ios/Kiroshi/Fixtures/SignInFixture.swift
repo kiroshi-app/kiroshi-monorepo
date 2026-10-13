@@ -244,6 +244,7 @@
                 return RelayEnvironment(
                     transport: FixtureRelayTransport(
                         onlineSpaceIds: online, answers: MissionsFixture.answers,
+                        answersAfter: MissionsFixture.laterPagesAnswerAfter,
                         plays: MissionsFixture.answeringTurn),
                     clock: ContinuousRelayClock())
             case .missionWorking:

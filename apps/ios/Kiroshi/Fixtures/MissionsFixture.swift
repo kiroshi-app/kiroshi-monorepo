@@ -10,15 +10,33 @@
             status: "Asked you which screen goes first.", movedAt: at(hour: 8, minute: 32))
 
         static var answers: [String: String] {
-            [
+            pages(of: feed).merging([
                 "conversation_bots": companions,
-                "mission_space_feed": feed,
                 "conversation_message_page": thread,
                 "conversation_send_turn": "1",
                 "agent_pending_questions": "[]",
                 "chat_store_attachments":
                     #"["/Users/sam/Library/Application Support/app.kiroshi/attachments/thread-212/6f1c2e9a-3b4d-4e5f-8a6b-7c8d9e0f1a2b.png"]"#,
-            ]
+            ]) { page, _ in page }
+        }
+
+        static var laterPagesAnswerAfter: [String: Duration] {
+            isPaged ? ["mission_space_page 30": ConversationsFixture.laterPageDelay] : [:]
+        }
+
+        static func pages(of missions: [String]) -> [String: String] {
+            let size = MissionsRelay.listPageSize
+            return Dictionary(
+                uniqueKeysWithValues: stride(from: 0, to: max(missions.count, 1), by: size).map {
+                    offset in
+                    let page = missions.dropFirst(offset).prefix(size)
+                    let next = offset + size < missions.count ? #""\#(offset + size)""# : "null"
+                    let key = offset == 0 ? "mission_space_page" : "mission_space_page \(offset)"
+                    return (
+                        key,
+                        #"{"missions":[\#(page.joined(separator: ","))],"nextCursor":\#(next)}"#
+                    )
+                })
         }
 
         static var answeringTurn: [String: [ScriptedRelaySocket.Inbound]] {
@@ -54,7 +72,7 @@
         }
 
         static var emptyAnswers: [String: String] {
-            ["conversation_bots": companions, "mission_space_feed": "[]"]
+            pages(of: []).merging(["conversation_bots": companions]) { page, _ in page }
         }
 
         static func at(hour: Int, minute: Int) -> Int {
@@ -67,7 +85,7 @@
             [{"id":"bot-atlas","name":"Atlas","title":"Planner","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","title":"Builder","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","title":"Writer","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","title":"Designer","avatarBlot":"purple"}]
             """#
 
-        private static var feed: String {
+        private static var feed: [String] {
             let missions = [
                 json(
                     id: "mission-212", ticket: "OPE-212", objective: "Split the onboarding flow",
@@ -88,11 +106,23 @@
                     botId: "bot-mira", state: "ready_to_merge", isAgentRunning: false, status: nil,
                     movedAt: at(hour: 7, minute: 45)),
             ]
-            return "["
-                + missions.map {
-                    #"{"conversationId":"conversation-roadmap","conversationTitle":"Roadmap","mission":\#($0)}"#
-                }
-                .joined(separator: ",") + "]"
+            return (missions + (isPaged ? reviews : [])).map {
+                #"{"conversationId":"conversation-roadmap","conversationTitle":"Roadmap","mission":\#($0)}"#
+            }
+        }
+
+        private static var isPaged: Bool {
+            UserDefaults.standard.bool(forKey: "paged")
+        }
+
+        private static var reviews: [String] {
+            (1...40).map { index in
+                json(
+                    id: "mission-\(300 + index)", ticket: "OPE-\(300 + index)",
+                    objective: "Review batch \(index)", botId: "bot-mira",
+                    state: "ready_to_merge", isAgentRunning: false, status: nil,
+                    movedAt: at(hour: 7, minute: 0) - index * 3_600_000)
+            }
         }
 
         private static var hasHistory: Bool {
