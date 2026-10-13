@@ -8,6 +8,7 @@ import { newBotIdentity } from "@/lib/bots/bot-settings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { FailureFacts } from "@/lib/failure-report"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 type Fields = Record<string, unknown>
 
@@ -249,7 +250,7 @@ const firstOpeningOfGarage = async () => {
 	})
 	Object.assign(window, { __TAURI_INTERNALS__: {} })
 	const { App } = await import("@/App")
-	render(createElement(App))
+	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	const garage = await screen.findByRole("button", { name: /Garage/ })
 	await act(async () => {
 		garage.click()
@@ -352,7 +353,9 @@ const launchOnGarage = async (listedRemoteSpaceId: "unknown" | "known") => {
 	window.localStorage.setItem("firstRunDone", "on")
 	Object.assign(window, { __TAURI_INTERNALS__: {} })
 	const { App } = await import("@/App")
-	render(createElement(StrictMode, null, createElement(App)))
+	render(createElement(StrictMode, null, createElement(App)), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await vi.waitFor(
 		() =>
 			expect(relayed.map(({ command }) => command)).toContain(

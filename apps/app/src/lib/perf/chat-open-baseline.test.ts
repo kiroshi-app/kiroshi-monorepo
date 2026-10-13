@@ -19,6 +19,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
@@ -259,6 +260,7 @@ const mountApp = async ({
 			{ id: "app", onRender: commits.onRender },
 			createElement(App),
 		),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await settle(MOUNT_MS)
 	prepareHighlighter()

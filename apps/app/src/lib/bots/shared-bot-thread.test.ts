@@ -16,6 +16,7 @@ import {
 	type FakeNotificationPort,
 } from "@/lib/notifications/fake-notification-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const harness = vi.hoisted(
 	(): {
@@ -96,7 +97,7 @@ const mount = async (store: TranscriptStore) => {
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
 	harness.notifications = createFakeNotificationPort()
-	render(createElement(App))
+	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle(MOUNT_MS)
 	return harness.notifications
 }
