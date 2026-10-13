@@ -56,7 +56,7 @@ fn stacked_bundles<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_id: &str)
 	[
 		bundles::system::laid_down(app),
 		bundles::space::laid_down(app, space_id),
-		bundles::root(app).map(|root| bundles::dir(&root, bot_id)),
+		bundles::root(app).and_then(|root| bundles::dir(&root, bot_id).ok()),
 	]
 	.into_iter()
 	.flatten()

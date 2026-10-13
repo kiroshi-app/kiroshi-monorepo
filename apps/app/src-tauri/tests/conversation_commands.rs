@@ -71,6 +71,15 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 	.map_err(|error| serde_json::to_value(error).unwrap_or(Value::Null))
 }
 
+fn a_bundled_default_bot(app: &App<MockRuntime>) {
+	let state = app.state::<db::DatabaseState>();
+	let database = state.inner().as_ref().expect("the database is open");
+	let bot = tauri::async_runtime::block_on(database.conversations().ensure_default_bot())
+		.expect("the default bot is seeded");
+	let root = bundles::root(app.handle()).expect("the bundles have a root");
+	bundles::lay_down(&root, &bot).expect("the bundle is laid down");
+}
+
 fn a_bot_and_its_chat(window: &WebviewWindow<MockRuntime>) -> (Value, String) {
 	let chat = call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
@@ -1016,7 +1025,7 @@ fn the_rules_a_bot_is_given_are_written_to_its_settings_file_and_read_back_from_
 	assert_eq!(created["permissions"], ruled["permissions"]);
 
 	let root = bundles::root(app.handle()).expect("the bundle root");
-	let path = bundles::dir(&root, &id).join("settings.json");
+	let path = bundles::dir(&root, &id).expect("the bundle is held").join("settings.json");
 	std::fs::write(
 		&path,
 		json!({ "hooks": "kept", "permissions": { "deny": ["Bash(rm:*)"], "unknown": 1 } })
@@ -1066,8 +1075,10 @@ fn the_rules_the_panel_reads_are_the_stored_ones_and_never_the_file_it_writes() 
 	let id = created["id"].as_str().expect("the bot holds an id").to_owned();
 
 	let root = bundles::root(app.handle()).expect("the bundle root");
-	std::fs::remove_file(bundles::dir(&root, &id).join("settings.json"))
-		.expect("the file the panel writes goes away");
+	std::fs::remove_file(
+		bundles::dir(&root, &id).expect("the bundle is held").join("settings.json"),
+	)
+	.expect("the file the panel writes goes away");
 
 	let listed = call(&window, "conversation_bots", json!({})).expect("the bots");
 
@@ -1661,6 +1672,7 @@ fn a_bots_skills_are_written_listed_marked_and_taken_away() {
 	let app = home.app();
 	let window = window(&app);
 	a_bot_and_its_chat(&window);
+	a_bundled_default_bot(&app);
 
 	let created = call(
 		&window,
@@ -1766,7 +1778,7 @@ fn readers_skills(window: &WebviewWindow<MockRuntime>, bot_id: &str) -> Value {
 
 fn bundle_of(app: &App<MockRuntime>, bot_id: &str) -> PathBuf {
 	let root = bundles::root(app.handle()).expect("the bundle root");
-	bundles::dir(&root, bot_id)
+	bundles::dir(&root, bot_id).expect("the bundle is held")
 }
 
 fn json_at(path: &Path) -> Value {
@@ -1782,6 +1794,7 @@ fn a_bots_mcp_servers_are_written_listed_replaced_and_taken_away() {
 	let app = home.app();
 	let window = window(&app);
 	a_bot_and_its_chat(&window);
+	a_bundled_default_bot(&app);
 	let bundle = bundle_of(&app, BOT);
 	let servers = bundle.join(".mcp.json");
 	let manifest = bundle.join(".claude-plugin").join("plugin.json");
@@ -3345,6 +3358,7 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 	let app = a_host_with_agents(&home);
 	let window = window(&app);
 	let (_, conversation) = a_bot_and_its_chat(&window);
+	a_bundled_default_bot(&app);
 	let speaking = json!({ "conversationId": conversation, "botId": BOT, "runtimeSessionId": "r1", "epoch": 1 });
 	let silent = json!({ "conversationId": conversation, "botId": "companion-a", "runtimeSessionId": "r2", "epoch": 1 });
 	call(
@@ -3404,6 +3418,7 @@ fn a_question_line_the_host_wrote_answers_its_seq_and_refuses_every_front_write(
 	let window = window(&app);
 	let chat = call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation = chat["id"].as_str().expect("the chat holds an id").to_owned();
+	a_bundled_default_bot(&app);
 	let scope = json!({ "conversationId": conversation, "botId": BOT, "runtimeSessionId": "r1", "epoch": 1 });
 	call(
 		&window,

@@ -22,7 +22,7 @@ enum Plugin {
 impl Plugin {
 	fn is_laid_down(&self) -> bool {
 		match self {
-			Plugin::Bot { root, id } => bundles::dir(root, id).is_dir(),
+			Plugin::Bot { root, id } => bundles::dir(root, id).is_ok(),
 			Plugin::Owned { .. } => true,
 		}
 	}
@@ -610,7 +610,10 @@ mod tests {
 		let app = a_host("bot-system-skill");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
 		let root = bundles::root(app.handle()).expect("the bundles have a home");
-		let marked = bundles::dir(&root, &bot_id).join("skills").join("remembering");
+		let marked = bundles::dir(&root, &bot_id)
+			.expect("the bundle is held")
+			.join("skills")
+			.join("remembering");
 		fs::create_dir_all(&marked).expect("the skill directory is made");
 		let held =
 			"---\nname: remembering\nmetadata:\n  kiroshi:\n    system: true\n---\n\nOld rules.\n";

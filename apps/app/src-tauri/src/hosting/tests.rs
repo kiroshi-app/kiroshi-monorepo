@@ -4035,6 +4035,19 @@ impl Authoring {
 		self.app.manage(AuthorizationAnswers::default());
 	}
 
+	async fn bundled_default_bot(&self) {
+		let state = self.app.state::<DatabaseState>();
+		let database = state.as_ref().expect("the database");
+		let bot = database
+			.conversations()
+			.bot(DEFAULT_BOT.to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the default bot is planted");
+		let root = bundles::root(self.app.handle()).expect("the bundles have a root");
+		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
+	}
+
 	fn declared(&self, plugin: Value, name: &str) {
 		direct(
 			&self.window,
@@ -4102,6 +4115,7 @@ fn a_member_reads_no_application_served_by_a_grant_of_the_host_person_nor_one_of
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.reading_applications();
+		host.bundled_default_bot().await;
 		let root = host.env_root();
 		let bot = json!({ "kind": "bot", "id": DEFAULT_BOT });
 		host.declared(bot.clone(), "granola");

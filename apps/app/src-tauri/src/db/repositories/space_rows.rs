@@ -198,6 +198,13 @@ impl SpaceRows {
 		self.texts("bot_spaces", "bot_id")
 	}
 
+	pub fn bot_name(&self, id: &str) -> Option<&str> {
+		self.of("bots")
+			.iter()
+			.find(|row| row.get("id").and_then(Value::as_str) == Some(id))
+			.and_then(|row| row.get("name")?.as_str())
+	}
+
 	pub fn conversation_ids(&self) -> Vec<String> {
 		self.texts("conversations", "id")
 	}

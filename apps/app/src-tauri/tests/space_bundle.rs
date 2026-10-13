@@ -743,7 +743,9 @@ fn an_export_that_fails_midway_leaves_no_file_behind() {
 	let source = Home::new();
 	let seeded = seeded(&source);
 	let scratch = scratch();
-	let unreadable = bundles::dir(&source.bot_root(), &seeded.bot_ids[0]).join("sealed.md");
+	let unreadable = bundles::dir(&source.bot_root(), &seeded.bot_ids[0])
+		.expect("the bundle is held")
+		.join("sealed.md");
 	fs::write(&unreadable, "no one reads this").expect("written");
 	fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("sealed");
 	let archive = scratch.join("broken.kiroshi");

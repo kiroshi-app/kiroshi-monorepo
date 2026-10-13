@@ -748,33 +748,37 @@ async fn runtime_identity<R: Runtime>(
 	state: &db::DatabaseState,
 	scope: &RuntimeScope,
 	sidecar: &Sidecar,
-) -> RuntimeIdentity {
+) -> Result<RuntimeIdentity, TransportError> {
 	let Ok(database) = state.as_ref() else {
-		return RuntimeIdentity::default();
+		return Ok(RuntimeIdentity::default());
 	};
 	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
-		return RuntimeIdentity::default();
+		return Ok(RuntimeIdentity::default());
 	};
 	let Ok(space_id) =
 		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
 	else {
-		return RuntimeIdentity::default();
+		return Ok(RuntimeIdentity::default());
 	};
 	let root = bundles::root(app);
 	let system = bundles::system::laid_down(app);
 	let user = bundles::user::laid_down(app);
 	let space = bundles::space::laid_down(app, &space_id);
 	let permissions = settled_permissions(database, root.as_deref(), &bot).await;
-	let bundle = root.as_deref().and_then(|root| {
-		laid_down_bundle(
-			root,
-			&bot,
-			&permissions,
-			system.as_deref(),
-			user.as_deref(),
-			space.as_deref(),
-		)
-	});
+	let bundle = match root.as_deref() {
+		Some(root) => Some(
+			laid_down_bundle(
+				root,
+				&bot,
+				&permissions,
+				system.as_deref(),
+				user.as_deref(),
+				space.as_deref(),
+			)
+			.map_err(unavailable_bundle)?,
+		),
+		None => None,
+	};
 	if let Some(root) = root.as_deref() {
 		reconcile_bot(database, root, &bot).await;
 	}
@@ -782,13 +786,18 @@ async fn runtime_identity<R: Runtime>(
 		system.clone(),
 		user.clone(),
 		space.clone(),
-		root.as_deref().map(|root| bundles::dir(root, &bot.id)),
+		bundle.as_ref().map(|laid| PathBuf::from(&laid.path)),
 	]
 	.into_iter()
 	.flatten()
 	.collect();
 	let server_env = served_environment(app, sidecar, &bot.id, &space_id, &serving).await;
-	RuntimeIdentity { bundle, server_env, space_id: Some(space_id) }
+	Ok(RuntimeIdentity { bundle, server_env, space_id: Some(space_id) })
+}
+
+fn unavailable_bundle(error: bundles::BundleUnavailable) -> TransportError {
+	eprintln!("the session did not start: {error}");
+	TransportError::SpawnFailed { detail: error.to_string() }
 }
 
 async fn opens_on_a_mission_thread(state: &db::DatabaseState, conversation_id: &str) -> bool {
@@ -823,11 +832,13 @@ fn laid_down_bundle(
 	system: Option<&Path>,
 	user: Option<&Path>,
 	space: Option<&Path>,
-) -> Option<Bundle> {
-	bundles::set_permissions(root, bot, permissions).ok()?;
-	bundles::ensure(root, bot).ok()?;
-	Some(Bundle {
-		path: bundles::dir(root, &bot.id).to_string_lossy().into_owned(),
+) -> Result<Bundle, bundles::BundleUnavailable> {
+	let unavailable = |cause| bundles::BundleUnavailable { bot_id: bot.id.clone(), cause };
+	bundles::set_permissions(root, bot, permissions).map_err(unavailable)?;
+	bundles::ensure(root, bot)?;
+	let held = bundles::dir(root, &bot.id).map_err(unavailable)?;
+	Ok(Bundle {
+		path: held.to_string_lossy().into_owned(),
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
 		user_path: user.map(|path| path.to_string_lossy().into_owned()),
 		space_path: space.map(|path| path.to_string_lossy().into_owned()),
@@ -876,7 +887,6 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	}
 
 	let sidecar = state.sidecar().await?;
-	let identity = runtime_identity(&app, &database, &scope, &sidecar).await;
 	let mission_thread = opens_on_a_mission_thread(&database, &scope.conversation_id).await;
 	let running_in =
 		cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&app, &scope.bot_id));
@@ -895,6 +905,10 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		attachments.clone(),
 		announcing,
 	));
+	let identity = match runtime_identity(&app, &database, &scope, &sidecar).await {
+		Ok(identity) => identity,
+		Err(error) => return Err(refused(sink.as_ref(), error)),
+	};
 	let options = SessionOptions::new(running_in)
 		.bundled(identity.bundle)
 		.serving(identity.server_env)
@@ -929,11 +943,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {
 		Ok(started) => started,
-		Err(error) => {
-			sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable });
-			sink.emit(AgentEvent::Failed { error: error.clone() });
-			return Err(error);
-		}
+		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
 
 	if lineage_is_held_elsewhere {
@@ -956,6 +966,12 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	}
 	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Ready });
 	Ok(handle)
+}
+
+fn refused(sink: &dyn EventSink, error: TransportError) -> TransportError {
+	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable });
+	sink.emit(AgentEvent::Failed { error: error.clone() });
+	error
 }
 
 async fn forget_the_id_a_refusal_blames(
@@ -1374,7 +1390,7 @@ mod tests {
 	}
 
 	fn a_settings_path(root: &Path, bot: &StoredBot) -> PathBuf {
-		bundles::dir(root, &bot.id).join("settings.json")
+		bundles::dir(root, &bot.id).expect("the bundle is held").join("settings.json")
 	}
 
 	fn what_the_bot_wrote(root: &Path, bot: &StoredBot, allow: &str) {
@@ -1393,6 +1409,24 @@ mod tests {
 	fn settings_of(root: &Path, bot: &StoredBot) -> serde_json::Value {
 		let read = std::fs::read(a_settings_path(root, bot)).expect("the settings file is read");
 		serde_json::from_slice(&read).expect("the settings file parses")
+	}
+
+	#[test]
+	fn a_session_start_on_a_bot_with_no_bundle_fails_by_name_and_lays_down_nothing() {
+		let root = a_fresh_bundle_root("unbundled");
+		std::fs::create_dir_all(root.join("plugins")).expect("the plugins directory stands");
+		let bot = a_stored_bot();
+
+		let refused = laid_down_bundle(&root, &bot, &a_rule("Read"), None, None, None)
+			.expect_err("the session start is refused");
+
+		assert_eq!(refused.bot_id, bot.id);
+		assert_eq!(refused.cause.kind(), std::io::ErrorKind::NotFound);
+		assert_eq!(std::fs::read_dir(root.join("plugins")).expect("the plugins list").count(), 0);
+		assert!(matches!(
+			unavailable_bundle(refused),
+			TransportError::SpawnFailed { detail } if detail.contains(&bot.id)
+		));
 	}
 
 	#[test]

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::{
 	denies_changes, dir, object_at, serialised, settings_path, ALLOW_KEY, ASK_KEY, AUTO_MODE,
 	CHANGING_TOOLS, DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY, PERMISSION_MODES,
+	SETTINGS_NAME,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -48,7 +49,7 @@ impl BotPermissions {
 }
 
 pub fn permissions(root: &Path, bot_id: &str) -> Option<BotPermissions> {
-	let declared = declared_permissions(&settings_path(root, bot_id))?;
+	let declared = declared_permissions(&settings_path(root, bot_id).ok()?)?;
 	Some(BotPermissions {
 		default_mode: declared_mode(&declared),
 		allow: listed(&declared, ALLOW_KEY),
@@ -62,8 +63,9 @@ pub fn set_permissions(
 	bot: &Bot,
 	permissions: &BotPermissions,
 ) -> std::io::Result<()> {
-	let _serialised = serialised(&dir(root, &bot.id));
-	let path = settings_path(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
+	let _serialised = serialised(&bundle);
+	let path = bundle.join(SETTINGS_NAME);
 	let mut kept = object_at(&path);
 	let mut declared = match kept.remove(PERMISSIONS_KEY) {
 		Some(serde_json::Value::Object(held)) => held,
@@ -154,7 +156,7 @@ mod tests {
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
 		private_files::replace(
-			&settings_path(&root, &bot.id),
+			&settings_path(&root, &bot.id).expect("the bundle is held"),
 			serde_json::json!({
 				"permissions": {
 					"defaultMode": "bypassPermissions",
@@ -183,7 +185,7 @@ mod tests {
 		let root = a_root("forgotten");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		let path = settings_path(&root, &bot.id);
+		let path = settings_path(&root, &bot.id).expect("the bundle is held");
 		private_files::replace(
 			&path,
 			serde_json::json!({
@@ -219,7 +221,7 @@ mod tests {
 		let root = a_root("ruled");
 		let bot = a_bot("Bean", "Answer briefly.");
 		write(&root, &bot).expect("the bundle is written");
-		let path = settings_path(&root, &bot.id);
+		let path = settings_path(&root, &bot.id).expect("the bundle is held");
 		private_files::replace(
 			&path,
 			serde_json::json!({
@@ -269,7 +271,8 @@ mod tests {
 		.expect("the rules are written");
 
 		assert_eq!(
-			object_at(&settings_path(&root, &bot.id))["permissions"]["defaultMode"],
+			object_at(&settings_path(&root, &bot.id).expect("the bundle is held"))["permissions"]
+				["defaultMode"],
 			serde_json::json!(AUTO_MODE)
 		);
 

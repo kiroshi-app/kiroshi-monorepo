@@ -15,6 +15,7 @@ use kiroshi_app::account::session::{restore, AccountSession};
 use kiroshi_app::agent::commands::terminate_session;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
+use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageRole, StoredMessage};
@@ -186,6 +187,7 @@ impl Host {
 			.call_mut(|connection| Ok(connection.execute_batch(A_ROOM)?))
 			.await
 			.expect("the room is planted");
+		bundled(&app, &[ADA, GRACE]).await;
 		hosting_start(app.handle().clone(), PERSONAL.to_owned()).await.expect("the hosting starts");
 		let member = timeout(PATIENCE, sockets.recv())
 			.await
@@ -327,6 +329,19 @@ fn turns_closed_in(frames: &[Value], bot_id: &str) -> usize {
 		}
 	}
 	closed
+}
+
+async fn bundled(app: &App<MockRuntime>, bot_ids: &[&str]) {
+	let root = bundles::root(app.handle()).expect("the bundles have a root");
+	for bot_id in bot_ids {
+		let bot = database_of(app)
+			.conversations()
+			.bot((*bot_id).to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is planted");
+		bundles::lay_down(&root, &bot).expect("the bundle is laid down");
+	}
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
