@@ -30,7 +30,7 @@ import type {
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 
-export type PluginState = HistoryFilesState & {
+type PluginState = HistoryFilesState & {
 	skills: BotSkill[]
 	commits: BotHistoryEntry[]
 	hasFailedToLoad: boolean
@@ -38,7 +38,7 @@ export type PluginState = HistoryFilesState & {
 	file: OpenedSkillFile | null
 }
 
-export type PluginActions = SkillFilesController & {
+type PluginActions = SkillFilesController & {
 	createSkill: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	saveSkill: (skillId: string, draft: BotSkillDraft) => void
 	setSkillPreloaded: (skillId: string, isPreloaded: boolean) => void
