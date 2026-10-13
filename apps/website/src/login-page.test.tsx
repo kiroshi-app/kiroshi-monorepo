@@ -28,13 +28,19 @@ const RETIRED_NAME_ROUTES = [
 	"POST /api/auth/update-user",
 ]
 const SOCIAL_SIGN_IN = "POST /api/auth/sign-in/social"
+const GET_SESSION = "GET /api/auth/get-session"
 const RETRY_LABEL = "Retry"
 
 type Reply = { status?: number; body?: unknown }
 
 type RelayRoutes = Record<string, Reply | Error>
 
-type RelayCall = { route: string; body: unknown; authorization: string | null }
+type RelayCall = {
+	route: string
+	body: unknown
+	authorization: string | null
+	credentials: RequestCredentials | undefined
+}
 
 const relayError = (status: number, message: string): Reply => ({
 	status,
@@ -57,11 +63,13 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 		route,
 		body: init?.body ? JSON.parse(String(init.body)) : undefined,
 		authorization: new Headers(init?.headers).get("Authorization"),
+		credentials: init?.credentials,
 	})
 	const reply = routes[route]
 	if (!reply) throw new Error(`The fake relay has no ${route}`)
 	if (reply instanceof Error) throw reply
-	return Response.json(reply.body ?? {}, { status: reply.status ?? 200 })
+	const body = "body" in reply ? reply.body : {}
+	return Response.json(body, { status: reply.status ?? 200 })
 }
 
 const callsTo = (route: string) => calls.filter((call) => call.route === route)
@@ -396,12 +404,98 @@ describe("the sign-in page", () => {
 
 		await landedOn(router, "/account")
 	})
+})
 
-	it("keeps a bearer sent back as a token and carries on", async () => {
-		const router = renderSite("/login?token=social-bearer")
+describe("the social sign-in", () => {
+	const pressSocial = (label: string) => {
+		vi.spyOn(window.location, "assign").mockImplementation(() => {})
+		fireEvent.click(screen.getByRole("button", { name: label }))
+	}
+
+	const startBody = () =>
+		waitFor(() => {
+			const body = callsTo(SOCIAL_SIGN_IN)[0]?.body
+			expect(body).toBeDefined()
+			return body as Record<string, string>
+		})
+
+	it("posts the provider and both callbacks on this origin, carrying the redirect", async () => {
+		routes[SOCIAL_SIGN_IN] = { body: { url: "https://accounts.google.com/o" } }
+		await openLogin("/login?redirect=%2Fauthorize")
+
+		pressSocial(LOGIN_COPY.continueWithGoogle)
+
+		const { provider, callbackURL, errorCallbackURL } = await startBody()
+		const callback = new URL(callbackURL ?? "")
+		const errorCallback = new URL(errorCallbackURL ?? "")
+		expect(provider).toBe("google")
+		expect(callback.origin).toBe(window.location.origin)
+		expect(callback.pathname).toBe("/login")
+		expect(callback.searchParams.get("redirect")).toBe("/authorize")
+		expect(callback.searchParams.get("via")).toBe("social")
+		expect(errorCallback.origin).toBe(window.location.origin)
+		expect(errorCallback.pathname).toBe("/login")
+		expect(errorCallback.searchParams.get("redirect")).toBe("/authorize")
+		expect(errorCallback.searchParams.has("via")).toBe(false)
+		await waitFor(() =>
+			expect(window.location.assign).toHaveBeenCalledWith(
+				"https://accounts.google.com/o",
+			),
+		)
+	})
+
+	it("says Apple is not available yet and offers email on a 404", async () => {
+		routes[SOCIAL_SIGN_IN] = relayError(
+			404,
+			"Sign-in with apple is not configured",
+		)
+		await openLogin()
+
+		pressSocial(LOGIN_COPY.continueWithApple)
+
+		await screen.findByText(LOGIN_COPY.failures["apple-unavailable"])
+		expect(screen.queryByText(LOGIN_COPY.failures.unavailable)).toBeNull()
+		expect(screen.queryByRole("button", { name: RETRY_LABEL })).toBeNull()
+		expect(screen.getByLabelText(LOGIN_COPY.emailLabel)).toBeDefined()
+	})
+
+	it("keeps the session bearer read with credentials and lands on the redirect", async () => {
+		routes[GET_SESSION] = { body: { token: BEARER, user: { email: EMAIL } } }
+		const router = renderSite("/login?via=social&redirect=%2F")
+
+		await landedOn(router, "/")
+		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
+		expect(callsTo(GET_SESSION)[0]?.credentials).toBe("include")
+	})
+
+	it("lands on /account after the return without a redirect", async () => {
+		routes[GET_SESSION] = { body: { token: BEARER, user: { email: EMAIL } } }
+		const router = renderSite("/login?via=social")
 
 		await landedOn(router, "/account")
-		expect(localStorage.getItem(BEARER_KEY)).toBe("social-bearer")
+	})
+
+	it("shows the signed-out login with the failed line when the return has no session", async () => {
+		routes[GET_SESSION] = { body: null }
+		await openLogin("/login?via=social")
+
+		expect(screen.getByText(LOGIN_COPY.socialFailed)).toBeDefined()
+		expect(localStorage.getItem(BEARER_KEY)).toBeNull()
+	})
+
+	it("shows the signed-out login with the failed line on the error callback", async () => {
+		await openLogin("/login?error=access_denied")
+
+		expect(screen.getByText(LOGIN_COPY.socialFailed)).toBeDefined()
+		expect(screen.queryByText(LOGIN_COPY.failures.rejected)).toBeNull()
+		expect(screen.getByLabelText(LOGIN_COPY.emailLabel)).toBeDefined()
+		expect(callsTo(GET_SESSION)).toHaveLength(0)
+	})
+
+	it("ignores a token search param", async () => {
+		await openLogin("/login?token=social-bearer")
+
+		expect(localStorage.getItem(BEARER_KEY)).toBeNull()
 	})
 })
 

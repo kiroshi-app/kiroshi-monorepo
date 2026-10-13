@@ -2,7 +2,13 @@ const PROBE_ORIGIN = "https://kiroshi.invalid"
 
 const DEFAULT_LANDING = "/account"
 
-type LoginSearch = { redirect?: string; token?: string }
+const SOCIAL_RETURN = "social"
+
+type LoginSearch = {
+	redirect?: string
+	via?: typeof SOCIAL_RETURN
+	error?: string
+}
 
 const toSameOriginPath = (value: unknown) => {
 	if (typeof value !== "string" || !value.startsWith("/")) return undefined
@@ -13,12 +19,10 @@ const toSameOriginPath = (value: unknown) => {
 
 const validateLoginSearch = (search: Record<string, unknown>): LoginSearch => ({
 	redirect: toSameOriginPath(search.redirect),
-	token:
-		typeof search.token === "string" && search.token.length > 0
-			? search.token
-			: undefined,
+	via: search.via === SOCIAL_RETURN ? SOCIAL_RETURN : undefined,
+	error: search.error === undefined ? undefined : String(search.error),
 })
 
 const landingOf = ({ redirect }: LoginSearch) => redirect ?? DEFAULT_LANDING
 
-export { type LoginSearch, landingOf, validateLoginSearch }
+export { type LoginSearch, landingOf, SOCIAL_RETURN, validateLoginSearch }

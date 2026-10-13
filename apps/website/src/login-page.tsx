@@ -1,7 +1,6 @@
 import {
 	type ErrorComponentProps,
 	getRouteApi,
-	useLocation,
 	useNavigate,
 	useRouter,
 } from "@tanstack/react-router"
@@ -23,7 +22,7 @@ import {
 	TextLink,
 	TextLinkRow,
 } from "./login-parts"
-import { landingOf } from "./login-search"
+import { landingOf, SOCIAL_RETURN } from "./login-search"
 import { AppleMark, GoogleMark } from "./page-marks"
 import {
 	type CodeFailure,
@@ -75,15 +74,28 @@ type EmailStepProps = {
 
 const EmailStep = ({ initialEmail, onCodeSent }: EmailStepProps) => {
 	const [email, setEmail] = useState(initialEmail)
-	const loginHref = useLocation({ select: (location) => location.href })
+	const search = loginRoute.useSearch()
+	const router = useRouter()
 	const call = useRelayCall()
+	const hasSocialFailure = search.error !== undefined
+
+	const loginURL = (via?: typeof SOCIAL_RETURN) => {
+		const { href } = router.buildLocation({
+			to: "/login",
+			search: { redirect: search.redirect, via },
+		})
+		return new URL(href, window.location.origin).href
+	}
 
 	const continueWith = (provider: SocialProvider) => {
 		if (call.isPending) return
 		void call.run(async () => {
-			const callbackURL = new URL(loginHref, window.location.origin).href
 			window.location.assign(
-				await requestSocialSignIn({ provider, callbackURL }),
+				await requestSocialSignIn({
+					provider,
+					callbackURL: loginURL(SOCIAL_RETURN),
+					errorCallbackURL: loginURL(),
+				}),
 			)
 		})
 	}
@@ -127,7 +139,11 @@ const EmailStep = ({ initialEmail, onCodeSent }: EmailStepProps) => {
 					onClick={() => continueWith("apple")}
 				/>
 			</ActionGroup>
-			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+			{hasSocialFailure && !call.failure ? (
+				<FailureLine message={LOGIN_COPY.socialFailed} />
+			) : (
+				<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+			)}
 			<Footnote>{LOGIN_COPY.signInFootnote}</Footnote>
 		</>
 	)
