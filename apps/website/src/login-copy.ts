@@ -27,6 +27,8 @@ export const LOGIN_COPY = {
 	nameMissing: "Enter your name.",
 	nameTooLong: "Keep your name to 80 characters.",
 	retry: "Retry",
+	socialFailed:
+		"Sign-in with Google or Apple didn't finish. Try again, or use your email.",
 	failures: {
 		network: "Couldn't reach Kiroshi. Check your connection, then try again.",
 		server: "Kiroshi couldn't answer. Try again.",
@@ -36,5 +38,9 @@ export const LOGIN_COPY = {
 		"code-wrong": "Code is wrong",
 		"code-expired": "Code has expired",
 		"code-too-many": "Too many wrong codes, ask for a new one",
+		"google-unavailable":
+			"Sign-in with Google isn't set up yet. Use your email or Apple.",
+		"apple-unavailable":
+			"Sign-in with Apple isn't set up yet. Use your email or Google.",
 	} satisfies Record<RelayFailure, string>,
 }

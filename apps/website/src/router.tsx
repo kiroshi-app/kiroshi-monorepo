@@ -21,13 +21,16 @@ import { LoginLoadFailure, LoginPage } from "./login-page"
 import {
 	type LoginSearch,
 	landingOf,
+	SOCIAL_RETURN,
 	validateLoginSearch,
 } from "./login-search"
 import {
 	clearBearer,
+	isRelayFailure,
 	RelayError,
 	readAccount,
 	readBearer,
+	readSessionBearer,
 	saveBearer,
 } from "./relay"
 import { WebsitePage } from "./website-page"
@@ -69,6 +72,33 @@ const loadLoginState = async (search: LoginSearch): Promise<LoginState> => {
 	return { unnamedEmail: account.email }
 }
 
+const NO_SOCIAL_SESSION = "no-session"
+
+type LoginGuardContext = { search: LoginSearch }
+
+const readReturnedBearer = async () => {
+	try {
+		return await readSessionBearer()
+	} catch (error) {
+		if (!isRelayFailure(error, "unauthorized")) throw error
+		return null
+	}
+}
+
+const finishSocialSignIn = async ({ search }: LoginGuardContext) => {
+	if (search.via !== SOCIAL_RETURN) return
+	const bearer = await readReturnedBearer()
+	if (bearer) saveBearer(bearer)
+	throw redirect({
+		to: "/login",
+		search: {
+			redirect: search.redirect,
+			error: bearer ? undefined : NO_SOCIAL_SESSION,
+		},
+		replace: true,
+	})
+}
+
 const rootRoute = createRootRoute()
 
 const homeRoute = createRoute({
@@ -81,15 +111,7 @@ const loginRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/login",
 	validateSearch: validateLoginSearch,
-	beforeLoad: ({ search }) => {
-		if (!search.token) return
-		saveBearer(search.token)
-		throw redirect({
-			to: "/login",
-			search: { redirect: search.redirect },
-			replace: true,
-		})
-	},
+	beforeLoad: finishSocialSignIn,
 	loaderDeps: ({ search }) => ({ redirect: search.redirect }),
 	loader: ({ deps }) => loadLoginState(deps),
 	component: LoginPage,

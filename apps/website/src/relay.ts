@@ -11,6 +11,8 @@ type RelayFailure =
 	| "code-wrong"
 	| "code-expired"
 	| "code-too-many"
+	| "google-unavailable"
+	| "apple-unavailable"
 
 type CodeFailure = Extract<RelayFailure, `code-${string}`>
 
@@ -59,6 +61,7 @@ type RelayRequest = {
 	path: string
 	method?: "GET" | "POST" | "PATCH" | "DELETE"
 	body?: unknown
+	credentials?: RequestCredentials
 }
 
 const NO_CONTENT = 204
@@ -102,11 +105,17 @@ const headersFor = (body: unknown) => {
 	return headers
 }
 
-const send = async ({ path, method = "GET", body }: RelayRequest) => {
+const send = async ({
+	path,
+	method = "GET",
+	body,
+	credentials,
+}: RelayRequest) => {
 	const response = await fetch(new URL(path, RELAY_URL), {
 		method,
 		headers: headersFor(body),
 		body: body === undefined ? undefined : JSON.stringify(body),
+		credentials,
 	}).catch((cause: unknown) => {
 		throw new RelayError("network", { cause })
 	})
@@ -146,20 +155,46 @@ const signInWithCode = async ({ email, code }: CodeSignIn) => {
 	saveBearer(stringField(session, "token"))
 }
 
-type SocialSignIn = { provider: SocialProvider; callbackURL: string }
-
-// TODO: the relay route /api/auth/sign-in/social is pending, the relay is expected to send the bearer back as a token search param.
-const requestSocialSignIn = async ({ provider, callbackURL }: SocialSignIn) => {
-	const answer = await send({
-		path: "/api/auth/sign-in/social",
-		method: "POST",
-		body: { provider, callbackURL },
-	})
-	return stringField(answer, "url")
-}
-
 const isRelayFailure = (error: unknown, failure: RelayFailure) =>
 	error instanceof RelayError && error.failure === failure
+
+type SocialSignIn = {
+	provider: SocialProvider
+	callbackURL: string
+	errorCallbackURL: string
+}
+
+const UNCONFIGURED_PROVIDER_FAILURES: Record<SocialProvider, RelayFailure> = {
+	google: "google-unavailable",
+	apple: "apple-unavailable",
+}
+
+const requestSocialSignIn = async (request: SocialSignIn) => {
+	try {
+		const answer = await send({
+			path: "/api/auth/sign-in/social",
+			method: "POST",
+			body: request,
+			credentials: "include",
+		})
+		return stringField(answer, "url")
+	} catch (error) {
+		if (isRelayFailure(error, "unavailable")) {
+			throw new RelayError(UNCONFIGURED_PROVIDER_FAILURES[request.provider], {
+				cause: error,
+			})
+		}
+		throw error
+	}
+}
+
+const readSessionBearer = async () => {
+	const session = await send({
+		path: "/api/auth/get-session",
+		credentials: "include",
+	})
+	return stringField(session, "token")
+}
 
 const isNamedIn = (me: unknown) => {
 	const name = fieldOf(me, "name")
@@ -263,6 +298,7 @@ export {
 	readAccount,
 	readAuthorizationRequest,
 	readBearer,
+	readSessionBearer,
 	readSessions,
 	requestSocialSignIn,
 	type Session,
