@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 
 import {
@@ -116,8 +114,7 @@ const useMcpServerDraft = ({
 		config,
 		fields,
 		isUnsaved,
-		isNameBlank,
-		hasTriedSaving,
+		isNameRefused: hasTriedSaving && isNameBlank,
 		shown,
 		answer,
 		rename,

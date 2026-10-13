@@ -140,9 +140,7 @@ const McpServerEditor = ({
 						isReadable={Boolean(form.config)}
 						name={draft.name}
 						nameError={
-							form.hasTriedSaving && form.isNameBlank
-								? t("applications.name.blank")
-								: undefined
+							form.isNameRefused ? t("applications.name.blank") : undefined
 						}
 						onAnswer={form.answer}
 						onRename={form.rename}
