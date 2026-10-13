@@ -30,7 +30,8 @@ import { createMessageLandingController } from "../search/message-landing-contro
 import { useCollapsedSections } from "../sections/use-collapsed-sections"
 import { useSections } from "../sections/use-sections"
 import { createShownMemory } from "../sidebar/shown-memory"
-import { useInvitations, useJoinedSpaces } from "../spaces/use-joined-spaces"
+import { useInvitations } from "../spaces/use-invitations"
+import { useJoinedSpaces } from "../spaces/use-joined-spaces"
 import { useSpaces } from "../spaces/use-spaces"
 import { useUser } from "../user/use-user"
 

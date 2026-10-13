@@ -1,21 +1,24 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
 
-import {
-	createInvitationsController,
-	type InvitationsTransport,
-} from "./invitations-controller"
+import type { InvitationsTransport } from "./invitations-transport"
 import { createJoinedSpacesController } from "./joined-spaces-controller"
 import { createSpacesController } from "./spaces-controller"
+import { useInvitations } from "./use-invitations"
 import { useOpenJoinedHost, useSwitcherSpaces } from "./use-joined-spaces"
 
 import type { Invitation, JoinedSpace } from "../bindings"
-import { useController } from "../use-controller"
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState } from "../host/joined-hosts"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	isDesktopHost: () => true,
+	listen: vi.fn(async () => () => undefined),
+}))
 
 afterEach(cleanup)
 
@@ -32,41 +35,32 @@ const transport = {
 		throw { kind: "withdrawn" }
 	}),
 	decline: vi.fn(async () => undefined),
-	onChanged: vi.fn(async () => () => undefined),
 } satisfies InvitationsTransport
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
-
 const renderSwitcher = async () => {
-	const { queryClient } = createQueryTestWrapper()
+	const { queryClient, wrapper } = createQueryTestWrapper()
 	const joinedController = createJoinedSpacesController({
 		queryClient,
 		spaces: createSpacesController(createFakeTranscriptStore(), {
 			queryClient,
 		}),
 	})
-	const invitationsController = createInvitationsController({
-		joinedSpaces: joinedController,
-		transport,
-		reportFailure: vi.fn(),
-	})
-	const { result } = renderHook(() => {
-		const invitations = useController(() => invitationsController)
-		return useSwitcherSpaces(
-			{ spaces: [], selectedSpaceId: null },
-			{
-				state: joinedController.getState(),
-				controller: joinedController,
-				hosts: { active: null, connections: {} },
-			},
-			invitations,
-		)
-	})
-	await act(async () => {
-		invitationsController.watch()
-		await settle()
-	})
-	await act(() => invitationsController.accept(STUDIO.instanceId))
+	const { result } = renderHook(
+		() =>
+			useSwitcherSpaces(
+				{ spaces: [], selectedSpaceId: null },
+				{
+					state: joinedController.getState(),
+					controller: joinedController,
+					hosts: { active: null, connections: {} },
+				},
+				useInvitations(joinedController, { transport }),
+			),
+		{ wrapper },
+	)
+	await waitFor(() => expect(result.current.invitations).toHaveLength(1))
+	act(() => result.current.onAcceptInvitation(STUDIO.instanceId))
+	await waitFor(() => expect(statesOf(result.current)).toEqual(["withdrawn"]))
 	return result
 }
 
