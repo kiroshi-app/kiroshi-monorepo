@@ -132,8 +132,10 @@ const SpaceSettingsHarness = ({
 		joinedSpaces: { state: joinedState, controller: joined },
 		spaces: { state: spacesState, controller: spaces },
 		spaceEnvironment: {
-			state: { entries: [], hasFailedToRead: false },
-			controller: { remove: vi.fn(), set: vi.fn() },
+			entries: [],
+			hasFailedToRead: false,
+			remove: vi.fn(),
+			set: vi.fn(),
 		},
 		spaceMcpServers: { state: { hasFailedToLoad: false } },
 	} as unknown as WorkspaceCore

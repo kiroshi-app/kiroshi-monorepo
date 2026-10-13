@@ -14,6 +14,7 @@ import type { SettingsTarget } from "../applications/settings-target"
 import { useApplicationInstalls } from "../applications/use-application-installs"
 import { useApplicationMarks } from "../applications/use-application-marks"
 import type { EnvScope } from "../conversations/store-contract"
+import { useEnvironment } from "../environment/use-environment"
 import {
 	openLocalSpaceOf,
 	openRowIdOf,
@@ -27,15 +28,16 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 		chat,
 		joinedSpaces,
 		roster,
-		serverEnvironment,
 		spaceConnections,
 		spaceMcpServers,
 		spaces,
+		store,
 		userConnections,
 		userMcpServers,
 	} = core
 
 	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
+	const serverEnvironment = useEnvironment(store, openedMcpServer)
 	const [settingsTab, setSettingsTab] = useState<string>()
 	const [settingsApplication, setSettingsApplication] =
 		useState<SettingsTarget>()

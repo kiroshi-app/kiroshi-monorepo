@@ -2,10 +2,7 @@ import { useEffect } from "react"
 
 import type { ApplicationScopes } from "./use-application-scopes"
 import type { RosterView } from "./use-roster-view"
-import {
-	useServerEnvironmentReads,
-	useSpaceSettingsReads,
-} from "./use-settings-reads"
+import { useSpaceSettingsReads } from "./use-settings-reads"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { USER_OWNER } from "./user-owner"
@@ -31,15 +28,12 @@ export const useWorkspaceSubscriptions = ({
 	const {
 		applications,
 		botConnections,
-		botEnvironment,
 		botMcpServers,
 		chat,
 		companionPlugin,
 		joinedSpaces,
 		roster,
-		serverEnvironment,
 		spaceConnections,
-		spaceEnvironment,
 		spaceMcpServers,
 		user,
 		userConnections,
@@ -54,7 +48,7 @@ export const useWorkspaceSubscriptions = ({
 		selectedConversationId,
 		settingsBotId,
 	} = rosterView
-	const { isSpaceEditing, openedMcpServer, selectedSpaceId } = scopes
+	const { isSpaceEditing, selectedSpaceId } = scopes
 
 	useEffect(() => {
 		void user.controller.load()
@@ -82,7 +76,6 @@ export const useWorkspaceSubscriptions = ({
 		applications: applications.controller,
 		plugin: companionPlugin.controller,
 		servers: botMcpServers.controller,
-		environment: botEnvironment.controller,
 		connections: botConnections.controller,
 		companionId: settingsBotId,
 		spaceId: selectedSpaceId,
@@ -91,16 +84,10 @@ export const useWorkspaceSubscriptions = ({
 
 	useSpaceSettingsReads({
 		applications: applications.controller,
-		environment: spaceEnvironment.controller,
 		servers: spaceMcpServers.controller,
 		connections: spaceConnections.controller,
 		spaceId: selectedSpaceId,
 		isOpen: isSpaceEditing,
-	})
-
-	useServerEnvironmentReads({
-		environment: serverEnvironment.controller,
-		server: openedMcpServer,
 	})
 
 	useEffect(() => {

@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react"
 
+import {
+	companionSettingsOwnerOf,
+	spaceSettingsOwnerOf,
+} from "./settings-owners"
+
 import { useSignedInAccountId, useWatchedAccount } from "../account/use-account"
 import { applicationTransport } from "../applications/application-transport"
 import { connectionTransport } from "../applications/connection-transport"
@@ -88,9 +93,6 @@ export const useWorkspaceCore = () => {
 	const companionPlugin = usePlugin(store)
 	const botMcpServers = useMcpServers(store)
 	const spaceMcpServers = useMcpServers(store)
-	const botEnvironment = useEnvironment(store)
-	const spaceEnvironment = useEnvironment(store)
-	const serverEnvironment = useEnvironment(store)
 	const userMcpServers = useMcpServers(store)
 	const botConnections = useConnections(connectionTransport)
 	const spaceConnections = useConnections(connectionTransport)
@@ -103,6 +105,13 @@ export const useWorkspaceCore = () => {
 	const joinedSpaces = useJoinedSpaces(spaces.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
 	const spacePlugin = usePlugin(store)
+	const companionSettingsOwner = companionSettingsOwnerOf(
+		roster.state,
+		spaces.state,
+	)
+	const spaceSettingsOwner = spaceSettingsOwnerOf(spaces.state)
+	const botEnvironment = useEnvironment(store, companionSettingsOwner)
+	const spaceEnvironment = useEnvironment(store, spaceSettingsOwner)
 	const preferences = user.state.preferences
 
 	return {
@@ -113,6 +122,7 @@ export const useWorkspaceCore = () => {
 		botEnvironment,
 		botMcpServers,
 		catalogue,
+		companionSettingsOwner,
 		chat,
 		collapsedSections,
 		companionPlugin,
@@ -127,12 +137,12 @@ export const useWorkspaceCore = () => {
 		preferences,
 		roster,
 		sections,
-		serverEnvironment,
 		shownMemory,
 		spaceConnections,
 		spaceEnvironment,
 		spaceMcpServers,
 		spacePlugin,
+		spaceSettingsOwner,
 		spaces,
 		spokenWords,
 		store,

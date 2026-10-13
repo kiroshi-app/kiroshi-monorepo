@@ -6,14 +6,12 @@ import { onHostReconnected } from "../host"
 import type { ApplicationsController } from "../applications/applications-controller"
 import type { ConnectionsController } from "../applications/connections-controller"
 import { botPlugin } from "../conversations/plugin-scope"
-import type { EnvironmentController } from "../environment/environment-controller"
 import type { PluginController } from "../plugins/plugin-controller"
 
 export type CompanionSettings = {
 	applications: Pick<ApplicationsController, "open">
 	plugin: Pick<PluginController, "open" | "reload">
 	servers: Pick<McpServersController, "open" | "reload">
-	environment: Pick<EnvironmentController, "open" | "reload">
 	connections: Pick<ConnectionsController, "open" | "reload">
 	companionId: string | null
 	spaceId: string | null
@@ -24,7 +22,6 @@ export const useCompanionSettings = ({
 	applications,
 	plugin,
 	servers,
-	environment,
 	connections,
 	companionId,
 	spaceId,
@@ -38,23 +35,12 @@ export const useCompanionSettings = ({
 		void applications.open()
 		void plugin.open(botPlugin(companionId))
 		void servers.open(owner)
-		void environment.open(owner)
 		void connections.open(owner)
 		return onHostReconnected(() => {
 			void applications.open()
 			plugin.reload()
 			void servers.reload()
-			void environment.reload()
 			void connections.reload()
 		})
-	}, [
-		applications,
-		plugin,
-		servers,
-		environment,
-		connections,
-		companionId,
-		spaceId,
-		isOpen,
-	])
+	}, [applications, plugin, servers, connections, companionId, spaceId, isOpen])
 }

@@ -95,8 +95,8 @@ export const SpaceSettingsHost = ({
 			: {}
 
 	const sharedProps = {
-		environment: toEnvironmentRows(spaceEnvironment.state.entries),
-		hasEnvironmentFailedToRead: spaceEnvironment.state.hasFailedToRead,
+		environment: toEnvironmentRows(spaceEnvironment.entries),
+		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
 		haveMcpServersFailedToLoad: spaceMcpServers.state.hasFailedToLoad,
 		...spaceApplications,
 		mcpServerToOpen: applicationToOpenOn({
@@ -118,9 +118,9 @@ export const SpaceSettingsHost = ({
 		serverEnvironment: serverEnvironmentSection,
 		history: spaceHistory,
 		onClose: close,
-		onEnvironmentDelete: spaceEnvironment.controller.remove,
+		onEnvironmentDelete: spaceEnvironment.remove,
 		onEnvironmentSet: ({ name, value }: EnvironmentWrite) =>
-			spaceEnvironment.controller.set(name, value),
+			spaceEnvironment.set(name, value),
 		onValueChange: (value: SpaceSettingsValue) =>
 			spaces.controller.describe(selectedSpaceId, value),
 		open: isSpaceEditing,

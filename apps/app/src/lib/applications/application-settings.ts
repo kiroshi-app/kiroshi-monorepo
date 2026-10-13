@@ -279,11 +279,10 @@ export const toServerEnvironmentSection = ({
 	}
 
 	return {
-		entries: toEnvironmentRows(environment.state.entries),
-		hasFailedToRead: environment.state.hasFailedToRead,
-		onSet: ({ name, value }) =>
-			environment.controller.set(name, value).then(reopenScope),
-		onDelete: environment.controller.remove,
+		entries: toEnvironmentRows(environment.entries),
+		hasFailedToRead: environment.hasFailedToRead,
+		onSet: ({ name, value }) => environment.set(name, value).then(reopenScope),
+		onDelete: environment.remove,
 	}
 }
 

@@ -5,14 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type SpaceSettingsReads,
-	useServerEnvironmentReads,
 	useSpaceSettingsReads,
 } from "./use-settings-reads"
 
 import { createConnectionsController } from "../applications/connections-controller"
 import { createFakeConnectionPort } from "../applications/fake-connection-port"
-import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import { createEnvironmentController } from "../environment/environment-controller"
 import {
 	joinFakeHost,
 	leaveFakeHost,
@@ -26,12 +23,6 @@ vi.mock("../host", async (importOriginal) => ({
 
 const JOINED = "garage"
 
-const SERVER = {
-	kind: "server",
-	name: "linear",
-	owner: { kind: "space", id: "personal" },
-} as const
-
 afterEach(async () => {
 	cleanup()
 	await leaveFakeHost(JOINED)
@@ -43,7 +34,6 @@ const reloadable = () => ({ open: opener(), reload: opener() })
 
 const panelsOf = () => ({
 	applications: reloadable(),
-	environment: reloadable(),
 	servers: reloadable(),
 	connections: reloadable(),
 })
@@ -62,21 +52,13 @@ const mounted = (panels: Panels, isOpen: boolean) =>
 		{ initialProps: { isOpen } },
 	)
 
-const serverEnvironmentShown = () => {
-	const environment = reloadable()
-	const rendered = renderHook(() =>
-		useServerEnvironmentReads({ environment, server: SERVER }),
-	)
-	return { environment, rendered }
-}
-
 describe("useSpaceSettingsReads", () => {
 	it("reads every Space panel when the settings dialog opens", () => {
 		const panels = panelsOf()
 
 		mounted(panels, true)
 
-		expect(readCounts(panels)).toEqual([1, 1, 1, 1])
+		expect(readCounts(panels)).toEqual([1, 1, 1])
 		expect(panels.servers.open).toHaveBeenCalledWith({
 			kind: "space",
 			id: "personal",
@@ -88,7 +70,7 @@ describe("useSpaceSettingsReads", () => {
 
 		mounted(panels, false)
 
-		expect(readCounts(panels)).toEqual([0, 0, 0, 0])
+		expect(readCounts(panels)).toEqual([0, 0, 0])
 	})
 
 	it("reads them again when the relay of the joined Space reopens", async () => {
@@ -98,7 +80,7 @@ describe("useSpaceSettingsReads", () => {
 
 		reopenFakeRelay(JOINED)
 
-		expect(readCounts(panels)).toEqual([2, 2, 2, 2])
+		expect(readCounts(panels)).toEqual([2, 2, 2])
 	})
 
 	it("reads nothing more when the relay of another Space reopens", async () => {
@@ -108,7 +90,7 @@ describe("useSpaceSettingsReads", () => {
 
 		reopenFakeRelay("attic")
 
-		expect(readCounts(panels)).toEqual([1, 1, 1, 1])
+		expect(readCounts(panels)).toEqual([1, 1, 1])
 	})
 
 	it("reads nothing more once the settings dialog has closed", async () => {
@@ -119,7 +101,7 @@ describe("useSpaceSettingsReads", () => {
 
 		reopenFakeRelay(JOINED)
 
-		expect(readCounts(panels)).toEqual([1, 1, 1, 1])
+		expect(readCounts(panels)).toEqual([1, 1, 1])
 	})
 })
 
@@ -131,17 +113,13 @@ describe("useSpaceSettingsReads on live controllers", () => {
 		const port = createFakeConnectionPort()
 		port.rows.space = [ATLAS]
 		const connections = createConnectionsController(port)
-		const store = createFakeTranscriptStore()
-		await store.setEnvironmentVariable(SPACE, "TOKEN", "secret")
-		const environment = createEnvironmentController(store)
-		const panels = { ...panelsOf(), environment, connections }
+		const panels = { ...panelsOf(), connections }
 		await joinFakeHost(JOINED)
 		renderHook(() =>
 			useSpaceSettingsReads({ ...panels, spaceId: SPACE.id, isOpen: true }),
 		)
 		await waitFor(() => expect(connections.getState().rows).toEqual([ATLAS]))
-		await waitFor(() => expect(environment.getState().entries).toHaveLength(1))
-		return { connections, environment }
+		return { connections }
 	}
 
 	it("keeps a connect in flight when the relay of the joined Space reopens", async () => {
@@ -155,49 +133,5 @@ describe("useSpaceSettingsReads on live controllers", () => {
 			connecting: "atlas",
 		})
 		void connections.cancel()
-	})
-
-	it("keeps the environment rows on screen while the fresh read is on its way", async () => {
-		const { environment } = await shownWithLiveControllers()
-
-		reopenFakeRelay(JOINED)
-
-		expect(environment.getState().entries).toHaveLength(1)
-	})
-})
-
-describe("useServerEnvironmentReads", () => {
-	it("reads the environment of the opened server", () => {
-		const { environment } = serverEnvironmentShown()
-
-		expect(environment.open).toHaveBeenCalledExactlyOnceWith(SERVER)
-	})
-
-	it("reads it again when the relay of the joined Space reopens", async () => {
-		await joinFakeHost(JOINED)
-		const { environment } = serverEnvironmentShown()
-
-		reopenFakeRelay(JOINED)
-
-		expect(environment.reload).toHaveBeenCalledOnce()
-	})
-
-	it("reads nothing more when the relay of another Space reopens", async () => {
-		await joinFakeHost(JOINED)
-		const { environment } = serverEnvironmentShown()
-
-		reopenFakeRelay("attic")
-
-		expect(environment.open).toHaveBeenCalledOnce()
-	})
-
-	it("reads nothing more once the panel is gone", async () => {
-		await joinFakeHost(JOINED)
-		const { environment, rendered } = serverEnvironmentShown()
-		rendered.unmount()
-
-		reopenFakeRelay(JOINED)
-
-		expect(environment.open).toHaveBeenCalledOnce()
 	})
 })
