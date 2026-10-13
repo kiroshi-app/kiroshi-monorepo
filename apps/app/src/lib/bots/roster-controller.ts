@@ -794,7 +794,7 @@ export const createRosterController = (
 		},
 	})
 
-	const hasReadLocally = ({ spaceRowId }: RosterSpace) =>
+	const isReadyToOpen = ({ spaceRowId }: RosterSpace) =>
 		isJoinedRowId(spaceRowId) || rosterReadIn(spaceRowId) !== undefined
 
 	const load = async ({ spaces, spaceRowId, lastRowId }: RosterOpening) => {
@@ -805,7 +805,7 @@ export const createRosterController = (
 				queryClient.prefetchQuery(rosterQuery(space.spaceRowId)),
 			),
 		)
-		if (spaces.every(hasReadLocally)) {
+		if (spaces.every(isReadyToOpen)) {
 			choose({ hasLoaded: true })
 		}
 		await prefetchPreviews()
