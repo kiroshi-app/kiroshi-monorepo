@@ -34,27 +34,39 @@ type IdentityProps = {
 	name: string
 	email?: string
 	action: ReactNode
+	failure: ReactNode
 }
 
-export const Identity = ({ initials, name, email, action }: IdentityProps) => (
-	<div className="flex items-center gap-3.5">
-		<span
-			aria-hidden="true"
-			className="flex size-12 shrink-0 items-center justify-center rounded-full bg-initials-tile text-base leading-5 font-semibold text-initials-glyph uppercase"
-		>
-			{initials}
-		</span>
-		<div className="flex min-w-0 flex-1 flex-col">
-			<h1 className="text-[22px] leading-7 font-semibold tracking-[-0.015em] wrap-anywhere">
-				{name}
-			</h1>
-			{email ? (
-				<p className="text-sm leading-5 wrap-anywhere text-muted-foreground">
-					{email}
-				</p>
-			) : null}
+export const Identity = ({
+	initials,
+	name,
+	email,
+	action,
+	failure,
+}: IdentityProps) => (
+	<div className="flex flex-col gap-2">
+		<div className="flex items-center gap-3.5">
+			<span
+				aria-hidden="true"
+				className="flex size-12 shrink-0 items-center justify-center rounded-full bg-initials-tile text-base leading-5 font-semibold text-initials-glyph uppercase"
+			>
+				{initials}
+			</span>
+			<div className="flex min-w-0 flex-1 flex-col">
+				<div className="flex items-start gap-4">
+					<h1 className="min-w-0 flex-1 text-[22px] leading-7 font-semibold tracking-[-0.015em] wrap-anywhere">
+						{name}
+					</h1>
+					<span className="shrink-0">{action}</span>
+				</div>
+				{email ? (
+					<p className="text-sm leading-5 wrap-anywhere text-muted-foreground">
+						{email}
+					</p>
+				) : null}
+			</div>
 		</div>
-		{action}
+		<div className="max-w-80 self-end empty:hidden">{failure}</div>
 	</div>
 )
 

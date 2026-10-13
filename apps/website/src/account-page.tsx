@@ -181,18 +181,30 @@ const SignOutEverywhere = () => {
 	)
 }
 
-const AccountSignOut = () => {
+type AccountIdentityProps = {
+	account: Account
+}
+
+const AccountIdentity = ({ account }: AccountIdentityProps) => {
 	const call = useSignOutCall()
+	const displayName = account.name ?? account.email
 
 	return (
-		<AccountActions>
-			<TextButton
-				isBusy={call.isPending}
-				label={ACCOUNT_COPY.signOut}
-				onClick={() => call.signOut(signOutCurrentSession, call.leaveSignedOut)}
-			/>
-			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
-		</AccountActions>
+		<Identity
+			action={
+				<TextButton
+					isBusy={call.isPending}
+					label={ACCOUNT_COPY.signOut}
+					onClick={() =>
+						call.signOut(signOutCurrentSession, call.leaveSignedOut)
+					}
+				/>
+			}
+			email={account.name ? account.email : undefined}
+			failure={<RelayFailureLine failure={call.failure} onRetry={call.retry} />}
+			initials={initialsOf(displayName)}
+			name={displayName}
+		/>
 	)
 }
 
@@ -201,16 +213,10 @@ const planOf = (account: Account) =>
 
 export const AccountPage = () => {
 	const { account, sessions } = accountRoute.useLoaderData()
-	const displayName = account.name ?? account.email
 
 	return (
 		<AccountShell>
-			<Identity
-				action={<AccountSignOut />}
-				email={account.name ? account.email : undefined}
-				initials={initialsOf(displayName)}
-				name={displayName}
-			/>
+			<AccountIdentity account={account} />
 			<AccountSection heading={ACCOUNT_COPY.planHeading}>
 				<PlanCard {...planOf(account)} />
 			</AccountSection>
