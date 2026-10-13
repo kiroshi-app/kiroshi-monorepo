@@ -37,6 +37,7 @@ import {
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import type { FailureMeta } from "../query/query-client"
 import { runMutation } from "../query/run-mutation"
+import { isJoinedRowId } from "../spaces/joined-spaces-controller"
 
 export type BotPreviews = Record<string, LastWord | undefined>
 
@@ -793,8 +794,8 @@ export const createRosterController = (
 		},
 	})
 
-	const hasRead = ({ spaceRowId }: RosterSpace) =>
-		rosterReadIn(spaceRowId) !== undefined
+	const hasReadLocally = ({ spaceRowId }: RosterSpace) =>
+		isJoinedRowId(spaceRowId) || rosterReadIn(spaceRowId) !== undefined
 
 	const load = async ({ spaces, spaceRowId, lastRowId }: RosterOpening) => {
 		spaces.forEach(learn)
@@ -804,7 +805,7 @@ export const createRosterController = (
 				queryClient.prefetchQuery(rosterQuery(space.spaceRowId)),
 			),
 		)
-		if (spaces.every(hasRead)) {
+		if (spaces.every(hasReadLocally)) {
 			choose({ hasLoaded: true })
 		}
 		await prefetchPreviews()

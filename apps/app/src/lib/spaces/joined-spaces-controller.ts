@@ -109,6 +109,9 @@ const JOINED_ROW_PREFIX = "joined:"
 const rowIdOf = (joined: JoinedSpace): string =>
 	`${JOINED_ROW_PREFIX}${joined.id}`
 
+export const isJoinedRowId = (rowId: string): boolean =>
+	rowId.startsWith(JOINED_ROW_PREFIX)
+
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
 
