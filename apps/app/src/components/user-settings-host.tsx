@@ -77,16 +77,7 @@ export const UserSettingsHost = ({
 				onLanguageChange={(next) => {
 					void user.controller.setLanguage(next)
 				}}
-				onPictureRemove={() => {
-					void user.controller.removePicture()
-				}}
-				onPictureUpload={(file) => {
-					void user.controller.uploadPicture(file)
-				}}
 				onValueChange={(value) => {
-					if (value.name !== userSettings.name) {
-						user.controller.rename(value.name)
-					}
 					if (value.colorScheme !== userSettings.colorScheme) {
 						void user.controller.setColorScheme(value.colorScheme)
 					}

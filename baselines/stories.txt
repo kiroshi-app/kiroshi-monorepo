@@ -1473,6 +1473,7 @@ settings-user-usersettingsdialog--no-skills
 settings-user-usersettingsdialog--notifications
 settings-user-usersettingsdialog--opens-on-a-missing-application
 settings-user-usersettingsdialog--opens-on-an-application
+settings-user-usersettingsdialog--opens-on-appearance-without-an-account
 settings-user-usersettingsdialog--request-expired
 settings-user-usersettingsdialog--signed-in
 settings-user-usersettingsdialog--signed-in-on-the-free-plan
@@ -1485,5 +1486,4 @@ settings-user-usersettingsdialog--waiting
 settings-user-usersettingsdialog--with-a-long-email
 settings-user-usersettingsdialog--with-a-long-name
 settings-user-usersettingsdialog--with-a-long-skill
-settings-user-usersettingsdialog--with-picture
 settings-user-usersettingsdialog--without-applications

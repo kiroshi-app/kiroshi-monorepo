@@ -3,7 +3,6 @@ const settings = {
 		title: "Réglages",
 	},
 	rail: {
-		profile: "Profil",
 		account: "Compte",
 		space: "Espace",
 		members: "Membres",
@@ -69,18 +68,6 @@ const settings = {
 	plugin: {
 		author: {
 			bot: "Un compagnon",
-		},
-	},
-	profile: {
-		name: {
-			label: "Nom affiché",
-			placeholder: "Sans nom",
-		},
-		picture: {
-			file: "Fichier de photo de profil",
-			add: "Ajouter une photo",
-			change: "Changer la photo",
-			remove: "Retirer la photo",
 		},
 	},
 	notifications: {
