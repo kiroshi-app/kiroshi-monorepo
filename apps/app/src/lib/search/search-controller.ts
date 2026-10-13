@@ -1,37 +1,18 @@
 import type { SearchTab } from "@workspace/ui/components/search-palette"
 
-import type {
-	Catalogue,
-	CatalogueChat,
-	CatalogueMission,
-	CatalogueRoutine,
-} from "./catalogue-contract"
-import { MAX_QUERY_CHARS, type MessageHit } from "./search-contract"
-import type { SearchPort } from "./search-port"
-
 import { createStore } from "../store"
-import { isHostOffline } from "../host/host-offline"
 
 export const QUIET_MS = 150
-
-export type SearchRead = {
-	messages: MessageHit[]
-	chats: CatalogueChat[]
-	missions: CatalogueMission[]
-	routines: CatalogueRoutine[]
-}
 
 type SearchState = {
 	isOpen: boolean
 	spaceId: string | null
 	query: string
+	searchedQuery: string
 	tab: SearchTab
 	isAllSpaces: boolean
-	isLoading: boolean
-	hasFailed: boolean
 	activeIndex: number
-	read: SearchRead
-	recents: CatalogueChat[]
+	activeLanding: number
 }
 
 export type SearchController = {
@@ -42,134 +23,49 @@ export type SearchController = {
 	setQuery: (query: string) => void
 	setTab: (tab: SearchTab) => void
 	setScope: (isAllSpaces: boolean) => void
-	moveActive: (by: number, count: number) => void
-}
-
-export type SearchWiring = {
-	port: SearchPort
-	onFailure: () => void
-}
-
-const NOTHING_READ: SearchRead = {
-	messages: [],
-	chats: [],
-	missions: [],
-	routines: [],
-}
-
-type ReadScope = {
-	query: string
-	spaceId: string
-	allSpaces: boolean
+	moveActive: (by: number, count: number, landing: number) => void
 }
 
 const CLOSED: SearchState = {
 	isOpen: false,
 	spaceId: null,
 	query: "",
+	searchedQuery: "",
 	tab: "all",
 	isAllSpaces: false,
-	isLoading: false,
-	hasFailed: false,
 	activeIndex: 0,
-	read: NOTHING_READ,
-	recents: [],
+	activeLanding: 0,
 }
 
-const isOverLimit = (query: string) => [...query].length > MAX_QUERY_CHARS
-
-const readOf = (messages: MessageHit[], catalogue: Catalogue): SearchRead => ({
-	messages,
-	chats: catalogue.chats,
-	missions: catalogue.missions,
-	routines: catalogue.routines,
-})
+export const activeIndexOn = (state: SearchState, landing: number) =>
+	state.activeLanding === landing ? state.activeIndex : 0
 
 const wrapped = (index: number, count: number) =>
 	count === 0 ? 0 : (index + count) % count
 
-export const createSearchController = ({
-	port,
-	onFailure,
-}: SearchWiring): SearchController => {
+export const createSearchController = (): SearchController => {
 	const stateStore = createStore(CLOSED)
 	const current = stateStore.getState
 	let quiet: ReturnType<typeof setTimeout> | undefined
-	let reads = 0
 
 	const publish = (next: Partial<SearchState>) => {
 		stateStore.setState({ ...current(), ...next })
 	}
 
-	const fail = (reason: unknown) => {
-		publish({ isLoading: false, hasFailed: true })
-		if (!isHostOffline(reason)) {
-			onFailure()
-		}
+	const searchQueryNow = () => {
+		clearTimeout(quiet)
+		publish({ searchedQuery: current().query })
 	}
 
-	const settle = (ticket: number, next: Partial<SearchState>) => {
-		if (ticket === reads) {
-			publish(next)
-		}
-	}
-
-	const restAnswer = ({ spaceId, allSpaces }: ReadScope) =>
-		Promise.all([
-			port.recent({ spaceId, allSpaces }),
-			port.catalogue({ query: "", spaceId, allSpaces }),
-		]).then(([recents, catalogue]) => ({
-			recents,
-			read: readOf([], catalogue),
-		}))
-
-	const foundAnswer = ({ query, spaceId, allSpaces }: ReadScope) =>
-		Promise.all([
-			port.messages({ text: query, spaceId, allSpaces }),
-			port.catalogue({ query, spaceId, allSpaces }),
-		]).then(([messages, catalogue]) => ({ read: readOf(messages, catalogue) }))
-
-	const answerOf = (scope: ReadScope): Promise<Partial<SearchState>> =>
-		scope.query === "" ? restAnswer(scope) : foundAnswer(scope)
-
-	const read = () => {
-		const { query, spaceId, isAllSpaces } = current()
-
-		if (!spaceId || isOverLimit(query)) {
-			publish({ isLoading: false })
-			return
-		}
-
-		reads += 1
-		const ticket = reads
-		publish({ isLoading: true })
-
-		void answerOf({ query, spaceId, allSpaces: isAllSpaces }).then(
-			(landed) =>
-				settle(ticket, {
-					isLoading: false,
-					hasFailed: false,
-					activeIndex: 0,
-					...landed,
-				}),
-			(reason) => {
-				if (ticket === reads) {
-					fail(reason)
-				}
-			},
-		)
-	}
-
-	const scheduleRead = () => {
+	const scheduleSearch = () => {
 		clearTimeout(quiet)
 
 		if (current().query === "") {
-			publish({ read: NOTHING_READ })
-			read()
+			searchQueryNow()
 			return
 		}
 
-		quiet = setTimeout(read, QUIET_MS)
+		quiet = setTimeout(searchQueryNow, QUIET_MS)
 	}
 
 	return {
@@ -180,31 +76,29 @@ export const createSearchController = ({
 		open: (spaceId) => {
 			clearTimeout(quiet)
 			publish({ ...CLOSED, isOpen: true, spaceId })
-			read()
 		},
 
 		close: () => {
 			clearTimeout(quiet)
-			reads += 1
 			publish(CLOSED)
 		},
 
 		setQuery: (query) => {
 			publish({ query, activeIndex: 0 })
-			scheduleRead()
+			scheduleSearch()
 		},
 
 		setTab: (tab) => publish({ tab, activeIndex: 0 }),
 
 		setScope: (isAllSpaces) => {
-			clearTimeout(quiet)
 			publish({ isAllSpaces, activeIndex: 0 })
-			read()
+			searchQueryNow()
 		},
 
-		moveActive: (by, count) =>
+		moveActive: (by, count, landing) =>
 			publish({
-				activeIndex: wrapped(current().activeIndex + by, count),
+				activeIndex: wrapped(activeIndexOn(current(), landing) + by, count),
+				activeLanding: landing,
 			}),
 	}
 }

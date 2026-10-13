@@ -4,13 +4,16 @@ import {
 	act,
 	cleanup,
 	fireEvent,
-	render,
+	type RenderOptions,
+	render as renderWithoutQueries,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react"
 import {
 	createElement,
 	Fragment,
+	type ReactElement,
 	type ReactNode,
 	useState,
 	useSyncExternalStore,
@@ -138,6 +141,15 @@ import {
 } from "@/lib/search/message-landing-controller"
 import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
+
+let queries = createQueryTestWrapper()
+
+beforeEach(() => {
+	queries = createQueryTestWrapper()
+})
+
+const render = (ui: ReactElement, options?: RenderOptions) =>
+	renderWithoutQueries(ui, { wrapper: queries.wrapper, ...options })
 
 vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 	const actual =
@@ -4236,9 +4248,12 @@ describe("ThreadScreen showing the applications installed", () => {
 				install: { kind: "nothing" },
 			}),
 		)
-		await settle()
 
-		expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBeGreaterThan(rowIndexOf("held"))
+		await waitFor(() =>
+			expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBeGreaterThan(
+				rowIndexOf("held"),
+			),
+		)
 	})
 
 	it("shows the same rows at the same anchors when the conversation is opened again", async () => {

@@ -458,10 +458,12 @@ describe("missions read on a joined host", () => {
 				await openLastSocket()
 				await reopenRelay("garage")
 			}
+			await waitFor(() =>
+				expect(markIdsOf(result.current)).toEqual([reopened.id]),
+			)
 			await settled()
 
 			expect(readsOf("mission_space_feed")).toBe(before + 1)
-			expect(markIdsOf(result.current)).toEqual([reopened.id])
 		},
 	)
 

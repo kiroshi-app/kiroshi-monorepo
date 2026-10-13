@@ -19,6 +19,7 @@ import type {
 	CatalogueMission,
 	CatalogueRoutine,
 } from "./catalogue-contract"
+import type { MessageHit } from "./search-contract"
 import { createSearchLookups } from "./search-model"
 import type { SearchNavigation } from "./search-navigation"
 import type { SearchPort } from "./search-port"
@@ -30,6 +31,7 @@ import type {
 	Space,
 } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const PERSONAL = "personal"
 
@@ -178,15 +180,17 @@ const renderSearch = ({ navigation, port, canOpen = true }: Rendering) => {
 		now: 2,
 	})
 
-	return renderHook(() =>
-		useSearch({
-			spaceId: PERSONAL,
-			spaceName: "Personal",
-			lookups,
-			navigation,
-			port,
-			canOpen,
-		}),
+	return renderHook(
+		() =>
+			useSearch({
+				spaceId: PERSONAL,
+				spaceName: "Personal",
+				lookups,
+				navigation,
+				port,
+				canOpen,
+			}),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	).result
 }
 
@@ -289,6 +293,25 @@ it("opens no palette on the chord while another dialog is open", () => {
 	expect(result.current.isOpen).toBe(false)
 })
 
+it("reads only the query the typing went quiet on", async () => {
+	const { navigation } = aNavigation()
+	const port = aPort()
+	const result = renderSearch({ navigation, port })
+
+	act(() => result.current.open())
+	act(() => result.current.palette.onQueryChange("r"))
+	act(() => result.current.palette.onQueryChange("ro"))
+	act(() => result.current.palette.onQueryChange("roadmap"))
+
+	await waitFor(() => expect(port.messages).toHaveBeenCalled())
+	expect(port.messages).toHaveBeenCalledOnce()
+	expect(port.messages).toHaveBeenCalledWith({
+		text: "roadmap",
+		spaceId: PERSONAL,
+		allSpaces: false,
+	})
+})
+
 it("ignores a rank chord while the palette is open", async () => {
 	const { navigation, trace } = aNavigation()
 	const result = await searchedOn(aPort(), navigation)
@@ -315,6 +338,34 @@ it("opens the active result on Enter and moves it with the arrows", async () => 
 	act(() => press("Enter"))
 
 	expect(trace).toEqual([`conversation:${A_ROOM.id}`, `space:${WORK}`])
+})
+
+it("puts the highlight back on the first row when new results land", async () => {
+	const { navigation } = aNavigation()
+	const port = aPort()
+	const result = await searchedOn(port, navigation)
+	let answer: (hits: MessageHit[]) => void = () => undefined
+	vi.mocked(port.messages).mockReturnValue(
+		new Promise((settle) => {
+			answer = settle
+		}),
+	)
+
+	act(() => result.current.palette.onQueryChange("roadmaps"))
+	await waitFor(() =>
+		expect(port.messages).toHaveBeenCalledWith(
+			expect.objectContaining({ text: "roadmaps" }),
+		),
+	)
+	act(() => press("ArrowDown"))
+
+	expect(result.current.palette.activeResultId).not.toBe(`chat-${A_ROOM.id}`)
+
+	await act(async () => answer([]))
+
+	await waitFor(() =>
+		expect(result.current.palette.activeResultId).toBe(`chat-${A_ROOM.id}`),
+	)
 })
 
 it("leaves Enter to a control that is neither the query input nor the body", async () => {

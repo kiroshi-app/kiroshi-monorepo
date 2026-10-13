@@ -405,7 +405,6 @@ describe("PRF5 chat open baseline", () => {
 			    "commits": 5,
 			    "elapsedMs": 0,
 			    "storeCalls": [
-			      "pinnedMessages",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -416,7 +415,6 @@ describe("PRF5 chat open baseline", () => {
 			    "commits": 5,
 			    "elapsedMs": 0,
 			    "storeCalls": [
-			      "pinnedMessages",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",
@@ -439,23 +437,21 @@ describe("PRF5 chat open baseline", () => {
 		expect(await measureOpenings(CALL_DELAY_MS)).toMatchInlineSnapshot(`
 			{
 			  "busyOpen": {
-			    "commits": 8,
-			    "elapsedMs": 11,
+			    "commits": 7,
+			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "mainChat",
 			      "captureCheckpoint",
-			      "pinnedMessages",
 			      "botCommands",
-			      "boundedContext",
 			      "loadPage",
+			      "boundedContext",
 			    ],
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 7,
+			    "commits": 6,
 			    "elapsedMs": 10,
 			    "storeCalls": [
-			      "pinnedMessages",
 			      "mainChat",
 			      "botCommands",
 			      "loadPage",

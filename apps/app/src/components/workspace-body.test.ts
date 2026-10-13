@@ -4,12 +4,18 @@ import {
 	act,
 	cleanup,
 	fireEvent,
-	render,
+	type RenderOptions,
+	render as renderWithoutQueries,
 	screen,
 	waitFor,
 	within,
 } from "@testing-library/react"
-import { type ComponentProps, createElement, useState } from "react"
+import {
+	type ComponentProps,
+	createElement,
+	type ReactElement,
+	useState,
+} from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
@@ -54,6 +60,15 @@ import { createOpenedRoutineController } from "@/lib/routines/opened-routine-con
 import { routinesTransport } from "@/lib/routines/routines-transport"
 import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
 import { createMessageLandingController } from "@/lib/search/message-landing-controller"
+
+let queries = createQueryTestWrapper()
+
+beforeEach(() => {
+	queries = createQueryTestWrapper()
+})
+
+const render = (ui: ReactElement, options?: RenderOptions) =>
+	renderWithoutQueries(ui, { wrapper: queries.wrapper, ...options })
 
 vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 	const actual =

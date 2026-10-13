@@ -1,9 +1,8 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState } from "react"
 
 import type { SearchPaletteProps } from "@workspace/ui/components/search-palette"
-import { i18n } from "@workspace/ui/lib/i18n"
 
-import { createSearchController } from "./search-controller"
+import { activeIndexOn, createSearchController } from "./search-controller"
 import {
 	createSearchLookups,
 	type SearchLookupSource,
@@ -21,8 +20,8 @@ import {
 } from "./search-navigation"
 import { type SearchPort, searchPort } from "./search-port"
 import { useSearchKeys } from "./use-search-keys"
+import { useSearchReads } from "./use-search-reads"
 
-import { raiseReportedFailure } from "../failure-report"
 import { useControllerState } from "../use-controller"
 
 export type SearchSource = {
@@ -80,15 +79,6 @@ export const useSearchNavigation = ({
 		[roster, spaces, missions, routines, landings, user],
 	)
 
-const raiseSearchFailure = () =>
-	raiseReportedFailure(
-		{
-			title: i18n.t("search:unavailable.title"),
-			description: i18n.t("search:unavailable.description"),
-		},
-		{ raisedIn: "use-search" },
-	)
-
 export const useSearch = ({
 	spaceId,
 	spaceName,
@@ -97,11 +87,15 @@ export const useSearch = ({
 	navigation,
 	port = searchPort,
 }: SearchSource): Search => {
-	const controller = useMemo(
-		() => createSearchController({ port, onFailure: raiseSearchFailure }),
-		[port],
-	)
+	const [controller] = useState(createSearchController)
 	const state = useControllerState(controller)
+	const { read, recents, landing, isLoading } = useSearchReads({
+		port,
+		isOpen: state.isOpen,
+		spaceId: state.spaceId,
+		query: state.searchedQuery,
+		isAllSpaces: state.isAllSpaces,
+	})
 
 	const openTarget = useCallback(
 		(target: SearchTarget) => {
@@ -114,24 +108,24 @@ export const useSearch = ({
 	const results = useMemo(
 		() =>
 			toSearchGroups({
-				read: state.read,
-				recents: state.recents,
+				read,
+				recents,
 				query: state.query,
 				lookups,
 				open: openTarget,
 			}),
-		[state.read, state.recents, state.query, lookups, openTarget],
+		[read, recents, state.query, lookups, openTarget],
 	)
 
 	const resting = useMemo(
 		() =>
 			toRestingGroups({
-				read: state.read,
-				recents: state.recents,
+				read,
+				recents,
 				lookups,
 				open: openTarget,
 			}),
-		[state.read, state.recents, lookups, openTarget],
+		[read, recents, lookups, openTarget],
 	)
 
 	const visible = useMemo(
@@ -145,7 +139,7 @@ export const useSearch = ({
 		[state.query, state.tab, results, resting],
 	)
 
-	const active = visible[state.activeIndex]
+	const active = visible[activeIndexOn(state, landing)]
 
 	const open = useCallback(() => {
 		if (spaceId) {
@@ -157,7 +151,7 @@ export const useSearch = ({
 		isOpen: state.isOpen,
 		canOpen,
 		onOpen: open,
-		onMove: (by) => controller.moveActive(by, visible.length),
+		onMove: (by) => controller.moveActive(by, visible.length, landing),
 		onEnter: () => active?.onOpen(),
 	})
 
@@ -180,7 +174,7 @@ export const useSearch = ({
 			spaceName: spaceName ?? "",
 			results,
 			resting,
-			isLoading: state.isLoading,
+			isLoading,
 			activeResultId: active?.id,
 		},
 	}

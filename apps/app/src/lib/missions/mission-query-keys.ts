@@ -11,4 +11,7 @@ export const missionQueryKeys = {
 		[...missionQueryKeys.details(), missionId] as const,
 	detail: (missionId: string, host: string | null) =>
 		[...missionQueryKeys.detailsOf(missionId), host] as const,
+	marks: () => [...missionQueryKeys.all, "marks"] as const,
+	marksOf: (source: string | null) =>
+		[...missionQueryKeys.marks(), source] as const,
 }
