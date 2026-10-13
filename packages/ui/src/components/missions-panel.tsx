@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -28,6 +28,7 @@ type MissionsPanelProps = {
 	openMissionId?: string | null
 	wrap?: MissionCardWrap
 	listEnd?: ListEnd
+	skeleton?: ReactNode
 }
 
 type MissionsPanelRowsProps = Pick<
@@ -79,11 +80,20 @@ const MissionsPanel = ({
 	open,
 	earlierToday,
 	listEnd,
+	skeleton,
 	...rowProps
 }: MissionsPanelProps) => {
 	const { t } = useTranslation("chat")
 	const [isEarlierTodayOpen, setEarlierTodayOpen] = useState(false)
 	const isEarlierTodayFolded = earlierToday.length > 0 && !isEarlierTodayOpen
+
+	if (skeleton) {
+		return (
+			<div className="min-h-0 flex-1" data-slot="missions-panel-skeleton">
+				{skeleton}
+			</div>
+		)
+	}
 
 	if (open.length === 0 && earlierToday.length === 0) {
 		return <MissionsPanelEmpty />

@@ -11,6 +11,7 @@ import {
 	companionGlyphsIn,
 	companionTintOf,
 	expectCompanionPictureShape,
+	expectSkeletonFilledTo,
 	FRAME_POLL,
 	hasOverlayScrollbars,
 	mergeA11y,
@@ -55,6 +56,7 @@ import type {
 	MissionsPanelMission,
 	MissionsPanelProps,
 } from "@workspace/ui/components/missions-panel"
+import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
@@ -896,6 +898,34 @@ export const UnreadableRoster = meta.story({
 		await expect(
 			canvas.queryByText("No companions yet"),
 		).not.toBeInTheDocument()
+	},
+})
+
+export const LoadingRoster = meta.story({
+	args: {
+		botsBySpaceId: inHome([]),
+		rosterSkeleton: <SidebarListSkeleton />,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The first read of the roster of the open space has not answered yet: `rosterSkeleton` takes the place of the list, so the reader never meets the invitation to create a first companion before the roster is known. Check no row is drawn, the empty state is absent, and the skeleton runs to the bottom of the list region while the header and the rail stay the loaded components.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectSkeletonFilledTo(canvasElement, "bottom")
+		await expect(rowsIn(canvasElement)).toHaveLength(0)
+		await expect(
+			canvas.queryByText("No companions yet"),
+		).not.toBeInTheDocument()
+		await expect(
+			slotIn(canvasElement, "list-skeleton").getBoundingClientRect().bottom,
+		).toBeCloseTo(
+			slotIn(canvasElement, "sidebar-content").getBoundingClientRect().bottom,
+			0,
+		)
 	},
 })
 

@@ -215,6 +215,7 @@ interface AppSidebarProps
 		SectionActions {
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
+	rosterSkeleton?: ReactNode
 	botsBySpaceId?: Record<string, AppSidebarBot[]>
 	conversations?: AppSidebarConversation[]
 	conversationsBySpaceId?: Record<string, AppSidebarConversation[]>
