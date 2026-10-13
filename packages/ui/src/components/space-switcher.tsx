@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -12,6 +13,11 @@ import {
 	blotTint,
 } from "@workspace/ui/components/companion-colour"
 import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
+import {
+	HostDot,
+	HostPill,
+	type SpaceHost,
+} from "@workspace/ui/components/host-pill"
 import { Icons } from "@workspace/ui/components/icons"
 import type { Space } from "@workspace/ui/components/space"
 import {
@@ -39,33 +45,28 @@ import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SWITCHER =
-	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4"
+	"relative h-8 min-w-0 max-w-64 shrink gap-2 rounded-md px-2 font-normal text-compact text-muted-foreground leading-4 aria-expanded:bg-sidebar-accent aria-expanded:[--host-dot-surface:var(--color-sidebar-accent)]"
 
 const SWITCHER_NAME = "min-w-0 truncate"
 
-const SWITCHER_SWATCH = "rounded-[3px]"
+const SQUARE = "relative rounded-[3px]"
+
+const HOST_DOT_ON_SQUARE =
+	"absolute -end-[3.5px] -bottom-[3.5px] ring-2 ring-(--host-dot-surface,var(--shell-surface,var(--background)))"
 
 const SWITCHER_CHEVRON = "size-3 shrink-0 stroke-2!"
 
-const SWITCHER_REMOTE = "size-3 shrink-0 text-muted-foreground"
-
 const SWITCHER_INVITATION =
-	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary ring-2 ring-sidebar"
+	"pointer-events-none absolute end-0.25 top-1 size-1.75 rounded-full bg-primary ring-2 ring-(--shell-surface,var(--background))"
 
 const MENU_RESTING = "max-w-64"
 
 const MENU_INVITED = "w-70"
 
+const ROW =
+	"[--host-dot-surface:var(--color-popover)] focus:[--host-dot-surface:var(--color-accent)]"
+
 const ROW_NAME = "min-w-0 grow truncate"
-
-const ROW_NAME_UNREACHABLE = "text-muted-foreground"
-
-const ROW_REMOTE = "size-3.5 shrink-0 text-muted-foreground"
-
-const ROW_UNREACHABLE =
-	"shrink-0 whitespace-nowrap text-muted-foreground text-xs"
-
-const ROW_UNREACHABLE_ICON = "size-3.5 shrink-0 text-destructive"
 
 const DOT = "h-2.5 w-2.5 shrink-0 rounded-full"
 
@@ -112,6 +113,7 @@ type SpaceDotProps = {
 	badge?: BotBadge
 	isFilled?: boolean
 	className?: string
+	children?: ReactNode
 }
 
 const SpaceDot = ({
@@ -119,6 +121,7 @@ const SpaceDot = ({
 	badge,
 	isFilled = true,
 	className,
+	children,
 }: SpaceDotProps) => {
 	const tint = isFilled && colour ? blotTint(colour) : undefined
 
@@ -135,7 +138,9 @@ const SpaceDot = ({
 			data-badge={badge}
 			data-slot="space-dot"
 			style={tint ? { backgroundColor: tint } : undefined}
-		/>
+		>
+			{children}
+		</span>
 	)
 }
 
@@ -147,41 +152,25 @@ type SpaceSelection = {
 	onReorderSpaces?: (ids: string[]) => void
 }
 
-type SpaceRemote = "connected" | "unreachable"
-
-type SpaceRemoteMarkerProps = {
-	remote: SpaceRemote
+type SpaceSquareProps = {
+	colour?: BotAvatarBlot | null
+	badge?: BotBadge
+	host?: SpaceHost
 }
 
-const SpaceRemoteMarker = ({ remote }: SpaceRemoteMarkerProps) => {
-	const { t } = useTranslation("bots")
+const SpaceSquare = ({ colour, badge, host }: SpaceSquareProps) => (
+	<SpaceDot badge={badge} className={SQUARE} colour={colour}>
+		{host ? <HostDot className={HOST_DOT_ON_SQUARE} host={host} /> : null}
+	</SpaceDot>
+)
 
-	if (remote === "connected") {
-		return (
-			<Icons.Web
-				aria-hidden={false}
-				aria-label={t("spaces.remote")}
-				className={ROW_REMOTE}
-				data-slot="space-remote"
-				role="img"
-			/>
-		)
-	}
-
-	return (
-		<>
-			<Icons.Alert aria-hidden="true" className={ROW_UNREACHABLE_ICON} />
-			<span className={ROW_UNREACHABLE} data-slot="space-unreachable">
-				{t("spaces.unreachable")}
-			</span>
-		</>
-	)
-}
+const isJoined = (host?: SpaceHost) => host !== undefined && host !== "shared"
 
 type SpaceSwitcherProps = SpaceSelection &
 	SpaceInvitationCallbacks & {
-		remoteBySpaceId?: Record<string, SpaceRemote>
+		hostBySpaceId?: Record<string, SpaceHost>
 		invitations?: SpaceInvitation[]
+		onShare?: () => void
 		onCreateSpace?: () => void
 		onOpenSpaceSettings?: () => void
 		onLeaveSpace?: () => void
@@ -192,10 +181,11 @@ const SpaceSwitcher = ({
 	spaces,
 	selectedSpaceId,
 	badgesBySpaceId,
-	remoteBySpaceId,
+	hostBySpaceId,
 	invitations = [],
 	onSelectSpace,
 	onReorderSpaces,
+	onShare,
 	onCreateSpace,
 	onOpenSpaceSettings,
 	onLeaveSpace,
@@ -211,14 +201,14 @@ const SpaceSwitcher = ({
 	if (!selected) return null
 
 	const rank = spaces.indexOf(selected)
-	const isRemote = Boolean(remoteBySpaceId?.[selected.id])
+	const host = hostBySpaceId?.[selected.id]
 	const isInvited = invitations.length > 0
 	const switchLabel = isInvited
-		? isRemote
-			? "spaces.switchRemoteInvited"
+		? host
+			? "spaces.switchHostedInvited"
 			: "spaces.switchInvited"
-		: isRemote
-			? "spaces.switchRemote"
+		: host
+			? "spaces.switchHosted"
 			: "spaces.switch"
 
 	const moveSelected = (by: number) => {
@@ -235,137 +225,142 @@ const SpaceSwitcher = ({
 			)
 
 	return (
-		<ContextMenu onOpenChange={(isOpen) => onOpenChange?.(isOpen)}>
-			<ContextMenuPressTrigger
-				render={
-					<Button
-						aria-label={t(switchLabel, {
-							count: invitations.length,
-							name: selected.name,
-						})}
-						className={SWITCHER}
-						data-slot="space-switcher"
-						size="sm"
-						variant="ghost"
-					>
-						<SpaceDot className={SWITCHER_SWATCH} colour={selected.colour} />
-						<span className={SWITCHER_NAME} data-slot="space-switcher-name">
-							{selected.name}
-						</span>
-						{isRemote ? (
-							<Icons.Web
-								aria-hidden="true"
-								className={SWITCHER_REMOTE}
-								data-slot="space-switcher-remote"
-							/>
-						) : null}
-						<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
-						{elsewhere ? (
-							<BotBadgeDot
-								badge={elsewhere}
-								data-slot="space-switcher-badge"
-								placement="switcher"
-							/>
-						) : null}
-						{isInvited ? (
-							<span
-								aria-hidden="true"
-								className={SWITCHER_INVITATION}
-								data-slot="space-switcher-invitation"
-							/>
-						) : null}
-					</Button>
-				}
-			/>
-			<ContextMenuContent
-				aria-label={t("spaces.label")}
-				className={cn(
-					isInvited ? MENU_INVITED : MENU_RESTING,
-					STILL_UNDER_REDUCED_MOTION,
-				)}
-			>
-				<ContextMenuRadioGroup
-					onValueChange={(value) => onSelectSpace?.(value)}
-					value={selected.id}
-				>
-					{spaces.map((space, index) => {
-						const remote = remoteBySpaceId?.[space.id]
-						const isUnreachable = remote === "unreachable"
-						return (
-							<ContextMenuRadioItem
-								closeOnClick
-								key={space.id}
-								label={space.name}
-								value={space.id}
-							>
-								<SpaceDot
-									badge={badgesBySpaceId?.[space.id]}
-									colour={space.colour}
-									isFilled={!isUnreachable}
+		<>
+			<ContextMenu onOpenChange={(isOpen) => onOpenChange?.(isOpen)}>
+				<ContextMenuPressTrigger
+					render={
+						<Button
+							aria-label={t(switchLabel, {
+								count: invitations.length,
+								host: host ? t(`spaces.host.${host}`) : "",
+								name: selected.name,
+							})}
+							className={SWITCHER}
+							data-slot="space-switcher"
+							size="sm"
+							variant="ghost"
+						>
+							<SpaceSquare colour={selected.colour} host={host} />
+							<span className={SWITCHER_NAME} data-slot="space-switcher-name">
+								{selected.name}
+							</span>
+							<Icons.Expand aria-hidden="true" className={SWITCHER_CHEVRON} />
+							{elsewhere ? (
+								<BotBadgeDot
+									badge={elsewhere}
+									data-slot="space-switcher-badge"
+									placement="switcher"
 								/>
+							) : null}
+							{isInvited ? (
 								<span
-									className={cn(
-										ROW_NAME,
-										isUnreachable && ROW_NAME_UNREACHABLE,
-									)}
-								>
-									{space.name}
-								</span>
-								{remote ? <SpaceRemoteMarker remote={remote} /> : null}
-								{index < SPACE_RANK_LIMIT ? (
-									<ContextMenuShortcut>
-										{t("spaces.shortcut", { rank: index + 1 })}
-									</ContextMenuShortcut>
-								) : null}
-							</ContextMenuRadioItem>
-						)
-					})}
-				</ContextMenuRadioGroup>
-				<SpaceInvitations
-					invitations={invitations}
-					onAcceptInvitation={onAcceptInvitation}
-					onDeclineInvitation={onDeclineInvitation}
-					onRetryInvitation={onRetryInvitation}
+									aria-hidden="true"
+									className={SWITCHER_INVITATION}
+									data-slot="space-switcher-invitation"
+								/>
+							) : null}
+						</Button>
+					}
 				/>
-				<ContextMenuSeparator />
-				{spaces.length > 1 ? (
-					<>
-						<ContextMenuItem
-							disabled={rank === 0}
-							onClick={() => moveSelected(-1)}
-						>
-							<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
-							{t("spaces.moveUp")}
-						</ContextMenuItem>
-						<ContextMenuItem
-							disabled={rank === spaces.length - 1}
-							onClick={() => moveSelected(1)}
-						>
-							<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
-							{t("spaces.moveDown")}
-						</ContextMenuItem>
-						<ContextMenuSeparator />
-					</>
-				) : null}
-				<ContextMenuItem onClick={onCreateSpace}>
-					<Icons.Add aria-hidden="true" className="size-3.5" />
-					{t("spaces.create")}
-				</ContextMenuItem>
-				<ContextMenuItem onClick={onOpenSpaceSettings}>
-					<Icons.Settings aria-hidden="true" className="size-3.5" />
-					{t("spaces.settings")}
-				</ContextMenuItem>
-				{isRemote ? (
-					<>
-						<ContextMenuSeparator />
-						<ContextMenuItem onClick={onLeaveSpace} variant="destructive">
-							<Icons.Leave aria-hidden="true" className="size-3.5" />
-							{t("spaces.leave")}
-						</ContextMenuItem>
-					</>
-				) : null}
-			</ContextMenuContent>
-		</ContextMenu>
+				<ContextMenuContent
+					aria-label={t("spaces.label")}
+					className={cn(
+						isInvited ? MENU_INVITED : MENU_RESTING,
+						STILL_UNDER_REDUCED_MOTION,
+					)}
+				>
+					{onShare ? (
+						<>
+							<ContextMenuItem onClick={onShare}>
+								<Icons.Users aria-hidden="true" className="size-3.5" />
+								{t("spaces.share")}
+							</ContextMenuItem>
+							<ContextMenuSeparator />
+						</>
+					) : null}
+					<ContextMenuRadioGroup
+						onValueChange={(value) => onSelectSpace?.(value)}
+						value={selected.id}
+					>
+						{spaces.map((space, index) => {
+							const rowHost = hostBySpaceId?.[space.id]
+							return (
+								<ContextMenuRadioItem
+									className={ROW}
+									closeOnClick
+									key={space.id}
+									label={space.name}
+									value={space.id}
+								>
+									<SpaceSquare
+										badge={badgesBySpaceId?.[space.id]}
+										colour={space.colour}
+										host={rowHost}
+									/>
+									<span className={ROW_NAME}>{space.name}</span>
+									{rowHost ? (
+										<span className="sr-only">
+											{t(`spaces.host.${rowHost}`)}
+										</span>
+									) : null}
+									{index < SPACE_RANK_LIMIT ? (
+										<ContextMenuShortcut>
+											{t("spaces.shortcut", { rank: index + 1 })}
+										</ContextMenuShortcut>
+									) : null}
+								</ContextMenuRadioItem>
+							)
+						})}
+					</ContextMenuRadioGroup>
+					<SpaceInvitations
+						invitations={invitations}
+						onAcceptInvitation={onAcceptInvitation}
+						onDeclineInvitation={onDeclineInvitation}
+						onRetryInvitation={onRetryInvitation}
+					/>
+					<ContextMenuSeparator />
+					{spaces.length > 1 ? (
+						<>
+							<ContextMenuItem
+								disabled={rank === 0}
+								onClick={() => moveSelected(-1)}
+							>
+								<Icons.ArrowUp aria-hidden="true" className="size-3.5" />
+								{t("spaces.moveUp")}
+							</ContextMenuItem>
+							<ContextMenuItem
+								disabled={rank === spaces.length - 1}
+								onClick={() => moveSelected(1)}
+							>
+								<Icons.ArrowDown aria-hidden="true" className="size-3.5" />
+								{t("spaces.moveDown")}
+							</ContextMenuItem>
+							<ContextMenuSeparator />
+						</>
+					) : null}
+					<ContextMenuItem onClick={onCreateSpace}>
+						<Icons.Add aria-hidden="true" className="size-3.5" />
+						{t("spaces.create")}
+					</ContextMenuItem>
+					<ContextMenuItem onClick={onOpenSpaceSettings}>
+						<Icons.Settings aria-hidden="true" className="size-3.5" />
+						{t("spaces.settings")}
+					</ContextMenuItem>
+					{isJoined(host) ? (
+						<>
+							<ContextMenuSeparator />
+							<ContextMenuItem onClick={onLeaveSpace} variant="destructive">
+								<Icons.Leave aria-hidden="true" className="size-3.5" />
+								{t("spaces.leave")}
+							</ContextMenuItem>
+						</>
+					) : null}
+				</ContextMenuContent>
+			</ContextMenu>
+			{host === "connecting" || host === "down" ? (
+				<HostPill host={host} />
+			) : null}
+		</>
 	)
 }
 
@@ -458,10 +453,4 @@ const SpaceDots = ({
 	)
 }
 
-export {
-	SpaceDot,
-	SpaceDots,
-	type SpaceRemote,
-	SpaceSwitcher,
-	type SpaceSwitcherProps,
-}
+export { SpaceDot, SpaceDots, SpaceSwitcher, type SpaceSwitcherProps }

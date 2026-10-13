@@ -753,6 +753,14 @@ navigation-apprail--update-downloading
 navigation-apprail--update-idle
 navigation-apprail--update-ready
 navigation-apprail--with-dot
+navigation-appsidebar--a-1-local-space
+navigation-appsidebar--a-2-shared-space
+navigation-appsidebar--a-3-joined-space
+navigation-appsidebar--a-4-connecting
+navigation-appsidebar--a-5-not-connected
+navigation-appsidebar--a-6-invitation-waiting
+navigation-appsidebar--a-7-menu-open
+navigation-appsidebar--a-8-long-name-at-minimum-width
 navigation-appsidebar--badges
 navigation-appsidebar--bare-rows
 navigation-appsidebar--caption-window-controls
@@ -857,11 +865,6 @@ navigation-appsidebar--space-switching-off
 navigation-appsidebar--space-switching-off-in-missions
 navigation-appsidebar--space-tinted
 navigation-appsidebar--spaces-without-rosters
-navigation-appsidebar--title-bar-guest-narrow-window
-navigation-appsidebar--title-bar-guest-offline
-navigation-appsidebar--title-bar-guest-online
-navigation-appsidebar--title-bar-guest-share
-navigation-appsidebar--title-bar-host-share
 navigation-appsidebar--unreadable-roster
 navigation-appsidebar--uploaded-pictures
 navigation-appsidebar--window-controls-reserved
@@ -898,8 +901,8 @@ navigation-headeridentitybutton--in-layout
 navigation-headeridentitybutton--long-content
 navigation-headeridentitybutton--variants
 navigation-headeridentitybutton--working
-navigation-hostpill--offline
-navigation-hostpill--online
+navigation-hostpill--connecting
+navigation-hostpill--not-connected
 navigation-hostpill--themes-side-by-side
 navigation-missionspanel--default
 navigation-missionspanel--earlier-today-unfolded
@@ -934,7 +937,6 @@ navigation-settingsrail--icons-only
 navigation-settingsrail--scrolling-panel
 navigation-settingsrail--selected-beside-idle
 navigation-settingsrail--with-back
-navigation-sharebutton--default
 navigation-sidebar--expanded
 navigation-sidebar--right-side
 navigation-sidebarlistrow--all-slots
@@ -970,6 +972,7 @@ navigation-spaceswitcher--colourless
 navigation-spaceswitcher--default
 navigation-spaceswitcher--drag-dot-nowhere
 navigation-spaceswitcher--drag-dot-to-place
+navigation-spaceswitcher--hosted-long-names
 navigation-spaceswitcher--invitation-long-content
 navigation-spaceswitcher--invitation-over-bot-badge
 navigation-spaceswitcher--invitation-without-join-entry
@@ -986,11 +989,9 @@ navigation-spaceswitcher--m-6-unreachable
 navigation-spaceswitcher--m-9-failed-servers
 navigation-spaceswitcher--move-space
 navigation-spaceswitcher--open
-navigation-spaceswitcher--remote-long-names
 navigation-spaceswitcher--single-space
+navigation-spaceswitcher--themes-joined-space-menu
 navigation-spaceswitcher--themes-local-space-menu
-navigation-spaceswitcher--themes-remote-space-trigger
-navigation-spaceswitcher--themes-unreachable-space-menu
 navigation-spaceswitcher--with-dots
 navigation-spaceswitcher--wrapped-dots
 navigation-tabs--default

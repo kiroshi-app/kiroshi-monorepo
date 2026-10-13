@@ -4,12 +4,11 @@ import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
 import { HostPill } from "@workspace/ui/components/host-pill"
 
-const ITERATION_FIVE =
-	"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, dark only."
-
-const PRESENCE_ONLINE = "rgb(63, 180, 102)"
+const MOCKUP = "Measured against the Paper page `Mockup`, A4 and A5."
 
 const PRESENCE_OFFLINE = "rgb(115, 115, 115)"
+
+const DARK_BACKGROUND = "rgb(0, 0, 0)"
 
 const FOREGROUND = "rgb(245, 245, 245)"
 
@@ -23,12 +22,12 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a guest's title bar says about the space they joined: whether the Mac hosting it is reachable right now, never who the host is. A dot on the presence colour carries the state alongside the words `Connected` or `Not connected`, never instead of them, and those words are its only readable content. It is a plain label, not a control, and carries no tooltip. It replaces `ShareButton`, which only a host sees.",
+					"The state pill a guest's title bar shows beside the space selector while the Mac hosting the joined space is not answering yet, or not at all: `Connecting…` over a hollow dot, `Not connected` over the muted presence dot. A reachable host and a space shared from this Mac draw no pill, the dot on the selector's square says it. The words are its only readable content; it is a plain label, not a control, and carries no tooltip. `HostDot` is the dot it shares with the selector's square and the menu rows.",
 			},
 		},
 	},
 	args: {
-		isOnline: true,
+		host: "connecting" as const,
 	},
 })
 
@@ -41,51 +40,54 @@ const expectPillGeometry = async (pill: HTMLElement) => {
 	await expect(style.fontSize).toBe("12px")
 	await expect(style.lineHeight).toBe("16px")
 	await expect(style.fontWeight).toBe("500")
-	const dot = slotIn(pill, "host-pill-dot")
+	const dot = slotIn(pill, "host-dot")
 	await expect(dot.getBoundingClientRect().width).toBe(7)
 	await expect(dot).toHaveAttribute("aria-hidden", "true")
 	return dot
 }
 
-export const Online = meta.story({
+export const Connecting = meta.story({
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
-				story: `${ITERATION_FIVE} 5.6: a guest whose host's Mac answers. Check the 24px pill is fully rounded with 8px before the 7px online dot and 10px after the label, that it reads \`Connected\` in 12px at weight 500, that it is no button and sits outside the tab order, that hovering it opens no tooltip, and that no \`@\` appears. Pick \`Offline\` for the host that stopped answering.`,
+				story: `${MOCKUP} A4: the guest's Mac is still reaching the host. Check the 24px pill is fully rounded with 8px before the 7px hollow dot and 10px after the label, that the dot is a 1.5px inner muted presence ring over the title bar background, that it reads \`Connecting…\` in the foreground at 12px and weight 500, and that it is no button and opens no tooltip. Pick \`NotConnected\` for the host that does not answer.`,
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
-		const pill = canvas.getByText("Connected").parentElement as HTMLElement
-		await expect(pill).toHaveTextContent(/^Connected$/)
+		const pill = canvas.getByText("Connecting…").parentElement as HTMLElement
+		await expect(pill).toHaveTextContent(/^Connecting…$/)
 		await expect(canvas.queryByRole("button")).toBeNull()
 		await expect(pill).not.toHaveAttribute("tabindex")
-		await expect(pill.textContent).not.toContain("@")
 		const dot = await expectPillGeometry(pill)
-		await expect(getComputedStyle(dot).backgroundColor).toBe(PRESENCE_ONLINE)
+		const ring = getComputedStyle(dot)
+		await expect(ring.boxShadow).toContain(
+			`${PRESENCE_OFFLINE} 0px 0px 0px 1.5px inset`,
+		)
+		await expect(ring.backgroundColor).toBe(DARK_BACKGROUND)
 		await expect(getComputedStyle(pill).color).toBe(FOREGROUND)
 		await userEvent.hover(pill)
 		await expect(screen.queryByRole("tooltip")).toBeNull()
 	},
 })
 
-export const Offline = meta.story({
+export const NotConnected = meta.story({
 	globals: { theme: "dark" },
-	args: { isOnline: false },
+	args: { host: "down" },
 	parameters: {
 		docs: {
 			description: {
-				story: `${ITERATION_FIVE} 5.7: a guest whose host's Mac is gone. Check the pill keeps the geometry of \`Online\`, that the dot turns to the muted presence colour, and that the label reads \`Not connected\` in the muted foreground as its only readable content. Pick \`Online\` for the reachable host.`,
+				story: `${MOCKUP} A5: the host is down or refused the guest. Check the pill keeps the geometry of \`Connecting\`, that the dot is filled with the muted presence colour, and that the label reads \`Not connected\` in the muted foreground. Pick \`Connecting\` for the host still being reached.`,
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		const pill = canvas.getByText("Not connected").parentElement as HTMLElement
 		await expect(pill).toHaveTextContent(/^Not connected$/)
-		await expect(pill.textContent).not.toContain("@")
 		const dot = await expectPillGeometry(pill)
 		await expect(getComputedStyle(dot).backgroundColor).toBe(PRESENCE_OFFLINE)
+		await expect(getComputedStyle(dot).boxShadow).toBe("none")
 		await expect(getComputedStyle(pill).color).toBe(MUTED_FOREGROUND)
 	},
 })
@@ -93,12 +95,12 @@ export const Offline = meta.story({
 export const ThemesSideBySide = meta.story({
 	globals: { theme_layout: "side-by-side" },
 	tags: ["test-only"],
-	args: { isOnline: false },
+	args: { host: "down" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The offline pill in light beside dark, the pair the contrast audit reads: the muted label sits on the opaque light pill fill so it keeps AA wherever the shell is tinted. Pick `Offline` for the measured dark artboard.",
+					"The not connected pill in light beside dark, the pair the contrast audit reads: the muted label sits on the opaque light pill fill so it keeps AA wherever the shell is tinted. Pick `NotConnected` for the measured dark state.",
 			},
 		},
 	},
