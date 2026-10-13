@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+// @vitest-environment happy-dom
+
+import { cleanup, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import {
 	type BotSections,
@@ -7,15 +12,33 @@ import {
 	sectionsIn,
 	spaceOfSection,
 } from "./sections-controller"
+import { useSectionReads } from "./use-sections"
 
+import { useControllerState } from "../use-controller"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: vi.fn(async () => () => undefined),
+}))
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal()),
+	raiseFailureNotice: vi.fn(() => "notice-1"),
+}))
+
+afterEach(() => {
+	cleanup()
+	vi.mocked(raiseFailureNotice).mockClear()
+})
 
 const silentBots: BotSections = {
 	move: () => undefined,
 	clear: () => undefined,
 	pin: () => undefined,
 	hostSpaceIdOf: (spaceRowId) => spaceRowId,
+	reload: async () => undefined,
 }
 
 const atTop = (id: string) => ({ id, sectionId: null })
@@ -25,7 +48,14 @@ const entered = async (
 	spaceId = "personal",
 	bots: BotSections = silentBots,
 ) => {
-	const controller = createSectionsController(store, bots)
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	const controller = createSectionsController(store, bots, { queryClient })
+	renderHook(
+		() => useSectionReads(controller, useControllerState(controller)),
+		{
+			wrapper,
+		},
+	)
 	await controller.enter(spaceId)
 	return controller
 }
@@ -210,6 +240,35 @@ describe("createSectionsController", () => {
 		await controller.moveBot("default", "gone")
 
 		expect(moves).toEqual([])
+	})
+
+	it("reads the roster again when the record refuses a companion move", async () => {
+		const store = createFakeTranscriptStore()
+		const reload = vi.fn(async () => undefined)
+		const controller = await entered(store, "personal", {
+			...silentBots,
+			reload,
+		})
+
+		await controller.moveBot("default", "gone")
+
+		expect(reload).toHaveBeenCalledOnce()
+	})
+
+	it("raises a failure notice and holds no section when a space cannot be read", async () => {
+		const store = createFakeTranscriptStore()
+		await store.createSection("personal", "Writers")
+		vi.spyOn(store, "sections").mockRejectedValue(new Error("no record"))
+
+		const controller = await entered(store)
+
+		expect(names(controller)).toEqual([])
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title:
+					"Couldn’t load the sections of this space. Restart Kiroshi to retry.",
+			}),
+		)
 	})
 
 	it("restores the sections it held when a rename is refused", async () => {

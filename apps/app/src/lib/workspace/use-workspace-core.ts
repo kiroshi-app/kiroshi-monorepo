@@ -79,6 +79,7 @@ export const useWorkspaceCore = () => {
 		clear: roster.controller.clearSection,
 		pin: roster.controller.pin,
 		hostSpaceIdOf: roster.controller.hostSpaceIdOf,
+		reload: roster.controller.reload,
 	})
 	const collapsedSections = useCollapsedSections(
 		store,

@@ -19,10 +19,9 @@ export const useSpaceSections = ({ core, rosterLines }: SpaceSectionsInput) => {
 			listedRosters === "" ? [] : listedRosters.split(" ")
 		sections.controller.keep(rosteredSpaceIds)
 		collapsedSections.controller.keep(rosteredSpaceIds)
-		const held = sections.controller.getState().sections
+		const held = collapsedSections.controller.getState().collapsedBySpaceId
 		for (const spaceId of rosteredSpaceIds) {
 			if (!held[spaceId]) {
-				void sections.controller.enter(spaceId)
 				void collapsedSections.controller.enter(spaceId)
 			}
 		}
