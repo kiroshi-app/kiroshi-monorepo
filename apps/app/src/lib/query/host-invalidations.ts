@@ -27,7 +27,11 @@ export const useInvalidateOnHostEvent = (
 	useEffect(() => {
 		const keys: QueryKey[] = JSON.parse(keysHash)
 		const invalidate = () => {
-			for (const queryKey of keys) queryClient.invalidateQueries({ queryKey })
+			for (const queryKey of keys) {
+				void queryClient
+					.cancelQueries({ queryKey })
+					.then(() => queryClient.invalidateQueries({ queryKey }))
+			}
 		}
 		const subscription = listen(event, invalidate).catch(
 			reportUnheardEvent(event),
