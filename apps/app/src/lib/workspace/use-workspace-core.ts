@@ -92,9 +92,6 @@ export const useWorkspaceCore = () => {
 		roster.controller.hostSpaceIdOf,
 	)
 	const companionPlugin = usePlugin(store)
-	const botConnections = useConnections(connectionTransport)
-	const spaceConnections = useConnections(connectionTransport)
-	const userConnections = useConnections(connectionTransport)
 	const applications = useApplications(applicationTransport, store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
@@ -114,6 +111,15 @@ export const useWorkspaceCore = () => {
 	const botMcpServers = useMcpServers(store, companionSettingsOwner)
 	const spaceMcpServers = useMcpServers(store, spaceSettingsOwner)
 	const userMcpServers = useMcpServers(store, userSettingsOwner)
+	const botConnections = useConnections(
+		connectionTransport,
+		companionSettingsOwner,
+	)
+	const spaceConnections = useConnections(
+		connectionTransport,
+		spaceSettingsOwner,
+	)
+	const userConnections = useConnections(connectionTransport, userSettingsOwner)
 	const preferences = user.state.preferences
 
 	return {

@@ -139,10 +139,8 @@ const connectRefusalOf = (rows: ApplicationRow[], name: string) => {
 }
 
 const connectFor =
-	({ controller }: Connections) =>
-	async (name: string, url: string) => {
-		await controller.connect(name, url)
-		const { failure, rows } = controller.getState()
+	(connections: Connections) => async (name: string, url: string) => {
+		const { failure, rows } = await connections.connect(name, url)
 		if (failure?.command === "connect" && failure.name === name) {
 			throw failure.reason
 		}

@@ -15,8 +15,7 @@ import {
 	initialApplicationsState,
 } from "./applications-controller"
 import type { ApplicationRow } from "./connection-port"
-import type { ConnectionFailure } from "./connections-controller"
-import type { Connections } from "./use-connections"
+import type { ConnectionFailure, Connections } from "./use-connections"
 
 import type { McpServers } from "../bots/use-mcp-servers"
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
@@ -117,20 +116,20 @@ const serversWith = (
 	reread: vi.fn(async () => undefined),
 })
 
-const NO_CONNECTIONS = {
-	state: { owner: null, rows: [], connecting: null, failure: null },
-	controller: {
-		connect: vi.fn(async () => undefined),
-		disconnect: vi.fn(async () => undefined),
-		cancel: vi.fn(async () => undefined),
-		getState: () => ({
-			owner: null,
-			rows: [],
-			connecting: null,
-			failure: null,
-		}),
-	} as unknown as Connections["controller"],
-} as Connections
+const connectionsReading = (
+	rows: ApplicationRow[],
+	failure: ConnectionFailure | null = null,
+): Connections => ({
+	rows,
+	connecting: null,
+	failure,
+	isPending: false,
+	connect: vi.fn(async () => ({ rows, failure })),
+	disconnect: vi.fn(async () => ({ rows, failure })),
+	cancel: vi.fn(),
+})
+
+const NO_CONNECTIONS = connectionsReading([])
 
 const scopeOf = (
 	applications = applicationsWith({ curated: [LINEAR] }),
@@ -149,23 +148,10 @@ const scopeOf = (
 	reopen,
 })
 
-const connectionsLanding = (connected: string[]): Connections => {
-	const state = {
-		owner: USER,
-		rows: connected.map((name) => ({ name, status: "connected" as const })),
-		connecting: null,
-		failure: null,
-	}
-	return {
-		state,
-		controller: {
-			connect: vi.fn(async () => undefined),
-			disconnect: vi.fn(async () => undefined),
-			cancel: vi.fn(async () => undefined),
-			getState: () => state,
-		},
-	} as unknown as Connections
-}
+const connectionsLanding = (connected: string[]): Connections =>
+	connectionsReading(
+		connected.map((name) => ({ name, status: "connected" as const })),
+	)
 
 type SettlingScopeSource = {
 	owner?: EnvOwner | null
@@ -709,22 +695,6 @@ describe("toApplicationScope", () => {
 		expect(reopen).not.toHaveBeenCalled()
 	})
 })
-
-const connectionsReading = (
-	rows: ApplicationRow[],
-	failure: ConnectionFailure | null = null,
-): Connections => {
-	const state = { owner: USER, rows, connecting: null, failure }
-	return {
-		state,
-		controller: {
-			connect: vi.fn(async () => undefined),
-			disconnect: vi.fn(async () => undefined),
-			cancel: vi.fn(async () => undefined),
-			getState: () => state,
-		},
-	} as unknown as Connections
-}
 
 const installTargetOf = (connections: Connections) => {
 	const applications = applicationsWith({ curated: [LINEAR], picked: LINEAR })

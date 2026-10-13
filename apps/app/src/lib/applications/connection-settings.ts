@@ -6,9 +6,9 @@ import type {
 import type { McpConnectionSection } from "@workspace/ui/components/bot-settings-dialog/mcp-connection"
 import { readMcpServerLaunch } from "@workspace/ui/components/bot-settings-dialog/mcp-server-launch"
 
+import type { ApplicationRow } from "./connection-port"
 import { toConnectionReason } from "./connection-reason"
-import type { ConnectionsState } from "./connections-controller"
-import type { Connections } from "./use-connections"
+import type { ConnectionOutcome, Connections } from "./use-connections"
 
 import type { BotMcpServer } from "../conversations/store-contract"
 
@@ -54,54 +54,53 @@ type ApplicationConnection = {
 }
 
 const connectionOf = (
-	state: ConnectionsState,
+	{ connecting, failure, rows }: Connections,
 	name: string,
 ): ApplicationConnection => {
-	if (state.connecting === name) {
+	if (connecting === name) {
 		return { state: "connecting" }
 	}
-	if (state.failure?.command === "connect" && state.failure.name === name) {
-		return { state: "failed", reason: toConnectionReason(state.failure.reason) }
+	if (failure?.command === "connect" && failure.name === name) {
+		return { state: "failed", reason: toConnectionReason(failure.reason) }
 	}
-	const status = state.rows.find((row) => row.name === name)?.status
+	const status = rows.find((row) => row.name === name)?.status
 	return status === "unknown" ? {} : { state: status }
 }
 
 type ConnectionLanding = "connected" | "disconnected"
 
 const isLanded = (
-	{ controller }: Connections,
+	rows: ApplicationRow[],
 	name: string,
 	landing: ConnectionLanding,
 ) => {
 	const isConnected =
-		controller.getState().rows.find((row) => row.name === name)?.status ===
-		"connected"
+		rows.find((row) => row.name === name)?.status === "connected"
 	return landing === "connected" ? isConnected : !isConnected
 }
 
 const settling =
-	(connections: Connections, onSettled?: (name: string) => void) =>
-	(name: string, landing: ConnectionLanding, run: Promise<void>) => {
-		void run.then(() => {
-			if (isLanded(connections, name, landing)) {
+	(onSettled?: (name: string) => void) =>
+	(
+		name: string,
+		landing: ConnectionLanding,
+		run: Promise<ConnectionOutcome>,
+	) => {
+		void run.then(({ rows }) => {
+			if (isLanded(rows, name, landing)) {
 				onSettled?.(name)
 			}
 		})
 	}
 
-type ConnectionRuns = (
-	name: string,
-	landing: ConnectionLanding,
-	run: Promise<void>,
-) => void
+type ConnectionRuns = ReturnType<typeof settling>
 
 const sectionOf = (
-	{ state, controller }: Connections,
+	connections: Connections,
 	server: BotMcpServer,
 	settle: ConnectionRuns,
 ): McpConnectionSection | undefined => {
-	const connection = connectionOf(state, server.name)
+	const connection = connectionOf(connections, server.name)
 	if (!connection.state) {
 		return undefined
 	}
@@ -112,16 +111,14 @@ const sectionOf = (
 		reason: connection.reason,
 		host: hostOf(url),
 		onConnect: () => {
-			settle(server.name, "connected", controller.connect(server.name, url))
+			settle(server.name, "connected", connections.connect(server.name, url))
 		},
-		onCancel: () => {
-			void controller.cancel()
-		},
+		onCancel: connections.cancel,
 		onDisconnect: () => {
 			settle(
 				server.name,
 				"disconnected",
-				controller.disconnect(server.name, url),
+				connections.disconnect(server.name, url),
 			)
 		},
 	}
@@ -134,11 +131,11 @@ export const toConnectionSettings = ({
 	onSettled,
 }: ConnectionSettingsSource): ConnectionSettings => {
 	const opened = servers.find((server) => server.name === openedName)
-	const settle = settling(connections, onSettled)
+	const settle = settling(onSettled)
 
 	return {
 		mcpServers: servers.map((server) => {
-			const { state, reason } = connectionOf(connections.state, server.name)
+			const { state, reason } = connectionOf(connections, server.name)
 			return {
 				name: server.name,
 				config: configOf(server),
@@ -151,7 +148,7 @@ export const toConnectionSettings = ({
 			settle(
 				server.name,
 				"connected",
-				connections.controller.connect(server.name, urlOf(server.config)),
+				connections.connect(server.name, urlOf(server.config)),
 			)
 		},
 		serverConnection: opened && sectionOf(connections, opened, settle),

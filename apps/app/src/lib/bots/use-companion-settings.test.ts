@@ -33,7 +33,6 @@ const reloadable = () => ({ open: opener(), reload: opener() })
 const panelsOf = () => ({
 	applications: reloadable(),
 	plugin: reloadable(),
-	connections: reloadable(),
 })
 
 type Panels = ReturnType<typeof panelsOf>
@@ -61,11 +60,10 @@ describe("useCompanionSettings", () => {
 
 		mounted(panels, true)
 
-		expect(readCounts(panels)).toEqual([1, 1, 1])
-		expect(panels.connections.open).toHaveBeenCalledWith({
+		expect(readCounts(panels)).toEqual([1, 1])
+		expect(panels.plugin.open).toHaveBeenCalledWith({
 			kind: "bot",
 			id: "scribe",
-			spaceId: "personal",
 		})
 	})
 
@@ -74,7 +72,7 @@ describe("useCompanionSettings", () => {
 
 		mounted(panels, false)
 
-		expect(readCounts(panels)).toEqual([0, 0, 0])
+		expect(readCounts(panels)).toEqual([0, 0])
 	})
 
 	it("reads them again on a second opening on the same companion", () => {
@@ -84,7 +82,7 @@ describe("useCompanionSettings", () => {
 		rendered.rerender({ isOpen: false })
 		rendered.rerender({ isOpen: true })
 
-		expect(readCounts(panels)).toEqual([2, 2, 2])
+		expect(readCounts(panels)).toEqual([2, 2])
 	})
 
 	it("reads them again when the relay of the joined Space reopens", async () => {
@@ -94,7 +92,7 @@ describe("useCompanionSettings", () => {
 
 		reopenFakeRelay(JOINED)
 
-		expect(readCounts(panels)).toEqual([2, 2, 2])
+		expect(readCounts(panels)).toEqual([2, 2])
 	})
 
 	it("reads nothing more when the relay of another Space reopens", async () => {
@@ -104,7 +102,7 @@ describe("useCompanionSettings", () => {
 
 		reopenFakeRelay("attic")
 
-		expect(readCounts(panels)).toEqual([1, 1, 1])
+		expect(readCounts(panels)).toEqual([1, 1])
 	})
 
 	it("reads nothing more once the settings dialog has closed", async () => {
@@ -115,6 +113,6 @@ describe("useCompanionSettings", () => {
 
 		reopenFakeRelay(JOINED)
 
-		expect(readCounts(panels)).toEqual([1, 1, 1])
+		expect(readCounts(panels)).toEqual([1, 1])
 	})
 })

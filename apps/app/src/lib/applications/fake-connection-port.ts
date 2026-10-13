@@ -1,5 +1,5 @@
 import type { ApplicationRow, ConnectionPort } from "./connection-port"
-import type { ConnectionCommand } from "./connections-controller"
+import type { ConnectionCommand } from "./use-connections"
 
 import type { EnvOwner } from "../conversations/store-contract"
 

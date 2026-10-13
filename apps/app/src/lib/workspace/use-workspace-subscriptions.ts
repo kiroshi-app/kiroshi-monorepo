@@ -5,7 +5,6 @@ import type { RosterView } from "./use-roster-view"
 import { useSpaceSettingsReads } from "./use-settings-reads"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
-import { USER_OWNER } from "./user-owner"
 
 import { useDirectoryWatch } from "../applications/use-directory-watch"
 import { useCompanionSettings } from "../bots/use-companion-settings"
@@ -25,17 +24,8 @@ export const useWorkspaceSubscriptions = ({
 	rosterView,
 	scopes,
 }: WorkspaceSubscriptionsInput) => {
-	const {
-		applications,
-		botConnections,
-		chat,
-		companionPlugin,
-		joinedSpaces,
-		roster,
-		spaceConnections,
-		user,
-		userConnections,
-	} = core
+	const { applications, chat, companionPlugin, joinedSpaces, roster, user } =
+		core
 	const { onboarding } = drivers
 	const {
 		bots,
@@ -72,7 +62,6 @@ export const useWorkspaceSubscriptions = ({
 	useCompanionSettings({
 		applications: applications.controller,
 		plugin: companionPlugin.controller,
-		connections: botConnections.controller,
 		companionId: settingsBotId,
 		spaceId: selectedSpaceId,
 		isOpen: isEditing,
@@ -80,7 +69,6 @@ export const useWorkspaceSubscriptions = ({
 
 	useSpaceSettingsReads({
 		applications: applications.controller,
-		connections: spaceConnections.controller,
 		spaceId: selectedSpaceId,
 		isOpen: isSpaceEditing,
 	})
@@ -90,12 +78,7 @@ export const useWorkspaceSubscriptions = ({
 			return
 		}
 		void applications.controller.open()
-		void userConnections.controller.open(USER_OWNER)
-	}, [
-		applications.controller,
-		userConnections.controller,
-		user.state.isSettingsOpen,
-	])
+	}, [applications.controller, user.state.isSettingsOpen])
 
 	useDirectoryWatch(
 		applications.controller,
