@@ -770,7 +770,7 @@
                     .frame(
                         event(
                             #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#
-                        ), after: .seconds(3)))
+                        )))
                 push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
             }
         }

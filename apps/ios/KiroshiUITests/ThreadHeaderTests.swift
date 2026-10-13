@@ -60,11 +60,14 @@ final class ThreadHeaderTests: XCTestCase {
                 .waitForExistence(timeout: 10))
     }
 
-    func testASoloAGroupAndAMissionOpenTheSameHeaderAndComposer() {
+    func testASoloAGroupAndAMissionAtWorkOpenTheSameHeaderAndComposer() {
         let subjects = [
             ("3.1", "Juniper, Writer", "Message Juniper"),
             ("group-thread", "Release crew", "Message Release crew"),
-            ("5.2", "OPE-212 · Atlas · Planner, Split the onboarding flow", "Answer this mission…"),
+            (
+                "mission-working", "OPE-212 · Atlas · Planner, Split the onboarding flow",
+                "Answer this mission…"
+            ),
         ]
         for (fixture, label, placeholder) in subjects {
             let app = launch(fixture)
@@ -77,6 +80,10 @@ final class ThreadHeaderTests: XCTestCase {
             let field = composer(in: app)
             XCTAssertTrue(field.exists, fixture)
             XCTAssertEqual(field.placeholderValue, placeholder, fixture)
+            if fixture == "mission-working" {
+                XCTAssertTrue(app.staticTexts["Atlas is working…"].exists)
+                XCTAssertFalse(app.buttons["Stop"].exists)
+            }
             let attach = app.buttons["Attach"]
             XCTAssertTrue(attach.isEnabled, fixture)
             XCTAssertLessThan(attach.frame.maxX, field.frame.minX, fixture)

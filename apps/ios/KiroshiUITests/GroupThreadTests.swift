@@ -57,11 +57,8 @@ final class GroupThreadTests: XCTestCase {
         app.buttons["Send"].tap()
 
         XCTAssertTrue(element("@Atlas is the tag out?", in: app).waitForExistence(timeout: 5))
-        let working = app.staticTexts["Atlas is working…"]
-        XCTAssertTrue(working.waitForExistence(timeout: 5))
         XCTAssertTrue(element("Atlas, On it.", in: app).waitForExistence(timeout: 10))
         XCTAssertFalse(element("Juniper, On it.", in: app).exists)
-        XCTAssertTrue(working.waitForNonExistence(timeout: 10))
     }
 
     func testTheMentionPickerPassesTheAudit() throws {

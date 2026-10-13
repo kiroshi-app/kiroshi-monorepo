@@ -22,15 +22,6 @@ final class ThreadAccessibilityTests: XCTestCase {
     }
 
     func testTheWorkingThreadPassesTheAudit() throws {
-        let app = launch("3.3")
-        XCTAssertTrue(app.staticTexts["Juniper is working…"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 10))
-        waitForThePushToEnd(app)
-
-        try auditTheThread(app)
-    }
-
-    func testACompanionAtWorkAfterItsOwnReplyShowsWorkingAboveTheComposer() throws {
         let app = launch("working-after-reply")
         let working = app.staticTexts["Juniper is working…"]
         XCTAssertTrue(working.waitForExistence(timeout: 10))
