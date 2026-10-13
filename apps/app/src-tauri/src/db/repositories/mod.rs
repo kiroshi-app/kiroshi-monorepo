@@ -4,6 +4,7 @@ pub mod bot_spaces;
 pub mod catalogue;
 pub mod conversations;
 pub mod joined_spaces;
+pub mod keyset;
 pub mod messages;
 pub mod missions;
 pub mod routines;

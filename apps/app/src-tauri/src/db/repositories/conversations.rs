@@ -14,9 +14,11 @@ use crate::db::{Access, DatabaseError};
 mod avatar;
 mod bots;
 mod effort;
+mod page;
 
 pub use avatar::AvatarBlot;
 pub use bots::{Bot, BotIdentity};
+pub use page::{ActiveConversation, LastWord};
 
 use bots::{
 	bot, bot_at, bot_in, bots_of, counted_bots, created_bot, deleted_bot, ensured_default_bot,
@@ -691,9 +693,15 @@ fn seats_of_space(
 			(SELECT id FROM conversations WHERE kind = ?1 AND space_id = ?2)
 		ORDER BY seat.conversation_id ASC, seat.join_seq ASC"
 	))?;
-	let rows = statement.query_map(params![TOPIC_KIND, space_id], |row| {
-		Ok((row.get::<_, String>("conversation_id")?, seated(row)?))
-	})?;
+	seats_by_conversation(&mut statement, params![TOPIC_KIND, space_id])
+}
+
+fn seats_by_conversation(
+	statement: &mut rusqlite::Statement<'_>,
+	bound: impl rusqlite::Params,
+) -> Result<HashMap<String, Vec<Seat>>, ConversationError> {
+	let rows = statement
+		.query_map(bound, |row| Ok((row.get::<_, String>("conversation_id")?, seated(row)?)))?;
 	let mut held: HashMap<String, Vec<Seat>> = HashMap::new();
 	for row in rows {
 		let (conversation_id, seat) = row?;

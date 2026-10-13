@@ -120,6 +120,10 @@ pub enum TranscriptStoreError {
 		conversation_id: String,
 		turn_id: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	UnreadableCursor {
+		cursor: String,
+	},
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

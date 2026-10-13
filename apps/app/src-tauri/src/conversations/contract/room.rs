@@ -76,6 +76,46 @@ impl Conversation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationPage {
+	pub conversations: Vec<ConversationInPage>,
+	pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationInPage {
+	#[serde(flatten)]
+	pub conversation: Conversation,
+	pub last_activity_at: i64,
+	pub last_word: Option<LastWord>,
+}
+
+impl ConversationInPage {
+	pub fn of(row: conversations::ActiveConversation, avatars: Option<&Path>) -> Self {
+		Self {
+			conversation: Conversation::of(row.conversation, avatars),
+			last_activity_at: row.last_activity_at,
+			last_word: row.last_word.map(Into::into),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LastWord {
+	pub text: Option<String>,
+	pub at: i64,
+	pub author_bot_id: Option<String>,
+}
+
+impl From<conversations::LastWord> for LastWord {
+	fn from(word: conversations::LastWord) -> Self {
+		Self { text: word.text, at: word.at, author_bot_id: word.author_bot_id }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct Participant {
 	pub bot_id: String,
 	pub role: ParticipantRole,

@@ -56,6 +56,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 47, statements: MESSAGE_ACCOUNT_AUTHOR },
 	Migration { version: 48, statements: SPACE_MEMBER_ROLES },
 	Migration { version: 49, statements: SPACE_MEMBER_ROLES_DROPPED },
+	Migration { version: 50, statements: CONVERSATION_ACTIVITY },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1080,6 +1081,34 @@ const SPACE_MEMBER_ROLES_DROPPED: &str = "
 DROP TABLE space_member_roles;
 ";
 
+const CONVERSATION_ACTIVITY: &str = "
+ALTER TABLE conversations ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0;
+
+UPDATE conversations SET last_activity_at = COALESCE(
+	(SELECT MAX(messages.created_at) FROM messages
+		WHERE messages.conversation_id = conversations.id),
+	created_at);
+
+CREATE TRIGGER conversations_are_active_from_their_creation
+AFTER INSERT ON conversations
+WHEN NEW.last_activity_at < NEW.created_at
+BEGIN
+	UPDATE conversations SET last_activity_at = NEW.created_at WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER messages_move_their_conversation_activity_forward
+AFTER INSERT ON messages
+BEGIN
+	UPDATE conversations SET last_activity_at = NEW.created_at
+		WHERE id = NEW.conversation_id AND last_activity_at < NEW.created_at;
+END;
+
+CREATE INDEX conversations_by_activity
+	ON conversations (space_id, last_activity_at, id) WHERE kind = 'topic';
+
+CREATE INDEX missions_by_opening ON missions (opened_at, id, closed_at);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1183,6 +1212,7 @@ mod tests {
 	const MESSAGE_ACCOUNT_AUTHOR_STEP: u32 = 47;
 	const SPACE_MEMBER_ROLES_STEP: u32 = 48;
 	const SPACE_MEMBER_ROLES_DROPPED_STEP: u32 = 49;
+	const CONVERSATION_ACTIVITY_STEP: u32 = 50;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3695,9 +3725,70 @@ mod tests {
 
 		apply(&mut connection).expect("the file comes up to this build");
 
-		assert_eq!(version(&connection).expect("version"), SPACE_MEMBER_ROLES_DROPPED_STEP);
+		assert_eq!(version(&connection).expect("version"), latest_version());
 		assert!(!has_table(&connection, "space_member_roles"), "the member roles survived");
 		assert_eq!(count(&connection, "spaces"), 2);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn last_activity_of(connection: &Connection, conversation_id: &str) -> i64 {
+		connection
+			.query_row(
+				"SELECT last_activity_at FROM conversations WHERE id = ?1",
+				[conversation_id],
+				|row| row.get(0),
+			)
+			.expect("the activity is read")
+	}
+
+	fn a_message_at(conversation_id: &str, id: &str, seq: u32, created_at: i64) -> String {
+		format!(
+			"INSERT INTO turns (id, conversation_id, seq, started_at)
+				VALUES ('t-{id}', '{conversation_id}', {seq}, {created_at});
+			INSERT INTO messages
+				(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
+				VALUES ('{id}', '{conversation_id}', 't-{id}', {seq}, 'user', 'hi', 'complete',
+					{created_at});"
+		)
+	}
+
+	#[test]
+	fn conversation_activity_is_backfilled_then_moved_forward_by_each_new_message() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(CONVERSATION_ACTIVITY_STEP))
+			.expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('spoken', 'topic', 'personal', 'Spoken', 5, 5),
+						('silent', 'topic', 'personal', 'Silent', 4, 4);
+				{}{}",
+				a_message_at("spoken", "m1", 1, 9),
+				a_message_at("spoken", "m2", 2, 7),
+			))
+			.expect("the rows are inserted");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(last_activity_of(&connection, "spoken"), 9, "not the newest message");
+		assert_eq!(last_activity_of(&connection, "silent"), 4, "not the creation time");
+
+		connection
+			.execute_batch(&format!(
+				"{}{}INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('fresh', 'topic', 'personal', 'Fresh', 60, 60);",
+				a_message_at("silent", "m3", 1, 50),
+				a_message_at("spoken", "m4", 3, 3),
+			))
+			.expect("the new rows are inserted");
+
+		assert_eq!(last_activity_of(&connection, "silent"), 50, "a new message did not move it");
+		assert_eq!(last_activity_of(&connection, "spoken"), 9, "an older message moved it back");
+		assert_eq!(last_activity_of(&connection, "fresh"), 60, "a new room starts at zero");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
