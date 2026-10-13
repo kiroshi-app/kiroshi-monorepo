@@ -94,6 +94,7 @@ export type ThreadFacts = {
 	isBusy: boolean
 	isLoadingOlder: boolean
 	isLoadingNewer: boolean
+	isFirstLoadPending: boolean
 	isPromptPending: boolean
 	isOverlayOpen: boolean
 	canAttach: boolean
@@ -146,6 +147,7 @@ const botFactsOf = (thread: LoadedBotThread): ThreadFacts => {
 		isBusy: isTurnBusy(thread.state.turn),
 		isLoadingOlder: thread.state.loadingOlder,
 		isLoadingNewer: thread.state.loadingNewer,
+		isFirstLoadPending: thread.state.isFirstLoadPending,
 		isPromptPending: permission !== null || question !== null,
 		isOverlayOpen: thread.isOverlayOpen,
 		canAttach: isReady,
@@ -175,6 +177,7 @@ const conversationFactsOf = (
 	isBusy: thread.state.speakers.length > 0,
 	isLoadingOlder: thread.state.isLoadingOlder,
 	isLoadingNewer: thread.state.isLoadingNewer,
+	isFirstLoadPending: thread.state.isFirstLoadPending,
 	isPromptPending: thread.state.pendingPrompt !== null,
 	isOverlayOpen: false,
 	canAttach: true,

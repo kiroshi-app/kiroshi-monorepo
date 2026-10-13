@@ -46,6 +46,7 @@ const conversationState: ConversationState = {
 	isLoadingOlder: false,
 	hasNewer: false,
 	isLoadingNewer: false,
+	isFirstLoadPending: false,
 	speakers: [],
 	waitingBotIds: [],
 	refusedMessage: null,

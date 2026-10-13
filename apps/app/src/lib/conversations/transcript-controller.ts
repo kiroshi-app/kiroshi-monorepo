@@ -76,7 +76,12 @@ export const createTranscriptController = (
 		) {
 			return
 		}
-		await readPage(conversationId, null)
+		try {
+			await readPage(conversationId, null)
+		} catch (reason) {
+			dispatch({ type: "firstPageFailed", conversationId })
+			throw reason
+		}
 	}
 
 	const loadOlder = async (conversationId: string) => {
