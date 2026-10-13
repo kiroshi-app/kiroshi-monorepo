@@ -77,22 +77,22 @@ const expectComplete = async (canvasElement: HTMLElement) => {
 
 export const ReadingMore = meta.story({
 	args: { listEnd: READING_MORE },
-	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const ReadingMoreDark = meta.story({
 	args: { listEnd: READING_MORE },
 	globals: { theme: "dark", theme_layout: "single" },
-	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const Complete = meta.story({
 	args: { listEnd: COMPLETE },
-	play: async ({ canvasElement }) => expectComplete(canvasElement),
+	play: ({ canvasElement }) => expectComplete(canvasElement),
 })
 
 export const CompleteDark = meta.story({
 	args: { listEnd: COMPLETE },
 	globals: { theme: "dark", theme_layout: "single" },
-	play: async ({ canvasElement }) => expectComplete(canvasElement),
+	play: ({ canvasElement }) => expectComplete(canvasElement),
 })

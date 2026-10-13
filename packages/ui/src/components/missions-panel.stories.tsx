@@ -366,7 +366,7 @@ export const ReadingMore = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const ReadingMoreDark = meta.story({
@@ -379,7 +379,7 @@ export const ReadingMoreDark = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const Complete = meta.story({
@@ -391,7 +391,7 @@ export const Complete = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectComplete(canvasElement),
+	play: ({ canvasElement }) => expectComplete(canvasElement),
 })
 
 export const CompleteDark = meta.story({
@@ -404,7 +404,7 @@ export const CompleteDark = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => expectComplete(canvasElement),
+	play: ({ canvasElement }) => expectComplete(canvasElement),
 })
 
 export const ReadingMoreUnderAFold = meta.story({
