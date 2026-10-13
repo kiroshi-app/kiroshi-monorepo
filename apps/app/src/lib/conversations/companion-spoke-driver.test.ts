@@ -117,28 +117,14 @@ const createRoom = async (
 		title: "Walls",
 		botIds: bots.map((bot) => bot.id),
 	})
-	const { runtimes, roster, notices, spoken, hear, stop } = await startFront(
-		store,
-		driver,
-		() => null,
-	)
+	const front = await startFront(store, driver, () => null)
 
 	const announce = async (spoken: CompanionSpoke) => {
-		hear(spoken)
+		front.hear(spoken)
 		await settled()
 	}
 
-	return {
-		driver,
-		store,
-		runtimes,
-		roster,
-		conversation,
-		notices,
-		spoken,
-		announce,
-		stop,
-	}
+	return { ...front, driver, store, conversation, announce }
 }
 
 const answeringFirstReadWith = (
