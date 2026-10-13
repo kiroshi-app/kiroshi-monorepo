@@ -479,20 +479,20 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func aRefusedSendLeavesTheLastSentMessageAsItWas() async {
-        let host = TestHost { call in
-            guard call.command == "conversation_send_turn" else { return nil }
-            return TestHost.refused(call, status: 502, #""the host could not run the call""#)
-        }
+    @Test func theSendNamesItsMessageBeforeTheHostAnswers() async throws {
+        let host = TestHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
 
         store.draft = "Hello"
-        await store.send()?.value
+        let sending = store.send()
 
-        #expect(store.lastSentId == nil)
+        #expect(store.lastSentId == "id-1")
+        #expect(store.entries.isEmpty)
+        _ = try #require(await host.nextCall("conversation_send_turn"))
         following.cancel()
         await connection.stop()
+        await sending?.value
     }
 
     @Test func sendingIsUnavailableWhileTheHostIsOffline() async {

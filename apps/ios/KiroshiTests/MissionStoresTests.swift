@@ -179,6 +179,7 @@ struct MissionStoresTests {
 
         store.draft = " The account step. "
         store.send()
+        #expect(store.lastSentId == "id-1")
         let call = await nextCall("conversation_send_turn", on: socket)
         await waitUntil { store.draft.isEmpty }
 
@@ -192,7 +193,6 @@ struct MissionStoresTests {
         #expect(
             MissionTesting.shown(store.transcript).last
                 == .init(id: "id-1", isYours: true, bubbles: ["The account step."]))
-        #expect(store.lastSentId == "id-1")
         following.cancel()
         await connection.stop()
     }

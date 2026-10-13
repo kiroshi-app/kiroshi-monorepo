@@ -139,6 +139,7 @@ final class ThreadStore {
             id: makeId(), turnId: makeId(), conversationId: conversationId,
             written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
             sentAt: now())
+        lastSentId = outgoing.id
         draft = ""
         attachments = []
         sendFailure = nil
@@ -192,7 +193,6 @@ final class ThreadStore {
                 threadMessage(
                     id: message.id, isYours: true, text: message.content,
                     sentAt: message.createdAt))
-            lastSentId = message.id
         } catch is CancellationError {
             return
         } catch {
