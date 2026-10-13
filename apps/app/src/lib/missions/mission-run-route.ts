@@ -1,19 +1,19 @@
+import type { createMissionRunBegin } from "./mission-run-begin"
 import {
 	detailOf,
 	type LiveMissionRun,
 	type MissionRunBook,
 	STATUS_CAUSE,
 } from "./mission-run-book"
-import type { MissionRunCall } from "./mission-run-prompt"
-import { isClosed } from "./mission-run-settle"
+import { type createMissionRunSettle, isClosed } from "./mission-run-settle"
 
-import type { ScopedEvent, TransportError, TurnEnded } from "../agent/contract"
+import type { ScopedEvent, TransportError } from "../agent/contract"
 import { needsFreshSession } from "../chat/screen-model"
 
 type MissionRunRouteOptions = {
 	book: MissionRunBook
-	run: (call: MissionRunCall) => Promise<boolean>
-	settle: (held: LiveMissionRun, ended: TurnEnded) => Promise<void>
+	run: ReturnType<typeof createMissionRunBegin>
+	settle: ReturnType<typeof createMissionRunSettle>
 }
 
 export const createMissionRunRoute = ({

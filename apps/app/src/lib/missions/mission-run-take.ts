@@ -4,9 +4,10 @@ import type {
 	MissionDetail,
 	MissionState,
 } from "./mission-contract"
+import type { createMissionRunBegin } from "./mission-run-begin"
 import { detailOf, type MissionRunBook } from "./mission-run-book"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
-import type { MissionRunCall, MissionRunCause } from "./mission-run-prompt"
+import type { MissionRunCause } from "./mission-run-prompt"
 import {
 	isSummonedMissionState,
 	missionSummonsFor,
@@ -21,7 +22,7 @@ type MissionRunTakeOptions = Pick<
 	"store" | "runtimes" | "missions"
 > & {
 	book: MissionRunBook
-	run: (call: MissionRunCall) => Promise<boolean>
+	run: ReturnType<typeof createMissionRunBegin>
 }
 
 const CAUSE_OF_STATE: Partial<Record<MissionState, MissionRunCause>> = {
