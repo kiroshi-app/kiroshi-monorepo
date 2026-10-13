@@ -12,6 +12,7 @@ struct ConversationsStoreTests {
     let juniper = Companion(id: "juniper", name: "Juniper")
     let atlas = Companion(id: "atlas", name: "Atlas")
     let pico = Companion(id: "pico", name: "Pico")
+    let work = CompanionWork()
 
     func makeConnection() -> RelayConnection {
         RelayConnection(
@@ -29,12 +30,22 @@ struct ConversationsStoreTests {
     func follow(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>)
     {
         let connection = makeConnection()
-        let store = ConversationsStore()
+        let store = ConversationsStore(work: work)
+        await feed(work, from: connection)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
         await waitUntil { store.phase == .loaded }
         return (store, connection, following)
+    }
+
+    func feed(_ work: CompanionWork, from connection: RelayConnection) async {
+        let updates = await connection.updates()
+        Task {
+            for await update in updates {
+                work.apply(update)
+            }
+        }
     }
 
     var host: TestHost {
@@ -74,7 +85,8 @@ struct ConversationsStoreTests {
     @Test func asksForTheCompanionsOfTheSpaceTheHostShares() async throws {
         let host = host
         let connection = makeConnection()
-        let store = ConversationsStore()
+        let store = ConversationsStore(work: work)
+        await feed(work, from: connection)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
@@ -100,6 +112,16 @@ struct ConversationsStoreTests {
 
         host.pushAgent("chat-pico", #"{"type":"turnChanged","state":"running"}"#)
         await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == true }
+        host.pushAgent(
+            "chat-pico", #"{"type":"questionRequested","request":{"id":"q1","questions":[]}}"#)
+        host.pushAgent("chat-pico", #"{"type":"turnChanged","state":"idle"}"#)
+        host.pushAgent(
+            "chat-juniper",
+            #"{"type":"messageCompleted","message":{"id":"j2","role":"assistant","text":"Done.","timestamp":4000}}"#
+        )
+        await waitUntil { store.summaries.first { $0.id == "juniper" }?.preview == "Done." }
+        #expect(store.summaries.first { $0.id == "pico" }?.isWorking == true)
+        #expect(work.workers.map(\.conversationId) == ["chat-pico"])
         host.pushAgent(
             "chat-pico", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
         await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == false }
@@ -157,7 +179,8 @@ struct ConversationsStoreTests {
 
     func start(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>) {
         let connection = makeConnection()
-        let store = ConversationsStore()
+        let store = ConversationsStore(work: work)
+        await feed(work, from: connection)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
@@ -349,7 +372,7 @@ struct ConversationsStoreTests {
         host.push(
             event: "agent://event",
             payload:
-                #"{"scope":{"conversationId":"group-release","botId":"atlas","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":null}"#
+                #"{"scope":{"conversationId":"group-release","botId":"atlas","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":{"turnId":"t1","conversationId":"group-release"}}"#
         )
         await waitUntil { store.summaries.first { $0.id == "group-release" }?.isWorking == true }
 
