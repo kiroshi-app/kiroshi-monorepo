@@ -1,0 +1,214 @@
+import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core"
+
+import {
+	type ConversationSource,
+	createConversationProvenance,
+	LOCAL_IDS_COMMAND,
+} from "./conversation-provenance"
+import { HostRefused } from "./host-refused"
+import { type HttpHost, hostOnlyRefusalOf } from "./http"
+import type { JoinedHostsOptions, JoinedHostsState } from "./joined-hosts"
+import { describeRejection } from "./joined-hosts-join"
+import type { Listen } from "./joined-hosts-listen"
+
+import type { Store } from "../store"
+
+export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
+	"space_list",
+	"space_create",
+	"space_update",
+	"space_reorder",
+	"space_delete",
+	"space_export",
+	"space_import",
+	"joined_spaces_list",
+	"joined_space_connect",
+	"joined_space_remove",
+	"user_preferences",
+	"user_set_preferences",
+	"user_set_profile_picture",
+	"window_declare_maximize_button",
+	"hosting_state",
+	"hosting_start",
+	"hosting_stop",
+	"mcp_oauth_cancel",
+	"mission_board",
+	"mission_unreported",
+	"notification_show",
+	"companion_launch_outcome",
+	"account_state",
+	"account_sign_in",
+	"account_sign_out",
+	"agent_account",
+	"agent_sign_in",
+	"agent_sign_in_code",
+	"agent_sign_in_cancel",
+	"agent_live_sessions",
+	"connection_set",
+	"invitations_list",
+	"invitation_accept",
+	"invitation_decline",
+	LOCAL_IDS_COMMAND,
+])
+
+const TAURI_PLUGIN_PREFIX = "plugin:"
+
+const COMMANDS_ONLY_THE_HOST_RUNS: ReadonlySet<string> = new Set([
+	"mcp_oauth_connect",
+])
+
+const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
+	"user",
+	"person",
+	"account",
+])
+
+type Invoke = <T>(
+	command: string,
+	args?: InvokeArgs,
+	options?: InvokeOptions,
+) => Promise<T>
+
+export type LocalHost = {
+	invoke: Invoke
+	listen: Listen
+	fileSrc: (path: string) => string
+}
+
+const isLocalCommand = (command: string): boolean =>
+	command.startsWith(TAURI_PLUGIN_PREFIX) || LOCAL_COMMANDS.has(command)
+
+type ScopeFields = { kind?: unknown; owner?: unknown; scope?: unknown }
+
+const fieldsOf = (value: unknown): ScopeFields =>
+	typeof value === "object" && value !== null ? value : {}
+
+const isPersonalOwner = (owner: unknown): boolean =>
+	fieldsOf(owner).kind === "user"
+
+const isPersonalScope = (scope: unknown): boolean => {
+	const { kind, owner } = fieldsOf(scope)
+	return (
+		PERSONAL_SCOPE_KINDS.has(kind) ||
+		(kind === "server" && isPersonalOwner(owner))
+	)
+}
+
+const carriesPersonalScope = (args?: InvokeArgs): boolean => {
+	const { scope, owner } = fieldsOf(args)
+	return isPersonalScope(scope) || isPersonalOwner(owner)
+}
+
+type JoinedHostsInvokeOptions = Pick<JoinedHostsOptions, "reportFailure"> & {
+	store: Store<JoinedHostsState>
+	hosts: Map<string, HttpHost>
+	sharedSpaceIds: Map<string, string>
+	local: LocalHost
+	isDown: (id: string) => boolean
+	invokeOnceOpen: <T>(
+		id: string,
+		command: string,
+		args?: InvokeArgs,
+	) => Promise<T>
+}
+
+export const createJoinedHostsInvoke = ({
+	store,
+	hosts,
+	sharedSpaceIds,
+	local,
+	isDown,
+	invokeOnceOpen,
+	reportFailure,
+}: JoinedHostsInvokeOptions): Invoke => {
+	const provenance = createConversationProvenance()
+	let localIdsRecall: Promise<void> | null = null
+	let hasLocalIds = false
+
+	const isOpenHost = (source: ConversationSource) =>
+		source !== null && hosts.has(source) && !isDown(source)
+
+	const forgetLocalIdsRecall = (reason: unknown) => {
+		localIdsRecall = null
+		reportFailure({
+			message: describeRejection(reason),
+			command: LOCAL_IDS_COMMAND,
+		})
+	}
+
+	const recallLocalIds = (): Promise<void> => {
+		localIdsRecall ??= provenance
+			.record(null, LOCAL_IDS_COMMAND, local.invoke(LOCAL_IDS_COMMAND))
+			.then(() => {
+				hasLocalIds = true
+			}, forgetLocalIdsRecall)
+		return localIdsRecall
+	}
+
+	const namesWhatOnlyThisMacHolds = (active: string, args?: InvokeArgs) =>
+		provenance
+			.heldOnlyHereIn(args, active)
+			.some((id) => id !== sharedSpaceIds.get(active))
+
+	const ownerOf = (active: string, args?: InvokeArgs): ConversationSource => {
+		if (namesWhatOnlyThisMacHolds(active, args)) {
+			return null
+		}
+		const sources = provenance.sourcesNamedIn(args)
+		if (sources.size === 0) {
+			return provenance.namesConversation(args) && !hasLocalIds ? null : active
+		}
+		if (sources.has(active)) {
+			return active
+		}
+		if (sources.has(null)) {
+			return null
+		}
+		return [...sources].find(isOpenHost) ?? null
+	}
+
+	const sendTo = <T>(
+		target: ConversationSource,
+		call: Parameters<Invoke>,
+	): Promise<T> => {
+		const [command, args] = call
+		if (target === null) {
+			return provenance.record(null, command, local.invoke<T>(...call))
+		}
+		const joined = hosts.get(target)
+		return provenance.record(
+			target,
+			command,
+			joined
+				? joined.invoke<T>(command, args)
+				: invokeOnceOpen<T>(target, command, args),
+		)
+	}
+
+	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
+		const refusal = hostOnlyRefusalOf(command)
+		reportFailure(refusal)
+		return Promise.reject(new HostRefused(refusal.message, refusal))
+	}
+
+	return <T>(...call: Parameters<Invoke>): Promise<T> => {
+		const [command, args] = call
+		const { active } = store.getState()
+		if (
+			isLocalCommand(command) ||
+			active === null ||
+			carriesPersonalScope(args)
+		) {
+			return sendTo<T>(null, call)
+		}
+		const route = () => {
+			const target = ownerOf(active, args)
+			return target !== null && COMMANDS_ONLY_THE_HOST_RUNS.has(command)
+				? refuseAsTheHostWould<T>(command)
+				: sendTo<T>(target, call)
+		}
+		return provenance.namesConversation(args)
+			? recallLocalIds().then(route)
+			: route()
+	}
+}

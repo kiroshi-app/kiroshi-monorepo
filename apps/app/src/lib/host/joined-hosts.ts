@@ -1,105 +1,23 @@
-import type { InvokeArgs, InvokeOptions } from "@tauri-apps/api/core"
-import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
+import type { UnlistenFn } from "@tauri-apps/api/event"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
+import type { HostRefusal, HostSocket, HttpHost } from "./http"
+import { createJoinedHostsDown } from "./joined-hosts-down"
+import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
 import {
-	type ConversationSource,
-	createConversationProvenance,
-	LOCAL_IDS_COMMAND,
-} from "./conversation-provenance"
-import { HostRefused } from "./host-refused"
-import {
-	createHttpHost,
-	type HostRefusal,
-	type HostSocket,
-	type HttpHost,
-	hostOnlyRefusalOf,
-} from "./http"
-import {
-	isJoinedSpaceError,
-	joinRefusalNoticeOf,
-	unexpectedJoinNotice,
-} from "./join-refusal"
+	createJoinedHostsJoin,
+	describeRejection,
+	type JoinOutcome,
+} from "./joined-hosts-join"
+import { createJoinedHostsListen } from "./joined-hosts-listen"
 
-import {
-	type commands,
-	INVITATION_CHANGED_EVENT,
-	JOINED_SPACE_RECONNECTED_EVENT,
-	JOINED_SPACE_REMOVED_EVENT,
-	type JoinedSpaceConnection,
-	type JoinedSpaceError,
-	type JoinedSpaceReconnected,
-} from "../bindings"
 import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
-export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
-	"space_list",
-	"space_create",
-	"space_update",
-	"space_reorder",
-	"space_delete",
-	"space_export",
-	"space_import",
-	"joined_spaces_list",
-	"joined_space_connect",
-	"joined_space_remove",
-	"user_preferences",
-	"user_set_preferences",
-	"user_set_profile_picture",
-	"window_declare_maximize_button",
-	"hosting_state",
-	"hosting_start",
-	"hosting_stop",
-	"mcp_oauth_cancel",
-	"mission_board",
-	"mission_unreported",
-	"notification_show",
-	"companion_launch_outcome",
-	"account_state",
-	"account_sign_in",
-	"account_sign_out",
-	"agent_account",
-	"agent_sign_in",
-	"agent_sign_in_code",
-	"agent_sign_in_cancel",
-	"agent_live_sessions",
-	"connection_set",
-	"invitations_list",
-	"invitation_accept",
-	"invitation_decline",
-	LOCAL_IDS_COMMAND,
-])
-
-export const JOINED_SPACE_CHANGED_EVENT = "joined-space://changed"
-
-const LOCAL_EVENTS: ReadonlySet<string> = new Set([
-	"host://presence",
-	"hosting://changed",
-	JOINED_SPACE_CHANGED_EVENT,
-	JOINED_SPACE_REMOVED_EVENT,
-	INVITATION_CHANGED_EVENT,
-	"window-maximize-button",
-	"notification://activated",
-	"user://first-run-done",
-	"companion://created",
-	"companion://seed-refused",
-	"account://changed",
-	"agent://sign-in-started",
-])
-
-const TAURI_PLUGIN_PREFIX = "plugin:"
-
-const COMMANDS_ONLY_THE_HOST_RUNS: ReadonlySet<string> = new Set([
-	"mcp_oauth_connect",
-])
-
-const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
-	"user",
-	"person",
-	"account",
-])
+export { LONGEST_DOWN_GRACE } from "./joined-hosts-down"
+export { LOCAL_COMMANDS } from "./joined-hosts-invoke"
+export { JOINED_SPACE_CHANGED_EVENT } from "./joined-hosts-listen"
 
 export type JoinedHostState =
 	| { status: "connecting" }
@@ -112,21 +30,7 @@ export type JoinedHostsState = {
 	connections: Record<string, JoinedHostState>
 }
 
-type Invoke = <T>(
-	command: string,
-	args?: InvokeArgs,
-	options?: InvokeOptions,
-) => Promise<T>
-
-type Listen = HttpHost["listen"]
-
-type LocalHost = {
-	invoke: Invoke
-	listen: Listen
-	fileSrc: (path: string) => string
-}
-
-type JoinOutcome = Awaited<ReturnType<typeof commands.joinedSpaceConnect>>
+export type RecordJoinedHost = (id: string, state: JoinedHostState) => void
 
 export type JoinedHostsOptions = {
 	local: LocalHost
@@ -138,53 +42,6 @@ export type JoinedHostsOptions = {
 	reportHostDown: () => string
 	endHostDown: (noticeId: string) => void
 }
-
-type Route = (event: string) => Listen
-
-type ReopenSignal = "relay" | "socket"
-
-type UnpairedReopen = { signal: ReopenSignal; heardAt: number }
-
-const REOPEN_PAIRING_MS = 10_000
-
-export const LONGEST_DOWN_GRACE = 3000
-
-type Subscription = {
-	event: string
-	handler: EventCallback<unknown>
-	route: Route
-	source: Listen
-	unlisten: UnlistenFn
-}
-
-const unheard: Listen = async () => () => undefined
-
-const isLocalCommand = (command: string): boolean =>
-	command.startsWith(TAURI_PLUGIN_PREFIX) || LOCAL_COMMANDS.has(command)
-
-type ScopeFields = { kind?: unknown; owner?: unknown; scope?: unknown }
-
-const fieldsOf = (value: unknown): ScopeFields =>
-	typeof value === "object" && value !== null ? value : {}
-
-const isPersonalOwner = (owner: unknown): boolean =>
-	fieldsOf(owner).kind === "user"
-
-const isPersonalScope = (scope: unknown): boolean => {
-	const { kind, owner } = fieldsOf(scope)
-	return (
-		PERSONAL_SCOPE_KINDS.has(kind) ||
-		(kind === "server" && isPersonalOwner(owner))
-	)
-}
-
-const carriesPersonalScope = (args?: InvokeArgs): boolean => {
-	const { scope, owner } = fieldsOf(args)
-	return isPersonalScope(scope) || isPersonalOwner(owner)
-}
-
-const describeRejection = (reason: unknown): string =>
-	reason instanceof Error ? reason.message : String(reason)
 
 export const createJoinedHosts = ({
 	local,
@@ -199,19 +56,9 @@ export const createJoinedHosts = ({
 	const store = createStore<JoinedHostsState>({ active: null, connections: {} })
 	const hosts = new Map<string, HttpHost>()
 	const sharedSpaceIds = new Map<string, string>()
-	const pendingJoins = new Map<string, Promise<HttpHost | null>>()
-	const subscriptions = new Set<Subscription>()
-	const downNotices = new Map<string, string>()
-	const downGraces = new Map<string, ReturnType<typeof setTimeout>>()
-	const reconnectionListeners = new Set<() => void>()
-	const unpairedReopens = new Map<string, UnpairedReopen>()
-	let isHearingRelayReopens = false
-	const provenance = createConversationProvenance()
 	let requested: string | null = null
-	let localIdsRecall: Promise<void> | null = null
-	let hasLocalIds = false
 
-	const record = (id: string, state: JoinedHostState) => {
+	const record: RecordJoinedHost = (id, state) => {
 		const current = store.getState()
 		store.setState({
 			...current,
@@ -219,191 +66,9 @@ export const createJoinedHosts = ({
 		})
 	}
 
-	const refuse = (id: string, failure: string): null => {
-		record(id, { status: "refused", failure })
-		return null
-	}
-
-	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
-		const notice = joinRefusalNoticeOf(error)
-		reportJoinRefusal(notice)
-		return refuse(id, notice.title)
-	}
-
-	const refuseRejection = (id: string, reason: unknown): null => {
-		if (isJoinedSpaceError(reason)) {
-			return refuseJoin(id, reason)
-		}
-		reportJoinRefusal(unexpectedJoinNotice())
-		return refuse(id, describeRejection(reason))
-	}
-
-	const isDown = (id: string) =>
-		store.getState().connections[id]?.status === "down"
-
-	const reportIfActiveDown = (id: string) => {
-		if (
-			store.getState().active === id &&
-			isDown(id) &&
-			!downGraces.has(id) &&
-			!downNotices.has(id)
-		) {
-			downNotices.set(id, reportHostDown())
-		}
-	}
-
-	const endDownGrace = (id: string) => {
-		clearTimeout(downGraces.get(id))
-		downGraces.delete(id)
-	}
-
-	const endGraceAndReport = (id: string) => {
-		endDownGrace(id)
-		reportIfActiveDown(id)
-	}
-
-	const startDownGrace = (id: string) => {
-		downGraces.set(
-			id,
-			setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE),
-		)
-	}
-
-	const endDownNotice = (id: string) => {
-		const noticeId = downNotices.get(id)
-		if (noticeId) {
-			endHostDown(noticeId)
-			downNotices.delete(id)
-		}
-	}
-
-	const announceReconnectionOf = (id: string) => {
-		if (store.getState().active !== id) {
-			return
-		}
-		for (const listener of [...reconnectionListeners]) {
-			listener()
-		}
-	}
-
-	const leaveUnpaired = (id: string, signal: ReopenSignal) => {
-		unpairedReopens.set(id, { signal, heardAt: Date.now() })
-	}
-
-	const pairsWith = (id: string, signal: ReopenSignal) => {
-		const unpaired = unpairedReopens.get(id)
-		unpairedReopens.delete(id)
-		return (
-			unpaired?.signal === signal &&
-			Date.now() - unpaired.heardAt <= REOPEN_PAIRING_MS
-		)
-	}
-
-	const catchUpOnSocketReopen = (id: string) => {
-		if (!pairsWith(id, "relay")) {
-			leaveUnpaired(id, "socket")
-		}
-		announceReconnectionOf(id)
-	}
-
-	const catchUpOnRelayReopen: EventCallback<JoinedSpaceReconnected> = ({
-		payload: { id },
-	}) => {
-		const status = store.getState().connections[id]?.status
-		if (status === "down") {
-			leaveUnpaired(id, "relay")
-			return
-		}
-		if (status === "up" && !pairsWith(id, "socket")) {
-			announceReconnectionOf(id)
-		}
-	}
-
-	const markUp = (id: string) => {
-		const wasDown = isDown(id)
-		record(id, { status: "up" })
-		endDownGrace(id)
-		endDownNotice(id)
-		if (wasDown) {
-			catchUpOnSocketReopen(id)
-		}
-	}
-
 	const reportListenFailure = (reason: unknown): UnlistenFn => {
 		reportFailure({ message: describeRejection(reason) })
 		return () => undefined
-	}
-
-	const hearRelayReopens = () => {
-		if (
-			isHearingRelayReopens ||
-			hosts.size === 0 ||
-			reconnectionListeners.size === 0
-		) {
-			return
-		}
-		isHearingRelayReopens = true
-		void local
-			.listen(JOINED_SPACE_RECONNECTED_EVENT, catchUpOnRelayReopen)
-			.catch(reportListenFailure)
-	}
-
-	const onReconnected = (listener: () => void) => {
-		reconnectionListeners.add(listener)
-		hearRelayReopens()
-		return () => {
-			reconnectionListeners.delete(listener)
-		}
-	}
-
-	const openHost = (
-		id: string,
-		{ hostUrl, token, remoteSpaceId }: JoinedSpaceConnection,
-	) => {
-		const host = createHttpHost({
-			host: hostUrl,
-			token,
-			fetch,
-			openSocket,
-			onUp: () => markUp(id),
-			onDown: () => {
-				record(id, { status: "down" })
-				startDownGrace(id)
-			},
-			onReconnectFailed: () => endGraceAndReport(id),
-			onRefused: reportFailure,
-		})
-		hosts.set(id, host)
-		sharedSpaceIds.set(id, remoteSpaceId ?? id)
-		host.openEvents()
-		hearRelayReopens()
-		return host
-	}
-
-	const settleJoin = (id: string, outcome: JoinOutcome) =>
-		outcome.status === "ok"
-			? openHost(id, outcome.data)
-			: refuseJoin(id, outcome.error)
-
-	const startJoin = async (id: string): Promise<HttpHost | null> => {
-		record(id, { status: "connecting" })
-		try {
-			return settleJoin(id, await join(id))
-		} catch (reason) {
-			return refuseRejection(id, reason)
-		} finally {
-			pendingJoins.delete(id)
-		}
-	}
-
-	const openConnection = (id: string): Promise<HttpHost | null> => {
-		const opened = hosts.get(id)
-		if (opened) {
-			return Promise.resolve(opened)
-		}
-		const pending = pendingJoins.get(id) ?? startJoin(id)
-		pendingJoins.set(id, pending)
-		return pending
 	}
 
 	const activeHost = (): HttpHost | undefined => {
@@ -411,40 +76,45 @@ export const createJoinedHosts = ({
 		return active ? hosts.get(active) : undefined
 	}
 
+	const down = createJoinedHostsDown({
+		store,
+		hosts,
+		local,
+		record,
+		reportListenFailure,
+		reportHostDown,
+		endHostDown,
+	})
+	const { openConnection, invokeOnceOpen } = createJoinedHostsJoin({
+		store,
+		hosts,
+		sharedSpaceIds,
+		down,
+		record,
+		join,
+		fetch,
+		openSocket,
+		reportFailure,
+		reportJoinRefusal,
+	})
+	const invoke = createJoinedHostsInvoke({
+		store,
+		hosts,
+		sharedSpaceIds,
+		local,
+		isDown: down.isDown,
+		invokeOnceOpen,
+		reportFailure,
+	})
+	const { relocateAll, listen, listenToActiveHost } = createJoinedHostsListen({
+		local,
+		activeHost,
+		reportListenFailure,
+	})
+
 	const activeSpaceId = (): string | null => {
 		const { active } = store.getState()
 		return active ? (sharedSpaceIds.get(active) ?? null) : null
-	}
-
-	const listenerFor = (event: string): Listen => {
-		const joined = LOCAL_EVENTS.has(event) ? undefined : activeHost()
-		return joined ? joined.listen : local.listen
-	}
-
-	const relocate = (subscription: Subscription) => {
-		const source = subscription.route(subscription.event)
-		if (source === subscription.source) {
-			return
-		}
-		subscription.unlisten()
-		subscription.source = source
-		const attached = source(subscription.event, subscription.handler).catch(
-			reportListenFailure,
-		)
-		subscription.unlisten = () => {
-			attached.then((unlisten) => unlisten())
-		}
-		attached.then((unlisten) => {
-			if (subscription.source === source && subscriptions.has(subscription)) {
-				subscription.unlisten = unlisten
-			}
-		})
-	}
-
-	const relocateAll = () => {
-		for (const subscription of subscriptions) {
-			relocate(subscription)
-		}
 	}
 
 	const setActive = (active: string | null) => {
@@ -453,7 +123,7 @@ export const createJoinedHosts = ({
 			return
 		}
 		if (previous) {
-			endDownNotice(previous)
+			down.endDownNotice(previous)
 		}
 		store.setState({ ...store.getState(), active })
 		relocateAll()
@@ -481,151 +151,20 @@ export const createJoinedHosts = ({
 			return
 		}
 		relocateAll()
-		reportIfActiveDown(id)
+		down.reportIfActiveDown(id)
 	}
 
 	const forget = (id: string) => {
 		hosts.get(id)?.close()
 		hosts.delete(id)
 		sharedSpaceIds.delete(id)
-		unpairedReopens.delete(id)
-		endDownGrace(id)
-		endDownNotice(id)
+		down.forgetDown(id)
 		const { [id]: _forgotten, ...connections } = store.getState().connections
 		store.setState({ ...store.getState(), connections })
 		if (requested === id) {
 			void activate(null)
 		}
 	}
-
-	const unreachable = (id: string) => {
-		const connection = store.getState().connections[id]
-		const failure =
-			connection?.status === "refused" ? connection.failure : "unreachable"
-		return new Error(`joined host ${id}: ${failure}`)
-	}
-
-	const invokeOnceOpen = async <T>(
-		id: string,
-		command: string,
-		args?: InvokeArgs,
-	): Promise<T> => {
-		const host = await openConnection(id)
-		if (!host) {
-			throw unreachable(id)
-		}
-		return host.invoke<T>(command, args)
-	}
-
-	const isOpenHost = (source: ConversationSource) =>
-		source !== null && hosts.has(source) && !isDown(source)
-
-	const forgetLocalIdsRecall = (reason: unknown) => {
-		localIdsRecall = null
-		reportFailure({
-			message: describeRejection(reason),
-			command: LOCAL_IDS_COMMAND,
-		})
-	}
-
-	const recallLocalIds = (): Promise<void> => {
-		localIdsRecall ??= provenance
-			.record(null, LOCAL_IDS_COMMAND, local.invoke(LOCAL_IDS_COMMAND))
-			.then(() => {
-				hasLocalIds = true
-			}, forgetLocalIdsRecall)
-		return localIdsRecall
-	}
-
-	const namesWhatOnlyThisMacHolds = (active: string, args?: InvokeArgs) =>
-		provenance
-			.heldOnlyHereIn(args, active)
-			.some((id) => id !== sharedSpaceIds.get(active))
-
-	const ownerOf = (active: string, args?: InvokeArgs): ConversationSource => {
-		if (namesWhatOnlyThisMacHolds(active, args)) {
-			return null
-		}
-		const sources = provenance.sourcesNamedIn(args)
-		if (sources.size === 0) {
-			return provenance.namesConversation(args) && !hasLocalIds ? null : active
-		}
-		if (sources.has(active)) {
-			return active
-		}
-		if (sources.has(null)) {
-			return null
-		}
-		return [...sources].find(isOpenHost) ?? null
-	}
-
-	const sendTo = <T>(
-		target: ConversationSource,
-		call: Parameters<Invoke>,
-	): Promise<T> => {
-		const [command, args] = call
-		if (target === null) {
-			return provenance.record(null, command, local.invoke<T>(...call))
-		}
-		const joined = hosts.get(target)
-		return provenance.record(
-			target,
-			command,
-			joined
-				? joined.invoke<T>(command, args)
-				: invokeOnceOpen<T>(target, command, args),
-		)
-	}
-
-	const refuseAsTheHostWould = <T>(command: string): Promise<T> => {
-		const refusal = hostOnlyRefusalOf(command)
-		reportFailure(refusal)
-		return Promise.reject(new HostRefused(refusal.message, refusal))
-	}
-
-	const invoke: Invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {
-		const [command, args] = call
-		const { active } = store.getState()
-		if (
-			isLocalCommand(command) ||
-			active === null ||
-			carriesPersonalScope(args)
-		) {
-			return sendTo<T>(null, call)
-		}
-		const route = () => {
-			const target = ownerOf(active, args)
-			return target !== null && COMMANDS_ONLY_THE_HOST_RUNS.has(command)
-				? refuseAsTheHostWould<T>(command)
-				: sendTo<T>(target, call)
-		}
-		return provenance.namesConversation(args)
-			? recallLocalIds().then(route)
-			: route()
-	}
-
-	const routedListen =
-		(route: Route): Listen =>
-		async (event, handler) => {
-			const source = route(event)
-			const subscription: Subscription = {
-				event,
-				handler: handler as EventCallback<unknown>,
-				route,
-				source,
-				unlisten: await source(event, handler),
-			}
-			subscriptions.add(subscription)
-			relocate(subscription)
-			return () => {
-				subscriptions.delete(subscription)
-				subscription.unlisten()
-			}
-		}
-
-	const listen = routedListen(listenerFor)
-
-	const listenToActiveHost = routedListen(() => activeHost()?.listen ?? unheard)
 
 	const fileSrc = (path: string): string =>
 		(activeHost() ?? local).fileSrc(path)
@@ -642,7 +181,7 @@ export const createJoinedHosts = ({
 		activeSpaceId,
 		listen,
 		listenToActiveHost,
-		onReconnected,
+		onReconnected: down.onReconnected,
 		fileSrc,
 	}
 }
