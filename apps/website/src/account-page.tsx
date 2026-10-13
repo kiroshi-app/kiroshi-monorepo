@@ -15,6 +15,7 @@ import {
 	SessionList,
 	SessionRow,
 	SignOutButton,
+	TextButton,
 } from "./account-parts"
 import { RelayFailureLine } from "./login-page"
 import {
@@ -22,6 +23,7 @@ import {
 	clearBearer,
 	isRelayFailure,
 	type Session,
+	signOutCurrentSession,
 	signOutEverywhere,
 	signOutSession,
 } from "./relay"
@@ -179,20 +181,42 @@ const SignOutEverywhere = () => {
 	)
 }
 
+type AccountIdentityProps = {
+	account: Account
+}
+
+const AccountIdentity = ({ account }: AccountIdentityProps) => {
+	const call = useSignOutCall()
+	const displayName = account.name ?? account.email
+
+	return (
+		<Identity
+			action={
+				<TextButton
+					isBusy={call.isPending}
+					label={ACCOUNT_COPY.signOut}
+					onClick={() =>
+						call.signOut(signOutCurrentSession, call.leaveSignedOut)
+					}
+				/>
+			}
+			email={account.name ? account.email : undefined}
+			failure={<RelayFailureLine failure={call.failure} onRetry={call.retry} />}
+			initials={initialsOf(displayName)}
+			name={displayName}
+		/>
+	)
+}
+
 const planOf = (account: Account) =>
 	account.plan === "pro" ? ACCOUNT_COPY.plans.pro : ACCOUNT_COPY.plans.free
 
 export const AccountPage = () => {
 	const { account, sessions } = accountRoute.useLoaderData()
-	const displayName = account.name ?? account.email
 
 	return (
 		<AccountShell>
-			<Identity
-				email={account.name ? account.email : undefined}
-				initials={initialsOf(displayName)}
-				name={displayName}
-			/>
+			<AccountIdentity account={account} />
 			<AccountSection heading={ACCOUNT_COPY.planHeading}>
 				<PlanCard {...planOf(account)} />
 			</AccountSection>

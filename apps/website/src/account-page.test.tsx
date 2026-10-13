@@ -30,6 +30,7 @@ const SESSIONS = "GET /me/sessions"
 const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const SIGN_OUT_EVERYWHERE = "DELETE /me/sessions"
+const SIGN_OUT = "POST /api/auth/sign-out"
 const RETRY_LABEL = "Retry"
 
 const signOutOf = (id: string) => `DELETE /me/sessions/${id}`
@@ -43,6 +44,8 @@ type RelayCall = { route: string; authorization: string | null }
 type Router = ReturnType<typeof createSiteRouter>
 
 const NO_CONTENT: Reply = { status: 204 }
+
+const SIGNED_OUT: Reply = { body: { status: true } }
 
 const relayError = (status: number, code: string): Reply => ({
 	status,
@@ -104,6 +107,7 @@ const relayRoutes = (): RelayRoutes => ({
 	[signOutOf("mini")]: NO_CONTENT,
 	[signOutOf("unnamed")]: NO_CONTENT,
 	[SIGN_OUT_EVERYWHERE]: NO_CONTENT,
+	[SIGN_OUT]: SIGNED_OUT,
 })
 
 let routes: RelayRoutes = {}
@@ -184,6 +188,16 @@ const rowOf = (name: string) => {
 const rowSignOut = (name: string) => `Sign out ${name}`
 
 const confirmation = () => screen.findByRole("alertdialog")
+
+const devicesSection = () => {
+	const section = screen
+		.getByRole("heading", { name: ACCOUNT_COPY.devicesHeading })
+		.closest("section")
+	if (!section) throw new Error("No devices section")
+	return section
+}
+
+const accountSignOut = () => button(ACCOUNT_COPY.signOut)
 
 const triggerOf = (name: string) =>
 	screen
@@ -510,8 +524,11 @@ describe("the actions under the device list", () => {
 	it("offer Sign out everywhere and no standalone Sign out", async () => {
 		await openAccount()
 
-		expect(button("Sign out everywhere")).toBeTruthy()
-		expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull()
+		const devices = within(devicesSection())
+		expect(
+			devices.getByRole("button", { name: "Sign out everywhere" }),
+		).toBeTruthy()
+		expect(devices.queryByRole("button", { name: "Sign out" })).toBeNull()
 	})
 
 	it("leave the site signed out when the bearer is already rejected", async () => {
@@ -521,5 +538,60 @@ describe("the actions under the device list", () => {
 		await pressAndConfirm(ACCOUNT_COPY.signOutEverywhere)
 
 		await leftSignedOut(router)
+	})
+})
+
+describe("the account Sign out", () => {
+	it("sits outside the devices section, which still lists this device", async () => {
+		await openAccount()
+
+		expect(devicesSection().contains(accountSignOut())).toBe(false)
+		expect(rowNames()).toEqual([MINI, MAC, IPHONE, ACCOUNT_COPY.unknownDevice])
+		expect(triggerOf(rowSignOut(MINI))).toBeTruthy()
+		expect(triggerOf(ACCOUNT_COPY.signOutEverywhere)).toBeTruthy()
+	})
+
+	it("signs this browser out without a confirmation and lands on /login", async () => {
+		const router = await openAccount()
+
+		fireEvent.click(accountSignOut())
+
+		expect(screen.queryByRole("alertdialog")).toBeNull()
+		await leftSignedOut(router)
+		expect(callsTo(SIGN_OUT)).toHaveLength(1)
+		expect(callsTo(SIGN_OUT)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expect(callsTo(SIGN_OUT_EVERYWHERE)).toHaveLength(0)
+	})
+
+	it("lands on /login when the bearer is already rejected", async () => {
+		routes[SIGN_OUT] = relayError(401, "UNAUTHENTICATED")
+		const router = await openAccount()
+
+		fireEvent.click(accountSignOut())
+
+		await leftSignedOut(router)
+	})
+
+	it("disables itself while pending, then stays on /account and shows what failed with a Retry", async () => {
+		const reply = deferredReply()
+		routes[SIGN_OUT] = reply.promise
+		const router = await openAccount()
+
+		fireEvent.click(accountSignOut())
+
+		await waitFor(() =>
+			expect(accountSignOut().hasAttribute("disabled")).toBe(true),
+		)
+		reply.resolve(relayError(500, "INTERNAL"))
+		const alert = await screen.findByRole("alert")
+		expect(alert.textContent).toBe(LOGIN_COPY.failures.server)
+		expect(devicesSection().contains(alert)).toBe(false)
+		expect(router.state.location.pathname).toBe(ACCOUNT_PATH)
+		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
+		expect(accountSignOut().hasAttribute("disabled")).toBe(false)
+		routes[SIGN_OUT] = SIGNED_OUT
+		press(RETRY_LABEL)
+		await leftSignedOut(router)
+		expect(callsTo(SIGN_OUT)).toHaveLength(2)
 	})
 })
