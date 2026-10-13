@@ -15,6 +15,12 @@ enum CodeSignInAnswer: Equatable, Sendable {
     case unreachable
 }
 
+enum ProviderSignInAnswer: Equatable, Sendable {
+    case signedIn(Session)
+    case refused
+    case unreachable
+}
+
 enum SpacesAnswer: Equatable, Sendable {
     case spaces([Space])
     case unauthenticated
@@ -47,15 +53,28 @@ struct KiroshiCloud: Sendable {
         guard let (status, data) = try await send(request) else { return .unreachable }
         switch status {
         case 200:
-            guard let granted = try? JSONDecoder().decode(GrantedSession.self, from: data) else {
-                return .unreachable
-            }
-            return .signedIn(
-                Session(
-                    bearer: granted.token, email: granted.user.email,
-                    deviceName: granted.session?.deviceName, platform: granted.session?.platform))
+            guard let granted = session(from: data) else { return .unreachable }
+            return .signedIn(granted)
         case 400, 401:
             return refusal(of: data)
+        default:
+            return .unreachable
+        }
+    }
+
+    func signIn(with credential: ProviderCredential) async throws -> ProviderSignInAnswer {
+        let request = post(
+            "api/auth/sign-in/social",
+            body: IdTokenSignIn(
+                provider: credential.provider.rawValue, idToken: credential.idToken,
+                nonce: credential.nonce, name: credential.name, deviceName: deviceName))
+        guard let (status, data) = try await send(request) else { return .unreachable }
+        switch status {
+        case 200:
+            guard let granted = session(from: data) else { return .unreachable }
+            return .signedIn(granted)
+        case 400, 401, 404:
+            return .refused
         default:
             return .unreachable
         }
@@ -83,6 +102,15 @@ struct KiroshiCloud: Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         _ = try? await send(request)
+    }
+
+    private func session(from data: Data) -> Session? {
+        guard let granted = try? JSONDecoder().decode(GrantedSession.self, from: data) else {
+            return nil
+        }
+        return Session(
+            bearer: granted.token, email: granted.user.email,
+            deviceName: granted.session?.deviceName, platform: granted.session?.platform)
     }
 
     private func refusal(of data: Data) -> CodeSignInAnswer {
@@ -121,6 +149,15 @@ private struct CodeRequest: Encodable {
 private struct CodeSignIn: Encodable {
     let email: String
     let otp: String
+    let deviceName: String
+    let platform = "ios"
+}
+
+private struct IdTokenSignIn: Encodable {
+    let provider: String
+    let idToken: String
+    let nonce: String?
+    let name: String?
     let deviceName: String
     let platform = "ios"
 }
