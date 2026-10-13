@@ -1,21 +1,48 @@
+// @vitest-environment happy-dom
+
+import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import {
+	type NoticeMessage,
+	raiseFailureNotice,
+} from "@workspace/ui/components/notice-surface"
+import type { CatalogueCategory } from "@workspace/ui/components/plugin-settings/applications-catalogue"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import type { InstallTarget, InstallValues } from "./application-install"
 import type { Application, ApplicationSearch } from "./application-port"
-import {
-	catalogueStatusOf,
-	createApplicationsController,
-	DIRECTORY_READ_BOUND_MS,
-	type InstallTarget,
-} from "./applications-controller"
 import {
 	createFakeApplicationPort,
 	type FakeApplicationPort,
 } from "./fake-application-port"
+import { catalogueStatusOf, useApplications } from "./use-applications"
+import { READ_BOUND_MS } from "./use-read-bound"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { EnvOwner } from "../conversations/store-contract"
+import type { TranscriptStore } from "../conversations/store-port"
+import {
+	joinFakeHost,
+	leaveFakeHost,
+	reopenFakeRelay,
+} from "../host/fake-joined-hosts"
+import { invalidateOnHostReconnect } from "../query/host-invalidations"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	...(await import("../host/fake-joined-hosts")).fakeHostModule,
+}))
+
+vi.mock("@workspace/ui/components/notice-surface", () => ({
+	raiseFailureNotice: vi.fn(() => "notice-1"),
+}))
+
+afterEach(() => {
+	cleanup()
+	vi.mocked(raiseFailureNotice).mockClear()
+})
 
 const USER: EnvOwner = { kind: "user" }
 
@@ -95,20 +122,73 @@ const targetOf = (overrides: Partial<InstallTarget> = {}): InstallTarget => ({
 	...overrides,
 })
 
-const controllerOn = (
-	port = createFakeApplicationPort(),
-	store = createFakeTranscriptStore(),
-) =>
-	createApplicationsController(port, store, {
-		reportFailure: () => undefined,
+const flushed = () =>
+	vi.isFakeTimers()
+		? vi.advanceTimersByTimeAsync(0)
+		: new Promise((resolve) => setTimeout(resolve, 0))
+
+const settled = () =>
+	act(async () => {
+		for (let round = 0; round < 5; round += 1) {
+			await flushed()
+		}
 	})
 
-const reportingOn = (port: FakeApplicationPort) => {
+type CatalogueOpen = { isCatalogueOpen: boolean }
+
+const mountedOn = async (
+	port = createFakeApplicationPort(),
+	store: TranscriptStore = createFakeTranscriptStore(),
+	reportFailure: (notice: NoticeMessage) => void = () => undefined,
+) => {
+	const { result, rerender } = renderHook(
+		({ isCatalogueOpen }: CatalogueOpen) =>
+			useApplications(port, store, { isCatalogueOpen, reportFailure }),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+			initialProps: { isCatalogueOpen: true },
+		},
+	)
+	const acting = (run: () => void) =>
+		act(async () => {
+			run()
+			await flushed()
+		})
+	await settled()
+	return {
+		getState: () => result.current.state,
+		actions: () => result.current.actions,
+		browse: () => acting(() => result.current.actions.browse()),
+		retry: () => acting(() => result.current.actions.retry()),
+		search: (query: string) =>
+			acting(() => result.current.actions.search(query)),
+		pickCategory: (category: CatalogueCategory) =>
+			acting(() => result.current.actions.pickCategory(category)),
+		pick: (id: string) => acting(() => result.current.actions.pick(id)),
+		leave: () => acting(() => result.current.actions.leave()),
+		install: async (target: InstallTarget, values?: InstallValues) => {
+			await acting(() => result.current.actions.install(target, values))
+			await settled()
+		},
+		closeCatalogue: () => act(() => rerender({ isCatalogueOpen: false })),
+		openCatalogue: () => act(() => rerender({ isCatalogueOpen: true })),
+	}
+}
+
+const installedOf = (application: string) => ({
+	conversationId: "conversation-1",
+	application,
+	title: application,
+	scope: "user" as const,
+	install: { kind: "nothing" as const },
+})
+
+const reportingOn = async (port: FakeApplicationPort) => {
 	const reportFailure = vi.fn()
-	const controller = createApplicationsController(
+	const controller = await mountedOn(
 		port,
 		createFakeTranscriptStore(),
-		{ reportFailure },
+		reportFailure,
 	)
 	return { controller, reportFailure }
 }
@@ -146,76 +226,102 @@ const pendingCatalogueOn = (port: FakeApplicationPort) => {
 	return reading
 }
 
-const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
-
 const searchesOf = (port: FakeApplicationPort) =>
 	port.calls.filter((call) => call.command === "search")
 
-describe("applications controller", () => {
+describe("useApplications", () => {
 	it("opens on the curated applications the host answers", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER, SUPERSET]
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		await controller.open()
+		await settled()
 
 		expect(controller.getState().curated).toEqual([PAPER, SUPERSET])
 	})
 
-	it("reads the catalogue again for every panel that opens it", async () => {
+	it("reads the catalogue again, its rows still on screen, when the host reconnects", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const controller = controllerOn(port)
-
-		await controller.open()
+		await joinFakeHost("garage")
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const stopInvalidating = invalidateOnHostReconnect(queryClient)
+		const { result } = renderHook(
+			() =>
+				useApplications(port, createFakeTranscriptStore(), {
+					isCatalogueOpen: true,
+				}),
+			{ wrapper },
+		)
+		await settled()
 		port.curated = [PAPER, SUPERSET]
-		await controller.open()
 
-		expect(port.calls).toEqual([
-			{ command: "catalogue" },
-			{ command: "catalogue" },
-		])
-		expect(controller.getState().curated).toEqual([PAPER, SUPERSET])
+		reopenFakeRelay("garage")
+		expect(result.current.state.curated).toEqual([PAPER])
+		await settled()
+
+		expect(result.current.state.curated).toEqual([PAPER, SUPERSET])
+		stopInvalidating()
+		await leaveFakeHost("garage")
 	})
 
-	it("issues no second catalogue read while one is in flight", async () => {
+	it("reads the catalogue once for two readers mounted together", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const controller = controllerOn(port)
+		const store = createFakeTranscriptStore()
+		const options = { isCatalogueOpen: true }
 
-		await Promise.all([controller.open(), controller.open()])
+		renderHook(
+			() => [
+				useApplications(port, store, options),
+				useApplications(port, store, options),
+			],
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settled()
 
 		expect(port.calls).toEqual([{ command: "catalogue" }])
+	})
+
+	it("reads the catalogue, the directory and the mark again when an application is installed", async () => {
+		const port = createFakeApplicationPort()
+		port.curated = [PAPER]
+		port.found = [LINEAR]
+		const controller = await mountedOn(port)
+		await controller.browse()
+		await settled()
+
+		port.curated = [PAPER, SUPERSET]
+		port.found = [LINEAR, SUPERSET]
+		port.announce(installedOf("paper"))
+		await settled()
+
+		expect(controller.getState().curated).toEqual([PAPER, SUPERSET])
+		expect(controller.getState().directory).toEqual([LINEAR, SUPERSET])
 	})
 
 	it("keeps the curated rows it holds when a catalogue re-read is refused", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const { controller, reportFailure } = reportingOn(port)
-		await controller.open()
+		const controller = await mountedOn(port)
 
 		port.refusals.catalogue = { kind: "catalogueUnreadable", detail: "gone" }
-		await controller.open()
+		port.announce(installedOf("paper"))
+		await settled()
 
 		expect(controller.getState().curated).toEqual([PAPER])
-		expect(reportFailure).toHaveBeenCalledTimes(1)
+		expect(raiseFailureNotice).toHaveBeenCalledOnce()
 	})
 
 	it("reports it is reading the catalogue until the read lands", async () => {
 		const port = createFakeApplicationPort()
-		port.curated = [PAPER]
-		const pending: ((curated: Application[]) => void)[] = []
-		port.catalogue = () =>
-			new Promise((resolve) => {
-				pending.push(resolve)
-			})
-		const controller = controllerOn(port)
+		const reading = pendingCatalogueOn(port)
+		const controller = await mountedOn(port)
 
-		const reading = controller.open()
 		expect(controller.getState().isReadingCatalogue).toBe(true)
 
-		pending[0]?.([PAPER])
-		await reading
+		reading.answer([PAPER])
+		await settled()
 
 		expect(controller.getState().isReadingCatalogue).toBe(false)
 		expect(controller.getState().curated).toEqual([PAPER])
@@ -224,25 +330,22 @@ describe("applications controller", () => {
 	it("reports a catalogue it could not read", async () => {
 		const port = createFakeApplicationPort()
 		port.refusals.catalogue = { kind: "catalogueUnreadable", detail: "gone" }
-		const reportFailure = vi.fn()
-		const controller = createApplicationsController(
-			port,
-			createFakeTranscriptStore(),
-			{ reportFailure },
-		)
 
-		await controller.open()
+		const controller = await mountedOn(port)
 
 		expect(controller.getState().hasCatalogueFailed).toBe(true)
-		expect(reportFailure).toHaveBeenCalledTimes(1)
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
+			title: i18n.t("bots:applications.catalogue.unavailable"),
+			report: expect.objectContaining({ raisedIn: "use-applications" }),
+		})
 	})
 
 	it("reads the whole directory once the catalogue page opens", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR, SUPERSET]
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		expect(controller.getState().isReadingDirectory).toBe(true)
 		await settled()
 
@@ -254,12 +357,12 @@ describe("applications controller", () => {
 	it("reads the directory again for every page that opens it", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 		port.found = [LINEAR, SUPERSET]
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(searchesOf(port)).toHaveLength(2)
@@ -268,25 +371,26 @@ describe("applications controller", () => {
 
 	it("issues no second directory read while one is in flight", async () => {
 		const port = createFakeApplicationPort()
-		port.found = [LINEAR]
-		const controller = controllerOn(port)
+		pendingSearchOn(port)
+		const search = vi.spyOn(port, "search")
+		const controller = await mountedOn(port)
 
-		controller.browse()
-		controller.browse()
-		await settled()
+		await controller.browse()
+		await controller.browse()
 
-		expect(searchesOf(port)).toEqual([{ command: "search", query: "" }])
+		expect(controller.getState().isReadingDirectory).toBe(true)
+		expect(search).toHaveBeenCalledOnce()
 	})
 
 	it("keeps the held directory listed and raises a notice when a re-read is refused", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const { controller, reportFailure } = reportingOn(port)
-		controller.browse()
+		const { controller, reportFailure } = await reportingOn(port)
+		await controller.browse()
 		await settled()
 
 		port.refusals.search = { kind: "registryTimedOut" }
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().directory).toEqual([LINEAR])
@@ -298,12 +402,12 @@ describe("applications controller", () => {
 	it("narrows what it holds on a keystroke without calling the port", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR, SUPERSET]
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		for (const typed of ["l", "li", "lin", "line", "linea", "linear"]) {
-			controller.search(typed)
+			await controller.search(typed)
 		}
 		await settled()
 
@@ -313,12 +417,12 @@ describe("applications controller", () => {
 		expect(controller.getState().isReadingDirectory).toBe(false)
 	})
 
-	it("holds the picked category so every page reads one value", () => {
-		const controller = controllerOn()
+	it("holds the picked category so every page reads one value", async () => {
+		const controller = await mountedOn()
 
 		expect(controller.getState().category).toBe("everything")
 
-		controller.pickCategory("developer-tools")
+		await controller.pickCategory("developer-tools")
 
 		expect(controller.getState().category).toBe("developer-tools")
 	})
@@ -326,16 +430,16 @@ describe("applications controller", () => {
 	it("reports a directory it could not read and reads it again on a retry", async () => {
 		const port = createFakeApplicationPort()
 		port.refusals.search = { kind: "registryTimedOut" }
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 		expect(controller.getState().hasDirectoryFailed).toBe(true)
 		expect(controller.getState().directory).toEqual([])
 
 		port.refusals = {}
 		port.found = [LINEAR]
-		controller.retry()
+		await controller.retry()
 		await settled()
 
 		expect(searchesOf(port)).toEqual([
@@ -349,19 +453,19 @@ describe("applications controller", () => {
 	it("reads the directory again when the page opens after a failed read", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		port.refusals.search = { kind: "registryTimedOut" }
-		controller.retry()
+		await controller.retry()
 		await settled()
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
 		expect(controller.getState().directory).toEqual([LINEAR])
 
 		port.refusals = {}
 		port.found = [LINEAR, SUPERSET]
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(searchesOf(port)).toHaveLength(3)
@@ -376,10 +480,10 @@ describe("applications controller", () => {
 			new Promise((resolve) => {
 				answers.push(resolve)
 			})
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
-		controller.retry()
+		await controller.browse()
+		await controller.retry()
 		answers[1]?.({ applications: [LINEAR] })
 		answers[0]?.({ applications: [SUPERSET] })
 		await settled()
@@ -392,9 +496,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundIsStale = true
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().isDirectoryStale).toBe(true)
@@ -405,9 +509,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundIsStale = false
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().isDirectoryStale).toBe(false)
@@ -417,9 +521,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundFailure = { kind: "registryTimedOut" }
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().directory).toEqual([LINEAR])
@@ -431,9 +535,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundFailure = { kind: "registryTimedOut" }
-		const { controller, reportFailure } = reportingOn(port)
+		const { controller, reportFailure } = await reportingOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().directory).toEqual([LINEAR])
@@ -444,9 +548,9 @@ describe("applications controller", () => {
 	it("raises no notice for a directory read where both sides answered", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const { controller, reportFailure } = reportingOn(port)
+		const { controller, reportFailure } = await reportingOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(reportFailure).not.toHaveBeenCalled()
@@ -455,9 +559,9 @@ describe("applications controller", () => {
 	it("reports no partial failure when both directory sides answered", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
@@ -467,12 +571,12 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundFailure = { kind: "registryTimedOut" }
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		port.refusals.search = { kind: "registryTimedOut" }
-		controller.retry()
+		await controller.retry()
 		await settled()
 
 		expect(controller.getState().hasDirectoryFailed).toBe(false)
@@ -483,12 +587,12 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundFailure = { kind: "registryTimedOut" }
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		const reading = pendingSearchOn(port)
-		controller.browse()
+		await controller.browse()
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(true)
 
 		reading.answer({ applications: [LINEAR, SUPERSET] })
@@ -501,13 +605,13 @@ describe("applications controller", () => {
 	it("drops the partial failure of an empty directory as a re-read starts", async () => {
 		const port = createFakeApplicationPort()
 		port.foundFailure = { kind: "registryTimedOut" }
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(true)
 
 		const reading = pendingSearchOn(port)
-		controller.browse()
+		await controller.browse()
 		expect(controller.getState().hasDirectoryPartlyFailed).toBe(false)
 
 		reading.answer({ applications: [LINEAR] })
@@ -520,12 +624,12 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundIsStale = true
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		const reading = pendingSearchOn(port)
-		controller.browse()
+		await controller.browse()
 		expect(controller.getState().isDirectoryStale).toBe(true)
 
 		reading.refuse({ kind: "registryTimedOut" })
@@ -538,12 +642,12 @@ describe("applications controller", () => {
 	it("drops the stale mark of an empty directory on a refused re-read", async () => {
 		const port = createFakeApplicationPort()
 		port.foundIsStale = true
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		const reading = pendingSearchOn(port)
-		controller.browse()
+		await controller.browse()
 		expect(controller.getState().isDirectoryStale).toBe(true)
 
 		reading.refuse({ kind: "registryTimedOut" })
@@ -555,11 +659,11 @@ describe("applications controller", () => {
 	it("listens to directory refreshes once however many times the catalogue opens", async () => {
 		const port = createFakeApplicationPort()
 		const onDirectoryRefreshed = vi.spyOn(port, "onDirectoryRefreshed")
-		const controller = controllerOn(port)
+		const controller = await mountedOn(port)
 
-		controller.browse()
+		await controller.browse()
 		await settled()
-		controller.browse()
+		await controller.browse()
 		await settled()
 
 		expect(onDirectoryRefreshed).toHaveBeenCalledOnce()
@@ -569,11 +673,11 @@ describe("applications controller", () => {
 	it("lists the rows of a refreshed directory keeping the query and the category", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
-		controller.search("lin")
-		controller.pickCategory("on-this-machine")
+		await controller.search("lin")
+		await controller.pickCategory("on-this-machine")
 
 		port.found = [LINEAR, SUPERSET]
 		port.refreshDirectory()
@@ -588,12 +692,13 @@ describe("applications controller", () => {
 	it("keeps the held rows listed while a refreshed directory is read", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		pendingSearchOn(port)
 		port.refreshDirectory()
+		await settled()
 
 		expect(controller.getState().isReadingDirectory).toBe(true)
 		expect(controller.getState().directory).toEqual([LINEAR])
@@ -603,8 +708,8 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
 		port.foundIsStale = true
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
 		port.foundIsStale = false
@@ -617,8 +722,8 @@ describe("applications controller", () => {
 	it("keeps the held rows and raises a notice when a refresh answers a failed side", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const { controller, reportFailure } = reportingOn(port)
-		controller.browse()
+		const { controller, reportFailure } = await reportingOn(port)
+		await controller.browse()
 		await settled()
 
 		port.found = []
@@ -634,8 +739,8 @@ describe("applications controller", () => {
 	it("keeps the held rows and raises a notice when a refresh read is refused", async () => {
 		const port = createFakeApplicationPort()
 		port.found = [LINEAR]
-		const { controller, reportFailure } = reportingOn(port)
-		controller.browse()
+		const { controller, reportFailure } = await reportingOn(port)
+		await controller.browse()
 		await settled()
 
 		port.refusals.search = { kind: "registryTimedOut" }
@@ -647,31 +752,34 @@ describe("applications controller", () => {
 		expect(reportFailure).toHaveBeenCalledWith(UNREFRESHED_NOTICE)
 	})
 
-	it("stops reading on directory refreshes once it stops watching", async () => {
+	it("reads no refreshed directory while every catalogue view is closed", async () => {
 		const port = createFakeApplicationPort()
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
 
-		controller.stopWatchingDirectory()
+		await controller.closeCatalogue()
 		port.refreshDirectory()
 		await settled()
 
-		expect(port.isListeningToDirectory()).toBe(false)
 		expect(searchesOf(port)).toHaveLength(1)
 	})
 
-	it("listens again when the catalogue opens after it stopped watching", async () => {
+	it("reads the directory refreshed while closed once the catalogue opens again", async () => {
 		const port = createFakeApplicationPort()
-		const controller = controllerOn(port)
-		controller.browse()
+		const controller = await mountedOn(port)
+		await controller.browse()
 		await settled()
-		controller.stopWatchingDirectory()
-
-		controller.browse()
+		await controller.closeCatalogue()
+		port.found = [LINEAR]
+		port.refreshDirectory()
 		await settled()
 
-		expect(port.isListeningToDirectory()).toBe(true)
+		await controller.openCatalogue()
+		await settled()
+
+		expect(searchesOf(port)).toHaveLength(2)
+		expect(controller.getState().directory).toEqual([LINEAR])
 	})
 
 	describe("with a directory read that never answers", () => {
@@ -683,15 +791,17 @@ describe("applications controller", () => {
 			vi.useRealTimers()
 		})
 
-		it("shows the failure state once the bound passes with no rows held", () => {
+		const passing = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+		it("shows the failure state once the bound passes with no rows held", async () => {
 			const port = createFakeApplicationPort()
 			pendingSearchOn(port)
-			const controller = controllerOn(port)
+			const controller = await mountedOn(port)
 
-			controller.browse()
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 1)
+			await controller.browse()
+			await passing(READ_BOUND_MS - 1)
 			expect(controller.getState().hasDirectoryFailed).toBe(false)
-			vi.advanceTimersByTime(1)
+			await passing(1)
 
 			expect(controller.getState().isReadingDirectory).toBe(false)
 			expect(controller.getState().hasDirectoryFailed).toBe(true)
@@ -700,12 +810,13 @@ describe("applications controller", () => {
 		it("lists the rows of a read answering after the bound", async () => {
 			const port = createFakeApplicationPort()
 			const reading = pendingSearchOn(port)
-			const controller = controllerOn(port)
-			controller.browse()
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+			const controller = await mountedOn(port)
+			await controller.browse()
+			await passing(READ_BOUND_MS)
+			expect(controller.getState().hasDirectoryFailed).toBe(true)
 
 			reading.answer({ applications: [LINEAR] })
-			await vi.runAllTimersAsync()
+			await settled()
 
 			expect(controller.getState().directory).toEqual([LINEAR])
 			expect(controller.getState().hasDirectoryFailed).toBe(false)
@@ -714,27 +825,29 @@ describe("applications controller", () => {
 		it("cancels the bound once a read answers before it", async () => {
 			const port = createFakeApplicationPort()
 			const reading = pendingSearchOn(port)
-			const controller = controllerOn(port)
-			controller.browse()
+			const controller = await mountedOn(port)
+			await controller.browse()
 
 			reading.answer({ applications: [] })
-			await vi.advanceTimersByTimeAsync(0)
+			await settled()
+			await passing(READ_BOUND_MS)
 
-			expect(vi.getTimerCount()).toBe(0)
 			expect(controller.getState().hasDirectoryFailed).toBe(false)
 		})
 
 		it("sets no bound on a re-read while rows are held", async () => {
 			const port = createFakeApplicationPort()
 			port.found = [LINEAR]
-			const controller = controllerOn(port)
-			controller.browse()
-			await vi.advanceTimersByTimeAsync(0)
+			const controller = await mountedOn(port)
+			await controller.browse()
+			await settled()
 
 			pendingSearchOn(port)
 			port.refreshDirectory()
+			await passing(READ_BOUND_MS)
 
-			expect(vi.getTimerCount()).toBe(0)
+			expect(controller.getState().isReadingDirectory).toBe(true)
+			expect(controller.getState().hasDirectoryFailed).toBe(false)
 		})
 	})
 
@@ -747,29 +860,30 @@ describe("applications controller", () => {
 			vi.useRealTimers()
 		})
 
-		it("stops showing skeletons once the bound passes with no curated rows", () => {
+		const passing = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+		it("stops showing skeletons once the bound passes with no curated rows", async () => {
 			const port = createFakeApplicationPort()
 			catalogueNeverAnswering(port)
-			const controller = controllerOn(port)
+			const controller = await mountedOn(port)
 
-			void controller.open()
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 1)
+			await passing(READ_BOUND_MS - 1)
 			expect(catalogueStatusOf(controller.getState()).isLoading).toBe(true)
-			vi.advanceTimersByTime(1)
+			await passing(1)
 
 			expect(catalogueStatusOf(controller.getState()).isLoading).toBe(false)
 		})
 
-		it("shows the failure line with a retry reading the catalogue again once the bound passes", () => {
+		it("shows the failure line with a retry reading the catalogue again once the bound passes", async () => {
 			const port = createFakeApplicationPort()
 			catalogueNeverAnswering(port)
 			const catalogue = vi.spyOn(port, "catalogue")
-			const controller = controllerOn(port)
-			void controller.open()
+			const controller = await mountedOn(port)
 
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+			await passing(READ_BOUND_MS)
 			expect(catalogueStatusOf(controller.getState()).hasFailed).toBe(true)
-			controller.retry()
+			await controller.retry()
+			await settled()
 
 			expect(catalogue).toHaveBeenCalledTimes(2)
 		})
@@ -777,12 +891,12 @@ describe("applications controller", () => {
 		it("lists the curated rows of a read answering after the bound", async () => {
 			const port = createFakeApplicationPort()
 			const reading = pendingCatalogueOn(port)
-			const controller = controllerOn(port)
-			void controller.open()
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS)
+			const controller = await mountedOn(port)
+			await passing(READ_BOUND_MS)
+			expect(catalogueStatusOf(controller.getState()).hasFailed).toBe(true)
 
 			reading.answer([PAPER])
-			await vi.advanceTimersByTimeAsync(0)
+			await settled()
 
 			expect(controller.getState().curated).toEqual([PAPER])
 			expect(catalogueStatusOf(controller.getState())).toEqual({
@@ -791,18 +905,17 @@ describe("applications controller", () => {
 			})
 		})
 
-		it("shows the failure line once the directory bound passes with no curated rows", () => {
+		it("shows the failure line once the directory bound passes with no curated rows", async () => {
 			const port = createFakeApplicationPort()
-			catalogueNeverAnswering(port)
+			const reading = pendingCatalogueOn(port)
 			pendingSearchOn(port)
-			const controller = controllerOn(port)
-			controller.browse()
-			vi.advanceTimersByTime(5_000)
-			void controller.open()
+			const controller = await mountedOn(port)
+			await passing(READ_BOUND_MS - 5_000)
+			await controller.browse()
+			reading.answer([])
 
-			vi.advanceTimersByTime(DIRECTORY_READ_BOUND_MS - 5_000)
+			await passing(READ_BOUND_MS)
 
-			expect(controller.getState().isReadingCatalogue).toBe(true)
 			expect(catalogueStatusOf(controller.getState())).toEqual({
 				isLoading: false,
 				hasFailed: true,
@@ -814,9 +927,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 
 		await controller.install(targetOf())
 
@@ -829,9 +942,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [MARKED]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 
 		await controller.install(targetOf())
 
@@ -850,9 +963,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [SUPERSET]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("superset")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("superset")
 
 		await controller.install(targetOf(), { Authorization: "sk-typed" })
 
@@ -870,9 +983,9 @@ describe("applications controller", () => {
 		const store = createFakeTranscriptStore()
 		const declare = vi.spyOn(store, "setPluginMcpServer")
 		const write = vi.spyOn(store, "setEnvironmentVariable")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("@owner/two-headers")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("@owner/two-headers")
 
 		await controller.install(targetOf(), { Authorization: "sk-typed" })
 
@@ -885,9 +998,9 @@ describe("applications controller", () => {
 	it("names every field no value arrived under the name of", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [TWO_KEYED]
-		const controller = controllerOn(port)
-		await controller.open()
-		controller.pick("@owner/two-headers")
+		const controller = await mountedOn(port)
+		await settled()
+		await controller.pick("@owner/two-headers")
 
 		await controller.install(targetOf(), { apiKey: "   " })
 
@@ -900,9 +1013,9 @@ describe("applications controller", () => {
 		port.curated = [TWO_KEYED]
 		const store = createFakeTranscriptStore()
 		const write = vi.spyOn(store, "setEnvironmentVariable")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("@owner/two-headers")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("@owner/two-headers")
 
 		await controller.install(targetOf(), { tenant: "acme", apiKey: "sk-typed" })
 
@@ -917,9 +1030,9 @@ describe("applications controller", () => {
 	it("runs the connect of the scope for an install that signs in", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [LINEAR]
-		const controller = controllerOn(port)
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port)
+		await settled()
+		await controller.pick("linear")
 		const connect = vi.fn(async () => undefined)
 
 		await controller.install(targetOf({ connect }))
@@ -935,9 +1048,9 @@ describe("applications controller", () => {
 			kind: "store",
 			detail: "the bundle is read only",
 		})
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 
 		await controller.install(targetOf())
 
@@ -951,9 +1064,9 @@ describe("applications controller", () => {
 		port.curated = [REFUSED]
 		const store = createFakeTranscriptStore()
 		const declare = vi.spyOn(store, "setPluginMcpServer")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("@owner/queried")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("@owner/queried")
 
 		await controller.install(targetOf())
 
@@ -972,9 +1085,9 @@ describe("applications controller", () => {
 		const store = createFakeTranscriptStore()
 		const declare = vi.spyOn(store, "setPluginMcpServer")
 		const write = vi.spyOn(store, "setEnvironmentVariable")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("@owner/two-headers")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("@owner/two-headers")
 
 		await controller.install(targetOf(), { apiKey: "sk-typed", tenant: "acme" })
 
@@ -989,9 +1102,9 @@ describe("applications controller", () => {
 	it("reads the config of what it installs against the runners of this machine", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const controller = controllerOn(port)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port)
+		await settled()
+		await controller.pick("paper")
 
 		await controller.install(targetOf())
 
@@ -1007,13 +1120,15 @@ describe("applications controller", () => {
 		port.curated = [PAPER]
 		const store = createFakeTranscriptStore()
 		const declare = vi.spyOn(store, "setPluginMcpServer")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 
-		const running = controller.install(targetOf())
-		await controller.install(targetOf())
-		await running
+		await act(async () => {
+			controller.actions().install(targetOf())
+			controller.actions().install(targetOf())
+		})
+		await settled()
 
 		expect(declare).toHaveBeenCalledTimes(1)
 	})
@@ -1022,9 +1137,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 		await controller.install(targetOf())
 
 		await controller.install(
@@ -1041,9 +1156,9 @@ describe("applications controller", () => {
 		port.curated = [PAPER]
 		const store = createFakeTranscriptStore()
 		const declare = vi.spyOn(store, "setPluginMcpServer")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("paper")
 
 		await controller.install(targetOf({ declared: ["paper"] }))
 
@@ -1058,9 +1173,9 @@ describe("applications controller", () => {
 			kind: "env",
 			detail: "the keyring is locked",
 		})
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("superset")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("superset")
 
 		await controller.install(targetOf(), { Authorization: "sk-typed" })
 
@@ -1079,9 +1194,9 @@ describe("applications controller", () => {
 			kind: "env",
 			detail: "the keyring is locked",
 		})
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("superset")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("superset")
 
 		await controller.install(targetOf(), { Authorization: "sk-typed" })
 
@@ -1104,11 +1219,9 @@ describe("applications controller", () => {
 			detail: "the bundle is read only",
 		})
 		const reportFailure = vi.fn()
-		const controller = createApplicationsController(port, store, {
-			reportFailure,
-		})
-		await controller.open()
-		controller.pick("superset")
+		const controller = await mountedOn(port, store, reportFailure)
+		await settled()
+		await controller.pick("superset")
 
 		await controller.install(targetOf(), { Authorization: "sk-typed" })
 
@@ -1120,9 +1233,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [LINEAR]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("linear")
 
 		await controller.install(
 			targetOf({
@@ -1141,9 +1254,9 @@ describe("applications controller", () => {
 		port.curated = [LINEAR]
 		const store = createFakeTranscriptStore()
 		const scope = { kind: "server", name: "linear", owner: USER } as const
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("linear")
 
 		await controller.install(
 			targetOf({
@@ -1168,9 +1281,9 @@ describe("applications controller", () => {
 					? Promise.reject({ kind: "env", detail: "the keyring is locked" })
 					: write(scope, name, value),
 		)
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("@owner/two-headers")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("@owner/two-headers")
 
 		await controller.install(targetOf(), { apiKey: "sk-typed", tenant: "acme" })
 
@@ -1191,9 +1304,9 @@ describe("applications controller", () => {
 		const scope = { kind: "server", name: "linear", owner: USER } as const
 		await store.setPluginMcpServer({ kind: "user" }, "linear", LINEAR.config)
 		await store.setEnvironmentVariable(scope, "LINEAR_TOKEN", "kept")
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("linear")
 
 		await controller.install(
 			targetOf({
@@ -1220,11 +1333,9 @@ describe("applications controller", () => {
 			detail: "the bundle is read only",
 		})
 		const reportFailure = vi.fn()
-		const controller = createApplicationsController(port, store, {
-			reportFailure,
-		})
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store, reportFailure)
+		await settled()
+		await controller.pick("linear")
 
 		await controller.install(
 			targetOf({
@@ -1247,11 +1358,9 @@ describe("applications controller", () => {
 			detail: "the keyring is locked",
 		})
 		const reportFailure = vi.fn()
-		const controller = createApplicationsController(port, store, {
-			reportFailure,
-		})
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store, reportFailure)
+		await settled()
+		await controller.pick("linear")
 
 		await controller.install(
 			targetOf({
@@ -1275,9 +1384,9 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [LINEAR]
 		const store = createFakeTranscriptStore()
-		const controller = controllerOn(port, store)
-		await controller.open()
-		controller.pick("linear")
+		const controller = await mountedOn(port, store)
+		await settled()
+		await controller.pick("linear")
 		await controller.install(
 			targetOf({
 				connect: async () => {
@@ -1297,9 +1406,9 @@ describe("applications controller", () => {
 	it("settles the scope once the install lands", async () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
-		const controller = controllerOn(port)
-		await controller.open()
-		controller.pick("paper")
+		const controller = await mountedOn(port)
+		await settled()
+		await controller.pick("paper")
 		const settle = vi.fn(async () => undefined)
 
 		await controller.install(targetOf({ settle }))
@@ -1311,97 +1420,17 @@ describe("applications controller", () => {
 		const port = createFakeApplicationPort()
 		port.curated = [PAPER]
 		port.found = [LINEAR]
-		const controller = controllerOn(port)
-		await controller.open()
-		controller.browse()
+		const controller = await mountedOn(port)
 		await settled()
-		controller.search("linear")
-		controller.pick("paper")
+		await controller.browse()
+		await settled()
+		await controller.search("linear")
+		await controller.pick("paper")
 
-		controller.leave()
+		await controller.leave()
 
 		expect(controller.getState().picked).toBeNull()
 		expect(controller.getState().query).toBe("linear")
 		expect(controller.getState().directory).toEqual([LINEAR])
-	})
-})
-
-describe("application marks", () => {
-	const namedCallsOf = (port: FakeApplicationPort) =>
-		port.calls.filter((call) => call.command === "named")
-
-	it("asks the host for a declared name the catalogue does not bear", async () => {
-		const port = createFakeApplicationPort()
-		port.found = [MARKED]
-		const controller = controllerOn(port)
-
-		controller.resolveMarks(["paper"])
-		await settled()
-
-		expect(controller.getState().marks).toEqual({
-			paper: { title: "Paper", mark: MARKED.logo },
-		})
-	})
-
-	it("leaves a row on its raw name while the lookup is in flight", () => {
-		const controller = controllerOn()
-
-		controller.resolveMarks(["paper"])
-
-		expect(controller.getState().marks.paper).toBeUndefined()
-	})
-
-	it("asks the host once per name whatever the panels declaring it", async () => {
-		const port = createFakeApplicationPort()
-		port.found = [MARKED]
-		const controller = controllerOn(port)
-
-		controller.resolveMarks(["paper", "paper"])
-		controller.resolveMarks(["paper"])
-		await settled()
-		controller.resolveMarks(["paper"])
-
-		expect(namedCallsOf(port)).toEqual([{ command: "named", name: "paper" }])
-	})
-
-	it("asks nothing for a name the curated catalogue already bears", async () => {
-		const port = createFakeApplicationPort()
-		port.curated = [PAPER]
-		const controller = controllerOn(port)
-		await controller.open()
-
-		controller.resolveMarks(["paper"])
-		await settled()
-
-		expect(namedCallsOf(port)).toEqual([])
-	})
-
-	it("records a name the host answers nothing for as unresolved", async () => {
-		const port = createFakeApplicationPort()
-		const controller = controllerOn(port)
-
-		controller.resolveMarks(["ghost"])
-		await settled()
-		controller.resolveMarks(["ghost"])
-
-		expect(controller.getState().marks).toEqual({ ghost: null })
-		expect(namedCallsOf(port)).toHaveLength(1)
-	})
-
-	it("records a name the host refuses as unresolved and raises no notice", async () => {
-		const port = createFakeApplicationPort()
-		port.refusals.named = { kind: "registryTimedOut" }
-		const reportFailure = vi.fn()
-		const controller = createApplicationsController(
-			port,
-			createFakeTranscriptStore(),
-			{ reportFailure },
-		)
-
-		controller.resolveMarks(["paper"])
-		await settled()
-
-		expect(controller.getState().marks).toEqual({ paper: null })
-		expect(reportFailure).not.toHaveBeenCalled()
 	})
 })

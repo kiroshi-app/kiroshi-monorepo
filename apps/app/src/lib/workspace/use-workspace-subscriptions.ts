@@ -2,11 +2,9 @@ import { useEffect } from "react"
 
 import type { ApplicationScopes } from "./use-application-scopes"
 import type { RosterView } from "./use-roster-view"
-import { useSpaceSettingsReads } from "./use-settings-reads"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
-import { useDirectoryWatch } from "../applications/use-directory-watch"
 import { useCompanionSettings } from "../bots/use-companion-settings"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
 import { useCompanionArrivals } from "../conversations/use-companion-arrivals"
@@ -24,8 +22,7 @@ export const useWorkspaceSubscriptions = ({
 	rosterView,
 	scopes,
 }: WorkspaceSubscriptionsInput) => {
-	const { applications, chat, companionPlugin, joinedSpaces, roster, user } =
-		core
+	const { chat, companionPlugin, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
 	const {
 		bots,
@@ -35,7 +32,7 @@ export const useWorkspaceSubscriptions = ({
 		selectedConversationId,
 		settingsBotId,
 	} = rosterView
-	const { isSpaceEditing, selectedSpaceId } = scopes
+	const { selectedSpaceId } = scopes
 
 	useEffect(() => {
 		void user.controller.load()
@@ -60,30 +57,11 @@ export const useWorkspaceSubscriptions = ({
 	})
 
 	useCompanionSettings({
-		applications: applications.controller,
 		plugin: companionPlugin.controller,
 		companionId: settingsBotId,
 		spaceId: selectedSpaceId,
 		isOpen: isEditing,
 	})
-
-	useSpaceSettingsReads({
-		applications: applications.controller,
-		spaceId: selectedSpaceId,
-		isOpen: isSpaceEditing,
-	})
-
-	useEffect(() => {
-		if (!user.state.isSettingsOpen) {
-			return
-		}
-		void applications.controller.open()
-	}, [applications.controller, user.state.isSettingsOpen])
-
-	useDirectoryWatch(
-		applications.controller,
-		user.state.isSettingsOpen || isEditing || isSpaceEditing,
-	)
 
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
 

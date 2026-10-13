@@ -1,5 +1,6 @@
 import { describe, expect, it, type Mock, vi } from "vitest"
 
+import type { InstallTarget } from "./application-install"
 import type { Application } from "./application-port"
 import {
 	applicationTitleOf,
@@ -8,13 +9,8 @@ import {
 	toInstallableApplication,
 	withApplicationMarks,
 } from "./application-settings"
-import {
-	type ApplicationsController,
-	type ApplicationsState,
-	type InstallTarget,
-	initialApplicationsState,
-} from "./applications-controller"
 import type { ApplicationRow } from "./connection-port"
+import type { Applications, ApplicationsState } from "./use-applications"
 import type { ConnectionFailure, Connections } from "./use-connections"
 
 import type { McpServers } from "../bots/use-mcp-servers"
@@ -90,16 +86,33 @@ const ATLAS_SERVER: BotMcpServer = {
 	config: { type: "http", url: "https://mcp.atlas.test/mcp" },
 }
 
-const applicationsWith = (state: Partial<ApplicationsState>) => ({
-	state: { ...initialApplicationsState, ...state },
-	controller: {
+const NOTHING_READ: ApplicationsState = {
+	curated: [],
+	isReadingCatalogue: false,
+	hasCatalogueFailed: false,
+	query: "",
+	category: "everything",
+	directory: [],
+	isReadingDirectory: false,
+	hasDirectoryFailed: false,
+	hasDirectoryPartlyFailed: false,
+	isDirectoryStale: false,
+	picked: null,
+	installing: null,
+	failure: null,
+}
+
+const applicationsWith = (state: Partial<ApplicationsState>): Applications => ({
+	state: { ...NOTHING_READ, ...state },
+	actions: {
+		browse: vi.fn(),
 		search: vi.fn(),
 		pickCategory: vi.fn(),
 		retry: vi.fn(),
 		pick: vi.fn(),
 		leave: vi.fn(),
-		install: vi.fn(async () => undefined),
-	} as unknown as ApplicationsController,
+		install: vi.fn(),
+	},
 })
 
 const serversWith = (
@@ -138,6 +151,7 @@ const scopeOf = (
 ) => ({
 	scope: toApplicationScope({
 		applications,
+		marks: {},
 		servers,
 		connections: NO_CONNECTIONS,
 		openedName: null,
@@ -168,6 +182,7 @@ const settlingScopeOf = ({
 	return {
 		scope: toApplicationScope({
 			applications: applicationsWith({ curated: [LINEAR] }),
+			marks: {},
 			servers: serversWith(owner, [LINEAR_SERVER, ATLAS_SERVER]),
 			connections: connectionsLanding(connected),
 			openedName,
@@ -700,13 +715,14 @@ const installTargetOf = (connections: Connections) => {
 	const applications = applicationsWith({ curated: [LINEAR], picked: LINEAR })
 	const scope = toApplicationScope({
 		applications,
+		marks: {},
 		servers: serversWith(USER),
 		connections,
 		openedName: null,
 		reopen: vi.fn(async () => undefined),
 	})
 	scope.mcpCatalogue?.install?.onInstall({})
-	const install = applications.controller.install as Mock
+	const install = applications.actions.install as Mock
 	return install.mock.calls[0]?.[0] as InstallTarget
 }
 

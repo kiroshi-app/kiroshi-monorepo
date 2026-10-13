@@ -59,18 +59,19 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	useApplicationInstalls(applicationTransport, ({ application, scope }) => {
 		void reopenSessions({
 			scope,
-			application: applicationTitleOf(
-				applications.controller.getState().curated,
-				application,
-			),
+			application: applicationTitleOf(applications.state.curated, application),
 		})
 	})
 
-	useApplicationMarks(applications.controller, [
-		...userMcpServers.servers,
-		...spaceMcpServers.servers,
-		...botMcpServers.servers,
-	])
+	const marks = useApplicationMarks(
+		applicationTransport,
+		applications.state.curated,
+		[
+			...userMcpServers.servers,
+			...spaceMcpServers.servers,
+			...botMcpServers.servers,
+		],
+	)
 
 	const serverEnvironmentSection = toServerEnvironmentSection({
 		environment: serverEnvironment,
@@ -81,6 +82,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const userApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: userMcpServers,
 		connections: userConnections,
 		openedName: openedServerName,
@@ -89,6 +91,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const spaceApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: spaceMcpServers,
 		connections: spaceConnections,
 		openedName: openedServerName,
@@ -97,6 +100,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const botApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: botMcpServers,
 		connections: botConnections,
 		openedName: openedServerName,

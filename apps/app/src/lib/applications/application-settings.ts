@@ -11,24 +11,25 @@ import type { ApplicationsCatalogueSection } from "@workspace/ui/components/plug
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { categoriesOf } from "./application-categories"
+import { type InstallTarget, serverScopeOf } from "./application-install"
 import type { Application, Install } from "./application-port"
-import {
-	type ApplicationMark,
-	type ApplicationMarks,
-	type ApplicationsController,
-	type ApplicationsState,
-	applicationMarkOf,
-	catalogueStatusOf,
-	type InstallTarget,
-	serverScopeOf,
-} from "./applications-controller"
 import type { ApplicationRow } from "./connection-port"
 import {
 	type ConnectionSettings,
 	toConnectionSettings,
 } from "./connection-settings"
 import { type SessionReopener, scopeOfOwner } from "./session-reopening"
-import type { Applications } from "./use-applications"
+import {
+	type ApplicationMark,
+	type ApplicationMarks,
+	applicationMarkOf,
+} from "./use-application-marks"
+import {
+	type Applications,
+	type ApplicationsActions,
+	type ApplicationsState,
+	catalogueStatusOf,
+} from "./use-applications"
 import type { Connections } from "./use-connections"
 
 import type { McpServers } from "../bots/use-mcp-servers"
@@ -195,13 +196,13 @@ const narrowed = (applications: Application[], narrowing: CatalogueNarrowing) =>
 
 type ApplicationsCatalogueSource = {
 	state: ApplicationsState
-	controller: ApplicationsController
+	actions: ApplicationsActions
 	target: InstallTarget
 }
 
 const toApplicationsCatalogue = ({
 	state,
-	controller,
+	actions,
 	target,
 }: ApplicationsCatalogueSource): ApplicationsCatalogueSection => {
 	const narrowing: CatalogueNarrowing = {
@@ -217,9 +218,9 @@ const toApplicationsCatalogue = ({
 
 	return {
 		query: state.query,
-		onQueryChange: controller.search,
+		onQueryChange: actions.search,
 		category: state.category,
-		onCategoryChange: controller.pickCategory,
+		onCategoryChange: actions.pickCategory,
 		applications: [
 			...narrowed(state.curated, narrowing).map(toCatalogueApplication),
 			...narrowed(beyondCurated, narrowing).map(toRegistryApplication),
@@ -227,19 +228,17 @@ const toApplicationsCatalogue = ({
 		...catalogueStatusOf(state),
 		hasPartlyFailed: state.hasDirectoryPartlyFailed,
 		isStale: state.isDirectoryStale,
-		onRetry: controller.retry,
-		onOpen: controller.browse,
-		onPick: (application) => controller.pick(application.id),
+		onRetry: actions.retry,
+		onOpen: actions.browse,
+		onPick: (application) => actions.pick(application.id),
 		install: picked
 			? {
 					application: toInstallableApplication(picked),
 					isInstalling: state.installing === picked.name,
 					isInstalled: target.declared.includes(picked.name),
 					failure: state.failure ?? undefined,
-					onInstall: (values) => {
-						void controller.install(target, values)
-					},
-					onLeave: controller.leave,
+					onInstall: (values) => actions.install(target, values),
+					onLeave: actions.leave,
 				}
 			: undefined,
 	}
@@ -286,6 +285,7 @@ export const toServerEnvironmentSection = ({
 
 type ApplicationScopeSource = {
 	applications: Applications
+	marks: ApplicationMarks
 	servers: McpServers
 	connections: Connections
 	openedName: string | null
@@ -305,12 +305,13 @@ type ApplicationScope = ConnectionSettings & {
 
 export const toApplicationScope = ({
 	applications,
+	marks,
 	servers,
 	connections,
 	openedName,
 	reopen,
 }: ApplicationScopeSource): ApplicationScope => {
-	const { curated, marks } = applications.state
+	const { curated } = applications.state
 	const { owner } = servers
 
 	const reopenFor = (name: string) => {
@@ -356,7 +357,7 @@ export const toApplicationScope = ({
 		mcpCatalogue: owner
 			? toApplicationsCatalogue({
 					state: applications.state,
-					controller: applications.controller,
+					actions: applications.actions,
 					target: installTarget(owner),
 				})
 			: undefined,

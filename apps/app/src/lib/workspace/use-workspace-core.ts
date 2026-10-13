@@ -93,7 +93,6 @@ export const useWorkspaceCore = () => {
 		roster.controller.hostSpaceIdOf,
 	)
 	const companionPlugin = usePlugin(store)
-	const applications = useApplications(applicationTransport, store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const userPlugin = usePlugin(store)
@@ -107,6 +106,11 @@ export const useWorkspaceCore = () => {
 	)
 	const spaceSettingsOwner = spaceSettingsOwnerOf(spaces.state)
 	const userSettingsOwner = userSettingsOwnerOf(user.state.isSettingsOpen)
+	const applications = useApplications(applicationTransport, store, {
+		isCatalogueOpen: Boolean(
+			companionSettingsOwner ?? spaceSettingsOwner ?? userSettingsOwner,
+		),
+	})
 	const botEnvironment = useEnvironment(store, companionSettingsOwner)
 	const spaceEnvironment = useEnvironment(store, spaceSettingsOwner)
 	const botMcpServers = useMcpServers(store, companionSettingsOwner)

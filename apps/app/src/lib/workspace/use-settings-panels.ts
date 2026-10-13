@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useMemo } from "react"
 
 import type { ApplicationScopes } from "./use-application-scopes"
 import type { RosterView } from "./use-roster-view"
@@ -128,9 +128,6 @@ export const useSettingsPanels = ({
 		[applications.state.curated, spaces.state.spaces, openApplicationsOf],
 	)
 
-	useEffect(() => {
-		void applications.controller.open()
-	}, [applications.controller])
 	const sessionApplications = useMemo(
 		() => ({ spaceId: selectedSpaceId }),
 		[selectedSpaceId],
