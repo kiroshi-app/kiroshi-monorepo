@@ -4,9 +4,19 @@ options:
     iOS: "27.0"
   # Build number: Xcode Cloud's CI_BUILD_NUMBER when set, else the commit count of HEAD, written to BuildNumber.xcconfig on every generate.
   preGenCommand: echo "CURRENT_PROJECT_VERSION = ${CI_BUILD_NUMBER:-$(git rev-list --count HEAD)}" > BuildNumber.xcconfig
+  # Xcode Cloud resolves no package on its own: the pinned Package.resolved goes into the generated project.
+  # The packages check out under build/, which swift format lint must skip.
+  postGenCommand: >-
+    mkdir -p Kiroshi.xcodeproj/project.xcworkspace/xcshareddata/swiftpm build &&
+    cp Package.resolved Kiroshi.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved &&
+    echo '*' > build/.swift-format-ignore
 settings:
   base:
     SWIFT_VERSION: "6.0"
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    exactVersion: 9.2.0
 targets:
   Kiroshi:
     type: application
@@ -16,18 +26,32 @@ targets:
         excludes: [Resources]
       - path: Kiroshi/Resources/companion-avatar.js
         buildPhase: resources
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
     info:
       path: Kiroshi/Info.plist
       properties:
         UILaunchScreen:
           UIImageName: Hexagon
           UIColorName: background
+        GIDClientID: $(GOOGLE_IOS_CLIENT_ID).apps.googleusercontent.com
+        GIDServerClientID: 831614415289-j73b47kr5ln51a378i3l6ihg50v63kne.apps.googleusercontent.com
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - com.googleusercontent.apps.$(GOOGLE_IOS_CLIENT_ID)
+    entitlements:
+      path: Kiroshi/Kiroshi.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     configFiles:
       Debug: BuildNumber.xcconfig
       Release: BuildNumber.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kiroshi.app.ios
+        # The iOS OAuth client of Google Cloud, without its .apps.googleusercontent.com suffix.
+        GOOGLE_IOS_CLIENT_ID: GOOGLE-IOS-CLIENT-ID-NOT-SET
         MARKETING_VERSION: "0.1.0"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: BBE5V2JL5H
