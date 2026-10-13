@@ -645,6 +645,7 @@ export type ConversationMissions = {
 };
 
 export type ConversationPage = {
+	pinned: ConversationInPage[],
 	conversations: ConversationInPage[],
 	nextCursor: string | null,
 };

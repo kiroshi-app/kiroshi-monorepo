@@ -77,8 +77,22 @@ impl Conversation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationPage {
+	pub pinned: Vec<ConversationInPage>,
 	pub conversations: Vec<ConversationInPage>,
 	pub next_cursor: Option<String>,
+}
+
+impl ConversationPage {
+	pub fn of(read: conversations::ActivePage, avatars: Option<&Path>) -> Self {
+		let drawn = |rows: Vec<conversations::ActiveConversation>| {
+			rows.into_iter().map(|row| ConversationInPage::of(row, avatars)).collect()
+		};
+		Self {
+			pinned: drawn(read.pinned),
+			conversations: drawn(read.page.rows),
+			next_cursor: read.page.next.map(|keyset| keyset.encoded()),
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

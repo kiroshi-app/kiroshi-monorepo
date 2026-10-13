@@ -2175,9 +2175,16 @@
               "type": "null"
             }
           ]
+        },
+        "pinned": {
+          "items": {
+            "$ref": "#/$defs/ConversationInPage"
+          },
+          "type": "array"
         }
       },
       "required": [
+        "pinned",
         "conversations",
         "nextCursor"
       ],

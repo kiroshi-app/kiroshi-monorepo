@@ -2,8 +2,8 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInPage, ConversationPage, ConversationStored, RuntimeSession, TranscriptStoreError,
+	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted, ConversationPage,
+	ConversationStored, RuntimeSession, TranscriptStoreError,
 };
 use super::bot::ready;
 use crate::avatars;
@@ -68,19 +68,11 @@ pub async fn conversation_page<R: Runtime>(
 ) -> Result<ConversationPage, TranscriptStoreError> {
 	let after = keyset::after(cursor)
 		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
-	let page = ready(&state)?
+	let read = ready(&state)?
 		.conversations()
 		.conversation_page(space_id, after, keyset::page_size(limit))
 		.await?;
-	let dir = avatars::Avatars::dir(&app);
-	Ok(ConversationPage {
-		conversations: page
-			.rows
-			.into_iter()
-			.map(|row| ConversationInPage::of(row, dir.as_deref()))
-			.collect(),
-		next_cursor: page.next.map(|keyset| keyset.encoded()),
-	})
+	Ok(ConversationPage::of(read, avatars::Avatars::dir(&app).as_deref()))
 }
 
 #[tauri::command]

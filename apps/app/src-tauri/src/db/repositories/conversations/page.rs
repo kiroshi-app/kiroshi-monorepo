@@ -22,23 +22,25 @@ pub struct ActiveConversation {
 	pub last_word: Option<LastWord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivePage {
+	pub pinned: Vec<ActiveConversation>,
+	pub page: Page<ActiveConversation>,
+}
+
 impl ConversationsRepository {
 	pub async fn conversation_page(
 		&self,
 		space_id: String,
 		after: Option<Keyset>,
 		size: u32,
-	) -> Result<Page<ActiveConversation>, ConversationError> {
+	) -> Result<ActivePage, ConversationError> {
 		self.call(move |connection| Ok(page_of_space(connection, &space_id, after.as_ref(), size)))
 			.await?
 	}
 }
 
-fn page_statement(after: Option<&Keyset>) -> String {
-	let past_the_cursor = match after {
-		Some(_) => "AND (conversations.last_activity_at, conversations.id) < (?2, ?3)",
-		None => "",
-	};
+fn active_statement(filter: &str, order: &str) -> String {
 	format!(
 		"SELECT conversations.id AS id, conversations.space_id AS space_id,
 			conversations.section_id AS section_id, conversations.pin_position AS pin_position,
@@ -52,13 +54,59 @@ fn page_statement(after: Option<&Keyset>) -> String {
 			WHERE settled.conversation_id = conversations.id
 				AND settled.completion_state NOT IN ('pending', 'streaming')
 			ORDER BY settled.seq DESC LIMIT 1)
-		WHERE conversations.kind = '{TOPIC_KIND}' AND conversations.space_id = ?1
-			{past_the_cursor}
-		ORDER BY conversations.last_activity_at DESC, conversations.id DESC LIMIT ?4"
+		WHERE conversations.kind = '{TOPIC_KIND}' AND conversations.space_id = ?1 {filter}
+		{order}"
+	)
+}
+
+fn page_statement(after: Option<&Keyset>) -> String {
+	let past_the_cursor = match after {
+		Some(_) => "AND (conversations.last_activity_at, conversations.id) < (?2, ?3)",
+		None => "",
+	};
+	active_statement(
+		&format!("AND conversations.pin_position IS NULL {past_the_cursor}"),
+		"ORDER BY conversations.last_activity_at DESC, conversations.id DESC LIMIT ?4",
+	)
+}
+
+fn pinned_statement() -> String {
+	active_statement(
+		"AND conversations.pin_position IS NOT NULL",
+		"ORDER BY conversations.pin_position ASC, conversations.id ASC",
 	)
 }
 
 fn page_of_space(
+	connection: &Connection,
+	space_id: &str,
+	after: Option<&Keyset>,
+	size: u32,
+) -> Result<ActivePage, ConversationError> {
+	let pinned = match after {
+		Some(_) => Vec::new(),
+		None => pinned_of_space(connection, space_id)?,
+	};
+	let mut read = ActivePage { pinned, page: unpinned_page(connection, space_id, after, size)? };
+	let ids: Vec<&str> =
+		read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.as_str()).collect();
+	let mut seats = seats_of_page(connection, &ids)?;
+	for row in read.pinned.iter_mut().chain(&mut read.page.rows) {
+		row.conversation.seats = seats.remove(&row.conversation.id).unwrap_or_default();
+	}
+	Ok(read)
+}
+
+fn pinned_of_space(
+	connection: &Connection,
+	space_id: &str,
+) -> Result<Vec<ActiveConversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&pinned_statement())?;
+	let rows = statement.query_map([space_id], active)?;
+	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+fn unpinned_page(
 	connection: &Connection,
 	space_id: &str,
 	after: Option<&Keyset>,
@@ -74,16 +122,10 @@ fn page_of_space(
 		],
 		active,
 	)?;
-	let mut page = paged(rows.collect::<rusqlite::Result<Vec<_>>>()?, size, |row| Keyset {
+	Ok(paged(rows.collect::<rusqlite::Result<Vec<_>>>()?, size, |row| Keyset {
 		sort_key: row.last_activity_at,
 		id: row.conversation.id.clone(),
-	});
-	let ids: Vec<&str> = page.rows.iter().map(|row| row.conversation.id.as_str()).collect();
-	let mut seats = seats_of_page(connection, &ids)?;
-	for row in &mut page.rows {
-		row.conversation.seats = seats.remove(&row.conversation.id).unwrap_or_default();
-	}
-	Ok(page)
+	}))
 }
 
 fn seats_of_page(
@@ -167,11 +209,7 @@ mod tests {
 		)
 	}
 
-	async fn page(
-		database: &Database,
-		after: Option<Keyset>,
-		size: u32,
-	) -> Page<ActiveConversation> {
+	async fn page(database: &Database, after: Option<Keyset>, size: u32) -> ActivePage {
 		database
 			.conversations()
 			.conversation_page("personal".to_owned(), after, size)
@@ -179,16 +217,16 @@ mod tests {
 			.expect("the page reads")
 	}
 
-	fn ids(page: &Page<ActiveConversation>) -> Vec<String> {
-		page.rows.iter().map(|row| row.conversation.id.clone()).collect()
+	fn ids(rows: &[ActiveConversation]) -> Vec<String> {
+		rows.iter().map(|row| row.conversation.id.clone()).collect()
 	}
 
 	async fn walked(database: &Database, mut after: Option<Keyset>, size: u32) -> Vec<Vec<String>> {
 		let mut pages = Vec::new();
 		loop {
 			let read = page(database, after, size).await;
-			pages.push(ids(&read));
-			match read.next {
+			pages.push(ids(&read.page.rows));
+			match read.page.next {
 				Some(next) => after = Some(next),
 				None => return pages,
 			}
@@ -219,12 +257,12 @@ mod tests {
 			.await
 			.expect("the message lands");
 
-		let rest = walked(&database, first.next.clone(), 2).await;
+		let rest = walked(&database, first.page.next.clone(), 2).await;
 
-		assert_eq!(ids(&first), vec!["c06", "c05"]);
+		assert_eq!(ids(&first.page.rows), vec!["c06", "c05"]);
 		assert_eq!(rest, vec![vec!["c04", "c03"], vec!["c02", "c01"]]);
 		assert_eq!(
-			ids(&page(&database, None, 2).await),
+			ids(&page(&database, None, 2).await.page.rows),
 			vec!["c05", "c06"],
 			"the room did not move up"
 		);
@@ -257,6 +295,7 @@ mod tests {
 		let read = page(&database, None, 30).await;
 
 		let words: Vec<(&str, i64, Option<&LastWord>, usize)> = read
+			.page
 			.rows
 			.iter()
 			.map(|row| {
@@ -283,7 +322,41 @@ mod tests {
 				("silent", 4, None, 0),
 			]
 		);
-		assert_eq!(read.next, None);
+		assert_eq!(read.page.next, None);
+	}
+
+	#[tokio::test]
+	async fn pinned_rooms_lead_the_first_page_in_pin_order_and_stay_out_of_the_walk() {
+		let rows = format!(
+			"{A_SEATED_BOT}{}
+			UPDATE conversations SET pin_position = 1 WHERE id = 'c03';
+			UPDATE conversations SET pin_position = 2 WHERE id = 'c01';
+			UPDATE conversations SET pin_position = 2 WHERE id = 'c02';
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('c01', 'b1', 'lead', 1, 0);
+			{}",
+			rooms(35, |n| n as i64),
+			said("c01", 1, "complete", "pinned word", 0),
+		);
+		let (database, _dir) = planted(rows).await;
+
+		let first = page(&database, None, 30).await;
+		let pages = walked(&database, None, 30).await;
+		let later = page(&database, first.page.next.clone(), 30).await;
+
+		let pinned_c01 = first.pinned.iter().find(|row| row.conversation.id == "c01");
+		let unpinned: Vec<String> = (4..=35).rev().map(|n| format!("c{n:02}")).collect();
+		assert_eq!(ids(&first.pinned), vec!["c03", "c01", "c02"]);
+		assert_eq!(first.page.rows.len(), 30);
+		assert_eq!(pages.iter().map(Vec::len).collect::<Vec<_>>(), vec![30, 2]);
+		assert_eq!(pages.concat(), unpinned, "the walk did not answer each unpinned room once");
+		assert_eq!(later.pinned, Vec::new(), "a later page answered the pinned rooms again");
+		assert_eq!(pinned_c01.map(|row| row.conversation.seats.len()), Some(1));
+		assert_eq!(
+			pinned_c01.and_then(|row| row.last_word.as_ref()).and_then(|word| word.text.clone()),
+			Some("pinned word".to_owned())
+		);
 	}
 
 	#[tokio::test]
