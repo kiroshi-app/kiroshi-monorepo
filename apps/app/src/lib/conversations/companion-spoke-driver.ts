@@ -34,6 +34,8 @@ export type CompanionSpokeDriverOptions = {
 	joinedSpaceId: () => string | null
 }
 
+type WriteSpoken = (spoken: CompanionSpoke, key: string) => Promise<boolean>
+
 const SEPARATOR = "\u0000"
 
 const keyOf = ({ conversationId, authorBotId, text }: CompanionSpoke) =>
@@ -92,11 +94,18 @@ export const startCompanionSpokeDriver = ({
 		return true
 	}
 
-	const isWrittenByJoinedHost = () => joinedSpaceId() !== null
+	const leaveToJoinedHost: WriteSpoken = async () => true
 
-	const relayAndAnnounce = async (spoken: CompanionSpoke, key: string) => {
+	const writerAtHearing = (): WriteSpoken =>
+		joinedSpaceId() === null ? relay : leaveToJoinedHost
+
+	const relayAndAnnounce = async (
+		spoken: CompanionSpoke,
+		key: string,
+		write: WriteSpoken,
+	) => {
 		const isShown = await rosterShows(spoken.conversationId)
-		const isWritten = isWrittenByJoinedHost() || (await relay(spoken, key))
+		const isWritten = await write(spoken, key)
 
 		if (!isShown || !isWritten) {
 			return
@@ -116,7 +125,7 @@ export const startCompanionSpokeDriver = ({
 		}
 
 		relayed.add(key)
-		void relayAndAnnounce(spoken, key)
+		void relayAndAnnounce(spoken, key, writerAtHearing())
 	}
 
 	const listening = companions.onCompanionSpoke(take).catch((reason) => {
