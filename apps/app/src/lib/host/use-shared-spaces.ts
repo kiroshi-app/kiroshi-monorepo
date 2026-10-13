@@ -10,9 +10,7 @@ import { useController } from "../use-controller"
 const ID_SEPARATOR = "\n"
 
 export const useSharedSpaces = (spaces: Space[]) => {
-	const { state, controller } = useController(() =>
-		createSharedSpacesController(),
-	)
+	const { state, controller } = useController(createSharedSpacesController)
 	const watchedIds = spaces.map((space) => space.id).join(ID_SEPARATOR)
 
 	useEffect(
