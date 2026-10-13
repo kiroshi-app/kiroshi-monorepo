@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { expect, fireEvent, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -425,6 +425,181 @@ export const LongContent = meta.story({
 		const menu = await openMenuOn(canvas.getByText("Right-click this card"))
 
 		await expect(menu.getBoundingClientRect().width).toBeLessThanOrEqual(256)
+	},
+})
+
+const TRAILING_GAP = 24
+
+const panelFloor = () =>
+	pixelsOf(getComputedStyle(document.documentElement).fontSize) * 12
+
+const slotOf = (row: HTMLElement, selector: string) => {
+	const slot = row.querySelector<HTMLElement>(selector)
+	if (!slot) throw new Error(`No trailing slot ${selector} in the row`)
+	return slot
+}
+
+interface MenuOnCardProps {
+	children: ReactNode
+	className?: string
+}
+
+const MenuOnCard = ({ children, className }: MenuOnCardProps) => (
+	<ContextMenu>
+		<ContextMenuTrigger
+			render={
+				<button className={SURFACE} type="button">
+					Right-click this card
+				</button>
+			}
+		/>
+		<ContextMenuContent
+			aria-label={MENU_LABEL}
+			className={`${className ?? ""} ${STILL_UNDER_REDUCED_MOTION}`}
+		>
+			{children}
+		</ContextMenuContent>
+	</ContextMenu>
+)
+
+export const MinimumWidth = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+		docs: {
+			description: {
+				story:
+					"Three short labels never shrink the panel below the shared 12rem floor the globals layer sets on every context menu panel.",
+			},
+		},
+	},
+	render: () => (
+		<MenuOnCard>
+			<ContextMenuItem>Cut</ContextMenuItem>
+			<ContextMenuItem>Copy</ContextMenuItem>
+			<ContextMenuItem>Paste</ContextMenuItem>
+		</MenuOnCard>
+	),
+	play: async ({ canvas }) => {
+		const menu = await openMenuOn(canvas.getByText("Right-click this card"))
+
+		await expect(menu.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+			panelFloor(),
+		)
+	},
+})
+
+const TrailingSlotsMenu = () => {
+	const [wrap, setWrap] = useState(true)
+
+	return (
+		<MenuOnCard>
+			<ContextMenuItem>
+				<Icons.Copy aria-hidden="true" className="size-3.5" />
+				Copy transcript
+				<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+			</ContextMenuItem>
+			<ContextMenuSub>
+				<ContextMenuSubTrigger className="gap-2">
+					<Icons.Folder aria-hidden="true" className="size-3.5" />
+					{SUBMENU_LABEL}
+				</ContextMenuSubTrigger>
+				<ContextMenuSubContent className={STILL_UNDER_REDUCED_MOTION}>
+					<ContextMenuItem>Inbox</ContextMenuItem>
+					<ContextMenuItem>Later</ContextMenuItem>
+				</ContextMenuSubContent>
+			</ContextMenuSub>
+			<ContextMenuCheckboxItem
+				checked={wrap}
+				closeOnClick={false}
+				onCheckedChange={setWrap}
+			>
+				Wrap long lines
+			</ContextMenuCheckboxItem>
+		</MenuOnCard>
+	)
+}
+
+export const TrailingSlotsAligned = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+		docs: {
+			description: {
+				story:
+					"A shortcut, a submenu chevron and a checkbox indicator share one fixed-width trailing column, flush to the same inline-end edge, and the submenu panel keeps the 12rem floor.",
+			},
+		},
+	},
+	render: () => <TrailingSlotsMenu />,
+	play: async ({ canvas, userEvent }) => {
+		const menu = await openMenuOn(canvas.getByText("Right-click this card"))
+		const trailing = [
+			slotOf(
+				within(menu).getByRole("menuitem", { name: /Copy transcript/ }),
+				'[data-slot="context-menu-shortcut"]',
+			),
+			slotOf(
+				within(menu).getByRole("menuitem", { name: SUBMENU_LABEL }),
+				"svg:last-child",
+			),
+			slotOf(
+				within(menu).getByRole("menuitemcheckbox", { name: "Wrap long lines" }),
+				":scope > span:first-child",
+			),
+		].map((slot) => slot.getBoundingClientRect())
+
+		for (const rect of trailing) {
+			await expect(Math.abs(rect.right - trailing[0].right)).toBeLessThan(1)
+			await expect(Math.abs(rect.left - trailing[0].left)).toBeLessThan(1)
+		}
+
+		await userEvent.hover(
+			within(menu).getByRole("menuitem", { name: SUBMENU_LABEL }),
+		)
+		const submenu = await shownMenu(SUBMENU_LABEL)
+		await expect(submenu.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+			panelFloor(),
+		)
+	},
+})
+
+export const LongLabelKeepsTrailingSlot = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		a11y: mergeA11y(A11Y_FLOATING_FOCUS_GUARDS, A11Y_SUBMENU_PORTAL_GUARD),
+		docs: {
+			description: {
+				story:
+					"A label longer than the panel's max width truncates, keeps 24px before the trailing slot, and the shortcut stays inside the panel, flush right.",
+			},
+		},
+	},
+	render: () => (
+		<MenuOnCard className="max-w-64">
+			<ContextMenuItem label={LONG_LABEL}>
+				<Icons.Folder aria-hidden="true" className="size-3.5" />
+				<span className="min-w-0 truncate">{LONG_LABEL}</span>
+				<ContextMenuShortcut>⌘L</ContextMenuShortcut>
+			</ContextMenuItem>
+		</MenuOnCard>
+	),
+	play: async ({ canvas }) => {
+		const menu = await openMenuOn(canvas.getByText("Right-click this card"))
+		const row = within(menu).getByRole("menuitem")
+		const label = within(row).getByText(LONG_LABEL)
+		const shortcut = slotOf(row, '[data-slot="context-menu-shortcut"]')
+		const panel = menu.getBoundingClientRect()
+		const slot = shortcut.getBoundingClientRect()
+		const slotContentStart =
+			slot.left + pixelsOf(getComputedStyle(shortcut).paddingInlineStart)
+
+		await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth)
+		await expect(slot.left).toBeGreaterThanOrEqual(panel.left)
+		await expect(slot.right).toBeLessThanOrEqual(panel.right)
+		await expect(
+			slotContentStart - label.getBoundingClientRect().right,
+		).toBeGreaterThanOrEqual(TRAILING_GAP)
 	},
 })
 

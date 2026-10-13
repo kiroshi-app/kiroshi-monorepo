@@ -2969,7 +2969,13 @@ export const RowSpaceNameTooLong = meta.story({
 			Number.parseFloat(getComputedStyle(name).lineHeight) + 1,
 		)
 		await expect(dot.getBoundingClientRect().width).toBe(10)
-		await expect(getComputedStyle(row).paddingInlineEnd).toBe("32px")
+		const tick = (row.firstElementChild as HTMLElement).getBoundingClientRect()
+		await expect(tick.left).toBeGreaterThanOrEqual(
+			name.getBoundingClientRect().right,
+		)
+		await expect(tick.right).toBeLessThanOrEqual(
+			row.getBoundingClientRect().right,
+		)
 	},
 })
 

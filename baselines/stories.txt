@@ -1021,9 +1021,12 @@ overlays-contextmenu--closed
 overlays-contextmenu--default
 overlays-contextmenu--keyboard-focus-ring
 overlays-contextmenu--long-content
+overlays-contextmenu--long-label-keeps-trailing-slot
+overlays-contextmenu--minimum-width
 overlays-contextmenu--pointer-focus-without-ring
 overlays-contextmenu--radius-ladder
 overlays-contextmenu--states
+overlays-contextmenu--trailing-slots-aligned
 overlays-contextmenu--with-checkbox-and-radio-items
 overlays-contextmenu--with-submenu
 overlays-contextmenupresstrigger--closed
