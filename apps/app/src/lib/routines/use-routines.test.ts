@@ -877,11 +877,12 @@ it("reads the routines again when their conversation is mounted again", async ()
 		wrapper,
 	})
 
-	await waitFor(() => expect(second.result.current.routines).toHaveLength(2))
-	expect(second.result.current.routines.map(({ id }) => id)).toEqual([
-		ROUTINE.id,
-		WEBHOOK_ROUTINE.id,
-	])
+	await waitFor(() =>
+		expect(second.result.current.routines.map(({ id }) => id)).toEqual([
+			ROUTINE.id,
+			WEBHOOK_ROUTINE.id,
+		]),
+	)
 	expect(list).toHaveBeenCalledTimes(2)
 })
 
