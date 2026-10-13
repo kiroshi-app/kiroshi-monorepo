@@ -103,3 +103,52 @@ it("skips the global notice for a write showing its error inline", async () => {
 
 	expect(raiseFailureNotice).not.toHaveBeenCalled()
 })
+
+it("skips the notice of a read for an error its meta keeps silent", async () => {
+	await fetchFailing(hostOfflineOf("gone"), {
+		...reportedMeta,
+		isSilentOn: () => true,
+	}).fetched
+
+	expect(raiseFailureNotice).not.toHaveBeenCalled()
+})
+
+const outageMeta: FailureMeta = {
+	...reportedMeta,
+	isSilentOn: (error) => error === "silent",
+	raisesOncePerOutage: true,
+}
+
+const fetchOutcomes = async (outcomes: unknown[]) => {
+	const queryClient = createQueryClient()
+	for (const outcome of outcomes) {
+		await queryClient
+			.fetchQuery({
+				queryKey: ["outage"],
+				queryFn: () =>
+					outcome === "answer"
+						? Promise.resolve(outcome)
+						: Promise.reject(outcome),
+				meta: outageMeta,
+				staleTime: 0,
+			})
+			.catch((error: unknown) => error)
+	}
+}
+
+it("raises one notice per outage of a read until it answers again", async () => {
+	await fetchOutcomes([
+		new Error("a"),
+		new Error("b"),
+		"answer",
+		new Error("c"),
+	])
+
+	expect(raiseFailureNotice).toHaveBeenCalledTimes(2)
+})
+
+it("opens no outage on a failure its meta keeps silent", async () => {
+	await fetchOutcomes(["silent", new Error("a"), new Error("b")])
+
+	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+})

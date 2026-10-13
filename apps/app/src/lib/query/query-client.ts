@@ -1,4 +1,9 @@
-import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query"
+import {
+	MutationCache,
+	type Query,
+	QueryCache,
+	QueryClient,
+} from "@tanstack/react-query"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
@@ -8,7 +13,12 @@ import { isHostOffline } from "@/lib/host/host-offline"
 
 type InlineFailure = { rendersErrorInline: true }
 
-type NoticedFailure = { failureNotice: () => NoticeMessage; raisedIn: string }
+type NoticedFailure = {
+	failureNotice: () => NoticeMessage
+	raisedIn: string
+	isSilentOn?: (error: unknown) => boolean
+	raisesOncePerOutage?: true
+}
 
 export type FailureMeta = InlineFailure | NoticedFailure
 
@@ -28,12 +38,49 @@ const unlabelledFailureIn = (raisedIn: string): NoticedFailure => ({
 	raisedIn,
 })
 
-const raiseFailureOf = (meta: FailureMeta | undefined, cacheName: string) => {
+const noticedFailureOf = (
+	error: unknown,
+	meta: FailureMeta | undefined,
+	cacheName: string,
+): NoticedFailure | null => {
 	if (meta && "rendersErrorInline" in meta) {
-		return
+		return null
 	}
-	const { failureNotice, raisedIn } = meta ?? unlabelledFailureIn(cacheName)
+	const noticed = meta ?? unlabelledFailureIn(cacheName)
+	return noticed.isSilentOn?.(error) ? null : noticed
+}
+
+const raiseNoticedFailure = ({ failureNotice, raisedIn }: NoticedFailure) =>
 	raiseReportedFailure(failureNotice(), { raisedIn })
+
+const raiseFailureOf = (
+	error: unknown,
+	meta: FailureMeta | undefined,
+	cacheName: string,
+) => {
+	const noticed = noticedFailureOf(error, meta, cacheName)
+	if (noticed) {
+		raiseNoticedFailure(noticed)
+	}
+}
+
+const createQueryCache = (): QueryCache => {
+	const noticedOutages = new WeakSet<Query<unknown, unknown>>()
+	return new QueryCache({
+		onError: (error, query) => {
+			const noticed = noticedFailureOf(error, query.meta, "query-cache")
+			if (!noticed || noticedOutages.has(query)) {
+				return
+			}
+			if (noticed.raisesOncePerOutage) {
+				noticedOutages.add(query)
+			}
+			raiseNoticedFailure(noticed)
+		},
+		onSuccess: (_data, query) => {
+			noticedOutages.delete(query)
+		},
+	})
 }
 
 const retriesAnOfflineJoinedHostOnce = (
@@ -43,12 +90,10 @@ const retriesAnOfflineJoinedHostOnce = (
 
 export const createQueryClient = (): QueryClient =>
 	new QueryClient({
-		queryCache: new QueryCache({
-			onError: (_error, query) => raiseFailureOf(query.meta, "query-cache"),
-		}),
+		queryCache: createQueryCache(),
 		mutationCache: new MutationCache({
-			onError: (_error, _variables, _result, mutation) =>
-				raiseFailureOf(mutation.meta, "mutation-cache"),
+			onError: (error, _variables, _result, mutation) =>
+				raiseFailureOf(error, mutation.meta, "mutation-cache"),
 		}),
 		defaultOptions: {
 			queries: {
