@@ -449,12 +449,11 @@ function applySessionReset(
 	}
 }
 
+type TranscriptChange = Extract<ChatAction, { type: "transcriptChanged" }>
+
 function applyTranscriptChanged(
 	state: ChatState,
-	messages: TranscriptMessage[],
-	hasOlder: boolean,
-	hasNewer: boolean,
-	isFirstLoadPending: boolean,
+	{ messages, hasOlder, hasNewer, isFirstLoadPending }: TranscriptChange,
 ): ChatState {
 	if (
 		state.messages === messages &&
@@ -550,13 +549,7 @@ function reducedChat(state: ChatState, action: ChatAction): ChatState {
 				? state
 				: { ...state, foreignTurn: action.speaker }
 		case "transcriptChanged":
-			return applyTranscriptChanged(
-				state,
-				action.messages,
-				action.hasOlder,
-				action.hasNewer,
-				action.isFirstLoadPending,
-			)
+			return applyTranscriptChanged(state, action)
 		case "olderLoading":
 			return state.loadingOlder === action.loading
 				? state
