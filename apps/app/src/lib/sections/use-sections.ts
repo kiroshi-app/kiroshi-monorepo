@@ -1,3 +1,5 @@
+import { useQueries, useQueryClient } from "@tanstack/react-query"
+
 import {
 	type BotSections,
 	createSectionsController,
@@ -13,7 +15,25 @@ export type Sections = {
 	controller: SectionsController
 }
 
+export const useSectionReads = (
+	controller: SectionsController,
+	state: SectionsState,
+) => {
+	useQueries({
+		queries: Object.keys(state.sections).map((spaceId) =>
+			controller.listQuery(spaceId),
+		),
+	})
+}
+
 export const useSections = (
 	store: TranscriptStore,
 	bots: BotSections,
-): Sections => useController(() => createSectionsController(store, bots))
+): Sections => {
+	const queryClient = useQueryClient()
+	const sections = useController(() =>
+		createSectionsController(store, bots, { queryClient }),
+	)
+	useSectionReads(sections.controller, sections.state)
+	return sections
+}

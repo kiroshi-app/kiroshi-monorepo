@@ -12,7 +12,6 @@ import { USER_OWNER } from "./user-owner"
 
 import { useDirectoryWatch } from "../applications/use-directory-watch"
 import { useCompanionSettings } from "../bots/use-companion-settings"
-import { useRosterReloads } from "../bots/use-roster-reloads"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
 import { useCompanionArrivals } from "../conversations/use-companion-arrivals"
 
@@ -78,8 +77,6 @@ export const useWorkspaceSubscriptions = ({
 	useCompanionArrivals(() => {
 		void roster.controller.reload()
 	})
-
-	useRosterReloads(roster.controller.reload)
 
 	useCompanionSettings({
 		applications: applications.controller,

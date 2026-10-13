@@ -1,3 +1,5 @@
+import { type QueryClient, queryOptions } from "@tanstack/react-query"
+
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type NoticeMessage,
@@ -7,6 +9,7 @@ import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type SpaceInviters, storedInviters } from "./space-inviters"
+import { spaceQueryKeys } from "./space-query-keys"
 import type { SpacesController } from "./spaces-controller"
 
 import {
@@ -27,6 +30,7 @@ import {
 	type JoinedHostState,
 	type JoinedHosts,
 } from "../host/joined-hosts"
+import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 
 export type JoinedSpacesState = {
 	joinedSpaces: JoinedSpace[]
@@ -39,6 +43,7 @@ export type JoinedSpacesState = {
 export type JoinedSpacesController = {
 	getState: () => JoinedSpacesState
 	subscribe: (listener: () => void) => () => void
+	listQuery: JoinedSpaceListQuery
 	watch: () => () => void
 	selectSpace: (id: string) => void
 	restore: (rowId: string | null) => void
@@ -64,6 +69,7 @@ type JoinedSpacesHosts = Pick<
 >
 
 type JoinedSpacesControllerOptions = {
+	queryClient: QueryClient
 	spaces: Pick<SpacesController, "getState" | "select" | "setSettingsOpen">
 	hosts?: JoinedSpacesHosts
 	transport?: JoinedSpacesTransport
@@ -102,6 +108,9 @@ const JOINED_ROW_PREFIX = "joined:"
 
 const rowIdOf = (joined: JoinedSpace): string =>
 	`${JOINED_ROW_PREFIX}${joined.id}`
+
+export const isJoinedRowId = (rowId: string): boolean =>
+	rowId.startsWith(JOINED_ROW_PREFIX)
 
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
@@ -186,15 +195,42 @@ export const rosterSpacesOf = (
 		: spaces.map((space) => ({ spaceRowId: space.id, spaceId: space.id }))
 }
 
-const initialJoinedSpacesState: JoinedSpacesState = {
-	joinedSpaces: [],
-	hasFailedToLoad: false,
+type JoinedSpacesChoice = Pick<
+	JoinedSpacesState,
+	"isLeaveOpen" | "leavingId" | "openId"
+>
+
+const initialJoinedSpacesChoice: JoinedSpacesChoice = {
 	isLeaveOpen: false,
 	leavingId: null,
 	openId: null,
 }
 
+const NO_JOINED_SPACES: JoinedSpace[] = []
+
+const joinedSpaceListQueryOf = (read: () => Promise<JoinedSpace[]>) =>
+	queryOptions({
+		queryKey: spaceQueryKeys.joined(),
+		queryFn: read,
+		meta: {
+			failureNotice: joinRejectionNoticeOf,
+			raisedIn: "joined-spaces-controller",
+		},
+	})
+
+type JoinedSpaceListQuery = ReturnType<typeof joinedSpaceListQueryOf>
+
+const joinedSpacesStateOf = (
+	choice: JoinedSpacesChoice,
+	joinedSpaces: JoinedSpace[],
+	hasFailedToLoad: boolean,
+): JoinedSpacesState => ({ ...choice, joinedSpaces, hasFailedToLoad })
+
+const vanishedFrom = (held: JoinedSpace[], listed: JoinedSpace[]) =>
+	held.filter((joined) => !listed.some((entry) => entry.id === joined.id))
+
 export const createJoinedSpacesController = ({
+	queryClient,
 	spaces,
 	hosts = joinedHosts,
 	transport = joinedSpacesTransport,
@@ -202,35 +238,37 @@ export const createJoinedSpacesController = ({
 	reportRemoval = raiseRemovalNotice,
 	inviters = storedInviters,
 }: JoinedSpacesControllerOptions): JoinedSpacesController => {
-	const stateStore = createStore(initialJoinedSpacesState)
-	const current = stateStore.getState
-	let latestRead = 0
+	const choiceStore = createStore(initialJoinedSpacesChoice)
+	const listQuery = joinedSpaceListQueryOf(() => transport.list())
+	const listKey = listQuery.queryKey
 	let previousLocalId: string | null = null
 	let hasRead = false
 	let pendingRowId: string | null = null
 	let awaitedRowId: string | null = null
 
-	const set = (fields: Partial<JoinedSpacesState>) =>
-		stateStore.setState({ ...current(), ...fields })
+	const current = memoizedOn(
+		() => [
+			choiceStore.getState(),
+			queryClient.getQueryData<JoinedSpace[]>(listKey) ?? NO_JOINED_SPACES,
+			queryClient.getQueryState(listKey)?.status === "error",
+		],
+		joinedSpacesStateOf,
+	)
+
+	const set = (fields: Partial<JoinedSpacesChoice>) =>
+		choiceStore.setState({ ...choiceStore.getState(), ...fields })
+
+	const hold = (joinedSpaces: JoinedSpace[]) =>
+		queryClient.setQueryData(listKey, joinedSpaces)
 
 	const reportRefusal = (reason: unknown) =>
 		reportFailure(joinRejectionNoticeOf(reason))
-
-	const noteFailedLoad = (reason: unknown) => {
-		set({ hasFailedToLoad: true })
-		reportRefusal(reason)
-	}
 
 	const connectEach = (joinedSpaces: JoinedSpace[]) => {
 		for (const joined of joinedSpaces) {
 			void hosts.connect(joined.id)
 		}
 	}
-
-	const vanishedFrom = (listed: JoinedSpace[]) =>
-		current().joinedSpaces.filter(
-			(held) => !listed.some((joined) => joined.id === held.id),
-		)
 
 	const leaveVanished = (gone: JoinedSpace[]) => {
 		for (const joined of gone) {
@@ -244,22 +282,21 @@ export const createJoinedSpacesController = ({
 		if (back) selectSpace(back)
 	}
 
+	const hasListed = () =>
+		queryClient.getQueryState(listKey)?.status === "success"
+
 	const read = async () => {
-		latestRead += 1
-		const ticket = latestRead
-		try {
-			const joinedSpaces = await transport.list()
-			if (ticket === latestRead) {
-				const gone = vanishedFrom(joinedSpaces)
-				set({ joinedSpaces, hasFailedToLoad: false })
-				hasRead = true
-				connectEach(joinedSpaces)
-				leaveVanished(gone)
-				reopenPending()
-			}
-		} catch (reason) {
-			if (ticket === latestRead) noteFailedLoad(reason)
+		const held = current().joinedSpaces
+		await queryClient.cancelQueries({ queryKey: listKey })
+		await queryClient.prefetchQuery({ ...listQuery, staleTime: 0 })
+		if (!hasListed()) {
+			return
 		}
+		const { joinedSpaces } = current()
+		hasRead = true
+		connectEach(joinedSpaces)
+		leaveVanished(vanishedFrom(held, joinedSpaces))
+		reopenPending()
 	}
 
 	const watch = () => {
@@ -269,7 +306,7 @@ export const createJoinedSpacesController = ({
 				void read()
 			})
 			.catch((reason: unknown) => {
-				noteFailedLoad(reason)
+				reportRefusal(reason)
 				return undefined
 			})
 		const detachRemovals = transport
@@ -326,7 +363,7 @@ export const createJoinedSpacesController = ({
 		const back = backSpaceId()
 		hosts.forget(id)
 		inviters.forget(id)
-		set({ joinedSpaces: heldWithout(id) })
+		hold(heldWithout(id))
 		reportRemoval(removalNoticeOf(name, hostEmail))
 		if (wasOpen && back) selectSpace(back)
 	}
@@ -374,7 +411,7 @@ export const createJoinedSpacesController = ({
 
 	const admit = async (joined: JoinedSpace, hostEmail: string) => {
 		inviters.remember(joined.id, hostEmail)
-		set({ joinedSpaces: [...heldWithout(joined.id), joined] })
+		hold([...heldWithout(joined.id), joined])
 		await hosts.connect(joined.id)
 		await read()
 		const learned = current().joinedSpaces.find((held) => held.id === joined.id)
@@ -391,9 +428,7 @@ export const createJoinedSpacesController = ({
 			throw reason
 		})
 		hosts.forget(leaving.id)
-		set({
-			joinedSpaces: heldWithout(leaving.id),
-		})
+		hold(heldWithout(leaving.id))
 		spaces.setSettingsOpen(false)
 		const [firstLocal] = spaces.getState().spaces
 		if (isOpenJoined(leaving) && firstLocal) {
@@ -403,7 +438,8 @@ export const createJoinedSpacesController = ({
 
 	return {
 		getState: current,
-		subscribe: stateStore.subscribe,
+		subscribe: subscribeWithQueries(choiceStore, queryClient, listKey),
+		listQuery,
 		watch,
 		selectSpace,
 		restore,

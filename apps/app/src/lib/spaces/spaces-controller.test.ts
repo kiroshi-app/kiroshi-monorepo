@@ -1,3 +1,4 @@
+import { QueryObserver } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
@@ -10,15 +11,27 @@ import {
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+const listed = async (
+	store: TranscriptStore,
+	lastSpaceId: string | null = null,
+) => {
+	const { queryClient } = createQueryTestWrapper()
+	const controller = createSpacesController(store, { queryClient })
+	new QueryObserver(queryClient, controller.listQuery).subscribe(
+		() => undefined,
+	)
+	await controller.load(lastSpaceId)
+	const refetch = () =>
+		queryClient.invalidateQueries({ queryKey: controller.listQuery.queryKey })
+	return { controller, refetch }
+}
 
 const loaded = async (
 	store: TranscriptStore,
 	lastSpaceId: string | null = null,
-) => {
-	const controller = createSpacesController(store)
-	await controller.load(lastSpaceId)
-	return controller
-}
+) => (await listed(store, lastSpaceId)).controller
 
 const names = async (store: TranscriptStore) =>
 	(await store.spaces()).map((space) => space.name)
@@ -289,6 +302,7 @@ const transferRig = async ({
 	const successes: NoticeMessage[] = []
 	const failures: NoticeMessage[] = []
 	const controller = createSpacesController(store, {
+		queryClient: createQueryTestWrapper().queryClient,
 		pickers,
 		reportSuccess: (notice) => successes.push(notice),
 		reportFailure: (notice) => failures.push(notice),
@@ -296,6 +310,43 @@ const transferRig = async ({
 	await controller.load(null)
 	return { store, pickers, successes, failures, controller }
 }
+
+describe("a refetch of the space list", () => {
+	it("selects the remembered space once the chosen one is dropped", async () => {
+		const store = createFakeTranscriptStore()
+		const remembered = await store.createSpace("Vocca")
+		const chosen = await store.createSpace("Garage")
+		const { controller, refetch } = await listed(store, remembered.id)
+		controller.select(chosen.id)
+		await store.deleteSpace(chosen.id)
+
+		await refetch()
+
+		expect(controller.getState().selectedSpaceId).toBe(remembered.id)
+	})
+
+	it("selects the first space once the chosen one is dropped and none is remembered", async () => {
+		const store = createFakeTranscriptStore()
+		const chosen = await store.createSpace("Garage")
+		const { controller, refetch } = await listed(store)
+		controller.select(chosen.id)
+		await store.deleteSpace(chosen.id)
+
+		await refetch()
+
+		expect(controller.getState().selectedSpaceId).toBe("personal")
+	})
+
+	it("keeps a chosen space the list never held, as a joined space", async () => {
+		const store = createFakeTranscriptStore()
+		const { controller, refetch } = await listed(store)
+		controller.select("garage")
+
+		await refetch()
+
+		expect(controller.getState().selectedSpaceId).toBe("garage")
+	})
+})
 
 describe("space transfer", () => {
 	it("exports the selected space to the chosen archive and names it in the notice", async () => {

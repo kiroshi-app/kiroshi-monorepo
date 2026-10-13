@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest"
+// @vitest-environment happy-dom
+
+import { cleanup } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
 
@@ -8,10 +11,8 @@ import {
 	toRosterBots,
 	toSettingsValue,
 } from "./bot-settings"
-import {
-	createRosterController,
-	type RosterController,
-} from "./roster-controller"
+import { mountRoster } from "./mounted-roster"
+import type { RosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import {
@@ -21,6 +22,12 @@ import {
 } from "../conversations/roster-conversations"
 import type { Bot, Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+
+vi.mock("@tauri-apps/api/event", () => ({
+	listen: vi.fn(async () => () => undefined),
+}))
+
+afterEach(cleanup)
 
 const anEmptyStore = async (): Promise<TranscriptStore> => {
 	const store = createFakeTranscriptStore()
@@ -39,7 +46,7 @@ const opening = (
 })
 
 const loaded = async (store: TranscriptStore) => {
-	const controller = createRosterController(store)
+	const controller = mountRoster(store)
 	await controller.load(opening())
 	return controller
 }
@@ -168,7 +175,7 @@ describe("createRosterController", () => {
 	})
 
 	it("refuses a drafted companion while the roster is in no space", async () => {
-		const controller = createRosterController(createFakeTranscriptStore())
+		const controller = mountRoster(createFakeTranscriptStore())
 
 		await expect(
 			controller.createFromDraft({
@@ -200,7 +207,7 @@ describe("createRosterController", () => {
 		await opened.create()
 		const left = opened.getState().selectedBotId
 
-		const reopened = createRosterController(store)
+		const reopened = mountRoster(store)
 		await reopened.load(opening(left))
 
 		expect(left).not.toBe("default")
@@ -209,7 +216,7 @@ describe("createRosterController", () => {
 
 	it("opens on the first companion when the roster no longer holds that one", async () => {
 		const store = createFakeTranscriptStore()
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening("gone"))
 
@@ -217,7 +224,7 @@ describe("createRosterController", () => {
 	})
 
 	it("says nothing has been read until the rows land", async () => {
-		const controller = createRosterController(await anEmptyStore())
+		const controller = mountRoster(await anEmptyStore())
 
 		expect(controller.getState().hasLoaded).toBe(false)
 
@@ -226,12 +233,17 @@ describe("createRosterController", () => {
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
 
-	it("counts a refused read as an answer", async () => {
+	it("waits on a refused read until a retry reads the roster", async () => {
 		const store = createFakeTranscriptStore()
-		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
-		const controller = createRosterController(store)
-
+		const refusal = vi
+			.spyOn(store, "bots")
+			.mockRejectedValue(new Error("no record"))
+		const controller = mountRoster(store)
 		await controller.load(opening())
+		expect(controller.getState().hasLoaded).toBe(false)
+
+		refusal.mockRestore()
+		await controller.retryLoad()
 
 		expect(controller.getState().hasLoaded).toBe(true)
 	})
@@ -239,7 +251,7 @@ describe("createRosterController", () => {
 	it("reports a roster it could not read instead of an empty sidebar", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening())
 
@@ -249,7 +261,7 @@ describe("createRosterController", () => {
 	it("clears the reported failure once the roster reads again", async () => {
 		const store = createFakeTranscriptStore()
 		vi.spyOn(store, "bots").mockRejectedValueOnce(new Error("no record"))
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening())
 
 		await controller.load(opening())
@@ -553,7 +565,7 @@ describe("createRosterController", () => {
 		controller.askToDelete("default")
 		await store.deleteBot("default")
 
-		await controller.load(opening())
+		await controller.reload()
 
 		expect(controller.getState()).toMatchObject({
 			isEditing: false,
@@ -567,7 +579,7 @@ describe("createRosterController on a space", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
@@ -581,7 +593,7 @@ describe("createRosterController on a space", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		const read = vi.spyOn(store, "bots")
 
@@ -600,7 +612,7 @@ describe("createRosterController on a space", () => {
 	it("selects nothing when the space it lands on holds no companion", async () => {
 		const store = createFakeTranscriptStore()
 		const empty = await store.createSpace("Vacances")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", empty.id]))
 
 		controller.enter({
@@ -617,7 +629,7 @@ describe("createRosterController on a space", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		await store.createBot(newBotIdentity([]), elsewhere.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		controller.edit("default")
 
@@ -635,7 +647,7 @@ describe("createRosterController on a space", () => {
 
 	it("holds an empty roster for a space it has never read", async () => {
 		const store = createFakeTranscriptStore()
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening())
 
 		controller.enter({
@@ -650,7 +662,7 @@ describe("createRosterController on a space", () => {
 	it("drops the roster of a space that is no longer listed", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		await controller.load(opening(null, "personal"))
@@ -661,7 +673,7 @@ describe("createRosterController on a space", () => {
 	it("creates a companion in the space the reader is in and nowhere else", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(
 			opening(null, elsewhere.id, ["personal", elsewhere.id]),
 		)
@@ -678,7 +690,7 @@ describe("createRosterController on a space", () => {
 	it("lands the copy in the space it was sent to and opens that space on it", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		const copy = await controller.duplicate("default", elsewhere.id)
@@ -694,7 +706,7 @@ describe("createRosterController on a space", () => {
 	it("stays where it is when the copy the other space was sent is refused", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		vi.spyOn(store, "duplicateBot").mockRejectedValue(new Error("no room"))
 
@@ -713,7 +725,7 @@ describe("createRosterController on a space", () => {
 		const elsewhere = await store.createSpace("Vocca")
 		const section = await store.createSection("personal", "Writers")
 		await store.moveBotToSection("default", section.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		const moved = await controller.moveToSpace("default", elsewhere.id)
@@ -735,7 +747,7 @@ describe("createRosterController on a space", () => {
 	it("reads the rosters again when the move to another space is refused", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		vi.spyOn(store, "moveBotToSpace").mockRejectedValue(new Error("no room"))
 
@@ -750,7 +762,7 @@ describe("createRosterController on a space", () => {
 
 	it("writes nothing when the companion is already in the space it is moved to", async () => {
 		const store = createFakeTranscriptStore()
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening())
 		const write = vi.spyOn(store, "moveBotToSpace")
 
@@ -769,7 +781,7 @@ describe("createRosterController on a space", () => {
 			title: "Launch",
 			botIds: ["default"],
 		})
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		await controller.moveToSpace("default", elsewhere.id)
@@ -785,7 +797,7 @@ describe("createRosterController on a space", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		await controller.remove("default")
@@ -801,7 +813,7 @@ describe("createRosterController on memberships", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		await store.addBotToSpace("default", elsewhere.id)
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		return { store, elsewhere, controller }
 	}
@@ -837,7 +849,7 @@ describe("createRosterController on memberships", () => {
 			"Away",
 		)
 
-		const listed = createRosterController(store)
+		const listed = mountRoster(store)
 		await listed.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		const { previews } = listed.getState()
@@ -848,7 +860,7 @@ describe("createRosterController on memberships", () => {
 	it("shows a companion in the space it is added to without reading every roster", async () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 		const reads = countingBots(store)
 
@@ -877,7 +889,7 @@ describe("createRosterController on memberships", () => {
 		const store = createFakeTranscriptStore()
 		const elsewhere = await store.createSpace("Vocca")
 		const reportFailure = vi.fn()
-		const controller = createRosterController(store, { reportFailure })
+		const controller = mountRoster(store, { reportFailure })
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		await controller.removeFromSpace("default", "personal")
@@ -893,7 +905,7 @@ describe("createRosterController on memberships", () => {
 	it("says nothing changed when a removal fails for another reason", async () => {
 		const { store, elsewhere } = await acrossTwoSpaces()
 		const reportFailure = vi.fn()
-		const refusing = createRosterController(
+		const refusing = mountRoster(
 			{
 				...store,
 				removeBotFromSpace: () => Promise.reject({ kind: "storage" }),
@@ -921,7 +933,7 @@ describe("createRosterController previews", () => {
 		const loud = await store.createBot(newBotIdentity([quiet]), elsewhere.id)
 		await saidTo(store, quiet.id, "Pulled the three papers.")
 		await saidTo(store, loud.id, "Rebuilding the bundle.")
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
@@ -1143,7 +1155,7 @@ describe("createRosterController on conversations", () => {
 			title: "Launch",
 			botIds: ["default", talker.id],
 		})
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening())
 
@@ -1165,7 +1177,7 @@ describe("createRosterController on conversations", () => {
 			title: "Launch",
 			botIds: [away.id],
 		})
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
@@ -1291,9 +1303,11 @@ describe("createRosterController on conversations", () => {
 		})
 		expect(controller.getState().conversations[0].title).toBe("Menu")
 
-		const state = await reloaded(store)
-		expect(state.conversations[0].title).toBe("Menu")
-		expect(state.conversations[0].instructions).toBe("Stay short.")
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0].title).toBe("Menu")
+			expect(state.conversations[0].instructions).toBe("Stay short.")
+		})
 	})
 
 	it("stores the name a nameless conversation is given", async () => {
@@ -1304,8 +1318,10 @@ describe("createRosterController on conversations", () => {
 		controller.nameConversation(created?.id ?? "", "Menu")
 		expect(controller.getState().conversations[0].title).toBe("Menu")
 
-		const state = await reloaded(store)
-		expect(state.conversations[0].title).toBe("Menu")
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0].title).toBe("Menu")
+		})
 	})
 
 	it("leaves alone the name of a conversation that has one", async () => {
@@ -1411,7 +1427,7 @@ describe("createRosterController on conversations", () => {
 	it("seats nobody and names the refused companion when a seating fails", async () => {
 		const store = createFakeTranscriptStore()
 		const reportFailure = vi.fn()
-		const refusing = createRosterController(
+		const refusing = mountRoster(
 			{
 				...store,
 				addConversationParticipant: () => Promise.reject({ kind: "storage" }),
@@ -1519,7 +1535,7 @@ describe("createRosterController on conversations", () => {
 
 	it("selects the first row of the roster when the remembered conversation is gone", async () => {
 		const store = createFakeTranscriptStore()
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 
 		await controller.load(opening("conversation-404"))
 
@@ -1537,7 +1553,7 @@ describe("createRosterController on conversations", () => {
 			title: "Launch",
 			botIds: [away.id],
 		})
-		const controller = createRosterController(store)
+		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
 
 		controller.enter({

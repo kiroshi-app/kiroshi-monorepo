@@ -3,21 +3,18 @@ import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { useCommonCopy } from "@workspace/ui/hooks/use-common-copy"
 
 type StartupScreenProps = {
-	haveSpacesFailed: boolean
-	onRetrySpaces: () => void
+	hasFailed: boolean
+	onRetry: () => void
 }
 
-export const StartupScreen = ({
-	haveSpacesFailed,
-	onRetrySpaces,
-}: StartupScreenProps) => {
+export const StartupScreen = ({ hasFailed, onRetry }: StartupScreenProps) => {
 	const t = useCommonCopy()
 
-	if (haveSpacesFailed) {
+	if (hasFailed) {
 		return (
 			<AppBootNotice
 				description={t("spaces.unavailable.description")}
-				onRetry={onRetrySpaces}
+				onRetry={onRetry}
 				title={t("spaces.unavailable.title")}
 			/>
 		)

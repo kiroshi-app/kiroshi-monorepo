@@ -9,6 +9,7 @@ import {
 } from "./use-sidebar-actions"
 
 import { createStore } from "../store"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { spacePlugin } from "../conversations/plugin-scope"
 import {
@@ -51,7 +52,8 @@ describe("the rail gear", () => {
 	it("opens the settings of the selected space", async () => {
 		const store = createFakeTranscriptStore()
 		const shown = await store.createSpace("Vocca")
-		const spaces = createSpacesController(store)
+		const { queryClient } = createQueryTestWrapper()
+		const spaces = createSpacesController(store, { queryClient })
 		await spaces.load(shown.id)
 		const gear = gearFor(spaces)
 
@@ -62,7 +64,10 @@ describe("the rail gear", () => {
 	})
 
 	it("opens no space plugin when no space is selected", () => {
-		const spaces = createSpacesController(createFakeTranscriptStore())
+		const { queryClient } = createQueryTestWrapper()
+		const spaces = createSpacesController(createFakeTranscriptStore(), {
+			queryClient,
+		})
 		const gear = gearFor(spaces)
 
 		gear.press()

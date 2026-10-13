@@ -26,6 +26,7 @@ import {
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
 	createJoinedSpacesController,
 	type JoinedSpacesController,
@@ -97,10 +98,12 @@ const hostsFake = () => ({
 const gearWithGarage = async () => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	const spaces = createSpacesController(store)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
 	const transport = garageTransport()
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts: hostsFake(),
 		transport,

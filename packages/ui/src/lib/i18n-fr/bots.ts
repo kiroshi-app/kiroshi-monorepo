@@ -11,6 +11,8 @@ const bots = {
 		empty: "Aucun compagnon pour l’instant",
 		unavailable:
 			"Impossible de charger vos compagnons. Redémarrez Kiroshi pour réessayer.",
+		previewUnreadable:
+			"Impossible de charger les derniers messages. Redémarrez Kiroshi pour réessayer.",
 		mission: {
 			state: {
 				waiting: "en attente de vous",
@@ -62,6 +64,8 @@ const bots = {
 			moveDown: "Descendre",
 			delete: "Supprimer",
 			empty: "Déposez un compagnon ici",
+			unreadable:
+				"Impossible de charger les sections de cet espace. Redémarrez Kiroshi pour réessayer.",
 		},
 		seedRefused: "Votre premier compagnon n’a pas pu être créé",
 	},

@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo } from "react"
 
 import type { SpaceInvitationCallbacks } from "@workspace/ui/components/space-invitations"
@@ -37,10 +38,12 @@ export type JoinedSpaces = {
 }
 
 export const useJoinedSpaces = (spaces: SpacesController): JoinedSpaces => {
+	const queryClient = useQueryClient()
 	const { state, controller } = useController(() =>
-		createJoinedSpacesController({ spaces }),
+		createJoinedSpacesController({ queryClient, spaces }),
 	)
 	const hosts = useControllerState(joinedHosts)
+	useQuery({ ...controller.listQuery, enabled: isDesktopHost() })
 
 	useEffect(
 		() => (isDesktopHost() ? controller.watch() : undefined),

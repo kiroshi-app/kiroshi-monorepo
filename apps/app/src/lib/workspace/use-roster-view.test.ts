@@ -162,15 +162,17 @@ const localConversationOpen = async () => {
 	wire.hostCalls.length = 0
 	wire.answerLocal = answeredBy(localStore)
 	wire.answerHost = answeredBy(hostStore)
-	const spaces = createSpacesController(localStore)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(localStore, { queryClient })
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts: joinedHosts,
 		transport: transportOf([HOST_PERSONAL]),
 	})
 	joined.watch()
 	await settle()
-	const roster = createRosterController(relayed)
+	const roster = createRosterController(relayed, { queryClient })
 	const user = {
 		getState: () => ({
 			preferences: {

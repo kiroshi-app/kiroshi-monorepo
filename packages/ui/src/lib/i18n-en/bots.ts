@@ -19,6 +19,8 @@ const bots = {
 		},
 		empty: "No companions yet",
 		unavailable: "Couldn’t load your companions. Restart Kiroshi to retry.",
+		previewUnreadable:
+			"Couldn’t load the latest messages. Restart Kiroshi to retry.",
 		mission: {
 			state: {
 				waiting: "waiting for you",
@@ -70,6 +72,8 @@ const bots = {
 			moveDown: "Move down",
 			delete: "Delete",
 			empty: "Drop a companion here",
+			unreadable:
+				"Couldn’t load the sections of this space. Restart Kiroshi to retry.",
 		},
 		seedRefused: "Your first companion couldn’t be set up",
 	},

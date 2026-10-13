@@ -13,10 +13,8 @@ import {
 import { useCompanionArrivals } from "./use-companion-arrivals"
 
 import { newBotIdentity } from "../bots/bot-settings"
-import {
-	createRosterController,
-	type RosterController,
-} from "../bots/roster-controller"
+import { mountRoster } from "../bots/mounted-roster"
+import type { RosterController } from "../bots/roster-controller"
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
 
@@ -72,7 +70,7 @@ const anAwayConversation = async (): Promise<AwayConversation> => {
 		title: "Away thread",
 		botIds: [host.id],
 	})
-	const controller = createRosterController(store)
+	const controller = mountRoster(store)
 	await controller.load({
 		spaces: ["personal", away.id].map((id) => ({
 			spaceRowId: id,
