@@ -94,6 +94,7 @@
         case groupFailed = "group-failed"
         case groupMention = "group-mention"
         case slowThread = "slow-thread"
+        case longReply = "long-reply"
         case slowGroup = "slow-group"
         case longName = "long-name"
         case longGroup = "long-group"
@@ -157,7 +158,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .missionsButton,
                 .conversationMissions, .conversationNoMissions:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
@@ -176,7 +178,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .missionsButton,
                 .conversationMissions, .conversationNoMissions:
                 true
             default: false
@@ -233,7 +236,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .missionsButton,
                 .conversationMissions, .conversationNoMissions:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
@@ -333,7 +337,8 @@
                 .conversationsRecovering,
                 .threadFailed, .groupThread,
                 .groupWorking,
-                .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,
+                .groupFailed, .groupMention, .slowThread, .longReply, .slowGroup, .longName,
+                .longGroup,
                 .twoAsks, .missionsButton, .conversationMissions, .conversationNoMissions,
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,

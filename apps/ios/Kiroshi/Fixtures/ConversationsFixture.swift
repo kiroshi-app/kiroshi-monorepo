@@ -277,6 +277,10 @@
                 daysAgo: 1, hour: 17, minute: 12),
         ]
 
+        static let longReplyParagraphs = (1...12).map { section in
+            "Section \(section) of the notes lists what moved since 0.42: the changelog entry, the pull requests behind it, who reviewed them and what still needs a check before the tag goes out tonight."
+        }
+
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
                 fixture.isOnHome
@@ -339,6 +343,10 @@
             case .slowThread:
                 script.messages[juniper.id] = longThread
                 script.threadAnswersAfter = .seconds(2)
+            case .longReply:
+                script.messages[juniper.id] = longThread
+                script.replyParagraphs = longReplyParagraphs
+                script.wordsPerDelta = 6
             case .slowGroup:
                 script.messages[releaseCrew.id] = longGroupThread
                 script.threadAnswersAfter = .seconds(2)
@@ -367,7 +375,7 @@
             switch fixture {
             case .thread, .emptyThread, .workingThread, .workingAfterReply, .threadHostOffline,
                 .swipedThread,
-                .threadFailed, .slowThread, .longName, .twoAsks:
+                .threadFailed, .slowThread, .longReply, .longName, .twoAsks:
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
                 releaseCrew.id
@@ -448,6 +456,8 @@
             var hostLeavesAfter: Duration?
             var hostLeavesAfterThread = false
             var threadAnswersAfter = Duration.zero
+            var replyParagraphs: [String] = []
+            var wordsPerDelta = 1
             var missionFeed = "[]"
         }
 
@@ -865,16 +875,21 @@
                         event(FixtureHost.activity("live-\(index)", title, "running")),
                         after: .milliseconds(500)))
             }
-            let reply = "Drafted. Three sections: new, fixed, under the hood."
+            let reply =
+                (["Drafted. Three sections: new, fixed, under the hood."] + script.replyParagraphs)
+                .joined(separator: "\n\n").replacingOccurrences(of: "\n", with: #"\n"#)
             push(
                 .frame(
                     event(FixtureHost.chatMessage("live-reply", "", "messageStarted")),
                     after: .milliseconds(400)))
-            for word in reply.split(separator: " ") {
+            let words = reply.split(separator: " ")
+            for start in stride(from: 0, to: words.count, by: script.wordsPerDelta) {
+                let delta = words[start..<min(start + script.wordsPerDelta, words.count)]
+                    .joined(separator: " ")
                 push(
                     .frame(
                         event(
-                            #"{"type":"messageDelta","id":"live-reply","seq":1,"text":"\#(word) "}"#
+                            #"{"type":"messageDelta","id":"live-reply","seq":1,"text":"\#(delta) "}"#
                         ),
                         after: .milliseconds(120)))
             }
