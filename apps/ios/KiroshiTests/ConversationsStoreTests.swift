@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Synchronization
 import Testing
 
 @testable import Kiroshi
@@ -200,16 +201,133 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
-    @Test func aCompanionWhoseConversationIsRefusedFailsTheList() async throws {
-        let host = TestHost(companions: [juniper], holding: ["conversation_main_chat"])
+    @Test func aCompanionWhoseConversationIsRefusedKeepsTheOtherRows() async throws {
+        let host = TestHost(
+            companions: [juniper, atlas],
+            messages: [
+                "chat-atlas": [
+                    TestHost.message(
+                        "a1", in: "chat-atlas", seq: 1, isYours: false, "Split in two.", at: 3_000)
+                ]
+            ]
+        ) { call in
+            guard call.command == "conversation_main_chat",
+                (try? call.args(as: TestHost.BotArgs.self))?.botId == "juniper"
+            else { return nil }
+            return TestHost.refused(
+                call, status: 403, #""this command reaches outside the shared space""#)
+        }
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.summaries.map(\.subject.title) == ["Atlas", "Juniper"])
+        #expect(store.summaries[0].preview == "Split in two.")
+        #expect(store.summaries[1].conversationId == nil)
+        #expect(store.summaries[1].preview == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aFailedRereadKeepsTheList() async {
+        let reads = ReadCount()
+        let host = TestHost(companions: [juniper, atlas, pico]) { call in
+            guard call.command == "conversation_bots", reads.next() > 1 else { return nil }
+            return TestHost.refused(call, status: 500, TestHost.unavailable)
+        }
+        let (store, connection, following) = await follow(host)
+
+        await store.refresh()
+
+        #expect(store.phase == .loaded)
+        #expect(store.summaries.count == 3)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aLoadCutByStoppingTheConnectionIsNotAFailure() async throws {
+        let host = TestHost(companions: [juniper], holding: ["conversation_bots"])
         let (store, connection, following) = await start(host)
+        _ = try #require(await host.nextCall("conversation_bots"))
+        let cut = store.reload()
+        _ = try #require(await host.nextCall("conversation_bots"))
+        let reconnection = makeConnection()
+        let followingAgain = Task { await store.follow(reconnection) }
+        while await reconnection.subscriberCount == 0 {
+            await Task.yield()
+        }
 
-        let call = try #require(await host.nextCall("conversation_main_chat"))
-        host.reply(
-            TestHost.refused(call, status: 403, #""this command reaches outside the shared space""#)
-        )
+        await connection.stop()
+        await cut?.value
+
+        #expect(store.phase == .loading)
+        following.cancel()
+        followingAgain.cancel()
+        await reconnection.stop()
+    }
+
+    @Test func aFailureThenANewConnectionToTheSameInstanceLoadsOnceOnline() async throws {
+        let host = host
+        let refusing = TestHost(companions: [juniper], holding: ["conversation_bots"])
+        let (store, connection, following) = await start(refusing)
+        let refused = try #require(await refusing.nextCall("conversation_bots"))
+        refusing.reply(TestHost.refused(refused, status: 500, TestHost.unavailable))
         await waitUntil { store.phase == .failed }
+        following.cancel()
+        await connection.stop()
 
+        let reconnection = makeConnection()
+        let followingAgain = Task { await store.follow(reconnection) }
+        await reconnection.start()
+        await transport.nextOpening().accept(host.socket)
+        await waitUntil { store.phase == .loaded }
+
+        #expect(store.summaries.map(\.subject.title) == ["Atlas", "Juniper", "Pico"])
+        followingAgain.cancel()
+        await reconnection.stop()
+    }
+
+    func failWhileOnline(through clock: TestRelayClock) async throws -> (
+        ConversationsStore, RelayConnection, Task<Void, Never>
+    ) {
+        let refusing = TestHost(companions: [juniper], holding: ["conversation_bots"])
+        let connection = makeConnection()
+        let store = ConversationsStore(work: work, clock: clock)
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(refusing.socket)
+        let refused = try #require(await refusing.nextCall("conversation_bots"))
+        refusing.reply(TestHost.refused(refused, status: 500, TestHost.unavailable))
+        await waitUntil { store.phase == .failed }
+        refusing.socket.push(.close(RelayClosure.hostOffline))
+        await waitUntil { !store.isOnline }
+        return (store, connection, following)
+    }
+
+    @Test func tryingAgainWhileNotConnectedWaitsThenLoadsOnceOnline() async throws {
+        let host = host
+        let (store, connection, following) = try await failWhileOnline(through: TestRelayClock())
+
+        let retrying = store.reload()
+        #expect(store.phase == .loading)
+        await clock.wakeNextSleep(of: Backoff.first)
+        await transport.nextOpening().accept(host.socket)
+        await retrying?.value
+        await waitUntil { store.phase == .loaded }
+
+        #expect(store.summaries.map(\.subject.title) == ["Atlas", "Juniper", "Pico"])
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func tryingAgainFailsAgainWhenTheConnectionStaysOffline() async throws {
+        let storeClock = TestRelayClock()
+        let (store, connection, following) = try await failWhileOnline(through: storeClock)
+
+        let retrying = store.reload()
+        #expect(store.phase == .loading)
+        await storeClock.wakeNextSleep(of: ConversationsStore.onlineDeadline)
+        await retrying?.value
+
+        #expect(store.phase == .failed)
         following.cancel()
         await connection.stop()
     }
@@ -483,5 +601,16 @@ struct ConversationsStoreTests {
         let sectionId: String?
         let title: String
         let botIds: [String]
+    }
+}
+
+private final class ReadCount: Sendable {
+    private let count = Mutex(0)
+
+    func next() -> Int {
+        count.withLock { count in
+            count += 1
+            return count
+        }
     }
 }
