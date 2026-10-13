@@ -14,7 +14,7 @@ import type { MembersPanelProps } from "@workspace/ui/components/space-settings-
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { hostQueryKeys } from "./host-query-keys"
-import type { HostedSpace } from "./hosting-controller"
+import type { HostedSpace } from "./hosting-transport"
 import { isDesktopHost } from "./index"
 import {
 	type MemberAction,

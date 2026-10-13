@@ -427,7 +427,9 @@ describe("SpaceSettingsHost hosting on the desktop", () => {
 
 		expect(commands.hostingStart).toHaveBeenCalledWith(gear.home.id)
 		expect(screen.queryByRole("alertdialog")).toBeNull()
-		expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("true")
+		await waitFor(() =>
+			expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("true"),
+		)
 	})
 
 	it("stops hosting at once when the switch turns off, with no confirmation", async () => {
