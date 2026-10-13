@@ -3,6 +3,7 @@ import { expect, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	expectSkeletonFilledTo,
 	FRAME_POLL,
 	isInBrowserRunner,
 	slotIn,
@@ -112,21 +113,6 @@ const withMotionAllowed = async (run: () => Promise<void>) => {
 
 const phaseOf = (root: Element) => slotIn(root, "timed-list").dataset.phase
 
-const expectLastRowAcrossEdge = (
-	canvasElement: HTMLElement,
-	edge: "top" | "bottom",
-) => {
-	const frame = slotIn(canvasElement, "list-frame").getBoundingClientRect()
-	const lastRow = slotsIn(canvasElement, "list-skeleton-row")
-		.at(-1)
-		?.getBoundingClientRect()
-	const edgeY = frame[edge]
-
-	return expect(
-		lastRow !== undefined && lastRow.top <= edgeY && lastRow.bottom >= edgeY,
-	).toBe(true)
-}
-
 const rowCountIn = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "list-skeleton-row").length
 
@@ -165,7 +151,7 @@ export const TallContainer = meta.story({
 			secondRow.getBoundingClientRect().top -
 				firstRow.getBoundingClientRect().bottom,
 		).toBe(4)
-		await expectLastRowAcrossEdge(canvasElement, "bottom")
+		await expectSkeletonFilledTo(canvasElement, "bottom")
 		await expect(getComputedStyle(list).animationName).toBe("none")
 		await expect(getComputedStyle(list).opacity).toBe("1")
 		for (const shape of slotsIn(list, "skeleton"))
@@ -185,7 +171,7 @@ export const HeightOnARowStep = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(5), FRAME_POLL)
-		await expectLastRowAcrossEdge(canvasElement, "bottom")
+		await expectSkeletonFilledTo(canvasElement, "bottom")
 	},
 })
 
@@ -202,7 +188,7 @@ export const ShortContainer = meta.story({
 	play: async ({ canvasElement }) => {
 		const frame = slotIn(canvasElement, "list-frame")
 		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(4), FRAME_POLL)
-		await expectLastRowAcrossEdge(canvasElement, "bottom")
+		await expectSkeletonFilledTo(canvasElement, "bottom")
 
 		frame.style.height = "480px"
 		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(9), FRAME_POLL)
@@ -227,7 +213,7 @@ export const BottomAnchored = meta.story({
 		const [firstRow] = slotsIn(canvasElement, "list-skeleton-row")
 
 		await expect(firstRow.getBoundingClientRect().bottom).toBe(frame.bottom)
-		await expectLastRowAcrossEdge(canvasElement, "top")
+		await expectSkeletonFilledTo(canvasElement, "top")
 	},
 })
 

@@ -606,6 +606,10 @@ feedback-listskeleton--pending-310-ms
 feedback-listskeleton--pending-under-300-ms
 feedback-listskeleton--short-container
 feedback-listskeleton--tall-container
+feedback-missiondetailskeleton--dark
+feedback-missiondetailskeleton--light
+feedback-missionsfeedskeleton--dark
+feedback-missionsfeedskeleton--light
 feedback-notice--default
 feedback-notice--dismissible
 feedback-notice--long-content
@@ -617,7 +621,11 @@ feedback-notice--with-retry-label
 feedback-progressring--default
 feedback-progressring--values
 feedback-progressring--zero-value
+feedback-sidebarlistskeleton--dark
+feedback-sidebarlistskeleton--light
 feedback-skeleton--loading
+feedback-threadtranscriptskeleton--dark
+feedback-threadtranscriptskeleton--light
 feedback-updatebadge--default
 feedback-updatebadge--empty
 feedback-updatebadge--error

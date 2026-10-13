@@ -93,6 +93,18 @@ export const SidebarFrame = ({ children }: { children: ReactNode }) => (
 	</SidebarProvider>
 )
 
+export const expectSkeletonFilledTo = (root: Element, edge: "top" | "bottom") =>
+	waitFor(() => {
+		const edgeY = slotIn(root, "list-skeleton").getBoundingClientRect()[edge]
+		const lastRow = slotsIn(root, "list-skeleton-row")
+			.at(-1)
+			?.getBoundingClientRect()
+
+		expect(
+			lastRow !== undefined && lastRow.top <= edgeY && lastRow.bottom >= edgeY,
+		).toBe(true)
+	}, FRAME_POLL)
+
 export const slotsIn = (root: Element, slot: string) =>
 	Array.from(root.querySelectorAll<HTMLElement>(`[data-slot="${slot}"]`))
 
