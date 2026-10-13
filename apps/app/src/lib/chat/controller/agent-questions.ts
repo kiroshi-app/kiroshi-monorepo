@@ -15,7 +15,13 @@ import type {
 	QuestionRequest,
 	RuntimeScope,
 } from "../../agent/contract"
+import type { ForeignQuestion } from "../../conversations/foreign-turns"
 import type { NewUserMessage } from "../../conversations/store-contract"
+
+type AnswerPlace = Pick<
+	NewUserMessage,
+	"conversationId" | "turnId" | "repliedToMessageId"
+>
 
 type AgentQuestionsParts = {
 	loadLatest: TranscriptPaging["loadLatest"]
@@ -50,8 +56,10 @@ export const createAgentQuestions = (
 			await send()
 			foreignTurns.release(scope, id)
 			botsShowing(scope.conversationId).forEach(showForeignTurn)
+			return true
 		} catch (reason) {
 			report(bot, reason)
+			return false
 		}
 	}
 
@@ -95,22 +103,20 @@ export const createAgentQuestions = (
 		})
 	}
 
-	const recordAnswers = (
+	const writeAnswers = (
 		bot: BotChat,
+		place: AnswerPlace,
 		request: QuestionRequest,
 		answers: QuestionAnswers,
 	) => {
-		const turn = bot.activeTurn
 		const content = answeredText(request, answers)
-		if (!turn || content.length === 0) {
+		if (content.length === 0) {
 			return
 		}
 		const answered: NewUserMessage = {
+			...place,
 			id: newId(),
-			conversationId: turn.conversationId,
-			turnId: turn.id,
 			authorBotId: null,
-			repliedToMessageId: issuedAskingOf(bot, request),
 			content,
 			createdAt: now(),
 		}
@@ -121,12 +127,45 @@ export const createAgentQuestions = (
 		)
 	}
 
+	const recordAnswers = (
+		bot: BotChat,
+		request: QuestionRequest,
+		answers: QuestionAnswers,
+	) => {
+		const turn = bot.activeTurn
+		if (!turn) {
+			return
+		}
+		const place: AnswerPlace = {
+			conversationId: turn.conversationId,
+			turnId: turn.id,
+			repliedToMessageId: issuedAskingOf(bot, request),
+		}
+		writeAnswers(bot, place, request, answers)
+	}
+
+	const recordForeignAnswers = (
+		bot: BotChat,
+		{ scope, turnId, request }: ForeignQuestion,
+		answers: QuestionAnswers,
+	) => {
+		const place: AnswerPlace = {
+			conversationId: scope.conversationId,
+			turnId,
+			repliedToMessageId: questionMessageIdOf(request.id),
+		}
+		writeAnswers(bot, place, request, answers)
+	}
+
 	const answer = async (bot: BotChat, id: string, answers: QuestionAnswers) => {
-		const foreign = foreignTurns.scopeAsking(id)
+		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
-			await answerForeign(bot, foreign, id, () =>
-				driver.answerQuestion(foreign, id, answers),
+			const isAccepted = await answerForeign(bot, foreign.scope, id, () =>
+				driver.answerQuestion(foreign.scope, id, answers),
 			)
+			if (isAccepted) {
+				recordForeignAnswers(bot, foreign, answers)
+			}
 			return
 		}
 		const posted = pendingPostOf(bot, id)

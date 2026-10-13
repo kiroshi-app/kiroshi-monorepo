@@ -5,6 +5,7 @@ import type {
 	ActivityEvent,
 	AgentEvent,
 	ChatMessage,
+	EventTurn,
 	PermissionRequest,
 	QuestionRequest,
 	RuntimeScope,
@@ -31,8 +32,15 @@ export type ForeignSpeaker = {
 	question: QuestionRequest | null
 }
 
+export type ForeignQuestion = {
+	scope: RuntimeScope
+	turnId: string
+	request: QuestionRequest
+}
+
 type ForeignTurn = {
 	scope: RuntimeScope
+	turnId: string
 	held: Map<string, ChatMessage>
 	streamed: Map<string, number>
 	hasWritten: boolean
@@ -46,9 +54,10 @@ type ForeignTranscript = Pick<
 
 export type ForeignTurns = {
 	claim: (scope: RuntimeScope) => void
-	render: (scope: RuntimeScope, event: AgentEvent) => void
+	render: (scope: RuntimeScope, turn: EventTurn, event: AgentEvent) => void
 	speakersIn: (conversationId: string) => ForeignSpeaker[]
 	scopeAsking: (id: string) => RuntimeScope | null
+	questionAsking: (id: string) => ForeignQuestion | null
 	release: (scope: RuntimeScope, id: string) => void
 }
 
@@ -63,7 +72,7 @@ export const createForeignTurns = (
 	const resolved = new Set<string>()
 	const turns = new Map<string, ForeignTurn>()
 
-	const turnAt = (scope: RuntimeScope): ForeignTurn => {
+	const turnAt = (scope: RuntimeScope, turnId: string): ForeignTurn => {
 		const key = keyOf(scope)
 		const known = turns.get(key)
 		if (known) {
@@ -71,6 +80,7 @@ export const createForeignTurns = (
 		}
 		const turn: ForeignTurn = {
 			scope,
+			turnId,
 			held: new Map(),
 			streamed: new Map(),
 			hasWritten: false,
@@ -282,9 +292,9 @@ export const createForeignTurns = (
 			claimed.add(keyOf(scope))
 			turns.delete(keyOf(scope))
 		},
-		render: (scope, event) => {
+		render: (scope, { turnId }, event) => {
 			if (!claimed.has(keyOf(scope))) {
-				apply(turnAt(scope), event)
+				apply(turnAt(scope, turnId), event)
 			}
 		},
 		speakersIn: (conversationId) =>
@@ -296,6 +306,15 @@ export const createForeignTurns = (
 				({ speaker }) =>
 					speaker?.permission?.id === id || speaker?.question?.id === id,
 			)?.scope ?? null,
+		questionAsking: (id) => {
+			const asking = [...turns.values()].find(
+				({ speaker }) => speaker?.question?.id === id,
+			)
+			const request = asking?.speaker?.question
+			return asking && request
+				? { scope: asking.scope, turnId: asking.turnId, request }
+				: null
+		},
 		release: (scope, id) => {
 			const turn = turns.get(keyOf(scope))
 			if (turn) {

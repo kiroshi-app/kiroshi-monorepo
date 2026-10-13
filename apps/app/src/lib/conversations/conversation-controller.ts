@@ -11,7 +11,7 @@ import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
 import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
-import type { Conversation, MessagePin } from "./store-contract"
+import type { Conversation, MessagePin, NewUserMessage } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
 	CompanionArrival,
@@ -171,6 +171,8 @@ export type ConversationControllerOptions = {
 }
 
 type Seating = "held" | "unknown" | "unreadable"
+
+type AnswerPlace = Pick<NewUserMessage, "conversationId" | "turnId">
 
 type OpenTurn = {
 	id: string
@@ -819,7 +821,7 @@ export const createConversationController = (
 			return
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
-			foreignTurns.render(scope, event)
+			foreignTurns.render(scope, turn, event)
 			sync()
 		}
 	}
@@ -1294,13 +1296,12 @@ export const createConversationController = (
 	}
 
 	const recordAnswers = (
-		held: Speaker,
+		{ conversationId, turnId }: AnswerPlace,
 		request: QuestionRequest,
 		answers: QuestionAnswers,
 	) => {
-		const conversationId = conversation?.id
 		const content = answeredText(request, answers)
-		if (!conversationId || content.length === 0) {
+		if (content.length === 0) {
 			return
 		}
 		const id = newId()
@@ -1311,7 +1312,7 @@ export const createConversationController = (
 				store.appendUserMessage({
 					id,
 					conversationId,
-					turnId: held.turn.id,
+					turnId,
 					authorBotId: null,
 					repliedToMessageId,
 					content,
@@ -1321,7 +1322,7 @@ export const createConversationController = (
 				transcript.append({
 					id,
 					conversationId,
-					turnId: held.turn.id,
+					turnId,
 					role: "user",
 					content,
 					completion: "complete",
@@ -1346,18 +1347,31 @@ export const createConversationController = (
 		try {
 			await send()
 			foreignTurns.release(scope, id)
+			return true
 		} catch (reason) {
 			noteSpeakerFailure(scope.botId, toTransportError(reason))
+			return false
+		} finally {
+			sync()
 		}
-		sync()
 	}
 
 	const answer = async (id: string, answers: QuestionAnswers) => {
-		const foreign = foreignTurns.scopeAsking(id)
+		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
-			await answerForeign(foreign, id, () =>
-				driver.answerQuestion(foreign, id, answers),
+			const isAccepted = await answerForeign(foreign.scope, id, () =>
+				driver.answerQuestion(foreign.scope, id, answers),
 			)
+			if (isAccepted) {
+				recordAnswers(
+					{
+						conversationId: foreign.scope.conversationId,
+						turnId: foreign.turnId,
+					},
+					foreign.request,
+					answers,
+				)
+			}
 			return
 		}
 		const held = speakerAsked(id)
@@ -1378,7 +1392,14 @@ export const createConversationController = (
 			sync()
 			return
 		}
-		recordAnswers(held, pending.request, answers)
+		const openId = conversation?.id
+		if (openId) {
+			recordAnswers(
+				{ conversationId: openId, turnId: held.turn.id },
+				pending.request,
+				answers,
+			)
+		}
 		releasePrompt(held, id)
 	}
 

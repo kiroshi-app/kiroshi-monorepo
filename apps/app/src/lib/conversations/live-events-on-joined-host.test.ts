@@ -16,8 +16,10 @@ import type {
 	AgentEvent,
 	EventTurn,
 	PermissionRequest,
+	QuestionAnswers,
 	QuestionRequest,
 	RuntimeScope,
+	ScopedEvent,
 } from "../agent/contract"
 import { agentTransport } from "../agent/transport"
 import { createRosterController } from "../bots/roster-controller"
@@ -119,6 +121,8 @@ const { joinedHosts } = await import("../host")
 const JOINED = "garage"
 
 const BOT = "default"
+
+const MEMBER = "member-account"
 
 const settled = () =>
 	act(async () => {
@@ -291,7 +295,9 @@ const NOTHING_TO_PREPARE: Prepare = async () => undefined
 const openSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
-	const controller = createChatController(driver, store)
+	const controller = createChatController(driver, store, {
+		senderAccountId: () => MEMBER,
+	})
 	const detach = controller.attach()
 	const chat = await store.mainChat(BOT, null)
 	await prepare({ store, driver, conversationId: chat.id, botId: BOT })
@@ -320,7 +326,9 @@ const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 		botIds: [bot?.id ?? ""],
 	})
 	const botId = bot?.id ?? ""
-	const controller = createConversationController(driver, store)
+	const controller = createConversationController(driver, store, {
+		senderAccountId: () => MEMBER,
+	})
 	const detach = controller.attach()
 	await prepare({ store, driver, conversationId: conversation.id, botId })
 	await act(() => controller.open(conversation))
@@ -1087,9 +1095,10 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("shows the approval in a solo chat, answers it with the foreign scope, and closes it once resolved", async () => {
-		const { controller, driver, detach, botId, conversationId } =
+		const { store, controller, driver, detach, botId, conversationId } =
 			await openSoloChat()
 		const respond = vi.spyOn(driver, "respondToPermission")
+		const append = vi.spyOn(store, "appendUserMessage")
 		const scope = foreignScope(conversationId)
 		const turn = storedTurn(conversationId)
 
@@ -1102,6 +1111,7 @@ describe("a prompt raised by a turn the other Mac started", () => {
 		await act(() => controller.respond(PERMISSION.id, "allowOnce"))
 
 		expect(respond).toHaveBeenCalledWith(scope, PERMISSION.id, "allowOnce")
+		expect(append).not.toHaveBeenCalled()
 
 		await emitLocally("agent://event", {
 			scope,
@@ -1135,11 +1145,12 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("keeps the question open in a solo chat and raises a notice when the answer is refused", async () => {
-		const { controller, driver, detach, botId, conversationId } =
+		const { store, controller, driver, detach, botId, conversationId } =
 			await openSoloChat()
 		vi.spyOn(driver, "answerQuestion").mockRejectedValueOnce(
 			new Error("relay down"),
 		)
+		const append = vi.spyOn(store, "appendUserMessage")
 		const scope = foreignScope(conversationId)
 		const turn = storedTurn(conversationId)
 		await emitLocally("agent://event", { scope, turn, event: ASKED_QUESTION })
@@ -1148,9 +1159,133 @@ describe("a prompt raised by a turn the other Mac started", () => {
 
 		expect(controller.stateFor(botId).foreignTurn?.question).toEqual(QUESTION)
 		expect(controller.stateFor(botId).errors).not.toEqual([])
+		expect(append).not.toHaveBeenCalled()
 		detach()
 	})
+
+	it("records the answer to a question of a turn opened elsewhere and shows it in the thread", async () => {
+		const answered = await answerForeignQuestion({ open: openSoloChat })
+
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
+	})
+
+	it("records the answer of a member on the joined host and shows it in the thread", async () => {
+		const answered = await answerForeignQuestion({
+			open: openSoloChat,
+			ask: askOnJoinedHost,
+		})
+
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
+	})
+
+	it("records nothing when the answer to a foreign question is empty", async () => {
+		const answered = await answerForeignQuestion({
+			open: openSoloChat,
+			answers: {},
+		})
+
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
+	})
+
+	it("records the answer to a question of a turn opened elsewhere and shows it in the room", async () => {
+		const answered = await answerForeignQuestion({ open: openRoom })
+
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
+	})
+
+	it("records nothing in the room when the answer to a foreign question is refused", async () => {
+		const answered = await answerForeignQuestion({
+			open: openRoom,
+			deliver: REFUSED,
+		})
+
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
+	})
+
+	it("records nothing in the room when the answer to a foreign question is empty", async () => {
+		const answered = await answerForeignQuestion({
+			open: openRoom,
+			answers: {},
+		})
+
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
+	})
 })
+
+type AskForeign = (scoped: ScopedEvent) => Promise<void>
+
+const askLocally: AskForeign = (scoped) => emitLocally("agent://event", scoped)
+
+const askOnJoinedHost: AskForeign = async (scoped) => {
+	await joinHost()
+	await emitOnHost("agent://event", scoped)
+}
+
+const ACCEPTED = () => Promise.resolve()
+
+const REFUSED = () => Promise.reject(new Error("relay down"))
+
+type ForeignAnswering = {
+	open: typeof openSoloChat | typeof openRoom
+	ask?: AskForeign
+	answers?: QuestionAnswers
+	deliver?: () => Promise<void>
+}
+
+const answerForeignQuestion = async ({
+	open,
+	ask = askLocally,
+	answers = ANSWERS,
+	deliver = ACCEPTED,
+}: ForeignAnswering) => {
+	const { store, controller, driver, detach, botId, conversationId } =
+		await open()
+	vi.spyOn(driver, "answerQuestion").mockImplementation(deliver)
+	const append = vi.spyOn(store, "appendUserMessage")
+	await ask({
+		scope: { ...foreignScope(conversationId), botId },
+		turn: storedTurn(conversationId),
+		event: ASKED_QUESTION,
+	})
+
+	await act(() => controller.answer(QUESTION.id, answers))
+	await settled()
+	detach()
+
+	const bubble = controller
+		.getState()
+		.messages.find(
+			({ repliedToMessageId }) => repliedToMessageId === QUESTION_ROW_ID,
+		)
+	return { append, bubble, conversationId }
+}
+
+const answerStoredIn = (conversationId: string) =>
+	expect.objectContaining({
+		conversationId,
+		turnId: "turn-of-another-window",
+		authorBotId: null,
+		repliedToMessageId: QUESTION_ROW_ID,
+		content: "North",
+	})
+
+const ANSWER_BUBBLE = {
+	role: "user",
+	content: "North",
+	authorAccountId: MEMBER,
+}
 
 type QuestionShown = {
 	messages: TranscriptMessage[]

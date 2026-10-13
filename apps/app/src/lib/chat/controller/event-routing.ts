@@ -54,7 +54,7 @@ export const createEventRouting = (
 
 	const renderForeign = ({ scope, turn, event }: ScopedEvent) => {
 		if (scope && turn && isShowing(turn.conversationId)) {
-			foreignTurns.render(scope, event)
+			foreignTurns.render(scope, turn, event)
 			botsShowing(turn.conversationId).forEach(showForeignTurn)
 		}
 	}
