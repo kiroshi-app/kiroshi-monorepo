@@ -12,6 +12,7 @@ import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -86,7 +87,7 @@ const mountApp = async () => {
 	harness.store = store
 	harness.driver = createFakeChatDriver({ stepMs: 1 })
 	await seedRoster(store)
-	render(createElement(App))
+	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle(MOUNT_MS)
 }
 
