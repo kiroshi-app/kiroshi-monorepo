@@ -7,7 +7,6 @@ import type {
 	BotSkillDraft,
 	BotSkillItem,
 } from "@workspace/ui/components/bot-settings"
-import { Icons } from "@workspace/ui/components/icons"
 import {
 	displayNameOf,
 	InitialsAvatar,
@@ -24,15 +23,12 @@ import {
 	useMcpSession,
 } from "@workspace/ui/components/plugin-settings/use-mcp-session"
 import { useSkillSession } from "@workspace/ui/components/plugin-settings/use-skill-session"
-import { ProfilePictureField } from "@workspace/ui/components/profile-picture-field"
 import { SettingsDialogShell } from "@workspace/ui/components/settings-dialog-shell"
-import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	SETTINGS_PANEL_CLASS,
 	SettingsRailItem,
 	SettingsScrollingPanel,
 } from "@workspace/ui/components/settings-rail"
-import { PICTURE_FIELD_SIZE } from "@workspace/ui/components/settings-styles"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import {
 	AccountPanel,
@@ -44,13 +40,13 @@ import { NotificationFields } from "@workspace/ui/components/user-settings-dialo
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
 import type { Language } from "@workspace/ui/lib/i18n"
 
-const FIRST_TAB = "profile"
-
 const BREADCRUMB_AVATAR_SIZE = 32
 
 const APPLICATIONS_TAB = "mcp"
 
 const ACCOUNT_TAB = "account"
+
+const APPEARANCE_TAB = "appearance"
 
 const NO_APPLICATIONS: ApplicationsSection = {
 	servers: [],
@@ -64,10 +60,8 @@ type UserSettingsDialogProps = {
 	onClose: () => void
 	value: UserSettingsValue
 	onValueChange: (value: UserSettingsValue) => void
-	onPictureUpload: (file: File) => void
 	language: Language | null
 	onLanguageChange: (language: Language | null) => void
-	onPictureRemove?: () => void
 	skills: BotSkillItem[]
 	onSkillCreate: (draft: BotSkillDraft, isPreloaded: boolean) => void
 	onSkillChange: (id: string, draft: BotSkillDraft) => void
@@ -86,8 +80,6 @@ const UserSettingsDialog = ({
 	onClose,
 	value,
 	onValueChange,
-	onPictureUpload,
-	onPictureRemove,
 	language,
 	onLanguageChange,
 	skills,
@@ -130,12 +122,6 @@ const UserSettingsDialog = ({
 	const patch = (fields: Partial<UserSettingsValue>) =>
 		onValueChange({ ...value, ...fields })
 
-	const picture = value.image ? (
-		<InitialsAvatar image={value.image} size={PICTURE_FIELD_SIZE} />
-	) : (
-		<Icons.User aria-hidden="true" className="size-6 text-muted-foreground" />
-	)
-
 	return (
 		<SettingsDialogShell
 			breadcrumb={t("breadcrumb.title")}
@@ -153,12 +139,6 @@ const UserSettingsDialog = ({
 			pages={pages}
 			rail={(iconsOnly) => (
 				<>
-					<SettingsRailItem
-						icon="User"
-						iconsOnly={iconsOnly}
-						label={t("rail.profile")}
-						value={FIRST_TAB}
-					/>
 					{account ? (
 						<SettingsRailItem
 							icon="Cloud"
@@ -171,7 +151,7 @@ const UserSettingsDialog = ({
 						icon="Image"
 						iconsOnly={iconsOnly}
 						label={t("rail.appearance")}
-						value="appearance"
+						value={APPEARANCE_TAB}
 					/>
 					<SettingsRailItem
 						icon="Bell"
@@ -212,35 +192,15 @@ const UserSettingsDialog = ({
 				applications: mcpSession,
 				history: historySession,
 			}}
-			tab={tab ?? FIRST_TAB}
+			tab={tab ?? (account ? ACCOUNT_TAB : APPEARANCE_TAB)}
 		>
-			<SettingsScrollingPanel value={FIRST_TAB}>
-				<ProfilePictureField
-					fileLabel={t("profile.picture.file")}
-					isPlaceholder={!value.image}
-					onPick={onPictureUpload}
-					onRemove={value.image ? onPictureRemove : undefined}
-					pickLabel={t(
-						value.image ? "profile.picture.change" : "profile.picture.add",
-					)}
-					preview={picture}
-					removeLabel={t("profile.picture.remove")}
-				/>
-				<SettingsField
-					label={t("profile.name.label")}
-					onValueChange={(name) => patch({ name })}
-					placeholder={t("profile.name.placeholder")}
-					value={value.name}
-				/>
-			</SettingsScrollingPanel>
-
 			{account ? (
 				<SettingsScrollingPanel value={ACCOUNT_TAB}>
 					<AccountPanel {...account} image={value.image} />
 				</SettingsScrollingPanel>
 			) : null}
 
-			<SettingsScrollingPanel value="appearance">
+			<SettingsScrollingPanel value={APPEARANCE_TAB}>
 				<AppearanceFields
 					colorScheme={value.colorScheme}
 					onColorSchemeChange={(colorScheme) => patch({ colorScheme })}

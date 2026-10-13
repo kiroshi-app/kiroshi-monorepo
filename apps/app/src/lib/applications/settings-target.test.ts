@@ -81,7 +81,6 @@ const OpenedSettings = ({ application }: SettingsProps) =>
 			language: null,
 			onClose: vi.fn(),
 			onLanguageChange: vi.fn(),
-			onPictureUpload: vi.fn(),
 			onValueChange: vi.fn(),
 			open: true,
 			tab: APPLICATIONS_TAB,

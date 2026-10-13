@@ -4,7 +4,6 @@ import { expect, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	opaque,
-	PICKED_PICTURE_FILE,
 	slotIn,
 	slotsIn,
 	UPLOADED_AVATAR_IMAGE,
@@ -152,7 +151,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face — the same avatar the sidebar chip draws, so the dialog is visibly the one that chip opened — their name and the word Settings. Down the left is a rail of four groups: Profile, what the app calls them and the picture it shows; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks. It opens on Profile every time. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence — closing it is never a question. Two things do not travel through the value: the picture, whose file is handed to the host to store and write a URL back for, and the language, which travels as a prop of its own because the translation runtime is what the whole app reads from.",
+					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face, the same avatar the sidebar chip draws so the dialog is visibly the one that chip opened, then their name and the word Settings. Down the left is a rail: Account, how they are signed in to Kiroshi; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks; then Skills, Applications and History for their own plugin. It opens on the tab the host asks for, else on Account, or on Appearance for a host that passes no account. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence, so closing it is never a question. The language does not travel through the value: it is a prop of its own because the translation runtime is what the whole app reads from.",
 			},
 		},
 	},
@@ -161,8 +160,6 @@ const meta = preview.meta({
 		value: FILLED_USER,
 		onClose: fn(),
 		onValueChange: fn(),
-		onPictureUpload: fn(),
-		onPictureRemove: fn(),
 		language: null,
 		onLanguageChange: fn(),
 		skills: BOT_SKILLS,
@@ -180,26 +177,50 @@ const meta = preview.meta({
 })
 
 export const Default = meta.story({
+	args: { account: accountIn(SIGNED_IN) },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The dialog as it opens on a reader who has filled their name in. Check that it lands on Profile with the display name in reach, that the breadcrumb wears their face and names them, and that typing emits a change immediately — nothing here batches or waits. Pick `Appearance` for the colour scheme, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `WithPicture` for the control that takes a picture, `Empty` for the reader who never filled anything in, `Skills` and `History` for the person's own plugin.",
+					"The dialog as it opens on a signed in reader. Check that it lands on Account, first on the rail, that the breadcrumb wears their face and names them, and that the card draws the same avatar. Pick `OpensOnAppearanceWithoutAnAccount` for a host that passes no account, `Appearance` for the colour scheme, `Notifications` for what the app tells them about, `LanguageTab` for the language the app is read in, `Empty` for the reader who never filled anything in, `Skills` and `History` for the person's own plugin.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
+	play: async () => {
 		const dialog = await dialogIn()
 		await expect(dialog).toHaveAccessibleName("Ada Martin Settings")
 
-		const profile = within(dialog).getByRole("tab", { name: "Profile" })
-		await expect(profile).toHaveAttribute("aria-selected", "true")
-		await expect(slotsIn(dialog, "user-avatar")).toHaveLength(1)
+		await expect(within(dialog).queryByRole("tab", { name: "Profile" })).toBe(
+			null,
+		)
+		await expect(
+			within(dialog).getByRole("tab", { name: "Account" }),
+		).toHaveAttribute("aria-selected", "true")
 
-		const name = within(dialog).getByLabelText("Display name")
-		await userEvent.type(name, "!")
-		await expect(args.onValueChange).toHaveBeenCalledTimes(1)
-		await expect(name).toHaveValue("Ada Martin!")
+		const panel = await accountPanelIn(dialog)
+		await expect(slotsIn(dialog, "user-avatar")).toHaveLength(2)
+		await expect(slotsIn(panel, "user-avatar")).toHaveLength(1)
+	},
+})
+
+export const OpensOnAppearanceWithoutAnAccount = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that passes no account. Check that the rail draws no Account item and that the dialog lands on Appearance, the first group left. Pick `Default` for the signed in reader.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+
+		await expect(within(dialog).queryByRole("tab", { name: "Account" })).toBe(
+			null,
+		)
+		await expect(
+			within(dialog).getByRole("tab", { name: "Appearance" }),
+		).toHaveAttribute("aria-selected", "true")
 	},
 })
 
@@ -209,7 +230,7 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader who has never filled anything in. Check that the breadcrumb reads `You` rather than a gap before the chevron, that the avatar falls back to that name's initial instead of a blank circle, that the picture control heads the group as a dashed circle with a person glyph and offers nothing to remove, and that the field itself stays empty with a placeholder — the fallback is what the app calls them, never a value written into the record. Pick `Default` for the named reader.",
+					"A reader who has never filled anything in. Check that the breadcrumb reads `You` rather than a gap before the chevron, and that the avatar falls back to that name's initial instead of a blank circle. The fallback is what the app calls them, never a value written into the record. Pick `Default` for the named reader.",
 			},
 		},
 	},
@@ -217,40 +238,7 @@ export const Empty = meta.story({
 		const dialog = await dialogIn()
 
 		await expect(dialog).toHaveAccessibleName("You Settings")
-		await expect(
-			within(dialog).getByRole("button", { name: "Add picture" }),
-		).toBeVisible()
-		await expect(
-			within(dialog).queryByRole("button", { name: "Remove picture" }),
-		).toBeNull()
-		await expect(within(dialog).getByLabelText("Display name")).toHaveValue("")
-	},
-})
-
-export const WithPicture = meta.story({
-	args: { value: PICTURED_USER },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The round control that takes a picture, on a reader who already uploaded one. Check that it heads the Profile group above the display name and against the leading edge, that a picked file is handed to the host as a file and that the dialog changes nothing it holds — the picture only moves once the host writes a URL back. Remove is the same deal: it is emitted, never applied here. The same control takes a drop and a paste. Pick `Default` for the reader with no picture.",
-			},
-		},
-	},
-	play: async ({ args, userEvent }) => {
-		const dialog = await dialogIn()
-
-		await userEvent.upload(
-			within(dialog).getByLabelText("Profile picture file"),
-			PICKED_PICTURE_FILE,
-		)
-		await expect(args.onPictureUpload).toHaveBeenCalledWith(PICKED_PICTURE_FILE)
-
-		await userEvent.click(
-			within(dialog).getByRole("button", { name: "Remove picture" }),
-		)
-		await expect(args.onPictureRemove).toHaveBeenCalledTimes(1)
-		await expect(args.onValueChange).not.toHaveBeenCalled()
+		await expect(slotsIn(dialog, "user-avatar")).toHaveLength(1)
 	},
 })
 
@@ -350,7 +338,7 @@ export const Skills = meta.story({
 		docs: {
 			description: {
 				story:
-					"The skills of the person's own plugin — the same panel a companion's settings draws, on the plugin every companion reads before it answers. Check that opening one swaps the whole body for the editor, and that the way back restores the rail — on Profile, as the companion dialog does after the same trip. Pick `NoSkills` for the plugin that holds none yet.",
+					"The skills of the person's own plugin, the same panel a companion's settings draws, on the plugin every companion reads before it answers. Check that opening one swaps the whole body for the editor, and that the way back restores the rail. Pick `NoSkills` for the plugin that holds none yet.",
 			},
 		},
 	},
@@ -578,14 +566,14 @@ export const SignedOut = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3.1: a reader who never signed in to Kiroshi. Check that Account sits second on the rail, that the panel explains what signing in buys, that there is no field to fill, and that Sign in with your browser carries the external link mark and calls back once. Pick `Waiting` for the moment after the press.",
+					"Artboard 3.1: a reader who never signed in to Kiroshi. Check that Account heads the rail, that the panel explains what signing in buys, that there is no field to fill, and that Sign in with your browser carries the external link mark and calls back once. Pick `Waiting` for the moment after the press.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const dialog = await dialogIn()
 		const tabs = within(dialog).getAllByRole("tab")
-		await expect(tabs[1]).toHaveAccessibleName("Account")
+		await expect(tabs[0]).toHaveAccessibleName("Account")
 
 		const panel = await accountPanelIn(dialog)
 		await expect(
@@ -709,7 +697,7 @@ export const SignedInWithPicture = meta.story({
 		docs: {
 			description: {
 				story:
-					"A reader signed in who set a picture on Profile: the card's avatar wears that picture, the same one the breadcrumb shows, instead of their initials.",
+					"A reader signed in whose stored record holds a picture: the card's avatar wears that picture, the same one the breadcrumb shows, instead of their initials.",
 			},
 		},
 	},
