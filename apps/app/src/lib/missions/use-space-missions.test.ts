@@ -8,6 +8,8 @@ import { aMission } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
 import { useSpaceMissions } from "./use-space-missions"
 
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
 vi.mock("./missions-transport", () => ({
 	missionsTransport: {
 		spaceFeed: vi.fn(),
@@ -43,7 +45,9 @@ describe("useSpaceMissions", () => {
 	afterEach(cleanup)
 
 	it("reads the feed of the space from the local midnight", async () => {
-		const { result } = renderHook(() => useSpaceMissions("s-1"))
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
@@ -59,7 +63,9 @@ describe("useSpaceMissions", () => {
 			announce = listener
 			return Promise.resolve(() => undefined)
 		})
-		const { result } = renderHook(() => useSpaceMissions("s-1"))
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
@@ -76,7 +82,9 @@ describe("useSpaceMissions", () => {
 			})
 		})
 
-		expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"])
+		await waitFor(() =>
+			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
+		)
 		expect(result.current.inProgress).toEqual([])
 		expect(result.current.waitingCount).toBe(1)
 		expect(readSpaceFeed).toHaveBeenCalledTimes(2)
@@ -88,7 +96,9 @@ describe("useSpaceMissions", () => {
 			announce = listener
 			return Promise.resolve(() => undefined)
 		})
-		const { result } = renderHook(() => useSpaceMissions("s-1"))
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
@@ -105,12 +115,16 @@ describe("useSpaceMissions", () => {
 			})
 		})
 
-		expect(idsOf(result.current.earlierToday)).toEqual(["m-1"])
+		await waitFor(() =>
+			expect(idsOf(result.current.earlierToday)).toEqual(["m-1"]),
+		)
 		expect(result.current.inProgress).toEqual([])
 	})
 
 	it("flags a rejected read and keeps the missions it held", async () => {
-		const { result } = renderHook(() => useSpaceMissions("s-1"))
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
@@ -123,7 +137,9 @@ describe("useSpaceMissions", () => {
 	})
 
 	it("issues no read and holds empty groups without a space", () => {
-		const { result } = renderHook(() => useSpaceMissions(null))
+		const { result } = renderHook(() => useSpaceMissions(null), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		expect(readSpaceFeed).not.toHaveBeenCalled()
 		expect(result.current.waitingOnYou).toEqual([])
@@ -142,7 +158,10 @@ describe("useSpaceMissions", () => {
 		readSpaceFeed.mockResolvedValueOnce([ELSEWHERE])
 		const { result, rerender } = renderHook(
 			({ spaceId }) => useSpaceMissions(spaceId),
-			{ initialProps: { spaceId: "s-1" } },
+			{
+				wrapper: createQueryTestWrapper().wrapper,
+				initialProps: { spaceId: "s-1" },
+			},
 		)
 		rerender({ spaceId: "s-2" })
 		await waitFor(() =>

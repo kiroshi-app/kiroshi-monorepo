@@ -452,7 +452,7 @@ describe("PRF5 chat open baseline", () => {
 			    "writesAhead": 0,
 			  },
 			  "coldOpen": {
-			    "commits": 6,
+			    "commits": 7,
 			    "elapsedMs": 10,
 			    "storeCalls": [
 			      "pinnedMessages",

@@ -2,7 +2,7 @@
 
 import type { EventCallback } from "@tauri-apps/api/event"
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { StrictMode } from "react"
+import { createElement, type PropsWithChildren, StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Mission, MissionInSpace } from "./mission-contract"
@@ -17,6 +17,8 @@ import {
 	type JoinedSpaceReconnected,
 } from "../bindings"
 import type { FailureFacts } from "../failure-report"
+import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { type HostSocket, raiseRefusalNotice } from "../host/http"
 import { createJoinedHosts, type JoinedHosts } from "../host/joined-hosts"
 
@@ -65,8 +67,16 @@ vi.mock("../host", () => {
 			joinedHosts.invoke(...args)) as JoinedHosts["invoke"],
 		listen: ((...args: Parameters<JoinedHosts["listen"]>) =>
 			joinedHosts.listen(...args)) as JoinedHosts["listen"],
+		onHostReconnected: ((...args: Parameters<JoinedHosts["onReconnected"]>) =>
+			joinedHosts.onReconnected(...args)) as JoinedHosts["onReconnected"],
 	}
 })
+
+const reconnectingQueryWrapper = () => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	invalidateOnHostReconnect(queryClient)
+	return wrapper
+}
 
 const buildJoinedHosts = (): JoinedHosts =>
 	createJoinedHosts({
@@ -221,7 +231,9 @@ const joinGarage = async () => {
 
 const activityPanelOnGarage = async () => {
 	await joinGarage()
-	const rendered = renderHook(() => useMissions("c-1"))
+	const rendered = renderHook(() => useMissions("c-1"), {
+		wrapper: reconnectingQueryWrapper(),
+	})
 	await waitFor(() =>
 		expect(objectivesOf(rendered.result.current.open)).toEqual([
 			HOST_MISSION.objective,
@@ -248,10 +260,13 @@ describe("missions read on a joined host", () => {
 		const localRead = deferred<unknown>()
 		wire.localAnswer = async (command) =>
 			command === "conversation_local_ids" ? [] : localRead.promise
-		const { result } = renderHook(() => ({
-			conversation: useMissions("c-1"),
-			space: useSpaceMissions("space-on-host"),
-		}))
+		const { result } = renderHook(
+			() => ({
+				conversation: useMissions("c-1"),
+				space: useSpaceMissions("space-on-host"),
+			}),
+			{ wrapper: reconnectingQueryWrapper() },
+		)
 
 		await act(() => joinedHosts.activate("garage"))
 		await openLastSocket()
@@ -279,7 +294,9 @@ describe("missions read on a joined host", () => {
 		})
 		await joinedHosts.activate("garage")
 		await openLastSocket()
-		const { result } = renderHook(() => useMissions("c-1"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await waitFor(() =>
 			expect(objectivesOf(result.current.open)).toEqual([
 				HOST_MISSION.objective,
@@ -306,7 +323,9 @@ describe("missions read on a joined host", () => {
 		}
 		await joinedHosts.activate("garage")
 		await openLastSocket()
-		const { result } = renderHook(() => useMissionMarks("space-on-host"))
+		const { result } = renderHook(() => useMissionMarks("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 
 		await waitFor(() =>
 			expect(
@@ -320,7 +339,9 @@ describe("missions read on a joined host", () => {
 	it("drops the marks while the host is down and reads them again once it is back", async () => {
 		await joinedHosts.activate("garage")
 		await openLastSocket()
-		const { result } = renderHook(() => useMissionMarks("space-on-host"))
+		const { result } = renderHook(() => useMissionMarks("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await waitFor(() => expect(result.current).toHaveLength(1))
 
 		dropLastSocket()
@@ -354,7 +375,10 @@ describe("missions read on a joined host", () => {
 		await openLastSocket()
 		const { result, rerender } = renderHook(
 			({ spaceId }) => useMissionMarks(spaceId),
-			{ initialProps: { spaceId: "space-on-host" } },
+			{
+				wrapper: reconnectingQueryWrapper(),
+				initialProps: { spaceId: "space-on-host" },
+			},
 		)
 		await waitFor(() =>
 			expect(result.current.map(({ mission }) => mission.id)).toEqual([
@@ -377,7 +401,9 @@ describe("missions read on a joined host", () => {
 
 	const marksOnGarage = async () => {
 		await joinGarage()
-		const rendered = renderHook(() => useMissionMarks("space-on-host"))
+		const rendered = renderHook(() => useMissionMarks("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await waitFor(() =>
 			expect(markIdsOf(rendered.result.current)).toEqual([HOST_MISSION.id]),
 		)
@@ -455,7 +481,9 @@ describe("missions read on a joined host", () => {
 
 	it("reads the Missions tab again when the relay of the joined Space reopens", async () => {
 		await joinGarage()
-		const { result } = renderHook(() => useSpaceMissions("space-on-host"))
+		const { result } = renderHook(() => useSpaceMissions("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await waitFor(() => expect(result.current.inProgress).toHaveLength(1))
 		const reopened = missionOf("m-reopened", "Ship the parser")
 		wire.hostAnswer = answering({
@@ -473,7 +501,9 @@ describe("missions read on a joined host", () => {
 
 	it("reads no mission again when the relay of another Space reopens", async () => {
 		await activityPanelOnGarage()
-		renderHook(() => useSpaceMissions("space-on-host"))
+		renderHook(() => useSpaceMissions("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await settled()
 		const before = [readsOf("mission_list"), readsOf("mission_space_feed")]
 
@@ -487,7 +517,9 @@ describe("missions read on a joined host", () => {
 
 	it("reads the missions once when the socket and the relay reopen together", async () => {
 		await activityPanelOnGarage()
-		renderHook(() => useSpaceMissions("space-on-host"))
+		renderHook(() => useSpaceMissions("space-on-host"), {
+			wrapper: reconnectingQueryWrapper(),
+		})
 		await settled()
 		const before = [readsOf("mission_list"), readsOf("mission_space_feed")]
 
@@ -538,8 +570,14 @@ const useTwoMissionFeedSubscribers = () => [
 
 const feedsOnGarageInStrictMode = async () => {
 	await joinGarage()
+	const QueryWrapper = reconnectingQueryWrapper()
 	const rendered = renderHook(useTwoMissionFeedSubscribers, {
-		wrapper: StrictMode,
+		wrapper: ({ children }: PropsWithChildren) =>
+			createElement(
+				StrictMode,
+				null,
+				createElement(QueryWrapper, null, children),
+			),
 	})
 	await waitFor(() =>
 		expect(rendered.result.current.every(({ hasFailed }) => hasFailed)).toBe(

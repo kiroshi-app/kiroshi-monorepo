@@ -12,6 +12,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type { HostSocket } from "@/lib/host/http"
 import { useMissions } from "@/lib/missions/use-missions"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
 	createJoinedSpacesController,
 	openRowIdOf,
@@ -182,32 +183,35 @@ const localConversationOpen = async () => {
 		}),
 		setLastSpace: vi.fn(async () => undefined),
 	}
-	const view = renderHook(() => {
-		const spacesState = useControllerState(spaces)
-		const joinedState = useControllerState(joined)
-		const hostsState = useControllerState(joinedHosts)
-		const rosterState = useControllerState(roster)
-		const { selectedSpaceId } = spacesState
-		const openRowId = openRowIdOf(joinedState, selectedSpaceId)
-		const core = {
-			joinedSpaces: {
-				state: joinedState,
-				controller: joined,
-				hosts: hostsState,
-			},
-			roster: { state: rosterState, controller: roster },
-			spaces: { state: spacesState, controller: spaces },
-			user: { controller: user },
-		} as never
-		useSpaceLoading({ core, scopes: { selectedSpaceId, openRowId } } as never)
-		const rosterView = useRosterView({
-			core,
-			drivers: { missionMarks: [], waitingMissionIds: new Set() } as never,
-			openRowId,
-		})
-		useMissions(rosterView.selectedConversation?.id ?? null)
-		return rosterView
-	})
+	const view = renderHook(
+		() => {
+			const spacesState = useControllerState(spaces)
+			const joinedState = useControllerState(joined)
+			const hostsState = useControllerState(joinedHosts)
+			const rosterState = useControllerState(roster)
+			const { selectedSpaceId } = spacesState
+			const openRowId = openRowIdOf(joinedState, selectedSpaceId)
+			const core = {
+				joinedSpaces: {
+					state: joinedState,
+					controller: joined,
+					hosts: hostsState,
+				},
+				roster: { state: rosterState, controller: roster },
+				spaces: { state: spacesState, controller: spaces },
+				user: { controller: user },
+			} as never
+			useSpaceLoading({ core, scopes: { selectedSpaceId, openRowId } } as never)
+			const rosterView = useRosterView({
+				core,
+				drivers: { missionMarks: [], waitingMissionIds: new Set() } as never,
+				openRowId,
+			})
+			useMissions(rosterView.selectedConversation?.id ?? null)
+			return rosterView
+		},
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
 	await waitFor(() =>
 		expect(view.result.current.selectedConversation?.id).toBe(LOCAL_OPEN_ROOM),
 	)

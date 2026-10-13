@@ -126,6 +126,7 @@ import {
 } from "@/lib/onboarding/sign-in-controller"
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import type { Routine } from "@/lib/routines/routine-contract"
 import { routinesTransport } from "@/lib/routines/routines-transport"
@@ -465,6 +466,7 @@ const settle = () =>
 		for (let round = 0; round < 20; round += 1) {
 			await Promise.resolve()
 		}
+		await new Promise((notified) => setTimeout(notified, 0))
 	})
 
 const raisedNotices = (title: string) =>
@@ -1283,7 +1285,9 @@ describe("ThreadScreen", () => {
 
 	it("opens the routines of a solo companion thread on its main conversation", async () => {
 		updateRoutine.mockResolvedValue({ ...SOLO_ROUTINE, isEnabled: false })
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1304,7 +1308,9 @@ describe("ThreadScreen", () => {
 
 	it("keeps the caption buttons out of the conversation header on Windows", async () => {
 		onCaptionWindow.mockReturnValue(true)
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		const header = within(screen.getByRole("banner"))
@@ -1316,7 +1322,9 @@ describe("ThreadScreen", () => {
 
 	it("leaves a solo companion thread with no main conversation without routines", async () => {
 		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "held" })
-		render(screenOf(withoutMainConversation(thread)))
+		render(screenOf(withoutMainConversation(thread)), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.queryByRole("button", { name: ROUTINES_TOGGLE })).toBeNull()
@@ -1326,7 +1334,9 @@ describe("ThreadScreen", () => {
 
 	it("keeps the transcript a solo companion thread mounted when its main conversation arrives", async () => {
 		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "held" })
-		const { rerender } = render(screenOf(withoutMainConversation(thread)))
+		const { rerender } = render(screenOf(withoutMainConversation(thread)), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		const painted = turnGroups()[0]
@@ -1343,7 +1353,9 @@ describe("ThreadScreen", () => {
 
 	it("tells the reader when the routines of a solo companion thread could not be read", async () => {
 		listRoutines.mockRejectedValue(new Error("refused"))
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1366,7 +1378,9 @@ describe("ThreadScreen", () => {
 			return Promise.resolve(() => undefined)
 		})
 		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1389,7 +1403,9 @@ describe("ThreadScreen", () => {
 
 	it("shows a mission of the conversation under the run that opened it", async () => {
 		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		const card = missionCard()
@@ -1407,6 +1423,7 @@ describe("ThreadScreen", () => {
 			screenOf(
 				withoutRuns(threadOf({ id: "bot-1", name: "Nyx", said: "held" })),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1423,6 +1440,7 @@ describe("ThreadScreen", () => {
 				NO_BOT_RECORDS,
 				openMission,
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1444,7 +1462,9 @@ describe("ThreadScreen", () => {
 			return Promise.resolve(() => undefined)
 		})
 		listMissions.mockResolvedValue({ open: [SOLO_MISSION], done: [] })
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(
@@ -1469,7 +1489,9 @@ describe("ThreadScreen", () => {
 
 	it("keeps a closed mission in the transcript with the state it ended on", async () => {
 		listMissions.mockResolvedValue({ open: [], done: [CLOSED_SOLO_MISSION] })
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		const card = missionCard().querySelector('[data-slot="mission-card"]')
@@ -1482,7 +1504,9 @@ describe("ThreadScreen", () => {
 			open: [{ ...SOLO_MISSION, openedAt: Date.now() - TWO_HOURS_MS }],
 			done: [],
 		})
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1492,7 +1516,9 @@ describe("ThreadScreen", () => {
 
 	it("leaves the transcript without a mission card when the missions could not be read", async () => {
 		listMissions.mockRejectedValue(new Error("refused"))
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(missionCards()).toHaveLength(0)
@@ -1501,7 +1527,9 @@ describe("ThreadScreen", () => {
 
 	it("names the missions when they are the read that failed", async () => {
 		listMissions.mockRejectedValue(new Error("refused"))
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1520,7 +1548,9 @@ describe("ThreadScreen", () => {
 	it("covers both reads with one notice when neither came back", async () => {
 		listRoutines.mockRejectedValue(new Error("refused"))
 		listMissions.mockRejectedValue(new Error("refused"))
-		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })))
+		render(screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openRoutinesPanel()
@@ -1550,7 +1580,9 @@ describe("ThreadScreen", () => {
 			name: "Vex",
 			said: "the second answer",
 		})
-		const { rerender } = render(screenOf(first))
+		const { rerender } = render(screenOf(first), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0])
@@ -1575,7 +1607,9 @@ describe("ThreadScreen", () => {
 			}),
 		})
 		const room = await roomOf({ names: ["Ada"] })
-		const { rerender } = render(screenOf(thread))
+		const { rerender } = render(screenOf(thread), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		expect(left).toEqual([])
 
@@ -1591,12 +1625,15 @@ describe("ThreadScreen", () => {
 			id: "crashed-1",
 			error: { kind: "crashed", code: 1, detail: refusal },
 		}
-		render(createElement(NoticeSurface))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		const { unmount } = render(
 			screenOf(
 				threadOf({ id: "bot-1", name: "Nyx", said: "hi", errors: [reported] }),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1620,6 +1657,7 @@ describe("ThreadScreen", () => {
 					errors: [withoutCode],
 				}),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1634,6 +1672,7 @@ describe("ThreadScreen", () => {
 			screenOf(
 				threadOf({ id: "bot-1", name: "Nyx", said: "hi", errors: [CRASH] }),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1658,15 +1697,19 @@ describe("ThreadScreen", () => {
 			},
 		})
 		const shown = (): BotThread => ({ ...opened, chat: { state, controller } })
-		render(createElement(NoticeSurface))
-		const { unmount } = render(screenOf(shown()))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { unmount } = render(screenOf(shown()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(raisedNotices(CRASH_TITLE)).toHaveLength(1)
 
 		await closeNotice(CRASH_TITLE)
 		unmount()
-		render(screenOf(shown()))
+		render(screenOf(shown()), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(raisedNotices(CRASH_TITLE)).toHaveLength(0)
@@ -1679,8 +1722,12 @@ describe("ThreadScreen", () => {
 			said: "the first answer",
 			errors: [CRASH],
 		})
-		render(createElement(NoticeSurface))
-		const { rerender } = render(screenOf(thread))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { rerender } = render(screenOf(thread), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		rerender(screenOf({ ...thread }))
 		await settle()
@@ -1702,8 +1749,10 @@ describe("ThreadScreen", () => {
 				},
 			}),
 		})
-		render(createElement(NoticeSurface))
-		render(screenOf(thread))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		render(screenOf(thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await closeNotice(CRASH_TITLE)
@@ -1728,8 +1777,12 @@ describe("ThreadScreen", () => {
 			},
 		})
 		const shown = (): BotThread => ({ ...opened, chat: { state, controller } })
-		render(createElement(NoticeSurface))
-		const { rerender } = render(screenOf(shown()))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { rerender } = render(screenOf(shown()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await pressInNotice(CRASH_TITLE, "Restart session")
@@ -1753,8 +1806,12 @@ describe("ThreadScreen", () => {
 			name: "Nyx",
 			said: "the first answer",
 		})
-		render(createElement(NoticeSurface))
-		const { rerender, unmount } = render(screenOf(failing))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { rerender, unmount } = render(screenOf(failing), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		rerender(screenOf(recovered))
 		await settle()
@@ -1783,7 +1840,9 @@ describe("ThreadScreen", () => {
 			0,
 		)
 
-		render(createElement(NoticeSurface))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		render(
 			screenOf({
 				...dismissed,
@@ -1792,6 +1851,7 @@ describe("ThreadScreen", () => {
 					state: { ...later, errors: [SPAWN_FAILURE] },
 				},
 			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1814,8 +1874,12 @@ describe("ThreadScreen", () => {
 			isSettingsOpen: false,
 			onOpenSettings: () => undefined,
 		}
-		render(createElement(NoticeSurface))
-		const { unmount } = render(screenOf(thread))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { unmount } = render(screenOf(thread), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		fireEvent.click(screen.getByRole("button", { name: "Load older messages" }))
@@ -1826,7 +1890,7 @@ describe("ThreadScreen", () => {
 		expect(raisedNotices(READ_TITLE)).toHaveLength(0)
 
 		unmount()
-		render(screenOf(thread))
+		render(screenOf(thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(raisedNotices(READ_TITLE)).toHaveLength(0)
@@ -1849,7 +1913,7 @@ describe("ThreadScreen", () => {
 				pins: async () => [{ message: pinned, blockIndex: 0, pinnedAt: 1 }],
 			}),
 		})
-		render(screenOf(thread))
+		render(screenOf(thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 		await press("Pinned messages, 1 pinned")
 
@@ -1870,7 +1934,7 @@ describe("ThreadScreen", () => {
 				pins: () => Promise.reject(new Error("refused")),
 			}),
 		})
-		render(screenOf(thread))
+		render(screenOf(thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(screen.getByText(PINS_TITLE)).toBeTruthy()
@@ -1882,7 +1946,7 @@ describe("ThreadScreen", () => {
 
 	it("tells the reader which token of a finished turn nobody answered", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -1910,6 +1974,7 @@ describe("ThreadScreen", () => {
 				room.thread,
 				room.bots.map((bot) => ({ ...bot, title: BOT_TITLE })),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1923,6 +1988,7 @@ describe("ThreadScreen", () => {
 			screenOf(room.thread, [
 				{ ...room.bots[0], id: "bot-elsewhere", title: BOT_TITLE },
 			]),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -1932,7 +1998,7 @@ describe("ThreadScreen", () => {
 
 	it("names a run of consecutive messages once and marks its gutter once", async () => {
 		const room = await runRoomOf()
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(nameLineOf(ADA_OPENS.text)).toContain("Ada")
@@ -1943,7 +2009,7 @@ describe("ThreadScreen", () => {
 
 	it("opens a second run with its own name line and gutter avatar when the author changes", async () => {
 		const room = await runRoomOf()
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(
@@ -1955,7 +2021,7 @@ describe("ThreadScreen", () => {
 
 	it("carries the mark of a run on the message that closes it", async () => {
 		const room = await runRoomOf()
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(markOf(ADA_OPENS.text)).toBeNull()
@@ -1968,7 +2034,7 @@ describe("ThreadScreen", () => {
 			names: ["Ada"],
 			spoken: [ASKED_FIRST, ASKED_AGAIN],
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(bubbleShapeOf(ASKED_FIRST.text)).not.toEqual(
@@ -1978,7 +2044,9 @@ describe("ThreadScreen", () => {
 
 	it("shapes the bubble that opens a queued run apart from the one that closes it", async () => {
 		const solo = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
-		render(screenOf(solo.thread()))
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(2)
@@ -1987,13 +2055,17 @@ describe("ThreadScreen", () => {
 
 	it("shapes a lone queued bubble apart from both ends of a queued run", async () => {
 		const grouped = await queuedSoloOf([QUEUED_FIRST, QUEUED_LAST])
-		const run = render(screenOf(grouped.thread()))
+		const run = render(screenOf(grouped.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		const ends = [bubbleShapeOf(QUEUED_FIRST), bubbleShapeOf(QUEUED_LAST)]
 
 		run.unmount()
 		const lone = await queuedSoloOf([QUEUED_FIRST])
-		render(screenOf(lone.thread()))
+		render(screenOf(lone.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getAllByText(WAITING_TO_BE_SENT)).toHaveLength(1)
@@ -2006,7 +2078,7 @@ describe("ThreadScreen", () => {
 			spoken: [REPORTED],
 			readReportedRuns: reportedRunsOf(REPORT_TURN),
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
@@ -2019,7 +2091,7 @@ describe("ThreadScreen", () => {
 			spoken: [REPORTED],
 			readReportedRuns: reportedRunsOf("t-elsewhere"),
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
@@ -2032,7 +2104,7 @@ describe("ThreadScreen", () => {
 			spoken: [STOPPED_BEFORE_WRITING],
 			readReportedRuns: reportedRunsOf("t-stopped"),
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(causeTitles()).toEqual([])
@@ -2045,8 +2117,10 @@ describe("ThreadScreen", () => {
 			spoken: [REPORTED],
 			readReportedRuns: REFUSED_REPORTED_RUNS,
 		})
-		render(createElement(NoticeSurface))
-		render(screenOf(room.thread))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
@@ -2060,7 +2134,7 @@ describe("ThreadScreen", () => {
 			spoken: [SAID_BEFORE, REPORTED, SAID_AFTER],
 			readReportedRuns: reportedRunsOf(REPORT_TURN),
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const opened = screen
@@ -2079,13 +2153,17 @@ describe("ThreadScreen", () => {
 			spoken: [REPORTED],
 			readReportedRuns: REFUSED_REPORTED_RUNS,
 		})
-		render(createElement(NoticeSurface))
-		const { unmount } = render(screenOf(room.thread))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const { unmount } = render(screenOf(room.thread), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		const raised = screen.getAllByText(CAUSES_TITLE).length
 
 		unmount()
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(screen.getAllByText(CAUSES_TITLE)).toHaveLength(raised)
@@ -2096,7 +2174,9 @@ describe("ThreadScreen", () => {
 			spoken: [REPORTED],
 			readReportedRuns: reportedRunsOf(REPORT_TURN),
 		})
-		render(screenOf(solo.thread()))
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
@@ -2105,7 +2185,9 @@ describe("ThreadScreen", () => {
 
 	it("shows a report written while the solo thread is open", async () => {
 		const solo = await soloOf({ spoken: [SAID_BEFORE] })
-		const { rerender } = render(screenOf(solo.thread()))
+		const { rerender } = render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.queryByText(REPORT_TEXT)).toBeNull()
@@ -2119,12 +2201,16 @@ describe("ThreadScreen", () => {
 	})
 
 	it("keeps the solo transcript and reports a failed read of the runs", async () => {
-		render(createElement(NoticeSurface))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		const solo = await soloOf({
 			spoken: [REPORTED],
 			readReportedRuns: REFUSED_REPORTED_RUNS,
 		})
-		render(screenOf(solo.thread()))
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getByText(REPORT_TEXT)).toBeTruthy()
@@ -2137,7 +2223,9 @@ describe("ThreadScreen", () => {
 
 	it("keeps what a solo companion wrote above the question it asks", async () => {
 		const solo = await soloOf({})
-		const { rerender } = render(screenOf(solo.thread()))
+		const { rerender } = render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await solo.send("hold the wall")
@@ -2159,7 +2247,9 @@ describe("ThreadScreen", () => {
 	it("counts the solo working row from the instant the turn began", async () => {
 		const clock = vi.spyOn(Date, "now").mockReturnValue(TURN_STARTED_AT)
 		const solo = await soloOf({})
-		const { rerender, unmount } = render(screenOf(solo.thread()))
+		const { rerender, unmount } = render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await solo.send("hold the wall")
@@ -2177,7 +2267,9 @@ describe("ThreadScreen", () => {
 		expect(screen.getByText("Ada · Grep · walls")).toBeTruthy()
 
 		unmount()
-		render(screenOf(solo.thread()))
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(elapsedText()).toBe("3s")
@@ -2186,7 +2278,7 @@ describe("ThreadScreen", () => {
 
 	it("tells a queued seat from a speaker blocked on a question", async () => {
 		const room = await roomOf({ names: ["Ada", "Nyx", "Zoe"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada @Nyx now")
@@ -2204,7 +2296,7 @@ describe("ThreadScreen", () => {
 
 	it("stops the companion whose working row carries the stop, and no other", async () => {
 		const room = await roomOf({ names: ["Ada", "Nyx"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada @Nyx now")
@@ -2219,7 +2311,7 @@ describe("ThreadScreen", () => {
 
 	it("leaves no stop on the waiting row of a companion holding no seat", async () => {
 		const room = await roomOf({ names: ["Ada", "Nyx"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2231,7 +2323,7 @@ describe("ThreadScreen", () => {
 
 	it("clocks the working row of a seated companion from the start of its turn", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2241,7 +2333,7 @@ describe("ThreadScreen", () => {
 
 	it("stops a writing companion from its working row alone", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2260,7 +2352,7 @@ describe("ThreadScreen", () => {
 
 	it("holds a seated companion on its waiting row until it publishes a block", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2276,7 +2368,7 @@ describe("ThreadScreen", () => {
 
 	it("keeps the working row of a seated companion that has published a block", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2298,7 +2390,7 @@ describe("ThreadScreen", () => {
 
 	it("keeps what a speaker wrote above the question it asks", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2324,7 +2416,7 @@ describe("ThreadScreen", () => {
 
 	it("keeps the working row of a companion asking after it published a block", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2342,7 +2434,7 @@ describe("ThreadScreen", () => {
 
 	it("draws one row for a speaking companion another speaker hands over to", async () => {
 		const room = await roomOf({ names: ["Ada", "Nyx"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada @Nyx now")
@@ -2359,7 +2451,7 @@ describe("ThreadScreen", () => {
 
 	it("leaves no stop on the turn a companion has landed", async () => {
 		const room = await roomOf({ names: ["Ada"] })
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await room.send("@Ada now")
@@ -2378,7 +2470,9 @@ describe("ThreadScreen", () => {
 			events: [MISSION_ESCALATED, MISSION_OPENED],
 			spoken: [MISSION_SAID],
 		})
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		const rows = transcriptRows()
@@ -2391,7 +2485,9 @@ describe("ThreadScreen", () => {
 
 	it("renders the events of a mission thread holding no message alone", async () => {
 		const room = await missionRoomOf({ events: [MISSION_OPENED] })
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getByText(/Mission opened by/)).toBeTruthy()
@@ -2402,7 +2498,9 @@ describe("ThreadScreen", () => {
 
 	it("shows a working row for the companion a mission thread summons", async () => {
 		const room = await missionRoomOf({ events: [] })
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await room.send("@Ada now")
@@ -2415,7 +2513,9 @@ describe("ThreadScreen", () => {
 			events: [],
 			spoken: [MISSION_SUMMONS, MISSION_SAID],
 		})
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await room.send("and the tests?")
@@ -2444,7 +2544,9 @@ describe("ThreadScreen", () => {
 			events: [],
 			spoken: [MISSION_SUMMONS, MISSION_ASKED, MISSION_SAID],
 		})
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.queryByText(MISSION_SUMMONS.text)).toBeNull()
@@ -2462,7 +2564,9 @@ describe("ThreadScreen", () => {
 				MISSION_SAID_AGAIN,
 			],
 		})
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(causeTitles()).toEqual([SUMMONS_CAUSE, SUMMONS_AGAIN_CAUSE])
@@ -2470,7 +2574,9 @@ describe("ThreadScreen", () => {
 
 	it("disables the composer of a closed mission thread", async () => {
 		const room = await missionRoomOf({ events: [], closedAt: A_MINUTE })
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(screen.getByRole("textbox").hasAttribute("disabled")).toBe(true)
@@ -2491,6 +2597,7 @@ describe("ThreadScreen", () => {
 					}),
 				},
 			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -2509,7 +2616,10 @@ describe("ThreadScreen", () => {
 			seq: LANDED_SEQ,
 		})
 
-		render(screenOf(room.thread, room.bots, () => undefined, landings))
+		render(
+			screenOf(room.thread, room.bots, () => undefined, landings),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
 		await settle()
 
 		expect(screen.getByText(textOfTurn(LANDED_SEQ))).toBeTruthy()
@@ -2543,12 +2653,15 @@ describe("ThreadScreen", () => {
 
 		const { unmount } = render(
 			screenOf(room.thread, room.bots, () => undefined, landings),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 		expect(shownTurnNumbers()).toContain(LANDED_SEQ)
 
 		unmount()
-		render(screenOf(room.thread, room.bots))
+		render(screenOf(room.thread, room.bots), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(Math.max(...shownTurnNumbers())).toBe(LONG_ROOM_TURNS)
@@ -2565,7 +2678,10 @@ describe("ThreadScreen", () => {
 			seq: LANDED_SEQ,
 		})
 
-		render(screenOf(room.thread, room.bots, () => undefined, landings))
+		render(
+			screenOf(room.thread, room.bots, () => undefined, landings),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
 		await settle()
 		expect(shownTurnNumbers()).toContain(LANDED_SEQ)
 
@@ -2587,8 +2703,13 @@ describe("ThreadScreen", () => {
 			seq: LANDED_SEQ,
 		})
 
-		render(createElement(NoticeSurface))
-		render(screenOf(room.thread, room.bots, () => undefined, landings))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		render(
+			screenOf(room.thread, room.bots, () => undefined, landings),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
 		await settle()
 
 		expect(landings.getState()).toBeNull()
@@ -2617,8 +2738,12 @@ const CRASHED_SESSION: AgentEvent[] = [{ type: "failed", error: CRASH.error }]
 
 const conversationFailingWith = async (events: AgentEvent[]) => {
 	const room = await roomOf({ names: ["Ada"] })
-	render(createElement(NoticeSurface))
-	render(screenOf(room.thread, room.bots))
+	render(createElement(NoticeSurface), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	render(screenOf(room.thread, room.bots), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await room.send("hold the line")
 	act(() => {
 		room.driver.pushTo(room.idOf("Ada"), events)
@@ -2635,7 +2760,9 @@ describe("ThreadScreen application left out of a session", () => {
 	afterEach(cleanup)
 
 	it("raises no notice on a solo thread", async () => {
-		render(createElement(NoticeSurface))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		render(
 			createElement(
 				SessionApplicationsContext.Provider,
@@ -2649,6 +2776,7 @@ describe("ThreadScreen application left out of a session", () => {
 					}),
 				),
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -2756,7 +2884,9 @@ const onboardingScreen = ({ controller, solo }: OnboardingFixture) =>
 const renderAsking = async (
 	view: () => ReturnType<typeof screenOf>,
 ): Promise<OnboardingScreen> => {
-	const { rerender } = render(view())
+	const { rerender } = render(view(), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	const refresh = async () => {
 		await settle()
 		rerender(view())
@@ -2868,7 +2998,9 @@ describe("the first run in a solo thread", () => {
 	it("leaves a message typed before the thread mounted unanchored", async () => {
 		const solo = await soloOf({})
 		await solo.send(TYPED_MESSAGE)
-		render(screenOf(solo.thread()))
+		render(screenOf(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
@@ -2892,7 +3024,9 @@ describe("the first run in a solo thread", () => {
 				}),
 				thread: solo.thread(),
 			})
-		const shown = render(soloScreen())
+		const shown = render(soloScreen(), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await act(async () => {
@@ -2946,7 +3080,9 @@ describe("the first run in a solo thread", () => {
 				.getByText(TYPED_MESSAGE)
 				.closest("article")
 				?.getAttribute("aria-label")
-		const shown = render(joinedScreen(solo.thread()))
+		const shown = render(joinedScreen(solo.thread()), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await act(async () => {
@@ -3354,7 +3490,9 @@ describe("signing in from a companion's solo thread", () => {
 
 	it("offers the sign-in in place of the restart on a signed-out notice", async () => {
 		const fixture = await signedOutOf()
-		render(createElement(NoticeSurface))
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		const shown = await renderSignIn(fixture)
 		const notice = raisedNotice(NOT_CONNECTED_TITLE)
 
@@ -3414,6 +3552,7 @@ const seatlessRoomWith = async (
 			{ value: seatingOf(bots, seat) },
 			screenOf(room.thread, bots),
 		),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await settle()
 	return room
@@ -3522,6 +3661,7 @@ const sendingRoomWith = async ({
 				},
 			}),
 		),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await settle()
 
@@ -3712,7 +3852,9 @@ const arrivalRoomOf = async (
 }
 
 const renderArrivalRoom = async (room: ArrivalRoom) => {
-	render(screenOf(room.thread, room.bots))
+	render(screenOf(room.thread, room.bots), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await settle()
 }
 
@@ -3929,7 +4071,7 @@ describe("ThreadScreen showing the applications installed", () => {
 
 	it("shows an install needing nothing as a receipt outside every bubble after the run it follows", async () => {
 		const room = installRoomOf([installOf()])
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const row = rowHolding(NYX_SENTRY_RECEIPT)
@@ -3942,7 +4084,7 @@ describe("ThreadScreen showing the applications installed", () => {
 
 	it("places an install no run precedes before the first run", async () => {
 		const room = installRoomOf([installOf({ lastMessageSeq: 0 })])
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBeLessThan(rowIndexOf("held"))
@@ -3952,7 +4094,7 @@ describe("ThreadScreen showing the applications installed", () => {
 		const room = installRoomOf([
 			installOf({ install: { kind: "key", secrets: ["SENTRY_AUTH_TOKEN"] } }),
 		])
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const row = rowHolding(NYX_SENTRY_RECEIPT)
@@ -3985,7 +4127,7 @@ describe("ThreadScreen showing the applications installed", () => {
 				install: { kind: "oauth" },
 			}),
 		])
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const spaceRow = rowHolding("Every companion in Personal has Linear.")
@@ -4013,7 +4155,7 @@ describe("ThreadScreen showing the applications installed", () => {
 				),
 			],
 		)
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const row = rowHolding("Sentry was left out")
@@ -4047,7 +4189,7 @@ describe("ThreadScreen showing the applications installed", () => {
 				),
 			],
 		)
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		const row = rowHolding("Sentry was left out")
@@ -4070,7 +4212,7 @@ describe("ThreadScreen showing the applications installed", () => {
 				),
 			],
 		)
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(rowIndexOf("Sentry was left out")).toBe(-1)
@@ -4079,7 +4221,7 @@ describe("ThreadScreen showing the applications installed", () => {
 
 	it("shows an install announced for the open conversation without a reload", async () => {
 		const room = installRoomOf([])
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 		expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBe(-1)
 
@@ -4103,11 +4245,13 @@ describe("ThreadScreen showing the applications installed", () => {
 		const room = installRoomOf([
 			installOf({ id: "install-before", lastMessageSeq: 0 }),
 		])
-		const opened = render(room.view())
+		const opened = render(room.view(), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		opened.unmount()
 
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBeLessThan(rowIndexOf("held"))
@@ -4119,7 +4263,7 @@ describe("ThreadScreen showing the applications installed", () => {
 			kind: "catalogueUnreadable",
 			detail: "refused",
 		}
-		render(room.view())
+		render(room.view(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(rowIndexOf(NYX_SENTRY_RECEIPT)).toBe(-1)
@@ -4149,7 +4293,9 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 	it("opens it in the solo thread", async () => {
 		const solo = await soloOf({ spoken: [ADA_CLOSES] })
 		const thread = solo.thread()
-		render(underCompanionMenu(screenOf(thread), [thread.bot.id]))
+		render(underCompanionMenu(screenOf(thread), [thread.bot.id]), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(await rightClickGutterOf(ADA_CLOSES.text)).toBeTruthy()
@@ -4162,6 +4308,7 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 		})
 		render(
 			underCompanionMenu(screenOf(room.thread, room.bots), [room.idOf("Ada")]),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -4173,7 +4320,9 @@ describe("ThreadScreen opening the companion menu of a gutter avatar", () => {
 			events: [MISSION_OPENED],
 			spoken: [MISSION_SAID],
 		})
-		render(underCompanionMenu(screenOf(room.thread, room.bots), []))
+		render(underCompanionMenu(screenOf(room.thread, room.bots), []), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await expect(rightClickGutterOf(MISSION_SAID.text)).rejects.toThrow()
@@ -4210,6 +4359,7 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 				[room.idOf("Ada")],
 				target,
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -4228,6 +4378,7 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 				[room.idOf("Ada"), room.idOf("Nyx")],
 				target,
 			),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -4243,7 +4394,9 @@ describe("ThreadScreen selecting a companion from the transcript", () => {
 			spoken: [MISSION_SAID],
 		})
 		const target = selectTargetInMissionOf(room.idOf("Ada"))
-		render(underCompanionSelect(screenOf(room.thread, room.bots), [], target))
+		render(underCompanionSelect(screenOf(room.thread, room.bots), [], target), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		clickGutterOf(MISSION_SAID.text)
@@ -4269,7 +4422,7 @@ describe("ThreadScreen dating its messages in Tokyo", () => {
 			names: ["Ada"],
 			spoken: createdAts.map(spokenAt),
 		})
-		render(screenOf(room.thread))
+		render(screenOf(room.thread), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 	}
 

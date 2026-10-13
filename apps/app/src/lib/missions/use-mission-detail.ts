@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { skipToken, useQuery } from "@tanstack/react-query"
+import { useCallback, useMemo, useState } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 
-import { coalescedRead } from "./coalesced-read"
+import { useMissionChanges } from "./mission-changes"
 import type { Mission } from "./mission-contract"
-import { toMissionEventModels, withMissionChange } from "./missions-model"
+import { missionQueryKeys } from "./mission-query-keys"
+import { toMissionEventModels } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-type MissionRead = {
+import { useReachableHost } from "@/lib/host/use-reachable-host"
+import { hasLastReadFailed } from "@/lib/query/last-read"
+
+export type MissionRead = {
 	mission: Mission
 	events: MissionEventModel[]
 	readAt: number
@@ -20,73 +25,41 @@ export type MissionDetailRead = {
 	onRetry: () => void
 }
 
+const readMission = async (missionId: string): Promise<MissionRead> => {
+	const detail = await missionsTransport.detail(missionId)
+	return {
+		mission: detail.mission,
+		events: toMissionEventModels(detail.events),
+		readAt: Date.now(),
+	}
+}
+
 export const useMissionDetail = (missionId: string): MissionDetailRead => {
-	const [read, setRead] = useState<MissionRead | null>(null)
-	const [isReading, setReading] = useState(true)
-	const [hasFailedToRead, setFailedToRead] = useState(false)
-	const reads = useRef(0)
+	const host = useReachableHost()
+	const canRead = host !== null
+	const [isRetrying, setRetrying] = useState(false)
+	useMissionChanges()
 
-	const fetchMission = useCallback(() => {
-		reads.current += 1
-		const ticket = reads.current
+	const detail = useQuery({
+		queryKey: missionQueryKeys.detail(missionId, host),
+		queryFn: canRead ? () => readMission(missionId) : skipToken,
+		meta: { rendersErrorInline: true },
+	})
+	const { data, isPending, refetch } = detail
+	const read = data ?? null
+	const hasFailedToRead = hasLastReadFailed(detail)
+	const isReading = isPending || isRetrying
 
-		void missionsTransport.detail(missionId).then(
-			(detail) => {
-				if (ticket !== reads.current) return
-				setRead({
-					mission: detail.mission,
-					events: toMissionEventModels(detail.events),
-					readAt: Date.now(),
-				})
-				setReading(false)
-				setFailedToRead(false)
-			},
-			() => {
-				if (ticket !== reads.current) return
-				setReading(false)
-				setFailedToRead(true)
-			},
-		)
-	}, [missionId])
-
-	const readMission = useCallback(() => {
-		setReading(true)
-		fetchMission()
-	}, [fetchMission])
-
-	useEffect(() => {
-		setRead(null)
-		readMission()
-	}, [readMission])
-
-	useEffect(() => {
-		const rereading = coalescedRead(fetchMission)
-		const listening = missionsTransport
-			.onChanged((changed) => {
-				if (changed.missionId !== missionId) return
-				setRead((held) =>
-					held
-						? { ...held, mission: withMissionChange(held.mission, changed) }
-						: held,
-				)
-				rereading.request()
-			})
-			.catch((reason) => {
-				console.error(
-					"mission thread: mission changes could not be listened to",
-					reason,
-				)
-				return () => undefined
-			})
-
-		return () => {
-			rereading.cancel()
-			void listening.then((unsubscribe) => unsubscribe())
+	const onRetry = useCallback(() => {
+		if (!canRead) {
+			return
 		}
-	}, [missionId, fetchMission])
+		setRetrying(true)
+		void refetch().then(() => setRetrying(false))
+	}, [canRead, refetch])
 
 	return useMemo(
-		() => ({ read, isReading, hasFailedToRead, onRetry: readMission }),
-		[read, isReading, hasFailedToRead, readMission],
+		() => ({ read, isReading, hasFailedToRead, onRetry }),
+		[read, isReading, hasFailedToRead, onRetry],
 	)
 }

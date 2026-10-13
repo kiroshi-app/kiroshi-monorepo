@@ -6,8 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 
 import type { RoutineRun } from "./routine-contract"
+import { routineQueryKeys } from "./routine-query-keys"
 import { DEFAULT_RUN_PAGE, routinesTransport } from "./routines-transport"
 import { useRoutineDetail } from "./use-routine-detail"
+
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("./routines-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./routines-transport")>()),
@@ -48,8 +51,10 @@ const pageOf = (length: number): RoutineRun[] =>
 
 const onWriteFailure = vi.fn()
 
-const mountDetail = () =>
-	renderHook(() => useRoutineDetail({ routines: [ROW], onWriteFailure })).result
+const mountDetail = (query = createQueryTestWrapper()) =>
+	renderHook(() => useRoutineDetail({ routines: [ROW], onWriteFailure }), {
+		wrapper: query.wrapper,
+	}).result
 
 const opened = async (carried: RoutineRun[]) => {
 	readRuns.mockResolvedValueOnce(carried)
@@ -149,6 +154,9 @@ it("reads the runs again when a failed read is retried", async () => {
 	await act(async () => {
 		result.current.onOpen(ROW.id)
 	})
+	await waitFor(() =>
+		expect(result.current.open?.hasFailedToReadRuns).toBe(true),
+	)
 	readRuns.mockResolvedValueOnce([RUN])
 	await act(async () => {
 		result.current.onRetryRuns()
@@ -185,7 +193,9 @@ it("keeps the failure on screen while a retried read is in flight", async () => 
 		settleRead([RUN])
 	})
 
-	expect(result.current.open?.hasFailedToReadRuns).toBe(false)
+	await waitFor(() =>
+		expect(result.current.open?.hasFailedToReadRuns).toBe(false),
+	)
 	expect(result.current.open?.runs).toHaveLength(1)
 })
 
@@ -213,37 +223,43 @@ it("ignores a retry fired while a read of the runs is in flight", async () => {
 		result.current.onRetryRuns()
 	})
 
+	await waitFor(() => expect(result.current.open?.isReadingRuns).toBe(true))
 	expect(readRuns).toHaveBeenCalledTimes(2)
-	expect(result.current.open?.isReadingRuns).toBe(true)
 
 	await act(async () => {
 		settleRead([RUN])
 	})
-	expect(result.current.open?.runs).toHaveLength(1)
+	await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
 })
 
 it("keeps the runs a later read carried when an earlier read rejects", async () => {
-	let rejectFirstRead = (_reason: unknown) => {}
-	readRuns.mockReturnValueOnce(
-		new Promise<RoutineRun[]>((_resolve, reject) => {
-			rejectFirstRead = reject
-		}),
-	)
-	const result = mountDetail()
-
-	act(() => {
+	const query = createQueryTestWrapper()
+	readRuns.mockResolvedValueOnce([])
+	const result = mountDetail(query)
+	await act(async () => {
 		result.current.onOpen(ROW.id)
 	})
+	await waitFor(() => expect(result.current.open?.isReadingRuns).toBe(false))
+	const rereadRuns = () =>
+		act(() => {
+			void query.queryClient.invalidateQueries({
+				queryKey: routineQueryKeys.runs(),
+			})
+		})
 
-	runNow.mockResolvedValueOnce({ kind: "started", runId: "run-3" })
+	let rejectEarlierRead = (_reason: unknown) => {}
+	readRuns.mockReturnValueOnce(
+		new Promise<RoutineRun[]>((_resolve, reject) => {
+			rejectEarlierRead = reject
+		}),
+	)
+	rereadRuns()
 	readRuns.mockResolvedValueOnce([RUN])
-	await act(async () => {
-		result.current.onRunNow()
-	})
+	rereadRuns()
 	await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
 
 	await act(async () => {
-		rejectFirstRead(new Error("the runs are unreadable"))
+		rejectEarlierRead(new Error("the runs are unreadable"))
 	})
 
 	expect(result.current.open?.hasFailedToReadRuns).toBe(false)
@@ -258,38 +274,41 @@ it("shows beside the control the refusal a Run now was answered with", async () 
 		result.current.onRunNow()
 	})
 
-	expect(result.current.open?.refusal).toBe("alreadySeen")
+	await waitFor(() => expect(result.current.open?.refusal).toBe("alreadySeen"))
 	expect(result.current.open?.isRunning).toBe(false)
 	expect(readRuns).toHaveBeenCalledTimes(1)
 })
 
-it("reads the runs again when Run now starts a run", async () => {
+it("leaves the reread of the runs to the change a started run announces", async () => {
 	const result = await opened([])
 	runNow.mockResolvedValueOnce({ kind: "started", runId: "run-3" })
-	readRuns.mockResolvedValueOnce([RUN])
 
 	await act(async () => {
 		result.current.onRunNow()
 	})
 
-	await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
+	await waitFor(() => expect(result.current.open?.isRunning).toBe(false))
 	expect(result.current.open?.refusal).toBeUndefined()
+	expect(readRuns).toHaveBeenCalledTimes(1)
 })
 
-it("reads the runs again when Run now is answered with a skipped run", async () => {
+it("forgets the refusal of the routine it closed", async () => {
 	const result = await opened([])
-	runNow.mockResolvedValueOnce({
-		kind: "skipped",
-		runId: "run-4",
-		reason: "hourlyCap",
-	})
-	readRuns.mockResolvedValueOnce([SKIPPED_RUN])
-
+	runNow.mockResolvedValueOnce({ kind: "refused", by: "alreadySeen" })
 	await act(async () => {
 		result.current.onRunNow()
 	})
+	await waitFor(() => expect(result.current.open?.refusal).toBe("alreadySeen"))
 
-	await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
+	readRuns.mockResolvedValueOnce([])
+	act(() => {
+		result.current.onClose()
+	})
+	act(() => {
+		result.current.onOpen(ROW.id)
+	})
+
+	expect(result.current.open?.refusal).toBeUndefined()
 })
 
 it("raises the write failure when a Run now request fails", async () => {
@@ -312,4 +331,26 @@ it("closes the detail back onto the list", async () => {
 	})
 
 	expect(result.current.open).toBeNull()
+})
+
+it("shows none of the runs of the routine it left while the next one reads", async () => {
+	const other: RoutineRowModel = { ...ROW, id: "r-2", title: "Morning digest" }
+	readRuns.mockResolvedValueOnce([RUN])
+	const { result } = renderHook(
+		() => useRoutineDetail({ routines: [ROW, other], onWriteFailure }),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+	await act(async () => {
+		result.current.onOpen(ROW.id)
+	})
+	await waitFor(() => expect(result.current.open?.runs).toHaveLength(1))
+	readRuns.mockReturnValueOnce(new Promise(() => undefined))
+
+	act(() => {
+		result.current.onOpen(other.id)
+	})
+
+	expect(result.current.open?.id).toBe(other.id)
+	expect(result.current.open?.runs).toEqual([])
+	expect(result.current.open?.isReadingRuns).toBe(true)
 })

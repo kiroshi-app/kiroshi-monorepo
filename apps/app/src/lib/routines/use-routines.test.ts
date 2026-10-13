@@ -15,6 +15,8 @@ import type { TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { type ConversationRoutines, useRoutines } from "./use-routines"
 
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
 vi.mock("./routines-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./routines-transport")>()),
 	routinesTransport: {
@@ -30,6 +32,12 @@ vi.mock("./routines-transport", async (importOriginal) => ({
 }))
 vi.mock("./trigger-sources-transport", () => ({
 	triggerSourcesTransport: { sources: vi.fn() },
+}))
+
+const reachable = vi.hoisted(() => ({ host: "local" as string | null }))
+
+vi.mock("@/lib/host/use-reachable-host", () => ({
+	useReachableHost: () => reachable.host,
 }))
 
 const list = vi.mocked(routinesTransport.list)
@@ -113,8 +121,9 @@ const mountLeadRoutines = async (listed: Routine[]) => {
 	list.mockResolvedValueOnce(listed)
 	sources.mockResolvedValue(DECLARED)
 
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.form.canCreate).toBe(true))
 	return result
@@ -124,7 +133,9 @@ const mountHeldRoutines = async () => {
 	list.mockResolvedValueOnce([ROUTINE])
 	sources.mockResolvedValue([])
 
-	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId))
+	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	return result
 }
@@ -142,6 +153,7 @@ const announce = async (conversationId: string) => {
 
 beforeEach(() => {
 	vi.clearAllMocks()
+	reachable.host = "local"
 	onChanged.mockResolvedValue(() => undefined)
 	readRuns.mockResolvedValue([])
 })
@@ -287,8 +299,9 @@ it("lists the routines of a conversation whose sources are unreadable", async ()
 	list.mockResolvedValueOnce([ROUTINE])
 	sources.mockRejectedValue(new Error("the sources are unreadable"))
 
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
 	await waitFor(() => expect(result.current.failure).toBe("routines"))
@@ -326,8 +339,9 @@ it("hands the panel a trigger source the lead does not declare", async () => {
 	list.mockResolvedValueOnce([WEBHOOK_ROUTINE])
 	sources.mockResolvedValue([SCHEDULE_SOURCE])
 
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	expect(result.current.form.sources).toEqual([
@@ -547,8 +561,9 @@ const mountOwnedRoutine = async (
 		botId === INBOX_ROUTINE.botId ? owning() : Promise.resolve(DECLARED),
 	)
 
-	const { result } = renderHook(() =>
-		useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	return result
@@ -815,4 +830,34 @@ it("re-reads the run history of the open routine when a routine changes", async 
 	await announce(ROUTINE.conversationId)
 
 	await waitFor(() => expect(result.current.detail.open?.runs).toHaveLength(1))
+})
+
+it("lists the routines once for two readers of the conversation", async () => {
+	list.mockResolvedValue([ROUTINE])
+	sources.mockResolvedValue([])
+
+	const { result } = renderHook(
+		() => ({
+			panel: useRoutines(ROUTINE.conversationId),
+			card: useRoutines(ROUTINE.conversationId),
+		}),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	await waitFor(() => expect(result.current.card.routines).toHaveLength(1))
+	expect(result.current.panel.routines).toHaveLength(1)
+	expect(list).toHaveBeenCalledTimes(1)
+})
+
+it("reads no routine while no host is reachable", async () => {
+	reachable.host = null
+
+	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await act(async () => undefined)
+
+	expect(list).not.toHaveBeenCalled()
+	expect(result.current.routines).toEqual([])
+	expect(result.current.failure).toBeNull()
 })

@@ -34,6 +34,7 @@ import { missionsTransport } from "@/lib/missions/missions-transport"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import type { MissionSpeakingRuntimes } from "@/lib/missions/use-live-missions"
 import { createOpenedController } from "@/lib/opened-controller"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
@@ -171,7 +172,10 @@ const renderSidebarMissions = (
 				},
 				rosterLines: { now: NOW },
 			}),
-		{ initialProps: { selectedSpaceId: spaceId } },
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+			initialProps: { selectedSpaceId: spaceId },
+		},
 	)
 	return { ...rendered, select, selectConversation, open, leave, openedMission }
 }
@@ -241,7 +245,7 @@ describe("useSidebarMissions", () => {
 			})
 		})
 
-		expect(result.current.waitingCount).toBe(0)
+		await waitFor(() => expect(result.current.waitingCount).toBe(0))
 		expect(panelOf(result.current).open.map(({ id }) => id)).toEqual([
 			"m-working",
 		])
