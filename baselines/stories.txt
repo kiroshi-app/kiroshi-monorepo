@@ -598,6 +598,13 @@ feedback-appbootscreen--window-surface-dark
 feedback-connectionstatus--default
 feedback-connectionstatus--variants
 feedback-connectionstatus--zero-value
+feedback-listskeleton--bottom-anchored
+feedback-listskeleton--dark
+feedback-listskeleton--fade
+feedback-listskeleton--pending-310-ms
+feedback-listskeleton--pending-under-300-ms
+feedback-listskeleton--short-container
+feedback-listskeleton--tall-container
 feedback-notice--default
 feedback-notice--dismissible
 feedback-notice--long-content
