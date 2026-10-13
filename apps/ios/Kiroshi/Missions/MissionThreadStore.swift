@@ -247,6 +247,12 @@ extension MissionThreadStore: ThreadModel {
 
     func mention(_ companion: Companion) {}
 
+    var hasOlder: Bool { false }
+
+    var olderFailed: Bool { false }
+
+    func loadOlder() {}
+
     @discardableResult
     func stop() -> Task<Void, Never>? { nil }
 }
