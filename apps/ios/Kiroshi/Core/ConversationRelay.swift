@@ -42,6 +42,12 @@ struct ConversationRelay: Sendable {
         _ = try await ask("conversation_send_turn", args, as: Int.self)
     }
 
+    func pendingQuestions(in conversationId: String) async throws -> [AgentEvent] {
+        try await ask(
+            "agent_pending_questions", InConversationArgs(conversationId: conversationId),
+            as: [AgentEvent].self)
+    }
+
     func cancelTurn(_ scope: AgentEvent.Scope) async throws {
         let answer = try await connection.call("agent_cancel_turn", args: CancelArgs(scope: scope))
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
@@ -70,6 +76,10 @@ private struct StoreError: Decodable {
 
 private struct MainChat: Decodable {
     let id: String
+}
+
+private struct InConversationArgs: Encodable {
+    let conversationId: String
 }
 
 private struct SpaceArgs: Encodable {

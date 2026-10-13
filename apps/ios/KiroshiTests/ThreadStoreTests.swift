@@ -11,6 +11,7 @@ struct ThreadStoreTests {
     let clock = TestRelayClock()
     let juniper = Companion(id: "juniper", name: "Juniper")
     let sentAt = Date(milliseconds: 1_791_000_000_000)
+    let work = CompanionWork(now: { Date(milliseconds: 1_791_000_000_000) })
 
     func makeConnection() -> RelayConnection {
         RelayConnection(
@@ -30,7 +31,8 @@ struct ThreadStoreTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         return ThreadStore(
-            subject: .companion(juniper), now: { [sentAt] in sentAt }, makeId: { ids.next()! },
+            subject: .companion(juniper), work: work, now: { [sentAt] in sentAt },
+            makeId: { ids.next()! },
             calendar: calendar)
     }
 
@@ -38,11 +40,21 @@ struct ThreadStoreTests {
         RelayConnection, Task<Void, Never>
     ) {
         let connection = makeConnection()
+        await feed(work, from: connection)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
         await waitUntil { store.phase == .loaded }
         return (connection, following)
+    }
+
+    func feed(_ work: CompanionWork, from connection: RelayConnection) async {
+        let updates = await connection.updates()
+        Task {
+            for await update in updates {
+                work.apply(update)
+            }
+        }
     }
 
     func texts(_ store: ThreadStore) -> [String] {
@@ -88,14 +100,33 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func aMessageLeftUnfinishedOpensTheThreadWorking() async {
+    @Test func aQuestionPendingWhenTheThreadOpensShowsTheCompanionWorking() async throws {
+        let host = TestHost(messages: ["chat-juniper": twoDays]) { call in
+            guard call.command == "agent_pending_questions" else { return nil }
+            #expect((try? call.args(as: InConversation.self))?.conversationId == "chat-juniper")
+            return TestHost.ok(
+                call,
+                #"[{"scope":{"conversationId":"chat-juniper","botId":"juniper","runtimeSessionId":"session-1","epoch":1},"turn":{"turnId":"t1","conversationId":"chat-juniper"},"event":{"type":"questionRequested","request":{"id":"q1","questions":[]}}}]"#
+            )
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+
+        await waitUntil { store.isWorking }
+        #expect(store.workingCompanions == [juniper])
+        #expect(store.runningScope?.runtimeSessionId == "session-1")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aMessageLeftUnfinishedIsNoSignThatTheCompanionWorks() async {
         let unfinished =
             #"{"id":"m1","conversationId":"chat-juniper","turnId":"t","seq":1,"role":"assistant","content":"Draft","completion":"streaming","createdAt":1,"authorBotId":null,"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
         let host = TestHost(messages: ["chat-juniper": [unfinished]])
         let store = makeStore()
         let (connection, following) = await follow(host, store)
 
-        #expect(store.isWorking)
+        #expect(!store.isWorking)
         following.cancel()
         await connection.stop()
     }
@@ -197,7 +228,7 @@ struct ThreadStoreTests {
         #expect(call.text.contains(#""repliedToMessageId":null"#))
         #expect(texts(store) == ["you: Can you draft the release notes?"])
         #expect(store.draft.isEmpty)
-        #expect(store.isWorking)
+        #expect(!store.isWorking)
         #expect(store.sendFailure == nil)
         following.cancel()
         await connection.stop()
@@ -263,7 +294,7 @@ struct ThreadStoreTests {
 
     @Test func theHeaderNamesTheCompanionThenItsTitle() {
         let writer = Companion(id: "juniper", name: "Juniper", role: "Writer")
-        let store = ThreadStore(subject: .companion(writer))
+        let store = ThreadStore(subject: .companion(writer), work: work)
 
         #expect(
             store.heading
@@ -290,7 +321,7 @@ struct ThreadStoreTests {
         ) { call in
             call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil
         }
-        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let store = ThreadStore(subject: .group(group), work: work, now: { [sentAt] in sentAt })
         let (connection, following) = await follow(host, store)
         #expect(texts(store) == ["Tagging 0.42 next."])
 
@@ -304,7 +335,7 @@ struct ThreadStoreTests {
         host.push(
             event: "agent://event",
             payload:
-                #"{"scope":{"conversationId":"group-release","botId":"\#(atlas.id)","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":null}"#
+                #"{"scope":{"conversationId":"group-release","botId":"\#(atlas.id)","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":{"turnId":"t1","conversationId":"group-release"}}"#
         )
         await waitUntil { store.runningScope != nil }
         #expect(store.workingName == "Atlas")
@@ -322,7 +353,7 @@ struct ThreadStoreTests {
             id: release.id, title: release.title, createdAt: 0,
             participants: [.init(botId: juniper.id, name: "Juniper")])
         let host = TestHost()
-        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let store = ThreadStore(subject: .group(group), work: work, now: { [sentAt] in sentAt })
         let (connection, following) = await follow(host, store)
 
         host.push(
@@ -347,7 +378,7 @@ struct ThreadStoreTests {
             id: "group-release", title: "Release crew", createdAt: 0,
             participants: [.init(botId: juniper.id, name: "Juniper")])
         let host = TestHost()
-        let store = ThreadStore(subject: .group(group), now: { [sentAt] in sentAt })
+        let store = ThreadStore(subject: .group(group), work: work, now: { [sentAt] in sentAt })
         let (connection, following) = await follow(host, store)
 
         host.push(
@@ -381,9 +412,9 @@ struct ThreadStoreTests {
         await store.send()?.value
         let call = try #require(await host.nextCall("conversation_send_turn"))
         #expect(try call.args(as: SendTurnArgs.self).summoned == [juniper.id])
-        #expect(store.isWorking)
 
         host.pushAgent("chat-juniper", #"{"type":"turnChanged","state":"running"}"#)
+        await waitUntil { store.isWorking }
         host.pushAgent(
             "chat-juniper",
             #"{"type":"messageCompleted","message":{"id":"a1","role":"assistant","text":"Drafted.","timestamp":1791000001000}}"#
@@ -561,6 +592,7 @@ struct ThreadStoreTests {
         let host = TestHost(holding: ["conversation_message_page"])
         let store = makeStore()
         let connection = makeConnection()
+        await feed(work, from: connection)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
@@ -623,21 +655,47 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func aTurnUnderwayAtLoadShowsStopOnceTheHostNamesItsScope() async {
-        let unfinished =
-            #"{"id":"m1","conversationId":"chat-juniper","turnId":"t","seq":1,"role":"assistant","content":"Draft","completion":"streaming","createdAt":1,"authorBotId":null,"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":"session-1"}"#
-        let host = TestHost(messages: ["chat-juniper": [unfinished]])
+    @Test func aTurnHeardBeforeTheThreadOpensShowsWhateverTheLastRow() async throws {
+        let host = TestHost(messages: ["chat-juniper": Array(twoDays.prefix(2))])
+        let connection = makeConnection()
+        await feed(work, from: connection)
+        await connection.start()
+        await transport.nextOpening().accept(host.socket)
+        host.pushAgent("chat-juniper", #"{"type":"turnChanged","state":"running"}"#)
+        await waitUntil { !work.workers.isEmpty }
+
+        let store = makeStore()
+        let following = Task { await store.follow(connection) }
+        await waitUntil { store.phase == .loaded }
+
+        #expect(texts(store).last == "Drafted.")
+        #expect(store.isWorking)
+        #expect(store.working?.name == "Juniper")
+        #expect(store.canStop)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aPendingQuestionKeepsTheCompanionWorkingUntilItsTurnEnds() async {
+        let host = TestHost(messages: ["chat-juniper": twoDays])
         let store = makeStore()
         let (connection, following) = await follow(host, store)
 
+        host.pushAgent(
+            "chat-juniper",
+            #"{"type":"questionRequested","request":{"id":"q1","questions":[]}}"#)
+        await waitUntil { store.isWorking }
+        host.pushAgent("chat-juniper", #"{"type":"turnChanged","state":"idle"}"#)
+        host.pushAgent(
+            "chat-juniper",
+            #"{"type":"messageCompleted","message":{"id":"a1","role":"assistant","text":"Which one?","timestamp":1791000001000}}"#
+        )
+        await waitUntil { texts(store).last == "Which one?" }
         #expect(store.isWorking)
-        #expect(store.runningScope == nil)
-        #expect(store.stop() == nil)
 
-        host.pushAgent("chat-juniper", #"{"type":"messageDelta","id":"m1","seq":2,"text":"ed."}"#)
-        await waitUntil { store.runningScope != nil }
-
-        #expect(texts(store) == ["Drafted."])
+        host.pushAgent("chat-juniper", #"{"type":"failed","error":{"kind":"crashed"}}"#)
+        await waitUntil { !store.isWorking }
+        #expect(store.working == nil)
         following.cancel()
         await connection.stop()
     }
@@ -684,6 +742,10 @@ struct ThreadStoreTests {
 
         let message: Message
         let summoned: [String]
+    }
+
+    struct InConversation: Decodable {
+        let conversationId: String
     }
 
     struct CancelArgs: Decodable {

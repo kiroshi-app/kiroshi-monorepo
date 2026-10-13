@@ -36,6 +36,10 @@ struct ThreadScreen<Model: ThreadModel>: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(heading.title)
             .threadHeader(heading)
+            .onChange(of: model.working?.spoken) { _, spoken in
+                guard let spoken else { return }
+                AccessibilityNotification.Announcement(spoken).post()
+            }
             .task(id: space.connection.map(ObjectIdentifier.init)) {
                 guard let connection = space.connection else { return }
                 await model.follow(connection)

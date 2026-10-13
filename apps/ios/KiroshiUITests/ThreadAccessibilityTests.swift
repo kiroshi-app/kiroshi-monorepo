@@ -22,9 +22,14 @@ final class ThreadAccessibilityTests: XCTestCase {
     }
 
     func testTheWorkingThreadPassesTheAudit() throws {
-        let app = launch("3.3")
-        XCTAssertTrue(app.staticTexts["Juniper is working…"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 10))
+        let app = launch("working-after-reply")
+        let working = app.staticTexts["Juniper is working…"]
+        XCTAssertTrue(working.waitForExistence(timeout: 10))
+        let lastReply = app.staticTexts["They’re waiting for your read."].firstMatch
+        XCTAssertTrue(lastReply.exists)
+        XCTAssertGreaterThan(working.frame.minY, lastReply.frame.maxY)
+        XCTAssertLessThan(working.frame.maxY, composer(in: app).frame.minY)
+        XCTAssertTrue(app.buttons["Stop"].exists)
         waitForThePushToEnd(app)
 
         try auditTheThread(app)
@@ -116,6 +121,7 @@ final class ThreadAccessibilityTests: XCTestCase {
                 .waitForExistence(timeout: 15))
         XCTAssertEqual(toolRows.count, 0)
         XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["Juniper is working…"].exists)
         XCTAssertEqual(toolRows.count, 0)
     }
 

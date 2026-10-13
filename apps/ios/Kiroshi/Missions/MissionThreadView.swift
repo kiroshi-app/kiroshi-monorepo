@@ -8,13 +8,17 @@ struct MissionThreadView: View {
     init(mission: Mission, missions: MissionsStore, space: SpaceStore) {
         self.missions = missions
         self.space = space
-        _thread = State(initialValue: MissionThreadStore(mission: mission))
+        _thread = State(
+            initialValue: MissionThreadStore(
+                mission: mission, missions: missions, work: space.work))
     }
 
     var body: some View {
         let companion = missions.companion(of: thread.mission)
         ThreadScreen(
-            model: thread, heading: thread.mission.heading(companion: companion),
+            model: thread,
+            heading: missions.live(thread.mission).heading(
+                companion: companion, working: Set(thread.workers.map(\.companionId))),
             opening: ThreadOpening(
                 day: thread.transcript.openedDay,
                 line: MissionTranscript.openedLine(by: companion)),
@@ -23,9 +27,10 @@ struct MissionThreadView: View {
 }
 
 extension Mission {
-    func heading(companion: MissionCompanion?) -> ThreadHeading {
+    func heading(companion: MissionCompanion?, working: Set<Companion.ID> = []) -> ThreadHeading {
         ThreadHeading(
-            avatar: .companion(companion), working: isAgentRunning ? [botId] : [],
+            avatar: .companion(companion),
+            working: isAgentRunning ? working.union([botId]) : working,
             overline: titleLine(companion: companion), title: objective)
     }
 }

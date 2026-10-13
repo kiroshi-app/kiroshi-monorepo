@@ -12,7 +12,8 @@ struct ThreadView: View {
         #else
             let draft = ""
         #endif
-        _thread = State(initialValue: ThreadStore(subject: subject, draft: draft))
+        _thread = State(
+            initialValue: ThreadStore(subject: subject, work: space.work, draft: draft))
     }
 
     var body: some View {
@@ -28,7 +29,7 @@ struct ThreadView: View {
 
 extension ThreadStore {
     var heading: ThreadHeading {
-        let working = isWorking ? Set(workingCompanions.map(\.id)) : []
+        let working = Set(workingCompanions.map(\.id))
         return switch subject {
         case .companion(let companion):
             ThreadHeading(
@@ -51,6 +52,10 @@ extension ThreadStore {
 
     #Preview("3.3 State · agent working") {
         SignInRootView(model: .fixture(.workingThread))
+    }
+
+    #Preview("State · at work after its own reply") {
+        SignInRootView(model: .fixture(.workingAfterReply))
     }
 
     #Preview("3.4 State · host offline") {

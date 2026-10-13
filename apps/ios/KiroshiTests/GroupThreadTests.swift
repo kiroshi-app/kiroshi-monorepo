@@ -21,7 +21,8 @@ extension ThreadStoreTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         return ThreadStore(
-            subject: .group(releaseCrew), now: { [sentAt] in sentAt }, makeId: { ids.next()! },
+            subject: .group(releaseCrew), work: work, now: { [sentAt] in sentAt },
+            makeId: { ids.next()! },
             calendar: calendar)
     }
 
@@ -37,7 +38,7 @@ extension ThreadStoreTests {
         host.push(
             event: "agent://event",
             payload:
-                #"{"scope":{"conversationId":"group-release","botId":"\#(companionId)","runtimeSessionId":"session-\#(companionId)","epoch":1},"event":\#(event),"turn":null}"#
+                #"{"scope":{"conversationId":"group-release","botId":"\#(companionId)","runtimeSessionId":"session-\#(companionId)","epoch":1},"event":\#(event),"turn":{"turnId":"turn-\#(companionId)","conversationId":"group-release"}}"#
         )
     }
 
@@ -118,7 +119,7 @@ extension ThreadStoreTests {
         #expect(args.summoned == ["atlas"])
         #expect(texts(store) == ["you: Ship it <@atlas> and @Otto"])
         #expect(String(store.entries[0].rendered.characters) == "Ship it @Atlas and @Otto")
-        #expect(store.workingName == "Atlas")
+        #expect(!store.isWorking)
         following.cancel()
         await connection.stop()
     }
@@ -136,7 +137,7 @@ extension ThreadStoreTests {
 
         #expect(try call.args(as: SendTurnArgs.self).summoned.isEmpty)
         #expect(try call.args(as: SendTurnArgs.self).message.content == "Is the tag out?")
-        #expect(store.workingName == "Juniper")
+        #expect(!store.isWorking)
         following.cancel()
         await connection.stop()
     }
@@ -187,6 +188,11 @@ extension ThreadStoreTests {
         #expect(store.workingName == "Atlas")
 
         pushGroupAgent(host, by: "atlas", #"{"type":"turnChanged","state":"idle"}"#)
+        pushGroupAgent(host, by: juniper.id, #"{"type":"turnChanged","state":"idle"}"#)
+        pushGroupAgent(
+            host, by: "atlas",
+            #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"completed"}}"#
+        )
         await waitUntil { !store.isWorking }
         #expect(store.runningScope == nil)
         following.cancel()

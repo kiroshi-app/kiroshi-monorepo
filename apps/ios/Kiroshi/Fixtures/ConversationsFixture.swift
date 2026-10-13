@@ -297,6 +297,9 @@
             case .workingThread:
                 script.messages[juniper.id] = [releaseNotesAsk]
                 script.workingCompanion = juniper.id
+            case .workingAfterReply:
+                script.messages[juniper.id] = releaseNotes
+                script.workingCompanion = juniper.id
             case .longName:
                 script.companions = [longNamed] + companions.dropFirst()
                 script.messages[juniper.id] = releaseNotes
@@ -314,7 +317,8 @@
 
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
-            case .thread, .emptyThread, .workingThread, .threadHostOffline, .swipedThread,
+            case .thread, .emptyThread, .workingThread, .workingAfterReply, .threadHostOffline,
+                .swipedThread,
                 .threadFailed, .slowThread, .longName, .twoAsks:
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
@@ -429,13 +433,13 @@
             let companionId =
                 companionId ?? conversationId.replacingOccurrences(of: "chat-", with: "")
             return
-                #"{"conversationId":"\#(conversationId)","botId":"\#(companionId)","runtimeSessionId":"session-1","epoch":1}"#
+                #"{"conversationId":"\#(conversationId)","botId":"\#(companionId)","runtimeSessionId":"session-\#(companionId)","epoch":1}"#
         }
 
         static func agentEvent(
             _ conversationId: String, _ event: String, by companionId: Companion.ID? = nil
         ) -> String {
-            #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId, by: companionId)),"event":\#(event),"turn":null}}}"#
+            #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId, by: companionId)),"event":\#(event),"turn":{"turnId":"turn-live","conversationId":"\#(conversationId)"}}}}"#
         }
 
         static func activity(_ id: String, _ title: String, _ status: String) -> String {
@@ -644,6 +648,8 @@
                 reply(id, "[\(paths.joined(separator: ","))]")
             case "agent_cancel_turn":
                 reply(id, "null")
+            case "agent_pending_questions":
+                reply(id, "[]")
             case "conversation_create":
                 let companionIds = args["botIds"] as? [String] ?? []
                 let group = created.withLock { groups in

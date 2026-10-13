@@ -15,9 +15,42 @@
                 "mission_space_feed": feed,
                 "conversation_message_page": thread,
                 "conversation_send_turn": "1",
+                "agent_pending_questions": "[]",
                 "chat_store_attachments":
                     #"["/Users/sam/Library/Application Support/app.kiroshi/attachments/thread-212/6f1c2e9a-3b4d-4e5f-8a6b-7c8d9e0f1a2b.png"]"#,
             ]
+        }
+
+        static var answeringTurn: [String: [ScriptedRelaySocket.Inbound]] {
+            [
+                "conversation_send_turn": [
+                    .frame(
+                        agentEvent(#"{"type":"turnChanged","state":"running"}"#),
+                        after: .milliseconds(300)),
+                    .frame(
+                        agentEvent(
+                            #"{"type":"activity","activity":{"id":"tool-1","title":"Read · onboarding.md","kind":"tool","status":"running"}}"#
+                        ), after: .seconds(1)),
+                    .frame(
+                        agentEvent(
+                            #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"completed"}}"#
+                        ),
+                        after: .seconds(8)),
+                    .frame(agentEvent(#"{"type":"turnChanged","state":"idle"}"#)),
+                ]
+            ]
+        }
+
+        static var atWork: [String: [ScriptedRelaySocket.Inbound]] {
+            [
+                "conversation_message_page": [
+                    .frame(agentEvent(#"{"type":"turnChanged","state":"running"}"#))
+                ]
+            ]
+        }
+
+        private static func agentEvent(_ event: String) -> String {
+            #"{"event":{"event":"agent://event","payload":{"scope":{"conversationId":"\#(threadConversationId)","botId":"bot-atlas","runtimeSessionId":"session-atlas","epoch":1},"turn":{"turnId":"turn-atlas","conversationId":"\#(threadConversationId)"},"event":\#(event)}}}"#
         }
 
         static var emptyAnswers: [String: String] {

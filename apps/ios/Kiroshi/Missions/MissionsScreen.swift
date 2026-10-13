@@ -99,6 +99,10 @@ private struct ScrollingUnavailable<Content: View>: View {
         SignInRootView(model: .fixture(.missions))
     }
 
+    #Preview("Mission · companion at work") {
+        SignInRootView(model: .fixture(.missionWorking))
+    }
+
     #Preview("5.2 Mission · thread") {
         SignInRootView(model: .fixture(.missionThread))
     }

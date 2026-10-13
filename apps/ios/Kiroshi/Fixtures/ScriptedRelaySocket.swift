@@ -3,7 +3,7 @@
 
     final class ScriptedRelaySocket: RelaySocket {
         enum Inbound: Sendable {
-            case frame(String)
+            case frame(String, after: Duration = .zero)
             case close(Int)
         }
 
@@ -15,12 +15,13 @@
         private let answersPings: Bool
         private let answers: [String: String]
         private let answersAfter: [String: Duration]
+        private let plays: [String: [Inbound]]
         private let hostLeavesAfter: String?
 
         init(
             sharedSpaceId: String? = nil, answersPings: Bool = true,
             answers: [String: String] = [:], answersAfter: [String: Duration] = [:],
-            hostLeavesAfter: String? = nil
+            plays: [String: [Inbound]] = [:], hostLeavesAfter: String? = nil
         ) {
             (sent, sentContinuation) = AsyncStream.makeStream()
             (inbound, inboundContinuation) = AsyncStream.makeStream()
@@ -28,6 +29,7 @@
             self.answersPings = answersPings
             self.answers = answers
             self.answersAfter = answersAfter
+            self.plays = plays
             self.hostLeavesAfter = hostLeavesAfter
         }
 
@@ -49,6 +51,9 @@
                     try await Task.sleep(for: delay)
                 }
                 push(.frame(#"{"id":\#(call.id),"status":200,"body":\#(body)}"#))
+                for played in plays[call.command] ?? [] {
+                    push(played)
+                }
                 if call.command == hostLeavesAfter {
                     push(.close(RelayClosure.hostOffline))
                 }
@@ -58,7 +63,9 @@
         func receive() async throws -> String {
             var iterator = inbound.makeAsyncIterator()
             switch await iterator.next() {
-            case .frame(let text): return text
+            case .frame(let text, let delay):
+                try await ContinuousClock().sleep(for: delay)
+                return text
             case .close(let code): throw RelayClosure(code: code)
             case nil: throw CancellationError()
             }

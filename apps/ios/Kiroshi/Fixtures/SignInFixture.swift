@@ -79,6 +79,7 @@
         case thread = "3.1"
         case emptyThread = "3.2"
         case workingThread = "3.3"
+        case workingAfterReply = "working-after-reply"
         case threadHostOffline = "3.4"
         case swipedThread = "3.5"
         case conversationsFailed = "conversations-failed"
@@ -94,6 +95,7 @@
         case twoAsks = "two-asks"
         case missions = "5.1"
         case missionThread = "5.2"
+        case missionWorking = "mission-working"
         case slowMission = "slow-mission"
         case noMissions = "5.3"
         case missionsHostOffline = "5.4"
@@ -131,12 +133,14 @@
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
                 ]
-            case .missions, .missionThread, .slowMission, .noMissions, .missionsHostOffline:
+            case .missions, .missionThread, .missionWorking, .slowMission, .noMissions,
+                .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
-                .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
+                .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
+                .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
@@ -147,12 +151,14 @@
         fileprivate var isSignedIn: Bool {
             switch self {
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .missions, .missionThread,
+                .missionWorking,
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
-                .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
+                .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
+                .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 true
@@ -186,8 +192,10 @@
         }
 
         var opensOnMissions: Bool {
-            [.missions, .missionThread, .slowMission, .noMissions, .missionsHostOffline].contains(
-                self)
+            [
+                .missions, .missionThread, .missionWorking, .slowMission, .noMissions,
+                .missionsHostOffline,
+            ].contains(self)
         }
 
         @MainActor fileprivate var relay: RelayEnvironment {
@@ -196,14 +204,24 @@
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
-                .conversationsHostOffline, .workingList, .workingThread, .conversationsFailed,
+                .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
+                .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
                     transport: FixtureRelayTransport(
-                        onlineSpaceIds: online, answers: MissionsFixture.answers),
+                        onlineSpaceIds: online, answers: MissionsFixture.answers,
+                        plays: MissionsFixture.answeringTurn),
+                    clock: ContinuousRelayClock())
+            case .missionWorking:
+                return RelayEnvironment(
+                    transport: FixtureRelayTransport(
+                        onlineSpaceIds: online, answers: MissionsFixture.answers,
+                        plays: MissionsFixture.atWork.merging(MissionsFixture.answeringTurn) {
+                            atWork, _ in atWork
+                        }),
                     clock: ContinuousRelayClock())
             case .slowMission:
                 return RelayEnvironment(
@@ -273,12 +291,14 @@
                 .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
-                .workingList, .workingThread, .conversationsFailed, .threadFailed, .groupThread,
+                .workingList, .workingThread, .workingAfterReply, .conversationsFailed,
+                .threadFailed, .groupThread,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,
                 .twoAsks,
                 .missions,
-                .missionThread, .slowMission, .noMissions, .missionsHostOffline, .settings:
+                .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
+                .settings:
                 break
             }
             return model
