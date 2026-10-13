@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
 	createJoinedSpacesController,
+	hostMarksOf,
 	type JoinedSpacesTransport,
 	openLocalSpaceOf,
 	openRowIdOf,
-	remoteMarksOf,
 	rosterSpacesOf,
 	switcherSpacesOf,
 } from "./joined-spaces-controller"
@@ -140,9 +140,9 @@ describe("the switcher rows", () => {
 		])
 	})
 
-	it("marks a joined space unreachable once its host is down or refused", () => {
+	it("marks a joined space down once its host is down or refused", () => {
 		expect(
-			remoteMarksOf(
+			hostMarksOf(
 				[GARAGE, ATTIC, { ...ATTIC, id: "j3", remoteSpaceId: "loft" }],
 				{
 					[GARAGE.id]: { status: "up" },
@@ -151,16 +151,20 @@ describe("the switcher rows", () => {
 				},
 			),
 		).toEqual({
-			[GARAGE_ROW]: "connected",
-			"joined:joined-attic": "unreachable",
-			"joined:j3": "unreachable",
+			[GARAGE_ROW]: "up",
+			"joined:joined-attic": "down",
+			"joined:j3": "down",
 		})
 	})
 
-	it("keeps a joined space connected while its host is still connecting", () => {
+	it("marks a joined space connecting while its host is still connecting", () => {
 		expect(
-			remoteMarksOf([GARAGE], { [GARAGE.id]: { status: "connecting" } }),
-		).toEqual({ [GARAGE_ROW]: "connected" })
+			hostMarksOf([GARAGE], { [GARAGE.id]: { status: "connecting" } }),
+		).toEqual({ [GARAGE_ROW]: "connecting" })
+	})
+
+	it("marks a joined space connecting before its host reports any state", () => {
+		expect(hostMarksOf([GARAGE], {})).toEqual({ [GARAGE_ROW]: "connecting" })
 	})
 
 	it("keeps a joined row apart from a local space carrying the same id", () => {
@@ -172,8 +176,8 @@ describe("the switcher rows", () => {
 			{ id: GARAGE_ROW, name: "Garage" },
 		])
 		expect(
-			remoteMarksOf([hostPersonal], { [GARAGE.id]: { status: "up" } }),
-		).toEqual({ [GARAGE_ROW]: "connected" })
+			hostMarksOf([hostPersonal], { [GARAGE.id]: { status: "up" } }),
+		).toEqual({ [GARAGE_ROW]: "up" })
 	})
 })
 
@@ -490,11 +494,11 @@ describe("a host removing the reader", () => {
 		expect(gear.reportRemoval).not.toHaveBeenCalled()
 		expect(gear.joined.getState().joinedSpaces).toEqual([STUDIO])
 		expect(
-			remoteMarksOf(
+			hostMarksOf(
 				gear.joined.getState().joinedSpaces,
 				gear.hosts.getState().connections,
 			),
-		).toEqual({ [STUDIO_ROW]: "unreachable" })
+		).toEqual({ [STUDIO_ROW]: "down" })
 	})
 })
 
@@ -557,7 +561,7 @@ describe("a local and a joined space both carrying the id personal", () => {
 				gear.joined.getState(),
 				gear.spaces.getState().selectedSpaceId,
 			),
-			marks: remoteMarksOf(shown, gear.hosts.getState().connections),
+			marks: hostMarksOf(shown, gear.hosts.getState().connections),
 		}
 	}
 

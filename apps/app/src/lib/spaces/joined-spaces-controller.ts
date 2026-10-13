@@ -1,9 +1,9 @@
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import {
 	type NoticeMessage,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
-import type { SpaceRemote } from "@workspace/ui/components/space-switcher"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type SpaceInviters, storedInviters } from "./space-inviters"
@@ -109,8 +109,12 @@ const isSharedSpaceKnown = (joined: JoinedSpace) =>
 const hostSpaceIdOf = (joined: JoinedSpace): string =>
 	joined.remoteSpaceId ?? joined.id
 
-const isUnreachable = (connection: JoinedHostState | undefined) =>
-	connection?.status === "down" || connection?.status === "refused"
+const HOST_OF_STATUS: Record<JoinedHostState["status"], SpaceHost> = {
+	connecting: "connecting",
+	up: "up",
+	down: "down",
+	refused: "down",
+}
 
 const RELAY_HOST_SUFFIX = "/relay/member"
 
@@ -155,14 +159,14 @@ export const switcherSpacesOf = (
 	...joinedSpaces.map((joined) => ({ id: rowIdOf(joined), name: joined.name })),
 ]
 
-export const remoteMarksOf = (
+export const hostMarksOf = (
 	joinedSpaces: JoinedSpace[],
 	connections: Record<string, JoinedHostState>,
-): Record<string, SpaceRemote> =>
+): Record<string, SpaceHost> =>
 	Object.fromEntries(
 		joinedSpaces.map((joined) => [
 			rowIdOf(joined),
-			isUnreachable(connections[joined.id]) ? "unreachable" : "connected",
+			HOST_OF_STATUS[connections[joined.id]?.status ?? "connecting"],
 		]),
 	)
 
