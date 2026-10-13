@@ -112,6 +112,14 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 `KiroshiUITests` runs the accessibility audit on `5.1`, `5.3` and `5.4`, opens OPE-212 from `5.1` and audits it as `5.2` draws it, then swipes left to bring the times in. `MissionOpeningTests` opens `slow-mission`, goes back, opens OPE-212 again and checks it shows the loading, without the `Today` separator, then the thread. `ThreadHeaderTests` opens Juniper, Shoto, Release crew and OPE-212 from their lists and reads each header: `Juniper, Writer`, `Shoto`, `Release crew`, `OPE-212 · Atlas · Planner, Split the onboarding flow`; checks `3.1`, `group-thread` and `5.2` show the same header and composer; and checks `long-name` and `long-group` keep their name on one line, centred.
 
+A Conversation's missions: the flag at the top right of a solo or group Conversation pushes Missions, the same `MissionsList` as the Missions tab (`MissionsStore.sections(in:)` keeps only the missions opened in that conversation), in the Conversations tab's typed path (`ConversationsRoute`); a row opens the mission's thread, Back returns to the Conversation. Page 2's host answers `mission_space_feed` with three missions in Release 0.42 (OPE-215, OPE-218, OPE-209) and one in Juniper's conversation (OPE-220). `missions-button` opens on Release 0.42's thread, `conversation-missions` on its missions, `conversation-no-missions` on Atlas's, which has none:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversation-missions
+```
+
+`ConversationMissionsTests` opens Release 0.42 from `2.1`, taps Missions, checks only its three missions show, audits the list, opens OPE-209 and comes back to the thread, then audits `conversation-no-missions`.
+
 ## Settings and Sign out without the network
 
 Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations and Missions tabs, presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
