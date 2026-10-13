@@ -4,7 +4,7 @@ import type { EmitFor, FakeRun } from "./fake-driver-runs"
 
 import type { ChatMessage, TurnOutcome } from "../agent/contract"
 
-export type FinishTurn = (run: FakeRun, outcome: TurnOutcome) => void
+type FinishTurn = (run: FakeRun, outcome: TurnOutcome) => void
 
 type TurnStepsOptions = {
 	emitFor: EmitFor
