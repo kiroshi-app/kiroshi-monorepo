@@ -170,7 +170,7 @@ const addItemChanges = (
 }
 
 const addScrollChanges = (
-	active: Recorder,
+	{ active }: ViewportTrace,
 	changes: ChangeSet,
 	before: Layout,
 	after: Layout,
@@ -232,7 +232,7 @@ const addReaderResidual = (
 export const diff = (trace: ViewportTrace, before: Layout, after: Layout) => {
 	const changes = changeSet()
 	addItemChanges(trace, changes, before, after)
-	addScrollChanges(trace.active, changes, before, after)
+	addScrollChanges(trace, changes, before, after)
 	addReaderResidual(changes, before, after)
 	return changes.list()
 }
