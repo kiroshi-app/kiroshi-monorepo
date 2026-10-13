@@ -76,6 +76,11 @@ const bots = {
 		searchMissions: "Rechercher des missions",
 		spaceSettings: "Réglages de l’espace",
 		dot: "{{name}}, nouvelle activité",
+		badge: {
+			attention: "{{name}}, en attente de vous",
+			done: "{{name}}, activité terminée",
+			failed: "{{name}}, activité en échec",
+		},
 	},
 	spaces: {
 		label: "Espaces",

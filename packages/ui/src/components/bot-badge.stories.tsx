@@ -5,6 +5,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	Row,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import {
 	BOT_BADGES,
@@ -89,7 +90,7 @@ export const BotBadges = meta.story({
 		docs: {
 			description: {
 				story:
-					"The three things a companion badge can mean, on their own tokens: attention is orange and breathes because it is the only one asking the reader for something, done is green and failed is red and both hold still. Check the three colours hold across themes and across light and dark — they are fixed on purpose — and that only attention pulses, and only while motion is allowed. Pick `Placements` for where the mark lands.",
+					"The three things a companion badge can mean, on their own tokens: attention wears the warning tone and breathes because it is the only one waiting on the reader, done is green and failed is red and both hold still. The primary blue never marks attention: blue is the app's accent, not a request. Check the three colours hold in light and dark, that the attention dot reads `--warning` in both, and that only attention pulses, and only while motion is allowed. Pick `Placements` for where the mark lands.",
 			},
 		},
 	},
@@ -100,6 +101,9 @@ export const BotBadges = meta.story({
 		await expect(
 			dots.map((dot) => dot.classList.contains("motion-safe:animate-pulse")),
 		).toEqual([true, false, false])
+		await expect(getComputedStyle(dots[0]).backgroundColor).toBe(
+			tokenStyleIn(dots[0], "bg-warning", "backgroundColor"),
+		)
 		await expect(dots.map((dot) => dot.getAttribute("aria-hidden"))).toEqual([
 			"true",
 			"true",
@@ -262,6 +266,10 @@ export const MissionStates = meta.story({
 			],
 		)
 		await expect(strips[3]).toHaveTextContent("working")
+		const waitingDot = trailingOf(strips[0])
+		await expect(getComputedStyle(waitingDot).backgroundColor).toBe(
+			tokenStyleIn(waitingDot, "bg-warning", "backgroundColor"),
+		)
 		await expect(strips.map((strip) => boxOf(trailingOf(strip)).width)).toEqual(
 			strips.map(() => 6),
 		)

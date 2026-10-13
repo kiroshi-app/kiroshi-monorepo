@@ -17,6 +17,7 @@
 	--bot-badge-attention: #46639c;
 	--bot-badge-done: oklch(0.68 0.17 148);
 	--bot-badge-failed: oklch(0.62 0.22 27);
+	--warning: oklch(0.64 0.16 60);
 	--state-connected: oklch(0.696 0.17 162.48);
 	--presence-online: #239f53;
 	--presence-offline: #737373;
@@ -69,6 +70,7 @@
 	--bot-avatar-field-untinted: #75acff;
 	--bot-avatar-ink: oklch(0.995 0 0);
 	--bot-badge-attention: #7490c2;
+	--warning: oklch(0.76 0.16 72);
 	--presence-online: #3fb466;
 	--presence-offline: #737373;
 	--title-bar-pill: oklch(1 0 0 / 6%);

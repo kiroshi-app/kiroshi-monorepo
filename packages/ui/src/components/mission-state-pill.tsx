@@ -11,7 +11,7 @@ type StateMark = {
 }
 
 const MISSION_STATE_MARK = {
-	waiting_human: { Mark: Icons.Bell, markClass: "text-bot-badge-attention" },
+	waiting_human: { Mark: Icons.Bell, markClass: "text-warning" },
 	ready_to_merge: { Mark: Icons.Check, markClass: "text-bot-badge-done" },
 	failed: { Mark: Icons.Error, markClass: "text-bot-badge-failed" },
 	done: { Mark: Icons.Success, markClass: "text-bot-badge-done" },
