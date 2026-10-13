@@ -204,7 +204,7 @@ mod tests {
 	}
 
 	fn a_bundle(root: &Path, bot_id: &str) -> PathBuf {
-		let bundle = bundles::dir(root, bot_id);
+		let bundle = root.join("plugins").join(format!("bundle-{bot_id}"));
 		fs::create_dir_all(&bundle).expect("the bundle stands");
 		bundle
 	}
@@ -302,7 +302,7 @@ mod tests {
 			fs::read_to_string(bundles::marketplace_file(&root)).expect("the marketplace is there");
 		assert!(!listed.contains(&bundle_name("bean", &cascaded)), "got {listed}");
 		assert!(listed.contains(&bundle_name("sprout", &kept)), "got {listed}");
-		assert!(!bundles::dir(&root, &cascaded).exists());
+		assert!(bundles::lookup(&root, &cascaded).expect("the plugins list").is_none());
 
 		let _ = fs::remove_dir_all(&root);
 	}

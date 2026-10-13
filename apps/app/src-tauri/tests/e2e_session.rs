@@ -1,8 +1,10 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{terminate_session, EVENT_CHANNEL};
@@ -66,11 +68,10 @@ fn serial() -> MutexGuard<'static, ()> {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"e2e",
-		mock_builder()
-			.manage(AgentState::default())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
-			.invoke_handler(invoke_handler()),
+		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
+	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -365,6 +366,7 @@ fn launch_stored(name: &str, played: &str) -> Stored {
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
 	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");

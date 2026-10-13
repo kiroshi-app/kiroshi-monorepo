@@ -71,6 +71,7 @@ async fn write_bundle<R: Runtime>(
 	let root = bundles::root(app);
 	if let Some(root) = root.as_deref() {
 		let effort = written_effort(app, bot).await;
+		bundles::lay_down(root, bot).map_err(unwritable)?;
 		bundles::set_permissions(root, bot, &accepted).map_err(unwritable)?;
 		bundles::write_styled(root, bot, output_style, effort).map_err(unwritable)?;
 	}
@@ -422,7 +423,7 @@ async fn copied_onto<R: Runtime>(
 	copied_environment(app, database, &carried.source_of, &placed.id).await?;
 	let root = bundles::root(app);
 	if let Some(root) = root.as_deref() {
-		bundles::inherit(root, &carried.source_id, &placed.id).map_err(unwritable)?;
+		bundles::inherit(root, &carried.source_id, &placed).map_err(unwritable)?;
 	}
 	write_bundle(app, database, &placed, &carried.output_style, &carried.permissions).await
 }
@@ -783,7 +784,12 @@ mod tests {
 		let listed = held.bots(Some(space)).await.expect("the space reads");
 		assert!(listed.iter().any(|bot| bot.id == created.id));
 		let root = bundles::root(app.handle()).expect("the bundle root is named");
-		assert!(bundles::dir(&root, &created.id).is_dir());
+		let plugins = root.join("plugins");
+		assert_eq!(
+			bundles::dir(&root, &created.id).expect("the bundle is held"),
+			plugins.join(format!("quill-{}", &created.id[..8]))
+		);
+		assert!(!plugins.join(&created.id).exists(), "a bundle was laid down under the bot id");
 	}
 
 	async fn a_bundle_on_the_default_model(app: &App<MockRuntime>, name: &str) -> PathBuf {

@@ -94,7 +94,7 @@ fn is_loopback(url: &str) -> bool {
 }
 
 pub fn mcp_servers(root: &Path, bot_id: &str) -> Vec<McpServer> {
-	mcp_servers_at(&dir(root, bot_id))
+	dir(root, bot_id).map(|bundle| mcp_servers_at(&bundle)).unwrap_or_default()
 }
 
 pub fn mcp_servers_at(bundle: &Path) -> Vec<McpServer> {
@@ -127,7 +127,7 @@ pub fn set_mcp_server(
 	config: &serde_json::Value,
 	mark: Option<&ApplicationMark>,
 ) -> std::io::Result<McpServer> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let server = set_mcp_server_at(&bundle, name, config, mark)?;
 	rewrite_manifest(root, bot)?;
@@ -171,7 +171,7 @@ fn written_mark(
 }
 
 pub fn remove_mcp_server(root: &Path, bot: &Bot, name: &str) -> std::io::Result<()> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	remove_mcp_server_at(&bundle, name)?;
 	rewrite_manifest(root, bot)?;
@@ -307,7 +307,7 @@ mod tests {
 	}
 
 	fn marks_file(root: &Path, bot_id: &str) -> PathBuf {
-		dir(root, bot_id).join(MARKS_NAME)
+		dir(root, bot_id).expect("the bundle is held").join(MARKS_NAME)
 	}
 
 	#[test]

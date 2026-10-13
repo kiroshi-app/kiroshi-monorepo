@@ -8,6 +8,7 @@ pub mod commands;
 pub mod companions;
 pub mod conversations;
 pub mod db;
+mod descriptors;
 pub mod environment;
 pub mod events;
 pub mod file_store;
@@ -40,6 +41,7 @@ use agent::AgentState;
 use commands::builder;
 
 pub fn run() {
+	descriptors::raise_open_file_limit();
 	tauri::Builder::default()
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
 			window_controls::raise_main(app);

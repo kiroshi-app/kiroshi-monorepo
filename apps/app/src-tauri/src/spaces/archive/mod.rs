@@ -275,7 +275,10 @@ fn trees_of(
 		let bot = placed(&bot_id)?;
 		let owner = EnvOwner::Bot { id: bot.clone(), space_id: space.clone() };
 		let [env, servers] = env_dirs(places, &owner)?;
-		trees.insert(Tree::Bot(bot_id.clone()), bundles::dir(&places.bots, &bot));
+		let name =
+			rows.bot_name(&bot_id).ok_or_else(|| unreadable_archive("a seated bot has no row"))?;
+		let bundle = bundles::placed_dir(&places.bots, &bot, name).map_err(unwritable_bundle)?;
+		trees.insert(Tree::Bot(bot_id.clone()), bundle);
 		trees.insert(Tree::BotEnv(bot_id.clone()), env);
 		trees.insert(Tree::BotServers(bot_id), servers);
 	}

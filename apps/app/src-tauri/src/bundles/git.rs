@@ -313,11 +313,13 @@ fn others(run: &[Commit]) -> String {
 	run.iter().skip(1).map(summary).collect::<Vec<String>>().join("\n")
 }
 
+pub fn init(bundle: &Path) -> Result<(), git2::Error> {
+	exclude(&Repository::init(bundle)?);
+	Ok(())
+}
+
 fn opened(bundle: &Path) -> Result<Repository, git2::Error> {
-	let repository = match Repository::open(bundle) {
-		Ok(repository) => repository,
-		Err(_) => Repository::init(bundle)?,
-	};
+	let repository = Repository::open(bundle)?;
 	exclude(&repository);
 	Ok(repository)
 }
@@ -470,7 +472,39 @@ mod tests {
 		let bundle = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-git-{name}")));
 		let _ = fs::remove_dir_all(&bundle);
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
+		init(&bundle).expect("the repository is created");
 		bundle
+	}
+
+	#[test]
+	fn a_bundle_with_no_repository_refuses_the_record_and_is_given_none() {
+		let bundle = RemovedOnDrop(std::env::temp_dir().join("kiroshi-git-no-repository"));
+		let _ = fs::remove_dir_all(&bundle);
+		fs::create_dir_all(&bundle).expect("the bundle is laid down");
+		fs::write(bundle.join("agent.md"), "Answer briefly.").expect("the file lands");
+
+		assert!(record(&bundle, Author::User, "Saved", "").is_err());
+		assert!(!bundle.join(".git").exists(), "a repository was created");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_bundle_whose_repository_cannot_be_read_refuses_the_record_and_keeps_it() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let bundle = a_bundle("sealed-repository");
+		let first = writes(&bundle, &[("agent.md", "Answer briefly.")], "Saved");
+		fs::write(bundle.join("agent.md"), "Answer at length.").expect("the file lands");
+		let repository = bundle.join(".git");
+		fs::set_permissions(&repository, fs::Permissions::from_mode(0o000)).expect("it is sealed");
+
+		let recorded = record(&bundle, Author::User, "Saved again", "");
+		fs::set_permissions(&repository, fs::Permissions::from_mode(0o700))
+			.expect("it is unsealed");
+
+		assert!(recorded.is_err());
+		let walked = history(&bundle).expect("the history reads");
+		assert_eq!(walked.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>(), vec![first]);
 	}
 
 	fn writes(bundle: &Path, files: &[(&str, &str)], title: &str) -> String {

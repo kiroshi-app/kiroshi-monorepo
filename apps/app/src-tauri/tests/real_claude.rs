@@ -241,8 +241,11 @@ fn denying(rules: &str) -> String {
 fn ruled(folder: &LiveFolder, bot: &Bot, settings: &str) -> Bundle {
 	let root = folder.bundles();
 	bundles::write(&root, bot).expect("the bundle is written");
-	std::fs::write(bundles::dir(&root, &bot.id).join("settings.json"), settings)
-		.expect("the settings file is written");
+	std::fs::write(
+		bundles::dir(&root, &bot.id).expect("the bundle is held").join("settings.json"),
+		settings,
+	)
+	.expect("the settings file is written");
 	handed_over(folder, bot)
 }
 
@@ -254,7 +257,7 @@ fn written(folder: &LiveFolder, bot: &Bot) -> Bundle {
 fn handed_over(folder: &LiveFolder, bot: &Bot) -> Bundle {
 	let root = folder.bundles();
 	Bundle {
-		path: bundles::dir(&root, &bot.id).display().to_string(),
+		path: bundles::dir(&root, &bot.id).expect("the bundle is held").display().to_string(),
 		system_path: Some(folder.system_plugin().display().to_string()),
 		user_path: Some(folder.user_plugin().display().to_string()),
 		space_path: Some(folder.space_plugin().display().to_string()),
@@ -581,7 +584,7 @@ async fn a_bot_is_handed_its_own_directory_before_its_first_turn() {
 	let told = text(&live.run_turn(WHICH_ROOT).await);
 	live.sidecar.shutdown().await;
 
-	let bundle = bundles::dir(&folder.bundles(), "live-bot");
+	let bundle = bundles::dir(&folder.bundles(), "live-bot").expect("the bundle is held");
 	let resolved = bundle.canonicalize().unwrap_or_else(|_| bundle.clone());
 	assert!(
 		told.contains(&seen_as(&bundle)) || told.contains(&seen_as(&resolved)),

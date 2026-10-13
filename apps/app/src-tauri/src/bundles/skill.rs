@@ -78,7 +78,7 @@ pub struct SkillFront {
 }
 
 pub fn skills(root: &Path, bot_id: &str) -> Vec<Skill> {
-	skills_at(&dir(root, bot_id))
+	dir(root, bot_id).map(|bundle| skills_at(&bundle)).unwrap_or_default()
 }
 
 pub fn skills_at(bundle: &Path) -> Vec<Skill> {
@@ -86,12 +86,13 @@ pub fn skills_at(bundle: &Path) -> Vec<Skill> {
 }
 
 pub fn is_system_skill(root: &Path, bot_id: &str, skill_id: &str) -> bool {
-	skill_dir(&dir(root, bot_id), skill_id)
+	dir(root, bot_id)
+		.and_then(|bundle| skill_dir(&bundle, skill_id))
 		.is_ok_and(|path| front_value(&held_skill(&path), SYSTEM_KEY).as_deref() == Some(MARKED))
 }
 
 pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Result<Skill> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let path = free_skill_dir(&bundle, &draft.name);
 	let skill = written_skill(root, bot, &path, drafted(None, draft)?)?;
@@ -100,7 +101,7 @@ pub fn create_skill(root: &Path, bot: &Bot, draft: &SkillDraft) -> std::io::Resu
 }
 
 pub fn write_skills(root: &Path, bot: &Bot, skills: &[(&str, &[u8])]) -> std::io::Result<()> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	for (id, body) in skills {
 		private_files::replace(&bundle.join(SKILLS_DIR).join(id).join(SKILL_NAME), body)?;
@@ -122,7 +123,7 @@ pub fn update_skill(
 	skill_id: &str,
 	draft: &SkillDraft,
 ) -> std::io::Result<Skill> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let path = skill_dir(&bundle, skill_id)?;
 	let text = drafted(Some(&held_skill(&path)), draft)?;
@@ -152,7 +153,7 @@ pub fn set_skill_preloaded(
 	skill_id: &str,
 	is_preloaded: bool,
 ) -> std::io::Result<Skill> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let path = skill_dir(&bundle, skill_id)?;
 	let skill = written_skill(root, bot, &path, marked(&held_skill(&path), is_preloaded)?)?;
@@ -185,7 +186,7 @@ fn marking(is_preloaded: bool) -> &'static str {
 }
 
 pub fn remove_skill(root: &Path, bot: &Bot, skill_id: &str) -> std::io::Result<()> {
-	let bundle = dir(root, &bot.id);
+	let bundle = dir(root, &bot.id)?;
 	let _serialised = serialised(&bundle);
 	let name = deleted_skill(&bundle, skill_id)?;
 	rewrite_agent(root, bot)?;
@@ -307,7 +308,7 @@ pub fn skill_file(
 	skill_id: &str,
 	relative: &str,
 ) -> std::io::Result<String> {
-	skill_file_at(&dir(root, bot_id), skill_id, relative)
+	skill_file_at(&dir(root, bot_id)?, skill_id, relative)
 }
 
 pub fn skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<String> {
@@ -321,7 +322,7 @@ pub fn write_skill_file(
 	relative: &str,
 	text: &str,
 ) -> std::io::Result<Skill> {
-	write_skill_file_at(&dir(root, bot_id), skill_id, relative, text)
+	write_skill_file_at(&dir(root, bot_id)?, skill_id, relative, text)
 }
 
 pub fn write_skill_file_at(
@@ -345,7 +346,7 @@ pub fn remove_skill_file(
 	skill_id: &str,
 	relative: &str,
 ) -> std::io::Result<()> {
-	remove_skill_file_at(&dir(root, bot_id), skill_id, relative)
+	remove_skill_file_at(&dir(root, bot_id)?, skill_id, relative)
 }
 
 pub fn remove_skill_file_at(bundle: &Path, skill_id: &str, relative: &str) -> std::io::Result<()> {
@@ -463,7 +464,8 @@ fn marked(text: &str, is_preloaded: bool) -> std::io::Result<String> {
 #[cfg(test)]
 mod tests {
 	use super::super::tests::{
-		a_bot, a_draft, a_root, drop_a_skill, rewrite_the_brief, written_agent, written_skill_file,
+		a_bot, a_draft, a_held_bundle, a_root, drop_a_skill, rewrite_the_brief, written_agent,
+		written_skill_file,
 	};
 	use super::super::{agent_file, instructions, write, FENCE};
 	use super::*;
@@ -472,7 +474,7 @@ mod tests {
 	fn a_skill_reports_every_file_its_directory_holds_but_its_own() {
 		let root = a_root("skill-files-listed");
 		let bot = a_bot("Bean", "Answer briefly.");
-		let held = dir(&root, &bot.id).join(SKILLS_DIR).join("baking");
+		let held = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking");
 		for (path, text) in [
 			(held.join(SKILL_NAME), "---\nname: baking\n---\n\nBake.\n"),
 			(held.join("reference").join("crumb.md"), "Open crumb."),
@@ -548,7 +550,7 @@ mod tests {
 		}
 
 		assert!(skills(&root, &bot.id)[0].files.is_empty());
-		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join("escaped.md").exists());
+		assert!(!a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("escaped.md").exists());
 
 		let _ = fs::remove_dir_all(&root);
 	}
@@ -563,7 +565,7 @@ mod tests {
 			.expect("the skill lands");
 		let outside = root.join("outside");
 		private_files::replace(&outside.join("secret.md"), b"Not yours.").expect("the file lands");
-		let held = dir(&root, &bot.id).join(SKILLS_DIR).join("baking");
+		let held = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking");
 		std::os::unix::fs::symlink(&outside, held.join("reference")).expect("the link lands");
 
 		for linked in ["reference", "reference/secret.md"] {
@@ -601,7 +603,7 @@ mod tests {
 
 		assert_eq!(renamed.id, "proofing");
 		assert_eq!(renamed.files, vec!["reference/crumb.md".to_owned()]);
-		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join("baking").exists());
+		assert!(!a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking").exists());
 		assert_eq!(
 			skill_file(&root, &bot.id, "proofing", "reference/crumb.md").expect("the file reads"),
 			"Open crumb."
@@ -675,7 +677,7 @@ mod tests {
 	fn an_edited_skill_keeps_every_key_this_app_does_not_own() {
 		let root = a_root("skill-edited");
 		let bot = a_bot("Bean", "Answer briefly.");
-		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		let path = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
 		private_files::replace(
 			&path,
 			concat!(
@@ -714,7 +716,7 @@ mod tests {
 	fn every_frontmatter_key_a_skill_carries_is_read_back_whatever_the_file_spells() {
 		let root = a_root("skill-front-read");
 		let bot = a_bot("Bean", "Answer briefly.");
-		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		let path = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
 		private_files::replace(
 			&path,
 			concat!(
@@ -804,7 +806,7 @@ mod tests {
 	fn a_folded_block_a_hand_indented_survives_a_letter_that_is_not_ascii() {
 		let root = a_root("skill-folded");
 		let bot = a_bot("Bean", "Answer briefly.");
-		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		let path = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
 		private_files::replace(
 			&path,
 			concat!(
@@ -831,7 +833,7 @@ mod tests {
 	fn a_draft_writes_what_it_offers_and_leaves_alone_what_it_does_not() {
 		let root = a_root("skill-front-write");
 		let bot = a_bot("Bean", "Answer briefly.");
-		let path = dir(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
+		let path = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("baking").join(SKILL_NAME);
 		private_files::replace(
 			&path,
 			concat!(
@@ -916,7 +918,7 @@ mod tests {
 		let unclosed = "---\nname: baking\nstill typing\n";
 		let strange = "---\nname: kneading\njust some prose\n---\n\nKnead.\n";
 		for (id, text) in [("baking", unclosed), ("kneading", strange)] {
-			let path = dir(&root, &bot.id).join(SKILLS_DIR).join(id).join(SKILL_NAME);
+			let path = a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join(id).join(SKILL_NAME);
 			private_files::replace(&path, text.as_bytes()).expect("the skill is dropped in");
 
 			let refused = update_skill(&root, &bot, id, &a_draft("Baking", "New.", "New body."));
@@ -977,7 +979,7 @@ mod tests {
 
 		remove_skill(&root, &bot, &doomed.id).expect("the skill is taken away");
 
-		assert!(!dir(&root, &bot.id).join(SKILLS_DIR).join(&doomed.id).exists());
+		assert!(!a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join(&doomed.id).exists());
 		assert!(kept.is_file(), "the skill beside it was taken away too");
 		assert!(remove_skill(&root, &bot, &doomed.id).is_err(), "a skill that is gone was removed");
 		assert!(remove_skill(&root, &bot, "../..").is_err(), "an id named a path of its own");
@@ -1039,7 +1041,7 @@ mod tests {
 			.expect("the skill is written");
 		set_skill_preloaded(&root, &bot, &created.id, true).expect("the mark lands");
 		private_files::replace(
-			&dir(&root, &bot.id).join(SKILLS_DIR).join("kneading").join(SKILL_NAME),
+			&a_held_bundle(&root, &bot.id).join(SKILLS_DIR).join("kneading").join(SKILL_NAME),
 			format!("{FENCE}\nmetadata:\n  kiroshi:\n    preload: true\n{FENCE}\n\nKnead.\n")
 				.as_bytes(),
 		)

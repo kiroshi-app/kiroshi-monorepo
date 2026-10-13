@@ -8,6 +8,7 @@ use super::contract::{
 	is_a_connection_name, is_reserved, EnvEntry, EnvError, EnvOwner, EnvScope, PerServer,
 	ResolvedEnv, Values, ACCOUNT_BEARER,
 };
+use crate::descriptors;
 use crate::private_files;
 
 const DIR_NAME: &str = "env";
@@ -328,13 +329,18 @@ fn held(path: &Path) -> Result<Entries, EnvError> {
 	match fs::read_to_string(path) {
 		Ok(text) => parsed(&text),
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Entries::new()),
-		Err(error) => Err(EnvError::Unreadable { detail: error.to_string() }),
+		Err(error) => {
+			descriptors::note_exhaustion(&error, path);
+			Err(EnvError::Unreadable { detail: error.to_string() })
+		}
 	}
 }
 
 fn written(path: &Path, entries: &Entries) -> Result<(), EnvError> {
-	private_files::replace_atomically(path, rendered(entries).as_bytes())
-		.map_err(|error| EnvError::Unwritable { detail: error.to_string() })
+	private_files::replace_atomically(path, rendered(entries).as_bytes()).map_err(|error| {
+		descriptors::note_exhaustion(&error, path);
+		EnvError::Unwritable { detail: error.to_string() }
+	})
 }
 
 fn rendered(entries: &Entries) -> String {

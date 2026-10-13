@@ -249,7 +249,7 @@ fn bundle_name_of(harness: &Harness, bot: &str) -> String {
 
 fn bundle_of(harness: &Harness, bot: &str) -> PathBuf {
 	let root = bundles::root(harness.app.handle()).expect("the bundle root");
-	bundles::dir(&root, bot)
+	bundles::dir(&root, bot).expect("the bundle is held")
 }
 
 fn a_bot_plugin(bot_id: &str) -> Value {
@@ -399,9 +399,21 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	assert!(edited.spoken.contains(&briefed(SPANISH)), "got {}", edited.spoken);
 
 	std::fs::remove_dir_all(&bundle).expect("the bundle is taken away");
-	let rebuilt = harness.runtime_of(&conversation, &bot, 6);
-	assert!(rebuilt.spoken.contains(&briefed(SPANISH)), "got {}", rebuilt.spoken);
-	assert!(agent.is_file(), "the run that found no bundle did not write one");
+	let unbundled = harness.open_run(&conversation, &bot, 6);
+	let refused = harness
+		.call(
+			"agent_start_or_resume_session",
+			json!({ "scope": unbundled, "resume": Value::Null, "cwd": Value::Null }),
+		)
+		.expect_err("the run that found no bundle is refused");
+	assert_eq!(refused["kind"], "spawnFailed", "got {refused}");
+	assert!(
+		refused["detail"].as_str().is_some_and(|detail| detail.contains(&bot)),
+		"got {refused}"
+	);
+	assert!(!bundle.exists(), "the run that found no bundle wrote one");
+	harness.describe(&bot, SPANISH);
+	assert!(agent.is_file(), "the save from settings did not lay the bundle down");
 
 	harness
 		.call(

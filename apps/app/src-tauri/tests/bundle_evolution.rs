@@ -227,7 +227,7 @@ fn space_plugin(harness: &Harness, space: &str) -> PathBuf {
 
 fn bot_bundle(harness: &Harness, bot: &str) -> PathBuf {
 	let root = bundles::root(harness.app.handle()).expect("the bundle root");
-	bundles::dir(&root, bot)
+	bundles::dir(&root, bot).expect("the bundle is held")
 }
 
 fn drop_a_skill(plugin: &Path, name: &str) {

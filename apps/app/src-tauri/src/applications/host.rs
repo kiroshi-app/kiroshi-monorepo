@@ -348,6 +348,15 @@ mod tests {
 			.expect("the space is planted");
 		bundles::space::lay_down(app.handle(), "personal").expect("the space plugin lands");
 		bundles::user::lay_down(&user_plugin(&app)).expect("the person plugin lands");
+		let bot = ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.conversations()
+			.bot("b1".to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is planted");
+		let root = bundles::root(app.handle()).expect("the bundles have a root");
+		bundles::lay_down(&root, &bot).expect("the bot bundle lands");
 		app
 	}
 

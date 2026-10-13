@@ -1,8 +1,10 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
@@ -40,6 +42,7 @@ fn launch() -> Harness {
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
 	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");

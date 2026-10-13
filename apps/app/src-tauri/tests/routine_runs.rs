@@ -1,8 +1,10 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
@@ -101,6 +103,7 @@ fn booted(name: &str) -> AppOfItsOwn {
 		mock_builder().manage(AgentState::default()),
 	);
 	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default"]);
 	app
 }
 

@@ -286,6 +286,7 @@ mod tests {
 
 	fn bundle_of(app: &App<MockRuntime>, bot: &StoredBot) -> PathBuf {
 		bundles::dir(&bundles::root(app.handle()).expect("the bundle root"), &bot.id)
+			.expect("the bundle is held")
 	}
 
 	fn skill_body(bundle: &Path, id: &str) -> Vec<u8> {
@@ -510,7 +511,11 @@ mod tests {
 
 		assert_eq!(roster.len(), 1, "a second companion was planted");
 		assert_ne!(roster[0].name, shoto::NAME);
-		assert!(!bundle_of(&app, &roster[0]).exists(), "a bundle was written");
+		let root = bundles::root(app.handle()).expect("the bundle root");
+		assert!(
+			bundles::lookup(&root, &roster[0].id).expect("the plugins list").is_none(),
+			"a bundle was written"
+		);
 		assert!(database.user().is_first_companion_seeded().await.expect("the marker"));
 		assert!(database.user().preferences().await.expect("the preferences").first_run_done);
 		assert_eq!(payloads::<CompanionCreated>(&created), Vec::new());

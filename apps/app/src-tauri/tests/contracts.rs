@@ -450,7 +450,10 @@ fn the_plugin_readers_extract_what_the_snapshot_holds() {
 	let root = layer_root();
 	let layers: serde_json::Map<String, Value> =
 		LAYERS.iter().map(|layer| ((*layer).to_owned(), layer_reading(&root, layer))).collect();
-	let layered: Vec<PathBuf> = LAYERS.iter().map(|layer| bundles::dir(&root, layer)).collect();
+	let layered: Vec<PathBuf> = LAYERS
+		.iter()
+		.map(|layer| bundles::dir(&root, layer).expect("the bundle is held"))
+		.collect();
 	let sources = stacked(&layered).expect("every layer declares readable sources");
 
 	frozen(LAYERS_SNAPSHOT, &json!({ "layers": layers, "triggerSources": sources }));

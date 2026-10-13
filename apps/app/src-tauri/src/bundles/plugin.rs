@@ -21,6 +21,7 @@ pub fn lay_down(descriptor: &Descriptor, path: &Path) -> std::io::Result<()> {
 	kept(&about_file(descriptor, path), about(descriptor)?.as_bytes())?;
 	kept(&manifest_file(path), manifest(descriptor).as_bytes())?;
 	let _serialised = super::serialised(path);
+	git::init(path).map_err(unrecorded)?;
 	git::commit(path, Author::User, descriptor.laid_down_title, "").map(|_| ()).map_err(unrecorded)
 }
 
