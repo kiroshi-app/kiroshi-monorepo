@@ -25,13 +25,6 @@ extension ThreadStoreTests {
             calendar: calendar)
     }
 
-    func messages(_ store: ThreadStore) -> [ThreadMessage] {
-        store.entries.compactMap { entry in
-            guard case .message(let message) = entry else { return nil }
-            return message
-        }
-    }
-
     func groupMessage(
         _ id: String, seq: Int, by author: Companion.ID?, _ content: String, minute: Int
     ) -> String {
@@ -63,7 +56,7 @@ extension ThreadStoreTests {
         let store = makeGroupStore()
         let (connection, following) = await follow(host, store)
 
-        let shown = messages(store)
+        let shown = store.entries
         #expect(
             shown.map(\.author?.name) == [
                 nil, "Juniper", "Juniper", "Atlas", "Atlas", "Juniper", "Otto",
@@ -81,7 +74,7 @@ extension ThreadStoreTests {
         let (connection, following) = await follow(host, store)
 
         #expect(texts(store) == ["Drafted."])
-        #expect(messages(store).map(\.author) == [nil])
+        #expect(store.entries.map(\.author) == [nil])
         following.cancel()
         await connection.stop()
     }
@@ -97,7 +90,7 @@ extension ThreadStoreTests {
         )
         await waitUntil { store.entries.count == 1 }
 
-        let reply = try #require(messages(store).first)
+        let reply = try #require(store.entries.first)
         #expect(reply.author?.name == "Atlas")
         #expect(String(reply.rendered.characters) == "On it, @Juniper.")
         following.cancel()
@@ -124,7 +117,7 @@ extension ThreadStoreTests {
         #expect(args.message.content == "Ship it <@atlas> and @Otto")
         #expect(args.summoned == ["atlas"])
         #expect(texts(store) == ["you: Ship it <@atlas> and @Otto"])
-        #expect(String(messages(store)[0].rendered.characters) == "Ship it @Atlas and @Otto")
+        #expect(String(store.entries[0].rendered.characters) == "Ship it @Atlas and @Otto")
         #expect(store.workingName == "Atlas")
         following.cancel()
         await connection.stop()

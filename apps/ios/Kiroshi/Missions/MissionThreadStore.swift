@@ -175,7 +175,7 @@ extension MissionThreadStore: ThreadModel {
         return isLoading ? .loading : .shown
     }
 
-    var entries: [ThreadEntry] {
+    var entries: [ThreadMessage] {
         transcript.entries
     }
 

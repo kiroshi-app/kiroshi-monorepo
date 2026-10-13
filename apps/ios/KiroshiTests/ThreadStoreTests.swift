@@ -46,12 +46,7 @@ struct ThreadStoreTests {
     }
 
     func texts(_ store: ThreadStore) -> [String] {
-        store.entries.map { entry in
-            switch entry {
-            case .message(let message): (message.isYours ? "you: " : "") + message.text
-            case .activities(let group): "[\(group.summary)]"
-            }
-        }
+        store.entries.map { ($0.isYours ? "you: " : "") + $0.text }
     }
 
     let twoDays = [
@@ -71,11 +66,7 @@ struct ThreadStoreTests {
 
         #expect(store.conversationId == "chat-juniper")
         #expect(texts(store) == ["you: Can you draft the notes?", "Drafted.", "you: Thanks!"])
-        let opensDay = store.entries.map { entry -> Bool in
-            guard case .message(let message) = entry else { return false }
-            return message.dayLabel != nil
-        }
-        #expect(opensDay == [true, false, true])
+        #expect(store.entries.map { $0.dayLabel != nil } == [true, false, true])
         #expect(!store.isWorking)
         following.cancel()
         await connection.stop()
@@ -109,7 +100,7 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func aTurnArrivesLiveWithItsToolsAndItsReply() async {
+    @Test func aTurnArrivesLiveWithItsReplyAndNoRowForItsTools() async {
         let host = TestHost(messages: ["chat-juniper": Array(twoDays.prefix(1))])
         let store = makeStore()
         let (connection, following) = await follow(host, store)
@@ -131,6 +122,8 @@ struct ThreadStoreTests {
             "chat-juniper",
             #"{"type":"activity","activity":{"id":"t3","title":"Bash · List tags","kind":"tool","status":"running"}}"#
         )
+        await waitUntil { store.isWorking }
+        #expect(texts(store) == ["you: Can you draft the notes?"])
         host.pushAgent(
             "chat-juniper",
             #"{"type":"messageStarted","message":{"id":"r1","role":"assistant","text":"","completion":"streaming","timestamp":1791000000000}}"#
@@ -139,11 +132,7 @@ struct ThreadStoreTests {
         host.pushAgent("chat-juniper", #"{"type":"messageDelta","id":"r1","seq":2,"text":"ed."}"#)
         await waitUntil { texts(store).last == "Drafted." }
 
-        #expect(
-            texts(store) == [
-                "you: Can you draft the notes?", "[The agent read 2 files, ran 1 command]",
-                "Drafted.",
-            ])
+        #expect(texts(store) == ["you: Can you draft the notes?", "Drafted."])
         #expect(store.runningScope?.runtimeSessionId == "session-1")
 
         host.pushAgent(
@@ -158,7 +147,8 @@ struct ThreadStoreTests {
             "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
         await waitUntil { !store.isWorking }
 
-        #expect(texts(store).suffix(2) == ["[The agent edited 1 file]", "They’re waiting."])
+        #expect(
+            texts(store) == ["you: Can you draft the notes?", "Drafted.", "They’re waiting."])
         #expect(store.runningScope == nil)
         following.cancel()
         await connection.stop()
@@ -241,7 +231,7 @@ struct ThreadStoreTests {
                 Attached to this message, sent 2026-10-03T04:00:00.000Z, 1 file:
                 1/1 /d/attachments/chat-juniper/flow.png
                 """)
-        let shown = try #require(messages(store).last)
+        let shown = try #require(store.entries.last)
         #expect(shown.bubbles.map { String($0.text.characters) } == ["Look at this"])
         #expect(shown.attachedFiles == ["flow.png"])
         #expect(store.attachments.isEmpty)
@@ -600,7 +590,7 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func aReloadAfterAReconnectDropsTheToolsHeardBefore() async throws {
+    @Test func aReloadAfterAReconnectKeepsTheTurnHeardBefore() async throws {
         let reply = TestHost.message(
             "r1", in: "chat-juniper", seq: 2, isYours: false, "Done.", at: 1_790_900_060_000)
         let host = TestHost(messages: ["chat-juniper": [twoDays[0]]])
@@ -617,9 +607,8 @@ struct ThreadStoreTests {
         )
         host.pushAgent(
             "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
-        await waitUntil { !store.isWorking && store.entries.count == 3 }
-        #expect(
-            texts(store) == ["you: Can you draft the notes?", "[The agent read 1 file]", "Done."])
+        await waitUntil { !store.isWorking && store.entries.count == 2 }
+        #expect(texts(store) == ["you: Can you draft the notes?", "Done."])
 
         host.socket.push(.close(RelayClosure.hostOffline))
         await waitUntil { !store.isReachable }
