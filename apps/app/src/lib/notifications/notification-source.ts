@@ -1,48 +1,31 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
-import {
-	type ConversationRound,
-	type NotificationSwitches,
-	notificationsFor,
-	notifiesAskedQuestion,
-	notifiesFinishedRound,
-	notifiesMission,
-	notifiesSpokenWord,
-} from "./notification-policy"
 import type {
-	NotificationPort,
-	NotificationRequest,
-	NotificationTarget,
-} from "./notification-port"
+	ConversationRound,
+	NotificationSwitches,
+} from "./notification-policy"
+import type { NotificationPort } from "./notification-port"
+import { createDelivery, type Reading } from "./notification-source-delivery"
+import { createFailWith } from "./notification-source-failures"
+import { createNotificationLanding } from "./notification-source-landing"
+import { createMissionThreadTracking } from "./notification-source-missions"
 import {
-	isNotifiedMissionState,
-	missionNotificationWordsFor,
-	missionQuestionWordsFor,
-	type NotificationFailure,
-	notificationFailureTitleFor,
-	notificationWordsFor,
-	spokenWordsFor,
-} from "./notification-words"
+	createNotificationRequests,
+	type NotifiedBot,
+} from "./notification-source-requests"
+import { createSpokenWordNotifier } from "./notification-source-spoken"
 
 import type { ChatState } from "../chat/chat-state"
-import { conversationName } from "../conversations/roster-conversations"
-import type { SpokenWord, SpokenWords } from "../conversations/spoken-words"
+import type { SpokenWords } from "../conversations/spoken-words"
 import type { Conversation } from "../conversations/store-contract"
-import { isHostOffline } from "../host/host-offline"
 import type {
 	Mission,
 	MissionChanged,
 	MissionDetail,
 	MissionOnBoard,
 } from "../missions/mission-contract"
-import { createMissionStates } from "../missions/mission-states"
 import type { OpenedMission } from "../missions/opened-mission-controller"
 import type { UserPreferences } from "../user/preferences-contract"
-
-type NotifiedBot = {
-	id: string
-	name: string
-}
 
 type ChatSource = {
 	stateFor: (botId: string) => ChatState
@@ -102,25 +85,6 @@ export type NotificationSourceOptions = {
 	reportFailure: FailureNoticeReporter
 }
 
-type Reading = {
-	switches: NotificationSourceSwitches
-	hasFocus: boolean
-}
-
-const reasonOf = (reason: unknown): string =>
-	reason instanceof Error ? reason.message : String(reason)
-
-const forgetBeyond = <Held>(seen: Map<string, Held>, ids: string[]) => {
-	if (seen.size <= ids.length) {
-		return
-	}
-	for (const id of seen.keys()) {
-		if (!ids.includes(id)) {
-			seen.delete(id)
-		}
-	}
-}
-
 export const startNotificationSource = ({
 	chat,
 	runtimes,
@@ -136,330 +100,52 @@ export const startNotificationSource = ({
 	playChime,
 	reportFailure,
 }: NotificationSourceOptions): (() => void) => {
-	const seen = new Map<string, ChatState>()
-	const seenRounds = new Map<string, ConversationRound>()
 	const missionThreads = new Map<string, Mission>()
-	const missionStates = createMissionStates()
 
 	let windowFocus: boolean | undefined
-
-	const reportedFailures = new Set<NotificationFailure>()
-
-	const failWith =
-		(failure: NotificationFailure) =>
-		(reason: unknown): undefined => {
-			if (reportedFailures.has(failure) || isHostOffline(reason)) {
-				return
-			}
-			reportedFailures.add(failure)
-			reportFailure({
-				title: notificationFailureTitleFor(failure),
-				description: reasonOf(reason),
-			})
-		}
-
-	const rosteredBots = (): NotifiedBot[] => {
-		const held = new Map<string, NotifiedBot>()
-		for (const bots of Object.values(roster.getState().rosters)) {
-			for (const bot of bots) {
-				held.set(bot.id, bot)
-			}
-		}
-		return [...held.values()]
-	}
-
-	const botNotifications = ({
-		switches,
-		hasFocus,
-	}: Reading): NotificationRequest[] => {
-		const bots = rosteredBots()
-		const requests: NotificationRequest[] = []
-
-		for (const bot of bots) {
-			const after = chat.stateFor(bot.id)
-			const before = seen.get(bot.id)
-			seen.set(bot.id, after)
-
-			if (!before) {
-				continue
-			}
-
-			const changes = notificationsFor({
-				botId: bot.id,
-				before,
-				after,
-				switches,
-				hasFocus,
-			})
-
-			for (const change of changes) {
-				requests.push({
-					target: { kind: "bot", id: bot.id },
-					...notificationWordsFor({ name: bot.name, event: change.event }),
-				})
-			}
-		}
-
-		forgetBeyond(
-			seen,
-			bots.map((bot) => bot.id),
-		)
-		return requests
-	}
-
-	const roundChangeOf = (conversationId: string) => {
-		const held = runtimes.heldFor(conversationId)
-
-		if (!held) {
-			seenRounds.delete(conversationId)
-			return null
-		}
-
-		const after = held.getState()
-		const before = seenRounds.get(conversationId)
-		seenRounds.set(conversationId, after)
-
-		return before ? { before, after } : null
-	}
-
-	const conversationNotifications = (
-		conversations: Conversation[],
-		reading: Reading,
-	): NotificationRequest[] =>
-		conversations.flatMap((conversation) => {
-			const change = roundChangeOf(conversation.id)
-
-			if (!change || !notifiesFinishedRound({ ...change, ...reading })) {
-				return []
-			}
-
-			return [
-				{
-					target: { kind: "conversation" as const, id: conversation.id },
-					...notificationWordsFor({
-						name: conversationName(conversation),
-						event: "finishedTurn",
-					}),
-				},
-			]
-		})
-
-	const botNameOf = (botId: string) =>
-		rosteredBots().find(({ id }) => id === botId)?.name
-
-	const missionThreadNotifications = (
-		reading: Reading,
-	): NotificationRequest[] =>
-		[...missionThreads.values()].flatMap((mission) => {
-			const change = roundChangeOf(mission.threadConversationId)
-			const name = botNameOf(mission.botId)
-
-			if (
-				!change ||
-				!name ||
-				!notifiesAskedQuestion({ ...change, ...reading })
-			) {
-				return []
-			}
-
-			return [
-				{
-					target: { kind: "mission" as const, id: mission.id },
-					...missionQuestionWordsFor({
-						name,
-						ticket: mission.ticket.externalId,
-					}),
-				},
-			]
-		})
-
-	const spaceOfBotThread = (botId: string) => {
-		const { conversationId } = chat.stateFor(botId)
-		return conversationId
-			? roster.spaceOfConversation(conversationId)
-			: undefined
-	}
 
 	const currentFocus = (): boolean => windowFocus ?? hasFocus()
 
 	const hasHostFocus = (): boolean => windowFocus === true
 
-	const rosteredConversation = (conversationId: string) =>
-		Object.values(roster.getState().conversationRosters)
-			.flat()
-			.find(({ id }) => id === conversationId)
-
-	const speakerNameIn = (conversation: Conversation, botId: string) =>
-		conversation.participants.find(({ botId: seated }) => seated === botId)
-			?.name
-
-	const notifySpokenWord = ({ conversationId, authorBotId }: SpokenWord) => {
-		const reading: Reading = {
-			switches: switches(),
-			hasFocus: hasHostFocus(),
-		}
-		const conversation = rosteredConversation(conversationId)
-		const name = conversation && speakerNameIn(conversation, authorBotId)
-
-		if (!conversation || !name || !notifiesSpokenWord(reading)) {
-			return
-		}
-
-		void notifications
-			.send({
-				target: { kind: "conversation", id: conversationId },
-				...spokenWordsFor({ title: conversationName(conversation), name }),
-			})
-			.catch(failWith("send"))
-
-		if (reading.switches.notifyWithSound) {
-			playChime()
-		}
-	}
+	const failWith = createFailWith(reportFailure)
+	const deliver = createDelivery({ notifications, playChime, failWith })
+	const { requestsFor, botNameOf } = createNotificationRequests({
+		chat,
+		runtimes,
+		roster,
+		missionThreads,
+	})
+	const notifySpokenWord = createSpokenWordNotifier({
+		roster,
+		switches,
+		hasHostFocus,
+		deliver,
+	})
+	const { missionChanged, catchUpOnMissionThreads } =
+		createMissionThreadTracking({
+			missions,
+			switches,
+			missionThreads,
+			currentFocus,
+			botNameOf,
+			deliver,
+		})
+	const activate = createNotificationLanding({
+		chat,
+		roster,
+		spaces,
+		missions,
+		raiseWindow,
+		failWith,
+	})
 
 	const compare = () => {
 		const reading: Reading = {
 			switches: switches(),
 			hasFocus: currentFocus(),
 		}
-		const { conversations } = roster.getState()
-		const requests = [
-			...botNotifications(reading),
-			...conversationNotifications(conversations, reading),
-			...missionThreadNotifications(reading),
-		]
-
-		forgetBeyond(seenRounds, [
-			...conversations.map((conversation) => conversation.id),
-			...missionThreads.keys(),
-		])
-
-		for (const request of requests) {
-			void notifications.send(request).catch(failWith("send"))
-		}
-
-		if (requests.length > 0 && reading.switches.notifyWithSound) {
-			playChime()
-		}
-	}
-
-	const holdMissionThread = (mission: Mission) => {
-		if (mission.closedAt === null) {
-			missionThreads.set(mission.threadConversationId, mission)
-			return
-		}
-
-		missionThreads.delete(mission.threadConversationId)
-	}
-
-	const missionChanged = async (changed: MissionChanged) => {
-		if (!missionStates.entered(changed)) {
-			return
-		}
-
-		missionStates.remember(changed)
-
-		const { mission } = await missions.detail(changed.missionId)
-		holdMissionThread(mission)
-
-		const { state } = changed
-
-		if (!isNotifiedMissionState(state)) {
-			return
-		}
-
-		const reading: Reading = {
-			switches: switches(),
-			hasFocus: currentFocus(),
-		}
-
-		if (!notifiesMission({ state, ...reading })) {
-			return
-		}
-
-		const name = botNameOf(mission.botId)
-
-		if (!name) {
-			return
-		}
-
-		void notifications
-			.send({
-				target: { kind: "mission", id: mission.id },
-				...missionNotificationWordsFor({
-					name,
-					ticket: mission.ticket.externalId,
-					state,
-				}),
-			})
-			.catch(failWith("send"))
-
-		if (reading.switches.notifyWithSound) {
-			playChime()
-		}
-	}
-
-	const catchUpOnMissionThreads = async () => {
-		for (const { mission } of await missions.board()) {
-			holdMissionThread(mission)
-		}
-	}
-
-	const openMission = async (missionId: string) => {
-		const { mission } = await missions.detail(missionId)
-		const spaceId = roster.spaceOfConversation(mission.originConversationId)
-
-		if (!spaceId) {
-			return
-		}
-
-		roster.select(mission.botId)
-		spaces.select(roster.hostSpaceIdOf(spaceId))
-		missions.open({ missionId, rowId: mission.botId, spaceId })
-	}
-
-	const windowRaised = (): Promise<void> => {
-		try {
-			return raiseWindow()
-		} catch (reason) {
-			return Promise.reject(reason)
-		}
-	}
-
-	const landOnBot = (botId: string) => {
-		const spaceId = spaceOfBotThread(botId)
-
-		if (!spaceId) {
-			return
-		}
-
-		roster.select(botId)
-		spaces.select(roster.hostSpaceIdOf(spaceId))
-	}
-
-	const landOnConversation = (conversationId: string) => {
-		const spaceId = roster.spaceOfConversation(conversationId)
-
-		if (!spaceId) {
-			return
-		}
-
-		roster.selectConversation(conversationId)
-		spaces.select(roster.hostSpaceIdOf(spaceId))
-	}
-
-	const activate = ({ kind, id }: NotificationTarget) => {
-		void windowRaised().catch(failWith("reveal"))
-
-		if (kind === "mission") {
-			return void openMission(id).catch(failWith("clicks"))
-		}
-
-		if (kind === "bot") {
-			return landOnBot(id)
-		}
-
-		landOnConversation(id)
+		deliver(requestsFor(reading), reading)
 	}
 
 	const stopChat = chat.subscribe(compare)
