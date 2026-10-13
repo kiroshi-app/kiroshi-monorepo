@@ -209,6 +209,36 @@ export const tokenStyleIn = (
 	property: ProbedProperty,
 ) => probedStyleOf(className, property, element)
 
+export const contentBottomOf = (surface: HTMLElement) => {
+	const style = getComputedStyle(surface)
+	return (
+		surface.getBoundingClientRect().bottom -
+		Number.parseFloat(style.paddingBottom) -
+		Number.parseFloat(style.borderBottomWidth)
+	)
+}
+
+export const expectSkeletonClippedAtBottomOf = async (surface: HTMLElement) => {
+	const list = await waitFor(() => slotIn(surface, "list-skeleton"))
+	await waitFor(() => {
+		const edge = list.getBoundingClientRect().bottom
+		const lastRow = slotsIn(list, "list-skeleton-row")
+			.at(-1)
+			?.getBoundingClientRect()
+		expect(Math.abs(edge - contentBottomOf(surface))).toBeLessThan(1)
+		expect(
+			lastRow !== undefined && lastRow.top < edge && lastRow.bottom >= edge,
+		).toBe(true)
+	}, FRAME_POLL)
+	await expect(getComputedStyle(list).overflowY).toBe("hidden")
+	await expect(list).toHaveAttribute("aria-hidden", "true")
+	await expect(getComputedStyle(list).animationName).toBe("none")
+	await expect(getComputedStyle(slotIn(list, "skeleton")).backgroundColor).toBe(
+		probedStyleOf("bg-border", "backgroundColor", list),
+	)
+	return list
+}
+
 const surfaceOf = (frame: HTMLElement) => frame.parentElement ?? document.body
 
 export const expectFieldFrame = async (

@@ -5,6 +5,8 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	contentBottomOf,
+	expectSkeletonClippedAtBottomOf,
 	FRAME_POLL,
 	glyphIn,
 	probedStyleOf,
@@ -228,6 +230,35 @@ export const Environment = meta.story({
 			name: "RELEASE_DESK",
 			value: "sk-live",
 		})
+	},
+})
+
+export const EnvironmentLoading = meta.story({
+	args: { environment: [], isEnvironmentPending: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The space's secrets still on their way, the flag forwarded from the dialog to the Secrets panel. Check that the head line and Add secret stay put and that secret row skeletons fill the panel below them to the bottom, the last one cut by the edge, while the region reads busy. Pick `Environment` for the panel once the secrets are read.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Secrets" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Secrets",
+		})
+
+		await expect(
+			within(panel).getByRole("button", { name: "Add secret" }),
+		).toBeVisible()
+		await expect(slotIn(panel, "secrets-pending")).toHaveAttribute(
+			"aria-busy",
+			"true",
+		)
+		await expectSkeletonClippedAtBottomOf(panel)
 	},
 })
 
@@ -795,6 +826,35 @@ export const MembersI1 = meta.story({
 		await expect(memberRowsIn(panel)).toEqual([
 			["S", "Steve", "steve@example.com", "Host"],
 		])
+	},
+})
+
+export const MembersLoading = meta.story({
+	args: membersArgs({ members: [], isPending: true }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The member list still on its way. Check that the invite form stays rendered, that member row skeletons sit inside one bordered frame filling the panel below it to the bottom, the last one cut by the edge, each at the height of a loaded member row with its divider, and that the panel reads busy.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expect(inviteFieldIn(panel)).toBeVisible()
+		await expect(slotIn(panel, "members-panel")).toHaveAttribute(
+			"aria-busy",
+			"true",
+		)
+
+		const frame = await waitFor(() => slotIn(panel, "members-skeleton-frame"))
+		const list = await expectSkeletonClippedAtBottomOf(frame)
+		await expect(
+			Math.abs(frame.getBoundingClientRect().bottom - contentBottomOf(panel)),
+		).toBeLessThan(1)
+		const [firstRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(53)
+		await expect(slotsIn(panel, "space-member")).toHaveLength(0)
 	},
 })
 

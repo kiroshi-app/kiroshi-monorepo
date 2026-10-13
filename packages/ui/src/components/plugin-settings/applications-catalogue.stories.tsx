@@ -2,6 +2,7 @@ import { useState } from "react"
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { expectSkeletonClippedAtBottomOf } from "@workspace/storybook/story-utils"
 import {
 	CATALOGUE_APPLICATIONS,
 	CLAMPED_APPLICATION,
@@ -483,26 +484,24 @@ export const Loading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The catalogue reading. Check the six card skeletons three across, the body marked busy and the polite line announced from outside it.",
+					"The catalogue reading. Check that the body draws application row skeletons, the settings list row and not the card grid, filling it to the bottom with the last one cut by the edge, each at the height of a loaded application row, the body marked busy and the polite line announced from outside it.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		await expect(
-			slotsOf(canvasElement, "catalogue-card-skeleton"),
-		).toHaveLength(6)
-
+	play: async ({ canvas }) => {
 		const body = canvas.getByRole("tabpanel")
 		await expect(body).toHaveAttribute("aria-busy", "true")
+
+		const list = await expectSkeletonClippedAtBottomOf(body)
+		const [firstRow] = slotsOf(list, "list-skeleton-row")
+		await expect(firstRow?.getBoundingClientRect().height).toBe(60)
+		await expect(body.querySelector("ul")).toBeNull()
 
 		const announcement = canvas.getByRole("status")
 		await expect(announcement).toHaveTextContent(
 			"Loading the applications catalogue",
 		)
 		await expect(body.contains(announcement)).toBe(false)
-
-		const [bar] = slotsOf(canvasElement, "skeleton")
-		await expect(bar).toHaveClass("motion-reduce:animate-none")
 	},
 })
 

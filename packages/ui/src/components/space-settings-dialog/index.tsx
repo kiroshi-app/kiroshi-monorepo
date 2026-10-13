@@ -77,6 +77,7 @@ type SpaceSettingsDialogProps = PluginSessionsProps & {
 	value: SpaceSettingsValue
 	onValueChange: (value: SpaceSettingsValue) => void
 	environment: EnvironmentEntry[]
+	isEnvironmentPending?: boolean
 	hasEnvironmentFailedToRead?: boolean
 	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
 	onEnvironmentDelete: (name: string) => void | Promise<void>
@@ -93,6 +94,7 @@ const SpaceSettingsDialog = ({
 	value,
 	onValueChange,
 	environment,
+	isEnvironmentPending,
 	hasEnvironmentFailedToRead,
 	onEnvironmentSet,
 	onEnvironmentDelete,
@@ -213,7 +215,7 @@ const SpaceSettingsDialog = ({
 
 			{members === undefined ? null : (
 				<SettingsScrollingPanel value={MEMBERS_TAB}>
-					<div className="flex flex-col gap-6">
+					<div className="flex flex-1 flex-col gap-6">
 						{hosting === undefined ? null : (
 							<ShareCard
 								hosting={hosting}
@@ -232,6 +234,7 @@ const SpaceSettingsDialog = ({
 				<EnvironmentPanel
 					entries={environment}
 					hasFailedToRead={hasEnvironmentFailedToRead}
+					isPending={isEnvironmentPending}
 					onDelete={onEnvironmentDelete}
 					onSet={onEnvironmentSet}
 					scope="space"

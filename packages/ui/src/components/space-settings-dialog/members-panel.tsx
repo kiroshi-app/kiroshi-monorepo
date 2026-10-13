@@ -7,12 +7,18 @@ import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { Icons } from "@workspace/ui/components/icons"
 import { AvatarFrame } from "@workspace/ui/components/initials-avatar"
 import {
+	ListSkeleton,
+	SkeletonBar,
+} from "@workspace/ui/components/list-skeleton"
+import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 	SETTINGS_TAG_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
+import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SpaceMemberStatus = "host" | "joined" | "pending"
@@ -53,6 +59,7 @@ type MembersFailure =
 type MembersPanelProps = {
 	space: string
 	members: SpaceMember[]
+	isPending?: boolean
 	email: string
 	onEmailChange: (email: string) => void
 	onInvite: (email: string) => void
@@ -67,6 +74,9 @@ type MembersPanelProps = {
 }
 
 const AVATAR_SIZE = 28
+
+const MEMBER_SKELETON_LIST =
+	"gap-0 [--skeleton-title:--spacing(21)] [--skeleton-sub:--spacing(30)] [&>:nth-child(3n+2)]:[--skeleton-title:--spacing(18)] [&>:nth-child(3n+2)]:[--skeleton-sub:--spacing(33)] [&>:nth-child(3n)]:[--skeleton-title:--spacing(24)] [&>:nth-child(3n)]:[--skeleton-sub:--spacing(27.5)]"
 
 const nameOf = (member: SpaceMember) => member.name ?? member.email
 
@@ -263,9 +273,26 @@ const MemberRow = ({
 	)
 }
 
+const MemberRowSkeleton = () => (
+	<div className="flex items-center gap-2.5 border-border border-b py-2 ps-3 pe-2">
+		<Skeleton className="size-7 shrink-0 animate-none rounded-full bg-border" />
+		<div className="flex min-w-0 flex-1 flex-col">
+			<div className="flex h-5 items-center">
+				<SkeletonBar className="w-(--skeleton-title)" />
+			</div>
+			<div className="flex h-4 items-center">
+				<SkeletonBar className="w-(--skeleton-sub)" isFaint />
+			</div>
+		</div>
+		<SkeletonBar className="h-5 w-13 shrink-0" isFaint />
+		<div className="h-7 w-17.5 shrink-0" />
+	</div>
+)
+
 const MembersPanel = ({
 	space,
 	members,
+	isPending = false,
 	email,
 	onEmailChange,
 	onInvite,
@@ -281,6 +308,8 @@ const MembersPanel = ({
 	const { t } = useTranslation("settings")
 	const isAnswered = useRef(false)
 	const [asked, setAsked] = useState(removing)
+	const phase = useSkeletonTiming(isPending)
+	const isAwaiting = phase === "delay" || phase === "skeleton"
 
 	if (removing && removing !== asked) {
 		setAsked(removing)
@@ -303,7 +332,11 @@ const MembersPanel = ({
 	const rowFailureText = useFailureText(rowFailure, space)
 
 	return (
-		<div className="flex flex-col gap-6" data-slot="members-panel">
+		<div
+			aria-busy={isAwaiting}
+			className="flex flex-1 flex-col gap-6"
+			data-slot="members-panel"
+		>
 			<InviteField
 				email={email}
 				failure={failure?.action === "invite" ? failure : undefined}
@@ -313,19 +346,32 @@ const MembersPanel = ({
 				refusal={refusal}
 				space={space}
 			/>
-			<ul className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2.5 divide-y divide-border rounded-xl border border-border">
-				{members.map((member) => (
-					<MemberRow
-						failureText={
-							rowFailure?.member.id === member.id ? rowFailureText : ""
-						}
-						key={member.id}
-						member={member}
-						onRemove={onRemove}
-						onWithdraw={onWithdraw}
+			{phase === "skeleton" ? (
+				<div
+					className="flex min-h-0 flex-1 flex-col rounded-xl border border-border"
+					data-slot="members-skeleton-frame"
+				>
+					<ListSkeleton
+						className={MEMBER_SKELETON_LIST}
+						row={<MemberRowSkeleton />}
 					/>
-				))}
-			</ul>
+				</div>
+			) : null}
+			{isAwaiting ? null : (
+				<ul className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-x-2.5 divide-y divide-border rounded-xl border border-border">
+					{members.map((member) => (
+						<MemberRow
+							failureText={
+								rowFailure?.member.id === member.id ? rowFailureText : ""
+							}
+							key={member.id}
+							member={member}
+							onRemove={onRemove}
+							onWithdraw={onWithdraw}
+						/>
+					))}
+				</ul>
+			)}
 			<ConfirmDialog
 				confirmLabel={t("space.members.remove")}
 				description={t("space.members.confirm.description", { name })}

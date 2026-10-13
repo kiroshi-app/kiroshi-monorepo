@@ -54,6 +54,7 @@ type BotSettingsDialogProps = PluginSessionsProps & {
 	onMemoryChange?: (memory: string) => void
 	onAvatarUpload: (file: File) => void
 	environment: EnvironmentEntry[]
+	isEnvironmentPending?: boolean
 	hasEnvironmentFailedToRead?: boolean
 	onEnvironmentSet: (write: EnvironmentWrite) => void | Promise<void>
 	onEnvironmentDelete: (name: string) => void | Promise<void>
@@ -79,6 +80,7 @@ const BotSettingsDialog = ({
 	onMemoryChange,
 	onAvatarUpload,
 	environment,
+	isEnvironmentPending,
 	hasEnvironmentFailedToRead,
 	onEnvironmentSet,
 	onEnvironmentDelete,
@@ -251,6 +253,7 @@ const BotSettingsDialog = ({
 				<EnvironmentPanel
 					entries={environment}
 					hasFailedToRead={hasEnvironmentFailedToRead}
+					isPending={isEnvironmentPending}
 					onDelete={onEnvironmentDelete}
 					onSet={onEnvironmentSet}
 					scope="bot"
