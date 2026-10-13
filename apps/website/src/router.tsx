@@ -78,17 +78,13 @@ type LoginGuardContext = { search: LoginSearch }
 const finishSocialSignIn = async ({ search }: LoginGuardContext) => {
 	if (search.via !== SOCIAL_RETURN) return
 	const bearer = await readSessionBearer()
-	if (!bearer) {
-		throw redirect({
-			to: "/login",
-			search: { redirect: search.redirect, error: NO_SOCIAL_SESSION },
-			replace: true,
-		})
-	}
-	saveBearer(bearer)
+	if (bearer) saveBearer(bearer)
 	throw redirect({
 		to: "/login",
-		search: { redirect: search.redirect },
+		search: {
+			redirect: search.redirect,
+			error: bearer ? undefined : NO_SOCIAL_SESSION,
+		},
 		replace: true,
 	})
 }
