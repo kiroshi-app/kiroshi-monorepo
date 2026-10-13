@@ -694,13 +694,15 @@ const failOnNetwork = (): Response => {
 	throw new TypeError("Load failed")
 }
 
+type NoticeReporters = Pick<
+	ReturnType<typeof joinedHostsOf>,
+	"reportFailure" | "reportJoinRefusal"
+>
+
 const expectNoNotice = ({
 	reportFailure,
 	reportJoinRefusal,
-}: Pick<
-	ReturnType<typeof joinedHostsOf>,
-	"reportFailure" | "reportJoinRefusal"
->) => {
+}: NoticeReporters) => {
 	expect(reportFailure).not.toHaveBeenCalled()
 	expect(reportJoinRefusal).not.toHaveBeenCalled()
 }
@@ -838,7 +840,6 @@ describe("an offline joined host", () => {
 		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
 			message: "Load failed",
 			command: "bot_list",
-			status: undefined,
 			side: "member",
 		})
 	})
