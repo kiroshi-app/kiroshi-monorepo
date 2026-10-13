@@ -47,7 +47,7 @@ const ListSkeleton = ({
 		<div
 			aria-hidden="true"
 			className={cn(
-				"flex size-full min-h-0 animate-pulse gap-3 overflow-hidden contain-size motion-reduce:animate-none",
+				"flex size-full animate-pulse gap-3 overflow-hidden contain-size motion-reduce:animate-none",
 				anchor === "bottom" ? "flex-col-reverse" : "flex-col",
 				className,
 			)}
