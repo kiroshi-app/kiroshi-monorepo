@@ -15,6 +15,7 @@ import {
 	SessionList,
 	SessionRow,
 	SignOutButton,
+	TextButton,
 } from "./account-parts"
 import { RelayFailureLine } from "./login-page"
 import {
@@ -22,6 +23,7 @@ import {
 	clearBearer,
 	isRelayFailure,
 	type Session,
+	signOutCurrentSession,
 	signOutEverywhere,
 	signOutSession,
 } from "./relay"
@@ -179,6 +181,21 @@ const SignOutEverywhere = () => {
 	)
 }
 
+const AccountSignOut = () => {
+	const call = useSignOutCall()
+
+	return (
+		<AccountActions>
+			<TextButton
+				isBusy={call.isPending}
+				label={ACCOUNT_COPY.signOut}
+				onClick={() => call.signOut(signOutCurrentSession, call.leaveSignedOut)}
+			/>
+			<RelayFailureLine failure={call.failure} onRetry={call.retry} />
+		</AccountActions>
+	)
+}
+
 const planOf = (account: Account) =>
 	account.plan === "pro" ? ACCOUNT_COPY.plans.pro : ACCOUNT_COPY.plans.free
 
@@ -189,6 +206,7 @@ export const AccountPage = () => {
 	return (
 		<AccountShell>
 			<Identity
+				action={<AccountSignOut />}
 				email={account.name ? account.email : undefined}
 				initials={initialsOf(displayName)}
 				name={displayName}

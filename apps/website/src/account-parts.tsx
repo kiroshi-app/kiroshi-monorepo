@@ -7,6 +7,9 @@ import { DesktopMark, LaptopMark, PhoneMark } from "./page-marks"
 
 const CARD = "rounded-[14px] bg-card shadow-field"
 
+const TEXT_ACTION =
+	"rounded-sm text-[13px] leading-4 font-medium text-foreground outline-none focus-visible:shadow-field-focus disabled:opacity-50"
+
 type ChildrenProps = {
 	children: ReactNode
 }
@@ -30,9 +33,10 @@ type IdentityProps = {
 	initials: string
 	name: string
 	email?: string
+	action: ReactNode
 }
 
-export const Identity = ({ initials, name, email }: IdentityProps) => (
+export const Identity = ({ initials, name, email, action }: IdentityProps) => (
 	<div className="flex items-center gap-3.5">
 		<span
 			aria-hidden="true"
@@ -40,7 +44,7 @@ export const Identity = ({ initials, name, email }: IdentityProps) => (
 		>
 			{initials}
 		</span>
-		<div className="flex min-w-0 flex-col">
+		<div className="flex min-w-0 flex-1 flex-col">
 			<h1 className="text-[22px] leading-7 font-semibold tracking-[-0.015em] wrap-anywhere">
 				{name}
 			</h1>
@@ -50,6 +54,7 @@ export const Identity = ({ initials, name, email }: IdentityProps) => (
 				</p>
 			) : null}
 		</div>
+		{action}
 	</div>
 )
 
@@ -168,6 +173,23 @@ export const SignOutButton = ({
 				{target ? <span className="sr-only">{` ${target}`}</span> : null}
 			</>
 		}
-		triggerClassName="rounded-sm text-[13px] leading-4 font-medium text-foreground outline-none focus-visible:shadow-field-focus disabled:opacity-50"
+		triggerClassName={TEXT_ACTION}
 	/>
+)
+
+type TextButtonProps = {
+	label: string
+	isBusy: boolean
+	onClick: () => void
+}
+
+export const TextButton = ({ label, isBusy, onClick }: TextButtonProps) => (
+	<button
+		className={TEXT_ACTION}
+		disabled={isBusy}
+		onClick={onClick}
+		type="button"
+	>
+		{label}
+	</button>
 )
