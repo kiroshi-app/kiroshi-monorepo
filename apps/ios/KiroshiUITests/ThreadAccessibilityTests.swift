@@ -30,6 +30,20 @@ final class ThreadAccessibilityTests: XCTestCase {
         try auditTheThread(app)
     }
 
+    func testACompanionAtWorkAfterItsOwnReplyShowsWorkingAboveTheComposer() throws {
+        let app = launch("working-after-reply")
+        let working = app.staticTexts["Juniper is working…"]
+        XCTAssertTrue(working.waitForExistence(timeout: 10))
+        let lastReply = app.staticTexts["They’re waiting for your read."].firstMatch
+        XCTAssertTrue(lastReply.exists)
+        XCTAssertGreaterThan(working.frame.minY, lastReply.frame.maxY)
+        XCTAssertLessThan(working.frame.maxY, composer(in: app).frame.minY)
+        XCTAssertTrue(app.buttons["Stop"].exists)
+        waitForThePushToEnd(app)
+
+        try auditTheThread(app)
+    }
+
     func testAnEmptyThreadInvitesTheFirstMessageAndPassesTheAudit() throws {
         let app = launch("3.2")
         XCTAssertTrue(
@@ -116,6 +130,7 @@ final class ThreadAccessibilityTests: XCTestCase {
                 .waitForExistence(timeout: 15))
         XCTAssertEqual(toolRows.count, 0)
         XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["Juniper is working…"].exists)
         XCTAssertEqual(toolRows.count, 0)
     }
 

@@ -111,6 +111,39 @@ final class MissionsAccessibilityTests: XCTestCase {
         XCTAssertLessThan(question.frame.minX, restingX)
     }
 
+    func testAMissionAtWorkShowsItsCompanionWorkingAndPassesTheAudit() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "mission-working")
+        let app = launch("mission-working")
+        let working = app.staticTexts["Atlas is working…"]
+        XCTAssertTrue(working.waitForExistence(timeout: 15))
+        let question = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Which one goes first?")
+        ).firstMatch
+        XCTAssertTrue(question.exists)
+        XCTAssertGreaterThan(working.frame.minY, question.frame.maxY)
+        XCTAssertTrue(app.buttons["Stop"].exists)
+
+        try auditTheThread(app, onScreenAtTheLargestSize: onScreen)
+    }
+
+    func testAnAnswerShowsTheCompanionWorkingUntilItsTurnEnds() {
+        let app = launch("5.2")
+        let question = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Which one goes first?")
+        ).firstMatch
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        let field = composer(in: app)
+        field.tap()
+        field.typeText("Start with the account step.")
+        app.buttons["Send"].tap()
+
+        let working = app.staticTexts["Atlas is working…"]
+        XCTAssertTrue(working.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Stop"].exists)
+        XCTAssertTrue(working.waitForNonExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["Stop"].exists)
+    }
+
     func testNoMissionsSaysWhereTheyComeFromAndPassesTheAudit() throws {
         let onScreen = textsOnScreenAtTheLargestSize(of: "5.3", waitingFor: "No missions yet")
         let app = launch("5.3")
