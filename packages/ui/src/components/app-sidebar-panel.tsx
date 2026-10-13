@@ -158,9 +158,13 @@ const AppSidebarPanel = ({
 		spaces,
 	}
 
+	const skeletonSlot = rosterSkeleton ? (
+		<RosterSkeletonSlot>{rosterSkeleton}</RosterSkeletonSlot>
+	) : null
+
 	const rosterOfSpace = (space: Space) =>
-		rosterSkeleton && space.id === selectedSpaceId ? (
-			<RosterSkeletonSlot>{rosterSkeleton}</RosterSkeletonSlot>
+		skeletonSlot && space.id === selectedSpaceId ? (
+			skeletonSlot
 		) : (
 			<BotRoster
 				{...rosterProps}
@@ -203,17 +207,17 @@ const AppSidebarPanel = ({
 					selectedSpaceId={selectedSpaceId}
 					spaces={spaces}
 				>
-					{isRosterOpen && rosterSkeleton ? (
-						<RosterSkeletonSlot>{rosterSkeleton}</RosterSkeletonSlot>
-					) : isRosterOpen ? (
-						<BotRoster
-							{...rosterProps}
-							bots={bots}
-							conversations={conversations}
-							naming={naming}
-							sections={sections}
-							spaceId={selectedSpaceId}
-						/>
+					{isRosterOpen ? (
+						(skeletonSlot ?? (
+							<BotRoster
+								{...rosterProps}
+								bots={bots}
+								conversations={conversations}
+								naming={naming}
+								sections={sections}
+								spaceId={selectedSpaceId}
+							/>
+						))
 					) : (
 						<MissionsPanelEmpty />
 					)}
