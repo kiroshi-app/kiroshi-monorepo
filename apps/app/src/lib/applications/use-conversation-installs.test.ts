@@ -1,12 +1,17 @@
 // @vitest-environment happy-dom
 
-import { cleanup, renderHook, waitFor } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { createElement, type ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
-import type { ApplicationInstall, ApplicationPort } from "./application-port"
+import type {
+	ApplicationInstall,
+	ApplicationInstalled,
+	ApplicationPort,
+} from "./application-port"
+import { createFakeApplicationPort } from "./fake-application-port"
 import {
 	type ConversationApplications,
 	ConversationApplicationsContext,
@@ -20,6 +25,8 @@ import {
 } from "../host/fake-joined-hosts"
 import { hostOfflineOf } from "../host/host-offline"
 import { createJoinedHosts } from "../host/joined-hosts"
+import { invalidateOnHostReconnect } from "../query/host-invalidations"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(),
@@ -34,14 +41,20 @@ type Provided = {
 	children: ReactNode
 }
 
-const providing =
-	(applications: ConversationApplications) =>
-	({ children }: Provided) =>
+const providing = (applications: ConversationApplications) => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	invalidateOnHostReconnect(queryClient)
+	return ({ children }: Provided) =>
 		createElement(
-			ConversationApplicationsContext.Provider,
-			{ value: applications },
-			children,
+			wrapper,
+			null,
+			createElement(
+				ConversationApplicationsContext.Provider,
+				{ value: applications },
+				children,
+			),
 		)
+}
 
 const installsRefusedWith = (reason: unknown) => {
 	const installs = vi.fn(() => Promise.reject(reason))
@@ -75,6 +88,15 @@ describe("reading the installs of a conversation", () => {
 		installsRefusedWith(new Error("no installs"))
 
 		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Couldn’t read the applications added to this conversation.",
+				report: expect.objectContaining({
+					raisedIn: "use-conversation-installs",
+				}),
+			}),
+		)
+		expect(console.error).not.toHaveBeenCalled()
 	})
 
 	it("raises no notice of its own when the host of the space is offline", async () => {
@@ -85,6 +107,44 @@ describe("reading the installs of a conversation", () => {
 		await waitFor(() => expect(installs).toHaveBeenCalled())
 		await Promise.resolve()
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+})
+
+describe("reading the installs again when an application is installed", () => {
+	const installedIn = (conversationId: string) =>
+		({ conversationId }) as ApplicationInstalled
+
+	const installsShownWithFakePort = async () => {
+		const port = createFakeApplicationPort()
+		renderHook(() => useConversationInstalls("conversation-1"), {
+			wrapper: providing({ port, curated: [], spaces: [], onOpen: vi.fn() }),
+		})
+		await waitFor(() => expect(port.isListening()).toBe(true))
+		await waitFor(() => expect(installReadsOf(port)).toBe(1))
+		return port
+	}
+
+	const installReadsOf = (
+		port: ApplicationPort & { calls: { command: string }[] },
+	) => port.calls.filter(({ command }) => command === "installs").length
+
+	afterEach(cleanup)
+
+	it("reads the installs again for an install in the shown conversation", async () => {
+		const port = await installsShownWithFakePort()
+
+		act(() => port.announce(installedIn("conversation-1")))
+
+		await waitFor(() => expect(installReadsOf(port)).toBe(2))
+	})
+
+	it("reads nothing for an install in another conversation", async () => {
+		const port = await installsShownWithFakePort()
+
+		act(() => port.announce(installedIn("conversation-2")))
+		await Promise.resolve()
+
+		expect(installReadsOf(port)).toBe(1)
 	})
 })
 
