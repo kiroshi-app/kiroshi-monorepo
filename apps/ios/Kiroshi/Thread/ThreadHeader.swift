@@ -19,13 +19,14 @@ struct ThreadHeading: Equatable {
 }
 
 extension View {
-    func threadHeader(_ heading: ThreadHeading) -> some View {
-        modifier(ThreadHeaderBar(heading: heading))
+    func threadHeader(_ heading: ThreadHeading, overhang: Binding<CGFloat>) -> some View {
+        modifier(ThreadHeaderBar(heading: heading, overhang: overhang))
     }
 }
 
 private struct ThreadHeaderBar: ViewModifier {
     let heading: ThreadHeading
+    @Binding var overhang: CGFloat
     @State private var barWidth: CGFloat?
 
     func body(content: Content) -> some View {
@@ -34,6 +35,11 @@ private struct ThreadHeaderBar: ViewModifier {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     ThreadHeader(heading: heading)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            ThreadHeaderLayout.overhang(ofHeaderHeight: proxy.size.height)
+                        } action: {
+                            overhang = $0
+                        }
                         .frame(height: ThreadHeaderLayout.barHeight, alignment: .top)
                         .offset(y: -ThreadHeaderLayout.raise)
                         .frame(width: barWidth.map(ThreadHeaderLayout.width(in:)))
@@ -51,6 +57,10 @@ enum ThreadHeaderLayout {
 
     static func width(in barWidth: CGFloat) -> CGFloat {
         max(0, barWidth - 2 * sideReserve)
+    }
+
+    static func overhang(ofHeaderHeight height: CGFloat) -> CGFloat {
+        max(0, height - barHeight - raise)
     }
 }
 
@@ -115,7 +125,7 @@ struct ThreadHeader: View {
                         }
                         .defaultScrollAnchor(.bottom)
                         .navigationBarTitleDisplayMode(.inline)
-                        .threadHeader(heading)
+                        .threadHeader(heading, overhang: .constant(0))
                         .toolbar {
                             if hasTrailingItem {
                                 ToolbarItem(placement: .topBarTrailing) {
