@@ -28,16 +28,13 @@ export const useWorkspaceSubscriptions = ({
 	const {
 		applications,
 		botConnections,
-		botMcpServers,
 		chat,
 		companionPlugin,
 		joinedSpaces,
 		roster,
 		spaceConnections,
-		spaceMcpServers,
 		user,
 		userConnections,
-		userMcpServers,
 	} = core
 	const { onboarding } = drivers
 	const {
@@ -75,7 +72,6 @@ export const useWorkspaceSubscriptions = ({
 	useCompanionSettings({
 		applications: applications.controller,
 		plugin: companionPlugin.controller,
-		servers: botMcpServers.controller,
 		connections: botConnections.controller,
 		companionId: settingsBotId,
 		spaceId: selectedSpaceId,
@@ -84,7 +80,6 @@ export const useWorkspaceSubscriptions = ({
 
 	useSpaceSettingsReads({
 		applications: applications.controller,
-		servers: spaceMcpServers.controller,
 		connections: spaceConnections.controller,
 		spaceId: selectedSpaceId,
 		isOpen: isSpaceEditing,
@@ -95,11 +90,9 @@ export const useWorkspaceSubscriptions = ({
 			return
 		}
 		void applications.controller.open()
-		void userMcpServers.controller.open(USER_OWNER)
 		void userConnections.controller.open(USER_OWNER)
 	}, [
 		applications.controller,
-		userMcpServers.controller,
 		userConnections.controller,
 		user.state.isSettingsOpen,
 	])

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react"
 
 import type { WorkspaceCore } from "./use-workspace-core"
 
-import { reloadPanelsHolding } from "../applications/application-panels"
 import {
 	applicationTitleOf,
 	toApplicationScope,
@@ -58,11 +57,6 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	)
 
 	useApplicationInstalls(applicationTransport, ({ application, scope }) => {
-		void reloadPanelsHolding(scope, [
-			botMcpServers.controller,
-			spaceMcpServers.controller,
-			userMcpServers.controller,
-		])
 		void reopenSessions({
 			scope,
 			application: applicationTitleOf(
@@ -73,9 +67,9 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	})
 
 	useApplicationMarks(applications.controller, [
-		...userMcpServers.state.servers,
-		...spaceMcpServers.state.servers,
-		...botMcpServers.state.servers,
+		...userMcpServers.servers,
+		...spaceMcpServers.servers,
+		...botMcpServers.servers,
 	])
 
 	const serverEnvironmentSection = toServerEnvironmentSection({

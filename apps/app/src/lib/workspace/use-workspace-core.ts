@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react"
 import {
 	companionSettingsOwnerOf,
 	spaceSettingsOwnerOf,
+	userSettingsOwnerOf,
 } from "./settings-owners"
 
 import { useSignedInAccountId, useWatchedAccount } from "../account/use-account"
@@ -91,9 +92,6 @@ export const useWorkspaceCore = () => {
 		roster.controller.hostSpaceIdOf,
 	)
 	const companionPlugin = usePlugin(store)
-	const botMcpServers = useMcpServers(store)
-	const spaceMcpServers = useMcpServers(store)
-	const userMcpServers = useMcpServers(store)
 	const botConnections = useConnections(connectionTransport)
 	const spaceConnections = useConnections(connectionTransport)
 	const userConnections = useConnections(connectionTransport)
@@ -110,8 +108,12 @@ export const useWorkspaceCore = () => {
 		spaces.state,
 	)
 	const spaceSettingsOwner = spaceSettingsOwnerOf(spaces.state)
+	const userSettingsOwner = userSettingsOwnerOf(user.state.isSettingsOpen)
 	const botEnvironment = useEnvironment(store, companionSettingsOwner)
 	const spaceEnvironment = useEnvironment(store, spaceSettingsOwner)
+	const botMcpServers = useMcpServers(store, companionSettingsOwner)
+	const spaceMcpServers = useMcpServers(store, spaceSettingsOwner)
+	const userMcpServers = useMcpServers(store, userSettingsOwner)
 	const preferences = user.state.preferences
 
 	return {

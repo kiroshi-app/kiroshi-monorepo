@@ -137,7 +137,7 @@ const SpaceSettingsHarness = ({
 			remove: vi.fn(),
 			set: vi.fn(),
 		},
-		spaceMcpServers: { state: { hasFailedToLoad: false } },
+		spaceMcpServers: { hasFailedToLoad: false },
 	} as unknown as WorkspaceCore
 	const panels = {
 		applicationToOpenOn: () => undefined,

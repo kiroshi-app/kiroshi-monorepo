@@ -313,7 +313,7 @@ export const toApplicationScope = ({
 	reopen,
 }: ApplicationScopeSource): ApplicationScope => {
 	const { curated, marks } = applications.state
-	const owner = servers.state.owner
+	const { owner } = servers
 
 	const reopenFor = (name: string) => {
 		if (!owner) {
@@ -332,7 +332,7 @@ export const toApplicationScope = ({
 	}
 
 	const connectionSettings = toConnectionSettings({
-		servers: servers.state.servers,
+		servers: servers.servers,
 		connections,
 		openedName,
 		onSettled: reopenFor,
@@ -340,10 +340,10 @@ export const toApplicationScope = ({
 
 	const installTarget = (owned: EnvOwner): InstallTarget => ({
 		owner: owned,
-		declared: servers.state.servers.map((server) => server.name),
+		declared: servers.servers.map((server) => server.name),
 		connect: connectFor(connections),
 		settle: async () => {
-			await servers.controller.reload()
+			await servers.reread()
 			reopenFor(applications.state.picked?.name ?? "")
 		},
 	})
@@ -363,15 +363,13 @@ export const toApplicationScope = ({
 				})
 			: undefined,
 		onMcpServerCreate: (name, config) => {
-			void servers.controller.create(name, config).then(onceWritten(name))
+			void servers.create(name, config).then(onceWritten(name))
 		},
 		onMcpServerChange: (opened, name, config) => {
-			void servers.controller
-				.rename(opened, name, config)
-				.then(onceWritten(name))
+			void servers.rename(opened, name, config).then(onceWritten(name))
 		},
 		onMcpServerDelete: (name) => {
-			void servers.controller.remove(name).then(onceWritten(name))
+			void servers.remove(name).then(onceWritten(name))
 		},
 	}
 }

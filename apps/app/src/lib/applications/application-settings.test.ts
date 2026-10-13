@@ -107,13 +107,14 @@ const serversWith = (
 	owner: EnvOwner | null,
 	servers: BotMcpServer[] = [],
 ): McpServers => ({
-	state: { owner, servers, hasFailedToLoad: false },
-	controller: {
-		create: vi.fn(async () => true),
-		rename: vi.fn(async () => true),
-		remove: vi.fn(async () => true),
-		reload: vi.fn(async () => undefined),
-	} as unknown as McpServers["controller"],
+	owner,
+	servers,
+	hasFailedToLoad: false,
+	isPending: false,
+	create: vi.fn(async () => true),
+	rename: vi.fn(async () => true),
+	remove: vi.fn(async () => true),
+	reread: vi.fn(async () => undefined),
 })
 
 const NO_CONNECTIONS = {
@@ -632,7 +633,7 @@ describe("toApplicationScope", () => {
 
 	it("leaves the sessions alone when the declaration was refused", async () => {
 		const servers = serversWith(USER)
-		servers.controller.create = vi.fn(async () => false)
+		servers.create = vi.fn(async () => false)
 		const { scope, reopen } = scopeOf(
 			applicationsWith({ curated: [LINEAR] }),
 			servers,

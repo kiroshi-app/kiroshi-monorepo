@@ -44,7 +44,7 @@ export const BotSettingsHost = ({
 	return settingsBot ? (
 		<BotSettingsDialog
 			history={botHistory}
-			haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
+			haveMcpServersFailedToLoad={botMcpServers.hasFailedToLoad}
 			{...botApplications}
 			mcpServerToOpen={applicationToOpenOn({
 				kind: "companion",

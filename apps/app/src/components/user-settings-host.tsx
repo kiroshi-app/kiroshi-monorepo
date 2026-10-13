@@ -55,7 +55,7 @@ export const UserSettingsHost = ({
 				account={account}
 				applications={{
 					servers: userApplications.mcpServers,
-					haveFailedToLoad: userMcpServers.state.hasFailedToLoad,
+					haveFailedToLoad: userMcpServers.hasFailedToLoad,
 					onServerCreate: userApplications.onMcpServerCreate,
 					onServerChange: userApplications.onMcpServerChange,
 					onServerDelete: userApplications.onMcpServerDelete,
