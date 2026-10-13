@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+	skipToken,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query"
+import { useCallback, useMemo, useState } from "react"
 
+import { chatQueryKeys } from "./chat-query-keys"
 import { type PinnedBubble, pinnedBubblesOf } from "./pinned-bubbles"
 import { bubbleIdOf } from "./screen-model"
 
@@ -23,28 +30,68 @@ export type PinnedBubbles = {
 	dismissFailure: () => void
 }
 
-export function usePinnedMessages(
+type PinWrite = {
+	conversationId: string | null
+	messageId: string
+	blockIndex: number
+	isPinned: boolean
+}
+
+type DismissedFailure = {
+	readFailedAt: number
+	writeSubmittedAt: number
+}
+
+const NOTHING_DISMISSED: DismissedFailure = {
+	readFailedAt: 0,
+	writeSubmittedAt: 0,
+}
+
+const SHOWN_INLINE = { rendersErrorInline: true } as const
+
+export const usePinnedMessages = (
 	controller: PinnedMessagesController,
 	conversationId: string | null,
-): PinnedBubbles {
-	const [pins, setPins] = useState<MessagePin[]>(NO_PINS)
-	const [hasFailed, setHasFailed] = useState(false)
+): PinnedBubbles => {
+	const queryClient = useQueryClient()
+	const [dismissed, setDismissed] = useState(NOTHING_DISMISSED)
 
-	const noteFailure = useCallback(() => setHasFailed(true), [])
-	const dismissFailure = useCallback(() => setHasFailed(false), [])
+	const read = useQuery({
+		queryKey: chatQueryKeys.pins(conversationId),
+		queryFn: conversationId ? controller.pins : skipToken,
+		meta: SHOWN_INLINE,
+	})
 
-	const recall = useCallback(() => {
-		if (!conversationId) {
-			setPins(NO_PINS)
-			return
-		}
-		void controller.pins().then((held) => {
-			setPins(held)
-			setHasFailed(false)
-		}, noteFailure)
-	}, [controller, conversationId, noteFailure])
+	const write = useMutation({
+		mutationFn: ({ messageId, blockIndex, isPinned }: PinWrite) =>
+			isPinned
+				? controller.unpin(messageId, blockIndex)
+				: controller.pin(messageId, blockIndex),
+		onSettled: (_result, _error, written) =>
+			queryClient.invalidateQueries({
+				queryKey: chatQueryKeys.pins(written.conversationId),
+			}),
+		meta: SHOWN_INLINE,
+	})
+	const { mutate } = write
 
-	useEffect(recall, [recall])
+	const pins = read.data ?? NO_PINS
+	const isReadFailureShown =
+		read.isError && read.errorUpdatedAt > dismissed.readFailedAt
+	const isWriteFailureShown =
+		write.isError &&
+		write.variables.conversationId === conversationId &&
+		write.submittedAt > dismissed.writeSubmittedAt
+	const hasFailed = isReadFailureShown || isWriteFailureShown
+
+	const dismissFailure = useCallback(
+		() =>
+			setDismissed({
+				readFailedAt: read.errorUpdatedAt,
+				writeSubmittedAt: write.submittedAt,
+			}),
+		[read.errorUpdatedAt, write.submittedAt],
+	)
 
 	const bubbles = useMemo(() => pinnedBubblesOf(pins), [pins])
 	const held = useMemo(
@@ -61,12 +108,14 @@ export function usePinnedMessages(
 
 	const toggle = useCallback(
 		(messageId: string, blockIndex: number) => {
-			const act = isPinned(bubbleIdOf(messageId, blockIndex))
-				? controller.unpin(messageId, blockIndex)
-				: controller.pin(messageId, blockIndex)
-			void act.then(recall, noteFailure)
+			mutate({
+				conversationId,
+				messageId,
+				blockIndex,
+				isPinned: isPinned(bubbleIdOf(messageId, blockIndex)),
+			})
 		},
-		[controller, isPinned, recall, noteFailure],
+		[conversationId, isPinned, mutate],
 	)
 
 	const unpin = useCallback(
@@ -75,11 +124,14 @@ export function usePinnedMessages(
 			if (!shown) {
 				return
 			}
-			void controller
-				.unpin(shown.pin.message.id, shown.pin.blockIndex)
-				.then(recall, noteFailure)
+			mutate({
+				conversationId,
+				messageId: shown.pin.message.id,
+				blockIndex: shown.pin.blockIndex,
+				isPinned: true,
+			})
 		},
-		[controller, held, recall, noteFailure],
+		[conversationId, held, mutate],
 	)
 
 	return useMemo(
