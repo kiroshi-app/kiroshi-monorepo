@@ -565,20 +565,21 @@ impl std::error::Error for BundleUnavailable {
 	}
 }
 
-pub fn ensure(root: &Path, bot: &Bot) -> Result<(), BundleUnavailable> {
+pub fn ensure(root: &Path, bot: &Bot) -> Result<PathBuf, BundleUnavailable> {
 	ensured(root, bot).map_err(|cause| BundleUnavailable { bot_id: bot.id.clone(), cause })
 }
 
-fn ensured(root: &Path, bot: &Bot) -> std::io::Result<()> {
+fn ensured(root: &Path, bot: &Bot) -> std::io::Result<PathBuf> {
 	let held = dir(root, &bot.id)?;
 	let _serialised = serialised(&held);
 	let bundle = settled(root, bot, held)?;
 	if agent_file(root, &bot.id).is_none() {
-		return rewritten(root, bot, bundle);
+		rewritten(root, bot, bundle.clone())?;
+		return Ok(bundle);
 	}
 	rewrite_agent(root, bot)?;
 	recorded(&bundle, BOT_SUBJECT, &bot.name, "added to the history").map_err(unrecorded)?;
-	Ok(())
+	Ok(bundle)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

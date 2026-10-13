@@ -833,10 +833,9 @@ fn laid_down_bundle(
 	user: Option<&Path>,
 	space: Option<&Path>,
 ) -> Result<Bundle, bundles::BundleUnavailable> {
-	let unavailable = |cause| bundles::BundleUnavailable { bot_id: bot.id.clone(), cause };
-	bundles::set_permissions(root, bot, permissions).map_err(unavailable)?;
-	bundles::ensure(root, bot)?;
-	let held = bundles::dir(root, &bot.id).map_err(unavailable)?;
+	bundles::set_permissions(root, bot, permissions)
+		.map_err(|cause| bundles::BundleUnavailable { bot_id: bot.id.clone(), cause })?;
+	let held = bundles::ensure(root, bot)?;
 	Ok(Bundle {
 		path: held.to_string_lossy().into_owned(),
 		system_path: system.map(|path| path.to_string_lossy().into_owned()),
