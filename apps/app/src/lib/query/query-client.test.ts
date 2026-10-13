@@ -92,6 +92,20 @@ it("raises the declared failure notice once from the mutation cache", async () =
 	})
 })
 
+it("hands the failure to the notice it declares", async () => {
+	await fetchFailing(new Error("disk full"), {
+		failureNotice: (error) => ({
+			title: "Couldn’t read it.",
+			description: error instanceof Error ? error.message : undefined,
+		}),
+		raisedIn: "query-client-test",
+	}).fetched
+
+	expect(raiseFailureNotice).toHaveBeenCalledWith(
+		expect.objectContaining({ description: "disk full" }),
+	)
+})
+
 it("skips the global notice for a read showing its error inline", async () => {
 	await fetchFailing(new Error("local"), { rendersErrorInline: true }).fetched
 
