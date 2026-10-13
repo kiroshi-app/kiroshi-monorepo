@@ -114,6 +114,32 @@ Only **technical composition** — it places things, it does not draw them:
 - `swift format lint --recursive apps/ios` reports nothing. Xcode is pinned in `.xcode-version`.
 - `ios:run` and `ios:test` share the iPhone 17 simulator: never run them at once.
 
+## Data reading
+
+`apps/app` reads host data through TanStack Query. `packages/ui` never imports it.
+
+### A read
+
+- One `useQuery` per read inside a `use-*.ts` hook of the domain folder, its `queryFn` the existing reader (`readModelCatalogue`). Never `useEffect` plus `useState`.
+- The hook maps query state to what its caller needs: `{ models, hasFailedToLoad }`, never raw `data`.
+- Every query and mutation declares its failure in `meta`: `{ failureNotice: () => ({ title: i18n.t(...) }), raisedIn: "use-model-catalogue" }`, or `{ rendersErrorInline: true }` when the screen shows the error itself. The cache `onError` in `lib/query/query-client.ts` raises it through `raiseReportedFailure`: never call it from the hook.
+- Defaults live in `lib/query/query-client.ts`. Only a joined host offline retries a read, once. A refused or local read never retries, a mutation never retries.
+
+### Keys
+
+- One factory per domain, `<domain>-query-keys.ts` in that domain folder (`lib/bots/bot-query-keys.ts`), from generic to specific: `botQueryKeys.all`, then `botQueryKeys.modelCatalogue()`.
+- The key carries every input the `queryFn` reads.
+
+### Invalidation
+
+- `useInvalidateOnHostEvent(event, keys)` from `lib/query/host-invalidations.ts` invalidates `keys` when the host emits `event`, and stops on unmount.
+- A host reconnect invalidates every query on its own.
+- A mutation invalidates either through the host event it triggers or in its `onSettled`, never both.
+
+### Tests
+
+- `createQueryTestWrapper()` from `lib/query/query-test-wrapper.tsx` gives each test a fresh `QueryClient`, retry off and no gc timer left running: `renderHook(useX, { wrapper: createQueryTestWrapper().wrapper })`. A test rendering `App` passes it too.
+
 ## House Rules
 
 - **No new dependencies without approval** — Ask before adding any package.
