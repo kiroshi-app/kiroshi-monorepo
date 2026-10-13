@@ -819,7 +819,7 @@ export const createConversationController = (
 			return
 		}
 		if (scope && turn && isOpenConversation(turn.conversationId)) {
-			foreignTurns.render(scope, event)
+			foreignTurns.render(scope, turn, event)
 			sync()
 		}
 	}
