@@ -164,8 +164,6 @@ const SpaceSquare = ({ colour, badge, host }: SpaceSquareProps) => (
 	</SpaceDot>
 )
 
-const isJoined = (host?: SpaceHost) => host !== undefined && host !== "shared"
-
 type SpaceSwitcherProps = SpaceSelection &
 	SpaceInvitationCallbacks & {
 		hostBySpaceId?: Record<string, SpaceHost>
@@ -346,7 +344,7 @@ const SpaceSwitcher = ({
 						<Icons.Settings aria-hidden="true" className="size-3.5" />
 						{t("spaces.settings")}
 					</ContextMenuItem>
-					{isJoined(host) ? (
+					{host && host !== "shared" ? (
 						<>
 							<ContextMenuSeparator />
 							<ContextMenuItem onClick={onLeaveSpace} variant="destructive">
