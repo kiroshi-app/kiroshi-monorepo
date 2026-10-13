@@ -20,9 +20,9 @@ import type {
 	CatalogueRoutine,
 } from "./catalogue-contract"
 import type { MessageHit } from "./search-contract"
-import type { SearchRead } from "./search-controller"
 import { markedTitle } from "./search-fold"
 import type { SearchRow, SearchTarget } from "./search-navigation"
+import type { SearchRead } from "./use-search-reads"
 
 import { rosterTimestamp } from "@/lib/bots/roster-timestamp"
 import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"

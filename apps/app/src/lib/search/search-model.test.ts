@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest"
 
 import type { CatalogueMission } from "./catalogue-contract"
-import type { SearchRead } from "./search-controller"
 import { createSearchLookups, toSearchGroups } from "./search-model"
+import type { SearchRead } from "./use-search-reads"
 
 import type { MissionState } from "@/lib/missions/mission-contract"
 

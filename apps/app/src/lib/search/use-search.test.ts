@@ -30,6 +30,7 @@ import type {
 	Space,
 } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const PERSONAL = "personal"
 
@@ -178,15 +179,17 @@ const renderSearch = ({ navigation, port, canOpen = true }: Rendering) => {
 		now: 2,
 	})
 
-	return renderHook(() =>
-		useSearch({
-			spaceId: PERSONAL,
-			spaceName: "Personal",
-			lookups,
-			navigation,
-			port,
-			canOpen,
-		}),
+	return renderHook(
+		() =>
+			useSearch({
+				spaceId: PERSONAL,
+				spaceName: "Personal",
+				lookups,
+				navigation,
+				port,
+				canOpen,
+			}),
+		{ wrapper: createQueryTestWrapper().wrapper },
 	).result
 }
 
@@ -287,6 +290,25 @@ it("opens no palette on the chord while another dialog is open", () => {
 	act(() => press("k", { metaKey: true }))
 
 	expect(result.current.isOpen).toBe(false)
+})
+
+it("reads only the query the typing went quiet on", async () => {
+	const { navigation } = aNavigation()
+	const port = aPort()
+	const result = renderSearch({ navigation, port })
+
+	act(() => result.current.open())
+	act(() => result.current.palette.onQueryChange("r"))
+	act(() => result.current.palette.onQueryChange("ro"))
+	act(() => result.current.palette.onQueryChange("roadmap"))
+
+	await waitFor(() => expect(port.messages).toHaveBeenCalled())
+	expect(port.messages).toHaveBeenCalledOnce()
+	expect(port.messages).toHaveBeenCalledWith({
+		text: "roadmap",
+		spaceId: PERSONAL,
+		allSpaces: false,
+	})
 })
 
 it("ignores a rank chord while the palette is open", async () => {
