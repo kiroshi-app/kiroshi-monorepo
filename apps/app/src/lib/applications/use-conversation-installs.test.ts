@@ -11,7 +11,10 @@ import type {
 	ApplicationInstalled,
 	ApplicationPort,
 } from "./application-port"
-import { createFakeApplicationPort } from "./fake-application-port"
+import {
+	createFakeApplicationPort,
+	type FakeApplicationPort,
+} from "./fake-application-port"
 import {
 	type ConversationApplications,
 	ConversationApplicationsContext,
@@ -114,6 +117,9 @@ describe("reading the installs again when an application is installed", () => {
 	const installedIn = (conversationId: string) =>
 		({ conversationId }) as ApplicationInstalled
 
+	const installReadsOf = (port: FakeApplicationPort) =>
+		port.calls.filter(({ command }) => command === "installs").length
+
 	const installsShownWithFakePort = async () => {
 		const port = createFakeApplicationPort()
 		renderHook(() => useConversationInstalls("conversation-1"), {
@@ -123,10 +129,6 @@ describe("reading the installs again when an application is installed", () => {
 		await waitFor(() => expect(installReadsOf(port)).toBe(1))
 		return port
 	}
-
-	const installReadsOf = (
-		port: ApplicationPort & { calls: { command: string }[] },
-	) => port.calls.filter(({ command }) => command === "installs").length
 
 	afterEach(cleanup)
 
