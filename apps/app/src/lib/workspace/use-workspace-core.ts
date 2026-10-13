@@ -38,7 +38,7 @@ export const useWorkspaceCore = () => {
 	const store = useMemo(createTranscriptStore, [])
 	const driver = useMemo(() => createChatDriver(store), [store])
 	const account = useWatchedAccount()
-	const senderAccountId = useSignedInAccountId(account)
+	const senderAccountId = useSignedInAccountId()
 	const chat = useChat(driver, store, { senderAccountId })
 	const roster = useRoster(store)
 	const conversationRuntimes = useMemo(
