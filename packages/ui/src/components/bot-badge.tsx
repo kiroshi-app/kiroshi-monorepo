@@ -18,7 +18,7 @@ const DOT_CLASS = "pointer-events-none size-2 gap-0 rounded-full border-0 p-0"
 const botBadgeVariants = cva("", {
 	variants: {
 		badge: {
-			attention: "bg-bot-badge-attention motion-safe:animate-pulse",
+			attention: "bg-warning motion-safe:animate-pulse",
 			done: "bg-bot-badge-done",
 			failed: "bg-bot-badge-failed",
 		},
@@ -29,6 +29,7 @@ const botBadgeVariants = cva("", {
 			switcher:
 				"group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:ring-2 group-data-[collapsible=icon]:ring-[var(--badge-ring,var(--color-sidebar))]",
 			row: "absolute end-0 bottom-1",
+			rail: "absolute -end-px -top-px ring-2 ring-(--shell-surface,var(--background)) transition-shadow duration-400 ease-out motion-reduce:transition-none",
 		},
 	},
 })
@@ -36,7 +37,7 @@ const botBadgeVariants = cva("", {
 const botBadgeRingVariants = cva("ring-2", {
 	variants: {
 		badge: {
-			attention: "ring-bot-badge-attention motion-safe:animate-pulse",
+			attention: "ring-warning motion-safe:animate-pulse",
 			done: "ring-bot-badge-done",
 			failed: "ring-bot-badge-failed",
 		},
@@ -73,7 +74,7 @@ const BOT_MISSION_DOT_SLOT = "size-1.5 shrink-0"
 const botMissionDotVariants = cva(`${BOT_MISSION_DOT_SLOT} rounded-full`, {
 	variants: {
 		state: {
-			waiting: "bg-bot-badge-attention",
+			waiting: "bg-warning",
 			failed: "bg-bot-badge-failed",
 			ready: "bg-bot-badge-done",
 			working: "bg-muted-foreground/40",

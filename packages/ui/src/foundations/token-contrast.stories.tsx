@@ -14,6 +14,7 @@ type TokenPair = { background: string; foreground: string }
 type ThemeName = "light" | "dark"
 
 const AA_TEXT_RATIO = 4.5
+const AA_NON_TEXT_RATIO = 3
 const FOREGROUND_SUFFIX = "-foreground"
 const THEMES: ThemeName[] = ["light", "dark"]
 const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
@@ -43,6 +44,11 @@ const USER_BUBBLE_PAIR: TokenPair = {
 	background: "--user-bubble",
 	foreground: "--user-bubble-foreground",
 }
+
+const WARNING_PAIRS: TokenPair[] = [
+	{ background: ROOT_PAIR.background, foreground: "--warning" },
+	{ background: "--sidebar", foreground: "--warning" },
+]
 
 const TOKEN_PAIRS = [
 	ROOT_PAIR,
@@ -138,12 +144,12 @@ const measurePair = (
 
 type Measurement = { key: string; ratio: number }
 
-const failuresIn = (measurements: Measurement[]) =>
+const failuresIn = (measurements: Measurement[], floor = AA_TEXT_RATIO) =>
 	measurements
-		.filter(({ ratio }) => ratio < AA_TEXT_RATIO)
+		.filter(({ ratio }) => ratio < floor)
 		.map(
 			({ key, ratio }) =>
-				`${key}: measured ${ratio.toFixed(2)}:1, needs ${AA_TEXT_RATIO}:1`,
+				`${key}: measured ${ratio.toFixed(2)}:1, needs ${floor}:1`,
 		)
 
 const meta = preview.meta({
@@ -182,6 +188,26 @@ export const SemanticPairsMeetAaText = meta.story({
 		await expect(
 			problems,
 			`Semantic token pairs failing their contrast floor:\n${problems.join("\n")}`,
+		).toEqual([])
+	},
+})
+
+export const WarningMeetsAaNonText = meta.story({
+	play: async ({ canvasElement }) => {
+		const pixel = createPixel()
+		const measurements = THEMES.map((scheme) =>
+			probeTheme(pixel, canvasElement, scheme),
+		).flatMap((probe) =>
+			WARNING_PAIRS.map((pair) => ({
+				key: pairKey(probe.scheme, pair),
+				ratio: measurePair(pixel, probe, pair),
+			})),
+		)
+		const problems = failuresIn(measurements, AA_NON_TEXT_RATIO)
+
+		await expect(
+			problems,
+			`Warning failing its non-text contrast floor:\n${problems.join("\n")}`,
 		).toEqual([])
 	},
 })

@@ -11,11 +11,13 @@ import {
 } from "@workspace/storybook/story-utils"
 import {
 	AppRail,
+	type AppRailDots,
 	type AppRailPanel,
 	type AppRailProps,
 	NAVIGATION_ROW_GAP,
 } from "@workspace/ui/components/app-rail"
 import { AppSidebar } from "@workspace/ui/components/app-sidebar"
+import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { blotTint } from "@workspace/ui/components/companion-colour"
 import {
 	UpdateBadge,
@@ -260,6 +262,52 @@ const selecting = (selected: AppRailPanel) => ({
 	},
 })
 
+const DOT_TOKEN: Record<BotBadge, string> = {
+	attention: "bg-warning",
+	done: "bg-bot-badge-done",
+	failed: "bg-bot-badge-failed",
+}
+
+const DOT_NEWS: Record<BotBadge, string> = {
+	attention: "waiting for you",
+	done: "activity finished",
+	failed: "activity failed",
+}
+
+const isMotionReduced = () =>
+	matchMedia("(prefers-reduced-motion: reduce)").matches
+
+const expectDotOfKind = async (
+	canvasElement: HTMLElement,
+	panel: AppRailPanel,
+	badge: BotBadge,
+) => {
+	const entry = entryNamed(
+		canvasElement,
+		`${ENTRY_NAMES[panel]}, ${DOT_NEWS[badge]}`,
+	)
+	const dot = slotIn(entry, "app-rail-dot")
+	const { backgroundColor, animationName } = getComputedStyle(dot)
+	await expect(backgroundColor).toBe(
+		tokenStyleIn(entry, DOT_TOKEN[badge], "backgroundColor"),
+	)
+	await expect(backgroundColor).not.toBe(
+		tokenStyleIn(entry, "bg-primary", "backgroundColor"),
+	)
+	const isPulsing = badge === "attention" && !isMotionReduced()
+	await expect(animationName === "pulse").toBe(isPulsing)
+}
+
+const dotsOfKind = (dots: AppRailDots) => ({
+	args: { dots },
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		for (const panel of PANELS) {
+			const badge = dots[panel]
+			if (badge) await expectDotOfKind(canvasElement, panel, badge)
+		}
+	},
+})
+
 const meta = preview.meta({
 	title: "Navigation/AppRail",
 	component: AppRail,
@@ -491,17 +539,17 @@ export const FirstTabLevelWithPanelTitle = meta.story({
 })
 
 export const WithDot = meta.story({
-	args: { dots: { conversations: true, missions: true } },
+	args: { dots: { conversations: "done", missions: "attention" } },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Two entries with something new, the way the reference draws them. Check each dot is 8px, primary, carries no number, flush with the top and trailing corner of its 36px entry and ringed 2px in the window ground, and that the entry's name says there is news.",
+					"Two entries with something new, the way the reference draws them. Check each dot is 8px, carries no number, flush with the top and trailing corner of its 36px entry and ringed 2px in the window ground, and that the entry's name says there is news.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		const entry = entryNamed(canvasElement, "Conversations, new activity")
+		const entry = entryNamed(canvasElement, "Conversations, activity finished")
 		const dot = slotIn(entry, "app-rail-dot").getBoundingClientRect()
 		const box = entry.getBoundingClientRect()
 		await expect(dot.width).toBe(8)
@@ -510,7 +558,7 @@ export const WithDot = meta.story({
 		await expect(slotIn(canvasElement, "app-rail")).not.toHaveTextContent(/\d/)
 		await expect(
 			slotIn(
-				entryNamed(canvasElement, "Missions, new activity"),
+				entryNamed(canvasElement, "Missions, waiting for you"),
 				"app-rail-dot",
 			),
 		).toBeVisible()
@@ -520,6 +568,57 @@ export const WithDot = meta.story({
 			),
 		).toBeNull()
 	},
+})
+
+export const AttentionDot = meta.story({
+	...dotsOfKind({ conversations: "attention", missions: "attention" }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation of the space waits on the reader and a mission waits on them too. Check both dots wear `--warning`, never the primary blue, that they pulse while motion is allowed and hold still under `prefers-reduced-motion: reduce`, and that each entry is named waiting for you. Pick `DoneDot` for a turn that simply finished.",
+			},
+		},
+	},
+})
+
+export const AttentionDotDark = meta.story({
+	...dotsOfKind({ conversations: "attention", missions: "attention" }),
+	globals: { theme: "dark" },
+})
+
+export const DoneDot = meta.story({
+	...dotsOfKind({ conversations: "done" }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The strongest badge among the conversations of the space is a finished turn. Check the Conversations dot is green on `--bot-badge-done`, holds still, and that the entry is named activity finished. Pick `FailedDot` for a turn that failed.",
+			},
+		},
+	},
+})
+
+export const DoneDotDark = meta.story({
+	...dotsOfKind({ conversations: "done" }),
+	globals: { theme: "dark" },
+})
+
+export const FailedDot = meta.story({
+	...dotsOfKind({ conversations: "failed" }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A failed turn is the strongest badge among the conversations of the space, over any finished one. Check the Conversations dot is red on `--bot-badge-failed`, holds still, and that the entry is named activity failed. Pick `AttentionDot` for a conversation that waits on the reader.",
+			},
+		},
+	},
+})
+
+export const FailedDotDark = meta.story({
+	...dotsOfKind({ conversations: "failed" }),
+	globals: { theme: "dark" },
 })
 
 export const UpdateAvailable = meta.story({
@@ -609,7 +708,7 @@ type TintedShellStyle = CSSProperties & { "--space-tint": string }
 const TINTED_SHELL: TintedShellStyle = { "--space-tint": blotTint("blue") }
 
 export const OnTintedSpace = meta.story({
-	args: { dots: { conversations: true, missions: true } },
+	args: { dots: { conversations: "done", missions: "attention" } },
 	render: (args: AppRailProps) => (
 		<div
 			className="surface-shell flex h-[32rem]"
@@ -640,7 +739,7 @@ export const OnTintedSpace = meta.story({
 })
 
 export const Dark = meta.story({
-	args: { dots: { conversations: true, missions: true } },
+	args: { dots: { conversations: "done", missions: "attention" } },
 	globals: { theme: "dark" },
 	play: async ({ canvasElement }) => {
 		await expectListRowGapBetweenEntries(canvasElement)

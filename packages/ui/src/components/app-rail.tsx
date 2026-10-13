@@ -3,6 +3,7 @@
 import type { ComponentProps, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
 import { FillIcons, Icons } from "@workspace/ui/components/icons"
 import {
 	AvatarFrame,
@@ -15,9 +16,9 @@ import { cn } from "@workspace/ui/lib/utils"
 
 type AppRailPanel = "conversations" | "missions"
 
-type AppRailEntry = AppRailPanel | "settings" | "you"
-
-type AppRailDots = Partial<Record<AppRailEntry, boolean>>
+type AppRailDots = Partial<
+	Record<AppRailPanel, BotBadge> & Record<"settings" | "you", boolean>
+>
 
 const PANEL_ICON = {
 	conversations: "Conversations",
@@ -46,6 +47,7 @@ const AVATAR_SIZE = 26
 
 type RailItemProps = {
 	name: string
+	badge?: BotBadge
 	hasDot?: boolean
 	isSelected?: boolean
 	onPress?: () => void
@@ -54,13 +56,18 @@ type RailItemProps = {
 
 const RailItem = ({
 	name,
+	badge,
 	hasDot,
 	isSelected,
 	onPress,
 	children,
 }: RailItemProps) => {
 	const { t } = useTranslation("bots")
-	const spokenName = hasDot ? t("rail.dot", { name }) : name
+	const spokenName = badge
+		? t(`rail.badge.${badge}`, { name })
+		: hasDot
+			? t("rail.dot", { name })
+			: name
 
 	return (
 		<li>
@@ -76,6 +83,13 @@ const RailItem = ({
 				variant="ghost"
 			>
 				{children}
+				{badge ? (
+					<BotBadgeDot
+						badge={badge}
+						data-slot="app-rail-dot"
+						placement="rail"
+					/>
+				) : null}
 				{hasDot ? (
 					<span
 						aria-hidden="true"
@@ -132,7 +146,7 @@ const AppRail = ({
 		const PanelIcon = (isSelected ? FillIcons : Icons)[PANEL_ICON[entry]]
 		return {
 			children: <PanelIcon aria-hidden="true" />,
-			hasDot: dots?.[entry],
+			badge: dots?.[entry],
 			isSelected,
 			name: t(`rail.${entry}`),
 		}

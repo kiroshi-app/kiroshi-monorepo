@@ -176,9 +176,7 @@ const MissionAuthoredEvent = ({
 					</span>
 					<BotTitleBadge
 						className={
-							event.kind === "agent_asked"
-								? "bg-bot-badge-attention/18"
-								: undefined
+							event.kind === "agent_asked" ? "bg-warning/18" : undefined
 						}
 						title={t(`missions.event.kind.${event.kind}`)}
 					/>

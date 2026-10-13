@@ -7,6 +7,7 @@ import {
 	AppSidebar,
 	type AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
+import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { Markdown } from "@workspace/ui/components/markdown"
@@ -90,9 +91,15 @@ const missionsPanelOf = (space: SceneSpace): MissionsPanelProps => ({
 	onOpen: doNothing,
 })
 
+const STRONGEST_FIRST: BotBadge[] = ["attention", "failed", "done"]
+
 const railDotsOf = (space: SceneSpace): AppRailDots => ({
-	conversations: space.conversations.some((row) => row.badge),
-	missions: space.missions.some((mission) => mission.state === "waiting_human"),
+	conversations: STRONGEST_FIRST.find((badge) =>
+		space.conversations.some((row) => row.badge === badge),
+	),
+	missions: space.missions.some((mission) => mission.state === "waiting_human")
+		? "attention"
+		: undefined,
 })
 
 const sceneRow = (

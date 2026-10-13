@@ -169,7 +169,7 @@ export const ConversationOpenDark = meta.story({
 			<AppSidebar
 				bots={ROSTER}
 				insetWindowControls
-				railDots={{ conversations: true, missions: true }}
+				railDots={{ conversations: "done", missions: "attention" }}
 				selectedBotId="atlas"
 			/>
 		),

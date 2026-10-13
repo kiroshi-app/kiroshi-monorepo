@@ -1749,7 +1749,7 @@ export const MissionStripWithChatBadge = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, their trailing edges 2px apart, so they read as one column down the row rather than as two. They carry the same attention colour here, measured against `--bot-badge-attention` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
+					"A companion whose mission waits on the reader and whose conversation is asking for them too, which is the one case where the two marks of the row meet. Check both are drawn and that they stack: the chat dot at the trailing edge of the preview line, the mission dot at the trailing edge of the strip below it, their trailing edges 2px apart, so they read as one column down the row rather than as two. They carry the same warning colour here, measured against `--warning` on both, so colour and column are exactly what a reader cannot tell them apart by: the line each one sits on is, the preview line answering what the conversation wants and the strip answering what the work is doing. Check the strip hangs below the badge instead of colliding with it. Pick `Badges` for the dot alone, `MissionStripStates` for the strip alone.",
 			},
 		},
 	},
@@ -1758,10 +1758,7 @@ export const MissionStripWithChatBadge = meta.story({
 
 		const chatDot = slotIn(rows[0], "bot-activity-dot")
 		const missionDot = dotIn(rows[0])
-		const attention = tokenBackground(
-			canvasElement,
-			"var(--bot-badge-attention)",
-		)
+		const warning = tokenBackground(canvasElement, "var(--warning)")
 
 		await expect(stripStatesIn(rows[0])).toEqual(["waiting"])
 		await expect(badgeIn(rows[0])).toBe("attention")
@@ -1776,7 +1773,7 @@ export const MissionStripWithChatBadge = meta.story({
 		).toBe(2)
 		await expect(
 			[chatDot, missionDot].map((dot) => getComputedStyle(dot).backgroundColor),
-		).toEqual([attention, attention])
+		).toEqual([warning, warning])
 		await expect(stripsIn(rows[1])).toHaveLength(0)
 		await expectAlignedRows(rows)
 	},
@@ -2156,14 +2153,14 @@ const expectJoinedCard = async (canvasElement: HTMLElement) => {
 export const ConversationsPanel = meta.story({
 	args: {
 		insetWindowControls: true,
-		railDots: { conversations: true, missions: true },
+		railDots: { conversations: "done", missions: "attention" },
 	},
 	globals: { theme: "dark" },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected and a dot on Conversations and Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 52px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the search and create buttons, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
+					"The V1 shell as the app opens it, drawn against the reference artboard: the title bar with the space switcher, the rail on the window ground with Conversations selected, a still green dot on Conversations and a pulsing warning dot on Missions, then the shell card holding the Conversations panel and the conversation. Check the rail is 52px wide, the panel 304px with its 1px divider, the panel header 32px with the 15px semibold title and the search and create buttons, the card on its 12px radius with a 1px border 34px under the top of the window and 4px off the trailing and bottom edges, and the roster below the header exactly as the list has always drawn it.",
 			},
 		},
 	},
@@ -2171,7 +2168,9 @@ export const ConversationsPanel = meta.story({
 		const rail = slotIn(canvasElement, "app-rail")
 		await expect(rail.getBoundingClientRect().width).toBe(RAIL_WIDTH)
 		await expect(
-			within(rail).getByRole("button", { name: "Conversations, new activity" }),
+			within(rail).getByRole("button", {
+				name: "Conversations, activity finished",
+			}),
 		).toHaveAttribute("aria-current", "true")
 
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
@@ -3102,6 +3101,10 @@ export const SpaceBadges = meta.story({
 			"failed",
 			undefined,
 		])
+		await expect(
+			getComputedStyle(slotsIn(spaceDotsIn(canvasElement)[2], "space-dot")[0])
+				.boxShadow,
+		).toContain(tokenBackground(canvasElement, "var(--warning)"))
 
 		const trigger = canvas.getByRole("button", {
 			name: "Change space, Vocca open",
