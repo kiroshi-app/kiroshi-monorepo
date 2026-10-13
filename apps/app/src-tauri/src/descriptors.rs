@@ -21,7 +21,11 @@ pub fn raise_open_file_limit() {}
 #[cfg(unix)]
 fn raised_to_the_hard_limit() -> io::Result<()> {
 	let mut limit = open_file_limit()?;
-	limit.rlim_cur = ceiling(limit.rlim_max);
+	let raised = raised_soft(limit.rlim_cur, limit.rlim_max);
+	if raised == limit.rlim_cur {
+		return Ok(());
+	}
+	limit.rlim_cur = raised;
 	if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) } != 0 {
 		return Err(io::Error::last_os_error());
 	}
@@ -35,6 +39,11 @@ fn open_file_limit() -> io::Result<libc::rlimit> {
 		return Err(io::Error::last_os_error());
 	}
 	Ok(limit)
+}
+
+#[cfg(unix)]
+fn raised_soft(current: libc::rlim_t, hard: libc::rlim_t) -> libc::rlim_t {
+	current.max(ceiling(hard))
 }
 
 #[cfg(target_os = "macos")]
@@ -68,11 +77,33 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn the_soft_limit_ends_at_the_ceiling_of_the_hard_limit() {
+	fn the_soft_limit_ends_where_the_raise_puts_it() {
+		let before = open_file_limit().expect("the limit reads");
+
 		raise_open_file_limit();
 
-		let limit = open_file_limit().expect("the limit reads");
-		assert_eq!(limit.rlim_cur, ceiling(limit.rlim_max));
+		let after = open_file_limit().expect("the limit reads");
+		assert_eq!(after.rlim_cur, raised_soft(before.rlim_cur, before.rlim_max));
+	}
+
+	#[test]
+	fn a_soft_limit_below_the_ceiling_rises_to_it() {
+		assert_eq!(raised_soft(256, 4_096), ceiling(4_096));
+	}
+
+	#[test]
+	fn a_soft_limit_is_never_lowered() {
+		for (current, hard) in
+			[(256, 4_096), (4_096, 4_096), (60_000, 120_000), (60_000, libc::RLIM_INFINITY)]
+		{
+			assert!(raised_soft(current, hard) >= current, "{current} under {hard} was lowered");
+		}
+	}
+
+	#[cfg(target_os = "macos")]
+	#[test]
+	fn a_soft_limit_above_the_ceiling_is_left_as_it_is() {
+		assert_eq!(raised_soft(OPEN_MAX + 1, libc::RLIM_INFINITY), OPEN_MAX + 1);
 	}
 
 	#[test]

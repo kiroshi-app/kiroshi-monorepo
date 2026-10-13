@@ -271,13 +271,23 @@ fn created(root: &Path, bot: &Bot) -> std::io::Result<PathBuf> {
 	Ok(bundle)
 }
 
-fn settled(root: &Path, bot: &Bot, held: PathBuf) -> std::io::Result<PathBuf> {
+fn settled(root: &Path, bot: &Bot, held: PathBuf) -> PathBuf {
 	let target = root.join(PLUGINS_DIR).join(dir_name(bot));
 	if held == target || target.exists() {
-		return Ok(held);
+		return held;
 	}
-	fs::rename(&held, &target)?;
-	Ok(target)
+	match fs::rename(&held, &target) {
+		Ok(()) => target,
+		Err(error) => {
+			eprintln!(
+				"the bundle of bot {} stays at {} and was not renamed to {}: {error}",
+				bot.id,
+				held.display(),
+				target.display()
+			);
+			held
+		}
+	}
 }
 
 pub fn slug(name: &str) -> String {
@@ -428,7 +438,7 @@ fn write_styled_into(
 			effort,
 		},
 	)?;
-	let bundle = settled(root, bot, held)?;
+	let bundle = settled(root, bot, held);
 	recorded(&bundle, BOT_SUBJECT, &bot.name, "saved from settings").map_err(unrecorded)?;
 	Ok(())
 }
@@ -572,7 +582,7 @@ pub fn ensure(root: &Path, bot: &Bot) -> Result<PathBuf, BundleUnavailable> {
 fn ensured(root: &Path, bot: &Bot) -> std::io::Result<PathBuf> {
 	let held = dir(root, &bot.id)?;
 	let _serialised = serialised(&held);
-	let bundle = settled(root, bot, held)?;
+	let bundle = settled(root, bot, held);
 	if agent_file(root, &bot.id).is_none() {
 		rewritten(root, bot, bundle.clone())?;
 		return Ok(bundle);
@@ -2298,6 +2308,27 @@ mod tests {
 		);
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_legacy_bundle_that_cannot_be_renamed_is_used_where_it_stands() {
+		use std::os::unix::fs::PermissionsExt;
+
+		let root = a_root("unrenamed");
+		let bot = a_bot("Bean", "Answer briefly.");
+		let legacy = root.join(PLUGINS_DIR).join(&bot.id);
+		write_at_legacy_name(&root, &bot);
+		let plugins = root.join(PLUGINS_DIR);
+		fs::set_permissions(&plugins, fs::Permissions::from_mode(0o500)).expect("it is sealed");
+
+		let settled_at = settled(&root, &bot, legacy.clone());
+		let ensured = ensure(&root, &bot);
+		fs::set_permissions(&plugins, fs::Permissions::from_mode(0o700)).expect("it is unsealed");
+
+		assert_eq!(settled_at, legacy);
+		assert_eq!(ensured.expect("the turn goes on with the held bundle"), legacy);
+		assert!(!plugins.join(dir_name(&bot)).exists(), "the bundle moved");
 	}
 
 	#[test]

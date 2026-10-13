@@ -1,8 +1,10 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
@@ -13,7 +15,7 @@ use kiroshi_app::db;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{Listener, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -43,11 +45,10 @@ struct Harness {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"scoped-runtime",
-		mock_builder()
-			.manage(AgentState::default())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
-			.invoke_handler(invoke_handler()),
+		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
+	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default", "second"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");

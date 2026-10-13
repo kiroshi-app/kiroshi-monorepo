@@ -711,12 +711,23 @@ fn reported(binary_version: Option<String>, probe: Result<Checked, TransportErro
 	}
 }
 
-#[derive(Default)]
 struct RuntimeIdentity {
-	bundle: Option<Bundle>,
+	bundle: Bundle,
 	server_env: ResolvedEnv,
-	space_id: Option<String>,
+	space_id: String,
 }
+
+struct ResolvedRun {
+	bot: StoredBot,
+	space_id: String,
+	root: PathBuf,
+}
+
+const DATABASE_UNREACHED: &str = "the database could not be reached";
+const ROW_MISSING: &str = "its row is missing";
+const ROW_UNREADABLE: &str = "its row could not be read";
+const SPACE_UNRESOLVED: &str = "the space of the conversation could not be resolved";
+const ROOT_UNRESOLVED: &str = "the bundle root could not be resolved";
 
 pub const ENV_UNREADABLE: &str = "the environment store could not be read";
 
@@ -749,55 +760,60 @@ async fn runtime_identity<R: Runtime>(
 	scope: &RuntimeScope,
 	sidecar: &Sidecar,
 ) -> Result<RuntimeIdentity, TransportError> {
-	let Ok(database) = state.as_ref() else {
-		return Ok(RuntimeIdentity::default());
-	};
-	let Ok(Some(bot)) = database.conversations().bot(scope.bot_id.clone()).await else {
-		return Ok(RuntimeIdentity::default());
-	};
-	let Ok(space_id) =
-		space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id).await
-	else {
-		return Ok(RuntimeIdentity::default());
-	};
-	let root = bundles::root(app);
+	let database = state.as_ref().map_err(|failure| {
+		identity_refused(&scope.bot_id, &format!("{DATABASE_UNREACHED}: {failure:?}"))
+	})?;
+	let ResolvedRun { bot, space_id, root } =
+		resolved_run(database, bundles::root(app), scope).await?;
 	let system = bundles::system::laid_down(app);
 	let user = bundles::user::laid_down(app);
 	let space = bundles::space::laid_down(app, &space_id);
-	let permissions = settled_permissions(database, root.as_deref(), &bot).await;
-	let bundle = match root.as_deref() {
-		Some(root) => Some(
-			laid_down_bundle(
-				root,
-				&bot,
-				&permissions,
-				system.as_deref(),
-				user.as_deref(),
-				space.as_deref(),
-			)
-			.map_err(unavailable_bundle)?,
-		),
-		None => None,
-	};
-	if let Some(root) = root.as_deref() {
-		reconcile_bot(database, root, &bot).await;
-	}
-	let serving: Vec<PathBuf> = [
-		system.clone(),
-		user.clone(),
-		space.clone(),
-		bundle.as_ref().map(|laid| PathBuf::from(&laid.path)),
-	]
-	.into_iter()
-	.flatten()
-	.collect();
+	let permissions = settled_permissions(database, Some(&root), &bot).await;
+	let bundle = laid_down_bundle(
+		&root,
+		&bot,
+		&permissions,
+		system.as_deref(),
+		user.as_deref(),
+		space.as_deref(),
+	)
+	.map_err(unavailable_bundle)?;
+	reconcile_bot(database, &root, &bot).await;
+	let serving: Vec<PathBuf> =
+		[system.clone(), user.clone(), space.clone(), Some(PathBuf::from(&bundle.path))]
+			.into_iter()
+			.flatten()
+			.collect();
 	let server_env = served_environment(app, sidecar, &bot.id, &space_id, &serving).await;
-	Ok(RuntimeIdentity { bundle, server_env, space_id: Some(space_id) })
+	Ok(RuntimeIdentity { bundle, server_env, space_id })
+}
+
+async fn resolved_run(
+	database: &db::Database,
+	root: Option<PathBuf>,
+	scope: &RuntimeScope,
+) -> Result<ResolvedRun, TransportError> {
+	let refused = |step: String| identity_refused(&scope.bot_id, &step);
+	let bot = match database.conversations().bot(scope.bot_id.clone()).await {
+		Ok(Some(bot)) => bot,
+		Ok(None) => return Err(refused(ROW_MISSING.to_owned())),
+		Err(error) => return Err(refused(format!("{ROW_UNREADABLE}: {error:?}"))),
+	};
+	let space_id = space_of_the_conversation(database, &scope.conversation_id, &scope.bot_id)
+		.await
+		.map_err(|error| refused(format!("{SPACE_UNRESOLVED}: {error:?}")))?;
+	let root = root.ok_or_else(|| refused(ROOT_UNRESOLVED.to_owned()))?;
+	Ok(ResolvedRun { bot, space_id, root })
 }
 
 fn unavailable_bundle(error: bundles::BundleUnavailable) -> TransportError {
-	eprintln!("the session did not start: {error}");
-	TransportError::SpawnFailed { detail: error.to_string() }
+	identity_refused(&error.bot_id, &format!("its bundle is unavailable: {}", error.cause))
+}
+
+fn identity_refused(bot_id: &str, step: &str) -> TransportError {
+	let detail = format!("the session of bot {bot_id} did not start: {step}");
+	eprintln!("{detail}");
+	TransportError::SpawnFailed { detail }
 }
 
 async fn opens_on_a_mission_thread(state: &db::DatabaseState, conversation_id: &str) -> bool {
@@ -909,7 +925,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
 	let options = SessionOptions::new(running_in)
-		.bundled(identity.bundle)
+		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
 		.connected(held_connection(&app))
 		.with_app_data(app.path().app_data_dir().ok())
@@ -930,7 +946,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.bot_id.clone(),
 			attachments,
 		)))
-		.hosting(hosted(StandingHost::new(app.clone(), scope.bot_id.clone(), identity.space_id)))
+		.hosting(hosted(StandingHost::new(
+			app.clone(),
+			scope.bot_id.clone(),
+			Some(identity.space_id),
+		)))
 		.hosting(hosted(ApplicationHost::new(
 			app.clone(),
 			scope.conversation_id.clone(),
@@ -1408,6 +1428,82 @@ mod tests {
 	fn settings_of(root: &Path, bot: &StoredBot) -> serde_json::Value {
 		let read = std::fs::read(a_settings_path(root, bot)).expect("the settings file is read");
 		serde_json::from_slice(&read).expect("the settings file parses")
+	}
+
+	fn heard_refusal_of(error: TransportError) -> Vec<AgentEvent> {
+		let (sink, mut heard) = tokio::sync::mpsc::unbounded_channel();
+		refused(&sink, error);
+		std::iter::from_fn(|| heard.try_recv().ok()).collect()
+	}
+
+	fn assert_refused_naming(error: TransportError, bot_id: &str, step: &str) {
+		let heard = heard_refusal_of(error);
+		assert_eq!(
+			heard.first(),
+			Some(&AgentEvent::ConnectionChanged { state: ConnectionState::Unavailable })
+		);
+		let Some(AgentEvent::Failed { error: TransportError::SpawnFailed { detail } }) =
+			heard.get(1)
+		else {
+			panic!("no spawnFailed was heard: {heard:?}");
+		};
+		assert!(detail.contains(bot_id), "the bot is not named: {detail}");
+		assert!(detail.contains(step), "the step is not named: {detail}");
+	}
+
+	async fn a_run_of_a_seated_bot(database: &crate::db::Database) -> RuntimeScope {
+		let bot = database
+			.conversations()
+			.create_bot(a_stored_bot().into(), None, None)
+			.await
+			.expect("the bot");
+		RuntimeScope { bot_id: bot.id, ..a_scope() }
+	}
+
+	#[tokio::test]
+	async fn a_run_whose_bot_row_is_missing_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let root = a_fresh_bundle_root("no-row");
+
+		let Err(error) = resolved_run(&database, Some(root.to_path_buf()), &a_scope()).await else {
+			panic!("a run with no bot row was resolved");
+		};
+
+		assert_refused_naming(error, &a_scope().bot_id, ROW_MISSING);
+	}
+
+	#[tokio::test]
+	async fn a_run_whose_space_cannot_be_resolved_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let scope = a_run_of_a_seated_bot(&database).await;
+		database
+			.call_mut(|connection| {
+				Ok(connection.execute_batch("ALTER TABLE conversations RENAME TO unreadable")?)
+			})
+			.await
+			.expect("the conversations are made unreadable");
+		let root = a_fresh_bundle_root("no-space");
+
+		let Err(error) = resolved_run(&database, Some(root.to_path_buf()), &scope).await else {
+			panic!("a run with no readable space was resolved");
+		};
+
+		assert_refused_naming(error, &scope.bot_id, SPACE_UNRESOLVED);
+	}
+
+	#[tokio::test]
+	async fn a_run_with_no_bundle_root_is_refused_naming_the_step() {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let scope = a_run_of_a_seated_bot(&database).await;
+
+		let Err(error) = resolved_run(&database, None, &scope).await else {
+			panic!("a run with no bundle root was resolved");
+		};
+
+		assert_refused_naming(error, &scope.bot_id, ROOT_UNRESOLVED);
 	}
 
 	#[test]

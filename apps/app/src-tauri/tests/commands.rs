@@ -1,7 +1,9 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex};
 
+use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{
 	agent_start_or_resume_session, shutdown_session, terminate_session, EVENT_CHANNEL,
@@ -19,13 +21,13 @@ use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 fn app() -> AppOfItsOwn {
-	an_app_of_its_own(
+	let app = an_app_of_its_own(
 		"commands",
-		mock_builder()
-			.manage(AgentState::default())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
-			.invoke_handler(invoke_handler()),
-	)
+		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+	);
+	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default", "other"]);
+	app
 }
 
 fn a_scope() -> Value {

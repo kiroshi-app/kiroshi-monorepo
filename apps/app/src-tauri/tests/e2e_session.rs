@@ -1,8 +1,10 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{terminate_session, EVENT_CHANNEL};
@@ -12,14 +14,13 @@ use kiroshi_app::agent::contract::{
 };
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
-use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
@@ -67,11 +68,10 @@ fn serial() -> MutexGuard<'static, ()> {
 fn launch() -> Harness {
 	let app = an_app_of_its_own(
 		"e2e",
-		mock_builder()
-			.manage(AgentState::default())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
-			.invoke_handler(invoke_handler()),
+		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
+	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -366,7 +366,7 @@ fn launch_stored(name: &str, played: &str) -> Stored {
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
 	);
 	app.manage(db::bootstrap(app.handle()));
-	a_bundled_default_bot(&app);
+	bundled_bots(&app, &["default"]);
 	let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 		.build()
 		.expect("window builds");
@@ -612,13 +612,4 @@ fn cancelling_a_live_session_before_any_submit_closes_the_turn_the_host_opened()
 	assert_eq!(cancelled, Err(serde_json::to_value(TransportError::NoActiveTurn).expect("json")));
 	assert!(stored.completed_at("t1").is_some(), "the unsubmitted host turn was left open");
 	stored.close();
-}
-
-fn a_bundled_default_bot(app: &App<MockRuntime>) {
-	let state = app.state::<db::DatabaseState>();
-	let database = state.inner().as_ref().expect("the database is open");
-	let bot = tauri::async_runtime::block_on(database.conversations().ensure_default_bot())
-		.expect("the default bot is seeded");
-	let root = bundles::root(app.handle()).expect("the bundles have a root");
-	bundles::lay_down(&root, &bot).expect("the bundle is laid down");
 }

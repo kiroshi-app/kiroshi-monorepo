@@ -1,10 +1,12 @@
 #![cfg(unix)]
 
+mod bundled;
 mod common;
 
 use std::path::Path;
 use std::time::Duration;
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{
@@ -32,13 +34,13 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 }
 
 fn app() -> AppOfItsOwn {
-	an_app_of_its_own(
+	let app = an_app_of_its_own(
 		"lifecycle",
-		mock_builder()
-			.manage(AgentState::default())
-			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir))
-			.invoke_handler(invoke_handler()),
-	)
+		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+	);
+	app.manage(db::bootstrap(app.handle()));
+	bundled_bots(&app, &["default", "second"]);
+	app
 }
 
 fn runtime() -> tokio::runtime::Runtime {

@@ -1,14 +1,15 @@
+mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
-use kiroshi_app::bundles;
 use kiroshi_app::conversations::commands::conversation_main_chat;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
@@ -102,7 +103,7 @@ fn booted(name: &str) -> AppOfItsOwn {
 		mock_builder().manage(AgentState::default()),
 	);
 	app.manage(db::bootstrap(app.handle()));
-	a_bundled_default_bot(&app);
+	bundled_bots(&app, &["default"]);
 	app
 }
 
@@ -458,13 +459,4 @@ fn a_report_that_cannot_be_written_closes_the_run_failed_and_writes_no_message()
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
 	host.quit();
-}
-
-fn a_bundled_default_bot(app: &App<MockRuntime>) {
-	let state = app.state::<db::DatabaseState>();
-	let database = state.inner().as_ref().expect("the database is open");
-	let bot = tauri::async_runtime::block_on(database.conversations().ensure_default_bot())
-		.expect("the default bot is seeded");
-	let root = bundles::root(app.handle()).expect("the bundles have a root");
-	bundles::lay_down(&root, &bot).expect("the bundle is laid down");
 }
