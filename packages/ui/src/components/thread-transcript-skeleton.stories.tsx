@@ -64,8 +64,16 @@ const meta = preview.meta({
 			agent.getBoundingClientRect().bottom,
 		)
 		await expect(name.getBoundingClientRect().width).toBe(44)
-		await expect(agent.getBoundingClientRect().height).toBe(20 + 4 + 116)
-		await expect(user.getBoundingClientRect().height).toBe(44)
+		const agentBubble = slotIn(
+			agent,
+			"skeleton-agent-bubble",
+		).getBoundingClientRect()
+		await expect([agentBubble.width, agentBubble.height]).toEqual([400, 44])
+		const userBubble = slotIn(
+			user,
+			"skeleton-user-bubble",
+		).getBoundingClientRect()
+		await expect([userBubble.width, userBubble.height]).toEqual([236, 44])
 	},
 })
 

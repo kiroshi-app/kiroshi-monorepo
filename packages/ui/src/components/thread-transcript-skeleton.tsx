@@ -23,7 +23,10 @@ const AgentSkeleton = ({
 			<div className="flex h-5 items-center px-3.5">
 				<SkeletonBar className={nameClassName} />
 			</div>
-			<div className={cn(BUBBLE, "rounded-es-md", bubbleClassName)} />
+			<div
+				className={cn(BUBBLE, "rounded-es-md", bubbleClassName)}
+				data-slot="skeleton-agent-bubble"
+			/>
 		</div>
 	</div>
 )
@@ -34,7 +37,10 @@ type UserSkeletonProps = {
 
 const UserSkeleton = ({ bubbleClassName }: UserSkeletonProps) => (
 	<div className="flex justify-end">
-		<div className={cn(BUBBLE, "h-11", bubbleClassName)} />
+		<div
+			className={cn(BUBBLE, "h-11", bubbleClassName)}
+			data-slot="skeleton-user-bubble"
+		/>
 	</div>
 )
 
@@ -48,17 +54,17 @@ const TranscriptSkeleton = ({ row }: TranscriptSkeletonProps) => (
 
 const THREAD_CYCLE_FROM_THE_COMPOSER = [
 	<AgentSkeleton
-		bubbleClassName="h-29 w-140"
-		key="agent-long"
-		nameClassName="w-11"
-	/>,
-	<UserSkeleton bubbleClassName="w-105" key="user-long" />,
-	<AgentSkeleton
 		bubbleClassName="h-11 w-100"
 		key="agent-short"
 		nameClassName="w-11"
 	/>,
 	<UserSkeleton bubbleClassName="w-59" key="user-short" />,
+	<AgentSkeleton
+		bubbleClassName="h-29 w-140"
+		key="agent-long"
+		nameClassName="w-11"
+	/>,
+	<UserSkeleton bubbleClassName="w-105" key="user-long" />,
 ]
 
 const threadItemAt = (index: number) =>

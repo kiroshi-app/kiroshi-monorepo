@@ -46,8 +46,10 @@ const ListSkeleton = ({
 
 	useLayoutEffect(() => {
 		const container = containerRef.current
-		if (container) setRowCount(rowsToFill(container, anchor))
-	})
+		if (!container) return
+		const rowsNeeded = rowsToFill(container, anchor)
+		if (rowsNeeded !== rowCount) setRowCount(rowsNeeded)
+	}, [rowCount, anchor])
 
 	useLayoutEffect(() => {
 		const container = containerRef.current
