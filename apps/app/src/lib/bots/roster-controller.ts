@@ -75,7 +75,7 @@ type RosterEntry = RosterSpace & {
 	lastRowId: string | null
 }
 
-export type RosterRead = {
+type RosterRead = {
 	bots: Bot[]
 	conversations: Conversation[]
 }
@@ -118,9 +118,9 @@ const lastWordQueryOf = (
 		meta: PREVIEW_FAILURE,
 	})
 
-export type RosterQuery = ReturnType<typeof rosterQueryOf>
-export type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
-export type LastWordQuery = ReturnType<typeof lastWordQueryOf>
+type RosterQuery = ReturnType<typeof rosterQueryOf>
+type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
+type LastWordQuery = ReturnType<typeof lastWordQueryOf>
 
 export type RosterController = {
 	getState: () => RosterState

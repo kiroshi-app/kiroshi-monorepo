@@ -74,7 +74,7 @@ const sectionsStateOf = (
 	),
 })
 
-export type SectionsControllerOptions = {
+type SectionsControllerOptions = {
 	queryClient: QueryClient
 }
 
@@ -151,8 +151,6 @@ export const createSectionsController = (
 
 	const reloadAll = () =>
 		queryClient.invalidateQueries({ queryKey: sectionQueryKeys.lists() })
-
-	const reloadRoster = () => bots.reload()
 
 	const writes = createWriteLoop<string, Section>({
 		enqueue,
@@ -248,6 +246,6 @@ export const createSectionsController = (
 			commit(async () => {
 				await store.moveBotToSection(botId, sectionId)
 				bots.move(botId, sectionId)
-			}).catch(reloadRoster),
+			}).catch(bots.reload),
 	}
 }

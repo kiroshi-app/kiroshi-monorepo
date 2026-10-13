@@ -2,7 +2,7 @@ import { MutationObserver, type QueryClient } from "@tanstack/react-query"
 
 import type { FailureMeta } from "./query-client"
 
-export const PRESENTED_BY_CALLER: FailureMeta = { rendersErrorInline: true }
+const PRESENTED_BY_CALLER: FailureMeta = { rendersErrorInline: true }
 
 export const runMutation = <Result>(
 	queryClient: QueryClient,
