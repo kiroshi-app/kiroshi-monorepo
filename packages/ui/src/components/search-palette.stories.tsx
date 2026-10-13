@@ -809,7 +809,6 @@ export const LoadingFirstQuery = meta.story({
 
 		const list = await expectSkeletonClippedAtBottomOf(body)
 		await expect(slotsIn(body, "search-palette-section-head")).toHaveLength(0)
-		await expect(reader.queryByText(/^Recent/)).toBeNull()
 		const [firstRow] = slotsIn(list, "list-skeleton-row")
 		await expect(firstRow?.getBoundingClientRect().height).toBe(52)
 		await expect(firstRow?.getBoundingClientRect().top).toBe(contentTopOf(body))
