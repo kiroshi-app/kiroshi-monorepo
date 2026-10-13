@@ -94,7 +94,7 @@ export const useMembers = (
 		queryClient.getQueryData<Member[]>(hostQueryKeys.membersOf(spaceId)) ??
 		NO_MEMBERS
 
-	const act = useMutation({
+	const memberAction = useMutation({
 		mutationFn: (run: MemberAction) =>
 			membersAfter(transport, run, heldMembers(run.spaceId)),
 		onSuccess: (answered, run) => {
@@ -105,15 +105,20 @@ export const useMembers = (
 		meta: { rendersErrorInline: true },
 	})
 
-	const ownRun = act.variables?.spaceId === watchedId ? act.variables : null
+	const ownRun =
+		memberAction.variables?.spaceId === watchedId
+			? memberAction.variables
+			: null
 	const { refusal, failure } =
-		ownRun && act.isError ? refusalOf(ownRun, act.error) : NOT_REFUSED
+		ownRun && memberAction.isError
+			? refusalOf(ownRun, memberAction.error)
+			: NOT_REFUSED
 
 	const memberOf = (userId: string) =>
 		members.find((member) => member.userId === userId)
 
 	const runOnWatched = (run: (spaceId: string) => MemberAction) => {
-		if (watchedId) act.mutate(run(watchedId))
+		if (watchedId) memberAction.mutate(run(watchedId))
 	}
 
 	if (!shownSpace) return undefined
@@ -122,7 +127,7 @@ export const useMembers = (
 		email,
 		onEmailChange: (typed) => {
 			setEmail(typed)
-			if (refusal) act.reset()
+			if (refusal) memberAction.reset()
 		},
 		onInvite: (invited) =>
 			runOnWatched((spaceId) => ({
