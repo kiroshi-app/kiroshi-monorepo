@@ -45,6 +45,8 @@ type Router = ReturnType<typeof createSiteRouter>
 
 const NO_CONTENT: Reply = { status: 204 }
 
+const SIGNED_OUT: Reply = { body: { status: true } }
+
 const relayError = (status: number, code: string): Reply => ({
 	status,
 	body: { error: { code, message: code, status } },
@@ -105,7 +107,7 @@ const relayRoutes = (): RelayRoutes => ({
 	[signOutOf("mini")]: NO_CONTENT,
 	[signOutOf("unnamed")]: NO_CONTENT,
 	[SIGN_OUT_EVERYWHERE]: NO_CONTENT,
-	[SIGN_OUT]: { body: { status: true } },
+	[SIGN_OUT]: SIGNED_OUT,
 })
 
 let routes: RelayRoutes = {}
@@ -587,7 +589,7 @@ describe("the account Sign out", () => {
 		expect(router.state.location.pathname).toBe(ACCOUNT_PATH)
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		expect(accountSignOut().hasAttribute("disabled")).toBe(false)
-		routes[SIGN_OUT] = { body: { status: true } }
+		routes[SIGN_OUT] = SIGNED_OUT
 		press(RETRY_LABEL)
 		await leftSignedOut(router)
 		expect(callsTo(SIGN_OUT)).toHaveLength(2)
