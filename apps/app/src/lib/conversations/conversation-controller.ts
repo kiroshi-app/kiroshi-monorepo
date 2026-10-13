@@ -7,11 +7,7 @@ import {
 	type MessageStoredListener,
 	type ReconnectionListener,
 } from "./create-live-listeners"
-import {
-	createForeignTurns,
-	type ForeignQuestion,
-	type ForeignSpeaker,
-} from "./foreign-turns"
+import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
 import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
@@ -1360,16 +1356,6 @@ export const createConversationController = (
 		}
 	}
 
-	const recordForeignAnswers = (
-		{ scope, turnId, request }: ForeignQuestion,
-		answers: QuestionAnswers,
-	) =>
-		recordAnswers(
-			{ conversationId: scope.conversationId, turnId },
-			request,
-			answers,
-		)
-
 	const answer = async (id: string, answers: QuestionAnswers) => {
 		const foreign = foreignTurns.questionAsking(id)
 		if (foreign) {
@@ -1377,7 +1363,14 @@ export const createConversationController = (
 				driver.answerQuestion(foreign.scope, id, answers),
 			)
 			if (isAccepted) {
-				recordForeignAnswers(foreign, answers)
+				recordAnswers(
+					{
+						conversationId: foreign.scope.conversationId,
+						turnId: foreign.turnId,
+					},
+					foreign.request,
+					answers,
+				)
 			}
 			return
 		}
