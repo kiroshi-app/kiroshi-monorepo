@@ -2,7 +2,6 @@ import Foundation
 import Observation
 
 enum SignInStep: Hashable {
-    case email
     case code
 }
 
@@ -17,6 +16,11 @@ enum EmailProblem: Equatable {
     case unreachable
     case tooManyCodes
     case invalidEmail
+}
+
+enum ProviderProblem: Equatable {
+    case refused(SignInProvider)
+    case unreachable
 }
 
 enum CodeProblem: Equatable {
@@ -45,6 +49,8 @@ final class SignInModel {
     private(set) var isSigningIn = false
     private(set) var emailProblem: EmailProblem?
     private(set) var codeProblem: CodeProblem?
+    private(set) var signingInWith: SignInProvider?
+    private(set) var providerProblem: ProviderProblem?
     var isConfirmingSignOut = false
     @ObservationIgnored var onSignOut: () -> Void = {}
     @ObservationIgnored private(set) var revocation: Task<Void, Never>?
@@ -54,6 +60,8 @@ final class SignInModel {
     @ObservationIgnored private let sessions: any SessionStore
     @ObservationIgnored private let lastSpace: any LastSpaceStore
     @ObservationIgnored private let relay: RelayEnvironment
+    @ObservationIgnored private let google: any GoogleAuthorizing
+    @ObservationIgnored private var appleNonce: String?
     @ObservationIgnored private var session: Session?
     @ObservationIgnored private var work: Task<Void, Never>?
 
@@ -61,12 +69,14 @@ final class SignInModel {
         cloud: KiroshiCloud,
         sessions: any SessionStore,
         lastSpace: any LastSpaceStore,
-        relay: RelayEnvironment
+        relay: RelayEnvironment,
+        google: any GoogleAuthorizing = GoogleSignInAuthorizer()
     ) {
         self.cloud = cloud
         self.sessions = sessions
         self.lastSpace = lastSpace
         self.relay = relay
+        self.google = google
         session = sessions.load()
         stage = session == nil ? .signedOut : .loadingSpaces
         signedInEmail = session?.email ?? ""
@@ -76,8 +86,8 @@ final class SignInModel {
         codeProblem?.needsNewCode ?? false
     }
 
-    func start() {
-        path = [.email]
+    var isBusy: Bool {
+        isRequestingCode || signingInWith != nil
     }
 
     func continueWithEmail() {
@@ -106,7 +116,30 @@ final class SignInModel {
         work?.cancel()
         code = ""
         codeProblem = nil
-        path = [.email]
+        path = []
+    }
+
+    func appleRequestNonce() -> String {
+        work?.cancel()
+        let raw = Nonce.random()
+        appleNonce = raw
+        startSigningIn(with: .apple)
+        return Nonce.sha256(raw)
+    }
+
+    func appleCompleted(_ outcome: ProviderOutcome) {
+        let nonce = appleNonce
+        appleNonce = nil
+        run { [weak self] in await self?.finishSigningIn(with: .apple, outcome, nonce: nonce) }
+    }
+
+    func continueWithGoogle() {
+        startSigningIn(with: .google)
+        run { [weak self] in await self?.signInWithGoogle() }
+    }
+
+    func signInWithGoogle() async {
+        await finishSigningIn(with: .google, await google.authorize(), nonce: nil)
     }
 
     func checkAgain() {
@@ -117,12 +150,12 @@ final class SignInModel {
     func useAnotherAccount() {
         signOut()
         email = ""
-        path = [.email]
     }
 
     func requestCode() async {
         email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         emailProblem = nil
+        providerProblem = nil
         isRequestingCode = true
         defer { isRequestingCode = false }
         guard let answer = try? await cloud.requestCode(for: email) else { return }
@@ -130,7 +163,7 @@ final class SignInModel {
         case .sent:
             code = ""
             codeProblem = nil
-            path = [.email, .code]
+            path = [.code]
         case .tooManyRequests: emailProblem = .tooManyCodes
         case .invalidEmail: emailProblem = .invalidEmail
         case .unreachable: emailProblem = .unreachable
@@ -155,13 +188,7 @@ final class SignInModel {
         defer { isSigningIn = false }
         guard let answer = try? await cloud.signIn(email: email, code: code) else { return }
         switch answer {
-        case .signedIn(let granted):
-            try? sessions.save(granted)
-            session = granted
-            signedInEmail = granted.email
-            code = ""
-            path = []
-            stage = .loadingSpaces
+        case .signedIn(let granted): begin(granted)
         case .wrongCode: codeProblem = .wrongCode
         case .tooManyWrongCodes: codeProblem = .tooManyWrongCodes
         case .expiredCode:
@@ -194,6 +221,42 @@ final class SignInModel {
         endSession()
     }
 
+    private func startSigningIn(with provider: SignInProvider) {
+        signingInWith = provider
+        providerProblem = nil
+        emailProblem = nil
+    }
+
+    private func finishSigningIn(
+        with provider: SignInProvider, _ outcome: ProviderOutcome, nonce: String?
+    ) async {
+        defer { signingInWith = nil }
+        switch outcome {
+        case .authorized(let idToken, let name):
+            let credential = ProviderCredential(
+                provider: provider, idToken: idToken, nonce: nonce, name: name)
+            guard let answer = try? await cloud.signIn(with: credential) else { return }
+            switch answer {
+            case .signedIn(let granted): begin(granted)
+            case .refused: providerProblem = .refused(provider)
+            case .unreachable: providerProblem = .unreachable
+            }
+        case .cancelled:
+            break
+        case .failed:
+            providerProblem = .refused(provider)
+        }
+    }
+
+    private func begin(_ granted: Session) {
+        try? sessions.save(granted)
+        session = granted
+        signedInEmail = granted.email
+        code = ""
+        path = []
+        stage = .loadingSpaces
+    }
+
     private func makeShell(spaces: [Space], session: Session) -> SpaceStore {
         let shell = SpaceStore(
             spaces: spaces, session: session, cloud: cloud, lastSpace: lastSpace, relay: relay
@@ -223,6 +286,7 @@ final class SignInModel {
         code = ""
         codeProblem = nil
         emailProblem = nil
+        providerProblem = nil
         isConfirmingSignOut = false
         path = []
         stage = .signedOut
