@@ -2,11 +2,16 @@ import SwiftUI
 
 struct ThreadView: View {
     let space: SpaceStore
+    let openMissions: (ConversationMissions) -> Void
     @State private var thread: ThreadStore
     @Environment(\.dismiss) private var dismiss
 
-    init(subject: ConversationSubject, space: SpaceStore) {
+    init(
+        subject: ConversationSubject, space: SpaceStore,
+        openMissions: @escaping (ConversationMissions) -> Void
+    ) {
         self.space = space
+        self.openMissions = openMissions
         #if DEBUG
             let draft = ConversationsFixture.draft
         #else
@@ -24,10 +29,30 @@ struct ThreadView: View {
             .onChange(of: thread.isDeleted) {
                 dismiss()
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Missions", systemImage: "flag") {
+                        thread.missions.map(openMissions)
+                    }
+                    .disabled(thread.missions == nil)
+                }
+            }
+            #if DEBUG
+                .task(id: thread.missions) {
+                    guard ConversationsFixture.opensMissions, let missions = thread.missions
+                    else { return }
+                    ConversationsFixture.opensMissions = false
+                    openMissions(missions)
+                }
+            #endif
     }
 }
 
 extension ThreadStore {
+    var missions: ConversationMissions? {
+        conversationId.map { ConversationMissions(conversationId: $0, title: subject.title) }
+    }
+
     var heading: ThreadHeading {
         let working = Set(workingCompanions.map(\.id))
         return switch subject {

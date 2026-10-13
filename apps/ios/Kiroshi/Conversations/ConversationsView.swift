@@ -2,10 +2,13 @@ import SwiftUI
 
 struct ConversationsView: View {
     let space: SpaceStore
+    let account: SignInModel
     @State private var store: ConversationsStore
+    @State private var missions = MissionsStore()
 
-    init(space: SpaceStore) {
+    init(space: SpaceStore, account: SignInModel) {
         self.space = space
+        self.account = account
         #if DEBUG
             let opening = ConversationsFixture.opening
         #else
@@ -15,31 +18,56 @@ struct ConversationsView: View {
     }
 
     var body: some View {
-        content
-            .task(id: space.connection.map(ObjectIdentifier.init)) {
-                guard let connection = space.connection else { return }
-                await store.follow(connection)
-            }
-            .navigationDestination(item: $store.opened) { subject in
-                ThreadView(subject: subject, space: space)
-            }
-            .toolbarVisibility(store.opened == nil ? .visible : .hidden, for: .tabBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        store.pickCompanions()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("New Conversation")
-                    .disabled(store.phase != .loaded)
+        NavigationStack(path: $store.path) {
+            content
+                .spaceChrome(store: space, account: account, section: .conversations)
+                .task(id: space.connection.map(ObjectIdentifier.init)) {
+                    guard let connection = space.connection else { return }
+                    await store.follow(connection)
                 }
+                .navigationDestination(for: ConversationsRoute.self) { route in
+                    destination(route)
+                }
+                .toolbarVisibility(store.path.isEmpty ? .visible : .hidden, for: .tabBar)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            store.pickCompanions()
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("New Conversation")
+                        .disabled(store.phase != .loaded)
+                    }
+                }
+                .sheet(isPresented: $store.isPickingCompanions, onDismiss: store.stopPicking) {
+                    NewConversationSheet(
+                        companions: store.companions, creation: store.creation,
+                        create: { store.createGroup(with: $0) }, cancel: store.stopPicking)
+                }
+        }
+        .task(
+            id: MissionsFollow(
+                connection: space.connection.map(ObjectIdentifier.init),
+                isShown: store.showsMissions)
+        ) {
+            guard store.showsMissions, let connection = space.connection else { return }
+            await missions.follow(connection)
+        }
+    }
+
+    @ViewBuilder private func destination(_ route: ConversationsRoute) -> some View {
+        switch route {
+        case .conversation(let subject):
+            ThreadView(subject: subject, space: space) { store.path.append(.missions($0)) }
+        case .missions(let conversation):
+            ConversationMissionsScreen(conversation: conversation, missions: missions, space: space)
+            {
+                store.path.append(.mission($0))
             }
-            .sheet(isPresented: $store.isPickingCompanions, onDismiss: store.stopPicking) {
-                NewConversationSheet(
-                    companions: store.companions, creation: store.creation,
-                    create: { store.createGroup(with: $0) }, cancel: store.stopPicking)
-            }
+        case .mission(let mission):
+            MissionThreadView(mission: mission, missions: missions, space: space)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -98,6 +126,11 @@ struct ConversationsView: View {
             }
         }
     }
+}
+
+private struct MissionsFollow: Hashable {
+    let connection: ObjectIdentifier?
+    let isShown: Bool
 }
 
 #if DEBUG
