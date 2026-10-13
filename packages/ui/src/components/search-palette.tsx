@@ -136,7 +136,7 @@ const ResultRowSkeleton = () => (
 			style={COMPANION_SILHOUETTE}
 		/>
 		<div className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
-			<div className="flex h-5 items-center justify-between gap-2">
+			<div className="flex h-5 items-center justify-between">
 				<SkeletonBar className="w-(--skeleton-title)" />
 				<SkeletonBar className="w-7 shrink-0" isFaint />
 			</div>

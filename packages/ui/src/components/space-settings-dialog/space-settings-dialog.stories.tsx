@@ -5,6 +5,7 @@ import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	contentBottomOf,
 	expectSkeletonClippedAtBottomOf,
 	FRAME_POLL,
 	glyphIn,
@@ -819,11 +820,8 @@ export const MembersLoading = meta.story({
 
 		const frame = await waitFor(() => slotIn(panel, "members-skeleton-frame"))
 		const list = await expectSkeletonClippedAtBottomOf(frame)
-		const panelBottom =
-			panel.getBoundingClientRect().bottom -
-			Number.parseFloat(getComputedStyle(panel).paddingBottom)
 		await expect(
-			Math.abs(frame.getBoundingClientRect().bottom - panelBottom),
+			Math.abs(frame.getBoundingClientRect().bottom - contentBottomOf(panel)),
 		).toBeLessThan(1)
 		const [firstRow] = slotsIn(list, "list-skeleton-row")
 		await expect(firstRow?.getBoundingClientRect().height).toBe(53)

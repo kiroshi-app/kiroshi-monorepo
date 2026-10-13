@@ -209,7 +209,7 @@ export const tokenStyleIn = (
 	property: ProbedProperty,
 ) => probedStyleOf(className, property, element)
 
-const contentBottomOf = (surface: HTMLElement) => {
+export const contentBottomOf = (surface: HTMLElement) => {
 	const style = getComputedStyle(surface)
 	return (
 		surface.getBoundingClientRect().bottom -
