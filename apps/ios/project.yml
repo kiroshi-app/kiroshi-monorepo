@@ -16,7 +16,7 @@ settings:
 packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
-    exactVersion: 9.2.0
+    exactVersion: 7.1.0
 targets:
   Kiroshi:
     type: application
