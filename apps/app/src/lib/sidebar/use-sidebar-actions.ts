@@ -6,12 +6,7 @@ import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
-import {
-	spacePlugin as spacePluginScope,
-	USER_PLUGIN,
-} from "../conversations/plugin-scope"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
-import type { PluginController } from "../plugins/plugin-controller"
 import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
 import {
@@ -58,10 +53,8 @@ export type SidebarActionsSource = {
 	roster: RosterController
 	runtimes: ConversationRuntimes
 	sections: SectionsController
-	spacePlugin: PluginController
 	spaces: SpacesController
 	user: UserController
-	userPlugin: PluginController
 }
 
 const localSpaceIdsIn = (spaces: SpacesController, ids: string[]) => {
@@ -78,10 +71,8 @@ export const useSidebarActions = ({
 	roster,
 	runtimes,
 	sections,
-	spacePlugin,
 	spaces,
 	user,
-	userPlugin,
 }: SidebarActionsSource): SidebarActions =>
 	useMemo(
 		() => ({
@@ -139,17 +130,8 @@ export const useSidebarActions = ({
 			onEditBot: roster.edit,
 			onLeaveSpace: joinedSpaces.askToLeave,
 			onOpenConversationSettings: roster.editConversation,
-			onOpenSpaceSettings: () => {
-				spaces.setSettingsOpen(true)
-				const spaceId = spaces.getState().selectedSpaceId
-				if (spaceId) {
-					void spacePlugin.open(spacePluginScope(spaceId))
-				}
-			},
-			onOpenUserSettings: () => {
-				user.setSettingsOpen(true)
-				void userPlugin.open(USER_PLUGIN)
-			},
+			onOpenSpaceSettings: () => spaces.setSettingsOpen(true),
+			onOpenUserSettings: () => user.setSettingsOpen(true),
 			onPinRoster: (spaceId, pins) => {
 				void sections.pin(spaceId, pins)
 			},
@@ -176,9 +158,7 @@ export const useSidebarActions = ({
 			roster,
 			runtimes,
 			sections,
-			spacePlugin,
 			spaces,
 			user,
-			userPlugin,
 		],
 	)

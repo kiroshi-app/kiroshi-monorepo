@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest"
+// @vitest-environment happy-dom
 
-import { createPluginController } from "./plugin-controller"
+import { act, cleanup, renderHook } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { usePlugin } from "./use-plugin"
 
 import { UNDONE_TITLE_PREFIX } from "../bots/history-runs"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -11,6 +14,9 @@ import {
 } from "../conversations/plugin-scope"
 import type { BotSkill, PluginScope } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+afterEach(cleanup)
 
 const A_SKILL = {
 	name: "Release notes",
@@ -20,14 +26,53 @@ const A_SKILL = {
 
 const A_COMPANION = botPlugin("default")
 
-const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+const settled = () =>
+	act(async () => {
+		for (let round = 0; round < 5; round += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0))
+		}
+	})
 
 const readers = (skills: BotSkill[]) =>
 	skills.filter((skill) => !skill.isSystem)
 
+type OpenScope = { scope: PluginScope | null }
+
+const mounted = (store: TranscriptStore, scope: PluginScope | null) => {
+	const { result, rerender } = renderHook(
+		({ scope: open }: OpenScope) => usePlugin(store, open),
+		{ wrapper: createQueryTestWrapper().wrapper, initialProps: { scope } },
+	)
+	const acting =
+		<Args extends unknown[]>(
+			pick: (actions: typeof result.current.actions) => (...args: Args) => void,
+		) =>
+		(...args: Args) =>
+			act(() => pick(result.current.actions)(...args))
+	return {
+		getState: () => result.current.state,
+		open: async (next: PluginScope | null) => {
+			act(() => rerender({ scope: next }))
+			await settled()
+		},
+		openScope: (next: PluginScope | null) =>
+			act(() => rerender({ scope: next })),
+		createSkill: acting((actions) => actions.createSkill),
+		saveSkill: acting((actions) => actions.saveSkill),
+		setSkillPreloaded: acting((actions) => actions.setSkillPreloaded),
+		removeSkill: acting((actions) => actions.removeSkill),
+		openFiles: acting((actions) => actions.openFiles),
+		revert: acting((actions) => actions.revert),
+		openFile: acting((actions) => actions.openFile),
+		addFile: acting((actions) => actions.addFile),
+		saveFile: acting((actions) => actions.saveFile),
+		removeFile: acting((actions) => actions.removeFile),
+	}
+}
+
 const opened = async (store: TranscriptStore, scope = A_COMPANION) => {
-	const controller = createPluginController(store)
-	await controller.open(scope)
+	const controller = mounted(store, scope)
+	await settled()
 	return controller
 }
 
@@ -45,7 +90,7 @@ const scopes: [string, PluginScope][] = [
 	["the person", USER_PLUGIN],
 ]
 
-describe.each(scopes)("plugin controller on %s", (_name, scope) => {
+describe.each(scopes)("usePlugin on %s", (_name, scope) => {
 	const held = async (store: TranscriptStore) =>
 		readers(await store.pluginSkills(scope))
 
@@ -167,7 +212,7 @@ describe.each(scopes)("plugin controller on %s", (_name, scope) => {
 	})
 })
 
-describe("plugin controller", () => {
+describe("usePlugin", () => {
 	it("clears what the last scope held before the read of the next one lands", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createPluginSkill(A_COMPANION, A_SKILL)
@@ -177,7 +222,7 @@ describe("plugin controller", () => {
 		await settled()
 		controller.openFile(controller.getState().skills[0].id, "notes.md")
 
-		void controller.open(spacePlugin("personal"))
+		controller.openScope(spacePlugin("personal"))
 
 		expect(controller.getState()).toMatchObject({
 			skills: [],
@@ -191,11 +236,9 @@ describe("plugin controller", () => {
 	it("drops a read whose scope is no longer the open one", async () => {
 		const store = createFakeTranscriptStore()
 		await store.createPluginSkill(A_COMPANION, A_SKILL)
-		const controller = createPluginController(store)
+		const controller = mounted(store, A_COMPANION)
 
-		const reading = controller.open(A_COMPANION)
 		await controller.open(spacePlugin("personal"))
-		await reading
 
 		expect(controller.getState().skills).toEqual([])
 	})
@@ -238,7 +281,9 @@ describe("plugin controller", () => {
 			},
 		}
 		const controller = await opened(refusingOnce)
+		expect(controller.getState().hasFailedToLoad).toBe(true)
 
+		await controller.open(null)
 		await controller.open(A_COMPANION)
 
 		expect(controller.getState().hasFailedToLoad).toBe(false)
@@ -292,11 +337,10 @@ describe("plugin controller", () => {
 				return store.pluginHistoryDiff(scope, oldestCommitId, newestCommitId)
 			},
 		}
-		const controller = createPluginController(counted)
+		const controller = mounted(counted, null)
 
 		controller.openFiles("commit-1", "commit-1")
 		controller.revert("commit-1", "commit-1")
-		controller.reload()
 		controller.createSkill(A_SKILL, false)
 		await settled()
 
@@ -503,5 +547,78 @@ describe("plugin controller", () => {
 		await settled()
 
 		expect(controller.getState().file).toMatchObject({ skillId: kept.id })
+	})
+
+	it("shows a preload toggle before the write lands and rolls it back when refused", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createPluginSkill(A_COMPANION, A_SKILL)
+		let refuse: (reason: unknown) => void = () => undefined
+		const refusing: TranscriptStore = {
+			...store,
+			setPluginSkillPreloaded: () =>
+				new Promise((_resolve, reject) => {
+					refuse = reject
+				}),
+		}
+		const controller = await opened(refusing)
+
+		controller.setSkillPreloaded(written.id, true)
+		await settled()
+		expect(readers(controller.getState().skills)[0].isPreloaded).toBe(true)
+
+		refuse({ kind: "unwritableBundle" })
+		await settled()
+
+		expect(readers(controller.getState().skills)[0].isPreloaded).toBe(false)
+	})
+
+	it("runs the writes one after the other, in the order they were asked", async () => {
+		const store = createFakeTranscriptStore()
+		const steps: string[] = []
+		let finishFirst: () => void = () => undefined
+		const ordered: TranscriptStore = {
+			...store,
+			createPluginSkill: async (scope, draft) => {
+				steps.push(`start ${draft.name}`)
+				if (draft.name === "First") {
+					await new Promise<void>((resolve) => {
+						finishFirst = resolve
+					})
+				}
+				steps.push(`end ${draft.name}`)
+				return store.createPluginSkill(scope, draft)
+			},
+		}
+		const controller = await opened(ordered)
+
+		controller.createSkill({ ...A_SKILL, name: "First" }, false)
+		controller.createSkill({ ...A_SKILL, name: "Second" }, false)
+		await settled()
+		finishFirst()
+		await settled()
+
+		expect(steps).toEqual([
+			"start First",
+			"end First",
+			"start Second",
+			"end Second",
+		])
+	})
+
+	it("reads the scope again once a skill file write settles, even refused", async () => {
+		const store = createFakeTranscriptStore()
+		const written = await store.createPluginSkill(A_COMPANION, A_SKILL)
+		const refusing: TranscriptStore = {
+			...store,
+			writePluginSkillFile: () => Promise.reject({ kind: "unwritableBundle" }),
+		}
+		const reads = vi.spyOn(refusing, "pluginSkills")
+		const controller = await opened(refusing)
+		reads.mockClear()
+
+		controller.addFile(written.id, "notes.md")
+		await settled()
+
+		expect(reads).toHaveBeenCalledOnce()
 	})
 })

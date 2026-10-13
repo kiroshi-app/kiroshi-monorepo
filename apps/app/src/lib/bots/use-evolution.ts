@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 
 import {
@@ -5,22 +6,24 @@ import {
 	startEvolutionSource,
 } from "./evolution-source"
 
-export const useEvolution = ({
-	driver,
-	roster,
-	companionPlugin,
-	userPlugin,
-	spacePlugin,
-}: EvolutionSourceOptions) => {
+import { pluginQueryKeys } from "../plugins/plugin-query-keys"
+
+type EvolutionOptions = Pick<EvolutionSourceOptions, "driver" | "roster">
+
+export const useEvolution = ({ driver, roster }: EvolutionOptions) => {
+	const queryClient = useQueryClient()
+
 	useEffect(
 		() =>
 			startEvolutionSource({
 				driver,
 				roster,
-				companionPlugin,
-				userPlugin,
-				spacePlugin,
+				rereadPlugin: (scope) => {
+					void queryClient.invalidateQueries({
+						queryKey: pluginQueryKeys.scope(scope),
+					})
+				},
 			}),
-		[driver, roster, companionPlugin, userPlugin, spacePlugin],
+		[driver, roster, queryClient],
 	)
 }

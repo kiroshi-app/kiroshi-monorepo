@@ -11,12 +11,10 @@ import {
 import { createStore } from "../store"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import { spacePlugin } from "../conversations/plugin-scope"
 import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "../missions/opened-mission-controller"
-import { createPluginController } from "../plugins/plugin-controller"
 import {
 	createSpacesController,
 	type SpacesController,
@@ -25,9 +23,6 @@ import {
 const UNUSED = {} as never
 
 const gearFor = (spaces: SpacesController) => {
-	const store = createFakeTranscriptStore()
-	const plugin = createPluginController(store)
-	const opening = vi.spyOn(plugin, "open")
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
@@ -37,13 +32,11 @@ const gearFor = (spaces: SpacesController) => {
 		roster: UNUSED,
 		runtimes: UNUSED,
 		sections: UNUSED,
-		spacePlugin: plugin,
 		spaces,
 		user: UNUSED,
-		userPlugin: UNUSED,
 	}
 	const { result } = renderHook(() => useSidebarActions(source))
-	return { press: result.current.onOpenSpaceSettings, opening }
+	return { press: result.current.onOpenSpaceSettings }
 }
 
 afterEach(cleanup)
@@ -60,19 +53,6 @@ describe("the rail gear", () => {
 		gear.press()
 
 		expect(spaces.getState().isSettingsOpen).toBe(true)
-		expect(gear.opening).toHaveBeenCalledWith(spacePlugin(shown.id))
-	})
-
-	it("opens no space plugin when no space is selected", () => {
-		const { queryClient } = createQueryTestWrapper()
-		const spaces = createSpacesController(createFakeTranscriptStore(), {
-			queryClient,
-		})
-		const gear = gearFor(spaces)
-
-		gear.press()
-
-		expect(gear.opening).not.toHaveBeenCalled()
 	})
 })
 
@@ -96,10 +76,8 @@ const rowsFor = (selected: SelectedRow) => {
 		roster: rows as never,
 		runtimes: UNUSED,
 		sections: UNUSED,
-		spacePlugin: UNUSED,
 		spaces: UNUSED,
 		user: UNUSED,
-		userPlugin: UNUSED,
 	}
 	const { result, rerender } = renderHook(() => useSidebarActions(source))
 	return { actions: () => result.current, rerender, openedMission, rows }

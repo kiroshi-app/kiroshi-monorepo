@@ -21,17 +21,14 @@ import { useUpdater } from "../updater/use-updater"
 export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 	const {
 		chat,
-		companionPlugin,
 		conversationRuntimes,
 		driver,
 		openedMission,
 		roster,
-		spacePlugin,
 		spaces,
 		spokenWords,
 		store,
 		user,
-		userPlugin,
 	} = core
 
 	const onboarding = useOnboarding(onboardingTransport, {
@@ -91,9 +88,6 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 	useEvolution({
 		driver,
 		roster: roster.controller,
-		companionPlugin: companionPlugin.controller,
-		userPlugin: userPlugin.controller,
-		spacePlugin: spacePlugin.controller,
 	})
 
 	const badges = useBotBadges({

@@ -53,9 +53,9 @@ export const useSettingsPanels = ({
 	const botHistory = useHistoryView({
 		...companionPlugin.state,
 		isOpen: isEditing,
-		onOpenRun: companionPlugin.controller.openFiles,
+		onOpenRun: companionPlugin.actions.openFiles,
 		onUndoRun: (oldestCommitId, newestCommitId) => {
-			companionPlugin.controller.revert(oldestCommitId, newestCommitId)
+			companionPlugin.actions.revert(oldestCommitId, newestCommitId)
 			if (settingsBotId) chat.controller.redescribe(settingsBotId)
 		},
 	})
@@ -63,15 +63,15 @@ export const useSettingsPanels = ({
 	const spaceHistory = useHistoryView({
 		...spacePlugin.state,
 		isOpen: isSpaceEditing,
-		onOpenRun: spacePlugin.controller.openFiles,
-		onUndoRun: spacePlugin.controller.revert,
+		onOpenRun: spacePlugin.actions.openFiles,
+		onUndoRun: spacePlugin.actions.revert,
 	})
 
 	const userHistory = useHistoryView({
 		...userPlugin.state,
 		isOpen: user.state.isSettingsOpen,
-		onOpenRun: userPlugin.controller.openFiles,
-		onUndoRun: userPlugin.controller.revert,
+		onOpenRun: userPlugin.actions.openFiles,
+		onUndoRun: userPlugin.actions.revert,
 	})
 
 	const companionSkills = toPluginSkills(companionPlugin)

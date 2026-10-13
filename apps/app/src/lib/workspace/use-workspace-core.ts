@@ -21,6 +21,7 @@ import { createDraftsController } from "../chat/drafts-controller"
 import { useChat } from "../chat/use-chat"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createTranscriptStore } from "../conversations/create-store"
+import { pluginScopeOf } from "../conversations/plugin-scope"
 import { createSpokenWords } from "../conversations/spoken-words"
 import { useEnvironment } from "../environment/use-environment"
 import { createOpenedMissionController } from "../missions/opened-mission-controller"
@@ -92,14 +93,11 @@ export const useWorkspaceCore = () => {
 		store,
 		roster.controller.hostSpaceIdOf,
 	)
-	const companionPlugin = usePlugin(store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
-	const userPlugin = usePlugin(store)
 	const spaces = useSpaces(store)
 	const joinedSpaces = useJoinedSpaces(spaces.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
-	const spacePlugin = usePlugin(store)
 	const companionSettingsOwner = companionSettingsOwnerOf(
 		roster.state,
 		spaces.state,
@@ -111,6 +109,18 @@ export const useWorkspaceCore = () => {
 			companionSettingsOwner ?? spaceSettingsOwner ?? userSettingsOwner,
 		),
 	})
+	const companionPlugin = usePlugin(
+		store,
+		companionSettingsOwner && pluginScopeOf(companionSettingsOwner),
+	)
+	const spacePlugin = usePlugin(
+		store,
+		spaceSettingsOwner && pluginScopeOf(spaceSettingsOwner),
+	)
+	const userPlugin = usePlugin(
+		store,
+		userSettingsOwner && pluginScopeOf(userSettingsOwner),
+	)
 	const botEnvironment = useEnvironment(store, companionSettingsOwner)
 	const spaceEnvironment = useEnvironment(store, spaceSettingsOwner)
 	const botMcpServers = useMcpServers(store, companionSettingsOwner)
