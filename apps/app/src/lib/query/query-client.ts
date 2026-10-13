@@ -14,7 +14,7 @@ import { isHostOffline } from "@/lib/host/host-offline"
 type InlineFailure = { rendersErrorInline: true }
 
 type NoticedFailure = {
-	failureNotice: () => NoticeMessage
+	failureNotice: (error: unknown) => NoticeMessage
 	raisedIn: string
 	isSilentOn?: (error: unknown) => boolean
 	raisesOncePerOutage?: true
@@ -50,8 +50,10 @@ const noticedFailureOf = (
 	return noticed.isSilentOn?.(error) ? null : noticed
 }
 
-const raiseNoticedFailure = ({ failureNotice, raisedIn }: NoticedFailure) =>
-	raiseReportedFailure(failureNotice(), { raisedIn })
+const raiseNoticedFailure = (
+	error: unknown,
+	{ failureNotice, raisedIn }: NoticedFailure,
+) => raiseReportedFailure(failureNotice(error), { raisedIn })
 
 const raiseFailureOf = (
 	error: unknown,
@@ -60,7 +62,7 @@ const raiseFailureOf = (
 ) => {
 	const noticed = noticedFailureOf(error, meta, cacheName)
 	if (noticed) {
-		raiseNoticedFailure(noticed)
+		raiseNoticedFailure(error, noticed)
 	}
 }
 
@@ -75,7 +77,7 @@ const createQueryCache = (): QueryCache => {
 			if (noticed.raisesOncePerOutage) {
 				noticedOutages.add(query)
 			}
-			raiseNoticedFailure(noticed)
+			raiseNoticedFailure(error, noticed)
 		},
 		onSuccess: (_data, query) => {
 			noticedOutages.delete(query)

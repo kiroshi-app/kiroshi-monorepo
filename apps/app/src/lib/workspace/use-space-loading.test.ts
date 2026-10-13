@@ -16,6 +16,7 @@ import {
 	type JoinedHostsOptions,
 	type JoinedHostsState,
 } from "@/lib/host/joined-hosts"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
 	createJoinedSpacesController,
 	openRowIdOf,
@@ -56,10 +57,14 @@ const transportOf = (listed: JoinedSpace[]) => ({
 })
 
 const gearFor = async () => {
-	const spaces = createSpacesController(createFakeTranscriptStore())
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(createFakeTranscriptStore(), {
+		queryClient,
+	})
 	await spaces.load(null)
 	const hosts = hostsFake()
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts,
 		transport: transportOf([HOST_PERSONAL]),
@@ -181,9 +186,11 @@ const mountedRosters = async () => {
 	const hosts = hostsFake()
 	const local = await storeHolding(LOCAL_COMPANION)
 	const host = await storeHolding(HOST_COMPANION)
-	const spaces = createSpacesController(local)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(local, { queryClient })
 	await spaces.load(null)
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts,
 		transport: transportOf([HOST_PERSONAL]),
@@ -379,8 +386,10 @@ const relaunchedOnJoinedSpace = async () => {
 			(...params: unknown[]) =>
 				hosts.invoke(command, { params }),
 	})
-	const spaces = createSpacesController(localStore)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(localStore, { queryClient })
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts,
 		transport: transportOf([HOST_PERSONAL]),

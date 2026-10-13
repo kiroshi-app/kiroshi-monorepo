@@ -7,6 +7,7 @@ import { afterEach, expect, it } from "vitest"
 import { createFakeNotificationPort } from "./fake-notification-port"
 import { startNotificationSource } from "./notification-source"
 
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { newBotIdentity } from "../bots/bot-settings"
 import { createRosterController } from "../bots/roster-controller"
 import { initialChatState } from "../chat/chat-state"
@@ -78,7 +79,8 @@ const aWorld = async () => {
 		[away.id]: (await store.mainChat(away.id, elsewhere.id)).id,
 	}
 
-	const spaces = createSpacesController(store)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(null)
 	const roster = createRosterController(store)
 	await roster.load({

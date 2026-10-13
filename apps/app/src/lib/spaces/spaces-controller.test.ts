@@ -1,3 +1,4 @@
+import { QueryObserver } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
@@ -10,12 +11,17 @@ import {
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 const loaded = async (
 	store: TranscriptStore,
 	lastSpaceId: string | null = null,
 ) => {
-	const controller = createSpacesController(store)
+	const { queryClient } = createQueryTestWrapper()
+	const controller = createSpacesController(store, { queryClient })
+	new QueryObserver(queryClient, controller.listQuery).subscribe(
+		() => undefined,
+	)
 	await controller.load(lastSpaceId)
 	return controller
 }
@@ -289,6 +295,7 @@ const transferRig = async ({
 	const successes: NoticeMessage[] = []
 	const failures: NoticeMessage[] = []
 	const controller = createSpacesController(store, {
+		queryClient: createQueryTestWrapper().queryClient,
 		pickers,
 		reportSuccess: (notice) => successes.push(notice),
 		reportFailure: (notice) => failures.push(notice),

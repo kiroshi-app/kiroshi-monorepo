@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+
 import {
 	createJoinedSpacesController,
 	hostMarksOf,
@@ -15,6 +17,12 @@ import type { JoinedSpace, JoinedSpaceRemoved } from "../bindings"
 import { createStore } from "../store"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState, JoinedHostsState } from "../host/joined-hosts"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal()),
+	raiseFailureNotice: vi.fn(() => "notice-1"),
+}))
 
 const GARAGE: JoinedSpace = {
 	id: "joined-garage",
@@ -108,7 +116,8 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 const gearFor = async (listed: JoinedSpace[] = []) => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	const spaces = createSpacesController(store)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
 	const hosts = hostsFake()
 	const wire = transportFake(listed)
@@ -116,6 +125,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 	const reportRemoval = vi.fn()
 	const inviters = invitersFake()
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts,
 		transport: wire.transport,
@@ -128,6 +138,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 
 afterEach(() => {
 	vi.useRealTimers()
+	vi.mocked(raiseFailureNotice).mockClear()
 })
 
 describe("the switcher rows", () => {
@@ -229,22 +240,24 @@ describe("watching the joined spaces", () => {
 	})
 
 	it("records a failed list and raises it", async () => {
-		const { joined, wire, reportFailure } = await gearFor()
+		const { joined, wire } = await gearFor()
 		wire.transport.list.mockRejectedValueOnce(new Error("database locked"))
 
 		joined.watch()
 		await settle()
 
 		expect(joined.getState().hasFailedToLoad).toBe(true)
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Something went wrong with this space",
-			description:
-				"Kiroshi couldn’t finish the request. Try again in a moment.",
-		})
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				title: "Something went wrong with this space",
+				description:
+					"Kiroshi couldn’t finish the request. Try again in a moment.",
+			}),
+		)
 	})
 
 	it("raises a refused list in a sentence, never the refusal kind", async () => {
-		const { joined, wire, reportFailure } = await gearFor()
+		const { joined, wire } = await gearFor()
 		wire.transport.list.mockRejectedValueOnce({
 			kind: "unavailable",
 			failure: { kind: "sqlite", detail: "database is locked" },
@@ -253,11 +266,13 @@ describe("watching the joined spaces", () => {
 		joined.watch()
 		await settle()
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith({
-			title: "Couldn’t open the spaces you joined",
-			description:
-				"Kiroshi can’t read its saved data on this Mac. Restart Kiroshi, then try again.",
-		})
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				title: "Couldn’t open the spaces you joined",
+				description:
+					"Kiroshi can’t read its saved data on this Mac. Restart Kiroshi, then try again.",
+			}),
+		)
 	})
 })
 

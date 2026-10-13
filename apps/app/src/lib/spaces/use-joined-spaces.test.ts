@@ -13,6 +13,7 @@ import { useOpenJoinedHost, useSwitcherSpaces } from "./use-joined-spaces"
 
 import type { Invitation, JoinedSpace } from "../bindings"
 import { useController } from "../use-controller"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState } from "../host/joined-hosts"
 
@@ -37,8 +38,12 @@ const transport = {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const renderSwitcher = async () => {
+	const { queryClient } = createQueryTestWrapper()
 	const joinedController = createJoinedSpacesController({
-		spaces: createSpacesController(createFakeTranscriptStore()),
+		queryClient,
+		spaces: createSpacesController(createFakeTranscriptStore(), {
+			queryClient,
+		}),
 	})
 	const invitationsController = createInvitationsController({
 		joinedSpaces: joinedController,
@@ -94,10 +99,12 @@ const STUDIO_SPACE: JoinedSpace = {
 const openStudio = async () => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
-	const spaces = createSpacesController(store)
+	const { queryClient } = createQueryTestWrapper()
+	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
 	const emails = new Map<string, string>()
 	const joined = createJoinedSpacesController({
+		queryClient,
 		spaces,
 		hosts: {
 			getState: () => ({ active: null, connections: {} }),

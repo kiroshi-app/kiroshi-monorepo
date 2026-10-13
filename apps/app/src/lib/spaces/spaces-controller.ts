@@ -1,3 +1,5 @@
+import { type QueryClient, queryOptions } from "@tanstack/react-query"
+
 import {
 	type NoticeMessage,
 	raiseTransientNotice,
@@ -10,6 +12,7 @@ import {
 	archiveFileNameOf,
 	nativeArchivePickers,
 } from "./archive-pickers"
+import { spaceQueryKeys } from "./space-query-keys"
 import { newSpaceName } from "./space-settings"
 
 import { failureReporterIn } from "../failure-report"
@@ -18,6 +21,8 @@ import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
 import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
+import { runMutation } from "../query/run-mutation"
 
 export type SpacesState = {
 	spaces: Space[]
@@ -30,6 +35,7 @@ export type SpacesState = {
 export type SpacesController = {
 	getState: () => SpacesState
 	subscribe: (listener: () => void) => () => void
+	listQuery: SpaceListQuery
 	load: (lastSpaceId: string | null) => Promise<void>
 	select: (id: string) => void
 	create: () => Promise<void>
@@ -42,6 +48,7 @@ export type SpacesController = {
 }
 
 export type SpacesControllerOptions = {
+	queryClient: QueryClient
 	pickers?: ArchivePickers
 	reportSuccess?: (notice: NoticeMessage) => void
 	reportFailure?: (notice: NoticeMessage) => void
@@ -84,69 +91,105 @@ const transferRefusalReasonOf = (refusal: unknown) => {
 	}
 }
 
-const initialSpacesState: SpacesState = {
-	spaces: [],
-	selectedSpaceId: null,
+type SpacesChoice = {
+	chosenSpaceId: string | null
+	rememberedSpaceId: string | null
+	isSettingsOpen: boolean
+	hasFailedToCreate: boolean
+}
+
+const initialSpacesChoice: SpacesChoice = {
+	chosenSpaceId: null,
+	rememberedSpaceId: null,
 	isSettingsOpen: false,
-	hasFailedToLoad: false,
 	hasFailedToCreate: false,
 }
+
+const NO_SPACES: Space[] = []
+
+const spaceListQueryOf = (read: () => Promise<Space[]>) =>
+	queryOptions({
+		queryKey: spaceQueryKeys.list(),
+		queryFn: read,
+		meta: { rendersErrorInline: true },
+	})
+
+type SpaceListQuery = ReturnType<typeof spaceListQueryOf>
+
+const heldIdIn = (spaces: Space[], id: string | null) =>
+	spaces.find((space) => space.id === id)?.id
+
+const spacesStateOf = (
+	choice: SpacesChoice,
+	spaces: Space[],
+	hasFailedToLoad: boolean,
+): SpacesState => ({
+	spaces,
+	selectedSpaceId:
+		choice.chosenSpaceId ??
+		heldIdIn(spaces, choice.rememberedSpaceId) ??
+		spaces[0]?.id ??
+		null,
+	isSettingsOpen: choice.isSettingsOpen,
+	hasFailedToLoad,
+	hasFailedToCreate: choice.hasFailedToCreate,
+})
 
 export const createSpacesController = (
 	store: TranscriptStore,
 	{
+		queryClient,
 		pickers = nativeArchivePickers,
 		reportSuccess = raiseTransientNotice,
 		reportFailure = failureReporterIn("spaces-controller"),
-	}: SpacesControllerOptions = {},
+	}: SpacesControllerOptions,
 ): SpacesController => {
-	const stateStore = createStore(initialSpacesState)
-	const current = stateStore.getState
-
+	const choiceStore = createStore(initialSpacesChoice)
 	const enqueue = createQueue()
+	const listQuery = spaceListQueryOf(() => enqueue(() => store.spaces()))
+	const listKey = listQuery.queryKey
 
-	const set = (fields: Partial<SpacesState>) =>
-		stateStore.setState({ ...current(), ...fields })
+	const current = memoizedOn(
+		() => [
+			choiceStore.getState(),
+			queryClient.getQueryData<Space[]>(listKey) ?? NO_SPACES,
+			queryClient.getQueryState(listKey)?.status === "error",
+		],
+		spacesStateOf,
+	)
+
+	const choose = (fields: Partial<SpacesChoice>) =>
+		choiceStore.setState({ ...choiceStore.getState(), ...fields })
+
+	const hold = (spaces: Space[]) => queryClient.setQueryData(listKey, spaces)
+
+	const commit = <Result>(write: () => Promise<Result>) =>
+		enqueue(() => runMutation(queryClient, write))
+
+	const reload = () => queryClient.invalidateQueries({ queryKey: listKey })
 
 	const apply = (written: Space) =>
-		set({
-			spaces: current().spaces.map((space) =>
+		hold(
+			current().spaces.map((space) =>
 				space.id === written.id ? written : space,
 			),
-		})
-
-	const read = async (lastSpaceId: string | null) => {
-		const spaces = await store.spaces()
-		const stillHeld = spaces.find(
-			(space) => space.id === current().selectedSpaceId,
-		)?.id
-		const remembered = spaces.find((space) => space.id === lastSpaceId)?.id
-		set({
-			spaces,
-			selectedSpaceId: stillHeld ?? remembered ?? spaces[0]?.id ?? null,
-			hasFailedToLoad: false,
-			hasFailedToCreate: false,
-		})
-	}
-
-	const noteFailedLoad = () => set({ hasFailedToLoad: true })
-
-	const reload = () => {
-		void enqueue(() => read(null)).catch(noteFailedLoad)
-	}
+		)
 
 	const noteRefusedCreate = () => {
-		set({ hasFailedToCreate: true })
-		return enqueue(async () => set({ spaces: await store.spaces() })).catch(
-			noteFailedLoad,
-		)
+		choose({ hasFailedToCreate: true })
+		return reload()
 	}
 
 	const writes = createWriteLoop<SpaceSettingsValue, Space>({
 		enqueue,
-		write: (id, value) => store.updateSpace(id, value.name, value.colour),
+		write: (id, value) =>
+			runMutation(queryClient, () =>
+				store.updateSpace(id, value.name, value.colour),
+			),
 		apply: (_id, written) => apply(written),
-		onRefused: reload,
+		onRefused: () => {
+			void reload()
+		},
 	})
 
 	let isTransferring = false
@@ -190,7 +233,7 @@ export const createSpacesController = (
 				if (!path) {
 					return
 				}
-				await enqueue(() => store.exportSpace(id, path))
+				await commit(() => store.exportSpace(id, path))
 				reportSuccess({
 					title: i18n.t("settings:space.transfer.exported", {
 						name: space.name,
@@ -212,10 +255,11 @@ export const createSpacesController = (
 				if (!path) {
 					return
 				}
-				const imported = await enqueue(() => store.importSpace(path))
-				set({
-					spaces: [...current().spaces, imported],
-					selectedSpaceId: imported.id,
+				const imported = await commit(async () => {
+					const written = await store.importSpace(path)
+					hold([...current().spaces, written])
+					choose({ chosenSpaceId: written.id })
+					return written
 				})
 				reportSuccess({
 					title: i18n.t("settings:space.transfer.imported", {
@@ -234,28 +278,29 @@ export const createSpacesController = (
 	return {
 		getState: current,
 
-		subscribe: stateStore.subscribe,
+		subscribe: subscribeWithQueries(choiceStore, queryClient, listKey),
 
-		load: (lastSpaceId: string | null) =>
-			enqueue(() => read(lastSpaceId)).catch(noteFailedLoad),
+		listQuery,
+
+		load: (lastSpaceId: string | null) => {
+			choose({ rememberedSpaceId: lastSpaceId, hasFailedToCreate: false })
+			return queryClient.prefetchQuery({ ...listQuery, staleTime: 0 })
+		},
 
 		select: (id: string) => {
 			if (id !== current().selectedSpaceId) {
-				set({ selectedSpaceId: id })
+				choose({ chosenSpaceId: id })
 			}
 		},
 
 		create: () =>
-			enqueue(async () => {
+			commit(async () => {
 				const created = await store.createSpace(newSpaceName())
-				set({
-					spaces: [...current().spaces, created],
-					selectedSpaceId: created.id,
-					hasFailedToCreate: false,
-				})
+				hold([...current().spaces, created])
+				choose({ chosenSpaceId: created.id, hasFailedToCreate: false })
 			}).catch(noteRefusedCreate),
 
-		setSettingsOpen: (isSettingsOpen: boolean) => set({ isSettingsOpen }),
+		setSettingsOpen: (isSettingsOpen: boolean) => choose({ isSettingsOpen }),
 
 		describe: (id: string, value: SpaceSettingsValue) => {
 			const held = current().spaces.find((space) => space.id === id)
@@ -271,20 +316,17 @@ export const createSpacesController = (
 			if (isSameOrder(spaces, ids)) {
 				return Promise.resolve()
 			}
-			set({ spaces: repositioned(spaces, ids) })
-			return enqueue(() => store.reorderSpaces(ids)).catch(reload)
+			hold(repositioned(spaces, ids))
+			return commit(() => store.reorderSpaces(ids)).catch(reload)
 		},
 
 		remove: (id: string) =>
-			enqueue(async () => {
+			commit(async () => {
 				await store.deleteSpace(id)
 				writes.drop(id)
 				const spaces = current().spaces.filter((space) => space.id !== id)
-				set({
-					spaces,
-					selectedSpaceId: spaces[0]?.id ?? null,
-					isSettingsOpen: false,
-				})
+				hold(spaces)
+				choose({ chosenSpaceId: spaces[0]?.id ?? null, isSettingsOpen: false })
 			}).catch(reload),
 
 		exportSpace,

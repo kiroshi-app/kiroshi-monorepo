@@ -152,3 +152,16 @@ it("opens no outage on a failure its meta keeps silent", async () => {
 
 	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
 })
+
+it("builds the failure notice from the failure the read met", async () => {
+	const titledByFailure: FailureMeta = {
+		failureNotice: (error) => ({ title: `Couldn’t read it: ${error}` }),
+		raisedIn: "query-client-test",
+	}
+
+	await fetchFailing("refused", titledByFailure).fetched
+
+	expect(raiseFailureNotice).toHaveBeenCalledWith(
+		expect.objectContaining({ title: "Couldn’t read it: refused" }),
+	)
+})
