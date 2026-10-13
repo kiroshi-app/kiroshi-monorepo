@@ -172,7 +172,7 @@ const localConversationOpen = async () => {
 	})
 	joined.watch()
 	await settle()
-	const roster = createRosterController(relayed)
+	const roster = createRosterController(relayed, { queryClient })
 	const user = {
 		getState: () => ({
 			preferences: {

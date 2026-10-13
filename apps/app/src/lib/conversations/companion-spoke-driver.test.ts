@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest"
+// @vitest-environment happy-dom
+
+import { cleanup } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
 
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 
@@ -15,10 +18,10 @@ import type { TranscriptStore } from "./store-port"
 import type { CompanionSpoke } from "./transcript-contract"
 import { seatBots } from "./transcript-fixtures"
 
-import {
-	createRosterController,
-	type RosterController,
-} from "../bots/roster-controller"
+import { mountRoster } from "../bots/mounted-roster"
+import type { RosterController } from "../bots/roster-controller"
+
+afterEach(cleanup)
 
 const SPACE = "personal"
 
@@ -62,9 +65,7 @@ const createRoom = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const runtimes = createConversationRuntimes(driver, store)
-	const roster = createRosterController(store, {
-		reportFailure: () => undefined,
-	})
+	const roster = mountRoster(store, { reportFailure: () => undefined })
 	await roster.load({
 		spaces: [{ spaceRowId: SPACE, spaceId: SPACE }],
 		spaceRowId: SPACE,
@@ -327,7 +328,7 @@ describe("a companion speaking in a room the front never opened", () => {
 		const store = createFakeTranscriptStore()
 		startCompanionSpokeDriver({
 			runtimes: createConversationRuntimes(createScriptedDriver(), store),
-			roster: createRosterController(store, { reportFailure: () => undefined }),
+			roster: mountRoster(store, { reportFailure: () => undefined }),
 			spokenWords: createSpokenWords(),
 			companions: {
 				onCompanionSpoke: () => Promise.reject(new Error("refused")),

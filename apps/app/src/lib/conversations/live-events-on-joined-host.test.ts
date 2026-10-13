@@ -1,7 +1,15 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	onTestFinished,
+	vi,
+} from "vitest"
 
 import { createConversationController } from "./conversation-controller"
 import { withFakeHostWrites } from "./fake-host-writes"
@@ -12,6 +20,7 @@ import type { TranscriptMessage } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
 
 import { JOINED_SPACE_RECONNECTED_EVENT } from "../bindings"
+import { useControllerState } from "../use-controller"
 import type {
 	AgentEvent,
 	EventTurn,
@@ -23,7 +32,7 @@ import type {
 } from "../agent/contract"
 import { agentTransport } from "../agent/transport"
 import { createRosterController } from "../bots/roster-controller"
-import { useRosterReloads } from "../bots/use-roster-reloads"
+import { useRosterReads } from "../bots/use-roster"
 import { createChatController } from "../chat/chat-controller"
 import {
 	questionMessageIdOf,
@@ -38,6 +47,8 @@ import { useAskedQuestion } from "../chat/use-asked-question"
 import type { HostSocket } from "../host/http"
 import { aMission } from "../missions/mission-fixtures"
 import { useLiveMissions } from "../missions/use-live-missions"
+import { invalidateOnHostReconnect } from "../query/host-invalidations"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 type Handler = (event: { event: string; id: number; payload: unknown }) => void
 
@@ -595,53 +606,64 @@ describe("the roster and the conversation list fed by every writer", () => {
 		["companion://deleted", { id: "b", spaceId: "personal" }],
 	] as const
 
-	it.each(CHANGES)("reloads on a local %s", async (event, payload) => {
-		const reload = vi.fn()
-		renderHook(() => useRosterReloads(reload))
-		await settled()
-
-		await emitLocally(event, payload)
-
-		expect(reload).toHaveBeenCalledOnce()
-	})
-
-	it.each(CHANGES)(
-		"reloads on %s from the joined host only while a joined space is active",
-		async (event, payload) => {
-			const reload = vi.fn()
-			renderHook(() => useRosterReloads(reload))
-			await settled()
-			await joinHost()
-			await settled()
-
-			await emitLocally(event, payload)
-			expect(reload).not.toHaveBeenCalled()
-
-			await emitOnHost(event, payload)
-			expect(reload).toHaveBeenCalledOnce()
-		},
-	)
-
-	it("reloads when the joined host comes back up", async () => {
-		const reload = vi.fn()
-		renderHook(() => useRosterReloads(reload))
-		await joinHost()
-		await settled()
-
-		await reconnectHost()
-
-		expect(reload).toHaveBeenCalledOnce()
-	})
-
-	const rosterOnHost = async () => {
+	const mountedRoster = async () => {
 		const store = createFakeTranscriptStore()
-		const roster = createRosterController(store)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		onTestFinished(invalidateOnHostReconnect(queryClient))
+		const roster = createRosterController(store, { queryClient })
+		const rendered = renderHook(
+			() => useRosterReads(roster, useControllerState(roster)),
+			{ wrapper },
+		)
 		await roster.load({
 			spaces: [{ spaceRowId: "personal", spaceId: "personal" }],
 			spaceRowId: "personal",
 			lastRowId: null,
 		})
-		const rendered = renderHook(() => useRosterReloads(roster.reload))
+		await settled()
+		const reads = vi.spyOn(store, "conversations")
+		return { store, roster, rendered, reads }
+	}
+
+	it.each(CHANGES)(
+		"reads the roster again on a local %s",
+		async (event, payload) => {
+			const { reads } = await mountedRoster()
+
+			await emitLocally(event, payload)
+
+			await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		},
+	)
+
+	it.each(CHANGES)(
+		"reads the roster again on %s from the joined host only while a joined space is active",
+		async (event, payload) => {
+			const { reads } = await mountedRoster()
+			await joinHost()
+			await settled()
+
+			await emitLocally(event, payload)
+			await settled()
+			expect(reads).not.toHaveBeenCalled()
+
+			await emitOnHost(event, payload)
+			await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		},
+	)
+
+	it("reads the roster again when the joined host comes back up", async () => {
+		const { reads } = await mountedRoster()
+		await joinHost()
+		await settled()
+
+		await reconnectHost()
+
+		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+	})
+
+	const rosterOnHost = async () => {
+		const { store, roster, rendered } = await mountedRoster()
 		await joinHost()
 		await settled()
 		const writeConversation = (title: string) =>
@@ -664,7 +686,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 
 		await reopenRelay(JOINED)
 
-		expect(titles()).toContain("Opened during the cut")
+		await vi.waitFor(() => expect(titles()).toContain("Opened during the cut"))
 	})
 
 	it("lists nothing new when the relay of another Space reopens", async () => {
@@ -672,6 +694,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await writeConversation("Held by another Space")
 
 		await reopenRelay("attic")
+		await settled()
 
 		expect(titles()).not.toContain("Held by another Space")
 	})
@@ -682,13 +705,13 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await writeConversation("After the roster left")
 
 		await reopenRelay(JOINED)
+		await settled()
 
 		expect(titles()).not.toContain("After the roster left")
 	})
 
-	it("reloads once when the relay reopens before the socket", async () => {
-		const reload = vi.fn()
-		renderHook(() => useRosterReloads(reload))
+	it("reads the roster once when the relay reopens before the socket", async () => {
+		const { reads } = await mountedRoster()
 		await joinHost()
 		await settled()
 
@@ -697,19 +720,22 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await openLastSocket()
 		await settled()
 
-		expect(reload).toHaveBeenCalledOnce()
+		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		await settled()
+		expect(reads).toHaveBeenCalledOnce()
 	})
 
-	it("reloads once when the socket reopens before the relay", async () => {
-		const reload = vi.fn()
-		renderHook(() => useRosterReloads(reload))
+	it("reads the roster once when the socket reopens before the relay", async () => {
+		const { reads } = await mountedRoster()
 		await joinHost()
 		await settled()
 
 		await reconnectHost()
 		await reopenRelay(JOINED)
 
-		expect(reload).toHaveBeenCalledOnce()
+		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		await settled()
+		expect(reads).toHaveBeenCalledOnce()
 	})
 })
 

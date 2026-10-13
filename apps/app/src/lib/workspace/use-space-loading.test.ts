@@ -197,7 +197,9 @@ const mountedRosters = async () => {
 	})
 	joined.watch()
 	await settle()
-	const roster = createRosterController(routedBy(hosts, local, host))
+	const roster = createRosterController(routedBy(hosts, local, host), {
+		queryClient,
+	})
 	const user = {
 		getState: () => ({
 			preferences: { lastSpaceId: null, lastBotIdBySpace: {} },
@@ -396,7 +398,7 @@ const relaunchedOnJoinedSpace = async () => {
 	})
 	joined.watch()
 	await settle()
-	const roster = createRosterController(relayed)
+	const roster = createRosterController(relayed, { queryClient })
 	const user = {
 		getState: () => ({
 			preferences: { lastSpaceId: HOST_PERSONAL_ROW, lastBotIdBySpace: {} },

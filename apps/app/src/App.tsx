@@ -100,8 +100,12 @@ export function App() {
 	if (!rosterView.hasLoaded) {
 		return (
 			<StartupScreen
-				haveSpacesFailed={spaces.state.hasFailedToLoad}
-				onRetrySpaces={loadSpaces}
+				hasFailed={spaces.state.hasFailedToLoad || roster.state.hasFailedToLoad}
+				onRetry={
+					spaces.state.hasFailedToLoad
+						? loadSpaces
+						: roster.controller.retryLoad
+				}
 			/>
 		)
 	}

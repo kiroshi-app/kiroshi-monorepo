@@ -8,12 +8,20 @@ type Subscribable = {
 	subscribe: (listener: () => void) => () => void
 }
 
+const isSameList = (held: readonly unknown[], list: readonly unknown[]) =>
+	held.length === list.length &&
+	held.every((entry, index) => Object.is(entry, list[index]))
+
+const isSameInput = (held: unknown, input: unknown) =>
+	Object.is(held, input) ||
+	(Array.isArray(held) && Array.isArray(input) && isSameList(held, input))
+
 const isSameInputs = (
 	held: readonly unknown[],
 	inputs: readonly unknown[],
 ): boolean =>
 	held.length === inputs.length &&
-	held.every((input, index) => Object.is(input, inputs[index]))
+	held.every((input, index) => isSameInput(input, inputs[index]))
 
 export const memoizedOn = <Inputs extends unknown[], Snapshot>(
 	inputsOf: () => [...Inputs],

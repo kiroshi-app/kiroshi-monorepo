@@ -82,7 +82,7 @@ const aWorld = async () => {
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(null)
-	const roster = createRosterController(store)
+	const roster = createRosterController(store, { queryClient })
 	await roster.load({
 		spaces: [HOME, elsewhere.id].map((id) => ({ spaceRowId: id, spaceId: id })),
 		spaceRowId: HOME,
