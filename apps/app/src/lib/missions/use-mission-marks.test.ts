@@ -23,6 +23,8 @@ import { useMissionMarks } from "./use-mission-marks"
 import { toSpaceBadges } from "@/lib/chat/sidebar-badges"
 import type { Bot } from "@/lib/conversations/store-contract"
 import { hostOfflineOf } from "@/lib/host/host-offline"
+import { HostRefused } from "@/lib/host/host-refused"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { useRosterBotsBySpace } from "@/lib/workspace/use-roster-bots-by-space"
 
 const reachable = vi.hoisted(() => ({ host: "local" as string | null }))
@@ -107,6 +109,7 @@ const pending = () => {
 const renderMarks = (shown: string | null) =>
 	renderHook(({ spaceId }) => useMissionMarks(spaceId), {
 		initialProps: { spaceId: shown },
+		wrapper: createQueryTestWrapper().wrapper,
 	})
 
 const announced = async () => {
@@ -133,14 +136,13 @@ describe("useMissionMarks on a local Space", () => {
 		expect(readSpaceFeed).not.toHaveBeenCalled()
 	})
 
-	it("re-reads the board on a local Space change and keeps the marks meanwhile", async () => {
+	it("keeps the marks of the board on a local Space change without reading it again", async () => {
 		const { result, rerender } = renderMarks("space-a")
 		await waitFor(() => expect(idsOf(result.current)).toEqual(["m-local"]))
-		readBoard.mockReturnValue(new Promise(() => undefined))
 
 		rerender({ spaceId: "space-b" })
 
-		expect(readBoard).toHaveBeenCalledTimes(2)
+		expect(readBoard).toHaveBeenCalledOnce()
 		expect(idsOf(result.current)).toEqual(["m-local"])
 	})
 
@@ -168,6 +170,31 @@ describe("useMissionMarks on a local Space", () => {
 		})
 		await Promise.resolve()
 		expect(raiseFailureNotice).toHaveBeenCalledOnce()
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Couldn’t load missions",
+				description: "Restart Kiroshi to retry.",
+				report: expect.objectContaining({ raisedIn: "use-mission-marks" }),
+			}),
+		)
+		expect(result.current).toEqual([])
+	})
+
+	it("raises a notice again once a read succeeded between two failures", async () => {
+		readBoard.mockRejectedValueOnce(new Error("no board"))
+		const { result } = renderMarks("space-a")
+		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+		const announce = await announced()
+
+		act(() => announce(A_CLOSE))
+		await waitFor(() => expect(idsOf(result.current)).toEqual(["m-local"]))
+
+		readBoard.mockRejectedValueOnce(new Error("no board"))
+		act(() => announce(A_CLOSE))
+
+		await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2), {
+			timeout: 2000,
+		})
 		expect(result.current).toEqual([])
 	})
 
@@ -220,8 +247,8 @@ describe("useMissionMarks on a joined Space", () => {
 
 		reachable.host = "garage"
 		rerender({ spaceId: "joined" })
-		expect(result.current).toEqual([])
-		await waitFor(() => expect(idsOf(result.current)).toEqual(["m-joined"]))
+		expect(idsOf(result.current)).toEqual(["m-joined"])
+		await waitFor(() => expect(readSpaceFeed).toHaveBeenCalledTimes(2))
 		expect(readBoard).toHaveBeenCalledOnce()
 	})
 
@@ -255,6 +282,17 @@ describe("useMissionMarks on a joined Space", () => {
 		await waitFor(() => expect(idsOf(result.current)).toEqual(["m-joined"]))
 		expect(readSpaceFeed).toHaveBeenCalledTimes(2)
 		expect(readBoard).not.toHaveBeenCalled()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises no notice when the host refuses the feed", async () => {
+		readSpaceFeed.mockRejectedValue(new HostRefused("forbidden", "403"))
+
+		const { result } = renderMarks("joined")
+
+		await waitFor(() => expect(readSpaceFeed).toHaveBeenCalled())
+		await Promise.resolve()
+		expect(result.current).toEqual([])
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
@@ -307,7 +345,9 @@ describe("the rail rings of local Spaces", () => {
 			}),
 		])
 
-		const { result } = renderHook(() => useRailRings("space-a"))
+		const { result } = renderHook(() => useRailRings("space-a"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		await waitFor(() => expect(result.current["space-b"]).toBe("attention"))
 		expect(result.current["space-a"]).toBeUndefined()

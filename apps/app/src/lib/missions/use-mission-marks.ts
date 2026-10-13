@@ -1,21 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { coalescedRead } from "./coalesced-read"
+import { missionQueryKeys } from "./mission-query-keys"
 import type { MissionEntry } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
-import { raiseReportedFailure } from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
 import { isHostRefused } from "@/lib/host/host-refused"
-import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { LOCAL_HOST, useReachableHost } from "@/lib/host/use-reachable-host"
-
-type HeldMarks = {
-	source: string
-	entries: MissionEntry[]
-}
 
 type MarksRead = {
 	source: string
@@ -23,6 +18,8 @@ type MarksRead = {
 }
 
 const NO_MARKS: MissionEntry[] = []
+
+const REREAD_ON_EVERY_SWITCH = 0
 
 const marksReadOf = (
 	host: string | null,
@@ -40,64 +37,16 @@ const marksReadOf = (
 	}
 }
 
-const raiseUnavailableNotice = () =>
-	raiseReportedFailure(
-		{
-			title: i18n.t("bots:roster.mission.unavailable.title"),
-			description: i18n.t("bots:roster.mission.unavailable.description"),
-		},
-		{ raisedIn: "use-mission-marks" },
-	)
+const isHostUnreachable = (error: unknown) =>
+	isHostOffline(error) || isHostRefused(error)
 
-export const useMissionMarks = (
-	shownSpaceId: string | null,
-): MissionEntry[] => {
-	const [held, setHeld] = useState<HeldMarks | null>(null)
-	const reads = useRef(0)
-	const isFailureReported = useRef(false)
-	const host = useReachableHost()
-
-	const reload = useCallback(() => {
-		reads.current += 1
-		const marksRead = marksReadOf(host, shownSpaceId)
-		if (!marksRead) {
-			return
-		}
-
-		const ticket = reads.current
-		const { source, read } = marksRead
-		read().then(
-			(entries) => {
-				if (ticket !== reads.current) {
-					return
-				}
-				isFailureReported.current = false
-				setHeld({ source, entries })
-			},
-			(reason) => {
-				if (ticket !== reads.current) {
-					return
-				}
-				setHeld(null)
-				if (
-					isHostOffline(reason) ||
-					isHostRefused(reason) ||
-					isFailureReported.current
-				) {
-					return
-				}
-				isFailureReported.current = true
-				raiseUnavailableNotice()
-			},
-		)
-	}, [host, shownSpaceId])
-
-	useEffect(reload, [reload])
-
-	useHostReconnections(reload)
+const useRereadOnMissionChange = () => {
+	const queryClient = useQueryClient()
 
 	useEffect(() => {
-		const rereading = coalescedRead(reload)
+		const rereading = coalescedRead(() => {
+			queryClient.invalidateQueries({ queryKey: missionQueryKeys.marks() })
+		})
 		const listening = missionsTransport
 			.onChanged(rereading.request)
 			.catch((reason) => {
@@ -112,9 +61,29 @@ export const useMissionMarks = (
 			rereading.cancel()
 			void listening.then((unsubscribe) => unsubscribe())
 		}
-	}, [reload])
+	}, [queryClient])
+}
 
-	const isShown =
-		held !== null && held.source === marksReadOf(host, shownSpaceId)?.source
-	return isShown ? held.entries : NO_MARKS
+export const useMissionMarks = (
+	shownSpaceId: string | null,
+): MissionEntry[] => {
+	const marksRead = marksReadOf(useReachableHost(), shownSpaceId)
+	const { data = NO_MARKS, isError } = useQuery({
+		queryKey: missionQueryKeys.marksOf(marksRead?.source ?? null),
+		queryFn: marksRead?.read ?? skipToken,
+		staleTime: REREAD_ON_EVERY_SWITCH,
+		meta: {
+			failureNotice: () => ({
+				title: i18n.t("bots:roster.mission.unavailable.title"),
+				description: i18n.t("bots:roster.mission.unavailable.description"),
+			}),
+			raisedIn: "use-mission-marks",
+			isSilentOn: isHostUnreachable,
+			raisesOncePerOutage: true,
+		},
+	})
+
+	useRereadOnMissionChange()
+
+	return isError ? NO_MARKS : data
 }
