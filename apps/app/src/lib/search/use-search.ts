@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 
 import type { SearchPaletteProps } from "@workspace/ui/components/search-palette"
 
-import { createSearchController } from "./search-controller"
+import { activeIndexOn, createSearchController } from "./search-controller"
 import {
 	createSearchLookups,
 	type SearchLookupSource,
@@ -89,7 +89,7 @@ export const useSearch = ({
 }: SearchSource): Search => {
 	const [controller] = useState(createSearchController)
 	const state = useControllerState(controller)
-	const { read, recents, isLoading } = useSearchReads({
+	const { read, recents, landing, isLoading } = useSearchReads({
 		port,
 		isOpen: state.isOpen,
 		spaceId: state.spaceId,
@@ -139,7 +139,7 @@ export const useSearch = ({
 		[state.query, state.tab, results, resting],
 	)
 
-	const active = visible[state.activeIndex]
+	const active = visible[activeIndexOn(state, landing)]
 
 	const open = useCallback(() => {
 		if (spaceId) {
@@ -151,7 +151,7 @@ export const useSearch = ({
 		isOpen: state.isOpen,
 		canOpen,
 		onOpen: open,
-		onMove: (by) => controller.moveActive(by, visible.length),
+		onMove: (by) => controller.moveActive(by, visible.length, landing),
 		onEnter: () => active?.onOpen(),
 	})
 

@@ -162,10 +162,83 @@ it("reads the new scope at once when the all spaces switch changes", async () =>
 		spaceId: "personal",
 		allSpaces: true,
 	})
+})
+
+it("reads the recents of the new scope at once while the query is empty", async () => {
+	const port = aPort()
+	const { result, rerender } = renderReads(port)
+	await waitFor(() => expect(result.current.isLoading).toBe(false))
+
+	rerender({ isAllSpaces: true })
+
 	expect(port.recent).toHaveBeenLastCalledWith({
 		spaceId: "personal",
 		allSpaces: true,
 	})
+})
+
+it("keeps the last results that landed when a read fails", async () => {
+	const port = aPort()
+	const { result, rerender } = renderReads(port, { query: "road" })
+	await waitFor(() => expect(messageIdsOf(result.current)).toEqual(["road"]))
+	port.catalogue.mockRejectedValue(new Error("no catalogue"))
+
+	rerender({ query: "roadmap" })
+
+	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+	expect(result.current.isLoading).toBe(false)
+	expect(messageIdsOf(result.current)).toEqual(["road"])
+})
+
+it("keeps the last recents that landed when a rest read fails", async () => {
+	const port = aPort()
+	const { result, rerender } = renderReads(port)
+	await waitFor(() => expect(result.current.recents).toEqual([A_CHAT]))
+	port.recent.mockRejectedValue(new Error("no recents"))
+
+	rerender({ isAllSpaces: true })
+
+	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+	expect(result.current.recents).toEqual([A_CHAT])
+	expect(result.current.read.chats).toEqual([A_CHAT])
+})
+
+it("keeps the resting recents while a query is shown", async () => {
+	const port = aPort()
+	const { result, rerender } = renderReads(port)
+	await waitFor(() => expect(result.current.recents).toEqual([A_CHAT]))
+
+	rerender({ query: "road" })
+
+	await waitFor(() => expect(messageIdsOf(result.current)).toEqual(["road"]))
+	expect(result.current.recents).toEqual([A_CHAT])
+})
+
+it("raises one notice when the recents and the catalogue fail from the same open", async () => {
+	const port = aPort()
+	port.recent.mockRejectedValue(new Error("no recents"))
+	port.catalogue.mockRejectedValue(new Error("no catalogue"))
+
+	const { result } = renderReads(port)
+
+	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalled())
+	await waitFor(() => expect(result.current.isLoading).toBe(false))
+	expect(raiseFailureNotice).toHaveBeenCalledOnce()
+})
+
+it("counts a landing for each answer that lands and none for a failure", async () => {
+	const port = aPort()
+	const { result, rerender } = renderReads(port)
+	await waitFor(() => expect(result.current.landing).toBe(1))
+
+	rerender({ query: "road" })
+	await waitFor(() => expect(result.current.landing).toBe(2))
+
+	port.catalogue.mockRejectedValue(new Error("no catalogue"))
+	rerender({ query: "roadmap" })
+	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
+
+	expect(result.current.landing).toBe(2)
 })
 
 it("raises the search notice when a read fails", async () => {
@@ -188,7 +261,7 @@ it("raises no notice when the host of the space is offline", async () => {
 	port.catalogue.mockRejectedValue(hostOfflineOf("gone"))
 	port.recent.mockRejectedValue(hostOfflineOf("gone"))
 
-	const { result } = renderReads(port, { query: "road" })
+	const { result } = renderReads(port)
 
 	await waitFor(() => expect(result.current.isLoading).toBe(false))
 	expect(port.catalogue).toHaveBeenCalled()

@@ -12,6 +12,7 @@ type SearchState = {
 	tab: SearchTab
 	isAllSpaces: boolean
 	activeIndex: number
+	activeLanding: number
 }
 
 export type SearchController = {
@@ -22,7 +23,7 @@ export type SearchController = {
 	setQuery: (query: string) => void
 	setTab: (tab: SearchTab) => void
 	setScope: (isAllSpaces: boolean) => void
-	moveActive: (by: number, count: number) => void
+	moveActive: (by: number, count: number, landing: number) => void
 }
 
 const CLOSED: SearchState = {
@@ -33,7 +34,11 @@ const CLOSED: SearchState = {
 	tab: "all",
 	isAllSpaces: false,
 	activeIndex: 0,
+	activeLanding: 0,
 }
+
+export const activeIndexOn = (state: SearchState, landing: number) =>
+	state.activeLanding === landing ? state.activeIndex : 0
 
 const wrapped = (index: number, count: number) =>
 	count === 0 ? 0 : (index + count) % count
@@ -90,9 +95,10 @@ export const createSearchController = (): SearchController => {
 			searchQueryNow()
 		},
 
-		moveActive: (by, count) =>
+		moveActive: (by, count, landing) =>
 			publish({
-				activeIndex: wrapped(current().activeIndex + by, count),
+				activeIndex: wrapped(activeIndexOn(current(), landing) + by, count),
+				activeLanding: landing,
 			}),
 	}
 }

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
-import { createSearchController, QUIET_MS } from "./search-controller"
+import {
+	activeIndexOn,
+	createSearchController,
+	QUIET_MS,
+} from "./search-controller"
 
 const openedOn = (spaceId = "personal") => {
 	const controller = createSearchController()
@@ -83,7 +87,7 @@ it("forgets its query, its tab, its scope and its active result when it closes",
 	vi.advanceTimersByTime(QUIET_MS)
 	controller.setTab("missions")
 	controller.setScope(true)
-	controller.moveActive(1, 3)
+	controller.moveActive(1, 3, 0)
 
 	controller.close()
 
@@ -95,17 +99,30 @@ it("forgets its query, its tab, its scope and its active result when it closes",
 		tab: "all",
 		isAllSpaces: false,
 		activeIndex: 0,
+		activeLanding: 0,
 	})
 })
 
 it("wraps the active result at both ends of the visible order", () => {
 	const controller = openedOn()
 
-	controller.moveActive(-1, 3)
+	controller.moveActive(-1, 3, 0)
 
-	expect(controller.getState().activeIndex).toBe(2)
+	expect(activeIndexOn(controller.getState(), 0)).toBe(2)
 
-	controller.moveActive(1, 3)
+	controller.moveActive(1, 3, 0)
 
-	expect(controller.getState().activeIndex).toBe(0)
+	expect(activeIndexOn(controller.getState(), 0)).toBe(0)
+})
+
+it("puts the active result back on the first row once newer results land", () => {
+	const controller = openedOn()
+	controller.moveActive(2, 3, 1)
+
+	expect(activeIndexOn(controller.getState(), 1)).toBe(2)
+	expect(activeIndexOn(controller.getState(), 2)).toBe(0)
+
+	controller.moveActive(1, 3, 2)
+
+	expect(activeIndexOn(controller.getState(), 2)).toBe(1)
 })

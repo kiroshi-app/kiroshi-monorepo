@@ -1,4 +1,5 @@
-import { keepPreviousData, skipToken, useQuery } from "@tanstack/react-query"
+import { skipToken, useQuery } from "@tanstack/react-query"
+import { useState } from "react"
 
 import { i18n } from "@workspace/ui/lib/i18n"
 
@@ -8,7 +9,7 @@ import type {
 	CatalogueMission,
 	CatalogueRoutine,
 } from "./catalogue-contract"
-import type { CatalogueScope, RecentScope } from "./catalogue-transport"
+import type { CatalogueScope } from "./catalogue-transport"
 import { MAX_QUERY_CHARS, type MessageHit } from "./search-contract"
 import type { SearchPort } from "./search-port"
 import { searchQueryKeys } from "./search-query-keys"
@@ -33,7 +34,20 @@ type SearchReadSource = {
 type SearchReads = {
 	read: SearchRead
 	recents: CatalogueChat[]
+	landing: number
 	isLoading: boolean
+}
+
+type SearchAnswer = {
+	read: SearchRead
+	recents: CatalogueChat[] | null
+}
+
+type Landed = {
+	answer: SearchAnswer | undefined
+	read: SearchRead
+	recents: CatalogueChat[]
+	landing: number
 }
 
 const NOTHING_READ: SearchRead = {
@@ -45,7 +59,12 @@ const NOTHING_READ: SearchRead = {
 
 const NO_RECENTS: CatalogueChat[] = []
 
-const NO_MESSAGES: MessageHit[] = []
+const NOTHING_LANDED: Landed = {
+	answer: undefined,
+	read: NOTHING_READ,
+	recents: NO_RECENTS,
+	landing: 0,
+}
 
 const REREAD_ON_EVERY_OPEN = 0
 
@@ -67,56 +86,72 @@ const readOf = (messages: MessageHit[], catalogue: Catalogue): SearchRead => ({
 	routines: catalogue.routines,
 })
 
-const messagesOf = (
+const restingAnswer = (
 	port: SearchPort,
-	{ query, spaceId, allSpaces }: CatalogueScope,
-) =>
-	query === ""
-		? Promise.resolve(NO_MESSAGES)
-		: port.messages({ text: query, spaceId, allSpaces })
+	scope: CatalogueScope,
+): Promise<SearchAnswer> =>
+	Promise.all([
+		port.recent({ spaceId: scope.spaceId, allSpaces: scope.allSpaces }),
+		port.catalogue(scope),
+	]).then(([recents, catalogue]) => ({ read: readOf([], catalogue), recents }))
 
-const readResults = (port: SearchPort, scope: CatalogueScope) =>
-	Promise.all([messagesOf(port, scope), port.catalogue(scope)]).then(
-		([messages, catalogue]) => readOf(messages, catalogue),
-	)
+const foundAnswer = (
+	port: SearchPort,
+	scope: CatalogueScope,
+): Promise<SearchAnswer> =>
+	Promise.all([
+		port.messages({
+			text: scope.query,
+			spaceId: scope.spaceId,
+			allSpaces: scope.allSpaces,
+		}),
+		port.catalogue(scope),
+	]).then(([messages, catalogue]) => ({
+		read: readOf(messages, catalogue),
+		recents: null,
+	}))
 
-const recentScopeOf = ({
+const readAnswer = (port: SearchPort, scope: CatalogueScope) =>
+	scope.query === "" ? restingAnswer(port, scope) : foundAnswer(port, scope)
+
+const scopeOf = ({
 	isOpen,
 	spaceId,
+	query,
 	isAllSpaces,
-}: SearchReadSource): RecentScope | null =>
-	isOpen && spaceId ? { spaceId, allSpaces: isAllSpaces } : null
+}: SearchReadSource): CatalogueScope | null =>
+	isOpen && spaceId && !isOverLimit(query)
+		? { query, spaceId, allSpaces: isAllSpaces }
+		: null
 
-const resultScopeOf = (
-	recentScope: RecentScope | null,
-	query: string,
-): CatalogueScope | null =>
-	recentScope && !isOverLimit(query) ? { ...recentScope, query } : null
+const landedWith = (landed: Landed, answer: SearchAnswer): Landed => ({
+	answer,
+	read: answer.read,
+	recents: answer.recents ?? landed.recents,
+	landing: landed.landing + 1,
+})
+
+const useLastLanded = (answer: SearchAnswer | undefined): Landed => {
+	const [landed, setLanded] = useState(NOTHING_LANDED)
+	if (answer === undefined || answer === landed.answer) {
+		return landed
+	}
+	const next = landedWith(landed, answer)
+	setLanded(next)
+	return next
+}
 
 export const useSearchReads = (source: SearchReadSource): SearchReads => {
-	const { port, query } = source
-	const recentScope = recentScopeOf(source)
-	const resultScope = resultScopeOf(recentScope, query)
+	const { port } = source
+	const scope = scopeOf(source)
 
-	const recents = useQuery({
-		queryKey: searchQueryKeys.recents(recentScope),
-		queryFn: recentScope ? () => port.recent(recentScope) : skipToken,
-		placeholderData: keepPreviousData,
+	const answer = useQuery({
+		queryKey: searchQueryKeys.results(scope),
+		queryFn: scope ? () => readAnswer(port, scope) : skipToken,
 		staleTime: REREAD_ON_EVERY_OPEN,
 		meta: SEARCH_FAILURE,
 	})
+	const { read, recents, landing } = useLastLanded(answer.data)
 
-	const results = useQuery({
-		queryKey: searchQueryKeys.results(resultScope),
-		queryFn: resultScope ? () => readResults(port, resultScope) : skipToken,
-		placeholderData: keepPreviousData,
-		staleTime: REREAD_ON_EVERY_OPEN,
-		meta: SEARCH_FAILURE,
-	})
-
-	return {
-		read: results.data ?? NOTHING_READ,
-		recents: recents.data ?? NO_RECENTS,
-		isLoading: results.isFetching || recents.isFetching,
-	}
+	return { read, recents, landing, isLoading: answer.isFetching }
 }

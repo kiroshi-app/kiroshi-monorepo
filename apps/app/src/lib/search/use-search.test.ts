@@ -19,6 +19,7 @@ import type {
 	CatalogueMission,
 	CatalogueRoutine,
 } from "./catalogue-contract"
+import type { MessageHit } from "./search-contract"
 import { createSearchLookups } from "./search-model"
 import type { SearchNavigation } from "./search-navigation"
 import type { SearchPort } from "./search-port"
@@ -337,6 +338,34 @@ it("opens the active result on Enter and moves it with the arrows", async () => 
 	act(() => press("Enter"))
 
 	expect(trace).toEqual([`conversation:${A_ROOM.id}`, `space:${WORK}`])
+})
+
+it("puts the highlight back on the first row when new results land", async () => {
+	const { navigation } = aNavigation()
+	const port = aPort()
+	const result = await searchedOn(port, navigation)
+	let answer: (hits: MessageHit[]) => void = () => undefined
+	vi.mocked(port.messages).mockReturnValue(
+		new Promise((settle) => {
+			answer = settle
+		}),
+	)
+
+	act(() => result.current.palette.onQueryChange("roadmaps"))
+	await waitFor(() =>
+		expect(port.messages).toHaveBeenCalledWith(
+			expect.objectContaining({ text: "roadmaps" }),
+		),
+	)
+	act(() => press("ArrowDown"))
+
+	expect(result.current.palette.activeResultId).not.toBe(`chat-${A_ROOM.id}`)
+
+	await act(async () => answer([]))
+
+	await waitFor(() =>
+		expect(result.current.palette.activeResultId).toBe(`chat-${A_ROOM.id}`),
+	)
 })
 
 it("leaves Enter to a control that is neither the query input nor the body", async () => {
