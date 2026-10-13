@@ -10,11 +10,11 @@ import {
 	slotsIn,
 } from "@workspace/storybook/story-utils"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { Space } from "@workspace/ui/components/space"
 import type { SpaceInvitation } from "@workspace/ui/components/space-invitations"
 import {
 	SpaceDots,
-	type SpaceRemote,
 	SpaceSwitcher,
 	type SpaceSwitcherProps,
 } from "@workspace/ui/components/space-switcher"
@@ -725,27 +725,27 @@ export const MoveSpace = meta.story({
 	},
 })
 
-const REMOTE_SPACES: Record<string, SpaceRemote> = {
-	vocca: "connected",
-	veille: "unreachable",
+const HOSTS: Record<string, SpaceHost> = {
+	vocca: "up",
+	atelier: "shared",
+	veille: "down",
+	archives: "connecting",
 }
 
-const LONG_REMOTE_SPACES: Space[] = [
+const LONG_HOSTED_SPACES: Space[] = [
 	{ id: "perso", name: "Perso", colour: "blue" },
 	{
 		id: "vocca",
 		name: "Everything the team has not filed anywhere else yet",
-		colour: "green",
 	},
 	{
 		id: "veille",
 		name: "Reading list shared with the whole studio this quarter",
-		colour: "yellow",
 	},
 ]
 
-const ARTBOARD =
-	"Measured against the Paper page `Join a Space, remote Spaces`, light on the left and dark on the right through the side-by-side theme layout."
+const MOCKUP =
+	"Measured against the Paper page `Mockup`, light on the left and dark on the right through the side-by-side theme layout."
 
 const triggersIn = (root: HTMLElement) =>
 	within(root).getAllByRole("button", { name: /^Change space/ })
@@ -772,48 +772,47 @@ const openMenuLikeItsTheme = async (trigger: HTMLElement) => {
 const rowNamed = (menu: HTMLElement, name: string) =>
 	within(menu).getByRole("menuitemradio", { name: new RegExp(`^${name}`) })
 
-const rowGapOf = (row: HTMLElement) =>
-	Number.parseFloat(getComputedStyle(row).columnGap)
-
-const expectOneRowGapApart = async (
-	row: HTMLElement,
-	before: Element,
-	after: Element,
-) => {
-	await expect(rowGapOf(row)).toBe(8)
-	await expect(
-		after.getBoundingClientRect().left - before.getBoundingClientRect().right,
-	).toBeCloseTo(rowGapOf(row), 1)
-}
-
 const shortcutOf = (row: HTMLElement) =>
 	slotsIn(row, "context-menu-shortcut")[0]
 
-const expectConnectedRow = async (row: HTMLElement) => {
-	const globe = within(row).getByRole("img", { name: "Remote" })
-	await expect(globe.getBoundingClientRect().width).toBe(14)
-	await expect(globe.nextElementSibling).toBe(shortcutOf(row))
-	await expectOneRowGapApart(row, globe, shortcutOf(row))
-	await expect(slotsIn(row, "space-dot")[0].style.backgroundColor).not.toBe("")
+const hostDotOn = (root: HTMLElement) => slotsIn(root, "host-dot")[0]
+
+const expectDotOnSquareCorner = async (root: HTMLElement, host: SpaceHost) => {
+	const square = slotsIn(root, "space-dot")[0]
+	const dot = hostDotOn(root)
+	await expect(dot).toHaveAttribute("data-host", host)
+	await expect(dot.parentElement).toBe(square)
+	const corner = square.getBoundingClientRect()
+	const box = dot.getBoundingClientRect()
+	await expect(box.width).toBe(7)
+	await expect(box.left + box.width / 2).toBeCloseTo(corner.right, 1)
+	await expect(box.top + box.height / 2).toBeCloseTo(corner.bottom, 1)
+	await expect(getComputedStyle(dot).boxShadow).toContain("0px 0px 0px 2px")
 }
 
-const expectUnreachableRow = async (row: HTMLElement) => {
-	const status = slotsIn(row, "space-unreachable")[0]
-	const alert = status.previousElementSibling
-	if (!alert) throw new Error("Nothing draws the alert before the status")
-	await expect(status).toHaveTextContent("Unreachable")
-	await expect(alert).toHaveAttribute("aria-hidden", "true")
-	await expectOneRowGapApart(row, alert, status)
-	await expect(status.nextElementSibling).toBe(shortcutOf(row))
-	await expectOneRowGapApart(row, status, shortcutOf(row))
-	await expect(slotsIn(row, "space-dot")[0].style.backgroundColor).toBe("")
-	await expect(within(row).queryByRole("img", { name: "Remote" })).toBeNull()
-}
+const ROW_STATES: [string, SpaceHost | null][] = [
+	["Perso", null],
+	["Vocca", "up"],
+	["Atelier", "shared"],
+	["Veille", "down"],
+	["Archives", "connecting"],
+]
 
-const expectRemoteMarkers = async (menu: HTMLElement) => {
-	await expectConnectedRow(rowNamed(menu, "Vocca"))
-	await expectUnreachableRow(rowNamed(menu, "Veille"))
-	await expect(slotsIn(rowNamed(menu, "Perso"), "space-remote")).toHaveLength(0)
+const expectRowDots = async (menu: HTMLElement) => {
+	for (const [name, host] of ROW_STATES) {
+		const row = rowNamed(menu, name)
+		await expect(
+			getComputedStyle(slotsIn(row, "space-dot")[0]).borderStartStartRadius,
+		).toBe("3px")
+		if (host) await expectDotOnSquareCorner(row, host)
+		else await expect(hostDotOn(row)).toBeUndefined()
+		await expect(row.querySelectorAll("svg")).toHaveLength(
+			row.getAttribute("aria-checked") === "true" ? 1 : 0,
+		)
+	}
+	await expect(
+		within(menu).queryByText(/Unreachable|Remote|Connected/),
+	).toBeNull()
 }
 
 const expectSettingsRightAfterCreate = async (menu: HTMLElement) => {
@@ -843,12 +842,12 @@ const SIDE_BY_SIDE_MENU_A11Y = mergeA11y(
 
 export const ThemesLocalSpaceMenu = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { remoteBySpaceId: REMOTE_SPACES, selectedSpaceId: "perso" },
+	args: { hostBySpaceId: HOSTS, selectedSpaceId: "perso" },
 	parameters: {
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${ARTBOARD} The menu of a local space that sits beside joined ones (J5 and J6, first menu). Check the connected row carries the 14px globe between its name and its shortcut, that the unreachable row drops its tint, mutes its name and says \`Unreachable\` after a destructive alert, that \`Open space settings\` follows \`Create a space\` with no \`Join a space\` between them, and that no \`Leave space\` is offered, since a local space is not left. Pick \`ThemesUnreachableSpaceMenu\` for the menu of a joined space.`,
+				story: `${MOCKUP} The menu of a local space beside shared and joined ones (A7 rows). Check every row carries its 10px square on a 3px radius and, where the space has a host state, the 7px state dot centred on the square's bottom end corner: online for the shared and the reachable rows, hollow for the connecting one, muted for the one that does not answer. No globe and no \`Unreachable\` remain, and no \`Leave space\` is offered, since a local space is not left. Pick \`ThemesJoinedSpaceMenu\` for the menu of a joined space.`,
 			},
 		},
 	},
@@ -856,12 +855,13 @@ export const ThemesLocalSpaceMenu = meta.story({
 		const [light, dark] = triggersIn(canvasElement)
 		for (const trigger of [light, dark]) {
 			await expect(trigger).toHaveAccessibleName("Change space, Perso open")
-			await expect(slotsIn(trigger, "space-switcher-remote")).toHaveLength(0)
+			await expect(hostDotOn(trigger)).toBeUndefined()
 		}
+		await expect(slotsIn(canvasElement, "host-pill")).toHaveLength(0)
 
 		for (const trigger of [light, dark]) {
 			const menu = await openMenuLikeItsTheme(trigger)
-			await expectRemoteMarkers(menu)
+			await expectRowDots(menu)
 			await expectSettingsRightAfterCreate(menu)
 			await expect(
 				within(menu).queryByRole("menuitem", { name: "Leave space" }),
@@ -871,14 +871,14 @@ export const ThemesLocalSpaceMenu = meta.story({
 	},
 })
 
-export const ThemesUnreachableSpaceMenu = meta.story({
+export const ThemesJoinedSpaceMenu = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { remoteBySpaceId: REMOTE_SPACES, selectedSpaceId: "veille" },
+	args: { hostBySpaceId: HOSTS, selectedSpaceId: "veille" },
 	parameters: {
 		a11y: SIDE_BY_SIDE_MENU_A11Y,
 		docs: {
 			description: {
-				story: `${ARTBOARD} The menu of a joined space whose host does not answer (J5 and J6, second menu). Check the open row keeps its mark and stays choosable while it reads \`Unreachable\`, that the globe still marks the connected row, and that a rule then the destructive \`Leave space\` close the menu. The item only reports: the confirmation belongs to the host. Pick \`ThemesLocalSpaceMenu\` for the menu with nothing to leave.`,
+				story: `${MOCKUP} The menu of a joined space whose host does not answer. Check the open row keeps its mark and its muted dot and stays choosable, that the rows read their state to assistive technology after their name, and that a rule then the destructive \`Leave space\` close the menu. The item only reports: the confirmation belongs to the host. Pick \`ThemesLocalSpaceMenu\` for the menu with nothing to leave.`,
 			},
 		},
 	},
@@ -894,60 +894,20 @@ export const ThemesUnreachableSpaceMenu = meta.story({
 
 		for (const trigger of [light, dark]) {
 			const menu = await openMenuLikeItsTheme(trigger)
-			await expectRemoteMarkers(menu)
-			await expect(rowNamed(menu, "Veille")).toHaveAttribute(
-				"aria-checked",
-				"true",
-			)
+			await expectRowDots(menu)
+			const open = rowNamed(menu, "Veille")
+			await expect(open).toHaveAttribute("aria-checked", "true")
+			await expect(open).toHaveAccessibleName(/^Veille Not connected/)
 			await expectSettingsRightAfterCreate(menu)
 			await expectLeaveLast(menu)
 		}
 	},
 })
 
-export const ThemesRemoteSpaceTrigger = meta.story({
-	globals: { theme_layout: "side-by-side" },
-	args: { remoteBySpaceId: REMOTE_SPACES, selectedSpaceId: "vocca" },
-	parameters: {
-		a11y: SIDE_BY_SIDE_MENU_A11Y,
-		docs: {
-			description: {
-				story: `${ARTBOARD} The title bar while a joined space is open (J3). Check a 12px muted globe sits between the name and the chevron with the gap and padding of a local space, and that the button announces the space as remote rather than leaving the globe to speak, since it is hidden from assistive technology. Its menu offers \`Leave space\` last. Pick \`Default\` for a local space.`,
-			},
-		},
-	},
-	play: async ({ args, canvasElement, userEvent }) => {
-		const [light, dark] = triggersIn(canvasElement)
-		for (const trigger of [light, dark]) {
-			await expect(trigger).toHaveAccessibleName(
-				"Change space, Vocca open, remote",
-			)
-			const globe = slotsIn(trigger, "space-switcher-remote")[0]
-			await expect(globe).toHaveAttribute("aria-hidden", "true")
-			await expect(globe.getBoundingClientRect().width).toBe(12)
-			await expect(globe.previousElementSibling).toHaveAttribute(
-				"data-slot",
-				"space-switcher-name",
-			)
-			await expect(getComputedStyle(trigger).columnGap).toBe("8px")
-			await expect(trigger.getBoundingClientRect().height).toBe(32)
-		}
-
-		const menu = await openMenuLikeItsTheme(light)
-		await expectConnectedRow(rowNamed(menu, "Vocca"))
-		await expectLeaveLast(menu)
-		await userEvent.click(
-			within(menu).getByRole("menuitem", { name: "Leave space" }),
-		)
-		await expect(args.onLeaveSpace).toHaveBeenCalledOnce()
-		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
-	},
-})
-
-export const RemoteLongNames = meta.story({
+export const HostedLongNames = meta.story({
 	args: {
-		spaces: LONG_REMOTE_SPACES,
-		remoteBySpaceId: REMOTE_SPACES,
+		spaces: LONG_HOSTED_SPACES,
+		hostBySpaceId: { vocca: "up", veille: "down" },
 		selectedSpaceId: "perso",
 	},
 	parameters: {
@@ -955,7 +915,7 @@ export const RemoteLongNames = meta.story({
 		docs: {
 			description: {
 				story:
-					"Joined spaces named as sentences, which their owner chose and the reader cannot shorten. Check each name clips to one line with an ellipsis while the globe, the `Unreachable` status and the shortcut keep their full width inside the row. Pick `LongContent` for a long local name on the button.",
+					"Joined spaces named as sentences, which their owner chose and the reader cannot shorten. Check each name clips to one line with an ellipsis while the square, its state dot and the shortcut keep their full size inside the row. Pick `LongContent` for a long local name on the button.",
 			},
 		},
 	},
@@ -964,26 +924,19 @@ export const RemoteLongNames = meta.story({
 			canvas.getByRole("button", { name: /^Change space/ }),
 		)
 
-		for (const [name, marker] of [
-			["Everything", "space-remote"],
-			["Reading", "space-unreachable"],
-		]) {
+		for (const name of ["Everything", "Reading"]) {
 			const row = rowNamed(menu, name)
 			const label = within(row).getByText(new RegExp(`^${name}`))
 			await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth)
-			const shortcut = shortcutOf(row)
 			const end = row.getBoundingClientRect().right
-			await expect(shortcut.getBoundingClientRect().right).toBeLessThan(end)
-			const held = slotsIn(row, marker)[0]
-			await expect(held.scrollWidth).toBeLessThanOrEqual(held.clientWidth)
-			await expectOneRowGapApart(row, held, shortcut)
+			await expect(shortcutOf(row).getBoundingClientRect().right).toBeLessThan(
+				end,
+			)
+			await expect(hostDotOn(row).getBoundingClientRect().width).toBe(7)
+			await expect(
+				slotsIn(row, "space-dot")[0].getBoundingClientRect().width,
+			).toBe(10)
 		}
-		await expect(
-			slotsIn(
-				rowNamed(menu, "Everything"),
-				"space-remote",
-			)[0].getBoundingClientRect().width,
-		).toBe(14)
 
 		await userEvent.keyboard("{Escape}")
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
@@ -1237,13 +1190,13 @@ export const M5Joined = meta.story({
 	name: "M5 Joined",
 	args: {
 		spaces: JOINED_SPACES,
-		remoteBySpaceId: { studio: "connected" },
+		hostBySpaceId: { studio: "up" },
 	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M5: the invitation is accepted, so its Space joins the list as a remote row carrying the globe, built by OPE-478, and the Invitations group and the trigger dot are gone.`,
+				story: `${INVITED_ARTBOARD} M5: the invitation is accepted, so its Space joins the list as a row whose square carries the online dot of its reachable host, and the Invitations group and the trigger dot are gone.`,
 			},
 		},
 	},
@@ -1253,7 +1206,7 @@ export const M5Joined = meta.story({
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
 		const menu = await openSwitcher(canvasElement)
-		await expectConnectedRow(rowNamed(menu, "Studio Nord"))
+		await expectDotOnSquareCorner(rowNamed(menu, "Studio Nord"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
 	},
 })
@@ -1263,19 +1216,19 @@ export const M6Unreachable = meta.story({
 	name: "M6 Unreachable",
 	args: {
 		spaces: JOINED_SPACES,
-		remoteBySpaceId: { studio: "unreachable" },
+		hostBySpaceId: { studio: "down" },
 	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so its row drops its tint and says Unreachable, as OPE-478 built it.`,
+				story: `${INVITED_ARTBOARD} M6: the joined Space's host stops answering, so the dot on its row's square turns to the muted presence colour.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const menu = await openSwitcher(canvasElement)
-		await expectUnreachableRow(rowNamed(menu, "Studio Nord"))
+		await expectDotOnSquareCorner(rowNamed(menu, "Studio Nord"), "down")
 	},
 })
 

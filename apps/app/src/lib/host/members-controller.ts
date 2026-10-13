@@ -73,7 +73,7 @@ const answerOf = <Data>(call: Promise<Data>): Promise<MembersAnswer<Data>> =>
 		},
 	)
 
-const membersTransport: MembersTransport = {
+export const membersTransport: MembersTransport = {
 	list: (spaceId) => answerOf(invoke<Member[]>("hosting_members", { spaceId })),
 	invite: (spaceId, email) =>
 		answerOf(invoke<Member>("hosting_invite_member", { spaceId, email })),

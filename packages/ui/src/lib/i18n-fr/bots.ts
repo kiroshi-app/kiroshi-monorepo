@@ -76,31 +76,31 @@ const bots = {
 	spaces: {
 		label: "Espaces",
 		switch: "Changer d’espace, {{name}} ouvert",
-		switchRemote: "Changer d’espace, {{name}} ouvert, distant",
+		switchHosted: "Changer d’espace, {{name}} ouvert, {{host}}",
 		switchInvited_one: "Changer d’espace, {{name}} ouvert, 1 invitation",
 		switchInvited_many:
 			"Changer d’espace, {{name}} ouvert, {{count}} invitations",
 		switchInvited_other:
 			"Changer d’espace, {{name}} ouvert, {{count}} invitations",
-		switchRemoteInvited_one:
-			"Changer d’espace, {{name}} ouvert, distant, 1 invitation",
-		switchRemoteInvited_many:
-			"Changer d’espace, {{name}} ouvert, distant, {{count}} invitations",
-		switchRemoteInvited_other:
-			"Changer d’espace, {{name}} ouvert, distant, {{count}} invitations",
+		switchHostedInvited_one:
+			"Changer d’espace, {{name}} ouvert, {{host}}, 1 invitation",
+		switchHostedInvited_many:
+			"Changer d’espace, {{name}} ouvert, {{host}}, {{count}} invitations",
+		switchHostedInvited_other:
+			"Changer d’espace, {{name}} ouvert, {{host}}, {{count}} invitations",
 		open: "Ouvrir {{name}}",
 		moveUp: "Monter",
 		moveDown: "Descendre",
 		create: "Créer un espace",
 		settings: "Ouvrir les réglages de l’espace",
 		leave: "Quitter l’espace",
-		remote: "Distant",
-		unreachable: "Injoignable",
 		shortcut: "⌘{{rank}}",
 		share: "Partager",
 		host: {
-			online: "Connecté",
-			offline: "Non connecté",
+			shared: "Partagé",
+			up: "En ligne",
+			connecting: "Connexion…",
+			down: "Non connecté",
 		},
 		remove: {
 			lastSpace: "Un compagnon a besoin d’au moins un espace.",

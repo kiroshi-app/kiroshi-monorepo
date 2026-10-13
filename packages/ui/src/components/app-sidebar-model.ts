@@ -13,13 +13,13 @@ import type {
 } from "@workspace/ui/components/bot-badge"
 import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { Space } from "@workspace/ui/components/space"
 import type {
 	SpaceInvitation,
 	SpaceInvitationCallbacks,
 } from "@workspace/ui/components/space-invitations"
-import type { SpaceRemote } from "@workspace/ui/components/space-switcher"
 import type { Sidebar } from "@workspace/ui/components/ui/sidebar"
 import type { UserChipIdentity } from "@workspace/ui/components/user-chip"
 import { toPlainText } from "@workspace/ui/lib/plain-text"
@@ -233,8 +233,8 @@ interface AppSidebarProps
 	onReorderSpaces?: (ids: string[]) => void
 	onCreateSpace?: () => void
 	onLeaveSpace?: () => void
-	spaceAccess?: ReactNode
-	remoteBySpaceId?: Record<string, SpaceRemote>
+	hostBySpaceId?: Record<string, SpaceHost>
+	onShare?: () => void
 	invitations?: SpaceInvitation[]
 	onAcceptInvitation?: SpaceInvitationCallbacks["onAcceptInvitation"]
 	onDeclineInvitation?: SpaceInvitationCallbacks["onDeclineInvitation"]

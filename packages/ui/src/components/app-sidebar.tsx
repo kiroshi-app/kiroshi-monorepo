@@ -33,8 +33,6 @@ const NO_WINDOW_CONTROLS_INSET = "pl-2.5"
 
 const TITLE_BAR_WINDOW_CONTROLS = "ms-auto flex shrink-0 self-stretch"
 
-const TITLE_BAR_SPACE_ACCESS = "flex shrink-0 items-center gap-2"
-
 const FOOTER_INSET = "px-2 py-0 not-has-[*:not(:empty)]:hidden"
 
 const SpaceDotsFooter = (dots: ComponentProps<typeof SpaceDots>) =>
@@ -53,8 +51,8 @@ const AppSidebarBase = ({
 	onReorderSpaces,
 	onCreateSpace,
 	onLeaveSpace,
-	spaceAccess,
-	remoteBySpaceId,
+	hostBySpaceId,
+	onShare,
 	invitations,
 	onAcceptInvitation,
 	onDeclineInvitation,
@@ -106,6 +104,7 @@ const AppSidebarBase = ({
 			>
 				<SpaceSwitcher
 					badgesBySpaceId={badgesBySpaceId}
+					hostBySpaceId={hostBySpaceId}
 					invitations={invitations}
 					onAcceptInvitation={onAcceptInvitation}
 					onCreateSpace={onCreateSpace}
@@ -116,19 +115,10 @@ const AppSidebarBase = ({
 					onReorderSpaces={onReorderSpaces}
 					onRetryInvitation={onRetryInvitation}
 					onSelectSpace={onSelectSpace}
-					remoteBySpaceId={remoteBySpaceId}
+					onShare={onShare}
 					selectedSpaceId={selectedSpaceId}
 					spaces={spaces}
 				/>
-				{spaceAccess ? (
-					<div
-						className={TITLE_BAR_SPACE_ACCESS}
-						data-slot="app-title-bar-space-access"
-						data-tauri-drag-region="false"
-					>
-						{spaceAccess}
-					</div>
-				) : null}
 				{windowControls ? (
 					<div
 						className={TITLE_BAR_WINDOW_CONTROLS}

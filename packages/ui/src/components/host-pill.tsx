@@ -4,38 +4,57 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@workspace/ui/lib/utils"
 
-const PILL =
-	"inline-flex h-6 min-w-0 items-center gap-1.5 rounded-full bg-title-bar-pill ps-2 pe-2.5 font-medium text-foreground text-xs"
+type SpaceHost = "shared" | "up" | "connecting" | "down"
 
-const PILL_OFFLINE = "text-muted-foreground"
+type HostPillState = Extract<SpaceHost, "connecting" | "down">
+
+const PILL =
+	"inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-title-bar-pill ps-2 pe-2.5 font-medium text-foreground text-xs"
+
+const PILL_DOWN = "text-muted-foreground"
 
 const DOT = "pointer-events-none size-1.75 shrink-0 rounded-full"
 
-const DOT_ONLINE = "bg-presence-online"
-
-const DOT_OFFLINE = "bg-presence-offline"
-
-const LABEL = "min-w-0 truncate"
-
-type HostPillProps = {
-	isOnline: boolean
+const DOT_FILL: Record<SpaceHost, string> = {
+	shared: "bg-presence-online",
+	up: "bg-presence-online",
+	connecting:
+		"inset-ring-[1.5px] inset-ring-presence-offline bg-(--host-dot-surface,var(--shell-surface,var(--background)))",
+	down: "bg-presence-offline",
 }
 
-const HostPill = ({ isOnline }: HostPillProps) => {
+const LABEL = "whitespace-nowrap"
+
+type HostDotProps = {
+	host: SpaceHost
+	className?: string
+}
+
+const HostDot = ({ host, className }: HostDotProps) => (
+	<span
+		aria-hidden="true"
+		className={cn(DOT, DOT_FILL[host], className)}
+		data-host={host}
+		data-slot="host-dot"
+	/>
+)
+
+type HostPillProps = {
+	host: HostPillState
+}
+
+const HostPill = ({ host }: HostPillProps) => {
 	const { t } = useTranslation("bots")
 
 	return (
-		<span className={cn(PILL, !isOnline && PILL_OFFLINE)} data-slot="host-pill">
-			<span
-				aria-hidden="true"
-				className={cn(DOT, isOnline ? DOT_ONLINE : DOT_OFFLINE)}
-				data-slot="host-pill-dot"
-			/>
-			<span className={LABEL}>
-				{t(isOnline ? "spaces.host.online" : "spaces.host.offline")}
-			</span>
+		<span
+			className={cn(PILL, host === "down" && PILL_DOWN)}
+			data-slot="host-pill"
+		>
+			<HostDot host={host} />
+			<span className={LABEL}>{t(`spaces.host.${host}`)}</span>
 		</span>
 	)
 }
 
-export { HostPill, type HostPillProps }
+export { HostDot, HostPill, type HostPillProps, type SpaceHost }

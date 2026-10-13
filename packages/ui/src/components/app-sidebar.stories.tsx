@@ -46,7 +46,6 @@ import {
 	COMPANION_SILHOUETTE_SPACE,
 	silhouetteKey,
 } from "@workspace/ui/components/companion-silhouette"
-import { HostPill } from "@workspace/ui/components/host-pill"
 import { OUTER } from "@workspace/ui/components/kiroshi-hexagon"
 import {
 	SPACE_EARLIER_TODAY_MISSIONS,
@@ -56,7 +55,7 @@ import type {
 	MissionsPanelMission,
 	MissionsPanelProps,
 } from "@workspace/ui/components/missions-panel"
-import { ShareButton } from "@workspace/ui/components/share-button"
+import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { WindowControls } from "@workspace/ui/components/window-controls"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
@@ -3877,138 +3876,328 @@ export const CaptionWindowControls = meta.story({
 		}
 	},
 })
-const TITLE_BAR_ARTBOARD =
-	"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, dark only."
+const MOCKUP =
+	"Measured against the Paper page `Mockup`; light and dark through the theme toolbar."
 
 const STUDIO: Space = { id: "studio", name: "Studio", colour: "orange" }
 
-const STUDIO_ARGS = {
-	"data-tauri-drag-region": "deep",
-	spaces: [STUDIO],
-	selectedSpaceId: STUDIO.id,
-	botsBySpaceId: { [STUDIO.id]: ROSTER },
-}
+const GARAGE: Space = { id: "garage", name: "Garage" }
 
 const sharedSpace = fn()
 
-const spaceAccessIn = (canvasElement: HTMLElement) =>
-	slotIn(titleBarIn(canvasElement), "app-title-bar-space-access")
-
-const expectRightAfterSwitcher = async (canvasElement: HTMLElement) => {
-	const titleBar = titleBarIn(canvasElement)
-	const access = spaceAccessIn(canvasElement)
-	await expect(access.previousElementSibling).toBe(
-		slotIn(titleBar, "space-switcher"),
-	)
-	const switcher = slotIn(titleBar, "space-switcher").getBoundingClientRect()
-	const control = access.firstElementChild?.getBoundingClientRect()
-	if (!control) throw new Error("The title bar slot holds nothing")
-	await expect(control.left - switcher.right).toBe(TITLE_BAR_GAP)
-	const bar = titleBar.getBoundingClientRect()
-	await expect(control.top - bar.top).toBe(bar.bottom - control.bottom)
-	await expect(access).toHaveAttribute("data-tauri-drag-region", "false")
-	await expect(titleBar).toHaveAttribute("data-tauri-drag-region", "deep")
+const TITLE_BAR_ARGS = {
+	"data-tauri-drag-region": "deep",
+	spaces: [STUDIO, GARAGE],
+	selectedSpaceId: STUDIO.id,
+	botsBySpaceId: { [STUDIO.id]: ROSTER, [GARAGE.id]: ROSTER },
+	onShare: sharedSpace,
 }
 
-export const TitleBarHostShare = meta.story({
-	globals: { theme: "dark" },
-	args: {
-		...STUDIO_ARGS,
-		spaceAccess: <ShareButton onShare={sharedSpace} />,
-	},
+const selectorIn = (canvasElement: HTMLElement) =>
+	slotIn(titleBarIn(canvasElement), "space-switcher")
+
+const hostDotIn = (canvasElement: HTMLElement) =>
+	slotsIn(selectorIn(canvasElement), "host-dot")[0]
+
+const titleBarPaint = (canvasElement: HTMLElement) =>
+	probedStyleOf(
+		"bg-(--shell-surface,var(--background))",
+		"backgroundColor",
+		titleBarIn(canvasElement),
+	)
+
+const presencePaint = (
+	canvasElement: HTMLElement,
+	tone: "online" | "offline",
+) =>
+	probedStyleOf(
+		tone === "online" ? "bg-presence-online" : "bg-presence-offline",
+		"backgroundColor",
+		titleBarIn(canvasElement),
+	)
+
+const expectOneSelector = async (canvasElement: HTMLElement) => {
+	const titleBar = titleBarIn(canvasElement)
+	await expect(
+		within(titleBar).getAllByRole("button", { name: /^Change space/ }),
+	).toHaveLength(1)
+	await expect(
+		within(titleBar).queryByRole("button", { name: "Share" }),
+	).toBeNull()
+	await expect(selectorIn(canvasElement).querySelectorAll("svg")).toHaveLength(
+		1,
+	)
+	await expect(within(titleBar).queryByText(/Connected$/)).toBeNull()
+}
+
+const expectDotOnSquare = async (canvasElement: HTMLElement) => {
+	const dot = hostDotIn(canvasElement)
+	const square = slotsIn(selectorIn(canvasElement), "space-dot")[0]
+	await expect(dot.parentElement).toBe(square)
+	const corner = square.getBoundingClientRect()
+	const box = dot.getBoundingClientRect()
+	await expect(box.width).toBe(7)
+	await expect(box.left + box.width / 2).toBeCloseTo(corner.right, 1)
+	await expect(box.top + box.height / 2).toBeCloseTo(corner.bottom, 1)
+	await expect(getComputedStyle(dot).boxShadow).toContain(
+		`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,
+	)
+	return getComputedStyle(dot)
+}
+
+const expectNoPill = async (canvasElement: HTMLElement) => {
+	await expect(slotsIn(titleBarIn(canvasElement), "host-pill")).toHaveLength(0)
+}
+
+const expectPillBeside = async (canvasElement: HTMLElement, label: string) => {
+	const titleBar = titleBarIn(canvasElement)
+	const pill = slotIn(titleBar, "host-pill")
+	await expect(pill).toHaveTextContent(new RegExp(`^${label}$`))
+	await expect(pill.previousElementSibling).toBe(selectorIn(canvasElement))
+	const selector = selectorIn(canvasElement).getBoundingClientRect()
+	const box = pill.getBoundingClientRect()
+	await expect(box.left - selector.right).toBe(TITLE_BAR_GAP)
+	const bar = titleBar.getBoundingClientRect()
+	await expect(box.top - bar.top).toBe(bar.bottom - box.bottom)
+	await expect(
+		within(titleBar).queryByRole("button", { name: label }),
+	).toBeNull()
+	return pill
+}
+
+export const A1LocalSpace = meta.story({
+	name: "A1 Local space",
+	args: TITLE_BAR_ARGS,
 	parameters: {
 		docs: {
 			description: {
-				story: `${TITLE_BAR_ARTBOARD} 5.1: the reader hosts the open space, so the title bar offers \`Share\` right after the switcher, 8px from it and centred in the 34px bar, outside the drag region while the bar around it still drags the window. Pick \`TitleBarGuestOnline\` for a joined space, \`WindowControlsReserved\` for a bar with nothing in that slot.`,
+				story: `${MOCKUP} A1: the reader's own space, kept on this Mac. Check the title bar holds one selector and nothing after it: the 10px square on a 3px radius without any state dot, the muted name, the chevron, no globe, no \`Share\` button and no pill. Pick \`A2SharedSpace\` once the space is shared.`,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
-		await expectRightAfterSwitcher(canvasElement)
-		await userEvent.click(canvas.getByRole("button", { name: "Share" }))
-		await expect(sharedSpace).toHaveBeenCalledOnce()
-		await expect(
-			canvas.queryByRole("button", { name: /connected$/i }),
-		).toBeNull()
-	},
-})
-
-export const TitleBarGuestOnline = meta.story({
-	globals: { theme: "dark" },
-	args: {
-		...STUDIO_ARGS,
-		spaceAccess: <HostPill isOnline />,
-	},
-	parameters: {
-		docs: {
-			description: {
-				story: `${TITLE_BAR_ARTBOARD} 5.6: the reader joined the open space and its host is connected, so the pill reading \`Connected\` takes the slot \`Share\` holds for a host. Check it sits 8px after the switcher, centred, outside the drag region, and that no \`Share\` is offered. Pick \`TitleBarGuestOffline\` for the host that stopped answering.`,
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		await expectRightAfterSwitcher(canvasElement)
-		await expect(canvas.getByText("Connected")).toBeVisible()
-		await expect(canvas.queryByRole("button", { name: "Connected" })).toBeNull()
-		await expect(canvas.queryByRole("button", { name: "Share" })).toBeNull()
-	},
-})
-
-export const TitleBarGuestShare = meta.story({
-	globals: { theme: "dark" },
-	args: {
-		...STUDIO_ARGS,
-		spaceAccess: (
-			<>
-				<HostPill isOnline />
-				<ShareButton onShare={sharedSpace} />
-			</>
-		),
-	},
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"A guest who may share the joined space: the pill reading `Connected` and `Share` side by side in the slot after the switcher. No artboard draws this pair, so the gap between them is the title bar's own gap between its children. Check both are present, that the pill keeps its place 8px after the switcher, and that `Share` sits one title bar gap after the pill. Pick `TitleBarGuestOnline` for the pill alone.",
-			},
-		},
-	},
-	play: async ({ canvas, canvasElement }) => {
-		await expectRightAfterSwitcher(canvasElement)
-		const pill = slotIn(spaceAccessIn(canvasElement), "host-pill")
-		const share = canvas.getByRole("button", { name: "Share" })
-		await expect(pill).toHaveTextContent("Connected")
-		await expect(share).toBeVisible()
-
-		const titleBarGap = Number.parseFloat(
-			getComputedStyle(titleBarIn(canvasElement)).columnGap,
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
+			"Change space, Studio open",
 		)
-		await expect(titleBarGap).toBe(TITLE_BAR_GAP)
-		await expect(
-			share.getBoundingClientRect().left - pill.getBoundingClientRect().right,
-		).toBe(titleBarGap)
+		await expect(hostDotIn(canvasElement)).toBeUndefined()
+		await expectNoPill(canvasElement)
 	},
 })
 
-export const TitleBarGuestOffline = meta.story({
-	globals: { theme: "dark" },
+export const A2SharedSpace = meta.story({
+	name: "A2 Shared space",
+	args: { ...TITLE_BAR_ARGS, hostBySpaceId: { [STUDIO.id]: "shared" } },
+	parameters: {
+		docs: {
+			description: {
+				story: `${MOCKUP} A2: the reader shares their own space from this Mac. Check the 7px online dot sits centred on the square's bottom end corner inside a 2px ring of the title bar background, that the selector names the space as shared, and that no pill follows it. Pick \`A3JoinedSpace\` for the same dot on a joined space.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
+			"Change space, Studio open, Shared",
+		)
+		const dot = await expectDotOnSquare(canvasElement)
+		await expect(dot.backgroundColor).toBe(
+			presencePaint(canvasElement, "online"),
+		)
+		await expectNoPill(canvasElement)
+	},
+})
+
+export const A3JoinedSpace = meta.story({
+	name: "A3 Joined space",
 	args: {
-		...STUDIO_ARGS,
-		spaceAccess: <HostPill isOnline={false} />,
+		...TITLE_BAR_ARGS,
+		selectedSpaceId: GARAGE.id,
+		hostBySpaceId: { [GARAGE.id]: "up" },
 	},
 	parameters: {
 		docs: {
 			description: {
-				story: `${TITLE_BAR_ARTBOARD} 5.7: the host's Mac is not reachable, so the pill mutes its dot and reads \`Not connected\`. Check it keeps the slot and the gap of \`TitleBarGuestOnline\`. Pick \`TitleBarGuestOnline\` for the reachable host.`,
+				story: `${MOCKUP} A3: the reader joined the open space and its host answers. Check the untinted square carries the same online dot as \`A2SharedSpace\`, that the selector names the host as online, and that no pill and no \`Connected\` appear. Pick \`A4Connecting\` for a host still being reached.`,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		await expectRightAfterSwitcher(canvasElement)
-		await expect(canvas.getByText("Not connected")).toBeVisible()
-		await expect(
-			canvas.queryByRole("button", { name: "Not connected" }),
-		).toBeNull()
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
+			"Change space, Garage open, Online",
+		)
+		const dot = await expectDotOnSquare(canvasElement)
+		await expect(dot.backgroundColor).toBe(
+			presencePaint(canvasElement, "online"),
+		)
+		await expectNoPill(canvasElement)
+	},
+})
+
+export const A4Connecting = meta.story({
+	name: "A4 Connecting",
+	args: {
+		...TITLE_BAR_ARGS,
+		selectedSpaceId: GARAGE.id,
+		hostBySpaceId: { [GARAGE.id]: "connecting" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `${MOCKUP} A4: the reader's Mac is still reaching the host. Check the dot on the square is hollow, a 1.5px muted presence ring filled with the title bar background, and that the pill reading \`Connecting…\` sits 8px after the selector, centred in the bar. Pick \`A5NotConnected\` for the host that does not answer.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
+			"Change space, Garage open, Connecting…",
+		)
+		const dot = await expectDotOnSquare(canvasElement)
+		await expect(dot.boxShadow).toContain(
+			`${presencePaint(canvasElement, "offline")} 0px 0px 0px 1.5px inset`,
+		)
+		await expect(dot.backgroundColor).toBe(titleBarPaint(canvasElement))
+		const pill = await expectPillBeside(canvasElement, "Connecting…")
+		await expect(slotIn(pill, "host-dot")).toHaveAttribute(
+			"data-host",
+			"connecting",
+		)
+	},
+})
+
+export const A5NotConnected = meta.story({
+	name: "A5 Not connected",
+	args: {
+		...TITLE_BAR_ARGS,
+		selectedSpaceId: GARAGE.id,
+		hostBySpaceId: { [GARAGE.id]: "down" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `${MOCKUP} A5: the host is down, or refused the reader. Check the dot on the square is filled with the muted presence colour and that the pill reading \`Not connected\` sits 8px after the selector, centred in the bar. Pick \`A4Connecting\` for the host still being reached.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		await expect(selectorIn(canvasElement)).toHaveAccessibleName(
+			"Change space, Garage open, Not connected",
+		)
+		const dot = await expectDotOnSquare(canvasElement)
+		await expect(dot.backgroundColor).toBe(
+			presencePaint(canvasElement, "offline"),
+		)
+		const pill = await expectPillBeside(canvasElement, "Not connected")
+		await expect(slotIn(pill, "host-dot")).toHaveAttribute("data-host", "down")
+	},
+})
+
+export const A6InvitationWaiting = meta.story({
+	name: "A6 Invitation waiting",
+	args: {
+		...TITLE_BAR_ARGS,
+		invitations: [
+			{
+				id: "atelier",
+				name: "Atelier",
+				colour: "cyan",
+				hostEmail: "lea@example.com",
+				state: "waiting",
+			},
+		],
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `${MOCKUP} A6: an invitation waits. Check the 7px primary dot sits 1px from the selector's end and 4px from its top inside a 2px ring of the title bar background, that the selector counts the invitation in its name, and that the square carries no state dot and no pill follows. Pick \`A1LocalSpace\` for the resting bar.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectOneSelector(canvasElement)
+		const selector = selectorIn(canvasElement)
+		await expect(selector).toHaveAccessibleName(
+			"Change space, Studio open, 1 invitation",
+		)
+		const invitation = slotIn(selector, "space-switcher-invitation")
+		const style = getComputedStyle(invitation)
+		await expect(style.insetInlineEnd).toBe("1px")
+		await expect(style.top).toBe("4px")
+		await expect(invitation.getBoundingClientRect().width).toBe(7)
+		await expect(style.backgroundColor).toBe(
+			probedStyleOf("bg-primary", "backgroundColor", titleBarIn(canvasElement)),
+		)
+		await expect(style.boxShadow).toContain(
+			`${titleBarPaint(canvasElement)} 0px 0px 0px 2px`,
+		)
+		await expect(hostDotIn(canvasElement)).toBeUndefined()
+		await expectNoPill(canvasElement)
+	},
+})
+
+export const A7MenuOpen = meta.story({
+	name: "A7 Menu open",
+	args: {
+		...TITLE_BAR_ARGS,
+		hostBySpaceId: { [STUDIO.id]: "shared", [GARAGE.id]: "down" },
+	},
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story: `${MOCKUP} A7: the selector's menu is open. Check the selector takes the sidebar accent with its name and chevron in the foreground, that \`Share\` with its users icon comes first then a rule, that each space row carries its square and that space's state dot, and that no connection line, host name or globe appears. \`Share\` only reports: the members panel belongs to the host. Pick \`A2SharedSpace\` for the closed selector.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		sharedSpace.mockClear()
+		const selector = selectorIn(canvasElement)
+		await expect(hostDotIn(canvasElement)).toHaveAttribute(
+			"data-host",
+			"shared",
+		)
+		await expectNoPill(canvasElement)
+		await userEvent.click(selector)
+		const menu = await settled(await screen.findByRole("menu"))
+		await expect(selector).toHaveAttribute("aria-expanded", "true")
+		await waitFor(async () => {
+			const style = getComputedStyle(selector)
+			await expect(style.backgroundColor).toBe(
+				probedStyleOf("bg-sidebar-accent", "backgroundColor", selector),
+			)
+			await expect(style.color).toBe(
+				probedStyleOf("text-foreground", "color", selector),
+			)
+		}, FRAME_POLL)
+
+		const share = within(menu).getByRole("menuitem", { name: "Share" })
+		await expect(menu.firstElementChild).toBe(share)
+		await expect(share.querySelector("svg")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+		await expect(share.nextElementSibling).toHaveAttribute("role", "separator")
+		for (const [name, host] of [
+			["Studio", "shared"],
+			["Garage", "down"],
+		]) {
+			const row = within(menu).getByRole("menuitemradio", {
+				name: new RegExp(`^${name}`),
+			})
+			await expect(slotIn(row, "host-dot")).toHaveAttribute("data-host", host)
+			await expect(slotIn(row, "host-dot").parentElement).toHaveAttribute(
+				"data-slot",
+				"space-dot",
+			)
+		}
+		await expect(within(menu).queryByText(/Connected|@/)).toBeNull()
+
+		await userEvent.click(share)
+		await expect(sharedSpace).toHaveBeenCalledOnce()
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 
@@ -4020,55 +4209,51 @@ const LONG_SPACE: Space = {
 
 const NARROW_WINDOW = 320
 
-export const TitleBarGuestNarrowWindow = meta.story({
-	globals: { theme: "dark" },
+export const A8LongNameAtMinimumWidth = meta.story({
+	name: "A8 Long name at minimum width",
 	args: {
-		...STUDIO_ARGS,
+		...TITLE_BAR_ARGS,
 		spaces: [LONG_SPACE],
 		selectedSpaceId: LONG_SPACE.id,
 		botsBySpaceId: { [LONG_SPACE.id]: ROSTER },
-		spaceAccess: <HostPill isOnline={false} />,
-		windowControls: (
-			<WindowControls
-				maximized={false}
-				onClose={fn()}
-				onMinimize={fn()}
-				onToggleMaximize={fn()}
-			/>
-		),
+		hostBySpaceId: { [LONG_SPACE.id]: "shared" },
+		insetWindowControls: true,
 	},
 	render: (args) => (
-		<div style={{ width: NARROW_WINDOW }}>{renderShell(args)}</div>
+		<div style={{ width: NARROW_WINDOW }}>
+			<WorkspaceShell
+				sidebar={<AppSidebar {...args} />}
+				width={SIDEBAR_MIN_WIDTH}
+			>
+				{null}
+			</WorkspaceShell>
+		</div>
 	),
 	parameters: {
 		docs: {
 			description: {
-				story: `A guest in a 320px window with caption buttons, on a space whose name its owner chose and the reader cannot shorten. Check the space name clips to one line with an ellipsis, that \`Not connected\` stays whole, and that the caption buttons keep their full width flush with the trailing edge rather than being pushed out. Pick \`TitleBarGuestOffline\` for a window that fits.`,
+				story: `${MOCKUP} A8: a space name its owner chose and the reader cannot shorten, with the sidebar at its minimum width in a 320px window. Check the name clips to one line with an ellipsis while the square, its state dot and the chevron stay whole inside the selector. Pick \`A2SharedSpace\` for a name that fits.`,
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement }) => {
-		const titleBar = titleBarIn(canvasElement)
-		const bar = titleBar.getBoundingClientRect()
-		await expect(bar.width).toBe(NARROW_WINDOW)
-		const name = slotIn(titleBar, "space-switcher-name")
+	play: async ({ canvasElement }) => {
+		const selector = selectorIn(canvasElement)
+		const frame = selector.getBoundingClientRect()
+		await expect(titleBarIn(canvasElement).getBoundingClientRect().width).toBe(
+			NARROW_WINDOW,
+		)
+		const name = slotIn(selector, "space-switcher-name")
 		await expect(getComputedStyle(name).textOverflow).toBe("ellipsis")
 		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
-		const pill = slotIn(titleBar, "host-pill")
-		await expect(
-			canvas.queryByRole("button", { name: "Not connected" }),
-		).toBeNull()
-		const label = pill.lastElementChild as HTMLElement
-		await expect(label).toHaveTextContent(/^Not connected$/)
-		await expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth)
-		const controls = slotIn(
-			titleBar,
-			"app-title-bar-window-controls",
-		).getBoundingClientRect()
-		await expect(controls.right).toBe(bar.right)
-		await expect(pill.getBoundingClientRect().right).toBeLessThanOrEqual(
-			controls.left,
-		)
+		await expect(name.getBoundingClientRect().height).toBe(16)
+		const chevron = selector.querySelector("svg")
+		if (!chevron) throw new Error("The selector draws no chevron")
+		const chevronBox = chevron.getBoundingClientRect()
+		await expect(chevronBox.width).toBe(12)
+		await expect(chevronBox.right).toBeLessThanOrEqual(frame.right)
+		await expectDotOnSquare(canvasElement)
+		await expect(hostDotIn(canvasElement).checkVisibility()).toBe(true)
+		await expectNoPill(canvasElement)
 	},
 })
 
