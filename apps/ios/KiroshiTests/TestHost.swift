@@ -108,6 +108,13 @@ final class TestHost: Sendable {
         switch call.command {
         case "conversation_list":
             return ok(call, "[\(groups.map(\.json).joined(separator: ","))]")
+        case "conversation_page":
+            guard let args = try? call.args(as: ListPageArgs.self) else { return nil }
+            let rows = groups.map { group in
+                pageRow(group, last: messages[group.id]?.last.flatMap(transcriptMessage))
+            }
+            return ok(
+                call, FixtureHost.conversationPage(rows, cursor: args.cursor, limit: args.limit))
         case "conversation_bots":
             let bots = companions.map { #"{"id":"\#($0.id)","name":"\#($0.name)"}"# }
             return ok(call, "[\(bots.joined(separator: ","))]")
@@ -118,14 +125,39 @@ final class TestHost: Sendable {
             return ok(call, #"{"id":"chat-\#(args.botId)","createdAt":0,"updatedAt":0}"#)
         case "conversation_message_page":
             guard let args = try? call.args(as: PageArgs.self) else { return nil }
-            let page = (messages[args.conversationId] ?? []).suffix(args.limit)
+            let earlier = (messages[args.conversationId] ?? []).filter { message in
+                args.beforeSeq.map { (transcriptMessage(message)?.seq ?? 0) < $0 } ?? true
+            }
             return ok(
                 call,
-                #"{"conversationId":"\#(args.conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":false}"#
-            )
+                messagePage(
+                    args.conversationId, Array(earlier.suffix(args.limit)),
+                    hasMore: earlier.count > args.limit))
         default:
             return nil
         }
+    }
+
+    static func messagePage(_ conversationId: String, _ messages: [String], hasMore: Bool)
+        -> String
+    {
+        #"{"conversationId":"\#(conversationId)","messages":[\#(messages.joined(separator: ","))],"arrivals":[],"hasMore":\#(hasMore)}"#
+    }
+
+    static func pageRow(_ group: FixtureHost.Group, last: TranscriptMessage?)
+        -> FixtureHost.PageRow
+    {
+        FixtureHost.PageRow(
+            group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
+            lastWord: last.map {
+                FixtureHost.lastWordJSON(
+                    text: $0.content, at: $0.createdAt,
+                    by: $0.role == .user ? nil : $0.authorBotId)
+            })
+    }
+
+    static func transcriptMessage(_ json: String) -> TranscriptMessage? {
+        try? JSONDecoder().decode(TranscriptMessage.self, from: Data(json.utf8))
     }
 
     private struct Head: Decodable {
@@ -140,6 +172,13 @@ final class TestHost: Sendable {
 
     struct PageArgs: Decodable {
         let conversationId: String
+        let beforeSeq: Int?
+        let limit: Int
+    }
+
+    struct ListPageArgs: Decodable {
+        let spaceId: String
+        let cursor: String?
         let limit: Int
     }
 }

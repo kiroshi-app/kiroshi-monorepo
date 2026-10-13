@@ -17,9 +17,11 @@ final class ConversationsStore {
     }
 
     static let onlineDeadline = Duration.seconds(30)
+    static let prefetchDistance = 5
 
     private(set) var phase = Phase.loading
     private(set) var isOnline = false
+    private(set) var nextPage = NextPage.complete
     private var listed: [ConversationSummary] = []
     private(set) var companions: [Companion] = []
     private(set) var creation = Creation.idle
@@ -44,6 +46,14 @@ final class ConversationsStore {
     @ObservationIgnored private var opening: Companion.ID?
     @ObservationIgnored private var loading: Task<Void, Never>?
     @ObservationIgnored private var creating: Task<Void, Never>?
+    @ObservationIgnored private var paging: Task<Void, Never>?
+    @ObservationIgnored private var merging: Task<Void, Never>?
+    @ObservationIgnored private var rows: [ConversationSummary] = []
+    @ObservationIgnored private var pinnedIds: [String] = []
+    @ObservationIgnored private var nextCursor: String?
+    @ObservationIgnored private var horizon: Date?
+    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var readsWholeList = false
     @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
@@ -84,7 +94,13 @@ final class ConversationsStore {
             instanceId = connection.instanceId
             spaceId = nil
             phase = .loading
+            rows = []
             listed = []
+            pinnedIds = []
+            nextCursor = nil
+            horizon = nil
+            nextPage = .complete
+            readsWholeList = false
             companions = []
             opened = nil
             stopPicking()
@@ -107,8 +123,12 @@ final class ConversationsStore {
         }
         guard isFollowing(connection) else { return }
         isOnline = false
-        loading?.cancel()
+        for task in [loading, paging, merging] {
+            task?.cancel()
+        }
         loading = nil
+        paging = nil
+        merging = nil
     }
 
     @discardableResult
@@ -119,6 +139,14 @@ final class ConversationsStore {
             phase = .loading
         }
         loading?.cancel()
+        paging?.cancel()
+        merging?.cancel()
+        paging = nil
+        merging = nil
+        generation += 1
+        if nextPage != .complete {
+            nextPage = .loading
+        }
         let task = Task { await load(spaceId, through: relay) }
         loading = task
         return task
@@ -126,6 +154,24 @@ final class ConversationsStore {
 
     func refresh() async {
         await reload()?.value
+    }
+
+    func rowAppeared(_ id: ConversationSummary.ID) {
+        guard let index = listed.firstIndex(where: { $0.id == id }),
+            index >= listed.count - Self.prefetchDistance
+        else { return }
+        loadMore()
+    }
+
+    func loadMore() {
+        guard nextPage == .available || nextPage == .failed, let cursor = nextCursor,
+            let spaceId, let relay
+        else { return }
+        nextPage = .loading
+        let generation = generation
+        paging = Task {
+            await readPage(after: cursor, in: spaceId, through: relay, generation: generation)
+        }
     }
 
     private func isFollowing(_ connection: RelayConnection) -> Bool {
@@ -195,14 +241,15 @@ final class ConversationsStore {
     }
 
     private func admit(_ group: GroupConversation) {
-        guard phase == .loaded, !listed.contains(where: { $0.id == group.id }) else { return }
-        publish(listed + [summary(of: group, lastMessage: nil)])
+        guard phase == .loaded, !rows.contains(where: { $0.id == group.id }) else { return }
+        publish(rows + [summary(of: group, lastMessage: nil)])
     }
 
     private func apply(_ event: ConversationEvent) {
         switch event {
         case .messageStored(let message):
-            update(message.conversationId) { $0.lastMessage = MessagePreview(message) }
+            guard update(message.conversationId, { $0.lastMessage = MessagePreview(message) })
+            else { return mergeFirstPage() }
         case .agent(let agent):
             guard let scope = agent.scope, case .messageCompleted(let message) = agent.change
             else { return }
@@ -214,23 +261,27 @@ final class ConversationsStore {
         case .groupCreated(let group):
             admit(group)
         case .groupUpdated(let group):
-            guard let index = listed.firstIndex(where: { $0.subject.isGroup(group.id) })
+            guard let index = rows.firstIndex(where: { $0.subject.isGroup(group.id) })
             else { return }
-            var changed = listed
+            var changed = rows
             changed[index].subject = .group(group)
             publish(changed)
         case .groupDeleted(let id):
-            guard listed.contains(where: { $0.subject.isGroup(id) }) else { return }
-            publish(listed.filter { !$0.subject.isGroup(id) })
+            guard rows.contains(where: { $0.subject.isGroup(id) }) else { return }
+            publish(rows.filter { !$0.subject.isGroup(id) })
         }
     }
 
-    private func update(_ conversationId: String, _ change: (inout ConversationSummary) -> Void) {
-        guard let index = listed.firstIndex(where: { $0.conversationId == conversationId })
-        else { return }
-        var changed = listed
+    @discardableResult
+    private func update(_ conversationId: String, _ change: (inout ConversationSummary) -> Void)
+        -> Bool
+    {
+        guard let index = rows.firstIndex(where: { $0.conversationId == conversationId })
+        else { return false }
+        var changed = rows
         change(&changed[index])
         publish(changed)
+        return true
     }
 
     private func summary(of group: GroupConversation, lastMessage: MessagePreview?)
@@ -241,12 +292,14 @@ final class ConversationsStore {
     }
 
     private func load(_ spaceId: String, through relay: ConversationRelay) async {
+        let generation = generation
         do {
             async let listedCompanions = relay.companions(in: spaceId)
-            async let groups = relay.groups(in: spaceId)
+            let page = try await firstPage(in: spaceId, through: relay)
             let companions = try await listedCompanions
+            let groups = page == nil ? try await relay.groups(in: spaceId) : []
             let subjects =
-                try await groups.map(ConversationSubject.group)
+                groups.map(ConversationSubject.group)
                 + companions.map(ConversationSubject.companion)
             let loaded = try await withThrowingTaskGroup(of: ConversationSummary.self) { tasks in
                 for subject in subjects {
@@ -260,21 +313,95 @@ final class ConversationsStore {
                 }
                 return loaded
             }
-            guard !Task.isCancelled else { return }
-            publish(subjects.compactMap { loaded[$0.id] })
+            guard !Task.isCancelled, generation == self.generation else { return }
+            pinnedIds = page?.pinned.map(\.group.id) ?? []
+            read(page)
+            publish(Self.summaries(of: page) + subjects.compactMap { loaded[$0.id] })
             self.companions = companions
             phase = .loaded
-            if let opening, let subject = subjects.first(where: { $0.id == opening }) {
+            if let opening, let subject = rows.first(where: { $0.id == opening })?.subject {
                 self.opening = nil
                 opened = subject
             }
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled, await relay.connection.isRunning, !Task.isCancelled,
-                phase != .loaded
+            guard !Task.isCancelled, generation == self.generation else { return }
+            nextPage = nextCursor == nil ? .complete : .available
+            guard await relay.connection.isRunning, !Task.isCancelled,
+                generation == self.generation, phase != .loaded
             else { return }
             phase = .failed
+        }
+    }
+
+    private func firstPage(in spaceId: String, through relay: ConversationRelay) async throws
+        -> ConversationPage?
+    {
+        guard !readsWholeList else { return nil }
+        do {
+            return try await relay.page(in: spaceId, after: nil)
+        } catch ConversationCallError.unknownToTheHost {
+            readsWholeList = true
+            return nil
+        }
+    }
+
+    private func readPage(
+        after cursor: String, in spaceId: String, through relay: ConversationRelay,
+        generation: Int
+    ) async {
+        do {
+            let page = try await relay.page(in: spaceId, after: cursor)
+            guard !Task.isCancelled, generation == self.generation else { return }
+            paging = nil
+            read(page)
+            let known = Set(rows.map(\.id))
+            publish(rows + Self.summaries(of: page).filter { !known.contains($0.id) })
+        } catch {
+            guard !Task.isCancelled, generation == self.generation else { return }
+            paging = nil
+            if error is CancellationError {
+                nextPage = .available
+            } else if (error as? ConversationCallError)?.isUnreadableCursor == true {
+                nextCursor = nil
+                reload()
+            } else {
+                nextPage = .failed
+            }
+        }
+    }
+
+    private func mergeFirstPage() {
+        guard phase == .loaded, nextPage != .complete, merging == nil, let spaceId, let relay
+        else { return }
+        let generation = generation
+        merging = Task {
+            let page = try? await relay.page(in: spaceId, after: nil)
+            guard !Task.isCancelled, generation == self.generation else { return }
+            merging = nil
+            guard let page else { return }
+            pinnedIds = page.pinned.map(\.group.id)
+            let known = Set(rows.map(\.id))
+            publish(rows + Self.summaries(of: page).filter { !known.contains($0.id) })
+        }
+    }
+
+    private func read(_ page: ConversationPage?) {
+        nextCursor = page?.nextCursor
+        horizon =
+            nextCursor == nil
+            ? nil : page?.conversations.last.map { Date(milliseconds: $0.lastActivityAt) }
+        nextPage = nextCursor == nil ? .complete : .available
+    }
+
+    private static func summaries(of page: ConversationPage?) -> [ConversationSummary] {
+        guard let page else { return [] }
+        return (page.pinned + page.conversations).map { row in
+            ConversationSummary(
+                subject: .group(row.group), conversationId: row.group.id,
+                lastMessage: row.lastWord.map(MessagePreview.init),
+                activeAt: Date(milliseconds: row.lastActivityAt))
         }
     }
 
@@ -305,7 +432,7 @@ final class ConversationsStore {
 
     private func publish(_ changed: [ConversationSummary]) {
         let time = ConversationTime(now: now(), calendar: calendar)
-        listed = Self.ordered(changed).map { summary in
+        rows = changed.map { summary in
             var summary = summary
             summary.timeLabel = summary.lastMessage.map { time.listLabel(for: $0.sentAt) }
             switch summary.subject {
@@ -316,6 +443,14 @@ final class ConversationsStore {
             }
             return summary
         }
+        let pinned = pinnedIds.compactMap { id in rows.first { $0.id == id } }
+        let unpinned = rows.filter { !pinnedIds.contains($0.id) && isWithinReadPages($0) }
+        listed = pinned + Self.ordered(unpinned)
+    }
+
+    private func isWithinReadPages(_ summary: ConversationSummary) -> Bool {
+        guard case .companion = summary.subject, let horizon else { return true }
+        return summary.lastActivity >= horizon
     }
 
     private static func ordered(_ summaries: [ConversationSummary]) -> [ConversationSummary] {

@@ -20,6 +20,41 @@
             UserDefaults.standard.bool(forKey: "history")
         }
 
+        static var isPaged: Bool {
+            UserDefaults.standard.bool(forKey: "paged")
+        }
+
+        nonisolated static var laterPageDelay: Duration {
+            let seconds = UserDefaults.standard.double(forKey: "pageDelay")
+            return .milliseconds(Int((seconds > 0 ? seconds : 2.5) * 1000))
+        }
+
+        static let topics: [FixtureHost.Group] = (1...40).map { index in
+            FixtureHost.Group(
+                id: "group-topic-\(index)", title: "Topic \(index)", members: [mira, pico],
+                createdAt: 0)
+        }
+
+        static let topicMessages: [String: [FixtureHost.Message]] = Dictionary(
+            uniqueKeysWithValues: topics.enumerated().map { index, topic in
+                (
+                    topic.id,
+                    [
+                        .init(
+                            id: "m-\(topic.id)", isYours: false,
+                            content: "Notes for \(topic.title.lowercased()) are in.",
+                            daysAgo: 10 + index, hour: 11, minute: 0, author: mira.id)
+                    ]
+                )
+            })
+
+        static let earlierNotes: [FixtureHost.Message] = (1...110).map { index in
+            FixtureHost.Message(
+                id: "earlier-\(index)", isYours: index.isMultiple(of: 2),
+                content: "Earlier note \(index).", daysAgo: 2, hour: 6 + index / 20,
+                minute: (index % 20) * 3)
+        }
+
         static var draft: String {
             UserDefaults.standard.string(forKey: "draft")
                 ?? (SignInFixture.opened == .groupMention ? "@" : "")
@@ -297,11 +332,18 @@
                 : FixtureHost.Script(
                     companions: companions, groups: [releaseCrew, designReview],
                     messages: listMessages.merging(groupMessages) { listed, _ in listed })
+            if isPaged {
+                script.laterPagesAnswerAfter = laterPageDelay
+                script.groups += topics
+                script.messages.merge(topicMessages) { listed, _ in listed }
+            }
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
             case .thread, .swipedThread:
-                script.messages[juniper.id] = (hasHistory ? releaseHistory : []) + releaseNotes
+                script.messages[juniper.id] =
+                    (isPaged ? earlierNotes : []) + (hasHistory ? releaseHistory : [])
+                    + releaseNotes
             case .twoAsks:
                 script.messages[juniper.id] = releaseNotes + twoAsks
             case .threadHostOffline:
@@ -403,15 +445,23 @@
             let minute: Int
             var author: Companion.ID?
 
-            func json(in conversationId: String, seq: Int) -> String {
+            var createdAt: Int {
                 let calendar = Calendar.current
                 let day = calendar.date(
                     byAdding: .day, value: -daysAgo, to: calendar.startOfDay(for: .now))!
-                let at = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day)!
-                return FixtureHost.messageJSON(
+                return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day)!
+                    .milliseconds
+            }
+
+            func json(in conversationId: String, seq: Int) -> String {
+                FixtureHost.messageJSON(
                     id: id, conversationId: conversationId, seq: seq,
                     role: isYours ? "user" : "assistant", content: content,
-                    createdAt: at.milliseconds, authorBotId: author)
+                    createdAt: createdAt, authorBotId: author)
+            }
+
+            var lastWordJSON: String {
+                FixtureHost.lastWordJSON(text: content, at: createdAt, by: isYours ? nil : author)
             }
         }
 
@@ -420,13 +470,20 @@
             let title: String
             let members: [Companion]
             let createdAt: Int
+            var pinPosition: Int?
 
             var conversation: GroupConversation {
                 try! JSONDecoder().decode(GroupConversation.self, from: Data(json.utf8))
             }
 
             func renamed(_ title: String) -> Group {
-                Group(id: id, title: title, members: members, createdAt: createdAt)
+                Group(
+                    id: id, title: title, members: members, createdAt: createdAt,
+                    pinPosition: pinPosition)
+            }
+
+            func pageJSON(lastActivityAt: Int, lastWord: String?) -> String {
+                "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null")}"
             }
 
             var json: String {
@@ -438,7 +495,7 @@
                         #"{"botId":"\#(companion.id)","role":"\#(role)","joinedAt":\#(index),"leftAt":null,"name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path),"isDeleted":false}"#
                 }
                 return
-                    #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":null,"title":"\#(title)","instructions":"","createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
+                    #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":\#(pinPosition.map(String.init) ?? "null"),"title":"\#(title)","instructions":"","createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
             }
         }
 
@@ -458,6 +515,7 @@
             var threadAnswersAfter = Duration.zero
             var replyParagraphs: [String] = []
             var wordsPerDelta = 1
+            var laterPagesAnswerAfter = Duration.zero
             var missionFeed = "[]"
         }
 
@@ -487,6 +545,41 @@
             let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
             return
                 #"{"id":"\#(companion.id)","name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
+        }
+
+        static func lastWordJSON(text: String, at: Int, by author: Companion.ID?) -> String {
+            let encoded = String(decoding: try! JSONEncoder().encode(text), as: UTF8.self)
+            let author = author.map { #""\#($0)""# } ?? "null"
+            return #"{"text":\#(encoded),"at":\#(at),"authorBotId":\#(author)}"#
+        }
+
+        struct PageRow {
+            let group: Group
+            let lastActivityAt: Int
+            let lastWord: String?
+        }
+
+        static func conversationPage(_ rows: [PageRow], cursor: String?, limit: Int) -> String {
+            let offset = cursor.flatMap(Int.init) ?? 0
+            let pinned =
+                offset == 0
+                ? rows.filter { $0.group.pinPosition != nil }
+                    .sorted { $0.group.pinPosition! < $1.group.pinPosition! } : []
+            let paged = rows.filter { $0.group.pinPosition == nil }
+                .sorted {
+                    $0.lastActivityAt == $1.lastActivityAt
+                        ? $0.group.id > $1.group.id : $0.lastActivityAt > $1.lastActivityAt
+                }
+            let page = paged.dropFirst(offset).prefix(limit)
+            let next = offset + limit < paged.count ? #""\#(offset + limit)""# : "null"
+            let json = { (rows: [PageRow]) in
+                rows.map {
+                    $0.group.pageJSON(lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord)
+                }
+                .joined(separator: ",")
+            }
+            return
+                #"{"pinned":[\#(json(pinned))],"conversations":[\#(json(Array(page)))],"nextCursor":\#(next)}"#
         }
 
         static func chat(of companionId: Companion.ID) -> String {
@@ -631,7 +724,7 @@
             let leaves =
                 script.hostLeavesAfterThread
                 ? args["limit"] as? Int != 1
-                : await pages.next() == script.companions.count + script.groups.count
+                : await pages.next() == script.companions.count
             guard leaves else { return }
             push(.close(RelayClosure.hostOffline, after: leaving))
         }
@@ -696,6 +789,22 @@
                 let groups = script.groups + created.withLock { $0 }
                 reply(id, "[\(groups.map(\.json).joined(separator: ","))]")
                 listed.yield()
+            case "conversation_page":
+                let rows = (script.groups + created.withLock { $0 }).map { group in
+                    let last = script.messages[group.id]?.last
+                    return FixtureHost.PageRow(
+                        group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
+                        lastWord: last?.lastWordJSON)
+                }
+                let cursor = args["cursor"] as? String
+                reply(
+                    id,
+                    FixtureHost.conversationPage(
+                        rows, cursor: cursor, limit: args["limit"] as? Int ?? 30),
+                    after: cursor == nil ? .zero : script.laterPagesAnswerAfter)
+                if cursor == nil {
+                    listed.yield()
+                }
             case "conversation_main_chat":
                 let companionId = args["botId"] as? String ?? ""
                 reply(
@@ -704,7 +813,7 @@
             case "conversation_message_page":
                 let conversationId = args["conversationId"] as? String ?? ""
                 let limit = args["limit"] as? Int ?? 50
-                answerPage(id, conversationId, limit)
+                answerPage(id, conversationId, before: args["beforeSeq"] as? Int, limit)
             case "conversation_send_turn":
                 guard let message = args["message"] as? [String: Any] else { return }
                 reply(id, "1")
@@ -732,6 +841,8 @@
                 reply(id, "[]")
             case "mission_space_feed":
                 reply(id, script.missionFeed)
+            case "mission_space_page":
+                reply(id, #"{"missions":\#(script.missionFeed),"nextCursor":null}"#)
             case "conversation_create":
                 let companionIds = args["botIds"] as? [String] ?? []
                 let group = created.withLock { groups in
@@ -788,15 +899,18 @@
             }
         }
 
-        private func answerPage(_ id: Int, _ conversationId: String, _ limit: Int) {
+        private func answerPage(_ id: Int, _ conversationId: String, before: Int?, _ limit: Int) {
             let companionId = conversationId.replacingOccurrences(of: "chat-", with: "")
             let messages = script.messages[companionId] ?? []
-            let page = messages.enumerated().map { $1.json(in: conversationId, seq: $0 + 1) }
-                .suffix(limit)
+            let earlier = messages.enumerated().map { $1.json(in: conversationId, seq: $0 + 1) }
+                .prefix((before ?? messages.count + 1) - 1)
+            let page = earlier.suffix(limit)
             reply(
                 id,
-                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":false}"#,
-                after: limit == 1 ? .zero : script.threadAnswersAfter
+                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":\#(earlier.count > limit)}"#,
+                after: limit == 1
+                    ? .zero
+                    : before == nil ? script.threadAnswersAfter : script.laterPagesAnswerAfter
             )
             if let working = script.workingGroup, working.id == conversationId {
                 for companionId in working.companions {

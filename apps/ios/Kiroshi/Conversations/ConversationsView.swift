@@ -110,15 +110,23 @@ struct ConversationsView: View {
                 Text("Add one to \(space.currentSpace?.name ?? "") on your Mac. It shows up here.")
             }
         case .loaded:
-            List(store.summaries) { summary in
-                Button {
-                    store.opened = summary.subject
-                } label: {
-                    ConversationRow(summary: summary)
+            List {
+                ForEach(store.summaries) { summary in
+                    Button {
+                        store.opened = summary.subject
+                    } label: {
+                        ConversationRow(summary: summary)
+                    }
+                    .listRowInsets(.vertical, 0)
+                    .listRowSeparator(.hidden, edges: .top)
+                    .listRowSeparatorTint(Color(.separator))
+                    .onAppear {
+                        store.rowAppeared(summary.id)
+                    }
                 }
-                .listRowInsets(.vertical, 0)
-                .listRowSeparator(.hidden, edges: .top)
-                .listRowSeparatorTint(Color(.separator))
+                NextPageRow(
+                    nextPage: store.nextPage, loadingLabel: "Loading more conversations",
+                    load: store.loadMore)
             }
             .listStyle(.plain)
             .refreshable {

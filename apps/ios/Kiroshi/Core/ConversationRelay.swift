@@ -1,9 +1,17 @@
 enum ConversationCallError: Error, Equatable {
     case refused(status: Int, kind: String?)
     case unreadable
+    case unknownToTheHost
+
+    var isUnreadableCursor: Bool {
+        guard case .refused(_, let kind) = self else { return false }
+        return kind == "unreadableCursor"
+    }
 }
 
 struct ConversationRelay: Sendable {
+    static let listPageSize = 30
+
     let connection: RelayConnection
 
     func companions(in spaceId: String) async throws -> [Companion] {
@@ -13,6 +21,11 @@ struct ConversationRelay: Sendable {
     func groups(in spaceId: String) async throws -> [GroupConversation] {
         try await ask(
             "conversation_list", SpaceArgs(spaceId: spaceId), as: [GroupConversation].self)
+    }
+
+    func page(in spaceId: String, after cursor: String?) async throws -> ConversationPage {
+        let args = ListPageArgs(spaceId: spaceId, cursor: cursor, limit: Self.listPageSize)
+        return try await ask("conversation_page", args, as: ConversationPage.self)
     }
 
     func createGroup(in spaceId: String, with companionIds: [Companion.ID]) async throws
@@ -28,9 +41,17 @@ struct ConversationRelay: Sendable {
     }
 
     func latestMessages(in conversationId: String, limit: Int) async throws -> [TranscriptMessage] {
-        let args = PageArgs(conversationId: conversationId, beforeSeq: nil, limit: limit)
+        try await messages(in: conversationId, before: nil, limit: limit).messages
+    }
+
+    func messages(in conversationId: String, before seq: Int?, limit: Int) async throws
+        -> TranscriptPage
+    {
+        let args = PageArgs(conversationId: conversationId, beforeSeq: seq, limit: limit)
         let page = try await ask("conversation_message_page", args, as: TranscriptPage.self)
-        return page.messages.sorted { $0.seq < $1.seq }
+        return TranscriptPage(
+            conversationId: page.conversationId,
+            messages: page.messages.sorted { $0.seq < $1.seq }, hasMore: page.hasMore)
     }
 
     func storeAttachments(_ attachments: ConversationAttachments) async throws -> [String] {
@@ -65,6 +86,7 @@ struct ConversationRelay: Sendable {
     }
 
     private static func refusal(of answer: RelayAnswer) -> ConversationCallError {
+        guard !answer.isUnknownToTheHost else { return .unknownToTheHost }
         let kind = (try? answer.body(as: StoreError.self))?.kind
         return .refused(status: answer.status, kind: kind)
     }
@@ -128,6 +150,25 @@ private struct PageArgs: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(conversationId, forKey: .conversationId)
         try container.encode(beforeSeq, forKey: .beforeSeq)
+        try container.encode(limit, forKey: .limit)
+    }
+}
+
+private struct ListPageArgs: Encodable {
+    enum CodingKeys: String, CodingKey {
+        case spaceId
+        case cursor
+        case limit
+    }
+
+    let spaceId: String
+    let cursor: String?
+    let limit: Int
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(spaceId, forKey: .spaceId)
+        try container.encode(cursor, forKey: .cursor)
         try container.encode(limit, forKey: .limit)
     }
 }
