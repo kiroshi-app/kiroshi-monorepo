@@ -11,6 +11,7 @@ type RelayFailure =
 	| "code-wrong"
 	| "code-expired"
 	| "code-too-many"
+	| "google-unavailable"
 	| "apple-unavailable"
 
 type CodeFailure = Extract<RelayFailure, `code-${string}`>
@@ -163,8 +164,10 @@ type SocialSignIn = {
 	errorCallbackURL: string
 }
 
-const isUnconfiguredApple = (provider: SocialProvider, error: unknown) =>
-	provider === "apple" && isRelayFailure(error, "unavailable")
+const UNCONFIGURED_PROVIDER_FAILURES: Record<SocialProvider, RelayFailure> = {
+	google: "google-unavailable",
+	apple: "apple-unavailable",
+}
 
 const requestSocialSignIn = async (request: SocialSignIn) => {
 	try {
@@ -172,11 +175,14 @@ const requestSocialSignIn = async (request: SocialSignIn) => {
 			path: "/api/auth/sign-in/social",
 			method: "POST",
 			body: request,
+			credentials: "include",
 		})
 		return stringField(answer, "url")
 	} catch (error) {
-		if (isUnconfiguredApple(request.provider, error)) {
-			throw new RelayError("apple-unavailable", { cause: error })
+		if (isRelayFailure(error, "unavailable")) {
+			throw new RelayError(UNCONFIGURED_PROVIDER_FAILURES[request.provider], {
+				cause: error,
+			})
 		}
 		throw error
 	}
@@ -187,7 +193,7 @@ const readSessionBearer = async () => {
 		path: "/api/auth/get-session",
 		credentials: "include",
 	})
-	return session === null ? null : stringField(session, "token")
+	return stringField(session, "token")
 }
 
 const isNamedIn = (me: unknown) => {

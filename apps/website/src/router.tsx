@@ -26,6 +26,7 @@ import {
 } from "./login-search"
 import {
 	clearBearer,
+	isRelayFailure,
 	RelayError,
 	readAccount,
 	readBearer,
@@ -75,9 +76,18 @@ const NO_SOCIAL_SESSION = "no-session"
 
 type LoginGuardContext = { search: LoginSearch }
 
+const readReturnedBearer = async () => {
+	try {
+		return await readSessionBearer()
+	} catch (error) {
+		if (!isRelayFailure(error, "unauthorized")) throw error
+		return null
+	}
+}
+
 const finishSocialSignIn = async ({ search }: LoginGuardContext) => {
 	if (search.via !== SOCIAL_RETURN) return
-	const bearer = await readSessionBearer()
+	const bearer = await readReturnedBearer()
 	if (bearer) saveBearer(bearer)
 	throw redirect({
 		to: "/login",

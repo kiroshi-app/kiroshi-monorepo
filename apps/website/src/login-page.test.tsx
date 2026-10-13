@@ -346,7 +346,7 @@ describe("the sign-in page", () => {
 		expect(screen.queryByRole("alert")).toBeNull()
 	})
 
-	it("shows a 404 on Google as a failure with no retry", async () => {
+	it("says Google isn't set up yet on a 404, with no retry", async () => {
 		routes[SOCIAL_SIGN_IN] = relayError(404, "Not Found")
 		await openLogin()
 
@@ -354,7 +354,8 @@ describe("the sign-in page", () => {
 			screen.getByRole("button", { name: LOGIN_COPY.continueWithGoogle }),
 		)
 
-		await screen.findByText(LOGIN_COPY.failures.unavailable)
+		await screen.findByText(LOGIN_COPY.failures["google-unavailable"])
+		expect(screen.queryByText(LOGIN_COPY.failures.unavailable)).toBeNull()
 		expect(screen.queryByRole("button", { name: RETRY_LABEL })).toBeNull()
 		expect(
 			screen.getByRole("button", { name: LOGIN_COPY.continueWithGoogle }),
@@ -437,6 +438,7 @@ describe("the social sign-in", () => {
 		expect(errorCallback.pathname).toBe("/login")
 		expect(errorCallback.searchParams.get("redirect")).toBe("/authorize")
 		expect(errorCallback.searchParams.has("via")).toBe(false)
+		expect(callsTo(SOCIAL_SIGN_IN)[0]?.credentials).toBe("include")
 		await waitFor(() =>
 			expect(window.location.assign).toHaveBeenCalledWith(
 				"https://accounts.google.com/o",
@@ -444,7 +446,7 @@ describe("the social sign-in", () => {
 		)
 	})
 
-	it("says Apple is not available yet and offers email on a 404", async () => {
+	it("says Apple isn't set up yet on a 404, with no retry", async () => {
 		routes[SOCIAL_SIGN_IN] = relayError(
 			404,
 			"Sign-in with apple is not configured",
@@ -475,8 +477,8 @@ describe("the social sign-in", () => {
 		await landedOn(router, "/account")
 	})
 
-	it("shows the signed-out login with the failed line when the return has no session", async () => {
-		routes[GET_SESSION] = { body: null }
+	it("shows the signed-out login with the failed line when get-session answers 401", async () => {
+		routes[GET_SESSION] = relayError(401, "Unauthenticated")
 		await openLogin("/login?via=social")
 
 		expect(screen.getByText(LOGIN_COPY.socialFailed)).toBeDefined()
