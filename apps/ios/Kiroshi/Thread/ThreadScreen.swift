@@ -78,9 +78,11 @@ struct ThreadScreen<Model: ThreadModel>: View {
                             message.id == model.lastSentId
                                 ? proxy.frame(in: .transcript).minY : nil
                         } action: { top in
-                            if let top {
-                                sentTop = top
+                            guard let top else { return }
+                            if sentTop == nil, scrolling == .followingTheBottom {
+                                position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
                             }
+                            sentTop = top
                         }
                 }
                 if let working = model.working {
@@ -91,11 +93,13 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     HostOfflineLine(space: offlineSpace, email: space.email)
                         .padding(.top, 20)
                 }
+                Color.clear
+                    .frame(height: 12)
+                    .id(Self.transcriptEnd)
             }
             .scrollTargetLayout()
             .coordinateSpace(.transcript)
             .padding(.horizontal)
-            .padding(.bottom, 12)
         }
         .contentMargins(.top, headerOverhang, for: .scrollContent)
         .scrollPosition($position)
@@ -116,13 +120,15 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 scrolling = .followingTheBottom
             }
         }
-        .onChange(of: model.lastSentId) { _, sent in
+        .onChange(of: model.lastSentId) {
             sentTop = nil
-            guard let sent, scrolling == .holdingTheSentBubble else { return }
+            guard scrolling != .followingTheBottom else { return }
             scrolling = .followingTheBottom
-            position.scrollTo(id: sent, anchor: .bottom)
+            position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
         }
     }
+
+    private static var transcriptEnd: ThreadMessage.ID { "transcript-end" }
 
     private func holdTheSentBubble() {
         guard let sent = model.lastSentId, scrolling == .followingTheBottom else { return }
@@ -151,7 +157,7 @@ extension ScrollGeometry {
     }
 
     fileprivate var isAtTheBottom: Bool {
-        visibleTop + containerSize.height >= contentSize.height - 1
+        visibleRect.maxY - contentInsets.bottom >= contentSize.height - 1
     }
 }
 
