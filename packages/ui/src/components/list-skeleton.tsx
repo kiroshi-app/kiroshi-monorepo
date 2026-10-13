@@ -17,11 +17,10 @@ type ListSkeletonProps = {
 const rowsToFill = (container: HTMLElement) => {
 	const firstRow = container.firstElementChild
 	if (!(firstRow instanceof HTMLElement)) return 1
-	const rowHeight = firstRow.offsetHeight
-	const pitch =
-		rowHeight + Number.parseFloat(getComputedStyle(container).rowGap)
+	const gap = Number.parseFloat(getComputedStyle(container).rowGap)
+	const pitch = firstRow.offsetHeight + gap
 	if (pitch <= 0) return 1
-	return Math.max(1, Math.ceil(container.clientHeight / pitch))
+	return Math.max(1, Math.ceil((container.clientHeight + gap) / pitch))
 }
 
 const ListSkeleton = ({
@@ -47,7 +46,7 @@ const ListSkeleton = ({
 		<div
 			aria-hidden="true"
 			className={cn(
-				"flex size-full animate-pulse gap-3 overflow-hidden contain-size motion-reduce:animate-none",
+				"flex size-full animate-pulse gap-1 overflow-hidden contain-size motion-reduce:animate-none",
 				anchor === "bottom" ? "flex-col-reverse" : "flex-col",
 				className,
 			)}
@@ -79,17 +78,19 @@ const SkeletonBar = ({ className, isFaint = false }: SkeletonBarProps) => (
 )
 
 const GenericSkeletonRow = () => (
-	<div className="flex items-center gap-2.5">
+	<div className="flex items-center gap-2.5 py-1.5 ps-1.5 pe-3">
 		<Skeleton
 			className="size-10 shrink-0 animate-none rounded-none bg-border"
 			style={COMPANION_SILHOUETTE}
 		/>
-		<div className="flex min-w-0 flex-1 flex-col gap-1.75">
-			<div className="flex items-center justify-between">
+		<div className="flex min-w-0 flex-1 flex-col">
+			<div className="flex h-5 items-center justify-between">
 				<SkeletonBar className="w-16.5" />
-				<SkeletonBar className="w-7" isFaint />
+				<SkeletonBar className="w-7.5" isFaint />
 			</div>
-			<SkeletonBar className="w-35" isFaint />
+			<div className="flex h-4 items-center">
+				<SkeletonBar className="w-43" isFaint />
+			</div>
 		</div>
 	</div>
 )

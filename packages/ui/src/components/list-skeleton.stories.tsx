@@ -123,7 +123,7 @@ const expectLastRowAcrossEdge = (
 	const edgeY = frame[edge]
 
 	return expect(
-		lastRow !== undefined && lastRow.top < edgeY && lastRow.bottom > edgeY,
+		lastRow !== undefined && lastRow.top <= edgeY && lastRow.bottom >= edgeY,
 	).toBe(true)
 }
 
@@ -156,14 +156,36 @@ export const TallContainer = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const list = slotIn(canvasElement, "list-skeleton")
-		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(10), FRAME_POLL)
+		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(9), FRAME_POLL)
 
 		await expect(list).toHaveAttribute("aria-hidden", "true")
+		const [firstRow, secondRow] = slotsIn(list, "list-skeleton-row")
+		await expect(firstRow.getBoundingClientRect().height).toBe(52)
+		await expect(
+			secondRow.getBoundingClientRect().top -
+				firstRow.getBoundingClientRect().bottom,
+		).toBe(4)
 		await expectLastRowAcrossEdge(canvasElement, "bottom")
 		await expect(getComputedStyle(list).animationName).toBe("none")
 		await expect(getComputedStyle(list).opacity).toBe("1")
 		for (const shape of slotsIn(list, "skeleton"))
 			await expect(getComputedStyle(shape).animationName).toBe("none")
+	},
+})
+
+export const HeightOnARowStep = meta.story({
+	render: () => <ListFrame heightClass="h-56" />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A pane 224 px tall, exactly four rows and their gaps plus one more gap: the height where counting rows by their step alone stops one row short and leaves a strip under the last one. Check that a fifth row starts on the bottom edge so the list still reaches it. Pick `ShortContainer` for a height that cuts a row in its middle.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(5), FRAME_POLL)
+		await expectLastRowAcrossEdge(canvasElement, "bottom")
 	},
 })
 
@@ -183,7 +205,7 @@ export const ShortContainer = meta.story({
 		await expectLastRowAcrossEdge(canvasElement, "bottom")
 
 		frame.style.height = "480px"
-		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(10), FRAME_POLL)
+		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(9), FRAME_POLL)
 		frame.style.height = ""
 		await waitFor(() => expect(rowCountIn(canvasElement)).toBe(4), FRAME_POLL)
 	},
