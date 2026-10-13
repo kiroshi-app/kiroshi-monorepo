@@ -860,6 +860,8 @@
         private func playTurn(after sent: [String: Any]) {
             let conversationId = sent["conversationId"] as? String ?? ""
             let event = { (event: String) in FixtureHost.agentEvent(conversationId, event) }
+            let sentId = sent["id"] as? String ?? ""
+            let replyId = "reply-\(sentId)"
             pushStoredEcho(of: sent)
             push(
                 .frame(
@@ -880,7 +882,7 @@
                 .joined(separator: "\n\n").replacingOccurrences(of: "\n", with: #"\n"#)
             push(
                 .frame(
-                    event(FixtureHost.chatMessage("live-reply", "", "messageStarted")),
+                    event(FixtureHost.chatMessage(replyId, "", "messageStarted")),
                     after: .milliseconds(400)))
             let words = reply.split(separator: " ")
             for start in stride(from: 0, to: words.count, by: script.wordsPerDelta) {
@@ -889,11 +891,11 @@
                 push(
                     .frame(
                         event(
-                            #"{"type":"messageDelta","id":"live-reply","seq":1,"text":"\#(delta) "}"#
+                            #"{"type":"messageDelta","id":"\#(replyId)","seq":1,"text":"\#(delta) "}"#
                         ),
                         after: .milliseconds(120)))
             }
-            push(.frame(event(FixtureHost.chatMessage("live-reply", reply, "messageCompleted"))))
+            push(.frame(event(FixtureHost.chatMessage(replyId, reply, "messageCompleted"))))
             push(
                 .frame(
                     event(
@@ -903,7 +905,8 @@
             let closing = "They’re waiting for your read."
             push(
                 .frame(
-                    event(FixtureHost.chatMessage("live-closing", closing, "messageCompleted")),
+                    event(
+                        FixtureHost.chatMessage("closing-\(sentId)", closing, "messageCompleted")),
                     after: .milliseconds(500)))
             push(
                 .frame(
