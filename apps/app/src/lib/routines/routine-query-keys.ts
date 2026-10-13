@@ -1,6 +1,6 @@
 export const routineQueryKeys = {
 	all: ["routines"] as const,
-	conversation: (conversationId: string) =>
+	conversation: (conversationId: string | null) =>
 		[...routineQueryKeys.all, "conversation", conversationId] as const,
 	list: (
 		conversationId: string | null,
@@ -8,9 +8,7 @@ export const routineQueryKeys = {
 		host: string | null,
 	) =>
 		[
-			...routineQueryKeys.all,
-			"conversation",
-			conversationId,
+			...routineQueryKeys.conversation(conversationId),
 			leadBotId,
 			host,
 		] as const,
