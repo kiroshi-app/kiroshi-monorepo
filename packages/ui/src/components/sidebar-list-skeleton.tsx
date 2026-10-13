@@ -44,4 +44,4 @@ const sidebarRowAt = (index: number) => (
 
 const SidebarListSkeleton = () => <ListSkeleton row={sidebarRowAt} />
 
-export { SidebarListSkeleton }
+export { SidebarListSkeleton, sidebarRowAt }

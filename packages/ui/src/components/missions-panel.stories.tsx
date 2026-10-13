@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react"
-import { expect, fireEvent, fn, screen, within } from "storybook/test"
+import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -324,5 +324,103 @@ export const RowMenu = meta.story({
 				.getAllByRole("menuitem")
 				.map((item) => item.textContent),
 		).toEqual(["Open mission", "Copy", "Answer the question", "Close"])
+	},
+})
+
+const READING_MORE = { hasNextPage: true, isFetchingNextPage: true }
+
+const COMPLETE = { hasNextPage: false, isFetchingNextPage: false }
+
+const expectReadingMore = async (canvasElement: HTMLElement) => {
+	const sentinel = slotIn(canvasElement, "list-end-sentinel")
+	const lastRow = slotsIn(canvasElement, "mission-card-row").at(-1)
+	await waitFor(() =>
+		expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(1),
+	)
+	await expect(lastRow?.compareDocumentPosition(sentinel)).toBe(
+		Node.DOCUMENT_POSITION_FOLLOWING,
+	)
+	await expect(sentinel.closest('[aria-hidden="true"]')).not.toBeNull()
+	await expect(
+		slotIn(canvasElement, "list-end-skeleton").closest('[aria-hidden="true"]'),
+	).not.toBeNull()
+}
+
+const expectComplete = async (canvasElement: HTMLElement) => {
+	await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+	await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(0)
+}
+
+const READING_MORE_STORY =
+	"The next page of missions on its way. Check one mission row stand-in pulses under the last group, and that the sentinel the app observes sits after the last loaded row."
+
+const COMPLETE_STORY =
+	"Every mission of the space loaded. Check nothing is drawn under the last group: no stand-in row, no sentinel."
+
+export const ReadingMore = meta.story({
+	args: { earlierToday: NO_SPACE_MISSIONS, listEnd: READING_MORE },
+	parameters: {
+		docs: {
+			description: {
+				story: `${READING_MORE_STORY} Pick \`ReadingMoreDark\` for the dark theme. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+})
+
+export const ReadingMoreDark = meta.story({
+	args: { earlierToday: NO_SPACE_MISSIONS, listEnd: READING_MORE },
+	globals: { theme: "dark", theme_layout: "single" },
+	parameters: {
+		docs: {
+			description: {
+				story: `${READING_MORE_STORY} Pick \`ReadingMore\` for the light theme. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+})
+
+export const Complete = meta.story({
+	args: { earlierToday: NO_SPACE_MISSIONS, listEnd: COMPLETE },
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPLETE_STORY} Pick \`CompleteDark\` for the dark theme. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectComplete(canvasElement),
+})
+
+export const CompleteDark = meta.story({
+	args: { earlierToday: NO_SPACE_MISSIONS, listEnd: COMPLETE },
+	globals: { theme: "dark", theme_layout: "single" },
+	parameters: {
+		docs: {
+			description: {
+				story: `${COMPLETE_STORY} Pick \`Complete\` for the light theme. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => expectComplete(canvasElement),
+})
+
+export const ReadingMoreUnderAFold = meta.story({
+	tags: ["test-only"],
+	args: { listEnd: READING_MORE },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A next page exists while Earlier today is folded. Check no sentinel is drawn until the fold opens, since the rows it would load are hidden.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(0)
+		await userEvent.click(canvas.getByRole("button", { name: /Earlier today/ }))
+		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(1)
 	},
 })

@@ -1,4 +1,4 @@
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { SidebarFrame, slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -49,4 +49,50 @@ export const PinnedZoneThenSortedZone = meta.story({
 			slotIn(canvasElement, "roster-zone-separator"),
 		).toBeInTheDocument()
 	},
+})
+
+const READING_MORE = { hasNextPage: true, isFetchingNextPage: true }
+
+const COMPLETE = { hasNextPage: false, isFetchingNextPage: false }
+
+const expectReadingMore = async (canvasElement: HTMLElement) => {
+	const sentinel = slotIn(canvasElement, "list-end-sentinel")
+	const sortedArea = slotsIn(canvasElement, "roster-drop-area").at(-1)
+	await waitFor(() =>
+		expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(1),
+	)
+	await expect(sortedArea?.compareDocumentPosition(sentinel)).toBe(
+		Node.DOCUMENT_POSITION_FOLLOWING,
+	)
+	await expect(sentinel.closest('[aria-hidden="true"]')).not.toBeNull()
+	await expect(
+		slotIn(canvasElement, "list-end-skeleton").closest('[aria-hidden="true"]'),
+	).not.toBeNull()
+}
+
+const expectComplete = async (canvasElement: HTMLElement) => {
+	await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+	await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(0)
+}
+
+export const ReadingMore = meta.story({
+	args: { listEnd: READING_MORE },
+	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+})
+
+export const ReadingMoreDark = meta.story({
+	args: { listEnd: READING_MORE },
+	globals: { theme: "dark", theme_layout: "single" },
+	play: async ({ canvasElement }) => expectReadingMore(canvasElement),
+})
+
+export const Complete = meta.story({
+	args: { listEnd: COMPLETE },
+	play: async ({ canvasElement }) => expectComplete(canvasElement),
+})
+
+export const CompleteDark = meta.story({
+	args: { listEnd: COMPLETE },
+	globals: { theme: "dark", theme_layout: "single" },
+	play: async ({ canvasElement }) => expectComplete(canvasElement),
 })

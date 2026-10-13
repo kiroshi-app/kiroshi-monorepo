@@ -904,7 +904,11 @@ navigation-appsidebarbotrow--selected-bot
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--pinned-conversation-with-a-working-bot
 navigation-appsidebarpanel--conversations-with-a-working-bot
+navigation-appsidebarroster--complete
+navigation-appsidebarroster--complete-dark
 navigation-appsidebarroster--pinned-zone-then-sorted-zone
+navigation-appsidebarroster--reading-more
+navigation-appsidebarroster--reading-more-dark
 navigation-appsidebarrostermenu--pinned-section-then-pinned-conversation
 navigation-appsidebarrosterparts--empty-section-drop
 navigation-appsidebarrosterparts--insertion-mark-above
@@ -930,6 +934,8 @@ navigation-headeridentitybutton--working
 navigation-hostpill--connecting
 navigation-hostpill--not-connected
 navigation-hostpill--themes-side-by-side
+navigation-missionspanel--complete
+navigation-missionspanel--complete-dark
 navigation-missionspanel--default
 navigation-missionspanel--earlier-today-unfolded
 navigation-missionspanel--empty
@@ -937,6 +943,9 @@ navigation-missionspanel--long-title
 navigation-missionspanel--no-selected-row
 navigation-missionspanel--one-group
 navigation-missionspanel--opening-a-mission
+navigation-missionspanel--reading-more
+navigation-missionspanel--reading-more-dark
+navigation-missionspanel--reading-more-under-a-fold
 navigation-missionspanel--row-menu
 navigation-missionspanel--selected-row
 navigation-missionspanel--toggling
