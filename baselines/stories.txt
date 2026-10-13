@@ -906,6 +906,7 @@ navigation-appsidebarconversationrow--pinned-conversation-with-a-working-bot
 navigation-appsidebarpanel--conversations-with-a-working-bot
 navigation-appsidebarroster--complete
 navigation-appsidebarroster--complete-dark
+navigation-appsidebarroster--idle
 navigation-appsidebarroster--pinned-zone-then-sorted-zone
 navigation-appsidebarroster--reading-more
 navigation-appsidebarroster--reading-more-dark
@@ -939,6 +940,7 @@ navigation-missionspanel--complete-dark
 navigation-missionspanel--default
 navigation-missionspanel--earlier-today-unfolded
 navigation-missionspanel--empty
+navigation-missionspanel--idle
 navigation-missionspanel--long-title
 navigation-missionspanel--no-selected-row
 navigation-missionspanel--one-group

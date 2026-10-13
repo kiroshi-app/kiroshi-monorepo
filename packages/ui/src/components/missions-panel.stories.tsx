@@ -424,3 +424,29 @@ export const ReadingMoreUnderAFold = meta.story({
 		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(1)
 	},
 })
+
+const PAST_SKELETON_DELAY_MS = 400
+
+export const Idle = meta.story({
+	args: {
+		earlierToday: NO_SPACE_MISSIONS,
+		listEnd: { hasNextPage: true, isFetchingNextPage: false },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `A next page exists but is not being read yet. Check the sentinel the app observes sits after the last loaded row and no stand-in row is drawn. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await new Promise((resolve) => setTimeout(resolve, PAST_SKELETON_DELAY_MS))
+		const [sentinel] = slotsIn(canvasElement, "list-end-sentinel")
+		const lastRow = slotsIn(canvasElement, "mission-card-row").at(-1)
+		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(1)
+		await expect(lastRow?.compareDocumentPosition(sentinel as Node)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+	},
+})

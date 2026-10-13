@@ -96,3 +96,19 @@ export const CompleteDark = meta.story({
 	globals: { theme: "dark", theme_layout: "single" },
 	play: ({ canvasElement }) => expectComplete(canvasElement),
 })
+
+const PAST_SKELETON_DELAY_MS = 400
+
+export const Idle = meta.story({
+	args: { listEnd: { hasNextPage: true, isFetchingNextPage: false } },
+	play: async ({ canvasElement }) => {
+		await new Promise((resolve) => setTimeout(resolve, PAST_SKELETON_DELAY_MS))
+		const [sentinel] = slotsIn(canvasElement, "list-end-sentinel")
+		const sortedArea = slotsIn(canvasElement, "roster-drop-area").at(-1)
+		await expect(slotsIn(canvasElement, "list-end-sentinel")).toHaveLength(1)
+		await expect(sortedArea?.compareDocumentPosition(sentinel as Node)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+	},
+})
