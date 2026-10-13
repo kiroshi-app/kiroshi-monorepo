@@ -20,7 +20,9 @@ import type {
 } from "../bindings"
 import type { Store } from "../store"
 
-type JoinOutcome = Awaited<ReturnType<typeof commands.joinedSpaceConnect>>
+export type JoinOutcome = Awaited<
+	ReturnType<typeof commands.joinedSpaceConnect>
+>
 
 type JoinedHostsJoinOptions = Pick<
 	JoinedHostsOptions,

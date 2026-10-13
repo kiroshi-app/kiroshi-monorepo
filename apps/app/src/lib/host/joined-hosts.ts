@@ -5,10 +5,13 @@ import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import type { HostRefusal, HostSocket, HttpHost } from "./http"
 import { createJoinedHostsDown } from "./joined-hosts-down"
 import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
-import { createJoinedHostsJoin, describeRejection } from "./joined-hosts-join"
+import {
+	createJoinedHostsJoin,
+	describeRejection,
+	type JoinOutcome,
+} from "./joined-hosts-join"
 import { createJoinedHostsListen } from "./joined-hosts-listen"
 
-import type { commands } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
@@ -28,8 +31,6 @@ export type JoinedHostsState = {
 }
 
 export type RecordJoinedHost = (id: string, state: JoinedHostState) => void
-
-type JoinOutcome = Awaited<ReturnType<typeof commands.joinedSpaceConnect>>
 
 export type JoinedHostsOptions = {
 	local: LocalHost
