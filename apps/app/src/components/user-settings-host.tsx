@@ -40,7 +40,7 @@ export const UserSettingsHost = ({
 		settingsTab,
 		userApplications,
 	} = scopes
-	const { signOutConfirmation, ...account } = useAccount(
+	const { panel: accountPanel, signOutConfirmation } = useAccount(
 		watchedAccount,
 		userSettings.name,
 		signOutLeavingOf(
@@ -52,10 +52,10 @@ export const UserSettingsHost = ({
 	return (
 		<>
 			<UserSettingsDialog
-				account={account}
+				account={accountPanel}
 				applications={{
 					servers: userApplications.mcpServers,
-					haveFailedToLoad: userMcpServers.state.hasFailedToLoad,
+					haveFailedToLoad: userMcpServers.hasFailedToLoad,
 					onServerCreate: userApplications.onMcpServerCreate,
 					onServerChange: userApplications.onMcpServerChange,
 					onServerDelete: userApplications.onMcpServerDelete,

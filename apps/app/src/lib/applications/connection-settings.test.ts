@@ -8,7 +8,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react"
-import { createElement, useEffect, useState } from "react"
+import { createElement, useState } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
@@ -22,6 +22,7 @@ import {
 import { useConnections } from "./use-connections"
 
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 const SPACE: EnvOwner = { kind: "space", id: "s-1" }
 
@@ -46,12 +47,8 @@ type SpaceConnectionsProps = {
 }
 
 const SpaceConnections = ({ port, onSettled }: SpaceConnectionsProps) => {
-	const connections = useConnections(port)
+	const connections = useConnections(port, SPACE)
 	const [openedName, setOpenedName] = useState<string | null>(null)
-
-	useEffect(() => {
-		void connections.controller.open(SPACE)
-	}, [connections.controller])
 
 	return createElement(SpaceSettingsDialog, {
 		...toConnectionSettings({
@@ -84,13 +81,15 @@ const SpaceConnections = ({ port, onSettled }: SpaceConnectionsProps) => {
 
 const settle = () =>
 	act(async () => {
-		for (let round = 0; round < 20; round += 1) {
-			await Promise.resolve()
+		for (let round = 0; round < 5; round += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 0))
 		}
 	})
 
 const mounted = async (port: FakeConnectionPort, onSettled?: () => void) => {
-	render(createElement(SpaceConnections, { port, onSettled }))
+	render(createElement(SpaceConnections, { port, onSettled }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await settle()
 	return screen.getByRole("tabpanel", { name: "Applications" })
 }

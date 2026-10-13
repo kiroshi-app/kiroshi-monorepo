@@ -44,19 +44,17 @@ export const BotSettingsHost = ({
 	return settingsBot ? (
 		<BotSettingsDialog
 			history={botHistory}
-			haveMcpServersFailedToLoad={botMcpServers.state.hasFailedToLoad}
+			haveMcpServersFailedToLoad={botMcpServers.hasFailedToLoad}
 			{...botApplications}
 			mcpServerToOpen={applicationToOpenOn({
 				kind: "companion",
 				id: settingsBot.id,
 			})}
 			tab={settingsTab}
-			environment={toEnvironmentRows(botEnvironment.state.entries)}
-			hasEnvironmentFailedToRead={botEnvironment.state.hasFailedToRead}
-			onEnvironmentSet={({ name, value }) =>
-				botEnvironment.controller.set(name, value)
-			}
-			onEnvironmentDelete={botEnvironment.controller.remove}
+			environment={toEnvironmentRows(botEnvironment.entries)}
+			hasEnvironmentFailedToRead={botEnvironment.hasFailedToRead}
+			onEnvironmentSet={({ name, value }) => botEnvironment.set(name, value)}
+			onEnvironmentDelete={botEnvironment.remove}
 			onMcpServerOpen={(name) =>
 				setOpenedMcpServer(
 					name && selectedSpaceId

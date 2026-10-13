@@ -17,10 +17,9 @@ export type SkillFilesPort = {
 
 export type SkillFilesHost = {
 	run: (task: () => Promise<void>) => void
+	write: (task: () => Promise<void>) => void
 	getFile: () => OpenedSkillFile | null
 	setFile: (file: OpenedSkillFile | null) => void
-	getSkills: () => BotSkill[]
-	applySkill: (skillId: string, fields: Partial<BotSkill>) => void
 }
 
 export type SkillFilesController = {
@@ -54,12 +53,6 @@ export const createSkillFilesController = (
 		}
 	}
 
-	const keepPaths = (skill: BotSkill) =>
-		host.applySkill(skill.id, { files: skill.files })
-
-	const heldPaths = (skillId: string) =>
-		host.getSkills().find((skill) => skill.id === skillId)?.files ?? []
-
 	return {
 		carryFile: (fromSkillId: string, toSkillId: string) => {
 			const open = host.getFile()
@@ -83,9 +76,9 @@ export const createSkillFilesController = (
 
 		addFile: (skillId: string, path: string) => {
 			host.setFile({ skillId, path })
-			host.run(async () => {
+			host.write(async () => {
 				try {
-					keepPaths(await port.write(skillId, path, ""))
+					await port.write(skillId, path, "")
 					applyToOpen(skillId, path, { text: "" })
 				} catch {
 					applyToOpen(skillId, path, { failure: "write" })
@@ -94,9 +87,9 @@ export const createSkillFilesController = (
 		},
 
 		saveFile: (skillId: string, path: string, text: string) =>
-			host.run(async () => {
+			host.write(async () => {
 				try {
-					keepPaths(await port.write(skillId, path, text))
+					await port.write(skillId, path, text)
 					applyToOpen(skillId, path, { text, failure: undefined })
 				} catch {
 					applyToOpen(skillId, path, { failure: "write" })
@@ -104,12 +97,9 @@ export const createSkillFilesController = (
 			}),
 
 		removeFile: (skillId: string, path: string) =>
-			host.run(async () => {
+			host.write(async () => {
 				try {
 					await port.remove(skillId, path)
-					host.applySkill(skillId, {
-						files: heldPaths(skillId).filter((held) => held !== path),
-					})
 					closeOpen(skillId, path)
 				} catch {
 					applyToOpen(skillId, path, { failure: "delete" })

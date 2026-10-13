@@ -1,5 +1,6 @@
 import { describe, expect, it, type Mock, vi } from "vitest"
 
+import type { InstallTarget } from "./application-install"
 import type { Application } from "./application-port"
 import {
 	applicationTitleOf,
@@ -8,15 +9,9 @@ import {
 	toInstallableApplication,
 	withApplicationMarks,
 } from "./application-settings"
-import {
-	type ApplicationsController,
-	type ApplicationsState,
-	type InstallTarget,
-	initialApplicationsState,
-} from "./applications-controller"
 import type { ApplicationRow } from "./connection-port"
-import type { ConnectionFailure } from "./connections-controller"
-import type { Connections } from "./use-connections"
+import type { Applications, ApplicationsState } from "./use-applications"
+import type { ConnectionFailure, Connections } from "./use-connections"
 
 import type { McpServers } from "../bots/use-mcp-servers"
 import type { BotMcpServer, EnvOwner } from "../conversations/store-contract"
@@ -91,45 +86,63 @@ const ATLAS_SERVER: BotMcpServer = {
 	config: { type: "http", url: "https://mcp.atlas.test/mcp" },
 }
 
-const applicationsWith = (state: Partial<ApplicationsState>) => ({
-	state: { ...initialApplicationsState, ...state },
-	controller: {
+const NOTHING_READ: ApplicationsState = {
+	curated: [],
+	isReadingCatalogue: false,
+	hasCatalogueFailed: false,
+	query: "",
+	category: "everything",
+	directory: [],
+	isReadingDirectory: false,
+	hasDirectoryFailed: false,
+	hasDirectoryPartlyFailed: false,
+	isDirectoryStale: false,
+	picked: null,
+	installing: null,
+	failure: null,
+}
+
+const applicationsWith = (state: Partial<ApplicationsState>): Applications => ({
+	state: { ...NOTHING_READ, ...state },
+	actions: {
+		browse: vi.fn(),
 		search: vi.fn(),
 		pickCategory: vi.fn(),
 		retry: vi.fn(),
 		pick: vi.fn(),
 		leave: vi.fn(),
-		install: vi.fn(async () => undefined),
-	} as unknown as ApplicationsController,
+		install: vi.fn(),
+	},
 })
 
 const serversWith = (
 	owner: EnvOwner | null,
 	servers: BotMcpServer[] = [],
 ): McpServers => ({
-	state: { owner, servers, hasFailedToLoad: false },
-	controller: {
-		create: vi.fn(async () => true),
-		rename: vi.fn(async () => true),
-		remove: vi.fn(async () => true),
-		reload: vi.fn(async () => undefined),
-	} as unknown as McpServers["controller"],
+	owner,
+	servers,
+	hasFailedToLoad: false,
+	isPending: false,
+	create: vi.fn(async () => true),
+	rename: vi.fn(async () => true),
+	remove: vi.fn(async () => true),
+	reread: vi.fn(async () => undefined),
 })
 
-const NO_CONNECTIONS = {
-	state: { owner: null, rows: [], connecting: null, failure: null },
-	controller: {
-		connect: vi.fn(async () => undefined),
-		disconnect: vi.fn(async () => undefined),
-		cancel: vi.fn(async () => undefined),
-		getState: () => ({
-			owner: null,
-			rows: [],
-			connecting: null,
-			failure: null,
-		}),
-	} as unknown as Connections["controller"],
-} as Connections
+const connectionsReading = (
+	rows: ApplicationRow[],
+	failure: ConnectionFailure | null = null,
+): Connections => ({
+	rows,
+	connecting: null,
+	failure,
+	isPending: false,
+	connect: vi.fn(async () => ({ rows, failure })),
+	disconnect: vi.fn(async () => ({ rows, failure })),
+	cancel: vi.fn(),
+})
+
+const NO_CONNECTIONS = connectionsReading([])
 
 const scopeOf = (
 	applications = applicationsWith({ curated: [LINEAR] }),
@@ -138,6 +151,7 @@ const scopeOf = (
 ) => ({
 	scope: toApplicationScope({
 		applications,
+		marks: {},
 		servers,
 		connections: NO_CONNECTIONS,
 		openedName: null,
@@ -148,23 +162,10 @@ const scopeOf = (
 	reopen,
 })
 
-const connectionsLanding = (connected: string[]): Connections => {
-	const state = {
-		owner: USER,
-		rows: connected.map((name) => ({ name, status: "connected" as const })),
-		connecting: null,
-		failure: null,
-	}
-	return {
-		state,
-		controller: {
-			connect: vi.fn(async () => undefined),
-			disconnect: vi.fn(async () => undefined),
-			cancel: vi.fn(async () => undefined),
-			getState: () => state,
-		},
-	} as unknown as Connections
-}
+const connectionsLanding = (connected: string[]): Connections =>
+	connectionsReading(
+		connected.map((name) => ({ name, status: "connected" as const })),
+	)
 
 type SettlingScopeSource = {
 	owner?: EnvOwner | null
@@ -181,6 +182,7 @@ const settlingScopeOf = ({
 	return {
 		scope: toApplicationScope({
 			applications: applicationsWith({ curated: [LINEAR] }),
+			marks: {},
 			servers: serversWith(owner, [LINEAR_SERVER, ATLAS_SERVER]),
 			connections: connectionsLanding(connected),
 			openedName,
@@ -632,7 +634,7 @@ describe("toApplicationScope", () => {
 
 	it("leaves the sessions alone when the declaration was refused", async () => {
 		const servers = serversWith(USER)
-		servers.controller.create = vi.fn(async () => false)
+		servers.create = vi.fn(async () => false)
 		const { scope, reopen } = scopeOf(
 			applicationsWith({ curated: [LINEAR] }),
 			servers,
@@ -709,33 +711,18 @@ describe("toApplicationScope", () => {
 	})
 })
 
-const connectionsReading = (
-	rows: ApplicationRow[],
-	failure: ConnectionFailure | null = null,
-): Connections => {
-	const state = { owner: USER, rows, connecting: null, failure }
-	return {
-		state,
-		controller: {
-			connect: vi.fn(async () => undefined),
-			disconnect: vi.fn(async () => undefined),
-			cancel: vi.fn(async () => undefined),
-			getState: () => state,
-		},
-	} as unknown as Connections
-}
-
 const installTargetOf = (connections: Connections) => {
 	const applications = applicationsWith({ curated: [LINEAR], picked: LINEAR })
 	const scope = toApplicationScope({
 		applications,
+		marks: {},
 		servers: serversWith(USER),
 		connections,
 		openedName: null,
 		reopen: vi.fn(async () => undefined),
 	})
 	scope.mcpCatalogue?.install?.onInstall({})
-	const install = applications.controller.install as Mock
+	const install = applications.actions.install as Mock
 	return install.mock.calls[0]?.[0] as InstallTarget
 }
 

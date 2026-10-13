@@ -31,10 +31,8 @@ export const useRosterLines = ({
 		openedMission,
 		roster,
 		sections,
-		spacePlugin,
 		spaces,
 		user,
-		userPlugin,
 	} = core
 	const { badges, updater } = drivers
 	const { bots, missions, rosteredSpaceId, settingsBotId, soloThreads } =
@@ -63,10 +61,8 @@ export const useRosterLines = ({
 		roster: roster.controller,
 		runtimes: conversationRuntimes,
 		sections: sections.controller,
-		spacePlugin: spacePlugin.controller,
 		spaces: spaces.controller,
 		user: user.controller,
-		userPlugin: userPlugin.controller,
 	})
 
 	const deleteBot = async (id: string) => {

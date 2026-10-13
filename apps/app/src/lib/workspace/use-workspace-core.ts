@@ -1,5 +1,11 @@
 import { useEffect, useMemo } from "react"
 
+import {
+	companionSettingsOwnerOf,
+	spaceSettingsOwnerOf,
+	userSettingsOwnerOf,
+} from "./settings-owners"
+
 import { useSignedInAccountId, useWatchedAccount } from "../account/use-account"
 import { applicationTransport } from "../applications/application-transport"
 import { connectionTransport } from "../applications/connection-transport"
@@ -15,6 +21,7 @@ import { createDraftsController } from "../chat/drafts-controller"
 import { useChat } from "../chat/use-chat"
 import { createConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createTranscriptStore } from "../conversations/create-store"
+import { pluginScopeOf } from "../conversations/plugin-scope"
 import { createSpokenWords } from "../conversations/spoken-words"
 import { useEnvironment } from "../environment/use-environment"
 import { createOpenedMissionController } from "../missions/opened-mission-controller"
@@ -24,7 +31,8 @@ import { createMessageLandingController } from "../search/message-landing-contro
 import { useCollapsedSections } from "../sections/use-collapsed-sections"
 import { useSections } from "../sections/use-sections"
 import { createShownMemory } from "../sidebar/shown-memory"
-import { useInvitations, useJoinedSpaces } from "../spaces/use-joined-spaces"
+import { useInvitations } from "../spaces/use-invitations"
+import { useJoinedSpaces } from "../spaces/use-joined-spaces"
 import { useSpaces } from "../spaces/use-spaces"
 import { useUser } from "../user/use-user"
 
@@ -32,7 +40,7 @@ export const useWorkspaceCore = () => {
 	const store = useMemo(createTranscriptStore, [])
 	const driver = useMemo(() => createChatDriver(store), [store])
 	const account = useWatchedAccount()
-	const senderAccountId = useSignedInAccountId(account)
+	const senderAccountId = useSignedInAccountId()
 	const chat = useChat(driver, store, { senderAccountId })
 	const roster = useRoster(store)
 	const conversationRuntimes = useMemo(
@@ -85,24 +93,48 @@ export const useWorkspaceCore = () => {
 		store,
 		roster.controller.hostSpaceIdOf,
 	)
-	const companionPlugin = usePlugin(store)
-	const botMcpServers = useMcpServers(store)
-	const spaceMcpServers = useMcpServers(store)
-	const botEnvironment = useEnvironment(store)
-	const spaceEnvironment = useEnvironment(store)
-	const serverEnvironment = useEnvironment(store)
-	const userMcpServers = useMcpServers(store)
-	const botConnections = useConnections(connectionTransport)
-	const spaceConnections = useConnections(connectionTransport)
-	const userConnections = useConnections(connectionTransport)
-	const applications = useApplications(applicationTransport, store)
 	const catalogue = useModelCatalogue()
 	const user = useUser()
-	const userPlugin = usePlugin(store)
 	const spaces = useSpaces(store)
 	const joinedSpaces = useJoinedSpaces(spaces.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
-	const spacePlugin = usePlugin(store)
+	const companionSettingsOwner = companionSettingsOwnerOf(
+		roster.state,
+		spaces.state,
+	)
+	const spaceSettingsOwner = spaceSettingsOwnerOf(spaces.state)
+	const userSettingsOwner = userSettingsOwnerOf(user.state.isSettingsOpen)
+	const applications = useApplications(applicationTransport, store, {
+		isCatalogueOpen: Boolean(
+			companionSettingsOwner ?? spaceSettingsOwner ?? userSettingsOwner,
+		),
+	})
+	const companionPlugin = usePlugin(
+		store,
+		companionSettingsOwner && pluginScopeOf(companionSettingsOwner),
+	)
+	const spacePlugin = usePlugin(
+		store,
+		spaceSettingsOwner && pluginScopeOf(spaceSettingsOwner),
+	)
+	const userPlugin = usePlugin(
+		store,
+		userSettingsOwner && pluginScopeOf(userSettingsOwner),
+	)
+	const botEnvironment = useEnvironment(store, companionSettingsOwner)
+	const spaceEnvironment = useEnvironment(store, spaceSettingsOwner)
+	const botMcpServers = useMcpServers(store, companionSettingsOwner)
+	const spaceMcpServers = useMcpServers(store, spaceSettingsOwner)
+	const userMcpServers = useMcpServers(store, userSettingsOwner)
+	const botConnections = useConnections(
+		connectionTransport,
+		companionSettingsOwner,
+	)
+	const spaceConnections = useConnections(
+		connectionTransport,
+		spaceSettingsOwner,
+	)
+	const userConnections = useConnections(connectionTransport, userSettingsOwner)
 	const preferences = user.state.preferences
 
 	return {
@@ -127,7 +159,6 @@ export const useWorkspaceCore = () => {
 		preferences,
 		roster,
 		sections,
-		serverEnvironment,
 		shownMemory,
 		spaceConnections,
 		spaceEnvironment,

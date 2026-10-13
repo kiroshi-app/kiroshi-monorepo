@@ -4,11 +4,11 @@ import type { Plugin } from "./use-plugin"
 
 import { toSkillDraft, toSkillFiles, toSkillItem } from "../bots/skill-draft"
 
-export const toPluginSkills = ({ state, controller }: Plugin) => ({
+export const toPluginSkills = ({ state, actions }: Plugin) => ({
 	skills: state.skills.map(toSkillItem),
-	skillFiles: toSkillFiles(state.skills, state.file, controller),
+	skillFiles: toSkillFiles(state.skills, state.file, actions),
 	onSkillChange: (id: string, draft: EditedSkill) =>
-		controller.saveSkill(
+		actions.saveSkill(
 			id,
 			toSkillDraft(
 				draft,
@@ -16,7 +16,7 @@ export const toPluginSkills = ({ state, controller }: Plugin) => ({
 			),
 		),
 	onSkillCreate: (draft: EditedSkill, isPreloaded: boolean) =>
-		controller.createSkill(toSkillDraft(draft), isPreloaded),
-	onSkillDelete: controller.removeSkill,
-	onSkillPreloadedChange: controller.setSkillPreloaded,
+		actions.createSkill(toSkillDraft(draft), isPreloaded),
+	onSkillDelete: actions.removeSkill,
+	onSkillPreloadedChange: actions.setSkillPreloaded,
 })

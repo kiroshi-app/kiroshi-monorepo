@@ -1,14 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useMemo } from "react"
 
-import type { SpaceInvitationCallbacks } from "@workspace/ui/components/space-invitations"
-
-import {
-	createInvitationsController,
-	type InvitationsController,
-	type InvitationsState,
-	invitationRowsOf,
-} from "./invitations-controller"
 import {
 	createJoinedSpacesController,
 	hostMarksOf,
@@ -24,6 +16,7 @@ import {
 	type OpenJoinedHost,
 } from "./open-joined-host"
 import type { SpacesController, SpacesState } from "./spaces-controller"
+import type { Invitations } from "./use-invitations"
 
 import { isDesktopHost, joinedHosts } from "../host"
 import { useController, useControllerState } from "../use-controller"
@@ -53,45 +46,6 @@ export const useJoinedSpaces = (spaces: SpacesController): JoinedSpaces => {
 	return { state, controller, hosts }
 }
 
-export type Invitations = {
-	state: InvitationsState
-	controller: InvitationsController
-}
-
-export const useInvitations = (
-	joinedSpaces: JoinedSpacesController,
-): Invitations => {
-	const { state, controller } = useController(() =>
-		createInvitationsController({ joinedSpaces }),
-	)
-
-	useEffect(
-		() => (isDesktopHost() ? controller.watch() : undefined),
-		[controller],
-	)
-
-	return { state, controller }
-}
-
-const invitationCallbacksOf = (
-	controller: InvitationsController,
-): Required<SpaceInvitationCallbacks> => ({
-	onAcceptInvitation: (id) => {
-		void controller.accept(id)
-	},
-	onDeclineInvitation: (id) => {
-		void controller.decline(id)
-	},
-	onRetryInvitation: (id) => {
-		void controller.accept(id)
-	},
-})
-
-const sweepOnCloseOf =
-	(controller: InvitationsController) => (isOpen: boolean) => {
-		if (!isOpen) controller.sweepWithdrawn()
-	}
-
 export const useSwitcherSpaces = (
 	{ spaces, selectedSpaceId }: Pick<SpacesState, "spaces" | "selectedSpaceId">,
 	{ state, hosts }: JoinedSpaces,
@@ -108,9 +62,13 @@ export const useSwitcherSpaces = (
 				...sharedMarksOf(sharedBySpaceId),
 				...hostMarksOf(joinedSpaces, connections),
 			},
-			invitations: invitationRowsOf(invitations.state),
-			...invitationCallbacksOf(invitations.controller),
-			onSpaceSwitcherOpenChange: sweepOnCloseOf(invitations.controller),
+			invitations: invitations.rows,
+			onAcceptInvitation: invitations.accept,
+			onDeclineInvitation: invitations.decline,
+			onRetryInvitation: invitations.accept,
+			onSpaceSwitcherOpenChange: (isOpen: boolean) => {
+				if (!isOpen) invitations.sweepWithdrawn()
+			},
 		}),
 		[
 			spaces,
@@ -119,8 +77,7 @@ export const useSwitcherSpaces = (
 			openId,
 			connections,
 			sharedBySpaceId,
-			invitations.state,
-			invitations.controller,
+			invitations,
 		],
 	)
 }

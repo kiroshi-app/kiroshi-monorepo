@@ -33,8 +33,10 @@ it("invalidates the given keys when the host event fires, and stops on unmount",
 	handler({ event, id: 1, payload: null })
 
 	expect(event).toBe("bots://changed")
-	expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots", "a"] })
-	expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots"] })
+	await vi.waitFor(() => {
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots", "a"] })
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots"] })
+	})
 
 	unmount()
 	await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))

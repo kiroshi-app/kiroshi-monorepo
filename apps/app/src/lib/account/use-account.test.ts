@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook } from "@testing-library/react"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -11,11 +11,17 @@ import {
 import { en } from "@workspace/ui/lib/i18n-en"
 
 import { storedOwnAccounts } from "./own-accounts"
-import { signOutLeavingOf, useAccount, useWatchedAccount } from "./use-account"
+import {
+	signOutLeavingOf,
+	useAccount,
+	useWatchedAccount,
+	type WatchedAccount,
+} from "./use-account"
 
 import { ACCOUNT_CHANGED_EVENT, type AccountState, commands } from "../bindings"
 import { listen } from "../host"
 import { openInBrowser } from "../links/use-external-links"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({ listen: vi.fn() }))
 
@@ -86,7 +92,7 @@ const failureNotice = vi.mocked(raiseFailureNotice)
 
 const reported = (notice: NoticeMessage) => ({
 	...notice,
-	report: expect.objectContaining({ raisedIn: "account-controller" }),
+	report: expect.objectContaining({ raisedIn: "use-account" }),
 })
 
 const settling = () =>
@@ -94,21 +100,36 @@ const settling = () =>
 		await new Promise((resolve) => setTimeout(resolve, 0))
 	})
 
+const untilAnswered = async (result: {
+	current: ReturnType<typeof useAccount>
+}) => {
+	await waitFor(() => expect(result.current.panel).toBeDefined())
+	await settling()
+}
+
 const mountAccount = async (displayName = PROFILE_NAME) => {
 	const mounted = renderHook(
 		({ displayName }) => useAccount(useWatchedAccount(), displayName),
 		{
 			initialProps: { displayName },
+			wrapper: createQueryTestWrapper().wrapper,
 		},
 	)
-	await settling()
+	await untilAnswered(mounted.result)
 	return mounted
 }
 
-const announce = (payload: AccountState) =>
+const announce = async (payload: AccountState) => {
+	const readsSoFar = vi.mocked(commands.accountState).mock.calls.length
+	vi.mocked(commands.accountState).mockResolvedValue(payload)
 	act(() => {
 		changes.announce({ payload })
 	})
+	await waitFor(() =>
+		expect(commands.accountState).toHaveBeenCalledTimes(readsSoFar + 1),
+	)
+	await settling()
+}
 
 beforeEach(() => {
 	vi.mocked(commands.accountState).mockResolvedValue({
@@ -148,35 +169,66 @@ describe("useAccount", () => {
 		const { result } = await mountAccount()
 
 		expect(commands.accountState).toHaveBeenCalledOnce()
-		expect(result.current.account).toEqual(signedInPanel(PROFILE_NAME))
+		expect(result.current.panel?.account).toEqual(signedInPanel(PROFILE_NAME))
 	})
 
 	it("re-renders the panel from the state an account change carries", async () => {
 		const { result } = await mountAccount()
 
-		announce(WAITING)
+		await announce(WAITING)
 
-		expect(result.current.account).toEqual({ status: "waiting" })
+		expect(result.current.panel?.account).toEqual({ status: "waiting" })
 
-		announce(SIGNED_IN)
+		await announce(SIGNED_IN)
 
-		expect(result.current.account).toEqual(signedInPanel(PROFILE_NAME))
+		expect(result.current.panel?.account).toEqual(signedInPanel(PROFILE_NAME))
 	})
 
 	it("keeps a change heard before the first read lands", async () => {
-		let answerRead: (state: AccountState) => void = () => undefined
-		vi.mocked(commands.accountState).mockReturnValue(
+		let answerFirstRead: (state: AccountState) => void = () => undefined
+		vi.mocked(commands.accountState).mockReturnValueOnce(
 			new Promise((resolve) => {
-				answerRead = resolve
+				answerFirstRead = resolve
 			}),
 		)
-		const { result } = await mountAccount()
+		const { result } = renderHook(
+			() => useAccount(useWatchedAccount(), PROFILE_NAME),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
 
-		announce(SIGNED_IN)
-		answerRead({ kind: "signedOut", reason: null })
+		await announce(SIGNED_IN)
+		answerFirstRead({ kind: "signedOut", reason: null })
 		await settling()
 
-		expect(result.current.account.status).toBe("signedIn")
+		expect(result.current.panel?.account.status).toBe("signedIn")
+	})
+
+	it("reports nothing about the account until the first read lands", async () => {
+		vi.mocked(commands.accountState).mockReturnValue(
+			new Promise(() => undefined),
+		)
+		const { result } = renderHook(
+			(): [WatchedAccount, ReturnType<typeof useAccount>] => {
+				const watched = useWatchedAccount()
+				return [watched, useAccount(watched, PROFILE_NAME)]
+			},
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settling()
+
+		const [watched, settings] = result.current
+		expect(watched).toEqual({ state: undefined, isPending: true })
+		expect(settings.panel).toBeUndefined()
+		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it("reads the account again each time the host announces a change", async () => {
+		await mountAccount()
+
+		await announce(WAITING)
+		await announce(SIGNED_IN)
+
+		expect(commands.accountState).toHaveBeenCalledTimes(3)
 	})
 
 	it("names a signed-in account after the email when the profile has no name", async () => {
@@ -184,7 +236,7 @@ describe("useAccount", () => {
 
 		const { result } = await mountAccount("")
 
-		expect(result.current.account).toEqual(signedInPanel("ada.martin"))
+		expect(result.current.panel?.account).toEqual(signedInPanel("ada.martin"))
 	})
 
 	it("shows the new profile name when the person renames while signed in", async () => {
@@ -193,14 +245,14 @@ describe("useAccount", () => {
 
 		rerender({ displayName: "Ada Lovelace" })
 
-		expect(result.current.account).toEqual(signedInPanel("Ada Lovelace"))
+		expect(result.current.panel?.account).toEqual(signedInPanel("Ada Lovelace"))
 		expect(commands.accountState).toHaveBeenCalledOnce()
 	})
 
 	it("signs in without an email", async () => {
 		const { result } = await mountAccount()
 
-		act(() => result.current.onSignIn())
+		act(() => result.current.panel?.onSignIn())
 		await settling()
 
 		expect(commands.accountSignIn).toHaveBeenCalledWith()
@@ -211,7 +263,7 @@ describe("useAccount", () => {
 		vi.mocked(commands.accountState).mockResolvedValue(WAITING)
 		const { result } = await mountAccount()
 
-		act(() => result.current.onCancel())
+		act(() => result.current.panel?.onCancel())
 		await settling()
 
 		expect(commands.accountSignOut).toHaveBeenCalledOnce()
@@ -221,7 +273,7 @@ describe("useAccount", () => {
 		vi.mocked(commands.accountState).mockResolvedValue(WAITING)
 		const { result } = await mountAccount()
 
-		act(() => result.current.onCopySignInLink())
+		act(() => result.current.panel?.onCopySignInLink())
 		await settling()
 
 		expect(navigator.clipboard.writeText).toHaveBeenCalledExactlyOnceWith(
@@ -237,7 +289,7 @@ describe("useAccount", () => {
 	it("copies nothing and raises no notice when Copy the sign-in link is pressed outside a wait", async () => {
 		const { result } = await mountAccount()
 
-		act(() => result.current.onCopySignInLink())
+		act(() => result.current.panel?.onCopySignInLink())
 		await settling()
 
 		expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
@@ -249,7 +301,7 @@ describe("useAccount", () => {
 		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
 		const { result } = await mountAccount()
 
-		act(() => result.current.onManageAccount())
+		act(() => result.current.panel?.onManageAccount())
 		await settling()
 
 		expect(openInBrowser).toHaveBeenCalledExactlyOnceWith(ACCOUNT_PAGE_URL)
@@ -264,8 +316,8 @@ describe("useAccount", () => {
 		)
 		const { result } = await mountAccount()
 
-		act(() => result.current.onCopySignInLink())
-		act(() => result.current.onManageAccount())
+		act(() => result.current.panel?.onCopySignInLink())
+		act(() => result.current.panel?.onManageAccount())
 		await settling()
 
 		expect(failureNotice).toHaveBeenCalledTimes(2)
@@ -291,12 +343,13 @@ describe("useAccount", () => {
 			],
 			() => "lea@example.com",
 		)
-		const { result } = renderHook(() =>
-			useAccount(useWatchedAccount(), PROFILE_NAME, leaving),
+		const { result } = renderHook(
+			() => useAccount(useWatchedAccount(), PROFILE_NAME, leaving),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
-		await settling()
+		await untilAnswered(result)
 
-		act(() => result.current.onSignOut())
+		act(() => result.current.panel?.onSignOut())
 
 		expect(commands.accountSignOut).not.toHaveBeenCalled()
 		expect(result.current.signOutConfirmation).toEqual(
@@ -320,16 +373,18 @@ describe("useAccount", () => {
 
 	it("signs out without asking when no relay space is joined", async () => {
 		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
-		const { result } = renderHook(() =>
-			useAccount(
-				useWatchedAccount(),
-				PROFILE_NAME,
-				signOutLeavingOf([], () => ""),
-			),
+		const { result } = renderHook(
+			() =>
+				useAccount(
+					useWatchedAccount(),
+					PROFILE_NAME,
+					signOutLeavingOf([], () => ""),
+				),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
-		await settling()
+		await untilAnswered(result)
 
-		act(() => result.current.onSignOut())
+		act(() => result.current.panel?.onSignOut())
 		await settling()
 
 		expect(result.current.signOutConfirmation).toBe(null)
@@ -340,7 +395,7 @@ describe("useAccount", () => {
 		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
 		const { result } = await mountAccount()
 
-		act(() => result.current.onSignOut())
+		act(() => result.current.panel?.onSignOut())
 		await settling()
 
 		expect(commands.accountSignOut).toHaveBeenCalledOnce()
@@ -349,13 +404,13 @@ describe("useAccount", () => {
 	it("raises the unreachable notice once and renders the signed-out panel", async () => {
 		const { result, rerender } = await mountAccount()
 
-		announce(WAITING)
-		announce({ kind: "unreachable", reason: "offline" })
+		await announce(WAITING)
+		await announce({ kind: "unreachable", reason: "offline" })
 		rerender({ displayName: PROFILE_NAME })
-		announce({ kind: "unreachable", reason: "offline" })
+		await announce({ kind: "unreachable", reason: "offline" })
 		rerender({ displayName: PROFILE_NAME })
 
-		expect(result.current.account).toEqual({ status: "signedOut" })
+		expect(result.current.panel?.account).toEqual({ status: "signedOut" })
 		expect(failureNotice).toHaveBeenCalledOnce()
 		expect(failureNotice).toHaveBeenCalledWith(reported(COPY.unreachable))
 	})
@@ -375,12 +430,12 @@ describe("useAccount", () => {
 		async (failure, notice) => {
 			const { result, rerender } = await mountAccount()
 
-			announce({ kind: "failed", failure })
+			await announce({ kind: "failed", failure })
 			rerender({ displayName: PROFILE_NAME })
-			announce({ kind: "failed", failure })
+			await announce({ kind: "failed", failure })
 			rerender({ displayName: PROFILE_NAME })
 
-			expect(result.current.account).toEqual({ status: "signedOut" })
+			expect(result.current.panel?.account).toEqual({ status: "signedOut" })
 			expect(failureNotice).toHaveBeenCalledExactlyOnceWith(reported(notice))
 		},
 	)
@@ -388,18 +443,18 @@ describe("useAccount", () => {
 	it("raises the signed out on the site notice once per transition", async () => {
 		const { result, rerender } = await mountAccount()
 
-		announce(SIGNED_IN)
-		announce(SIGNED_OUT_ON_SITE)
+		await announce(SIGNED_IN)
+		await announce(SIGNED_OUT_ON_SITE)
 		rerender({ displayName: PROFILE_NAME })
-		announce(SIGNED_OUT_ON_SITE)
+		await announce(SIGNED_OUT_ON_SITE)
 
-		expect(result.current.account).toEqual({ status: "signedOut" })
+		expect(result.current.panel?.account).toEqual({ status: "signedOut" })
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith(
 			reported(COPY.signedOutFromTheSite),
 		)
 
-		announce(SIGNED_IN)
-		announce(SIGNED_OUT_ON_SITE)
+		await announce(SIGNED_IN)
+		await announce(SIGNED_OUT_ON_SITE)
 
 		expect(failureNotice).toHaveBeenCalledTimes(2)
 	})
@@ -407,10 +462,10 @@ describe("useAccount", () => {
 	it("raises no notice when the account signs out without a reason", async () => {
 		await mountAccount()
 
-		announce(SIGNED_IN)
-		announce({ kind: "signedOut", reason: null })
-		announce(SIGNED_OUT_ON_SITE)
-		announce({ kind: "signedOut", reason: null })
+		await announce(SIGNED_IN)
+		await announce({ kind: "signedOut", reason: null })
+		await announce(SIGNED_OUT_ON_SITE)
+		await announce({ kind: "signedOut", reason: null })
 
 		expect(failureNotice).toHaveBeenCalledOnce()
 	})
@@ -418,9 +473,9 @@ describe("useAccount", () => {
 	it("raises the notice again on a new transition into the same failure", async () => {
 		await mountAccount()
 
-		announce({ kind: "failed", failure: "expired" })
-		announce(WAITING)
-		announce({ kind: "failed", failure: "expired" })
+		await announce({ kind: "failed", failure: "expired" })
+		await announce(WAITING)
+		await announce({ kind: "failed", failure: "expired" })
 
 		expect(failureNotice).toHaveBeenCalledTimes(2)
 	})
@@ -430,7 +485,7 @@ describe("useAccount", () => {
 
 		const { result } = await mountAccount()
 
-		expect(result.current.account).toEqual({ status: "signedOut" })
+		expect(result.current.panel?.account).toEqual({ status: "signedOut" })
 		expect(failureNotice).toHaveBeenCalledWith(
 			reported({ title: COPY.readFailed }),
 		)
@@ -446,9 +501,9 @@ describe("useAccount", () => {
 			vi.mocked(commands.accountSignOut).mockImplementation(outcome)
 			const { result } = await mountAccount()
 
-			act(() => result.current.onSignIn())
-			act(() => result.current.onCancel())
-			act(() => result.current.onSignOut())
+			act(() => result.current.panel?.onSignIn())
+			act(() => result.current.panel?.onCancel())
+			act(() => result.current.panel?.onSignOut())
 			await settling()
 
 			expect(failureNotice.mock.calls).toEqual([

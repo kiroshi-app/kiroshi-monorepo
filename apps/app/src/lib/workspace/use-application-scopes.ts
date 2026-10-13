@@ -2,7 +2,6 @@ import { useMemo, useState } from "react"
 
 import type { WorkspaceCore } from "./use-workspace-core"
 
-import { reloadPanelsHolding } from "../applications/application-panels"
 import {
 	applicationTitleOf,
 	toApplicationScope,
@@ -14,6 +13,7 @@ import type { SettingsTarget } from "../applications/settings-target"
 import { useApplicationInstalls } from "../applications/use-application-installs"
 import { useApplicationMarks } from "../applications/use-application-marks"
 import type { EnvScope } from "../conversations/store-contract"
+import { useEnvironment } from "../environment/use-environment"
 import {
 	openLocalSpaceOf,
 	openRowIdOf,
@@ -27,15 +27,16 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 		chat,
 		joinedSpaces,
 		roster,
-		serverEnvironment,
 		spaceConnections,
 		spaceMcpServers,
 		spaces,
+		store,
 		userConnections,
 		userMcpServers,
 	} = core
 
 	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
+	const serverEnvironment = useEnvironment(store, openedMcpServer)
 	const [settingsTab, setSettingsTab] = useState<string>()
 	const [settingsApplication, setSettingsApplication] =
 		useState<SettingsTarget>()
@@ -56,25 +57,21 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 	)
 
 	useApplicationInstalls(applicationTransport, ({ application, scope }) => {
-		void reloadPanelsHolding(scope, [
-			botMcpServers.controller,
-			spaceMcpServers.controller,
-			userMcpServers.controller,
-		])
 		void reopenSessions({
 			scope,
-			application: applicationTitleOf(
-				applications.controller.getState().curated,
-				application,
-			),
+			application: applicationTitleOf(applications.state.curated, application),
 		})
 	})
 
-	useApplicationMarks(applications.controller, [
-		...userMcpServers.state.servers,
-		...spaceMcpServers.state.servers,
-		...botMcpServers.state.servers,
-	])
+	const marks = useApplicationMarks(
+		applicationTransport,
+		applications.state.curated,
+		[
+			...userMcpServers.servers,
+			...spaceMcpServers.servers,
+			...botMcpServers.servers,
+		],
+	)
 
 	const serverEnvironmentSection = toServerEnvironmentSection({
 		environment: serverEnvironment,
@@ -85,6 +82,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const userApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: userMcpServers,
 		connections: userConnections,
 		openedName: openedServerName,
@@ -93,6 +91,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const spaceApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: spaceMcpServers,
 		connections: spaceConnections,
 		openedName: openedServerName,
@@ -101,6 +100,7 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const botApplications = toApplicationScope({
 		applications,
+		marks,
 		servers: botMcpServers,
 		connections: botConnections,
 		openedName: openedServerName,

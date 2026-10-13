@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useEffect, useState } from "react"
 
 import type { ConfirmDialogProps } from "@workspace/ui/components/confirm-dialog"
@@ -8,12 +9,32 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
-	type AccountController,
-	createAccountController,
-} from "./account-controller"
+	ACCOUNT_RAISED_IN,
+	type AccountCommand,
+	announceSpacesLeft,
+	copySignInLinkOf,
+	manageAccount,
+	performAccountCommand,
+	readAccountState,
+} from "./account-actions"
+import { accountQueryKeys } from "./account-query-keys"
+import { transitionNoticeOf, transitionOf } from "./account-transitions"
 
-import type { AccountState, JoinedSpace } from "../bindings"
-import { useController } from "../use-controller"
+import {
+	ACCOUNT_CHANGED_EVENT,
+	type AccountState,
+	commands,
+	type JoinedSpace,
+} from "../bindings"
+import { raiseReportedFailure } from "../failure-report"
+import { useInvalidateOnHostEvent } from "../query/host-invalidations"
+
+const SIGNED_OUT: AccountState = { kind: "signedOut", reason: null }
+
+type AccountCommandFailure =
+	| "settings:account.signInFailed"
+	| "settings:account.cancelFailed"
+	| "settings:account.signOutFailed"
 
 const localPartOf = (email: string) => {
 	const [localPart = email] = email.split("@")
@@ -43,7 +64,8 @@ export type SignOutLeaving = {
 	hostEmails: string
 }
 
-type Account = AccountPanelProps & {
+type AccountSettings = {
+	panel: AccountPanelProps | undefined
 	signOutConfirmation: ConfirmDialogProps | null
 }
 
@@ -66,7 +88,7 @@ export const signOutLeavingOf = (
 
 const signOutConfirmationOf = (
 	leaving: SignOutLeaving,
-	controller: AccountController,
+	signOut: () => Promise<void>,
 	isOpen: boolean,
 	onOpenChange: (isOpen: boolean) => void,
 ): ConfirmDialogProps => ({
@@ -78,50 +100,106 @@ const signOutConfirmationOf = (
 		email: leaving.hostEmails,
 	}),
 	confirmLabel: i18n.t("bots:spaces.signOut.confirm"),
-	onConfirm: () => controller.signOutLeaving(leaving.spaceNames),
+	onConfirm: signOut,
 })
 
 export type WatchedAccount = {
-	state: AccountState
-	controller: AccountController
+	state: AccountState | undefined
+	isPending: boolean
+}
+
+const useTransitionNotices = (state: AccountState | undefined) => {
+	const transition = state && transitionOf(state)
+
+	useEffect(() => {
+		const notice = transition && transitionNoticeOf(transition)
+		if (notice) raiseReportedFailure(notice, { raisedIn: ACCOUNT_RAISED_IN })
+	}, [transition])
 }
 
 export const useWatchedAccount = (): WatchedAccount => {
-	const watched = useController(createAccountController)
-	const { controller } = watched
+	const { data, isError, isPending } = useQuery({
+		queryKey: accountQueryKeys.state(),
+		queryFn: readAccountState,
+		meta: {
+			failureNotice: () => ({ title: i18n.t("settings:account.readFailed") }),
+			raisedIn: ACCOUNT_RAISED_IN,
+		},
+	})
+	useInvalidateOnHostEvent(ACCOUNT_CHANGED_EVENT, [accountQueryKeys.state()])
 
-	useEffect(() => controller.watch(), [controller])
+	const state = data ?? (isError ? SIGNED_OUT : undefined)
+	useTransitionNotices(state)
 
-	return watched
+	return { state, isPending }
 }
 
-export const signedInAccountIdOf = (state: AccountState): string | null =>
-	state.kind === "signedIn" ? state.id : null
+export const signedInAccountIdOf = (
+	state: AccountState | undefined,
+): string | null => (state?.kind === "signedIn" ? state.id : null)
 
-export const useSignedInAccountId = ({
-	controller,
-}: WatchedAccount): (() => string | null) =>
-	useCallback(() => signedInAccountIdOf(controller.getState()), [controller])
+export const useSignedInAccountId = (): (() => string | null) => {
+	const queryClient = useQueryClient()
+
+	return useCallback(
+		() =>
+			signedInAccountIdOf(
+				queryClient.getQueryData<AccountState>(accountQueryKeys.state()),
+			),
+		[queryClient],
+	)
+}
+
+const useAccountCommand = (
+	command: AccountCommand,
+	failure: AccountCommandFailure,
+) =>
+	useMutation({
+		mutationFn: () => performAccountCommand(command),
+		meta: {
+			failureNotice: () => ({ title: i18n.t(failure) }),
+			raisedIn: ACCOUNT_RAISED_IN,
+		},
+	})
 
 export const useAccount = (
-	{ state, controller }: WatchedAccount,
+	{ state }: WatchedAccount,
 	displayName: string,
 	leaving: SignOutLeaving | null = null,
-): Account => {
+): AccountSettings => {
 	const [isSignOutAsked, setSignOutAsked] = useState(false)
+	const signIn = useAccountCommand(
+		commands.accountSignIn,
+		"settings:account.signInFailed",
+	)
+	const cancel = useAccountCommand(
+		commands.accountSignOut,
+		"settings:account.cancelFailed",
+	)
+	const signOut = useAccountCommand(
+		commands.accountSignOut,
+		"settings:account.signOutFailed",
+	)
+
+	const signOutLeaving = (spaceNames: string) => () =>
+		signOut.mutateAsync(undefined, {
+			onSuccess: () => announceSpacesLeft(spaceNames),
+		})
 
 	return {
-		account: toPanelState(state, displayName),
-		onSignIn: controller.signIn,
-		onCancel: controller.cancel,
-		onCopySignInLink: controller.copySignInLink,
-		onManageAccount: controller.manageAccount,
-		onSignOut: leaving ? () => setSignOutAsked(true) : controller.signOut,
+		panel: state && {
+			account: toPanelState(state, displayName),
+			onSignIn: () => signIn.mutate(),
+			onCancel: () => cancel.mutate(),
+			onCopySignInLink: copySignInLinkOf(state),
+			onManageAccount: manageAccount,
+			onSignOut: leaving ? () => setSignOutAsked(true) : () => signOut.mutate(),
+		},
 		signOutConfirmation:
 			leaving &&
 			signOutConfirmationOf(
 				leaving,
-				controller,
+				signOutLeaving(leaving.spaceNames),
 				isSignOutAsked,
 				setSignOutAsked,
 			),

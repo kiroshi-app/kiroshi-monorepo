@@ -47,7 +47,7 @@ export function App() {
 	})
 	const panels = useSettingsPanels({ core, rosterView, scopes })
 	const loadSpaces = useSpaceLoading({ core, scopes })
-	useWorkspaceSubscriptions({ core, drivers, rosterView, scopes })
+	useWorkspaceSubscriptions({ core, drivers, rosterView })
 	const rosterLines = useRosterLines({ core, drivers, rosterView })
 	const sidebarMissions = useSidebarMissions({ core, rosterLines })
 	const rosterLists = useRosterLists({

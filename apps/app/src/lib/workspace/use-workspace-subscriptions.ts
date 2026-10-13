@@ -1,17 +1,9 @@
 import { useEffect } from "react"
 
-import type { ApplicationScopes } from "./use-application-scopes"
 import type { RosterView } from "./use-roster-view"
-import {
-	useServerEnvironmentReads,
-	useSpaceSettingsReads,
-} from "./use-settings-reads"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
-import { USER_OWNER } from "./user-owner"
 
-import { useDirectoryWatch } from "../applications/use-directory-watch"
-import { useCompanionSettings } from "../bots/use-companion-settings"
 import { useCompanionAnnouncements } from "../companions/use-companion-announcements"
 import { useCompanionArrivals } from "../conversations/use-companion-arrivals"
 
@@ -19,42 +11,17 @@ type WorkspaceSubscriptionsInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	rosterView: RosterView
-	scopes: ApplicationScopes
 }
 
 export const useWorkspaceSubscriptions = ({
 	core,
 	drivers,
 	rosterView,
-	scopes,
 }: WorkspaceSubscriptionsInput) => {
-	const {
-		applications,
-		botConnections,
-		botEnvironment,
-		botMcpServers,
-		chat,
-		companionPlugin,
-		joinedSpaces,
-		roster,
-		serverEnvironment,
-		spaceConnections,
-		spaceEnvironment,
-		spaceMcpServers,
-		user,
-		userConnections,
-		userMcpServers,
-	} = core
+	const { chat, joinedSpaces, roster, user } = core
 	const { onboarding } = drivers
-	const {
-		bots,
-		isEditing,
-		rosteredSpaceId,
-		selectedBotId,
-		selectedConversationId,
-		settingsBotId,
-	} = rosterView
-	const { isSpaceEditing, openedMcpServer, selectedSpaceId } = scopes
+	const { bots, rosteredSpaceId, selectedBotId, selectedConversationId } =
+		rosterView
 
 	useEffect(() => {
 		void user.controller.load()
@@ -77,50 +44,6 @@ export const useWorkspaceSubscriptions = ({
 	useCompanionArrivals(() => {
 		void roster.controller.reload()
 	})
-
-	useCompanionSettings({
-		applications: applications.controller,
-		plugin: companionPlugin.controller,
-		servers: botMcpServers.controller,
-		environment: botEnvironment.controller,
-		connections: botConnections.controller,
-		companionId: settingsBotId,
-		spaceId: selectedSpaceId,
-		isOpen: isEditing,
-	})
-
-	useSpaceSettingsReads({
-		applications: applications.controller,
-		environment: spaceEnvironment.controller,
-		servers: spaceMcpServers.controller,
-		connections: spaceConnections.controller,
-		spaceId: selectedSpaceId,
-		isOpen: isSpaceEditing,
-	})
-
-	useServerEnvironmentReads({
-		environment: serverEnvironment.controller,
-		server: openedMcpServer,
-	})
-
-	useEffect(() => {
-		if (!user.state.isSettingsOpen) {
-			return
-		}
-		void applications.controller.open()
-		void userMcpServers.controller.open(USER_OWNER)
-		void userConnections.controller.open(USER_OWNER)
-	}, [
-		applications.controller,
-		userMcpServers.controller,
-		userConnections.controller,
-		user.state.isSettingsOpen,
-	])
-
-	useDirectoryWatch(
-		applications.controller,
-		user.state.isSettingsOpen || isEditing || isSpaceEditing,
-	)
 
 	const holdsSelectedBot = bots.some((bot) => bot.id === selectedBotId)
 

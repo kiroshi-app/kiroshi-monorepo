@@ -10,7 +10,11 @@ import type {
 	RuntimeScope,
 	ScopedEvent,
 } from "../agent/contract"
-import { botPlugin, spacePlugin } from "../conversations/plugin-scope"
+import {
+	botPlugin,
+	spacePlugin,
+	USER_PLUGIN,
+} from "../conversations/plugin-scope"
 
 const scopeOf = (botId: string): RuntimeScope => ({
 	conversationId: "chat-1",
@@ -57,34 +61,18 @@ const createFakeDriver = () => {
 	}
 }
 
-type Panels = Pick<
-	EvolutionSourceOptions,
-	"roster" | "companionPlugin" | "userPlugin" | "spacePlugin"
->
+type Panels = Pick<EvolutionSourceOptions, "roster" | "rereadPlugin">
 
-type OpenPanels = {
-	botId: string | null
-	spaceId?: string | null
-}
-
-const createPanels = ({ botId, spaceId = null }: OpenPanels) => {
-	const panels: Panels = {
+const createPanels = () => {
+	const panels = {
 		roster: {
 			spaceOfConversation: (id: string) =>
 				id === "chat-1" ? "space-1" : undefined,
-			hostSpaceIdOf: (spaceRowId: string) => spaceRowId,
+			hostSpaceIdOf: (spaceRowId: string) => `host-${spaceRowId}`,
 			reload: vi.fn(() => Promise.resolve()),
 		},
-		companionPlugin: {
-			getState: () => ({ scope: botId ? botPlugin(botId) : null }),
-			reload: vi.fn(),
-		},
-		userPlugin: { reload: vi.fn() },
-		spacePlugin: {
-			getState: () => ({ scope: spaceId ? spacePlugin(spaceId) : null }),
-			reload: vi.fn(),
-		},
-	}
+		rereadPlugin: vi.fn(),
+	} satisfies Panels
 	return panels
 }
 
@@ -97,63 +85,41 @@ const start = (panels: Panels) => {
 	return { driver, stop, reportFailure }
 }
 
-const expectNoReload = (panels: Panels) => {
-	expect(panels.roster.reload).not.toHaveBeenCalled()
-	expect(panels.companionPlugin.reload).not.toHaveBeenCalled()
-	expect(panels.userPlugin.reload).not.toHaveBeenCalled()
-	expect(panels.spacePlugin.reload).not.toHaveBeenCalled()
-}
-
 describe("evolution source", () => {
-	it("re-reads the open companion's plugin and the roster", () => {
-		const panels = createPanels({ botId: "bot-1" })
+	it("re-reads the companion's plugin and the roster", () => {
+		const panels = createPanels()
 		const { driver } = start(panels)
 
 		driver.evolve("bot-1", "bot")
 
-		expect(panels.companionPlugin.reload).toHaveBeenCalledTimes(1)
+		expect(panels.rereadPlugin).toHaveBeenCalledExactlyOnceWith(
+			botPlugin("bot-1"),
+		)
 		expect(panels.roster.reload).toHaveBeenCalledTimes(1)
 	})
 
-	it("leaves the panels of another companion untouched", () => {
-		const panels = createPanels({ botId: "bot-2" })
-		const { driver } = start(panels)
-
-		driver.evolve("bot-1", "bot")
-
-		expect(panels.companionPlugin.reload).not.toHaveBeenCalled()
-	})
-
 	it("re-reads the person's plugin", () => {
-		const panels = createPanels({ botId: "bot-1" })
+		const panels = createPanels()
 		const { driver } = start(panels)
 
 		driver.evolve("bot-1", "user")
 
-		expect(panels.userPlugin.reload).toHaveBeenCalledTimes(1)
-		expect(panels.companionPlugin.reload).not.toHaveBeenCalled()
+		expect(panels.rereadPlugin).toHaveBeenCalledExactlyOnceWith(USER_PLUGIN)
 	})
 
-	it("re-reads the plugin of the open space", () => {
-		const panels = createPanels({ botId: "bot-1", spaceId: "space-1" })
+	it("re-reads the plugin of the space hosting the conversation", () => {
+		const panels = createPanels()
 		const { driver } = start(panels)
 
 		driver.evolve("bot-1", "space")
 
-		expect(panels.spacePlugin.reload).toHaveBeenCalledTimes(1)
-	})
-
-	it("leaves the plugin of another space untouched", () => {
-		const panels = createPanels({ botId: "bot-1", spaceId: "space-2" })
-		const { driver } = start(panels)
-
-		driver.evolve("bot-1", "space")
-
-		expect(panels.spacePlugin.reload).not.toHaveBeenCalled()
+		expect(panels.rereadPlugin).toHaveBeenCalledExactlyOnceWith(
+			spacePlugin("host-space-1"),
+		)
 	})
 
 	it("raises no notice when a change is recorded", () => {
-		const panels = createPanels({ botId: "bot-1" })
+		const panels = createPanels()
 		const { driver, reportFailure } = start(panels)
 
 		driver.evolve("bot-1", "bot")
@@ -168,7 +134,7 @@ describe("evolution source", () => {
 	] as const)(
 		"reports a %s change that couldn't be recorded",
 		(bundle, title) => {
-			const panels = createPanels({ botId: "bot-1", spaceId: "space-1" })
+			const panels = createPanels()
 			const { driver, reportFailure } = start(panels)
 
 			driver.failToRecord("bot-1", bundle)
@@ -183,18 +149,19 @@ describe("evolution source", () => {
 	)
 
 	it("reloads nothing when a change couldn't be recorded", () => {
-		const panels = createPanels({ botId: "bot-1", spaceId: "space-1" })
+		const panels = createPanels()
 		const { driver } = start(panels)
 
 		driver.failToRecord("bot-1", "bot")
 		driver.failToRecord("bot-1", "user")
 		driver.failToRecord("bot-1", "space")
 
-		expectNoReload(panels)
+		expect(panels.roster.reload).not.toHaveBeenCalled()
+		expect(panels.rereadPlugin).not.toHaveBeenCalled()
 	})
 
 	it("ignores an unrecorded change without a runtime scope", () => {
-		const panels = createPanels({ botId: "bot-1" })
+		const panels = createPanels()
 		const { driver, reportFailure } = start(panels)
 
 		driver.failUnscoped()
@@ -203,7 +170,7 @@ describe("evolution source", () => {
 	})
 
 	it("stops reading once detached", async () => {
-		const panels = createPanels({ botId: "bot-1" })
+		const panels = createPanels()
 		const { driver, stop } = start(panels)
 
 		stop()
