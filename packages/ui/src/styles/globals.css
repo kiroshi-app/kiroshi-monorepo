@@ -418,6 +418,71 @@
 }
 
 :is(
+	[data-slot="context-menu-content"],
+	[data-slot="context-menu-sub-content"]
+) {
+	min-inline-size: calc(var(--spacing) * 48);
+}
+
+[data-slot="context-menu-item"]:not(
+	:has(> [data-slot="context-menu-shortcut"])
+) {
+	padding-inline-end: calc(var(--spacing) * 8);
+}
+
+:is(
+	[data-slot="context-menu-checkbox-item"],
+	[data-slot="context-menu-radio-item"]
+) {
+	padding-inline-end: calc(var(--spacing) * 2);
+}
+
+:is(
+	[data-slot="context-menu-shortcut"],
+	[data-slot="context-menu-sub-trigger"] > svg:last-child,
+	[data-slot="context-menu-checkbox-item"] > span:first-child,
+	[data-slot="context-menu-radio-item"] > span:first-child
+) {
+	position: static;
+	flex: none;
+	order: 1;
+	box-sizing: content-box;
+	margin-inline-start: auto;
+	padding-inline-start: calc(var(--spacing) * 6);
+}
+
+:is(
+	[data-slot="context-menu-shortcut"],
+	[data-slot="context-menu-checkbox-item"] > span:first-child,
+	[data-slot="context-menu-radio-item"] > span:first-child
+) {
+	display: flex;
+	justify-content: flex-end;
+	min-inline-size: calc(var(--spacing) * 6);
+}
+
+[data-slot="context-menu-sub-trigger"] > svg:last-child {
+	padding-inline-start: calc(var(--spacing) * 8);
+}
+
+:is(
+		[data-slot="context-menu-checkbox-item"],
+		[data-slot="context-menu-radio-item"]
+	)
+	> span:first-child {
+	order: 2;
+}
+
+:is(
+		[data-slot="context-menu-checkbox-item"],
+		[data-slot="context-menu-radio-item"]
+	):has(> [data-slot="context-menu-shortcut"])
+	> span:first-child {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+}
+
+:is(
 	[data-slot="context-menu-item"],
 	[data-slot="context-menu-sub-trigger"],
 	[data-slot="context-menu-checkbox-item"],
