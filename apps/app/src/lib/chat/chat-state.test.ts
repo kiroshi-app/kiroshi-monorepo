@@ -97,6 +97,7 @@ describe("chatReducer", () => {
 			messages,
 			hasOlder: true,
 			hasNewer: false,
+			isFirstLoadPending: false,
 		})
 
 		expect(mirrored.messages).toBe(messages)
@@ -107,6 +108,7 @@ describe("chatReducer", () => {
 				messages,
 				hasOlder: true,
 				hasNewer: false,
+				isFirstLoadPending: false,
 			}),
 		).toBe(mirrored)
 	})
@@ -117,6 +119,7 @@ describe("chatReducer", () => {
 			messages: [message({ id: "m-1" })],
 			hasOlder: true,
 			hasNewer: false,
+			isFirstLoadPending: false,
 		})
 		const reset = reduce(mirrored, {
 			type: "sessionReset",

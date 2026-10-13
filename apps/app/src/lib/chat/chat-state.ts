@@ -51,6 +51,7 @@ export type ChatState = {
 	loadingOlder: boolean
 	hasNewer: boolean
 	loadingNewer: boolean
+	isFirstLoadPending: boolean
 	rejectedPromptId: string | null
 	outbox: OutboxEntry[]
 	activities: ActivityEvent[]
@@ -73,6 +74,7 @@ export type ChatAction =
 			messages: TranscriptMessage[]
 			hasOlder: boolean
 			hasNewer: boolean
+			isFirstLoadPending: boolean
 	  }
 	| { type: "olderLoading"; loading: boolean }
 	| { type: "newerLoading"; loading: boolean }
@@ -106,6 +108,7 @@ export const initialChatState: ChatState = {
 	loadingOlder: false,
 	hasNewer: false,
 	loadingNewer: false,
+	isFirstLoadPending: false,
 	rejectedPromptId: null,
 	outbox: [],
 	activities: [],
@@ -451,15 +454,17 @@ function applyTranscriptChanged(
 	messages: TranscriptMessage[],
 	hasOlder: boolean,
 	hasNewer: boolean,
+	isFirstLoadPending: boolean,
 ): ChatState {
 	if (
 		state.messages === messages &&
 		state.hasOlder === hasOlder &&
-		state.hasNewer === hasNewer
+		state.hasNewer === hasNewer &&
+		state.isFirstLoadPending === isFirstLoadPending
 	) {
 		return state
 	}
-	return { ...state, messages, hasOlder, hasNewer }
+	return { ...state, messages, hasOlder, hasNewer, isFirstLoadPending }
 }
 
 function applyPromptRejected(
@@ -550,6 +555,7 @@ function reducedChat(state: ChatState, action: ChatAction): ChatState {
 				action.messages,
 				action.hasOlder,
 				action.hasNewer,
+				action.isFirstLoadPending,
 			)
 		case "olderLoading":
 			return state.loadingOlder === action.loading

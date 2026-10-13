@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { createConversationController } from "./conversation-controller"
 import { readConversation } from "./read-conversation"
+import { createScriptedDriver } from "./scripted-driver"
 import { conversationStore } from "./store-transport"
 import { botIdentity } from "./transcript-fixtures"
 
+import type { Conversation } from "../bindings"
+import { createChatController } from "../chat/chat-controller"
 import type { HostSocket } from "../host/http"
+import type { ReportedRunsReader } from "../routines/run-port"
 
 const HOST = "http://192.168.1.20:45367"
 const JOINED_ID = "garage"
@@ -13,10 +18,26 @@ const GUEST_SPACE_ID = "space-of-the-guest"
 
 type Call = [command: string, args: unknown]
 
-const wire = vi.hoisted(() => ({
-	localCalls: [] as [string, unknown][],
-	hostCalls: [] as [string, unknown][],
-}))
+const wire = vi.hoisted(() => {
+	const pageRead = { answered: Promise.withResolvers<void>() }
+	const answerTo = async (command: string, args: unknown) => {
+		if (command === "conversation_main_chat") {
+			return { id: "chat" }
+		}
+		if (command !== "conversation_message_page") {
+			return []
+		}
+		await pageRead.answered.promise
+		const { conversationId } = args as { conversationId: string }
+		return { conversationId, messages: [], arrivals: [], hasMore: false }
+	}
+	return {
+		localCalls: [] as [string, unknown][],
+		hostCalls: [] as [string, unknown][],
+		pageRead,
+		answerTo,
+	}
+})
 
 vi.mock("../host", async () => {
 	const { createJoinedHosts } = await import("../host/joined-hosts")
@@ -24,7 +45,9 @@ vi.mock("../host", async () => {
 		local: {
 			invoke: (async (command: string, args: unknown) => {
 				wire.localCalls.push([command, args])
-				return command === "space_list" ? [{ id: GUEST_SPACE_ID }] : []
+				return command === "space_list"
+					? [{ id: GUEST_SPACE_ID }]
+					: wire.answerTo(command, args)
 			}) as never,
 			listen: async () => () => undefined,
 			fileSrc: (path) => path,
@@ -41,15 +64,11 @@ vi.mock("../host", async () => {
 		}),
 		fetch: async (input, init) => {
 			const command = decodeURIComponent(String(input).split("/").pop() ?? "")
-			wire.hostCalls.push([command, JSON.parse(String(init?.body))])
-			return new Response(
-				JSON.stringify(
-					command === "conversation_main_chat" ? { id: "chat" } : [],
-				),
-				{
-					headers: { "content-type": "application/json" },
-				},
-			)
+			const args = JSON.parse(String(init?.body))
+			wire.hostCalls.push([command, args])
+			return new Response(JSON.stringify(await wire.answerTo(command, args)), {
+				headers: { "content-type": "application/json" },
+			})
 		},
 		openSocket: () =>
 			({
@@ -157,5 +176,106 @@ describe("store calls with no joined space", () => {
 			["space_list", undefined],
 			["conversation_list", { spaceId: GUEST_SPACE_ID }],
 		])
+	})
+})
+
+const GROUP: Conversation = {
+	id: "c-1",
+	spaceId: GUEST_SPACE_ID,
+	sectionId: null,
+	pinPosition: null,
+	title: "Walls",
+	instructions: "",
+	createdAt: 0,
+	updatedAt: 0,
+	participants: [],
+}
+
+const NO_REPORTED_RUNS: ReportedRunsReader = () => Promise.resolve([])
+
+const NO_LIVE_EVENTS = () => Promise.resolve(() => undefined)
+
+const NO_RECONNECTIONS = () => () => undefined
+
+const pageAsked = (conversationId: string) =>
+	vi.waitFor(() => {
+		const asked = [...wire.localCalls, ...wire.hostCalls].some(
+			([command, args]) =>
+				command === "conversation_message_page" &&
+				(args as { conversationId: string }).conversationId === conversationId,
+		)
+		if (!asked) {
+			throw new Error(`no page of ${conversationId} was asked`)
+		}
+	})
+
+const openGroupThread = () => {
+	const controller = createConversationController(
+		createScriptedDriver(),
+		conversationStore,
+		{
+			readReportedRuns: NO_REPORTED_RUNS,
+			onCompanionArrived: NO_LIVE_EVENTS,
+			onMessageStored: NO_LIVE_EVENTS,
+			onReconnected: NO_RECONNECTIONS,
+		},
+	)
+	const opened = controller.open(GROUP)
+	return { controller, opened }
+}
+
+const openSoloThread = () => {
+	const controller = createChatController(
+		createScriptedDriver(),
+		conversationStore,
+		{
+			readReportedRuns: NO_REPORTED_RUNS,
+			onMessageStored: NO_LIVE_EVENTS,
+			onReconnected: NO_RECONNECTIONS,
+		},
+	)
+	void controller.open("b-1", null)
+	return controller
+}
+
+describe.each([
+	{ path: "the local store", joinedSpaceId: null },
+	{ path: "the joined host", joinedSpaceId: JOINED_ID },
+])("the first page of a thread read through $path", ({ joinedSpaceId }) => {
+	beforeEach(async () => {
+		wire.localCalls.length = 0
+		wire.hostCalls.length = 0
+		wire.pageRead.answered = Promise.withResolvers<void>()
+		await joinedHosts.activate(joinedSpaceId)
+	})
+
+	afterEach(() => {
+		wire.pageRead.answered.resolve()
+		joinedHosts.forget(JOINED_ID)
+	})
+
+	it("holds a group thread in its first load until the page answers", async () => {
+		const { controller, opened } = openGroupThread()
+		await pageAsked("c-1")
+
+		expect(controller.getState().isFirstLoadPending).toBe(true)
+
+		wire.pageRead.answered.resolve()
+		await opened
+
+		expect(controller.getState().isFirstLoadPending).toBe(false)
+	})
+
+	it("holds a solo bot thread in its first load until the page answers", async () => {
+		const controller = openSoloThread()
+		await pageAsked("chat")
+
+		expect(controller.stateFor("b-1").isFirstLoadPending).toBe(true)
+
+		wire.pageRead.answered.resolve()
+
+		await vi.waitFor(() => {
+			expect(controller.stateFor("b-1").isFirstLoadPending).toBe(false)
+		})
 	})
 })

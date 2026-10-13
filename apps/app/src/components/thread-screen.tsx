@@ -1105,7 +1105,8 @@ const signInOfferOf = (
 const showsEmptyState = (
 	rows: TranscriptItem[],
 	onboarding: OnboardingTail | null,
-) => rows.length === 0 && !onboarding
+	isFirstLoadPending: boolean,
+) => rows.length === 0 && !onboarding && !isFirstLoadPending
 
 type ThreadTailProps = {
 	thread: LoadedThread
@@ -1708,7 +1709,11 @@ function ThreadView(props: ThreadViewProps) {
 			scrollerRef={view.scrollerRef}
 			transcriptKey={view.facts.id}
 		>
-			{showsEmptyState(view.transcriptRows, view.onboardingTail) ? (
+			{showsEmptyState(
+				view.transcriptRows,
+				view.onboardingTail,
+				view.facts.isFirstLoadPending,
+			) ? (
 				<ThreadEmptyState
 					botImage={view.botImage}
 					latestError={view.facts.latestError}

@@ -24,6 +24,7 @@ import {
 	selectArrivals,
 	selectHasMore,
 	selectHasNewer,
+	selectIsFirstLoadPending,
 	selectMessages,
 	selectOldestSeq,
 	type TranscriptState,
@@ -1005,5 +1006,89 @@ describe("the arrivals a conversation holds", () => {
 		})
 
 		expect(arrivalIdsOf(left)).toEqual(["a-6"])
+	})
+})
+
+describe("the first page of a conversation", () => {
+	const isPending = (state: TranscriptState) =>
+		selectIsFirstLoadPending(state, CONVERSATION)
+
+	it("waits for a conversation nothing has answered for yet", () => {
+		expect(isPending(initialTranscriptState)).toBe(true)
+	})
+
+	it("ends once a page with no message answers", () => {
+		expect(isPending(load(initialTranscriptState, page([])))).toBe(false)
+	})
+
+	it("ends once a page with messages answers", () => {
+		expect(isPending(load(initialTranscriptState, page([message()])))).toBe(
+			false,
+		)
+	})
+
+	it("ends once the read of that page fails", () => {
+		const failed = transcriptReducer(initialTranscriptState, {
+			type: "firstPageFailed",
+			conversationId: CONVERSATION,
+		})
+
+		expect(isPending(failed)).toBe(false)
+		expect(selectMessages(failed, CONVERSATION)).toEqual([])
+	})
+
+	it("ends once a landed window answers first", () => {
+		const landed = transcriptReducer(initialTranscriptState, {
+			type: "windowLanded",
+			window: {
+				conversationId: CONVERSATION,
+				messages: [message({ id: "m-40", seq: 40 })],
+				arrivals: [],
+				hasOlder: true,
+				hasNewer: true,
+			},
+		})
+
+		expect(isPending(landed)).toBe(false)
+	})
+
+	it("keeps waiting while a message is appended before the page answers", () => {
+		const appended = append(initialTranscriptState, streamingDraft("live"))
+
+		expect(isPending(appended)).toBe(true)
+		expect(idsOf(appended)).toEqual(["live"])
+	})
+
+	it("waits for one conversation whatever the page of another does", () => {
+		expect(isPending(SEEDED)).toBe(true)
+		expect(selectIsFirstLoadPending(SEEDED, OTHER_CONVERSATION)).toBe(false)
+	})
+
+	it("does not wait again for a conversation left with its messages", () => {
+		const left = transcriptReducer(load(SEEDED, page([message()])), {
+			type: "threadLeft",
+			conversationId: CONVERSATION,
+		})
+
+		expect(isPending(left)).toBe(false)
+	})
+
+	it("waits again for a conversation whose landed window was forgotten", () => {
+		const landed = transcriptReducer(SEEDED, {
+			type: "windowLanded",
+			window: {
+				conversationId: CONVERSATION,
+				messages: [message({ id: "m-40", seq: 40 })],
+				arrivals: [],
+				hasOlder: true,
+				hasNewer: true,
+			},
+		})
+		const left = transcriptReducer(landed, {
+			type: "threadLeft",
+			conversationId: CONVERSATION,
+		})
+
+		expect(isPending(left)).toBe(true)
 	})
 })

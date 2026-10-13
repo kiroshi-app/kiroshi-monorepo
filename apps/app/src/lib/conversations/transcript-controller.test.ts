@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 
-import { createFakeTranscriptPort } from "./fake-transcript-port"
+import {
+	createFakeTranscriptPort,
+	holdFirstPages,
+} from "./fake-transcript-port"
 import {
 	TRANSCRIPT_WINDOW_SIZE,
 	type TranscriptDraft,
@@ -19,6 +22,7 @@ import type { TranscriptPort } from "./transcript-port"
 import {
 	selectHasMore,
 	selectHasNewer,
+	selectIsFirstLoadPending,
 	selectMessages,
 } from "./transcript-state"
 
@@ -410,5 +414,70 @@ describe("reopening a thread that was left", () => {
 		).rejects.toThrow()
 
 		expect(idsOf(controller)).toContain(`m-${LONG.length}`)
+	})
+})
+
+describe("the first page a transcript waits for", () => {
+	const heldController = () => {
+		const held = holdFirstPages(
+			createFakeTranscriptPort({ messages: STORED, pageSize: PAGE_SIZE }),
+		)
+		return { ...held, controller: createTranscriptController(held.port) }
+	}
+
+	const isPending = (
+		controller: TranscriptController,
+		conversationId = CONVERSATION,
+	) => selectIsFirstLoadPending(controller.getState(), conversationId)
+
+	it("waits until the first page answers", async () => {
+		const { controller, answer } = heldController()
+		const loaded = controller.load(CONVERSATION)
+
+		expect(isPending(controller)).toBe(true)
+
+		answer(CONVERSATION)
+		await loaded
+
+		expect(isPending(controller)).toBe(false)
+		expect(idsOf(controller)).toEqual(["m-3", "m-4"])
+	})
+
+	it("stops waiting when the first page fails, and still reports the failure", async () => {
+		const { controller, fail } = heldController()
+		const loaded = controller.load(CONVERSATION)
+		fail(CONVERSATION, new Error("unreachable"))
+
+		await expect(loaded).rejects.toThrow("unreachable")
+		expect(isPending(controller)).toBe(false)
+	})
+
+	it("keeps waiting for the next conversation whatever the page of the last one does", async () => {
+		const { controller, answer } = heldController()
+		const first = controller.load(OTHER_CONVERSATION)
+		controller.leave(OTHER_CONVERSATION)
+		const next = controller.load(CONVERSATION)
+
+		answer(OTHER_CONVERSATION)
+		await first
+
+		expect(isPending(controller)).toBe(true)
+
+		answer(CONVERSATION)
+		await next
+
+		expect(isPending(controller)).toBe(false)
+	})
+
+	it("never waits again for a conversation reopened with its messages", async () => {
+		const { controller, answer } = heldController()
+		answer(CONVERSATION)
+		await controller.load(CONVERSATION)
+		controller.leave(CONVERSATION)
+
+		const reopened = controller.reopen(CONVERSATION)
+
+		expect(isPending(controller)).toBe(false)
+		await reopened
 	})
 })

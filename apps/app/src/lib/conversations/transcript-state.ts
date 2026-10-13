@@ -34,6 +34,7 @@ type TranscriptConversation = {
 	arrivals: CompanionArrival[]
 	hasMore: boolean
 	hasNewer: boolean
+	hasAnswered: boolean
 }
 
 export type TranscriptState = {
@@ -42,6 +43,7 @@ export type TranscriptState = {
 
 export type TranscriptAction =
 	| { type: "pageLoaded"; page: TranscriptPage }
+	| { type: "firstPageFailed"; conversationId: string }
 	| { type: "windowLanded"; window: TranscriptWindow }
 	| { type: "latestLoaded"; page: TranscriptPage }
 	| { type: "newerLoaded"; window: TranscriptWindow }
@@ -67,6 +69,7 @@ const EMPTY_CONVERSATION: TranscriptConversation = {
 	arrivals: NO_ARRIVALS,
 	hasMore: false,
 	hasNewer: false,
+	hasAnswered: false,
 }
 
 const FORGOTTEN_CONVERSATION: TranscriptConversation = {
@@ -74,6 +77,7 @@ const FORGOTTEN_CONVERSATION: TranscriptConversation = {
 	arrivals: NO_ARRIVALS,
 	hasMore: true,
 	hasNewer: false,
+	hasAnswered: false,
 }
 
 const isAwayFromNewest = (held: TranscriptConversation): boolean =>
@@ -115,6 +119,11 @@ export const selectHasNewer = (
 	state: TranscriptState,
 	conversationId: string,
 ): boolean => state.conversations[conversationId]?.hasNewer ?? false
+
+export const selectIsFirstLoadPending = (
+	state: TranscriptState,
+	conversationId: string,
+): boolean => !state.conversations[conversationId]?.hasAnswered
 
 export type LastWord = {
 	text?: string
@@ -314,6 +323,7 @@ const applyPageLoaded = (
 ): TranscriptState => {
 	const current = state.conversations[page.conversationId] ?? EMPTY_CONVERSATION
 	if (
+		current.hasAnswered &&
 		page.messages.length === 0 &&
 		page.arrivals.length === 0 &&
 		page.hasMore === current.hasMore
@@ -326,6 +336,21 @@ const applyPageLoaded = (
 		messages,
 		arrivals: mergeArrivals(current.arrivals, page.arrivals),
 		hasMore: nextHasMore(current, page, messages),
+		hasAnswered: true,
+	})
+}
+
+const applyFirstPageFailed = (
+	state: TranscriptState,
+	conversationId: string,
+): TranscriptState => {
+	const current = state.conversations[conversationId] ?? EMPTY_CONVERSATION
+	if (current.hasAnswered) {
+		return state
+	}
+	return withConversation(state, conversationId, {
+		...current,
+		hasAnswered: true,
 	})
 }
 
@@ -338,6 +363,7 @@ const applyWindowLanded = (
 		arrivals: orderedArrivals(window.arrivals),
 		hasMore: window.hasOlder,
 		hasNewer: window.hasNewer,
+		hasAnswered: true,
 	})
 
 const applyLatestLoaded = (
@@ -349,6 +375,7 @@ const applyLatestLoaded = (
 		arrivals: orderedArrivals(page.arrivals),
 		hasMore: page.hasMore,
 		hasNewer: false,
+		hasAnswered: true,
 	})
 
 const applyNewerLoaded = (
@@ -550,6 +577,8 @@ export const transcriptReducer = (
 	switch (action.type) {
 		case "pageLoaded":
 			return applyPageLoaded(state, action.page)
+		case "firstPageFailed":
+			return applyFirstPageFailed(state, action.conversationId)
 		case "windowLanded":
 			return applyWindowLanded(state, action.window)
 		case "latestLoaded":

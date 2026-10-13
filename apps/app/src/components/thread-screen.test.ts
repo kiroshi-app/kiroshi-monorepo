@@ -80,6 +80,7 @@ import type {
 	Thread,
 } from "@/lib/chat/thread-contract"
 import { createConversationRuntimes } from "@/lib/conversations/conversation-runtimes"
+import { holdFirstPages } from "@/lib/conversations/fake-transcript-port"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import {
 	createScriptedDriver,
@@ -4501,5 +4502,152 @@ describe("ThreadScreen dating its messages in Tokyo", () => {
 		)
 
 		expect(daySeparators()).toHaveLength(0)
+	})
+})
+
+const CONVERSATION_EMPTY_STATE_SLOT = '[data-slot="conversation-empty-state"]'
+
+const drawsEmptyState = () =>
+	document.querySelector(
+		`${CONVERSATION_EMPTY_STATE_SLOT}, ${EMPTY_STATE_SLOT}`,
+	) !== null
+
+const HELD_SAID: SpokenTurn = {
+	turnId: "t-held",
+	text: "the walls hold",
+	createdAt: A_MINUTE,
+}
+
+const heldRoomOf = async (spoken: SpokenTurn[] = []) => {
+	const store = createFakeTranscriptStore()
+	const bots = await seatBots(store, SPACE, ["Ada"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: bots.map((bot) => bot.id),
+	})
+	for (const turn of spoken) {
+		await writeTurn(store, conversation.id, bots[0].id, turn)
+	}
+	const held = holdFirstPages(store)
+	const runtimes = createConversationRuntimes(createScriptedDriver(), held.port)
+	const thread: ConversationThread = {
+		kind: "conversation",
+		conversation,
+		runtimes,
+		isSettingsOpen: false,
+		onOpenSettings: () => undefined,
+	}
+	render(screenOf(thread, bots), { wrapper: createQueryTestWrapper().wrapper })
+	await settle()
+
+	return {
+		answer: async () => {
+			await act(async () => held.answer(conversation.id))
+			await settle()
+		},
+		fail: async () => {
+			await act(async () =>
+				held.fail(conversation.id, new Error("unreachable")),
+			)
+			await settle()
+		},
+	}
+}
+
+const soloThreadWaitingOf = (isFirstLoadPending: boolean): BotThread => {
+	const sent = threadOf({ id: "bot-1", name: "Nyx", said: "" })
+	return {
+		...sent,
+		chat: {
+			...sent.chat,
+			state: { ...sent.chat.state, messages: [], isFirstLoadPending },
+		},
+	}
+}
+
+describe("the first load of a thread transcript", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("draws no empty state in a group thread while its first page is pending", async () => {
+		const room = await heldRoomOf()
+
+		expect(drawsEmptyState()).toBe(false)
+
+		await room.answer()
+
+		expect(document.querySelector(CONVERSATION_EMPTY_STATE_SLOT)).not.toBeNull()
+	})
+
+	it("draws the messages of a group thread and never the empty state before them", async () => {
+		const room = await heldRoomOf([HELD_SAID])
+
+		expect(drawsEmptyState()).toBe(false)
+		expect(screen.queryByText(HELD_SAID.text)).toBeNull()
+
+		await room.answer()
+
+		expect(screen.getByText(HELD_SAID.text)).toBeTruthy()
+		expect(drawsEmptyState()).toBe(false)
+	})
+
+	it("draws the empty state and the failure once the first page of a group thread fails", async () => {
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		const room = await heldRoomOf()
+
+		await room.fail()
+
+		expect(document.querySelector(CONVERSATION_EMPTY_STATE_SLOT)).not.toBeNull()
+		expect(raisedNotices(READ_TITLE)).toHaveLength(1)
+	})
+
+	it("draws a message appended while the first page is pending, and no empty state", async () => {
+		const sent = threadOf({ id: "bot-1", name: "Nyx", said: "anyone here?" })
+		render(
+			screenOf({
+				...sent,
+				chat: {
+					...sent.chat,
+					state: { ...sent.chat.state, isFirstLoadPending: true },
+				},
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		expect(screen.getByText("anyone here?")).toBeTruthy()
+		expect(drawsEmptyState()).toBe(false)
+	})
+
+	it("draws no empty state in a solo bot thread while its first page is pending", async () => {
+		const { rerender } = render(screenOf(soloThreadWaitingOf(true)), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(drawsEmptyState()).toBe(false)
+
+		rerender(screenOf(soloThreadWaitingOf(false)))
+		await settle()
+
+		expect(document.querySelector(EMPTY_STATE_SLOT)).not.toBeNull()
 	})
 })

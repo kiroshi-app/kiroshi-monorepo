@@ -27,6 +27,7 @@ import { createTranscriptController } from "../../conversations/transcript-contr
 import {
 	selectHasMore,
 	selectHasNewer,
+	selectIsFirstLoadPending,
 	selectMessages,
 } from "../../conversations/transcript-state"
 import { createQueue } from "../../queue"
@@ -119,6 +120,7 @@ export const createChatContext = (
 			),
 			hasOlder: selectHasMore(current, conversationId),
 			hasNewer: selectHasNewer(current, conversationId),
+			isFirstLoadPending: selectIsFirstLoadPending(current, conversationId),
 		})
 	}
 

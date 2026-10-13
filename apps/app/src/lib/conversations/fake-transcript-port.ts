@@ -59,3 +59,39 @@ export const createFakeTranscriptPort = (
 		},
 	}
 }
+
+type HeldFirstPages<Port extends TranscriptPort> = {
+	port: Port
+	answer: (conversationId: string) => void
+	fail: (conversationId: string, reason: Error) => void
+}
+
+export const holdFirstPages = <Port extends TranscriptPort>(
+	port: Port,
+): HeldFirstPages<Port> => {
+	const gates = new Map<string, PromiseWithResolvers<void>>()
+
+	const gateOf = (conversationId: string) => {
+		const known = gates.get(conversationId)
+		if (known) {
+			return known
+		}
+		const gate = Promise.withResolvers<void>()
+		gates.set(conversationId, gate)
+		return gate
+	}
+
+	return {
+		port: {
+			...port,
+			loadPage: async (conversationId, cursor) => {
+				if (!cursor) {
+					await gateOf(conversationId).promise
+				}
+				return port.loadPage(conversationId, cursor)
+			},
+		},
+		answer: (conversationId) => gateOf(conversationId).resolve(),
+		fail: (conversationId, reason) => gateOf(conversationId).reject(reason),
+	}
+}

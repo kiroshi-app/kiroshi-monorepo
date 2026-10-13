@@ -25,6 +25,7 @@ import {
 	selectArrivals,
 	selectHasMore,
 	selectHasNewer,
+	selectIsFirstLoadPending,
 	selectMessages,
 } from "./transcript-state"
 import {
@@ -119,6 +120,7 @@ export type ConversationState = {
 	isLoadingOlder: boolean
 	hasNewer: boolean
 	isLoadingNewer: boolean
+	isFirstLoadPending: boolean
 	speakers: SpeakingBot[]
 	waitingBotIds: string[]
 	refusedMessage: RefusedMessage | null
@@ -243,6 +245,7 @@ const isSameState = (left: ConversationState, right: ConversationState) =>
 	left.isLoadingOlder === right.isLoadingOlder &&
 	left.hasNewer === right.hasNewer &&
 	left.isLoadingNewer === right.isLoadingNewer &&
+	left.isFirstLoadPending === right.isFirstLoadPending &&
 	isSameSpeakers(left.speakers, right.speakers) &&
 	isSameOrder(left.waitingBotIds, right.waitingBotIds) &&
 	left.refusedMessage === right.refusedMessage &&
@@ -275,6 +278,7 @@ const initialState: ConversationState = {
 	isLoadingOlder: false,
 	hasNewer: false,
 	isLoadingNewer: false,
+	isFirstLoadPending: false,
 	speakers: NO_SPEAKERS,
 	waitingBotIds: [],
 	refusedMessage: null,
@@ -358,6 +362,7 @@ export const createConversationController = (
 				arrivals: NO_ARRIVALS,
 				hasOlder: false,
 				hasNewer: false,
+				isFirstLoadPending: false,
 			}
 		}
 		const held = transcript.getState()
@@ -366,6 +371,7 @@ export const createConversationController = (
 			arrivals: selectArrivals(held, conversationId),
 			hasOlder: selectHasMore(held, conversationId),
 			hasNewer: selectHasNewer(held, conversationId),
+			isFirstLoadPending: selectIsFirstLoadPending(held, conversationId),
 		}
 	}
 
