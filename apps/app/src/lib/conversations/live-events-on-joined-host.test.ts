@@ -16,8 +16,10 @@ import type {
 	AgentEvent,
 	EventTurn,
 	PermissionRequest,
+	QuestionAnswers,
 	QuestionRequest,
 	RuntimeScope,
+	ScopedEvent,
 } from "../agent/contract"
 import { agentTransport } from "../agent/transport"
 import { createRosterController } from "../bots/roster-controller"
@@ -1160,57 +1162,65 @@ describe("a prompt raised by a turn the other Mac started", () => {
 	})
 
 	it("records the answer to a question of a turn opened elsewhere and shows it in the thread", async () => {
-		const { store, controller, driver, detach, conversationId } =
-			await openSoloChat()
-		vi.spyOn(driver, "answerQuestion").mockResolvedValue()
-		const append = vi.spyOn(store, "appendUserMessage")
-		const scope = foreignScope(conversationId)
-		const turn = storedTurn(conversationId)
-		await emitLocally("agent://event", { scope, turn, event: ASKED_QUESTION })
+		const answered = await answerForeignQuestion(askLocally, ANSWERS)
 
-		await act(() => controller.answer(QUESTION.id, ANSWERS))
-		await settled()
-
-		expect(append).toHaveBeenCalledWith(answerStoredIn(conversationId))
-		expect(answerBubbleIn(controller.getState())).toMatchObject(ANSWER_BUBBLE)
-		detach()
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
 	})
 
 	it("records the answer of a member on the joined host and shows it in the thread", async () => {
-		const { store, controller, driver, detach, conversationId } =
-			await openSoloChat()
-		vi.spyOn(driver, "answerQuestion").mockResolvedValue()
-		const append = vi.spyOn(store, "appendUserMessage")
-		await joinHost()
-		const scope = foreignScope(conversationId)
-		const turn = storedTurn(conversationId)
-		await emitOnHost("agent://event", { scope, turn, event: ASKED_QUESTION })
+		const answered = await answerForeignQuestion(askOnJoinedHost, ANSWERS)
 
-		await act(() => controller.answer(QUESTION.id, ANSWERS))
-		await settled()
-
-		expect(append).toHaveBeenCalledWith(answerStoredIn(conversationId))
-		expect(answerBubbleIn(controller.getState())).toMatchObject(ANSWER_BUBBLE)
-		detach()
+		expect(answered.append).toHaveBeenCalledWith(
+			answerStoredIn(answered.conversationId),
+		)
+		expect(answered.bubble).toMatchObject(ANSWER_BUBBLE)
 	})
 
 	it("records nothing when the answer to a foreign question is empty", async () => {
-		const { store, controller, driver, detach, conversationId } =
-			await openSoloChat()
-		vi.spyOn(driver, "answerQuestion").mockResolvedValue()
-		const append = vi.spyOn(store, "appendUserMessage")
-		const scope = foreignScope(conversationId)
-		const turn = storedTurn(conversationId)
-		await emitLocally("agent://event", { scope, turn, event: ASKED_QUESTION })
+		const answered = await answerForeignQuestion(askLocally, {})
 
-		await act(() => controller.answer(QUESTION.id, {}))
-		await settled()
-
-		expect(append).not.toHaveBeenCalled()
-		expect(answerBubbleIn(controller.getState())).toBeUndefined()
-		detach()
+		expect(answered.append).not.toHaveBeenCalled()
+		expect(answered.bubble).toBeUndefined()
 	})
 })
+
+type AskForeign = (scoped: ScopedEvent) => Promise<void>
+
+const askLocally: AskForeign = (scoped) => emitLocally("agent://event", scoped)
+
+const askOnJoinedHost: AskForeign = async (scoped) => {
+	await joinHost()
+	await emitOnHost("agent://event", scoped)
+}
+
+const answerForeignQuestion = async (
+	ask: AskForeign,
+	answers: QuestionAnswers,
+) => {
+	const { store, controller, driver, detach, conversationId } =
+		await openSoloChat()
+	vi.spyOn(driver, "answerQuestion").mockResolvedValue()
+	const append = vi.spyOn(store, "appendUserMessage")
+	await ask({
+		scope: foreignScope(conversationId),
+		turn: storedTurn(conversationId),
+		event: ASKED_QUESTION,
+	})
+
+	await act(() => controller.answer(QUESTION.id, answers))
+	await settled()
+	detach()
+
+	const bubble = controller
+		.getState()
+		.messages.find(
+			({ repliedToMessageId }) => repliedToMessageId === QUESTION_ROW_ID,
+		)
+	return { append, bubble, conversationId }
+}
 
 const answerStoredIn = (conversationId: string) =>
 	expect.objectContaining({
@@ -1220,11 +1230,6 @@ const answerStoredIn = (conversationId: string) =>
 		repliedToMessageId: QUESTION_ROW_ID,
 		content: "North",
 	})
-
-const answerBubbleIn = ({ messages }: { messages: TranscriptMessage[] }) =>
-	messages.find(
-		({ repliedToMessageId }) => repliedToMessageId === QUESTION_ROW_ID,
-	)
 
 const ANSWER_BUBBLE = {
 	role: "user",
