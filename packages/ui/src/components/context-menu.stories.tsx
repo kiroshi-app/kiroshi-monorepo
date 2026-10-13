@@ -30,6 +30,7 @@ import {
 	ContextMenuTrigger,
 } from "@workspace/ui/components/ui/context-menu"
 import { STILL_UNDER_REDUCED_MOTION } from "@workspace/ui/lib/reduced-motion"
+import { cn } from "@workspace/ui/lib/utils"
 
 const SURFACE =
 	"flex h-40 w-72 items-center justify-center rounded-xl border border-border border-dashed bg-card text-muted-foreground text-sm"
@@ -455,7 +456,7 @@ const MenuOnCard = ({ children, className }: MenuOnCardProps) => (
 		/>
 		<ContextMenuContent
 			aria-label={MENU_LABEL}
-			className={`${className ?? ""} ${STILL_UNDER_REDUCED_MOTION}`}
+			className={cn(className, STILL_UNDER_REDUCED_MOTION)}
 		>
 			{children}
 		</ContextMenuContent>
@@ -489,36 +490,28 @@ export const MinimumWidth = meta.story({
 	},
 })
 
-const TrailingSlotsMenu = () => {
-	const [wrap, setWrap] = useState(true)
-
-	return (
-		<MenuOnCard>
-			<ContextMenuItem>
-				<Icons.Copy aria-hidden="true" className="size-3.5" />
-				Copy transcript
-				<ContextMenuShortcut>⌘C</ContextMenuShortcut>
-			</ContextMenuItem>
-			<ContextMenuSub>
-				<ContextMenuSubTrigger className="gap-2">
-					<Icons.Folder aria-hidden="true" className="size-3.5" />
-					{SUBMENU_LABEL}
-				</ContextMenuSubTrigger>
-				<ContextMenuSubContent className={STILL_UNDER_REDUCED_MOTION}>
-					<ContextMenuItem>Inbox</ContextMenuItem>
-					<ContextMenuItem>Later</ContextMenuItem>
-				</ContextMenuSubContent>
-			</ContextMenuSub>
-			<ContextMenuCheckboxItem
-				checked={wrap}
-				closeOnClick={false}
-				onCheckedChange={setWrap}
-			>
-				Wrap long lines
-			</ContextMenuCheckboxItem>
-		</MenuOnCard>
-	)
-}
+const TrailingSlotsMenu = () => (
+	<MenuOnCard>
+		<ContextMenuItem>
+			<Icons.Copy aria-hidden="true" className="size-3.5" />
+			Copy transcript
+			<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+		</ContextMenuItem>
+		<ContextMenuSub>
+			<ContextMenuSubTrigger className="gap-2">
+				<Icons.Folder aria-hidden="true" className="size-3.5" />
+				{SUBMENU_LABEL}
+			</ContextMenuSubTrigger>
+			<ContextMenuSubContent className={STILL_UNDER_REDUCED_MOTION}>
+				<ContextMenuItem>Inbox</ContextMenuItem>
+				<ContextMenuItem>Later</ContextMenuItem>
+			</ContextMenuSubContent>
+		</ContextMenuSub>
+		<ContextMenuCheckboxItem closeOnClick={false} defaultChecked>
+			Wrap long lines
+		</ContextMenuCheckboxItem>
+	</MenuOnCard>
+)
 
 export const TrailingSlotsAligned = meta.story({
 	tags: ["test-only"],
