@@ -15,6 +15,7 @@ final class ThreadStore {
     private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadMessage] = []
+    private(set) var lastSentId: ThreadMessage.ID?
     private(set) var isReachable = false
     private(set) var isSending = false
     private(set) var sendFailure: SendFailure?
@@ -191,6 +192,7 @@ final class ThreadStore {
                 threadMessage(
                     id: message.id, isYours: true, text: message.content,
                     sentAt: message.createdAt))
+            lastSentId = message.id
         } catch is CancellationError {
             return
         } catch {

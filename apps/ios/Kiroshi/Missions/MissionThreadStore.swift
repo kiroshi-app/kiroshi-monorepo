@@ -23,6 +23,7 @@ final class MissionThreadStore {
     private(set) var isOnline = false
     private(set) var isSending = false
     private(set) var sendProblem: MissionSendProblem?
+    private(set) var lastSentId: ThreadMessage.ID?
 
     @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private let now: () -> Date
@@ -138,6 +139,7 @@ final class MissionThreadStore {
                     id: message.id, conversationId: message.conversationId, seq: .max,
                     role: .user, content: content, createdAt: message.createdAt, authorBotId: nil),
                 into: messages)
+            lastSentId = message.id
             if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
                 draft = ""
             }

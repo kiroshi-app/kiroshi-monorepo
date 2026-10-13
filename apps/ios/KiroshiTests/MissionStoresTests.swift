@@ -192,6 +192,7 @@ struct MissionStoresTests {
         #expect(
             MissionTesting.shown(store.transcript).last
                 == .init(id: "id-1", isYours: true, bubbles: ["The account step."]))
+        #expect(store.lastSentId == "id-1")
         following.cancel()
         await connection.stop()
     }
