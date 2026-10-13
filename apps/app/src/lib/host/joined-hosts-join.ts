@@ -83,7 +83,6 @@ export const createJoinedHostsJoin = ({
 			openSocket,
 			onUp: () => down.markUp(id),
 			onDown: () => down.markDown(id),
-			onReconnectFailed: () => down.endGraceAndReport(id),
 			onRefused: reportFailure,
 		})
 		hosts.set(id, host)

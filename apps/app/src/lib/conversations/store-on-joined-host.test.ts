@@ -78,8 +78,6 @@ vi.mock("../host", async () => {
 				close: () => undefined,
 			}) satisfies HostSocket,
 		reportFailure: () => undefined,
-		reportHostDown: () => "notice",
-		endHostDown: () => undefined,
 	})
 	return {
 		joinedHosts,

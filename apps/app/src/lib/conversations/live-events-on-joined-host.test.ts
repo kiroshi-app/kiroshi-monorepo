@@ -112,8 +112,6 @@ vi.mock("../host", async (importOriginal) => {
 			return socket
 		},
 		reportFailure: () => undefined,
-		reportHostDown: () => "notice",
-		endHostDown: () => undefined,
 	})
 	return {
 		...actual,

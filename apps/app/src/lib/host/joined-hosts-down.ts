@@ -1,11 +1,7 @@
 import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
 
 import type { HttpHost } from "./http"
-import type {
-	JoinedHostsOptions,
-	JoinedHostsState,
-	RecordJoinedHost,
-} from "./joined-hosts"
+import type { JoinedHostsState, RecordJoinedHost } from "./joined-hosts"
 import type { LocalHost } from "./joined-hosts-invoke"
 import { createReopenPairing } from "./joined-hosts-reopens"
 
@@ -15,12 +11,7 @@ import {
 } from "../bindings"
 import type { Store } from "../store"
 
-export const LONGEST_DOWN_GRACE = 3000
-
-type JoinedHostsDownOptions = Pick<
-	JoinedHostsOptions,
-	"reportHostDown" | "endHostDown"
-> & {
+type JoinedHostsDownOptions = {
 	store: Store<JoinedHostsState>
 	hosts: Map<string, HttpHost>
 	local: LocalHost
@@ -34,53 +25,13 @@ export const createJoinedHostsDown = ({
 	local,
 	record,
 	reportListenFailure,
-	reportHostDown,
-	endHostDown,
 }: JoinedHostsDownOptions) => {
-	const downNotices = new Map<string, string>()
-	const downGraces = new Map<string, ReturnType<typeof setTimeout>>()
 	const reconnectionListeners = new Set<() => void>()
 	const { leaveUnpaired, pairsWith, forgetUnpaired } = createReopenPairing()
 	let isHearingRelayReopens = false
 
 	const isDown = (id: string) =>
 		store.getState().connections[id]?.status === "down"
-
-	const reportIfActiveDown = (id: string) => {
-		if (
-			store.getState().active === id &&
-			isDown(id) &&
-			!downGraces.has(id) &&
-			!downNotices.has(id)
-		) {
-			downNotices.set(id, reportHostDown())
-		}
-	}
-
-	const endDownGrace = (id: string) => {
-		clearTimeout(downGraces.get(id))
-		downGraces.delete(id)
-	}
-
-	const endGraceAndReport = (id: string) => {
-		endDownGrace(id)
-		reportIfActiveDown(id)
-	}
-
-	const startDownGrace = (id: string) => {
-		downGraces.set(
-			id,
-			setTimeout(() => endGraceAndReport(id), LONGEST_DOWN_GRACE),
-		)
-	}
-
-	const endDownNotice = (id: string) => {
-		const noticeId = downNotices.get(id)
-		if (noticeId) {
-			endHostDown(noticeId)
-			downNotices.delete(id)
-		}
-	}
 
 	const announceReconnectionOf = (id: string) => {
 		if (store.getState().active !== id) {
@@ -114,8 +65,6 @@ export const createJoinedHostsDown = ({
 	const markUp = (id: string) => {
 		const wasDown = isDown(id)
 		record(id, { status: "up" })
-		endDownGrace(id)
-		endDownNotice(id)
 		if (wasDown) {
 			catchUpOnSocketReopen(id)
 		}
@@ -123,7 +72,6 @@ export const createJoinedHostsDown = ({
 
 	const markDown = (id: string) => {
 		record(id, { status: "down" })
-		startDownGrace(id)
 	}
 
 	const hearRelayReopens = () => {
@@ -150,15 +98,10 @@ export const createJoinedHostsDown = ({
 
 	const forgetDown = (id: string) => {
 		forgetUnpaired(id)
-		endDownGrace(id)
-		endDownNotice(id)
 	}
 
 	return {
 		isDown,
-		reportIfActiveDown,
-		endGraceAndReport,
-		endDownNotice,
 		markUp,
 		markDown,
 		hearRelayReopens,

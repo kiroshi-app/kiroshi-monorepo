@@ -15,7 +15,6 @@ import { createJoinedHostsListen } from "./joined-hosts-listen"
 import { failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
-export { LONGEST_DOWN_GRACE } from "./joined-hosts-down"
 export { LOCAL_COMMANDS } from "./joined-hosts-invoke"
 export { JOINED_SPACE_CHANGED_EVENT } from "./joined-hosts-listen"
 
@@ -39,8 +38,6 @@ export type JoinedHostsOptions = {
 	openSocket: (url: string) => HostSocket
 	reportFailure: (refusal: HostRefusal) => void
 	reportJoinRefusal?: (notice: NoticeMessage) => void
-	reportHostDown: () => string
-	endHostDown: (noticeId: string) => void
 }
 
 export const createJoinedHosts = ({
@@ -50,8 +47,6 @@ export const createJoinedHosts = ({
 	openSocket,
 	reportFailure,
 	reportJoinRefusal = failureReporterIn("joined-hosts"),
-	reportHostDown,
-	endHostDown,
 }: JoinedHostsOptions) => {
 	const store = createStore<JoinedHostsState>({ active: null, connections: {} })
 	const hosts = new Map<string, HttpHost>()
@@ -82,8 +77,6 @@ export const createJoinedHosts = ({
 		local,
 		record,
 		reportListenFailure,
-		reportHostDown,
-		endHostDown,
 	})
 	const { openConnection, invokeOnceOpen } = createJoinedHostsJoin({
 		store,
@@ -122,9 +115,6 @@ export const createJoinedHosts = ({
 		if (previous === active) {
 			return
 		}
-		if (previous) {
-			down.endDownNotice(previous)
-		}
 		store.setState({ ...store.getState(), active })
 		relocateAll()
 	}
@@ -151,7 +141,6 @@ export const createJoinedHosts = ({
 			return
 		}
 		relocateAll()
-		down.reportIfActiveDown(id)
 	}
 
 	const forget = (id: string) => {

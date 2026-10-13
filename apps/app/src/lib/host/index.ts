@@ -1,10 +1,8 @@
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { platform } from "@tauri-apps/plugin-os"
 
-import { endNotice } from "@workspace/ui/components/notice-surface"
-
 import { createHostedSpaces } from "./hosted-spaces"
-import { raiseHostOfflineNotice, raiseRefusalNotice } from "./http"
+import { raiseRefusalNotice } from "./http"
 import { createJoinedHosts } from "./joined-hosts"
 import {
 	convertFileSrc,
@@ -34,8 +32,6 @@ export const joinedHosts = createJoinedHosts({
 	fetch: (input, init) => fetch(input, init),
 	openSocket: (url) => new WebSocket(url),
 	reportFailure: raiseRefusalNotice,
-	reportHostDown: raiseHostOfflineNotice,
-	endHostDown: (noticeId) => endNotice(noticeId),
 })
 
 export const invoke: typeof tauriInvoke = joinedHosts.invoke
