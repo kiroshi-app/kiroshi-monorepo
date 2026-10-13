@@ -140,7 +140,11 @@
             return mission
         }
 
-        private static func json(
+        static func entry(in conversationId: String, _ mission: String) -> String {
+            #"{"conversationId":"\#(conversationId)","mission":\#(mission)}"#
+        }
+
+        static func json(
             id: String, ticket: String, objective: String, botId: String, state: String,
             isAgentRunning: Bool, status: String?, movedAt: Int
         ) -> String {

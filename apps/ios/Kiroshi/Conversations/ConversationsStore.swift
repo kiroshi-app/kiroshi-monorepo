@@ -20,8 +20,20 @@ final class ConversationsStore {
     private var listed: [ConversationSummary] = []
     private(set) var companions: [Companion] = []
     private(set) var creation = Creation.idle
-    var opened: ConversationSubject?
+    var path: [ConversationsRoute] = []
     var isPickingCompanions = false
+
+    var opened: ConversationSubject? {
+        get {
+            guard case .conversation(let subject) = path.first else { return nil }
+            return subject
+        }
+        set { path = newValue.map { [.conversation($0)] } ?? [] }
+    }
+
+    var showsMissions: Bool {
+        path.contains(where: \.showsMissions)
+    }
 
     @ObservationIgnored private var instanceId: Space.ID?
     @ObservationIgnored private var spaceId: String?

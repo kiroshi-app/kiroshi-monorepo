@@ -6,6 +6,7 @@
     @MainActor
     enum ConversationsFixture {
         static var opening: Companion.ID?
+        static var opensMissions = false
 
         static var showsTimes: Bool {
             SignInFixture.opened == .swipedThread
@@ -117,6 +118,48 @@
                     hour: 8, minute: 58, author: pico.id)
             ],
         ]) { _, home in home }
+
+        static var release042Missions: String {
+            let missions = [
+                MissionsFixture.entry(
+                    in: release042.id,
+                    MissionsFixture.json(
+                        id: "mission-215", ticket: "OPE-215",
+                        objective: "Add dictation to the composer", botId: pico.id,
+                        state: "working", isAgentRunning: true, status: nil,
+                        movedAt: MissionsFixture.at(hour: 9, minute: 10))),
+                MissionsFixture.entry(
+                    in: release042.id,
+                    MissionsFixture.json(
+                        id: "mission-218", ticket: "OPE-218", objective: "Retry failed uploads",
+                        botId: juniper.id, state: "working", isAgentRunning: false,
+                        status: "Fixed the red check, CI is running again.",
+                        movedAt: MissionsFixture.at(hour: 9, minute: 2))),
+                MissionsFixture.entry(
+                    in: release042.id,
+                    MissionsFixture.json(
+                        id: "mission-209", ticket: "OPE-209",
+                        objective: "Settings sheet on iPhone", botId: mira.id,
+                        state: "ready_to_merge", isAgentRunning: false, status: nil,
+                        movedAt: MissionsFixture.at(hour: 7, minute: 45))),
+                MissionsFixture.entry(
+                    in: FixtureHost.chat(of: juniper.id),
+                    MissionsFixture.json(
+                        id: "mission-220", ticket: "OPE-220",
+                        objective: "Draft the 0.42 release notes", botId: juniper.id,
+                        state: "waiting_human", isAgentRunning: false,
+                        status: "Asked you which fix leads.",
+                        movedAt: MissionsFixture.at(hour: 9, minute: 20))),
+            ]
+            return "[\(missions.joined(separator: ","))]"
+        }
+
+        static let dictationMission: [FixtureHost.Message] = [
+            .init(
+                id: "d-on-it", isYours: false,
+                content: "Dictation is in, I’m on the last check.", daysAgo: 0, hour: 9,
+                minute: 10, author: pico.id)
+        ]
 
         static let releasePlanning: [FixtureHost.Message] = [
             .init(
@@ -236,14 +279,17 @@
 
         static func script(_ fixture: SignInFixture) -> FixtureHost.Script {
             var script =
-                fixture.rawValue.hasPrefix("2.")
+                fixture.isOnHome
                 ? FixtureHost.Script(
                     companions: [
                         juniper, atlas, pico, mira,
                         Companion(id: otto.id, name: otto.name, role: otto.role, tint: .cyan),
                     ],
                     groups: [release042],
-                    messages: homeMessages)
+                    messages: homeMessages.merging(["thread-mission-215": dictationMission]) {
+                        home, _ in home
+                    },
+                    missionFeed: release042Missions)
                 : FixtureHost.Script(
                     companions: companions, groups: [releaseCrew, designReview],
                     messages: listMessages.merging(groupMessages) { listed, _ in listed })
@@ -323,6 +369,10 @@
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
                 releaseCrew.id
+            case .missionsButton, .conversationMissions:
+                release042.id
+            case .conversationNoMissions:
+                atlas.id
             default: nil
             }
         }
@@ -395,6 +445,7 @@
             var hostLeavesAfter: Duration?
             var hostLeavesAfterThread = false
             var threadAnswersAfter = Duration.zero
+            var missionFeed = "[]"
         }
 
         static let spaceId = "space-studio"
@@ -650,6 +701,8 @@
                 reply(id, "null")
             case "agent_pending_questions":
                 reply(id, "[]")
+            case "mission_space_feed":
+                reply(id, script.missionFeed)
             case "conversation_create":
                 let companionIds = args["botIds"] as? [String] ?? []
                 let group = created.withLock { groups in

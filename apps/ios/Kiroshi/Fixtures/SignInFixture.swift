@@ -93,6 +93,9 @@
         case longName = "long-name"
         case longGroup = "long-group"
         case twoAsks = "two-asks"
+        case missionsButton = "missions-button"
+        case conversationMissions = "conversation-missions"
+        case conversationNoMissions = "conversation-no-missions"
         case missions = "5.1"
         case missionThread = "5.2"
         case missionWorking = "mission-working"
@@ -142,7 +145,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .conversationMissions, .conversationNoMissions:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -160,7 +164,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .conversationMissions, .conversationNoMissions:
                 true
             default: false
             }
@@ -191,6 +196,15 @@
             [.settings, .signOutAlert].contains(self)
         }
 
+        var isOnHome: Bool {
+            rawValue.hasPrefix("2.")
+                || [.missionsButton, .conversationMissions, .conversationNoMissions].contains(self)
+        }
+
+        var opensConversationMissions: Bool {
+            [.conversationMissions, .conversationNoMissions].contains(self)
+        }
+
         var opensOnMissions: Bool {
             [
                 .missions, .missionThread, .missionWorking, .slowMission, .noMissions,
@@ -207,7 +221,8 @@
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed,
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
-                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks:
+                .slowThread, .slowGroup, .longName, .longGroup, .twoAsks, .missionsButton,
+                .conversationMissions, .conversationNoMissions:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -267,6 +282,7 @@
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
                 relay: fixture.relay)
             ConversationsFixture.opening = ConversationsFixture.opening(fixture)
+            ConversationsFixture.opensMissions = fixture.opensConversationMissions
             if ![.opening, .keychain, .seededKeychain].contains(fixture) {
                 model.email = CloudFixture.email
             }
@@ -295,7 +311,7 @@
                 .threadFailed, .groupThread,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .slowGroup, .longName, .longGroup,
-                .twoAsks,
+                .twoAsks, .missionsButton, .conversationMissions, .conversationNoMissions,
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
                 .settings:

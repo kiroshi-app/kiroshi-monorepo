@@ -12,7 +12,7 @@ struct ShellView: View {
                 "Conversations", systemImage: "bubble.left.and.bubble.right.fill",
                 value: .conversations
             ) {
-                SpaceScreen(store: store, account: account, section: .conversations)
+                ConversationsView(space: store, account: account)
                     .tint(.accentColor)
             }
             Tab(value: SpaceSection.missions) {
