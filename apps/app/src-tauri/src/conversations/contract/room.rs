@@ -76,6 +76,60 @@ impl Conversation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationPage {
+	pub pinned: Vec<ConversationInPage>,
+	pub conversations: Vec<ConversationInPage>,
+	pub next_cursor: Option<String>,
+}
+
+impl ConversationPage {
+	pub fn of(read: conversations::ActivePage, avatars: Option<&Path>) -> Self {
+		let drawn = |rows: Vec<conversations::ActiveConversation>| {
+			rows.into_iter().map(|row| ConversationInPage::of(row, avatars)).collect()
+		};
+		Self {
+			pinned: drawn(read.pinned),
+			conversations: drawn(read.page.rows),
+			next_cursor: read.page.next.map(|keyset| keyset.encoded()),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationInPage {
+	#[serde(flatten)]
+	pub conversation: Conversation,
+	pub last_activity_at: i64,
+	pub last_word: Option<LastWord>,
+}
+
+impl ConversationInPage {
+	pub fn of(row: conversations::ActiveConversation, avatars: Option<&Path>) -> Self {
+		Self {
+			conversation: Conversation::of(row.conversation, avatars),
+			last_activity_at: row.last_activity_at,
+			last_word: row.last_word.map(Into::into),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LastWord {
+	pub text: Option<String>,
+	pub at: i64,
+	pub author_bot_id: Option<String>,
+}
+
+impl From<conversations::LastWord> for LastWord {
+	fn from(word: conversations::LastWord) -> Self {
+		Self { text: word.text, at: word.at, author_bot_id: word.author_bot_id }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct Participant {
 	pub bot_id: String,
 	pub role: ParticipantRole,

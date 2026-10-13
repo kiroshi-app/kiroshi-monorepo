@@ -8,7 +8,7 @@ use super::checkout;
 use super::contract::{
 	ConversationMissions, HookedMission, Mission, MissionAnswer, MissionClosing, MissionDetail,
 	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionInSpace, MissionNote,
-	MissionOnBoard, MissionOpened, MissionState, MissionWatch, MissionWatching,
+	MissionOnBoard, MissionOpened, MissionSpacePage, MissionState, MissionWatch, MissionWatching,
 };
 use super::hook;
 use crate::avatars;
@@ -16,6 +16,7 @@ use crate::bundles;
 use crate::conversations::commands::{bot_row, ready};
 use crate::conversations::contract::Bot;
 use crate::db;
+use crate::db::repositories::keyset;
 use crate::events::{self, MISSION_CHANGED};
 use crate::file_store::FileStore;
 use crate::routines::webhook::{Webhook, HEADER};
@@ -398,6 +399,27 @@ pub async fn mission_space_feed(
 	closed_since: i64,
 ) -> Result<Vec<MissionInSpace>, MissionError> {
 	ready(&state)?.missions().of_space(space_id, closed_since).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn mission_space_page(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	closed_since: i64,
+	cursor: Option<String>,
+	limit: Option<u32>,
+) -> Result<MissionSpacePage, MissionError> {
+	let after =
+		keyset::after(cursor).map_err(|cursor| MissionError::UnreadableCursor { cursor })?;
+	let page = ready(&state)?
+		.missions()
+		.space_page(space_id, closed_since, after, keyset::page_size(limit))
+		.await?;
+	Ok(MissionSpacePage {
+		missions: page.rows,
+		next_cursor: page.next.map(|keyset| keyset.encoded()),
+	})
 }
 
 #[tauri::command]

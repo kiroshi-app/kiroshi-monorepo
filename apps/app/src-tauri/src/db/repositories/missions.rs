@@ -6,6 +6,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use super::conversations::open_thread_under;
+use super::keyset::{paged, Keyset, Page};
 use super::messages::conversation_of_turn;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
@@ -418,6 +419,36 @@ impl MissionsRepository {
 			.await?)
 	}
 
+	pub async fn space_page(
+		&self,
+		space_id: String,
+		closed_since: i64,
+		after: Option<Keyset>,
+		size: u32,
+	) -> Result<Page<MissionInSpace>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let after = after.as_ref();
+				let mut statement = connection.prepare_cached(&space_page_statement(after))?;
+				let rows = statement.query_map(
+					params![
+						space_id,
+						closed_since,
+						after.map(|keyset| keyset.sort_key),
+						after.map(|keyset| keyset.id.as_str()),
+						size + 1
+					],
+					in_space,
+				)?;
+				Ok(paged(rows.collect::<rusqlite::Result<Vec<_>>>()?, size, |entry| Keyset {
+					sort_key: entry.mission.opened_at,
+					id: entry.mission.id.clone(),
+				}))
+			})
+			.await?)
+	}
+
 	pub async fn closed_without_report(&self) -> Result<Vec<Mission>, MissionError> {
 		Ok(self
 			.access
@@ -814,6 +845,21 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Mission>, DatabaseEr
 
 fn read(transaction: &Transaction<'_>, id: &str) -> Result<Mission, MissionError> {
 	held(transaction, id)?.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
+}
+
+fn space_page_statement(after: Option<&Keyset>) -> String {
+	let past_the_cursor = match after {
+		Some(_) => "AND (opened_at, id) < (?3, ?4)",
+		None => "",
+	};
+	format!(
+		"SELECT feed.*, conversations.title AS conversation_title
+		FROM ({MISSION_COLUMNS} WHERE (closed_at IS NULL OR closed_at >= ?2) {past_the_cursor})
+			AS feed
+		CROSS JOIN conversations ON conversations.id = feed.origin_conversation_id
+		WHERE conversations.space_id = ?1
+		ORDER BY feed.opened_at DESC, feed.id DESC LIMIT ?5"
+	)
 }
 
 pub(in crate::db) fn oldest_first<T>(mut newest_first: Vec<T>) -> Vec<T> {
@@ -1600,6 +1646,115 @@ mod tests {
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn missions_opened_at(
+		conversation_id: &str,
+		bot_id: &str,
+		ids: &[&str],
+		opened_at: i64,
+	) -> String {
+		ids.iter()
+			.map(|id| {
+				format!(
+					"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+						VALUES ('thread-{id}', 'mission', 'personal', '{id}', 1, 1);
+					INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+						objective, ticket_platform, ticket_external_id, ticket_url, ticket_title,
+						tools, opened_at)
+						VALUES ('{id}', '{conversation_id}', '{bot_id}', 'thread-{id}', '{id}',
+							'github', '{id}', 'https://kiroshi.test/tickets/{id}', 'Ticket', '[]',
+							{opened_at});"
+				)
+			})
+			.collect()
+	}
+
+	async fn walked_space(
+		database: &Database,
+		space_id: &str,
+		closed_since: i64,
+		size: u32,
+	) -> Vec<Vec<String>> {
+		let mut pages = Vec::new();
+		let mut after = None;
+		loop {
+			let page = database
+				.missions()
+				.space_page(space_id.to_owned(), closed_since, after, size)
+				.await
+				.expect("the page reads");
+			pages.push(page.rows.iter().map(|entry| entry.mission.id.clone()).collect());
+			match page.next {
+				Some(next) => after = Some(next),
+				None => return pages,
+			}
+		}
+	}
+
+	#[tokio::test]
+	async fn missions_sharing_their_opening_across_a_page_boundary_come_back_once_each() {
+		let (database, _dir) = planted().await;
+		let rows = format!(
+			"{}{}UPDATE missions SET closed_at = 2 WHERE id = 'closed-early';",
+			missions_opened_at("c1", "b1", &["m-1", "m-2", "m-3", "m-4", "m-5", "closed-early"], 5),
+			missions_opened_at("c2", "b2", &["m-6", "m-7"], 5),
+		);
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(&rows)?))
+			.await
+			.expect("the missions are planted");
+
+		let pages = walked_space(&database, "personal", 3, 2).await;
+
+		assert_eq!(pages, vec![vec!["m-5", "m-4"], vec!["m-3", "m-2"], vec!["m-1"]]);
+	}
+
+	#[tokio::test]
+	async fn the_paged_space_read_walks_past_the_cap_of_the_other_reads() {
+		let (database, _dir) = planted().await;
+		database
+			.call_mut(|connection| Ok(connection.execute_batch(MISSIONS_PAST_THE_CAP)?))
+			.await
+			.expect("the missions are planted");
+
+		let pages = walked_space(&database, "personal", 0, 30).await;
+
+		assert_eq!(pages.concat().len(), 205, "the paged read stopped at the cap");
+		assert_eq!(pages.first().and_then(|page| page.first()).map(String::as_str), Some("m-205"));
+	}
+
+	#[tokio::test]
+	async fn every_space_page_reads_its_missions_through_the_opening_index_with_no_sort() {
+		let (database, _dir) = planted().await;
+		let cursor = Keyset { sort_key: 1, id: "m-1".to_owned() };
+
+		for after in [None, Some(cursor)] {
+			let plan = database
+				.call(move |connection| {
+					let mut statement = connection.prepare(&format!(
+						"EXPLAIN QUERY PLAN {}",
+						space_page_statement(after.as_ref())
+					))?;
+					let steps = statement
+						.query_map(params!["personal", 0, 1, "m-1", 31], |row| {
+							row.get::<_, String>(3)
+						})?
+						.collect::<rusqlite::Result<Vec<_>>>()?;
+					Ok(steps)
+				})
+				.await
+				.expect("the query plan");
+
+			assert!(
+				plan.iter().any(|step| step.contains("missions_by_opening")),
+				"the page does not read the missions through their opening index: {plan:?}"
+			);
+			assert!(
+				!plan.iter().any(|step| step.contains("TEMP B-TREE")),
+				"the page sorts its missions apart from the index: {plan:?}"
+			);
+		}
 	}
 
 	const MISSIONS_PAST_THE_CAP: &str = "

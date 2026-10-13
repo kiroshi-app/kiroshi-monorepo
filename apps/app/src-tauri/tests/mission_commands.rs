@@ -253,6 +253,89 @@ fn the_space_feed_holds_the_open_and_recently_closed_missions_of_that_space_only
 	);
 }
 
+fn walked_feed(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Vec<Value>> {
+	let mut pages = Vec::new();
+	let mut cursor = Value::Null;
+	loop {
+		let page = call(
+			window,
+			"mission_space_page",
+			json!({ "spaceId": space_id, "closedSince": 0, "cursor": cursor, "limit": null }),
+		)
+		.expect("the page reads");
+		pages.push(page["missions"].as_array().expect("the page holds a list").clone());
+		cursor = page["nextCursor"].clone();
+		if cursor.is_null() {
+			return pages;
+		}
+	}
+}
+
+#[test]
+fn a_space_of_65_missions_is_walked_newest_first_in_pages_of_30_30_and_5() {
+	let home = Home::new();
+	let window = window(&home.app);
+	call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
+	let crashes = a_room(&window, "personal", "Crashes", &[BOT]);
+	let opened: Vec<String> =
+		(0..65).map(|n| opened_in(&home, &crashes, BOT, &format!("objective-{n}"))).collect();
+
+	let pages = walked_feed(&window, "personal");
+
+	let sizes: Vec<usize> = pages.iter().map(Vec::len).collect();
+	let walked: Vec<Value> =
+		pages.concat().iter().map(|entry| entry["mission"]["id"].clone()).collect();
+	let newest_first: Vec<Value> = opened.iter().rev().map(|id| json!(id)).collect();
+	assert_eq!(sizes, vec![30, 30, 5]);
+	assert_eq!(walked, newest_first);
+	assert_eq!(pages[0][0]["conversationTitle"], json!("Crashes"));
+}
+
+#[test]
+fn a_mission_page_holds_thirty_missions_at_most_and_one_at_least() {
+	let home = Home::new();
+	let window = window(&home.app);
+	call(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
+	let crashes = a_room(&window, "personal", "Crashes", &[BOT]);
+	for n in 0..31 {
+		opened_in(&home, &crashes, BOT, &format!("objective-{n}"));
+	}
+	let held = |limit: Value| {
+		call(
+			&window,
+			"mission_space_page",
+			json!({ "spaceId": "personal", "closedSince": 0, "cursor": null, "limit": limit }),
+		)
+		.expect("the page reads")["missions"]
+			.as_array()
+			.map(Vec::len)
+	};
+
+	assert_eq!(held(Value::Null), Some(30));
+	assert_eq!(held(json!(45)), Some(30));
+	assert_eq!(held(json!(0)), Some(1));
+	assert_eq!(held(json!(3)), Some(3));
+}
+
+#[test]
+fn a_mission_cursor_that_does_not_decode_is_refused_by_name_before_any_row_is_read() {
+	let app = an_app_of_its_own(
+		"mission-commands-no-database",
+		mock_builder()
+			.invoke_handler(invoke_handler())
+			.manage(db::DatabaseState::Err(db::DatabaseError::AppDataDir)),
+	);
+	let window = window(&app);
+
+	let refused = call(
+		&window,
+		"mission_space_page",
+		json!({ "spaceId": "any", "closedSince": 0, "cursor": "not a cursor", "limit": null }),
+	);
+
+	assert_eq!(refused, Err(json!({ "kind": "unreadableCursor", "cursor": "not a cursor" })));
+}
+
 fn last_event(window: &WebviewWindow<MockRuntime>, mission_id: &str) -> (Value, Value) {
 	let detail = call(window, "mission_detail", json!({ "missionId": mission_id }))
 		.expect("the mission reads");

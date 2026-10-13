@@ -2101,6 +2101,35 @@
       ],
       "type": "object"
     },
+    "ConversationInPage": {
+      "allOf": [
+        {
+          "properties": {
+            "lastActivityAt": {
+              "type": "integer"
+            },
+            "lastWord": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LastWord"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "lastActivityAt",
+            "lastWord"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Conversation"
+        }
+      ]
+    },
     "ConversationKind": {
       "enum": [
         "main",
@@ -2126,6 +2155,38 @@
       "required": [
         "open",
         "done"
+      ],
+      "type": "object"
+    },
+    "ConversationPage": {
+      "properties": {
+        "conversations": {
+          "items": {
+            "$ref": "#/$defs/ConversationInPage"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pinned": {
+          "items": {
+            "$ref": "#/$defs/ConversationInPage"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pinned",
+        "conversations",
+        "nextCursor"
       ],
       "type": "object"
     },
@@ -2912,6 +2973,39 @@
           "type": "object"
         }
       ]
+    },
+    "LastWord": {
+      "properties": {
+        "at": {
+          "type": "integer"
+        },
+        "authorBotId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text",
+        "at",
+        "authorBotId"
+      ],
+      "type": "object"
     },
     "LaunchOutcome": {
       "properties": {
@@ -3926,6 +4020,21 @@
             "detail"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unreadableCursor"
+            }
+          },
+          "required": [
+            "kind",
+            "cursor"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3994,6 +4103,31 @@
         "mission",
         "conversationId",
         "conversationTitle"
+      ],
+      "type": "object"
+    },
+    "MissionSpacePage": {
+      "properties": {
+        "missions": {
+          "items": {
+            "$ref": "#/$defs/MissionInSpace"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "missions",
+        "nextCursor"
       ],
       "type": "object"
     },
@@ -6736,6 +6870,21 @@
             "turnId"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unreadableCursor"
+            }
+          },
+          "required": [
+            "kind",
+            "cursor"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -8429,6 +8578,46 @@
         "$ref": "#/$defs/RuntimeSession"
       }
     },
+    "conversation_page": {
+      "args": {
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "$ref": "#/$defs/ConversationPage"
+      }
+    },
     "conversation_pin_message": {
       "args": {
         "properties": {
@@ -9222,6 +9411,50 @@
           "$ref": "#/$defs/MissionInSpace"
         },
         "type": "array"
+      }
+    },
+    "mission_space_page": {
+      "args": {
+        "properties": {
+          "closedSince": {
+            "type": "integer"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "closedSince"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MissionError"
+      },
+      "ok": {
+        "$ref": "#/$defs/MissionSpacePage"
       }
     },
     "plugin_create_skill": {

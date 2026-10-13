@@ -3586,3 +3586,97 @@ fn a_host_without_a_database_answers_the_local_ids_with_why_there_is_none() {
 	assert_eq!(call(&window, "conversation_list", json!({ "spaceId": "any" })), unavailable);
 	assert_eq!(call(&window, "conversation_local_ids", json!({})), unavailable);
 }
+
+fn page_of(
+	window: &WebviewWindow<MockRuntime>,
+	space_id: &str,
+	cursor: Value,
+	limit: Value,
+) -> Value {
+	call(
+		window,
+		"conversation_page",
+		json!({ "spaceId": space_id, "cursor": cursor, "limit": limit }),
+	)
+	.expect("the page reads")
+}
+
+fn walked_rooms(window: &WebviewWindow<MockRuntime>, space_id: &str) -> Vec<Vec<Value>> {
+	let mut pages = Vec::new();
+	let mut cursor = Value::Null;
+	loop {
+		let page = page_of(window, space_id, cursor, Value::Null);
+		pages.push(page["conversations"].as_array().expect("the page holds a list").clone());
+		cursor = page["nextCursor"].clone();
+		if cursor.is_null() {
+			return pages;
+		}
+	}
+}
+
+fn rooms_in(
+	home: &Home,
+	count: usize,
+) -> (App<MockRuntime>, WebviewWindow<MockRuntime>, String, Vec<String>) {
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let created = (0..count)
+		.map(|n| id_of(&a_room(&window, &space, &format!("Room {n}"), vec![bot.clone()])))
+		.collect();
+	(app, window, space, created)
+}
+
+#[test]
+fn a_space_of_65_rooms_is_walked_newest_first_in_pages_of_30_30_and_5() {
+	let home = Home::new();
+	let (_app, window, space, mut created) = rooms_in(&home, 65);
+
+	let pages = walked_rooms(&window, &space);
+
+	let sizes: Vec<usize> = pages.iter().map(Vec::len).collect();
+	let walked: Vec<Value> = pages.concat();
+	let keys: Vec<(i64, String)> = walked
+		.iter()
+		.map(|room| (room["lastActivityAt"].as_i64().expect("an activity"), id_of(room)))
+		.collect();
+	let mut newest_first = keys.clone();
+	newest_first.sort_by(|left, right| right.cmp(left));
+	let mut ids: Vec<String> = walked.iter().map(id_of).collect();
+	ids.sort();
+	created.sort();
+	assert_eq!(sizes, vec![30, 30, 5]);
+	assert_eq!(keys, newest_first, "the walk was not newest first");
+	assert_eq!(ids, created, "the walk did not answer every room exactly once");
+	assert_eq!(walked[0]["lastWord"], Value::Null);
+	assert_eq!(walked[0]["participants"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn a_page_holds_thirty_rooms_at_most_and_one_at_least() {
+	let home = Home::new();
+	let (_app, window, space, _) = rooms_in(&home, 31);
+	let held = |limit: Value| {
+		page_of(&window, &space, Value::Null, limit)["conversations"].as_array().map(Vec::len)
+	};
+
+	assert_eq!(held(Value::Null), Some(30));
+	assert_eq!(held(json!(45)), Some(30));
+	assert_eq!(held(json!(0)), Some(1));
+	assert_eq!(held(json!(3)), Some(3));
+}
+
+#[test]
+fn a_cursor_that_does_not_decode_is_refused_by_name_before_any_row_is_read() {
+	let app = app_without_a_database();
+	let window = window(&app);
+
+	let refused = call(
+		&window,
+		"conversation_page",
+		json!({ "spaceId": "any", "cursor": "not a cursor", "limit": null }),
+	);
+
+	assert_eq!(refused, Err(json!({ "kind": "unreadableCursor", "cursor": "not a cursor" })));
+}
