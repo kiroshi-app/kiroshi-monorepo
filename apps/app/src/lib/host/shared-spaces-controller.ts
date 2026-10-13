@@ -1,6 +1,6 @@
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 
-import { type MembersTransport, membersTransport } from "./members-controller"
+import { type MembersTransport, membersTransport } from "./members-transport"
 
 import type { Member, MembersChanged } from "../bindings"
 import { createStore } from "../store"

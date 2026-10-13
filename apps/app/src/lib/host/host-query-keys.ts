@@ -1,0 +1,6 @@
+export const hostQueryKeys = {
+	all: ["host"] as const,
+	members: () => [...hostQueryKeys.all, "members"] as const,
+	membersOf: (spaceId: string | undefined) =>
+		[...hostQueryKeys.members(), spaceId] as const,
+}

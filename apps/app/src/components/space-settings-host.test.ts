@@ -173,7 +173,9 @@ const SpaceSettingsHarness = ({
 const openSettingsOf = (gear: Gear, rowId: string, openedTab?: string) => {
 	gear.joined.selectSpace(rowId)
 	gear.spaces.setSettingsOpen(true)
-	render(createElement(SpaceSettingsHarness, { ...gear, openedTab }))
+	render(createElement(SpaceSettingsHarness, { ...gear, openedTab }), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	return screen.getByRole("dialog")
 }
 
@@ -336,7 +338,12 @@ const openShareOf = async (gear: Gear, rowId: string) => {
 	const openAccountSettings = vi.fn()
 	gear.joined.selectSpace(rowId)
 	gear.spaces.setSettingsOpen(true)
-	render(createElement(SpaceSettingsHarness, { ...gear, openAccountSettings }))
+	render(
+		createElement(SpaceSettingsHarness, { ...gear, openAccountSettings }),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
 	const dialog = screen.getByRole("dialog")
 	fireEvent.click(
 		await within(dialog).findByRole("tab", { name: MEMBERS_TAB_NAME }),
@@ -736,6 +743,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		const gear = await gearWithGarage()
 		const { dialog } = await openShareOf(gear, GARAGE_ROW)
 		await within(dialog).findByText("Sam Carter")
+		answerMembers({ hosting_members: [HOST_ROW] })
 
 		act(() => announce({ spaceId: "garage", members: [HOST_ROW] }))
 
