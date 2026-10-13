@@ -121,7 +121,6 @@ final class MissionsAccessibilityTests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(question.exists)
         XCTAssertGreaterThan(working.frame.minY, question.frame.maxY)
-        XCTAssertTrue(app.buttons["Stop"].exists)
 
         try auditTheThread(app, onScreenAtTheLargestSize: onScreen)
     }
@@ -139,9 +138,7 @@ final class MissionsAccessibilityTests: XCTestCase {
 
         let working = app.staticTexts["Atlas is working…"]
         XCTAssertTrue(working.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Stop"].exists)
         XCTAssertTrue(working.waitForNonExistence(timeout: 15))
-        XCTAssertFalse(app.buttons["Stop"].exists)
     }
 
     func testNoMissionsSaysWhereTheyComeFromAndPassesTheAudit() throws {

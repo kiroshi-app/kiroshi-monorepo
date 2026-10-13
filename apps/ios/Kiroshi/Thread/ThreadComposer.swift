@@ -91,7 +91,7 @@ struct ThreadComposer<Model: ThreadModel>: View {
     }
 
     @ViewBuilder private var sendOrStop: some View {
-        if model.working != nil {
+        if model.working != nil, model.kind == .conversation {
             Button {
                 model.stop()
             } label: {

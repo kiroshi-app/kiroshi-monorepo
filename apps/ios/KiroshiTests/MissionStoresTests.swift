@@ -389,7 +389,6 @@ struct MissionStoresTests {
                 "agent_pending_questions":
                     "[" + scoped
                     + #"{"type":"questionRequested","request":{"id":"q1","questions":[]}}}]"#,
-                "agent_cancel_turn": "null",
             ])
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -399,11 +398,6 @@ struct MissionStoresTests {
         #expect(store.entries.last?.isYours == false)
         #expect(store.workers.map(\.companionId) == ["bot-1"])
         #expect(mission.heading(companion: nil, working: ["bot-1"]).working == ["bot-1"])
-        #expect(store.canStop)
-        store.stop()
-        let cancel = await nextCall("agent_cancel_turn", on: socket)
-        let scope = (cancel["args"] as? [String: Any])?["scope"] as? [String: Any]
-        #expect(scope?["runtimeSessionId"] as? String == "r1")
 
         socket.push(
             .frame(
@@ -412,7 +406,6 @@ struct MissionStoresTests {
                     + #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"cancelled"}}}}}"#
             ))
         await waitUntil { store.working == nil }
-        #expect(!store.canStop)
         following.cancel()
         feeding.cancel()
         await connection.stop()
