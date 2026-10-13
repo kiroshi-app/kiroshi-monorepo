@@ -31,7 +31,7 @@ final class SignInAccessibilityTests: XCTestCase {
         continueAfterFailure = true
     }
 
-    func testEverySignInStatePassesTheAuditAndTheOpeningShowsTheKiroshiMark() throws {
+    func testEverySignInStatePassesTheAuditAndWelcomeKeepsEveryActionAboveTheKeyboard() throws {
         for (fixture, text) in Self.shownText.sorted(by: { $0.key < $1.key }) {
             try XCTContext.runActivity(named: fixture) { _ in
                 let app = launch(fixture)
@@ -46,12 +46,14 @@ final class SignInAccessibilityTests: XCTestCase {
                 try audit(app) { issue in
                     Self.isDimmedWhileSigningIn(issue) || Self.isScrollingTextField(issue)
                 }
+                if fixture == "1.1" {
+                    try tapTheEmailFieldThenCheckEveryActionStaysAboveTheKeyboard(app)
+                }
             }
         }
     }
 
-    func testTheEmailFieldHidesTheMarkAndKeepsEveryActionAboveTheKeyboard() throws {
-        let app = launch("1.1")
+    func tapTheEmailFieldThenCheckEveryActionStaysAboveTheKeyboard(_ app: XCUIApplication) throws {
         let email = app.textFields["Email"]
         XCTAssertTrue(email.waitForExistence(timeout: 10))
 
