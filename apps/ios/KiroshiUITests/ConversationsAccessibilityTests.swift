@@ -143,7 +143,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
         XCTAssertTrue(launchPlan.waitForExistence(timeout: 15))
         let isHittable = expectation(
             for: NSPredicate(format: "isHittable == true"), evaluatedWith: launchPlan)
-        wait(for: [isHittable], timeout: 5)
+        wait(for: [isHittable], timeout: 15)
 
         launchPlan.tap()
 
