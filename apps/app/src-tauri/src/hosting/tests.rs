@@ -2098,6 +2098,14 @@ fn a_relay_guest_lists_the_conversations_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_pages_the_conversations_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"conversation_page",
+		|space_id| json!({ "spaceId": space_id, "cursor": null, "limit": null }),
+	));
+}
+
+#[test]
 fn a_relay_guest_reads_the_hosting_state_of_the_shared_space_only() {
 	run(kept_in_the_space_named("hosting_state", space_named));
 }
@@ -2107,6 +2115,14 @@ fn a_relay_guest_reads_the_mission_feed_of_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"mission_space_feed",
 		|space_id| json!({ "spaceId": space_id, "closedSince": 0 }),
+	));
+}
+
+#[test]
+fn a_relay_guest_pages_the_mission_feed_of_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"mission_space_page",
+		|space_id| json!({ "spaceId": space_id, "closedSince": 0, "cursor": null, "limit": null }),
 	));
 }
 
