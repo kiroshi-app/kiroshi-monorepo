@@ -14,6 +14,7 @@ final class SpaceStore {
     private(set) var connection: RelayConnection?
     private(set) var pictures: CompanionPictures?
     let email: String
+    let work = CompanionWork()
 
     @ObservationIgnored private let cloud: KiroshiCloud
     @ObservationIgnored private let bearer: String
@@ -63,6 +64,7 @@ final class SpaceStore {
     func follow() async {
         guard !hasLeft else { return }
         let spaceId = currentSpaceId
+        work.forget()
         let connection = RelayConnection(
             baseURL: cloud.baseURL, instanceId: spaceId, bearer: bearer, environment: relay)
         self.connection = connection
@@ -71,6 +73,7 @@ final class SpaceStore {
         if !hasLeft {
             await connection.start()
             for await update in updates {
+                work.apply(update)
                 guard case .state(let state) = update else { continue }
                 apply(state, to: spaceId)
             }
@@ -79,6 +82,7 @@ final class SpaceStore {
         if self.connection === connection {
             self.connection = nil
             pictures = nil
+            work.forget()
         }
     }
 

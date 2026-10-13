@@ -89,7 +89,8 @@ struct ConversationMappingTests {
     @Test func anAgentEventItDoesNotDrawIsKeptAsOther() {
         let agent = event(
             "agent://event",
-            #"{"scope":null,"event":{"type":"permissionRequested","request":{}},"turn":null}"#)
+            #"{"scope":null,"event":{"type":"botEvolved","bundle":{},"commitId":"c","title":"t"},"turn":null}"#
+        )
 
         #expect(agent == .agent(AgentEvent(scope: nil, change: .other)))
     }

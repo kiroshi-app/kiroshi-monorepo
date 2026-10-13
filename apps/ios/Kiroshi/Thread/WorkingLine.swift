@@ -6,17 +6,11 @@ struct WorkingLine: View {
     var body: some View {
         HStack(spacing: 8) {
             CompanionAvatar(working.companion, size: .message, isWorking: true)
-            Group {
-                if working.isSeveral {
-                    Text("\(working.name) are working…")
-                } else {
-                    Text("\(working.name) is working…")
-                }
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.secondary)
-            .modifier(Shimmer())
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(working.spoken)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .modifier(Shimmer())
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let since = working.since {
                 TimelineView(.periodic(from: since, by: 1)) { timeline in
                     Text(ConversationTime.elapsed(since: since, at: timeline.date))

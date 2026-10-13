@@ -11,10 +11,6 @@ struct TranscriptMessage: Decodable, Equatable, Sendable {
         case cancelled
         case failed
         case interrupted
-
-        var isUnderway: Bool {
-            self == .pending || self == .streaming
-        }
     }
 
     let id: String

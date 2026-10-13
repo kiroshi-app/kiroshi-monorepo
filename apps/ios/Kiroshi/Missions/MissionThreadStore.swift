@@ -11,6 +11,7 @@ enum MissionSendProblem: Equatable {
 @Observable
 final class MissionThreadStore {
     let mission: Mission
+    let missions: MissionsStore
     var draft = ""
     var attachments: [PickedAttachment] = []
     private(set) var messages: [MissionThreadMessage] = [] {
@@ -22,25 +23,41 @@ final class MissionThreadStore {
     private(set) var isOnline = false
     private(set) var isSending = false
     private(set) var sendProblem: MissionSendProblem?
+    private var stopRefused = false
 
+    @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let newId: () -> String
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private var relay: MissionsRelay?
     @ObservationIgnored private var rereads: AsyncStream<Void>.Continuation?
     @ObservationIgnored private var sending: Task<Void, Never>?
+    @ObservationIgnored private var stopping: Task<Void, Never>?
+    @ObservationIgnored private var seeding: Task<Void, Never>?
 
     init(
         mission: Mission,
+        missions: MissionsStore,
+        work: CompanionWork,
         now: @escaping () -> Date = Date.init,
         newId: @escaping () -> String = { UUID().uuidString.lowercased() },
         calendar: Calendar = .current
     ) {
         self.mission = mission
+        self.missions = missions
+        self.work = work
         self.now = now
         self.newId = newId
         self.calendar = calendar
         transcribe()
+    }
+
+    var workers: [CompanionWorker] {
+        work.workers(in: mission.threadConversationId)
+    }
+
+    var companion: Companion? {
+        missions.companion(of: mission)
     }
 
     var isLoading: Bool {
@@ -64,11 +81,18 @@ final class MissionThreadStore {
             group.addTask { await self.reread(signals, through: relay) }
             for await update in updates {
                 apply(update)
+                if case .state(.online) = update {
+                    seeding?.cancel()
+                    seeding = Task { await seedPendingQuestions(through: relay) }
+                }
             }
             rereads.finish()
         }
         self.rereads = nil
         isOnline = false
+        for task in [seeding, stopping] {
+            task?.cancel()
+        }
     }
 
     @discardableResult
@@ -150,6 +174,15 @@ final class MissionThreadStore {
         }
     }
 
+    private func seedPendingQuestions(through relay: MissionsRelay) async {
+        let questions = try? await ConversationRelay(connection: relay.connection)
+            .pendingQuestions(in: mission.threadConversationId)
+        guard !Task.isCancelled else { return }
+        for question in questions ?? [] {
+            work.hear(question)
+        }
+    }
+
     private func reread(_ signals: AsyncStream<Void>, through relay: MissionsRelay) async {
         for await _ in signals {
             do {
@@ -179,13 +212,22 @@ extension MissionThreadStore: ThreadModel {
         transcript.entries
     }
 
-    var working: ThreadWorking? { nil }
+    var working: ThreadWorking? {
+        guard let since = workers.map(\.since).min() else { return nil }
+        return ThreadWorking(
+            companion: companion, name: companion?.name ?? String(localized: "The companion"),
+            isSeveral: false,
+            since: since)
+    }
 
     var placeholder: String {
         String(localized: "Answer this mission…")
     }
 
     var problem: String? {
+        if stopRefused, let working {
+            return String(localized: "Couldn’t stop \(working.name). Tap Stop to try again.")
+        }
         if !isOnline, hasLoaded {
             return String(
                 localized: "The host’s Mac is offline. You can send again once it’s back.")
@@ -203,12 +245,32 @@ extension MissionThreadStore: ThreadModel {
         }
     }
 
-    var canStop: Bool { false }
+    var canStop: Bool {
+        isOnline && !workers.isEmpty
+    }
 
     var mentionCandidates: [Companion] { [] }
 
     func mention(_ companion: Companion) {}
 
     @discardableResult
-    func stop() -> Task<Void, Never>? { nil }
+    func stop() -> Task<Void, Never>? {
+        guard canStop, let relay else { return nil }
+        let conversations = ConversationRelay(connection: relay.connection)
+        let scopes = workers.map(\.scope)
+        stopRefused = false
+        let task = Task {
+            for scope in scopes {
+                do {
+                    try await conversations.cancelTurn(scope)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    stopRefused = true
+                }
+            }
+        }
+        stopping = task
+        return task
+    }
 }

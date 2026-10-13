@@ -15,28 +15,18 @@ final class ThreadStore {
     private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadMessage] = []
-    private(set) var isWorking = false {
-        didSet {
-            if isWorking != oldValue {
-                workingSince = isWorking ? now() : nil
-            }
-        }
-    }
-    private(set) var workingSince: Date?
     private(set) var isReachable = false
     private(set) var isSending = false
-    private(set) var runningScopes: [AgentEvent.Scope] = []
-    private(set) var summoning: [Companion.ID] = []
     private(set) var sendFailure: SendFailure?
-    private(set) var stopFailed = false
     private(set) var isDeleted = false
+    private(set) var conversationId: String?
+    private var stopRefused = false
     var draft: String
     var attachments: [PickedAttachment] = []
 
-    @ObservationIgnored private(set) var conversationId: String?
+    @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
-    @ObservationIgnored private var heardTurnWhileLoading = false
     @ObservationIgnored private var loading: Task<Void, Never>?
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var stopping: Task<Void, Never>?
@@ -46,25 +36,44 @@ final class ThreadStore {
 
     init(
         subject: ConversationSubject,
+        work: CompanionWork,
         draft: String = "",
         now: @escaping () -> Date = Date.init,
         makeId: @escaping () -> String = { UUID().uuidString.lowercased() },
         calendar: Calendar = .current
     ) {
         self.subject = subject
+        self.work = work
         self.draft = draft
         self.now = now
         self.makeId = makeId
         self.calendar = calendar
     }
 
+    var workers: [CompanionWorker] {
+        work.workers(in: conversationId)
+    }
+
+    var isWorking: Bool {
+        !workers.isEmpty
+    }
+
+    var workingSince: Date? {
+        workers.map(\.since).min()
+    }
+
     var runningScope: AgentEvent.Scope? {
-        runningScopes.last
+        workers.last?.scope
+    }
+
+    var stopFailed: Bool {
+        stopRefused && isWorking
     }
 
     var workingCompanions: [Companion] {
-        let ids = runningScopes.isEmpty ? summoning : runningScopes.map(\.botId)
-        return ids.compactMap { id in subject.members.first { $0.id == id } }
+        subject.members.filter { companion in
+            workers.contains { $0.companionId == companion.id }
+        }
     }
 
     var workingName: String {
@@ -140,9 +149,9 @@ final class ThreadStore {
 
     @discardableResult
     func stop() -> Task<Void, Never>? {
-        guard let relay, !runningScopes.isEmpty else { return nil }
-        let scopes = runningScopes
-        stopFailed = false
+        guard let relay, isWorking else { return nil }
+        let scopes = workers.map(\.scope)
+        stopRefused = false
         let task = Task {
             for scope in scopes {
                 do {
@@ -150,7 +159,7 @@ final class ThreadStore {
                 } catch is CancellationError {
                     return
                 } catch {
-                    stopFailed = true
+                    stopRefused = true
                 }
             }
         }
@@ -182,8 +191,6 @@ final class ThreadStore {
                 threadMessage(
                     id: message.id, isYours: true, text: message.content,
                     sentAt: message.createdAt))
-            summoning = summoned.isEmpty ? answering : summoned
-            isWorking = true
         } catch is CancellationError {
             return
         } catch {
@@ -209,11 +216,6 @@ final class ThreadStore {
         }
     }
 
-    private var answering: [Companion.ID] {
-        guard case .group(let group) = subject else { return [] }
-        return group.leadId.map { [$0] } ?? []
-    }
-
     private func threadMessage(
         id: String, isYours: Bool, text: String, sentAt: Int, authorId: Companion.ID? = nil
     ) -> ThreadMessage {
@@ -223,7 +225,6 @@ final class ThreadStore {
     }
 
     private func load(in spaceId: String, through relay: ConversationRelay) async {
-        heardTurnWhileLoading = false
         let shownBeforeLoad = Set(entries.map(\.id))
         do {
             let conversationId =
@@ -238,10 +239,12 @@ final class ThreadStore {
                 in: conversationId, limit: Self.pageSize)
             guard !Task.isCancelled else { return }
             merge(messages, droppingAnyOf: shownBeforeLoad)
-            if !heardTurnWhileLoading {
-                isWorking = messages.last?.completion.isUnderway ?? false
-            }
             phase = .loaded
+            let questions = try? await relay.pendingQuestions(in: conversationId)
+            guard !Task.isCancelled else { return }
+            for question in questions ?? [] {
+                work.hear(question)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -273,9 +276,6 @@ final class ThreadStore {
                     id: message.id, isYours: message.role == .user, text: message.content,
                     sentAt: message.createdAt, authorId: message.authorBotId))
         case .agent(let agent) where agent.scope?.conversationId == conversationId:
-            if let scope = agent.scope {
-                track(scope, through: agent.change)
-            }
             apply(agent.change, by: agent.scope?.botId)
         case .groupUpdated(let group) where subject.isGroup(group.id):
             subject = .group(group)
@@ -287,35 +287,9 @@ final class ThreadStore {
         }
     }
 
-    private func track(_ scope: AgentEvent.Scope, through change: AgentEvent.Change) {
-        let index = runningScopes.firstIndex { $0.botId == scope.botId }
-        let ends =
-            switch change {
-            case .turnEnded: true
-            case .turn(let state): !state.isWorking
-            default: false
-            }
-        if ends {
-            if let index {
-                runningScopes.remove(at: index)
-            }
-        } else if let index {
-            runningScopes[index] = scope
-        } else {
-            runningScopes.append(scope)
-        }
-    }
-
     private func apply(_ change: AgentEvent.Change, by authorId: Companion.ID?) {
-        heardTurnWhileLoading = true
         switch change {
-        case .turn(let state):
-            isWorking = state.isWorking || !runningScopes.isEmpty
-            if !isWorking {
-                settle()
-            }
         case .messageStarted(let message):
-            isWorking = true
             insert(
                 threadMessage(
                     id: message.id, isYours: message.role == .user, text: message.text,
@@ -329,21 +303,10 @@ final class ThreadStore {
                         id: message.id, isYours: message.role == .user, text: message.text,
                         sentAt: message.timestamp, authorId: authorId))
             }
-        case .activity(let activity) where activity.kind == .tool:
-            isWorking = true
-        case .turnEnded:
-            isWorking = !runningScopes.isEmpty
-            if !isWorking {
-                settle()
-            }
-        case .activity, .other:
+        case .turn, .activity, .permissionRequested, .questionRequested, .turnEnded, .failed,
+            .other:
             break
         }
-    }
-
-    private func settle() {
-        stopFailed = false
-        summoning = []
     }
 
     private func insert(_ message: ThreadMessage) {

@@ -66,7 +66,7 @@ final class TestHost: Sendable {
         push(
             event: "agent://event",
             payload:
-                #"{"scope":{"conversationId":"\#(conversationId)","botId":"bot","runtimeSessionId":"session-1","epoch":1},"event":\#(event),"turn":null}"#
+                #"{"scope":{"conversationId":"\#(conversationId)","botId":"bot","runtimeSessionId":"session-1","epoch":1},"event":\#(event),"turn":{"turnId":"turn-1","conversationId":"\#(conversationId)"}}"#
         )
     }
 
@@ -111,6 +111,8 @@ final class TestHost: Sendable {
         case "conversation_bots":
             let bots = companions.map { #"{"id":"\#($0.id)","name":"\#($0.name)"}"# }
             return ok(call, "[\(bots.joined(separator: ","))]")
+        case "agent_pending_questions":
+            return ok(call, "[]")
         case "conversation_main_chat":
             guard let args = try? call.args(as: BotArgs.self) else { return nil }
             return ok(call, #"{"id":"chat-\#(args.botId)","createdAt":0,"updatedAt":0}"#)

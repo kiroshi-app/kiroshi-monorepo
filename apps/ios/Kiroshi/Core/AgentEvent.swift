@@ -4,6 +4,15 @@ struct AgentEvent: Decodable, Equatable, Sendable {
         let botId: String
         let runtimeSessionId: String
         let epoch: Int
+
+        func isSameRun(as other: Scope) -> Bool {
+            runtimeSessionId == other.runtimeSessionId && epoch == other.epoch
+        }
+    }
+
+    struct Turn: Decodable, Equatable, Sendable {
+        let turnId: String
+        let conversationId: String
     }
 
     struct Message: Decodable, Equatable, Sendable {
@@ -40,26 +49,45 @@ struct AgentEvent: Decodable, Equatable, Sendable {
         case messageDelta(id: String, text: String)
         case messageCompleted(Message)
         case activity(Activity)
+        case permissionRequested
+        case questionRequested
         case turnEnded
+        case failed
         case other
+
+        var opensWork: Bool {
+            switch self {
+            case .turn(let state): state.isWorking
+            case .activity, .permissionRequested, .questionRequested: true
+            default: false
+            }
+        }
+
+        var closesWork: Bool {
+            self == .turnEnded || self == .failed
+        }
     }
 
     enum CodingKeys: String, CodingKey {
         case scope
+        case turn
         case event
     }
 
     let scope: Scope?
+    let turn: Turn?
     let change: Change
 
-    init(scope: Scope?, change: Change) {
+    init(scope: Scope?, turn: Turn? = nil, change: Change) {
         self.scope = scope
+        self.turn = turn
         self.change = change
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         scope = try container.decodeIfPresent(Scope.self, forKey: .scope)
+        turn = try? container.decodeIfPresent(Turn.self, forKey: .turn)
         change = try container.decode(Wire.self, forKey: .event).change
     }
 
@@ -79,7 +107,10 @@ struct AgentEvent: Decodable, Equatable, Sendable {
                 id.flatMap { id in text.map { Change.messageDelta(id: id, text: $0) } } ?? .other
             case "messageCompleted": message.map(Change.messageCompleted) ?? .other
             case "activity": activity.map(Change.activity) ?? .other
+            case "permissionRequested": .permissionRequested
+            case "questionRequested": .questionRequested
             case "turnEnded": .turnEnded
+            case "failed": .failed
             default: .other
             }
         }

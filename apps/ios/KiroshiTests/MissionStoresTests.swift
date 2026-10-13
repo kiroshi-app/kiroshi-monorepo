@@ -127,7 +127,8 @@ struct MissionStoresTests {
         let mission = MissionTesting.mission(
             id: "mission-1", state: "waiting_human", botId: "bot-1")
         let store = MissionThreadStore(
-            mission: mission, now: { Date(timeIntervalSince1970: 100) }, newId: { "id-1" })
+            mission: mission, missions: MissionsStore(), work: CompanionWork(),
+            now: { Date(timeIntervalSince1970: 100) }, newId: { "id-1" })
         let page =
             #"{"conversationId":"thread-mission-1","hasMore":false,"arrivals":[],"messages":[\#(MissionTesting.message(id: "s", seq: 1, content: "Carry out this mission.")),\#(MissionTesting.message(id: "q", seq: 2, role: "assistant", content: "Which one first?", botId: "bot-1"))]}"#
         let socket = ScriptedRelaySocket(
@@ -164,7 +165,9 @@ struct MissionStoresTests {
 
     @Test func anAnswerSentJustBeforeLeavingTheThreadStillReachesTheHost() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission(), newId: { "id-1" })
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork(),
+            newId: { "id-1" })
         let socket = ScriptedRelaySocket(
             sharedSpaceId: "s-1",
             answers: [
@@ -193,7 +196,9 @@ struct MissionStoresTests {
 
     @Test func whatThePersonTypesWhileTheAnswerIsSendingIsKept() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission(), newId: { "id-1" })
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork(),
+            newId: { "id-1" })
         let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -217,7 +222,8 @@ struct MissionStoresTests {
     @Test func attachedFilesAreStoredBeforeTheAnswerNamesThem() async {
         let connection = makeConnection()
         let store = MissionThreadStore(
-            mission: MissionTesting.mission(), now: { Date(timeIntervalSince1970: 0) },
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork(),
+            now: { Date(timeIntervalSince1970: 0) },
             newId: { "id-1" })
         let socket = ScriptedRelaySocket(
             sharedSpaceId: "s-1",
@@ -255,7 +261,8 @@ struct MissionStoresTests {
 
     @Test func aRefusedAnswerKeepsTheDraftAndSaysSo() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
         let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -276,7 +283,8 @@ struct MissionStoresTests {
 
     @Test func theThreadLoadsUntilItsPageArrivesThenAnEmptyThreadIsNoLongerLoading() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
         let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -299,7 +307,8 @@ struct MissionStoresTests {
 
     @Test func leavingTheThreadWhileItLoadsIsNotAFailure() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
         let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -317,7 +326,8 @@ struct MissionStoresTests {
     @Test func theHeaderAndTheOpeningDayAreKnownBeforeTheThreadLoads() {
         let atlas = Companion(id: "bot-1", name: "Atlas", role: "Planner")
         let mission = MissionTesting.mission(isAgentRunning: true)
-        let store = MissionThreadStore(mission: mission)
+        let store = MissionThreadStore(
+            mission: mission, missions: MissionsStore(), work: CompanionWork())
 
         #expect(
             mission.heading(companion: atlas)
@@ -331,7 +341,8 @@ struct MissionStoresTests {
 
     @Test func tryingAgainAfterAFailureLoadsTheThread() async {
         let connection = makeConnection()
-        let store = MissionThreadStore(mission: MissionTesting.mission())
+        let store = MissionThreadStore(
+            mission: MissionTesting.mission(), missions: MissionsStore(), work: CompanionWork())
         let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -353,6 +364,57 @@ struct MissionStoresTests {
         #expect(store.state == .shown)
         #expect(MissionTesting.shown(store.transcript).map(\.id) == ["m-1"])
         following.cancel()
+        await connection.stop()
+    }
+
+    @Test func theMissionThreadShowsItsCompanionAtWorkUntilTheTurnEnds() async {
+        let connection = makeConnection()
+        let work = CompanionWork()
+        let updates = await connection.updates()
+        let feeding = Task {
+            for await update in updates {
+                work.apply(update)
+            }
+        }
+        let mission = MissionTesting.mission(id: "mission-1", botId: "bot-1")
+        let store = MissionThreadStore(mission: mission, missions: MissionsStore(), work: work)
+        let scoped =
+            #"{"scope":{"conversationId":"thread-mission-1","botId":"bot-1","runtimeSessionId":"r1","epoch":1},"turn":{"turnId":"t1","conversationId":"thread-mission-1"},"event":"#
+        let page =
+            #"{"conversationId":"thread-mission-1","hasMore":false,"arrivals":[],"messages":[\#(MissionTesting.message(id: "q", seq: 1, role: "assistant", content: "Which one first?", botId: "bot-1"))]}"#
+        let socket = ScriptedRelaySocket(
+            sharedSpaceId: "s-1",
+            answers: [
+                "conversation_message_page": page,
+                "agent_pending_questions":
+                    "[" + scoped
+                    + #"{"type":"questionRequested","request":{"id":"q1","questions":[]}}}]"#,
+                "agent_cancel_turn": "null",
+            ])
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        await waitUntil { store.hasLoaded && store.working != nil }
+
+        #expect(store.entries.last?.isYours == false)
+        #expect(store.workers.map(\.companionId) == ["bot-1"])
+        #expect(mission.heading(companion: nil, working: ["bot-1"]).working == ["bot-1"])
+        #expect(store.canStop)
+        store.stop()
+        let cancel = await nextCall("agent_cancel_turn", on: socket)
+        let scope = (cancel["args"] as? [String: Any])?["scope"] as? [String: Any]
+        #expect(scope?["runtimeSessionId"] as? String == "r1")
+
+        socket.push(
+            .frame(
+                #"{"event":{"event":"agent://event","payload":"#
+                    + scoped
+                    + #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"cancelled"}}}}}"#
+            ))
+        await waitUntil { store.working == nil }
+        #expect(!store.canStop)
+        following.cancel()
+        feeding.cancel()
         await connection.stop()
     }
 }

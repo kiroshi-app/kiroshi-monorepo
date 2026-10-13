@@ -25,6 +25,10 @@ final class MissionsStore {
         companions[mission.botId]
     }
 
+    func live(_ mission: Mission) -> Mission {
+        entries.first { $0.mission.id == mission.id }?.mission ?? mission
+    }
+
     func follow(_ connection: RelayConnection) async {
         if instanceId != connection.instanceId {
             instanceId = connection.instanceId

@@ -6,16 +6,19 @@
         let onlineOnceSpaceIds: Set<Space.ID>
         let answers: [String: String]
         let answersAfter: [String: Duration]
+        let plays: [String: [ScriptedRelaySocket.Inbound]]
         private var leftSpaceIds: Set<Space.ID> = []
 
         init(
             onlineSpaceIds: Set<Space.ID>, onlineOnceSpaceIds: Set<Space.ID> = [],
-            answers: [String: String] = [:], answersAfter: [String: Duration] = [:]
+            answers: [String: String] = [:], answersAfter: [String: Duration] = [:],
+            plays: [String: [ScriptedRelaySocket.Inbound]] = [:]
         ) {
             self.onlineSpaceIds = onlineSpaceIds
             self.onlineOnceSpaceIds = onlineOnceSpaceIds
             self.answers = answers
             self.answersAfter = answersAfter
+            self.plays = plays
         }
 
         func open(_ request: URLRequest) async throws -> any RelaySocket {
@@ -32,7 +35,8 @@
                 throw RelayClosure(code: RelayClosure.hostOffline)
             }
             return ScriptedRelaySocket(
-                sharedSpaceId: sharedSpaceId, answers: answers, answersAfter: answersAfter)
+                sharedSpaceId: sharedSpaceId, answers: answers, answersAfter: answersAfter,
+                plays: plays)
         }
     }
 #endif

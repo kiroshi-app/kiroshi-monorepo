@@ -161,17 +161,11 @@ final class ConversationsStore {
     private func apply(
         _ change: AgentEvent.Change, by companionId: Companion.ID, in conversationId: String
     ) {
-        switch change {
-        case .turn(let state):
-            setWorking(state.isWorking, companionId, in: conversationId)
-        case .messageStarted:
-            setWorking(true, companionId, in: conversationId)
-        case .messageCompleted(let message):
+        if case .messageCompleted(let message) = change {
             update(conversationId) { $0.lastMessage = MessagePreview(message, by: companionId) }
-        case .turnEnded:
-            setWorking(false, companionId, in: conversationId)
-        case .messageDelta, .activity, .other:
-            break
+        }
+        if change.opensWork || change.closesWork {
+            setWorking(change.opensWork, companionId, in: conversationId)
         }
     }
 

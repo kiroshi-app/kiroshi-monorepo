@@ -18,6 +18,11 @@ struct ThreadWorking: Equatable {
     let name: String
     let isSeveral: Bool
     let since: Date?
+
+    var spoken: String {
+        isSeveral
+            ? String(localized: "\(name) are working…") : String(localized: "\(name) is working…")
+    }
 }
 
 struct ThreadOpening: Equatable {
