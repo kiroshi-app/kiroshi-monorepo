@@ -1117,6 +1117,7 @@ overlays-searchpalette--one-hit
 overlays-searchpalette--one-kind
 overlays-searchpalette--reduced-motion
 overlays-searchpalette--resting
+overlays-searchpalette--resting-all-loading
 overlays-searchpalette--resting-kind-empty
 overlays-searchpalette--resting-loading
 overlays-searchpalette--resting-messages
@@ -1442,6 +1443,7 @@ settings-space-spacefields--recoloured
 settings-space-spacesettingsdialog--danger
 settings-space-spacesettingsdialog--default
 settings-space-spacesettingsdialog--environment
+settings-space-spacesettingsdialog--environment-loading
 settings-space-spacesettingsdialog--history
 settings-space-spacesettingsdialog--joined-danger
 settings-space-spacesettingsdialog--joined-space

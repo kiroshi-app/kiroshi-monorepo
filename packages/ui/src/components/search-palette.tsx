@@ -152,13 +152,26 @@ type SkeletonSectionHeadProps = {
 }
 
 const SkeletonSectionHead = ({ label }: SkeletonSectionHeadProps) => (
-	<div className={SECTION_HEAD_CLASS}>
+	<div className={SECTION_HEAD_CLASS} data-slot="search-palette-section-head">
 		<span className="font-medium text-foreground text-xs">{label}</span>
 	</div>
 )
 
-const ResultsSkeleton = () => {
+type ResultsSkeletonProps = {
+	isSectioned: boolean
+}
+
+const ResultsSkeleton = ({ isSectioned }: ResultsSkeletonProps) => {
 	const { t } = useTranslation("search")
+
+	if (!isSectioned) {
+		return (
+			<ListSkeleton
+				className={cn("gap-0.5", CONVERSATION_SKELETON_WIDTHS)}
+				row={<ResultRowSkeleton />}
+			/>
+		)
+	}
 
 	return (
 		<div
@@ -320,7 +333,7 @@ const SearchPalette = ({
 
 	const panelOf = () => {
 		if (shown.length > 0) return null
-		if (isSkeletonShown) return <ResultsSkeleton />
+		if (isSkeletonShown) return null
 		if (!isRest) return isLoading ? null : foundPanel
 		if (tab === "messages") return instructionPanel()
 		if (isLoading) return null
@@ -457,10 +470,14 @@ const SearchPalette = ({
 						{shown.length > 0 ? null : (
 							<div
 								aria-label={t("results")}
-								className={LIST_CLASS}
+								className={cn(LIST_CLASS, isSkeletonShown && "min-h-0 flex-1")}
 								id={listId}
 								role="listbox"
-							/>
+							>
+								{isSkeletonShown ? (
+									<ResultsSkeleton isSectioned={isRest && isAllTab} />
+								) : null}
+							</div>
 						)}
 
 						{panelOf()}

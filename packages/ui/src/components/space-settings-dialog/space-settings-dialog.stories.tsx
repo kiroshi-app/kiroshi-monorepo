@@ -233,6 +233,35 @@ export const Environment = meta.story({
 	},
 })
 
+export const EnvironmentLoading = meta.story({
+	args: { environment: [], isEnvironmentPending: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The space's secrets still on their way, the flag forwarded from the dialog to the Secrets panel. Check that the head line and Add secret stay put and that secret row skeletons fill the panel below them to the bottom, the last one cut by the edge, while the region reads busy. Pick `Environment` for the panel once the secrets are read.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+
+		await userEvent.click(within(dialog).getByRole("tab", { name: "Secrets" }))
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Secrets",
+		})
+
+		await expect(
+			within(panel).getByRole("button", { name: "Add secret" }),
+		).toBeVisible()
+		await expect(slotIn(panel, "secrets-pending")).toHaveAttribute(
+			"aria-busy",
+			"true",
+		)
+		await expectSkeletonClippedAtBottomOf(panel)
+	},
+})
+
 export const Skills = meta.story({
 	parameters: {
 		docs: {
