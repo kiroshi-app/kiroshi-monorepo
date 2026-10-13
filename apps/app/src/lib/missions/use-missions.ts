@@ -1,25 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { skipToken, useQuery } from "@tanstack/react-query"
+import { useCallback, useMemo } from "react"
 
-import { coalescedRead } from "./coalesced-read"
-import type { Mission, MissionChanged } from "./mission-contract"
-import { withMissionChange } from "./missions-model"
+import { useMissionChanges } from "./mission-changes"
+import type { Mission } from "./mission-contract"
+import { missionQueryKeys } from "./mission-query-keys"
 import { missionsTransport } from "./missions-transport"
 
-import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
+import { hasLastReadFailed } from "@/lib/query/last-read"
 
 const NO_MISSIONS: Mission[] = []
-
-const withChangeApplied =
-	(changed: MissionChanged) =>
-	(held: Mission[]): Mission[] =>
-		held.some(({ id }) => id === changed.missionId)
-			? held.map((mission) =>
-					mission.id === changed.missionId
-						? withMissionChange(mission, changed)
-						: mission,
-				)
-			: held
 
 export type ConversationMissionsRead = {
 	open: Mission[]
@@ -32,75 +22,30 @@ export type ConversationMissionsRead = {
 export const useMissions = (
 	conversationId: string | null,
 ): ConversationMissionsRead => {
-	const [running, setRunning] = useState<Mission[]>(NO_MISSIONS)
-	const [closed, setClosed] = useState<Mission[]>(NO_MISSIONS)
-	const [hasFailed, setFailed] = useState(false)
-	const reads = useRef(0)
 	const host = useReachableHost()
+	const canRead = conversationId !== null && host !== null
+	useMissionChanges()
+
+	const read = useQuery({
+		queryKey: missionQueryKeys.conversation(conversationId, host),
+		queryFn: canRead ? () => missionsTransport.list(conversationId) : skipToken,
+		meta: { rendersErrorInline: true },
+	})
+	const { data, refetch } = read
+	const open = data?.open ?? NO_MISSIONS
+	const closed = data?.done ?? NO_MISSIONS
+	const hasFailed = hasLastReadFailed(read)
 
 	const reload = useCallback(() => {
-		reads.current += 1
-		if (!conversationId || !host) {
-			return
+		if (canRead) {
+			void refetch()
 		}
+	}, [canRead, refetch])
 
-		const ticket = reads.current
-
-		missionsTransport.list(conversationId).then(
-			(listed) => {
-				if (ticket !== reads.current) {
-					return
-				}
-
-				setRunning(listed.open)
-				setClosed(listed.done)
-				setFailed(false)
-			},
-			() => {
-				if (ticket === reads.current) {
-					setFailed(true)
-				}
-			},
-		)
-	}, [conversationId, host])
-
-	useEffect(reload, [reload])
-
-	useHostReconnections(reload)
-
-	useEffect(() => {
-		const rereading = coalescedRead(reload)
-		const applyChange = (changed: MissionChanged) => {
-			setRunning(withChangeApplied(changed))
-			setClosed(withChangeApplied(changed))
-			rereading.request()
-		}
-		const listening = missionsTransport
-			.onChanged(applyChange)
-			.catch((reason) => {
-				console.error(
-					"activity panel: mission changes could not be listened to",
-					reason,
-				)
-				return () => undefined
-			})
-
-		return () => {
-			rereading.cancel()
-			void listening.then((unsubscribe) => unsubscribe())
-		}
-	}, [reload])
-
-	const missions = useMemo(() => [...running, ...closed], [running, closed])
+	const missions = useMemo(() => [...open, ...closed], [open, closed])
 
 	return useMemo(
-		() => ({
-			open: running,
-			closed,
-			missions,
-			hasFailed,
-			reload,
-		}),
-		[running, closed, missions, hasFailed, reload],
+		() => ({ open, closed, missions, hasFailed, reload }),
+		[open, closed, missions, hasFailed, reload],
 	)
 }

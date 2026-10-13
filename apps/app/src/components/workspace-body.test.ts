@@ -49,6 +49,7 @@ import {
 import { createFakeOnboardingPort } from "@/lib/onboarding/fake-onboarding-port"
 import { createSignInController } from "@/lib/onboarding/sign-in-controller"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import { createOpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import { routinesTransport } from "@/lib/routines/routines-transport"
 import { triggerSourcesTransport } from "@/lib/routines/trigger-sources-transport"
@@ -297,6 +298,7 @@ const settle = () =>
 		for (let round = 0; round < 20; round += 1) {
 			await Promise.resolve()
 		}
+		await new Promise((notified) => setTimeout(notified, 0))
 	})
 
 const openMission = async () => {
@@ -376,7 +378,7 @@ describe("WorkspaceBody missions", () => {
 			mission,
 			events: [eventOf("opened", 0)],
 		}))
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await openMission()
@@ -388,7 +390,7 @@ describe("WorkspaceBody missions", () => {
 
 	it("sends what the composer holds to the owning companion", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await openMission()
@@ -407,7 +409,7 @@ describe("WorkspaceBody missions", () => {
 			mission: opened,
 			events: [],
 		}))
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await openMission()
@@ -427,8 +429,10 @@ describe("WorkspaceBody missions", () => {
 			mission,
 			events: [eventOf("opened", 0)],
 		}))
-		render(workspace.body())
-		render(createElement(NoticeSurface))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openMission()
@@ -443,7 +447,7 @@ describe("WorkspaceBody missions", () => {
 
 	it("returns to the conversation the mission was opened from", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await openMission()
@@ -458,7 +462,9 @@ describe("WorkspaceBody missions", () => {
 
 	it("shows the thread of the origin row when it is selected again", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
-		const view = render(workspace.body())
+		const view = render(workspace.body(), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openMission()
@@ -481,7 +487,7 @@ describe("WorkspaceBody missions", () => {
 			events: [],
 		}))
 		readMission.mockRejectedValue(new Error("refused"))
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		await openMission()
@@ -504,8 +510,10 @@ describe("WorkspaceBody missions", () => {
 			(mission) => ({ mission, events: [] }),
 			refusing,
 		)
-		render(workspace.body())
-		render(createElement(NoticeSurface))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		await openMission()
@@ -544,7 +552,9 @@ describe("WorkspaceBody activity panel", () => {
 
 	it("opens the first thread with the panel already open", async () => {
 		const workspace = await workspaceOf()
-		render(workspace.body({ isActivityPanelOpenAtFirst: true }))
+		render(workspace.body({ isActivityPanelOpenAtFirst: true }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		expect(isPanelOpen()).toBe(true)
@@ -552,7 +562,7 @@ describe("WorkspaceBody activity panel", () => {
 
 	it("renders the panel closed when the preference is not set", async () => {
 		const workspace = await workspaceOf()
-		render(workspace.body())
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
 		await settle()
 
 		expect(isPanelClosed()).toBe(true)
@@ -560,7 +570,9 @@ describe("WorkspaceBody activity panel", () => {
 
 	it("holds the panel open when the reader moves to another conversation", async () => {
 		const workspace = await workspaceOf()
-		const view = render(workspace.body())
+		const view = render(workspace.body(), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 
 		fireEvent.click(activityToggle())
@@ -582,6 +594,7 @@ describe("WorkspaceBody activity panel", () => {
 				onOpenChange,
 				openedRoutine: createOpenedRoutineController(),
 			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
 
@@ -628,8 +641,12 @@ describe("WorkspaceBody mission menu", () => {
 			isClosed ? { open: [], done: [mission] } : { open: [mission], done: [] },
 		)
 		readMission.mockResolvedValue({ mission, events: [] })
-		render(workspace.body({ isActivityPanelOpenAtFirst: true }))
-		render(createElement(NoticeSurface))
+		render(workspace.body({ isActivityPanelOpenAtFirst: true }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		render(createElement(NoticeSurface), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await settle()
 		return { workspace, mission }
 	}

@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { skipToken, useQuery } from "@tanstack/react-query"
+import { useCallback, useMemo, useState } from "react"
 
-import { coalescedRead } from "./coalesced-read"
-import type { MissionChanged, MissionInSpace } from "./mission-contract"
+import { useMissionChanges } from "./mission-changes"
+import { missionQueryKeys } from "./mission-query-keys"
 import {
 	type SpaceMissionGroups,
+	type SpaceMissionsRead,
 	startOfLocalDay,
 	toSpaceMissionGroups,
-	withMissionMove,
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
 
 import { isHostRefused } from "@/lib/host/host-refused"
-import { useHostReconnections } from "@/lib/host/use-host-reconnections"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-
-type FailedRead = {
-	spaceId: string
-	isRaised: boolean
-}
-
-type HeldSpaceMissions = {
-	spaceId: string
-	closedSince: number
-	entries: MissionInSpace[]
-}
 
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
@@ -31,19 +20,11 @@ const NO_GROUPS: SpaceMissionGroups = {
 	earlierToday: [],
 }
 
-const withChangeApplied =
-	(changed: MissionChanged) =>
-	(held: HeldSpaceMissions | null): HeldSpaceMissions | null =>
-		held?.entries.some(({ mission }) => mission.id === changed.missionId)
-			? {
-					...held,
-					entries: held.entries.map((entry) =>
-						entry.mission.id === changed.missionId
-							? { ...entry, mission: withMissionMove(entry.mission, changed) }
-							: entry,
-					),
-				}
-			: held
+const readSpaceFeed = async (spaceId: string): Promise<SpaceMissionsRead> => {
+	const closedSince = startOfLocalDay(Date.now())
+	const entries = await missionsTransport.spaceFeed(spaceId, closedSince)
+	return { closedSince, entries }
+}
 
 export type SpaceMissionsView = SpaceMissionGroups & {
 	waitingCount: number
@@ -54,71 +35,32 @@ export type SpaceMissionsView = SpaceMissionGroups & {
 }
 
 export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
-	const [held, setHeld] = useState<HeldSpaceMissions | null>(null)
-	const [failed, setFailed] = useState<FailedRead | null>(null)
-	const reads = useRef(0)
 	const host = useReachableHost()
+	const canRead = spaceId !== null && host !== null
+	const [isRetrying, setRetrying] = useState(false)
+	useMissionChanges()
+
+	const { data, error, isError, isFetching, refetch } = useQuery({
+		queryKey: missionQueryKeys.spaceFeed(spaceId, host),
+		queryFn: canRead ? () => readSpaceFeed(spaceId) : skipToken,
+		meta: { rendersErrorInline: true },
+	})
 
 	const reload = useCallback(() => {
-		reads.current += 1
-		setFailed(null)
-		if (!spaceId || !host) {
+		if (!canRead) {
 			return
 		}
+		setRetrying(true)
+		void refetch().then(() => setRetrying(false))
+	}, [canRead, refetch])
 
-		const ticket = reads.current
-		const closedSince = startOfLocalDay(Date.now())
-
-		missionsTransport.spaceFeed(spaceId, closedSince).then(
-			(entries) => {
-				if (ticket !== reads.current) {
-					return
-				}
-
-				setHeld({ spaceId, closedSince, entries })
-				setFailed(null)
-			},
-			(reason) => {
-				if (ticket === reads.current) {
-					setFailed({ spaceId, isRaised: isHostRefused(reason) })
-				}
-			},
-		)
-	}, [spaceId, host])
-
-	useEffect(reload, [reload])
-
-	useHostReconnections(reload)
-
-	useEffect(() => {
-		const rereading = coalescedRead(reload)
-		const applyChange = (changed: MissionChanged) => {
-			setHeld(withChangeApplied(changed))
-			rereading.request()
-		}
-		const listening = missionsTransport
-			.onChanged(applyChange)
-			.catch((reason) => {
-				console.error(
-					"missions tab: mission changes could not be listened to",
-					reason,
-				)
-				return () => undefined
-			})
-
-		return () => {
-			rereading.cancel()
-			void listening.then((unsubscribe) => unsubscribe())
-		}
-	}, [reload])
-
-	const hasLoaded = spaceId !== null && held?.spaceId === spaceId
+	const hasLoaded = data !== undefined
 	const groups = useMemo(
-		() => (hasLoaded && held ? toSpaceMissionGroups(held) : NO_GROUPS),
-		[hasLoaded, held],
+		() => (data ? toSpaceMissionGroups(data) : NO_GROUPS),
+		[data],
 	)
-	const hasFailed = spaceId !== null && failed?.spaceId === spaceId
-	const isFailureRaised = hasFailed && failed?.isRaised === true
+	const hasFailed = isError && !isFetching && !isRetrying
+	const isFailureRaised = hasFailed && isHostRefused(error)
 
 	return useMemo(
 		() => ({

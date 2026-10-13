@@ -6,15 +6,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { Mission, MissionChanged } from "./mission-contract"
 import { missionsTransport } from "./missions-transport"
 import { useMissions } from "./use-missions"
+import { useSpaceMissions } from "./use-space-missions"
+
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("./missions-transport", () => ({
 	missionsTransport: {
 		list: vi.fn(),
+		spaceFeed: vi.fn(),
 		onChanged: vi.fn(),
 	},
 }))
 
+const reachable = vi.hoisted(() => ({ host: "local" as string | null }))
+
+vi.mock("@/lib/host/use-reachable-host", () => ({
+	useReachableHost: () => reachable.host,
+}))
+
 const listMissions = vi.mocked(missionsTransport.list)
+const readSpaceFeed = vi.mocked(missionsTransport.spaceFeed)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 
 const MISSION: Mission = {
@@ -52,6 +63,7 @@ const A_MINUTE_MS = 60_000
 describe("useMissions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		reachable.host = "local"
 		listMissions.mockResolvedValue({ open: [MISSION], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -62,7 +74,9 @@ describe("useMissions", () => {
 	})
 
 	it("reads the missions of the conversation once they are listed", async () => {
-		const { result } = renderHook(() => useMissions("c-1"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 
 		await waitFor(() => expect(result.current.missions).toEqual([MISSION]))
 		expect(result.current.open).toHaveLength(1)
@@ -70,7 +84,9 @@ describe("useMissions", () => {
 	})
 
 	it("holds its read still when the roster clock ticks", async () => {
-		const { result } = renderHook(() => useMissions("c-1"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() => expect(result.current.missions).toEqual([MISSION]))
 		const read = result.current
 
@@ -89,7 +105,9 @@ describe("useMissions", () => {
 			announce = listener
 			return Promise.resolve(() => undefined)
 		})
-		const { result } = renderHook(() => useMissions("c-1"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() => expect(result.current.missions).toEqual([MISSION]))
 		listMissions.mockReturnValue(new Promise(() => undefined))
 
@@ -103,9 +121,11 @@ describe("useMissions", () => {
 			}),
 		)
 
-		expect(result.current.open).toEqual([
-			{ ...MISSION, isAgentRunning: true, lastActivityAt: 42 },
-		])
+		await waitFor(() =>
+			expect(result.current.open).toEqual([
+				{ ...MISSION, isAgentRunning: true, lastActivityAt: 42 },
+			]),
+		)
 	})
 
 	it("holds its read when a change names a mission it does not hold", async () => {
@@ -114,7 +134,9 @@ describe("useMissions", () => {
 			announce = listener
 			return Promise.resolve(() => undefined)
 		})
-		const { result } = renderHook(() => useMissions("c-1"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
 		await waitFor(() => expect(result.current.missions).toEqual([MISSION]))
 		listMissions.mockReturnValue(new Promise(() => undefined))
 		const read = result.current
@@ -128,8 +150,106 @@ describe("useMissions", () => {
 				lastActivityAt: 42,
 			}),
 		)
+		await waitFor(() => expect(listMissions).toHaveBeenCalledTimes(2))
+		await act(() => new Promise((settle) => setTimeout(settle, 0)))
 
 		expect(result.current).toBe(read)
+	})
+
+	it("lists the missions once for two readers of the same conversation", async () => {
+		const { result } = renderHook(
+			() => ({ panel: useMissions("c-1"), thread: useMissions("c-1") }),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+
+		await waitFor(() =>
+			expect(result.current.thread.missions).toEqual([MISSION]),
+		)
+		expect(result.current.panel.missions).toEqual([MISSION])
+		expect(listMissions).toHaveBeenCalledTimes(1)
+	})
+
+	it("reads nothing while no host is reachable", async () => {
+		reachable.host = null
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await act(async () => undefined)
+
+		expect(listMissions).not.toHaveBeenCalled()
+		expect(result.current.missions).toEqual([])
+		expect(result.current.hasFailed).toBe(false)
+	})
+
+	it("reads the missions again when they mount after every reader left", async () => {
+		const { wrapper } = createQueryTestWrapper()
+		const first = renderHook(() => useMissions("c-1"), { wrapper })
+		await waitFor(() =>
+			expect(first.result.current.missions).toEqual([MISSION]),
+		)
+		first.unmount()
+
+		const second = renderHook(() => useMissions("c-1"), { wrapper })
+
+		expect(second.result.current.missions).toEqual([MISSION])
+		await waitFor(() => expect(listMissions).toHaveBeenCalledTimes(2))
+	})
+
+	it("flags a rejected read and keeps it flagged while the reader retries", async () => {
+		listMissions.mockRejectedValue(new Error("unreadable"))
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await waitFor(() => expect(result.current.hasFailed).toBe(true))
+		listMissions.mockReturnValue(new Promise(() => undefined))
+
+		act(() => result.current.reload())
+		await act(() => new Promise((settle) => setTimeout(settle, 0)))
+
+		expect(listMissions).toHaveBeenCalledTimes(2)
+		expect(result.current.hasFailed).toBe(true)
+	})
+
+	it("patches a change into the conversation and the space feed it holds at once", async () => {
+		let announce: (changed: MissionChanged) => void = () => undefined
+		listenToMissions.mockImplementation((listener) => {
+			announce = listener
+			return Promise.resolve(() => undefined)
+		})
+		readSpaceFeed.mockResolvedValue([
+			{ mission: MISSION, conversationId: "c-1", conversationTitle: "Crashes" },
+		])
+		const { result } = renderHook(
+			() => ({ panel: useMissions("c-1"), feed: useSpaceMissions("s-1") }),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await waitFor(() => expect(result.current.feed.inProgress).toHaveLength(1))
+		await waitFor(() => expect(result.current.panel.open).toHaveLength(1))
+		listMissions.mockReturnValue(new Promise(() => undefined))
+		readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+
+		act(() =>
+			announce({
+				missionId: "m-1",
+				state: "waiting_human",
+				stateSeq: 2,
+				isAgentRunning: true,
+				lastActivityAt: 42,
+			}),
+		)
+
+		await waitFor(() =>
+			expect(
+				result.current.feed.waitingOnYou.map(({ mission }) => mission.id),
+			).toEqual(["m-1"]),
+		)
+		expect(result.current.panel.open[0]).toMatchObject({
+			isAgentRunning: true,
+			lastActivityAt: 42,
+		})
+		expect(listenToMissions).toHaveBeenCalledTimes(1)
+		expect(listMissions).toHaveBeenCalledTimes(2)
+		expect(readSpaceFeed).toHaveBeenCalledTimes(2)
 	})
 
 	describe("when changes arrive in a burst", () => {
@@ -143,7 +263,9 @@ describe("useMissions", () => {
 		let announce: (changed: MissionChanged) => void = () => undefined
 
 		const mountSettled = async () => {
-			const mounted = renderHook(() => useMissions("c-1"))
+			const mounted = renderHook(() => useMissions("c-1"), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
 			await act(async () => undefined)
 			listMissions.mockClear()
 			return mounted

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+	skipToken,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query"
+import { useCallback, useMemo, useState } from "react"
 
 import type { RoutineTriggerSource } from "@workspace/ui/components/routine-form"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
@@ -9,6 +15,7 @@ import type {
 } from "@workspace/ui/components/routines-panel"
 
 import type { Routine } from "./routine-contract"
+import { routineQueryKeys } from "./routine-query-keys"
 import {
 	botIdsOf,
 	type KnownSources,
@@ -25,13 +32,9 @@ import { useRoutineAnnouncements } from "./use-routine-announcements"
 import { useRoutineDetail } from "./use-routine-detail"
 import { useRoutineForm } from "./use-routine-form"
 
-const withoutWriteFailure = (current: RoutinesFailure | null) =>
-	current === "write" ? null : current
+import { useReachableHost } from "@/lib/host/use-reachable-host"
 
-const NO_ROUTINES: Routine[] = []
-const NO_KNOWN_SOURCES: KnownSources = new Map()
 const NO_SOURCES: RoutineTriggerSource[] = []
-const NO_REPORTED_RUNS: ReportedRunRead[] = []
 
 export type ConversationRoutines = {
 	routines: RoutineRowModel[]
@@ -59,11 +62,11 @@ const declaredBy = async (botIds: string[]): Promise<Declaration[]> => {
 	)
 }
 
-const declaredByLead = (leadBotId: string | undefined) =>
+const declaredByLead = (leadBotId: string | null) =>
 	leadBotId ? triggerSourcesTransport.sources(leadBotId) : Promise.resolve([])
 
 const leadDeclaration = (
-	leadBotId: string | undefined,
+	leadBotId: string | null,
 	declared: TriggerSource[] | null,
 ): Declaration | null =>
 	leadBotId && declared ? { botId: leadBotId, sources: declared } : null
@@ -105,25 +108,41 @@ const reportedRunsOf = async (
 }
 
 type RoutinesRead = {
+	rows: Routine[]
+	known: KnownSources
+	reported: ReportedRunRead[]
 	sources: RoutineTriggerSource[]
-	listed: {
-		rows: Routine[]
-		known: KnownSources
-		reported: ReportedRunRead[]
-	} | null
 	failure: RoutinesFailure | null
 }
 
-const readOf = async (
-	listing: PromiseSettledResult<Routine[]>,
-	declaring: PromiseSettledResult<TriggerSource[]>,
-	leadBotId: string | undefined,
-): Promise<RoutinesRead> => {
+const NOTHING_READ: RoutinesRead = {
+	rows: [],
+	known: new Map(),
+	reported: [],
+	sources: NO_SOURCES,
+	failure: null,
+}
+
+type RoutinesReading = {
+	conversationId: string
+	leadBotId: string | null
+	held: RoutinesRead | undefined
+}
+
+const readRoutines = async ({
+	conversationId,
+	leadBotId,
+	held,
+}: RoutinesReading): Promise<RoutinesRead> => {
+	const [listing, declaring] = await Promise.allSettled([
+		routinesTransport.list(conversationId),
+		declaredByLead(leadBotId),
+	])
 	const declared = declaring.status === "fulfilled" ? declaring.value : null
 	const sources = declared ? toTriggerSources(declared) : NO_SOURCES
 
 	if (listing.status === "rejected") {
-		return { sources, listed: null, failure: "routines" }
+		return { ...(held ?? NOTHING_READ), sources, failure: "routines" }
 	}
 
 	const known = await knownOf(
@@ -133,116 +152,122 @@ const readOf = async (
 	const runs = await reportedRunsOf(listing.value, known)
 
 	return {
+		rows: listing.value,
+		known,
+		reported: runs.reported,
 		sources,
-		listed: { rows: listing.value, known, reported: runs.reported },
 		failure: declared && !runs.hasFailed ? null : "routines",
 	}
 }
+
+type EnabledChange = { routine: Routine; isEnabled: boolean }
+
+const writeEnabled = ({ routine, isEnabled }: EnabledChange) =>
+	routinesTransport.update(routine.id, {
+		title: routine.title,
+		instruction: routine.instruction,
+		filter: routine.filter,
+		triggerConfig: routine.triggerConfig,
+		isEnabled,
+	})
+
+const withRoutineReplaced = (written: Routine) => (rows: Routine[]) =>
+	rows.map((row) => (row.id === written.id ? written : row))
+
+const withRoutineHeld = (written: Routine) => (rows: Routine[]) =>
+	rows.some((row) => row.id === written.id)
+		? withRoutineReplaced(written)(rows)
+		: [...rows, written]
+
+const withRoutineRemoved = (id: string) => (rows: Routine[]) =>
+	rows.filter((row) => row.id !== id)
 
 export const useRoutines = (
 	conversationId: string | null,
 	leadBotId?: string,
 ): ConversationRoutines => {
-	const [held, setHeld] = useState<Routine[]>(NO_ROUTINES)
-	const [known, setKnown] = useState<KnownSources>(NO_KNOWN_SOURCES)
-	const [sources, setSources] = useState<RoutineTriggerSource[]>(NO_SOURCES)
-	const [reportedRuns, setReportedRuns] =
-		useState<ReportedRunRead[]>(NO_REPORTED_RUNS)
-	const [failure, setFailure] = useState<RoutinesFailure | null>(null)
-	const reads = useRef(0)
+	const queryClient = useQueryClient()
+	const host = useReachableHost()
+	const lead = leadBotId ?? null
+	const canRead = conversationId !== null && host !== null
+	const [writeFailedAt, setWriteFailedAt] = useState<number | null>(null)
+
+	const {
+		data = NOTHING_READ,
+		dataUpdatedAt,
+		refetch,
+	} = useQuery({
+		queryKey: routineQueryKeys.list(conversationId, lead, host),
+		queryFn: canRead
+			? ({ client, queryKey: readKey }) =>
+					readRoutines({
+						conversationId,
+						leadBotId: lead,
+						held: client.getQueryData<RoutinesRead>(readKey),
+					})
+			: skipToken,
+		meta: { rendersErrorInline: true },
+	})
+	const { rows, known, reported, sources } = data
+	const hasWriteFailedLast =
+		writeFailedAt !== null && writeFailedAt >= dataUpdatedAt
+	const failure = hasWriteFailedLast ? "write" : data.failure
 
 	const reload = useCallback(() => {
-		if (!conversationId) {
-			return
+		if (canRead) {
+			void refetch()
 		}
+	}, [canRead, refetch])
 
-		reads.current += 1
-		const ticket = reads.current
+	const patchRows = useCallback(
+		(change: (rows: Routine[]) => Routine[]) => {
+			queryClient.setQueryData<RoutinesRead>(
+				routineQueryKeys.list(conversationId, lead, host),
+				(held) => held && { ...held, rows: change(held.rows) },
+			)
+			setWriteFailedAt(null)
+		},
+		[queryClient, conversationId, lead, host],
+	)
 
-		void Promise.allSettled([
-			routinesTransport.list(conversationId),
-			declaredByLead(leadBotId),
-		]).then(async ([listing, declaring]) => {
-			const read = await readOf(listing, declaring, leadBotId)
-			if (ticket !== reads.current) {
-				return
-			}
+	const raiseWriteFailure = useCallback(() => setWriteFailedAt(Date.now()), [])
 
-			setSources(read.sources)
-			setFailure(read.failure)
+	const { mutate: writeEnabledChange } = useMutation({
+		mutationFn: writeEnabled,
+		onSuccess: (written) => patchRows(withRoutineReplaced(written)),
+		onError: raiseWriteFailure,
+		meta: { rendersErrorInline: true },
+	})
 
-			if (read.listed) {
-				setKnown(read.listed.known)
-				setHeld(read.listed.rows)
-				setReportedRuns(read.listed.reported)
-			}
-		})
-	}, [conversationId, leadBotId])
-
-	useEffect(reload, [reload])
+	const { mutateAsync: remove } = useMutation({
+		mutationFn: (id: string) => routinesTransport.delete(id),
+		onSuccess: (_removed, id) => patchRows(withRoutineRemoved(id)),
+		meta: { rendersErrorInline: true },
+	})
 
 	const setEnabled = useCallback(
 		(id: string, isEnabled: boolean) => {
-			const routine = held.find((candidate) => candidate.id === id)
-			if (!routine) {
-				return
+			const routine = rows.find((candidate) => candidate.id === id)
+			if (routine) {
+				writeEnabledChange({ routine, isEnabled })
 			}
-
-			void routinesTransport
-				.update(id, {
-					title: routine.title,
-					instruction: routine.instruction,
-					filter: routine.filter,
-					triggerConfig: routine.triggerConfig,
-					isEnabled,
-				})
-				.then(
-					(written) => {
-						setHeld((rows) =>
-							rows.map((row) => (row.id === written.id ? written : row)),
-						)
-						setFailure(withoutWriteFailure)
-					},
-					() => setFailure("write"),
-				)
 		},
-		[held],
+		[rows, writeEnabledChange],
 	)
 
-	const remove = useCallback(
-		(id: string) =>
-			routinesTransport.delete(id).then(() => {
-				setHeld((rows) => rows.filter((row) => row.id !== id))
-				setFailure(withoutWriteFailure)
-			}),
-		[],
+	const hold = useCallback(
+		(written: Routine) => patchRows(withRoutineHeld(written)),
+		[patchRows],
 	)
 
-	const hold = useCallback((written: Routine) => {
-		setHeld((rows) =>
-			rows.some((row) => row.id === written.id)
-				? rows.map((row) => (row.id === written.id ? written : row))
-				: [...rows, written],
-		)
-		setFailure(withoutWriteFailure)
-	}, [])
-
-	const raiseWriteFailure = useCallback(() => setFailure("write"), [])
-
-	const routines = useMemo(() => toRoutineRows(held, known), [held, known])
+	const routines = useMemo(() => toRoutineRows(rows, known), [rows, known])
 
 	const detail = useRoutineDetail({
 		routines,
 		onWriteFailure: raiseWriteFailure,
 	})
 
-	const { refreshRuns } = detail
-	const onAnnounced = useCallback(() => {
-		reload()
-		refreshRuns()
-	}, [reload, refreshRuns])
-
-	useRoutineAnnouncements(conversationId, onAnnounced)
+	useRoutineAnnouncements(conversationId)
 
 	const form = useRoutineForm({
 		conversationId,
@@ -250,7 +275,7 @@ export const useRoutines = (
 		leadBotId,
 		sources,
 		known,
-		held,
+		held: rows,
 		onWritten: hold,
 		onWriteFailure: raiseWriteFailure,
 	})
@@ -258,7 +283,7 @@ export const useRoutines = (
 	return useMemo(
 		() => ({
 			routines,
-			reportedRuns,
+			reportedRuns: reported,
 			failure,
 			reload,
 			setEnabled,
@@ -266,6 +291,6 @@ export const useRoutines = (
 			form,
 			detail,
 		}),
-		[routines, reportedRuns, failure, reload, setEnabled, remove, form, detail],
+		[routines, reported, failure, reload, setEnabled, remove, form, detail],
 	)
 }

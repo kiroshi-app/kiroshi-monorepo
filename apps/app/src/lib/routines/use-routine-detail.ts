@@ -1,14 +1,16 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { skipToken, useMutation, useQuery } from "@tanstack/react-query"
+import { useCallback, useMemo, useState } from "react"
 
-import type {
-	RoutineRunModel,
-	RoutineRunRefusal,
-} from "@workspace/ui/components/routine-detail"
+import type { RoutineRunModel } from "@workspace/ui/components/routine-detail"
 import type { RoutineRowModel } from "@workspace/ui/components/routine-row"
 import type { RoutinesPanelDetail } from "@workspace/ui/components/routines-panel"
 
+import { routineQueryKeys } from "./routine-query-keys"
 import { toRunModels } from "./routines-model"
 import { DEFAULT_RUN_PAGE, routinesTransport } from "./routines-transport"
+
+import { useReachableHost } from "@/lib/host/use-reachable-host"
+import { hasLastReadFailed } from "@/lib/query/last-read"
 
 type RunsRead = {
 	runs: RoutineRunModel[]
@@ -16,144 +18,74 @@ type RunsRead = {
 	hasReadFullPage: boolean
 }
 
-type OpenRoutine = {
-	routineId: string
-	read: RunsRead | null
-	isReading: boolean
-	hasFailedToReadRuns: boolean
-	isRunning: boolean
-	refusal: RoutineRunRefusal | null
-}
-
-const opening = (routineId: string): OpenRoutine => ({
-	routineId,
-	read: null,
-	isReading: true,
-	hasFailedToReadRuns: false,
-	isRunning: false,
-	refusal: null,
-})
-
-export type OpenedRoutineDetail = RoutinesPanelDetail & {
-	refreshRuns: () => void
-}
-
 export type RoutineDetailWiring = {
 	routines: RoutineRowModel[]
 	onWriteFailure: () => void
 }
 
+const readRuns = async (routineId: string): Promise<RunsRead> => {
+	const carried = await routinesTransport.runs(routineId)
+	return {
+		runs: toRunModels(carried),
+		readAt: Date.now(),
+		hasReadFullPage: carried.length >= DEFAULT_RUN_PAGE,
+	}
+}
+
 export const useRoutineDetail = ({
 	routines,
 	onWriteFailure,
-}: RoutineDetailWiring): OpenedRoutineDetail => {
-	const [held, setHeld] = useState<OpenRoutine | null>(null)
-	const placed = useRef(0)
-	const reads = useRef(0)
+}: RoutineDetailWiring): RoutinesPanelDetail => {
+	const [openedId, setOpenedId] = useState<string | null>(null)
+	const host = useReachableHost()
+	const canRead = openedId !== null && host !== null
 
-	const revise = useCallback(
-		(placement: number, change: (held: OpenRoutine) => OpenRoutine) =>
-			setHeld((current) =>
-				current && placement === placed.current ? change(current) : current,
-			),
-		[],
-	)
+	const runsRead = useQuery({
+		queryKey: routineQueryKeys.runsOf(openedId, host),
+		queryFn: canRead ? () => readRuns(openedId) : skipToken,
+		gcTime: 0,
+		meta: { rendersErrorInline: true },
+	})
+	const { data: read, isFetching, refetch } = runsRead
+	const hasFailedToReadRuns = hasLastReadFailed(runsRead)
 
-	const readRuns = useCallback(
-		(routineId: string) => {
-			const placement = placed.current
-			reads.current += 1
-			const ticket = reads.current
-			const settle = (change: (held: OpenRoutine) => OpenRoutine) =>
-				revise(placement, (current) =>
-					ticket === reads.current ? change(current) : current,
-				)
-
-			revise(placement, (current) => ({ ...current, isReading: true }))
-
-			void routinesTransport.runs(routineId).then(
-				(carried) =>
-					settle((current) => ({
-						...current,
-						isReading: false,
-						hasFailedToReadRuns: false,
-						read: {
-							runs: toRunModels(carried),
-							readAt: Date.now(),
-							hasReadFullPage: carried.length >= DEFAULT_RUN_PAGE,
-						},
-					})),
-				() =>
-					settle((current) => ({
-						...current,
-						isReading: false,
-						hasFailedToReadRuns: true,
-					})),
-			)
-		},
-		[revise],
-	)
+	const running = useMutation({
+		mutationFn: (routineId: string) => routinesTransport.runNow(routineId),
+		onError: onWriteFailure,
+		meta: { rendersErrorInline: true },
+	})
+	const { mutate: runNow, reset: forgetRun } = running
+	const isRunningOpened = running.isPending && running.variables === openedId
+	const decision = running.variables === openedId ? running.data : undefined
 
 	const onOpen = useCallback(
 		(routineId: string) => {
-			placed.current += 1
-			setHeld(opening(routineId))
-			readRuns(routineId)
+			forgetRun()
+			setOpenedId(routineId)
 		},
-		[readRuns],
+		[forgetRun],
 	)
 
 	const onClose = useCallback(() => {
-		placed.current += 1
-		setHeld(null)
-	}, [])
+		forgetRun()
+		setOpenedId(null)
+	}, [forgetRun])
 
 	const onRetryRuns = useCallback(() => {
-		if (held && !held.isReading) {
-			readRuns(held.routineId)
+		if (canRead) {
+			void refetch({ cancelRefetch: false })
 		}
-	}, [held, readRuns])
-
-	const refreshRuns = useCallback(() => {
-		if (held) {
-			readRuns(held.routineId)
-		}
-	}, [held, readRuns])
+	}, [canRead, refetch])
 
 	const onRunNow = useCallback(() => {
-		if (!held || held.isRunning) {
-			return
+		if (openedId && !isRunningOpened) {
+			runNow(openedId)
 		}
-
-		const placement = placed.current
-		const { routineId } = held
-		revise(placement, (current) => ({
-			...current,
-			isRunning: true,
-			refusal: null,
-		}))
-
-		void routinesTransport.runNow(routineId).then(
-			(decision) => {
-				revise(placement, (current) => ({
-					...current,
-					isRunning: false,
-					refusal: decision.kind === "refused" ? decision.by : null,
-				}))
-				if (decision.kind !== "refused") {
-					readRuns(routineId)
-				}
-			},
-			() => {
-				revise(placement, (current) => ({ ...current, isRunning: false }))
-				onWriteFailure()
-			},
-		)
-	}, [held, revise, readRuns, onWriteFailure])
+	}, [openedId, isRunningOpened, runNow])
 
 	const open = useMemo(() => {
-		const row = routines.find(({ id }) => id === held?.routineId)
-		if (!held || !row) {
+		const row = routines.find(({ id }) => id === openedId)
+		if (!row) {
 			return null
 		}
 
@@ -162,18 +94,26 @@ export const useRoutineDetail = ({
 			title: row.title,
 			triggerSourceTitle: row.triggerSourceTitle,
 			hasStoppedItself: row.hasStoppedItself,
-			runs: held.read?.runs ?? [],
-			isReadingRuns: held.isReading,
-			hasFailedToReadRuns: held.hasFailedToReadRuns,
-			hasReadFullPage: held.read?.hasReadFullPage ?? false,
-			isRunning: held.isRunning,
-			refusal: held.refusal ?? undefined,
-			now: held.read?.readAt ?? 0,
+			runs: read?.runs ?? [],
+			isReadingRuns: isFetching,
+			hasFailedToReadRuns,
+			hasReadFullPage: read?.hasReadFullPage ?? false,
+			isRunning: isRunningOpened,
+			refusal: decision?.kind === "refused" ? decision.by : undefined,
+			now: read?.readAt ?? 0,
 		}
-	}, [routines, held])
+	}, [
+		routines,
+		openedId,
+		read,
+		isFetching,
+		hasFailedToReadRuns,
+		isRunningOpened,
+		decision,
+	])
 
 	return useMemo(
-		() => ({ open, onOpen, onClose, onRetryRuns, onRunNow, refreshRuns }),
-		[open, onOpen, onClose, onRetryRuns, onRunNow, refreshRuns],
+		() => ({ open, onOpen, onClose, onRetryRuns, onRunNow }),
+		[open, onOpen, onClose, onRetryRuns, onRunNow],
 	)
 }

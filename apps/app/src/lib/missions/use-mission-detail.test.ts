@@ -7,6 +7,8 @@ import type { MissionChanged, MissionDetail } from "./mission-contract"
 import { missionsTransport } from "./missions-transport"
 import { useMissionDetail } from "./use-mission-detail"
 
+import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+
 vi.mock("./missions-transport", async (importOriginal) => ({
 	...(await importOriginal<typeof import("./missions-transport")>()),
 	missionsTransport: { detail: vi.fn(), onChanged: vi.fn() },
@@ -70,7 +72,9 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it("reads the mission it is opened on", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"))
+	const { result } = renderHook(() => useMissionDetail("m-1"), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 
 	await waitFor(() => expect(result.current.isReading).toBe(false))
 
@@ -80,7 +84,9 @@ it("reads the mission it is opened on", async () => {
 })
 
 it("leaves the mission alone when a change names another one", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"))
+	const { result } = renderHook(() => useMissionDetail("m-1"), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 
 	await waitFor(() => expect(result.current.isReading).toBe(false))
 
@@ -98,7 +104,9 @@ it("leaves the mission alone when a change names another one", async () => {
 it("reports a failed read and reads again on retry", async () => {
 	readDetail.mockRejectedValueOnce({ kind: "unknownMission", id: "m-1" })
 
-	const { result } = renderHook(() => useMissionDetail("m-1"))
+	const { result } = renderHook(() => useMissionDetail("m-1"), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 
 	await waitFor(() => expect(result.current.hasFailedToRead).toBe(true))
 
@@ -109,7 +117,9 @@ it("reports a failed read and reads again on retry", async () => {
 })
 
 it("applies the activity of a change naming it before the reread returns", async () => {
-	const { result } = renderHook(() => useMissionDetail("m-1"))
+	const { result } = renderHook(() => useMissionDetail("m-1"), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
 	await waitFor(() => expect(result.current.isReading).toBe(false))
 	readDetail.mockReturnValue(new Promise(() => undefined))
 
@@ -123,10 +133,12 @@ it("applies the activity of a change naming it before the reread returns", async
 		}),
 	)
 
-	expect(result.current.read?.mission).toMatchObject({
-		isAgentRunning: true,
-		lastActivityAt: 42,
-	})
+	await waitFor(() =>
+		expect(result.current.read?.mission).toMatchObject({
+			isAgentRunning: true,
+			lastActivityAt: 42,
+		}),
+	)
 })
 
 describe("when changes arrive in a burst", () => {
@@ -139,8 +151,10 @@ describe("when changes arrive in a burst", () => {
 	}
 
 	const mountSettled = async () => {
-		const mounted = renderHook(() => useMissionDetail("m-1"))
-		await act(async () => undefined)
+		const mounted = renderHook(() => useMissionDetail("m-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await act(() => vi.advanceTimersByTimeAsync(0))
 		return mounted
 	}
 
@@ -200,6 +214,7 @@ describe("when changes arrive in a burst", () => {
 		readDetail.mockReturnValue(new Promise(() => undefined))
 
 		act(() => announce(A_CHANGE))
+		act(() => vi.advanceTimersByTime(0))
 
 		expect(readDetail).toHaveBeenCalledTimes(2)
 		expect(result.current.isReading).toBe(false)
