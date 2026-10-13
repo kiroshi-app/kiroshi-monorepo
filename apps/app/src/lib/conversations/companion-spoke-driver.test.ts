@@ -53,17 +53,20 @@ type Room = {
 	stop: () => void
 }
 
-const createRoom = async (
-	store: TranscriptStore = createFakeTranscriptStore(),
-	driver: ScriptedDriver = createScriptedDriver(),
-): Promise<Room> => {
-	const bots = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
-	const conversation = await store.createConversation({
-		spaceId: SPACE,
-		sectionId: null,
-		title: "Walls",
-		botIds: bots.map((bot) => bot.id),
-	})
+type Front = {
+	runtimes: ConversationRuntimes
+	roster: RosterController
+	notices: NoticeMessage[]
+	spoken: SpokenWord[]
+	hear: (spoken: CompanionSpoke) => void
+	stop: () => void
+}
+
+const startFront = async (
+	store: TranscriptStore,
+	driver: ScriptedDriver,
+	joinedSpaceId: () => string | null,
+): Promise<Front> => {
 	const runtimes = createConversationRuntimes(driver, store)
 	const roster = mountRoster(store, { reportFailure: () => undefined })
 	await roster.load({
@@ -93,25 +96,36 @@ const createRoom = async (
 		reportFailure: (notice) => {
 			notices.push(notice)
 		},
+		joinedSpaceId,
 	})
 	await settled()
 
-	const announce = async (spoken: CompanionSpoke) => {
+	const hear = (spoken: CompanionSpoke) => {
 		heard?.(spoken)
+	}
+
+	return { runtimes, roster, notices, spoken, hear, stop }
+}
+
+const createRoom = async (
+	store: TranscriptStore = createFakeTranscriptStore(),
+): Promise<Room> => {
+	const bots = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: bots.map((bot) => bot.id),
+	})
+	const driver = createScriptedDriver()
+	const front = await startFront(store, driver, () => null)
+
+	const announce = async (spoken: CompanionSpoke) => {
+		front.hear(spoken)
 		await settled()
 	}
 
-	return {
-		driver,
-		store,
-		runtimes,
-		roster,
-		conversation,
-		notices,
-		spoken,
-		announce,
-		stop,
-	}
+	return { ...front, driver, store, conversation, announce }
 }
 
 const answeringFirstReadWith = (
@@ -336,6 +350,7 @@ describe("a companion speaking in a room the front never opened", () => {
 			reportFailure: (notice) => {
 				notices.push(notice)
 			},
+			joinedSpaceId: () => null,
 		})
 		await settled()
 
@@ -505,58 +520,246 @@ describe("a companion speaking in a room the front never opened", () => {
 	})
 })
 
-type MemberMac = {
+type SharedSpace = {
 	store: TranscriptStore
 	driver: ScriptedDriver
-	storedTurnIds: Set<string>
+	member: Front
+	ada: string
+	nyx: string
+	open: (title: string) => Promise<Conversation>
+	hear: (spoken: CompanionSpoke) => Promise<void>
 }
 
-const createMemberMac = (): MemberMac => {
-	const host = createFakeTranscriptStore()
-	const storedTurnIds = new Set<string>()
-	const store: TranscriptStore = {
-		...host,
-		startTurn: (turn) => {
-			storedTurnIds.add(turn.id)
-			return host.startTurn(turn)
-		},
+const createSharedSpace = async (): Promise<SharedSpace> => {
+	const store = createFakeTranscriptStore()
+	const driver = createScriptedDriver()
+	const [ada, nyx, rex] = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
+	const host = await startFront(store, driver, () => null)
+	const member = await startFront(store, driver, () => SPACE)
+
+	const open = (title: string) =>
+		store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title,
+			botIds: [ada.id, nyx.id, rex.id],
+		})
+
+	const hear = async (spoken: CompanionSpoke) => {
+		host.hear(spoken)
+		member.hear(spoken)
+		await settled()
 	}
-	const scripted = createScriptedDriver()
-	const driver: ScriptedDriver = {
-		...scripted,
-		submitPrompt: (scope, prompt, turn) =>
-			turn && storedTurnIds.has(turn.turnId)
-				? scripted.submitPrompt(scope, prompt, turn)
-				: Promise.reject(
-						new Error("this command reaches outside the shared space"),
-					),
-	}
-	return { store, driver, storedTurnIds }
+
+	return { store, driver, member, ada: ada.id, nyx: nyx.id, open, hear }
 }
 
-describe("a room a companion opens on a member Mac", () => {
-	it("prompts the companion it names under a turn the host stored", async () => {
-		const member = createMemberMac()
-		const { driver, runtimes, conversation, notices, announce } =
-			await createRoom(member.store, member.driver)
-		const ada = idOf(conversation, "Ada")
-		const nyx = idOf(conversation, "Nyx")
+describe("a room a companion opens, heard by the host and by a member Mac", () => {
+	it("starts one turn for the companion its opening message names", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
 
-		await announce({
-			conversationId: conversation.id,
+		await hear({
+			conversationId: room.id,
 			authorBotId: ada,
-			text: "Walls are up. @Nyx, read it.",
+			text: "@Nyx, read it.",
+		})
+
+		expect(summonedBy(driver)).toEqual([nyx])
+	})
+
+	it("stores its opening message once", async () => {
+		const { store, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
 		})
 
 		expect(
-			driver.submissions.map(({ scope, turn }) => [
+			(await spokenIn(store, room.id)).map(({ authorBotId }) => authorBotId),
+		).toEqual([ada])
+	})
+
+	it("starts no turn when its opening message names nobody", async () => {
+		const { driver, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+
+		expect(summonedBy(driver)).toEqual([])
+	})
+
+	it("starts one turn for the companion a later word names", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(summonedBy(driver)).toEqual([nyx])
+	})
+
+	it("starts one turn per room for two rooms opened with the same words", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const first = await open("Walls")
+		const second = await open("Walls")
+
+		for (const room of [first, second]) {
+			await hear({
+				conversationId: room.id,
+				authorBotId: ada,
+				text: "@Nyx, read it.",
+			})
+		}
+
+		expect(
+			driver.submissions.map(({ scope }) => [
+				scope.conversationId,
 				scope.botId,
-				member.storedTurnIds.has(turn?.turnId ?? ""),
 			]),
-		).toEqual([[nyx, true]])
-		expect(runtimes.runtimeFor(conversation.id).getState().latestError).toBe(
+		).toEqual([
+			[first.id, nyx],
+			[second.id, nyx],
+		])
+	})
+
+	it("still announces the word on the member Mac", async () => {
+		const { member, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(member.spoken).toEqual([
+			{ conversationId: room.id, authorBotId: ada },
+		])
+		expect(member.notices).toEqual([])
+	})
+})
+
+type HeldRosterReload = {
+	store: TranscriptStore
+	hold: () => void
+	release: () => void
+}
+
+const holdingRosterReload = (store: TranscriptStore): HeldRosterReload => {
+	let held: Promise<void> | null = null
+	let release: () => void = () => undefined
+	return {
+		store: {
+			...store,
+			bots: async (spaceId) => {
+				await held
+				return store.bots(spaceId)
+			},
+		},
+		hold: () => {
+			held = new Promise<void>((resolve) => {
+				release = resolve
+			})
+		},
+		release: () => release(),
+	}
+}
+
+type SwitchingFront = {
+	store: TranscriptStore
+	driver: ScriptedDriver
+	ada: string
+	nyx: string
+	room: Conversation
+	hearDuringReload: (
+		spoken: CompanionSpoke,
+		switchTo: string | null,
+	) => Promise<void>
+}
+
+const startSwitchingFront = async (
+	joinedAtStart: string | null,
+): Promise<SwitchingFront> => {
+	const holding = holdingRosterReload(createFakeTranscriptStore())
+	const driver = createScriptedDriver()
+	const [ada, nyx, rex] = await seatBots(holding.store, SPACE, [
+		"Ada",
+		"Nyx",
+		"Rex",
+	])
+	let joined = joinedAtStart
+	const front = await startFront(holding.store, driver, () => joined)
+	const room = await holding.store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [ada.id, nyx.id, rex.id],
+	})
+
+	const hearDuringReload = async (
+		spoken: CompanionSpoke,
+		switchTo: string | null,
+	) => {
+		holding.hold()
+		front.hear(spoken)
+		await settled()
+		joined = switchTo
+		holding.release()
+		await settled()
+	}
+
+	return {
+		store: holding.store,
+		driver,
+		ada: ada.id,
+		nyx: nyx.id,
+		room,
+		hearDuringReload,
+	}
+}
+
+describe("a word heard while the joined space switches during the roster reload", () => {
+	it("is written and summons once when a joined space opens after it was heard", async () => {
+		const { store, driver, ada, nyx, room, hearDuringReload } =
+			await startSwitchingFront(null)
+
+		await hearDuringReload(
+			{ conversationId: room.id, authorBotId: ada, text: "@Nyx, read it." },
+			SPACE,
+		)
+
+		expect(
+			(await spokenIn(store, room.id)).map(({ authorBotId }) => authorBotId),
+		).toEqual([ada])
+		expect(summonedBy(driver)).toEqual([nyx])
+	})
+
+	it("is left to the joined host when that space is left after it was heard", async () => {
+		const { store, driver, ada, room, hearDuringReload } =
+			await startSwitchingFront(SPACE)
+
+		await hearDuringReload(
+			{ conversationId: room.id, authorBotId: ada, text: "@Nyx, read it." },
 			null,
 		)
-		expect(notices).toEqual([])
+
+		expect(await spokenIn(store, room.id)).toEqual([])
+		expect(summonedBy(driver)).toEqual([])
 	})
 })

@@ -6,6 +6,7 @@ import type { SpokenWords } from "./spoken-words"
 import { arrivalsTransport } from "./store-transport"
 
 import { failureReporterIn } from "../failure-report"
+import { activeJoinedSpaceId } from "../host"
 import type { RosterController } from "../bots/roster-controller"
 
 export type CompanionSpokeDriverMount = {
@@ -27,6 +28,7 @@ export const useCompanionSpokeDriver = ({
 				companions: arrivalsTransport,
 				spokenWords,
 				reportFailure: failureReporterIn("companion-spoke-driver"),
+				joinedSpaceId: activeJoinedSpaceId,
 			}),
 		[runtimes, roster, spokenWords],
 	)
