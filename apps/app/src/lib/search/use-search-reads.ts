@@ -45,7 +45,6 @@ type SearchAnswer = {
 
 type Landed = {
 	answer: SearchAnswer | undefined
-	read: SearchRead
 	recents: CatalogueChat[]
 	landing: number
 }
@@ -61,7 +60,6 @@ const NO_RECENTS: CatalogueChat[] = []
 
 const NOTHING_LANDED: Landed = {
 	answer: undefined,
-	read: NOTHING_READ,
 	recents: NO_RECENTS,
 	landing: 0,
 }
@@ -126,7 +124,6 @@ const scopeOf = ({
 
 const landedWith = (landed: Landed, answer: SearchAnswer): Landed => ({
 	answer,
-	read: answer.read,
 	recents: answer.recents ?? landed.recents,
 	landing: landed.landing + 1,
 })
@@ -151,7 +148,12 @@ export const useSearchReads = (source: SearchReadSource): SearchReads => {
 		staleTime: REREAD_ON_EVERY_OPEN,
 		meta: SEARCH_FAILURE,
 	})
-	const { read, recents, landing } = useLastLanded(answer.data)
+	const { answer: landedAnswer, recents, landing } = useLastLanded(answer.data)
 
-	return { read, recents, landing, isLoading: answer.isFetching }
+	return {
+		read: landedAnswer?.read ?? NOTHING_READ,
+		recents,
+		landing,
+		isLoading: answer.isFetching,
+	}
 }
