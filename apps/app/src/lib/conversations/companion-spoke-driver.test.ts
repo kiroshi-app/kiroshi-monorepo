@@ -50,17 +50,20 @@ type Room = {
 	stop: () => void
 }
 
-const createRoom = async (
-	store: TranscriptStore = createFakeTranscriptStore(),
-	driver: ScriptedDriver = createScriptedDriver(),
-): Promise<Room> => {
-	const bots = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
-	const conversation = await store.createConversation({
-		spaceId: SPACE,
-		sectionId: null,
-		title: "Walls",
-		botIds: bots.map((bot) => bot.id),
-	})
+type Front = {
+	runtimes: ConversationRuntimes
+	roster: RosterController
+	notices: NoticeMessage[]
+	spoken: SpokenWord[]
+	hear: (spoken: CompanionSpoke) => void
+	stop: () => void
+}
+
+const startFront = async (
+	store: TranscriptStore,
+	driver: ScriptedDriver,
+	joinedSpaceId: () => string | null,
+): Promise<Front> => {
 	const runtimes = createConversationRuntimes(driver, store)
 	const roster = createRosterController(store, {
 		reportFailure: () => undefined,
@@ -92,11 +95,36 @@ const createRoom = async (
 		reportFailure: (notice) => {
 			notices.push(notice)
 		},
+		joinedSpaceId,
 	})
 	await settled()
 
-	const announce = async (spoken: CompanionSpoke) => {
+	const hear = (spoken: CompanionSpoke) => {
 		heard?.(spoken)
+	}
+
+	return { runtimes, roster, notices, spoken, hear, stop }
+}
+
+const createRoom = async (
+	store: TranscriptStore = createFakeTranscriptStore(),
+	driver: ScriptedDriver = createScriptedDriver(),
+): Promise<Room> => {
+	const bots = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: bots.map((bot) => bot.id),
+	})
+	const { runtimes, roster, notices, spoken, hear, stop } = await startFront(
+		store,
+		driver,
+		() => null,
+	)
+
+	const announce = async (spoken: CompanionSpoke) => {
+		hear(spoken)
 		await settled()
 	}
 
@@ -335,6 +363,7 @@ describe("a companion speaking in a room the front never opened", () => {
 			reportFailure: (notice) => {
 				notices.push(notice)
 			},
+			joinedSpaceId: () => null,
 		})
 		await settled()
 
@@ -557,5 +586,140 @@ describe("a room a companion opens on a member Mac", () => {
 			null,
 		)
 		expect(notices).toEqual([])
+	})
+})
+
+type SharedSpace = {
+	store: TranscriptStore
+	driver: ScriptedDriver
+	member: Front
+	ada: string
+	nyx: string
+	open: (title: string) => Promise<Conversation>
+	hear: (spoken: CompanionSpoke) => Promise<void>
+}
+
+const createSharedSpace = async (): Promise<SharedSpace> => {
+	const store = createFakeTranscriptStore()
+	const driver = createScriptedDriver()
+	const [ada, nyx, rex] = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
+	const host = await startFront(store, driver, () => null)
+	const member = await startFront(store, driver, () => SPACE)
+
+	const open = (title: string) =>
+		store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title,
+			botIds: [ada.id, nyx.id, rex.id],
+		})
+
+	const hear = async (spoken: CompanionSpoke) => {
+		host.hear(spoken)
+		member.hear(spoken)
+		await settled()
+	}
+
+	return { store, driver, member, ada: ada.id, nyx: nyx.id, open, hear }
+}
+
+describe("a room a companion opens, heard by the host and by a member Mac", () => {
+	it("starts one turn for the companion its opening message names", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(summonedBy(driver)).toEqual([nyx])
+	})
+
+	it("stores its opening message once", async () => {
+		const { store, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(
+			(await spokenIn(store, room.id)).map(({ authorBotId }) => authorBotId),
+		).toEqual([ada])
+	})
+
+	it("starts no turn when its opening message names nobody", async () => {
+		const { driver, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+
+		expect(summonedBy(driver)).toEqual([])
+	})
+
+	it("starts one turn for the companion a later word names", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(summonedBy(driver)).toEqual([nyx])
+	})
+
+	it("starts one turn per room for two rooms opened with the same words", async () => {
+		const { driver, ada, nyx, open, hear } = await createSharedSpace()
+		const first = await open("Walls")
+		const second = await open("Walls")
+
+		for (const room of [first, second]) {
+			await hear({
+				conversationId: room.id,
+				authorBotId: ada,
+				text: "@Nyx, read it.",
+			})
+		}
+
+		expect(
+			driver.submissions.map(({ scope }) => [
+				scope.conversationId,
+				scope.botId,
+			]),
+		).toEqual([
+			[first.id, nyx],
+			[second.id, nyx],
+		])
+	})
+
+	it("still announces the word on the member Mac", async () => {
+		const { member, ada, open, hear } = await createSharedSpace()
+		const room = await open("Walls")
+
+		await hear({
+			conversationId: room.id,
+			authorBotId: ada,
+			text: "@Nyx, read it.",
+		})
+
+		expect(member.spoken).toEqual([
+			{ conversationId: room.id, authorBotId: ada },
+		])
+		expect(member.notices).toEqual([])
 	})
 })

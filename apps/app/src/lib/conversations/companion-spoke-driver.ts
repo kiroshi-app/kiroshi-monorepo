@@ -31,6 +31,7 @@ export type CompanionSpokeDriverOptions = {
 	companions: CompanionSpokePort
 	spokenWords: Pick<SpokenWords, "announce">
 	reportFailure: (notice: NoticeMessage) => void
+	joinedSpaceId: () => string | null
 }
 
 const SEPARATOR = "\u0000"
@@ -47,6 +48,7 @@ export const startCompanionSpokeDriver = ({
 	companions,
 	spokenWords,
 	reportFailure,
+	joinedSpaceId,
 }: CompanionSpokeDriverOptions): (() => void) => {
 	const relayed = new Set<string>()
 	let isStopped = false
@@ -90,9 +92,11 @@ export const startCompanionSpokeDriver = ({
 		return true
 	}
 
+	const isWrittenByJoinedHost = () => joinedSpaceId() !== null
+
 	const relayAndAnnounce = async (spoken: CompanionSpoke, key: string) => {
 		const isShown = await rosterShows(spoken.conversationId)
-		const isWritten = await relay(spoken, key)
+		const isWritten = isWrittenByJoinedHost() || (await relay(spoken, key))
 
 		if (!isShown || !isWritten) {
 			return
