@@ -93,6 +93,7 @@ const transferRefusalReasonOf = (refusal: unknown) => {
 
 type SpacesChoice = {
 	chosenSpaceId: string | null
+	isChosenListed: boolean
 	rememberedSpaceId: string | null
 	isSettingsOpen: boolean
 	hasFailedToCreate: boolean
@@ -100,6 +101,7 @@ type SpacesChoice = {
 
 const initialSpacesChoice: SpacesChoice = {
 	chosenSpaceId: null,
+	isChosenListed: false,
 	rememberedSpaceId: null,
 	isSettingsOpen: false,
 	hasFailedToCreate: false,
@@ -119,6 +121,16 @@ type SpaceListQuery = ReturnType<typeof spaceListQueryOf>
 const heldIdIn = (spaces: Space[], id: string | null) =>
 	spaces.find((space) => space.id === id)?.id
 
+const listedChoice = (id: string | null) => ({
+	chosenSpaceId: id,
+	isChosenListed: true,
+})
+
+const chosenIdIn = (spaces: Space[], choice: SpacesChoice) =>
+	choice.isChosenListed
+		? heldIdIn(spaces, choice.chosenSpaceId)
+		: choice.chosenSpaceId
+
 const spacesStateOf = (
 	choice: SpacesChoice,
 	spaces: Space[],
@@ -126,7 +138,7 @@ const spacesStateOf = (
 ): SpacesState => ({
 	spaces,
 	selectedSpaceId:
-		choice.chosenSpaceId ??
+		chosenIdIn(spaces, choice) ??
 		heldIdIn(spaces, choice.rememberedSpaceId) ??
 		spaces[0]?.id ??
 		null,
@@ -258,7 +270,7 @@ export const createSpacesController = (
 				const imported = await commit(async () => {
 					const written = await store.importSpace(path)
 					hold([...current().spaces, written])
-					choose({ chosenSpaceId: written.id })
+					choose(listedChoice(written.id))
 					return written
 				})
 				reportSuccess({
@@ -289,7 +301,10 @@ export const createSpacesController = (
 
 		select: (id: string) => {
 			if (id !== current().selectedSpaceId) {
-				choose({ chosenSpaceId: id })
+				choose({
+					chosenSpaceId: id,
+					isChosenListed: heldIdIn(current().spaces, id) !== undefined,
+				})
 			}
 		},
 
@@ -297,7 +312,7 @@ export const createSpacesController = (
 			commit(async () => {
 				const created = await store.createSpace(newSpaceName())
 				hold([...current().spaces, created])
-				choose({ chosenSpaceId: created.id, hasFailedToCreate: false })
+				choose({ ...listedChoice(created.id), hasFailedToCreate: false })
 			}).catch(noteRefusedCreate),
 
 		setSettingsOpen: (isSettingsOpen: boolean) => choose({ isSettingsOpen }),
@@ -326,7 +341,10 @@ export const createSpacesController = (
 				writes.drop(id)
 				const spaces = current().spaces.filter((space) => space.id !== id)
 				hold(spaces)
-				choose({ chosenSpaceId: spaces[0]?.id ?? null, isSettingsOpen: false })
+				choose({
+					...listedChoice(spaces[0]?.id ?? null),
+					isSettingsOpen: false,
+				})
 			}).catch(reload),
 
 		exportSpace,
