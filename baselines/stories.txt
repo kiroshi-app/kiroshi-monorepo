@@ -349,6 +349,8 @@ conversation-missions-missioncard--row-with-status
 conversation-missions-missioncard--row-without-a-ticket
 conversation-missions-missioncard--row-working
 conversation-missions-missioncard--row-working-with-many-tools
+conversation-missions-missioneventrow--agent-asked-on-warning
+conversation-missions-missioneventrow--agent-asked-on-warning-dark
 conversation-missions-missioneventrow--authored-event
 conversation-missions-missioneventrow--authored-events
 conversation-missions-missioneventrow--closed-by-you

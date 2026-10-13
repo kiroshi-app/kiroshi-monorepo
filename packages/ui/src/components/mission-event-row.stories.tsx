@@ -1,7 +1,12 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	listExhaustively,
+	slotIn,
+	slotsIn,
+	tokenStyleIn,
+} from "@workspace/storybook/story-utils"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -82,6 +87,21 @@ const [MACHINE_EVENT, AUTHORED_EVENT] = MISSION_EVENTS
 
 const PLACED_BY_THE_FEED =
 	"`apps/app/src/components/thread-screen.tsx:923` renders one row per stored event of the mission thread."
+
+const agentAskedOnWarning = {
+	args: { event: AGENT_QUESTION },
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const badge = slotIn(canvasElement, "bot-title-badge")
+		const { backgroundColor } = getComputedStyle(badge)
+
+		await expect(backgroundColor).toBe(
+			tokenStyleIn(badge, "bg-warning/18", "backgroundColor"),
+		)
+		await expect(backgroundColor).not.toBe(
+			tokenStyleIn(badge, "bg-bot-badge-attention/18", "backgroundColor"),
+		)
+	},
+}
 
 const meta = preview.meta({
 	title: "Conversation/Missions/MissionEventRow",
@@ -216,6 +236,24 @@ export const FromTheAgent = meta.story({
 		await expect(authored).not.toHaveTextContent("agent-hook")
 		await expect(gutter).toHaveAttribute("data-gutter", "tool")
 	},
+})
+
+export const AgentAskedOnWarning = meta.story({
+	...agentAskedOnWarning,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A question the agent is waiting on the reader to answer. Check that the kind badge on the author line is tinted from `--warning`, the tone of every signal blocked on the reader, and never from `--bot-badge-attention`. Pick `FromTheAgent` for the gutter and the tool name of the same row. " +
+					PLACED_BY_THE_FEED,
+			},
+		},
+	},
+})
+
+export const AgentAskedOnWarningDark = meta.story({
+	...agentAskedOnWarning,
+	globals: { theme: "dark" },
 })
 
 export const FromTheAgentWithoutATool = meta.story({
