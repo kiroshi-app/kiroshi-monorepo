@@ -4556,16 +4556,49 @@ const heldRoomOf = async (spoken: SpokenTurn[] = []) => {
 	}
 }
 
+const heldRoomOnFakeTimers = async () => {
+	const store = createFakeTranscriptStore()
+	const bots = await seatBots(store, SPACE, ["Ada"])
+	const conversation = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: bots.map((bot) => bot.id),
+	})
+	const held = holdFirstPages(store)
+	const runtimes = createConversationRuntimes(createScriptedDriver(), held.port)
+	const thread: ConversationThread = {
+		kind: "conversation",
+		conversation,
+		runtimes,
+		isSettingsOpen: false,
+		onOpenSettings: () => undefined,
+	}
+	render(screenOf(thread, bots), { wrapper: createQueryTestWrapper().wrapper })
+	await passing(0)
+
+	return () => held.fail(conversation.id, new Error("unreachable"))
+}
+
 const TRANSCRIPT_SKELETON_SLOT =
 	'[data-slot="thread-skeleton"] [data-slot="list-skeleton"]'
 
 const SKELETON_DELAY_MS = 300
 
+const SKELETON_SETTLED_MS = SKELETON_DELAY_MS + 500 + 150
+
 const drawsTranscriptSkeleton = () =>
 	document.querySelector(TRANSCRIPT_SKELETON_SLOT) !== null
 
-const pastTheSkeletonDelay = () =>
-	act(() => new Promise((resolve) => setTimeout(resolve, SKELETON_DELAY_MS)))
+const SKELETON_STEP_MS = 50
+
+const passing = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms))
+
+const passingInSteps = async (ms: number) => {
+	for (let elapsed = 0; elapsed < ms; elapsed += SKELETON_STEP_MS) {
+		await passing(SKELETON_STEP_MS)
+	}
+}
 
 const soloThreadWaitingOf = (isFirstLoadPending: boolean): BotThread => {
 	const sent = threadOf({ id: "bot-1", name: "Nyx", said: "" })
@@ -4648,46 +4681,58 @@ describe("the first load of a thread transcript", () => {
 		expect(drawsEmptyState()).toBe(false)
 	})
 
-	it("draws the transcript skeleton while the first page is pending and nothing is held", async () => {
-		render(screenOf(soloThreadWaitingOf(true)), {
-			wrapper: createQueryTestWrapper().wrapper,
+	describe("its skeleton", () => {
+		beforeEach(() => {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		})
-		await settle()
 
-		expect(drawsTranscriptSkeleton()).toBe(false)
-		await pastTheSkeletonDelay()
+		afterEach(() => {
+			vi.useRealTimers()
+		})
 
-		expect(drawsTranscriptSkeleton()).toBe(true)
-		expect(drawsEmptyState()).toBe(false)
-	})
+		it("draws the transcript skeleton once the delay passes while the first page is pending and nothing is held", async () => {
+			render(screenOf(soloThreadWaitingOf(true)), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			await passing(0)
 
-	it("draws the messages it holds at once, and no skeleton, while the first page is pending", async () => {
-		const sent = threadOf({ id: "bot-1", name: "Nyx", said: "anyone here?" })
-		render(
-			screenOf({
-				...sent,
-				chat: {
-					...sent.chat,
-					state: { ...sent.chat.state, isFirstLoadPending: true },
-				},
-			}),
-			{ wrapper: createQueryTestWrapper().wrapper },
-		)
-		await settle()
-		await pastTheSkeletonDelay()
+			await passing(SKELETON_DELAY_MS - 1)
+			expect(drawsTranscriptSkeleton()).toBe(false)
+			await passing(1)
 
-		expect(screen.getByText("anyone here?")).toBeTruthy()
-		expect(drawsTranscriptSkeleton()).toBe(false)
-	})
+			expect(drawsTranscriptSkeleton()).toBe(true)
+			expect(drawsEmptyState()).toBe(false)
+		})
 
-	it("draws the empty state and no skeleton once the first page fails", async () => {
-		const room = await heldRoomOf()
+		it("draws the messages it holds at once, and no skeleton, while the first page is pending", async () => {
+			const sent = threadOf({ id: "bot-1", name: "Nyx", said: "anyone here?" })
+			render(
+				screenOf({
+					...sent,
+					chat: {
+						...sent.chat,
+						state: { ...sent.chat.state, isFirstLoadPending: true },
+					},
+				}),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await passingInSteps(SKELETON_SETTLED_MS)
 
-		await room.fail()
-		await pastTheSkeletonDelay()
+			expect(screen.getByText("anyone here?")).toBeTruthy()
+			expect(drawsTranscriptSkeleton()).toBe(false)
+		})
 
-		expect(drawsTranscriptSkeleton()).toBe(false)
-		expect(document.querySelector(CONVERSATION_EMPTY_STATE_SLOT)).not.toBeNull()
+		it("draws the empty state and no skeleton once the first page fails", async () => {
+			const failFirstPage = await heldRoomOnFakeTimers()
+
+			failFirstPage()
+			await passingInSteps(SKELETON_SETTLED_MS)
+
+			expect(drawsTranscriptSkeleton()).toBe(false)
+			expect(
+				document.querySelector(CONVERSATION_EMPTY_STATE_SLOT),
+			).not.toBeNull()
+		})
 	})
 
 	it("draws no empty state in a solo bot thread while its first page is pending", async () => {
