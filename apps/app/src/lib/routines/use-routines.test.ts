@@ -861,3 +861,41 @@ it("reads no routine while no host is reachable", async () => {
 	expect(result.current.routines).toEqual([])
 	expect(result.current.failure).toBeNull()
 })
+
+it("reads the routines again when their conversation is mounted again", async () => {
+	list.mockResolvedValue([ROUTINE])
+	sources.mockResolvedValue([])
+	const { wrapper } = createQueryTestWrapper()
+	const first = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper,
+	})
+	await waitFor(() => expect(first.result.current.routines).toHaveLength(1))
+	first.unmount()
+
+	list.mockResolvedValue([ROUTINE, WEBHOOK_ROUTINE])
+	const second = renderHook(() => useRoutines(ROUTINE.conversationId), {
+		wrapper,
+	})
+
+	await waitFor(() => expect(second.result.current.routines).toHaveLength(2))
+	expect(second.result.current.routines.map(({ id }) => id)).toEqual([
+		ROUTINE.id,
+		WEBHOOK_ROUTINE.id,
+	])
+	expect(list).toHaveBeenCalledTimes(2)
+})
+
+it("reads the routines once while their panel stays mounted", async () => {
+	list.mockResolvedValue([ROUTINE])
+	sources.mockResolvedValue([])
+
+	const { result, rerender } = renderHook(
+		() => useRoutines(ROUTINE.conversationId),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+	await waitFor(() => expect(result.current.routines).toHaveLength(1))
+	rerender()
+	await act(() => new Promise((settle) => setTimeout(settle, 0)))
+
+	expect(list).toHaveBeenCalledTimes(1)
+})

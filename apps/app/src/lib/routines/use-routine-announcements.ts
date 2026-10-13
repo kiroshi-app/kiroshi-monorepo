@@ -32,6 +32,10 @@ export const useRoutineAnnouncements = (conversationId: string | null) => {
 
 		return () => {
 			void listening.then((unsubscribe) => unsubscribe())
+			queryClient.invalidateQueries({
+				queryKey: routineQueryKeys.conversation(conversationId),
+				refetchType: "none",
+			})
 		}
 	}, [conversationId, queryClient])
 }
