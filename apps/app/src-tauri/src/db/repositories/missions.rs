@@ -429,13 +429,14 @@ impl MissionsRepository {
 		Ok(self
 			.access
 			.call(move |connection| {
-				let mut statement = connection.prepare_cached(&space_page_statement(&after))?;
+				let after = after.as_ref();
+				let mut statement = connection.prepare_cached(&space_page_statement(after))?;
 				let rows = statement.query_map(
 					params![
 						space_id,
 						closed_since,
-						after.as_ref().map(|keyset| keyset.sort_key),
-						after.as_ref().map(|keyset| keyset.id.as_str()),
+						after.map(|keyset| keyset.sort_key),
+						after.map(|keyset| keyset.id.as_str()),
 						size + 1
 					],
 					in_space,
@@ -846,7 +847,7 @@ fn read(transaction: &Transaction<'_>, id: &str) -> Result<Mission, MissionError
 	held(transaction, id)?.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
 }
 
-fn space_page_statement(after: &Option<Keyset>) -> String {
+fn space_page_statement(after: Option<&Keyset>) -> String {
 	let past_the_cursor = match after {
 		Some(_) => "AND (opened_at, id) < (?3, ?4)",
 		None => "",
@@ -1731,8 +1732,10 @@ mod tests {
 		for after in [None, Some(cursor)] {
 			let plan = database
 				.call(move |connection| {
-					let mut statement = connection
-						.prepare(&format!("EXPLAIN QUERY PLAN {}", space_page_statement(&after)))?;
+					let mut statement = connection.prepare(&format!(
+						"EXPLAIN QUERY PLAN {}",
+						space_page_statement(after.as_ref())
+					))?;
 					let steps = statement
 						.query_map(params!["personal", 0, 1, "m-1", 31], |row| {
 							row.get::<_, String>(3)
