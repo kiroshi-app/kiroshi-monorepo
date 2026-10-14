@@ -63,20 +63,30 @@ const heldIdsAt = (holder: unknown): string[] =>
 		? HELD_ID_KEYS.flatMap((key) => [holder[key]].flat()).filter(isText)
 		: []
 
-const botIdsAt = (envelope: unknown): string[] => {
+const HELD_SCOPE_KINDS: ReadonlySet<unknown> = new Set(["bot", "space"])
+
+const scopedIdsAt = (envelope: unknown): string[] => {
 	if (!isFields(envelope)) {
 		return []
 	}
 	if (envelope.kind === "server") {
-		return botIdsAt(envelope.owner)
+		return scopedIdsAt(envelope.owner)
 	}
-	return envelope.kind === "bot" && isText(envelope.id) ? [envelope.id] : []
+	return HELD_SCOPE_KINDS.has(envelope.kind) && isText(envelope.id)
+		? [envelope.id]
+		: []
 }
 
-const heldIdsOf = (args?: InvokeArgs): string[] => [
-	...scopingHoldersOf(args).flatMap(heldIdsAt),
-	...(isFields(args) ? [args.scope, args.owner].flatMap(botIdsAt) : []),
-]
+const heldIdsOf = (args?: InvokeArgs): string[] => {
+	if (!isFields(args)) {
+		return []
+	}
+	const holders = [...scopingHoldersOf(args), args.query]
+	return [
+		...holders.flatMap(heldIdsAt),
+		...[args.scope, args.owner].flatMap(scopedIdsAt),
+	]
+}
 
 const conversationIdsNamedIn = (value: unknown): string[] => {
 	if (Array.isArray(value)) {
