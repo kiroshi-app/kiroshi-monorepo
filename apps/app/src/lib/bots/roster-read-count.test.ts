@@ -38,6 +38,8 @@ const COMMANDS: Record<string, string> = {
 	mainChat: "conversation_main_chat",
 }
 
+type StoreCall = (...args: unknown[]) => unknown
+
 type CountedStore = {
 	store: TranscriptStore
 	countOf: (command: string) => number
@@ -53,7 +55,7 @@ const countedCallsOn = (store: TranscriptStore): CountedStore => {
 				? (...args: unknown[]) => {
 						const command = COMMANDS[name] ?? name
 						counts.set(command, (counts.get(command) ?? 0) + 1)
-						return member(...args)
+						return (member as StoreCall)(...args)
 					}
 				: member,
 		]),

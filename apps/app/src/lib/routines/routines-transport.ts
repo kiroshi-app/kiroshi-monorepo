@@ -6,6 +6,7 @@ import type {
 	RoutineEdit,
 	RoutineKey,
 	RoutineRun,
+	RunsOfRoutine,
 	TriggerDecision,
 } from "./routine-contract"
 
@@ -24,6 +25,8 @@ export const routinesTransport = {
 		invoke<Routine[]>("routine_list", { conversationId }),
 	runs: (routineId: string, limit = DEFAULT_RUN_PAGE) =>
 		invoke<RoutineRun[]>("routine_runs", { routineId, limit }),
+	runsOfSpace: (spaceId: string, limit = DEFAULT_RUN_PAGE) =>
+		invoke<RunsOfRoutine[]>("routine_runs_of_space", { spaceId, limit }),
 	reportedRuns: (conversationId: string) =>
 		invoke<ReportedRun[]>("routine_reported_runs", { conversationId }),
 	runNow: (id: string) => invoke<TriggerDecision>("routine_run_now", { id }),

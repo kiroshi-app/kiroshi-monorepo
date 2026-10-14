@@ -42,6 +42,7 @@ type WorkspaceBodyProps = {
 	missions: OpenedMissionController
 	onboarding?: Onboarding
 	signIn: SignIn
+	spaceId: string | null
 }
 
 const threadOf = ({
@@ -145,6 +146,7 @@ export function WorkspaceBody(props: WorkspaceBodyProps) {
 			readerName={props.readerName}
 			runtimes={props.conversationRuntimes}
 			signIn={props.signIn}
+			spaceId={props.spaceId}
 			thread={thread}
 		/>
 	)

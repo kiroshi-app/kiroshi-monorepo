@@ -56,6 +56,18 @@ describe("routinesTransport", () => {
 		})
 	})
 
+	it("reads the runs of every routine of a space in one call, bounded by default", async () => {
+		hostInvoke.mockResolvedValueOnce([])
+
+		await routinesTransport.runsOfSpace("personal")
+
+		expect(hostInvoke).toHaveBeenCalledOnce()
+		expect(hostInvoke).toHaveBeenCalledWith("routine_runs_of_space", {
+			spaceId: "personal",
+			limit: DEFAULT_RUN_PAGE,
+		})
+	})
+
 	it("reads the runs of a conversation that reported in a turn", async () => {
 		const reported = {
 			turnId: "t-1",

@@ -272,14 +272,16 @@ const toPinnedRow = (
 
 type RoutinesScope = {
 	conversationId: string | null
+	spaceId: string | null
 	leadBotId?: string
 }
 
-const NO_ROUTINES: RoutinesScope = { conversationId: null }
+const NO_ROUTINES: RoutinesScope = { conversationId: null, spaceId: null }
 
 const routinesScopeOf = (
 	facts: ThreadFacts,
 	mainConversationId: string | null,
+	spaceId: string | null,
 ): RoutinesScope => {
 	if (facts.mission) {
 		return NO_ROUTINES
@@ -288,9 +290,10 @@ const routinesScopeOf = (
 	return facts.conversation
 		? {
 				conversationId: facts.conversation.id,
+				spaceId,
 				leadBotId: leadOf(facts.conversation),
 			}
-		: { conversationId: mainConversationId, leadBotId: facts.bot?.id }
+		: { conversationId: mainConversationId, spaceId, leadBotId: facts.bot?.id }
 }
 
 const speakerIdOf = (thread: LoadedThread, error: ChatError | undefined) =>
@@ -1192,6 +1195,7 @@ const newerControlOf = ({
 type ThreadViewProps = {
 	activityPanel: ActivityPanel
 	thread: LoadedThread
+	spaceId: string | null
 	bots: Bot[]
 	runtimes: ConversationRuntimes
 	attachments: AttachmentsController
@@ -1265,7 +1269,7 @@ const useThreadSeats = ({
 type ThreadSeats = ReturnType<typeof useThreadSeats>
 
 const useThreadAnnotations = (
-	{ runtimes, landings, onOpenMission }: ThreadViewProps,
+	{ runtimes, landings, onOpenMission, spaceId }: ThreadViewProps,
 	seats: ThreadSeats,
 ) => {
 	const {
@@ -1291,7 +1295,7 @@ const useThreadAnnotations = (
 		alsoQuoted,
 	)
 	const pins = usePinnedMessages(controller, state.conversationId)
-	const routinesScope = routinesScopeOf(facts, state.conversationId)
+	const routinesScope = routinesScopeOf(facts, state.conversationId, spaceId)
 	const missions = useMissions(routinesScope.conversationId)
 	const missionsInView = useMemo(
 		() => missionsSeatedIn(missions.missions, missionSeat),
@@ -1777,6 +1781,7 @@ function ThreadView(props: ThreadViewProps) {
 type ThreadScreenProps = {
 	activityPanel: ActivityPanel
 	thread: Thread
+	spaceId: string | null
 	bots: Bot[]
 	runtimes: ConversationRuntimes
 	attachments: AttachmentsController
@@ -1802,6 +1807,7 @@ function ConversationThreadView({
 	landings,
 	readerName,
 	onOpenMission,
+	spaceId,
 }: ConversationThreadViewProps) {
 	const { state, controller } = useConversation(
 		thread.runtimes,
@@ -1820,6 +1826,7 @@ function ConversationThreadView({
 			onOpenMission={onOpenMission}
 			readerName={readerName}
 			runtimes={runtimes}
+			spaceId={spaceId}
 			thread={{ ...thread, state, controller }}
 		/>
 	)
@@ -1841,6 +1848,7 @@ function BotThreadView({
 	onboarding,
 	signIn,
 	onOpenMission,
+	spaceId,
 }: BotThreadViewProps) {
 	const { controller } = thread.chat
 	const botId = thread.bot.id
@@ -1862,6 +1870,7 @@ function BotThreadView({
 			readerName={readerName}
 			runtimes={runtimes}
 			signIn={signIn}
+			spaceId={spaceId}
 			thread={{ ...thread, state: thread.chat.state, controller }}
 		/>
 	)
@@ -1879,6 +1888,7 @@ export function ThreadScreen({
 	onboarding,
 	signIn,
 	onOpenMission,
+	spaceId,
 }: ThreadScreenProps) {
 	if (thread.kind === "conversation") {
 		return (
@@ -1892,6 +1902,7 @@ export function ThreadScreen({
 				onOpenMission={onOpenMission}
 				readerName={readerName}
 				runtimes={runtimes}
+				spaceId={spaceId}
 				thread={thread}
 			/>
 		)
@@ -1910,6 +1921,7 @@ export function ThreadScreen({
 			readerName={readerName}
 			runtimes={runtimes}
 			signIn={signIn}
+			spaceId={spaceId}
 			thread={thread}
 		/>
 	)

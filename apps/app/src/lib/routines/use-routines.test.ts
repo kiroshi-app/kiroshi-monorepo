@@ -11,7 +11,7 @@ import {
 
 import type { Routine, RoutineKey, RoutineRun } from "./routine-contract"
 import { routinesTransport } from "./routines-transport"
-import type { TriggerSource } from "./trigger-contract"
+import type { BotTriggerSources, TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { type ConversationRoutines, useRoutines } from "./use-routines"
 
@@ -26,12 +26,13 @@ vi.mock("./routines-transport", async (importOriginal) => ({
 		create: vi.fn(),
 		key: vi.fn(),
 		runs: vi.fn(),
+		runsOfSpace: vi.fn(),
 		runNow: vi.fn(),
 		onChanged: vi.fn(),
 	},
 }))
 vi.mock("./trigger-sources-transport", () => ({
-	triggerSourcesTransport: { sources: vi.fn() },
+	triggerSourcesTransport: { sourcesOfSpace: vi.fn() },
 }))
 
 const reachable = vi.hoisted(() => ({ host: "local" as string | null }))
@@ -47,7 +48,14 @@ const create = vi.mocked(routinesTransport.create)
 const readKey = vi.mocked(routinesTransport.key)
 const readRuns = vi.mocked(routinesTransport.runs)
 const onChanged = vi.mocked(routinesTransport.onChanged)
-const sources = vi.mocked(triggerSourcesTransport.sources)
+const runsOfSpace = vi.mocked(routinesTransport.runsOfSpace)
+const sources = vi.mocked(triggerSourcesTransport.sourcesOfSpace)
+
+const SPACE = "personal"
+
+const declaredBy = (botId: string, triggerSources: TriggerSource[]) => [
+	{ botId, triggerSources, failure: null },
+]
 
 const ROUTINE: Routine = {
 	id: "r-1",
@@ -119,10 +127,10 @@ const entered = (values: Partial<RoutineFormValues>): RoutineFormValues => ({
 
 const mountLeadRoutines = async (listed: Routine[]) => {
 	list.mockResolvedValueOnce(listed)
-	sources.mockResolvedValue(DECLARED)
+	sources.mockResolvedValue(declaredBy(ROUTINE.botId, DECLARED))
 
 	const { result } = renderHook(
-		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.form.canCreate).toBe(true))
@@ -133,9 +141,12 @@ const mountHeldRoutines = async () => {
 	list.mockResolvedValueOnce([ROUTINE])
 	sources.mockResolvedValue([])
 
-	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	return result
 }
@@ -156,6 +167,7 @@ beforeEach(() => {
 	reachable.host = "local"
 	onChanged.mockResolvedValue(() => undefined)
 	readRuns.mockResolvedValue([])
+	runsOfSpace.mockResolvedValue([])
 })
 
 afterEach(cleanup)
@@ -300,7 +312,7 @@ it("lists the routines of a conversation whose sources are unreadable", async ()
 	sources.mockRejectedValue(new Error("the sources are unreadable"))
 
 	const { result } = renderHook(
-		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 
@@ -337,10 +349,10 @@ it("keeps the key a later read carried when an earlier read rejects", async () =
 
 it("hands the panel a trigger source the lead does not declare", async () => {
 	list.mockResolvedValueOnce([WEBHOOK_ROUTINE])
-	sources.mockResolvedValue([SCHEDULE_SOURCE])
+	sources.mockResolvedValue(declaredBy(ROUTINE.botId, [SCHEDULE_SOURCE]))
 
 	const { result } = renderHook(
-		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
@@ -554,25 +566,34 @@ const READ_ROWS = [
 
 const mountOwnedRoutine = async (
 	listed: Routine[],
-	owning: () => Promise<TriggerSource[]>,
+	owning: BotTriggerSources,
 ) => {
 	list.mockResolvedValueOnce(listed)
-	sources.mockImplementation((botId: string) =>
-		botId === INBOX_ROUTINE.botId ? owning() : Promise.resolve(DECLARED),
-	)
+	sources.mockResolvedValue([...declaredBy(ROUTINE.botId, DECLARED), owning])
 
 	const { result } = renderHook(
-		() => useRoutines(ROUTINE.conversationId, ROUTINE.botId),
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
 	return result
 }
 
-const declaringNothing = () =>
-	Promise.reject(new Error("the sources are unreadable"))
+const declaringNothing: BotTriggerSources = {
+	botId: INBOX_ROUTINE.botId,
+	triggerSources: [],
+	failure: {
+		kind: "unreadableSources",
+		path: "b-2/.triggers.json",
+		reason: "expected value at line 1",
+	},
+}
 
-const declaringTheInbox = () => Promise.resolve([INBOX_SOURCE])
+const declaringTheInbox: BotTriggerSources = {
+	botId: INBOX_ROUTINE.botId,
+	triggerSources: [INBOX_SOURCE],
+	failure: null,
+}
 
 const savedRows = (
 	result: { current: ConversationRoutines },
@@ -838,8 +859,8 @@ it("lists the routines once for two readers of the conversation", async () => {
 
 	const { result } = renderHook(
 		() => ({
-			panel: useRoutines(ROUTINE.conversationId),
-			card: useRoutines(ROUTINE.conversationId),
+			panel: useRoutines(ROUTINE.conversationId, SPACE),
+			card: useRoutines(ROUTINE.conversationId, SPACE),
 		}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
@@ -849,12 +870,65 @@ it("lists the routines once for two readers of the conversation", async () => {
 	expect(list).toHaveBeenCalledTimes(1)
 })
 
+it("reads the sources and the runs of every bot and routine of the space in one call each", async () => {
+	const routines = [ROUTINE, INBOX_ROUTINE, { ...ROUTINE, id: "r-4" }]
+	list.mockResolvedValueOnce(routines)
+	sources.mockResolvedValue([
+		...declaredBy(ROUTINE.botId, DECLARED),
+		declaringTheInbox,
+	])
+	runsOfSpace.mockResolvedValue([
+		{ routineId: ROUTINE.id, runs: [A_REPORTED_RUN] },
+		{ routineId: INBOX_ROUTINE.id, runs: [{ ...A_REPORTED_RUN, id: "run-2" }] },
+		{ routineId: "r-elsewhere", runs: [{ ...A_REPORTED_RUN, id: "run-3" }] },
+	])
+
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	await waitFor(() => expect(result.current.routines).toHaveLength(3))
+	expect(sources).toHaveBeenCalledOnce()
+	expect(sources).toHaveBeenCalledWith(SPACE)
+	expect(runsOfSpace).toHaveBeenCalledOnce()
+	expect(runsOfSpace).toHaveBeenCalledWith(SPACE)
+	expect(readRuns).not.toHaveBeenCalled()
+	expect(result.current.failure).toBeNull()
+	expect(result.current.reportedRuns.map(({ id }) => id).toSorted()).toEqual([
+		"run-1",
+		"run-2",
+	])
+	expect(
+		result.current.reportedRuns.find(({ id }) => id === "run-2")
+			?.triggerSourceTitle,
+	).toBe(INBOX_SOURCE.title)
+})
+
+it("lists the routines of a conversation whose runs are unreadable", async () => {
+	list.mockResolvedValueOnce([ROUTINE])
+	sources.mockResolvedValue(declaredBy(ROUTINE.botId, DECLARED))
+	runsOfSpace.mockRejectedValue(new Error("the runs are unreadable"))
+
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE, ROUTINE.botId),
+		{ wrapper: createQueryTestWrapper().wrapper },
+	)
+
+	await waitFor(() => expect(result.current.failure).toBe("routines"))
+	expect(result.current.routines).toHaveLength(1)
+	expect(result.current.reportedRuns).toEqual([])
+})
+
 it("reads no routine while no host is reachable", async () => {
 	reachable.host = null
 
-	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
 	await act(async () => undefined)
 
 	expect(list).not.toHaveBeenCalled()
@@ -866,14 +940,14 @@ it("reads the routines again when their conversation is mounted again", async ()
 	list.mockResolvedValue([ROUTINE])
 	sources.mockResolvedValue([])
 	const { wrapper } = createQueryTestWrapper()
-	const first = renderHook(() => useRoutines(ROUTINE.conversationId), {
+	const first = renderHook(() => useRoutines(ROUTINE.conversationId, SPACE), {
 		wrapper,
 	})
 	await waitFor(() => expect(first.result.current.routines).toHaveLength(1))
 	first.unmount()
 
 	list.mockResolvedValue([ROUTINE, WEBHOOK_ROUTINE])
-	const second = renderHook(() => useRoutines(ROUTINE.conversationId), {
+	const second = renderHook(() => useRoutines(ROUTINE.conversationId, SPACE), {
 		wrapper,
 	})
 
@@ -891,7 +965,7 @@ it("reads the routines once while their panel stays mounted", async () => {
 	sources.mockResolvedValue([])
 
 	const { result, rerender } = renderHook(
-		() => useRoutines(ROUTINE.conversationId),
+		() => useRoutines(ROUTINE.conversationId, SPACE),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await waitFor(() => expect(result.current.routines).toHaveLength(1))
@@ -905,9 +979,12 @@ it("waits on its first read of the routines while nothing is held", () => {
 	list.mockReturnValue(new Promise(() => undefined))
 	sources.mockResolvedValue([])
 
-	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
 
 	expect(result.current.isPending).toBe(true)
 })
@@ -927,9 +1004,12 @@ it("stops waiting on the routines once their first read fails", async () => {
 	list.mockRejectedValueOnce(new Error("read refused"))
 	sources.mockResolvedValue([])
 
-	const { result } = renderHook(() => useRoutines(ROUTINE.conversationId), {
-		wrapper: createQueryTestWrapper().wrapper,
-	})
+	const { result } = renderHook(
+		() => useRoutines(ROUTINE.conversationId, SPACE),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
 	await waitFor(() => expect(result.current.failure).toBe("routines"))
 
 	expect(result.current.isPending).toBe(false)

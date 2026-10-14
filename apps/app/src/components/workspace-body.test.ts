@@ -80,11 +80,12 @@ vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 			...actual.routinesTransport,
 			list: vi.fn(),
 			runs: vi.fn(),
+			runsOfSpace: vi.fn(),
 		},
 	}
 })
 vi.mock("@/lib/routines/trigger-sources-transport", () => ({
-	triggerSourcesTransport: { sources: vi.fn() },
+	triggerSourcesTransport: { sourcesOfSpace: vi.fn() },
 }))
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
@@ -97,8 +98,8 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
-const listRuns = vi.mocked(routinesTransport.runs)
-const listSources = vi.mocked(triggerSourcesTransport.sources)
+const listRuns = vi.mocked(routinesTransport.runsOfSpace)
+const listSources = vi.mocked(triggerSourcesTransport.sourcesOfSpace)
 const listMissions = vi.mocked(missionsTransport.list)
 const readMission = vi.mocked(missionsTransport.detail)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
@@ -281,6 +282,7 @@ const workspaceOf = async (store = createFakeTranscriptStore()) => {
 			onToggleSettings: () => undefined,
 			readerName: "Reader",
 			signIn: { state: signIn.getState(), controller: signIn },
+			spaceId: SPACE,
 		}
 	}
 

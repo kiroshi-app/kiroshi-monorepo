@@ -31,6 +31,7 @@ type ActivityPanel = {
 type ThreadRoutinesProps = {
 	activityPanel: ActivityPanel
 	conversationId: string | null
+	spaceId: string | null
 	leadBotId?: string
 	liveMissionIds: LiveMissionIds
 	missions: ConversationMissionsRead
@@ -55,6 +56,7 @@ const activityFailure = (
 const ThreadRoutines = ({
 	activityPanel,
 	conversationId,
+	spaceId,
 	leadBotId,
 	liveMissionIds,
 	missions,
@@ -75,7 +77,7 @@ const ThreadRoutines = ({
 		remove,
 		form,
 		detail,
-	} = useRoutines(conversationId, leadBotId)
+	} = useRoutines(conversationId, spaceId, leadBotId)
 	const opened = useSyncExternalStore(
 		activityPanel.openedRoutine.subscribe,
 		activityPanel.openedRoutine.getState,

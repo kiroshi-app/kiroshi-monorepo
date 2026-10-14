@@ -20,28 +20,33 @@ describe("triggerSourcesTransport", () => {
 		hostInvoke.mockReset()
 	})
 
-	it("asks the host for the sources stacked for one companion", async () => {
-		hostInvoke.mockResolvedValueOnce([SCHEDULE])
+	it("asks the host for the sources stacked for every companion of a space in one call", async () => {
+		const declared = [
+			{ botId: "b-1", triggerSources: [SCHEDULE], failure: null },
+		]
+		hostInvoke.mockResolvedValueOnce(declared)
 
-		await expect(triggerSourcesTransport.sources("b-1")).resolves.toEqual([
-			SCHEDULE,
-		])
+		await expect(
+			triggerSourcesTransport.sourcesOfSpace("personal"),
+		).resolves.toEqual(declared)
 
-		expect(hostInvoke).toHaveBeenCalledWith("routine_trigger_sources", {
-			botId: "b-1",
-		})
+		expect(hostInvoke).toHaveBeenCalledOnce()
+		expect(hostInvoke).toHaveBeenCalledWith(
+			"routine_trigger_sources_of_space",
+			{ spaceId: "personal" },
+		)
 	})
 
-	it("carries an unreadable declaration back to the caller", async () => {
+	it("carries an unreadable space declaration back to the caller", async () => {
 		const failure = {
 			kind: "unreadableSources",
-			path: "bundle/.triggers.json",
+			path: "space/.triggers.json",
 			reason: "expected value at line 1",
 		}
 		hostInvoke.mockRejectedValueOnce(failure)
 
-		await expect(triggerSourcesTransport.sources("b-1")).rejects.toEqual(
-			failure,
-		)
+		await expect(
+			triggerSourcesTransport.sourcesOfSpace("personal"),
+		).rejects.toEqual(failure)
 	})
 })
