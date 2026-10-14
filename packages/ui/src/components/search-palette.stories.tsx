@@ -20,9 +20,7 @@ import {
 
 const QUERY = "parser"
 
-const SPACE = { name: "Studio", tint: "blue" } as const
-
-const OTHER_SPACE = { name: "Archive" } as const
+const SPACE_NAME = "Studio"
 
 const MESSAGES_FOUND = 12
 
@@ -31,10 +29,6 @@ const SHOWN_PER_KIND = 3
 const POPUP_HEIGHT = 584
 
 const ELEVEN_HITS = 11
-
-const SPACE_MARK_SIZE = 8
-
-const UNTINTED_RESULTS = 2
 
 const NARROW_WIDTH = 320
 
@@ -63,7 +57,6 @@ const messageAt = (rank: number): SearchPaletteResult => ({
 		{ key: "author", text: "Ada Martin" },
 		{ key: "conversation", text: "Changelog cleanup" },
 	],
-	space: SPACE,
 	onOpen: fn(),
 })
 
@@ -84,7 +77,6 @@ const CHATS: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Changelog cleanup" }],
 		timestamp: "Mon",
 		parts: [{ key: "participants", text: "Atlas and Beacon" }],
-		space: SPACE,
 		onOpen: fn(),
 	},
 	{
@@ -93,7 +85,6 @@ const CHATS: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Release notes review" }],
 		timestamp: "Tue",
 		parts: [{ key: "bot", text: "Ada Martin" }],
-		space: OTHER_SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -114,7 +105,6 @@ const MISSIONS: SearchPaletteResult[] = [
 			{ key: "owner", text: "Ada Martin" },
 			{ key: "state", text: "Waiting for you" },
 		],
-		space: SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -126,7 +116,6 @@ const ROUTINES: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Morning changelog digest" }],
 		timestamp: "8d",
 		parts: [{ key: "schedule", text: "Every weekday at 09:00" }],
-		space: OTHER_SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -165,7 +154,6 @@ const restingRow = (
 	title: [{ key: "title", text: title }],
 	timestamp,
 	parts: [{ key: "part", text: part }],
-	space: SPACE,
 	onOpen: fn(),
 })
 
@@ -260,17 +248,11 @@ const contentTopOf = (body: HTMLElement) =>
 
 const Harness = (args: SearchPaletteProps) => {
 	const [tab, setTab] = useState<SearchTab>(args.tab)
-	const [isScopeAllSpaces, setScope] = useState(args.isScopeAllSpaces)
 	const [query, setQuery] = useState(args.query)
 
 	const changeTab = (next: SearchTab) => {
 		args.onTabChange(next)
 		setTab(next)
-	}
-
-	const changeScope = (next: boolean) => {
-		args.onScopeChange(next)
-		setScope(next)
 	}
 
 	const changeQuery = (next: string) => {
@@ -281,9 +263,7 @@ const Harness = (args: SearchPaletteProps) => {
 	return (
 		<SearchPalette
 			{...args}
-			isScopeAllSpaces={isScopeAllSpaces}
 			onQueryChange={changeQuery}
-			onScopeChange={changeScope}
 			onTabChange={changeTab}
 			query={query}
 			tab={tab}
@@ -299,7 +279,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The search surface of the app, opened over whatever the reader was doing. It composes its own popup rather than the shared dialog content because the query line and the tab row are pinned and only the body under them scrolls. It holds one height whatever the body holds, so a keystroke never moves a row under the reader's pointer. It reads nothing: the query, the tab, the scope, the results, the resting rows and the loading flag are all props, and every gesture is a callback, so the host owns the search itself. Focus stays on the query line at all times and the row the keyboard sits on is pointed at with `aria-activedescendant`, which is why the rows are options of one listbox rather than buttons in a tree. On the All tab each kind gets a head naming it and counting what it found, cut to three rows with a See all that moves the reader to that kind's own tab; every other tab is one flat list. While the query is empty every tab answers with the resting rows it was handed or, when it has none, with a panel that says what to do about it.",
+					"The search surface of the app, opened over whatever the reader was doing. It composes its own popup rather than the shared dialog content because the query line and the tab row are pinned and only the body under them scrolls. It searches the current space only and carries no scope control. It holds one height whatever the body holds, so a keystroke never moves a row under the reader's pointer. It reads nothing: the query, the tab, the results, the resting rows and the loading flag are all props, and every gesture is a callback, so the host owns the search itself. Focus stays on the query line at all times and the row the keyboard sits on is pointed at with `aria-activedescendant`, which is why the rows are options of one listbox rather than buttons in a tree. On the All tab each kind gets a head naming it and counting what it found, cut to three rows with a See all that moves the reader to that kind's own tab; every other tab is one flat list. While the query is empty every tab answers with the resting rows it was handed or, when it has none, with a panel that says what to do about it.",
 			},
 		},
 	},
@@ -307,8 +287,7 @@ const meta = preview.meta({
 		open: true,
 		query: QUERY,
 		tab: "all" as SearchTab,
-		isScopeAllSpaces: false,
-		spaceName: SPACE.name,
+		spaceName: SPACE_NAME,
 		results: RESULTS,
 		resting: RESTING,
 		isLoading: false,
@@ -316,7 +295,6 @@ const meta = preview.meta({
 		onOpenChange: fn(),
 		onQueryChange: fn(),
 		onTabChange: fn(),
-		onScopeChange: fn(),
 	},
 	render: (args) => <Harness {...args} />,
 })
@@ -341,6 +319,7 @@ export const Default = meta.story({
 		const heads = slotsIn(body, "search-palette-section-head")
 		await expect(heads).toHaveLength(4)
 		await expect(heads[0]).toHaveTextContent(`Messages${MESSAGES_FOUND}`)
+		await expect(within(popup).queryByRole("switch")).toBeNull()
 
 		const messages = within(popup).getByRole("listbox", { name: "Messages" })
 		await expect(slotsIn(messages, "search-result-row")).toHaveLength(
@@ -427,43 +406,6 @@ export const ChangingTab = meta.story({
 	},
 })
 
-export const AcrossSpaces = meta.story({
-	args: { isScopeAllSpaces: true },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The same query once the scope is every space. Check that each row opens its context line with a round mark in its space tint and then the space name, which is the only thing that tells two identically named threads apart here, that a result from a space with no tint keeps the untinted mark rather than dropping the column, and that turning the switch back reports the scope and takes the marks away with it. The app assembles it at `apps/app/src/App.tsx:1239`.",
-			},
-		},
-	},
-	play: async ({ args, userEvent }) => {
-		const popup = await palette()
-		const reader = within(popup)
-		const body = bodyOf(popup)
-		const [first] = slotsIn(body, "search-result-row-parts")
-		const marks = slotsIn(body, "space-tint")
-		const [mark] = marks
-
-		await expect(first?.textContent?.startsWith(SPACE.name)).toBe(true)
-		await expect(marks).toHaveLength(slotsIn(body, "search-result-row").length)
-		await expect(mark).toHaveAttribute("data-tint", SPACE.tint)
-		await expect(mark?.getBoundingClientRect().width).toBe(SPACE_MARK_SIZE)
-		await expect(
-			marks.filter((tint) => tint.dataset.tint === undefined),
-		).toHaveLength(UNTINTED_RESULTS)
-		await expect(
-			reader.getByRole("listbox", { name: "Conversations" }).textContent,
-		).toContain(OTHER_SPACE.name)
-
-		await userEvent.click(reader.getByRole("switch", { name: "All spaces" }))
-		await expect(args.onScopeChange).toHaveBeenCalledWith(false)
-		await waitFor(async () => {
-			await expect(slotsIn(body, "space-tint")).toHaveLength(0)
-		})
-	},
-})
-
 export const OneHit = meta.story({
 	args: { results: ONE_HIT, activeResultId: "chat-changelog" },
 	parameters: {
@@ -545,7 +487,7 @@ export const RestingMessages = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Messages tab with nothing typed. Check that it answers with an instruction rather than rows — no message is recent, every message is only ever reached by typing — that the instruction names the space it will read and warns that matching is by whole words, that it offers no button even while the scope is one space, since widening the scope of a search nobody has run yet changes nothing on screen, and that a listbox is still rendered under it so the query line points at an element that exists. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"The Messages tab with nothing typed. Check that it answers with an instruction rather than rows — no message is recent, every message is only ever reached by typing — that the instruction names the space it will read and warns that matching is by whole words, that it offers no button, and that a listbox is still rendered under it so the query line points at an element that exists. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
@@ -555,7 +497,7 @@ export const RestingMessages = meta.story({
 		const panel = slotIn(bodyOf(popup), "search-palette-rest")
 
 		await expect(reader.getByText("Search every message")).toBeVisible()
-		await expect(panel).toHaveTextContent(SPACE.name)
+		await expect(panel).toHaveTextContent(SPACE_NAME)
 		await expect(panel.querySelector("button")).toBeNull()
 		await expect(reader.queryAllByRole("option")).toHaveLength(0)
 		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
@@ -601,29 +543,19 @@ export const RestingKindEmpty = meta.story({
 		docs: {
 			description: {
 				story:
-					"The Missions tab in a space where no mission has been opened. Check that the panel carries the mark of the kind the reader asked for rather than a magnifier, that it names the space so the emptiness reads as local and not as a broken palette, and that the way out it offers is the scope: pressing it asks for every space, and once the scope is every space the button goes away rather than repeating the state the reader is already in. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"The Missions tab in a space where no mission has been opened. Check that the panel carries the mark of the kind the reader asked for rather than a magnifier, that it names the space so the emptiness reads as local and not as a broken palette, and that it offers no button, since the palette only ever searches this space. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
+	play: async () => {
 		const popup = await palette()
 		const reader = within(popup)
 		const panel = slotIn(bodyOf(popup), "search-palette-rest")
 
 		await expect(reader.getByText("No mission here yet")).toBeVisible()
-		await expect(panel).toHaveTextContent(SPACE.name)
+		await expect(panel).toHaveTextContent(`No missions in ${SPACE_NAME} yet.`)
+		await expect(panel.querySelector("button")).toBeNull()
 		await expect(reader.queryAllByRole("option")).toHaveLength(0)
-
-		await userEvent.click(
-			reader.getByRole("button", { name: "Look in all spaces" }),
-		)
-		await expect(args.onScopeChange).toHaveBeenCalledWith(true)
-		await waitFor(async () => {
-			await expect(
-				reader.queryByRole("button", { name: "Look in all spaces" }),
-			).toBeNull()
-		})
-		await expect(reader.getByText("No mission here yet")).toBeVisible()
 	},
 })
 
@@ -633,27 +565,20 @@ export const RestingNothing = meta.story({
 		docs: {
 			description: {
 				story:
-					"The All tab on a fresh account: nothing typed, nothing opened in any kind. Check that it falls back to the instruction the Messages tab carries rather than claiming nothing matches — no query has been asked, so there is nothing for an empty state to report on — and that it offers the scope as the one way out, since another space may well hold what this one does not. Check too that the offer goes away once the scope is every space. Pick `Empty` for the sentence a search that came back with nothing earns. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"The All tab on a fresh account: nothing typed, nothing opened in any kind. Check that it falls back to the instruction the Messages tab carries rather than claiming nothing matches — no query has been asked, so there is nothing for an empty state to report on — and that it offers no button, since the palette only ever searches this space. Pick `Empty` for the sentence a search that came back with nothing earns. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
-	play: async ({ args, userEvent }) => {
-		const reader = within(await palette())
+	play: async () => {
+		const popup = await palette()
+		const reader = within(popup)
 
 		await expect(reader.getByText("Search every message")).toBeVisible()
 		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
 		await expect(reader.queryByText("Nothing here matches")).toBeNull()
-
-		await userEvent.click(
-			reader.getByRole("button", { name: "Look in all spaces" }),
-		)
-		await expect(args.onScopeChange).toHaveBeenCalledWith(true)
-		await waitFor(async () => {
-			await expect(
-				reader.queryByRole("button", { name: "Look in all spaces" }),
-			).toBeNull()
-		})
-		await expect(reader.getByText("Search every message")).toBeVisible()
+		await expect(
+			slotIn(bodyOf(popup), "search-palette-rest").querySelector("button"),
+		).toBeNull()
 	},
 })
 
@@ -730,44 +655,23 @@ export const Empty = meta.story({
 		docs: {
 			description: {
 				story:
-					"A query nothing in the space answers. Check that the empty state names the space that was searched and quotes the query back, so a reader who mistyped sees it, and that the way out it offers is the scope itself — pressing it asks for every space rather than clearing the query. The app assembles it at `apps/app/src/App.tsx:1239`.",
-			},
-		},
-	},
-	play: async ({ args, userEvent }) => {
-		const reader = within(await palette())
-
-		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
-		await expect(reader.getByText("Nothing here matches")).toBeVisible()
-		await expect(
-			reader.getByText(`No results for “${QUERY}” in ${SPACE.name}`, {
-				exact: false,
-			}),
-		).toHaveTextContent(`“${QUERY}”`)
-
-		await userEvent.click(
-			reader.getByRole("button", { name: "Search all spaces" }),
-		)
-		await expect(args.onScopeChange).toHaveBeenCalledWith(true)
-	},
-})
-
-export const EmptyEverywhere = meta.story({
-	args: { results: [], isScopeAllSpaces: true },
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"The same nothing once every space has already been searched. Check that the empty state keeps its title and its sentence but drops the action: widening the scope is the only thing it offered, and a button that repeats the state the reader is already in is worse than no button. Pick `Empty` for the scoped search that still has somewhere to go. The app assembles it at `apps/app/src/App.tsx:1239`.",
+					"A query nothing in the space answers. Check that the empty state names the space that was searched and quotes the query back, so a reader who mistyped sees it, and that it offers no button, since the palette only ever searches this space. The app assembles it at `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
 	play: async () => {
-		const reader = within(await palette())
+		const popup = await palette()
+		const reader = within(popup)
 
+		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
 		await expect(reader.getByText("Nothing here matches")).toBeVisible()
 		await expect(
-			reader.queryByRole("button", { name: "Search all spaces" }),
+			reader.getByText(`No results for “${QUERY}” in ${SPACE_NAME}`, {
+				exact: false,
+			}),
+		).toHaveTextContent(`“${QUERY}”`)
+		await expect(
+			slotIn(bodyOf(popup), "search-palette-empty").querySelector("button"),
 		).toBeNull()
 	},
 })
@@ -832,7 +736,7 @@ export const Narrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The palette on a 320px window, the narrowest surface the shell reflows to. Check that the tab strip keeps every tab inside the row rather than pushing the scope switch off it — the strip scrolls sideways instead — that it draws no scrollbar of its own, since a reader whose system paints scrollbars permanently would otherwise get a bar across the tab labels, and that pressing a tab still swaps the body. Pick `Default` for the palette with room for all five tabs at once.",
+					"The palette on a 320px window, the narrowest surface the shell reflows to. Check that the tab strip keeps every tab inside the row — the strip scrolls sideways instead — that it draws no scrollbar of its own, since a reader whose system paints scrollbars permanently would otherwise get a bar across the tab labels, and that pressing a tab still swaps the body. Pick `Default` for the palette with room for all five tabs at once.",
 			},
 		},
 	},
@@ -848,7 +752,6 @@ export const Narrow = meta.story({
 		)
 		await expect(getComputedStyle(strip).scrollbarWidth).toBe("none")
 		await expect(strip.clientHeight).toBe(strip.offsetHeight)
-		await expect(reader.getByRole("switch")).toBeVisible()
 
 		await userEvent.click(reader.getByRole("tab", { name: "Conversations" }))
 		await expect(args.onTabChange).toHaveBeenCalledWith("chats")

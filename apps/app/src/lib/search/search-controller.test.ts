@@ -59,18 +59,6 @@ it("searches an erased query at once", () => {
 	expect(controller.getState().searchedQuery).toBe("")
 })
 
-it("searches the typed query at once when the scope switches", () => {
-	const controller = openedOn()
-	controller.setQuery("roadmap")
-
-	controller.setScope(true)
-
-	expect(controller.getState()).toMatchObject({
-		isAllSpaces: true,
-		searchedQuery: "roadmap",
-	})
-})
-
 it("lets no pending query land once it closes", () => {
 	const controller = openedOn()
 	controller.setQuery("roadmap")
@@ -81,12 +69,11 @@ it("lets no pending query land once it closes", () => {
 	expect(controller.getState().searchedQuery).toBe("")
 })
 
-it("forgets its query, its tab, its scope and its active result when it closes", () => {
+it("forgets its query, its tab and its active result when it closes", () => {
 	const controller = openedOn()
 	controller.setQuery("roadmap")
 	vi.advanceTimersByTime(QUIET_MS)
 	controller.setTab("missions")
-	controller.setScope(true)
 	controller.moveActive(1, 3, 0)
 
 	controller.close()
@@ -97,7 +84,6 @@ it("forgets its query, its tab, its scope and its active result when it closes",
 		query: "",
 		searchedQuery: "",
 		tab: "all",
-		isAllSpaces: false,
 		activeIndex: 0,
 		activeLanding: 0,
 	})

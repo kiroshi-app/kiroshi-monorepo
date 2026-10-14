@@ -1128,12 +1128,10 @@ overlays-popoverpanel--open
 overlays-popoverpanel--placements
 overlays-popoverpanel--playground
 overlays-popoverpanel--states
-overlays-searchpalette--across-spaces
 overlays-searchpalette--arrow-key-tabs
 overlays-searchpalette--changing-tab
 overlays-searchpalette--default
 overlays-searchpalette--empty
-overlays-searchpalette--empty-everywhere
 overlays-searchpalette--loading
 overlays-searchpalette--loading-first-query
 overlays-searchpalette--many-hits

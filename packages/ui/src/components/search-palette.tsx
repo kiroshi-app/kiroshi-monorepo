@@ -20,8 +20,6 @@ import {
 	BACKDROP_CLASS,
 	POPUP_CLASS,
 } from "@workspace/ui/components/settings-styles"
-import { ToggleSwitch } from "@workspace/ui/components/toggle-switch"
-import { Button } from "@workspace/ui/components/ui/button"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
@@ -55,8 +53,6 @@ type SearchPaletteProps = {
 	onQueryChange: (query: string) => void
 	tab: SearchTab
 	onTabChange: (tab: SearchTab) => void
-	isScopeAllSpaces: boolean
-	onScopeChange: (isAllSpaces: boolean) => void
 	spaceName: string
 	results: SearchResultGroup[]
 	resting: SearchRestingGroup[]
@@ -101,8 +97,7 @@ const QUERY_LINE_CLASS =
 const INPUT_CLASS =
 	"min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
 
-const TAB_ROW_CLASS =
-	"flex h-11 shrink-0 items-center justify-between gap-2 px-3"
+const TAB_ROW_CLASS = "flex h-11 shrink-0 items-center px-3"
 
 const TAB_STRIP_CLASS =
 	"scrollbar-hide max-w-full overflow-x-auto bg-transparent p-0"
@@ -211,8 +206,6 @@ const SearchPalette = ({
 	onQueryChange,
 	tab,
 	onTabChange,
-	isScopeAllSpaces,
-	onScopeChange,
 	spaceName,
 	results,
 	resting,
@@ -222,7 +215,6 @@ const SearchPalette = ({
 	const { t } = useTranslation("search")
 	const input = useRef<HTMLInputElement>(null)
 	const listId = useId()
-	const scopeId = useId()
 	const label = t("open")
 	const isRest = query === ""
 	const isAllTab = tab === "all"
@@ -282,25 +274,12 @@ const SearchPalette = ({
 			? listId
 			: sections.map((section) => sectionListId(section.key)).join(" ")
 
-	const scopeAction = (action: string) =>
-		isScopeAllSpaces ? undefined : (
-			<Button
-				className="rounded-lg"
-				onClick={() => onScopeChange(true)}
-				size="sm"
-				variant="secondary"
-			>
-				{action}
-			</Button>
-		)
-
 	const searchMark = (
 		<Icons.Search aria-hidden="true" className={PANEL_MARK_CLASS} />
 	)
 
-	const instructionPanel = (action?: ReactNode) => (
+	const instructionPanel = (
 		<EmptyStateShell
-			action={action}
 			className={PANEL_CLASS}
 			data-slot="search-palette-rest"
 			description={t("rest.messages.body", { space: spaceName })}
@@ -311,7 +290,6 @@ const SearchPalette = ({
 
 	const restingPanel = (kind: SearchRestingKind) => (
 		<EmptyStateShell
-			action={scopeAction(t("rest.action"))}
 			className={PANEL_CLASS}
 			data-slot="search-palette-rest"
 			description={t(`rest.none.body.${kind}`, { space: spaceName })}
@@ -322,7 +300,6 @@ const SearchPalette = ({
 
 	const foundPanel = (
 		<EmptyStateShell
-			action={scopeAction(t("empty.action"))}
 			className={PANEL_CLASS}
 			data-slot="search-palette-empty"
 			description={t("empty.description", { space: spaceName, query })}
@@ -335,19 +312,18 @@ const SearchPalette = ({
 		if (shown.length > 0) return null
 		if (isSkeletonShown) return null
 		if (!isRest) return isLoading ? null : foundPanel
-		if (tab === "messages") return instructionPanel()
+		if (tab === "messages") return instructionPanel
 		if (isLoading) return null
 		if (!isAllTab) return restingPanel(tab)
-		return instructionPanel(scopeAction(t("rest.action")))
+		return instructionPanel
 	}
 
-	const rowOf = ({ id, space, ...rest }: SearchPaletteResult) => (
+	const rowOf = ({ id, ...rest }: SearchPaletteResult) => (
 		<SearchResultRow
 			{...rest}
 			id={rowId(id)}
 			isActive={id === activeResultId}
 			key={id}
-			space={isScopeAllSpaces ? space : undefined}
 		/>
 	)
 
@@ -402,16 +378,6 @@ const SearchPalette = ({
 								))}
 							</TabsList>
 						</Tabs>
-						<div className="flex shrink-0 items-center gap-2">
-							<span className="text-muted-foreground text-xs" id={scopeId}>
-								{t("scope")}
-							</span>
-							<ToggleSwitch
-								aria-labelledby={scopeId}
-								checked={isScopeAllSpaces}
-								onCheckedChange={onScopeChange}
-							/>
-						</div>
 					</div>
 
 					<div

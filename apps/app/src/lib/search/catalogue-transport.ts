@@ -4,7 +4,6 @@ import { invoke } from "../host"
 
 export type RecentScope = {
 	spaceId: string
-	allSpaces: boolean
 }
 
 export type CatalogueScope = RecentScope & {
@@ -12,8 +11,12 @@ export type CatalogueScope = RecentScope & {
 }
 
 export const catalogueTransport = {
-	search: ({ query, spaceId, allSpaces }: CatalogueScope) =>
-		invoke<Catalogue>("search_catalogue", { query, spaceId, allSpaces }),
-	recent: ({ spaceId, allSpaces }: RecentScope) =>
-		invoke<CatalogueChat[]>("search_recent", { spaceId, allSpaces }),
+	search: ({ query, spaceId }: CatalogueScope) =>
+		invoke<Catalogue>("search_catalogue", {
+			query,
+			spaceId,
+			allSpaces: false,
+		}),
+	recent: ({ spaceId }: RecentScope) =>
+		invoke<CatalogueChat[]>("search_recent", { spaceId, allSpaces: false }),
 }

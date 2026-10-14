@@ -50,7 +50,7 @@ it("lets the error of a query over the limit reach the caller", async () => {
 		messagesTransport.search({
 			text: "a".repeat(201),
 			spaceId: "personal",
-			allSpaces: true,
+			allSpaces: false,
 		}),
 	).rejects.toEqual({ kind: "queryTooLong", limit: 200 })
 })

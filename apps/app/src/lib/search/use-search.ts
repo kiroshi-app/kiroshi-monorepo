@@ -42,7 +42,6 @@ export type Search = {
 export const useSearchLookups = ({
 	rosters,
 	conversationRosters,
-	spaces,
 	readerName,
 	now,
 }: SearchLookupSource): SearchLookups =>
@@ -51,11 +50,10 @@ export const useSearchLookups = ({
 			createSearchLookups({
 				rosters,
 				conversationRosters,
-				spaces,
 				readerName,
 				now,
 			}),
-		[rosters, conversationRosters, spaces, readerName, now],
+		[rosters, conversationRosters, readerName, now],
 	)
 
 export const useSearchNavigation = ({
@@ -94,7 +92,6 @@ export const useSearch = ({
 		isOpen: state.isOpen,
 		spaceId: state.spaceId,
 		query: state.searchedQuery,
-		isAllSpaces: state.isAllSpaces,
 	})
 
 	const openTarget = useCallback(
@@ -169,8 +166,6 @@ export const useSearch = ({
 			onQueryChange: controller.setQuery,
 			tab: state.tab,
 			onTabChange: controller.setTab,
-			isScopeAllSpaces: state.isAllSpaces,
-			onScopeChange: controller.setScope,
 			spaceName: spaceName ?? "",
 			results,
 			resting,

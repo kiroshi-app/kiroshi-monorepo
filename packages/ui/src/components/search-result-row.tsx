@@ -6,7 +6,6 @@ import {
 } from "@workspace/ui/components/avatar-group"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
-import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import {
@@ -21,7 +20,6 @@ import {
 	type RowPart,
 	RowParts,
 } from "@workspace/ui/components/row-anatomy"
-import { SpaceTint } from "@workspace/ui/components/space-tint"
 import { cn } from "@workspace/ui/lib/utils"
 
 type SearchResultIdentity =
@@ -36,14 +34,11 @@ type SearchResultKind = SearchResultIdentity["kind"]
 
 type SearchResultTitlePart = RowPart & { isMatch?: boolean }
 
-type SearchResultSpace = { name: string; tint?: BotAvatarBlot }
-
 type SearchResultRowProps = {
 	identity: SearchResultIdentity
 	title: SearchResultTitlePart[]
 	timestamp: string
 	parts: RowPart[]
-	space?: SearchResultSpace
 	identifier?: string
 	isActive?: boolean
 	id?: string
@@ -106,7 +101,6 @@ const SearchResultRow = ({
 	title,
 	timestamp,
 	parts,
-	space,
 	identifier,
 	isActive = false,
 	id,
@@ -142,7 +136,6 @@ const SearchResultRow = ({
 				nameSlot="search-result-row-title"
 				preview={
 					<>
-						{space ? <SpaceTint className="size-2" tint={space.tint} /> : null}
 						{Glyph ? (
 							<Glyph
 								aria-hidden="true"
@@ -152,7 +145,6 @@ const SearchResultRow = ({
 						) : null}
 						<RowParts
 							identifier={identifier}
-							lead={space ? <span>{space.name}</span> : undefined}
 							parts={parts}
 							slot="search-result-row-parts"
 						/>
@@ -170,6 +162,5 @@ export {
 	type SearchResultKind,
 	SearchResultRow,
 	type SearchResultRowProps,
-	type SearchResultSpace,
 	type SearchResultTitlePart,
 }
