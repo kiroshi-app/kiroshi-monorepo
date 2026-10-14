@@ -12,11 +12,4 @@ export const conversationQueryKeys = {
 			spaceId,
 			botId,
 		] as const,
-	lastWord: (spaceRowId: string, conversationId: string) =>
-		[
-			...conversationQueryKeys.previews(),
-			"last-word",
-			spaceRowId,
-			conversationId,
-		] as const,
 }

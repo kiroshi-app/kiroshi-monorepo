@@ -39,7 +39,11 @@ export type HttpHostOptions = HostConnection & {
 }
 
 export type HttpHost = {
-	invoke: <T>(command: string, args?: InvokeArgs) => Promise<T>
+	invoke: <T>(
+		command: string,
+		args?: InvokeArgs,
+		signal?: AbortSignal,
+	) => Promise<T>
 	listen: <T>(event: string, handler: EventCallback<T>) => Promise<UnlistenFn>
 	fileSrc: (path: string) => string
 	openEvents: () => void
@@ -95,6 +99,9 @@ const refusalOf = async (response: Response): Promise<Refusal> => {
 		? { reason: parsedJson(text), isCommandError: true }
 		: { reason: text, isCommandError: false }
 }
+
+export const isTimeout = (reason: unknown): boolean =>
+	reason instanceof DOMException && reason.name === "TimeoutError"
 
 const messageOf = (reason: unknown): string =>
 	reason instanceof Error ? reason.message : String(reason)
@@ -215,7 +222,21 @@ export const createHttpHost = ({
 		throw new HostRefused(message, reason)
 	}
 
-	const post = (command: string, args: InvokeArgs) =>
+	const rejectFailedPost = (
+		command: string,
+		reason: unknown,
+		signal?: AbortSignal,
+	): never => {
+		if (!signal?.aborted) {
+			return rejectNetworkFailure(command, reason)
+		}
+		if (isTimeout(signal.reason)) {
+			return goOffline(signal.reason)
+		}
+		throw signal.reason
+	}
+
+	const post = (command: string, args: InvokeArgs, signal?: AbortSignal) =>
 		fetch(new URL(`/api/invoke/${encodeURIComponent(command)}`, host), {
 			method: "POST",
 			headers: {
@@ -223,11 +244,16 @@ export const createHttpHost = ({
 				"content-type": JSON_TYPE,
 			},
 			body: JSON.stringify(args, encodeArgument),
-		}).catch((reason: unknown) => rejectNetworkFailure(command, reason))
+			signal,
+		}).catch((reason: unknown) => rejectFailedPost(command, reason, signal))
 
-	const invoke = async <T>(command: string, args: InvokeArgs = {}) => {
+	const invoke = async <T>(
+		command: string,
+		args: InvokeArgs = {},
+		signal?: AbortSignal,
+	) => {
 		countInvoke(command)
-		const response = await post(command, args)
+		const response = await post(command, args, signal)
 		if (!response.ok) {
 			const { reason, isCommandError } = await refusalOf(response)
 			if (isCommandError) {

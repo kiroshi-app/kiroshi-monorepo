@@ -146,8 +146,12 @@ export const conversationStore: TranscriptStore = {
 	removeBotFromSpace: (botId: string, spaceId: string) =>
 		invoke<void>("bot_remove_from_space", { botId, spaceId }),
 
-	bots: (spaceId?: string | null) =>
-		invoke<Bot[]>("conversation_bots", { spaceId: spaceOrJoined(spaceId) }),
+	bots: (spaceId?: string | null, signal?: AbortSignal) =>
+		invoke<Bot[]>(
+			"conversation_bots",
+			{ spaceId: spaceOrJoined(spaceId) },
+			{ signal },
+		),
 
 	botsByPresence: (spaceId: string, excludedConversationId?: string | null) =>
 		invoke<Bot[]>("conversation_bots_by_presence", {
@@ -296,8 +300,17 @@ export const conversationStore: TranscriptStore = {
 	conversations: (spaceId: string) =>
 		invoke<Conversation[]>("conversation_list", { spaceId }),
 
-	conversationPage: (spaceId: string, cursor: string | null, limit: number) =>
-		invoke<ConversationPage>("conversation_page", { spaceId, cursor, limit }),
+	conversationPage: (
+		spaceId: string,
+		cursor: string | null,
+		limit: number,
+		signal?: AbortSignal,
+	) =>
+		invoke<ConversationPage>(
+			"conversation_page",
+			{ spaceId, cursor, limit },
+			{ signal },
+		),
 
 	createConversation: ({
 		spaceId,

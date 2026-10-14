@@ -4,6 +4,7 @@ import { platform } from "@tauri-apps/plugin-os"
 import { createHostedSpaces } from "./hosted-spaces"
 import { raiseRefusalNotice } from "./http"
 import { createJoinedHosts } from "./joined-hosts"
+import type { Invoke } from "./joined-hosts-invoke"
 import {
 	convertFileSrc,
 	invoke as tauriInvoke,
@@ -24,7 +25,7 @@ const localFileSrc = (path: string): string =>
 
 export const joinedHosts = createJoinedHosts({
 	local: {
-		invoke: tauriInvoke,
+		invoke: tauriInvoke as Invoke,
 		listen: tauriListen,
 		fileSrc: localFileSrc,
 	},
@@ -34,7 +35,7 @@ export const joinedHosts = createJoinedHosts({
 	reportFailure: raiseRefusalNotice,
 })
 
-export const invoke: typeof tauriInvoke = joinedHosts.invoke
+export const invoke = joinedHosts.invoke
 
 export const listen = joinedHosts.listen
 

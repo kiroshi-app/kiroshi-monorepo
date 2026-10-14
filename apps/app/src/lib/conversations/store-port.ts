@@ -55,7 +55,7 @@ export type TranscriptStore = TranscriptPort & {
 	deleteSection: (id: string) => Promise<void>
 	moveBotToSection: (botId: string, sectionId: string | null) => Promise<void>
 	moveBotToSpace: (botId: string, spaceId: string) => Promise<void>
-	bots: (spaceId?: string | null) => Promise<Bot[]>
+	bots: (spaceId?: string | null, signal?: AbortSignal) => Promise<Bot[]>
 	botsByPresence: (
 		spaceId: string,
 		excludedConversationId?: string | null,
@@ -140,6 +140,7 @@ export type TranscriptStore = TranscriptPort & {
 		spaceId: string,
 		cursor: string | null,
 		limit: number,
+		signal?: AbortSignal,
 	) => Promise<ConversationPage>
 	createConversation: (draft: ConversationDraft) => Promise<Conversation>
 	updateConversation: (

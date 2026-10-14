@@ -150,7 +150,7 @@ describe("the roster conversations read a page at a time", () => {
 		const roster = await mountRoster(store)
 
 		expect(reads).toHaveBeenCalledOnce()
-		expect(reads).toHaveBeenCalledWith("personal", null, 30)
+		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
 		expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 6))
 		expect(roster.getState().bots.map(({ id }) => id)).toEqual(["default"])
 		expect(sentinel()).not.toBeNull()
@@ -165,7 +165,7 @@ describe("the roster conversations read a page at a time", () => {
 		await waitFor(() =>
 			expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 1)),
 		)
-		expect(reads).toHaveBeenLastCalledWith("personal", "30", 30)
+		expect(reads).toHaveBeenLastCalledWith("personal", "30", 30, undefined)
 	})
 
 	it("shows the loading row and asks once for a next page however often the end comes into view while it reads", async () => {
@@ -252,7 +252,7 @@ describe("a refresh of the roster pages scrolled through", () => {
 			expect(shownIds(roster)).toEqual(conversationIdsRanked(36, 1)),
 		)
 		expect(reads).toHaveBeenCalledOnce()
-		expect(reads).toHaveBeenCalledWith("personal", null, 30)
+		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
 	})
 
 	it("shows a conversation written to outside the first page at the top, once", async () => {
@@ -282,7 +282,7 @@ describe("a refresh of the roster pages scrolled through", () => {
 		await reconnectHost()
 
 		await waitFor(() => expect(reads).toHaveBeenCalledOnce())
-		expect(reads).toHaveBeenCalledWith("personal", null, 30)
+		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
 		expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 1))
 		expect(sentinel()).toBeNull()
 	})

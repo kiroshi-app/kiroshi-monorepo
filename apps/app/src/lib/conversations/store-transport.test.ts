@@ -71,7 +71,11 @@ const ASSISTANT_MESSAGE: NewAssistantMessage = {
 type WriteCase = {
 	member: string
 	write: () => Promise<unknown>
-	call: [command: string, args?: Record<string, unknown>]
+	call: [
+		command: string,
+		args?: Record<string, unknown>,
+		options?: { signal?: AbortSignal },
+	]
 }
 
 const IDENTITY = botIdentity()
@@ -254,7 +258,7 @@ const WRITES: WriteCase[] = [
 	{
 		member: "bots",
 		write: () => conversationStore.bots("s-1"),
-		call: ["conversation_bots", { spaceId: "s-1" }],
+		call: ["conversation_bots", { spaceId: "s-1" }, { signal: undefined }],
 	},
 	{
 		member: "botsByPresence",

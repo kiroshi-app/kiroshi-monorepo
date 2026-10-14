@@ -371,16 +371,16 @@ describe("createRosterController", () => {
 			}),
 		)
 		expect(held(controller, id).name).toBe("Nyx")
-		await vi.waitFor(() => expect(held(controller, id).title).toBe("Reviewer"))
 
-		const stored = (await reloaded(store)).bots[0]
-		expect(stored).toMatchObject({
-			name: "Nyx",
-			title: "Reviewer",
-			instructions: "Answer briefly.",
-			model: "haiku",
-			avatarBlot: "blue",
-		})
+		await vi.waitFor(async () =>
+			expect((await reloaded(store)).bots[0]).toMatchObject({
+				name: "Nyx",
+				title: "Reviewer",
+				instructions: "Answer briefly.",
+				model: "haiku",
+				avatarBlot: "blue",
+			}),
+		)
 	})
 
 	it("coalesces a burst of edits into the write of the last value", async () => {
@@ -1046,28 +1046,21 @@ describe("createRosterController previews", () => {
 		})
 	})
 
-	it("leaves the row of a conversation it cannot read blank and every other standing", async () => {
+	it("reads every last word from the roster without opening a transcript", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 		await controller.create()
 		const [first, second] = controller.getState().bots
+		await saidTo(store, first.id, "Pulled the three papers.")
 		await saidTo(store, second.id, "Rebuilding the bundle.")
-		const refused = (await store.mainChat(first.id)).id
-		const refusing: TranscriptStore = {
-			...store,
-			loadPage: (conversationId, cursor) =>
-				conversationId === refused
-					? Promise.reject({ kind: "storage" })
-					: store.loadPage(conversationId, cursor),
-		}
+		const transcriptReads = vi.spyOn(store, "loadPage")
 
-		const state = (await loaded(refusing)).getState()
+		const state = (await loaded(store)).getState()
 
-		expect(state.previews.personal?.[first.id]).toBeUndefined()
 		expect(state.previews.personal?.[second.id]).toMatchObject({
 			text: "Rebuilding the bundle.",
 		})
-		expect(state.bots).toHaveLength(2)
+		expect(transcriptReads).not.toHaveBeenCalled()
 	})
 	it("carries the section a companion is moved into", async () => {
 		const store = createFakeTranscriptStore()
@@ -1161,22 +1154,18 @@ describe("createRosterController conversation previews", () => {
 		})
 	})
 
-	it("leaves the row of a conversation it cannot read blank", async () => {
+	it("reads the last word of every conversation without opening its transcript", async () => {
 		const store = createFakeTranscriptStore()
 		const room = await opened(store)
 		await saidIn(store, room.id, "Menu is set.")
-		const refusing: TranscriptStore = {
-			...store,
-			loadPage: (conversationId, cursor) =>
-				conversationId === room.id
-					? Promise.reject({ kind: "storage" })
-					: store.loadPage(conversationId, cursor),
-		}
+		const transcriptReads = vi.spyOn(store, "loadPage")
 
-		const state = (await loaded(refusing)).getState()
+		const state = (await loaded(store)).getState()
 
-		expect(state.conversationPreviews[room.id]).toBeUndefined()
-		expect(state.conversations).toHaveLength(1)
+		expect(state.conversationPreviews[room.id]).toMatchObject({
+			text: "Menu is set.",
+		})
+		expect(transcriptReads).not.toHaveBeenCalled()
 	})
 })
 

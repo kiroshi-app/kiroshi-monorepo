@@ -7,10 +7,12 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import { newBotIdentity } from "./bot-settings"
 import { mountRoster } from "./mounted-roster"
+import { createRosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 import { hostOfflineOf } from "../host/host-offline"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(async () => () => undefined),
@@ -32,7 +34,7 @@ const JOINED = { spaceRowId: "joined:garage", spaceId: "garage" }
 
 it("raises a failure notice for the previews it could not read and keeps the roster", async () => {
 	const store = createFakeTranscriptStore()
-	vi.spyOn(store, "loadPage").mockRejectedValue(new Error("no record"))
+	vi.spyOn(store, "mainChat").mockRejectedValue(new Error("no record"))
 	const roster = mountRoster(store)
 
 	await roster.load({
@@ -49,7 +51,157 @@ it("raises a failure notice for the previews it could not read and keeps the ros
 		),
 	)
 	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
-	expect(roster.getState().previews.personal).toEqual({ default: undefined })
+	expect(roster.getState().previews.personal).toEqual({})
+})
+
+const neverAnswered = () => new Promise<never>(() => undefined)
+
+const heldRead = () => {
+	let release: () => void = () => undefined
+	const held = new Promise<void>((resolve) => {
+		release = resolve
+	})
+	return { held, release }
+}
+
+it("asks for the second space before the first one answers", async () => {
+	const store = createFakeTranscriptStore()
+	const other = await store.createSpace("Vocca")
+	const read = store.conversationPage
+	const { held, release } = heldRead()
+	const reads = vi
+		.spyOn(store, "conversationPage")
+		.mockImplementation(async (spaceId, ...rest) => {
+			if (spaceId === LOCAL.spaceId) {
+				await held
+			}
+			return read(spaceId, ...rest)
+		})
+	const roster = mountRoster(store)
+
+	const opening = roster.load({
+		spaces: [LOCAL, { spaceRowId: other.id, spaceId: other.id }],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+
+	await vi.waitFor(() =>
+		expect(reads).toHaveBeenCalledWith(other.id, null, 30, undefined),
+	)
+	release()
+	await opening
+})
+
+it("opens on the local spaces while a joined host never answers", async () => {
+	const store = createFakeTranscriptStore()
+	const read = store.bots
+	vi.spyOn(store, "bots").mockImplementation((spaceId, signal) =>
+		spaceId === JOINED.spaceId ? neverAnswered() : read(spaceId, signal),
+	)
+	const roster = mountRoster(store)
+
+	void roster.load({
+		spaces: [LOCAL, JOINED],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+
+	await vi.waitFor(() => expect(roster.getState().hasLoaded).toBe(true))
+	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
+})
+
+it("asks for the solo threads of the local spaces while a joined read is still out", async () => {
+	const store = createFakeTranscriptStore()
+	const read = store.bots
+	vi.spyOn(store, "bots").mockImplementation((spaceId, signal) =>
+		spaceId === JOINED.spaceId ? neverAnswered() : read(spaceId, signal),
+	)
+	const soloThreadReads = vi.spyOn(store, "mainChat")
+	const roster = createRosterController(store, {
+		queryClient: createQueryTestWrapper().queryClient,
+	})
+
+	void roster.load({
+		spaces: [LOCAL, JOINED],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+
+	await vi.waitFor(() =>
+		expect(soloThreadReads).toHaveBeenCalledWith("default", LOCAL.spaceId),
+	)
+})
+
+it("fills in the roster of a joined host that answers after the launch", async () => {
+	const store = createFakeTranscriptStore()
+	const garage = await store.createSpace("Garage")
+	const late = await store.createBot(newBotIdentity([]), garage.id)
+	const joined = { spaceRowId: "joined:garage", spaceId: garage.id }
+	const read = store.bots
+	const { held, release } = heldRead()
+	vi.spyOn(store, "bots").mockImplementation(async (spaceId, signal) => {
+		if (spaceId === garage.id) {
+			await held
+		}
+		return read(spaceId, signal)
+	})
+	const roster = mountRoster(store)
+
+	void roster.load({
+		spaces: [LOCAL, joined],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+	await vi.waitFor(() => expect(roster.getState().hasLoaded).toBe(true))
+	release()
+
+	await vi.waitFor(() =>
+		expect(
+			roster.getState().rosters[joined.spaceRowId]?.map((bot) => bot.id),
+		).toEqual([late.id]),
+	)
+})
+
+it("aborts the read of a joined host once nothing watches its roster", async () => {
+	const store = createFakeTranscriptStore()
+	const signals: (AbortSignal | undefined)[] = []
+	vi.spyOn(store, "conversationPage").mockImplementation(
+		(_spaceId, _cursor, _limit, signal) => {
+			signals.push(signal)
+			return neverAnswered()
+		},
+	)
+	const roster = mountRoster(store)
+	void roster.load({
+		spaces: [JOINED],
+		spaceRowId: JOINED.spaceRowId,
+		lastRowId: null,
+	})
+	await vi.waitFor(() => expect(signals).toHaveLength(1))
+
+	cleanup()
+
+	await vi.waitFor(() => expect(signals[0]?.aborted).toBe(true))
+})
+
+it("starts a write while a roster read is still out", async () => {
+	const store = createFakeTranscriptStore()
+	const roster = mountRoster(store)
+	await roster.load({
+		spaces: [LOCAL],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+	const reads = vi
+		.spyOn(store, "conversationPage")
+		.mockImplementation(neverAnswered)
+	const writes = vi.spyOn(store, "createBot")
+	void roster.refresh()
+	await vi.waitFor(() => expect(reads).toHaveBeenCalled())
+
+	void roster.create()
+
+	await vi.waitFor(() => expect(writes).toHaveBeenCalledOnce())
 })
 
 it("shows no row of the local space once a joined space opens and while its roster loads", async () => {
