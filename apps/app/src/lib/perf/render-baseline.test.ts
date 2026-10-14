@@ -45,6 +45,50 @@ vi.mock("@workspace/ui/components/markdown", async (importOriginal) => {
 	}
 })
 
+vi.mock(
+	"@workspace/ui/components/app-sidebar-bot-row",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@workspace/ui/components/app-sidebar-bot-row")
+			>()
+		const { createElement: element } = await import("react")
+		const { probeRender: probe } = await import(
+			"@workspace/ui/lib/render-probe"
+		)
+		return {
+			...actual,
+			BotRosterRow: (props: Parameters<typeof actual.BotRosterRow>[0]) => {
+				probe("RosterRow", props.bot.id)
+				return element(actual.BotRosterRow, props)
+			},
+		}
+	},
+)
+
+vi.mock(
+	"@workspace/ui/components/app-sidebar-conversation-row",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@workspace/ui/components/app-sidebar-conversation-row")
+			>()
+		const { createElement: element } = await import("react")
+		const { probeRender: probe } = await import(
+			"@workspace/ui/lib/render-probe"
+		)
+		return {
+			...actual,
+			ConversationRosterRow: (
+				props: Parameters<typeof actual.ConversationRosterRow>[0],
+			) => {
+				probe("RosterRow", props.conversation.id)
+				return element(actual.ConversationRosterRow, props)
+			},
+		}
+	},
+)
+
 vi.mock("@/lib/chat/create-driver", async () => {
 	const { withFakeHostWrites } = await import(
 		"@/lib/conversations/fake-host-writes"
@@ -422,12 +466,15 @@ const soloThreadRowOf = async (store: TranscriptStore) => {
 	return { spaceId: space.id, conversation: thread }
 }
 
-const storeMessageReceived = async (store: TranscriptStore) => {
+const storeMessageReceived = async (
+	store: TranscriptStore,
+	text = RECEIVED_TEXT,
+) => {
 	const [space] = await store.spaces()
 	const [bot] = await store.bots(space.id)
 	const { id: conversationId } = await store.mainChat(bot.id)
-	const turnId = `${bot.id}-received`
-	const id = `${bot.id}-received-message`
+	const turnId = `${bot.id}-received-${text}`
+	const id = `${bot.id}-received-message-${text}`
 	await store.startTurn({ conversationId, id: turnId, startedAt: Date.now() })
 	await store.openAssistantMessage({
 		authorBotId: bot.id,
@@ -437,7 +484,7 @@ const storeMessageReceived = async (store: TranscriptStore) => {
 		repliedToMessageId: null,
 		turnId,
 	})
-	await store.appendText(id, RECEIVED_TEXT)
+	await store.appendText(id, text)
 	await store.finalizeMessage(id, "complete")
 	await store.completeTurn(turnId, Date.now())
 }
@@ -477,6 +524,110 @@ const measureMessageReceived = async () => {
 		appSidebar: tally.countOf("AppSidebar"),
 		cacheEvents: cacheEvents.count(),
 		isShown: document.body.textContent?.includes(RECEIVED_TEXT) ?? false,
+	}
+}
+
+const EARLIER_TEXT = "An earlier message"
+
+const measureRowsOfMessageReceived = async () => {
+	const tally = tallyRenders()
+	const { store } = await mountApp()
+	await storeMessageReceived(store, EARLIER_TEXT)
+	await emitOnHost("conversation://updated", await soloThreadRowOf(store))
+	await settle(MOUNT_MS)
+	await storeMessageReceived(store)
+	const received = await soloThreadRowOf(store)
+	const receiverId = received.conversation.soloBotId ?? ""
+	tally.reset()
+
+	await emitOnHost("conversation://updated", received)
+	await settle(MOUNT_MS)
+
+	const rows = tally.entriesOf("RosterRow")
+	const [space] = await store.spaces()
+	const receiver = (await store.bots(space.id)).find(
+		({ id }) => id === receiverId,
+	)
+	return {
+		app: tally.countOf("App"),
+		receiverRow: rows.find(([id]) => id === receiverId)?.[1] ?? 0,
+		otherRows: rows.filter(([id]) => id !== receiverId).length,
+		isShownInRow:
+			receiver !== undefined &&
+			(rowFor(receiver.name).textContent?.includes(RECEIVED_TEXT) ?? false),
+	}
+}
+
+const createRoom = async (store: TranscriptStore, title: string) => {
+	const [space] = await store.spaces()
+	const [bot] = await store.bots(space.id)
+	return store.createConversation({
+		spaceId: space.id,
+		sectionId: null,
+		title,
+		botIds: [bot.id],
+	})
+}
+
+const speakIn = async (store: TranscriptStore, conversationId: string) => {
+	const turnId = `${conversationId}-spoken`
+	await store.startTurn({ conversationId, id: turnId, startedAt: Date.now() })
+	await store.appendUserMessage({
+		authorBotId: null,
+		content: RECEIVED_TEXT,
+		conversationId,
+		createdAt: Date.now(),
+		id: `${conversationId}-spoken-message`,
+		repliedToMessageId: null,
+		turnId,
+	})
+	await store.completeTurn(turnId, Date.now())
+}
+
+const pageRowOf = async (store: TranscriptStore, conversationId: string) => {
+	const [space] = await store.spaces()
+	const { pinned, conversations } = await store.conversationPage(
+		space.id,
+		null,
+		ROSTER_PAGE_SIZE,
+	)
+	const conversation = [...pinned, ...conversations].find(
+		({ id }) => id === conversationId,
+	)
+	return { spaceId: space.id, conversation }
+}
+
+const shownRowNames = () =>
+	[...document.querySelectorAll('[data-slot="roster-row-name"]')].map(
+		({ textContent }) => textContent,
+	)
+
+const measureRowMovedToTop = async () => {
+	const tally = tallyRenders()
+	layout = fakeLayout()
+	seedFirstRunDone()
+	const store = createFakeTranscriptStore()
+	harness.store = store
+	harness.driver = createFakeChatDriver({ stepMs: STEP_MS })
+	await seedRoster(store)
+	const older = await createRoom(store, "Older room")
+	await createRoom(store, "Newer room")
+	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
+	await settle(MOUNT_MS)
+	const [topBefore] = shownRowNames()
+	await speakIn(store, older.id)
+	const moved = await pageRowOf(store, older.id)
+	tally.reset()
+
+	await emitOnHost("conversation://updated", moved)
+	await settle(MOUNT_MS)
+
+	const [topAfter] = shownRowNames()
+	return {
+		app: tally.countOf("App"),
+		appSidebar: tally.countOf("AppSidebar"),
+		topBefore,
+		topAfter,
 	}
 }
 
@@ -714,13 +865,13 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
-			  "app": 18,
-			  "appSidebar": 6,
-			  "cacheEvents": 23,
+			  "app": 17,
+			  "appSidebar": 5,
+			  "cacheEvents": 21,
 			  "chunks": 11,
 			  "quietTurn": 2,
-			  "rosterBots": 6,
-			  "rosterBotsBySpace": 6,
+			  "rosterBots": 5,
+			  "rosterBotsBySpace": 5,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -731,13 +882,13 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
-			  "app": 29,
-			  "appSidebar": 6,
-			  "cacheEvents": 34,
+			  "app": 28,
+			  "appSidebar": 5,
+			  "cacheEvents": 32,
 			  "chunks": 22,
 			  "quietTurn": 2,
-			  "rosterBots": 6,
-			  "rosterBotsBySpace": 6,
+			  "rosterBots": 5,
+			  "rosterBotsBySpace": 5,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -748,12 +899,34 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureMessageReceived()).toMatchInlineSnapshot(`
 			{
-			  "app": 1,
+			  "app": 0,
 			  "appSidebar": 1,
-			  "cacheEvents": 5,
+			  "cacheEvents": 3,
 			  "isShown": true,
 			}
 		`)
+	})
+
+	it("renders the row of a received message alone, never App", async () => {
+		vi.useFakeTimers()
+
+		expect(await measureRowsOfMessageReceived()).toEqual({
+			app: 0,
+			receiverRow: 1,
+			otherRows: 0,
+			isShownInRow: true,
+		})
+	})
+
+	it("re-renders the roster, never App, when a row moves to the top", async () => {
+		vi.useFakeTimers()
+
+		expect(await measureRowMovedToTop()).toEqual({
+			app: 0,
+			appSidebar: 1,
+			topBefore: "Newer room",
+			topAfter: "Older room",
+		})
 	})
 
 	it("counts what the avatars write over sixty frames", async () => {

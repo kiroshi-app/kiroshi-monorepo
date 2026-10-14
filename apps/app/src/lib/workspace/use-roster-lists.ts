@@ -2,22 +2,22 @@ import { createElement, useMemo } from "react"
 
 import { SidebarListSkeleton } from "@workspace/ui/components/sidebar-list-skeleton"
 
+import { useRosterBots } from "./use-roster-bots"
 import { useRosterBotsBySpace } from "./use-roster-bots-by-space"
 import type { RosterLines } from "./use-roster-lines"
 import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
+import { useControllerState } from "../use-controller"
+import { useSharedStructure } from "../use-shared-structure"
 import {
 	toRailSignals,
 	toSpaceBadges,
 	withBadges,
 } from "../chat/sidebar-badges"
-import {
-	presentParticipants,
-	toConversationBots,
-	toRosterConversations,
-} from "../conversations/roster-conversations"
+import { useBotPreviews } from "../chat/use-chat"
+import { toRosterConversations } from "../conversations/roster-conversations"
 import {
 	useConversationPreviews,
 	useConversationWorkers,
@@ -46,26 +46,46 @@ export const useRosterLists = ({
 	rosterView,
 	waitingMissionCount,
 }: RosterListsInput) => {
-	const { conversationRuntimes, roster } = core
+	const { chat, conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
-	const { now, previews, rosters, working } = rosterLines
+	const { lines, now, rosters, working } = rosterLines
+	const { bots, missions, rosteredSpaceId, soloThreads } = rosterView
 	const {
-		bots,
+		conversationPreviews: storedConversationPreviews,
 		conversationRosters,
 		conversations,
-		missions,
-		rosteredSpaceId,
-		settingsConversation,
-	} = rosterView
+		previews: storedPreviews,
+	} = useControllerState(roster.controller)
 
-	const rosterBotsBySpace = useRosterBotsBySpace({
-		badges,
-		missions,
-		now,
-		previews,
-		rosters,
-		working,
+	const previews = useBotPreviews({
+		controller: chat.controller,
+		lines,
+		stored: storedPreviews,
+		soloThreads,
 	})
+
+	const rosterBots = useSharedStructure(
+		useRosterBots({
+			badges,
+			bots,
+			missions,
+			now,
+			previews,
+			rosteredSpaceId,
+			working,
+		}),
+	)
+
+	const rosterBotsBySpace = useSharedStructure(
+		useRosterBotsBySpace({
+			badges,
+			missions,
+			now,
+			previews,
+			rosters,
+			working,
+		}),
+	)
 
 	const conversationIds = useMemo(
 		() =>
@@ -83,70 +103,66 @@ export const useRosterLists = ({
 	const conversationPreviews = useConversationPreviews(
 		conversationRuntimes,
 		conversationIds,
-		roster.state.conversationPreviews,
+		storedConversationPreviews,
 	)
 
-	const rosterConversations = useMemo(
-		() =>
-			withMissions(
-				withBadges(
-					toRosterConversations(
-						conversations,
-						{ working: conversationWorkers, previews: conversationPreviews },
-						now,
-					),
-					conversationBadges,
-				),
-				missionsIn(missions, rosteredSpaceId),
-			),
-		[
-			conversations,
-			rosteredSpaceId,
-			conversationWorkers,
-			conversationPreviews,
-			now,
-			conversationBadges,
-			missions,
-		],
-	)
-
-	const seatedBots = useMemo(
-		() =>
-			settingsConversation
-				? toConversationBots(presentParticipants(settingsConversation), bots)
-				: [],
-		[settingsConversation, bots],
-	)
-
-	const rosterConversationsBySpace = useMemo(
-		() =>
-			Object.fromEntries(
-				Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
-					spaceId,
-					withMissions(
-						withBadges(
-							toRosterConversations(
-								spaceRooms,
-								{
-									working: conversationWorkers,
-									previews: conversationPreviews,
-								},
-								now,
-							),
-							conversationBadges,
+	const rosterConversations = useSharedStructure(
+		useMemo(
+			() =>
+				withMissions(
+					withBadges(
+						toRosterConversations(
+							conversations,
+							{ working: conversationWorkers, previews: conversationPreviews },
+							now,
 						),
-						missionsIn(missions, spaceId),
+						conversationBadges,
 					),
-				]),
-			),
-		[
-			conversationRosters,
-			conversationWorkers,
-			conversationPreviews,
-			now,
-			conversationBadges,
-			missions,
-		],
+					missionsIn(missions, rosteredSpaceId),
+				),
+			[
+				conversations,
+				rosteredSpaceId,
+				conversationWorkers,
+				conversationPreviews,
+				now,
+				conversationBadges,
+				missions,
+			],
+		),
+	)
+
+	const rosterConversationsBySpace = useSharedStructure(
+		useMemo(
+			() =>
+				Object.fromEntries(
+					Object.entries(conversationRosters).map(([spaceId, spaceRooms]) => [
+						spaceId,
+						withMissions(
+							withBadges(
+								toRosterConversations(
+									spaceRooms,
+									{
+										working: conversationWorkers,
+										previews: conversationPreviews,
+									},
+									now,
+								),
+								conversationBadges,
+							),
+							missionsIn(missions, spaceId),
+						),
+					]),
+				),
+			[
+				conversationRosters,
+				conversationWorkers,
+				conversationPreviews,
+				now,
+				conversationBadges,
+				missions,
+			],
+		),
 	)
 
 	const badgesBySpaceId = useMemo(
@@ -178,12 +194,10 @@ export const useRosterLists = ({
 	return {
 		badgesBySpaceId,
 		railSignals,
+		rosterBots,
 		rosterBotsBySpace,
 		rosterConversations,
 		rosterConversationsBySpace,
 		rosterSkeleton,
-		seatedBots,
 	}
 }
-
-export type RosterLists = ReturnType<typeof useRosterLists>

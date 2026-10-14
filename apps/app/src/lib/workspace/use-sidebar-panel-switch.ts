@@ -35,7 +35,6 @@ export type SidebarRosters = {
 
 type SidebarPanelSwitchInput = {
 	core: SidebarPanelSwitchCore
-	sidebarRosters: SidebarRosters
 	sidebarMissions: {
 		loadedSpaceId: string | null
 		showLastMission: () => void
@@ -83,7 +82,6 @@ const showLastConversation = (
 
 export const useSidebarPanelSwitch = ({
 	core,
-	sidebarRosters,
 	sidebarMissions,
 }: SidebarPanelSwitchInput) => {
 	const { openedMission, roster, shownMemory, user } = core
@@ -106,7 +104,7 @@ export const useSidebarPanelSwitch = ({
 	}, [openTab, loadedSpaceId, openedMission, showLastMission])
 
 	const switchPanel = useCallback(
-		(panel: SidebarPanel) => {
+		(panel: SidebarPanel, sidebarRosters: SidebarRosters) => {
 			openSidebarTab(panel)
 			if (panel === "missions") {
 				return
@@ -115,13 +113,7 @@ export const useSidebarPanelSwitch = ({
 			openedMission.leave()
 			showLastConversation(roster.controller, shownMemory, sidebarRosters)
 		},
-		[
-			openSidebarTab,
-			openedMission,
-			roster.controller,
-			shownMemory,
-			sidebarRosters,
-		],
+		[openSidebarTab, openedMission, roster.controller, shownMemory],
 	)
 
 	return { openTab, openSidebarTab: switchPanel }

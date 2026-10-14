@@ -5,25 +5,24 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
-import { useEffect } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 
 import {
 	createRosterController,
 	type RosterController,
-	type RosterState,
 } from "./roster-controller"
+import { type RosterFrame, rosterFrameReader } from "./roster-frame"
 import { type RosterLine, rosterLineKey, type SoloThreads } from "./roster-line"
 
-import { useController } from "../use-controller"
 import { listen, onHostReconnected } from "@/lib/host"
 import type { ConversationInPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { useListEnd } from "../query/use-list-end"
 
 export type Roster = {
-	state: RosterState
+	state: RosterFrame
 	controller: RosterController
 	listEnd: ListEnd
 }
@@ -119,7 +118,7 @@ const useRosterListEnd = (
 const openedLineOf = ({
 	spaceRowId,
 	selectedBotId,
-}: RosterState): RosterLine | null =>
+}: RosterFrame): RosterLine | null =>
 	spaceRowId === null || selectedBotId === null
 		? null
 		: { spaceId: spaceRowId, botId: selectedBotId }
@@ -131,7 +130,7 @@ const isKnownIn = (soloThreads: SoloThreads, line: RosterLine) =>
 
 const useOpenedSoloThread = (
 	controller: RosterController,
-	state: RosterState,
+	state: RosterFrame,
 ) => {
 	const line = openedLineOf(state)
 	useQuery({
@@ -142,7 +141,7 @@ const useOpenedSoloThread = (
 
 export const useRosterReads = (
 	controller: RosterController,
-	state: RosterState,
+	state: RosterFrame,
 ) => {
 	useObservedRosters(controller, Object.keys(state.rosters))
 	useOpenedSoloThread(controller, state)
@@ -152,9 +151,11 @@ export const useRosterReads = (
 
 export const useRoster = (store: TranscriptStore): Roster => {
 	const queryClient = useQueryClient()
-	const roster = useController(() =>
+	const [controller] = useState(() =>
 		createRosterController(store, { queryClient }),
 	)
-	const listEnd = useRosterReads(roster.controller, roster.state)
-	return { ...roster, listEnd }
+	const [readFrame] = useState(() => rosterFrameReader(controller.getState))
+	const state = useSyncExternalStore(controller.subscribe, readFrame)
+	const listEnd = useRosterReads(controller, state)
+	return { state, controller, listEnd }
 }

@@ -1,4 +1,3 @@
-import { AppSidebar } from "@workspace/ui/components/app-sidebar"
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
@@ -6,13 +5,13 @@ import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { AppDialogs } from "@/components/app-dialogs"
 import { StartupScreen } from "@/components/startup-screen"
-import { titleBarWindowControls } from "@/components/window-caption-controls"
 import { WorkspaceBody } from "@/components/workspace-body"
+import { WorkspaceSidebar } from "@/components/workspace-sidebar"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
 import { ThreadAuthorshipContext } from "@/lib/chat/thread-authorship"
 import { ConversationSeatingContext } from "@/lib/conversations/use-conversation-seating"
-import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
+import { isSidebarResizable } from "@/lib/host"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
@@ -23,7 +22,6 @@ import {
 } from "@/lib/spaces/use-joined-spaces"
 import { useApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import { useRosterLines } from "@/lib/workspace/use-roster-lines"
-import { useRosterLists } from "@/lib/workspace/use-roster-lists"
 import { useRosterView } from "@/lib/workspace/use-roster-view"
 import { useSettingsPanels } from "@/lib/workspace/use-settings-panels"
 import { useSidebarMissions } from "@/lib/workspace/use-sidebar-missions"
@@ -54,25 +52,9 @@ export function App() {
 	useWorkspaceSubscriptions({ core, drivers, rosterView })
 	const rosterLines = useRosterLines({ core, drivers, rosterView })
 	const sidebarMissions = useSidebarMissions({ core, rosterLines })
-	const rosterLists = useRosterLists({
-		core,
-		drivers,
-		rosterLines,
-		rosterView,
-		waitingMissionCount: sidebarMissions.waitingCount,
-	})
 	const overlay = useWorkspaceOverlay({ core, rosterLines, rosterView, scopes })
 	const collapsedSectionIds = useSpaceSections({ core, rosterLines })
-	const sidebarTab = useSidebarPanelSwitch({
-		core,
-		sidebarMissions,
-		sidebarRosters: {
-			botsBySpaceId: rosterLists.rosterBotsBySpace,
-			conversationsBySpaceId: rosterLists.rosterConversationsBySpace,
-			sectionsBySpaceId: core.sections.state.sections,
-			collapsedSectionIds,
-		},
-	})
+	const sidebarTab = useSidebarPanelSwitch({ core, sidebarMissions })
 	const companionMenu = useCompanionMenuLookup({
 		actions: rosterLines.sidebarActions,
 		conversationRosters: core.roster.state.conversationRosters,
@@ -131,43 +113,17 @@ export function App() {
 				onWidthChange={overlay.changeSidebarWidth}
 				isResizable={isSidebarResizable()}
 				sidebar={
-					<AppSidebar
-						data-tauri-drag-region="deep"
-						insetWindowControls={hasOverlayWindowControls()}
-						windowControls={titleBarWindowControls()}
-						bots={rosterLines.rosterBots}
-						haveBotsFailedToLoad={roster.state.hasFailedToLoad}
-						rosterSkeleton={rosterLists.rosterSkeleton}
-						rosterListEnd={roster.listEnd}
-						botsBySpaceId={rosterLists.rosterBotsBySpace}
-						conversations={rosterLists.rosterConversations}
-						conversationsBySpaceId={rosterLists.rosterConversationsBySpace}
-						badgesBySpaceId={rosterLists.badgesBySpaceId}
-						railDots={rosterLists.railSignals}
-						missionsBySpaceId={sidebarMissions.panelsBySpaceId}
-						openPanel={sidebarTab.openTab}
-						onOpenPanelChange={sidebarTab.openSidebarTab}
+					<WorkspaceSidebar
 						collapsedSectionIds={collapsedSectionIds}
-						sectionsBySpaceId={core.sections.state.sections}
-						updateBadge={rosterLines.updateBadge}
-						isSpaceSwitchingEnabled={!overlay.isOverlayOpen}
-						onOpenSearch={overlay.search.open}
-						{...rosterLines.sidebarActions}
-						onCreateConversation={rosterLines.startConversation}
-						selectedBotId={rosterView.selectedBotId ?? undefined}
-						selectedConversationId={
-							rosterView.selectedConversationId ?? undefined
-						}
-						selectedSpaceId={switcher.selectedSpaceId ?? undefined}
-						spaces={switcher.spaces}
-						hostBySpaceId={switcher.hostBySpaceId}
-						invitations={switcher.invitations}
-						onAcceptInvitation={switcher.onAcceptInvitation}
-						onDeclineInvitation={switcher.onDeclineInvitation}
-						onRetryInvitation={switcher.onRetryInvitation}
-						onSpaceSwitcherOpenChange={switcher.onSpaceSwitcherOpenChange}
-						onShare={panels.openSpaceMembers}
-						user={overlay.userSettings}
+						core={core}
+						drivers={drivers}
+						overlay={overlay}
+						panels={panels}
+						rosterLines={rosterLines}
+						rosterView={rosterView}
+						sidebarMissions={sidebarMissions}
+						sidebarTab={sidebarTab}
+						switcher={switcher}
 					/>
 				}
 			>
@@ -229,7 +185,6 @@ export function App() {
 				overlay={overlay}
 				panels={panels}
 				rosterLines={rosterLines}
-				rosterLists={rosterLists}
 				rosterView={rosterView}
 				scopes={scopes}
 			/>

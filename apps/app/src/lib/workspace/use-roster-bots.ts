@@ -3,7 +3,6 @@ import { useMemo } from "react"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
 import { toRosterBots } from "../bots/bot-settings"
-import { useRosterClock } from "../bots/use-roster-clock"
 import { withLineBadges } from "../chat/sidebar-badges"
 import type { useBotBadges } from "../chat/use-bot-badges"
 import {
@@ -23,6 +22,7 @@ type RosterBotsInput = {
 	badges: ReturnType<typeof useBotBadges>
 	bots: Bot[]
 	missions: ReturnType<typeof missionsBySpaceId>
+	now: number
 	previews: ReturnType<typeof useBotPreviews>
 	rosteredSpaceId: string | null
 	working: ReturnType<typeof useBotActivity>
@@ -32,6 +32,7 @@ export const useRosterBots = ({
 	badges,
 	bots,
 	missions,
+	now,
 	previews,
 	rosteredSpaceId,
 	working,
@@ -40,8 +41,7 @@ export const useRosterBots = ({
 	// rosterBots count of PRF1 render baseline read one per render instead of one per recompute
 	"use no memo"
 
-	const now = useRosterClock()
-	const rosterBots = useMemo(() => {
+	return useMemo(() => {
 		probeRender("rosterBots")
 		return withMissions(
 			withLineBadges(
@@ -59,6 +59,4 @@ export const useRosterBots = ({
 			missionsIn(missions, rosteredSpaceId),
 		)
 	}, [bots, rosteredSpaceId, working, previews, now, badges, missions])
-
-	return { now, rosterBots }
 }
