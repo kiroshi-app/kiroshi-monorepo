@@ -79,8 +79,12 @@ fn an_open_mission(home: &Home, window: &WebviewWindow<MockRuntime>) -> Mission 
 }
 
 fn changes_of(home: &Home) -> mpsc::Receiver<Value> {
+	heard(home, CHANGED_EVENT)
+}
+
+fn heard(home: &Home, event_name: &str) -> mpsc::Receiver<Value> {
 	let (sender, received) = mpsc::channel();
-	home.app.listen(CHANGED_EVENT, move |event| {
+	home.app.listen(event_name, move |event| {
 		let change = serde_json::from_str(event.payload()).expect("the payload is JSON");
 		sender.send(change).expect("the test still listens");
 	});
@@ -121,22 +125,13 @@ fn appended(window: &WebviewWindow<MockRuntime>, conversation_id: &str) {
 	.expect("the message is appended");
 }
 
-fn feed_updates_of(home: &Home) -> mpsc::Receiver<Value> {
-	let (sender, received) = mpsc::channel();
-	home.app.listen_any(UPDATED_EVENT, move |event| {
-		let update = serde_json::from_str(event.payload()).expect("the payload is JSON");
-		sender.send(update).expect("the test still listens");
-	});
-	received
-}
-
 #[test]
 fn a_message_appended_to_a_mission_thread_stays_out_of_the_feed_while_a_topic_one_lands() {
 	let home = Home::new();
 	let window = window(&home.app);
 	let thread_id = an_open_mission(&home, &window).thread_conversation_id;
 	let topic_id = a_topic(&window);
-	let updates = feed_updates_of(&home);
+	let updates = heard(&home, UPDATED_EVENT);
 
 	appended(&window, &thread_id);
 	appended(&window, &topic_id);
