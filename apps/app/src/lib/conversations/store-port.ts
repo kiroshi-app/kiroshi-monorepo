@@ -13,6 +13,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationPage,
 	EnvEntry,
 	EnvScope,
 	McpServerMark,
@@ -135,6 +136,11 @@ export type TranscriptStore = TranscriptPort & {
 	) => Promise<void>
 	removeBotFromSpace: (botId: string, spaceId: string) => Promise<void>
 	conversations: (spaceId: string) => Promise<Conversation[]>
+	conversationPage: (
+		spaceId: string,
+		cursor: string | null,
+		limit: number,
+	) => Promise<ConversationPage>
 	createConversation: (draft: ConversationDraft) => Promise<Conversation>
 	updateConversation: (
 		conversationId: string,

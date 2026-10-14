@@ -158,7 +158,7 @@ describe("useCompanionArrivals", () => {
 		const away = await anAwayConversation()
 		const { store, controller, spaceId, conversationId, invitedBotId } = away
 		await listening(controller)
-		const reading = vi.spyOn(store, "conversations")
+		const reading = vi.spyOn(store, "conversationPage")
 
 		const arrival = arrivalOf(conversationId, invitedBotId)
 		await announcing(arrival)
@@ -172,7 +172,9 @@ describe("useCompanionArrivals", () => {
 		const { store, controller, conversationId, invitedBotId } = away
 		const known = participantsOf(away)
 		await listening(controller)
-		vi.spyOn(store, "conversations").mockRejectedValue(new Error("no record"))
+		vi.spyOn(store, "conversationPage").mockRejectedValue(
+			new Error("no record"),
+		)
 
 		await announcing(arrivalOf(conversationId, invitedBotId))
 

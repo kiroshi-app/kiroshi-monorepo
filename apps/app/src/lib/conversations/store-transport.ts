@@ -13,6 +13,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationPage,
 	EnvEntry,
 	EnvScope,
 	McpServerMark,
@@ -294,6 +295,9 @@ export const conversationStore: TranscriptStore = {
 
 	conversations: (spaceId: string) =>
 		invoke<Conversation[]>("conversation_list", { spaceId }),
+
+	conversationPage: (spaceId: string, cursor: string | null, limit: number) =>
+		invoke<ConversationPage>("conversation_page", { spaceId, cursor, limit }),
 
 	createConversation: ({
 		spaceId,

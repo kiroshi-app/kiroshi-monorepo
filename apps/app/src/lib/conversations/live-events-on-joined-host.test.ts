@@ -619,7 +619,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 			lastRowId: null,
 		})
 		await settled()
-		const reads = vi.spyOn(store, "conversations")
+		const reads = vi.spyOn(store, "conversationPage")
 		return { store, roster, rendered, reads }
 	}
 

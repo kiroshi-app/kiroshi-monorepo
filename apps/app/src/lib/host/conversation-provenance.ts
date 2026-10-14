@@ -18,6 +18,8 @@ const HELD_ID_KEYS = [
 
 export const LOCAL_IDS_COMMAND = "conversation_local_ids"
 
+const PAGE_COMMAND = "conversation_page"
+
 const ANSWERS_NAMING_THEIR_IDS: ReadonlySet<string> = new Set([
 	"conversation_main_chat",
 	"conversation_create",
@@ -101,8 +103,14 @@ const ownIdsOf = (answer: unknown): string[] =>
 const listedIdsOf = (answer: unknown): string[] =>
 	[answer].flat().filter(isText)
 
+const pagedIdsOf = (answer: unknown): string[] =>
+	isFields(answer)
+		? [answer.pinned, answer.conversations].flatMap(ownIdsOf)
+		: []
+
 const idsAnswered = (command: string, answer: unknown) => [
 	...(ANSWERS_NAMING_THEIR_IDS.has(command) ? ownIdsOf(answer) : []),
+	...(command === PAGE_COMMAND ? pagedIdsOf(answer) : []),
 	...(command === LOCAL_IDS_COMMAND ? listedIdsOf(answer) : []),
 	...conversationIdsNamedIn(answer),
 ]

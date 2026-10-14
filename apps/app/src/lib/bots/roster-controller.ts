@@ -1,4 +1,8 @@
-import { type QueryClient, queryOptions } from "@tanstack/react-query"
+import {
+	infiniteQueryOptions,
+	type QueryClient,
+	queryOptions,
+} from "@tanstack/react-query"
 
 import type {
 	BotOutputStyle,
@@ -10,6 +14,17 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 import { type RosterLine, rosterLinesIn, type SoloThreads } from "./roster-line"
+import {
+	cursorAfter,
+	ROSTER_PAGE_SIZE,
+	type RosterPage,
+	type RosterPages,
+	type RosterRead,
+	rosterReadOf,
+	topicsIn,
+	withFreshHead,
+	withHeldRead,
+} from "./roster-pages"
 
 import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
@@ -77,16 +92,16 @@ type RosterEntry = RosterSpace & {
 	lastRowId: string | null
 }
 
-type RosterRead = {
-	bots: Bot[]
-	conversations: Conversation[]
-}
-
-const rosterQueryOf = (space: RosterSpace, read: () => Promise<RosterRead>) =>
-	queryOptions({
+const rosterQueryOf = (
+	space: RosterSpace,
+	read: (cursor: string | null) => Promise<RosterPage>,
+) =>
+	infiniteQueryOptions({
 		queryKey: conversationQueryKeys.roster(space.spaceRowId, space.spaceId),
-		queryFn: read,
-		meta: { rendersErrorInline: true },
+		queryFn: ({ pageParam }) => read(pageParam),
+		initialPageParam: null as string | null,
+		getNextPageParam: cursorAfter,
+		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
 	})
 
 const PREVIEW_FAILURE: FailureMeta = {
@@ -133,6 +148,9 @@ export type RosterController = {
 	load: (opening: RosterOpening) => Promise<void>
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
+	refresh: () => Promise<void>
+	restateConversation: (conversation: Conversation) => void
+	forgetConversation: (conversationId: string) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
 	spacesOfBot: (botId: string) => string[]
 	spaceOfConversation: (conversationId: string) => string | undefined
@@ -381,11 +399,12 @@ type RosterBase = Omit<
 
 const rosterBaseOf = (
 	choice: RosterChoice,
-	reads: (RosterRead | undefined)[],
+	paged: (RosterPages | undefined)[],
 	failures: boolean[],
 	pendings: boolean[],
 ): RosterBase => {
 	const spaceRowIds = heldSpaceRowIdsOf(choice)
+	const reads = paged.map((pages) => pages && rosterReadOf(pages))
 	const chosenIndex = choice.spaceRowId
 		? spaceRowIds.indexOf(choice.spaceRowId)
 		: -1
@@ -489,18 +508,24 @@ export const createRosterController = (
 	const commit = <Result>(write: () => Promise<Result>) =>
 		enqueue(() => runMutation(queryClient, write))
 
-	const readRosterIn = async (spaceId: string): Promise<RosterRead> => {
-		const [bots, conversations] = await Promise.all([
-			store.bots(spaceId),
-			store.conversations(spaceId),
+	const readBotsAt = (spaceId: string, cursor: string | null) =>
+		cursor === null ? store.bots(spaceId) : Promise.resolve(NO_BOTS)
+
+	const readRosterPageIn = async (
+		spaceId: string,
+		cursor: string | null,
+	): Promise<RosterPage> => {
+		const [bots, page] = await Promise.all([
+			readBotsAt(spaceId, cursor),
+			store.conversationPage(spaceId, cursor, ROSTER_PAGE_SIZE),
 		])
-		return { bots, conversations }
+		return { bots, conversations: topicsIn(page), nextCursor: page.nextCursor }
 	}
 
 	const rosterQuery = (spaceRowId: string) => {
 		const spaceId = hostSpaceIdOf(spaceRowId)
-		return rosterQueryOf({ spaceRowId, spaceId }, () =>
-			enqueue(() => readRosterIn(spaceId)),
+		return rosterQueryOf({ spaceRowId, spaceId }, (cursor) =>
+			enqueue(() => readRosterPageIn(spaceId, cursor)),
 		)
 	}
 
@@ -583,8 +608,15 @@ export const createRosterController = (
 		if (spaceRowId === null) {
 			return
 		}
-		queryClient.setQueryData(rosterQuery(spaceRowId).queryKey, (held) =>
-			update(held ?? { bots: NO_BOTS, conversations: NO_CONVERSATIONS }),
+		queryClient.setQueryData(rosterQuery(spaceRowId).queryKey, (paged) =>
+			withHeldRead(
+				paged,
+				update(
+					paged
+						? rosterReadOf(paged)
+						: { bots: NO_BOTS, conversations: NO_CONVERSATIONS },
+				),
+			),
 		)
 	}
 
@@ -694,6 +726,47 @@ export const createRosterController = (
 
 	const reload = () =>
 		queryClient.invalidateQueries({ queryKey: conversationQueryKeys.rosters() })
+
+	const rereadInFull = (spaceRowId: string) =>
+		queryClient.invalidateQueries({
+			queryKey: rosterQuery(spaceRowId).queryKey,
+			exact: true,
+		})
+
+	const rereadHeadIn = async (spaceRowId: string) => {
+		const { queryKey } = rosterQuery(spaceRowId)
+		const head = await enqueue(() =>
+			readRosterPageIn(hostSpaceIdOf(spaceRowId), null),
+		)
+		await queryClient.cancelQueries({ queryKey, exact: true })
+		queryClient.setQueryData(
+			queryKey,
+			(paged) => paged && withFreshHead(paged, head),
+		)
+	}
+
+	const rereadRosterIn = (spaceRowId: string) =>
+		rosterReadIn(spaceRowId) === undefined
+			? rereadInFull(spaceRowId)
+			: rereadHeadIn(spaceRowId).catch(() => rereadInFull(spaceRowId))
+
+	const refresh = async () => {
+		await Promise.all(heldSpaceRowIdsOf(chosen()).map(rereadRosterIn))
+	}
+
+	const reviseRostersHolding = (
+		conversationId: string,
+		revise: (conversations: Conversation[]) => Conversation[],
+	) => {
+		const { conversationRosters } = current()
+		for (const [spaceRowId, conversations] of Object.entries(
+			conversationRosters,
+		)) {
+			if (conversations.some(({ id }) => id === conversationId)) {
+				holdConversations(spaceRowId, revise(conversations))
+			}
+		}
+	}
 
 	const reloadAndYield = async () => {
 		await reload()
@@ -818,7 +891,7 @@ export const createRosterController = (
 		choose({ spaces, spaceRowId, lastRowId })
 		await Promise.all(
 			spaces.map((space) =>
-				queryClient.prefetchQuery(rosterQuery(space.spaceRowId)),
+				queryClient.prefetchInfiniteQuery(rosterQuery(space.spaceRowId)),
 			),
 		)
 		if (spaces.every(isReadyToOpen)) {
@@ -855,6 +928,20 @@ export const createRosterController = (
 		retryLoad: () => load(chosen()),
 
 		reload,
+
+		refresh,
+
+		restateConversation: (written: Conversation) =>
+			reviseRostersHolding(written.id, (conversations) =>
+				conversations.map((conversation) =>
+					conversation.id === written.id ? written : conversation,
+				),
+			),
+
+		forgetConversation: (conversationId: string) =>
+			reviseRostersHolding(conversationId, (conversations) =>
+				conversations.filter(({ id }) => id !== conversationId),
+			),
 
 		hostSpaceIdOf,
 
