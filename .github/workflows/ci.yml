@@ -169,14 +169,11 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Boot two simulators while the app builds
+      - name: Boot the simulator while the app builds
         run: |
           simulator=$(xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \(' | grep -oE '[0-9A-F-]{36}')
-          second_simulator=$(xcrun simctl create "iPhone 17 (threads)" "iPhone 17" "iOS$(cat .xcode-version)")
           echo "SIMULATOR=$simulator" >> "$GITHUB_ENV"
-          echo "SECOND_SIMULATOR=$second_simulator" >> "$GITHUB_ENV"
           nohup xcrun simctl boot "$simulator" > /dev/null 2>&1 &
-          nohup xcrun simctl boot "$second_simulator" > /dev/null 2>&1 &
 
       - name: Generate
         run: bun run ios:generate
@@ -186,20 +183,7 @@ jobs:
 
       - name: Test on the simulator
         timeout-minutes: 50
-        run: |
-          set -o pipefail
-          thread_classes="GroupThreadTests ThreadAccessibilityTests ThreadHeaderTests ThreadOpeningTests ThreadSendingTests"
-          test_on() {
-            xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$1" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never "${@:3}" test-without-building 2>&1 | sed "s/^/[$2] /"
-          }
-          test_on "$SIMULATOR" rest $(printf -- '-skip-testing:KiroshiUITests/%s ' $thread_classes) &
-          rest=$!
-          test_on "$SECOND_SIMULATOR" threads $(printf -- '-only-testing:KiroshiUITests/%s ' $thread_classes) &
-          threads=$!
-          status=0
-          wait $rest || status=1
-          wait $threads || status=1
-          exit $status
+        run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building
 
       - name: Swift format
         run: swift format lint --recursive --strict apps/ios
