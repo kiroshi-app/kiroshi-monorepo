@@ -1,0 +1,324 @@
+// @vitest-environment happy-dom
+
+import { act, cleanup, renderHook } from "@testing-library/react"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
+
+import { newBotIdentity } from "./bot-settings"
+import {
+	createRosterController,
+	type RosterController,
+} from "./roster-controller"
+import { useRosterReads } from "./use-roster"
+
+import { useControllerState } from "../use-controller"
+import { conversationQueryKeys } from "../conversations/conversation-query-keys"
+import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import type { TranscriptStore } from "../conversations/store-port"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
+
+type HostHandler = (event: { payload: unknown }) => void
+
+const host = vi.hoisted(() => ({
+	handlers: new Map<string, HostHandler>(),
+	reconnects: new Set<(hostId: string) => void>(),
+}))
+
+vi.mock("@/lib/host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host")>()),
+	listen: async (event: string, handler: HostHandler) => {
+		host.handlers.set(event, handler)
+		return () => host.handlers.delete(event)
+	},
+	onHostReconnected: (onReconnected: (hostId: string) => void) => {
+		host.reconnects.add(onReconnected)
+		return () => host.reconnects.delete(onReconnected)
+	},
+}))
+
+const LOCAL = { spaceRowId: "personal", spaceId: "personal" }
+
+const SHED_HOST = "shed"
+
+const emitOnHost = (event: string, payload: unknown) =>
+	act(async () => {
+		host.handlers.get(event)?.({ payload })
+	})
+
+const reconnectHost = (hostId: string) =>
+	act(async () => {
+		for (const onReconnected of host.reconnects) {
+			onReconnected(hostId)
+		}
+	})
+
+const neverAnswered = () => new Promise<never>(() => undefined)
+
+const nextTick = () => act(async () => undefined)
+
+const seededStore = async () => {
+	const store = createFakeTranscriptStore()
+	const garage = await store.createSpace("Garage")
+	const shed = await store.createSpace("Shed")
+	const companion = await store.createBot(newBotIdentity([]), LOCAL.spaceId)
+	for (const space of [LOCAL.spaceId, garage.id, shed.id]) {
+		if (space !== LOCAL.spaceId) {
+			await store.addBotToSpace(companion.id, space)
+		}
+		await store.createConversation({
+			spaceId: space,
+			sectionId: null,
+			title: `Topic of ${space}`,
+			botIds: [companion.id],
+		})
+	}
+	return {
+		store,
+		companion,
+		garage: { spaceRowId: garage.id, spaceId: garage.id },
+		shed: { spaceRowId: `joined:${SHED_HOST}`, spaceId: shed.id },
+	}
+}
+
+type Seeded = Awaited<ReturnType<typeof seededStore>>
+
+const mountRoster = (store: TranscriptStore) => {
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	const controller = createRosterController(store, { queryClient })
+	renderHook(() => useRosterReads(controller, useControllerState(controller)), {
+		wrapper,
+	})
+	return { controller, queryClient }
+}
+
+const loadedRoster = async () => {
+	const seeded = await seededStore()
+	const mounted = mountRoster(seeded.store)
+	await act(() =>
+		mounted.controller.load({
+			spaces: [LOCAL, seeded.garage, seeded.shed],
+			spaceRowId: LOCAL.spaceRowId,
+			lastRowId: null,
+		}),
+	)
+	const pageReads = vi.spyOn(seeded.store, "conversationPage")
+	const threadReads = vi.spyOn(seeded.store, "mainChat")
+	return { ...seeded, ...mounted, pageReads, threadReads }
+}
+
+const firstTopicIn = async (store: TranscriptStore, spaceId: string) => {
+	const page = await store.conversationPage(spaceId, null, 30)
+	const topic = page.conversations.find(({ soloBotId }) => soloBotId === null)
+	if (!topic) {
+		throw new Error(`no topic in ${spaceId}`)
+	}
+	return topic
+}
+
+const topicTitlesIn = (controller: RosterController, spaceRowId: string) =>
+	controller
+		.getState()
+		.conversationRosters[spaceRowId].map(({ title }) => title)
+
+const rosterKeyOf = ({ spaceRowId, spaceId }: Seeded["garage"]) =>
+	conversationQueryKeys.roster(spaceRowId, spaceId)
+
+beforeEach(() => {
+	host.handlers.clear()
+	host.reconnects.clear()
+})
+
+afterEach(() => {
+	cleanup()
+	vi.useRealTimers()
+})
+
+it("writes a conversation updated on the host into the roster of its space and reads nothing", async () => {
+	const { store, garage, controller, queryClient, pageReads } =
+		await loadedRoster()
+	const topic = await firstTopicIn(store, garage.spaceId)
+	pageReads.mockClear()
+
+	await emitOnHost("conversation://updated", {
+		spaceId: garage.spaceId,
+		conversation: {
+			...topic,
+			title: "Renamed on the host",
+			lastWord: { text: "Answered just now", at: 99, authorBotId: null },
+		},
+	})
+
+	expect(topicTitlesIn(controller, garage.spaceRowId)).toEqual([
+		"Renamed on the host",
+	])
+	expect(topicTitlesIn(controller, LOCAL.spaceRowId)).toEqual([
+		`Topic of ${LOCAL.spaceId}`,
+	])
+	expect(controller.getState().conversationPreviews[topic.id]?.text).toBe(
+		"Answered just now",
+	)
+	expect(pageReads).not.toHaveBeenCalled()
+	expect(queryClient.isFetching()).toBe(0)
+})
+
+it("adds a conversation created on the host to the roster of its space and reads nothing", async () => {
+	const { store, garage, companion, controller, pageReads } =
+		await loadedRoster()
+	await store.createConversation({
+		spaceId: garage.spaceId,
+		sectionId: null,
+		title: "Created on the host",
+		botIds: [companion.id],
+	})
+	const created = await firstTopicIn(store, garage.spaceId)
+	pageReads.mockClear()
+
+	await emitOnHost("conversation://created", {
+		spaceId: garage.spaceId,
+		conversation: created,
+	})
+
+	expect(topicTitlesIn(controller, garage.spaceRowId)).toEqual([
+		"Created on the host",
+		`Topic of ${garage.spaceId}`,
+	])
+	expect(pageReads).not.toHaveBeenCalled()
+})
+
+it("rereads each space concerned once, after a quiet delay, for companion and deletion events", async () => {
+	const { garage, companion, queryClient } = await loadedRoster()
+	vi.useFakeTimers()
+	const invalidations = vi.spyOn(queryClient, "invalidateQueries")
+
+	await emitOnHost("companion://deleted", {
+		id: companion.id,
+		spaceId: garage.spaceId,
+	})
+	await emitOnHost("conversation://deleted", {
+		spaceId: garage.spaceId,
+		conversationId: "unknown",
+	})
+	await emitOnHost("companion://updated", { id: companion.id })
+	expect(invalidations).not.toHaveBeenCalled()
+
+	await act(() => vi.advanceTimersByTimeAsync(250))
+
+	expect(invalidations.mock.calls.map(([filters]) => filters)).toEqual(
+		expect.arrayContaining([
+			{ queryKey: rosterKeyOf(garage), exact: true },
+			{ queryKey: rosterKeyOf(LOCAL), exact: true },
+		]),
+	)
+	expect(
+		invalidations.mock.calls.filter(
+			([filters]) =>
+				JSON.stringify(filters?.queryKey) ===
+				JSON.stringify(rosterKeyOf(garage)),
+		),
+	).toHaveLength(1)
+})
+
+it("rereads the roster of the reconnected joined host alone and marks its solo threads stale without reading them", async () => {
+	const { shed, garage, companion, queryClient, pageReads, threadReads } =
+		await loadedRoster()
+	const shedThread = conversationQueryKeys.soloThread(
+		shed.spaceRowId,
+		shed.spaceId,
+		companion.id,
+	)
+	const localThread = conversationQueryKeys.soloThread(
+		LOCAL.spaceRowId,
+		LOCAL.spaceId,
+		companion.id,
+	)
+	queryClient.setQueryData(shedThread, "thread-in-shed")
+	queryClient.setQueryData(localThread, "thread-at-home")
+
+	await reconnectHost(SHED_HOST)
+
+	await vi.waitFor(() => expect(pageReads).toHaveBeenCalledOnce())
+	expect(pageReads.mock.calls[0][0]).toBe(shed.spaceId)
+	expect(pageReads).not.toHaveBeenCalledWith(
+		garage.spaceId,
+		expect.anything(),
+		expect.anything(),
+		expect.anything(),
+	)
+	expect(queryClient.getQueryState(shedThread)?.isInvalidated).toBe(true)
+	expect(queryClient.getQueryState(localThread)?.isInvalidated).toBe(false)
+	expect(threadReads).not.toHaveBeenCalled()
+})
+
+it("aborts a roster read it cancels", async () => {
+	const { store } = await seededStore()
+	const signals: (AbortSignal | undefined)[] = []
+	vi.spyOn(store, "conversationPage").mockImplementation(
+		(_spaceId, _cursor, _limit, signal) => {
+			signals.push(signal)
+			return neverAnswered()
+		},
+	)
+	const { controller, queryClient } = mountRoster(store)
+	void controller.load({
+		spaces: [LOCAL],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+	await vi.waitFor(() => expect(signals).toHaveLength(1))
+
+	await act(() =>
+		queryClient.cancelQueries({ queryKey: conversationQueryKeys.rosters() }),
+	)
+
+	expect(signals[0]?.aborted).toBe(true)
+})
+
+it("aborts a solo thread read it cancels", async () => {
+	const { store, companion } = await seededStore()
+	const signals: (AbortSignal | undefined)[] = []
+	vi.spyOn(store, "mainChat").mockImplementation((_botId, _spaceId, signal) => {
+		signals.push(signal)
+		return neverAnswered()
+	})
+	const { controller, queryClient } = mountRoster(store)
+	const thread = controller.soloThreadQuery({
+		spaceId: LOCAL.spaceRowId,
+		botId: companion.id,
+	})
+	const read = queryClient.fetchQuery(thread)
+	await vi.waitFor(() => expect(signals).toHaveLength(1))
+
+	await act(() => queryClient.cancelQueries({ queryKey: thread.queryKey }))
+
+	expect(signals[0]?.aborted).toBe(true)
+	await expect(read).rejects.toThrow()
+})
+
+it("leaves the roster state untouched by a cache event outside the roster keys", async () => {
+	const { controller, queryClient } = await loadedRoster()
+	const held = controller.getState()
+	const listener = vi.fn()
+	const stop = controller.subscribe(listener)
+
+	queryClient.setQueryData(["bots", "model-catalogue"], [])
+	await nextTick()
+
+	expect(listener).not.toHaveBeenCalled()
+	expect(controller.getState()).toBe(held)
+	stop()
+})
+
+it("notifies its subscribers once for several roster cache events in one tick", async () => {
+	const { store, garage, controller } = await loadedRoster()
+	const topic = await firstTopicIn(store, garage.spaceId)
+	const listener = vi.fn()
+	const stop = controller.subscribe(listener)
+
+	for (const title of ["First", "Second", "Third"]) {
+		controller.holdPageRow(garage.spaceId, { ...topic, title })
+	}
+	await nextTick()
+
+	expect(listener).toHaveBeenCalledOnce()
+	expect(topicTitlesIn(controller, garage.spaceRowId)).toEqual(["Third"])
+	stop()
+})

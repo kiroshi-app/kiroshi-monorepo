@@ -31,7 +31,10 @@ import type {
 	ScopedEvent,
 } from "../agent/contract"
 import { agentTransport } from "../agent/transport"
-import { createRosterController } from "../bots/roster-controller"
+import {
+	createRosterController,
+	type RosterSpace,
+} from "../bots/roster-controller"
 import { useRosterReads } from "../bots/use-roster"
 import { createChatController } from "../chat/chat-controller"
 import {
@@ -49,6 +52,7 @@ import { aMission } from "../missions/mission-fixtures"
 import { useLiveMissions } from "../missions/use-live-missions"
 import { invalidateOnHostReconnect } from "../query/host-invalidations"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
+import { joinedRowIdOf } from "../spaces/joined-spaces-controller"
 
 type Handler = (event: { event: string; id: number; payload: unknown }) => void
 
@@ -596,15 +600,22 @@ describe("a room fed by every writer", () => {
 })
 
 describe("the roster and the conversation list fed by every writer", () => {
-	const CHANGES = [
-		["conversation://created", { spaceId: "personal", conversation: {} }],
-		["conversation://updated", { spaceId: "personal", conversation: {} }],
+	const REREADS = [
 		["conversation://deleted", { spaceId: "personal", conversationId: "c" }],
 		["companion://updated", { id: "b", bot: {} }],
 		["companion://deleted", { id: "b", spaceId: "personal" }],
 	] as const
 
-	const mountedRoster = async () => {
+	const PATCHES = ["conversation://created", "conversation://updated"] as const
+
+	const LOCAL_ROSTER = { spaceRowId: "personal", spaceId: "personal" }
+
+	const HOSTED_ROSTER = {
+		spaceRowId: joinedRowIdOf(JOINED),
+		spaceId: "personal",
+	}
+
+	const mountedRoster = async (space: RosterSpace = LOCAL_ROSTER) => {
 		const store = createFakeTranscriptStore()
 		const { queryClient, wrapper } = createQueryTestWrapper()
 		onTestFinished(invalidateOnHostReconnect(queryClient))
@@ -614,16 +625,35 @@ describe("the roster and the conversation list fed by every writer", () => {
 			{ wrapper },
 		)
 		await roster.load({
-			spaces: [{ spaceRowId: "personal", spaceId: "personal" }],
-			spaceRowId: "personal",
+			spaces: [space],
+			spaceRowId: space.spaceRowId,
 			lastRowId: null,
 		})
 		await settled()
 		const reads = vi.spyOn(store, "conversationPage")
-		return { store, roster, rendered, reads }
+		const writeConversation = (title: string) =>
+			store.createConversation({
+				spaceId: "personal",
+				sectionId: null,
+				title,
+				botIds: [BOT],
+			})
+		const titles = () =>
+			(roster.getState().conversationRosters[space.spaceRowId] ?? []).map(
+				({ title }) => title,
+			)
+		return { store, roster, rendered, reads, writeConversation, titles }
 	}
 
-	it.each(CHANGES)(
+	const storedRowTitled = async (store: TranscriptStore, title: string) => {
+		const { conversations } = await store.conversationPage("personal", null, 30)
+		const row = conversations.find(
+			(conversation) => conversation.title === title,
+		)
+		return { spaceId: "personal", conversation: row }
+	}
+
+	it.each(REREADS)(
 		"reads the roster again on a local %s",
 		async (event, payload) => {
 			const { reads } = await mountedRoster()
@@ -634,7 +664,22 @@ describe("the roster and the conversation list fed by every writer", () => {
 		},
 	)
 
-	it.each(CHANGES)(
+	it.each(PATCHES)(
+		"writes a local %s into the roster without reading it",
+		async (event) => {
+			const { store, reads, writeConversation, titles } = await mountedRoster()
+			await writeConversation("Written elsewhere")
+			const stored = await storedRowTitled(store, "Written elsewhere")
+			reads.mockClear()
+
+			await emitLocally(event, stored)
+
+			expect(titles()).toContain("Written elsewhere")
+			expect(reads).not.toHaveBeenCalled()
+		},
+	)
+
+	it.each(REREADS)(
 		"reads the roster again on %s from the joined host only while a joined space is active",
 		async (event, payload) => {
 			const { reads } = await mountedRoster()
@@ -650,8 +695,28 @@ describe("the roster and the conversation list fed by every writer", () => {
 		},
 	)
 
-	it("reads the roster again when the joined host comes back up", async () => {
-		const { reads } = await mountedRoster()
+	it.each(PATCHES)(
+		"writes %s from the joined host only into the roster while a joined space is active",
+		async (event) => {
+			const { store, reads, writeConversation, titles } = await mountedRoster()
+			await joinHost()
+			await settled()
+			await writeConversation("Written elsewhere")
+			const stored = await storedRowTitled(store, "Written elsewhere")
+			reads.mockClear()
+
+			await emitLocally(event, stored)
+			await settled()
+			expect(titles()).not.toContain("Written elsewhere")
+
+			await emitOnHost(event, stored)
+			await vi.waitFor(() => expect(titles()).toContain("Written elsewhere"))
+			expect(reads).not.toHaveBeenCalled()
+		},
+	)
+
+	it("reads the roster of the joined host again when it comes back up", async () => {
+		const { reads } = await mountedRoster(HOSTED_ROSTER)
 		await joinHost()
 		await settled()
 
@@ -660,26 +725,21 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
 	})
 
-	const rosterOnHost = async () => {
-		const { store, roster, rendered } = await mountedRoster()
+	it("reads nothing of a local roster when the joined host comes back up", async () => {
+		const { reads } = await mountedRoster()
 		await joinHost()
 		await settled()
-		const writeConversation = (title: string) =>
-			store.createConversation({
-				spaceId: "personal",
-				sectionId: null,
-				title,
-				botIds: [BOT],
-			})
-		const titles = () =>
-			(roster.getState().conversationRosters.personal ?? []).map(
-				({ title }) => title,
-			)
-		return { rendered, writeConversation, titles }
-	}
+
+		await reconnectHost()
+		await settled()
+
+		expect(reads).not.toHaveBeenCalled()
+	})
 
 	it("lists a conversation written during the cut once the relay of the joined Space reopens", async () => {
-		const { writeConversation, titles } = await rosterOnHost()
+		const { writeConversation, titles } = await mountedRoster(HOSTED_ROSTER)
+		await joinHost()
+		await settled()
 		await writeConversation("Opened during the cut")
 
 		await reopenRelay(JOINED)
@@ -688,7 +748,9 @@ describe("the roster and the conversation list fed by every writer", () => {
 	})
 
 	it("lists nothing new when the relay of another Space reopens", async () => {
-		const { writeConversation, titles } = await rosterOnHost()
+		const { writeConversation, titles } = await mountedRoster(HOSTED_ROSTER)
+		await joinHost()
+		await settled()
 		await writeConversation("Held by another Space")
 
 		await reopenRelay("attic")
@@ -698,7 +760,10 @@ describe("the roster and the conversation list fed by every writer", () => {
 	})
 
 	it("lists nothing new once the roster is gone", async () => {
-		const { rendered, writeConversation, titles } = await rosterOnHost()
+		const { rendered, writeConversation, titles } =
+			await mountedRoster(HOSTED_ROSTER)
+		await joinHost()
+		await settled()
 		rendered.unmount()
 		await writeConversation("After the roster left")
 
@@ -709,7 +774,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 	})
 
 	it("reads the roster once when the relay reopens before the socket", async () => {
-		const { reads } = await mountedRoster()
+		const { reads } = await mountedRoster(HOSTED_ROSTER)
 		await joinHost()
 		await settled()
 
@@ -724,7 +789,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 	})
 
 	it("reads the roster once when the socket reopens before the relay", async () => {
-		const { reads } = await mountedRoster()
+		const { reads } = await mountedRoster(HOSTED_ROSTER)
 		await joinHost()
 		await settled()
 

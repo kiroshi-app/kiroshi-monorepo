@@ -455,7 +455,11 @@ const WRITES: WriteCase[] = [
 	{
 		member: "mainChat",
 		write: () => conversationStore.mainChat("b-1", "s-1"),
-		call: ["conversation_main_chat", { botId: "b-1", spaceId: "s-1" }],
+		call: [
+			"conversation_main_chat",
+			{ botId: "b-1", spaceId: "s-1" },
+			{ signal: undefined },
+		],
 	},
 	{
 		member: "recordProviderSession",

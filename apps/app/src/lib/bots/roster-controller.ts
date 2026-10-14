@@ -31,6 +31,7 @@ import {
 	topicsIn,
 	withFreshHead,
 	withHeldRead,
+	withPageRow,
 } from "./roster-pages"
 
 import { failureReporterIn } from "../failure-report"
@@ -46,6 +47,7 @@ import type {
 	Bot,
 	BotDraft,
 	Conversation,
+	ConversationInPage,
 	Participant,
 	RosterPin,
 	SpaceError,
@@ -58,7 +60,10 @@ import type {
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import type { FailureMeta } from "../query/query-client"
 import { runMutation } from "../query/run-mutation"
-import { isJoinedRowId } from "../spaces/joined-spaces-controller"
+import {
+	isJoinedRowId,
+	joinedRowIdOf,
+} from "../spaces/joined-spaces-controller"
 
 export type BotPreviews = Record<string, LastWord | undefined>
 
@@ -113,7 +118,7 @@ const rosterQueryOf = (space: RosterSpace, read: RosterPageRead) =>
 		queryKey: conversationQueryKeys.roster(space.spaceRowId, space.spaceId),
 		queryFn: isJoined(space)
 			? ({ pageParam, signal }) => read(pageParam, answeredInTime(signal))
-			: ({ pageParam }) => read(pageParam),
+			: ({ pageParam, signal }) => read(pageParam, signal),
 		initialPageParam: null as string | null,
 		getNextPageParam: cursorAfter,
 		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
@@ -124,10 +129,12 @@ const PREVIEW_FAILURE: FailureMeta = {
 	raisedIn: "use-roster",
 }
 
+const ROSTER_REREAD_DELAY_MS = 250
+
 const soloThreadQueryOf = (
 	line: RosterLine,
 	spaceId: string,
-	read: () => Promise<string>,
+	read: (signal: AbortSignal) => Promise<string>,
 ) =>
 	queryOptions({
 		queryKey: conversationQueryKeys.soloThread(
@@ -135,9 +142,9 @@ const soloThreadQueryOf = (
 			spaceId,
 			line.botId,
 		),
-		queryFn: read,
+		queryFn: ({ signal }) => read(signal),
 		gcTime: Number.POSITIVE_INFINITY,
-		meta: PREVIEW_FAILURE,
+		meta: { ...PREVIEW_FAILURE, rereadsItselfOnReconnect: true },
 	})
 
 type RosterQuery = ReturnType<typeof rosterQueryOf>
@@ -151,8 +158,10 @@ export type RosterController = {
 	load: (opening: RosterOpening) => Promise<void>
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
-	refresh: () => Promise<void>
-	restateConversation: (conversation: Conversation) => void
+	holdPageRow: (spaceId: string | null, row: ConversationInPage) => void
+	rereadSpaceSoon: (spaceId: string | null) => void
+	rereadSpacesOfBotSoon: (botId: string) => void
+	catchUpWithHost: (hostId: string) => void
 	forgetConversation: (conversationId: string) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
 	spacesOfBot: (botId: string) => string[]
@@ -563,8 +572,8 @@ export const createRosterController = (
 
 	const soloThreadQuery = (line: RosterLine) => {
 		const spaceId = hostSpaceIdOf(line.spaceId)
-		return soloThreadQueryOf(line, spaceId, async () => {
-			const chat = await store.mainChat(line.botId, spaceId)
+		return soloThreadQueryOf(line, spaceId, async (signal) => {
+			const chat = await store.mainChat(line.botId, spaceId, signal)
 			return chat.id
 		})
 	}
@@ -753,8 +762,60 @@ export const createRosterController = (
 			? rereadInFull(spaceRowId)
 			: rereadHeadIn(spaceRowId).catch(() => rereadInFull(spaceRowId))
 
-	const refresh = async () => {
-		await Promise.all(heldSpaceRowIdsOf(chosen()).map(rereadRosterIn))
+	const heldRowIdOf = (spaceId: string | null) =>
+		heldSpaceRowIdsOf(chosen()).find(
+			(spaceRowId) => hostSpaceIdOf(spaceRowId) === spaceId,
+		)
+
+	const holdPageRow = (spaceId: string | null, row: ConversationInPage) => {
+		const spaceRowId = heldRowIdOf(spaceId)
+		if (spaceRowId === undefined) {
+			return
+		}
+		queryClient.setQueryData(
+			rosterQuery(spaceRowId).queryKey,
+			(paged) => paged && withPageRow(paged, row),
+		)
+	}
+
+	const pendingRereads = new Map<string, ReturnType<typeof setTimeout>>()
+
+	const rereadSoon = (spaceRowId: string) => {
+		clearTimeout(pendingRereads.get(spaceRowId))
+		pendingRereads.set(
+			spaceRowId,
+			setTimeout(() => {
+				pendingRereads.delete(spaceRowId)
+				void rereadInFull(spaceRowId)
+			}, ROSTER_REREAD_DELAY_MS),
+		)
+	}
+
+	const rereadSpaceSoon = (spaceId: string | null) => {
+		const spaceRowId = heldRowIdOf(spaceId)
+		if (spaceRowId !== undefined) {
+			rereadSoon(spaceRowId)
+		}
+	}
+
+	const rereadSpacesOfBotSoon = (botId: string) => {
+		const { spaceRowId } = chosen()
+		const seatedIn = spacesOfBot(botId)
+		const spaceRowIds =
+			seatedIn.length === 0 && spaceRowId !== null ? [spaceRowId] : seatedIn
+		spaceRowIds.forEach(rereadSoon)
+	}
+
+	const catchUpWithHost = (hostId: string) => {
+		const spaceRowId = joinedRowIdOf(hostId)
+		if (!heldSpaceRowIdsOf(chosen()).includes(spaceRowId)) {
+			return
+		}
+		void rereadRosterIn(spaceRowId)
+		void queryClient.invalidateQueries({
+			queryKey: conversationQueryKeys.soloThreadsIn(spaceRowId),
+			refetchType: "none",
+		})
 	}
 
 	const reviseRostersHolding = (
@@ -912,14 +973,13 @@ export const createRosterController = (
 
 		reload,
 
-		refresh,
+		holdPageRow,
 
-		restateConversation: (written: Conversation) =>
-			reviseRostersHolding(written.id, (conversations) =>
-				conversations.map((conversation) =>
-					conversation.id === written.id ? written : conversation,
-				),
-			),
+		rereadSpaceSoon,
+
+		rereadSpacesOfBotSoon,
+
+		catchUpWithHost,
 
 		forgetConversation: (conversationId: string) =>
 			reviseRostersHolding(conversationId, (conversations) =>

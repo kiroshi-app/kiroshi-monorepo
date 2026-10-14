@@ -22,7 +22,7 @@ type HostHandler = (event: { payload: unknown }) => void
 
 const host = vi.hoisted(() => ({
 	handlers: new Map<string, HostHandler>(),
-	reconnects: new Set<() => void>(),
+	reconnects: new Set<(hostId: string) => void>(),
 }))
 
 vi.mock("@/lib/host", async (importOriginal) => ({
@@ -31,7 +31,7 @@ vi.mock("@/lib/host", async (importOriginal) => ({
 		host.handlers.set(event, handler)
 		return () => host.handlers.delete(event)
 	},
-	onHostReconnected: (onReconnected: () => void) => {
+	onHostReconnected: (onReconnected: (hostId: string) => void) => {
 		host.reconnects.add(onReconnected)
 		return () => host.reconnects.delete(onReconnected)
 	},
@@ -68,10 +68,10 @@ const emitOnHost = (event: string, payload: unknown) =>
 		host.handlers.get(event)?.({ payload })
 	})
 
-const reconnectHost = () =>
+const reconnectHost = (hostId: string) =>
 	act(async () => {
 		for (const onReconnected of host.reconnects) {
-			onReconnected()
+			onReconnected(hostId)
 		}
 	})
 
@@ -150,7 +150,12 @@ describe("the roster conversations read a page at a time", () => {
 		const roster = await mountRoster(store)
 
 		expect(reads).toHaveBeenCalledOnce()
-		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
+		expect(reads).toHaveBeenCalledWith(
+			"personal",
+			null,
+			30,
+			expect.any(AbortSignal),
+		)
 		expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 6))
 		expect(roster.getState().bots.map(({ id }) => id)).toEqual(["default"])
 		expect(sentinel()).not.toBeNull()
@@ -165,7 +170,12 @@ describe("the roster conversations read a page at a time", () => {
 		await waitFor(() =>
 			expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 1)),
 		)
-		expect(reads).toHaveBeenLastCalledWith("personal", "30", 30, undefined)
+		expect(reads).toHaveBeenLastCalledWith(
+			"personal",
+			"30",
+			30,
+			expect.any(AbortSignal),
+		)
 	})
 
 	it("shows the loading row and asks once for a next page however often the end comes into view while it reads", async () => {
@@ -234,57 +244,49 @@ describe("a refresh of the roster pages scrolled through", () => {
 		return { ...paged, roster }
 	}
 
-	it("keeps every page scrolled through and reads the first page alone when a conversation is created", async () => {
-		const { store, reads, roster } = await scrolledRoster()
-		const created = await store.createConversation({
+	it("shows a created conversation at the top of the pages scrolled through without reading any page", async () => {
+		const { store, readPage, reads, roster } = await scrolledRoster()
+		await store.createConversation({
 			spaceId: LOCAL.spaceId,
 			sectionId: null,
 			title: "Conversation 36",
 			botIds: ["default"],
 		})
+		const [created] = (await readPage("personal", null, 30)).conversations
+		reads.mockClear()
 
 		await emitOnHost("conversation://created", {
 			spaceId: LOCAL.spaceId,
 			conversation: created,
 		})
 
-		await waitFor(() =>
-			expect(shownIds(roster)).toEqual(conversationIdsRanked(36, 1)),
-		)
-		expect(reads).toHaveBeenCalledOnce()
-		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
+		expect(shownIds(roster)).toEqual(conversationIdsRanked(36, 1))
+		expect(reads).not.toHaveBeenCalled()
 	})
 
-	it("shows a conversation written to outside the first page at the top, once", async () => {
+	it("shows a conversation written to outside the first page at the top, once, without reading any page", async () => {
 		const { readPage, reads, roster } = await scrolledRoster()
 		const [written] = (await readPage("personal", "30", 30)).conversations
-		reads.mockImplementation(async (spaceId, cursor, limit) => {
-			const page = await readPage(spaceId, cursor, limit)
-			return {
-				...page,
-				conversations: [written, ...page.conversations.slice(0, 29)],
-			}
-		})
+		reads.mockClear()
 
 		await emitOnHost("conversation://updated", {
 			spaceId: LOCAL.spaceId,
 			conversation: { ...written, title: "Answered just now" },
 		})
 
-		await waitFor(() => expect(shownIds(roster)[0]).toBe(written.id))
+		expect(shownIds(roster)[0]).toBe(written.id)
 		expect(shownIds(roster).filter((id) => id === written.id)).toHaveLength(1)
 		expect(shownIds(roster)).toHaveLength(35)
+		expect(reads).not.toHaveBeenCalled()
 	})
 
-	it("keeps every page scrolled through and reads the first page alone when the host reconnects", async () => {
+	it("reads nothing of a local space when a joined host reconnects", async () => {
 		const { reads, roster } = await scrolledRoster()
 
-		await reconnectHost()
+		await reconnectHost("garage")
 
-		await waitFor(() => expect(reads).toHaveBeenCalledOnce())
-		expect(reads).toHaveBeenCalledWith("personal", null, 30, undefined)
+		expect(reads).not.toHaveBeenCalled()
 		expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 1))
-		expect(sentinel()).toBeNull()
 	})
 
 	it("drops a deleted conversation from a page scrolled through", async () => {
