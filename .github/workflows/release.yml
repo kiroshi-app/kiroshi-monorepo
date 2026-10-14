@@ -26,6 +26,7 @@ jobs:
             target: ""
             args: ""
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 120
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
