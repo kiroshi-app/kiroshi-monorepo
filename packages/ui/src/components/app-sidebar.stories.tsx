@@ -931,9 +931,6 @@ export const LoadingRoster = meta.story({
 
 const PAGED_SPACES = SPACES.slice(0, 2)
 
-const listEndNodesIn = (canvasElement: HTMLElement) =>
-	canvasElement.ownerDocument.querySelectorAll('[data-slot^="list-end"]')
-
 export const RosterReadingNextPage = meta.story({
 	args: {
 		spaces: PAGED_SPACES,
@@ -975,7 +972,9 @@ export const RosterWithoutPaging = meta.story({
 	tags: ["test-only"],
 	play: async ({ canvasElement }) => {
 		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
-		await expect(listEndNodesIn(canvasElement)).toHaveLength(0)
+		await expect(
+			canvasElement.ownerDocument.querySelectorAll('[data-slot^="list-end"]'),
+		).toHaveLength(0)
 	},
 })
 
