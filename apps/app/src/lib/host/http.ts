@@ -100,7 +100,7 @@ const refusalOf = async (response: Response): Promise<Refusal> => {
 		: { reason: text, isCommandError: false }
 }
 
-const isTimeout = (reason: unknown): boolean =>
+export const isTimeout = (reason: unknown): boolean =>
 	reason instanceof DOMException && reason.name === "TimeoutError"
 
 const messageOf = (reason: unknown): string =>

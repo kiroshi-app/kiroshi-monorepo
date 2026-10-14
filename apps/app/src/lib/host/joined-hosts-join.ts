@@ -1,6 +1,7 @@
 import type { InvokeArgs } from "@tauri-apps/api/core"
 
-import { createHttpHost, type HttpHost } from "./http"
+import { hostOfflineOf } from "./host-offline"
+import { createHttpHost, type HttpHost, isTimeout } from "./http"
 import {
 	isJoinedSpaceError,
 	joinRefusalNoticeOf,
@@ -38,6 +39,22 @@ type JoinedHostsJoinOptions = Pick<
 
 export const describeRejection = (reason: unknown): string =>
 	reason instanceof Error ? reason.message : String(reason)
+
+const settledBefore = <T>(
+	pending: Promise<T>,
+	signal: AbortSignal,
+): Promise<T> =>
+	new Promise((resolve, reject) => {
+		const abandon = () => reject(signal.reason)
+		if (signal.aborted) {
+			abandon()
+			return
+		}
+		signal.addEventListener("abort", abandon, { once: true })
+		pending
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", abandon))
+	})
 
 export const createJoinedHostsJoin = ({
 	store,
@@ -125,13 +142,32 @@ export const createJoinedHostsJoin = ({
 		return new Error(`joined host ${id}: ${failure}`)
 	}
 
+	const goOffline = (id: string, reason: unknown): never => {
+		down.markDown(id)
+		throw hostOfflineOf(describeRejection(reason))
+	}
+
+	const openConnectionBefore = async (id: string, signal?: AbortSignal) => {
+		if (!signal) {
+			return openConnection(id)
+		}
+		try {
+			return await settledBefore(openConnection(id), signal)
+		} catch (reason) {
+			if (isTimeout(reason)) {
+				goOffline(id, reason)
+			}
+			throw reason
+		}
+	}
+
 	const invokeOnceOpen = async <T>(
 		id: string,
 		command: string,
 		args?: InvokeArgs,
 		signal?: AbortSignal,
 	): Promise<T> => {
-		const host = await openConnection(id)
+		const host = await openConnectionBefore(id, signal)
 		if (!host) {
 			throw unreachable(id)
 		}

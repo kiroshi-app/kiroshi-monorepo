@@ -511,6 +511,58 @@ describe("the active host", () => {
 		expect(localCommands(local)).not.toContain("mission_list")
 	})
 
+	it("rejects a read held by an opening host once it times out, and shows the host down", async () => {
+		const { hosts } = joinedHostsOf({
+			join: () => new Promise(() => undefined),
+		})
+		void hosts.activate("garage")
+		const reading = new AbortController()
+
+		const answer = hosts.invoke(
+			"conversation_page",
+			{ spaceId: "personal", cursor: null, limit: 30 },
+			{ signal: reading.signal },
+		)
+		reading.abort(new DOMException("too late", "TimeoutError"))
+
+		await expect(answer).rejects.toEqual({
+			kind: "hostOffline",
+			detail: "too late",
+		})
+		expect(hosts.getState().connections.garage).toEqual({ status: "down" })
+	})
+
+	it("rejects a read held by an opening host with the reason it was aborted, and keeps opening", async () => {
+		let open: () => void = () => undefined
+		const { hosts, join } = joinedHostsOf({
+			join: (id) =>
+				new Promise((resolve) => {
+					open = () => resolve(joinedConnection(id))
+				}),
+		})
+		const activating = hosts.activate("garage")
+		const reading = new AbortController()
+		const cancelled = new DOMException("cancelled", "AbortError")
+
+		const answer = hosts.invoke(
+			"conversation_page",
+			{ spaceId: "personal", cursor: null, limit: 30 },
+			{ signal: reading.signal },
+		)
+		reading.abort(cancelled)
+
+		await expect(answer).rejects.toBe(cancelled)
+		expect(hosts.getState().connections.garage).toEqual({
+			status: "connecting",
+		})
+		open()
+		await activating
+		await expect(
+			hosts.invoke("mission_list", { conversationId: "c1" }),
+		).resolves.toBe("joined")
+		expect(join).toHaveBeenCalledOnce()
+	})
+
 	it("names the joined Space id from the moment the joined host is selected", async () => {
 		const { hosts } = joinedHostsOf({
 			join: () => new Promise(() => undefined),
