@@ -61,23 +61,20 @@ const cursorAfter = (
 		? null
 		: { closedSince, cursor: nextCursor }
 
-const isFirstSeen =
-	(seenIds: Set<string>) =>
-	({ mission }: MissionInSpace): boolean => {
-		if (seenIds.has(mission.id)) {
-			return false
-		}
+const withoutRepeats = (entries: MissionInSpace[]): MissionInSpace[] => {
+	const seenIds = new Set<string>()
+	return entries.filter(({ mission }) => {
+		const isRepeat = seenIds.has(mission.id)
 		seenIds.add(mission.id)
-		return true
-	}
+		return !isRepeat
+	})
+}
 
 const spaceMissionsReadOf = ({
 	pages,
 }: InfiniteData<SpaceFeedPage>): SpaceMissionsRead => ({
 	closedSince: pages[0].closedSince,
-	entries: pages
-		.flatMap(({ missions }) => missions)
-		.filter(isFirstSeen(new Set())),
+	entries: withoutRepeats(pages.flatMap(({ missions }) => missions)),
 })
 
 export type SpaceMissionsView = SpaceMissionGroups & {

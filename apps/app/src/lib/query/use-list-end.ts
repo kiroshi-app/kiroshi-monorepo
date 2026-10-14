@@ -22,8 +22,8 @@ export const useListEnd = ({
 			) {
 				return
 			}
-			const observer = new IntersectionObserver(([entry]) => {
-				if (entry?.isIntersecting) {
+			const observer = new IntersectionObserver((entries) => {
+				if (entries.some(({ isIntersecting }) => isIntersecting)) {
 					void fetchNextPage({ cancelRefetch: false })
 				}
 			})
