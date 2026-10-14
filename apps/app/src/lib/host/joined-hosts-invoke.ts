@@ -63,7 +63,7 @@ const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
 	"account",
 ])
 
-export type HostInvokeOptions = Partial<InvokeOptions> & {
+type HostInvokeOptions = Partial<InvokeOptions> & {
 	signal?: AbortSignal
 }
 
