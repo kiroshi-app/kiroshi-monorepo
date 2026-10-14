@@ -12,11 +12,7 @@ export type CatalogueScope = RecentScope & {
 
 export const catalogueTransport = {
 	search: ({ query, spaceId }: CatalogueScope) =>
-		invoke<Catalogue>("search_catalogue", {
-			query,
-			spaceId,
-			allSpaces: false,
-		}),
+		invoke<Catalogue>("search_catalogue", { query, spaceId }),
 	recent: ({ spaceId }: RecentScope) =>
-		invoke<CatalogueChat[]>("search_recent", { spaceId, allSpaces: false }),
+		invoke<CatalogueChat[]>("search_recent", { spaceId }),
 }

@@ -115,7 +115,6 @@ it("reads the messages and the catalogue of a query", async () => {
 	expect(port.messages).toHaveBeenCalledWith({
 		text: "roadmap",
 		spaceId: "personal",
-		allSpaces: false,
 	})
 })
 

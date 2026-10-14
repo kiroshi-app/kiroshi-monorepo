@@ -163,7 +163,7 @@ are open to it, each kept inside the shared space:
 | `hosting_invite_member` | `spaceId` |
 | `hosting_withdraw_invitation` | `spaceId` |
 | `hosting_remove_member` | `spaceId` |
-| `search_messages` | `query.spaceId`, with `query.allSpaces` `false` |
+| `search_messages` | `query.spaceId` |
 | `agent_shutdown` | `scope.conversationId` and `scope.botId` |
 | `agent_live_sessions_in_space` | `spaceId` |
 | `env_list` | `scope` |

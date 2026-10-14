@@ -29,7 +29,6 @@ enum Check {
 	Child(SpaceChild),
 	PluginScope(SpaceChild),
 	EnvOwner(SpaceChild),
-	NotAllSpaces,
 	Absent,
 }
 
@@ -61,14 +60,7 @@ const fn optional_child(kind: SpaceChild, argument: &'static str) -> Held {
 }
 
 const SPACE_ID: &[Held] = &[space("/spaceId")];
-const SPACE_FILTER: &[Held] = &[
-	space("/spaceId"),
-	Held { argument: "/allSpaces", check: Check::NotAllSpaces, is_optional: false },
-];
-const QUERY_FILTER: &[Held] = &[
-	space("/query/spaceId"),
-	Held { argument: "/query/allSpaces", check: Check::NotAllSpaces, is_optional: false },
-];
+const QUERY_FILTER: &[Held] = &[space("/query/spaceId")];
 const ENV_SCOPE: &[Held] = &[env_owner(Bot, "/scope")];
 const ENV_WRITE_SCOPE: &[Held] = &[env_owner(BotHeldAlone, "/scope")];
 const PLUGIN_SCOPE: &[Held] =
@@ -293,9 +285,9 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("routine_renew_lease", Reach::Scoped(ROUTINE_RUN_ID)),
 	("routine_close_run", Reach::Scoped(ROUTINE_RUN_ID)),
 	("routine_key", Reach::Scoped(ROUTINE_AS_ID)),
-	("search_catalogue", Reach::Scoped(SPACE_FILTER)),
+	("search_catalogue", Reach::Scoped(SPACE_ID)),
 	("search_messages", Reach::Scoped(QUERY_FILTER)),
-	("search_recent", Reach::Scoped(SPACE_FILTER)),
+	("search_recent", Reach::Scoped(SPACE_ID)),
 	("section_list", Reach::Scoped(SPACE_ID)),
 	("section_create", Reach::Scoped(SPACE_ID)),
 	("section_rename", Reach::Scoped(SECTION_AS_ID)),
@@ -556,7 +548,6 @@ impl<R: Runtime> Lookup<'_, R> {
 		};
 		let is_held = match (held.check, value) {
 			(Check::Absent, _) => false,
-			(Check::NotAllSpaces, all_spaces) => all_spaces == &Value::Bool(false),
 			(Check::Space, Value::String(space_id)) => space_id == self.shared_space_id,
 			(Check::Child(kind), Value::String(child_id)) => self.holds_child(kind, child_id).await,
 			(Check::Child(kind), Value::Array(child_ids)) => {

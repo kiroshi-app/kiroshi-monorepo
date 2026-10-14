@@ -97,11 +97,7 @@ const foundAnswer = (
 	scope: CatalogueScope,
 ): Promise<SearchAnswer> =>
 	Promise.all([
-		port.messages({
-			text: scope.query,
-			spaceId: scope.spaceId,
-			allSpaces: false,
-		}),
+		port.messages({ text: scope.query, spaceId: scope.spaceId }),
 		port.catalogue(scope),
 	]).then(([messages, catalogue]) => ({
 		read: readOf(messages, catalogue),
