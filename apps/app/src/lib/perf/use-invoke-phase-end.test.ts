@@ -21,9 +21,9 @@ const mountPhaseEnd = async (phase: InvokePhase, settledOn: string) => {
 	vi.resetModules()
 	const { startInvokePhase } = await import("./invoke-tally-devtools")
 	const { useInvokePhaseEnd } = await import("./use-invoke-phase-end")
-	const screen = renderHook(
-		({ settledOn }: SettledScreen) => useInvokePhaseEnd(phase, settledOn),
-		{ initialProps: { settledOn } as SettledScreen },
+	const screen = renderHook<void, SettledScreen>(
+		(props) => useInvokePhaseEnd(phase, props.settledOn),
+		{ initialProps: { settledOn } },
 	)
 	startInvokePhase(phase)
 	printedLabels.mockClear()
