@@ -1,6 +1,6 @@
-export type CiEvent = "push" | "pull_request"
+type CiEvent = "push" | "pull_request"
 
-export type FilteredJobs = {
+type FilteredJobs = {
 	rust: boolean
 	vitest: boolean
 	website: boolean
