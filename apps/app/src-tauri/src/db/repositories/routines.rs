@@ -247,17 +247,14 @@ impl RoutinesRepository {
 			.access
 			.call(move |connection| {
 				let mut statement = connection.prepare_cached(SELECT_RUNS_OF_SPACE)?;
-				let mut rows = statement.query(params![space_id, page])?;
+				let rows = statement.query_map(params![space_id, page], routine_and_run)?;
 				let mut grouped: Vec<RoutineRuns> = Vec::new();
-				while let Some(row) = rows.next()? {
-					let routine_id: String = row.get(8)?;
-					if grouped.last().is_none_or(|held| held.routine_id != routine_id) {
-						grouped.push(RoutineRuns { routine_id, runs: Vec::new() });
-					}
-					if let (Some(_), Some(held)) =
-						(row.get::<_, Option<String>>(0)?, grouped.last_mut())
-					{
-						held.runs.push(run(row)?);
+				for row in rows {
+					let (routine_id, ran) = row?;
+					match grouped.last_mut() {
+						Some(held) if held.routine_id == routine_id => held.runs.extend(ran),
+						_ => grouped
+							.push(RoutineRuns { routine_id, runs: ran.into_iter().collect() }),
 					}
 				}
 				Ok(grouped)
@@ -716,6 +713,11 @@ fn run(row: &Row<'_>) -> rusqlite::Result<RoutineRun> {
 		cost_usd: row.get(6)?,
 		model_usage: row.get::<_, Option<String>>(7)?.map(|text| parsed(&text)).transpose()?,
 	})
+}
+
+fn routine_and_run(row: &Row<'_>) -> rusqlite::Result<(String, Option<RoutineRun>)> {
+	let has_run = row.get::<_, Option<String>>(0)?.is_some();
+	Ok((row.get(8)?, has_run.then(|| run(row)).transpose()?))
 }
 
 fn reported_run(row: &Row<'_>) -> rusqlite::Result<ReportedRun> {
