@@ -25,6 +25,15 @@ const countLocalInvokes = (internals: TauriInternals) => {
 	}
 }
 
+const startUnlessAlreadyOpen = (
+	phase: InvokePhase,
+	isAlreadyOpen: () => boolean,
+) => {
+	if (!isAlreadyOpen()) {
+		tally.start(phase)
+	}
+}
+
 const installTally = () => {
 	if (hasTauriInternals()) {
 		countLocalInvokes(Reflect.get(window, "__TAURI_INTERNALS__"))
@@ -43,6 +52,11 @@ export const startInvokePhase: (phase: InvokePhase) => void = import.meta.env
 	.DEV
 	? tally.start
 	: () => {}
+
+export const startInvokePhaseUnless: (
+	phase: InvokePhase,
+	isAlreadyOpen: () => boolean,
+) => void = import.meta.env.DEV ? startUnlessAlreadyOpen : () => {}
 
 export const endInvokePhase: (phase: InvokePhase) => void = import.meta.env.DEV
 	? tally.end

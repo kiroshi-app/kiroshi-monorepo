@@ -7,14 +7,17 @@ import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
-import { startInvokePhase } from "../perf/invoke-tally-devtools"
+import { startInvokePhaseUnless } from "../perf/invoke-tally-devtools"
 import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
 import {
 	type SectionsController,
 	spaceOfSection,
 } from "../sections/sections-controller"
-import type { JoinedSpacesController } from "../spaces/joined-spaces-controller"
+import {
+	type JoinedSpacesController,
+	openRowIdOf,
+} from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
 import type { UserController } from "../user/preferences-controller"
 
@@ -62,6 +65,11 @@ const localSpaceIdsIn = (spaces: SpacesController, ids: string[]) => {
 	const localIds = new Set(spaces.getState().spaces.map((space) => space.id))
 	return ids.filter((id) => localIds.has(id))
 }
+
+const openSpaceRowId = (
+	joinedSpaces: JoinedSpacesController,
+	spaces: SpacesController,
+) => openRowIdOf(joinedSpaces.getState(), spaces.getState().selectedSpaceId)
 
 export const useSidebarActions = ({
 	attachments,
@@ -141,17 +149,26 @@ export const useSidebarActions = ({
 				void spaces.reorder(localSpaceIdsIn(spaces, ids))
 			},
 			onSelectBot: (id) => {
-				startInvokePhase("thread open")
+				startInvokePhaseUnless(
+					"thread open",
+					() => id === roster.getState().selectedBotId,
+				)
 				openedMission.leave()
 				roster.select(id)
 			},
 			onSelectConversation: (id) => {
-				startInvokePhase("thread open")
+				startInvokePhaseUnless(
+					"thread open",
+					() => id === roster.getState().selectedConversationId,
+				)
 				openedMission.leave()
 				roster.selectConversation(id)
 			},
 			onSelectSpace: (id) => {
-				startInvokePhase("space switch")
+				startInvokePhaseUnless(
+					"space switch",
+					() => id === openSpaceRowId(joinedSpaces, spaces),
+				)
 				joinedSpaces.selectSpace(id)
 			},
 		}),
