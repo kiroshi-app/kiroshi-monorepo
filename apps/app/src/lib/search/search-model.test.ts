@@ -33,7 +33,6 @@ const identityOfMissionIn = (state: MissionState) => {
 		lookups: createSearchLookups({
 			rosters: {},
 			conversationRosters: {},
-			spaces: [],
 			readerName: "You",
 			now: 1,
 		}),

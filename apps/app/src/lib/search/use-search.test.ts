@@ -25,22 +25,13 @@ import type { SearchNavigation } from "./search-navigation"
 import type { SearchPort } from "./search-port"
 import { useSearch } from "./use-search"
 
-import type {
-	Bot,
-	Conversation,
-	Space,
-} from "@/lib/conversations/store-contract"
+import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 const PERSONAL = "personal"
 
 const WORK = "work"
-
-const SPACES: Space[] = [
-	{ id: PERSONAL, name: "Personal", colour: null, position: 0, createdAt: 1 },
-	{ id: WORK, name: "Work", colour: "blue", position: 1, createdAt: 1 },
-]
 
 const A_BOT: Bot = {
 	...botIdentity({ name: "Basile", avatarBlot: null }),
@@ -175,7 +166,6 @@ const renderSearch = ({ navigation, port, canOpen = true }: Rendering) => {
 	const lookups = createSearchLookups({
 		rosters: { [WORK]: [A_BOT] },
 		conversationRosters: { [WORK]: [A_ROOM] },
-		spaces: SPACES,
 		readerName: "You",
 		now: 2,
 	})

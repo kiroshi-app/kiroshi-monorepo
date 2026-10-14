@@ -59,7 +59,6 @@ export const useWorkspaceOverlay = ({
 	const searchLookups = useSearchLookups({
 		rosters: roster.state.rosters,
 		conversationRosters,
-		spaces: spaces.state.spaces,
 		readerName: preferences.displayName,
 		now,
 	})

@@ -318,7 +318,7 @@ const SearchPalette = ({
 		return instructionPanel
 	}
 
-	const rowOf = ({ id, space: _space, ...rest }: SearchPaletteResult) => (
+	const rowOf = ({ id, ...rest }: SearchPaletteResult) => (
 		<SearchResultRow
 			{...rest}
 			id={rowId(id)}

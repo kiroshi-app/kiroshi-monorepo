@@ -42,7 +42,6 @@ export type Search = {
 export const useSearchLookups = ({
 	rosters,
 	conversationRosters,
-	spaces,
 	readerName,
 	now,
 }: SearchLookupSource): SearchLookups =>
@@ -51,11 +50,10 @@ export const useSearchLookups = ({
 			createSearchLookups({
 				rosters,
 				conversationRosters,
-				spaces,
 				readerName,
 				now,
 			}),
-		[rosters, conversationRosters, spaces, readerName, now],
+		[rosters, conversationRosters, readerName, now],
 	)
 
 export const useSearchNavigation = ({

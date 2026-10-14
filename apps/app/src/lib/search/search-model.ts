@@ -8,10 +8,7 @@ import type {
 	SearchResultGroup,
 	SearchTab,
 } from "@workspace/ui/components/search-palette"
-import type {
-	SearchResultIdentity,
-	SearchResultSpace,
-} from "@workspace/ui/components/search-result-row"
+import type { SearchResultIdentity } from "@workspace/ui/components/search-result-row"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type {
@@ -30,11 +27,7 @@ import {
 	presentParticipants,
 	toConversationBots,
 } from "@/lib/conversations/roster-conversations"
-import type {
-	Bot,
-	Conversation,
-	Space,
-} from "@/lib/conversations/store-contract"
+import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
 import { badgeOfMissionState } from "@/lib/missions/missions-model"
 
@@ -43,7 +36,6 @@ const SHOWN_PER_KIND = 3
 export type SearchLookups = {
 	faceOf: (botId: string) => ThreadFace | undefined
 	conversationOf: (conversationId: string) => Conversation | undefined
-	spaceOf: (spaceId: string | null) => SearchResultSpace | undefined
 	readerName: string
 	now: number
 }
@@ -51,7 +43,6 @@ export type SearchLookups = {
 export type SearchLookupSource = {
 	rosters: Record<string, Bot[]>
 	conversationRosters: Record<string, Conversation[]>
-	spaces: Space[]
 	readerName: string
 	now: number
 }
@@ -59,7 +50,6 @@ export type SearchLookupSource = {
 export const createSearchLookups = ({
 	rosters,
 	conversationRosters,
-	spaces,
 	readerName,
 	now,
 }: SearchLookupSource): SearchLookups => {
@@ -73,17 +63,10 @@ export const createSearchLookups = ({
 			rows.map((conversation) => [conversation.id, conversation] as const),
 		),
 	)
-	const named = new Map(
-		spaces.map((space) => [
-			space.id,
-			{ name: space.name, tint: space.colour ?? undefined },
-		]),
-	)
 
 	return {
 		faceOf: (botId) => faces.get(botId),
 		conversationOf: (conversationId) => conversations.get(conversationId),
-		spaceOf: (spaceId) => (spaceId ? named.get(spaceId) : undefined),
 		readerName,
 		now,
 	}
@@ -178,7 +161,6 @@ const toMessageResult = (
 			? soloPart()
 			: { key: "conversation", text: hit.conversationTitle },
 	],
-	space: lookups.spaceOf(hit.spaceId),
 	onOpen: () =>
 		open({
 			kind: "chat",
@@ -208,7 +190,6 @@ const toChatResult = (
 			? soloPart()
 			: { key: "participants", text: chat.participants.join(", ") },
 	],
-	space: lookups.spaceOf(chat.spaceId),
 	onOpen: () => open({ kind: "chat", row, spaceId: chat.spaceId }),
 })
 
@@ -234,7 +215,6 @@ const toMissionResult = (
 	timestamp: "",
 	identifier: mission.ticketExternalId,
 	parts: [{ key: "ticket", text: mission.ticketTitle }],
-	space: lookups.spaceOf(mission.spaceId),
 	onOpen: () =>
 		open({
 			kind: "mission",
@@ -255,7 +235,6 @@ const toRoutineResult = (
 	title: markedTitle(routine.title, query),
 	timestamp: "",
 	parts: [{ key: "expression", text: routine.expression ?? "" }],
-	space: lookups.spaceOf(routine.spaceId),
 	onOpen: () =>
 		open({
 			kind: "routine",

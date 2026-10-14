@@ -20,9 +20,7 @@ import {
 
 const QUERY = "parser"
 
-const SPACE = { name: "Studio", tint: "blue" } as const
-
-const OTHER_SPACE = { name: "Archive" } as const
+const SPACE_NAME = "Studio"
 
 const MESSAGES_FOUND = 12
 
@@ -59,7 +57,6 @@ const messageAt = (rank: number): SearchPaletteResult => ({
 		{ key: "author", text: "Ada Martin" },
 		{ key: "conversation", text: "Changelog cleanup" },
 	],
-	space: SPACE,
 	onOpen: fn(),
 })
 
@@ -80,7 +77,6 @@ const CHATS: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Changelog cleanup" }],
 		timestamp: "Mon",
 		parts: [{ key: "participants", text: "Atlas and Beacon" }],
-		space: SPACE,
 		onOpen: fn(),
 	},
 	{
@@ -89,7 +85,6 @@ const CHATS: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Release notes review" }],
 		timestamp: "Tue",
 		parts: [{ key: "bot", text: "Ada Martin" }],
-		space: OTHER_SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -110,7 +105,6 @@ const MISSIONS: SearchPaletteResult[] = [
 			{ key: "owner", text: "Ada Martin" },
 			{ key: "state", text: "Waiting for you" },
 		],
-		space: SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -122,7 +116,6 @@ const ROUTINES: SearchPaletteResult[] = [
 		title: [{ key: "title", text: "Morning changelog digest" }],
 		timestamp: "8d",
 		parts: [{ key: "schedule", text: "Every weekday at 09:00" }],
-		space: OTHER_SPACE,
 		onOpen: fn(),
 	},
 ]
@@ -161,7 +154,6 @@ const restingRow = (
 	title: [{ key: "title", text: title }],
 	timestamp,
 	parts: [{ key: "part", text: part }],
-	space: SPACE,
 	onOpen: fn(),
 })
 
@@ -295,7 +287,7 @@ const meta = preview.meta({
 		open: true,
 		query: QUERY,
 		tab: "all" as SearchTab,
-		spaceName: SPACE.name,
+		spaceName: SPACE_NAME,
 		results: RESULTS,
 		resting: RESTING,
 		isLoading: false,
@@ -328,7 +320,6 @@ export const Default = meta.story({
 		await expect(heads).toHaveLength(4)
 		await expect(heads[0]).toHaveTextContent(`Messages${MESSAGES_FOUND}`)
 		await expect(within(popup).queryByRole("switch")).toBeNull()
-		await expect(slotsIn(body, "space-tint")).toHaveLength(0)
 
 		const messages = within(popup).getByRole("listbox", { name: "Messages" })
 		await expect(slotsIn(messages, "search-result-row")).toHaveLength(
@@ -506,7 +497,7 @@ export const RestingMessages = meta.story({
 		const panel = slotIn(bodyOf(popup), "search-palette-rest")
 
 		await expect(reader.getByText("Search every message")).toBeVisible()
-		await expect(panel).toHaveTextContent(SPACE.name)
+		await expect(panel).toHaveTextContent(SPACE_NAME)
 		await expect(panel.querySelector("button")).toBeNull()
 		await expect(reader.queryAllByRole("option")).toHaveLength(0)
 		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
@@ -562,7 +553,7 @@ export const RestingKindEmpty = meta.story({
 		const panel = slotIn(bodyOf(popup), "search-palette-rest")
 
 		await expect(reader.getByText("No mission here yet")).toBeVisible()
-		await expect(panel).toHaveTextContent(`No missions in ${SPACE.name} yet.`)
+		await expect(panel).toHaveTextContent(`No missions in ${SPACE_NAME} yet.`)
 		await expect(panel.querySelector("button")).toBeNull()
 		await expect(reader.queryAllByRole("option")).toHaveLength(0)
 	},
@@ -675,7 +666,7 @@ export const Empty = meta.story({
 		await expect(reader.getByRole("listbox")).toBeEmptyDOMElement()
 		await expect(reader.getByText("Nothing here matches")).toBeVisible()
 		await expect(
-			reader.getByText(`No results for “${QUERY}” in ${SPACE.name}`, {
+			reader.getByText(`No results for “${QUERY}” in ${SPACE_NAME}`, {
 				exact: false,
 			}),
 		).toHaveTextContent(`“${QUERY}”`)
