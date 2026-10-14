@@ -102,6 +102,7 @@ pub struct ConversationInPage {
 	pub conversation: Conversation,
 	pub last_activity_at: i64,
 	pub last_word: Option<LastWord>,
+	pub solo_bot_id: Option<String>,
 }
 
 impl ConversationInPage {
@@ -110,6 +111,7 @@ impl ConversationInPage {
 			conversation: Conversation::of(row.conversation, avatars),
 			last_activity_at: row.last_activity_at,
 			last_word: row.last_word.map(Into::into),
+			solo_bot_id: row.solo_bot_id,
 		}
 	}
 }

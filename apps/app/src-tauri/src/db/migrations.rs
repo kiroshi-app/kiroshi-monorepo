@@ -57,6 +57,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 48, statements: SPACE_MEMBER_ROLES },
 	Migration { version: 49, statements: SPACE_MEMBER_ROLES_DROPPED },
 	Migration { version: 50, statements: CONVERSATION_ACTIVITY },
+	Migration { version: 51, statements: SOLO_CONVERSATION_ACTIVITY },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1107,6 +1108,13 @@ CREATE INDEX conversations_by_activity
 	ON conversations (space_id, last_activity_at, id) WHERE kind = 'topic';
 
 CREATE INDEX missions_by_opening ON missions (opened_at, id, closed_at);
+";
+
+const SOLO_CONVERSATION_ACTIVITY: &str = "
+CREATE INDEX conversations_and_solos_by_activity
+	ON conversations (space_id, last_activity_at, id) WHERE kind IN ('topic', 'main');
+
+DROP INDEX conversations_by_activity;
 ";
 
 pub fn latest_version() -> u32 {

@@ -4,7 +4,7 @@ use rusqlite::{params, params_from_iter, Connection, Row};
 
 use super::{
 	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
-	Seat, SEAT_COLUMNS, TOPIC_KIND,
+	Seat, CHAT_KIND, SEAT_COLUMNS, TOPIC_KIND,
 };
 use crate::db::repositories::keyset::{paged, Keyset, Page};
 
@@ -20,6 +20,7 @@ pub struct ActiveConversation {
 	pub conversation: Conversation,
 	pub last_activity_at: i64,
 	pub last_word: Option<LastWord>,
+	pub solo_bot_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,21 +41,32 @@ impl ConversationsRepository {
 	}
 }
 
+const PIN_POSITION: &str =
+	"CASE WHEN solo.bot_id IS NULL THEN conversations.pin_position ELSE solo.pin_position END";
+
 fn active_statement(filter: &str, order: &str) -> String {
 	format!(
 		"SELECT conversations.id AS id, conversations.space_id AS space_id,
-			conversations.section_id AS section_id, conversations.pin_position AS pin_position,
+			conversations.section_id AS section_id, {PIN_POSITION} AS pin_position,
 			conversations.title AS title, conversations.instructions AS instructions,
 			conversations.created_at AS created_at, conversations.updated_at AS updated_at,
-			conversations.last_activity_at AS last_activity_at,
+			conversations.last_activity_at AS last_activity_at, solo.bot_id AS solo_bot_id,
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id
 		FROM conversations
+		LEFT JOIN conversation_participants AS solo_seat
+			ON conversations.kind = '{CHAT_KIND}' AND solo_seat.conversation_id = conversations.id
+		LEFT JOIN bots AS solo_bot
+			ON solo_bot.id = solo_seat.bot_id AND solo_bot.deleted_at IS NULL
+		LEFT JOIN bot_spaces AS solo
+			ON solo.bot_id = solo_bot.id AND solo.space_id = conversations.space_id
 		LEFT JOIN messages AS word ON word.id = (SELECT settled.id FROM messages AS settled
 			WHERE settled.conversation_id = conversations.id
 				AND settled.completion_state NOT IN ('pending', 'streaming')
 			ORDER BY settled.seq DESC LIMIT 1)
-		WHERE conversations.kind = '{TOPIC_KIND}' AND conversations.space_id = ?1 {filter}
+		WHERE conversations.space_id = ?1
+			AND conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
+			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL) {filter}
 		{order}"
 	)
 }
@@ -65,15 +77,15 @@ fn page_statement(after: Option<&Keyset>) -> String {
 		None => "",
 	};
 	active_statement(
-		&format!("AND conversations.pin_position IS NULL {past_the_cursor}"),
+		&format!("AND {PIN_POSITION} IS NULL {past_the_cursor}"),
 		"ORDER BY conversations.last_activity_at DESC, conversations.id DESC LIMIT ?4",
 	)
 }
 
 fn pinned_statement() -> String {
 	active_statement(
-		"AND conversations.pin_position IS NOT NULL",
-		"ORDER BY conversations.pin_position ASC, conversations.id ASC",
+		&format!("AND {PIN_POSITION} IS NOT NULL"),
+		&format!("ORDER BY {PIN_POSITION} ASC, conversations.id ASC"),
 	)
 }
 
@@ -152,6 +164,7 @@ fn active(row: &Row<'_>) -> rusqlite::Result<ActiveConversation> {
 			.get::<_, Option<i64>>("word_at")?
 			.map(|at| last_word(row, at))
 			.transpose()?,
+		solo_bot_id: row.get("solo_bot_id")?,
 	})
 }
 
@@ -359,36 +372,129 @@ mod tests {
 		);
 	}
 
+	fn a_companion(id: &str, pin_position: &str, deleted_at: &str) -> String {
+		format!(
+			"INSERT INTO bots (id, name, model, created_at, deleted_at)
+				VALUES ('{id}', '{id}', 'sonnet', 1, {deleted_at});
+			INSERT INTO bot_spaces (bot_id, space_id, pin_position, joined_at)
+				VALUES ('{id}', 'personal', {pin_position}, 1);"
+		)
+	}
+
+	fn a_solo(id: &str, bot_id: &str, created_at: i64) -> String {
+		format!(
+			"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+				VALUES ('{id}', 'main', 'personal', 'Chat', {created_at}, {created_at});
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('{id}', '{bot_id}', 'assistant', {created_at}, 0);"
+		)
+	}
+
 	#[tokio::test]
-	async fn every_page_reads_its_rooms_through_the_activity_index_with_no_sort() {
+	async fn each_companion_solo_is_paged_once_beside_the_rooms_and_pinned_by_its_companion() {
+		let rows = [
+			a_companion("pinned", "1", "NULL"),
+			a_companion("loose", "NULL", "NULL"),
+			a_companion("silent", "NULL", "NULL"),
+			a_companion("deleted", "NULL", "9"),
+			a_solo("solo-pinned", "pinned", 5),
+			a_solo("solo-loose", "loose", 6),
+			a_solo("solo-deleted", "deleted", 50),
+			said("solo-loose", 1, "complete", "hi there", 30),
+			rooms(5, |n| n as i64 * 10),
+			"UPDATE conversations SET pin_position = 1 WHERE id = 'c03';
+			UPDATE conversations SET pin_position = 2 WHERE id = 'c05';"
+				.to_owned(),
+		]
+		.concat();
+		let (database, _dir) = planted(rows).await;
+
+		let first = page(&database, None, 2).await;
+		let pages = walked(&database, None, 2).await;
+		let later = page(&database, first.page.next.clone(), 2).await;
+
+		let loose = first.page.rows.iter().find(|row| row.conversation.id == "solo-loose");
+		let pinned: Vec<(&str, Option<&str>)> = first
+			.pinned
+			.iter()
+			.map(|row| (row.conversation.id.as_str(), row.solo_bot_id.as_deref()))
+			.collect();
+		assert_eq!(pinned, vec![("c03", None), ("solo-pinned", Some("pinned")), ("c05", None)]);
+		assert_eq!(pages, vec![vec!["c04", "solo-loose"], vec!["c02", "c01"]]);
+		assert_eq!(later.pinned, Vec::new(), "a later page answered the pinned rows again");
+		assert_eq!(loose.map(|row| row.solo_bot_id.as_deref()), Some(Some("loose")));
+		assert_eq!(loose.map(|row| row.last_activity_at), Some(30));
+		assert_eq!(
+			loose.and_then(|row| row.last_word.as_ref()).and_then(|word| word.text.as_deref()),
+			Some("hi there")
+		);
+		assert_eq!(loose.map(|row| row.conversation.seats.len()), Some(1));
+		assert_eq!(first.pinned[1].conversation.pin_position, Some(1));
+	}
+
+	#[tokio::test]
+	async fn the_solo_of_a_companion_gone_from_the_space_is_left_out() {
+		let rows = format!(
+			"{}{}{}DELETE FROM bot_spaces WHERE bot_id = 'gone';",
+			a_companion("gone", "NULL", "NULL"),
+			a_solo("solo-gone", "gone", 1),
+			a_room("c01", 2),
+		);
+		let (database, _dir) = planted(rows).await;
+
+		let read = page(&database, None, 30).await;
+
+		assert_eq!(ids(&read.pinned), Vec::<String>::new());
+		assert_eq!(ids(&read.page.rows), vec!["c01"]);
+	}
+
+	async fn plan(database: &Database, statement: String) -> Vec<String> {
+		database
+			.call(move |connection| {
+				let mut explained =
+					connection.prepare(&format!("EXPLAIN QUERY PLAN {statement}"))?;
+				let slots = params!["personal", 1, "c01", 31];
+				let bound = slots.iter().take(explained.parameter_count());
+				let steps = explained
+					.query_map(params_from_iter(bound), |row| row.get::<_, String>(3))?
+					.collect::<rusqlite::Result<Vec<_>>>()?;
+				Ok(steps)
+			})
+			.await
+			.expect("the query plan")
+	}
+
+	#[tokio::test]
+	async fn every_page_reads_its_rows_through_the_activity_index_with_no_sort() {
 		let (database, _dir) = planted(String::new()).await;
 		let cursor = Keyset { sort_key: 1, id: "c01".to_owned() };
 
 		for after in [None, Some(cursor)] {
-			let plan = database
-				.conversations()
-				.call(move |connection| {
-					let mut statement = connection.prepare(&format!(
-						"EXPLAIN QUERY PLAN {}",
-						page_statement(after.as_ref())
-					))?;
-					let steps = statement
-						.query_map(params!["personal", 1, "c01", 31], |row| {
-							row.get::<_, String>(3)
-						})?
-						.collect::<rusqlite::Result<Vec<_>>>()?;
-					Ok(steps)
-				})
-				.await
-				.expect("the query plan");
+			let plan = plan(&database, page_statement(after.as_ref())).await;
 
 			assert!(
-				plan.iter().any(|step| step.contains("conversations_by_activity")),
-				"the page does not read the rooms through their activity index: {plan:?}"
+				plan.iter().any(|step| step.contains("conversations_and_solos_by_activity")),
+				"the page does not read its rows through their activity index: {plan:?}"
 			);
 			assert!(
 				!plan.iter().any(|step| step.contains("TEMP B-TREE")),
-				"the page sorts its rooms apart from the index: {plan:?}"
+				"the page sorts its rows apart from the index: {plan:?}"
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn no_read_of_the_page_scans_every_conversation() {
+		let (database, _dir) = planted(String::new()).await;
+		let cursor = Keyset { sort_key: 1, id: "c01".to_owned() };
+
+		for statement in [pinned_statement(), page_statement(None), page_statement(Some(&cursor))] {
+			let plan = plan(&database, statement).await;
+
+			assert!(
+				!plan.iter().any(|step| step.starts_with("SCAN conversations")),
+				"the page scans every conversation: {plan:?}"
 			);
 		}
 	}

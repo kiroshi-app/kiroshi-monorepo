@@ -3247,6 +3247,42 @@ fn a_guest_message_refused_by_the_host_answers_a_text_naming_the_refusal() {
 }
 
 #[test]
+fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let room = direct(
+			&host.window,
+			"conversation_create",
+			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
+		);
+		let args = json!({ "spaceId": PERSONAL, "cursor": null, "limit": null });
+
+		let read_by_the_guest = host
+			.relayed(json!({
+				"id": 1,
+				"command": "conversation_page",
+				"args": args,
+				"sender": guest_sender(),
+			}))
+			.await;
+		let read_by_the_host = direct(&host.window, "conversation_page", args);
+
+		let solo_bot_of = |id: &Value| {
+			read_by_the_guest["conversations"]
+				.as_array()
+				.expect("the page holds a list")
+				.iter()
+				.find(|row| row["id"] == *id)
+				.map(|row| row["soloBotId"].clone())
+		};
+		assert_eq!(read_by_the_guest, read_by_the_host);
+		assert_eq!(read_by_the_guest["conversations"].as_array().map(Vec::len), Some(2));
+		assert_eq!(solo_bot_of(&room["id"]), Some(Value::Null));
+		assert_eq!(solo_bot_of(&json!(host.conversation_id)), Some(json!("default")));
+	});
+}
+
+#[test]
 fn a_guest_message_naming_a_turn_of_another_conversation_is_refused_and_not_written() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
