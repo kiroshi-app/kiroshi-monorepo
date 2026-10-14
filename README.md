@@ -53,7 +53,8 @@ bun run dev
 | `bun run types` | Type check across the workspaces. |
 | `bun run build` | Build every workspace. |
 | `bun run tauri:build` | Package the desktop app. |
-| `bun run ci` | Format, lint, types and test, in that order. |
+| `bun run ci:fast` | Run before every push: biome format, biome and knip against the baseline, types, the app and UI unit tests and the story ids against the baseline, in under 2 minutes. |
+| `bun run ci` | Run before opening a pull request: exactly the checks of the pull request jobs, from `scripts/ci.ts`, lint, rust, vitest, website then ios. A group `scripts/ci-changes.ts` finds untouched since the merge base with `origin/main` is skipped, and ios is skipped off macOS. |
 | `bun run release` | Bump the version everywhere, commit, tag and push. Takes `patch`, `minor`, `major` or `X.Y.Z`. |
 
 ## Environment
