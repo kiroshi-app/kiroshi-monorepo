@@ -208,10 +208,7 @@ const rowsRenderedBy = async (
 		.toSorted()
 }
 
-const STABLE_MEMBERSHIPS = [SIDEBAR_SPACES[0].id]
-
 export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
-	args: { membershipsOf: () => STABLE_MEMBERSHIPS },
 	render: (args) => <ReshownRoster {...args} handle={rosterHandle} />,
 	play: async ({ args, canvasElement }) => {
 		await expect(committedRowHooksIn(canvasElement).size).toBe(3)
@@ -234,11 +231,29 @@ export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
 			DESK_ROOM.id,
 		])
 
+		const selectionMoved = { ...roomRenamed, selectedBotId: BEACON.id }
+		await expect(await rowsRenderedBy(canvasElement, selectionMoved)).toEqual([
+			ATLAS.id,
+			BEACON.id,
+		])
+
+		const sameSpaceIdsAnew = {
+			...selectionMoved,
+			membershipsOf: () => [SIDEBAR_SPACES[0].id],
+		}
+		await expect(await rowsRenderedBy(canvasElement, sameSpaceIdsAnew)).toEqual(
+			[],
+		)
+
+		const beaconJoinsEverySpace = {
+			...sameSpaceIdsAnew,
+			membershipsOf: (botId: string) =>
+				botId === BEACON.id
+					? SIDEBAR_SPACES.map((space) => space.id)
+					: [SIDEBAR_SPACES[0].id],
+		}
 		await expect(
-			await rowsRenderedBy(canvasElement, {
-				...roomRenamed,
-				selectedBotId: BEACON.id,
-			}),
-		).toEqual([ATLAS.id, BEACON.id])
+			await rowsRenderedBy(canvasElement, beaconJoinsEverySpace),
+		).toEqual([BEACON.id])
 	},
 })

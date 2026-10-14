@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
@@ -50,6 +51,18 @@ interface RosterRowsContext
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 }
 
+const NO_SPACE_IDS: string[] = []
+
+const isSameSpaceIds = (held: string[], next: string[]) =>
+	held.length === next.length && held.every((id, at) => id === next[at])
+
+const useSameSpaceIds = (next: string[]) => {
+	const [held, setHeld] = useState(next)
+	if (isSameSpaceIds(held, next)) return held
+	setHeld(next)
+	return next
+}
+
 interface RosterRowProps {
 	entry: PinnedEntry
 	isSlotted: boolean
@@ -58,6 +71,9 @@ interface RosterRowProps {
 
 const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 	const { edgeAt, slotFor, membershipsOf } = rows
+	const memberships = useSameSpaceIds(
+		entry.bot ? membershipsOf(entry.bot.id) : NO_SPACE_IDS,
+	)
 	const shared = {
 		insertion: isSlotted ? edgeAt(entry.id) : undefined,
 		isPinned: isSlotted,
@@ -86,7 +102,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 			{...shared}
 			bot={entry.bot}
 			isSelected={entry.bot.id === rows.activeBotId}
-			memberships={membershipsOf(entry.bot.id)}
+			memberships={memberships}
 			onAddToSpace={rows.onAddBotToSpace}
 			onDelete={rows.onDeleteBot}
 			onDuplicate={rows.onDuplicateBot}
