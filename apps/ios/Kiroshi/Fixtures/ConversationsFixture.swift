@@ -26,10 +26,10 @@
 
         nonisolated static var laterPageDelay: Duration {
             let seconds = UserDefaults.standard.double(forKey: "pageDelay")
-            return .milliseconds(Int((seconds > 0 ? seconds : 2.5) * 1000))
+            return .milliseconds(Int((seconds > 0 ? seconds : 1) * 1000))
         }
 
-        static let topics: [FixtureHost.Group] = (1...40).map { index in
+        static let topics: [FixtureHost.Group] = (1...7).map { index in
             FixtureHost.Group(
                 id: "group-topic-\(index)", title: "Topic \(index)", members: [mira, pico],
                 createdAt: 0)
@@ -48,7 +48,7 @@
                 )
             })
 
-        static let earlierNotes: [FixtureHost.Message] = (1...110).map { index in
+        static let earlierNotes: [FixtureHost.Message] = (1...10).map { index in
             FixtureHost.Message(
                 id: "earlier-\(index)", isYours: index.isMultiple(of: 2),
                 content: "Earlier note \(index).", daysAgo: 2, hour: 6 + index / 20,
@@ -154,7 +154,7 @@
             ],
         ]) { _, home in home }
 
-        static var release042Missions: String {
+        static var release042Missions: [String] {
             let missions = [
                 MissionsFixture.entry(
                     in: release042.id,
@@ -186,7 +186,7 @@
                         status: "Asked you which fix leads.",
                         movedAt: MissionsFixture.at(hour: 9, minute: 20))),
             ]
-            return "[\(missions.joined(separator: ","))]"
+            return missions
         }
 
         static let dictationMission: [FixtureHost.Message] = [
@@ -334,8 +334,12 @@
                     messages: listMessages.merging(groupMessages) { listed, _ in listed })
             if isPaged {
                 script.laterPagesAnswerAfter = laterPageDelay
+                script.listPageSize = MissionsFixture.pageSize
+                script.threadPageSize = 10
                 script.groups += topics
                 script.messages.merge(topicMessages) { listed, _ in listed }
+                script.messages[juniper.id] = earlierNotes + (script.messages[juniper.id] ?? [])
+                script.missionFeed += MissionsFixture.feed
             }
             switch fixture {
             case .conversationsLive:
@@ -516,7 +520,9 @@
             var replyParagraphs: [String] = []
             var wordsPerDelta = 1
             var laterPagesAnswerAfter = Duration.zero
-            var missionFeed = "[]"
+            var listPageSize = Int.max
+            var threadPageSize = Int.max
+            var missionFeed: [String] = []
         }
 
         static let spaceId = "space-studio"
@@ -800,7 +806,8 @@
                 reply(
                     id,
                     FixtureHost.conversationPage(
-                        rows, cursor: cursor, limit: args["limit"] as? Int ?? 30),
+                        rows, cursor: cursor,
+                        limit: min(args["limit"] as? Int ?? 30, script.listPageSize)),
                     after: cursor == nil ? .zero : script.laterPagesAnswerAfter)
                 if cursor == nil {
                     listed.yield()
@@ -840,9 +847,17 @@
             case "agent_pending_questions":
                 reply(id, "[]")
             case "mission_space_feed":
-                reply(id, script.missionFeed)
+                reply(id, "[\(script.missionFeed.joined(separator: ","))]")
             case "mission_space_page":
-                reply(id, #"{"missions":\#(script.missionFeed),"nextCursor":null}"#)
+                let page = (args["cursor"] as? String).map { "mission_space_page \($0)" }
+                reply(
+                    id,
+                    MissionsFixture.pages(
+                        of: script.missionFeed,
+                        size: min(script.listPageSize, MissionsRelay.listPageSize))[
+                            page ?? "mission_space_page"]
+                        ?? "",
+                    after: page == nil ? .zero : script.laterPagesAnswerAfter)
             case "conversation_create":
                 let companionIds = args["botIds"] as? [String] ?? []
                 let group = created.withLock { groups in
@@ -904,10 +919,11 @@
             let messages = script.messages[companionId] ?? []
             let earlier = messages.enumerated().map { $1.json(in: conversationId, seq: $0 + 1) }
                 .prefix((before ?? messages.count + 1) - 1)
-            let page = earlier.suffix(limit)
+            let size = min(limit, script.threadPageSize)
+            let page = earlier.suffix(size)
             reply(
                 id,
-                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":\#(earlier.count > limit)}"#,
+                #"{"conversationId":"\#(conversationId)","messages":[\#(page.joined(separator: ","))],"arrivals":[],"hasMore":\#(earlier.count > size)}"#,
                 after: limit == 1
                     ? .zero
                     : before == nil ? script.threadAnswersAfter : script.laterPagesAnswerAfter

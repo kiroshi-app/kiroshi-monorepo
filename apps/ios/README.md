@@ -100,7 +100,7 @@ A solo Conversation, a group Conversation and a Mission open the same thread scr
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -history YES
 ```
 
-`-paged YES` fills the fixtures past one page, and answers every page after the first 2.5 seconds late so the loading rows show (`-pageDelay 120` holds them two minutes, for a frame): `conversations` (and every page 2 fixture) gets 40 more group conversations, Topic 1 to Topic 40, `5.1` gets 40 more missions in Review, OPE-301 to OPE-340, and `3.1` gets 110 earlier notes before Juniper's thread, three pages of 50 for `conversation_message_page`. `PagingTests` scrolls each to its end:
+`-paged YES` gives the fixtures a second page and makes the host answer short pages, still with a `nextCursor`, so the second page is one scroll away: 8 rows a page for Conversations and Missions, 10 messages for a thread (the app still asks for 30 and 50; it stops on `nextCursor: null` or `hasMore: false`, never on a short page). `conversations` (and every page 2 fixture) gets Topic 1 to Topic 7, its page two being Topic 7, the Missions tab OPE-301 to OPE-305, OPE-305 alone on page two, and Juniper's thread 10 earlier notes, Earlier note 1 alone on its older page. `5.1` and `3.1` get the same. Every page after the first comes a second late so its loading row shows (`-pageDelay 120` holds it two minutes, for a frame). `PagingTests` launches `conversations -paged YES` once: it opens Juniper and finds Earlier note 1, then scrolls Conversations to Topic 7 and Missions to OPE-305, each list ending without its loading row:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture conversations -paged YES
@@ -179,7 +179,7 @@ Conversations and Missions read their lists 30 rows at a time: page one on openi
 
 `conversation_page` lists group conversations only, pinned ones first (page one only, in pin order), then by last activity, each with its `lastWord`, so a group row costs no call of its own. A companion's own conversation isn't in it: `conversation_bots` lists the companions, then each companion costs `conversation_main_chat` and a `conversation_message_page` of one message for its preview, as before. A companion row waits for the page its last activity falls in, so the order never jumps. A message in a conversation not read yet rereads page one and adds what's new, keeping the pages read; the same goes for a `mission://changed`.
 
-A Conversation thread opens on its last 50 messages; reaching the top reads the 50 before the oldest one held (`beforeSeq`), until `hasMore` is `false`, with a `ProgressView` at the top meanwhile. The message at the top of the screen stays where it is when the older page lands.
+A Conversation thread opens on its last 50 messages; reaching the top reads the 50 before the oldest one held (`beforeSeq`), until `hasMore` is `false`, with a `ProgressView` at the top meanwhile. The message at the top of the screen stays where it is when the older page lands: SwiftUI doesn't keep a `LazyVStack`'s position on a prepend on iOS 27, so the thread scrolls back to the message `ThreadAnchor` picks. `ThreadAnchorTests` cover that choice; no UI test measures the scroll itself.
 
 ## Companion avatars
 

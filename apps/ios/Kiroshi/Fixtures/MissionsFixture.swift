@@ -10,7 +10,7 @@
             status: "Asked you which screen goes first.", movedAt: at(hour: 8, minute: 32))
 
         static var answers: [String: String] {
-            pages(of: feed).merging([
+            pages(of: feed, size: pageSize).merging([
                 "conversation_bots": companions,
                 "conversation_message_page": thread,
                 "conversation_send_turn": "1",
@@ -21,11 +21,14 @@
         }
 
         static var laterPagesAnswerAfter: [String: Duration] {
-            isPaged ? ["mission_space_page 30": ConversationsFixture.laterPageDelay] : [:]
+            isPaged ? ["mission_space_page \(pageSize)": ConversationsFixture.laterPageDelay] : [:]
         }
 
-        static func pages(of missions: [String]) -> [String: String] {
-            let size = MissionsRelay.listPageSize
+        static var pageSize: Int {
+            isPaged ? 8 : MissionsRelay.listPageSize
+        }
+
+        static func pages(of missions: [String], size: Int) -> [String: String] {
             return Dictionary(
                 uniqueKeysWithValues: stride(from: 0, to: max(missions.count, 1), by: size).map {
                     offset in
@@ -72,7 +75,9 @@
         }
 
         static var emptyAnswers: [String: String] {
-            pages(of: []).merging(["conversation_bots": companions]) { page, _ in page }
+            pages(of: [], size: pageSize).merging(["conversation_bots": companions]) {
+                page, _ in page
+            }
         }
 
         static func at(hour: Int, minute: Int) -> Int {
@@ -85,7 +90,7 @@
             [{"id":"bot-atlas","name":"Atlas","title":"Planner","avatarBlot":"blue"},{"id":"bot-pico","name":"Pico","title":"Builder","avatarBlot":"orange"},{"id":"bot-juniper","name":"Juniper","title":"Writer","avatarBlot":"green"},{"id":"bot-mira","name":"Mira","title":"Designer","avatarBlot":"purple"}]
             """#
 
-        private static var feed: [String] {
+        static var feed: [String] {
             let missions = [
                 json(
                     id: "mission-212", ticket: "OPE-212", objective: "Split the onboarding flow",
@@ -116,7 +121,7 @@
         }
 
         private static var reviews: [String] {
-            (1...40).map { index in
+            (1...5).map { index in
                 json(
                     id: "mission-\(300 + index)", ticket: "OPE-\(300 + index)",
                     objective: "Review batch \(index)", botId: "bot-mira",
