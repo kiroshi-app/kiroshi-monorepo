@@ -14,12 +14,13 @@ use super::contract::{
 use super::session::EventSink;
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
-use crate::conversations::commands::ready;
+use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
 use crate::db::repositories::conversations::{MISSION_KIND, TOPIC_KIND};
 use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
 use crate::db::DatabaseError;
+use crate::events::CONVERSATION_UPDATED;
 
 const MENTION_SIGN: char = '@';
 const MENTION_OPEN: char = '<';
@@ -539,11 +540,11 @@ impl<R: Runtime> Store<R> {
 		completion: TerminalState,
 		settled_text: Option<String>,
 	) -> Result<(), TranscriptStoreError> {
-		Ok(self
-			.database()?
-			.messages()
-			.finalize_message(id.to_owned(), completion, settled_text)
-			.await?)
+		let database = self.database()?;
+		database.messages().finalize_message(id.to_owned(), completion, settled_text).await?;
+		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+			.await;
+		Ok(())
 	}
 
 	async fn complete_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
@@ -703,6 +704,7 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+	use serde_json::json;
 	use tauri::test::{mock_builder, MockRuntime};
 
 	use super::*;
@@ -1347,5 +1349,205 @@ mod tests {
 			.await;
 
 		assert_eq!(heard, [(late, None)]);
+	}
+
+	fn listen_to_updates(written: &Written) -> Arc<Mutex<Vec<serde_json::Value>>> {
+		use tauri::Listener;
+		let heard = Arc::new(Mutex::new(Vec::new()));
+		let kept = heard.clone();
+		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {
+			let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+			kept.lock().expect("the list is kept").push(payload);
+		});
+		heard
+	}
+
+	async fn send_prompt(written: &Written, turn_id: &str, prompt_id: &str) {
+		let message = crate::conversations::contract::NewUserMessage {
+			id: prompt_id.to_owned(),
+			conversation_id: written.conversation_id.clone(),
+			turn_id: turn_id.to_owned(),
+			author_bot_id: None,
+			replied_to_message_id: None,
+			content: "hello".to_owned(),
+			created_at: 1,
+		};
+		crate::conversations::commands::conversation_send_user_message(
+			written.app.handle().clone(),
+			written.app.state(),
+			crate::hosting::authorship::Caller::Host,
+			message,
+			vec![DEFAULT_BOT_ID.to_owned()],
+		)
+		.await
+		.expect("the prompt is sent");
+	}
+
+	fn a_tool_call(status: super::super::contract::ActivityStatus) -> AgentEvent {
+		AgentEvent::Activity {
+			activity: super::super::contract::ActivityEvent {
+				id: "tool-1".into(),
+				title: "Read a file".into(),
+				kind: super::super::contract::ActivityKind::Tool,
+				status,
+			},
+		}
+	}
+
+	fn completed(id: &str, text: &str, timestamp: i64) -> AgentEvent {
+		AgentEvent::MessageCompleted {
+			message: ChatMessage {
+				text: text.into(),
+				completion: MessageCompletion::Complete,
+				timestamp,
+				..streaming(id)
+			},
+		}
+	}
+
+	fn a_turn_with_ten_deltas_a_tool_call_and_two_replies() -> Vec<Entry> {
+		use super::super::contract::ActivityStatus;
+		let deltas = (1..=10).map(|seq| AgentEvent::MessageDelta {
+			id: "m1".into(),
+			seq,
+			text: format!("w{seq} "),
+		});
+		let events = std::iter::once(AgentEvent::MessageStarted { message: streaming("m1") })
+			.chain(deltas)
+			.chain([
+				completed("m1", "", 2),
+				a_tool_call(ActivityStatus::Running),
+				a_tool_call(ActivityStatus::Succeeded),
+				AgentEvent::MessageStarted {
+					message: ChatMessage { timestamp: 3, ..streaming("m2") },
+				},
+				AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "Done".into() },
+				completed("m2", "Done", 3),
+				turn_ended(),
+			]);
+		std::iter::once(Entry::Submitted(submitted("t1", "p1")))
+			.chain(events.map(Entry::Event))
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn one_agent_turn_announces_the_conversation_once_per_settled_message() {
+		let written = Written::new("updates-per-turn").await;
+		let heard = listen_to_updates(&written);
+
+		send_prompt(&written, "t1", "p1").await;
+		written.forwarded(a_turn_with_ten_deltas_a_tool_call_and_two_replies()).await;
+
+		let heard = heard.lock().expect("the list is kept");
+		let last_words: Vec<_> = heard
+			.iter()
+			.map(|payload| payload["conversation"]["lastWord"]["text"].clone())
+			.collect();
+		assert_eq!(
+			last_words,
+			[json!("hello"), json!("w1 w2 w3 w4 w5 w6 w7 w8 w9 w10"), json!("Done")]
+		);
+		assert_eq!(
+			heard.last().map(|payload| &payload["conversation"]["lastWord"]),
+			Some(&json!({ "text": "Done", "at": 3, "authorBotId": DEFAULT_BOT_ID }))
+		);
+	}
+
+	#[tokio::test]
+	async fn a_finalized_reply_announces_the_page_row_of_its_conversation() {
+		let written = Written::new("update-payload").await;
+		written.prompt("t1", "p1").await;
+		let heard = listen_to_updates(&written);
+
+		let turn = std::iter::once(Entry::Submitted(submitted("t1", "p1")))
+			.chain(a_spoken_turn().into_iter().map(Entry::Event))
+			.collect();
+		written.forwarded(turn).await;
+
+		let heard = heard.lock().expect("the list is kept");
+		let [payload] = heard.as_slice() else {
+			panic!("one update was expected, {} were heard", heard.len());
+		};
+		let conversation = &payload["conversation"];
+		let mut fields: Vec<&str> = conversation
+			.as_object()
+			.expect("the conversation is an object")
+			.keys()
+			.map(String::as_str)
+			.collect();
+		fields.sort_unstable();
+		assert_eq!(payload["spaceId"], json!("personal"));
+		assert_eq!(
+			fields,
+			[
+				"createdAt",
+				"id",
+				"instructions",
+				"lastActivityAt",
+				"lastWord",
+				"participants",
+				"pinPosition",
+				"sectionId",
+				"soloBotId",
+				"spaceId",
+				"title",
+				"updatedAt"
+			]
+		);
+		assert_eq!(conversation["id"], json!(written.conversation_id));
+		assert_eq!(conversation["spaceId"], json!("personal"));
+		assert_eq!(conversation["sectionId"], json!(null));
+		assert_eq!(conversation["pinPosition"], json!(null));
+		assert_eq!(conversation["soloBotId"], json!(DEFAULT_BOT_ID));
+		assert_eq!(conversation["lastActivityAt"], conversation["createdAt"]);
+		assert_eq!(
+			conversation["lastWord"],
+			json!({ "text": "Here", "at": 2, "authorBotId": DEFAULT_BOT_ID })
+		);
+		assert_eq!(conversation["title"], json!("Chat"));
+		assert_eq!(conversation["instructions"], json!(""));
+		assert_eq!(conversation["updatedAt"], conversation["createdAt"]);
+		assert_eq!(conversation["participants"][0]["botId"], json!(DEFAULT_BOT_ID));
+	}
+
+	#[tokio::test]
+	async fn a_finalize_whose_conversation_row_does_not_read_still_settles_the_message() {
+		let written = Written::new("update-unread").await;
+		written.prompt("t1", "p1").await;
+		let reply = NewAssistantMessage {
+			id: "m1".to_owned(),
+			conversation_id: written.conversation_id.clone(),
+			turn_id: "t1".to_owned(),
+			author_bot_id: Some(DEFAULT_BOT_ID.to_owned()),
+			replied_to_message_id: Some("p1".to_owned()),
+			created_at: 2,
+		};
+		written.database().messages().open_assistant_message(reply).await.expect("opened");
+		let heard = listen_to_updates(&written);
+		written
+			.database()
+			.messages()
+			.call_mut(|connection| {
+				Ok(connection
+					.execute_batch("ALTER TABLE conversation_participants RENAME TO gone")?)
+			})
+			.await
+			.expect("the seats table is renamed");
+
+		let finalized = crate::conversations::commands::conversation_finalize_message(
+			written.app.handle().clone(),
+			written.app.state(),
+			"m1".to_owned(),
+			crate::conversations::contract::TerminalCompletion::Complete,
+			None,
+		)
+		.await;
+
+		assert_eq!(finalized, Ok(()));
+		assert_eq!(
+			written.stored("m1").await.map(|stored| stored.state),
+			Some(MessageState::Complete)
+		);
+		assert!(heard.lock().expect("the list is kept").is_empty(), "an update was announced");
 	}
 }

@@ -237,6 +237,8 @@ const PINNED_MESSAGES: &str = "SELECT messages.id, messages.turn_id, messages.au
 		AND messages.conversation_id = message_pins.conversation_id
 	WHERE message_pins.conversation_id = ?1
 	ORDER BY messages.seq DESC, message_pins.block_index ASC";
+const CONVERSATION_OF_MESSAGE: &str = "SELECT conversation_id FROM messages WHERE id = ?1";
+
 const RUN_OF_TURN: &str = "SELECT runtime_session_id FROM messages
 	WHERE turn_id = ?1 AND role = 'assistant' AND runtime_session_id IS NOT NULL
 	ORDER BY seq LIMIT 1";
@@ -466,6 +468,20 @@ impl MessagesRepository {
 				Ok(connection
 					.prepare_cached(RUN_OF_TURN)?
 					.query_row(params![turn_id], |row| row.get(0))
+					.optional()?)
+			})
+			.await?)
+	}
+
+	pub async fn conversation_of_message(
+		&self,
+		id: String,
+	) -> Result<Option<String>, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(CONVERSATION_OF_MESSAGE)?
+					.query_row(params![id], |row| row.get(0))
 					.optional()?)
 			})
 			.await?)

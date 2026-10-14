@@ -41,12 +41,13 @@ use crate::companions::contract::{
 use crate::conversations::commands::{
 	conversation_add_participant, conversation_append_user_message, conversation_create,
 	conversation_create_bot_from_draft, conversation_delete, conversation_delete_bot,
-	conversation_duplicate_bot, conversation_remove_participant, conversation_send_user_message,
-	conversation_set_lead, conversation_update, conversation_update_bot,
+	conversation_duplicate_bot, conversation_page, conversation_remove_participant,
+	conversation_send_user_message, conversation_set_lead, conversation_update,
+	conversation_update_bot,
 };
 use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, NewUserMessage, ParticipantRole,
-	TranscriptStoreError, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
+	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord, NewUserMessage,
+	ParticipantRole, TranscriptStoreError, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
 	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT,
 	UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
@@ -3513,6 +3514,18 @@ impl Guest {
 			.expect("the conversation is deleted");
 	}
 
+	async fn paged_row(&self, conversation_id: &str) -> ConversationInPage {
+		let app = self.harness.app.handle().clone();
+		let page =
+			conversation_page(app, self.harness.app.state(), PERSONAL.to_owned(), None, None)
+				.await
+				.expect("the page is read");
+		page.conversations
+			.into_iter()
+			.find(|row| row.conversation.id == conversation_id)
+			.expect("the conversation is on the page")
+	}
+
 	async fn first_conversation_updated(&mut self) -> Value {
 		next_text(&mut self.member, |frame| frame["event"]["event"] == CONVERSATION_UPDATED_EVENT)
 			.await
@@ -3678,7 +3691,8 @@ fn a_relay_guest_hears_a_conversation_created_in_the_shared_space_only() {
 		let created = guest.conversation_created_in(PERSONAL).await;
 		let heard = guest.first_event().await;
 
-		let payload = json!({ "spaceId": PERSONAL, "conversation": as_json(created) });
+		let conversation = in_page(&created, created.created_at, None);
+		let payload = json!({ "spaceId": PERSONAL, "conversation": conversation });
 		assert_eq!(heard, as_forwarded((CONVERSATION_CREATED_EVENT, payload)));
 	});
 }
@@ -3692,9 +3706,48 @@ fn a_relay_guest_hears_a_conversation_updated_in_the_shared_space_only() {
 		let updated = guest.conversation_updated("c-mine").await;
 		let heard = guest.first_event().await;
 
-		let payload = json!({ "spaceId": PERSONAL, "conversation": as_json(updated) });
+		let conversation = in_page(&updated, 1, Some(the_last_word_of_mine()));
+		let payload = json!({ "spaceId": PERSONAL, "conversation": conversation });
 		assert_eq!(heard, as_forwarded((CONVERSATION_UPDATED_EVENT, payload)));
 	});
+}
+
+#[test]
+fn a_relay_guest_hears_a_conversation_updated_whose_last_word_is_the_message_sent() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("last-word-sent").await;
+
+		guest.user_message_sent("c-theirs").await;
+		guest.user_message_sent("c-mine").await;
+		let heard = guest.first_conversation_updated().await;
+		let paged = guest.paged_row("c-mine").await;
+
+		let conversation = &heard["event"]["payload"]["conversation"];
+		assert_eq!(heard["event"]["payload"]["spaceId"], json!(PERSONAL));
+		assert_eq!(
+			conversation["lastWord"],
+			json!({ "text": "hello", "at": 2, "authorBotId": null })
+		);
+		assert_eq!(conversation["lastActivityAt"], json!(2));
+		assert_eq!(*conversation, as_json(paged));
+	});
+}
+
+fn in_page(
+	conversation: &Conversation,
+	last_activity_at: i64,
+	last_word: Option<LastWord>,
+) -> Value {
+	as_json(ConversationInPage {
+		conversation: conversation.clone(),
+		last_activity_at,
+		last_word,
+		solo_bot_id: None,
+	})
+}
+
+fn the_last_word_of_mine() -> LastWord {
+	LastWord { text: Some("mine".to_owned()), at: 1, author_bot_id: None }
 }
 
 fn seated_in(conversation: &Conversation, bot_id: &str) -> bool {
@@ -3713,7 +3766,8 @@ fn led_by(conversation: &Conversation) -> Option<&str> {
 }
 
 fn stored_in_the_shared_space(conversation: &Conversation) -> Value {
-	let payload = json!({ "spaceId": PERSONAL, "conversation": as_json(conversation) });
+	let conversation = in_page(conversation, 1, Some(the_last_word_of_mine()));
+	let payload = json!({ "spaceId": PERSONAL, "conversation": conversation });
 	as_forwarded((CONVERSATION_UPDATED_EVENT, payload))
 }
 
