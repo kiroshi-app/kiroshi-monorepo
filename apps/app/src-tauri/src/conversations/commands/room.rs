@@ -10,7 +10,7 @@ use crate::avatars;
 use crate::companions::launch;
 use crate::db;
 use crate::db::repositories::conversations::{
-	Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined,
+	Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined, MISSION_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
@@ -198,7 +198,12 @@ pub(crate) async fn announce_conversation<R: Runtime>(
 					Err(failure) => failure.to_string(),
 				}
 			}
-			Ok(None) => "the conversation was not found".to_owned(),
+			Ok(None) => match database.conversations().kind(conversation_id.to_owned()).await {
+				Ok(Some(kind)) if kind == MISSION_KIND => return,
+				Ok(Some(_)) => "the conversation is outside the feed".to_owned(),
+				Ok(None) => "the conversation was not found".to_owned(),
+				Err(failure) => format!("the conversation kind did not read: {failure:?}"),
+			},
 			Err(failure) => format!("the conversation row did not read: {failure:?}"),
 		};
 	eprintln!("{} was not announced for conversation {conversation_id}: {failure}", event.name());

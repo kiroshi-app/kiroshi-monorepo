@@ -1,13 +1,15 @@
 mod common;
 
 use std::sync::mpsc;
+use std::time::Duration;
 
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::host::Host;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::conversations::contract::UPDATED_EVENT;
 use kiroshi_app::db;
 use kiroshi_app::missions::commands::CHANGED_EVENT;
-use kiroshi_app::missions::contract::{MissionDraft, Ticket};
+use kiroshi_app::missions::contract::{Mission, MissionDraft, Ticket};
 use kiroshi_app::missions::host::MissionHost;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
@@ -51,6 +53,10 @@ fn call(window: &WebviewWindow<MockRuntime>, cmd: &str, body: Value) -> Result<V
 }
 
 fn a_mission(home: &Home, window: &WebviewWindow<MockRuntime>) -> String {
+	an_open_mission(home, window).id
+}
+
+fn an_open_mission(home: &Home, window: &WebviewWindow<MockRuntime>) -> Mission {
 	let chat = call(window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let draft = MissionDraft {
 		origin_conversation_id: chat["id"].as_str().expect("the chat holds an id").to_owned(),
@@ -70,7 +76,6 @@ fn a_mission(home: &Home, window: &WebviewWindow<MockRuntime>) -> String {
 	let database = state.as_ref().expect("the database opens");
 	tauri::async_runtime::block_on(database.missions().open(draft, "a-key".to_owned()))
 		.expect("the mission opens")
-		.id
 }
 
 fn changes_of(home: &Home) -> mpsc::Receiver<Value> {
@@ -80,6 +85,70 @@ fn changes_of(home: &Home) -> mpsc::Receiver<Value> {
 		sender.send(change).expect("the test still listens");
 	});
 	received
+}
+
+fn a_topic(window: &WebviewWindow<MockRuntime>) -> String {
+	let topic = call(
+		window,
+		"conversation_create",
+		json!({ "spaceId": "personal", "sectionId": null, "title": "Standup", "botIds": [BOT] }),
+	)
+	.expect("the topic is created");
+	topic["id"].as_str().expect("the topic holds an id").to_owned()
+}
+
+fn appended(window: &WebviewWindow<MockRuntime>, conversation_id: &str) {
+	let turn = format!("t-{conversation_id}");
+	call(
+		window,
+		"conversation_start_turn",
+		json!({ "turn": { "id": turn, "conversationId": conversation_id, "startedAt": 1 } }),
+	)
+	.expect("the turn starts");
+	call(
+		window,
+		"conversation_append_user_message",
+		json!({ "message": {
+			"id": format!("m-{conversation_id}"),
+			"conversationId": conversation_id,
+			"turnId": turn,
+			"authorBotId": null,
+			"repliedToMessageId": null,
+			"content": "hello",
+			"createdAt": 2
+		}}),
+	)
+	.expect("the message is appended");
+}
+
+fn feed_updates_of(home: &Home) -> mpsc::Receiver<Value> {
+	let (sender, received) = mpsc::channel();
+	home.app.listen_any(UPDATED_EVENT, move |event| {
+		let update = serde_json::from_str(event.payload()).expect("the payload is JSON");
+		sender.send(update).expect("the test still listens");
+	});
+	received
+}
+
+#[test]
+fn a_message_appended_to_a_mission_thread_stays_out_of_the_feed_while_a_topic_one_lands() {
+	let home = Home::new();
+	let window = window(&home.app);
+	let thread_id = an_open_mission(&home, &window).thread_conversation_id;
+	let topic_id = a_topic(&window);
+	let updates = feed_updates_of(&home);
+
+	appended(&window, &thread_id);
+	appended(&window, &topic_id);
+
+	let topic_update =
+		updates.recv_timeout(Duration::from_secs(5)).expect("the topic update is announced");
+	assert_eq!(topic_update["conversation"]["id"], json!(topic_id));
+	assert_eq!(
+		updates.recv_timeout(Duration::from_millis(200)).ok(),
+		None,
+		"a second feed update was announced"
+	);
 }
 
 #[test]

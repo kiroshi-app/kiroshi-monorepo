@@ -74,19 +74,25 @@ fn active_rows() -> String {
 	)
 }
 
+fn in_the_feed() -> String {
+	format!(
+		"conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
+			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL)"
+	)
+}
+
 fn active_statement(filter: &str, order: &str) -> String {
 	format!(
 		"{}
-		WHERE conversations.space_id = ?1
-			AND conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
-			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL) {filter}
+		WHERE conversations.space_id = ?1 AND {} {filter}
 		{order}",
-		active_rows()
+		active_rows(),
+		in_the_feed()
 	)
 }
 
 fn by_id_statement() -> String {
-	format!("{} WHERE conversations.id = ?1", active_rows())
+	format!("{} WHERE conversations.id = ?1 AND {}", active_rows(), in_the_feed())
 }
 
 fn page_statement(after: Option<&Keyset>) -> String {
@@ -294,6 +300,25 @@ mod tests {
 			.find(|row| row.conversation.id == "c01");
 		assert_eq!(by_id.expect("the row reads"), paged);
 		assert_eq!(absent.expect("the read succeeds"), None);
+	}
+
+	#[tokio::test]
+	async fn a_mission_thread_read_by_id_is_no_row_beside_a_room_of_the_same_space() {
+		let mission =
+			"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('m01', 'mission', 'personal', 'Mission', 1, 1);";
+		let (database, _dir) =
+			planted(format!("{A_SEATED_BOT}{}{mission}", a_room("c01", 1))).await;
+		let conversations = database.conversations();
+
+		let mission = conversations.conversation_in_page("m01".to_owned()).await;
+		let room = conversations.conversation_in_page("c01".to_owned()).await;
+
+		assert_eq!(mission.expect("the read succeeds"), None);
+		assert_eq!(
+			room.expect("the row reads").map(|row| row.conversation.id),
+			Some("c01".to_owned())
+		);
 	}
 
 	#[tokio::test]
