@@ -752,14 +752,12 @@ export const createRosterController = (
 		return null
 	}
 
-	const prefetchSoloThreadsWhere = async (
-		isWanted: (line: RosterLine) => boolean,
-	) => {
-		const lines = rosterLinesIn(current().rosters).filter(isWanted)
-		await Promise.all(
-			lines.map((line) => queryClient.prefetchQuery(soloThreadQuery(line))),
+	const prefetchSoloThreadsWhere = (isWanted: (line: RosterLine) => boolean) =>
+		Promise.all(
+			rosterLinesIn(current().rosters)
+				.filter(isWanted)
+				.map((line) => queryClient.prefetchQuery(soloThreadQuery(line))),
 		)
-	}
 
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
 		const seated = rosterIn(current().conversationRosters, spaceRowId)
