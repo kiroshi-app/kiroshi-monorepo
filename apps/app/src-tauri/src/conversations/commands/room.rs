@@ -2,8 +2,8 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted, ConversationPage,
-	ConversationStored, RuntimeSession, TranscriptStoreError,
+	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
+	ConversationInPage, ConversationPage, ConversationStored, RuntimeSession, TranscriptStoreError,
 };
 use super::bot::ready;
 use crate::avatars;
@@ -15,7 +15,8 @@ use crate::db::repositories::conversations::{
 use crate::db::repositories::keyset;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
 use crate::events::{
-	Event, COMPANION_ARRIVED, CONVERSATION_CREATED, CONVERSATION_DELETED, CONVERSATION_UPDATED,
+	self, Event, COMPANION_ARRIVED, CONVERSATION_CREATED, CONVERSATION_DELETED,
+	CONVERSATION_UPDATED,
 };
 use crate::file_store::FileStore;
 
@@ -40,8 +41,9 @@ pub async fn conversation_create<R: Runtime>(
 	bot_ids: Vec<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let draft = ConversationDraft { space_id, section_id, title, bot_ids };
-	let created = drawn(&app, ready(&state)?.conversations().create_conversation(draft).await?);
-	announce_stored(&app, CONVERSATION_CREATED, &created);
+	let database = ready(&state)?;
+	let created = drawn(&app, database.conversations().create_conversation(draft).await?);
+	announce_conversation(&app, database, CONVERSATION_CREATED, &created.id).await;
 	Ok(created)
 }
 
@@ -96,9 +98,10 @@ pub async fn conversation_update<R: Runtime>(
 	section_id: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
 	let edit = ConversationEdit { title, instructions, section_id };
-	let updated = ready(&state)?.conversations().update_conversation(conversation_id, edit).await?;
+	let database = ready(&state)?;
+	let updated = database.conversations().update_conversation(conversation_id, edit).await?;
 	let updated = drawn(&app, updated);
-	announce_stored(&app, CONVERSATION_UPDATED, &updated);
+	announce_conversation(&app, database, CONVERSATION_UPDATED, &updated.id).await;
 	Ok(updated)
 }
 
@@ -143,7 +146,7 @@ pub(crate) async fn seat_participant<R: Runtime>(
 		.await?;
 	if let Some(arrival) = &joined.arrival {
 		launch::announce(app, COMPANION_ARRIVED, CompanionArrival::from(arrival.clone()));
-		announce_stored(app, CONVERSATION_UPDATED, &drawn(app, joined.conversation.clone()));
+		announce_conversation(app, database, CONVERSATION_UPDATED, &joined.conversation.id).await;
 	}
 	Ok(joined)
 }
@@ -156,9 +159,10 @@ pub async fn conversation_remove_participant<R: Runtime>(
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let left = ready(&state)?.conversations().remove_participant(conversation_id, bot_id).await?;
+	let database = ready(&state)?;
+	let left = database.conversations().remove_participant(conversation_id, bot_id).await?;
 	let left = drawn(&app, left);
-	announce_stored(&app, CONVERSATION_UPDATED, &left);
+	announce_conversation(&app, database, CONVERSATION_UPDATED, &left.id).await;
 	Ok(left)
 }
 
@@ -170,22 +174,34 @@ pub async fn conversation_set_lead<R: Runtime>(
 	conversation_id: String,
 	bot_id: String,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let led = ready(&state)?.conversations().set_lead(conversation_id, bot_id).await?;
+	let database = ready(&state)?;
+	let led = database.conversations().set_lead(conversation_id, bot_id).await?;
 	let led = drawn(&app, led);
-	announce_stored(&app, CONVERSATION_UPDATED, &led);
+	announce_conversation(&app, database, CONVERSATION_UPDATED, &led.id).await;
 	Ok(led)
 }
 
-fn announce_stored<R: Runtime>(
+pub(crate) async fn announce_conversation<R: Runtime>(
 	app: &AppHandle<R>,
+	database: &db::Database,
 	event: Event<ConversationStored>,
-	conversation: &Conversation,
+	conversation_id: &str,
 ) {
-	let stored = ConversationStored {
-		space_id: conversation.space_id.clone(),
-		conversation: conversation.clone(),
-	};
-	launch::announce(app, event, stored);
+	let failure =
+		match database.conversations().conversation_in_page(conversation_id.to_owned()).await {
+			Ok(Some(row)) => {
+				let conversation =
+					ConversationInPage::of(row, avatars::Avatars::dir(app).as_deref());
+				let space_id = conversation.conversation.space_id.clone();
+				match events::emit(app, event, ConversationStored { space_id, conversation }) {
+					Ok(()) => return,
+					Err(failure) => failure.to_string(),
+				}
+			}
+			Ok(None) => "the conversation was not found".to_owned(),
+			Err(failure) => format!("the conversation row did not read: {failure:?}"),
+		};
+	eprintln!("{} was not announced for conversation {conversation_id}: {failure}", event.name());
 }
 
 fn drawn<R: Runtime>(app: &AppHandle<R>, room: StoredConversation) -> Conversation {

@@ -30,7 +30,7 @@ pub const DELETED_EVENT: &str = "conversation://deleted";
 #[serde(rename_all = "camelCase")]
 pub struct ConversationStored {
 	pub space_id: Option<String>,
-	pub conversation: Conversation,
+	pub conversation: ConversationInPage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

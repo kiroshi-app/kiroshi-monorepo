@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::{params, params_from_iter, Connection, Row};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use super::{
 	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
@@ -39,12 +39,19 @@ impl ConversationsRepository {
 		self.call(move |connection| Ok(page_of_space(connection, &space_id, after.as_ref(), size)))
 			.await?
 	}
+
+	pub async fn conversation_in_page(
+		&self,
+		conversation_id: String,
+	) -> Result<Option<ActiveConversation>, ConversationError> {
+		self.call(move |connection| Ok(active_by_id(connection, &conversation_id))).await?
+	}
 }
 
 const PIN_POSITION: &str =
 	"CASE WHEN solo.bot_id IS NULL THEN conversations.pin_position ELSE solo.pin_position END";
 
-fn active_statement(filter: &str, order: &str) -> String {
+fn active_rows() -> String {
 	format!(
 		"SELECT conversations.id AS id, conversations.space_id AS space_id,
 			conversations.section_id AS section_id, {PIN_POSITION} AS pin_position,
@@ -63,12 +70,23 @@ fn active_statement(filter: &str, order: &str) -> String {
 		LEFT JOIN messages AS word ON word.id = (SELECT settled.id FROM messages AS settled
 			WHERE settled.conversation_id = conversations.id
 				AND settled.completion_state NOT IN ('pending', 'streaming')
-			ORDER BY settled.seq DESC LIMIT 1)
+			ORDER BY settled.seq DESC LIMIT 1)"
+	)
+}
+
+fn active_statement(filter: &str, order: &str) -> String {
+	format!(
+		"{}
 		WHERE conversations.space_id = ?1
 			AND conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
 			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL) {filter}
-		{order}"
+		{order}",
+		active_rows()
 	)
+}
+
+fn by_id_statement() -> String {
+	format!("{} WHERE conversations.id = ?1", active_rows())
 }
 
 fn page_statement(after: Option<&Keyset>) -> String {
@@ -107,6 +125,19 @@ fn page_of_space(
 		row.conversation.seats = seats.remove(&row.conversation.id).unwrap_or_default();
 	}
 	Ok(read)
+}
+
+fn active_by_id(
+	connection: &Connection,
+	conversation_id: &str,
+) -> Result<Option<ActiveConversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&by_id_statement())?;
+	let Some(mut row) = statement.query_row([conversation_id], active).optional()? else {
+		return Ok(None);
+	};
+	let mut seats = seats_of_page(connection, &[conversation_id])?;
+	row.conversation.seats = seats.remove(conversation_id).unwrap_or_default();
+	Ok(Some(row))
 }
 
 fn pinned_of_space(
@@ -244,6 +275,25 @@ mod tests {
 				None => return pages,
 			}
 		}
+	}
+
+	#[tokio::test]
+	async fn a_conversation_read_by_id_is_its_page_row_and_an_absent_one_is_no_row() {
+		let (database, _dir) = planted(format!("{A_SEATED_BOT}{}", rooms(2, |n| n as i64))).await;
+		let conversations = database.conversations();
+
+		let page = conversations.conversation_page("personal".to_owned(), None, 10).await;
+		let by_id = conversations.conversation_in_page("c01".to_owned()).await;
+		let absent = conversations.conversation_in_page("absent".to_owned()).await;
+
+		let paged = page
+			.expect("the page reads")
+			.page
+			.rows
+			.into_iter()
+			.find(|row| row.conversation.id == "c01");
+		assert_eq!(by_id.expect("the row reads"), paged);
+		assert_eq!(absent.expect("the read succeeds"), None);
 	}
 
 	#[tokio::test]

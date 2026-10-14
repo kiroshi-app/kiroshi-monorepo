@@ -3,15 +3,16 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use super::super::contract::{
 	MessageReference, NewAssistantMessage, NewTurn, NewUserMessage, PinnedBubble, SentMessage,
 	TerminalCompletion, TranscriptMessage, TranscriptPage, TranscriptStoreError, TranscriptWindow,
-	MESSAGE_STORED_EVENT,
+	MESSAGE_STORED_EVENT, UPDATED_EVENT,
 };
 use super::super::{context, host_turn};
 use super::bot::ready;
+use super::room::announce_conversation;
 use crate::agent::reply_writer::HostWrites;
 use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::messages::{MessagePageQuery, MessagesAroundQuery};
-use crate::events::{self, MESSAGE_STORED};
+use crate::events::{self, CONVERSATION_UPDATED, MESSAGE_STORED};
 use crate::hosting::authorship::Caller;
 
 #[tauri::command]
@@ -145,7 +146,8 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	let author = caller.author(&app, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
 	let seq = database.messages().append_user_message(message.written_by(author)).await?;
-	announce_stored(&app, database, conversation_id, id).await;
+	announce_stored(&app, database, conversation_id.clone(), id).await;
+	announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
 }
 
@@ -195,7 +197,8 @@ async fn store_sent<R: Runtime>(
 	if let Some(agent) = app.try_state::<AgentState>() {
 		agent.host_writes().claim_turn(&turn_id);
 	}
-	announce_stored(app, database, conversation_id, id).await;
+	announce_stored(app, database, conversation_id.clone(), id).await;
+	announce_conversation(app, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
 }
 
@@ -262,11 +265,24 @@ pub async fn conversation_finalize_message<R: Runtime>(
 	completion: TerminalCompletion,
 	settled_text: Option<String>,
 ) -> Result<(), TranscriptStoreError> {
-	let messages = ready(&state)?.messages();
+	let database = ready(&state)?;
+	let messages = database.messages();
 	if owned_by_host(&app, |host| host.owns_message(&id)) {
 		return Ok(());
 	}
-	Ok(messages.finalize_message(id, completion.into(), settled_text).await?)
+	messages.finalize_message(id.clone(), completion.into(), settled_text).await?;
+	match messages.conversation_of_message(id.clone()).await {
+		Ok(Some(conversation_id)) => {
+			announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await
+		}
+		Ok(None) => {
+			eprintln!("{UPDATED_EVENT} was not announced for message {id}: it was not found")
+		}
+		Err(failure) => eprintln!(
+			"{UPDATED_EVENT} was not announced for message {id}: its conversation did not read: {failure:?}"
+		),
+	}
+	Ok(())
 }
 
 fn owned_by_host<R: Runtime>(app: &AppHandle<R>, owns: impl Fn(&HostWrites) -> bool) -> bool {
