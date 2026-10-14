@@ -106,8 +106,10 @@ const raiseRemovalNotice = (notice: NoticeMessage) =>
 
 const JOINED_ROW_PREFIX = "joined:"
 
-const rowIdOf = (joined: JoinedSpace): string =>
-	`${JOINED_ROW_PREFIX}${joined.id}`
+export const joinedRowIdOf = (hostId: string): string =>
+	`${JOINED_ROW_PREFIX}${hostId}`
+
+const rowIdOf = (joined: JoinedSpace): string => joinedRowIdOf(joined.id)
 
 export const isJoinedRowId = (rowId: string): boolean =>
 	rowId.startsWith(JOINED_ROW_PREFIX)

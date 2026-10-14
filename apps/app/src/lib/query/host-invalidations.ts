@@ -6,16 +6,40 @@ import {
 } from "@tanstack/react-query"
 import { useEffect } from "react"
 
-import { listen, onHostReconnected } from "@/lib/host"
+import { joinedHosts, listen, onHostReconnected } from "@/lib/host"
+import { LOCAL_HOST } from "@/lib/host/use-reachable-host"
+import {
+	isJoinedRowId,
+	joinedRowIdOf,
+} from "@/lib/spaces/joined-spaces-controller"
 
 const reportUnheardEvent = (event: string) => (reason: unknown) => {
 	console.error(`query: ${event} could not be listened to`, reason)
 }
 
+const otherHostIdsThan = (hostId: string) =>
+	new Set(
+		Object.keys(joinedHosts.getState().connections).filter(
+			(id) => id !== hostId,
+		),
+	)
+
+const namesAnotherHost = (queryKey: QueryKey, hostId: string) => {
+	const otherHostIds = otherHostIdsThan(hostId)
+	return queryKey.some(
+		(segment) =>
+			typeof segment === "string" &&
+			(segment === LOCAL_HOST ||
+				otherHostIds.has(segment) ||
+				(isJoinedRowId(segment) && segment !== joinedRowIdOf(hostId))),
+	)
+}
+
 export const invalidateOnHostReconnect = (queryClient: QueryClient) =>
-	onHostReconnected(() => {
+	onHostReconnected((hostId) => {
 		queryClient.invalidateQueries({
-			predicate: ({ meta }) => !meta?.rereadsItselfOnReconnect,
+			predicate: ({ meta, queryKey }) =>
+				!meta?.rereadsItselfOnReconnect && !namesAnotherHost(queryKey, hostId),
 		})
 	})
 
