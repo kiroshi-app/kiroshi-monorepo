@@ -53,7 +53,7 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertFalse(app.staticTexts[Self.footer].waitForExistence(timeout: 3))
     }
 
-    func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensTheOpeningScreen()
+    func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensWelcome()
         throws
     {
         let app = launch("6.2")
@@ -77,7 +77,7 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.buttons["Sign out"].tap()
 
-        XCTAssertTrue(app.buttons["Sign in"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Sign in with Apple"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts[Self.footer].exists)
     }
 }

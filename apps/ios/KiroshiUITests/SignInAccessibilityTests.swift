@@ -4,7 +4,10 @@ import XCTest
 final class SignInAccessibilityTests: XCTestCase {
     static let shownText = [
         "1.1": "Your companions, away from your Mac.",
-        "1.2": "No account yet? This creates one.",
+        "1.1b": "Signing in with Apple…",
+        "1.1c": "Signing in with Google…",
+        "1.1d": "Couldn’t sign in with Apple. Try again, or use your email.",
+        "1.2": "Continue with Google",
         "1.3": "The code works for 5 minutes.",
         "1.4": "Signing in…",
         "1.5": "Loading your spaces…",
@@ -28,7 +31,7 @@ final class SignInAccessibilityTests: XCTestCase {
         continueAfterFailure = true
     }
 
-    func testEverySignInStatePassesTheAuditAndTheOpeningShowsTheKiroshiMark() throws {
+    func testEverySignInStatePassesTheAuditAndWelcomeKeepsEveryActionAboveTheKeyboard() throws {
         for (fixture, text) in Self.shownText.sorted(by: { $0.key < $1.key }) {
             try XCTContext.runActivity(named: fixture) { _ in
                 let app = launch(fixture)
@@ -37,11 +40,51 @@ final class SignInAccessibilityTests: XCTestCase {
                 XCTAssertTrue(shown.waitForExistence(timeout: 10), "\(fixture) shows “\(text)”")
                 if fixture == "1.1" {
                     XCTAssertTrue(app.images["Kiroshi"].exists)
+                    XCTAssertTrue(app.buttons["Sign in with Apple"].exists)
+                    XCTAssertTrue(app.buttons["Continue with Google"].exists)
                 }
                 try audit(app) { issue in
                     Self.isDimmedWhileSigningIn(issue) || Self.isScrollingTextField(issue)
                 }
+                if fixture == "1.1" {
+                    try tapTheEmailFieldThenCheckEveryActionStaysAboveTheKeyboard(app)
+                }
             }
         }
+    }
+
+    func tapTheEmailFieldThenCheckEveryActionStaysAboveTheKeyboard(_ app: XCUIApplication) throws {
+        let email = app.textFields["Email"]
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+
+        email.tap()
+
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.images["Kiroshi"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Continue"].isHittable)
+        add(XCTAttachment(screenshot: app.screenshot()))
+        try audit(app) { issue in Self.isScrollingTextField(issue) }
+    }
+
+    func testWelcomeAtTheLargestTextScrollsToEveryAction() throws {
+        let app = launch(
+            "1.1", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        XCTAssertTrue(app.textFields["Email"].waitForExistence(timeout: 10))
+        try audit(app) { issue in
+            Self.isScrollingTextField(issue) || Self.isScrolledOffScreen(issue, in: app)
+        }
+
+        app.swipeUp()
+
+        XCTAssertTrue(app.buttons["Continue with Google"].isHittable)
+        add(XCTAttachment(screenshot: app.screenshot()))
+    }
+
+    static func isScrolledOffScreen(_ issue: XCUIAccessibilityAuditIssue, in app: XCUIApplication)
+        -> Bool
+    {
+        guard issue.auditType == .dynamicType, let element = issue.element else { return false }
+        return !app.windows.firstMatch.frame.contains(element.frame)
     }
 }

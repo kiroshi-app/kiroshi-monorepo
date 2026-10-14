@@ -59,7 +59,7 @@ Xcode Cloud numbers builds from 1. If TestFlight already holds a `0.1.0` build u
 
 ## States without the network
 
-A Debug build opens straight on one state, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number. Page 1 "Sign in" of the Paper file "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards):
+A Debug build opens straight on one state, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number. Page 1 "Sign in" of the Paper file "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`), whose Welcome, email and code states (`1.1`, `1.1b`, `1.1c`, `1.1d`, `1.2`, `1.3`) now follow page "Sign in" of the Paper file "Kiroshi, iOS Sign-in"; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.7
@@ -100,7 +100,7 @@ A solo Conversation, a group Conversation and a Mission open the same thread scr
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -history YES
 ```
 
-`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.7b`), on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, sends from `3.1` and checks no element names the agent's tools while the turn runs or after, audits `two-asks` and checks each of its paragraphs stays in its message's one bubble, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and `slow-group` again from its list, and checks each open shows the loading, without a day separator, then lands on the last message with no scroll, opens the menu of Spaces on 2.1, checks both tabs of 2.1 show the same header (your initial and the Space button, at the same place) and opens the menu of Spaces from Missions, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
+`KiroshiUITests` runs the accessibility audit on every state of page 1 (`1.1` to `1.10`, `1.1b`, `1.1c`, `1.1d`, `1.7b`), taps the email field of `1.1` and checks every action stays above the keyboard, scrolls `1.1` to Continue with Google at the largest text size, then runs it on 2.1, 2.3, 2.4, 2.5, 2.6, `conversations`, and every state of page 3 (`3.1` to `3.5`), swipes left on `3.1` to bring the times in, sends from `3.1` and checks no element names the agent's tools while the turn runs or after, audits `two-asks` and checks each of its paragraphs stays in its message's one bubble, scrolls `3.1` up at the largest text size, opens `slow-thread` twice and `slow-group` again from its list, and checks each open shows the loading, without a day separator, then lands on the last message with no scroll, opens the menu of Spaces on 2.1, checks both tabs of 2.1 show the same header (your initial and the Space button, at the same place) and opens the menu of Spaces from Missions, and from 2.1 creates a group conversation with the + and runs the audit on New Conversation, as part of `bun run ios:test`.
 
 The same fixtures feed the `#Preview`s.
 
@@ -122,7 +122,7 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 ## Settings and Sign out without the network
 
-Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations and Missions tabs, presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on the Opening screen:
+Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of the Conversations and Missions tabs, presents. `6.1` opens on the Settings sheet, `6.2` on its Sign out confirmation; both sign in Sam with three spaces (Studio, Home lab, Side project) kept in memory and answer Sign out, so confirming lands on Welcome:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
@@ -138,6 +138,20 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 ```
 
 Tap your initial, then Sign out. Relaunched with `-fixture keychain` after confirming, the app opens on Sign in: no session is left on the device.
+
+## Sign in with Apple and Google
+
+Welcome (`WelcomeView`) offers the email, then Sign in with Apple and Continue with Google. Both send the provider's ID token to the cloud's `POST /api/auth/sign-in/social` (`KiroshiCloud.signIn(with:)`), which answers the session body of the email code: the bearer goes to the Keychain the same way. Apple is the system `SignInWithAppleButton`, handed the SHA-256 of a fresh nonce (`Nonce`) whose raw value goes to the cloud with the token and, on the first authorization only, the full name. Google is GoogleSignIn-iOS (`GoogleSignInAuthorizer`, behind `GoogleAuthorizing`), its `serverClientID` the cloud's web client so the token's audience matches. A cancelled sheet goes back silently; a refused token says so under the buttons.
+
+- `GOOGLE_IOS_CLIENT_ID` in `project.yml` is the iOS OAuth client of Google Cloud without its `.apps.googleusercontent.com` suffix; `GIDClientID` and the reversed URL scheme are built from it.
+- The app target carries the `com.apple.developer.applesignin` entitlement, so the App ID needs the Sign in with Apple capability.
+- `Package.resolved` pins the Swift packages. Every generate copies it into the project, since Xcode Cloud resolves none on its own: after changing a package, resolve in Xcode and copy `Kiroshi.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` back. The packages check out under `build/`, which every generate marks for `swift format` to skip.
+
+`1.1b` and `1.1c` hold the tapped button's loading while the cloud's answer is pending, `1.1d` shows the cloud refusing the Apple token:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 1.1d
+```
 
 ## The relay
 

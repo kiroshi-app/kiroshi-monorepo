@@ -17,7 +17,7 @@ struct SignInModelTests {
 
     func modelOnCodeScreen(code: String = "482913") -> SignInModel {
         let model = makeModel()
-        model.path = [.email, .code]
+        model.path = [.code]
         model.email = CloudFixture.email
         model.code = code
         return model
@@ -46,23 +46,14 @@ struct SignInModelTests {
         #expect(model.signedInEmail == CloudFixture.email)
     }
 
-    @Test func signInOpensTheEmailScreen() {
-        let model = makeModel()
-
-        model.start()
-
-        #expect(model.path == [.email])
-    }
-
     @Test func aSentCodeOpensTheCodeScreenForTheTrimmedEmail() async throws {
         await transport.answer(CloudFixture.codeRequestPath, with: CloudFixture.codeSent)
         let model = makeModel()
-        model.path = [.email]
         model.email = "  sam@example.com "
 
         await model.requestCode()
 
-        #expect(model.path == [.email, .code])
+        #expect(model.path == [.code])
         #expect(model.email == CloudFixture.email)
         #expect(model.emailProblem == nil)
         #expect(model.isRequestingCode == false)
@@ -87,17 +78,16 @@ struct SignInModelTests {
                 EmailProblem.invalidEmail
             ),
         ])
-    func aRefusedCodeRequestStaysOnTheEmailScreen(
+    func aRefusedCodeRequestStaysOnWelcome(
         answer: ScriptedTransport.Answer, problem: EmailProblem
     ) async {
         await transport.answer(CloudFixture.codeRequestPath, with: answer)
         let model = makeModel()
-        model.path = [.email]
         model.email = CloudFixture.email
 
         await model.requestCode()
 
-        #expect(model.path == [.email])
+        #expect(model.path.isEmpty)
         #expect(model.emailProblem == problem)
     }
 
@@ -178,7 +168,7 @@ struct SignInModelTests {
         #expect(model.codeProblem == problem)
         #expect(model.code == codeLeft)
         #expect(model.stage == .signedOut)
-        #expect(model.path == [.email, .code])
+        #expect(model.path == [.code])
         #expect(sessions.saved == nil)
     }
 
@@ -255,7 +245,7 @@ struct SignInModelTests {
 
         #expect(model.codeProblem == nil)
         #expect(model.code.isEmpty)
-        #expect(model.path == [.email, .code])
+        #expect(model.path == [.code])
     }
 
     @Test(
@@ -283,14 +273,14 @@ struct SignInModelTests {
         #expect(model.code == "482")
     }
 
-    @Test func aDifferentEmailGoesBackToTheEmailScreen() async {
+    @Test func aDifferentEmailGoesBackToWelcome() async {
         await transport.answer(CloudFixture.signInPath, with: CloudFixture.refused("Code is wrong"))
         let model = modelOnCodeScreen()
         await model.signIn()
 
         model.useDifferentEmail()
 
-        #expect(model.path == [.email])
+        #expect(model.path.isEmpty)
         #expect(model.code.isEmpty)
         #expect(model.codeProblem == nil)
         #expect(model.email == CloudFixture.email)
@@ -377,7 +367,7 @@ struct SignInModelTests {
         #expect(model.stage == .loadingSpaces)
     }
 
-    @Test func anotherAccountClearsTheKeychainAndOpensTheEmailScreen() async {
+    @Test func anotherAccountClearsTheKeychainAndOpensWelcome() async {
         let sessions = InMemorySessionStore(CloudFixture.session)
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
@@ -388,7 +378,7 @@ struct SignInModelTests {
 
         #expect(sessions.saved == nil)
         #expect(model.stage == .signedOut)
-        #expect(model.path == [.email])
+        #expect(model.path.isEmpty)
         #expect(model.email.isEmpty)
     }
 }
