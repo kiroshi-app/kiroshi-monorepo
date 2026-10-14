@@ -278,6 +278,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("plugin_history_diff", Reach::Scoped(PLUGIN_SCOPE)),
 	("plugin_revert", Reach::Scoped(PLUGIN_WRITE_SCOPE)),
 	("routine_trigger_sources", Reach::Scoped(BOT_ID)),
+	("routine_trigger_sources_of_space", Reach::Scoped(SPACE_ID)),
 	(
 		"routine_create",
 		Reach::Scoped(&[child(Conversation, "/draft/conversationId"), child(Bot, "/draft/botId")]),
@@ -286,6 +287,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("routine_delete", Reach::Scoped(ROUTINE_AS_ID)),
 	("routine_list", Reach::Scoped(CONVERSATION_ID)),
 	("routine_runs", Reach::Scoped(&[child(Routine, "/routineId")])),
+	("routine_runs_of_space", Reach::Scoped(SPACE_ID)),
 	("routine_reported_runs", Reach::Scoped(CONVERSATION_ID)),
 	("routine_run_now", Reach::Scoped(ROUTINE_AS_ID)),
 	("routine_renew_lease", Reach::Scoped(ROUTINE_RUN_ID)),

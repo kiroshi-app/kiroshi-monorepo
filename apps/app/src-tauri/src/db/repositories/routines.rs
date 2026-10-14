@@ -7,8 +7,9 @@ use super::messages::conversation_of_turn;
 
 use crate::db::{Access, DatabaseError};
 use crate::routines::contract::{
-	ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RunCause,
-	RunClosing, RunOutcome, RunRequested, SkipReason, TriggerDecision, TriggerEvent, LEASE_EXPIRED,
+	ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineRun, RoutineRuns,
+	RunCause, RunClosing, RunOutcome, RunRequested, SkipReason, TriggerDecision, TriggerEvent,
+	LEASE_EXPIRED,
 };
 use crate::routines::core::{
 	self, Dedupe, Facts, Verdict, DEDUPE_RETENTION_MS, FAILURES_BEFORE_DISABLE, HOUR_MS, LEASE_MS,
@@ -64,6 +65,17 @@ const SELECT_RUN: &str = "SELECT id, routine_id, started_at, ended_at, outcome, 
 const SELECT_RUNS_OF_ROUTINE: &str = "SELECT id, routine_id, started_at, ended_at, outcome, reason,
 	cost_usd, model_usage FROM routine_runs WHERE routine_id = ?1
 	ORDER BY started_at DESC, id DESC LIMIT ?2";
+
+const SELECT_RUNS_OF_SPACE: &str = "SELECT routine_runs.id, routine_runs.routine_id,
+	routine_runs.started_at, routine_runs.ended_at, routine_runs.outcome, routine_runs.reason,
+	routine_runs.cost_usd, routine_runs.model_usage, routines.id
+	FROM routines
+	JOIN conversations ON conversations.id = routines.conversation_id
+	LEFT JOIN routine_runs ON routine_runs.id IN (
+		SELECT newest.id FROM routine_runs AS newest WHERE newest.routine_id = routines.id
+		ORDER BY newest.started_at DESC, newest.id DESC LIMIT ?2)
+	WHERE conversations.space_id = ?1
+	ORDER BY routines.id, routine_runs.started_at DESC, routine_runs.id DESC";
 
 const INSERT_RUN: &str = "INSERT INTO routine_runs
 	(id, routine_id, started_at, ended_at, outcome, reason, lease_renewed_at)
@@ -214,13 +226,38 @@ impl RoutinesRepository {
 		routine_id: String,
 		limit: u32,
 	) -> Result<Vec<RoutineRun>, RoutineError> {
-		let page = limit.clamp(1, MAX_RUNS_PER_PAGE);
+		let page = runs_page(limit);
 		Ok(self
 			.access
 			.call(move |connection| {
 				let mut statement = connection.prepare_cached(SELECT_RUNS_OF_ROUTINE)?;
 				let rows = statement.query_map(params![routine_id, page], run)?;
 				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await?)
+	}
+
+	pub async fn runs_of_space(
+		&self,
+		space_id: String,
+		limit: u32,
+	) -> Result<Vec<RoutineRuns>, RoutineError> {
+		let page = runs_page(limit);
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(SELECT_RUNS_OF_SPACE)?;
+				let rows = statement.query_map(params![space_id, page], routine_and_run)?;
+				let mut grouped: Vec<RoutineRuns> = Vec::new();
+				for row in rows {
+					let (routine_id, ran) = row?;
+					match grouped.last_mut() {
+						Some(held) if held.routine_id == routine_id => held.runs.extend(ran),
+						_ => grouped
+							.push(RoutineRuns { routine_id, runs: ran.into_iter().collect() }),
+					}
+				}
+				Ok(grouped)
 			})
 			.await?)
 	}
@@ -661,6 +698,10 @@ fn enabled_routine(row: &Row<'_>) -> rusqlite::Result<EnabledRoutine> {
 	Ok(EnabledRoutine { routine: routine(row)?, last_occurrence_at: row.get(11)? })
 }
 
+fn runs_page(limit: u32) -> u32 {
+	limit.clamp(1, MAX_RUNS_PER_PAGE)
+}
+
 fn run(row: &Row<'_>) -> rusqlite::Result<RoutineRun> {
 	Ok(RoutineRun {
 		id: row.get(0)?,
@@ -672,6 +713,11 @@ fn run(row: &Row<'_>) -> rusqlite::Result<RoutineRun> {
 		cost_usd: row.get(6)?,
 		model_usage: row.get::<_, Option<String>>(7)?.map(|text| parsed(&text)).transpose()?,
 	})
+}
+
+fn routine_and_run(row: &Row<'_>) -> rusqlite::Result<(String, Option<RoutineRun>)> {
+	let has_run = row.get::<_, Option<String>>(0)?.is_some();
+	Ok((row.get(8)?, has_run.then(|| run(row)).transpose()?))
 }
 
 fn reported_run(row: &Row<'_>) -> rusqlite::Result<ReportedRun> {
@@ -1594,5 +1640,104 @@ mod tests {
 			.expect_err("the occurrence is refused");
 
 		assert!(matches!(failure, RoutineError::UnknownRoutine { .. }), "got {failure:?}");
+	}
+
+	const ROUTINES_IN_TWO_SPACES: &str = "
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('work', 'Work', 'blue', 1, 1), ('empty', 'Empty', 'green', 2, 1);
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b2', 'Second', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b2', 'work', 1);
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('p1', 'topic', 'personal', 'Mine', 1, 1),
+				('w1', 'topic', 'work', 'Theirs', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('p1', 'b1', 'assistant', 1, 0), ('w1', 'b2', 'assistant', 1, 0);
+		INSERT INTO routines (id, conversation_id, bot_id, trigger_source_id, event_filter,
+				trigger_config, trigger_key, created_at, title, instruction)
+			VALUES ('r-busy', 'p1', 'b1', 'schedule', '[]', '{}', 'k1', 2, 'Busy', 'Read'),
+				('r-idle', 'p1', 'b1', 'schedule', '[]', '{}', 'k2', 1, 'Idle', 'Read'),
+				('r-work', 'w1', 'b2', 'schedule', '[]', '{}', 'k3', 1, 'Work', 'Read');
+		INSERT INTO routine_runs (id, routine_id, started_at, ended_at, outcome, lease_renewed_at)
+			VALUES ('run-1', 'r-busy', 1, 2, 'ok', 1),
+				('run-2', 'r-busy', 2, 3, 'failed', 2),
+				('run-3a', 'r-busy', 3, 4, 'nothing', 3),
+				('run-3b', 'r-busy', 3, NULL, NULL, 3),
+				('run-w', 'r-work', 1, 2, 'ok', 1);
+	";
+
+	async fn routines_in_two_spaces() -> (Database, RemovedOnDrop) {
+		let (database, dir) = planted().await;
+		plant(&database, ROUTINES_IN_TWO_SPACES).await;
+		(database, dir)
+	}
+
+	async fn runs_of_space(database: &Database, space_id: &str, limit: u32) -> Vec<RoutineRuns> {
+		database
+			.routines()
+			.runs_of_space(space_id.to_owned(), limit)
+			.await
+			.expect("the runs of the space read")
+	}
+
+	fn routines_answered(answered: &[RoutineRuns]) -> Vec<&str> {
+		answered.iter().map(|entry| entry.routine_id.as_str()).collect()
+	}
+
+	#[tokio::test]
+	async fn each_space_answers_only_its_routines_with_the_runs_routine_runs_answers() {
+		let (database, _dir) = routines_in_two_spaces().await;
+
+		for limit in [0, 2, 3, MAX_RUNS_PER_PAGE + 1] {
+			let personal = runs_of_space(&database, "personal", limit).await;
+			let work = runs_of_space(&database, "work", limit).await;
+
+			assert_eq!(routines_answered(&personal), ["r-busy", "r-idle"], "limit {limit}");
+			assert_eq!(routines_answered(&work), ["r-work"], "limit {limit}");
+			for entry in personal.iter().chain(&work) {
+				let alone = database
+					.routines()
+					.runs(entry.routine_id.clone(), limit)
+					.await
+					.expect("the runs of the routine read");
+				assert_eq!(entry.runs, alone, "{} at limit {limit}", entry.routine_id);
+			}
+		}
+		let capped = runs_of_space(&database, "personal", 2).await;
+		let newest: Vec<&str> = capped[0].runs.iter().map(|run| run.id.as_str()).collect();
+		assert_eq!(newest, ["run-3b", "run-3a"], "the busy routine is cut at the limit");
+		assert!(capped[1].runs.is_empty(), "a routine with no run answers an empty list");
+	}
+
+	#[tokio::test]
+	async fn a_space_with_no_routine_answers_an_empty_list() {
+		let (database, _dir) = routines_in_two_spaces().await;
+
+		assert!(runs_of_space(&database, "empty", 10).await.is_empty());
+		assert!(runs_of_space(&database, "unknown", 10).await.is_empty());
+	}
+
+	#[tokio::test]
+	async fn the_runs_of_a_space_are_read_through_the_index_on_the_routine() {
+		let (database, _dir) = routines_in_two_spaces().await;
+
+		let plan = database
+			.call(|connection| {
+				let mut statement =
+					connection.prepare(&format!("EXPLAIN QUERY PLAN {SELECT_RUNS_OF_SPACE}"))?;
+				let rows = statement
+					.query_map(params!["personal", 10], |row| row.get::<_, String>("detail"))?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await
+			.expect("the plan");
+
+		assert!(
+			plan.iter().any(|step| step.contains("routine_runs_by_routine")),
+			"the runs read seeks the runs of each routine: got {plan:?}"
+		);
+		assert!(
+			!plan.iter().any(|step| step.starts_with("SCAN routine_runs")),
+			"the runs read never scans every run: got {plan:?}"
+		);
 	}
 }
