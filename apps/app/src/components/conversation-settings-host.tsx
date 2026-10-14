@@ -2,30 +2,28 @@ import { ConversationSettingsDialog } from "@workspace/ui/components/conversatio
 
 import {
 	leadOf,
+	presentParticipants,
+	toConversationBots,
 	toConversationSettingsValue,
 } from "@/lib/conversations/roster-conversations"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
 type ConversationSettingsHostProps = {
 	core: WorkspaceCore
 	rosterLines: RosterLines
-	rosterLists: RosterLists
 	rosterView: RosterView
 }
 
 export const ConversationSettingsHost = ({
 	core,
 	rosterLines,
-	rosterLists,
 	rosterView,
 }: ConversationSettingsHostProps) => {
 	const { roster } = core
 	const { sidebarActions } = rosterLines
-	const { seatedBots } = rosterLists
-	const { isEditingConversation, settingsConversation } = rosterView
+	const { bots, isEditingConversation, settingsConversation } = rosterView
 
 	return settingsConversation ? (
 		<ConversationSettingsDialog
@@ -50,7 +48,10 @@ export const ConversationSettingsHost = ({
 				roster.controller.describeConversation(settingsConversation.id, value)
 			}
 			open={isEditingConversation}
-			participants={seatedBots}
+			participants={toConversationBots(
+				presentParticipants(settingsConversation),
+				bots,
+			)}
 			value={toConversationSettingsValue(settingsConversation)}
 		/>
 	) : null

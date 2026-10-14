@@ -138,9 +138,8 @@ const mountSwitch = async ({
 					loadedSpaceId: props.loadedSpaceId,
 					showLastMission,
 				},
-				sidebarRosters: props.sidebarRosters,
 			})
-			return { user, sidebarTab }
+			return { user, sidebarTab, sidebarRosters: props.sidebarRosters }
 		},
 		{ initialProps: { loadedSpaceId, sidebarRosters } },
 	)
@@ -148,7 +147,12 @@ const mountSwitch = async ({
 	roster.enter("s-1", ON_C1)
 
 	const switchTo = (panel: "conversations" | "missions") =>
-		act(() => mounted.result.current.sidebarTab.openSidebarTab(panel))
+		act(() =>
+			mounted.result.current.sidebarTab.openSidebarTab(
+				panel,
+				mounted.result.current.sidebarRosters,
+			),
+		)
 	const selectedRow = () =>
 		roster.getState().selectedBotId ?? roster.getState().selectedConversationId
 	const shownMissionId = () => openedMission.getState()?.missionId ?? null

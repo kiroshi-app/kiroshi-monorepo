@@ -8,7 +8,6 @@ import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { UserSettingsHost } from "@/components/user-settings-host"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
@@ -19,7 +18,6 @@ type AppDialogsProps = {
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
 	rosterLines: RosterLines
-	rosterLists: RosterLists
 	rosterView: RosterView
 	scopes: ApplicationScopes
 }
@@ -29,7 +27,6 @@ export const AppDialogs = ({
 	overlay,
 	panels,
 	rosterLines,
-	rosterLists,
 	rosterView,
 	scopes,
 }: AppDialogsProps) => (
@@ -44,7 +41,6 @@ export const AppDialogs = ({
 		<ConversationSettingsHost
 			core={core}
 			rosterLines={rosterLines}
-			rosterLists={rosterLists}
 			rosterView={rosterView}
 		/>
 		<SpaceSettingsHost core={core} panels={panels} scopes={scopes} />
