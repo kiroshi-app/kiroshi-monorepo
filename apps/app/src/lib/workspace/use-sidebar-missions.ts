@@ -183,6 +183,7 @@ export const useSidebarMissions = ({
 			openMissionId: opened?.missionId ?? null,
 			wrap,
 			skeleton: feedSkeleton,
+			listEnd: feed.listEnd,
 		}
 		return { [spaceRowId]: panel }
 	}, [

@@ -130,6 +130,8 @@ const storeAnswer =
 				return { resumed: false }
 			case "mission_list":
 				return { open: [], done: [] }
+			case "mission_space_page":
+				return { missions: [], nextCursor: null }
 			default:
 				return command in answers ? answers[command] : []
 		}
@@ -375,8 +377,10 @@ const spaceIdsIn = (calls: Call[]) => [
 	),
 ]
 
+const FEED_READS = new Set(["mission_space_feed", "mission_space_page"])
+
 const feedReadsIn = (calls: Call[]) =>
-	calls.filter(({ command }) => command === "mission_space_feed")
+	calls.filter(({ command }) => FEED_READS.has(command))
 
 it.each(["unknown", "known"] as const)(
 	"launches on a joined Space whose shared Space id is %s to the Mac without a call outside it, nor a notice",

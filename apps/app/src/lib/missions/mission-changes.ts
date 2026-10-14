@@ -10,15 +10,19 @@ import type {
 	ConversationMissions,
 	Mission,
 	MissionChanged,
+	MissionInSpace,
 } from "./mission-contract"
 import { missionQueryKeys } from "./mission-query-keys"
 import {
-	type SpaceMissionsRead,
+	type SpaceFeedPage,
 	withMissionChange,
 	withMissionMove,
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
+import { rereadSpaceFeeds, type SpaceFeed } from "./space-feed-pages"
 import type { MissionRead } from "./use-mission-detail"
+
+import { onHostReconnected } from "@/lib/host"
 
 type Following = {
 	followers: number
@@ -37,6 +41,26 @@ const patchedMissions = (
 				mission.id === changed.missionId ? patch(mission, changed) : mission,
 			)
 		: missions
+
+const movedEntries = (
+	entries: MissionInSpace[],
+	changed: MissionChanged,
+): MissionInSpace[] =>
+	entries.some(({ mission }) => mission.id === changed.missionId)
+		? entries.map((entry) =>
+				entry.mission.id === changed.missionId
+					? { ...entry, mission: withMissionMove(entry.mission, changed) }
+					: entry,
+			)
+		: entries
+
+const movedPage = (
+	page: SpaceFeedPage,
+	changed: MissionChanged,
+): SpaceFeedPage => {
+	const missions = movedEntries(page.missions, changed)
+	return missions === page.missions ? page : { ...page, missions }
+}
 
 const patchHeldReads = <Read>(
 	queryClient: QueryClient,
@@ -61,20 +85,13 @@ const applyChange = (queryClient: QueryClient, changed: MissionChanged) => {
 			done: patchedMissions(done, changed, withMissionChange),
 		}),
 	)
-	patchHeldReads<SpaceMissionsRead>(
+	patchHeldReads<SpaceFeed>(
 		queryClient,
 		missionQueryKeys.spaceFeeds(),
-		(held) =>
-			held.entries.some(({ mission }) => mission.id === changed.missionId)
-				? {
-						...held,
-						entries: held.entries.map((entry) =>
-							entry.mission.id === changed.missionId
-								? { ...entry, mission: withMissionMove(entry.mission, changed) }
-								: entry,
-						),
-					}
-				: held,
+		(held) => ({
+			...held,
+			pages: held.pages.map((page) => movedPage(page, changed)),
+		}),
 	)
 	patchHeldReads<MissionRead>(
 		queryClient,
@@ -89,7 +106,7 @@ const startFollowing = (queryClient: QueryClient): Following => {
 		queryClient.invalidateQueries({
 			queryKey: missionQueryKeys.conversations(),
 		})
-		queryClient.invalidateQueries({ queryKey: missionQueryKeys.spaceFeeds() })
+		rereadSpaceFeeds(queryClient)
 		for (const missionId of changedMissionIds) {
 			queryClient.invalidateQueries({
 				queryKey: missionQueryKeys.detailsOf(missionId),
@@ -110,11 +127,13 @@ const startFollowing = (queryClient: QueryClient): Following => {
 			)
 			return () => undefined
 		})
+	const stopCatchingUp = onHostReconnected(() => rereadSpaceFeeds(queryClient))
 
 	return {
 		followers: 0,
 		stop: () => {
 			rereading.cancel()
+			stopCatchingUp()
 			void listening.then((unsubscribe) => unsubscribe())
 			queryClient.invalidateQueries({
 				queryKey: missionQueryKeys.all,

@@ -42,13 +42,19 @@ it("invalidates the given keys when the host event fires, and stops on unmount",
 	await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))
 })
 
-it("invalidates every query when the host reconnects", () => {
+it("invalidates every query when the host reconnects, but those that reread themselves", async () => {
 	const queryClient = createQueryClient()
-	const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+	await queryClient.prefetchQuery({ queryKey: ["plain"], queryFn: () => 1 })
+	await queryClient.prefetchQuery({
+		queryKey: ["feed"],
+		queryFn: () => 1,
+		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
+	})
 
 	invalidateOnHostReconnect(queryClient)
 	const [reconnected] = vi.mocked(onHostReconnected).mock.calls[0]
 	reconnected()
 
-	expect(invalidate).toHaveBeenCalledWith()
+	expect(queryClient.getQueryState(["plain"])?.isInvalidated).toBe(true)
+	expect(queryClient.getQueryState(["feed"])?.isInvalidated).toBe(false)
 })

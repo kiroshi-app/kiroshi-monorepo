@@ -6,6 +6,7 @@ import { createElement, type PropsWithChildren, StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Mission, MissionInSpace } from "./mission-contract"
+import { aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
 import { useSpaceMissionsFailure } from "./use-mission-failure-notices"
 import { useMissionMarks } from "./use-mission-marks"
@@ -172,15 +173,18 @@ const answering =
 	async (command) =>
 		answers[command] ?? null
 
+const HOST_FEED: MissionInSpace[] = [
+	{
+		mission: HOST_MISSION,
+		conversationId: "c-1",
+		conversationTitle: "Parser",
+	},
+]
+
 const hostAnswers = answering({
 	mission_list: { open: [HOST_MISSION], done: [] },
-	mission_space_feed: [
-		{
-			mission: HOST_MISSION,
-			conversationId: "c-1",
-			conversationTitle: "Parser",
-		},
-	] satisfies MissionInSpace[],
+	mission_space_feed: HOST_FEED,
+	mission_space_page: aSpacePage(HOST_FEED),
 })
 
 const objectivesOf = (missions: Mission[]) =>
@@ -487,7 +491,13 @@ describe("missions read on a joined host", () => {
 		await waitFor(() => expect(result.current.inProgress).toHaveLength(1))
 		const reopened = missionOf("m-reopened", "Ship the parser")
 		wire.hostAnswer = answering({
-			mission_space_feed: [{ mission: reopened, conversationId: "c-1" }],
+			mission_space_page: aSpacePage([
+				{
+					mission: reopened,
+					conversationId: "c-1",
+					conversationTitle: "Parser",
+				},
+			]),
 		})
 
 		await reopenRelay("garage")
@@ -505,12 +515,12 @@ describe("missions read on a joined host", () => {
 			wrapper: reconnectingQueryWrapper(),
 		})
 		await settled()
-		const before = [readsOf("mission_list"), readsOf("mission_space_feed")]
+		const before = [readsOf("mission_list"), readsOf("mission_space_page")]
 
 		await reopenRelay("attic")
 		await settled()
 
-		expect([readsOf("mission_list"), readsOf("mission_space_feed")]).toEqual(
+		expect([readsOf("mission_list"), readsOf("mission_space_page")]).toEqual(
 			before,
 		)
 	})
@@ -521,14 +531,14 @@ describe("missions read on a joined host", () => {
 			wrapper: reconnectingQueryWrapper(),
 		})
 		await settled()
-		const before = [readsOf("mission_list"), readsOf("mission_space_feed")]
+		const before = [readsOf("mission_list"), readsOf("mission_space_page")]
 
 		dropLastSocket()
 		await openLastSocket()
 		await reopenRelay("garage")
 		await settled()
 
-		expect([readsOf("mission_list"), readsOf("mission_space_feed")]).toEqual(
+		expect([readsOf("mission_list"), readsOf("mission_space_page")]).toEqual(
 			before.map((count) => count + 1),
 		)
 	})
@@ -611,24 +621,30 @@ describe("a mission feed read that fails on a joined host", () => {
 
 	it("raises only the host refusal, with its command, status and side, whatever the number of subscribers", async () => {
 		wire.failedReads.set("mission_space_feed", refusedByTheHost)
+		wire.failedReads.set("mission_space_page", refusedByTheHost)
 
 		await feedsOnGarageInStrictMode()
 
-		expect(distinctNotices(wire.raised)).toEqual([
-			{
-				title: "Couldn’t send that request",
-				facts: {
-					raisedIn: "host-refusal",
-					command: "mission_space_feed",
-					httpStatus: 403,
-					side: "member",
-				},
-			},
-		])
+		const notices = distinctNotices(wire.raised)
+		expect(notices).toHaveLength(2)
+		expect(notices).toEqual(
+			expect.arrayContaining(
+				["mission_space_feed", "mission_space_page"].map((command) => ({
+					title: "Couldn’t send that request",
+					facts: {
+						raisedIn: "host-refusal",
+						command,
+						httpStatus: 403,
+						side: "member",
+					},
+				})),
+			),
+		)
 	})
 
 	it("still raises the missions notices for a failure the host did not report", async () => {
 		wire.failedReads.set("mission_space_feed", failedOnTheHost)
+		wire.failedReads.set("mission_space_page", failedOnTheHost)
 
 		await feedsOnGarageInStrictMode()
 

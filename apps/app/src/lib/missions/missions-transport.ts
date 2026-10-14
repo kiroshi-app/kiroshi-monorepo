@@ -5,6 +5,7 @@ import type {
 	MissionDetail,
 	MissionInSpace,
 	MissionOnBoard,
+	MissionSpacePage,
 } from "./mission-contract"
 
 import { activeJoinedSpaceId, invoke, listen } from "../host"
@@ -22,6 +23,18 @@ export const missionsTransport = {
 	board: readBoardOfThisMac,
 	spaceFeed: (spaceId: string, closedSince: number) =>
 		invoke<MissionInSpace[]>("mission_space_feed", { spaceId, closedSince }),
+	spacePage: (
+		spaceId: string,
+		closedSince: number,
+		cursor: string | null,
+		limit: number,
+	) =>
+		invoke<MissionSpacePage>("mission_space_page", {
+			spaceId,
+			closedSince,
+			cursor,
+			limit,
+		}),
 	unreported: () => invoke<MissionOnBoard[]>("mission_unreported"),
 	reported: (missionId: string, turnId: string | null) =>
 		invoke<Mission>("mission_reported", { missionId, turnId }),

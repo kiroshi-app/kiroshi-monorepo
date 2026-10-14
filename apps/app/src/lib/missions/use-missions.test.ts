@@ -4,6 +4,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { Mission, MissionChanged } from "./mission-contract"
+import { aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
 import { useMissions } from "./use-missions"
 import { useSpaceMissions } from "./use-space-missions"
@@ -13,7 +14,7 @@ import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 vi.mock("./missions-transport", () => ({
 	missionsTransport: {
 		list: vi.fn(),
-		spaceFeed: vi.fn(),
+		spacePage: vi.fn(),
 		onChanged: vi.fn(),
 	},
 }))
@@ -25,7 +26,7 @@ vi.mock("@/lib/host/use-reachable-host", () => ({
 }))
 
 const listMissions = vi.mocked(missionsTransport.list)
-const readSpaceFeed = vi.mocked(missionsTransport.spaceFeed)
+const readSpacePage = vi.mocked(missionsTransport.spacePage)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 
 const MISSION: Mission = {
@@ -216,9 +217,15 @@ describe("useMissions", () => {
 			announce = listener
 			return Promise.resolve(() => undefined)
 		})
-		readSpaceFeed.mockResolvedValue([
-			{ mission: MISSION, conversationId: "c-1", conversationTitle: "Crashes" },
-		])
+		readSpacePage.mockResolvedValue(
+			aSpacePage([
+				{
+					mission: MISSION,
+					conversationId: "c-1",
+					conversationTitle: "Crashes",
+				},
+			]),
+		)
 		const { result } = renderHook(
 			() => ({ panel: useMissions("c-1"), feed: useSpaceMissions("s-1") }),
 			{ wrapper: createQueryTestWrapper().wrapper },
@@ -226,7 +233,7 @@ describe("useMissions", () => {
 		await waitFor(() => expect(result.current.feed.inProgress).toHaveLength(1))
 		await waitFor(() => expect(result.current.panel.open).toHaveLength(1))
 		listMissions.mockReturnValue(new Promise(() => undefined))
-		readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+		readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 		act(() =>
 			announce({
@@ -249,7 +256,7 @@ describe("useMissions", () => {
 		})
 		expect(listenToMissions).toHaveBeenCalledTimes(1)
 		expect(listMissions).toHaveBeenCalledTimes(2)
-		expect(readSpaceFeed).toHaveBeenCalledTimes(2)
+		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
 	describe("when changes arrive in a burst", () => {
