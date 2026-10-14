@@ -1407,6 +1407,9 @@ describe("a bot or a Space only this Mac holds", () => {
 		if (command === "conversation_bots") {
 			return [{ id: "own-bot" }, { id: "shared-bot" }]
 		}
+		if (command === "space_create") {
+			return { id: "fresh" }
+		}
 		return "local"
 	}
 
@@ -1511,6 +1514,76 @@ describe("a bot or a Space only this Mac holds", () => {
 			expect(local.invoke).not.toHaveBeenCalled()
 		},
 	)
+
+	const spaceScoped = (spaceId: string) => {
+		const space = { kind: "space", id: spaceId }
+		return [
+			["env_list", { scope: space }],
+			["env_set", { scope: space, name: "TOKEN", value: "v" }],
+			[
+				"env_delete",
+				{ scope: { kind: "server", name: "linear", owner: space } },
+			],
+			["plugin_skills", { scope: space }],
+			["plugin_mcp_servers", { scope: space }],
+			["plugin_set_mcp_server", { scope: space, name: "linear" }],
+			["plugin_history", { scope: space }],
+			["mcp_application_status", { owner: space }],
+			["mcp_oauth_disconnect", { owner: space, name: "linear" }],
+			[
+				"search_messages",
+				{ query: { text: "walls", spaceId, allSpaces: false } },
+			],
+		] as const
+	}
+
+	it.each(spaceScoped("mine"))(
+		"serves %s locally when it names a Space only this Mac holds",
+		async (command, args) => {
+			const { hosts, local, fetch } = await onGarageAfterLocalReads()
+
+			await hosts.invoke(command, args)
+
+			expect(local.invoke).toHaveBeenLastCalledWith(command, args)
+			expect(relayedCommands(fetch)).toEqual([])
+		},
+	)
+
+	it.each(spaceScoped("personal"))(
+		"relays %s when it names the shared Space of the active host",
+		async (command, args) => {
+			const { hosts, local, fetch } = await onGarageAfterLocalReads()
+
+			await hosts.invoke(command, args)
+
+			expect(relayedCommands(fetch)).toEqual([command])
+			expect(local.invoke).not.toHaveBeenCalled()
+		},
+	)
+
+	it("serves locally a space-scoped env_list of a Space created while the host is active", async () => {
+		const { hosts, local, fetch } = await onGarageAfterLocalReads()
+		const created = await hosts.invoke<{ id: string }>("space_create", {
+			name: "New Space",
+		})
+		const args = { scope: { kind: "space", id: created.id } }
+
+		await hosts.invoke("env_list", args)
+
+		expect(local.invoke).toHaveBeenLastCalledWith("env_list", args)
+		expect(relayedCommands(fetch)).toEqual([])
+	})
+
+	it("relays a space-scoped env_list of the joined Space once a Space was created", async () => {
+		const { hosts, local, fetch } = await onGarageAfterLocalReads()
+		await hosts.invoke("space_create", { name: "New Space" })
+		local.invoke.mockClear()
+
+		await hosts.invoke("env_list", { scope: { kind: "space", id: "personal" } })
+
+		expect(relayedCommands(fetch)).toEqual(["env_list"])
+		expect(local.invoke).not.toHaveBeenCalled()
+	})
 
 	const botOwned = (botId: string) => {
 		const owner = { kind: "bot", id: botId, spaceId: "personal" }

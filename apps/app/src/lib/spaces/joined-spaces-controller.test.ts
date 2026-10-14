@@ -117,9 +117,9 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
 	const { queryClient } = createQueryTestWrapper()
-	const spaces = createSpacesController(store, { queryClient })
-	await spaces.load(home.id)
 	const hosts = hostsFake()
+	const spaces = createSpacesController(store, { queryClient, hosts })
+	await spaces.load(home.id)
 	const wire = transportFake(listed)
 	const reportFailure = vi.fn()
 	const reportRemoval = vi.fn()
@@ -133,7 +133,16 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		reportRemoval,
 		inviters,
 	})
-	return { home, spaces, hosts, wire, reportFailure, reportRemoval, joined }
+	return {
+		home,
+		store,
+		spaces,
+		hosts,
+		wire,
+		reportFailure,
+		reportRemoval,
+		joined,
+	}
 }
 
 afterEach(() => {
@@ -301,6 +310,39 @@ describe("selecting a space", () => {
 
 		expect(spaces.getState().selectedSpaceId).toBe(home.id)
 		expect(hosts.activate).toHaveBeenLastCalledWith(null)
+	})
+
+	it("selects a Space created while a joined one is shown with no joined host active", async () => {
+		const { joined, spaces, hosts, home } = await gearFor([GARAGE])
+		joined.watch()
+		await settle()
+		joined.selectSpace(GARAGE_ROW)
+
+		await spaces.create()
+
+		const { selectedSpaceId } = spaces.getState()
+		expect(spaces.getState().spaces.map(({ id }) => id)).toContain(
+			selectedSpaceId,
+		)
+		expect(selectedSpaceId).not.toBe(home.id)
+		expect(openRowIdOf(joined.getState(), selectedSpaceId)).toBe(
+			selectedSpaceId,
+		)
+		expect(hosts.getState().active).toBeNull()
+	})
+
+	it("keeps the joined Space shown with its host active when a create is refused", async () => {
+		const { joined, spaces, hosts, store } = await gearFor([GARAGE])
+		vi.spyOn(store, "createSpace").mockRejectedValue(new Error("no record"))
+		joined.watch()
+		await settle()
+		joined.selectSpace(GARAGE_ROW)
+
+		await spaces.create()
+
+		const { selectedSpaceId } = spaces.getState()
+		expect(openRowIdOf(joined.getState(), selectedSpaceId)).toBe(GARAGE_ROW)
+		expect(hosts.getState().active).toBe(GARAGE.id)
 	})
 
 	it("opens a remote row once its connection learned the shared Space id", async () => {

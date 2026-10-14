@@ -16,11 +16,13 @@ import { spaceQueryKeys } from "./space-query-keys"
 import { newSpaceName } from "./space-settings"
 
 import { failureReporterIn } from "../failure-report"
+import { joinedHosts } from "../host"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
 import type { Space, SpaceError } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
+import type { JoinedHosts } from "../host/joined-hosts"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import { runMutation } from "../query/run-mutation"
 
@@ -52,6 +54,7 @@ export type SpacesControllerOptions = {
 	pickers?: ArchivePickers
 	reportSuccess?: (notice: NoticeMessage) => void
 	reportFailure?: (notice: NoticeMessage) => void
+	hosts?: Pick<JoinedHosts, "activate">
 }
 
 const repositioned = (spaces: Space[], ids: string[]) =>
@@ -154,6 +157,7 @@ export const createSpacesController = (
 		pickers = nativeArchivePickers,
 		reportSuccess = raiseTransientNotice,
 		reportFailure = failureReporterIn("spaces-controller"),
+		hosts = joinedHosts,
 	}: SpacesControllerOptions,
 ): SpacesController => {
 	const choiceStore = createStore(initialSpacesChoice)
@@ -312,6 +316,7 @@ export const createSpacesController = (
 			commit(async () => {
 				const created = await store.createSpace(newSpaceName())
 				hold([...current().spaces, created])
+				void hosts.activate(null)
 				choose({ ...listedChoice(created.id), hasFailedToCreate: false })
 			}).catch(noteRefusedCreate),
 
