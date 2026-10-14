@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
@@ -50,13 +51,30 @@ interface RosterRowsContext
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 }
 
-const rosterRowOf = (
-	entry: PinnedEntry,
-	isSlotted: boolean,
-	rows: RosterRowsContext,
-) => {
+const NO_SPACE_IDS: string[] = []
+
+const useSameSpaceIds = (next: string[]) => {
+	const [held, setHeld] = useState(next)
+	const isSame =
+		held.length === next.length && held.every((id, at) => id === next[at])
+	if (isSame) return held
+	setHeld(next)
+	return next
+}
+
+interface RosterRowProps {
+	entry: PinnedEntry
+	isSlotted: boolean
+	rows: RosterRowsContext
+}
+
+const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
+	const { edgeAt, slotFor, membershipsOf } = rows
+	const memberships = useSameSpaceIds(
+		entry.bot ? membershipsOf(entry.bot.id) : NO_SPACE_IDS,
+	)
 	const shared = {
-		insertion: isSlotted ? rows.edgeAt(entry.id) : undefined,
+		insertion: isSlotted ? edgeAt(entry.id) : undefined,
 		isPinned: isSlotted,
 		lift: rows.lift,
 		onCreateSectionFor: rows.onCreateSectionFor,
@@ -64,7 +82,7 @@ const rosterRowOf = (
 		onPin: rows.onPin,
 		onUnpin: rows.onUnpin,
 		sections: rows.sections,
-		slotRef: isSlotted ? rows.slotFor(entry.id) : undefined,
+		slotRef: isSlotted ? slotFor(entry.id) : undefined,
 	}
 	if (entry.conversation)
 		return (
@@ -72,7 +90,6 @@ const rosterRowOf = (
 				{...shared}
 				conversation={entry.conversation}
 				isSelected={entry.conversation.id === rows.selectedConversationId}
-				key={entry.id}
 				onDelete={rows.onDeleteConversation}
 				onOpenSettings={rows.onOpenConversationSettings}
 				onSelect={rows.onSelectConversation}
@@ -84,8 +101,7 @@ const rosterRowOf = (
 			{...shared}
 			bot={entry.bot}
 			isSelected={entry.bot.id === rows.activeBotId}
-			key={entry.id}
-			memberships={rows.membershipsOf(entry.bot.id)}
+			memberships={memberships}
 			onAddToSpace={rows.onAddBotToSpace}
 			onDelete={rows.onDeleteBot}
 			onDuplicate={rows.onDuplicateBot}
@@ -104,7 +120,14 @@ const rosterMenuOf = (
 	rows: RosterRowsContext,
 ) => (
 	<SidebarMenu className={NAVIGATION_ROW_GAP}>
-		{entries.map((entry) => rosterRowOf(entry, isSlotted, rows))}
+		{entries.map((entry) => (
+			<RosterRow
+				entry={entry}
+				isSlotted={isSlotted}
+				key={entry.id}
+				rows={rows}
+			/>
+		))}
 	</SidebarMenu>
 )
 

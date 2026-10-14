@@ -913,6 +913,7 @@ navigation-appsidebarroster--idle
 navigation-appsidebarroster--pinned-zone-then-sorted-zone
 navigation-appsidebarroster--reading-more
 navigation-appsidebarroster--reading-more-dark
+navigation-appsidebarroster--row-renders-only-when-its-own-props-change
 navigation-appsidebarrostermenu--pinned-section-then-pinned-conversation
 navigation-appsidebarrosterparts--empty-section-drop
 navigation-appsidebarrosterparts--insertion-mark-above
