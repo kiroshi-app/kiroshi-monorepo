@@ -97,8 +97,7 @@ const QUERY_LINE_CLASS =
 const INPUT_CLASS =
 	"min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
 
-const TAB_ROW_CLASS =
-	"flex h-11 shrink-0 items-center justify-between gap-2 px-3"
+const TAB_ROW_CLASS = "flex h-11 shrink-0 items-center px-3"
 
 const TAB_STRIP_CLASS =
 	"scrollbar-hide max-w-full overflow-x-auto bg-transparent p-0"
