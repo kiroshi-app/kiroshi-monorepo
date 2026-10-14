@@ -77,13 +77,16 @@ const scopedIdsAt = (envelope: unknown): string[] => {
 		: []
 }
 
-const heldIdsOf = (args?: InvokeArgs): string[] =>
-	isFields(args)
-		? [
-				...[...scopingHoldersOf(args), args.query].flatMap(heldIdsAt),
-				...[args.scope, args.owner].flatMap(scopedIdsAt),
-			]
-		: []
+const heldIdsOf = (args?: InvokeArgs): string[] => {
+	if (!isFields(args)) {
+		return []
+	}
+	const holders = [...scopingHoldersOf(args), args.query]
+	return [
+		...holders.flatMap(heldIdsAt),
+		...[args.scope, args.owner].flatMap(scopedIdsAt),
+	]
+}
 
 const conversationIdsNamedIn = (value: unknown): string[] => {
 	if (Array.isArray(value)) {
