@@ -28,7 +28,6 @@ type SearchReadSource = {
 	isOpen: boolean
 	spaceId: string | null
 	query: string
-	isAllSpaces: boolean
 }
 
 type SearchReads = {
@@ -89,7 +88,7 @@ const restingAnswer = (
 	scope: CatalogueScope,
 ): Promise<SearchAnswer> =>
 	Promise.all([
-		port.recent({ spaceId: scope.spaceId, allSpaces: scope.allSpaces }),
+		port.recent({ spaceId: scope.spaceId }),
 		port.catalogue(scope),
 	]).then(([recents, catalogue]) => ({ read: readOf([], catalogue), recents }))
 
@@ -101,7 +100,7 @@ const foundAnswer = (
 		port.messages({
 			text: scope.query,
 			spaceId: scope.spaceId,
-			allSpaces: scope.allSpaces,
+			allSpaces: false,
 		}),
 		port.catalogue(scope),
 	]).then(([messages, catalogue]) => ({
@@ -116,11 +115,8 @@ const scopeOf = ({
 	isOpen,
 	spaceId,
 	query,
-	isAllSpaces,
 }: SearchReadSource): CatalogueScope | null =>
-	isOpen && spaceId && !isOverLimit(query)
-		? { query, spaceId, allSpaces: isAllSpaces }
-		: null
+	isOpen && spaceId && !isOverLimit(query) ? { query, spaceId } : null
 
 const landedWith = (landed: Landed, answer: SearchAnswer): Landed => ({
 	answer,

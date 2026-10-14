@@ -10,7 +10,6 @@ const search = {
 		missions: "Missions",
 		routines: "Routines",
 	},
-	scope: "Tous les espaces",
 	seeAll: "Tout voir",
 	solo: "conversation en tête-à-tête",
 	unavailable: {
@@ -30,20 +29,15 @@ const search = {
 			missions: "Aucune mission ici",
 			routines: "Aucune routine ici",
 			body: {
-				chats:
-					"Aucune conversation dans {{space}}. Cherchez dans tous les espaces pour en trouver une.",
-				missions:
-					"Aucune mission dans {{space}}. Cherchez dans tous les espaces pour en trouver une.",
-				routines:
-					"Aucune routine dans {{space}}. Cherchez dans tous les espaces pour en trouver une.",
+				chats: "Aucune conversation dans {{space}}.",
+				missions: "Aucune mission dans {{space}}.",
+				routines: "Aucune routine dans {{space}}.",
 			},
 		},
-		action: "Chercher dans tous les espaces",
 	},
 	empty: {
 		title: "Rien ne correspond ici",
 		description: "Aucun résultat pour « {{query}} » dans {{space}}.",
-		action: "Rechercher dans tous les espaces",
 	},
 }
 

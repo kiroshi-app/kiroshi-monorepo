@@ -62,18 +62,16 @@ const aPort = () => {
 type ReadProps = {
 	isOpen?: boolean
 	query?: string
-	isAllSpaces?: boolean
 }
 
 const renderReads = (port: SearchPort, initial: ReadProps = {}) =>
 	renderHook(
-		({ isOpen = true, query = "", isAllSpaces = false }: ReadProps) =>
+		({ isOpen = true, query = "" }: ReadProps) =>
 			useSearchReads({
 				port,
 				isOpen,
 				spaceId: "personal",
 				query,
-				isAllSpaces,
 			}),
 		{ initialProps: initial, wrapper: createQueryTestWrapper().wrapper },
 	)
@@ -89,14 +87,10 @@ it("reads the recents and the catalogue of the space it opens on", async () => {
 	await waitFor(() => expect(result.current.isLoading).toBe(false))
 	expect(result.current.recents).toEqual([A_CHAT])
 	expect(result.current.read.chats).toEqual([A_CHAT])
-	expect(port.recent).toHaveBeenCalledWith({
-		spaceId: "personal",
-		allSpaces: false,
-	})
+	expect(port.recent).toHaveBeenCalledWith({ spaceId: "personal" })
 	expect(port.catalogue).toHaveBeenCalledWith({
 		query: "",
 		spaceId: "personal",
-		allSpaces: false,
 	})
 	expect(port.messages).not.toHaveBeenCalled()
 })
@@ -161,33 +155,6 @@ it("issues no read for a query over the limit and keeps the previous results", a
 	expect(messageIdsOf(result.current)).toEqual(["road"])
 })
 
-it("reads the new scope at once when the all spaces switch changes", async () => {
-	const port = aPort()
-	const { result, rerender } = renderReads(port, { query: "road" })
-	await waitFor(() => expect(result.current.isLoading).toBe(false))
-
-	rerender({ query: "road", isAllSpaces: true })
-
-	expect(port.messages).toHaveBeenLastCalledWith({
-		text: "road",
-		spaceId: "personal",
-		allSpaces: true,
-	})
-})
-
-it("reads the recents of the new scope at once while the query is empty", async () => {
-	const port = aPort()
-	const { result, rerender } = renderReads(port)
-	await waitFor(() => expect(result.current.isLoading).toBe(false))
-
-	rerender({ isAllSpaces: true })
-
-	expect(port.recent).toHaveBeenLastCalledWith({
-		spaceId: "personal",
-		allSpaces: true,
-	})
-})
-
 it("keeps the last results that landed when a read fails", async () => {
 	const port = aPort()
 	const { result, rerender } = renderReads(port, { query: "road" })
@@ -207,7 +174,8 @@ it("keeps the last recents that landed when a rest read fails", async () => {
 	await waitFor(() => expect(result.current.recents).toEqual([A_CHAT]))
 	port.recent.mockRejectedValue(new Error("no recents"))
 
-	rerender({ isAllSpaces: true })
+	rerender({ isOpen: false })
+	rerender({})
 
 	await waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
 	expect(result.current.recents).toEqual([A_CHAT])

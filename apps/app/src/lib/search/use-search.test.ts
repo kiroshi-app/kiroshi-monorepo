@@ -229,7 +229,7 @@ it("opens the palette on an empty query, the All tab and the current space", () 
 	expect(result.current.palette).toMatchObject({
 		query: "",
 		tab: "all",
-		isScopeAllSpaces: false,
+		spaceName: "Personal",
 	})
 })
 

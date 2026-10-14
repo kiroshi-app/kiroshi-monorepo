@@ -10,7 +10,6 @@ type SearchState = {
 	query: string
 	searchedQuery: string
 	tab: SearchTab
-	isAllSpaces: boolean
 	activeIndex: number
 	activeLanding: number
 }
@@ -22,7 +21,6 @@ export type SearchController = {
 	close: () => void
 	setQuery: (query: string) => void
 	setTab: (tab: SearchTab) => void
-	setScope: (isAllSpaces: boolean) => void
 	moveActive: (by: number, count: number, landing: number) => void
 }
 
@@ -32,7 +30,6 @@ const CLOSED: SearchState = {
 	query: "",
 	searchedQuery: "",
 	tab: "all",
-	isAllSpaces: false,
 	activeIndex: 0,
 	activeLanding: 0,
 }
@@ -89,11 +86,6 @@ export const createSearchController = (): SearchController => {
 		},
 
 		setTab: (tab) => publish({ tab, activeIndex: 0 }),
-
-		setScope: (isAllSpaces) => {
-			publish({ isAllSpaces, activeIndex: 0 })
-			searchQueryNow()
-		},
 
 		moveActive: (by, count, landing) =>
 			publish({

@@ -54,11 +54,7 @@ it("searches the catalogue of one space from the host", async () => {
 	hostInvoke.mockResolvedValueOnce(A_CATALOGUE)
 
 	await expect(
-		catalogueTransport.search({
-			query: "crash",
-			spaceId: "personal",
-			allSpaces: false,
-		}),
+		catalogueTransport.search({ query: "crash", spaceId: "personal" }),
 	).resolves.toEqual(A_CATALOGUE)
 
 	expect(hostInvoke).toHaveBeenCalledWith("search_catalogue", {
@@ -72,7 +68,7 @@ it("reads the recent chats of a space from the host", async () => {
 	hostInvoke.mockResolvedValueOnce([A_CHAT])
 
 	await expect(
-		catalogueTransport.recent({ spaceId: "personal", allSpaces: false }),
+		catalogueTransport.recent({ spaceId: "personal" }),
 	).resolves.toEqual([A_CHAT])
 
 	expect(hostInvoke).toHaveBeenCalledWith("search_recent", {
@@ -88,7 +84,6 @@ it("lets the error of a query over the limit reach the caller", async () => {
 		catalogueTransport.search({
 			query: "a".repeat(201),
 			spaceId: "personal",
-			allSpaces: true,
 		}),
 	).rejects.toEqual({ kind: "queryTooLong", limit: 200 })
 })
