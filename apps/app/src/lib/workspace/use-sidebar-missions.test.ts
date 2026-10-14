@@ -693,8 +693,8 @@ describe("the Missions tab read a page at a time", () => {
 
 	it("holds at most ten pages, the most a reread asks for again", async () => {
 		const pageAfter = (cursor: string | null) => {
-			const first = cursor === null ? 0 : Number(cursor) + 1
-			return aSpacePage(entriesRanked(first, first + 29), String(first + 29))
+			const rank = cursor === null ? 0 : Number(cursor) + 1
+			return aSpacePage([aWorkingEntry(rank)], String(rank))
 		}
 		readSpacePage.mockImplementation((_spaceId, _closedSince, cursor) =>
 			Promise.resolve(pageAfter(cursor)),
@@ -702,7 +702,7 @@ describe("the Missions tab read a page at a time", () => {
 		mountMissionsTab()
 
 		for (let page = 1; page <= 10; page++) {
-			await waitFor(() => expect(shownObjectives()).toHaveLength(page * 30))
+			await waitFor(() => expect(shownObjectives()).toHaveLength(page))
 			scrollToListEnd()
 		}
 
