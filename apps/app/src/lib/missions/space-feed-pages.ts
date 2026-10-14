@@ -52,7 +52,6 @@ export const withFreshHead = (
 	const [heldHead, ...laterPages] = held.pages
 	const headIds = new Set(head.missions.map(({ mission }) => mission.id))
 	const isInHead = ({ mission }: MissionInSpace) => headIds.has(mission.id)
-	const isOutOfHead = (entry: MissionInSpace) => !isInHead(entry)
 	return {
 		pageParams: held.pageParams,
 		pages: [
@@ -62,7 +61,7 @@ export const withFreshHead = (
 			},
 			...laterPages.map((page) => ({
 				...page,
-				missions: page.missions.filter(isOutOfHead),
+				missions: page.missions.filter((entry) => !isInHead(entry)),
 			})),
 		],
 	}
