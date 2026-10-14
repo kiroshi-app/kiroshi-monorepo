@@ -706,7 +706,9 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 mod tests {
 	use serde_json::json;
 	use tauri::test::{mock_builder, MockRuntime};
+	use tauri::Listener;
 
+	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
 	use super::*;
 	use crate::agent::commands;
 	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
@@ -1352,7 +1354,6 @@ mod tests {
 	}
 
 	fn listen_to_updates(written: &Written) -> Arc<Mutex<Vec<serde_json::Value>>> {
-		use tauri::Listener;
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let kept = heard.clone();
 		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {
@@ -1383,12 +1384,12 @@ mod tests {
 		.expect("the prompt is sent");
 	}
 
-	fn a_tool_call(status: super::super::contract::ActivityStatus) -> AgentEvent {
+	fn a_tool_call(status: ActivityStatus) -> AgentEvent {
 		AgentEvent::Activity {
-			activity: super::super::contract::ActivityEvent {
+			activity: ActivityEvent {
 				id: "tool-1".into(),
 				title: "Read a file".into(),
-				kind: super::super::contract::ActivityKind::Tool,
+				kind: ActivityKind::Tool,
 				status,
 			},
 		}
@@ -1406,7 +1407,6 @@ mod tests {
 	}
 
 	fn a_turn_with_ten_deltas_a_tool_call_and_two_replies() -> Vec<Entry> {
-		use super::super::contract::ActivityStatus;
 		let deltas = (1..=10).map(|seq| AgentEvent::MessageDelta {
 			id: "m1".into(),
 			seq,
