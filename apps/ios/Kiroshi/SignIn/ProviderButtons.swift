@@ -13,7 +13,7 @@ struct AppleSignInButton: View {
         Button("Sign in with Apple", action: signInTapped)
             .buttonStyle(
                 ProviderButtonStyle(
-                    logo: Image(systemName: "apple.logo"),
+                    logo: .buttonHeight(Image("AppleLogo")),
                     fill: colorScheme == .dark ? .white : .black,
                     foreground: colorScheme == .dark ? .black : .white,
                     stroke: nil,
@@ -54,7 +54,7 @@ struct GoogleSignInButton: View {
         Button("Continue with Google", action: model.continueWithGoogle)
             .buttonStyle(
                 ProviderButtonStyle(
-                    logo: Image("GoogleG"),
+                    logo: .inSlot(Image("GoogleG")),
                     fill: Color("GoogleFill"),
                     foreground: Color("GoogleLabel"),
                     stroke: Color("GoogleStroke"),
@@ -65,8 +65,13 @@ struct GoogleSignInButton: View {
     }
 }
 
+private enum ProviderLogo {
+    case inSlot(Image)
+    case buttonHeight(Image)
+}
+
 private struct ProviderButtonStyle: ButtonStyle {
-    let logo: Image
+    let logo: ProviderLogo
     let fill: Color
     let foreground: Color
     let stroke: Color?
@@ -76,12 +81,9 @@ private struct ProviderButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 0) {
-            logo
-                .resizable()
-                .scaledToFit()
-                .frame(width: logoSide, height: logoSide)
+            slottedLogo
                 .frame(width: slotSide, height: slotSide)
-                .accessibilityHidden(true)
+                .alignmentGuide(.logoCentre) { $0[HorizontalAlignment.center] }
             configuration.label
                 .font(.body.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -101,7 +103,16 @@ private struct ProviderButtonStyle: ButtonStyle {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: 52)
         .foregroundStyle(foreground)
+        .background(alignment: Alignment(horizontal: .logoCentre, vertical: .center)) {
+            if case .buttonHeight(let image) = logo, !isSigningIn {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .accessibilityHidden(true)
+            }
+        }
         .background(fill, in: .capsule)
+        .clipShape(.capsule)
         .overlay {
             if let stroke {
                 Capsule()
@@ -109,8 +120,31 @@ private struct ProviderButtonStyle: ButtonStyle {
             }
         }
         .contentShape(.capsule)
+        .compositingGroup()
         .opacity(configuration.isPressed ? 0.8 : 1)
     }
+
+    @ViewBuilder private var slottedLogo: some View {
+        if case .inSlot(let image) = logo {
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(width: logoSide, height: logoSide)
+                .accessibilityHidden(true)
+        } else {
+            Color.clear
+        }
+    }
+}
+
+extension HorizontalAlignment {
+    private enum LogoCentre: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[HorizontalAlignment.center]
+        }
+    }
+
+    fileprivate static let logoCentre = HorizontalAlignment(LogoCentre.self)
 }
 
 extension View {
