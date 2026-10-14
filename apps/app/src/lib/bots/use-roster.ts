@@ -111,21 +111,6 @@ const useRosterListEnd = (
 		}),
 	)
 
-const lastWordQueriesOf = (
-	controller: RosterController,
-	{ soloThreads, conversationRosters }: RosterState,
-) => [
-	...Object.entries(soloThreads).map(([conversationId, line]) =>
-		controller.lastWordQuery(line.spaceId, conversationId),
-	),
-	...Object.entries(conversationRosters).flatMap(
-		([spaceRowId, conversations]) =>
-			conversations.map((conversation) =>
-				controller.lastWordQuery(spaceRowId, conversation.id),
-			),
-	),
-]
-
 export const useRosterReads = (
 	controller: RosterController,
 	state: RosterState,
@@ -136,7 +121,6 @@ export const useRosterReads = (
 			controller.soloThreadQuery(line),
 		),
 	})
-	useQueries({ queries: lastWordQueriesOf(controller, state) })
 	useRosterRefreshes(controller)
 	return useRosterListEnd(controller, state.spaceRowId)
 }

@@ -3,8 +3,11 @@ import type { InfiniteData } from "@tanstack/react-query"
 import type {
 	Bot,
 	Conversation,
+	ConversationInPage,
 	ConversationPage,
+	StoredLastWord,
 } from "../conversations/store-contract"
+import type { LastWord } from "../conversations/transcript-state"
 
 export const ROSTER_PAGE_SIZE = 30
 
@@ -13,9 +16,17 @@ export type RosterRead = {
 	conversations: Conversation[]
 }
 
+export type LastWords = {
+	companions: Record<string, LastWord>
+	conversations: Record<string, LastWord>
+}
+
 export type RosterPage = RosterRead & {
+	lastWords: LastWords
 	nextCursor: string | null
 }
+
+export const NO_LAST_WORDS: LastWords = { companions: {}, conversations: {} }
 
 export type RosterPages = InfiniteData<RosterPage>
 
@@ -26,6 +37,48 @@ export const topicsIn = ({
 	[...pinned, ...conversations].filter(({ soloBotId }) => soloBotId === null)
 
 export const cursorAfter = ({ nextCursor }: RosterPage) => nextCursor
+
+const lastWordOf = ({ text, at, authorBotId }: StoredLastWord): LastWord => ({
+	text: text?.trim() || undefined,
+	at,
+	authorBotId: authorBotId ?? undefined,
+})
+
+const wordsOf = (
+	rows: ConversationInPage[],
+	keyOf: (row: ConversationInPage) => string | null,
+): Record<string, LastWord> =>
+	Object.fromEntries(
+		rows.flatMap((row) => {
+			const key = keyOf(row)
+			return key === null || row.lastWord === null
+				? []
+				: [[key, lastWordOf(row.lastWord)]]
+		}),
+	)
+
+export const lastWordsIn = ({
+	pinned,
+	conversations,
+}: ConversationPage): LastWords => {
+	const rows = [...pinned, ...conversations]
+	return {
+		companions: wordsOf(rows, ({ soloBotId }) => soloBotId),
+		conversations: wordsOf(rows, ({ id, soloBotId }) =>
+			soloBotId === null ? id : null,
+		),
+	}
+}
+
+const withWordsOf = (held: LastWords, fresh: LastWords): LastWords => ({
+	companions: { ...held.companions, ...fresh.companions },
+	conversations: { ...held.conversations, ...fresh.conversations },
+})
+
+export const lastWordsOf = ({ pages }: RosterPages): LastWords =>
+	pages
+		.map(({ lastWords }) => lastWords)
+		.reduceRight(withWordsOf, NO_LAST_WORDS)
 
 const withoutRepeats = (conversations: Conversation[]): Conversation[] => {
 	const seenIds = new Set<string>()
@@ -60,7 +113,10 @@ export const withHeldRead = (
 	read: RosterRead,
 ): RosterPages => {
 	if (paged === undefined) {
-		return { pages: [{ ...read, nextCursor: null }], pageParams: [null] }
+		return {
+			pages: [{ ...read, lastWords: NO_LAST_WORDS, nextCursor: null }],
+			pageParams: [null],
+		}
 	}
 	const [head, ...laterPages] = paged.pages
 	const held = new Map(read.conversations.map((row) => [row.id, row]))
@@ -110,6 +166,7 @@ export const withFreshHead = (
 					...head.conversations,
 					...pushedOutOf(heldHead, head, isInHead),
 				],
+				lastWords: withWordsOf(heldHead.lastWords, head.lastWords),
 			},
 			...laterPages.map((page) => ({
 				...page,

@@ -304,8 +304,6 @@ const ROOM_DRAFT = {
 
 const HOST_URL = "http://192.168.1.22:45367"
 
-const HOST_ROOM = "conversation-1"
-
 const LOCAL_ONLY_ROOM = "conversation-2"
 
 const storeWithRooms = async (count: number) => {
@@ -451,9 +449,10 @@ describe("relaunching the app on a joined Space", () => {
 
 		await openHost()
 
-		const relayedToHost = JSON.stringify(hostCalls)
-		expect(relayedToHost).toContain(HOST_ROOM)
-		expect(relayedToHost).not.toContain(LOCAL_ONLY_ROOM)
+		expect(hostCalls.map(({ command }) => command)).toContain(
+			"conversationPage",
+		)
+		expect(JSON.stringify(hostCalls)).not.toContain(LOCAL_ONLY_ROOM)
 		expect(localCalls).toEqual([])
 	})
 })

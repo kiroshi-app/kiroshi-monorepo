@@ -21,6 +21,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationInPage,
 	ConversationPage,
 	EnvEntry,
 	EnvScope,
@@ -40,6 +41,7 @@ import type {
 	Space,
 	SpaceError,
 	SpacePreferences,
+	StoredLastWord,
 	SuggestedBot,
 	TranscriptStoreError,
 } from "./store-contract"
@@ -129,34 +131,26 @@ type RankedBot = {
 	presence: number
 }
 
-const inPage = (conversation: Conversation) => ({
-	...conversation,
-	lastActivityAt: conversation.updatedAt,
-	lastWord: null,
-	soloBotId: null,
-})
-
 const isPinned = (conversation: Conversation) =>
 	conversation.pinPosition !== null
 
 const byPin = (one: Conversation, other: Conversation) =>
 	(one.pinPosition ?? 0) - (other.pinPosition ?? 0)
 
-const latestFirst = (one: Conversation, other: Conversation) =>
-	other.updatedAt - one.updatedAt
+const latestFirst = (one: ConversationInPage, other: ConversationInPage) =>
+	other.lastActivityAt - one.lastActivityAt
 
 const conversationPageOf = (
-	topics: Conversation[],
+	rows: ConversationInPage[],
 	cursor: string | null,
 	limit: number,
 ): ConversationPage => {
 	const start = cursor === null ? 0 : Number(cursor)
 	const end = start + limit
-	const loose = topics.filter((topic) => !isPinned(topic)).sort(latestFirst)
+	const loose = rows.filter((row) => !isPinned(row)).sort(latestFirst)
 	return {
-		pinned:
-			cursor === null ? topics.filter(isPinned).sort(byPin).map(inPage) : [],
-		conversations: loose.slice(start, end).map(inPage),
+		pinned: cursor === null ? rows.filter(isPinned).sort(byPin) : [],
+		conversations: loose.slice(start, end),
 		nextCursor: end < loose.length ? String(end) : null,
 	}
 }
@@ -816,6 +810,50 @@ export const createFakeTranscriptStore = (
 		return Promise.resolve(seq)
 	}
 
+	const lastWordOf = (conversationId: string): StoredLastWord | null => {
+		const settled = [...rows.values()]
+			.filter(
+				(row) =>
+					row.conversationId === conversationId &&
+					!OPEN.includes(row.completion),
+			)
+			.sort((one, other) => one.seq - other.seq)
+			.at(-1)
+		return settled
+			? {
+					text: settled.content,
+					at: settled.createdAt,
+					authorBotId: settled.authorBotId,
+				}
+			: null
+	}
+
+	const topicInPage = (conversation: Conversation): ConversationInPage => ({
+		...conversation,
+		lastActivityAt: conversation.updatedAt,
+		lastWord: lastWordOf(conversation.id),
+		soloBotId: null,
+	})
+
+	const soloChatInPage = (bot: Bot, spaceId: string): ConversationInPage => {
+		const id = chatIdOf(bot.id, spaceId)
+		const lastWord = lastWordOf(id)
+		return {
+			id,
+			spaceId,
+			sectionId: bot.sectionId,
+			pinPosition: bot.pinPosition,
+			title: "",
+			instructions: "",
+			createdAt: 0,
+			updatedAt: 0,
+			participants: [],
+			lastActivityAt: lastWord?.at ?? 0,
+			lastWord,
+			soloBotId: bot.id,
+		}
+	}
+
 	const transcriptPort = () =>
 		createFakeTranscriptPort({ messages: [...rows.values()], pageSize })
 
@@ -1425,9 +1463,15 @@ export const createFakeTranscriptStore = (
 		conversationPage: (spaceId: string, cursor: string | null, limit: number) =>
 			Promise.resolve(
 				conversationPageOf(
-					[...conversations.values()]
-						.filter((stored) => stored.spaceId === spaceId)
-						.map(drawnConversation),
+					[
+						...[...bots.values()]
+							.filter((bot) => isIn(bot.id, spaceId))
+							.map((bot) => soloChatInPage(bot, spaceId)),
+						...[...conversations.values()]
+							.filter((stored) => stored.spaceId === spaceId)
+							.map(drawnConversation)
+							.map(topicInPage),
+					],
 					cursor,
 					limit,
 				),

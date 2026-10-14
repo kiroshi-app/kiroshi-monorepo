@@ -16,6 +16,10 @@ import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 import { type RosterLine, rosterLinesIn, type SoloThreads } from "./roster-line"
 import {
 	cursorAfter,
+	type LastWords,
+	lastWordsIn,
+	lastWordsOf,
+	NO_LAST_WORDS,
 	ROSTER_PAGE_SIZE,
 	type RosterPage,
 	type RosterPages,
@@ -44,10 +48,9 @@ import type {
 	SpaceError,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
-import {
-	type ConversationPreviews,
-	type LastWord,
-	lastWordIn,
+import type {
+	ConversationPreviews,
+	LastWord,
 } from "../conversations/transcript-state"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 import type { FailureMeta } from "../query/query-client"
@@ -92,13 +95,28 @@ type RosterEntry = RosterSpace & {
 	lastRowId: string | null
 }
 
-const rosterQueryOf = (
-	space: RosterSpace,
-	read: (cursor: string | null) => Promise<RosterPage>,
-) =>
+const JOINED_HOST_ANSWER_MS = 10_000
+
+const answeredInTime = (signal: AbortSignal) =>
+	AbortSignal.any([signal, AbortSignal.timeout(JOINED_HOST_ANSWER_MS)])
+
+type RosterPageRead = (
+	cursor: string | null,
+	signal?: AbortSignal,
+) => Promise<RosterPage>
+
+type RosterQueryContext = { pageParam: string | null; signal: AbortSignal }
+
+const rosterReadOfSpace = (space: RosterSpace, read: RosterPageRead) =>
+	isJoinedRowId(space.spaceRowId)
+		? ({ pageParam, signal }: RosterQueryContext) =>
+				read(pageParam, answeredInTime(signal))
+		: ({ pageParam }: RosterQueryContext) => read(pageParam)
+
+const rosterQueryOf = (space: RosterSpace, read: RosterPageRead) =>
 	infiniteQueryOptions({
 		queryKey: conversationQueryKeys.roster(space.spaceRowId, space.spaceId),
-		queryFn: ({ pageParam }) => read(pageParam),
+		queryFn: rosterReadOfSpace(space, read),
 		initialPageParam: null as string | null,
 		getNextPageParam: cursorAfter,
 		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
@@ -124,27 +142,14 @@ const soloThreadQueryOf = (
 		meta: PREVIEW_FAILURE,
 	})
 
-const lastWordQueryOf = (
-	spaceRowId: string,
-	conversationId: string,
-	read: () => Promise<LastWord | null>,
-) =>
-	queryOptions({
-		queryKey: conversationQueryKeys.lastWord(spaceRowId, conversationId),
-		queryFn: read,
-		meta: PREVIEW_FAILURE,
-	})
-
 type RosterQuery = ReturnType<typeof rosterQueryOf>
 type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
-type LastWordQuery = ReturnType<typeof lastWordQueryOf>
 
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
 	rosterQuery: (spaceRowId: string) => RosterQuery
 	soloThreadQuery: (line: RosterLine) => SoloThreadQuery
-	lastWordQuery: (spaceRowId: string, conversationId: string) => LastWordQuery
 	load: (opening: RosterOpening) => Promise<void>
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
@@ -325,6 +330,10 @@ const rosterIn = <Row>(
 	spaceRowId: string | null,
 ) => (spaceRowId === null ? [] : (rosters[spaceRowId] ?? []))
 
+const isJoined = ({ spaceRowId }: RosterSpace) => isJoinedRowId(spaceRowId)
+
+const isLocal = (space: RosterSpace) => !isJoined(space)
+
 const heldSpaceRowIdsOf = ({ spaces, spaceRowId }: RosterChoice) => {
 	const listed = spaces.map((space) => space.spaceRowId)
 	return spaceRowId === null || listed.includes(spaceRowId)
@@ -392,10 +401,24 @@ const settingsStandingIn = (
 	}
 }
 
-type RosterBase = Omit<
-	RosterState,
-	"previews" | "soloThreads" | "conversationPreviews"
->
+type RosterBase = Omit<RosterState, "soloThreads">
+
+const companionPreviewsOf = (bots: Bot[], words: LastWords): BotPreviews =>
+	Object.fromEntries(
+		bots.flatMap(({ id }) =>
+			words.companions[id] ? [[id, words.companions[id]]] : [],
+		),
+	)
+
+const conversationPreviewsOf = (
+	conversations: Conversation[],
+	words: LastWords,
+): ConversationPreviews =>
+	Object.fromEntries(
+		conversations.flatMap(({ id }) =>
+			words.conversations[id] ? [[id, words.conversations[id]]] : [],
+		),
+	)
 
 const rosterBaseOf = (
 	choice: RosterChoice,
@@ -405,6 +428,9 @@ const rosterBaseOf = (
 ): RosterBase => {
 	const spaceRowIds = heldSpaceRowIdsOf(choice)
 	const reads = paged.map((pages) => pages && rosterReadOf(pages))
+	const words = paged.map((pages) =>
+		pages ? lastWordsOf(pages) : NO_LAST_WORDS,
+	)
 	const chosenIndex = choice.spaceRowId
 		? spaceRowIds.indexOf(choice.spaceRowId)
 		: -1
@@ -417,6 +443,18 @@ const rosterBaseOf = (
 			reads[index]?.conversations ?? NO_CONVERSATIONS,
 		]),
 	)
+	const previews = Object.fromEntries(
+		spaceRowIds.map((id, index) => [
+			id,
+			companionPreviewsOf(rosters[id], words[index]),
+		]),
+	)
+	const conversationPreviews = Object.assign(
+		{},
+		...spaceRowIds.map((id, index) =>
+			conversationPreviewsOf(conversationRosters[id], words[index]),
+		),
+	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
 	const conversations = rosterIn(conversationRosters, choice.spaceRowId)
 	return {
@@ -424,6 +462,8 @@ const rosterBaseOf = (
 		bots,
 		conversationRosters,
 		conversations,
+		previews,
+		conversationPreviews,
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
 		...settingsStandingIn(choice, bots, conversations),
@@ -433,48 +473,18 @@ const rosterBaseOf = (
 	}
 }
 
-type HeldConversation = { spaceRowId: string; conversationId: string }
-
-const conversationsHeldIn = (base: RosterBase): HeldConversation[] =>
-	Object.entries(base.conversationRosters).flatMap(
-		([spaceRowId, conversations]) =>
-			conversations.map((conversation) => ({
-				spaceRowId,
-				conversationId: conversation.id,
-			})),
-	)
-
-type LastWordRead = LastWord | null | undefined
-
-const wordOf = (read: LastWordRead) => read ?? undefined
-
 const rosterStateOf = (
 	base: RosterBase,
 	soloThreadIds: (string | undefined)[],
-	soloWords: LastWordRead[],
-	conversationWords: LastWordRead[],
 ): RosterState => {
-	const previews: Record<string, BotPreviews> = {}
 	const soloThreads: SoloThreads = {}
 	rosterLinesIn(base.rosters).forEach((line, index) => {
 		const conversationId = soloThreadIds[index]
-		if (conversationId === undefined) {
-			return
-		}
-		previews[line.spaceId] = {
-			...previews[line.spaceId],
-			[line.botId]: wordOf(soloWords[index]),
-		}
-		soloThreads[conversationId] = line
-	})
-	const conversationPreviews: ConversationPreviews = {}
-	conversationsHeldIn(base).forEach(({ conversationId }, index) => {
-		const read = conversationWords[index]
-		if (read !== undefined) {
-			conversationPreviews[conversationId] = wordOf(read)
+		if (conversationId !== undefined) {
+			soloThreads[conversationId] = line
 		}
 	})
-	return { ...base, previews, soloThreads, conversationPreviews }
+	return { ...base, soloThreads }
 }
 
 export type RosterControllerOptions = {
@@ -508,24 +518,34 @@ export const createRosterController = (
 	const commit = <Result>(write: () => Promise<Result>) =>
 		enqueue(() => runMutation(queryClient, write))
 
-	const readBotsAt = (spaceId: string, cursor: string | null) =>
-		cursor === null ? store.bots(spaceId) : Promise.resolve(NO_BOTS)
+	const readBotsAt = (
+		spaceId: string,
+		cursor: string | null,
+		signal?: AbortSignal,
+	) =>
+		cursor === null ? store.bots(spaceId, signal) : Promise.resolve(NO_BOTS)
 
 	const readRosterPageIn = async (
 		spaceId: string,
 		cursor: string | null,
+		signal?: AbortSignal,
 	): Promise<RosterPage> => {
 		const [bots, page] = await Promise.all([
-			readBotsAt(spaceId, cursor),
-			store.conversationPage(spaceId, cursor, ROSTER_PAGE_SIZE),
+			readBotsAt(spaceId, cursor, signal),
+			store.conversationPage(spaceId, cursor, ROSTER_PAGE_SIZE, signal),
 		])
-		return { bots, conversations: topicsIn(page), nextCursor: page.nextCursor }
+		return {
+			bots,
+			conversations: topicsIn(page),
+			lastWords: lastWordsIn(page),
+			nextCursor: page.nextCursor,
+		}
 	}
 
 	const rosterQuery = (spaceRowId: string) => {
 		const spaceId = hostSpaceIdOf(spaceRowId)
-		return rosterQueryOf({ spaceRowId, spaceId }, (cursor) =>
-			enqueue(() => readRosterPageIn(spaceId, cursor)),
+		return rosterQueryOf({ spaceRowId, spaceId }, (cursor, signal) =>
+			readRosterPageIn(spaceId, cursor, signal),
 		)
 	}
 
@@ -536,12 +556,6 @@ export const createRosterController = (
 			return chat.id
 		})
 	}
-
-	const lastWordQuery = (spaceRowId: string, conversationId: string) =>
-		lastWordQueryOf(spaceRowId, conversationId, async () => {
-			const page = await store.loadPage(conversationId, null)
-			return lastWordIn(page.messages) ?? null
-		})
 
 	const rosterReadIn = (spaceRowId: string) =>
 		queryClient.getQueryData(rosterQuery(spaceRowId).queryKey)
@@ -562,9 +576,6 @@ export const createRosterController = (
 	const soloThreadIdOf = (line: RosterLine) =>
 		queryClient.getQueryData(soloThreadQuery(line).queryKey)
 
-	const lastWordReadIn = (spaceRowId: string, conversationId: string) =>
-		queryClient.getQueryData(lastWordQuery(spaceRowId, conversationId).queryKey)
-
 	const base = memoizedOn(() => {
 		const spaceRowIds = heldSpaceRowIdsOf(chosen())
 		return [
@@ -575,28 +586,10 @@ export const createRosterController = (
 		]
 	}, rosterBaseOf)
 
-	const previewReadsOf = (held: RosterBase) => {
-		const lines = rosterLinesIn(held.rosters)
-		const soloThreadIds = lines.map(soloThreadIdOf)
-		const soloWords = lines.map((line, index) => {
-			const conversationId = soloThreadIds[index]
-			return conversationId === undefined
-				? undefined
-				: lastWordReadIn(line.spaceId, conversationId)
-		})
-		const conversationWords = conversationsHeldIn(held).map(
-			({ spaceRowId, conversationId }) =>
-				lastWordReadIn(spaceRowId, conversationId),
-		)
-		return [held, soloThreadIds, soloWords, conversationWords] as [
-			RosterBase,
-			(string | undefined)[],
-			LastWordRead[],
-			LastWordRead[],
-		]
-	}
-
-	const current = memoizedOn(() => previewReadsOf(base()), rosterStateOf)
+	const current = memoizedOn(() => {
+		const held = base()
+		return [held, rosterLinesIn(held.rosters).map(soloThreadIdOf)]
+	}, rosterStateOf)
 
 	const choose = (fields: Partial<RosterChoice>) =>
 		choiceStore.setState({ ...chosen(), ...fields })
@@ -735,9 +728,7 @@ export const createRosterController = (
 
 	const rereadHeadIn = async (spaceRowId: string) => {
 		const { queryKey } = rosterQuery(spaceRowId)
-		const head = await enqueue(() =>
-			readRosterPageIn(hostSpaceIdOf(spaceRowId), null),
-		)
+		const head = await readRosterPageIn(hostSpaceIdOf(spaceRowId), null)
 		await queryClient.cancelQueries({ queryKey, exact: true })
 		queryClient.setQueryData(
 			queryKey,
@@ -773,20 +764,11 @@ export const createRosterController = (
 		return null
 	}
 
-	const prefetchPreviews = async () => {
+	const prefetchSoloThreads = async () => {
 		const lines = rosterLinesIn(current().rosters)
 		await Promise.all(
 			lines.map((line) => queryClient.prefetchQuery(soloThreadQuery(line))),
 		)
-		const { soloThreads } = current()
-		await Promise.all([
-			...Object.entries(soloThreads).map(([conversationId, line]) =>
-				queryClient.prefetchQuery(lastWordQuery(line.spaceId, conversationId)),
-			),
-			...conversationsHeldIn(current()).map(({ spaceRowId, conversationId }) =>
-				queryClient.prefetchQuery(lastWordQuery(spaceRowId, conversationId)),
-			),
-		])
 	}
 
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
@@ -804,9 +786,7 @@ export const createRosterController = (
 	const catchUpOnLeftConversation = () => {
 		const { spaceRowId, selectedConversationId: left } = current()
 		if (spaceRowId !== null && left !== null) {
-			void queryClient.invalidateQueries({
-				queryKey: lastWordQuery(spaceRowId, left).queryKey,
-			})
+			void rereadRosterIn(spaceRowId)
 		}
 	}
 
@@ -883,21 +863,22 @@ export const createRosterController = (
 		},
 	})
 
-	const isReadyToOpen = ({ spaceRowId }: RosterSpace) =>
-		isJoinedRowId(spaceRowId) || rosterReadIn(spaceRowId) !== undefined
+	const isReadyToOpen = (space: RosterSpace) =>
+		isJoined(space) || rosterReadIn(space.spaceRowId) !== undefined
+
+	const readRosterOf = ({ spaceRowId }: RosterSpace) =>
+		queryClient.prefetchInfiniteQuery(rosterQuery(spaceRowId))
 
 	const load = async ({ spaces, spaceRowId, lastRowId }: RosterOpening) => {
 		spaces.forEach(learn)
 		choose({ spaces, spaceRowId, lastRowId })
-		await Promise.all(
-			spaces.map((space) =>
-				queryClient.prefetchInfiniteQuery(rosterQuery(space.spaceRowId)),
-			),
-		)
+		const joinedReads = spaces.filter(isJoined).map(readRosterOf)
+		await Promise.all(spaces.filter(isLocal).map(readRosterOf))
 		if (spaces.every(isReadyToOpen)) {
 			choose({ hasLoaded: true })
 		}
-		await prefetchPreviews()
+		await Promise.all(joinedReads)
+		await prefetchSoloThreads()
 	}
 
 	const openBotSettings = ({ id, isShowingDanger }: BotSettingsOpening) =>
@@ -920,8 +901,6 @@ export const createRosterController = (
 		rosterQuery,
 
 		soloThreadQuery,
-
-		lastWordQuery,
 
 		load,
 

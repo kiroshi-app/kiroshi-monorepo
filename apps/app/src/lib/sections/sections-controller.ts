@@ -109,7 +109,7 @@ export const createSectionsController = (
 	const listQuery = (spaceId: string) => {
 		const hostSpaceId = bots.hostSpaceIdOf(spaceId)
 		return sectionListQueryOf(spaceId, hostSpaceId, () =>
-			enqueue(() => store.sections(hostSpaceId)),
+			store.sections(hostSpaceId),
 		)
 	}
 
