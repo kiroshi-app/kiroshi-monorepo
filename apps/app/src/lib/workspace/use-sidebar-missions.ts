@@ -1,5 +1,11 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react"
+import {
+	createElement,
+	useCallback,
+	useMemo,
+	useSyncExternalStore,
+} from "react"
 
+import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 
 import {
@@ -22,7 +28,10 @@ import {
 } from "../missions/use-live-missions"
 import { useSpaceMissionsFailure } from "../missions/use-mission-failure-notices"
 import { useSpaceMissions } from "../missions/use-space-missions"
+import { useSkeletonSlot } from "../query/use-skeleton-slot"
 import type { ShownMemory } from "../sidebar/shown-memory"
+
+const MISSIONS_FEED_SKELETON = createElement(MissionsFeedSkeleton)
 
 type SidebarMissionsCore = {
 	conversationRuntimes: MissionSpeakingRuntimes & StoppableRuntimes
@@ -87,6 +96,7 @@ export const useSidebarMissions = ({
 	const feed = useSpaceMissions(spaces.state.selectedSpaceId)
 	const { spaceRowId } = roster.state
 	useSpaceMissionsFailure(feed)
+	const feedSkeleton = useSkeletonSlot(feed.isPending, MISSIONS_FEED_SKELETON)
 
 	const entries = useMemo(() => entriesOf(feed), [feed])
 	const missions = useMemo(
@@ -172,9 +182,20 @@ export const useSidebarMissions = ({
 			onOpen: (missionId: string) => openMission(missionId),
 			openMissionId: opened?.missionId ?? null,
 			wrap,
+			skeleton: feedSkeleton,
 		}
 		return { [spaceRowId]: panel }
-	}, [spaceRowId, feed, faces, liveMissionIds, now, openMission, opened, wrap])
+	}, [
+		spaceRowId,
+		feed,
+		faces,
+		liveMissionIds,
+		now,
+		openMission,
+		opened,
+		wrap,
+		feedSkeleton,
+	])
 
 	return {
 		loadedSpaceId: feed.hasLoaded ? spaceRowId : null,

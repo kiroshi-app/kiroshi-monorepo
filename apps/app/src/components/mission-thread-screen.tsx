@@ -1,7 +1,9 @@
 import { useMemo } from "react"
 
 import type { MissionEventModel } from "@workspace/ui/components/mission"
+import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
 import { Notice } from "@workspace/ui/components/notice"
+import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { ActivityPanel } from "@/components/thread-routines"
@@ -18,7 +20,10 @@ import { toMissionConversation } from "@/lib/missions/mission-thread-model"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import { useMissionDetail } from "@/lib/missions/use-mission-detail"
 import { useMissionReadFailure } from "@/lib/missions/use-mission-failure-notices"
+import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
+
+const MISSION_DETAIL_SKELETON = <MissionDetailSkeleton />
 
 type MissionReadFailureProps = {
 	onRetry: () => void
@@ -125,14 +130,20 @@ export function MissionThreadScreen({
 	onLeave,
 	onOpenMission,
 }: MissionThreadScreenProps) {
-	const { read, hasFailedToRead, onRetry } = useMissionDetail(opening.missionId)
+	const { read, isPending, hasFailedToRead, onRetry } = useMissionDetail(
+		opening.missionId,
+	)
+	const detailSkeleton = useSkeletonSlot(isPending, MISSION_DETAIL_SKELETON)
 
 	const bot = read
 		? bots.find(({ id }) => id === read.mission.botId)
 		: undefined
 
 	if (!read || !bot) {
-		return hasFailedToRead ? <MissionReadFailure onRetry={onRetry} /> : null
+		if (hasFailedToRead) return <MissionReadFailure onRetry={onRetry} />
+		return detailSkeleton ? (
+			<ThreadLayout skeleton={detailSkeleton}>{null}</ThreadLayout>
+		) : null
 	}
 
 	return (

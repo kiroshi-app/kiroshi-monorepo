@@ -269,6 +269,41 @@ describe("createRosterController", () => {
 		expect(controller.getState().hasFailedToLoad).toBe(false)
 	})
 
+	it("waits on the first read of the open space while it holds no roster", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockReturnValue(new Promise(() => undefined))
+		const controller = mountRoster(store)
+
+		void controller.load(opening())
+		await Promise.resolve()
+
+		expect(controller.getState().isRosterPending).toBe(true)
+	})
+
+	it("keeps the roster it holds while it reads it again", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const reread = vi
+			.spyOn(store, "bots")
+			.mockReturnValue(new Promise(() => undefined))
+
+		void controller.reload()
+
+		await vi.waitFor(() => expect(reread).toHaveBeenCalled())
+		expect(controller.getState().isRosterPending).toBe(false)
+		expect(controller.getState().bots).not.toHaveLength(0)
+	})
+
+	it("stops waiting on the roster once its read fails", async () => {
+		const store = createFakeTranscriptStore()
+		vi.spyOn(store, "bots").mockRejectedValue(new Error("no record"))
+		const controller = mountRoster(store)
+
+		await controller.load(opening())
+
+		expect(controller.getState().isRosterPending).toBe(false)
+	})
+
 	it("creates a companion immediately, selects it and leaves the settings closed", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

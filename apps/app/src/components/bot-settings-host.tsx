@@ -53,6 +53,7 @@ export const BotSettingsHost = ({
 			tab={settingsTab}
 			environment={toEnvironmentRows(botEnvironment.entries)}
 			hasEnvironmentFailedToRead={botEnvironment.hasFailedToRead}
+			isEnvironmentPending={botEnvironment.isPending}
 			onEnvironmentSet={({ name, value }) => botEnvironment.set(name, value)}
 			onEnvironmentDelete={botEnvironment.remove}
 			onMcpServerOpen={(name) =>

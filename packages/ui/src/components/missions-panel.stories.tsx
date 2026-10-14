@@ -5,6 +5,7 @@ import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	A11Y_FLOATING_FOCUS_GUARDS,
+	expectSkeletonFilledTo,
 	mergeA11y,
 	shown,
 	slotIn,
@@ -20,6 +21,7 @@ import {
 	SPACE_OPEN_MISSIONS,
 	SPACE_WAITING_MISSIONS,
 } from "@workspace/ui/components/missions.fixtures"
+import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
 import {
 	MissionsPanel,
 	type MissionsPanelProps,
@@ -27,6 +29,8 @@ import {
 import { Sidebar, SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 
 const PANEL_WIDTH = 304
+
+const PANEL_PADDING_BLOCK_END = 12
 
 const PANEL_STYLE = { "--sidebar-width": `${PANEL_WIDTH}px` } as CSSProperties
 
@@ -144,6 +148,35 @@ export const Empty = meta.story({
 			),
 		).toBeVisible()
 		await expect(slotsIn(canvasElement, "mission-card-row")).toHaveLength(0)
+	},
+})
+
+export const Loading = meta.story({
+	args: {
+		open: NO_SPACE_MISSIONS,
+		earlierToday: NO_SPACE_MISSIONS,
+		skeleton: <MissionsFeedSkeleton />,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The first read of the space feed has not answered yet: \`skeleton\` takes the place of the groups, so the panel never claims the space holds no mission before the feed is known. Check the empty state is absent and the skeleton runs to the bottom of the panel. ${WIRED_BY_THE_APP}`,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		await expectSkeletonFilledTo(canvasElement, "bottom")
+		await expect(
+			canvas.queryByRole("heading", { name: "No missions yet" }),
+		).not.toBeInTheDocument()
+		await expect(
+			slotIn(canvasElement, "missions-panel-skeleton").getBoundingClientRect()
+				.bottom,
+		).toBeCloseTo(
+			slotIn(canvasElement, "sidebar").getBoundingClientRect().bottom -
+				PANEL_PADDING_BLOCK_END,
+			0,
+		)
 	},
 })
 

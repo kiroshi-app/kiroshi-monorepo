@@ -10,6 +10,7 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import { en } from "@workspace/ui/lib/i18n-en"
 
+import { accountQueryKeys } from "./account-query-keys"
 import { storedOwnAccounts } from "./own-accounts"
 import {
 	signOutLeavingOf,
@@ -103,7 +104,7 @@ const settling = () =>
 const untilAnswered = async (result: {
 	current: ReturnType<typeof useAccount>
 }) => {
-	await waitFor(() => expect(result.current.panel).toBeDefined())
+	await waitFor(() => expect(result.current.panel.isPending).toBe(false))
 	await settling()
 }
 
@@ -203,7 +204,7 @@ describe("useAccount", () => {
 		expect(result.current.panel?.account.status).toBe("signedIn")
 	})
 
-	it("reports nothing about the account until the first read lands", async () => {
+	it("holds the account card pending, never signed out, until the first read lands", async () => {
 		vi.mocked(commands.accountState).mockReturnValue(
 			new Promise(() => undefined),
 		)
@@ -218,8 +219,24 @@ describe("useAccount", () => {
 
 		const [watched, settings] = result.current
 		expect(watched).toEqual({ state: undefined, isPending: true })
-		expect(settings.panel).toBeUndefined()
+		expect(settings.panel.isPending).toBe(true)
 		expect(failureNotice).not.toHaveBeenCalled()
+	})
+
+	it("renders the account it already holds at once while it reads again", () => {
+		vi.mocked(commands.accountState).mockReturnValue(
+			new Promise(() => undefined),
+		)
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		queryClient.setQueryData(accountQueryKeys.state(), SIGNED_IN)
+
+		const { result } = renderHook(
+			() => useAccount(useWatchedAccount(), PROFILE_NAME),
+			{ wrapper },
+		)
+
+		expect(result.current.panel.isPending).toBe(false)
+		expect(result.current.panel.account).toEqual(signedInPanel(PROFILE_NAME))
 	})
 
 	it("reads the account again each time the host announces a change", async () => {
@@ -485,7 +502,8 @@ describe("useAccount", () => {
 
 		const { result } = await mountAccount()
 
-		expect(result.current.panel?.account).toEqual({ status: "signedOut" })
+		expect(result.current.panel.isPending).toBe(false)
+		expect(result.current.panel.account).toEqual({ status: "signedOut" })
 		expect(failureNotice).toHaveBeenCalledWith(
 			reported({ title: COPY.readFailed }),
 		)

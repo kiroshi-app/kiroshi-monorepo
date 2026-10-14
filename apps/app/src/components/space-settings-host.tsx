@@ -97,6 +97,7 @@ export const SpaceSettingsHost = ({
 	const sharedProps = {
 		environment: toEnvironmentRows(spaceEnvironment.entries),
 		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
+		isEnvironmentPending: spaceEnvironment.isPending,
 		haveMcpServersFailedToLoad: spaceMcpServers.hasFailedToLoad,
 		...spaceApplications,
 		mcpServerToOpen: applicationToOpenOn({

@@ -33,11 +33,13 @@ import { useRoutineDetail } from "./use-routine-detail"
 import { useRoutineForm } from "./use-routine-form"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
+import { isFirstReadPending } from "@/lib/query/last-read"
 
 const NO_SOURCES: RoutineTriggerSource[] = []
 
 export type ConversationRoutines = {
 	routines: RoutineRowModel[]
+	isPending: boolean
 	reportedRuns: ReportedRunRead[]
 	failure: RoutinesFailure | null
 	reload: () => void
@@ -192,11 +194,7 @@ export const useRoutines = (
 	const canRead = conversationId !== null && host !== null
 	const [writeFailedAt, setWriteFailedAt] = useState<number | null>(null)
 
-	const {
-		data = NOTHING_READ,
-		dataUpdatedAt,
-		refetch,
-	} = useQuery({
+	const listing = useQuery({
 		queryKey: routineQueryKeys.list(conversationId, lead, host),
 		queryFn: canRead
 			? ({ client, queryKey: readKey }) =>
@@ -208,6 +206,8 @@ export const useRoutines = (
 			: skipToken,
 		meta: { rendersErrorInline: true },
 	})
+	const { data = NOTHING_READ, dataUpdatedAt, refetch } = listing
+	const isPending = isFirstReadPending(listing)
 	const { rows, known, reported, sources } = data
 	const hasWriteFailedLast =
 		writeFailedAt !== null && writeFailedAt >= dataUpdatedAt
@@ -283,6 +283,7 @@ export const useRoutines = (
 	return useMemo(
 		() => ({
 			routines,
+			isPending,
 			reportedRuns: reported,
 			failure,
 			reload,
@@ -291,6 +292,16 @@ export const useRoutines = (
 			form,
 			detail,
 		}),
-		[routines, reported, failure, reload, setEnabled, remove, form, detail],
+		[
+			routines,
+			isPending,
+			reported,
+			failure,
+			reload,
+			setEnabled,
+			remove,
+			form,
+			detail,
+		],
 	)
 }

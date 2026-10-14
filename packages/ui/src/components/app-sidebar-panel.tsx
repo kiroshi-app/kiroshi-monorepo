@@ -66,9 +66,20 @@ const missionsOfSpaceIn =
 		return missions ? <MissionsPanel {...missions} /> : null
 	}
 
+type RosterSkeletonSlotProps = {
+	children: ReactNode
+}
+
+const RosterSkeletonSlot = ({ children }: RosterSkeletonSlotProps) => (
+	<div className="min-h-0 flex-1" data-slot="roster-skeleton">
+		{children}
+	</div>
+)
+
 const AppSidebarPanel = ({
 	bots,
 	haveBotsFailedToLoad,
+	rosterSkeleton,
 	botsBySpaceId,
 	conversations = NO_CONVERSATIONS,
 	conversationsBySpaceId,
@@ -147,16 +158,23 @@ const AppSidebarPanel = ({
 		spaces,
 	}
 
-	const rosterOfSpace = (space: Space) => (
-		<BotRoster
-			{...rosterProps}
-			bots={rosters.botsOf(space.id)}
-			conversations={rosters.conversationsOf(space.id)}
-			naming={space.id === selectedSpaceId ? naming : null}
-			sections={rosters.sectionsOf(space.id)}
-			spaceId={space.id}
-		/>
-	)
+	const skeletonSlot = rosterSkeleton ? (
+		<RosterSkeletonSlot>{rosterSkeleton}</RosterSkeletonSlot>
+	) : null
+
+	const rosterOfSpace = (space: Space) =>
+		skeletonSlot && space.id === selectedSpaceId ? (
+			skeletonSlot
+		) : (
+			<BotRoster
+				{...rosterProps}
+				bots={rosters.botsOf(space.id)}
+				conversations={rosters.conversationsOf(space.id)}
+				naming={space.id === selectedSpaceId ? naming : null}
+				sections={rosters.sectionsOf(space.id)}
+				spaceId={space.id}
+			/>
+		)
 
 	return (
 		<>
@@ -190,14 +208,16 @@ const AppSidebarPanel = ({
 					spaces={spaces}
 				>
 					{isRosterOpen ? (
-						<BotRoster
-							{...rosterProps}
-							bots={bots}
-							conversations={conversations}
-							naming={naming}
-							sections={sections}
-							spaceId={selectedSpaceId}
-						/>
+						(skeletonSlot ?? (
+							<BotRoster
+								{...rosterProps}
+								bots={bots}
+								conversations={conversations}
+								naming={naming}
+								sections={sections}
+								spaceId={selectedSpaceId}
+							/>
+						))
 					) : (
 						<MissionsPanelEmpty />
 					)}

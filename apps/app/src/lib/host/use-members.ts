@@ -28,10 +28,12 @@ import { type MembersTransport, membersTransport } from "./members-transport"
 
 import { HOSTING_MEMBERS_CHANGED_EVENT, type Member } from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
+import { isFirstReadPending } from "../query/last-read"
 
 export type MembersProps = Pick<
 	MembersPanelProps,
 	| "members"
+	| "isPending"
 	| "email"
 	| "onEmailChange"
 	| "onInvite"
@@ -81,11 +83,12 @@ export const useMembers = (
 	const shownSpace = isDesktopHost() ? openSpace : null
 	const watchedId = isHosted ? shownSpace?.id : undefined
 
-	const { data: members = NO_MEMBERS } = useQuery({
+	const membersRead = useQuery({
 		queryKey: hostQueryKeys.membersOf(watchedId),
 		queryFn: watchedId ? () => readMembers(transport, watchedId) : skipToken,
 		meta: { failureNotice: readFailure, raisedIn: "use-members" },
 	})
+	const { data: members = NO_MEMBERS } = membersRead
 	useInvalidateOnHostEvent(HOSTING_MEMBERS_CHANGED_EVENT, [
 		hostQueryKeys.members(),
 	])
@@ -124,6 +127,7 @@ export const useMembers = (
 	if (!shownSpace) return undefined
 	return {
 		members: isHosted ? hostFirst(members).map(toSpaceMember) : [],
+		isPending: isFirstReadPending(membersRead),
 		email,
 		onEmailChange: (typed) => {
 			setEmail(typed)

@@ -820,6 +820,7 @@ navigation-appsidebar--full-row-menu
 navigation-appsidebar--identities
 navigation-appsidebar--live-space-selection
 navigation-appsidebar--live-space-selection-in-missions
+navigation-appsidebar--loading-roster
 navigation-appsidebar--long-content
 navigation-appsidebar--markdown-preview
 navigation-appsidebar--mission-space-ring
@@ -941,6 +942,7 @@ navigation-missionspanel--default
 navigation-missionspanel--earlier-today-unfolded
 navigation-missionspanel--empty
 navigation-missionspanel--idle
+navigation-missionspanel--loading
 navigation-missionspanel--long-title
 navigation-missionspanel--no-selected-row
 navigation-missionspanel--one-group

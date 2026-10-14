@@ -172,4 +172,40 @@ describe("useSpaceMissions", () => {
 
 		expect(idsOf(result.current.inProgress)).toEqual(["m-2"])
 	})
+	describe("the skeleton of the feed", () => {
+		const mountFeed = () =>
+			renderHook(() => useSpaceMissions("s-1"), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+
+		it("waits on its first read while nothing is held", () => {
+			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+
+			const { result } = mountFeed()
+
+			expect(result.current.isPending).toBe(true)
+		})
+
+		it("keeps the feed it holds while it reads it again", async () => {
+			const { result } = mountFeed()
+			await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+
+			act(() => result.current.reload())
+
+			expect(readSpaceFeed).toHaveBeenCalledTimes(2)
+			expect(result.current.isPending).toBe(false)
+		})
+
+		it("stops waiting once the read fails, retry included", async () => {
+			readSpaceFeed.mockRejectedValueOnce(new Error("the database is locked"))
+			const { result } = mountFeed()
+			await waitFor(() => expect(result.current.hasFailed).toBe(true))
+			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+
+			act(() => result.current.reload())
+
+			expect(result.current.isPending).toBe(false)
+		})
+	})
 })

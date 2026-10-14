@@ -13,6 +13,7 @@ import { missionsTransport } from "./missions-transport"
 
 import { isHostRefused } from "@/lib/host/host-refused"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
+import { isFirstReadPending } from "@/lib/query/last-read"
 
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
@@ -29,6 +30,7 @@ const readSpaceFeed = async (spaceId: string): Promise<SpaceMissionsRead> => {
 export type SpaceMissionsView = SpaceMissionGroups & {
 	waitingCount: number
 	hasLoaded: boolean
+	isPending: boolean
 	hasFailed: boolean
 	isFailureRaised: boolean
 	reload: () => void
@@ -40,11 +42,12 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 	const [isRetrying, setRetrying] = useState(false)
 	useMissionChanges()
 
-	const { data, error, isError, isFetching, refetch } = useQuery({
+	const feed = useQuery({
 		queryKey: missionQueryKeys.spaceFeed(spaceId, host),
 		queryFn: canRead ? () => readSpaceFeed(spaceId) : skipToken,
 		meta: { rendersErrorInline: true },
 	})
+	const { data, error, isError, isFetching, refetch } = feed
 
 	const reload = useCallback(() => {
 		if (!canRead) {
@@ -55,6 +58,7 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 	}, [canRead, refetch])
 
 	const hasLoaded = data !== undefined
+	const isPending = isFirstReadPending(feed)
 	const groups = useMemo(
 		() => (data ? toSpaceMissionGroups(data) : NO_GROUPS),
 		[data],
@@ -67,10 +71,11 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 			...groups,
 			waitingCount: groups.waitingOnYou.length,
 			hasLoaded,
+			isPending,
 			hasFailed,
 			isFailureRaised,
 			reload,
 		}),
-		[groups, hasLoaded, hasFailed, isFailureRaised, reload],
+		[groups, hasLoaded, isPending, hasFailed, isFailureRaised, reload],
 	)
 }
