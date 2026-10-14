@@ -14,6 +14,7 @@ import {
 } from "@workspace/ui/components/app-sidebar-model"
 import { AppSidebarPanel } from "@workspace/ui/components/app-sidebar-panel"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import { type Space, spaceAtRank } from "@workspace/ui/components/space"
 import {
 	SpaceDots,
@@ -171,6 +172,7 @@ export {
 	type AppSidebarRowMission,
 	type AppSidebarSection,
 	type BotAvatarBlot,
+	type ListEnd,
 	ROW_AVATAR_SIZE,
 	type RosterPin,
 	type Space,

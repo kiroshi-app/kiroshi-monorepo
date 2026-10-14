@@ -80,6 +80,7 @@ const AppSidebarPanel = ({
 	bots,
 	haveBotsFailedToLoad,
 	rosterSkeleton,
+	rosterListEnd,
 	botsBySpaceId,
 	conversations = NO_CONVERSATIONS,
 	conversationsBySpaceId,
@@ -170,6 +171,7 @@ const AppSidebarPanel = ({
 				{...rosterProps}
 				bots={rosters.botsOf(space.id)}
 				conversations={rosters.conversationsOf(space.id)}
+				listEnd={space.id === selectedSpaceId ? rosterListEnd : undefined}
 				naming={space.id === selectedSpaceId ? naming : null}
 				sections={rosters.sectionsOf(space.id)}
 				spaceId={space.id}
@@ -213,6 +215,7 @@ const AppSidebarPanel = ({
 								{...rosterProps}
 								bots={bots}
 								conversations={conversations}
+								listEnd={rosterListEnd}
 								naming={naming}
 								sections={sections}
 								spaceId={selectedSpaceId}

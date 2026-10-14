@@ -14,6 +14,7 @@ import type {
 import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
+import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"
 import type { Space } from "@workspace/ui/components/space"
 import type {
@@ -216,6 +217,7 @@ interface AppSidebarProps
 	bots: AppSidebarBot[]
 	haveBotsFailedToLoad?: boolean
 	rosterSkeleton?: ReactNode
+	rosterListEnd?: ListEnd
 	botsBySpaceId?: Record<string, AppSidebarBot[]>
 	conversations?: AppSidebarConversation[]
 	conversationsBySpaceId?: Record<string, AppSidebarConversation[]>
