@@ -16,7 +16,10 @@ final class ConversationsStore {
         case failed
     }
 
+    static let onlineDeadline = Duration.seconds(30)
+
     private(set) var phase = Phase.loading
+    private(set) var isOnline = false
     private var listed: [ConversationSummary] = []
     private(set) var companions: [Companion] = []
     private(set) var creation = Creation.idle
@@ -44,15 +47,17 @@ final class ConversationsStore {
     @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let calendar: Calendar
+    @ObservationIgnored private let clock: any RelayClock
 
     init(
         work: CompanionWork, opening: Companion.ID? = nil, now: @escaping () -> Date = Date.init,
-        calendar: Calendar = .current
+        calendar: Calendar = .current, clock: any RelayClock = ContinuousRelayClock()
     ) {
         self.work = work
         self.opening = opening
         self.now = now
         self.calendar = calendar
+        self.clock = clock
     }
 
     var summaries: [ConversationSummary] {
@@ -85,25 +90,31 @@ final class ConversationsStore {
             stopPicking()
         }
         relay = ConversationRelay(connection: connection)
+        isOnline = false
         for await update in await connection.updates() {
+            guard isFollowing(connection) else { return }
             switch update {
             case .state(.online(let sharedSpaceId)):
                 spaceId = sharedSpaceId
+                isOnline = true
                 reload()
             case .state:
-                break
+                isOnline = false
             case .event(let event):
                 guard let event = ConversationEvent(event) else { continue }
                 apply(event)
             }
         }
+        guard isFollowing(connection) else { return }
+        isOnline = false
         loading?.cancel()
         loading = nil
     }
 
     @discardableResult
     func reload() -> Task<Void, Never>? {
-        guard let spaceId, let relay else { return nil }
+        guard let relay else { return nil }
+        guard isOnline, let spaceId else { return waitForOnline() }
         if phase == .failed {
             phase = .loading
         }
@@ -115,6 +126,29 @@ final class ConversationsStore {
 
     func refresh() async {
         await reload()?.value
+    }
+
+    private func isFollowing(_ connection: RelayConnection) -> Bool {
+        relay?.connection === connection
+    }
+
+    private func waitForOnline() -> Task<Void, Never>? {
+        guard phase == .failed else { return nil }
+        phase = .loading
+        loading?.cancel()
+        let task = Task { await failUnlessOnlineInTime() }
+        loading = task
+        return task
+    }
+
+    private func failUnlessOnlineInTime() async {
+        do {
+            try await clock.sleep(for: Self.onlineDeadline)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled else { return }
+        phase = .failed
     }
 
     func pickCompanions() {
@@ -237,7 +271,9 @@ final class ConversationsStore {
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, await relay.connection.isRunning, !Task.isCancelled,
+                phase != .loaded
+            else { return }
             phase = .failed
         }
     }
@@ -245,12 +281,23 @@ final class ConversationsStore {
     private nonisolated static func summary(
         of subject: ConversationSubject, in spaceId: String, through relay: ConversationRelay
     ) async throws -> ConversationSummary {
-        let conversationId =
-            switch subject {
-            case .companion(let companion): try await relay.mainChat(of: companion.id, in: spaceId)
-            case .group(let group): group.id
+        let conversationId: String
+        switch subject {
+        case .companion(let companion):
+            do {
+                conversationId = try await relay.mainChat(of: companion.id, in: spaceId)
+            } catch is ConversationCallError {
+                return ConversationSummary(subject: subject)
             }
-        let last = try await relay.latestMessages(in: conversationId, limit: 1).last
+        case .group(let group):
+            conversationId = group.id
+        }
+        let last: TranscriptMessage?
+        do {
+            last = try await relay.latestMessages(in: conversationId, limit: 1).last
+        } catch is ConversationCallError {
+            last = nil
+        }
         return ConversationSummary(
             subject: subject, conversationId: conversationId,
             lastMessage: last.map(MessagePreview.init))
