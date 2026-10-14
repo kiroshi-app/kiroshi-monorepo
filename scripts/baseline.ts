@@ -87,6 +87,8 @@ const BASELINES = join(REPO, "baselines")
 
 const SIDECAR = join(REPO, "apps/app/sidecar")
 
+const UI = join(REPO, "packages/ui")
+
 const KNIP = "knip@6.37.0"
 
 const UPDATE = "bun run baseline:update"
@@ -106,12 +108,28 @@ type VitestFile = {
 
 type VitestReport = { success: boolean; testResults: VitestFile[] }
 
-type VitestSuite = { name: string; filter: string; script: string }
+type VitestSuite = {
+	name: string
+	filter: string
+	script: string
+	project?: string
+}
+
+const APP_SUITE: VitestSuite = {
+	name: "app",
+	filter: "app",
+	script: "test:unit",
+}
 
 const VITEST_SUITES: VitestSuite[] = [
-	{ name: "app", filter: "app", script: "test:unit" },
+	APP_SUITE,
 	{ name: "ui", filter: "@workspace/ui", script: "test" },
 	{ name: "website", filter: "website", script: "test" },
+]
+
+const UNIT_SUITES: VitestSuite[] = [
+	APP_SUITE,
+	{ name: "ui", filter: "@workspace/ui", script: "test", project: "unit" },
 ]
 
 type Run = { command: string[]; cwd: string }
@@ -159,6 +177,7 @@ const vitestReport = ({ suite, into }: SuiteRun) => {
 			`--filter=${suite.filter}`,
 			suite.script,
 			"--",
+			...(suite.project ? [`--project=${suite.project}`] : []),
 			"--reporter=default",
 			"--reporter=json",
 			`--outputFile.json=${path}`,
@@ -202,6 +221,41 @@ const storyIds = (reports: VitestReport[]) =>
 			),
 		),
 	)
+
+const TESTED_STORY_TAG = "test"
+
+type StorybookIndexEntry = { id: string; type: string; tags?: string[] }
+
+export type StorybookIndex = { entries: Record<string, StorybookIndexEntry> }
+
+export const testedStoryIds = (index: StorybookIndex) =>
+	Object.values(index.entries)
+		.filter(
+			(entry) =>
+				entry.type === "story" && (entry.tags ?? []).includes(TESTED_STORY_TAG),
+		)
+		.map((entry) => entry.id)
+
+const indexedStoryIds = (into: string) => {
+	const path = join(into, "storybook-index.json")
+	const label = "the storybook index"
+	const exitCode = runInherited({
+		command: [
+			join(UI, "node_modules/.bin/storybook"),
+			"index",
+			`--output-file=${path}`,
+			"--quiet",
+			"--disable-telemetry",
+		],
+		cwd: UI,
+	})
+	if (exitCode !== 0) throw new Error(`${label} exited with ${exitCode}`)
+	const index = JSON.parse(readReport({ path, label })) as StorybookIndex
+	if (typeof index.entries !== "object" || index.entries === null) {
+		throw unreadable(label)
+	}
+	return testedStoryIds(index)
+}
 
 const XML_ENTITIES: Record<string, string> = {
 	"&lt;": "<",
@@ -351,24 +405,41 @@ const writeItems = ({ area, items }: AreaItems) => {
 
 type Live = Record<string, string[]>
 
-const collectVitest = (): Live => {
-	const into = mkdtempSync(join(tmpdir(), "kiroshi-baseline-"))
-	const ran = VITEST_SUITES.map((suite) => ({
-		suite,
-		...vitestReport({ suite, into }),
-	}))
-	const outcomes: SuiteOutcome[] = [
-		...ran.map(({ suite, report, red }) => ({
-			suite: suite.name,
-			red,
-			items: vitestFailures({ suite: suite.name, report }),
-		})),
-		sidecarOutcome(into),
-	]
+type SuitesRun = { suites: VitestSuite[]; into: string }
+
+const runSuites = ({ suites, into }: SuitesRun) =>
+	suites.map((suite) => ({ suite, ...vitestReport({ suite, into }) }))
+
+type RanSuite = ReturnType<typeof runSuites>[number]
+
+const outcomeOf = ({ suite, report, red }: RanSuite): SuiteOutcome => ({
+	suite: suite.name,
+	red,
+	items: vitestFailures({ suite: suite.name, report }),
+})
+
+const attributedFailures = (outcomes: SuiteOutcome[]) => {
 	assertRedSuitesAreAttributed(outcomes)
+	return outcomes.flatMap((outcome) => outcome.items)
+}
+
+const newReportFolder = () => mkdtempSync(join(tmpdir(), "kiroshi-baseline-"))
+
+const collectVitest = (): Live => {
+	const into = newReportFolder()
+	const ran = runSuites({ suites: VITEST_SUITES, into })
 	return {
-		tests: outcomes.flatMap((outcome) => outcome.items),
+		tests: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
 		[STORIES]: storyIds(ran.map(({ report }) => report)),
+	}
+}
+
+const collectUnit = (): Live => {
+	const into = newReportFolder()
+	const ran = runSuites({ suites: UNIT_SUITES, into })
+	return {
+		tests: attributedFailures(ran.map(outcomeOf)),
+		[STORIES]: indexedStoryIds(into),
 	}
 }
 
@@ -377,9 +448,11 @@ const collectLint = (): Live => ({
 	knip: knipItems(),
 })
 
-const SCOPES = { vitest: collectVitest, lint: collectLint }
+const SCOPES = { vitest: collectVitest, lint: collectLint, unit: collectUnit }
 
 type Scope = keyof typeof SCOPES
+
+const FULL_SCOPES: Scope[] = ["vitest", "lint"]
 
 const isScope = (name: string): name is Scope => name in SCOPES
 
@@ -392,7 +465,16 @@ const requestedScopes = (argv: string[]): Scope[] => {
 		)
 	}
 	const chosen = named.filter(isScope)
-	return chosen.length === 0 ? Object.keys(SCOPES).filter(isScope) : chosen
+	return chosen.length === 0 ? FULL_SCOPES : chosen
+}
+
+const assertUnitScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
+	if (!scopes.includes("unit")) return
+	if (scopes.includes("vitest") || argv.includes("--prune")) {
+		throw new Error(
+			"the unit scope reads a subset of the vitest scope: run it without vitest and without --prune",
+		)
+	}
 }
 
 const compareArea = ({ area, items }: AreaItems) => {
@@ -440,7 +522,9 @@ const collect = (scopes: Scope[]): Live => {
 }
 
 const main = (argv: string[]) => {
-	const live = collect(requestedScopes(argv))
+	const scopes = requestedScopes(argv)
+	assertUnitScopeChecksAlone(scopes, argv)
+	const live = collect(scopes)
 	if (argv.includes("--prune")) return prune(live)
 	if (argv.includes("--update")) return update(live)
 	return check(live)

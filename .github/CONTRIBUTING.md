@@ -48,15 +48,15 @@ calls from a branch you are reviewing.
 4. Write commits as [Conventional Commits](https://www.conventionalcommits.org):
    `feat(ui): …`, `fix(app): …`, `chore: …`.
 
-## Before you open a pull request
+## Before you push, and before you open a pull request
 
 ```bash
-bun run lint    # Biome
-bun run types   # tsc -b
-bun run test    # Vitest + cargo test
+bun run ci:fast   # before every push: biome, knip, types, unit tests, story ids
+bun run ci        # before opening a pull request: the exact checks of the PR jobs
 ```
 
-All three must pass. Then fill in the pull request template: say what changed
+`bun run ci` runs `scripts/ci.ts`, the one definition of the gate the pull
+request jobs run. Both must pass. Then fill in the pull request template: say what changed
 and why, and how a reviewer can see it working. Screenshots or a short capture
 for anything visual.
 

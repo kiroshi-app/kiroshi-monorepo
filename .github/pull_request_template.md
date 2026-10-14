@@ -13,7 +13,7 @@
 
 ## Checklist
 
-- [ ] `bun run lint`, `bun run types`, and `bun run test` all pass.
+- [ ] `bun run ci:fast` passed before every push, and `bun run ci` passed before opening this pull request.
 - [ ] The change is surgical — every changed line traces to the stated problem.
 - [ ] Commits follow Conventional Commits, one concern per commit.
 - [ ] No visual code landed in `apps/app`; new or changed components in

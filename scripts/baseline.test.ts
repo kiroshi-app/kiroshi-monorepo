@@ -5,6 +5,7 @@ import {
 	compareItems,
 	compareStories,
 	mergeVerdicts,
+	testedStoryIds,
 	vitestFailures,
 	withOrdinals,
 } from "./baseline"
@@ -177,5 +178,20 @@ describe("baseline stories", () => {
 		})
 
 		expect(verdict.failures).toEqual([])
+	})
+})
+
+describe("story ids read from the storybook index", () => {
+	it("keeps the stories the storybook vitest project plays, nothing else", () => {
+		const ids = testedStoryIds({
+			entries: {
+				played: { id: "chat--played", type: "story", tags: ["dev", "test"] },
+				untested: { id: "chat--untested", type: "story", tags: ["dev"] },
+				untagged: { id: "chat--untagged", type: "story" },
+				docs: { id: "chat--docs", type: "docs", tags: ["dev", "test"] },
+			},
+		})
+
+		expect(ids).toEqual(["chat--played"])
 	})
 })
