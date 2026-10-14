@@ -9,6 +9,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
     @State private var scrolling = TranscriptScrolling.followingTheBottom
     @State private var sentTop: CGFloat?
     @State private var headerOverhang: CGFloat = 0
+    @State private var topShownId: ThreadMessage.ID?
 
     var body: some View {
         transcript
@@ -63,6 +64,11 @@ struct ThreadScreen<Model: ThreadModel>: View {
     private var messages: some View {
         TimesRevealingScroll {
             LazyVStack(alignment: .leading, spacing: 0) {
+                if model.hasOlder {
+                    OlderMessagesRow(
+                        isFailed: model.olderFailed, oldestId: model.entries.first?.id,
+                        load: model.loadOlder)
+                }
                 if let opening {
                     VStack(spacing: 20) {
                         if let separator = DaySeparator(label: opening.day) {
@@ -103,6 +109,14 @@ struct ThreadScreen<Model: ThreadModel>: View {
         }
         .contentMargins(.top, headerOverhang, for: .scrollContent)
         .scrollPosition($position)
+        .onScrollTargetVisibilityChange(idType: ThreadMessage.ID.self) { topShownId = $0.first }
+        .onChange(of: model.entries.first?.id) { previousFirst, _ in
+            guard
+                let reading = ThreadAnchor.message(
+                    toKeep: topShownId, whenFirstWas: previousFirst, in: model.entries)
+            else { return }
+            position.scrollTo(id: reading, anchor: .top)
+        }
         .defaultScrollAnchor(.bottom, for: .initialOffset)
         .defaultScrollAnchor(.bottom, for: .alignment)
         .defaultScrollAnchor(scrolling == .holdingTheSentBubble ? .top : .bottom, for: .sizeChanges)

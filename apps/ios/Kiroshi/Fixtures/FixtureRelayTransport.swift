@@ -29,7 +29,7 @@
                 leftSpaceIds.insert(spaceId)
                 return ScriptedRelaySocket(
                     sharedSpaceId: sharedSpaceId, answers: answers,
-                    hostLeavesAfter: "mission_space_feed")
+                    hostLeavesAfter: "mission_space_page")
             }
             guard onlineSpaceIds.contains(spaceId) else {
                 throw RelayClosure(code: RelayClosure.hostOffline)

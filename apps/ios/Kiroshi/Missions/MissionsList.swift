@@ -8,26 +8,39 @@ struct MissionsList: View {
 
     var body: some View {
         let sections = missions.sections(in: conversationId)
-        if !sections.isEmpty {
-            List(sections) { section in
-                Section {
-                    ForEach(section.missions) { mission in
-                        Button {
-                            open(mission)
-                        } label: {
-                            MissionRow(mission: mission, companion: missions.companion(of: mission))
+        if !sections.isEmpty || (missions.hasLoaded && missions.nextPage != .complete) {
+            List {
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.missions) { mission in
+                            Button {
+                                open(mission)
+                            } label: {
+                                MissionRow(
+                                    mission: mission, companion: missions.companion(of: mission))
+                            }
+                            .listRowInsets(.vertical, 0)
+                            .listRowSeparator(.hidden)
+                            .onAppear {
+                                missions.rowAppeared(mission, in: conversationId)
+                            }
                         }
-                        .listRowInsets(.vertical, 0)
-                        .listRowSeparator(.hidden)
+                    } header: {
+                        MissionSectionHeader(title: section.group.title)
+                            .listRowInsets(
+                                EdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16))
                     }
-                } header: {
-                    MissionSectionHeader(title: section.group.title)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 4, trailing: 16))
                 }
+                NextPageRow(
+                    nextPage: missions.nextPage, loadingLabel: "Loading more missions",
+                    load: missions.loadMore)
             }
             .listStyle(.plain)
             .listSectionSpacing(0)
             .environment(\.defaultMinListHeaderHeight, 0)
+            .refreshable {
+                await missions.refresh()
+            }
         } else if missions.hasLoaded {
             ScrollingUnavailable {
                 ContentUnavailableView {

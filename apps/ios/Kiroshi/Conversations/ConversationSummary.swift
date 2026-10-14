@@ -49,6 +49,7 @@ struct ConversationSummary: Identifiable, Equatable {
     var subject: ConversationSubject
     var conversationId: String?
     var lastMessage: MessagePreview?
+    var activeAt: Date?
     var workingCompanionIds: Set<Companion.ID> = []
     var timeLabel: String?
     var preview: String?
@@ -67,7 +68,8 @@ struct ConversationSummary: Identifiable, Equatable {
     }
 
     var lastActivity: Date {
-        lastMessage?.sentAt ?? Date(milliseconds: subject.createdAt)
+        [lastMessage?.sentAt, activeAt].compactMap(\.self).max()
+            ?? Date(milliseconds: subject.createdAt)
     }
 
     static let placeholders = [
@@ -101,6 +103,12 @@ struct MessagePreview: Equatable {
         self.init(
             text: message.content, isYours: message.role == .user,
             sentAt: Date(milliseconds: message.createdAt), authorId: message.authorBotId)
+    }
+
+    init(_ word: LastWord) {
+        self.init(
+            text: word.text ?? "", isYours: word.authorBotId == nil,
+            sentAt: Date(milliseconds: word.at), authorId: word.authorBotId)
     }
 
     init(_ message: AgentEvent.Message, by authorId: Companion.ID?) {

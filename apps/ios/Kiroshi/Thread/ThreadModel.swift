@@ -45,10 +45,13 @@ protocol ThreadModel: AnyObject, Observable {
     var isSending: Bool { get }
     var canStop: Bool { get }
     var mentionCandidates: [Companion] { get }
+    var hasOlder: Bool { get }
+    var olderFailed: Bool { get }
 
     func mention(_ companion: Companion)
     @discardableResult func send() -> Task<Void, Never>?
     @discardableResult func stop() -> Task<Void, Never>?
     @discardableResult func reload() -> Task<Void, Never>?
+    func loadOlder()
     func follow(_ connection: RelayConnection) async
 }

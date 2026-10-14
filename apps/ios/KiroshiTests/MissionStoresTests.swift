@@ -28,10 +28,15 @@ struct MissionStoresTests {
         let encoded = missions.map {
             MissionTesting.missionJSON(id: $0.id, state: $0.state.rawValue)
         }
-        return "["
-            + encoded.map {
+        return page(
+            encoded.map {
                 #"{"conversationId":"c-1","conversationTitle":"Roadmap","mission":\#($0)}"#
-            }.joined(separator: ",") + "]"
+            })
+    }
+
+    func page(_ entries: [String], next: String? = nil) -> String {
+        let next = next.map { #""\#($0)""# } ?? "null"
+        return #"{"missions":[\#(entries.joined(separator: ","))],"nextCursor":\#(next)}"#
     }
 
     func nextCall(_ command: String, on socket: ScriptedRelaySocket) async -> [String: Any] {
@@ -53,7 +58,7 @@ struct MissionStoresTests {
             sharedSpaceId: "s-1",
             answers: [
                 "conversation_bots": companions,
-                "mission_space_feed": feed(
+                "mission_space_page": feed(
                     MissionTesting.mission(id: "asks", state: "waiting_human"),
                     MissionTesting.mission(id: "works")),
             ])
@@ -61,7 +66,7 @@ struct MissionStoresTests {
         await connection.start()
         await transport.nextOpening().accept(socket)
 
-        let call = await nextCall("mission_space_feed", on: socket)
+        let call = await nextCall("mission_space_page", on: socket)
         await waitUntil { store.hasLoaded }
 
         #expect((call["args"] as? [String: Any])?["spaceId"] as? String == "s-1")
@@ -81,12 +86,11 @@ struct MissionStoresTests {
             sharedSpaceId: "s-1",
             answers: [
                 "conversation_bots": companions,
-                "mission_space_feed": "["
-                    + [
-                        opened("release", "asks", "waiting_human"),
-                        opened("roadmap", "works", "working"),
-                        opened("release", "merges", "ready_to_merge"),
-                    ].joined(separator: ",") + "]",
+                "mission_space_page": page([
+                    opened("release", "asks", "waiting_human"),
+                    opened("roadmap", "works", "working"),
+                    opened("release", "merges", "ready_to_merge"),
+                ]),
             ])
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -111,8 +115,8 @@ struct MissionStoresTests {
             sharedSpaceId: "s-1",
             answers: [
                 "conversation_bots": companions,
-                "mission_space_feed": feed(MissionTesting.mission(id: "works")),
-            ], hostLeavesAfter: "mission_space_feed")
+                "mission_space_page": feed(MissionTesting.mission(id: "works")),
+            ], hostLeavesAfter: "mission_space_page")
         let updates = await connection.updates()
         let following = Task { await store.follow(connection) }
         await connection.start()
@@ -137,7 +141,7 @@ struct MissionStoresTests {
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(socket)
-        let first = await nextCall("mission_space_feed", on: socket)
+        let first = await nextCall("mission_space_page", on: socket)
         socket.push(
             .frame(
                 #"{"id":\#(first["id"] as? Int ?? 0),"status":200,"body":\#(feed(MissionTesting.mission(id: "works")))}"#
@@ -150,7 +154,7 @@ struct MissionStoresTests {
             ))
 
         await waitUntil { store.sections.first?.group == .needsYou }
-        _ = await nextCall("mission_space_feed", on: socket)
+        _ = await nextCall("mission_space_page", on: socket)
         following.cancel()
         await connection.stop()
     }

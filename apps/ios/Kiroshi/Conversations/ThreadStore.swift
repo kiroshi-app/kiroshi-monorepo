@@ -21,6 +21,8 @@ final class ThreadStore {
     private(set) var sendFailure: SendFailure?
     private(set) var isDeleted = false
     private(set) var conversationId: String?
+    private(set) var hasOlder = false
+    private(set) var olderFailed = false
     private var stopRefused = false
     var draft: String
     var attachments: [PickedAttachment] = []
@@ -31,6 +33,9 @@ final class ThreadStore {
     @ObservationIgnored private var loading: Task<Void, Never>?
     @ObservationIgnored private var sending: Task<Void, Never>?
     @ObservationIgnored private var stopping: Task<Void, Never>?
+    @ObservationIgnored private var loadingOlder: Task<Void, Never>?
+    @ObservationIgnored private var oldestSeq: Int?
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let makeId: () -> String
     @ObservationIgnored private let calendar: Calendar
@@ -115,7 +120,7 @@ final class ThreadStore {
             }
         }
         isReachable = false
-        for task in [loading, sending, stopping] {
+        for task in [loading, sending, stopping, loadingOlder] {
             task?.cancel()
         }
     }
@@ -127,9 +132,44 @@ final class ThreadStore {
             phase = .loading
         }
         loading?.cancel()
+        loadingOlder?.cancel()
+        loadingOlder = nil
+        generation += 1
         let task = Task { await load(in: spaceId, through: relay) }
         loading = task
         return task
+    }
+
+    func loadOlder() {
+        guard phase == .loaded, hasOlder, loadingOlder == nil, let relay, let conversationId,
+            let oldestSeq
+        else { return }
+        olderFailed = false
+        let generation = generation
+        loadingOlder = Task {
+            await readOlder(
+                before: oldestSeq, in: conversationId, through: relay, generation: generation)
+        }
+    }
+
+    private func readOlder(
+        before seq: Int, in conversationId: String, through relay: ConversationRelay,
+        generation: Int
+    ) async {
+        do {
+            let page = try await relay.messages(
+                in: conversationId, before: seq, limit: Self.pageSize)
+            guard !Task.isCancelled, generation == self.generation else { return }
+            let shown = Set(entries.map(\.id))
+            entries = page.messages.filter { !shown.contains($0.id) }.map(threadMessage) + entries
+            layOut()
+            oldestSeq = page.messages.first?.seq ?? oldestSeq
+            hasOlder = page.hasMore
+        } catch {
+            guard !Task.isCancelled, generation == self.generation else { return }
+            olderFailed = !(error is CancellationError)
+        }
+        loadingOlder = nil
     }
 
     @discardableResult
@@ -228,6 +268,7 @@ final class ThreadStore {
 
     private func load(in spaceId: String, through relay: ConversationRelay) async {
         let shownBeforeLoad = Set(entries.map(\.id))
+        let generation = generation
         do {
             let conversationId =
                 switch subject {
@@ -237,10 +278,10 @@ final class ThreadStore {
                 }
             guard !Task.isCancelled else { return }
             self.conversationId = conversationId
-            let messages = try await relay.latestMessages(
-                in: conversationId, limit: Self.pageSize)
-            guard !Task.isCancelled else { return }
-            merge(messages, droppingAnyOf: shownBeforeLoad)
+            let page = try await relay.messages(
+                in: conversationId, before: nil, limit: Self.pageSize)
+            guard !Task.isCancelled, generation == self.generation else { return }
+            merge(page, droppingAnyOf: shownBeforeLoad)
             phase = .loaded
             let questions = try? await relay.pendingQuestions(in: conversationId)
             guard !Task.isCancelled else { return }
@@ -255,19 +296,30 @@ final class ThreadStore {
         }
     }
 
-    private func merge(_ messages: [TranscriptMessage], droppingAnyOf shownBeforeLoad: Set<String>)
-    {
-        let paged = messages.map { message in
-            threadMessage(
-                id: message.id, isYours: message.role == .user, text: message.content,
-                sentAt: message.createdAt, authorId: message.authorBotId)
-        }
+    private func merge(_ page: TranscriptPage, droppingAnyOf shownBeforeLoad: Set<String>) {
+        let paged = page.messages.map(threadMessage)
         let pagedIds = Set(paged.map(\.id))
         let heardDuringLoad = entries.filter {
             !pagedIds.contains($0.id) && !shownBeforeLoad.contains($0.id)
         }
-        entries = paged + heardDuringLoad
+        let olderKept = paged.first.flatMap { first in
+            entries.firstIndex { $0.id == first.id }.map { Array(entries[..<$0]) }
+        }
+        if let olderKept, !olderKept.isEmpty {
+            entries = olderKept + paged + heardDuringLoad
+        } else {
+            entries = paged + heardDuringLoad
+            oldestSeq = page.messages.first?.seq
+            hasOlder = page.hasMore
+        }
+        olderFailed = false
         layOut()
+    }
+
+    private func threadMessage(_ message: TranscriptMessage) -> ThreadMessage {
+        threadMessage(
+            id: message.id, isYours: message.role == .user, text: message.content,
+            sentAt: message.createdAt, authorId: message.authorBotId)
     }
 
     private func apply(_ event: ConversationEvent) {
