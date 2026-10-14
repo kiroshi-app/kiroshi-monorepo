@@ -929,6 +929,56 @@ export const LoadingRoster = meta.story({
 	},
 })
 
+const PAGED_SPACES = SPACES.slice(0, 2)
+
+const listEndNodesIn = (canvasElement: HTMLElement) =>
+	canvasElement.ownerDocument.querySelectorAll('[data-slot^="list-end"]')
+
+export const RosterReadingNextPage = meta.story({
+	args: {
+		spaces: PAGED_SPACES,
+		botsBySpaceId: Object.fromEntries(
+			PAGED_SPACES.map((space) => [space.id, ROSTER]),
+		),
+		rosterListEnd: { hasNextPage: true, isFetchingNextPage: true },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The roster of the open space has more conversations than the first page carried, and the next page is being read: one skeleton row closes the list, under the last row, while the neighbouring space keeps its roster unpaged. Check the skeleton row draws once, in the open space only, after its last row, and stays out of the accessibility tree.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expect(panelsIn(canvasElement)).toHaveLength(PAGED_SPACES.length)
+		const doc = canvasElement.ownerDocument.body
+		await waitFor(() =>
+			expect(slotsIn(doc, "list-end-skeleton")).toHaveLength(1),
+		)
+		await expect(slotsIn(doc, "list-end-sentinel")).toHaveLength(1)
+
+		const selected = panelInView(canvasElement)
+		const skeleton = slotIn(selected, "list-end-skeleton")
+		const lastDropArea = slotsIn(selected, "roster-drop-area").at(-1)
+		await expect(lastDropArea?.compareDocumentPosition(skeleton)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(skeleton.closest('[aria-hidden="true"]')).not.toBeNull()
+		await expect(
+			slotIn(selected, "list-end-sentinel").closest('[aria-hidden="true"]'),
+		).not.toBeNull()
+	},
+})
+
+export const RosterWithoutPaging = meta.story({
+	tags: ["test-only"],
+	play: async ({ canvasElement }) => {
+		await expect(rowsIn(canvasElement)).toHaveLength(ROSTER.length)
+		await expect(listEndNodesIn(canvasElement)).toHaveLength(0)
+	},
+})
+
 export const SingleBot = meta.story({
 	tags: ["test-only"],
 	args: { botsBySpaceId: inHome([ROSTER[1]]), selectedBotId: "beacon" },
