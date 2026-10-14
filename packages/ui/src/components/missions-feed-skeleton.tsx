@@ -34,6 +34,14 @@ const MISSIONS_GROUP_CYCLE: MissionsGroupShape[] = [
 	},
 ]
 
+const MissionSkeletonRow = (widths: MissionRowWidths) => (
+	<SkeletonRow hexagonClassName="size-8" stampClassName="w-7" {...widths} />
+)
+
+const MissionsFeedRow = () => (
+	<MissionSkeletonRow {...MISSIONS_GROUP_CYCLE[0].rows[0]} />
+)
+
 const missionsGroupAt = (index: number) => {
 	const { headerClassName, rows } =
 		MISSIONS_GROUP_CYCLE[index % MISSIONS_GROUP_CYCLE.length]
@@ -45,12 +53,7 @@ const missionsGroupAt = (index: number) => {
 			</div>
 			<div className="flex flex-col gap-0.5">
 				{rows.map((widths) => (
-					<SkeletonRow
-						hexagonClassName="size-8"
-						key={widths.titleClassName}
-						stampClassName="w-7"
-						{...widths}
-					/>
+					<MissionSkeletonRow key={widths.titleClassName} {...widths} />
 				))}
 			</div>
 		</div>
@@ -61,4 +64,4 @@ const MissionsFeedSkeleton = () => (
 	<ListSkeleton className="gap-3" row={missionsGroupAt} />
 )
 
-export { MissionsFeedSkeleton }
+export { MissionsFeedRow, MissionsFeedSkeleton }

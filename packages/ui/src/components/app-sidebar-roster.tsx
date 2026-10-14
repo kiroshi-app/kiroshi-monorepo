@@ -39,6 +39,11 @@ import {
 	SectionLabel,
 	SectionNameField,
 } from "@workspace/ui/components/app-sidebar-section"
+import {
+	type ListEnd,
+	ListEndSlot,
+} from "@workspace/ui/components/list-skeleton"
+import { sidebarRowAt } from "@workspace/ui/components/sidebar-list-skeleton"
 import type { Space } from "@workspace/ui/components/space"
 import {
 	SidebarGroup,
@@ -104,6 +109,7 @@ interface BotRosterProps
 	collapsedSectionIds?: string[]
 	naming?: SectionNaming | null
 	onNaming?: (naming: SectionNaming | null) => void
+	listEnd?: ListEnd
 }
 
 const BotRoster = ({
@@ -120,6 +126,7 @@ const BotRoster = ({
 	onCollapseSection,
 	naming = null,
 	onNaming,
+	listEnd,
 	onCreateBot,
 	onCreateConversation,
 	onOpenSpaceSettings,
@@ -231,6 +238,7 @@ const BotRoster = ({
 					)}
 				</RosterDropArea>
 			) : null}
+			<ListEndSlot listEnd={listEnd} row={sidebarRowAt(0)} />
 			{naming ? (
 				<SectionNamingGroup
 					bots={bots.filter((bot) => isNamed(bot.id))}

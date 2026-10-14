@@ -7,12 +7,17 @@ import {
 } from "@workspace/ui/components/activity-group"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import { Icons } from "@workspace/ui/components/icons"
+import {
+	type ListEnd,
+	ListEndSlot,
+} from "@workspace/ui/components/list-skeleton"
 import type { MissionCardModel } from "@workspace/ui/components/mission"
 import {
 	MissionCard,
 	type MissionCardWrap,
 	wrapCard,
 } from "@workspace/ui/components/mission-card"
+import { MissionsFeedRow } from "@workspace/ui/components/missions-feed-skeleton"
 
 type MissionsPanelMission = MissionCardModel & { conversationId: string }
 
@@ -22,6 +27,7 @@ type MissionsPanelProps = {
 	onOpen: (missionId: string, conversationId: string) => void
 	openMissionId?: string | null
 	wrap?: MissionCardWrap
+	listEnd?: ListEnd
 }
 
 type MissionsPanelRowsProps = Pick<
@@ -72,10 +78,12 @@ const MissionsPanelEmpty = () => {
 const MissionsPanel = ({
 	open,
 	earlierToday,
+	listEnd,
 	...rowProps
 }: MissionsPanelProps) => {
 	const { t } = useTranslation("chat")
 	const [isEarlierTodayOpen, setEarlierTodayOpen] = useState(false)
+	const isEarlierTodayFolded = earlierToday.length > 0 && !isEarlierTodayOpen
 
 	if (open.length === 0 && earlierToday.length === 0) {
 		return <MissionsPanelEmpty />
@@ -111,6 +119,10 @@ const MissionsPanel = ({
 					<MissionsPanelRows {...rowProps} missions={earlierToday} />
 				</ActivityGroup>
 			) : null}
+			<ListEndSlot
+				listEnd={isEarlierTodayFolded ? undefined : listEnd}
+				row={<MissionsFeedRow />}
+			/>
 		</div>
 	)
 }
