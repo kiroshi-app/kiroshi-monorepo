@@ -16,7 +16,6 @@ import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 import { type RosterLine, rosterLinesIn, type SoloThreads } from "./roster-line"
 import {
 	cursorAfter,
-	type LastWords,
 	lastWordsIn,
 	lastWordsOf,
 	NO_LAST_WORDS,
@@ -105,18 +104,12 @@ type RosterPageRead = (
 	signal?: AbortSignal,
 ) => Promise<RosterPage>
 
-type RosterQueryContext = { pageParam: string | null; signal: AbortSignal }
-
-const rosterReadOfSpace = (space: RosterSpace, read: RosterPageRead) =>
-	isJoinedRowId(space.spaceRowId)
-		? ({ pageParam, signal }: RosterQueryContext) =>
-				read(pageParam, answeredInTime(signal))
-		: ({ pageParam }: RosterQueryContext) => read(pageParam)
-
 const rosterQueryOf = (space: RosterSpace, read: RosterPageRead) =>
 	infiniteQueryOptions({
 		queryKey: conversationQueryKeys.roster(space.spaceRowId, space.spaceId),
-		queryFn: rosterReadOfSpace(space, read),
+		queryFn: isJoined(space)
+			? ({ pageParam, signal }) => read(pageParam, answeredInTime(signal))
+			: ({ pageParam }) => read(pageParam),
 		initialPageParam: null as string | null,
 		getNextPageParam: cursorAfter,
 		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
@@ -403,21 +396,12 @@ const settingsStandingIn = (
 
 type RosterBase = Omit<RosterState, "soloThreads">
 
-const companionPreviewsOf = (bots: Bot[], words: LastWords): BotPreviews =>
+const previewsOf = (
+	rows: { id: string }[],
+	words: Record<string, LastWord>,
+): Record<string, LastWord> =>
 	Object.fromEntries(
-		bots.flatMap(({ id }) =>
-			words.companions[id] ? [[id, words.companions[id]]] : [],
-		),
-	)
-
-const conversationPreviewsOf = (
-	conversations: Conversation[],
-	words: LastWords,
-): ConversationPreviews =>
-	Object.fromEntries(
-		conversations.flatMap(({ id }) =>
-			words.conversations[id] ? [[id, words.conversations[id]]] : [],
-		),
+		rows.flatMap(({ id }) => (words[id] ? [[id, words[id]]] : [])),
 	)
 
 const rosterBaseOf = (
@@ -446,13 +430,13 @@ const rosterBaseOf = (
 	const previews = Object.fromEntries(
 		spaceRowIds.map((id, index) => [
 			id,
-			companionPreviewsOf(rosters[id], words[index]),
+			previewsOf(rosters[id], words[index].companions),
 		]),
 	)
 	const conversationPreviews = Object.assign(
 		{},
 		...spaceRowIds.map((id, index) =>
-			conversationPreviewsOf(conversationRosters[id], words[index]),
+			previewsOf(conversationRosters[id], words[index].conversations),
 		),
 	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
