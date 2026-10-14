@@ -8,6 +8,7 @@ on:
 jobs:
   ci-green:
     runs-on: ubuntu-latest
+    timeout-minutes: 100
     permissions:
       actions: read
     steps:
