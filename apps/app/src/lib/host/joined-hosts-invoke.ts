@@ -63,10 +63,14 @@ const PERSONAL_SCOPE_KINDS: ReadonlySet<unknown> = new Set([
 	"account",
 ])
 
-type Invoke = <T>(
+export type HostInvokeOptions = Partial<InvokeOptions> & {
+	signal?: AbortSignal
+}
+
+export type Invoke = <T>(
 	command: string,
 	args?: InvokeArgs,
-	options?: InvokeOptions,
+	options?: HostInvokeOptions,
 ) => Promise<T>
 
 export type LocalHost = {
@@ -109,6 +113,7 @@ type JoinedHostsInvokeOptions = Pick<JoinedHostsOptions, "reportFailure"> & {
 		id: string,
 		command: string,
 		args?: InvokeArgs,
+		signal?: AbortSignal,
 	) => Promise<T>
 }
 
@@ -171,7 +176,7 @@ export const createJoinedHostsInvoke = ({
 		target: ConversationSource,
 		call: Parameters<Invoke>,
 	): Promise<T> => {
-		const [command, args] = call
+		const [command, args, options] = call
 		if (target === null) {
 			return provenance.record(null, command, local.invoke<T>(...call))
 		}
@@ -180,8 +185,8 @@ export const createJoinedHostsInvoke = ({
 			target,
 			command,
 			joined
-				? joined.invoke<T>(command, args)
-				: invokeOnceOpen<T>(target, command, args),
+				? joined.invoke<T>(command, args, options?.signal)
+				: invokeOnceOpen<T>(target, command, args, options?.signal),
 		)
 	}
 

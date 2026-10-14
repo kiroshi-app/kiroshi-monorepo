@@ -129,12 +129,13 @@ export const createJoinedHostsJoin = ({
 		id: string,
 		command: string,
 		args?: InvokeArgs,
+		signal?: AbortSignal,
 	): Promise<T> => {
 		const host = await openConnection(id)
 		if (!host) {
 			throw unreachable(id)
 		}
-		return host.invoke<T>(command, args)
+		return host.invoke<T>(command, args, signal)
 	}
 
 	return { openConnection, invokeOnceOpen }

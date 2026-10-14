@@ -65,7 +65,10 @@ type HostSeed = {
 }
 
 const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
-	const fetch = vi.fn(async () => {
+	const fetch = vi.fn(async (_input: URL | RequestInfo, init?: RequestInit) => {
+		if (init?.signal?.aborted) {
+			throw init.signal.reason
+		}
 		if (unreachable) {
 			throw new TypeError("Failed to fetch")
 		}
@@ -232,6 +235,41 @@ describe("invoke over http", () => {
 			status: undefined,
 			side: "member",
 		})
+	})
+})
+
+const abortedBy = (reason: DOMException) => {
+	const controller = new AbortController()
+	controller.abort(reason)
+	return controller.signal
+}
+
+describe("a request the caller stops waiting on", () => {
+	it("hands the signal to the request and rejects with its reason, refusing nothing", async () => {
+		const { host, fetch, onRefused, onDown } = hostOf()
+		const signal = abortedBy(new DOMException("cancelled", "AbortError"))
+
+		await expect(
+			host.invoke("conversation_page", {}, signal),
+		).rejects.toMatchObject({ name: "AbortError" })
+		expect(fetch).toHaveBeenCalledWith(
+			expect.any(URL),
+			expect.objectContaining({ signal }),
+		)
+		expect(onRefused).not.toHaveBeenCalled()
+		expect(onDown).not.toHaveBeenCalled()
+	})
+
+	it("reports the host down when it does not answer in time", async () => {
+		const { host, onRefused, onDown } = hostOf()
+		const signal = abortedBy(new DOMException("too late", "TimeoutError"))
+
+		await expect(host.invoke("conversation_page", {}, signal)).rejects.toEqual({
+			kind: "hostOffline",
+			detail: "too late",
+		})
+		expect(onDown).toHaveBeenCalledOnce()
+		expect(onRefused).not.toHaveBeenCalled()
 	})
 })
 
