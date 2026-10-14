@@ -179,6 +179,7 @@ struct MissionStoresTests {
 
         store.draft = " The account step. "
         store.send()
+        #expect(store.lastSentId == "id-1")
         let call = await nextCall("conversation_send_turn", on: socket)
         await waitUntil { store.draft.isEmpty }
 

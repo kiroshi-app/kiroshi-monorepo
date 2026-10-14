@@ -15,6 +15,7 @@ final class ThreadStore {
     private(set) var subject: ConversationSubject
     private(set) var phase = Phase.loading
     private(set) var entries: [ThreadMessage] = []
+    private(set) var lastSentId: ThreadMessage.ID?
     private(set) var isReachable = false
     private(set) var isSending = false
     private(set) var sendFailure: SendFailure?
@@ -138,6 +139,7 @@ final class ThreadStore {
             id: makeId(), turnId: makeId(), conversationId: conversationId,
             written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
             sentAt: now())
+        lastSentId = outgoing.id
         draft = ""
         attachments = []
         sendFailure = nil

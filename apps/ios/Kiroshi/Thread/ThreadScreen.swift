@@ -5,6 +5,10 @@ struct ThreadScreen<Model: ThreadModel>: View {
     let heading: ThreadHeading
     var opening: ThreadOpening?
     let space: SpaceStore
+    @State private var position = ScrollPosition(idType: ThreadMessage.ID.self)
+    @State private var scrolling = TranscriptScrolling.followingTheBottom
+    @State private var sentTop: CGFloat?
+    @State private var headerOverhang: CGFloat = 0
 
     var body: some View {
         transcript
@@ -35,7 +39,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             .navigationBarTitleDisplayMode(.inline)
             .navigationTitle(heading.title)
-            .threadHeader(heading)
+            .threadHeader(heading, overhang: $headerOverhang)
             .onChange(of: model.working?.spoken) { _, spoken in
                 guard let spoken else { return }
                 AccessibilityNotification.Announcement(spoken).post()
@@ -70,6 +74,16 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 }
                 ForEach(model.entries) { message in
                     ThreadMessageView(message: message, soloCompanion: heading.companion)
+                        .onGeometryChange(for: CGFloat?.self) { proxy in
+                            message.id == model.lastSentId
+                                ? proxy.frame(in: .transcript).minY : nil
+                        } action: { top in
+                            guard let top else { return }
+                            if sentTop == nil, scrolling == .followingTheBottom {
+                                position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+                            }
+                            sentTop = top
+                        }
                 }
                 if let working = model.working {
                     WorkingLine(working: working)
@@ -79,12 +93,47 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     HostOfflineLine(space: offlineSpace, email: space.email)
                         .padding(.top, 20)
                 }
+                Color.clear
+                    .frame(height: 12)
+                    .id(Self.transcriptEnd)
             }
+            .scrollTargetLayout()
+            .coordinateSpace(.transcript)
             .padding(.horizontal)
-            .padding(.bottom, 12)
         }
-        .defaultScrollAnchor(.bottom)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .contentMargins(.top, headerOverhang, for: .scrollContent)
+        .scrollPosition($position)
+        .defaultScrollAnchor(.bottom, for: .initialOffset)
+        .defaultScrollAnchor(.bottom, for: .alignment)
+        .defaultScrollAnchor(scrolling == .holdingTheSentBubble ? .top : .bottom, for: .sizeChanges)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            sentTop.map { geometry.visibleTop >= $0 - 1 } ?? false
+        } action: { _, sentBubbleReachesTheTop in
+            if sentBubbleReachesTheTop {
+                holdTheSentBubble()
+            }
+        }
+        .onScrollPhaseChange { _, phase, context in
+            if phase == .interacting {
+                scrolling = .reading
+            } else if phase == .idle, scrolling == .reading, context.geometry.isAtTheBottom {
+                scrolling = .followingTheBottom
+            }
+        }
+        .onChange(of: model.lastSentId) {
+            sentTop = nil
+            guard scrolling != .followingTheBottom else { return }
+            scrolling = .followingTheBottom
+            position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+        }
+    }
+
+    private static var transcriptEnd: ThreadMessage.ID { "transcript-end" }
+
+    private func holdTheSentBubble() {
+        guard let sent = model.lastSentId, scrolling == .followingTheBottom else { return }
+        scrolling = .holdingTheSentBubble
+        position.scrollTo(id: sent, anchor: .top)
     }
 
     private var failedTitle: LocalizedStringKey {
@@ -100,4 +149,24 @@ struct ThreadScreen<Model: ThreadModel>: View {
         case .mission: "Loading the mission"
         }
     }
+}
+
+extension ScrollGeometry {
+    fileprivate var visibleTop: CGFloat {
+        contentOffset.y + contentInsets.top
+    }
+
+    fileprivate var isAtTheBottom: Bool {
+        visibleRect.maxY - contentInsets.bottom >= contentSize.height - 1
+    }
+}
+
+private enum TranscriptScrolling {
+    case followingTheBottom
+    case holdingTheSentBubble
+    case reading
+}
+
+extension CoordinateSpaceProtocol where Self == NamedCoordinateSpace {
+    fileprivate static var transcript: Self { .named("transcript") }
 }

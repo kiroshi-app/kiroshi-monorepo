@@ -450,6 +450,51 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func theLastSentMessageKeepsItsIdThroughItsEchoUntilTheNextSend() async throws {
+        let host = TestHost { call in
+            call.command == "conversation_send_turn" ? TestHost.ok(call, "1") : nil
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        #expect(store.lastSentId == nil)
+
+        store.draft = "Hi"
+        await store.send()?.value
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "id-1", in: "chat-juniper", seq: 1, isYours: true, "Hi", at: 1))
+        host.pushAgent(
+            "chat-juniper",
+            #"{"type":"messageCompleted","message":{"id":"a1","role":"assistant","text":"Hello.","timestamp":1791000001000}}"#
+        )
+        await waitUntil { store.entries.count == 2 }
+
+        #expect(store.lastSentId == "id-1")
+        #expect(store.entries.map(\.id) == ["id-1", "a1"])
+        store.draft = "Thanks!"
+        await store.send()?.value
+        #expect(store.lastSentId == "id-3")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func theSendNamesItsMessageBeforeTheHostAnswers() async throws {
+        let host = TestHost()
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+
+        store.draft = "Hello"
+        let sending = store.send()
+
+        #expect(store.lastSentId == "id-1")
+        #expect(store.entries.isEmpty)
+        _ = try #require(await host.nextCall("conversation_send_turn"))
+        following.cancel()
+        await connection.stop()
+        await sending?.value
+    }
+
     @Test func sendingIsUnavailableWhileTheHostIsOffline() async {
         let host = TestHost()
         let store = makeStore()

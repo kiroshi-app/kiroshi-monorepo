@@ -35,6 +35,7 @@ protocol ThreadModel: AnyObject, Observable {
     var kind: ThreadKind { get }
     var state: ThreadState { get }
     var entries: [ThreadMessage] { get }
+    var lastSentId: ThreadMessage.ID? { get }
     var working: ThreadWorking? { get }
     var draft: String { get set }
     var attachments: [PickedAttachment] { get set }

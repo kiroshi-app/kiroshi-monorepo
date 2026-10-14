@@ -23,6 +23,7 @@ final class MissionThreadStore {
     private(set) var isOnline = false
     private(set) var isSending = false
     private(set) var sendProblem: MissionSendProblem?
+    private(set) var lastSentId: ThreadMessage.ID?
 
     @ObservationIgnored private let work: CompanionWork
     @ObservationIgnored private let now: () -> Date
@@ -94,8 +95,10 @@ final class MissionThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay else { return nil }
+        let id = newId()
+        lastSentId = id
         isSending = true
-        let task = Task { await deliver(through: relay) }
+        let task = Task { await deliver(id, through: relay) }
         sending = task
         return task
     }
@@ -114,7 +117,7 @@ final class MissionThreadStore {
             time: ConversationTime(now: now(), calendar: calendar))
     }
 
-    private func deliver(through relay: MissionsRelay) async {
+    private func deliver(_ id: String, through relay: MissionsRelay) async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let picked = attachments
         sendProblem = nil
@@ -130,7 +133,7 @@ final class MissionThreadStore {
                 content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
             }
             let message = MissionAnswer.Message(
-                id: newId(), conversationId: mission.threadConversationId, turnId: newId(),
+                id: id, conversationId: mission.threadConversationId, turnId: newId(),
                 content: content, createdAt: Int(sentAt.timeIntervalSince1970 * 1000))
             try await relay.answer(MissionAnswer(message: message, summoned: [mission.botId]))
             messages = MissionTranscript.upserting(
