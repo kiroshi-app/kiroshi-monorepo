@@ -155,7 +155,7 @@ describe("the roster conversations read a page at a time", () => {
 
 	it("shows the loading row and asks once for a next page however often the end comes into view while it reads", async () => {
 		const { store, readPage, reads } = await pagedStore()
-		let answerNext = () => undefined as unknown
+		let answerNext: () => void = () => undefined
 		reads.mockImplementation((spaceId, cursor, limit) =>
 			cursor === null
 				? readPage(spaceId, cursor, limit)
