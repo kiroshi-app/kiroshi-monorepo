@@ -1,6 +1,7 @@
 mod bundled;
 mod common;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -3671,16 +3672,13 @@ fn the_first_page_holds_each_companion_solo_beside_the_rooms() {
 
 	let page = page_of(&window, &space, Value::Null, Value::Null);
 
-	let mut rows: Vec<(String, Value)> = page["conversations"]
+	let rows: BTreeMap<String, Value> = page["conversations"]
 		.as_array()
 		.expect("the page holds a list")
 		.iter()
 		.map(|row| (id_of(row), row["soloBotId"].clone()))
 		.collect();
-	let mut expected = vec![(room, Value::Null), (solo, json!(bot))];
-	rows.sort_by(|left, right| left.0.cmp(&right.0));
-	expected.sort_by(|left, right| left.0.cmp(&right.0));
-	assert_eq!(rows, expected);
+	assert_eq!(rows, BTreeMap::from([(room, Value::Null), (solo, json!(bot))]));
 	assert_eq!(page["pinned"], json!([]));
 	assert_eq!(page["nextCursor"], Value::Null);
 }

@@ -391,10 +391,6 @@ mod tests {
 		)
 	}
 
-	fn solo_bot_ids(rows: &[ActiveConversation]) -> Vec<(String, Option<String>)> {
-		rows.iter().map(|row| (row.conversation.id.clone(), row.solo_bot_id.clone())).collect()
-	}
-
 	#[tokio::test]
 	async fn each_companion_solo_is_paged_once_beside_the_rooms_and_pinned_by_its_companion() {
 		let rows = [
@@ -419,14 +415,12 @@ mod tests {
 		let later = page(&database, first.page.next.clone(), 2).await;
 
 		let loose = first.page.rows.iter().find(|row| row.conversation.id == "solo-loose");
-		assert_eq!(
-			solo_bot_ids(&first.pinned),
-			vec![
-				("c03".to_owned(), None),
-				("solo-pinned".to_owned(), Some("pinned".to_owned())),
-				("c05".to_owned(), None),
-			]
-		);
+		let pinned: Vec<(&str, Option<&str>)> = first
+			.pinned
+			.iter()
+			.map(|row| (row.conversation.id.as_str(), row.solo_bot_id.as_deref()))
+			.collect();
+		assert_eq!(pinned, vec![("c03", None), ("solo-pinned", Some("pinned")), ("c05", None)]);
 		assert_eq!(pages, vec![vec!["c04", "solo-loose"], vec!["c02", "c01"]]);
 		assert_eq!(later.pinned, Vec::new(), "a later page answered the pinned rows again");
 		assert_eq!(loose.map(|row| row.solo_bot_id.as_deref()), Some(Some("loose")));
