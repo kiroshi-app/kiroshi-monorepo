@@ -40,10 +40,6 @@ export type KnownSources = ReadonlyMap<string, TriggerSource>
 export const sourceKeyOf = (botId: string, triggerSourceId: string) =>
 	`${botId}/${triggerSourceId}`
 
-export const botIdsOf = (routines: Routine[]): string[] => [
-	...new Set(routines.map((routine) => routine.botId)),
-]
-
 export const toKnownSources = (
 	declared: { botId: string; sources: TriggerSource[] }[],
 ): KnownSources =>

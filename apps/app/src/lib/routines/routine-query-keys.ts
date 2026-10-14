@@ -6,11 +6,13 @@ export const routineQueryKeys = {
 		conversationId: string | null,
 		leadBotId: string | null,
 		host: string | null,
+		spaceId: string | null,
 	) =>
 		[
 			...routineQueryKeys.conversation(conversationId),
 			leadBotId,
 			host,
+			spaceId,
 		] as const,
 	runs: () => [...routineQueryKeys.all, "runs"] as const,
 	runsOf: (routineId: string | null, host: string | null) =>

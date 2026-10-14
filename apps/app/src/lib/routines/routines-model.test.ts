@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import type { Routine, RoutineRun, RunOutcome } from "./routine-contract"
 import {
-	botIdsOf,
 	toFilter,
 	toFormFilter,
 	toKnownSources,
@@ -32,18 +31,6 @@ const SCHEDULE: TriggerSource = {
 	payload: [],
 	dedupeKey: "at",
 }
-
-describe("botIdsOf", () => {
-	it("keeps one entry per companion", () => {
-		expect(
-			botIdsOf([
-				routine({ id: "r-1", botId: "b-1" }),
-				routine({ id: "r-2", botId: "b-2" }),
-				routine({ id: "r-3", botId: "b-1" }),
-			]),
-		).toEqual(["b-1", "b-2"])
-	})
-})
 
 describe("toRoutineRows", () => {
 	const known = toKnownSources([{ botId: "b-1", sources: [SCHEDULE] }])

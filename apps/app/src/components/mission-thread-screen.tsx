@@ -100,6 +100,7 @@ const MissionThread = ({
 			onOpenMission={onOpenMission}
 			readerName={readerName}
 			runtimes={runtimes}
+			spaceId={null}
 			thread={thread}
 		/>
 	)

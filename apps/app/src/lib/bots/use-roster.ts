@@ -2,7 +2,7 @@ import {
 	hashKey,
 	InfiniteQueryObserver,
 	useInfiniteQuery,
-	useQueries,
+	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query"
 import { useEffect } from "react"
@@ -14,7 +14,7 @@ import {
 	type RosterController,
 	type RosterState,
 } from "./roster-controller"
-import { rosterLinesIn } from "./roster-line"
+import { type RosterLine, rosterLineKey, type SoloThreads } from "./roster-line"
 
 import { useController } from "../use-controller"
 import { listen, onHostReconnected } from "@/lib/host"
@@ -39,6 +39,8 @@ const REFRESHING_EVENTS = [
 ]
 
 const NO_SPACE_ROW = ""
+
+const NO_LINE: RosterLine = { spaceId: NO_SPACE_ROW, botId: "" }
 
 const reportUnheardEvent = (reason: unknown) => {
 	console.error("roster: a host event could not be listened to", reason)
@@ -111,16 +113,36 @@ const useRosterListEnd = (
 		}),
 	)
 
+const openedLineOf = ({
+	spaceRowId,
+	selectedBotId,
+}: RosterState): RosterLine | null =>
+	spaceRowId === null || selectedBotId === null
+		? null
+		: { spaceId: spaceRowId, botId: selectedBotId }
+
+const isKnownIn = (soloThreads: SoloThreads, line: RosterLine) =>
+	Object.values(soloThreads).some(
+		(known) => rosterLineKey(known) === rosterLineKey(line),
+	)
+
+const useOpenedSoloThread = (
+	controller: RosterController,
+	state: RosterState,
+) => {
+	const line = openedLineOf(state)
+	useQuery({
+		...controller.soloThreadQuery(line ?? NO_LINE),
+		enabled: line !== null && !isKnownIn(state.soloThreads, line),
+	})
+}
+
 export const useRosterReads = (
 	controller: RosterController,
 	state: RosterState,
 ) => {
 	useObservedRosters(controller, Object.keys(state.rosters))
-	useQueries({
-		queries: rosterLinesIn(state.rosters).map((line) =>
-			controller.soloThreadQuery(line),
-		),
-	})
+	useOpenedSoloThread(controller, state)
 	useRosterRefreshes(controller)
 	return useRosterListEnd(controller, state.spaceRowId)
 }

@@ -163,11 +163,12 @@ vi.mock("@/lib/routines/routines-transport", async (importOriginal) => {
 			list: vi.fn(),
 			update: vi.fn(),
 			runs: vi.fn(),
+			runsOfSpace: vi.fn(),
 		},
 	}
 })
 vi.mock("@/lib/routines/trigger-sources-transport", () => ({
-	triggerSourcesTransport: { sources: vi.fn() },
+	triggerSourcesTransport: { sourcesOfSpace: vi.fn() },
 }))
 vi.mock("@/lib/host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host")>()),
@@ -181,9 +182,9 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 }))
 
 const listRoutines = vi.mocked(routinesTransport.list)
-const listRuns = vi.mocked(routinesTransport.runs)
+const listRuns = vi.mocked(routinesTransport.runsOfSpace)
 const updateRoutine = vi.mocked(routinesTransport.update)
-const listSources = vi.mocked(triggerSourcesTransport.sources)
+const listSources = vi.mocked(triggerSourcesTransport.sourcesOfSpace)
 const listMissions = vi.mocked(missionsTransport.list)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 const onCaptionWindow = vi.mocked(hasCaptionWindowControls)
@@ -447,6 +448,7 @@ const ThreadScreenHarness = ({
 			signIn && signInState
 				? { state: signInState, controller: signIn }
 				: undefined,
+		spaceId: THREAD_SPACE,
 		thread,
 	})
 }
@@ -859,6 +861,12 @@ const SCHEDULE_SOURCE = {
 	payload: [],
 	dedupeKey: "occurrenceId",
 }
+
+const THREAD_SPACE = "personal"
+
+const SCHEDULE_DECLARED = [
+	{ botId: "bot-1", triggerSources: [SCHEDULE_SOURCE], failure: null },
+]
 
 const ROUTINES_TOGGLE = "Toggle activity"
 
@@ -1285,7 +1293,7 @@ describe("ThreadScreen", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([SOLO_ROUTINE])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -1307,7 +1315,8 @@ describe("ThreadScreen", () => {
 		await openRoutinesScreen()
 
 		expect(listRoutines).toHaveBeenCalledWith("c-bot-1")
-		expect(listSources).toHaveBeenCalledWith("bot-1")
+		expect(listSources).toHaveBeenCalledOnce()
+		expect(listSources).toHaveBeenCalledWith(THREAD_SPACE)
 		expect(screen.getByText(SOLO_ROUTINE.title)).toBeTruthy()
 
 		fireEvent.click(screen.getByRole("switch", { name: SOLO_ROUTINE.title }))
@@ -2963,7 +2972,7 @@ describe("the first run in a solo thread", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -3394,7 +3403,7 @@ describe("signing in from a companion's solo thread", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -3583,7 +3592,7 @@ describe("ThreadScreen on a conversation nobody is in", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -3719,7 +3728,7 @@ describe("ThreadScreen sending a message that mentions absent companions", () =>
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -3879,7 +3888,7 @@ describe("ThreadScreen showing the companions that arrived", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -4072,7 +4081,7 @@ describe("ThreadScreen showing the applications installed", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
@@ -4619,7 +4628,7 @@ describe("the first load of a thread transcript", () => {
 		vi.clearAllMocks()
 		listRoutines.mockResolvedValue([])
 		listRuns.mockResolvedValue([])
-		listSources.mockResolvedValue([SCHEDULE_SOURCE])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
 		listMissions.mockResolvedValue({ open: [], done: [] })
 		listenToMissions.mockResolvedValue(() => undefined)
 	})

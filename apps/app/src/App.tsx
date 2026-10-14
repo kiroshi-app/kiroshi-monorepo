@@ -47,6 +47,9 @@ export function App() {
 		openRowId: scopes.openRowId,
 	})
 	const panels = useSettingsPanels({ core, rosterView, scopes })
+	const rosteredHostSpaceId =
+		rosterView.rosteredSpaceId &&
+		core.roster.controller.hostSpaceIdOf(rosterView.rosteredSpaceId)
 	const loadSpaces = useSpaceLoading({ core, scopes })
 	useWorkspaceSubscriptions({ core, drivers, rosterView })
 	const rosterLines = useRosterLines({ core, drivers, rosterView })
@@ -211,6 +214,7 @@ export function App() {
 												onToggleSettings={overlay.toggleSettings}
 												readerName={preferences.displayName}
 												signIn={drivers.signIn}
+												spaceId={rosteredHostSpaceId}
 											/>
 										</ThreadAuthorshipContext.Provider>
 									</ConversationApplicationsContext.Provider>

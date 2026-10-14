@@ -14,10 +14,9 @@ import type {
 	RoutinesPanelForm,
 } from "@workspace/ui/components/routines-panel"
 
-import type { Routine } from "./routine-contract"
+import type { Routine, RunsOfRoutine } from "./routine-contract"
 import { routineQueryKeys } from "./routine-query-keys"
 import {
-	botIdsOf,
 	type KnownSources,
 	type ReportedRunRead,
 	toKnownSources,
@@ -26,7 +25,7 @@ import {
 	toTriggerSources,
 } from "./routines-model"
 import { routinesTransport } from "./routines-transport"
-import type { TriggerSource } from "./trigger-contract"
+import type { BotTriggerSources, TriggerSource } from "./trigger-contract"
 import { triggerSourcesTransport } from "./trigger-sources-transport"
 import { useRoutineAnnouncements } from "./use-routine-announcements"
 import { useRoutineDetail } from "./use-routine-detail"
@@ -51,37 +50,30 @@ export type ConversationRoutines = {
 
 type Declaration = { botId: string; sources: TriggerSource[] }
 
-const declaredBy = async (botIds: string[]): Promise<Declaration[]> => {
-	const reads = await Promise.allSettled(
-		botIds.map(async (botId) => ({
-			botId,
-			sources: await triggerSourcesTransport.sources(botId),
-		})),
-	)
+const declarationsIn = (
+	read: PromiseSettledResult<BotTriggerSources[]>,
+): Declaration[] =>
+	read.status === "fulfilled"
+		? read.value.flatMap(({ botId, triggerSources, failure }) =>
+				failure === null ? [{ botId, sources: triggerSources }] : [],
+			)
+		: []
 
-	return reads.flatMap((read) =>
-		read.status === "fulfilled" ? [read.value] : [],
-	)
-}
-
-const declaredByLead = (leadBotId: string | null) =>
-	leadBotId ? triggerSourcesTransport.sources(leadBotId) : Promise.resolve([])
-
-const leadDeclaration = (
+const leadSourcesIn = (
+	read: PromiseSettledResult<BotTriggerSources[]>,
 	leadBotId: string | null,
-	declared: TriggerSource[] | null,
-): Declaration | null =>
-	leadBotId && declared ? { botId: leadBotId, sources: declared } : null
-
-const knownOf = async (
-	listed: Routine[],
-	lead: Declaration | null,
-): Promise<KnownSources> => {
-	const others = await declaredBy(
-		botIdsOf(listed).filter((botId) => botId !== lead?.botId),
-	)
-
-	return toKnownSources(lead ? [lead, ...others] : others)
+): TriggerSource[] | null => {
+	if (leadBotId === null) {
+		return []
+	}
+	if (read.status === "rejected") {
+		return null
+	}
+	const lead = read.value.find(({ botId }) => botId === leadBotId)
+	if (!lead) {
+		return []
+	}
+	return lead.failure === null ? lead.triggerSources : null
 }
 
 type ReportedRunsRead = {
@@ -89,24 +81,23 @@ type ReportedRunsRead = {
 	hasFailed: boolean
 }
 
-const reportedRunsOf = async (
+const reportedRunsOf = (
 	listed: Routine[],
 	known: KnownSources,
-): Promise<ReportedRunsRead> => {
-	const reads = await Promise.allSettled(
-		listed.map(async (routine) => ({
-			routine,
-			runs: await routinesTransport.runs(routine.id),
-		})),
-	)
-	const held = reads.flatMap((read) =>
-		read.status === "fulfilled" ? [read.value] : [],
-	)
-
-	return {
-		reported: toReportedRuns(held, known),
-		hasFailed: held.length < reads.length,
+	read: PromiseSettledResult<RunsOfRoutine[]>,
+): ReportedRunsRead => {
+	if (read.status === "rejected") {
+		return { reported: [], hasFailed: true }
 	}
+	const runsByRoutineId = new Map(
+		read.value.map(({ routineId, runs }) => [routineId, runs]),
+	)
+	const held = listed.map((routine) => ({
+		routine,
+		runs: runsByRoutineId.get(routine.id) ?? [],
+	}))
+
+	return { reported: toReportedRuns(held, known), hasFailed: false }
 }
 
 type RoutinesRead = {
@@ -127,31 +118,32 @@ const NOTHING_READ: RoutinesRead = {
 
 type RoutinesReading = {
 	conversationId: string
+	spaceId: string
 	leadBotId: string | null
 	held: RoutinesRead | undefined
 }
 
 const readRoutines = async ({
 	conversationId,
+	spaceId,
 	leadBotId,
 	held,
 }: RoutinesReading): Promise<RoutinesRead> => {
-	const [listing, declaring] = await Promise.allSettled([
+	const [listing, declaring, running] = await Promise.allSettled([
 		routinesTransport.list(conversationId),
-		declaredByLead(leadBotId),
+		triggerSourcesTransport.sourcesOfSpace(spaceId),
+		routinesTransport.runsOfSpace(spaceId),
 	])
-	const declared = declaring.status === "fulfilled" ? declaring.value : null
+	const declarations = declarationsIn(declaring)
+	const declared = leadSourcesIn(declaring, leadBotId)
 	const sources = declared ? toTriggerSources(declared) : NO_SOURCES
 
 	if (listing.status === "rejected") {
 		return { ...(held ?? NOTHING_READ), sources, failure: "routines" }
 	}
 
-	const known = await knownOf(
-		listing.value,
-		leadDeclaration(leadBotId, declared),
-	)
-	const runs = await reportedRunsOf(listing.value, known)
+	const known = toKnownSources(declarations)
+	const runs = reportedRunsOf(listing.value, known, running)
 
 	return {
 		rows: listing.value,
@@ -186,20 +178,22 @@ const withRoutineRemoved = (id: string) => (rows: Routine[]) =>
 
 export const useRoutines = (
 	conversationId: string | null,
+	spaceId: string | null,
 	leadBotId?: string,
 ): ConversationRoutines => {
 	const queryClient = useQueryClient()
 	const host = useReachableHost()
 	const lead = leadBotId ?? null
-	const canRead = conversationId !== null && host !== null
+	const canRead = conversationId !== null && spaceId !== null && host !== null
 	const [writeFailedAt, setWriteFailedAt] = useState<number | null>(null)
 
 	const listing = useQuery({
-		queryKey: routineQueryKeys.list(conversationId, lead, host),
+		queryKey: routineQueryKeys.list(conversationId, lead, host, spaceId),
 		queryFn: canRead
 			? ({ client, queryKey: readKey }) =>
 					readRoutines({
 						conversationId,
+						spaceId,
 						leadBotId: lead,
 						held: client.getQueryData<RoutinesRead>(readKey),
 					})
@@ -222,12 +216,12 @@ export const useRoutines = (
 	const patchRows = useCallback(
 		(change: (rows: Routine[]) => Routine[]) => {
 			queryClient.setQueryData<RoutinesRead>(
-				routineQueryKeys.list(conversationId, lead, host),
+				routineQueryKeys.list(conversationId, lead, host, spaceId),
 				(held) => held && { ...held, rows: change(held.rows) },
 			)
 			setWriteFailedAt(null)
 		},
-		[queryClient, conversationId, lead, host],
+		[queryClient, conversationId, lead, host, spaceId],
 	)
 
 	const raiseWriteFailure = useCallback(() => setWriteFailedAt(Date.now()), [])

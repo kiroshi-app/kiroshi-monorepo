@@ -19,11 +19,15 @@ import {
 	lastWordsIn,
 	lastWordsOf,
 	NO_LAST_WORDS,
+	NO_SOLO_BOT_IDS,
 	ROSTER_PAGE_SIZE,
 	type RosterPage,
 	type RosterPages,
 	type RosterRead,
 	rosterReadOf,
+	type SoloBotIds,
+	soloBotIdsIn,
+	soloBotIdsOf,
 	topicsIn,
 	withFreshHead,
 	withHeldRead,
@@ -132,6 +136,7 @@ const soloThreadQueryOf = (
 			line.botId,
 		),
 		queryFn: read,
+		gcTime: Number.POSITIVE_INFINITY,
 		meta: PREVIEW_FAILURE,
 	})
 
@@ -327,10 +332,6 @@ const isJoined = ({ spaceRowId }: RosterSpace) => isJoinedRowId(spaceRowId)
 
 const isLocal = (space: RosterSpace) => !isJoined(space)
 
-const isJoinedLine = ({ spaceId }: RosterLine) => isJoinedRowId(spaceId)
-
-const isLocalLine = (line: RosterLine) => !isJoinedLine(line)
-
 const heldSpaceRowIdsOf = ({ spaces, spaceRowId }: RosterChoice) => {
 	const listed = spaces.map((space) => space.spaceRowId)
 	return spaceRowId === null || listed.includes(spaceRowId)
@@ -398,8 +399,6 @@ const settingsStandingIn = (
 	}
 }
 
-type RosterBase = Omit<RosterState, "soloThreads">
-
 const previewsOf = (
 	rows: { id: string }[],
 	words: Record<string, LastWord>,
@@ -408,12 +407,25 @@ const previewsOf = (
 		rows.flatMap(({ id }) => (words[id] ? [[id, words[id]]] : [])),
 	)
 
+const pagedSoloThreadsIn = (
+	spaceRowId: string,
+	bots: Bot[],
+	soloBotIds: SoloBotIds,
+): SoloThreads =>
+	Object.fromEntries(
+		Object.entries(soloBotIds).flatMap(([conversationId, botId]) =>
+			bots.some(({ id }) => id === botId)
+				? [[conversationId, { spaceId: spaceRowId, botId }]]
+				: [],
+		),
+	)
+
 const rosterBaseOf = (
 	choice: RosterChoice,
 	paged: (RosterPages | undefined)[],
 	failures: boolean[],
 	pendings: boolean[],
-): RosterBase => {
+): RosterState => {
 	const spaceRowIds = heldSpaceRowIdsOf(choice)
 	const reads = paged.map((pages) => pages && rosterReadOf(pages))
 	const words = paged.map((pages) =>
@@ -443,6 +455,16 @@ const rosterBaseOf = (
 			previewsOf(conversationRosters[id], words[index].conversations),
 		),
 	)
+	const soloThreads: SoloThreads = Object.assign(
+		{},
+		...spaceRowIds.map((id, index) =>
+			pagedSoloThreadsIn(
+				id,
+				rosters[id],
+				paged[index] ? soloBotIdsOf(paged[index]) : NO_SOLO_BOT_IDS,
+			),
+		),
+	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
 	const conversations = rosterIn(conversationRosters, choice.spaceRowId)
 	return {
@@ -451,6 +473,7 @@ const rosterBaseOf = (
 		conversationRosters,
 		conversations,
 		previews,
+		soloThreads,
 		conversationPreviews,
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
@@ -462,10 +485,10 @@ const rosterBaseOf = (
 }
 
 const rosterStateOf = (
-	base: RosterBase,
+	base: RosterState,
 	soloThreadIds: (string | undefined)[],
 ): RosterState => {
-	const soloThreads: SoloThreads = {}
+	const soloThreads: SoloThreads = { ...base.soloThreads }
 	rosterLinesIn(base.rosters).forEach((line, index) => {
 		const conversationId = soloThreadIds[index]
 		if (conversationId !== undefined) {
@@ -526,6 +549,7 @@ export const createRosterController = (
 			bots,
 			conversations: topicsIn(page),
 			lastWords: lastWordsIn(page),
+			soloBotIds: soloBotIdsIn(page),
 			nextCursor: page.nextCursor,
 		}
 	}
@@ -752,13 +776,6 @@ export const createRosterController = (
 		return null
 	}
 
-	const prefetchSoloThreadsWhere = (isWanted: (line: RosterLine) => boolean) =>
-		Promise.all(
-			rosterLinesIn(current().rosters)
-				.filter(isWanted)
-				.map((line) => queryClient.prefetchQuery(soloThreadQuery(line))),
-		)
-
 	const emptySeatsIn = async (spaceRowId: string, botId: string) => {
 		const seated = rosterIn(current().conversationRosters, spaceRowId)
 		const emptied = await Promise.all(
@@ -865,10 +882,7 @@ export const createRosterController = (
 		if (spaces.every(isReadyToOpen)) {
 			choose({ hasLoaded: true })
 		}
-		await Promise.all([
-			prefetchSoloThreadsWhere(isLocalLine),
-			joinedReads.then(() => prefetchSoloThreadsWhere(isJoinedLine)),
-		])
+		await joinedReads
 	}
 
 	const openBotSettings = ({ id, isShowingDanger }: BotSettingsOpening) =>

@@ -1,8 +1,10 @@
-import type { TriggerSource } from "./trigger-contract"
+import type { BotTriggerSources } from "./trigger-contract"
 
 import { invoke } from "../host"
 
 export const triggerSourcesTransport = {
-	sources: (botId: string) =>
-		invoke<TriggerSource[]>("routine_trigger_sources", { botId }),
+	sourcesOfSpace: (spaceId: string) =>
+		invoke<BotTriggerSources[]>("routine_trigger_sources_of_space", {
+			spaceId,
+		}),
 }
