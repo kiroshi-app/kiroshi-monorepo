@@ -49,6 +49,7 @@ import {
 	SidebarGroup,
 	SidebarGroupContent,
 } from "@workspace/ui/components/ui/sidebar"
+import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 
 const EMPTY_COPY = "px-3 py-4 text-center text-sidebar-foreground/70 text-sm"
 
@@ -147,9 +148,14 @@ const BotRoster = ({
 	const { t } = useTranslation("bots")
 	const entries = rosterEntriesOf({ bots, conversations, naming, sections })
 	const moves = rosterMovesOf({ entries, onPinRoster, spaceId })
-	const drag = useRosterDrag({ entries, onLand: moves.land })
+	const land = useStableCallback(moves.land)
+	const fileRow = useStableCallback(moves.fileRow)
+	const pinLast = useStableCallback(moves.pinLast)
+	const unpin = useStableCallback(moves.unpin)
+	const drag = useRosterDrag({ entries, onLand: land })
 	const { isNamed, sortedBots, sortedConversations, topLevel } = entries
 	const { liftedEntry, rosterLift } = drag
+	const { followRef } = rosterLift
 
 	const rows: RosterRowsContext = {
 		activeBotId: selectedConversationId ? undefined : selectedBotId,
@@ -164,14 +170,13 @@ const BotRoster = ({
 		onDeleteConversation,
 		onDuplicateBot,
 		onEditBot,
-		onMoveToSection:
-			onPinRoster && sections.length > 0 ? moves.fileRow : undefined,
+		onMoveToSection: onPinRoster && sections.length > 0 ? fileRow : undefined,
 		onOpenConversationSettings,
-		onPin: onPinRoster ? moves.pinLast : undefined,
+		onPin: onPinRoster ? pinLast : undefined,
 		onRemoveBotFromSpace,
 		onSelectBot,
 		onSelectConversation,
-		onUnpin: onPinRoster ? moves.unpin : undefined,
+		onUnpin: onPinRoster ? unpin : undefined,
 		sections,
 		selectedConversationId,
 		slotFor: drag.slotFor,
@@ -256,7 +261,7 @@ const BotRoster = ({
 						<LiftedRow
 							bot={liftedEntry?.bot}
 							conversation={liftedEntry?.conversation}
-							ref={rosterLift.followRef}
+							ref={followRef}
 						/>,
 						document.body,
 					)

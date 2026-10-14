@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useState } from "react"
 
 import {
 	isSameLanding,
@@ -10,6 +10,7 @@ import {
 import type { RosterEntries } from "@workspace/ui/components/app-sidebar-roster-layout"
 import type { InsertionEdge } from "@workspace/ui/components/app-sidebar-roster-parts"
 import { dropAreaAt, useRosterLift } from "@workspace/ui/hooks/use-roster-lift"
+import { useStableCallback } from "@workspace/ui/hooks/use-stable-callback"
 
 interface RosterDragSource {
 	entries: RosterEntries
@@ -20,9 +21,9 @@ const useRosterDrag = ({ entries, onLand }: RosterDragSource) => {
 	const { topLevel, pinnedEntries, blockOf, withoutBlock, topLevelWithout } =
 		entries
 
-	const slots = useRef(new Map<string, HTMLElement>()).current
+	const [slots] = useState(() => new Map<string, HTMLElement>())
 
-	const cards = useRef(new Map<string, HTMLElement>()).current
+	const [cards] = useState(() => new Map<string, HTMLElement>())
 
 	const keeping =
 		(held: Map<string, HTMLElement>) =>
@@ -40,22 +41,25 @@ const useRosterDrag = ({ entries, onLand }: RosterDragSource) => {
 	const isSectionLift = (id: string) =>
 		Boolean(topLevel.find((entry) => entry.id === id)?.section)
 
-	const landingAt = (x: number, y: number, id: string): Landing | null => {
-		const area = dropAreaAt(x, y)
-		if (area === null) return null
-		if (area === SORTED_ZONE) return SORTED
-		if (isSectionLift(id))
+	const landingAt = useStableCallback(
+		(x: number, y: number, id: string): Landing | null => {
+			const area = dropAreaAt(x, y)
+			if (area === null) return null
+			if (area === SORTED_ZONE) return SORTED
+			if (isSectionLift(id))
+				return {
+					at: topLevelWithout(id).filter(
+						(entry) => middleIn(cards, entry.id) < y,
+					).length,
+					holder: null,
+				}
 			return {
-				at: topLevelWithout(id).filter((entry) => middleIn(cards, entry.id) < y)
+				at: withoutBlock(id).filter((entry) => middleIn(slots, entry.id) < y)
 					.length,
-				holder: null,
+				holder: entries.holderOf(area),
 			}
-		return {
-			at: withoutBlock(id).filter((entry) => middleIn(slots, entry.id) < y)
-				.length,
-			holder: entries.holderOf(area),
-		}
-	}
+		},
+	)
 
 	const rosterLift = useRosterLift({
 		isEnabled: true,

@@ -1,15 +1,26 @@
+import {
+	type ComponentProps,
+	createRef,
+	Profiler,
+	type Ref,
+	useImperativeHandle,
+	useState,
+} from "react"
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { SidebarFrame, slotIn, slotsIn } from "@workspace/storybook/story-utils"
 import {
 	ATLAS,
+	BEACON,
 	DESK_ROOM,
 	SIDEBAR_BOTS,
 	SIDEBAR_CONVERSATIONS,
 	SIDEBAR_SECTION,
 	SIDEBAR_SPACES,
 } from "@workspace/ui/components/app-sidebar.fixtures"
+import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
+import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
 
 const meta = preview.meta({
@@ -110,5 +121,124 @@ export const Idle = meta.story({
 			Node.DOCUMENT_POSITION_FOLLOWING,
 		)
 		await expect(slotsIn(canvasElement, "list-end-skeleton")).toHaveLength(0)
+	},
+})
+
+type BotRosterProps = ComponentProps<typeof BotRoster>
+
+interface RosterHandle {
+	show: (props: BotRosterProps) => void
+}
+
+interface ReshownRosterProps extends BotRosterProps {
+	handle: Ref<RosterHandle>
+}
+
+let rosterCommits = 0
+
+const rosterHandle = createRef<RosterHandle>()
+
+const ReshownRoster = ({ handle, ...initial }: ReshownRosterProps) => {
+	const [shown, setShown] = useState(initial)
+	useImperativeHandle(handle, () => ({ show: setShown }), [])
+	return (
+		<Profiler
+			id="bot-roster"
+			onRender={() => {
+				rosterCommits += 1
+			}}
+		>
+			<BotRoster {...shown} />
+		</Profiler>
+	)
+}
+
+interface CommittedFiber {
+	type: unknown
+	key: string | null
+	memoizedState: unknown
+	child: CommittedFiber | null
+	sibling: CommittedFiber | null
+}
+
+type KeyedFiber = [CommittedFiber, string | null]
+
+interface HostRootFiber {
+	stateNode: { current: CommittedFiber }
+}
+
+const ROW_COMPONENTS: unknown[] = [BotRosterRow, ConversationRosterRow]
+
+const isRootKey = (key: string) => key.startsWith("__reactContainer$")
+
+const reactRootOf = (element: HTMLElement): HTMLElement =>
+	Object.keys(element).some(isRootKey) || !element.parentElement
+		? element
+		: reactRootOf(element.parentElement)
+
+const committedRowHooksIn = (canvasElement: HTMLElement) => {
+	const root = reactRootOf(canvasElement)
+	const rootKey = Object.keys(root).find(isRootKey) ?? ""
+	const hostRoot = Reflect.get(root, rootKey) as HostRootFiber
+	const hooksByRow = new Map<string | null, unknown>()
+	const pending: KeyedFiber[] = [[hostRoot.stateNode.current, null]]
+	for (let next = pending.pop(); next; next = pending.pop()) {
+		const [fiber, parentKey] = next
+		const key = fiber.key ?? parentKey
+		if (ROW_COMPONENTS.includes(fiber.type))
+			hooksByRow.set(key, fiber.memoizedState)
+		if (fiber.sibling) pending.push([fiber.sibling, parentKey])
+		if (fiber.child) pending.push([fiber.child, key])
+	}
+	return hooksByRow
+}
+
+const rowsRenderedBy = async (
+	container: HTMLElement,
+	props: BotRosterProps,
+) => {
+	const before = committedRowHooksIn(container)
+	const commitsBefore = rosterCommits
+	rosterHandle.current?.show(props)
+	await waitFor(() => expect(rosterCommits).toBeGreaterThan(commitsBefore))
+	const after = committedRowHooksIn(container)
+	return [...after]
+		.filter(([row, hooks]) => before.get(row) !== hooks)
+		.map(([row]) => row)
+		.toSorted()
+}
+
+const STABLE_MEMBERSHIPS = [SIDEBAR_SPACES[0].id]
+
+export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
+	args: { membershipsOf: () => STABLE_MEMBERSHIPS },
+	render: (args) => <ReshownRoster {...args} handle={rosterHandle} />,
+	play: async ({ args, canvasElement }) => {
+		await expect(committedRowHooksIn(canvasElement).size).toBe(3)
+
+		await expect(await rowsRenderedBy(canvasElement, { ...args })).toEqual([])
+
+		const beaconRenamed = {
+			...args,
+			bots: [ATLAS, { ...BEACON, name: `${BEACON.name} renamed` }],
+		}
+		await expect(await rowsRenderedBy(canvasElement, beaconRenamed)).toEqual([
+			BEACON.id,
+		])
+
+		const roomRenamed = {
+			...beaconRenamed,
+			conversations: [{ ...DESK_ROOM, name: `${DESK_ROOM.name} renamed` }],
+		}
+		await expect(await rowsRenderedBy(canvasElement, roomRenamed)).toEqual([
+			DESK_ROOM.id,
+		])
+
+		await expect(
+			await rowsRenderedBy(canvasElement, {
+				...roomRenamed,
+				selectedBotId: BEACON.id,
+			}),
+		).toEqual([ATLAS.id, BEACON.id].toSorted())
 	},
 })
