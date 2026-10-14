@@ -6,7 +6,44 @@ on:
       - "v*"
 
 jobs:
+  ci-green:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for the CI push run of the tagged commit to pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          started=$SECONDS
+          while :; do
+            elapsed=$((SECONDS - started))
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --commit "$GITHUB_SHA" --limit 1 \
+              --json status,url,conclusion --jq '.[] | [.status, .url, .conclusion] | @tsv')
+            if [ -n "$run" ]; then
+              IFS=$'\t' read -r status url conclusion <<< "$run"
+              if [ "$status" = completed ]; then
+                if [ "$conclusion" = success ]; then
+                  echo "CI passed on $GITHUB_SHA: $url"
+                  exit 0
+                fi
+                echo "::error::CI on $GITHUB_SHA concluded $conclusion: $url"
+                exit 1
+              fi
+              echo "CI on $GITHUB_SHA is $status: $url"
+            elif [ "$elapsed" -ge 600 ]; then
+              echo "::error::No CI push run found for $GITHUB_SHA 10 minutes after ci-green started"
+              exit 1
+            fi
+            if [ "$elapsed" -ge 5400 ]; then
+              echo "::error::CI on $GITHUB_SHA did not complete within 90 minutes"
+              exit 1
+            fi
+            sleep 30
+          done
+
   release:
+    needs: ci-green
     permissions:
       contents: write
     strategy:

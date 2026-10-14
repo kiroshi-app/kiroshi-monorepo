@@ -1,0 +1,96 @@
+import { describe, expect, it } from "bun:test"
+
+import { decideJobs } from "./ci-changes"
+
+const none = { rust: false, vitest: false, website: false, ios: false }
+const every = { rust: true, vitest: true, website: true, ios: true }
+
+const onPullRequest = (...paths: string[]) =>
+	decideJobs({ event: "pull_request", paths })
+
+describe("ci changes", () => {
+	it("runs every job on a push, whatever the paths", () => {
+		expect(decideJobs({ event: "push", paths: [] })).toEqual(every)
+		expect(
+			decideJobs({ event: "push", paths: ["apps/ios/Kiroshi/App.swift"] }),
+		).toEqual(every)
+	})
+
+	it("runs every job when a shared root path changed", () => {
+		expect(onPullRequest("bun.lock")).toEqual(every)
+		expect(onPullRequest("patches/a.patch")).toEqual(every)
+		expect(onPullRequest(".github/workflows/release.yml")).toEqual(every)
+	})
+
+	it("runs only vitest on a story under packages/ui", () => {
+		expect(
+			onPullRequest("packages/ui/src/components/button.stories.tsx"),
+		).toEqual({ ...none, vitest: true })
+		expect(onPullRequest("packages/ui/.storybook/preview.tsx")).toEqual({
+			...none,
+			vitest: true,
+		})
+	})
+
+	it("runs vitest and website on a component under packages/ui", () => {
+		expect(onPullRequest("packages/ui/src/components/button.tsx")).toEqual({
+			...none,
+			vitest: true,
+			website: true,
+		})
+	})
+
+	it("runs only rust on a Rust file under src-tauri", () => {
+		expect(onPullRequest("apps/app/src-tauri/src/lib.rs")).toEqual({
+			...none,
+			rust: true,
+		})
+	})
+
+	it("runs rust and vitest on a sidecar file", () => {
+		expect(onPullRequest("apps/app/sidecar/src/index.ts")).toEqual({
+			...none,
+			rust: true,
+			vitest: true,
+		})
+	})
+
+	it("runs rust on a Cargo manifest anywhere", () => {
+		expect(onPullRequest("crates/relay/Cargo.toml").rust).toBe(true)
+	})
+
+	it("runs only vitest on an app file outside src-tauri", () => {
+		expect(onPullRequest("apps/app/src/main.tsx")).toEqual({
+			...none,
+			vitest: true,
+		})
+	})
+
+	it("runs only website on a file under apps/website", () => {
+		expect(onPullRequest("apps/website/src/main.tsx")).toEqual({
+			...none,
+			website: true,
+		})
+	})
+
+	it("runs only ios on the paths the ios filter watches", () => {
+		expect(onPullRequest("apps/ios/Kiroshi/App.swift")).toEqual({
+			...none,
+			ios: true,
+		})
+		expect(onPullRequest(".xcode-version")).toEqual({ ...none, ios: true })
+		expect(onPullRequest(".swift-format")).toEqual({ ...none, ios: true })
+	})
+
+	it("runs nothing filtered on a path no job watches", () => {
+		expect(onPullRequest("docs/relay/notes.md")).toEqual(none)
+		expect(onPullRequest()).toEqual(none)
+	})
+
+	it("treats a nested package.json as local, not shared", () => {
+		expect(onPullRequest("apps/website/package.json")).toEqual({
+			...none,
+			website: true,
+		})
+	})
+})
