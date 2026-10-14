@@ -20,13 +20,20 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 type HostHandler = (event: { payload: unknown }) => void
 
-const host = vi.hoisted(() => ({ handlers: new Map<string, HostHandler>() }))
+const host = vi.hoisted(() => ({
+	handlers: new Map<string, HostHandler>(),
+	reconnects: new Set<() => void>(),
+}))
 
 vi.mock("@/lib/host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/host")>()),
 	listen: async (event: string, handler: HostHandler) => {
 		host.handlers.set(event, handler)
 		return () => host.handlers.delete(event)
+	},
+	onHostReconnected: (onReconnected: () => void) => {
+		host.reconnects.add(onReconnected)
+		return () => host.reconnects.delete(onReconnected)
 	},
 }))
 
@@ -59,6 +66,13 @@ const scrollToListEnd = () =>
 const emitOnHost = (event: string, payload: unknown) =>
 	act(async () => {
 		host.handlers.get(event)?.({ payload })
+	})
+
+const reconnectHost = () =>
+	act(async () => {
+		for (const onReconnected of host.reconnects) {
+			onReconnected()
+		}
 	})
 
 const sentinel = () => document.querySelector('[data-slot="list-end-sentinel"]')
@@ -120,6 +134,7 @@ const pagedStore = async () => {
 beforeEach(() => {
 	crossingSentinels.clear()
 	host.handlers.clear()
+	host.reconnects.clear()
 	vi.stubGlobal("IntersectionObserver", SentinelWatch)
 })
 
@@ -259,6 +274,17 @@ describe("a refresh of the roster pages scrolled through", () => {
 		await waitFor(() => expect(shownIds(roster)[0]).toBe(written.id))
 		expect(shownIds(roster).filter((id) => id === written.id)).toHaveLength(1)
 		expect(shownIds(roster)).toHaveLength(35)
+	})
+
+	it("keeps every page scrolled through and reads the first page alone when the host reconnects", async () => {
+		const { reads, roster } = await scrolledRoster()
+
+		await reconnectHost()
+
+		await waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		expect(reads).toHaveBeenCalledWith("personal", null, 30)
+		expect(shownIds(roster)).toEqual(conversationIdsRanked(35, 1))
+		expect(sentinel()).toBeNull()
 	})
 
 	it("drops a deleted conversation from a page scrolled through", async () => {
