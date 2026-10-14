@@ -111,8 +111,9 @@ struct ThreadScreen<Model: ThreadModel>: View {
         .scrollPosition($position)
         .onScrollTargetVisibilityChange(idType: ThreadMessage.ID.self) { topShownId = $0.first }
         .onChange(of: model.entries.first?.id) { previousFirst, _ in
-            guard let previousFirst, let reading = topShownId,
-                model.entries.dropFirst().contains(where: { $0.id == previousFirst })
+            guard
+                let reading = ThreadAnchor.message(
+                    toKeep: topShownId, whenFirstWas: previousFirst, in: model.entries)
             else { return }
             position.scrollTo(id: reading, anchor: .top)
         }

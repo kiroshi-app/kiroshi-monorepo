@@ -120,3 +120,32 @@ struct ThreadPagingTests {
         await connection.stop()
     }
 }
+
+struct ThreadAnchorTests {
+    func messages(_ ids: String...) -> [ThreadMessage] {
+        ids.map { ThreadMessage(id: $0, isYours: false, text: $0, sentAt: .now) }
+    }
+
+    @Test func anOlderPageKeepsTheMessageBeingRead() {
+        let kept = ThreadAnchor.message(
+            toKeep: "m20", whenFirstWas: "m11", in: messages("m1", "m10", "m11", "m20"))
+
+        #expect(kept == "m20")
+    }
+
+    @Test func aThreadReadAgainFromItsLatestPageKeepsNothing() {
+        let kept = ThreadAnchor.message(
+            toKeep: "m20", whenFirstWas: "m11", in: messages("m30", "m31"))
+
+        #expect(kept == nil)
+    }
+
+    @Test func theFirstPageOrNothingOnScreenKeepsNothing() {
+        #expect(
+            ThreadAnchor.message(toKeep: "m20", whenFirstWas: nil, in: messages("m11", "m20"))
+                == nil)
+        #expect(
+            ThreadAnchor.message(toKeep: nil, whenFirstWas: "m11", in: messages("m1", "m11"))
+                == nil)
+    }
+}
