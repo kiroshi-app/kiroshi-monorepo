@@ -1,9 +1,16 @@
 "use client"
 
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react"
+import {
+	type ReactNode,
+	type Ref,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react"
 
 import { COMPANION_SILHOUETTE } from "@workspace/ui/components/companion-picture"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { cn } from "@workspace/ui/lib/utils"
 
 type ListSkeletonAnchor = "top" | "bottom"
@@ -143,7 +150,39 @@ const GenericSkeletonRow = () => (
 	/>
 )
 
+type ListEnd = {
+	hasNextPage: boolean
+	isFetchingNextPage: boolean
+	sentinelRef?: Ref<HTMLDivElement>
+}
+
+type ListEndSlotProps = {
+	listEnd?: ListEnd
+	row: ReactNode
+}
+
+const ListEndSlot = ({ listEnd, row }: ListEndSlotProps) => {
+	const phase = useSkeletonTiming(listEnd?.isFetchingNextPage ?? false)
+
+	if (!listEnd?.hasNextPage) return null
+
+	return (
+		<div aria-hidden="true" data-slot="list-end">
+			<div data-slot="list-end-sentinel" ref={listEnd.sentinelRef} />
+			{phase === "skeleton" ? (
+				<div
+					className="animate-pulse motion-reduce:animate-none"
+					data-slot="list-end-skeleton"
+				>
+					{row}
+				</div>
+			) : null}
+		</div>
+	)
+}
+
 export type {
+	ListEnd,
 	ListSkeletonAnchor,
 	ListSkeletonProps,
 	ListSkeletonRowAt,
@@ -151,6 +190,7 @@ export type {
 }
 export {
 	GenericSkeletonRow,
+	ListEndSlot,
 	ListSkeleton,
 	SkeletonBar,
 	SkeletonHexagon,

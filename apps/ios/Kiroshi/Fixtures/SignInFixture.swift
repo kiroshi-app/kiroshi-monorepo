@@ -7,6 +7,7 @@
         static let codeRequestPath = "/api/auth/email-otp/send-verification-otp"
         static let signInPath = "/api/auth/sign-in/email-otp"
         static let spacesPath = "/instances"
+        static let providerSignInPath = "/api/auth/sign-in/social"
 
         static let codeSent = ScriptedTransport.Answer.status(
             200, #"{"status":true,"expiresAt":"2026-10-10T12:05:00.000Z"}"#)
@@ -54,6 +55,9 @@
 
     enum SignInFixture: String, CaseIterable {
         case opening = "1.1"
+        case appleSigningIn = "1.1b"
+        case googleSigningIn = "1.1c"
+        case appleRefused = "1.1d"
         case email = "1.2"
         case code = "1.3"
         case signingIn = "1.4"
@@ -115,6 +119,13 @@
         fileprivate var answers: [String: ScriptedTransport.Answer] {
             switch self {
             case .signingIn: [CloudFixture.signInPath: .pending]
+            case .appleSigningIn, .googleSigningIn: [CloudFixture.providerSignInPath: .pending]
+            case .appleRefused:
+                [
+                    CloudFixture.providerSignInPath: CloudFixture.refused(
+                        "ID token is invalid, expired, minted for another client or for another nonce"
+                    )
+                ]
             case .loadingSpaces: [CloudFixture.spacesPath: .pending]
             case .couldNotSendCode: [CloudFixture.codeRequestPath: .offline]
             case .wrongCode: [CloudFixture.signInPath: CloudFixture.refused("Code is wrong")]
@@ -272,6 +283,12 @@
         }
     }
 
+    struct FixtureGoogleAuthorizer: GoogleAuthorizing {
+        @MainActor func authorize() async -> ProviderOutcome {
+            .authorized(idToken: "fixture-google-id-token", name: nil)
+        }
+    }
+
     extension SignInModel {
         static func fixture(_ fixture: SignInFixture) -> SignInModel {
             SignInFixture.opened = fixture
@@ -281,7 +298,8 @@
                     transport: ScriptedTransport(fixture.answers)),
                 sessions: fixture.sessions,
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
-                relay: fixture.relay)
+                relay: fixture.relay,
+                google: FixtureGoogleAuthorizer())
             ConversationsFixture.opening = ConversationsFixture.opening(fixture)
             ConversationsFixture.opensMissions = fixture.opensConversationMissions
             if ![.opening, .keychain, .seededKeychain].contains(fixture) {
@@ -289,22 +307,25 @@
             }
             model.code = fixture.typedCode
             switch fixture {
-            case .email:
-                model.path = [.email]
             case .couldNotSendCode:
-                model.path = [.email]
                 model.continueWithEmail()
+            case .appleSigningIn, .appleRefused:
+                _ = model.appleRequestNonce()
+                model.appleCompleted(.authorized(idToken: "fixture-apple-id-token", name: nil))
+            case .googleSigningIn:
+                model.continueWithGoogle()
             case .code:
-                model.path = [.email, .code]
+                model.path = [.code]
             case .signingIn, .wrongCode, .tooManyWrongCodes, .expiredCode:
-                model.path = [.email, .code]
+                model.path = [.code]
                 model.codeChanged()
             case .tooManyCodes:
-                model.path = [.email, .code]
+                model.path = [.code]
                 model.sendNewCodeTapped()
             case .signOutAlert:
                 model.signOutTapped()
-            case .opening, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .keychain,
+            case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
+                .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,

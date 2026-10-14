@@ -4,3 +4,4 @@ DerivedData/
 xcuserdata/
 Kiroshi/Info.plist
 BuildNumber.xcconfig
+Kiroshi/Kiroshi.entitlements

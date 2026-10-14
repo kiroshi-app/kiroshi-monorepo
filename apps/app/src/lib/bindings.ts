@@ -80,6 +80,7 @@ export const commands = {
 	conversationMainChat: (botId: string, spaceId: string | null) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_main_chat", { botId, spaceId })),
 	conversationCreate: (spaceId: string, sectionId: string | null, title: string, botIds: string[]) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_create", { spaceId, sectionId, title, botIds })),
 	conversationList: (spaceId: string) => typedError<Conversation[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
+	conversationPage: (spaceId: string, cursor: string | null, limit: number | null) => typedError<ConversationPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_page", { spaceId, cursor, limit })),
 	conversationLocalIds: () => typedError<string[], TranscriptStoreError>(__TAURI_INVOKE("conversation_local_ids")),
 	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId })),
 	conversationDelete: (conversationId: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete", { conversationId })),
@@ -151,6 +152,7 @@ export const commands = {
 	missionDetail: (missionId: string) => typedError<MissionDetail, MissionError>(__TAURI_INVOKE("mission_detail", { missionId })),
 	missionBoard: () => typedError<MissionOnBoard[], MissionError>(__TAURI_INVOKE("mission_board")),
 	missionSpaceFeed: (spaceId: string, closedSince: number) => typedError<MissionInSpace[], MissionError>(__TAURI_INVOKE("mission_space_feed", { spaceId, closedSince })),
+	missionSpacePage: (spaceId: string, closedSince: number, cursor: string | null, limit: number | null) => typedError<MissionSpacePage, MissionError>(__TAURI_INVOKE("mission_space_page", { spaceId, closedSince, cursor, limit })),
 	missionUnreported: () => typedError<MissionOnBoard[], MissionError>(__TAURI_INVOKE("mission_unreported")),
 	missionReported: (missionId: string, turnId: string | null) => typedError<Mission, MissionError>(__TAURI_INVOKE("mission_reported", { missionId, turnId })),
 	missionAnswered: (missionId: string, seq: number) => typedError<Mission, MissionError>(__TAURI_INVOKE("mission_answered", { missionId, seq })),
@@ -630,11 +632,22 @@ export type Conversation = {
 	participants: Participant[],
 };
 
+export type ConversationInPage = {
+	lastActivityAt: number,
+	lastWord: LastWord | null,
+} & Conversation;
+
 export type ConversationKind = "main" | "topic" | "mission";
 
 export type ConversationMissions = {
 	open: Mission[],
 	done: Mission[],
+};
+
+export type ConversationPage = {
+	pinned: ConversationInPage[],
+	conversations: ConversationInPage[],
+	nextCursor: string | null,
 };
 
 export type Destination = "companion" | "space" | "user";
@@ -795,6 +808,12 @@ export type KiroshiAccount = {
 	plan: AccountPlan | null,
 };
 
+export type LastWord = {
+	text: string | null,
+	at: number,
+	authorBotId: string | null,
+};
+
 export type LaunchOutcome = {
 	created: CompanionCreated | null,
 	refused: CompanionSeedRefused | null,
@@ -935,7 +954,7 @@ export type MissionEntry = {
 	payload: Json,
 };
 
-export type MissionError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownMission"; id: string } | { kind: "unknownConversation"; id: string } | { kind: "missionAlreadyClosed"; id: string } | { kind: "missionStillOpen"; id: string } | { kind: "missionAlreadyReported"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "turnOfAnotherConversation"; turnId: string; conversationId: string } | { kind: "unknownBot"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankField"; field: string } | { kind: "missionOfAnotherConversation"; id: string; conversationId: string } | { kind: "missionOfAnotherBot"; id: string; botId: string } | { kind: "unreadableRequest"; detail: string } | { kind: "undeliverable"; detail: string } | { kind: "unexpected"; detail: string };
+export type MissionError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownMission"; id: string } | { kind: "unknownConversation"; id: string } | { kind: "missionAlreadyClosed"; id: string } | { kind: "missionStillOpen"; id: string } | { kind: "missionAlreadyReported"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "turnOfAnotherConversation"; turnId: string; conversationId: string } | { kind: "unknownBot"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankField"; field: string } | { kind: "missionOfAnotherConversation"; id: string; conversationId: string } | { kind: "missionOfAnotherBot"; id: string; botId: string } | { kind: "unreadableRequest"; detail: string } | { kind: "undeliverable"; detail: string } | { kind: "unexpected"; detail: string } | { kind: "unreadableCursor"; cursor: string };
 
 export type MissionEvent = {
 	id: string,
@@ -962,6 +981,11 @@ export type MissionNote = {
 export type MissionOnBoard = {
 	mission: Mission,
 	bot: Bot,
+};
+
+export type MissionSpacePage = {
+	missions: MissionInSpace[],
+	nextCursor: string | null,
 };
 
 export type MissionState = "working" | "waiting_bot" | "waiting_human" | "ready_to_merge" | "failed" | "done" | "closed";
@@ -1396,7 +1420,7 @@ export type TranscriptPage = {
 
 export type TranscriptRole = "user" | "assistant";
 
-export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "unknownMessage"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string };
+export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "unknownMessage"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
 
 export type TranscriptWindow = {
 	conversationId: string,

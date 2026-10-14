@@ -7,10 +7,9 @@ struct SignInRootView: View {
         switch model.stage {
         case .signedOut:
             NavigationStack(path: $model.path) {
-                OpeningView(model: model)
+                WelcomeView(model: model)
                     .navigationDestination(for: SignInStep.self) { step in
                         switch step {
-                        case .email: EmailView(model: model)
                         case .code: CodeView(model: model)
                         }
                     }

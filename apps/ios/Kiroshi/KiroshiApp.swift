@@ -1,3 +1,4 @@
+import GoogleSignIn
 import SwiftUI
 import UIKit
 
@@ -16,6 +17,9 @@ struct KiroshiApp: App {
     var body: some Scene {
         WindowGroup {
             SignInRootView(model: model)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 
@@ -32,6 +36,7 @@ struct KiroshiApp: App {
                     name: UIDevice.current.name, model: UIDevice.current.model)),
             sessions: KeychainSessionStore(),
             lastSpace: UserDefaultsLastSpaceStore(),
-            relay: .live)
+            relay: .live,
+            google: GoogleSignInAuthorizer())
     }
 }

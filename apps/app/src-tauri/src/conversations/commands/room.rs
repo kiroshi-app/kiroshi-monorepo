@@ -2,7 +2,7 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
+	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted, ConversationPage,
 	ConversationStored, RuntimeSession, TranscriptStoreError,
 };
 use super::bot::ready;
@@ -12,6 +12,7 @@ use crate::db;
 use crate::db::repositories::conversations::{
 	Conversation as StoredConversation, ConversationDraft, ConversationEdit, Joined,
 };
+use crate::db::repositories::keyset;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
 use crate::events::{
 	Event, COMPANION_ARRIVED, CONVERSATION_CREATED, CONVERSATION_DELETED, CONVERSATION_UPDATED,
@@ -54,6 +55,24 @@ pub async fn conversation_list<R: Runtime>(
 	let dir = avatars::Avatars::dir(&app);
 	let stored = ready(&state)?.conversations().conversations(space_id).await?;
 	Ok(stored.into_iter().map(|room| Conversation::of(room, dir.as_deref())).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn conversation_page<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	cursor: Option<String>,
+	limit: Option<u32>,
+) -> Result<ConversationPage, TranscriptStoreError> {
+	let after = keyset::after(cursor)
+		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
+	let read = ready(&state)?
+		.conversations()
+		.conversation_page(space_id, after, keyset::page_size(limit))
+		.await?;
+	Ok(ConversationPage::of(read, avatars::Avatars::dir(&app).as_deref()))
 }
 
 #[tauri::command]

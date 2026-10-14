@@ -35,3 +35,13 @@ extension CodeProblem {
         }
     }
 }
+
+extension ProviderProblem {
+    var message: LocalizedStringKey {
+        switch self {
+        case .refused(.apple): "Couldn’t sign in with Apple. Try again, or use your email."
+        case .refused(.google): "Couldn’t sign in with Google. Try again, or use your email."
+        case .unreachable: "Couldn’t reach Kiroshi. Check your connection and try again."
+        }
+    }
+}

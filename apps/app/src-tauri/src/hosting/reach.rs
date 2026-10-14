@@ -177,6 +177,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 		]),
 	),
 	("conversation_list", Reach::Scoped(SPACE_ID)),
+	("conversation_page", Reach::Scoped(SPACE_ID)),
 	("conversation_local_ids", Reach::HostOnly),
 	(
 		"conversation_update",
@@ -257,6 +258,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("mission_detail", Reach::Scoped(MISSION_ID)),
 	("mission_board", Reach::HostOnly),
 	("mission_space_feed", Reach::Scoped(SPACE_ID)),
+	("mission_space_page", Reach::Scoped(SPACE_ID)),
 	("mission_unreported", Reach::HostOnly),
 	("mission_reported", Reach::Scoped(&[child(Mission, "/missionId"), child(Turn, "/turnId")])),
 	("mission_answered", Reach::Scoped(MISSION_ID)),

@@ -295,6 +295,13 @@ pub struct MissionInSpace {
 	pub conversation_title: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionSpacePage {
+	pub missions: Vec<MissionInSpace>,
+	pub next_cursor: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MissionError {
@@ -332,6 +339,8 @@ pub enum MissionError {
 	Undeliverable { detail: String },
 	#[serde(rename_all = "camelCase")]
 	Unexpected { detail: String },
+	#[serde(rename_all = "camelCase")]
+	UnreadableCursor { cursor: String },
 }
 
 impl From<DatabaseError> for MissionError {
