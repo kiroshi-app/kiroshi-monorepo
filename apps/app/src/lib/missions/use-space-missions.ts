@@ -1,8 +1,4 @@
-import {
-	type InfiniteData,
-	skipToken,
-	useInfiniteQuery,
-} from "@tanstack/react-query"
+import { skipToken, useInfiniteQuery } from "@tanstack/react-query"
 import { useCallback, useMemo, useState } from "react"
 
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
@@ -11,55 +7,27 @@ import { useMissionChanges } from "./mission-changes"
 import type { MissionInSpace } from "./mission-contract"
 import { missionQueryKeys } from "./mission-query-keys"
 import {
-	type SpaceFeedPage,
 	type SpaceMissionGroups,
 	type SpaceMissionsRead,
-	startOfLocalDay,
 	toSpaceMissionGroups,
 } from "./missions-model"
-import { missionsTransport } from "./missions-transport"
+import {
+	cursorAfter,
+	type FeedCursor,
+	readSpaceFeedPage,
+	type SpaceFeed,
+} from "./space-feed-pages"
 
 import { isHostRefused } from "@/lib/host/host-refused"
 import { useReachableHost } from "@/lib/host/use-reachable-host"
 import { isFirstReadPending } from "@/lib/query/last-read"
 import { useListEnd } from "@/lib/query/use-list-end"
 
-const SPACE_FEED_PAGE_SIZE = 30
-
-const MOST_SPACE_FEED_PAGES = 10
-
 const NO_GROUPS: SpaceMissionGroups = {
 	waitingOnYou: [],
 	inProgress: [],
 	earlierToday: [],
 }
-
-type FeedCursor = {
-	closedSince: number
-	cursor: string
-}
-
-const readSpaceFeedPage = async (
-	spaceId: string,
-	after: FeedCursor | null,
-): Promise<SpaceFeedPage> => {
-	const closedSince = after?.closedSince ?? startOfLocalDay(Date.now())
-	const page = await missionsTransport.spacePage(
-		spaceId,
-		closedSince,
-		after?.cursor ?? null,
-		SPACE_FEED_PAGE_SIZE,
-	)
-	return { ...page, closedSince }
-}
-
-const cursorAfter = (
-	{ nextCursor, closedSince }: SpaceFeedPage,
-	pages: SpaceFeedPage[],
-): FeedCursor | null =>
-	nextCursor === null || pages.length >= MOST_SPACE_FEED_PAGES
-		? null
-		: { closedSince, cursor: nextCursor }
 
 const withoutRepeats = (entries: MissionInSpace[]): MissionInSpace[] => {
 	const seenIds = new Set<string>()
@@ -70,9 +38,7 @@ const withoutRepeats = (entries: MissionInSpace[]): MissionInSpace[] => {
 	})
 }
 
-const spaceMissionsReadOf = ({
-	pages,
-}: InfiniteData<SpaceFeedPage>): SpaceMissionsRead => ({
+const spaceMissionsReadOf = ({ pages }: SpaceFeed): SpaceMissionsRead => ({
 	closedSince: pages[0].closedSince,
 	entries: withoutRepeats(pages.flatMap(({ missions }) => missions)),
 })
@@ -101,7 +67,7 @@ export const useSpaceMissions = (spaceId: string | null): SpaceMissionsView => {
 		initialPageParam: null as FeedCursor | null,
 		getNextPageParam: cursorAfter,
 		select: spaceMissionsReadOf,
-		meta: { rendersErrorInline: true },
+		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
 	})
 	const { data, error, isError, isFetching, refetch } = feed
 	const listEnd = useListEnd(feed)

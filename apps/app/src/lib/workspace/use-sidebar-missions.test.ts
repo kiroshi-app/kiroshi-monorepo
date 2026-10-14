@@ -32,6 +32,7 @@ import {
 } from "./use-sidebar-missions"
 
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
+import { onHostReconnected } from "@/lib/host"
 import { createFakeThreadRuntimes } from "@/lib/missions/fake-thread-runtimes"
 import type {
 	MissionChanged,
@@ -44,6 +45,7 @@ import { missionsTransport } from "@/lib/missions/missions-transport"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import type { MissionSpeakingRuntimes } from "@/lib/missions/use-live-missions"
 import { createOpenedController } from "@/lib/opened-controller"
+import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("@/lib/missions/missions-transport", () => ({
@@ -53,6 +55,11 @@ vi.mock("@/lib/missions/missions-transport", () => ({
 		close: vi.fn(),
 		reopen: vi.fn(),
 	},
+}))
+
+vi.mock("@/lib/host", async (original) => ({
+	...(await original<object>()),
+	onHostReconnected: vi.fn(() => () => undefined),
 }))
 
 vi.mock("@workspace/ui/components/notice-surface", () => ({
@@ -593,11 +600,11 @@ const mountMissionsTab = () => {
 		const panel = useSidebarMissions(input).panelsBySpaceId["s-1"]
 		return panel ? createElement(MissionsPanel, panel) : null
 	}
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	invalidateOnHostReconnect(queryClient)
 	return render(
 		createElement(SidebarProvider, null, createElement(MissionsTab)),
-		{
-			wrapper: createQueryTestWrapper().wrapper,
-		},
+		{ wrapper },
 	)
 }
 
@@ -691,14 +698,11 @@ describe("the Missions tab read a page at a time", () => {
 		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
-	it("holds at most ten pages, the most a reread asks for again", async () => {
-		const pageAfter = (cursor: string | null) => {
+	it("loads an eleventh page while the host still holds a next cursor", async () => {
+		readSpacePage.mockImplementation((_spaceId, _closedSince, cursor) => {
 			const rank = cursor === null ? 0 : Number(cursor) + 1
-			return aSpacePage([aWorkingEntry(rank)], String(rank))
-		}
-		readSpacePage.mockImplementation((_spaceId, _closedSince, cursor) =>
-			Promise.resolve(pageAfter(cursor)),
-		)
+			return Promise.resolve(aSpacePage([aWorkingEntry(rank)], String(rank)))
+		})
 		mountMissionsTab()
 
 		for (let page = 1; page <= 10; page++) {
@@ -706,40 +710,71 @@ describe("the Missions tab read a page at a time", () => {
 			scrollToListEnd()
 		}
 
-		expect(sentinel()).toBeNull()
-		expect(readSpacePage).toHaveBeenCalledTimes(10)
+		await waitFor(() => expect(shownObjectives()).toHaveLength(11))
+		expect(readSpacePage).toHaveBeenCalledTimes(11)
+		expect(sentinel()).not.toBeNull()
 	})
 
-	it("keeps the pages scrolled through and puts a new mission on top when a change rereads the feed", async () => {
-		let announce: (changed: MissionChanged) => void = () => undefined
-		listenToMissions.mockImplementation((listener) => {
-			announce = listener
-			return Promise.resolve(() => undefined)
+	describe("a refresh of the pages scrolled through", () => {
+		const REFRESHED_HEAD = aSpacePage(
+			[aWorkingEntry(-1), ...entriesRanked(0, 28), aWorkingEntry(31)],
+			"after-28",
+		)
+
+		const scrolledThroughTwoPages = async () => {
+			const mounted = mountMissionsTab()
+			await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+			scrollToListEnd()
+			await waitFor(() => expect(shownObjectives()).toHaveLength(35))
+			readSpacePage.mockClear()
+			readSpacePage.mockResolvedValue(REFRESHED_HEAD)
+			return mounted
+		}
+
+		const expectOneHeadReadKeepingTheScrolledPages = async () => {
+			await waitFor(() =>
+				expect(shownObjectives()).toEqual(objectivesRanked(-1, 34)),
+			)
+			expect(readSpacePage).toHaveBeenCalledTimes(1)
+			expect(readSpacePage).toHaveBeenCalledWith(
+				"s-1",
+				expect.any(Number),
+				null,
+				30,
+			)
+		}
+
+		it("asks for the first page alone on a mission change and puts the new mission on top", async () => {
+			let announce: (changed: MissionChanged) => void = () => undefined
+			listenToMissions.mockImplementation((listener) => {
+				announce = listener
+				return Promise.resolve(() => undefined)
+			})
+			await scrolledThroughTwoPages()
+
+			act(() =>
+				announce({
+					missionId: "m-0",
+					state: "working",
+					stateSeq: 2,
+					isAgentRunning: true,
+					lastActivityAt: null,
+				}),
+			)
+
+			await expectOneHeadReadKeepingTheScrolledPages()
 		})
-		mountMissionsTab()
-		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
-		scrollToListEnd()
-		await waitFor(() => expect(shownObjectives()).toHaveLength(35))
-		readSpacePage.mockImplementation(
-			pagesByCursor(
-				aSpacePage([aWorkingEntry(-1), ...entriesRanked(0, 28)], "after-28"),
-				aSpacePage(entriesRanked(29, 34)),
-			),
-		)
 
-		act(() =>
-			announce({
-				missionId: "m-0",
-				state: "working",
-				stateSeq: 2,
-				isAgentRunning: true,
-				lastActivityAt: null,
-			}),
-		)
+		it("asks for the first page alone when the host reconnects", async () => {
+			await scrolledThroughTwoPages()
 
-		await waitFor(() =>
-			expect(shownObjectives()).toEqual(objectivesRanked(-1, 34)),
-		)
-		expect(readSpacePage).toHaveBeenCalledTimes(4)
+			act(() => {
+				for (const [reconnected] of vi.mocked(onHostReconnected).mock.calls) {
+					reconnected()
+				}
+			})
+
+			await expectOneHeadReadKeepingTheScrolledPages()
+		})
 	})
 })

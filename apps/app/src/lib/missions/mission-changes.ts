@@ -1,5 +1,4 @@
 import {
-	type InfiniteData,
 	type QueryClient,
 	type QueryKey,
 	useQueryClient,
@@ -20,7 +19,10 @@ import {
 	withMissionMove,
 } from "./missions-model"
 import { missionsTransport } from "./missions-transport"
+import { rereadSpaceFeeds, type SpaceFeed } from "./space-feed-pages"
 import type { MissionRead } from "./use-mission-detail"
+
+import { onHostReconnected } from "@/lib/host"
 
 type Following = {
 	followers: number
@@ -83,7 +85,7 @@ const applyChange = (queryClient: QueryClient, changed: MissionChanged) => {
 			done: patchedMissions(done, changed, withMissionChange),
 		}),
 	)
-	patchHeldReads<InfiniteData<SpaceFeedPage>>(
+	patchHeldReads<SpaceFeed>(
 		queryClient,
 		missionQueryKeys.spaceFeeds(),
 		(held) => ({
@@ -104,7 +106,7 @@ const startFollowing = (queryClient: QueryClient): Following => {
 		queryClient.invalidateQueries({
 			queryKey: missionQueryKeys.conversations(),
 		})
-		queryClient.invalidateQueries({ queryKey: missionQueryKeys.spaceFeeds() })
+		rereadSpaceFeeds(queryClient)
 		for (const missionId of changedMissionIds) {
 			queryClient.invalidateQueries({
 				queryKey: missionQueryKeys.detailsOf(missionId),
@@ -125,11 +127,13 @@ const startFollowing = (queryClient: QueryClient): Following => {
 			)
 			return () => undefined
 		})
+	const stopCatchingUp = onHostReconnected(() => rereadSpaceFeeds(queryClient))
 
 	return {
 		followers: 0,
 		stop: () => {
 			rereading.cancel()
+			stopCatchingUp()
 			void listening.then((unsubscribe) => unsubscribe())
 			queryClient.invalidateQueries({
 				queryKey: missionQueryKeys.all,

@@ -22,9 +22,11 @@ type NoticedFailure = {
 
 export type FailureMeta = InlineFailure | NoticedFailure
 
+type QueryMeta = FailureMeta & { rereadsItselfOnReconnect?: true }
+
 declare module "@tanstack/react-query" {
 	interface Register {
-		queryMeta: FailureMeta
+		queryMeta: QueryMeta
 		mutationMeta: FailureMeta
 	}
 }

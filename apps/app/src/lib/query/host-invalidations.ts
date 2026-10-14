@@ -14,7 +14,9 @@ const reportUnheardEvent = (event: string) => (reason: unknown) => {
 
 export const invalidateOnHostReconnect = (queryClient: QueryClient) =>
 	onHostReconnected(() => {
-		queryClient.invalidateQueries()
+		queryClient.invalidateQueries({
+			predicate: ({ meta }) => !meta?.rereadsItselfOnReconnect,
+		})
 	})
 
 export const useInvalidateOnHostEvent = (
