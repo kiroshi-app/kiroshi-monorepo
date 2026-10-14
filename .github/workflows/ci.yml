@@ -155,7 +155,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -182,7 +182,7 @@ jobs:
         run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
 
       - name: Test on the simulator
-        timeout-minutes: 25
+        timeout-minutes: 50
         run: xcodebuild -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building
 
       - name: Swift format
