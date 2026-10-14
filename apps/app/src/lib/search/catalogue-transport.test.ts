@@ -60,7 +60,6 @@ it("searches the catalogue of one space from the host", async () => {
 	expect(hostInvoke).toHaveBeenCalledWith("search_catalogue", {
 		query: "crash",
 		spaceId: "personal",
-		allSpaces: false,
 	})
 })
 
@@ -73,7 +72,6 @@ it("reads the recent chats of a space from the host", async () => {
 
 	expect(hostInvoke).toHaveBeenCalledWith("search_recent", {
 		spaceId: "personal",
-		allSpaces: false,
 	})
 })
 

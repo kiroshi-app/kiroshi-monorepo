@@ -36,9 +36,9 @@ const SEARCH_MESSAGES: &str = "SELECT message_id, seq, conversation_id, kind, ti
 		JOIN conversations ON conversations.id = messages.conversation_id
 		WHERE message_search MATCH ?1
 	)
-	WHERE ?6 OR space_id = ?7
+	WHERE space_id = ?6
 	ORDER BY relevance ASC, created_at DESC
-	LIMIT ?8";
+	LIMIT ?7";
 
 impl FromSql for ConversationKind {
 	fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
@@ -76,7 +76,6 @@ impl SearchRepository {
 						MATCH_CLOSES,
 						ELLIPSIS,
 						SNIPPET_TOKENS,
-						query.all_spaces,
 						query.space_id,
 						MAX_HITS
 					],

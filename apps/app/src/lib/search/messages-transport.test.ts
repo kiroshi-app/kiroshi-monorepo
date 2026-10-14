@@ -34,12 +34,11 @@ it("searches the messages of one space from the host", async () => {
 		messagesTransport.search({
 			text: "parser",
 			spaceId: "personal",
-			allSpaces: false,
 		}),
 	).resolves.toEqual([A_HIT])
 
 	expect(hostInvoke).toHaveBeenCalledWith("search_messages", {
-		query: { text: "parser", spaceId: "personal", allSpaces: false },
+		query: { text: "parser", spaceId: "personal" },
 	})
 })
 
@@ -50,7 +49,6 @@ it("lets the error of a query over the limit reach the caller", async () => {
 		messagesTransport.search({
 			text: "a".repeat(201),
 			spaceId: "personal",
-			allSpaces: false,
 		}),
 	).rejects.toEqual({ kind: "queryTooLong", limit: 200 })
 })

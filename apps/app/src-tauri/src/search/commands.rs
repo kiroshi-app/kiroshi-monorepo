@@ -30,12 +30,11 @@ pub async fn search_catalogue(
 	state: State<'_, db::DatabaseState>,
 	query: String,
 	space_id: String,
-	all_spaces: bool,
 ) -> Result<Catalogue, CatalogueError> {
 	ready(&state)
 		.map_err(|failure| CatalogueError::Unavailable { failure })?
 		.catalogue()
-		.search(CatalogueScope { query, space_id, all_spaces })
+		.search(CatalogueScope { query, space_id })
 		.await
 }
 
@@ -44,12 +43,11 @@ pub async fn search_catalogue(
 pub async fn search_recent(
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
-	all_spaces: bool,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
 	ready(&state)
 		.map_err(|failure| CatalogueError::Unavailable { failure })?
 		.catalogue()
-		.recent(space_id, all_spaces)
+		.recent(space_id)
 		.await
 }
 
@@ -128,19 +126,7 @@ mod tests {
 	}
 
 	fn in_space(text: &str, space_id: &str) -> MessageSearchQuery {
-		MessageSearchQuery {
-			text: text.to_owned(),
-			space_id: space_id.to_owned(),
-			all_spaces: false,
-		}
-	}
-
-	fn everywhere(text: &str) -> MessageSearchQuery {
-		MessageSearchQuery {
-			text: text.to_owned(),
-			space_id: "personal".to_owned(),
-			all_spaces: true,
-		}
+		MessageSearchQuery { text: text.to_owned(), space_id: space_id.to_owned() }
 	}
 
 	async fn found(app: &App<MockRuntime>, query: MessageSearchQuery) -> Vec<MessageHit> {
@@ -152,13 +138,13 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_search_holds_to_its_space_until_every_space_is_asked_for() {
+	async fn a_search_holds_to_the_space_it_names() {
 		let app = a_host("scope").await;
 		a_settled_message(&app, "m1", "c1", "the cafe opens at dawn", 1).await;
 		a_settled_message(&app, "m2", "c2", "the cafe closes at dusk", 2).await;
 
 		let here = found(&app, in_space("cafe", "personal")).await;
-		let anywhere = found(&app, everywhere("cafe")).await;
+		let there = found(&app, in_space("cafe", "work")).await;
 
 		assert_eq!(ids(&here), vec!["m1".to_owned()], "the scope let another space through");
 		assert_eq!(here[0].space_id.as_deref(), Some("personal"), "a main chat lost its space");
@@ -166,7 +152,7 @@ mod tests {
 		assert_eq!(here[0].conversation_title, "Chat", "the title of the room moved");
 		assert_eq!(here[0].author_bot_id.as_deref(), Some("b1"), "the author of the hit moved");
 		assert_eq!(here[0].seq, 1, "the seq of the hit moved");
-		assert_eq!(ids(&anywhere), vec!["m2".to_owned(), "m1".to_owned()], "a space was left out");
+		assert_eq!(ids(&there), vec!["m2".to_owned()], "the scope let another space through");
 	}
 
 	#[tokio::test]
@@ -267,7 +253,10 @@ mod tests {
 		plant(&app, "DELETE FROM messages WHERE id = 'm1';").await;
 		plant(&app, "DELETE FROM conversations WHERE id = 'c2';").await;
 
-		assert!(found(&app, everywhere("cafe")).await.is_empty(), "a deleted row still answers");
+		for space_id in ["personal", "work"] {
+			let held = found(&app, in_space("cafe", space_id)).await;
+			assert!(held.is_empty(), "a deleted row still answers in {space_id}");
+		}
 		assert_eq!(indexed_rows(&app, "m1").await, 0, "a deleted message kept its index row");
 		assert_eq!(indexed_rows(&app, "m2").await, 0, "a deleted conversation kept its index rows");
 	}
@@ -330,7 +319,7 @@ mod tests {
 			"a query at the cap was refused"
 		);
 		assert!(
-			search_catalogue(app.state(), held, "personal".to_owned(), false).await.is_ok(),
+			search_catalogue(app.state(), held, "personal".to_owned()).await.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert_eq!(
@@ -339,7 +328,7 @@ mod tests {
 			"the message search read a query past the cap"
 		);
 		assert_eq!(
-			search_catalogue(app.state(), over, "personal".to_owned(), false).await,
+			search_catalogue(app.state(), over, "personal".to_owned()).await,
 			Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the catalogue read a query past the cap"
 		);

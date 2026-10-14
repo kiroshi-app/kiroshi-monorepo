@@ -3529,9 +3529,6 @@
     },
     "MessageSearchQuery": {
       "properties": {
-        "allSpaces": {
-          "type": "boolean"
-        },
         "spaceId": {
           "type": "string"
         },
@@ -3541,8 +3538,7 @@
       },
       "required": [
         "text",
-        "spaceId",
-        "allSpaces"
+        "spaceId"
       ],
       "type": "object"
     },
@@ -10198,9 +10194,6 @@
     "search_catalogue": {
       "args": {
         "properties": {
-          "allSpaces": {
-            "type": "boolean"
-          },
           "query": {
             "type": "string"
           },
@@ -10210,8 +10203,7 @@
         },
         "required": [
           "query",
-          "spaceId",
-          "allSpaces"
+          "spaceId"
         ],
         "type": "object"
       },
@@ -10247,16 +10239,12 @@
     "search_recent": {
       "args": {
         "properties": {
-          "allSpaces": {
-            "type": "boolean"
-          },
           "spaceId": {
             "type": "string"
           }
         },
         "required": [
-          "spaceId",
-          "allSpaces"
+          "spaceId"
         ],
         "type": "object"
       },

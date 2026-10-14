@@ -188,9 +188,9 @@ export const commands = {
 	routineRenewLease: (runId: string) => typedError<null, RoutineError>(__TAURI_INVOKE("routine_renew_lease", { runId })),
 	routineCloseRun: (runId: string, closing: RunClosing_Deserialize) => typedError<RoutineRun, RoutineError>(__TAURI_INVOKE("routine_close_run", { runId, closing })),
 	routineKey: (id: string) => typedError<RoutineKey_Serialize, RoutineError>(__TAURI_INVOKE("routine_key", { id })),
-	searchCatalogue: (query: string, spaceId: string, allSpaces: boolean) => typedError<Catalogue, CatalogueError>(__TAURI_INVOKE("search_catalogue", { query, spaceId, allSpaces })),
+	searchCatalogue: (query: string, spaceId: string) => typedError<Catalogue, CatalogueError>(__TAURI_INVOKE("search_catalogue", { query, spaceId })),
 	searchMessages: (query: MessageSearchQuery) => typedError<MessageHit[], MessageSearchError>(__TAURI_INVOKE("search_messages", { query })),
-	searchRecent: (spaceId: string, allSpaces: boolean) => typedError<CatalogueChat[], CatalogueError>(__TAURI_INVOKE("search_recent", { spaceId, allSpaces })),
+	searchRecent: (spaceId: string) => typedError<CatalogueChat[], CatalogueError>(__TAURI_INVOKE("search_recent", { spaceId })),
 	sectionList: (spaceId: string) => typedError<Section[], SectionError>(__TAURI_INVOKE("section_list", { spaceId })),
 	sectionCreate: (spaceId: string, name: string) => typedError<Section, SectionError>(__TAURI_INVOKE("section_create", { spaceId, name })),
 	sectionRename: (id: string, name: string) => typedError<Section, SectionError>(__TAURI_INVOKE("section_rename", { id, name })),
@@ -917,7 +917,6 @@ export type MessageSearchError = { kind: "unavailable"; failure: StorageFailure 
 export type MessageSearchQuery = {
 	text: string,
 	spaceId: string,
-	allSpaces: boolean,
 };
 
 export type Mission = {

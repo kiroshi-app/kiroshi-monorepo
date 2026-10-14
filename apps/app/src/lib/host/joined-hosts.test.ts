@@ -1848,10 +1848,7 @@ describe("Space Settings of a joined Space", () => {
 		["hosting_invite_member", { spaceId: "garage", email: "a@example.com" }],
 		["hosting_withdraw_invitation", { spaceId: "garage", userId: "ana" }],
 		["hosting_remove_member", { spaceId: "garage", userId: "ana" }],
-		[
-			"search_messages",
-			{ query: { text: "walls", spaceId: "garage", allSpaces: false } },
-		],
+		["search_messages", { query: { text: "walls", spaceId: "garage" } }],
 		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],
 		["agent_live_sessions_in_space", { spaceId: "garage" }],
 	])("relays %s to the host", async (command, args) => {
@@ -1898,7 +1895,7 @@ describe("the commands reach.rs keeps on the host", () => {
 			scope: { kind: "server", name: "linear", owner: JOINED_SPACE },
 			name: "linear",
 		},
-		{ query: { text: "walls", spaceId: "garage", allSpaces: false } },
+		{ query: { text: "walls", spaceId: "garage" } },
 	]
 
 	it("reads the HostOnly entries out of reach.rs", () => {

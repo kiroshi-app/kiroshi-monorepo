@@ -69,6 +69,7 @@ use crate::mcp_oauth::reports::ApplicationReports;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::routines::commands::CHANGED_EVENT as ROUTINE_CHANGED_EVENT;
 use crate::routines::webhook::{self, Webhook};
+use crate::search::contract::{CatalogueScope, MessageSearchQuery};
 use crate::spaces::commands::{
 	bot_add_to_space, bot_move_to_space, bot_remove_from_space, space_delete,
 };
@@ -268,6 +269,20 @@ async fn host_effect_applied(
 	let root = &effects.env_root;
 	let text = |key: &str| args[key].as_str().expect("a text argument").to_owned();
 	match command.as_str() {
+		"search_catalogue" => {
+			let scope = CatalogueScope { query: text("query"), space_id: text("spaceId") };
+			let found = database.catalogue().search(scope).await.expect("the host searches");
+			return answered_json(StatusCode::OK, json!(found));
+		}
+		"search_recent" => {
+			let found = database.catalogue().recent(text("spaceId")).await.expect("the host reads");
+			return answered_json(StatusCode::OK, json!(found));
+		}
+		"search_messages" => {
+			let query: MessageSearchQuery = typed(&args, "query");
+			let found = database.search().messages(query).await.expect("the host searches");
+			return answered_json(StatusCode::OK, json!(found));
+		}
 		"joined_space_remove" => {
 			database.joined_spaces().remove(text("id")).await.expect("the host leaves");
 		}
@@ -1739,7 +1754,7 @@ fn a_bot_env_scope(bot_id: &str, space_id: &str) -> Value {
 }
 
 fn a_search_of(space_id: &str) -> Value {
-	json!({ "query": { "text": "mine", "spaceId": space_id, "allSpaces": false } })
+	json!({ "query": { "text": "mine", "spaceId": space_id } })
 }
 
 #[test]
@@ -1776,11 +1791,8 @@ fn a_member_searches_the_messages_of_the_shared_space_only() {
 	run(async {
 		let command = "search_messages";
 		let mut guest = Guest::of_two_spaces(command).await;
-		let mut every_space = a_search_of(PERSONAL);
-		every_space["query"]["allSpaces"] = json!(true);
 
 		guest.refused(command, a_search_of(ELSEWHERE)).await;
-		guest.refused(command, every_space).await;
 		guest.forwarded(command, a_search_of(PERSONAL)).await;
 
 		assert_eq!(guest.effects.reached(), [command]);
@@ -2131,29 +2143,46 @@ fn a_relay_guest_pages_the_mission_feed_of_the_shared_space_only() {
 fn a_relay_guest_searches_the_catalogue_of_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"search_catalogue",
-		|space_id| json!({ "query": "q", "spaceId": space_id, "allSpaces": false }),
+		|space_id| json!({ "query": "q", "spaceId": space_id }),
 	));
 }
 
 #[test]
 fn a_relay_guest_reads_the_recent_chats_of_the_shared_space_only() {
-	run(kept_in_the_space_named(
-		"search_recent",
-		|space_id| json!({ "spaceId": space_id, "allSpaces": false }),
-	));
+	run(kept_in_the_space_named("search_recent", |space_id| json!({ "spaceId": space_id })));
 }
 
 #[test]
-fn a_relay_guest_cannot_widen_a_search_to_every_space() {
+fn a_relay_guest_asking_for_every_space_is_answered_the_shared_space_only() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("all-spaces").await;
+		let mut messages = a_search_of(PERSONAL);
+		messages["query"]["allSpaces"] = json!(true);
 
-		for command in ["search_catalogue", "search_recent"] {
-			let args = json!({ "query": "q", "spaceId": PERSONAL, "allSpaces": true });
-			guest.refused(command, args).await;
-		}
+		let catalogue = guest
+			.called(
+				"search_catalogue",
+				json!({ "query": "", "spaceId": PERSONAL, "allSpaces": true }),
+			)
+			.await;
+		let recent =
+			guest.called("search_recent", json!({ "spaceId": PERSONAL, "allSpaces": true })).await;
+		let hits = guest.called("search_messages", messages).await;
 
-		assert!(guest.effects.reached().is_empty());
+		let spaces_of = |rows: &Value| -> Vec<String> {
+			rows.as_array()
+				.expect("a list of rows")
+				.iter()
+				.map(|row| row["spaceId"].as_str().expect("a space id").to_owned())
+				.collect()
+		};
+		assert_eq!(spaces_of(&catalogue["body"]["chats"]), [PERSONAL], "{catalogue}");
+		assert_eq!(spaces_of(&recent["body"]), [PERSONAL], "{recent}");
+		assert_eq!(spaces_of(&hits["body"]), [PERSONAL], "{hits}");
+		assert_eq!(
+			guest.effects.reached(),
+			["search_catalogue", "search_recent", "search_messages"]
+		);
 	});
 }
 

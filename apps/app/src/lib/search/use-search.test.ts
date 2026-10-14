@@ -298,7 +298,6 @@ it("reads only the query the typing went quiet on", async () => {
 	expect(port.messages).toHaveBeenCalledWith({
 		text: "roadmap",
 		spaceId: PERSONAL,
-		allSpaces: false,
 	})
 })
 
