@@ -45,10 +45,7 @@ const pushedOutOf = (
 		: heldHead.missions.slice(lastStillInHead + 1)
 }
 
-export const withFreshHead = (
-	held: SpaceFeed,
-	head: SpaceFeedPage,
-): SpaceFeed => {
+const withFreshHead = (held: SpaceFeed, head: SpaceFeedPage): SpaceFeed => {
 	const [heldHead, ...laterPages] = held.pages
 	const headIds = new Set(head.missions.map(({ mission }) => mission.id))
 	const isInHead = ({ mission }: MissionInSpace) => headIds.has(mission.id)
