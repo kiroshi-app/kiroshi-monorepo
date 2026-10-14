@@ -104,7 +104,12 @@ it("asks for the second space before the first one answers", async () => {
 	})
 
 	await vi.waitFor(() =>
-		expect(reads).toHaveBeenCalledWith(other.id, null, 30, undefined),
+		expect(reads).toHaveBeenCalledWith(
+			other.id,
+			null,
+			30,
+			expect.any(AbortSignal),
+		),
 	)
 	release()
 	await opening
@@ -218,7 +223,7 @@ it("starts a write while a roster read is still out", async () => {
 		.spyOn(store, "conversationPage")
 		.mockImplementation(neverAnswered)
 	const writes = vi.spyOn(store, "createBot")
-	void roster.refresh()
+	void roster.reload()
 	await vi.waitFor(() => expect(reads).toHaveBeenCalled())
 
 	void roster.create()

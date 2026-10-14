@@ -770,7 +770,7 @@ describe("the Missions tab read a page at a time", () => {
 
 			act(() => {
 				for (const [reconnected] of vi.mocked(onHostReconnected).mock.calls) {
-					reconnected()
+					reconnected("garage")
 				}
 			})
 

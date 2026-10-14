@@ -203,3 +203,41 @@ export const withFreshHead = (
 		],
 	}
 }
+
+const withoutConversation = (conversations: Conversation[], id: string) =>
+	conversations.filter((conversation) => conversation.id !== id)
+
+const lastWordsOfRow = (row: ConversationInPage) =>
+	lastWordsIn({ pinned: [], conversations: [row], nextCursor: null })
+
+export const withPageRow = (
+	paged: RosterPages,
+	row: ConversationInPage,
+): RosterPages => {
+	const [head, ...laterPages] = paged.pages
+	const lastWords = withWordsOf(head.lastWords, lastWordsOfRow(row))
+	if (row.soloBotId !== null) {
+		const soloBotIds = { ...head.soloBotIds, [row.id]: row.soloBotId }
+		return {
+			...paged,
+			pages: [{ ...head, lastWords, soloBotIds }, ...laterPages],
+		}
+	}
+	return {
+		pageParams: paged.pageParams,
+		pages: [
+			{
+				...head,
+				conversations: [
+					row,
+					...withoutConversation(head.conversations, row.id),
+				],
+				lastWords,
+			},
+			...laterPages.map((page) => ({
+				...page,
+				conversations: withoutConversation(page.conversations, row.id),
+			})),
+		],
+	}
+}

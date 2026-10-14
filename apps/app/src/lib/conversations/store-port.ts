@@ -128,7 +128,11 @@ export type TranscriptStore = TranscriptPort & {
 	deleteEnvironmentVariable: (scope: EnvScope, name: string) => Promise<void>
 	recordBotCommands: (botId: string, commands: AgentCommand[]) => Promise<void>
 	botCommands: (botId: string) => Promise<AgentCommand[]>
-	mainChat: (botId: string, spaceId?: string | null) => Promise<Chat>
+	mainChat: (
+		botId: string,
+		spaceId?: string | null,
+		signal?: AbortSignal,
+	) => Promise<Chat>
 	addBotToSpace: (
 		botId: string,
 		spaceId: string,

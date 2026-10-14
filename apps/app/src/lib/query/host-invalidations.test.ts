@@ -12,7 +12,16 @@ import { createQueryTestWrapper } from "./query-test-wrapper"
 
 import { listen, onHostReconnected } from "@/lib/host"
 
-vi.mock("@/lib/host", () => ({ listen: vi.fn(), onHostReconnected: vi.fn() }))
+vi.mock("@/lib/host", () => ({
+	listen: vi.fn(),
+	onHostReconnected: vi.fn(),
+	joinedHosts: {
+		getState: () => ({
+			active: "garage",
+			connections: { garage: { status: "up" }, shed: { status: "down" } },
+		}),
+	},
+}))
 
 afterEach(() => {
 	cleanup()
@@ -42,19 +51,42 @@ it("invalidates the given keys when the host event fires, and stops on unmount",
 	await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))
 })
 
-it("invalidates every query when the host reconnects, but those that reread themselves", async () => {
+const isInvalidated = (
+	queryClient: ReturnType<typeof createQueryClient>,
+	queryKey: string[],
+) => queryClient.getQueryState(queryKey)?.isInvalidated
+
+it("invalidates the queries of the reconnected host only, but those that reread themselves", async () => {
 	const queryClient = createQueryClient()
-	await queryClient.prefetchQuery({ queryKey: ["plain"], queryFn: () => 1 })
-	await queryClient.prefetchQuery({
-		queryKey: ["feed"],
-		queryFn: () => 1,
-		meta: { rendersErrorInline: true, rereadsItselfOnReconnect: true },
-	})
+	const keys = {
+		unnamed: ["plain"],
+		ofGarage: ["runs", "routine-1", "garage"],
+		inGarage: ["sections", "joined:garage", "space-1"],
+		ofShed: ["runs", "routine-1", "shed"],
+		inShed: ["sections", "joined:shed", "space-2"],
+		local: ["runs", "routine-1", "local"],
+		rereadItself: ["feed", "garage"],
+	}
+	for (const queryKey of Object.values(keys)) {
+		await queryClient.prefetchQuery({
+			queryKey,
+			queryFn: () => 1,
+			meta:
+				queryKey === keys.rereadItself
+					? { rendersErrorInline: true, rereadsItselfOnReconnect: true }
+					: undefined,
+		})
+	}
 
 	invalidateOnHostReconnect(queryClient)
 	const [reconnected] = vi.mocked(onHostReconnected).mock.calls[0]
-	reconnected()
+	reconnected("garage")
 
-	expect(queryClient.getQueryState(["plain"])?.isInvalidated).toBe(true)
-	expect(queryClient.getQueryState(["feed"])?.isInvalidated).toBe(false)
+	expect(isInvalidated(queryClient, keys.unnamed)).toBe(true)
+	expect(isInvalidated(queryClient, keys.ofGarage)).toBe(true)
+	expect(isInvalidated(queryClient, keys.inGarage)).toBe(true)
+	expect(isInvalidated(queryClient, keys.ofShed)).toBe(false)
+	expect(isInvalidated(queryClient, keys.inShed)).toBe(false)
+	expect(isInvalidated(queryClient, keys.local)).toBe(false)
+	expect(isInvalidated(queryClient, keys.rereadItself)).toBe(false)
 })

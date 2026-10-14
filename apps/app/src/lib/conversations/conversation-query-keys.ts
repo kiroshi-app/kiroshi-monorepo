@@ -4,11 +4,11 @@ export const conversationQueryKeys = {
 	roster: (spaceRowId: string, spaceId: string) =>
 		[...conversationQueryKeys.rosters(), spaceRowId, spaceId] as const,
 	previews: () => [...conversationQueryKeys.all, "preview"] as const,
+	soloThreadsIn: (spaceRowId: string) =>
+		[...conversationQueryKeys.previews(), "solo-thread", spaceRowId] as const,
 	soloThread: (spaceRowId: string, spaceId: string, botId: string) =>
 		[
-			...conversationQueryKeys.previews(),
-			"solo-thread",
-			spaceRowId,
+			...conversationQueryKeys.soloThreadsIn(spaceRowId),
 			spaceId,
 			botId,
 		] as const,

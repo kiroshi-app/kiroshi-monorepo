@@ -18,7 +18,7 @@ import { type RosterLine, rosterLineKey, type SoloThreads } from "./roster-line"
 
 import { useController } from "../use-controller"
 import { listen, onHostReconnected } from "@/lib/host"
-import type { Conversation } from "../conversations/store-contract"
+import type { ConversationInPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { useListEnd } from "../query/use-list-end"
 
@@ -28,15 +28,16 @@ export type Roster = {
 	listEnd: ListEnd
 }
 
-type ConversationStored = { conversation: Conversation }
+type ConversationStored = {
+	spaceId: string | null
+	conversation: ConversationInPage
+}
 
-type ConversationDeleted = { conversationId: string }
+type ConversationDeleted = { spaceId: string | null; conversationId: string }
 
-const REFRESHING_EVENTS = [
-	"conversation://created",
-	"companion://updated",
-	"companion://deleted",
-]
+type CompanionUpdated = { id: string }
+
+type CompanionDeleted = { id: string; spaceId: string }
 
 const NO_SPACE_ROW = ""
 
@@ -47,29 +48,31 @@ const reportUnheardEvent = (reason: unknown) => {
 	return () => undefined
 }
 
-const listenToRosterChanges = (
-	controller: RosterController,
-	refresh: () => void,
-) =>
+const STORED_EVENTS = ["conversation://created", "conversation://updated"]
+
+const listenToRosterChanges = (controller: RosterController) =>
 	[
-		...REFRESHING_EVENTS.map((event) => listen(event, refresh)),
-		listen<ConversationStored>("conversation://updated", ({ payload }) => {
-			controller.restateConversation(payload.conversation)
-			refresh()
-		}),
+		...STORED_EVENTS.map((event) =>
+			listen<ConversationStored>(event, ({ payload }) =>
+				controller.holdPageRow(payload.spaceId, payload.conversation),
+			),
+		),
 		listen<ConversationDeleted>("conversation://deleted", ({ payload }) => {
 			controller.forgetConversation(payload.conversationId)
-			refresh()
+			controller.rereadSpaceSoon(payload.spaceId)
 		}),
+		listen<CompanionUpdated>("companion://updated", ({ payload }) =>
+			controller.rereadSpacesOfBotSoon(payload.id),
+		),
+		listen<CompanionDeleted>("companion://deleted", ({ payload }) =>
+			controller.rereadSpaceSoon(payload.spaceId),
+		),
 	].map((listening) => listening.catch(reportUnheardEvent))
 
 const useRosterRefreshes = (controller: RosterController) => {
 	useEffect(() => {
-		const refresh = () => {
-			void controller.refresh()
-		}
-		const listenings = listenToRosterChanges(controller, refresh)
-		const stopCatchingUp = onHostReconnected(refresh)
+		const listenings = listenToRosterChanges(controller)
+		const stopCatchingUp = onHostReconnected(controller.catchUpWithHost)
 		return () => {
 			stopCatchingUp()
 			for (const listening of listenings) {

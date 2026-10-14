@@ -11,6 +11,8 @@ import {
 } from "../bindings"
 import type { Store } from "../store"
 
+type ReconnectionListener = (hostId: string) => void
+
 type JoinedHostsDownOptions = {
 	store: Store<JoinedHostsState>
 	hosts: Map<string, HttpHost>
@@ -26,7 +28,7 @@ export const createJoinedHostsDown = ({
 	record,
 	reportListenFailure,
 }: JoinedHostsDownOptions) => {
-	const reconnectionListeners = new Set<() => void>()
+	const reconnectionListeners = new Set<ReconnectionListener>()
 	const { leaveUnpaired, pairsWith, forgetUnpaired } = createReopenPairing()
 	let isHearingRelayReopens = false
 
@@ -38,7 +40,7 @@ export const createJoinedHostsDown = ({
 			return
 		}
 		for (const listener of [...reconnectionListeners]) {
-			listener()
+			listener(id)
 		}
 	}
 
@@ -88,7 +90,7 @@ export const createJoinedHostsDown = ({
 			.catch(reportListenFailure)
 	}
 
-	const onReconnected = (listener: () => void) => {
+	const onReconnected = (listener: ReconnectionListener) => {
 		reconnectionListeners.add(listener)
 		hearRelayReopens()
 		return () => {

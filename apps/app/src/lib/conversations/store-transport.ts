@@ -291,11 +291,12 @@ export const conversationStore: TranscriptStore = {
 	botCommands: (botId: string) =>
 		invoke<AgentCommand[]>("conversation_bot_commands", { botId }),
 
-	mainChat: (botId: string, spaceId?: string | null) =>
-		invoke<Chat>("conversation_main_chat", {
-			botId,
-			spaceId: spaceOrJoined(spaceId),
-		}),
+	mainChat: (botId: string, spaceId?: string | null, signal?: AbortSignal) =>
+		invoke<Chat>(
+			"conversation_main_chat",
+			{ botId, spaceId: spaceOrJoined(spaceId) },
+			{ signal },
+		),
 
 	conversations: (spaceId: string) =>
 		invoke<Conversation[]>("conversation_list", { spaceId }),
