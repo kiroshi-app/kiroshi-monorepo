@@ -1140,6 +1140,40 @@ describe("a conversation the active host does not hold", () => {
 		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
+	it.each(["attic-pinned", "attic-row"])(
+		"sends %s, answered in a conversation page of another joined host, to that host while it is open",
+		async (conversationId) => {
+			const { hosts, fetch } = joinedHostsOf({
+				join: joinedAt,
+				answer: () =>
+					new Response(
+						JSON.stringify({
+							pinned: [{ id: "attic-pinned" }],
+							conversations: [{ id: "attic-row" }],
+							nextCursor: null,
+						}),
+						{ headers: { "content-type": "application/json" } },
+					),
+			})
+			await hosts.activate("attic")
+			await hosts.invoke("conversation_page", {
+				spaceId: "a",
+				cursor: null,
+				limit: 30,
+			})
+			await hosts.activate("garage")
+			fetch.mockClear()
+
+			await hosts.invoke("application_installs", { conversationId })
+
+			expect(fetch).toHaveBeenCalledWith(
+				new URL(`${hostUrlOf("attic")}/api/invoke/application_installs`),
+				expect.anything(),
+			)
+			expect(fetch).toHaveBeenCalledOnce()
+		},
+	)
+
 	it("serves a conversation another joined host answered with on the local Mac once that host is closed", async () => {
 		const { hosts, local, fetch, reportFailure } =
 			await atticChatKnownWhileOnGarage()
