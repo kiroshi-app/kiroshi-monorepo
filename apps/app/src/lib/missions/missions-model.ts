@@ -28,6 +28,7 @@ import type {
 	MissionChanged,
 	MissionEvent,
 	MissionInSpace,
+	MissionSpacePage,
 	MissionState,
 } from "./mission-contract"
 import { toMissionFace } from "./mission-thread-model"
@@ -124,6 +125,10 @@ export type SpaceMissionGroups = Record<SpaceMissionGroup, MissionInSpace[]>
 
 export type SpaceMissionsRead = {
 	entries: MissionInSpace[]
+	closedSince: number
+}
+
+export type SpaceFeedPage = MissionSpacePage & {
 	closedSince: number
 }
 

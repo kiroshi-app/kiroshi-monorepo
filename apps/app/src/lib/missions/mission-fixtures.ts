@@ -2,6 +2,8 @@ import type {
 	Mission,
 	MissionEvent,
 	MissionEventKind,
+	MissionInSpace,
+	MissionSpacePage,
 } from "./mission-contract"
 
 import type { Json } from "@/lib/bindings"
@@ -61,3 +63,8 @@ const aMissionEvent = (
 
 export const missionEvents = (seeds: MissionEventSeed[]): MissionEvent[] =>
 	seeds.map(aMissionEvent)
+
+export const aSpacePage = (
+	missions: MissionInSpace[],
+	nextCursor: string | null = null,
+): MissionSpacePage => ({ missions, nextCursor })

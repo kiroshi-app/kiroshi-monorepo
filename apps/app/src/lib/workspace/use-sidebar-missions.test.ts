@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	render,
+	renderHook,
+	screen,
+	waitFor,
+} from "@testing-library/react"
 import { createElement, type ReactElement } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -10,11 +17,13 @@ import {
 	MissionMenu,
 	type MissionMenuProps,
 } from "@workspace/ui/components/mission-menu"
-import type {
-	MissionsPanelMission,
-	MissionsPanelProps,
+import {
+	MissionsPanel,
+	type MissionsPanelMission,
+	type MissionsPanelProps,
 } from "@workspace/ui/components/missions-panel"
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 import "@workspace/ui/lib/i18n"
 
 import {
@@ -27,9 +36,10 @@ import { createFakeThreadRuntimes } from "@/lib/missions/fake-thread-runtimes"
 import type {
 	MissionChanged,
 	MissionInSpace,
+	MissionSpacePage,
 	MissionState,
 } from "@/lib/missions/mission-contract"
-import { aMission } from "@/lib/missions/mission-fixtures"
+import { aMission, aSpacePage } from "@/lib/missions/mission-fixtures"
 import { missionsTransport } from "@/lib/missions/missions-transport"
 import type { OpenedMission } from "@/lib/missions/opened-mission-controller"
 import type { MissionSpeakingRuntimes } from "@/lib/missions/use-live-missions"
@@ -38,7 +48,7 @@ import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("@/lib/missions/missions-transport", () => ({
 	missionsTransport: {
-		spaceFeed: vi.fn(),
+		spacePage: vi.fn(),
 		onChanged: vi.fn(),
 		close: vi.fn(),
 		reopen: vi.fn(),
@@ -49,7 +59,7 @@ vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(),
 }))
 
-const readSpaceFeed = vi.mocked(missionsTransport.spaceFeed)
+const readSpacePage = vi.mocked(missionsTransport.spacePage)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 const closeMission = vi.mocked(missionsTransport.close)
 const reopenMission = vi.mocked(missionsTransport.reopen)
@@ -134,10 +144,7 @@ const panelOf = ({ panelsBySpaceId }: SidebarMissions) => {
 	return panel
 }
 
-const renderSidebarMissions = (
-	spaceId: string | null = "s-1",
-	lastMissions: Record<string, string> = {},
-) => {
+const sidebarMissionsWiring = (lastMissions: Record<string, string> = {}) => {
 	const select = vi.fn()
 	const selectConversation = vi.fn()
 	const openedMission = createOpenedController<OpenedMission>()
@@ -151,33 +158,42 @@ const renderSidebarMissions = (
 			return held && { ...held, stop: vi.fn(async () => undefined) }
 		},
 	}
-	const rendered = renderHook(
-		({ selectedSpaceId }) =>
-			useSidebarMissions({
-				core: {
-					conversationRuntimes: runtimes,
-					openedMission,
-					roster: {
-						state: {
-							rosters: { "s-1": [BOT], "s-2": [BOT] },
-							conversationRosters: { "s-1": [LISTED] },
-							spaceRowId: selectedSpaceId,
-						},
-						controller: { select, selectConversation },
-					},
-					shownMemory: {
-						lastMissionIn: (shownSpaceId) => lastMissions[shownSpaceId] ?? null,
-					},
-					spaces: { state: { selectedSpaceId } },
+	const inputFor = (selectedSpaceId: string | null) => ({
+		core: {
+			conversationRuntimes: runtimes,
+			openedMission,
+			roster: {
+				state: {
+					rosters: { "s-1": [BOT], "s-2": [BOT] },
+					conversationRosters: { "s-1": [LISTED] },
+					spaceRowId: selectedSpaceId,
 				},
-				rosterLines: { now: NOW },
-			}),
+				controller: { select, selectConversation },
+			},
+			shownMemory: {
+				lastMissionIn: (shownSpaceId: string) =>
+					lastMissions[shownSpaceId] ?? null,
+			},
+			spaces: { state: { selectedSpaceId } },
+		},
+		rosterLines: { now: NOW },
+	})
+	return { inputFor, select, selectConversation, open, leave, openedMission }
+}
+
+const renderSidebarMissions = (
+	spaceId: string | null = "s-1",
+	lastMissions: Record<string, string> = {},
+) => {
+	const { inputFor, ...spies } = sidebarMissionsWiring(lastMissions)
+	const rendered = renderHook(
+		({ selectedSpaceId }) => useSidebarMissions(inputFor(selectedSpaceId)),
 		{
 			wrapper: createQueryTestWrapper().wrapper,
 			initialProps: { selectedSpaceId: spaceId },
 		},
 	)
-	return { ...rendered, select, selectConversation, open, leave, openedMission }
+	return { ...rendered, ...spies }
 }
 
 const menuOn = (
@@ -191,7 +207,7 @@ const menuOn = (
 describe("useSidebarMissions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		readSpaceFeed.mockResolvedValue([WAITING, WORKING, DONE])
+		readSpacePage.mockResolvedValue(aSpacePage([WAITING, WORKING, DONE]))
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
 
@@ -217,7 +233,7 @@ describe("useSidebarMissions", () => {
 	})
 
 	it("counts nothing when no mission waits on the reader", async () => {
-		readSpaceFeed.mockResolvedValue([WORKING, DONE])
+		readSpacePage.mockResolvedValue(aSpacePage([WORKING, DONE]))
 		const { result } = renderSidebarMissions()
 
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(1))
@@ -233,7 +249,7 @@ describe("useSidebarMissions", () => {
 		const { result } = renderSidebarMissions()
 		await waitFor(() => expect(result.current.waitingCount).toBe(1))
 		await waitFor(() => expect(listenToMissions).toHaveBeenCalled())
-		readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+		readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 		act(() => {
 			announce({
@@ -257,7 +273,7 @@ describe("useSidebarMissions", () => {
 	it("shows only the missions of the newly selected space", async () => {
 		const { result, rerender } = renderSidebarMissions()
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
-		readSpaceFeed.mockResolvedValue([ELSEWHERE])
+		readSpacePage.mockResolvedValue(aSpacePage([ELSEWHERE]))
 
 		rerender({ selectedSpaceId: "s-2" })
 
@@ -269,7 +285,12 @@ describe("useSidebarMissions", () => {
 			]),
 		)
 		expect(panelOf(result.current).earlierToday).toEqual([])
-		expect(readSpaceFeed).toHaveBeenLastCalledWith("s-2", expect.any(Number))
+		expect(readSpacePage).toHaveBeenLastCalledWith(
+			"s-2",
+			expect.any(Number),
+			null,
+			30,
+		)
 	})
 
 	it("opens the mission on a listed conversation, then selects it", async () => {
@@ -343,7 +364,7 @@ describe("useSidebarMissions", () => {
 			"s-2": "m-elsewhere",
 		})
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
-		readSpaceFeed.mockResolvedValue([WORKING, ELSEWHERE])
+		readSpacePage.mockResolvedValue(aSpacePage([WORKING, ELSEWHERE]))
 
 		rerender({ selectedSpaceId: "s-2" })
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
@@ -357,11 +378,11 @@ describe("useSidebarMissions", () => {
 	})
 
 	it("leaves any open mission when the space holds no mission", async () => {
-		readSpaceFeed.mockResolvedValue([])
+		readSpacePage.mockResolvedValue(aSpacePage([]))
 		const { result, open, leave } = renderSidebarMissions("s-1", {
 			"s-1": "m-working",
 		})
-		await waitFor(() => expect(readSpaceFeed).toHaveBeenCalled())
+		await waitFor(() => expect(readSpacePage).toHaveBeenCalled())
 
 		result.current.showLastMission()
 
@@ -370,7 +391,7 @@ describe("useSidebarMissions", () => {
 	})
 
 	it("raises one failure notice when the feed fails, whose retry reads again", async () => {
-		readSpaceFeed.mockRejectedValue(new Error("offline"))
+		readSpacePage.mockRejectedValue(new Error("offline"))
 		const { rerender } = renderSidebarMissions()
 
 		await waitFor(() => expect(notice).toHaveBeenCalledTimes(1))
@@ -381,15 +402,15 @@ describe("useSidebarMissions", () => {
 		rerender({ selectedSpaceId: "s-1" })
 		expect(notice).toHaveBeenCalledTimes(1)
 
-		const reads = readSpaceFeed.mock.calls.length
-		readSpaceFeed.mockResolvedValue([WAITING])
+		const reads = readSpacePage.mock.calls.length
+		readSpacePage.mockResolvedValue(aSpacePage([WAITING]))
 		act(() => notice.mock.calls[0][0].action?.onPress())
 
-		await waitFor(() => expect(readSpaceFeed.mock.calls.length).toBe(reads + 1))
+		await waitFor(() => expect(readSpacePage.mock.calls.length).toBe(reads + 1))
 	})
 
 	it("raises a new failure notice when a retry fails again", async () => {
-		readSpaceFeed.mockRejectedValue(new Error("offline"))
+		readSpacePage.mockRejectedValue(new Error("offline"))
 		renderSidebarMissions()
 		await waitFor(() => expect(notice).toHaveBeenCalledTimes(1))
 
@@ -399,11 +420,11 @@ describe("useSidebarMissions", () => {
 	})
 
 	it("raises no notice on returning to a failed space until its new read fails", async () => {
-		readSpaceFeed.mockRejectedValue(new Error("offline"))
+		readSpacePage.mockRejectedValue(new Error("offline"))
 		const { rerender } = renderSidebarMissions()
 		await waitFor(() => expect(notice).toHaveBeenCalledTimes(1))
 		let failRead: (reason: Error) => void = () => undefined
-		readSpaceFeed.mockImplementation(
+		readSpacePage.mockImplementation(
 			() =>
 				new Promise((_, reject) => {
 					failRead = reject
@@ -414,7 +435,12 @@ describe("useSidebarMissions", () => {
 		rerender({ selectedSpaceId: "s-1" })
 
 		await waitFor(() =>
-			expect(readSpaceFeed).toHaveBeenLastCalledWith("s-1", expect.any(Number)),
+			expect(readSpacePage).toHaveBeenLastCalledWith(
+				"s-1",
+				expect.any(Number),
+				null,
+				30,
+			),
 		)
 		expect(notice).toHaveBeenCalledTimes(1)
 		await act(async () => failRead(new Error("offline")))
@@ -474,12 +500,12 @@ describe("useSidebarMissions", () => {
 		closeMission.mockResolvedValue(WAITING.mission)
 		const { result } = renderSidebarMissions()
 		await waitFor(() => expect(panelOf(result.current).open).toHaveLength(2))
-		const reads = readSpaceFeed.mock.calls.length
+		const reads = readSpacePage.mock.calls.length
 
 		const [waiting] = panelOf(result.current).open
 		menuOn(waiting, panelOf(result.current).wrap).props.onClose()
 
-		await waitFor(() => expect(readSpaceFeed.mock.calls.length).toBe(reads + 1))
+		await waitFor(() => expect(readSpacePage.mock.calls.length).toBe(reads + 1))
 		expect(closeMission).toHaveBeenCalledWith("m-waiting")
 	})
 
@@ -489,12 +515,231 @@ describe("useSidebarMissions", () => {
 		await waitFor(() =>
 			expect(panelOf(result.current).earlierToday).toHaveLength(1),
 		)
-		const reads = readSpaceFeed.mock.calls.length
+		const reads = readSpacePage.mock.calls.length
 
 		const [done] = panelOf(result.current).earlierToday
 		menuOn(done, panelOf(result.current).wrap).props.onReopen()
 
-		await waitFor(() => expect(readSpaceFeed.mock.calls.length).toBe(reads + 1))
+		await waitFor(() => expect(readSpacePage.mock.calls.length).toBe(reads + 1))
 		expect(reopenMission).toHaveBeenCalledWith("m-done")
+	})
+})
+
+const crossingSentinels = new Set<IntersectionObserverCallback>()
+
+class SentinelWatch {
+	constructor(private readonly onCross: IntersectionObserverCallback) {}
+
+	observe() {
+		crossingSentinels.add(this.onCross)
+	}
+
+	disconnect() {
+		crossingSentinels.delete(this.onCross)
+	}
+}
+
+const scrollToListEnd = () =>
+	act(() => {
+		for (const onCross of crossingSentinels) {
+			onCross(
+				[{ isIntersecting: true } as IntersectionObserverEntry],
+				{} as IntersectionObserver,
+			)
+		}
+	})
+
+const aWorkingEntry = (rank: number): MissionInSpace => ({
+	mission: aMission({
+		id: `m-${rank}`,
+		botId: BOT.id,
+		objective: `Mission ${rank}`,
+		state: "working",
+		stateSeq: 1,
+		openedAt: NOW - rank * 1000,
+		lastActivityAt: null,
+		closedAt: null,
+	}),
+	conversationId: "c-2",
+	conversationTitle: "Billing",
+})
+
+const ranksFrom = (first: number, last: number) =>
+	Array.from({ length: last - first + 1 }, (_, index) => first + index)
+
+const entriesRanked = (first: number, last: number) =>
+	ranksFrom(first, last).map(aWorkingEntry)
+
+const objectivesRanked = (first: number, last: number) =>
+	ranksFrom(first, last).map((rank) => `Mission ${rank}`)
+
+const FIRST_PAGE = aSpacePage(entriesRanked(0, 29), "after-29")
+
+const LAST_PAGE = aSpacePage([aWorkingEntry(29), ...entriesRanked(30, 34)])
+
+const pagesByCursor =
+	(first: MissionSpacePage, next: MissionSpacePage) =>
+	(_spaceId: string, _closedSince: number, cursor: string | null) =>
+		Promise.resolve(cursor === null ? first : next)
+
+const shownObjectives = () =>
+	screen.getAllByText(/^Mission -?\d+$/).map(({ textContent }) => textContent)
+
+const sentinel = () => document.querySelector('[data-slot="list-end-sentinel"]')
+
+const mountMissionsTab = () => {
+	const input = sidebarMissionsWiring().inputFor("s-1")
+	const MissionsTab = () => {
+		const panel = useSidebarMissions(input).panelsBySpaceId["s-1"]
+		return panel ? createElement(MissionsPanel, panel) : null
+	}
+	return render(
+		createElement(SidebarProvider, null, createElement(MissionsTab)),
+		{
+			wrapper: createQueryTestWrapper().wrapper,
+		},
+	)
+}
+
+describe("the Missions tab read a page at a time", () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		crossingSentinels.clear()
+		vi.stubGlobal("IntersectionObserver", SentinelWatch)
+		readSpacePage.mockImplementation(pagesByCursor(FIRST_PAGE, LAST_PAGE))
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		vi.unstubAllGlobals()
+	})
+
+	it("shows the first page of 30 missions and waits at the end of the list", async () => {
+		mountMissionsTab()
+
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+		expect(shownObjectives()).toEqual(objectivesRanked(0, 29))
+		expect(readSpacePage).toHaveBeenCalledTimes(1)
+		expect(readSpacePage).toHaveBeenCalledWith(
+			"s-1",
+			expect.any(Number),
+			null,
+			30,
+		)
+		expect(sentinel()).not.toBeNull()
+	})
+
+	it("appends the next page below once the end of the list comes into view", async () => {
+		mountMissionsTab()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+
+		scrollToListEnd()
+
+		await waitFor(() =>
+			expect(shownObjectives()).toEqual(objectivesRanked(0, 34)),
+		)
+		expect(readSpacePage).toHaveBeenLastCalledWith(
+			"s-1",
+			expect.any(Number),
+			"after-29",
+			30,
+		)
+	})
+
+	it("shows a mission held by two pages once", async () => {
+		mountMissionsTab()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+
+		scrollToListEnd()
+
+		await waitFor(() => expect(shownObjectives()).toHaveLength(35))
+		expect(screen.getAllByText("Mission 29")).toHaveLength(1)
+	})
+
+	it("asks once for a next page however often the end comes into view while it reads", async () => {
+		let answerNext: (page: MissionSpacePage) => void = () => undefined
+		readSpacePage.mockImplementation((_spaceId, _closedSince, cursor) =>
+			cursor === null
+				? Promise.resolve(FIRST_PAGE)
+				: new Promise((resolve) => {
+						answerNext = resolve
+					}),
+		)
+		mountMissionsTab()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+
+		scrollToListEnd()
+		scrollToListEnd()
+		scrollToListEnd()
+
+		expect(readSpacePage).toHaveBeenCalledTimes(2)
+		act(() => answerNext(LAST_PAGE))
+		await waitFor(() => expect(shownObjectives()).toHaveLength(35))
+		expect(readSpacePage).toHaveBeenCalledTimes(2)
+	})
+
+	it("asks for nothing more once the last page answers", async () => {
+		mountMissionsTab()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+
+		scrollToListEnd()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(35))
+		scrollToListEnd()
+
+		expect(sentinel()).toBeNull()
+		expect(readSpacePage).toHaveBeenCalledTimes(2)
+	})
+
+	it("holds at most ten pages, the most a reread asks for again", async () => {
+		const pageAfter = (cursor: string | null) => {
+			const first = cursor === null ? 0 : Number(cursor) + 1
+			return aSpacePage(entriesRanked(first, first + 29), String(first + 29))
+		}
+		readSpacePage.mockImplementation((_spaceId, _closedSince, cursor) =>
+			Promise.resolve(pageAfter(cursor)),
+		)
+		mountMissionsTab()
+
+		for (let page = 1; page <= 10; page++) {
+			await waitFor(() => expect(shownObjectives()).toHaveLength(page * 30))
+			scrollToListEnd()
+		}
+
+		expect(sentinel()).toBeNull()
+		expect(readSpacePage).toHaveBeenCalledTimes(10)
+	})
+
+	it("keeps the pages scrolled through and puts a new mission on top when a change rereads the feed", async () => {
+		let announce: (changed: MissionChanged) => void = () => undefined
+		listenToMissions.mockImplementation((listener) => {
+			announce = listener
+			return Promise.resolve(() => undefined)
+		})
+		mountMissionsTab()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(30))
+		scrollToListEnd()
+		await waitFor(() => expect(shownObjectives()).toHaveLength(35))
+		readSpacePage.mockImplementation(
+			pagesByCursor(
+				aSpacePage([aWorkingEntry(-1), ...entriesRanked(0, 28)], "after-28"),
+				aSpacePage(entriesRanked(29, 34)),
+			),
+		)
+
+		act(() =>
+			announce({
+				missionId: "m-0",
+				state: "working",
+				stateSeq: 2,
+				isAgentRunning: true,
+				lastActivityAt: null,
+			}),
+		)
+
+		await waitFor(() =>
+			expect(shownObjectives()).toEqual(objectivesRanked(-1, 34)),
+		)
+		expect(readSpacePage).toHaveBeenCalledTimes(4)
 	})
 })

@@ -3,8 +3,12 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { MissionChanged, MissionInSpace } from "./mission-contract"
-import { aMission } from "./mission-fixtures"
+import type {
+	MissionChanged,
+	MissionInSpace,
+	MissionSpacePage,
+} from "./mission-contract"
+import { aMission, aSpacePage } from "./mission-fixtures"
 import { missionsTransport } from "./missions-transport"
 import { useSpaceMissions } from "./use-space-missions"
 
@@ -12,12 +16,12 @@ import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 
 vi.mock("./missions-transport", () => ({
 	missionsTransport: {
-		spaceFeed: vi.fn(),
+		spacePage: vi.fn(),
 		onChanged: vi.fn(),
 	},
 }))
 
-const readSpaceFeed = vi.mocked(missionsTransport.spaceFeed)
+const readSpacePage = vi.mocked(missionsTransport.spacePage)
 const listenToMissions = vi.mocked(missionsTransport.onChanged)
 
 const WORKING: MissionInSpace = {
@@ -38,7 +42,7 @@ const idsOf = (entries: MissionInSpace[]): string[] =>
 describe("useSpaceMissions", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		readSpaceFeed.mockResolvedValue([WORKING])
+		readSpacePage.mockResolvedValue(aSpacePage([WORKING]))
 		listenToMissions.mockResolvedValue(() => undefined)
 	})
 
@@ -54,7 +58,12 @@ describe("useSpaceMissions", () => {
 		)
 		const midnight = new Date()
 		midnight.setHours(0, 0, 0, 0)
-		expect(readSpaceFeed).toHaveBeenCalledWith("s-1", midnight.getTime())
+		expect(readSpacePage).toHaveBeenCalledWith(
+			"s-1",
+			midnight.getTime(),
+			null,
+			30,
+		)
 	})
 
 	it("moves a mission into waiting on you when a change says so", async () => {
@@ -70,7 +79,7 @@ describe("useSpaceMissions", () => {
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
 		await waitFor(() => expect(listenToMissions).toHaveBeenCalled())
-		readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+		readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 		act(() => {
 			announce({
@@ -87,7 +96,7 @@ describe("useSpaceMissions", () => {
 		)
 		expect(result.current.inProgress).toEqual([])
 		expect(result.current.waitingCount).toBe(1)
-		expect(readSpaceFeed).toHaveBeenCalledTimes(2)
+		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
 	it("lists a mission a change closes in earlier today before the reread answers", async () => {
@@ -103,7 +112,7 @@ describe("useSpaceMissions", () => {
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
 		await waitFor(() => expect(listenToMissions).toHaveBeenCalled())
-		readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+		readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 		act(() => {
 			announce({
@@ -128,7 +137,7 @@ describe("useSpaceMissions", () => {
 		await waitFor(() =>
 			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
 		)
-		readSpaceFeed.mockRejectedValue(new Error("the database is locked"))
+		readSpacePage.mockRejectedValue(new Error("the database is locked"))
 
 		act(() => result.current.reload())
 
@@ -141,7 +150,7 @@ describe("useSpaceMissions", () => {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 
-		expect(readSpaceFeed).not.toHaveBeenCalled()
+		expect(readSpacePage).not.toHaveBeenCalled()
 		expect(result.current.waitingOnYou).toEqual([])
 		expect(result.current.inProgress).toEqual([])
 		expect(result.current.earlierToday).toEqual([])
@@ -149,13 +158,13 @@ describe("useSpaceMissions", () => {
 	})
 
 	it("drops a read that answers after the space changed", async () => {
-		let answerFirst: (entries: MissionInSpace[]) => void = () => undefined
-		readSpaceFeed.mockReturnValueOnce(
+		let answerFirst: (page: MissionSpacePage) => void = () => undefined
+		readSpacePage.mockReturnValueOnce(
 			new Promise((resolve) => {
 				answerFirst = resolve
 			}),
 		)
-		readSpaceFeed.mockResolvedValueOnce([ELSEWHERE])
+		readSpacePage.mockResolvedValueOnce(aSpacePage([ELSEWHERE]))
 		const { result, rerender } = renderHook(
 			({ spaceId }) => useSpaceMissions(spaceId),
 			{
@@ -168,7 +177,7 @@ describe("useSpaceMissions", () => {
 			expect(idsOf(result.current.inProgress)).toEqual(["m-2"]),
 		)
 
-		await act(async () => answerFirst([WORKING]))
+		await act(async () => answerFirst(aSpacePage([WORKING])))
 
 		expect(idsOf(result.current.inProgress)).toEqual(["m-2"])
 	})
@@ -179,7 +188,7 @@ describe("useSpaceMissions", () => {
 			})
 
 		it("waits on its first read while nothing is held", () => {
-			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+			readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 			const { result } = mountFeed()
 
@@ -189,19 +198,19 @@ describe("useSpaceMissions", () => {
 		it("keeps the feed it holds while it reads it again", async () => {
 			const { result } = mountFeed()
 			await waitFor(() => expect(result.current.hasLoaded).toBe(true))
-			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+			readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 			act(() => result.current.reload())
 
-			expect(readSpaceFeed).toHaveBeenCalledTimes(2)
+			expect(readSpacePage).toHaveBeenCalledTimes(2)
 			expect(result.current.isPending).toBe(false)
 		})
 
 		it("stops waiting once the read fails, retry included", async () => {
-			readSpaceFeed.mockRejectedValueOnce(new Error("the database is locked"))
+			readSpacePage.mockRejectedValueOnce(new Error("the database is locked"))
 			const { result } = mountFeed()
 			await waitFor(() => expect(result.current.hasFailed).toBe(true))
-			readSpaceFeed.mockReturnValue(new Promise(() => undefined))
+			readSpacePage.mockReturnValue(new Promise(() => undefined))
 
 			act(() => result.current.reload())
 

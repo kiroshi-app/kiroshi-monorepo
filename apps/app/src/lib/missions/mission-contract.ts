@@ -8,6 +8,7 @@ export type {
 	MissionEventKind,
 	MissionInSpace,
 	MissionOnBoard,
+	MissionSpacePage,
 	MissionState,
 } from "@/lib/bindings"
 

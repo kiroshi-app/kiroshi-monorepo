@@ -1,4 +1,5 @@
 import {
+	type InfiniteData,
 	type QueryClient,
 	type QueryKey,
 	useQueryClient,
@@ -10,10 +11,11 @@ import type {
 	ConversationMissions,
 	Mission,
 	MissionChanged,
+	MissionInSpace,
 } from "./mission-contract"
 import { missionQueryKeys } from "./mission-query-keys"
 import {
-	type SpaceMissionsRead,
+	type SpaceFeedPage,
 	withMissionChange,
 	withMissionMove,
 } from "./missions-model"
@@ -38,6 +40,26 @@ const patchedMissions = (
 			)
 		: missions
 
+const movedEntries = (
+	entries: MissionInSpace[],
+	changed: MissionChanged,
+): MissionInSpace[] =>
+	entries.some(({ mission }) => mission.id === changed.missionId)
+		? entries.map((entry) =>
+				entry.mission.id === changed.missionId
+					? { ...entry, mission: withMissionMove(entry.mission, changed) }
+					: entry,
+			)
+		: entries
+
+const movedPage = (
+	page: SpaceFeedPage,
+	changed: MissionChanged,
+): SpaceFeedPage => {
+	const missions = movedEntries(page.missions, changed)
+	return missions === page.missions ? page : { ...page, missions }
+}
+
 const patchHeldReads = <Read>(
 	queryClient: QueryClient,
 	queryKey: QueryKey,
@@ -61,20 +83,13 @@ const applyChange = (queryClient: QueryClient, changed: MissionChanged) => {
 			done: patchedMissions(done, changed, withMissionChange),
 		}),
 	)
-	patchHeldReads<SpaceMissionsRead>(
+	patchHeldReads<InfiniteData<SpaceFeedPage>>(
 		queryClient,
 		missionQueryKeys.spaceFeeds(),
-		(held) =>
-			held.entries.some(({ mission }) => mission.id === changed.missionId)
-				? {
-						...held,
-						entries: held.entries.map((entry) =>
-							entry.mission.id === changed.missionId
-								? { ...entry, mission: withMissionMove(entry.mission, changed) }
-								: entry,
-						),
-					}
-				: held,
+		(held) => ({
+			...held,
+			pages: held.pages.map((page) => movedPage(page, changed)),
+		}),
 	)
 	patchHeldReads<MissionRead>(
 		queryClient,
