@@ -12,6 +12,7 @@ import type {
 import { activeJoinedSpaceId, invoke, listen } from "../host"
 import type { SubmittedAttachment } from "../chat/attachments-contract"
 import type { ChatDriver } from "../chat/driver"
+import { traceAgentTurn } from "../perf/agent-turn-trace"
 
 const EVENT_CHANNEL = "agent://event"
 
@@ -74,7 +75,10 @@ export const agentTransport: ChatDriver = {
 		invoke<ScopedEvent[]>("agent_pending_questions", { conversationId }),
 
 	subscribe: (onEvent: (event: ScopedEvent) => void) =>
-		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => onEvent(payload)),
+		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => {
+			traceAgentTurn(payload.event)
+			onEvent(payload)
+		}),
 }
 
 export const liveSessions = () => {

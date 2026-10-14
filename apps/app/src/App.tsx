@@ -13,6 +13,7 @@ import { SessionApplicationsContext } from "@/lib/applications/use-session-appli
 import { ThreadAuthorshipContext } from "@/lib/chat/thread-authorship"
 import { ConversationSeatingContext } from "@/lib/conversations/use-conversation-seating"
 import { hasOverlayWindowControls, isSidebarResizable } from "@/lib/host"
+import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
 import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
@@ -96,6 +97,15 @@ export function App() {
 	)
 
 	const { preferences, roster, spaces } = core
+	const isOpenSpaceRostered =
+		rosterView.rosteredSpaceId === scopes.openRowId &&
+		!roster.state.isRosterPending
+
+	useInvokePhaseEnd("boot", rosterView.hasLoaded ? "startup screen gone" : null)
+	useInvokePhaseEnd(
+		"space switch",
+		isOpenSpaceRostered ? scopes.openRowId : null,
+	)
 
 	if (!rosterView.hasLoaded) {
 		return (

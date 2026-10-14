@@ -60,6 +60,7 @@ const rowsFor = (selected: SelectedRow) => {
 	const roster = createStore(selected)
 	const openedMission = createOpenedMissionController(roster)
 	const rows = {
+		getState: roster.getState,
 		select: vi.fn((id: string) =>
 			roster.setState({ selectedBotId: id, selectedConversationId: null }),
 		),

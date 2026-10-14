@@ -9,6 +9,7 @@ import { App } from "./App"
 
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
 import { revealWindow } from "@/lib/host"
+import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
 import { createQueryClient } from "@/lib/query/query-client"
@@ -18,6 +19,8 @@ import { warmCodeHighlighter } from "@/lib/warm-highlighter"
 const reportRevealFailure = (reason: unknown) => {
 	console.error("reveal at start failed", reason)
 }
+
+installInvokeTally()
 
 try {
 	revealWindow().catch(reportRevealFailure)
