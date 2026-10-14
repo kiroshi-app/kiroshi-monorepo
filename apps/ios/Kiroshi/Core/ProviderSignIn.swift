@@ -26,19 +26,18 @@ protocol GoogleAuthorizing: Sendable {
 extension ProviderOutcome {
     static let nameMaxLength = 80
 
-    init(apple result: Result<ASAuthorization, any Error>) {
+    init(apple result: Result<ASAuthorizationAppleIDCredential, any Error>) {
         switch result {
-        case .success(let authorization):
-            let credential = authorization.credential as? ASAuthorizationAppleIDCredential
+        case .success(let credential):
             guard
-                let token = credential?.identityToken.flatMap({
+                let token = credential.identityToken.flatMap({
                     String(data: $0, encoding: .utf8)
                 })
             else {
                 self = .failed
                 return
             }
-            self = .authorized(idToken: token, name: Self.name(of: credential?.fullName))
+            self = .authorized(idToken: token, name: Self.name(of: credential.fullName))
         case .failure(let error):
             self = Self.isCancellation(error) ? .cancelled : .failed
         }
