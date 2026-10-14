@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import type { QueryClient } from "@tanstack/react-query"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement, Profiler, type ProfilerOnRenderCallback } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +10,7 @@ import { setRenderProbe } from "@workspace/ui/lib/render-probe"
 import "@workspace/ui/lib/i18n"
 
 import { newBotIdentity } from "@/lib/bots/bot-settings"
+import { ROSTER_PAGE_SIZE } from "@/lib/bots/roster-pages"
 import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
@@ -66,6 +68,20 @@ vi.mock("@/lib/applications/application-transport", async (importOriginal) => {
 		},
 	}
 })
+
+type HostHandler = (event: { payload: unknown }) => void
+
+const hostEvents = vi.hoisted(() => new Map<string, Set<HostHandler>>())
+
+vi.mock("@/lib/host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/host")>()),
+	listen: async (event: string, handler: HostHandler) => {
+		const handlers = hostEvents.get(event) ?? new Set()
+		handlers.add(handler)
+		hostEvents.set(event, handlers)
+		return () => handlers.delete(handler)
+	},
+}))
 
 const { App } = await import("@/App")
 
@@ -374,9 +390,94 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 	harness.driver = createFakeChatDriver({ stepMs: STEP_MS, replyFor })
 	const watch = watchTurn(harness.driver)
 	await seedRoster(store)
-	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	render(createElement(App), { wrapper })
 	await settle(MOUNT_MS)
-	return { watch, frames }
+	return { watch, frames, store, queryClient }
+}
+
+const emitOnHost = (event: string, payload: unknown) =>
+	act(async () => {
+		for (const handler of [...(hostEvents.get(event) ?? [])]) {
+			handler({ payload })
+		}
+	})
+
+const RECEIVED_TEXT = "A message received"
+
+const soloThreadRowOf = async (store: TranscriptStore) => {
+	const [space] = await store.spaces()
+	const [bot] = await store.bots(space.id)
+	const { pinned, conversations } = await store.conversationPage(
+		space.id,
+		null,
+		ROSTER_PAGE_SIZE,
+	)
+	const thread = [...pinned, ...conversations].find(
+		({ soloBotId }) => soloBotId === bot.id,
+	)
+	if (!thread) {
+		throw new Error(`no solo thread for ${bot.name}`)
+	}
+	return { spaceId: space.id, conversation: thread }
+}
+
+const storeMessageReceived = async (store: TranscriptStore) => {
+	const [space] = await store.spaces()
+	const [bot] = await store.bots(space.id)
+	const { id: conversationId } = await store.mainChat(bot.id)
+	const turnId = `${bot.id}-received`
+	const id = `${bot.id}-received-message`
+	await store.startTurn({ conversationId, id: turnId, startedAt: Date.now() })
+	await store.openAssistantMessage({
+		authorBotId: bot.id,
+		conversationId,
+		createdAt: Date.now(),
+		id,
+		repliedToMessageId: null,
+		turnId,
+	})
+	await store.appendText(id, RECEIVED_TEXT)
+	await store.finalizeMessage(id, "complete")
+	await store.completeTurn(turnId, Date.now())
+}
+
+const HOST_UPDATES_PER_TURN = 2
+
+const emitHostUpdatesOfTurn = async (store: TranscriptStore) => {
+	for (let update = 0; update < HOST_UPDATES_PER_TURN; update += 1) {
+		await emitOnHost("conversation://updated", await soloThreadRowOf(store))
+	}
+}
+
+type CacheEventCounter = { count: () => number; stop: () => void }
+
+const countCacheEvents = (queryClient: QueryClient): CacheEventCounter => {
+	let count = 0
+	const stop = queryClient.getQueryCache().subscribe(() => {
+		count += 1
+	})
+	return { count: () => count, stop }
+}
+
+const measureMessageReceived = async () => {
+	const tally = tallyRenders()
+	const { store, queryClient } = await mountApp()
+	await storeMessageReceived(store)
+	const received = await soloThreadRowOf(store)
+	tally.reset()
+	const cacheEvents = countCacheEvents(queryClient)
+
+	await emitOnHost("conversation://updated", received)
+	await settle(MOUNT_MS)
+	cacheEvents.stop()
+
+	return {
+		app: tally.countOf("App"),
+		appSidebar: tally.countOf("AppSidebar"),
+		cacheEvents: cacheEvents.count(),
+		isShown: document.body.textContent?.includes(RECEIVED_TEXT) ?? false,
+	}
 }
 
 type FrameRunner = {
@@ -567,13 +668,18 @@ const measureLongTranscriptOpen = async () => {
 
 const measureTurn = async (chunks: number) => {
 	const tally = tallyRenders()
-	const { watch } = await mountApp(() => replyOf(chunks))
+	const { watch, store, queryClient } = await mountApp(() => replyOf(chunks))
 
 	await streamOneTurn("first turn", watch)
+	await emitHostUpdatesOfTurn(store)
 	const settledTurns = tally.entriesOf("ThreadTurn").map(([key]) => key)
 	tally.reset()
+	const cacheEvents = countCacheEvents(queryClient)
 
 	await streamOneTurn("second turn", watch)
+	await emitHostUpdatesOfTurn(store)
+	await settle(MOUNT_MS)
+	cacheEvents.stop()
 	const turns = tally.entriesOf("ThreadTurn")
 	const countsWhere = (isSettled: boolean) =>
 		turns
@@ -582,6 +688,7 @@ const measureTurn = async (chunks: number) => {
 
 	return {
 		chunks: watch.chunks,
+		cacheEvents: cacheEvents.count(),
 		app: tally.countOf("App"),
 		appSidebar: tally.countOf("AppSidebar"),
 		rosterBots: tally.countOf("rosterBots"),
@@ -607,12 +714,13 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
-			  "app": 17,
-			  "appSidebar": 5,
+			  "app": 18,
+			  "appSidebar": 6,
+			  "cacheEvents": 34,
 			  "chunks": 11,
 			  "quietTurn": 2,
-			  "rosterBots": 5,
-			  "rosterBotsBySpace": 5,
+			  "rosterBots": 6,
+			  "rosterBotsBySpace": 6,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -623,13 +731,27 @@ describe("PRF1 render baseline", () => {
 
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
-			  "app": 28,
-			  "appSidebar": 5,
+			  "app": 29,
+			  "appSidebar": 6,
+			  "cacheEvents": 45,
 			  "chunks": 22,
 			  "quietTurn": 2,
-			  "rosterBots": 5,
-			  "rosterBotsBySpace": 5,
+			  "rosterBots": 6,
+			  "rosterBotsBySpace": 6,
 			  "streamingTurn": 2,
+			}
+		`)
+	})
+
+	it("counts what one message received re-renders", async () => {
+		vi.useFakeTimers()
+
+		expect(await measureMessageReceived()).toMatchInlineSnapshot(`
+			{
+			  "app": 1,
+			  "appSidebar": 1,
+			  "cacheEvents": 14,
+			  "isShown": true,
 			}
 		`)
 	})
