@@ -56,7 +56,7 @@ final class PagingTests: XCTestCase {
     }
 
     func testAThreadScrolledToTheTopShowsAnOlderMessageWithoutMovingTheOneOnScreen() {
-        let app = launch("3.1", "-paged", "YES")
+        let app = launch("3.1", "-paged", "YES", "-pageDelay", "15")
         XCTAssertTrue(composer(in: app).waitForExistence(timeout: 10))
         let transcript = app.scrollViews.firstMatch
         let loading = app.descendants(matching: .any)["Loading earlier messages"]
@@ -65,8 +65,9 @@ final class PagingTests: XCTestCase {
         for _ in 0..<20 where !(loading.exists && firstOfThePage.exists) {
             drag(transcript, from: 0.3, to: 0.6)
         }
+        XCTAssertTrue(loading.exists)
         let readAt = firstOfThePage.frame.minY
-        XCTAssertTrue(loading.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(loading.waitForNonExistence(timeout: 30))
 
         XCTAssertEqual(firstOfThePage.frame.minY, readAt, accuracy: 44)
         drag(transcript, from: 0.3, to: 0.6)
