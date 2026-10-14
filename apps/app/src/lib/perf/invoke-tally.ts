@@ -2,11 +2,11 @@ export type InvokePhase = "boot" | "space switch" | "thread open" | "agent turn"
 
 type TalliedPhase = InvokePhase | "idle"
 
-export type InvokeCount = { command: string; count: number }
+type InvokeCount = { command: string; count: number }
 
 export type PhaseTally = { phase: TalliedPhase; counts: InvokeCount[] }
 
-export type InvokeTally = {
+type InvokeTally = {
 	count: (command: string) => void
 	start: (phase: InvokePhase) => void
 	end: (phase: InvokePhase) => void

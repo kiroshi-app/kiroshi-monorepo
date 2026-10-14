@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type MockInstance,
+	vi,
+} from "vitest"
 
 const answerInvoke = vi.fn<(command: string) => Promise<null>>(() =>
 	Promise.resolve(null),
@@ -16,11 +24,15 @@ const loadDevtools = async (isDev: boolean) => {
 	return import("./invoke-tally-devtools")
 }
 
-const printedTables = () => vi.spyOn(console, "table")
+const silenceConsole = () => {
+	vi.spyOn(console, "info").mockImplementation(() => {})
+	return vi.spyOn(console, "table").mockImplementation(() => {})
+}
+
+let printedTables: MockInstance<typeof console.table>
 
 beforeEach(() => {
-	vi.spyOn(console, "info").mockImplementation(() => {})
-	vi.spyOn(console, "table").mockImplementation(() => {})
+	printedTables = silenceConsole()
 })
 
 afterEach(() => {
@@ -41,7 +53,7 @@ describe("invoke tally devtools", () => {
 		devtools.endInvokePhase("boot")
 
 		expect(answerInvoke).toHaveBeenCalledWith("plugin:window|show")
-		expect(printedTables()).toHaveBeenCalledWith([
+		expect(printedTables).toHaveBeenCalledWith([
 			{ command: "plugin:window|show", count: 2 },
 		])
 	})
@@ -57,6 +69,6 @@ describe("invoke tally devtools", () => {
 		devtools.endInvokePhase("thread open")
 
 		expect(internals.invoke).toBe(answerInvoke)
-		expect(printedTables()).not.toHaveBeenCalled()
+		expect(printedTables).not.toHaveBeenCalled()
 	})
 })
