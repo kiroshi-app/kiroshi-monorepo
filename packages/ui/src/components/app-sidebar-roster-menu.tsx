@@ -53,12 +53,11 @@ interface RosterRowsContext
 
 const NO_SPACE_IDS: string[] = []
 
-const isSameSpaceIds = (held: string[], next: string[]) =>
-	held.length === next.length && held.every((id, at) => id === next[at])
-
 const useSameSpaceIds = (next: string[]) => {
 	const [held, setHeld] = useState(next)
-	if (isSameSpaceIds(held, next)) return held
+	const isSame =
+		held.length === next.length && held.every((id, at) => id === next[at])
+	if (isSame) return held
 	setHeld(next)
 	return next
 }
