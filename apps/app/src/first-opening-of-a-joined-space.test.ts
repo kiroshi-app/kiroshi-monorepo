@@ -112,6 +112,12 @@ const storeAnswer =
 				return store.bots(textOf(args.spaceId))
 			case "conversation_list":
 				return store.conversations(textOf(args.spaceId))
+			case "conversation_page":
+				return store.conversationPage(
+					textOf(args.spaceId),
+					null,
+					Number(args.limit),
+				)
 			case "conversation_main_chat":
 				return store.mainChat(textOf(args.botId), textOf(args.spaceId))
 			case "conversation_message_page":

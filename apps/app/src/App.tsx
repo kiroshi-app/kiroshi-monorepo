@@ -125,6 +125,7 @@ export function App() {
 						bots={rosterLines.rosterBots}
 						haveBotsFailedToLoad={roster.state.hasFailedToLoad}
 						rosterSkeleton={rosterLists.rosterSkeleton}
+						rosterListEnd={roster.listEnd}
 						botsBySpaceId={rosterLists.rosterBotsBySpace}
 						conversations={rosterLists.rosterConversations}
 						conversationsBySpaceId={rosterLists.rosterConversationsBySpace}

@@ -9,6 +9,7 @@ export type {
 	Chat,
 	ContextCheckpoint,
 	Conversation,
+	ConversationPage,
 	EnvEntry_Serialize as EnvEntry,
 	EnvOwner,
 	EnvScope_Serialize as EnvScope,

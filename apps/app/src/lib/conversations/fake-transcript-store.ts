@@ -21,6 +21,7 @@ import type {
 	Conversation,
 	ConversationDraft,
 	ConversationEdit,
+	ConversationPage,
 	EnvEntry,
 	EnvScope,
 	McpServerMark,
@@ -126,6 +127,38 @@ type Seat = {
 type RankedBot = {
 	bot: Bot
 	presence: number
+}
+
+const inPage = (conversation: Conversation) => ({
+	...conversation,
+	lastActivityAt: conversation.updatedAt,
+	lastWord: null,
+	soloBotId: null,
+})
+
+const isPinned = (conversation: Conversation) =>
+	conversation.pinPosition !== null
+
+const byPin = (one: Conversation, other: Conversation) =>
+	(one.pinPosition ?? 0) - (other.pinPosition ?? 0)
+
+const latestFirst = (one: Conversation, other: Conversation) =>
+	other.updatedAt - one.updatedAt
+
+const conversationPageOf = (
+	topics: Conversation[],
+	cursor: string | null,
+	limit: number,
+): ConversationPage => {
+	const start = cursor === null ? 0 : Number(cursor)
+	const end = start + limit
+	const loose = topics.filter((topic) => !isPinned(topic)).sort(latestFirst)
+	return {
+		pinned:
+			cursor === null ? topics.filter(isPinned).sort(byPin).map(inPage) : [],
+		conversations: loose.slice(start, end).map(inPage),
+		nextCursor: end < loose.length ? String(end) : null,
+	}
 }
 
 const ascending = (one: string, other: string) =>
@@ -1387,6 +1420,17 @@ export const createFakeTranscriptStore = (
 				[...conversations.values()]
 					.filter((stored) => stored.spaceId === spaceId)
 					.map(drawnConversation),
+			),
+
+		conversationPage: (spaceId: string, cursor: string | null, limit: number) =>
+			Promise.resolve(
+				conversationPageOf(
+					[...conversations.values()]
+						.filter((stored) => stored.spaceId === spaceId)
+						.map(drawnConversation),
+					cursor,
+					limit,
+				),
 			),
 
 		createConversation: (draft: ConversationDraft) => {
