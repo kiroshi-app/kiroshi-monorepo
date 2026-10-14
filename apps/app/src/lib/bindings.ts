@@ -176,11 +176,13 @@ export const commands = {
 	pluginHistoryDiff: (scope: PluginScope, oldestCommitId: string, newestCommitId: string) => typedError<BotChangedFile[], TranscriptStoreError>(__TAURI_INVOKE("plugin_history_diff", { scope, oldestCommitId, newestCommitId })),
 	pluginRevert: (scope: PluginScope, oldestCommitId: string, newestCommitId: string) => typedError<BotHistoryEntry[], TranscriptStoreError>(__TAURI_INVOKE("plugin_revert", { scope, oldestCommitId, newestCommitId })),
 	routineTriggerSources: (botId: string) => typedError<TriggerSource_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("routine_trigger_sources", { botId })),
+	routineTriggerSourcesOfSpace: (spaceId: string) => typedError<BotTriggerSources_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("routine_trigger_sources_of_space", { spaceId })),
 	routineCreate: (draft: RoutineDraft_Deserialize) => typedError<Routine_Serialize, RoutineError>(__TAURI_INVOKE("routine_create", { draft })),
 	routineUpdate: (id: string, edit: RoutineEdit_Deserialize) => typedError<Routine_Serialize, RoutineError>(__TAURI_INVOKE("routine_update", { id, edit })),
 	routineDelete: (id: string) => typedError<null, RoutineError>(__TAURI_INVOKE("routine_delete", { id })),
 	routineList: (conversationId: string) => typedError<Routine_Serialize[], RoutineError>(__TAURI_INVOKE("routine_list", { conversationId })),
 	routineRuns: (routineId: string, limit: number) => typedError<RoutineRun[], RoutineError>(__TAURI_INVOKE("routine_runs", { routineId, limit })),
+	routineRunsOfSpace: (spaceId: string, limit: number) => typedError<RoutineRuns[], RoutineError>(__TAURI_INVOKE("routine_runs_of_space", { spaceId, limit })),
 	routineReportedRuns: (conversationId: string) => typedError<ReportedRun[], RoutineError>(__TAURI_INVOKE("routine_reported_runs", { conversationId })),
 	routineRunNow: (id: string) => typedError<TriggerDecision, RoutineError>(__TAURI_INVOKE("routine_run_now", { id })),
 	routineRenewLease: (runId: string) => typedError<null, RoutineError>(__TAURI_INVOKE("routine_renew_lease", { runId })),
@@ -512,6 +514,18 @@ export type BotPermissions = {
 	allow: string[],
 	ask: string[],
 	deny: string[],
+};
+
+export type BotTriggerSources = BotTriggerSources_Serialize | BotTriggerSources_Deserialize;
+
+export type BotTriggerSources_Deserialize = {
+	botId: string,
+	triggerSources: TriggerSource_Deserialize[],
+};
+
+export type BotTriggerSources_Serialize = {
+	botId: string,
+	triggerSources: TriggerSource_Serialize[],
 };
 
 export type Catalogue = {
@@ -1185,6 +1199,11 @@ export type RoutineRun = {
 	reason: string | null,
 	costUsd: number | null,
 	modelUsage: Json | null,
+};
+
+export type RoutineRuns = {
+	routineId: string,
+	runs: RoutineRun[],
 };
 
 export type Routine_Deserialize = {

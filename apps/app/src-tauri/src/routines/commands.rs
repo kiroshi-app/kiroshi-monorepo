@@ -5,8 +5,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::contract::{
-	Filter, ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError, RoutineKey, RoutineRun,
-	RunClosing, TriggerDecision, TriggerSource,
+	BotTriggerSources, Filter, ReportedRun, Routine, RoutineDraft, RoutineEdit, RoutineError,
+	RoutineKey, RoutineRun, RoutineRuns, RunClosing, TriggerDecision, TriggerSource,
 };
 use super::core::{self, Clock, SystemClock};
 use super::filter;
@@ -50,6 +50,23 @@ pub async fn routine_trigger_sources<R: Runtime>(
 	let database = ready(&state)?;
 	let space_id = oldest_space(database, &bot_id).await?;
 	sources::stacked(&stacked_bundles(&app, &space_id, &bot_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn routine_trigger_sources_of_space<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<BotTriggerSources>, TranscriptStoreError> {
+	let mut bots = ready(&state)?.conversations().bots(Some(space_id.clone())).await?;
+	bots.sort_by(|left, right| left.id.cmp(&right.id));
+	bots.into_iter()
+		.map(|bot| {
+			let trigger_sources = sources::stacked(&stacked_bundles(&app, &space_id, &bot.id))?;
+			Ok(BotTriggerSources { bot_id: bot.id, trigger_sources })
+		})
+		.collect()
 }
 
 fn stacked_bundles<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_id: &str) -> Vec<PathBuf> {
@@ -181,6 +198,16 @@ pub async fn routine_runs(
 	limit: u32,
 ) -> Result<Vec<RoutineRun>, RoutineError> {
 	ready(&state)?.routines().runs(routine_id, limit).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn routine_runs_of_space(
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+	limit: u32,
+) -> Result<Vec<RoutineRuns>, RoutineError> {
+	ready(&state)?.routines().runs_of_space(space_id, limit).await
 }
 
 #[tauri::command]
@@ -457,5 +484,61 @@ mod tests {
 			matches!(named_by_no_space, RoutineError::UnknownSource { ref id } if id == SHIFT_LOG),
 			"got {named_by_no_space:?}"
 		);
+	}
+
+	const SEATS_IN_TWO_SPACES: &str = "
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('writers', 'Writers', 'blue', 1, 1), ('empty', 'Empty', 'green', 2, 1);
+		INSERT INTO bots (id, name, model, created_at, deleted_at)
+			VALUES ('b0', 'Zero', 'sonnet', 2, NULL), ('b2', 'Second', 'sonnet', 1, NULL),
+				('gone', 'Gone', 'sonnet', 1, 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
+			VALUES ('b0', 'personal', 1), ('gone', 'personal', 1),
+				('b1', 'writers', 2), ('b2', 'writers', 1);
+	";
+
+	async fn sources_of_space(app: &App<MockRuntime>, space_id: &str) -> Vec<BotTriggerSources> {
+		routine_trigger_sources_of_space(app.handle().clone(), app.state(), space_id.to_owned())
+			.await
+			.expect("the trigger sources of the space read")
+	}
+
+	async fn sources_of_bot(app: &App<MockRuntime>, bot_id: &str) -> Vec<TriggerSource> {
+		routine_trigger_sources(app.handle().clone(), app.state(), bot_id.to_owned())
+			.await
+			.expect("the trigger sources of the bot read")
+	}
+
+	fn seated(answered: &[BotTriggerSources]) -> Vec<&str> {
+		answered.iter().map(|entry| entry.bot_id.as_str()).collect()
+	}
+
+	fn declares(sources: &[TriggerSource], id: &str) -> bool {
+		sources.iter().any(|source| source.id == id)
+	}
+
+	#[tokio::test]
+	async fn each_space_answers_the_trigger_sources_of_its_own_seated_bots_ordered_by_id() {
+		let app = a_host("sources-of-space").await;
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
+			.await
+			.expect("the seats are planted");
+		declaring_shift_log(&app, "writers");
+
+		let personal = sources_of_space(&app, "personal").await;
+		let writers = sources_of_space(&app, "writers").await;
+
+		assert_eq!(seated(&personal), ["b0", "b1"], "a deleted bot is left out");
+		assert_eq!(seated(&writers), ["b1", "b2"]);
+		for entry in &personal {
+			assert_eq!(entry.trigger_sources, sources_of_bot(&app, &entry.bot_id).await);
+		}
+		assert_eq!(writers[1].trigger_sources, sources_of_bot(&app, "b2").await);
+		assert!(declares(&writers[0].trigger_sources, SHIFT_LOG), "got {writers:?}");
+		assert!(!declares(&sources_of_bot(&app, "b1").await, SHIFT_LOG));
+		assert!(!declares(&personal[1].trigger_sources, SHIFT_LOG), "got {personal:?}");
+		assert!(sources_of_space(&app, "empty").await.is_empty());
 	}
 }

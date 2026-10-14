@@ -1504,6 +1504,24 @@
       ],
       "type": "object"
     },
+    "BotTriggerSources_Serialize": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "triggerSources": {
+          "items": {
+            "$ref": "#/$defs/TriggerSource_Serialize"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "botId",
+        "triggerSources"
+      ],
+      "type": "object"
+    },
     "CallFrame": {
       "description": "A member calls one command of the host. args defaults to {} when absent.",
       "properties": {
@@ -5355,6 +5373,24 @@
         "reason",
         "costUsd",
         "modelUsage"
+      ],
+      "type": "object"
+    },
+    "RoutineRuns": {
+      "properties": {
+        "routineId": {
+          "type": "string"
+        },
+        "runs": {
+          "items": {
+            "$ref": "#/$defs/RoutineRun"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "routineId",
+        "runs"
       ],
       "type": "object"
     },
@@ -10054,6 +10090,33 @@
         "type": "array"
       }
     },
+    "routine_runs_of_space": {
+      "args": {
+        "properties": {
+          "limit": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "limit"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/RoutineError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/RoutineRuns"
+        },
+        "type": "array"
+      }
+    },
     "routine_trigger_sources": {
       "args": {
         "properties": {
@@ -10072,6 +10135,28 @@
       "ok": {
         "items": {
           "$ref": "#/$defs/TriggerSource_Serialize"
+        },
+        "type": "array"
+      }
+    },
+    "routine_trigger_sources_of_space": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/BotTriggerSources_Serialize"
         },
         "type": "array"
       }

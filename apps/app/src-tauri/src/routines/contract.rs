@@ -129,6 +129,13 @@ pub struct TriggerSource {
 	pub header: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BotTriggerSources {
+	pub bot_id: String,
+	pub trigger_sources: Vec<TriggerSource>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum RunOutcome {
@@ -214,6 +221,13 @@ pub struct RoutineRun {
 	pub cost_usd: Option<f64>,
 	#[specta(type = Option<crate::json::JsonValue>)]
 	pub model_usage: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineRuns {
+	pub routine_id: String,
+	pub runs: Vec<RoutineRun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
