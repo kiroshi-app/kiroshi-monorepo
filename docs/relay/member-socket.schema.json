@@ -1509,6 +1509,16 @@
         "botId": {
           "type": "string"
         },
+        "failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscriptStoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "triggerSources": {
           "items": {
             "$ref": "#/$defs/TriggerSource_Serialize"
@@ -1518,7 +1528,8 @@
       },
       "required": [
         "botId",
-        "triggerSources"
+        "triggerSources",
+        "failure"
       ],
       "type": "object"
     },

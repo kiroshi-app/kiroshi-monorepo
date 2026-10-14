@@ -521,11 +521,13 @@ export type BotTriggerSources = BotTriggerSources_Serialize | BotTriggerSources_
 export type BotTriggerSources_Deserialize = {
 	botId: string,
 	triggerSources: TriggerSource_Deserialize[],
+	failure: TranscriptStoreError | null,
 };
 
 export type BotTriggerSources_Serialize = {
 	botId: string,
 	triggerSources: TriggerSource_Serialize[],
+	failure: TranscriptStoreError | null,
 };
 
 export type Catalogue = {

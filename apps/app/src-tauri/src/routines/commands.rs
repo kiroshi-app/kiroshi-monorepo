@@ -61,23 +61,42 @@ pub async fn routine_trigger_sources_of_space<R: Runtime>(
 ) -> Result<Vec<BotTriggerSources>, TranscriptStoreError> {
 	let mut bots = ready(&state)?.conversations().bots(Some(space_id.clone())).await?;
 	bots.sort_by(|left, right| left.id.cmp(&right.id));
-	bots.into_iter()
-		.map(|bot| {
-			let trigger_sources = sources::stacked(&stacked_bundles(&app, &space_id, &bot.id))?;
-			Ok(BotTriggerSources { bot_id: bot.id, trigger_sources })
-		})
-		.collect()
+	let shared = sources::stacked(&space_bundles(&app, &space_id))?;
+	Ok(bots.into_iter().map(|bot| sources_of_bot(&app, &shared, bot.id)).collect())
+}
+
+fn sources_of_bot<R: Runtime>(
+	app: &AppHandle<R>,
+	shared: &[TriggerSource],
+	bot_id: String,
+) -> BotTriggerSources {
+	let stacked = match bot_bundle(app, &bot_id) {
+		Some(bundle) => sources::overlaid(shared.to_vec(), &bundle),
+		None => Ok(shared.to_vec()),
+	};
+	match stacked {
+		Ok(trigger_sources) => BotTriggerSources { bot_id, trigger_sources, failure: None },
+		Err(failure) => {
+			BotTriggerSources { bot_id, trigger_sources: Vec::new(), failure: Some(failure) }
+		}
+	}
 }
 
 fn stacked_bundles<R: Runtime>(app: &AppHandle<R>, space_id: &str, bot_id: &str) -> Vec<PathBuf> {
-	[
-		bundles::system::laid_down(app),
-		bundles::space::laid_down(app, space_id),
-		bundles::root(app).and_then(|root| bundles::dir(&root, bot_id).ok()),
-	]
-	.into_iter()
-	.flatten()
-	.collect()
+	let mut stacked = space_bundles(app, space_id);
+	stacked.extend(bot_bundle(app, bot_id));
+	stacked
+}
+
+fn space_bundles<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Vec<PathBuf> {
+	[bundles::system::laid_down(app), bundles::space::laid_down(app, space_id)]
+		.into_iter()
+		.flatten()
+		.collect()
+}
+
+fn bot_bundle<R: Runtime>(app: &AppHandle<R>, bot_id: &str) -> Option<PathBuf> {
+	bundles::root(app).and_then(|root| bundles::dir(&root, bot_id).ok())
 }
 
 pub(crate) async fn declared_source<R: Runtime>(
@@ -540,5 +559,53 @@ mod tests {
 		assert!(!declares(&sources_of_bot(&app, "b1").await, SHIFT_LOG));
 		assert!(!declares(&personal[1].trigger_sources, SHIFT_LOG), "got {personal:?}");
 		assert!(sources_of_space(&app, "empty").await.is_empty());
+	}
+
+	const UNREADABLE: &str = "{ not a declaration";
+
+	fn declaring_unreadable_sources(bundle: &std::path::Path) {
+		fs::create_dir_all(bundle).expect("the bundle directory is there");
+		fs::write(bundle.join(".triggers.json"), UNREADABLE).expect("the declaration lands");
+	}
+
+	#[tokio::test]
+	async fn an_unreadable_bot_bundle_fails_its_own_entry_and_an_unreadable_space_bundle_the_call()
+	{
+		let app = a_host("unreadable-sources").await;
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(|connection| Ok(connection.execute_batch(SEATS_IN_TWO_SPACES)?))
+			.await
+			.expect("the seats are planted");
+		declaring_shift_log(&app, "writers");
+		let readable = sources_of_space(&app, "writers").await;
+		let root = bundles::root(app.handle()).expect("the bundles are rooted");
+
+		declaring_unreadable_sources(
+			&bundles::placed_dir(&root, "b2", "Second").expect("the bundle is placed"),
+		);
+		let answered = sources_of_space(&app, "writers").await;
+
+		assert!(readable.iter().all(|entry| entry.failure.is_none()), "got {readable:?}");
+		assert_eq!(seated(&answered), ["b1", "b2"]);
+		assert_eq!(answered[0], readable[0], "the readable bot answers unchanged");
+		assert!(answered[1].trigger_sources.is_empty(), "got {answered:?}");
+		assert!(
+			matches!(answered[1].failure, Some(TranscriptStoreError::UnreadableSources { .. })),
+			"got {answered:?}"
+		);
+
+		declaring_unreadable_sources(
+			&bundles::space::path(app.handle(), "writers").expect("the plugin is named"),
+		);
+		let failed = routine_trigger_sources_of_space(
+			app.handle().clone(),
+			app.state(),
+			"writers".to_owned(),
+		)
+		.await
+		.expect_err("the space bundle fails the call");
+
+		assert!(matches!(failed, TranscriptStoreError::UnreadableSources { .. }), "got {failed:?}");
 	}
 }

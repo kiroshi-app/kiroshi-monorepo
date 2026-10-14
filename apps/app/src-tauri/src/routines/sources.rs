@@ -27,13 +27,17 @@ pub fn sources_at(bundle: &Path) -> Result<Vec<TriggerSource>, TranscriptStoreEr
 }
 
 pub fn stacked(bundles: &[PathBuf]) -> Result<Vec<TriggerSource>, TranscriptStoreError> {
-	let mut stacked: Vec<TriggerSource> = Vec::new();
-	for bundle in bundles {
-		for source in sources_at(bundle)? {
-			match stacked.iter_mut().find(|held| held.id == source.id) {
-				Some(held) => *held = source,
-				None => stacked.push(source),
-			}
+	bundles.iter().try_fold(Vec::new(), |stacked, bundle| overlaid(stacked, bundle))
+}
+
+pub fn overlaid(
+	mut stacked: Vec<TriggerSource>,
+	bundle: &Path,
+) -> Result<Vec<TriggerSource>, TranscriptStoreError> {
+	for source in sources_at(bundle)? {
+		match stacked.iter_mut().find(|held| held.id == source.id) {
+			Some(held) => *held = source,
+			None => stacked.push(source),
 		}
 	}
 	Ok(stacked)

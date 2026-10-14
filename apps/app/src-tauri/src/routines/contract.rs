@@ -134,6 +134,7 @@ pub struct TriggerSource {
 pub struct BotTriggerSources {
 	pub bot_id: String,
 	pub trigger_sources: Vec<TriggerSource>,
+	pub failure: Option<TranscriptStoreError>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
