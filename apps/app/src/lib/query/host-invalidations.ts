@@ -24,22 +24,22 @@ const otherHostIdsThan = (hostId: string) =>
 		),
 	)
 
-const namesAnotherHost = (queryKey: QueryKey, hostId: string) => {
+const namesAnotherHostThan = (hostId: string) => {
 	const otherHostIds = otherHostIdsThan(hostId)
-	return queryKey.some(
-		(segment) =>
-			typeof segment === "string" &&
-			(segment === LOCAL_HOST ||
-				otherHostIds.has(segment) ||
-				(isJoinedRowId(segment) && segment !== joinedRowIdOf(hostId))),
-	)
+	const isOtherHost = (segment: unknown) =>
+		typeof segment === "string" &&
+		(segment === LOCAL_HOST ||
+			otherHostIds.has(segment) ||
+			(isJoinedRowId(segment) && segment !== joinedRowIdOf(hostId)))
+	return (queryKey: QueryKey) => queryKey.some(isOtherHost)
 }
 
 export const invalidateOnHostReconnect = (queryClient: QueryClient) =>
 	onHostReconnected((hostId) => {
+		const namesAnotherHost = namesAnotherHostThan(hostId)
 		queryClient.invalidateQueries({
 			predicate: ({ meta, queryKey }) =>
-				!meta?.rereadsItselfOnReconnect && !namesAnotherHost(queryKey, hostId),
+				!meta?.rereadsItselfOnReconnect && !namesAnotherHost(queryKey),
 		})
 	})
 

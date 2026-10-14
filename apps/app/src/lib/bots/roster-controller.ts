@@ -785,7 +785,6 @@ export const createRosterController = (
 		pendingRereads.set(
 			spaceRowId,
 			setTimeout(() => {
-				pendingRereads.delete(spaceRowId)
 				void rereadInFull(spaceRowId)
 			}, ROSTER_REREAD_DELAY_MS),
 		)

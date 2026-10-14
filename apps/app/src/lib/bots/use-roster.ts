@@ -48,13 +48,14 @@ const reportUnheardEvent = (reason: unknown) => {
 	return () => undefined
 }
 
+const STORED_EVENTS = ["conversation://created", "conversation://updated"]
+
 const listenToRosterChanges = (controller: RosterController) =>
 	[
-		listen<ConversationStored>("conversation://created", ({ payload }) =>
-			controller.holdPageRow(payload.spaceId, payload.conversation),
-		),
-		listen<ConversationStored>("conversation://updated", ({ payload }) =>
-			controller.holdPageRow(payload.spaceId, payload.conversation),
+		...STORED_EVENTS.map((event) =>
+			listen<ConversationStored>(event, ({ payload }) =>
+				controller.holdPageRow(payload.spaceId, payload.conversation),
+			),
 		),
 		listen<ConversationDeleted>("conversation://deleted", ({ payload }) => {
 			controller.forgetConversation(payload.conversationId)
