@@ -7,10 +7,12 @@ import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import { newBotIdentity } from "./bot-settings"
 import { mountRoster } from "./mounted-roster"
+import { createRosterController } from "./roster-controller"
 
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 import { hostOfflineOf } from "../host/host-offline"
+import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(async () => () => undefined),
@@ -106,6 +108,28 @@ it("opens on the local spaces while a joined host never answers", async () => {
 
 	await vi.waitFor(() => expect(roster.getState().hasLoaded).toBe(true))
 	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
+})
+
+it("asks for the solo threads of the local spaces while a joined read is still out", async () => {
+	const store = createFakeTranscriptStore()
+	const read = store.bots
+	vi.spyOn(store, "bots").mockImplementation((spaceId, signal) =>
+		spaceId === JOINED.spaceId ? neverAnswered() : read(spaceId, signal),
+	)
+	const soloThreadReads = vi.spyOn(store, "mainChat")
+	const roster = createRosterController(store, {
+		queryClient: createQueryTestWrapper().queryClient,
+	})
+
+	void roster.load({
+		spaces: [LOCAL, JOINED],
+		spaceRowId: LOCAL.spaceRowId,
+		lastRowId: null,
+	})
+
+	await vi.waitFor(() =>
+		expect(soloThreadReads).toHaveBeenCalledWith("default", LOCAL.spaceId),
+	)
 })
 
 it("fills in the roster of a joined host that answers after the launch", async () => {

@@ -327,6 +327,10 @@ const isJoined = ({ spaceRowId }: RosterSpace) => isJoinedRowId(spaceRowId)
 
 const isLocal = (space: RosterSpace) => !isJoined(space)
 
+const isJoinedLine = ({ spaceId }: RosterLine) => isJoinedRowId(spaceId)
+
+const isLocalLine = (line: RosterLine) => !isJoinedLine(line)
+
 const heldSpaceRowIdsOf = ({ spaces, spaceRowId }: RosterChoice) => {
 	const listed = spaces.map((space) => space.spaceRowId)
 	return spaceRowId === null || listed.includes(spaceRowId)
@@ -748,8 +752,10 @@ export const createRosterController = (
 		return null
 	}
 
-	const prefetchSoloThreads = async () => {
-		const lines = rosterLinesIn(current().rosters)
+	const prefetchSoloThreadsWhere = async (
+		isWanted: (line: RosterLine) => boolean,
+	) => {
+		const lines = rosterLinesIn(current().rosters).filter(isWanted)
 		await Promise.all(
 			lines.map((line) => queryClient.prefetchQuery(soloThreadQuery(line))),
 		)
@@ -856,13 +862,15 @@ export const createRosterController = (
 	const load = async ({ spaces, spaceRowId, lastRowId }: RosterOpening) => {
 		spaces.forEach(learn)
 		choose({ spaces, spaceRowId, lastRowId })
-		const joinedReads = spaces.filter(isJoined).map(readRosterOf)
+		const joinedReads = Promise.all(spaces.filter(isJoined).map(readRosterOf))
 		await Promise.all(spaces.filter(isLocal).map(readRosterOf))
 		if (spaces.every(isReadyToOpen)) {
 			choose({ hasLoaded: true })
 		}
-		await Promise.all(joinedReads)
-		await prefetchSoloThreads()
+		await Promise.all([
+			prefetchSoloThreadsWhere(isLocalLine),
+			joinedReads.then(() => prefetchSoloThreadsWhere(isJoinedLine)),
+		])
 	}
 
 	const openBotSettings = ({ id, isShowingDanger }: BotSettingsOpening) =>
