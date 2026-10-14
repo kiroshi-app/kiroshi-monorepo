@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { isCancelledError } from "@tanstack/react-query"
 import { act, cleanup, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
@@ -284,13 +285,16 @@ it("aborts a solo thread read it cancels", async () => {
 		spaceId: LOCAL.spaceRowId,
 		botId: companion.id,
 	})
-	const read = queryClient.fetchQuery(thread)
+	const outcome = queryClient.fetchQuery(thread).then(
+		() => null,
+		(reason: unknown) => reason,
+	)
 	await vi.waitFor(() => expect(signals).toHaveLength(1))
 
 	await act(() => queryClient.cancelQueries({ queryKey: thread.queryKey }))
 
 	expect(signals[0]?.aborted).toBe(true)
-	await expect(read).rejects.toThrow()
+	expect(isCancelledError(await outcome)).toBe(true)
 })
 
 it("leaves the roster state untouched by a cache event outside the roster keys", async () => {
