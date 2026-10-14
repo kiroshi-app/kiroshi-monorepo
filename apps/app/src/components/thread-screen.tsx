@@ -215,6 +215,7 @@ import {
 import type { Onboarding } from "@/lib/onboarding/use-onboarding"
 import { usePostedOnboardingStep } from "@/lib/onboarding/use-posted-onboarding-step"
 import type { SignIn } from "@/lib/onboarding/use-sign-in"
+import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
@@ -1631,6 +1632,10 @@ const useThreadView = (props: ThreadViewProps) => {
 function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
 	const view = useThreadView(props)
+	useInvokePhaseEnd(
+		"thread open",
+		view.facts.isFirstLoadPending ? null : shownConversationIdOf(thread),
+	)
 	const transcriptSkeleton = useSkeletonSlot(
 		view.facts.isFirstLoadPending && view.state.messages.length === 0,
 		view.missionSeat ? MISSION_TRANSCRIPT_SKELETON : THREAD_TRANSCRIPT_SKELETON,

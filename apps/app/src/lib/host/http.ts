@@ -11,6 +11,7 @@ import { hostOfflineOf } from "./host-offline"
 import { HostRefused } from "./host-refused"
 
 import { raiseReportedFailure } from "../failure-report"
+import { countInvoke } from "../perf/invoke-tally-devtools"
 
 export type HostSocket = Pick<
 	WebSocket,
@@ -225,6 +226,7 @@ export const createHttpHost = ({
 		}).catch((reason: unknown) => rejectNetworkFailure(command, reason))
 
 	const invoke = async <T>(command: string, args: InvokeArgs = {}) => {
+		countInvoke(command)
 		const response = await post(command, args)
 		if (!response.ok) {
 			const { reason, isCommandError } = await refusalOf(response)

@@ -7,6 +7,7 @@ import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
+import { startInvokePhase } from "../perf/invoke-tally-devtools"
 import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
 import {
@@ -140,14 +141,19 @@ export const useSidebarActions = ({
 				void spaces.reorder(localSpaceIdsIn(spaces, ids))
 			},
 			onSelectBot: (id) => {
+				startInvokePhase("thread open")
 				openedMission.leave()
 				roster.select(id)
 			},
 			onSelectConversation: (id) => {
+				startInvokePhase("thread open")
 				openedMission.leave()
 				roster.selectConversation(id)
 			},
-			onSelectSpace: joinedSpaces.selectSpace,
+			onSelectSpace: (id) => {
+				startInvokePhase("space switch")
+				joinedSpaces.selectSpace(id)
+			},
 		}),
 		[
 			attachments,
