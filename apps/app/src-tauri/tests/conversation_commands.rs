@@ -3629,7 +3629,7 @@ fn rooms_in(
 }
 
 #[test]
-fn a_space_of_65_rooms_is_walked_newest_first_in_pages_of_30_30_and_5() {
+fn a_space_of_65_rooms_and_one_solo_is_walked_newest_first_in_pages_of_30_30_and_6() {
 	let home = Home::new();
 	let (_app, window, space, mut created) = rooms_in(&home, 65);
 
@@ -3643,14 +3643,46 @@ fn a_space_of_65_rooms_is_walked_newest_first_in_pages_of_30_30_and_5() {
 		.collect();
 	let mut newest_first = keys.clone();
 	newest_first.sort_by(|left, right| right.cmp(left));
-	let mut ids: Vec<String> = walked.iter().map(id_of).collect();
+	let (solos, rooms): (Vec<&Value>, Vec<&Value>) =
+		walked.iter().partition(|row| !row["soloBotId"].is_null());
+	let mut ids: Vec<String> = rooms.into_iter().map(id_of).collect();
 	ids.sort();
 	created.sort();
-	assert_eq!(sizes, vec![30, 30, 5]);
+	assert_eq!(sizes, vec![30, 30, 6]);
 	assert_eq!(keys, newest_first, "the walk was not newest first");
 	assert_eq!(ids, created, "the walk did not answer every room exactly once");
+	assert_eq!(solos.len(), 1, "the walk did not answer the companion solo exactly once");
 	assert_eq!(walked[0]["lastWord"], Value::Null);
 	assert_eq!(walked[0]["participants"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn the_first_page_holds_each_companion_solo_beside_the_rooms() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let solo = id_of(
+		&call(&window, "conversation_main_chat", json!({ "botId": bot, "spaceId": space }))
+			.expect("the solo"),
+	);
+	let room = id_of(&a_room(&window, &space, "Standup", vec![bot.clone()]));
+
+	let page = page_of(&window, &space, Value::Null, Value::Null);
+
+	let mut rows: Vec<(String, Value)> = page["conversations"]
+		.as_array()
+		.expect("the page holds a list")
+		.iter()
+		.map(|row| (id_of(row), row["soloBotId"].clone()))
+		.collect();
+	let mut expected = vec![(room, Value::Null), (solo, json!(bot))];
+	rows.sort_by(|left, right| left.0.cmp(&right.0));
+	expected.sort_by(|left, right| left.0.cmp(&right.0));
+	assert_eq!(rows, expected);
+	assert_eq!(page["pinned"], json!([]));
+	assert_eq!(page["nextCursor"], Value::Null);
 }
 
 #[test]

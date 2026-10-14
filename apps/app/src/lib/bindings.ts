@@ -635,6 +635,7 @@ export type Conversation = {
 export type ConversationInPage = {
 	lastActivityAt: number,
 	lastWord: LastWord | null,
+	soloBotId: string | null,
 } & Conversation;
 
 export type ConversationKind = "main" | "topic" | "mission";

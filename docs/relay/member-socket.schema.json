@@ -2117,11 +2117,22 @@
                   "type": "null"
                 }
               ]
+            },
+            "soloBotId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
             "lastActivityAt",
-            "lastWord"
+            "lastWord",
+            "soloBotId"
           ],
           "type": "object"
         },
