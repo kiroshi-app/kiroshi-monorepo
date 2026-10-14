@@ -1,0 +1,95 @@
+type CiEvent = "push" | "pull_request"
+
+type FilteredJobs = {
+	rust: boolean
+	vitest: boolean
+	website: boolean
+	ios: boolean
+}
+
+type ChangeSet = { event: CiEvent; paths: string[] }
+
+const SHARED_ROOT_FILES = [
+	"package.json",
+	"bun.lock",
+	"biome.json",
+	"knip.json",
+	"turbo.json",
+	"tsconfig.json",
+	"tsconfig.base.json",
+]
+
+const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
+
+const IOS_ROOT_FILES = [".swift-format", ".xcode-version"]
+
+const EVERY_JOB: FilteredJobs = {
+	rust: true,
+	vitest: true,
+	website: true,
+	ios: true,
+}
+
+const isUnder = (path: string, directories: string[]) =>
+	directories.some((directory) => path.startsWith(directory))
+
+const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1)
+
+const isShared = (path: string) =>
+	SHARED_ROOT_FILES.includes(path) || isUnder(path, SHARED_ROOT_DIRECTORIES)
+
+const touchesRust = (path: string) =>
+	isUnder(path, ["apps/app/src-tauri/", "apps/app/sidecar/"]) ||
+	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
+
+const touchesVitest = (path: string) =>
+	isUnder(path, ["packages/", "scripts/", "baselines/"]) ||
+	(path.startsWith("apps/app/") && !path.startsWith("apps/app/src-tauri/"))
+
+const touchesWebsite = (path: string) =>
+	path.startsWith("apps/website/") ||
+	(path.startsWith("packages/ui/") &&
+		!fileName(path).includes(".stories.") &&
+		!path.startsWith("packages/ui/.storybook/"))
+
+const touchesIos = (path: string) =>
+	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
+
+export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
+	if (event === "push" || paths.some(isShared)) return EVERY_JOB
+	return {
+		rust: paths.some(touchesRust),
+		vitest: paths.some(touchesVitest),
+		website: paths.some(touchesWebsite),
+		ios: paths.some(touchesIos),
+	}
+}
+
+const readEvent = (name: string | undefined): CiEvent => {
+	if (name === "push" || name === "pull_request") return name
+	throw new Error(`unsupported event "${name}"`)
+}
+
+const changedPaths = (base: string | undefined) => {
+	if (!base) throw new Error("BASE is required on a pull_request")
+	const diff = Bun.spawnSync(["git", "diff", "--name-only", base, "HEAD"])
+	if (!diff.success)
+		throw new Error(`git diff against ${base} failed: ${diff.stderr}`)
+	return diff.stdout.toString().split("\n").filter(Boolean)
+}
+
+const main = ([eventName, base]: string[]) => {
+	const event = readEvent(eventName)
+	const paths = event === "push" ? [] : changedPaths(base)
+	for (const [job, runs] of Object.entries(decideJobs({ event, paths })))
+		console.log(`${job}=${runs}`)
+}
+
+if (import.meta.main) {
+	try {
+		main(process.argv.slice(2))
+	} catch (failure) {
+		console.error(`ci-changes  ${(failure as Error).message}`)
+		process.exit(1)
+	}
+}

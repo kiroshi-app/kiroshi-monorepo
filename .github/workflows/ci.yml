@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
@@ -30,6 +31,9 @@ jobs:
       - name: Baseline unit tests
         run: bun run test:baseline
 
+      - name: CI change detection unit tests
+        run: bun run test:ci-changes
+
       - name: Biome and knip against the baseline
         run: bun run baseline lint
 
@@ -48,10 +52,27 @@ jobs:
       - name: iOS avatar bundle matches the avatar module
         run: bun run avatar:build && git diff --exit-code apps/ios/Kiroshi/Resources
 
+  website:
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Build website
         run: bun run --filter=website build
 
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -105,6 +126,8 @@ jobs:
         run: git diff --exit-code apps/app/src/lib/bindings.ts
 
   vitest:
+    needs: changes
+    if: needs.changes.outputs.vitest == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -138,22 +161,27 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
     outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      vitest: ${{ steps.filter.outputs.vitest }}
+      website: ${{ steps.filter.outputs.website }}
       ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Detect iOS changes
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Fetch the pull request base
+        if: github.event_name == 'pull_request'
+        run: git fetch --depth=1 origin "$BASE"
+
+      - name: Decide the jobs to run
         id: filter
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          git fetch --depth=1 origin "$BASE"
-          if git diff --quiet "$BASE" HEAD -- apps/ios .swift-format .xcode-version .github/workflows/ci.yml; then
-            echo "ios=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ios=true" >> "$GITHUB_OUTPUT"
-          fi
+        run: bun scripts/ci-changes.ts "$GITHUB_EVENT_NAME" "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   ios:
     needs: changes
@@ -193,15 +221,27 @@ jobs:
         run: swift format lint --recursive --strict apps/ios
 
   verify:
-    needs: [changes, lint, rust, vitest, ios]
+    needs: [changes, lint, rust, vitest, website, ios]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require changes, lint, rust and vitest to succeed
-        if: needs.changes.result != 'success' || needs.lint.result != 'success' || needs.rust.result != 'success' || needs.vitest.result != 'success'
+      - name: Require changes and lint to succeed
+        if: needs.changes.result != 'success' || needs.lint.result != 'success'
         run: exit 1
 
-      - name: Require ios to succeed when an iOS file changed, a skipped ios passes when none did
+      - name: Require rust to succeed when it ran for a change, and to be skipped otherwise
+        if: needs.rust.result != (needs.changes.outputs.rust == 'true' && 'success' || 'skipped')
+        run: exit 1
+
+      - name: Require vitest to succeed when it ran for a change, and to be skipped otherwise
+        if: needs.vitest.result != (needs.changes.outputs.vitest == 'true' && 'success' || 'skipped')
+        run: exit 1
+
+      - name: Require website to succeed when it ran for a change, and to be skipped otherwise
+        if: needs.website.result != (needs.changes.outputs.website == 'true' && 'success' || 'skipped')
+        run: exit 1
+
+      - name: Require ios to succeed when it ran for a change, and to be skipped otherwise
         if: needs.ios.result != (needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
         run: exit 1
