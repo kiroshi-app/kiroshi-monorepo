@@ -194,14 +194,14 @@ const committedRowHooksIn = (canvasElement: HTMLElement) => {
 }
 
 const rowsRenderedBy = async (
-	container: HTMLElement,
+	canvasElement: HTMLElement,
 	props: BotRosterProps,
 ) => {
-	const before = committedRowHooksIn(container)
+	const before = committedRowHooksIn(canvasElement)
 	const commitsBefore = rosterCommits
 	rosterHandle.current?.show(props)
 	await waitFor(() => expect(rosterCommits).toBeGreaterThan(commitsBefore))
-	const after = committedRowHooksIn(container)
+	const after = committedRowHooksIn(canvasElement)
 	return [...after]
 		.filter(([row, hooks]) => before.get(row) !== hooks)
 		.map(([row]) => row)
@@ -239,6 +239,6 @@ export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
 				...roomRenamed,
 				selectedBotId: BEACON.id,
 			}),
-		).toEqual([ATLAS.id, BEACON.id].toSorted())
+		).toEqual([ATLAS.id, BEACON.id])
 	},
 })
