@@ -9,7 +9,10 @@ import { newBotIdentity } from "./bot-settings"
 import { mountRoster } from "./mounted-roster"
 import { createRosterController } from "./roster-controller"
 
-import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import {
+	createFakeTranscriptStore,
+	FAKE_CHAT_ID,
+} from "../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../conversations/store-port"
 import { hostOfflineOf } from "../host/host-offline"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
@@ -32,8 +35,23 @@ const LOCAL = { spaceRowId: "personal", spaceId: "personal" }
 
 const JOINED = { spaceRowId: "joined:garage", spaceId: "garage" }
 
-it("raises a failure notice for the previews it could not read and keeps the roster", async () => {
+const withoutSoloThreads = (store: TranscriptStore) => {
+	const read = store.conversationPage
+	vi.spyOn(store, "conversationPage").mockImplementation(async (...args) => {
+		const page = await read(...args)
+		const isTopic = ({ soloBotId }: { soloBotId: string | null }) =>
+			soloBotId === null
+		return {
+			...page,
+			pinned: page.pinned.filter(isTopic),
+			conversations: page.conversations.filter(isTopic),
+		}
+	})
+}
+
+it("raises a failure notice for the opened bot whose solo thread it could not read and keeps the roster", async () => {
 	const store = createFakeTranscriptStore()
+	withoutSoloThreads(store)
 	vi.spyOn(store, "mainChat").mockRejectedValue(new Error("no record"))
 	const roster = mountRoster(store)
 
@@ -110,7 +128,7 @@ it("opens on the local spaces while a joined host never answers", async () => {
 	expect(roster.getState().bots.map((bot) => bot.id)).toEqual(["default"])
 })
 
-it("asks for the solo threads of the local spaces while a joined read is still out", async () => {
+it("knows the solo threads of the local spaces from their pages while a joined read is still out", async () => {
 	const store = createFakeTranscriptStore()
 	const read = store.bots
 	vi.spyOn(store, "bots").mockImplementation((spaceId, signal) =>
@@ -128,8 +146,12 @@ it("asks for the solo threads of the local spaces while a joined read is still o
 	})
 
 	await vi.waitFor(() =>
-		expect(soloThreadReads).toHaveBeenCalledWith("default", LOCAL.spaceId),
+		expect(roster.getState().soloThreads[FAKE_CHAT_ID]).toEqual({
+			spaceId: LOCAL.spaceRowId,
+			botId: "default",
+		}),
 	)
+	expect(soloThreadReads).not.toHaveBeenCalled()
 })
 
 it("fills in the roster of a joined host that answers after the launch", async () => {

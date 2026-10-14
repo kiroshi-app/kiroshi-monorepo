@@ -21,12 +21,17 @@ export type LastWords = {
 	conversations: Record<string, LastWord>
 }
 
+export type SoloBotIds = Record<string, string>
+
 export type RosterPage = RosterRead & {
 	lastWords: LastWords
+	soloBotIds: SoloBotIds
 	nextCursor: string | null
 }
 
 export const NO_LAST_WORDS: LastWords = { companions: {}, conversations: {} }
+
+export const NO_SOLO_BOT_IDS: SoloBotIds = {}
 
 export type RosterPages = InfiniteData<RosterPage>
 
@@ -80,6 +85,19 @@ export const lastWordsOf = ({ pages }: RosterPages): LastWords =>
 		.map(({ lastWords }) => lastWords)
 		.reduceRight(withWordsOf, NO_LAST_WORDS)
 
+export const soloBotIdsIn = ({
+	pinned,
+	conversations,
+}: ConversationPage): SoloBotIds =>
+	Object.fromEntries(
+		[...pinned, ...conversations].flatMap(({ id, soloBotId }) =>
+			soloBotId === null ? [] : [[id, soloBotId]],
+		),
+	)
+
+export const soloBotIdsOf = ({ pages }: RosterPages): SoloBotIds =>
+	Object.assign({}, ...pages.map(({ soloBotIds }) => soloBotIds))
+
 const withoutRepeats = (conversations: Conversation[]): Conversation[] => {
 	const seenIds = new Set<string>()
 	return conversations.filter(({ id }) => {
@@ -114,7 +132,14 @@ export const withHeldRead = (
 ): RosterPages => {
 	if (paged === undefined) {
 		return {
-			pages: [{ ...read, lastWords: NO_LAST_WORDS, nextCursor: null }],
+			pages: [
+				{
+					...read,
+					lastWords: NO_LAST_WORDS,
+					soloBotIds: NO_SOLO_BOT_IDS,
+					nextCursor: null,
+				},
+			],
 			pageParams: [null],
 		}
 	}
@@ -167,6 +192,7 @@ export const withFreshHead = (
 					...pushedOutOf(heldHead, head, isInHead),
 				],
 				lastWords: withWordsOf(heldHead.lastWords, head.lastWords),
+				soloBotIds: { ...heldHead.soloBotIds, ...head.soloBotIds },
 			},
 			...laterPages.map((page) => ({
 				...page,
