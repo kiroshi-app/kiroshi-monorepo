@@ -737,7 +737,7 @@ mod tests {
 			let polls = cloudy.polls();
 			assert_eq!(polls.len(), 2);
 			let waited = polls[1] - polls[0];
-			assert!(waited >= SLOW_DOWN, "{waited:?}");
+			assert!(waited >= SLOW_DOWN && waited < SLOW_DOWN * 2, "{waited:?}");
 		});
 	}
 
