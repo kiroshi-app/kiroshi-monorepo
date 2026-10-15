@@ -87,6 +87,21 @@ describe("the red main issue", () => {
 		expect(issue.title).toBe("Red main: lint, rust at 8a7919a")
 	})
 
+	it("titles the post-merge rust and storybook jobs that failed", () => {
+		const issue = redMainIssue({
+			run: redRun,
+			jobs: [
+				job("rust-check", "skipped"),
+				job("rust", "failure"),
+				job("storybook", "timed_out"),
+				job("verify", "failure"),
+			],
+			pullRequests: [mergedBy],
+		})
+
+		expect(issue.title).toBe("Red main: rust, storybook at 8a7919a")
+	})
+
 	it("titles verify when it is the sole failed job", () => {
 		const issue = redMainIssue({
 			run: redRun,
