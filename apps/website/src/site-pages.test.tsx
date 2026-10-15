@@ -93,14 +93,68 @@ describe("the privacy page", () => {
 	})
 })
 
+const TERMS_HEADINGS = [
+	"Who provides the service",
+	"What the service is",
+	"Accounts and eligibility",
+	"The Pro plan and the beta",
+	"Acceptable use",
+	"Your content and the model provider",
+	"The open-source code",
+	"Availability and changes to the service",
+	"Termination",
+	"Warranties and limitation of liability",
+	"Governing law",
+	"Changes to these terms",
+	"Contact",
+]
+
+const FORBIDDEN_TERMS_TEXT = [
+	"[",
+	"]",
+	"todo",
+	"placeholder",
+	"lorem",
+	"being written",
+	"siren",
+	"848 046 132",
+]
+
+const mainText = () =>
+	(screen.getByRole("main").textContent ?? "").toLowerCase()
+
 describe("the terms page", () => {
-	it("renders its three sections in order", async () => {
+	it("is titled Terms of Use", async () => {
+		await openPage("/terms", "Terms of Use")
+	})
+
+	it("renders its thirteen sections in order", async () => {
 		await openPage("/terms", terms.title)
-		expect(sectionHeadings()).toEqual([
-			"The service",
-			"The Pro plan",
-			"Acceptable use",
-		])
+		expect(sectionHeadings()).toEqual(TERMS_HEADINGS)
+	})
+
+	it("dates the changes section", async () => {
+		await openPage("/terms", terms.title)
+		const changes = screen.getByRole("heading", {
+			name: "Changes to these terms",
+		}).parentElement as HTMLElement
+		expect(
+			within(changes).getByText("Last updated 15 October 2026."),
+		).toBeDefined()
+	})
+
+	it("renders support@kiroshi.app as a mailto link under Contact", async () => {
+		await openPage("/terms", terms.title)
+		const contact = screen.getByRole("heading", { name: "Contact" })
+			.parentElement as HTMLElement
+		expect(
+			within(contact).getByRole("link", { name: "support@kiroshi.app" }),
+		).toHaveProperty("href", "mailto:support@kiroshi.app")
+	})
+
+	it.each(FORBIDDEN_TERMS_TEXT)("renders no %s", async (forbidden) => {
+		await openPage("/terms", terms.title)
+		expect(mainText()).not.toContain(forbidden)
 	})
 })
 
