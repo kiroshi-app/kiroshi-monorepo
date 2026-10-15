@@ -70,14 +70,11 @@ const SectionBlockView = ({ block }: SectionBlockViewProps) => {
 const toBlocks = (body: PageSection["body"]) =>
 	typeof body === "string" ? [body] : body
 
-const blockKey = (block: SectionBlock) =>
-	typeof block === "string" ? block : block.join()
-
 const Section = ({ heading, body, children }: SectionProps) => (
 	<section className="flex flex-col gap-2 text-reading">
 		<h2 className="font-medium text-foreground">{heading}</h2>
 		{toBlocks(body).map((block) => (
-			<SectionBlockView block={block} key={blockKey(block)} />
+			<SectionBlockView block={block} key={String(block)} />
 		))}
 		{children}
 	</section>
