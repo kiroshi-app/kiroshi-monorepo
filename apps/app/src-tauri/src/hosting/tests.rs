@@ -1075,7 +1075,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		});
 		is_held.await.expect("the database lock is held");
 		let lookup = json!({ "conversationId": "c-lagged" });
-		for _ in 0..=BUFFERED_FRAMES + 1 {
+		for _ in 0..BUFFERED_FRAMES + 2 {
 			events::emit(
 				harness.app.handle(),
 				Event::untyped(MESSAGE_STORED_EVENT),
