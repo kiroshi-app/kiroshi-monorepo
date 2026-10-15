@@ -26,6 +26,19 @@ fn next_message_id() -> String {
 	format!("msg_fake_{}_{}", std::process::id(), TURN.fetch_add(1, Ordering::Relaxed))
 }
 
+#[cfg(unix)]
+fn signal_opening() {
+	let Ok(path) = std::env::var("FAKE_AGENT_OPENING_SOCKET") else {
+		return;
+	};
+	if let Err(error) = std::os::unix::net::UnixStream::connect(path) {
+		eprintln!("the fake did not signal its slow open: {error}");
+	}
+}
+
+#[cfg(not(unix))]
+fn signal_opening() {}
+
 fn spawn_orphan(pid_file: Option<&str>) {
 	let Ok(child) = std::process::Command::new("sleep")
 		.arg("60")
@@ -353,6 +366,7 @@ fn on_open(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 			return emit_closed(key, "the agent exited during startup");
 		}
 		"slow_open" => {
+			signal_opening();
 			std::thread::sleep(std::time::Duration::from_millis(600));
 		}
 		"early_init" => {

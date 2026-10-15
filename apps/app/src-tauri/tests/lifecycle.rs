@@ -92,6 +92,14 @@ fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
 	matches!(outcome, Err(TransportError::TransitionInProgress))
 }
 
+#[cfg(unix)]
+async fn opening_signalled(listener: &tokio::net::UnixListener) {
+	tokio::time::timeout(DEADLINE, listener.accept())
+		.await
+		.expect("the restart began opening its session in time")
+		.expect("the fake signalled its open");
+}
+
 async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
 	let deadline = tokio::time::Instant::now() + DEADLINE;
 	while !is_satisfied() {
@@ -209,18 +217,25 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _ = std::fs::remove_file(&pid_file);
 }
 
+#[cfg(unix)]
 #[test]
 fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	let _serial = serial();
+	let opening = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-opening-{}.sock", std::process::id())),
+	);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
 	std::env::set_var("FAKE_AGENT_SCENARIO", "slow_open");
+	std::env::set_var("FAKE_AGENT_OPENING_SOCKET", &*opening);
 
 	let app = app();
 	runtime().block_on(async {
 		start(&app).await.expect("the session the restart replaces starts");
+		let listener = tokio::net::UnixListener::bind(&*opening).expect("the opening socket binds");
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
+			opening_signalled(&listener).await;
 			terminate_session(app.state::<AgentState>().inner()).await;
 		});
 
@@ -238,6 +253,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
+	std::env::remove_var("FAKE_AGENT_OPENING_SOCKET");
 }
 
 #[test]
