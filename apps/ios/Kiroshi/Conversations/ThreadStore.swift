@@ -422,7 +422,7 @@ extension ThreadStore: ThreadModel {
         case .hostOffline:
             String(
                 localized:
-                    "Couldn’t send, the Mac hosting this Space is offline. Tap Send again once it’s back."
+                    "Couldn’t send, the computer hosting this Space is offline. Tap Send again once it’s back."
             )
         case .stillWorking:
             String(

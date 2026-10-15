@@ -226,7 +226,7 @@ extension MissionThreadStore: ThreadModel {
     var problem: String? {
         if !isOnline, hasLoaded {
             return String(
-                localized: "The host’s Mac is offline. You can send again once it’s back.")
+                localized: "The host’s computer is offline. You can send again once it’s back.")
         }
         return switch sendProblem {
         case .couldNotSend: String(localized: "Couldn’t send your answer. Send it again.")
@@ -236,7 +236,8 @@ extension MissionThreadStore: ThreadModel {
                     "Couldn’t send your files: they’re too large. Remove one and send again.")
         case .offline:
             String(
-                localized: "Couldn’t send: the host’s Mac is offline. Send again once it’s back.")
+                localized:
+                    "Couldn’t send: the host’s computer is offline. Send again once it’s back.")
         case nil: nil
         }
     }

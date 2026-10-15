@@ -45,7 +45,7 @@ struct WelcomeView: View {
                     .frame(width: 88, height: 80)
                     .accessibilityLabel("Kiroshi")
             }
-            Text("Your companions, away from your Mac.")
+            Text("Your companions, away from your computer.")
                 .font(.title.bold())
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 290)

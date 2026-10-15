@@ -127,7 +127,7 @@ final class MissionsAccessibilityTests: XCTestCase {
         let app = launch("5.4")
         XCTAssertTrue(
             app.staticTexts[
-                "Side project is offline. You can write again once sam@example.com’s Mac is back."
+                "Side project is offline. You can write again once sam@example.com’s computer is back."
             ].waitForExistence(timeout: 15))
         XCTAssertTrue(row("Split the onboarding flow", in: app).exists)
 

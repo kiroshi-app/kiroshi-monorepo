@@ -48,14 +48,14 @@ struct NewConversationSheet: View {
         if companions.isEmpty {
             ContentUnavailableView(
                 "No companions yet", systemImage: "person.2",
-                description: Text("Add one on your Mac. It shows up here."))
+                description: Text("Add one on your computer. It shows up here."))
         } else {
             List {
                 if creation == .failed {
                     Section {
                         Label {
                             Text(
-                                "Couldn’t create the conversation. Check that your Mac is on, then try again."
+                                "Couldn’t create the conversation. Check that the computer where Kiroshi runs is on, then try again."
                             )
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill")

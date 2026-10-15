@@ -28,7 +28,7 @@ struct MessageConsentSection: View {
                 .textCase(nil)
         } footer: {
             Text(
-                "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to the model provider your Mac uses. Turn this off and nothing leaves this iPhone until you agree again."
+                "Messages you send here go to your computer through Kiroshi’s relay. Your computer passes them to the agent, which sends them to the model provider your computer uses. Turn this off and nothing leaves this iPhone until you agree again."
             )
         }
     }

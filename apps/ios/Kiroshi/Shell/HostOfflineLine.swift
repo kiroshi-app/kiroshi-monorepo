@@ -22,9 +22,9 @@ struct HostOfflineLine: View {
     private var message: String {
         switch space.role {
         case .owner:
-            "\(space.name) is offline. You can write again once \(email)’s Mac is back."
+            "\(space.name) is offline. You can write again once \(email)’s computer is back."
         case .member:
-            "\(space.name) is offline. You can write again once the host’s Mac is back."
+            "\(space.name) is offline. You can write again once the host’s computer is back."
         }
     }
 }
