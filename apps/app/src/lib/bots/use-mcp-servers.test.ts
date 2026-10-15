@@ -55,7 +55,7 @@ const installAnnounced = () => {
 	const [, announce] =
 		vi.mocked(listen).mock.calls.find(([event]) => event === INSTALLED_EVENT) ??
 		[]
-	announce?.({ event: INSTALLED_EVENT, id: 1, payload: null })
+	announce?.({ event: INSTALLED_EVENT, id: 1, payload: null }, null)
 }
 
 describe("useMcpServers", () => {

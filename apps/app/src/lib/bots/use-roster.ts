@@ -52,19 +52,25 @@ const STORED_EVENTS = ["conversation://created", "conversation://updated"]
 const listenToRosterChanges = (controller: RosterController) =>
 	[
 		...STORED_EVENTS.map((event) =>
-			listen<ConversationStored>(event, ({ payload }) =>
-				controller.holdPageRow(payload.spaceId, payload.conversation),
+			listen<ConversationStored>(event, ({ payload }, hostId) =>
+				controller.holdPageRow(
+					{ hostId, spaceId: payload.spaceId },
+					payload.conversation,
+				),
 			),
 		),
-		listen<ConversationDeleted>("conversation://deleted", ({ payload }) => {
-			controller.forgetConversation(payload.conversationId)
-			controller.rereadSpaceSoon(payload.spaceId)
-		}),
+		listen<ConversationDeleted>(
+			"conversation://deleted",
+			({ payload }, hostId) => {
+				controller.forgetConversation(payload.conversationId)
+				controller.rereadSpaceSoon({ hostId, spaceId: payload.spaceId })
+			},
+		),
 		listen<CompanionUpdated>("companion://updated", ({ payload }) =>
 			controller.rereadSpacesOfBotSoon(payload.id),
 		),
-		listen<CompanionDeleted>("companion://deleted", ({ payload }) =>
-			controller.rereadSpaceSoon(payload.spaceId),
+		listen<CompanionDeleted>("companion://deleted", ({ payload }, hostId) =>
+			controller.rereadSpaceSoon({ hostId, spaceId: payload.spaceId }),
 		),
 	].map((listening) => listening.catch(reportUnheardEvent))
 

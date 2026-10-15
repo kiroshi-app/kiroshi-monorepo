@@ -71,6 +71,13 @@ export const createJoinedHosts = ({
 		return active ? hosts.get(active) : undefined
 	}
 
+	const { attachHost, detachHost, listen, listenToActiveHost } =
+		createJoinedHostsListen({
+			local,
+			hosts,
+			activeHostId: () => store.getState().active,
+			reportListenFailure,
+		})
 	const down = createJoinedHostsDown({
 		store,
 		hosts,
@@ -84,6 +91,7 @@ export const createJoinedHosts = ({
 		sharedSpaceIds,
 		down,
 		record,
+		attachHost,
 		join,
 		fetch,
 		openSocket,
@@ -99,12 +107,6 @@ export const createJoinedHosts = ({
 		invokeOnceOpen,
 		reportFailure,
 	})
-	const { relocateAll, listen, listenToActiveHost } = createJoinedHostsListen({
-		local,
-		activeHost,
-		reportListenFailure,
-	})
-
 	const activeSpaceId = (): string | null => {
 		const { active } = store.getState()
 		return active ? (sharedSpaceIds.get(active) ?? null) : null
@@ -116,7 +118,6 @@ export const createJoinedHosts = ({
 			return
 		}
 		store.setState({ ...store.getState(), active })
-		relocateAll()
 	}
 
 	const activate = async (
@@ -138,12 +139,11 @@ export const createJoinedHosts = ({
 		}
 		if (!host) {
 			setActive(previous)
-			return
 		}
-		relocateAll()
 	}
 
 	const forget = (id: string) => {
+		detachHost(id)
 		hosts.get(id)?.close()
 		hosts.delete(id)
 		sharedSpaceIds.delete(id)

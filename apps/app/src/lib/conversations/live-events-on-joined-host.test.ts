@@ -401,20 +401,15 @@ describe("a solo conversation fed by every writer", () => {
 		detach()
 	})
 
-	it("takes the events from the joined host and not from local Tauri while a joined space is active", async () => {
+	it("takes the events from the joined host while a joined space is active", async () => {
 		const { store, controller, detach, conversationId } = await openSoloChat()
 		await joinHost()
-		const local = await writtenElsewhere(store, conversationId, "Local echo")
+		const stored = await writtenElsewhere(store, conversationId, "Host echo")
 
-		await emitLocally("conversation://message-stored", local)
+		await emitOnHost("conversation://message-stored", stored)
 		await settled()
 
-		expect(contentsOf(controller.getState())).not.toContain("Local echo")
-
-		await emitOnHost("conversation://message-stored", local)
-		await settled()
-
-		expect(contentsOf(controller.getState())).toContain("Local echo")
+		expect(contentsOf(controller.getState())).toContain("Host echo")
 
 		const scope = foreignScope(conversationId)
 		const turn = storedTurn(conversationId)
@@ -680,15 +675,11 @@ describe("the roster and the conversation list fed by every writer", () => {
 	)
 
 	it.each(REREADS)(
-		"reads the roster again on %s from the joined host only while a joined space is active",
+		"reads the roster of the joined space again on %s from the joined host",
 		async (event, payload) => {
-			const { reads } = await mountedRoster()
+			const { reads } = await mountedRoster(HOSTED_ROSTER)
 			await joinHost()
 			await settled()
-
-			await emitLocally(event, payload)
-			await settled()
-			expect(reads).not.toHaveBeenCalled()
 
 			await emitOnHost(event, payload)
 			await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
@@ -696,9 +687,10 @@ describe("the roster and the conversation list fed by every writer", () => {
 	)
 
 	it.each(PATCHES)(
-		"writes %s from the joined host only into the roster while a joined space is active",
+		"writes %s from the joined host only into the roster of the joined space",
 		async (event) => {
-			const { store, reads, writeConversation, titles } = await mountedRoster()
+			const { store, reads, writeConversation, titles } =
+				await mountedRoster(HOSTED_ROSTER)
 			await joinHost()
 			await settled()
 			await writeConversation("Written elsewhere")
@@ -710,6 +702,25 @@ describe("the roster and the conversation list fed by every writer", () => {
 			expect(titles()).not.toContain("Written elsewhere")
 
 			await emitOnHost(event, stored)
+			await vi.waitFor(() => expect(titles()).toContain("Written elsewhere"))
+			expect(reads).not.toHaveBeenCalled()
+		},
+	)
+
+	it.each(PATCHES)(
+		"writes %s from a joined host that is not the active one into its roster",
+		async (event) => {
+			const { store, reads, writeConversation, titles } =
+				await mountedRoster(HOSTED_ROSTER)
+			await act(() => joinedHosts.connect(JOINED))
+			await openLastSocket()
+			await writeConversation("Written elsewhere")
+			const stored = await storedRowTitled(store, "Written elsewhere")
+			reads.mockClear()
+
+			await emitOnHost(event, stored)
+
+			expect(joinedHosts.getState().active).toBeNull()
 			await vi.waitFor(() => expect(titles()).toContain("Written elsewhere"))
 			expect(reads).not.toHaveBeenCalled()
 		},

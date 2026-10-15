@@ -39,7 +39,7 @@ it("invalidates the given keys when the host event fires, and stops on unmount",
 		{ wrapper },
 	)
 	const [event, handler] = vi.mocked(listen).mock.calls[0]
-	handler({ event, id: 1, payload: null })
+	handler({ event, id: 1, payload: null }, null)
 
 	expect(event).toBe("bots://changed")
 	await vi.waitFor(() => {

@@ -15,7 +15,7 @@ import { createFakeTranscriptStore } from "../conversations/fake-transcript-stor
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
-type HostHandler = (event: { payload: unknown }) => void
+type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
 
 const host = vi.hoisted(() => ({ handlers: new Map<string, HostHandler>() }))
 
@@ -179,9 +179,12 @@ it("moves a conversation updated by a sent message to the top with no read per r
 	counted.resetCounts()
 
 	await act(async () => {
-		host.handlers.get("conversation://updated")?.({
-			payload: { spaceId: LOCAL.spaceId, conversation: oldest },
-		})
+		host.handlers.get("conversation://updated")?.(
+			{
+				payload: { spaceId: LOCAL.spaceId, conversation: oldest },
+			},
+			null,
+		)
 	})
 	await settle()
 

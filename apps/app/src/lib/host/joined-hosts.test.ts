@@ -101,6 +101,14 @@ const joinedHostsOf = ({ join, answer = answerJoined }: Seed = {}) => {
 	}
 }
 
+const emitLocally = (
+	local: ReturnType<typeof joinedHostsOf>["local"],
+	payload: unknown,
+) => {
+	const [event, handler] = local.listen.mock.calls[0] ?? []
+	handler?.({ event: event ?? "", id: 0, payload } as never)
+}
+
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const HOST_ONLY_REFUSAL = "this command belongs to the host"
@@ -333,10 +341,11 @@ describe("the onboarding account step on a joined space", () => {
 		const started = vi.fn()
 
 		await hosts.listen("agent://sign-in-started", started)
+		emitLocally(local, { id: "s1" })
 
-		expect(local.listen).toHaveBeenCalledWith(
-			"agent://sign-in-started",
-			started,
+		expect(started).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({ payload: { id: "s1" } }),
+			null,
 		)
 	})
 })
@@ -615,60 +624,94 @@ describe("the active host", () => {
 })
 
 describe("listening across hosts", () => {
-	it("moves a subscription to the joined host and releases the local one", async () => {
-		const { hosts, local, localUnlisten, sockets } = joinedHostsOf()
+	it("attaches a subscription made before the host was known once its connection opens", async () => {
+		const { hosts, sockets } = joinedHostsOf()
 		const missions = vi.fn()
 		await hosts.listen("mission://changed", missions)
-		expect(local.listen).toHaveBeenCalledWith("mission://changed", missions)
 
-		await hosts.activate("garage")
-		await settle()
+		await hosts.connect("garage")
 		sockets[0]?.send({ event: "mission://changed", payload: { id: "m1" } })
 
-		expect(localUnlisten).toHaveBeenCalledOnce()
-		expect(missions).toHaveBeenCalledWith(
+		expect(missions).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ payload: { id: "m1" } }),
+			"garage",
 		)
 	})
 
-	it("moves a subscription back to the local host and releases the joined one", async () => {
+	it("hears the local host and every joined host whichever space is active", async () => {
 		const { hosts, local, sockets } = joinedHostsOf()
 		const missions = vi.fn()
+		await hosts.connect("shed")
 		await hosts.activate("garage")
 		await hosts.listen("mission://changed", missions)
-		expect(local.listen).not.toHaveBeenCalled()
 
+		sockets[0]?.send({ event: "mission://changed", payload: { id: "m1" } })
+		sockets[1]?.send({ event: "mission://changed", payload: { id: "m2" } })
+		emitLocally(local, { id: "m3" })
+
+		expect(
+			missions.mock.calls.map(([{ payload }, hostId]) => [payload.id, hostId]),
+		).toEqual([
+			["m1", "shed"],
+			["m2", "garage"],
+			["m3", null],
+		])
+	})
+
+	it("neither unlistens nor relistens when the active space changes", async () => {
+		const { hosts, local, localUnlisten, sockets } = joinedHostsOf()
+		const missions = vi.fn()
+		await hosts.connect("garage")
+		await hosts.listen("mission://changed", missions)
+
+		await hosts.activate("garage")
 		await hosts.activate(null)
 		await settle()
 		sockets[0]?.send({ event: "mission://changed", payload: {} })
 
-		expect(missions).not.toHaveBeenCalled()
-		expect(local.listen).toHaveBeenCalledWith("mission://changed", missions)
-	})
-
-	it("keeps a local event on the local host", async () => {
-		const { hosts, local, localUnlisten } = joinedHostsOf()
-		await hosts.activate("garage")
-
-		await hosts.listen("window-maximize-button", vi.fn())
-		await hosts.activate(null)
-		await settle()
-
 		expect(local.listen).toHaveBeenCalledOnce()
 		expect(localUnlisten).not.toHaveBeenCalled()
+		expect(missions).toHaveBeenCalledOnce()
 	})
 
-	it("stops moving a subscription once it is released", async () => {
-		const { hosts, local, localUnlisten } = joinedHostsOf()
-		const unlisten = await hosts.listen("mission://changed", vi.fn())
+	it("stops every subscription on a forgotten host", async () => {
+		const { hosts, sockets } = joinedHostsOf()
+		const missions = vi.fn()
+		await hosts.connect("garage")
+		await hosts.listen("mission://changed", missions)
+
+		hosts.forget("garage")
+		await settle()
+		sockets[0]?.send({ event: "mission://changed", payload: {} })
+
+		expect(missions).not.toHaveBeenCalled()
+	})
+
+	it("stops the event on every host once released, including a host joined afterwards", async () => {
+		const { hosts, localUnlisten, sockets } = joinedHostsOf()
+		const missions = vi.fn()
+		await hosts.connect("garage")
+		const unlisten = await hosts.listen("mission://changed", missions)
 
 		unlisten()
-		await settle()
-		await hosts.activate("garage")
-		await settle()
+		sockets[0]?.send({ event: "mission://changed", payload: {} })
+		await hosts.connect("shed")
+		sockets[1]?.send({ event: "mission://changed", payload: {} })
 
 		expect(localUnlisten).toHaveBeenCalledOnce()
+		expect(missions).not.toHaveBeenCalled()
+	})
+
+	it("hears a local event from the local host only", async () => {
+		const { hosts, local, sockets } = joinedHostsOf()
+		const maximized = vi.fn()
+		await hosts.activate("garage")
+
+		await hosts.listen("window-maximize-button", maximized)
+		sockets[0]?.send({ event: "window-maximize-button", payload: {} })
+
 		expect(local.listen).toHaveBeenCalledOnce()
+		expect(maximized).not.toHaveBeenCalled()
 	})
 })
 
@@ -693,6 +736,7 @@ describe("listening to the active host only", () => {
 		expect(local.listen).not.toHaveBeenCalled()
 		expect(fromHost).toHaveBeenCalledExactlyOnceWith(
 			expect.objectContaining({ payload: { id: "b9" } }),
+			"garage",
 		)
 	})
 
@@ -704,6 +748,18 @@ describe("listening to the active host only", () => {
 
 		await hosts.activate(null)
 		await settle()
+		sockets[0]?.send({ event: "companion://created", payload: { id: "b9" } })
+
+		expect(fromHost).not.toHaveBeenCalled()
+	})
+
+	it("ignores a joined host that is not active", async () => {
+		const { hosts, sockets } = joinedHostsOf()
+		const fromHost = vi.fn()
+		await hosts.connect("shed")
+		await hosts.activate("garage")
+		await hosts.listenToActiveHost("companion://created", fromHost)
+
 		sockets[0]?.send({ event: "companion://created", payload: { id: "b9" } })
 
 		expect(fromHost).not.toHaveBeenCalled()

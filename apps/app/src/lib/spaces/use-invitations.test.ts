@@ -79,7 +79,7 @@ const changeAnnounced = () => {
 		vi
 			.mocked(listen)
 			.mock.calls.find(([event]) => event === INVITATION_CHANGED_EVENT) ?? []
-	announce?.({ event: INVITATION_CHANGED_EVENT, id: 1, payload: null })
+	announce?.({ event: INVITATION_CHANGED_EVENT, id: 1, payload: null }, null)
 }
 
 const gearFor = async (listed: Invitation[] = [STUDIO]) => {

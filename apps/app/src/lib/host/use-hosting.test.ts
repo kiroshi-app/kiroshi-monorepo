@@ -115,7 +115,7 @@ beforeEach(() => {
 	})
 	vi.mocked(listen).mockImplementation(async (event, handler) => {
 		if (event === HOSTING_CHANGED_EVENT) {
-			changes.announce = () => handler({ event, id: 1, payload: null })
+			changes.announce = () => handler({ event, id: 1, payload: null }, null)
 		}
 		return unlisten
 	})
