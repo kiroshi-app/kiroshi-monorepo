@@ -72,17 +72,14 @@ export const useRosterLists = ({
 		}),
 	)
 
-	const conversationIds = useMemo(
-		() =>
-			Object.values(conversationRosters)
-				.flat()
-				.map((conversation) => conversation.id),
+	const rosteredConversations = useMemo(
+		() => Object.values(conversationRosters).flat(),
 		[conversationRosters],
 	)
 
 	const conversationWorkers = useConversationWorkers(
 		conversationRuntimes,
-		conversationIds,
+		rosteredConversations,
 	)
 
 	const rosterConversations = useSharedStructure(

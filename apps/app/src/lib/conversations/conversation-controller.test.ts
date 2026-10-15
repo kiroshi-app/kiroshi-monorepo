@@ -911,7 +911,7 @@ describe("createConversationController", () => {
 		const stopped = harness.controller
 			.getState()
 			.speakers.find(({ botId }) => botId === iris)
-		await stopped?.stop()
+		await stopped?.stop?.()
 		harness.driver.pushTo(iris, [
 			{ type: "turnEnded", ended: { sessionId: null, outcome: "cancelled" } },
 		])
@@ -1992,7 +1992,7 @@ describe("a failure reaching a speaker", () => {
 	it("keeps the stop of a speaker kept alive in reach", async () => {
 		await failWith(SERVER_ENV_REJECTED)
 
-		harness.controller.getState().speakers[0].stop()
+		harness.controller.getState().speakers[0].stop?.()
 		await harness.settled()
 
 		expect(harness.driver.cancelled).toEqual([ada])

@@ -22,7 +22,11 @@ type HeldRuntime = {
 
 export type ConversationRuntimesOptions = Pick<
 	ConversationControllerOptions,
-	"onNamed" | "readReportedRuns" | "onCompanionArrived" | "senderAccountId"
+	| "onNamed"
+	| "readReportedRuns"
+	| "onCompanionArrived"
+	| "onForeignSpeakerSilent"
+	| "senderAccountId"
 >
 
 export const createConversationRuntimes = (

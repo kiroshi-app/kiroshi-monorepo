@@ -47,6 +47,7 @@ export const useWorkspaceCore = () => {
 		() =>
 			createConversationRuntimes(driver, store, {
 				onNamed: roster.controller.nameConversation,
+				onForeignSpeakerSilent: roster.controller.rereadConversationRow,
 				senderAccountId,
 			}),
 		[driver, store, roster.controller, senderAccountId],

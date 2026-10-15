@@ -10,7 +10,12 @@ import type { RosterBot } from "@workspace/ui/components/roster"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type MentionBot, toMentionNames } from "./mentions"
-import type { Bot, Conversation, Participant } from "./store-contract"
+import type {
+	Bot,
+	Conversation,
+	ConversationInPage,
+	Participant,
+} from "./store-contract"
 import type { ConversationPreviews, LastWord } from "./transcript-state"
 
 import { avatarSrc } from "../host"
@@ -24,6 +29,14 @@ export type ConversationWorker = {
 }
 
 const NO_WORKERS: ConversationWorker[] = []
+
+export type StoredConversation = Conversation &
+	Partial<Pick<ConversationInPage, "activeTurn">>
+
+export const storedSpeakerIdsOf = ({
+	activeTurn,
+}: StoredConversation): string[] | undefined =>
+	activeTurn === undefined ? undefined : (activeTurn?.botIds ?? [])
 
 const toBotRow = (id: string, face: BotFace): AppSidebarBot => ({
 	id,

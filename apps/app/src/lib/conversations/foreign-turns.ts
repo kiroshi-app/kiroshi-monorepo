@@ -59,7 +59,11 @@ export type ForeignTurns = {
 	scopeAsking: (id: string) => RuntimeScope | null
 	questionAsking: (id: string) => ForeignQuestion | null
 	release: (scope: RuntimeScope, id: string) => void
+	keepOnly: (conversationId: string, openBotIds: string[]) => void
+	dispose: () => void
 }
+
+export const FOREIGN_SPEAKER_SILENCE_MS = 60_000
 
 const keyOf = ({ runtimeSessionId, epoch }: RuntimeScope) =>
 	`${runtimeSessionId}:${epoch}`
@@ -67,10 +71,22 @@ const keyOf = ({ runtimeSessionId, epoch }: RuntimeScope) =>
 export const createForeignTurns = (
 	transcript: ForeignTranscript,
 	now: () => number,
+	onSilent?: (scope: RuntimeScope) => void,
 ): ForeignTurns => {
 	const claimed = new Set<string>()
 	const resolved = new Set<string>()
 	const turns = new Map<string, ForeignTurn>()
+	const silences = new Map<string, ReturnType<typeof setTimeout>>()
+
+	const hush = (key: string) => {
+		clearTimeout(silences.get(key))
+		silences.delete(key)
+	}
+
+	const forget = (key: string) => {
+		hush(key)
+		turns.delete(key)
+	}
 
 	const turnAt = (scope: RuntimeScope, turnId: string): ForeignTurn => {
 		const key = keyOf(scope)
@@ -184,6 +200,32 @@ export const createForeignTurns = (
 		turn.speaker = null
 	}
 
+	const expire = (turn: ForeignTurn) => {
+		silences.delete(keyOf(turn.scope))
+		closeSpeaker(turn)
+		onSilent?.(turn.scope)
+	}
+
+	const isAwaitingAnswer = ({ permission, question }: ForeignSpeaker) =>
+		permission !== null || question !== null
+
+	const watchSilence = (turn: ForeignTurn) => {
+		const key = keyOf(turn.scope)
+		hush(key)
+		if (
+			!onSilent ||
+			!turns.has(key) ||
+			!turn.speaker ||
+			isAwaitingAnswer(turn.speaker)
+		) {
+			return
+		}
+		silences.set(
+			key,
+			setTimeout(() => expire(turn), FOREIGN_SPEAKER_SILENCE_MS),
+		)
+	}
+
 	const open = (turn: ForeignTurn, message: ChatMessage) => {
 		const { scope } = turn
 		turn.held.delete(message.id)
@@ -257,7 +299,7 @@ export const createForeignTurns = (
 		for (const id of [...turn.streamed.keys()]) {
 			settle(turn, id, completion)
 		}
-		turns.delete(keyOf(turn.scope))
+		forget(keyOf(turn.scope))
 	}
 
 	const apply = (turn: ForeignTurn, event: AgentEvent) => {
@@ -290,12 +332,15 @@ export const createForeignTurns = (
 	return {
 		claim: (scope) => {
 			claimed.add(keyOf(scope))
-			turns.delete(keyOf(scope))
+			forget(keyOf(scope))
 		},
 		render: (scope, { turnId }, event) => {
-			if (!claimed.has(keyOf(scope))) {
-				apply(turnAt(scope, turnId), event)
+			if (claimed.has(keyOf(scope))) {
+				return
 			}
+			const turn = turnAt(scope, turnId)
+			apply(turn, event)
+			watchSilence(turn)
 		},
 		speakersIn: (conversationId) =>
 			[...turns.values()].flatMap(({ scope, speaker }) =>
@@ -319,6 +364,22 @@ export const createForeignTurns = (
 			const turn = turns.get(keyOf(scope))
 			if (turn) {
 				releasePrompt(turn, id)
+				watchSilence(turn)
+			}
+		},
+		keepOnly: (conversationId, openBotIds) => {
+			for (const [key, { scope }] of turns) {
+				if (
+					scope.conversationId === conversationId &&
+					!openBotIds.includes(scope.botId)
+				) {
+					forget(key)
+				}
+			}
+		},
+		dispose: () => {
+			for (const key of [...silences.keys()]) {
+				hush(key)
 			}
 		},
 	}

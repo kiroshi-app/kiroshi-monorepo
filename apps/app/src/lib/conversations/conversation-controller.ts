@@ -10,7 +10,13 @@ import {
 import { createForeignTurns, type ForeignSpeaker } from "./foreign-turns"
 import { addresseesIn, toMentionTokens } from "./mentions"
 import { readConversation } from "./read-conversation"
-import { isNameless, leadOf, presentParticipants } from "./roster-conversations"
+import {
+	isNameless,
+	leadOf,
+	presentParticipants,
+	type StoredConversation,
+	storedSpeakerIdsOf,
+} from "./roster-conversations"
 import type { Conversation, MessagePin, NewUserMessage } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
@@ -109,7 +115,8 @@ export type SpeakingBot = {
 	botId: string
 	work: WorkingState
 	hasPublished: boolean
-	stop: () => Promise<void>
+	isForeign: boolean
+	stop: (() => Promise<void>) | null
 }
 
 export type ConversationState = {
@@ -134,7 +141,7 @@ export type ConversationController = {
 	getState: () => ConversationState
 	subscribe: (listener: () => void) => () => void
 	attach: () => () => void
-	open: (conversation: Conversation) => Promise<void>
+	open: (conversation: StoredConversation) => Promise<void>
 	loadOlder: () => Promise<void>
 	loadNewer: () => Promise<void>
 	loadLatest: () => Promise<boolean>
@@ -169,6 +176,7 @@ export type ConversationControllerOptions = {
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
 	onReconnected?: ReconnectionListener
+	onForeignSpeakerSilent?: (conversationId: string) => void
 	senderAccountId?: () => string | null
 }
 
@@ -234,6 +242,8 @@ const isSameSpeakers = (left: SpeakingBot[], right: SpeakingBot[]) =>
 		(speaking, rank) =>
 			speaking.botId === right[rank].botId &&
 			speaking.hasPublished === right[rank].hasPublished &&
+			speaking.isForeign === right[rank].isForeign &&
+			(speaking.stop === null) === (right[rank].stop === null) &&
 			isSameWork(speaking.work, right[rank].work),
 	)
 
@@ -304,12 +314,16 @@ export const createConversationController = (
 		options.onMessageStored ?? createMessageStoredListener()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
 	const transcript = createTranscriptController(store)
-	const foreignTurns = createForeignTurns(transcript, now)
+	const hearSilence = ({ conversationId }: RuntimeScope) => {
+		sync()
+		options.onForeignSpeakerSilent?.(conversationId)
+	}
+	const foreignTurns = createForeignTurns(transcript, now, hearSilence)
 	const enqueue = createQueue()
 
 	const stateStore = createStore(initialState)
 	const current = stateStore.getState
-	let conversation: Conversation | null = null
+	let conversation: StoredConversation | null = null
 	let queue: TurnQueue = emptyQueue
 	let activeTurn: OpenTurn | null = null
 	const speakers = new Map<string, Speaker>()
@@ -325,6 +339,7 @@ export const createConversationController = (
 	let stopArrivals: Promise<() => void> | null = null
 	let stopStoredMessages: Promise<() => void> | null = null
 	let stopReconnections: (() => void) | null = null
+	let shouldRebuildForeignTurns = false
 
 	const settle = (next: ConversationState) => {
 		if (isSameState(current(), next)) {
@@ -391,24 +406,61 @@ export const createConversationController = (
 				botId: held.botId,
 				work: speakerWork(held, hasPublished),
 				hasPublished,
+				isForeign: false,
 				stop: () => stopSpeaker(held.botId),
 			}
 		})
 
-	const foreignSpeakingBot = (speaker: ForeignSpeaker): SpeakingBot => ({
+	const foreignSpeakingBot = (
+		speaker: ForeignSpeaker,
+		startedAt = speaker.startedAt,
+	): SpeakingBot => ({
 		botId: speaker.scope.botId,
 		work: {
 			...workingFor(speaker.activities, speaker.hasWritten),
-			startedAt: speaker.startedAt,
+			startedAt,
 		},
 		hasPublished: speaker.hasWritten,
+		isForeign: true,
 		stop: () => stopForeignTurn(speaker.scope),
 	})
 
-	const foreignSpeakingBots = (): SpeakingBot[] =>
-		conversation
-			? foreignTurns.speakersIn(conversation.id).map(foreignSpeakingBot)
-			: []
+	const unheardSpeakingBot = (
+		botId: string,
+		startedAt: number | undefined,
+	): SpeakingBot => ({
+		botId,
+		work: { ...workingFor([], false), startedAt },
+		hasPublished: false,
+		isForeign: true,
+		stop: null,
+	})
+
+	const storedSpeakingBots = (
+		shown: StoredConversation,
+		storedIds: string[],
+	): SpeakingBot[] => {
+		const heard = foreignTurns.speakersIn(shown.id)
+		const startedAt = shown.activeTurn?.startedAt
+		return storedIds.map((botId) => {
+			const speaker = heard.find(({ scope }) => scope.botId === botId)
+			return speaker
+				? foreignSpeakingBot(speaker, startedAt)
+				: unheardSpeakingBot(botId, startedAt)
+		})
+	}
+
+	const foreignSpeakingBots = (): SpeakingBot[] => {
+		if (!conversation) {
+			return []
+		}
+		const storedIds = storedSpeakerIdsOf(conversation)
+		return storedIds
+			? storedSpeakingBots(conversation, storedIds)
+			: foreignTurns
+					.speakersIn(conversation.id)
+					.map((speaker) => foreignSpeakingBot(speaker))
+	}
 
 	const speakingBots = (): SpeakingBot[] => {
 		const foreign = new Map(
@@ -891,13 +943,28 @@ export const createConversationController = (
 		stopStoredMessages = null
 		stopReconnections?.()
 		stopReconnections = null
+		foreignTurns.dispose()
+	}
+
+	const catchUpAfterReconnection = () => {
+		shouldRebuildForeignTurns = true
+		void reloadOpenPage()
+	}
+
+	const rebuildForeignTurns = (shown: StoredConversation) => {
+		const storedIds = storedSpeakerIdsOf(shown)
+		if (!shouldRebuildForeignTurns || !storedIds) {
+			return
+		}
+		shouldRebuildForeignTurns = false
+		foreignTurns.keepOnly(shown.id, storedIds)
 	}
 
 	const connect = () => {
 		disconnect()
 		stopArrivals = onCompanionArrived(announce)
 		stopStoredMessages = onMessageStored(reloadStoredPage)
-		stopReconnections = onReconnected(() => void reloadOpenPage())
+		stopReconnections = onReconnected(catchUpAfterReconnection)
 		detach = driver.subscribe((scoped) => route(scoped))
 		return detach
 	}
@@ -1475,9 +1542,10 @@ export const createConversationController = (
 		sync()
 	}
 
-	const open = async (next: Conversation) => {
+	const open = async (next: StoredConversation) => {
 		const isSameConversation = conversation?.id === next.id
 		conversation = next
+		rebuildForeignTurns(next)
 		if (isSameConversation) {
 			sync()
 			await readBack(next.id)
