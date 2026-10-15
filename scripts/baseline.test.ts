@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 
 import {
 	assertRedSuitesAreAttributed,
+	changedTestFiles,
 	compareItems,
 	compareStories,
 	mergeVerdicts,
@@ -193,5 +194,39 @@ describe("story ids read from the storybook index", () => {
 		})
 
 		expect(ids).toEqual(["chat--played"])
+	})
+})
+
+describe("unit test files changed since origin/main", () => {
+	it("keeps the test files under the source folder of the workspace", () => {
+		expect(
+			changedTestFiles({
+				root: "apps/app",
+				paths: [
+					"apps/app/src/lib/chat/rotation.test.ts",
+					"apps/app/src/lib/chat/rotation.ts",
+					"apps/app/vitest.config.ts",
+					"apps/app/sidecar/src/contracts.test.ts",
+					"packages/ui/src/hooks/use-skeleton-timing.test.tsx",
+				],
+			}),
+		).toEqual(["apps/app/src/lib/chat/rotation.test.ts"])
+	})
+
+	it("keeps the tsx test files of packages/ui", () => {
+		expect(
+			changedTestFiles({
+				root: "packages/ui",
+				paths: ["packages/ui/src/hooks/use-skeleton-timing.test.tsx"],
+			}),
+		).toEqual(["packages/ui/src/hooks/use-skeleton-timing.test.tsx"])
+	})
+
+	it.each([
+		["apps/website", ["apps/website/src/pages/index.test.ts"]],
+		[".github", [".github/workflows/ci.yml"]],
+	])("finds none on a branch that changes only %s", (_, paths) => {
+		expect(changedTestFiles({ root: "apps/app", paths })).toEqual([])
+		expect(changedTestFiles({ root: "packages/ui", paths })).toEqual([])
 	})
 })

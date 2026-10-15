@@ -9,6 +9,8 @@ import { tmpdir } from "node:os"
 import { join, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { pathsChangedSinceMain } from "./ci"
+
 export const STORIES = "stories"
 
 export type Verdict = { failures: string[]; warnings: string[] }
@@ -115,22 +117,39 @@ type VitestSuite = {
 	project?: string
 }
 
+type UnitSuite = VitestSuite & { root: string }
+
 const APP_SUITE: VitestSuite = {
 	name: "app",
 	filter: "app",
 	script: "test:unit",
 }
 
+const UI_SUITE: VitestSuite = {
+	name: "ui",
+	filter: "@workspace/ui",
+	script: "test",
+}
+
 const VITEST_SUITES: VitestSuite[] = [
 	APP_SUITE,
-	{ name: "ui", filter: "@workspace/ui", script: "test" },
+	UI_SUITE,
 	{ name: "website", filter: "website", script: "test" },
 ]
 
-const UNIT_SUITES: VitestSuite[] = [
-	APP_SUITE,
-	{ name: "ui", filter: "@workspace/ui", script: "test", project: "unit" },
+const UNIT_SUITES: UnitSuite[] = [
+	{ ...APP_SUITE, project: "unit", root: "apps/app" },
+	{ ...UI_SUITE, project: "unit", root: "packages/ui" },
 ]
+
+const TEST_FILE = /\.test\.tsx?$/
+
+type ChangedPaths = { paths: string[]; root: string }
+
+export const changedTestFiles = ({ paths, root }: ChangedPaths) =>
+	paths.filter(
+		(path) => path.startsWith(`${root}/src/`) && TEST_FILE.test(path),
+	)
 
 type Run = { command: string[]; cwd: string }
 
@@ -165,9 +184,9 @@ const readReport = ({ path, label }: ReportFile) => {
 const repoPath = (path: string, from: string) =>
 	relative(REPO, resolve(from, path))
 
-type SuiteRun = { suite: VitestSuite; into: string }
+type SuiteRun = { suite: VitestSuite; into: string; files?: string[] }
 
-const vitestReport = ({ suite, into }: SuiteRun) => {
+const vitestReport = ({ suite, into, files = [] }: SuiteRun) => {
 	const path = join(into, `${suite.name}.json`)
 	const label = `the ${suite.name} vitest suite`
 	const exitCode = runInherited({
@@ -178,6 +197,8 @@ const vitestReport = ({ suite, into }: SuiteRun) => {
 			suite.script,
 			"--",
 			...(suite.project ? [`--project=${suite.project}`] : []),
+			...files.map((file) => join(REPO, file)),
+			...(files.length > 0 ? ["--passWithNoTests"] : []),
 			"--reporter=default",
 			"--reporter=json",
 			`--outputFile.json=${path}`,
@@ -185,7 +206,8 @@ const vitestReport = ({ suite, into }: SuiteRun) => {
 		cwd: REPO,
 	})
 	const report = JSON.parse(readReport({ path, label })) as VitestReport
-	if (!Array.isArray(report.testResults) || report.testResults.length === 0) {
+	if (!Array.isArray(report.testResults)) throw unreadable(label)
+	if (report.testResults.length === 0 && files.length === 0) {
 		throw unreadable(label)
 	}
 	return { report, red: exitCode !== 0 || report.success === false }
@@ -443,12 +465,40 @@ const collectUnit = (): Live => {
 	}
 }
 
+const existingChangedPaths = () =>
+	pathsChangedSinceMain().filter((path) => existsSync(join(REPO, path)))
+
+type ChangedRun = { suite: UnitSuite; paths: string[]; into: string }
+
+const runChangedTests = ({ suite, paths, into }: ChangedRun) => {
+	const files = changedTestFiles({ paths, root: suite.root })
+	console.log(
+		`baseline  ${suite.name} unit test files changed since origin/main: ${files.join(", ") || "none"}`,
+	)
+	if (files.length === 0) return []
+	return [{ suite, ...vitestReport({ suite, into, files }) }]
+}
+
+const collectChanged = (): Live => {
+	const into = newReportFolder()
+	const paths = existingChangedPaths()
+	const ran = UNIT_SUITES.flatMap((suite) =>
+		runChangedTests({ suite, paths, into }),
+	)
+	return { tests: attributedFailures(ran.map(outcomeOf)) }
+}
+
 const collectLint = (): Live => ({
 	biome: biomeItems(),
 	knip: knipItems(),
 })
 
-const SCOPES = { vitest: collectVitest, lint: collectLint, unit: collectUnit }
+const SCOPES = {
+	vitest: collectVitest,
+	lint: collectLint,
+	unit: collectUnit,
+	changed: collectChanged,
+}
 
 type Scope = keyof typeof SCOPES
 
@@ -468,11 +518,18 @@ const requestedScopes = (argv: string[]): Scope[] => {
 	return chosen.length === 0 ? FULL_SCOPES : chosen
 }
 
-const assertUnitScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
-	if (!scopes.includes("unit")) return
-	if (scopes.includes("vitest") || argv.includes("--prune")) {
+const SUBSET_SCOPES: Scope[] = ["unit", "changed"]
+
+const assertSubsetScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
+	const subsets = scopes.filter((scope) => SUBSET_SCOPES.includes(scope))
+	if (subsets.length === 0) return
+	if (
+		subsets.length > 1 ||
+		scopes.includes("vitest") ||
+		argv.includes("--prune")
+	) {
 		throw new Error(
-			"the unit scope reads a subset of the vitest scope: run it without vitest and without --prune",
+			`the ${subsets.join(" and ")} scope reads a subset of the vitest scope: run it alone, without vitest and without --prune`,
 		)
 	}
 }
@@ -523,7 +580,7 @@ const collect = (scopes: Scope[]): Live => {
 
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
-	assertUnitScopeChecksAlone(scopes, argv)
+	assertSubsetScopeChecksAlone(scopes, argv)
 	const live = collect(scopes)
 	if (argv.includes("--prune")) return prune(live)
 	if (argv.includes("--update")) return update(live)

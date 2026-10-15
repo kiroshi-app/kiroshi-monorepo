@@ -101,23 +101,36 @@ export type Group = keyof typeof GATE
 
 export const GROUP_ORDER: Group[] = ["lint", "rust", "vitest", "website", "ios"]
 
+// ci:fast is the pre-push check and must stay green and under 120 s with a
+// dozen agents loading the machine, which the full unit set cannot do. It
+// runs the format, Biome and knip against the baseline, the types, and only
+// the apps/app and packages/ui unit test files changed since origin/main,
+// never a file of the apps/app perf project. bun run ci and the CI vitest
+// job keep the rest: the full unit set, the perf set, the story ids, the
+// stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
 	"Biome and knip against the baseline",
 	"Types",
-	"Unit tests and story ids against the baseline",
 ]
+
+export const CHANGED_UNIT_TESTS: Step = {
+	name: "Unit tests changed since origin/main against the baseline",
+	command: "bun run baseline changed",
+}
 
 export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat .xcode-version)" | grep -m1 -E '^ +iPhone 17 \\(' | grep -oE '[0-9A-F-]{36}'`
 
 const gateSteps = (): Step[] => GROUP_ORDER.flatMap((group) => GATE[group])
 
-export const fastSteps = (): Step[] =>
-	FAST_STEP_NAMES.map((name) => {
+export const fastSteps = (): Step[] => [
+	...FAST_STEP_NAMES.map((name) => {
 		const step = gateSteps().find((candidate) => candidate.name === name)
 		if (!step) throw new Error(`ci:fast names "${name}", not a gate step`)
 		return step
-	})
+	}),
+	CHANGED_UNIT_TESTS,
+]
 
 const isGroup = (name: string): name is Group => name in GATE
 
@@ -136,7 +149,7 @@ const captured = ({ command, operation }: Captured) => {
 	return finished.stdout.toString().trim()
 }
 
-const pathsChangedSinceMain = () => {
+export const pathsChangedSinceMain = () => {
 	const base = captured({
 		command: ["git", "merge-base", "HEAD", "origin/main"],
 		operation: "finding the merge base with origin/main",
