@@ -126,11 +126,15 @@ body.
 ### The event frame
 
 ```json
-{ "event": { "event": "conversation://deleted", "payload": { "spaceId": "s-1", "conversationId": "c-1" } } }
+{ "event": { "event": "conversation://deleted", "payload": { "spaceId": "s-1", "conversationId": "c-1" } }, "epoch": "6f1c…", "seq": 42 }
 ```
 
 - `event.event`: a key of the schema's `events` object.
 - `event.payload`: shaped by `events.<event>.payload`.
+- `epoch`: drawn once per hosting run of the space, and drawn again when the host
+  loses events of its own. A client that ignores replay may ignore it.
+- `seq`: 1 for the first frame of the epoch, then one more per frame. A client
+  that ignores replay may ignore it.
 
 The host forwards an event only when it concerns the shared space: an event about
 another space, or a host-wide `agent://event` (its `scope` is `null`), never
@@ -280,13 +284,43 @@ connection dropped: reconnect with backoff.
 - Stop reconnecting on 4003, on a 404 upgrade, and on a 401 upgrade until a new
   sign-in. Reconnect on everything else.
 
-## No replay of missed events
+## Replay of missed events
 
-The relay keeps no history. An event the host publishes while a member socket is
-closed, or before it opens, is lost for that member and never replayed. After
-each reconnection, a client re-reads with calls the state it shows (for example
-`conversation_list`, `conversation_message_page`, `mission_list`) instead of
-waiting for events to bring it back.
+The relay keeps no history; the host does. It keeps the last 1024 event frames of
+the space, at most 4 MiB of them, and drops the oldest first.
+
+A client keeps the `epoch` and the `seq` of the last event frame it applied:
+
+- A frame of the same epoch whose `seq` is at most the last applied is a
+  duplicate: drop it.
+- A frame whose `seq` is the last applied plus one: apply it.
+- A frame whose `seq` jumps further: hold it, and every next frame, and resume.
+- A frame of another epoch: adopt its `epoch` and `seq`, apply it, and re-read.
+
+To resume, on each socket open while it holds an epoch, or on a jump, the client
+sends:
+
+```json
+{ "id": 9, "command": "relay_resume", "args": { "epoch": "6f1c…", "since": 41, "token": "a-random-token" } }
+```
+
+The host sends every frame it kept with a `seq` above `since`, in order, as
+ordinary event frames, then answers:
+
+```json
+{ "id": 9, "status": 200, "body": { "token": "a-random-token", "replayed": 3 } }
+```
+
+The client applies the held frames in `seq` order, dropping duplicates. When the
+epoch is no longer the host's, or `since` is older than what the host kept, the
+host replays nothing and answers `{ "token": "a-random-token", "tooOld": true }`.
+
+The relay hands every answer to every member, so a client takes a resume answer
+only when its `token` is the one it sent. On `tooOld`, or when no answer comes
+within 300 seconds, the client adopts the `epoch` and `seq` of the next frame and
+re-reads with calls the state it shows (for example `conversation_list`,
+`conversation_message_page`, `mission_list`). A client with no epoch yet re-reads
+on each socket open. Neither the epoch nor the seq survives an app restart.
 
 ## Reading the schema
 

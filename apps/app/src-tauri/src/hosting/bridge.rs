@@ -148,8 +148,8 @@ pub(super) fn refused(id: Option<Value>) -> String {
 	)
 }
 
-pub(super) fn forwarded(frame: &str) -> String {
-	format!("{{\"event\":{frame}}}")
+pub(super) fn forwarded(frame: &str, epoch: &str, seq: u64) -> String {
+	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq}}}")
 }
 
 pub(super) async fn bridged<R: Runtime>(
@@ -299,7 +299,7 @@ fn body_of(body: &[u8]) -> Value {
 		.unwrap_or_else(|_| Value::String(String::from_utf8_lossy(body).into_owned()))
 }
 
-fn answer(id: Value, status: StatusCode, body: Value) -> String {
+pub(super) fn answer(id: Value, status: StatusCode, body: Value) -> String {
 	json!({ "id": id, "status": status.as_u16(), "body": body }).to_string()
 }
 
@@ -482,10 +482,10 @@ mod tests {
 	}
 
 	#[test]
-	fn an_event_is_wrapped_untouched() {
+	fn an_event_is_wrapped_untouched_beside_its_epoch_and_seq() {
 		assert_eq!(
-			forwarded(r#"{"event":"a://b","payload":1}"#),
-			r#"{"event":{"event":"a://b","payload":1}}"#
+			forwarded(r#"{"event":"a://b","payload":1}"#, "e-1", 7),
+			r#"{"event":{"event":"a://b","payload":1},"epoch":"e-1","seq":7}"#
 		);
 	}
 

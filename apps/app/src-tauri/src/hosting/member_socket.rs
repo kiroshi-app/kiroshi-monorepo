@@ -12,6 +12,7 @@ use specta_serde::{select_phase_datatype, Phase, PhasesFormat};
 use tauri_specta::{BuilderConfiguration, LanguageExt};
 
 use super::reach::{Audience, Reach, AUDIENCES, REACHES};
+use super::replay::RESUME_COMMAND;
 use crate::events::{self, Event};
 
 type Definition = fn(&mut Types) -> DataType;
@@ -147,7 +148,7 @@ fn frames() -> BTreeMap<String, Value> {
 		(
 			"EventFrame".to_owned(),
 			json!({
-				"description": "An event the host published, forwarded inside one more event key.",
+				"description": "An event the host published, forwarded inside one more event key. epoch and seq place it in the host's replay ring of the space.",
 				"type": "object",
 				"properties": {
 					"event": {
@@ -158,8 +159,70 @@ fn frames() -> BTreeMap<String, Value> {
 						},
 						"required": ["event", "payload"],
 					},
+					"epoch": {
+						"description": "Drawn once per hosting run of the space, and again when the host loses events.",
+						"type": "string",
+					},
+					"seq": {
+						"description": "1 for the first frame of the epoch, one more for each next frame.",
+						"type": "integer",
+						"minimum": 1,
+					},
 				},
 				"required": ["event"],
+			}),
+		),
+		(
+			"ResumeCallFrame".to_owned(),
+			json!({
+				"description": "A call frame asking the host to replay every frame of epoch above since. The host answers it itself.",
+				"type": "object",
+				"properties": {
+					"id": id,
+					"command": { "const": RESUME_COMMAND },
+					"args": {
+						"type": "object",
+						"properties": {
+							"epoch": { "type": "string" },
+							"since": { "type": "integer", "minimum": 0 },
+							"token": { "type": "string" },
+						},
+						"required": ["epoch", "since", "token"],
+					},
+				},
+				"required": ["id", "command", "args"],
+			}),
+		),
+		(
+			"ResumeAnswerFrame".to_owned(),
+			json!({
+				"description": "The answer to a ResumeCallFrame, sent after the replayed event frames. The relay hands it to every member: only the one that sent token takes it.",
+				"type": "object",
+				"properties": {
+					"id": id,
+					"status": { "const": 200 },
+					"body": {
+						"oneOf": [
+							{
+								"type": "object",
+								"properties": {
+									"token": { "type": "string" },
+									"replayed": { "type": "integer", "minimum": 0 },
+								},
+								"required": ["token", "replayed"],
+							},
+							{
+								"type": "object",
+								"properties": {
+									"token": { "type": "string" },
+									"tooOld": { "const": true },
+								},
+								"required": ["token", "tooOld"],
+							},
+						],
+					},
+				},
+				"required": ["id", "status", "body"],
 			}),
 		),
 	])
