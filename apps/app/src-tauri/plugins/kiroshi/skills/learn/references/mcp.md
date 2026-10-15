@@ -10,7 +10,7 @@ the same tool name.
 ## Which servers you can reach
 
 A session reaches the servers declared in your own `.mcp.json` and those declared in the
-system plugin. Nothing else is reachable, whatever else is installed on the machine. Before
+system plugin. Nothing else is reachable, whatever else is installed on this computer. Before
 a skill names a tool, read those declarations and take the server name from there rather
 than from memory.
 

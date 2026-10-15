@@ -76,7 +76,7 @@ fn written(path: &Path, bytes: &[u8]) -> Result<(), MissionError> {
 
 pub fn checkout(workspace: &str) -> Result<PathBuf, MissionError> {
 	let root = Path::new(workspace).canonicalize().map_err(|_| {
-		unreachable(format!("the workspace {workspace} is nowhere on this machine"))
+		unreachable(format!("the workspace {workspace} is nowhere on this computer"))
 	})?;
 	if !root.is_dir() {
 		return Err(unreachable(format!("the workspace {workspace} is not a directory")));

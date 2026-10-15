@@ -3,7 +3,7 @@ name: "connect"
 description: "Use when the person is not connected, asks how connection works, or hits a connection failure."
 ---
 
-Three sources, in this order: an existing Claude account already signed in on the machine (nothing to do, name the account and plan when the app exposes them), Sign in with Claude, an API key or a subscription token as a second field on the same screen.
+Three sources, in this order: an existing Claude account already signed in on this computer (nothing to do, name the account and plan when the app exposes them), Sign in with Claude, an API key or a subscription token as a second field on the same screen.
 
 Sign in with Claude is three steps: the app opens the browser, the person finishes there, the person pastes back the code the browser ends on. That paste is the step every sign-in ends on, and the screen carries the same link and the field for the code the whole time.
 
