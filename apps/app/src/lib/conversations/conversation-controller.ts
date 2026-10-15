@@ -17,7 +17,12 @@ import {
 	type StoredConversation,
 	storedSpeakerIdsOf,
 } from "./roster-conversations"
-import type { Conversation, MessagePin, NewUserMessage } from "./store-contract"
+import type {
+	ActiveTurn,
+	Conversation,
+	MessagePin,
+	NewUserMessage,
+} from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type {
 	CompanionArrival,
@@ -427,7 +432,7 @@ export const createConversationController = (
 
 	const unheardSpeakingBot = (
 		botId: string,
-		startedAt: number | undefined,
+		startedAt: number,
 	): SpeakingBot => ({
 		botId,
 		work: { ...workingFor([], false), startedAt },
@@ -437,12 +442,11 @@ export const createConversationController = (
 	})
 
 	const storedSpeakingBots = (
-		shown: StoredConversation,
-		storedIds: string[],
+		conversationId: string,
+		{ startedAt, botIds }: ActiveTurn,
 	): SpeakingBot[] => {
-		const heard = foreignTurns.speakersIn(shown.id)
-		const startedAt = shown.activeTurn?.startedAt
-		return storedIds.map((botId) => {
+		const heard = foreignTurns.speakersIn(conversationId)
+		return botIds.map((botId) => {
 			const speaker = heard.find(({ scope }) => scope.botId === botId)
 			return speaker
 				? foreignSpeakingBot(speaker, startedAt)
@@ -454,12 +458,13 @@ export const createConversationController = (
 		if (!conversation) {
 			return []
 		}
-		const storedIds = storedSpeakerIdsOf(conversation)
-		return storedIds
-			? storedSpeakingBots(conversation, storedIds)
-			: foreignTurns
-					.speakersIn(conversation.id)
-					.map((speaker) => foreignSpeakingBot(speaker))
+		const { id, activeTurn } = conversation
+		if (activeTurn === undefined) {
+			return foreignTurns
+				.speakersIn(id)
+				.map((speaker) => foreignSpeakingBot(speaker))
+		}
+		return activeTurn ? storedSpeakingBots(id, activeTurn) : NO_SPEAKERS
 	}
 
 	const speakingBots = (): SpeakingBot[] => {
