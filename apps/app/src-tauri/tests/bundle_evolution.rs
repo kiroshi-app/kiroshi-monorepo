@@ -277,4 +277,28 @@ fn every_bundle_the_turn_changed_is_announced_once() {
 		"Answer only in Spanish.",
 		"the bot record kept the stale brief"
 	);
+
+	harness.forget_events();
+	let later = harness.start_run(&conversation, &bot, 2);
+	harness.end_turn(&later);
+	drop_a_skill(&project, "about-later");
+	harness.end_turn(&later);
+	harness.wait_for("the turn that changed the space to be announced", |seen| {
+		evolution_of(seen, EvolvedBundle::Space).map(drop)
+	});
+
+	assert_eq!(
+		evolved_bundles(&harness.events()),
+		[EvolvedBundle::Space],
+		"a quiet turn was announced"
+	);
+}
+
+fn evolved_bundles(seen: &[AgentEvent]) -> Vec<EvolvedBundle> {
+	seen.iter()
+		.filter_map(|event| match event {
+			AgentEvent::BotEvolved { bundle, .. } => Some(*bundle),
+			_ => None,
+		})
+		.collect()
 }
