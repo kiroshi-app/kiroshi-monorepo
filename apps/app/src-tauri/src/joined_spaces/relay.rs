@@ -301,7 +301,11 @@ async fn started<R: Runtime>(
 	let link = Arc::new(MemberLink::new());
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
-	let origin = proxy::served(Arc::clone(&link), Arc::clone(&token), stopped.clone())
+	let reread = {
+		let (app, id) = (app.clone(), id.to_owned());
+		Arc::new(move || reread_announced(&app, &id))
+	};
+	let origin = proxy::served(Arc::clone(&link), Arc::clone(&token), reread, stopped.clone())
 		.await
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
 	let linked = Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link) };
@@ -388,13 +392,13 @@ async fn guest_linked<R: Runtime>(
 	let mut backoff = Backoff::first();
 	loop {
 		match attempted(&app, &linked, &mut stop, &mut backoff).await {
-			Ended::Stopped => return linked.link.closed(Presence::Ended),
+			Ended::Stopped => return linked.link.ended(Presence::Ended),
 			Ended::Evicted => {
-				linked.link.closed(Presence::Ended);
+				linked.link.ended(Presence::Ended);
 				return evicted(&app, &linked).await;
 			}
 			Ended::SignedOut(reason) => {
-				linked.link.closed(Presence::Down);
+				linked.link.ended(Presence::Down);
 				app.state::<RelayGuests>().left(&linked.id, &linked.link);
 				return eprintln!(
 					"joined space {} (instance {}) left its member relay: {reason}",
@@ -408,7 +412,7 @@ async fn guest_linked<R: Runtime>(
 					linked.id, linked.instance_id
 				);
 				if until_stopped(&mut stop, sleep(backoff.step())).await.is_none() {
-					return linked.link.closed(Presence::Ended);
+					return linked.link.ended(Presence::Ended);
 				}
 				linked.link.connecting();
 			}
@@ -510,14 +514,15 @@ fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> 
 		Resync::InStep => None,
 		Resync::Resume(frame) => Some(Message::text(frame)),
 		Resync::Reread => {
-			if let Err(failure) = announce_reconnection(app, linked.id.clone()) {
-				eprintln!(
-					"joined space {} must reread its host and the front was not told: {failure:?}",
-					linked.id
-				);
-			}
+			reread_announced(app, &linked.id);
 			None
 		}
+	}
+}
+
+fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
+	if let Err(failure) = announce_reconnection(app, id.to_owned()) {
+		eprintln!("joined space {id} must reread its host and the front was not told: {failure:?}");
 	}
 }
 

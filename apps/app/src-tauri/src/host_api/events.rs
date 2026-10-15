@@ -80,21 +80,30 @@ async fn caught_up_then_relayed(
 	relayed(socket, heard).await
 }
 
-pub(crate) async fn relayed(mut socket: WebSocket, mut heard: Receiver<Frame>) {
+async fn relayed(socket: WebSocket, mut heard: Receiver<Frame>) {
+	if let Some((socket, missed)) = relayed_until_behind(socket, &mut heard).await {
+		fell_behind(socket, missed).await;
+	}
+}
+
+pub(crate) async fn relayed_until_behind(
+	mut socket: WebSocket,
+	heard: &mut Receiver<Frame>,
+) -> Option<(WebSocket, u64)> {
 	loop {
 		tokio::select! {
 			frame = heard.recv() => match frame {
 				Ok(frame) => {
 					if !delivered(&mut socket, &frame).await {
-						return;
+						return None;
 					}
 				}
-				Err(RecvError::Lagged(missed)) => return fell_behind(socket, missed).await,
-				Err(RecvError::Closed) => return,
+				Err(RecvError::Lagged(missed)) => return Some((socket, missed)),
+				Err(RecvError::Closed) => return None,
 			},
 			sent = socket.recv() => {
 				if !keeps_listening(sent) {
-					return;
+					return None;
 				}
 			}
 		}

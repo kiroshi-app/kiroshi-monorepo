@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::ws::WebSocketUpgrade;
+use axum::extract::ws::{WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
@@ -13,9 +13,10 @@ use axum::routing::{get, post};
 use axum::Router;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 
 use super::member_link::{MemberLink, Presence};
+use crate::events::Frame;
 use crate::host_api::files::{AVATAR_PATH, INERT, NO_SNIFF};
 use crate::host_api::invoke::{
 	self, arguments, bearer_admitted, declares_more_than_the_cap, names_an_app_command, unread,
@@ -35,20 +36,24 @@ const IMMUTABLE: &str = "private, max-age=31536000, immutable";
 const UNREAD_AVATAR: (StatusCode, &str) =
 	(StatusCode::BAD_GATEWAY, "the host relayed an avatar that could not be read");
 
+pub(super) type Reread = Arc<dyn Fn() + Send + Sync>;
+
 #[derive(Clone)]
 struct Proxy {
 	link: Arc<MemberLink>,
 	token: Arc<HostToken>,
+	reread: Reread,
 }
 
 pub(super) async fn served(
 	link: Arc<MemberLink>,
 	token: Arc<HostToken>,
+	reread: Reread,
 	mut stop: watch::Receiver<bool>,
 ) -> std::io::Result<String> {
 	let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
 	let origin = format!("http://{}", listener.local_addr()?);
-	let router = routed(Proxy { link, token });
+	let router = routed(Proxy { link, token, reread });
 	tauri::async_runtime::spawn(async move {
 		if let Some(Err(failure)) =
 			until_stopped(&mut stop, axum::serve(listener, router).into_future()).await
@@ -168,15 +173,40 @@ async fn events_opened(State(proxy): State<Proxy>, upgrade: WebSocketUpgrade) ->
 		.on_failed_upgrade(|failure| {
 			eprintln!("a joined space proxy event client never connected: {failure}")
 		})
-		.on_upgrade(|socket| events::relayed(socket, heard))
+		.on_upgrade(|socket| relayed_with_rereads(socket, heard, proxy.reread))
+}
+
+async fn relayed_with_rereads(
+	mut socket: WebSocket,
+	mut heard: broadcast::Receiver<Frame>,
+	reread: Reread,
+) {
+	while let Some((behind, missed)) = events::relayed_until_behind(socket, &mut heard).await {
+		eprintln!("a joined space proxy event client fell {missed} events behind and rereads");
+		reread();
+		socket = behind;
+	}
 }
 
 #[cfg(test)]
 mod tests {
-	use axum::http::Method;
-	use tokio::sync::mpsc;
+	use std::sync::atomic::{AtomicUsize, Ordering};
+	use std::time::Duration;
 
+	use axum::http::Method;
+	use futures_util::StreamExt;
+	use tokio::net::TcpStream;
+	use tokio::sync::mpsc;
+	use tokio::time::timeout;
+	use tokio_tungstenite::tungstenite::Message;
+	use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+
+	use super::super::member_link::BUFFERED_EVENTS;
 	use super::*;
+
+	const PATIENCE: Duration = Duration::from_secs(10);
+
+	type FrontEvents = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 	#[test]
 	fn a_text_refusal_crosses_as_text_and_a_command_answer_as_json() {
@@ -196,11 +226,95 @@ mod tests {
 
 	const PNG: &[u8] = b"\x89PNG\r\n\x1a\n";
 
-	async fn a_guest_proxy(link: Arc<MemberLink>, token: Arc<HostToken>) -> String {
+	async fn a_guest_proxy(link: Arc<MemberLink>, token: Arc<HostToken>, reread: Reread) -> String {
 		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the proxy binds");
 		let origin = format!("http://{}", listener.local_addr().expect("an address"));
-		tokio::spawn(axum::serve(listener, routed(Proxy { link, token })).into_future());
+		tokio::spawn(axum::serve(listener, routed(Proxy { link, token, reread })).into_future());
 		origin
+	}
+
+	fn no_reread() -> Reread {
+		Arc::new(|| {})
+	}
+
+	fn a_counted_reread() -> (Reread, Arc<AtomicUsize>) {
+		let rereads = Arc::new(AtomicUsize::new(0));
+		let counted = Arc::clone(&rereads);
+		let reread = move || {
+			counted.fetch_add(1, Ordering::SeqCst);
+		};
+		(Arc::new(reread), rereads)
+	}
+
+	async fn front_events(origin: &str, token: &HostToken) -> FrontEvents {
+		let url = format!(
+			"{}{}?token={}",
+			origin.replacen("http", "ws", 1),
+			events::PATH,
+			token.bearer()
+		);
+		tokio_tungstenite::connect_async(url).await.expect("the events socket opens").0
+	}
+
+	fn unstamped(payload: u64) -> String {
+		json!({ "event": { "event": "a://b", "payload": payload } }).to_string()
+	}
+
+	async fn next_payload(events: &mut FrontEvents) -> Option<u64> {
+		match timeout(PATIENCE, events.next()).await.expect("a frame or a close in time") {
+			Some(Ok(Message::Text(text))) => {
+				let frame: Value = serde_json::from_str(text.as_str()).expect("a json frame");
+				Some(frame["payload"].as_u64().expect("a payload"))
+			}
+			Some(Ok(Message::Close(_)) | Err(_)) | None => None,
+			Some(Ok(other)) => panic!("an unexpected frame: {other:?}"),
+		}
+	}
+
+	#[tokio::test]
+	async fn a_front_event_socket_outlives_a_relay_drop_and_closes_when_the_guest_ends() {
+		let link = Arc::new(MemberLink::new());
+		let (calls, _sent) = mpsc::channel(4);
+		link.opened(calls);
+		let token = Arc::new(HostToken::random());
+		let origin = a_guest_proxy(link.clone(), token.clone(), no_reread()).await;
+		let mut events = front_events(&origin, &token).await;
+
+		link.closed(Presence::Down);
+		let (calls, _resent) = mpsc::channel(4);
+		link.opened(calls);
+		link.received(&unstamped(1));
+		let heard_after_the_reopen = next_payload(&mut events).await;
+		link.ended(Presence::Ended);
+
+		assert_eq!(heard_after_the_reopen, Some(1));
+		assert_eq!(next_payload(&mut events).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_front_event_socket_that_falls_behind_rereads_once_and_hears_the_next_frame() {
+		let link = Arc::new(MemberLink::new());
+		let (calls, _sent) = mpsc::channel(4);
+		link.opened(calls);
+		let token = Arc::new(HostToken::random());
+		let (reread, rereads) = a_counted_reread();
+		let origin = a_guest_proxy(link.clone(), token.clone(), reread).await;
+		let mut events = front_events(&origin, &token).await;
+		let overflowing = u64::try_from(BUFFERED_EVENTS).expect("a count") + 1;
+
+		for payload in 0..=overflowing {
+			link.received(&unstamped(payload));
+		}
+		let next = overflowing + 1;
+		link.received(&unstamped(next));
+		let mut heard = Vec::new();
+		while heard.last() != Some(&next) {
+			heard.push(next_payload(&mut events).await.expect("the socket stays open"));
+		}
+
+		assert_eq!(rereads.load(Ordering::SeqCst), 1);
+		assert!(heard.windows(2).all(|pair| pair[0] < pair[1]));
+		assert!(u64::try_from(heard.len()).expect("a count") < next);
 	}
 
 	fn a_host_answering_avatars(link: Arc<MemberLink>, mut sent: mpsc::Receiver<String>) {
@@ -240,7 +354,7 @@ mod tests {
 		link.opened(calls);
 		a_host_answering_avatars(link.clone(), sent);
 		let token = Arc::new(HostToken::random());
-		let origin = a_guest_proxy(link, token.clone()).await;
+		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
 		let client = a_client();
 
 		let by_query = client
@@ -277,7 +391,7 @@ mod tests {
 		let link = Arc::new(MemberLink::new());
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
-		let origin = a_guest_proxy(link, Arc::new(HostToken::random())).await;
+		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
 		let client = a_client();
 
 		for asked in [
@@ -296,7 +410,7 @@ mod tests {
 		let link = Arc::new(MemberLink::new());
 		link.closed(Presence::Down);
 		let token = Arc::new(HostToken::random());
-		let origin = a_guest_proxy(link, token.clone()).await;
+		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
 
 		let answer = a_client()
 			.get(avatar_url(&origin, "held.png"))
@@ -312,7 +426,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_preflight_from_the_packaged_window_is_allowed_before_any_token() {
 		let link = Arc::new(MemberLink::new());
-		let origin = a_guest_proxy(link, Arc::new(HostToken::random())).await;
+		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
 
 		for path in
 			[invoke::PATH.replace("{command}", "conversation_list"), events::PATH.to_owned()]
@@ -343,7 +457,7 @@ mod tests {
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());
-		let origin = a_guest_proxy(link, token.clone()).await;
+		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
 
 		let answer = a_client()
 			.get(format!("{origin}/api/files/attachments/c1/a.png"))
