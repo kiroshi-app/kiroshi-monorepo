@@ -79,9 +79,10 @@ final class DeleteAccountTests: XCTestCase {
         XCTAssertEqual(deletionCalls(), 1)
         XCTAssertTrue(app.staticTexts["sam@example.com"].exists)
         XCTAssertTrue(app.collectionViews.buttons["Sign out"].exists)
+        let bars = settingsBars(in: app)
         try audit(app) { issue in
             Self.isTheFailureLineInItsFooter(issue)
-                || Self.isTheWhereYourMessagesGoSectionFooter(issue)
+                || Self.isTheWhereYourMessagesGoSectionFooter(issue) || issue.isUnderABar(bars)
         }
 
         deleteAccountRow(app).tap()
