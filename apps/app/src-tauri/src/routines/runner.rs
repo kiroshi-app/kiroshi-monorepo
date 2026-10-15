@@ -12,7 +12,7 @@ use super::contract::{RoutineError, RunClosing, RunOutcome, RunRequested};
 use super::core::{Clock, RunSink, SystemClock};
 use super::run::{read_run_report, run_output_schema, run_prompt_for, RunReport};
 use crate::agent::commands::{
-	agent_cancel_turn, agent_shutdown, agent_start_or_resume_session, agent_submit_prompt,
+	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, cancel_session_turn,
 	EVENT_CHANNEL,
 };
 use crate::agent::contract::{
@@ -20,6 +20,7 @@ use crate::agent::contract::{
 	TransportError, TurnEnded, TurnOutcome,
 };
 use crate::agent::reply_writer::settled_mentions;
+use crate::agent::AgentState;
 use crate::conversations::commands::{
 	announce_conversation, conversation_open_runtime_session, ready,
 };
@@ -302,7 +303,7 @@ async fn refused<R: Runtime>(
 }
 
 async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
-	agent_cancel_turn(app.clone(), managed(app, NO_AGENT)?, scope.clone())
+	cancel_session_turn(app, &*managed::<R, AgentState>(app, NO_AGENT)?, scope)
 		.await
 		.map_err(|error| detail_of(&error))
 }

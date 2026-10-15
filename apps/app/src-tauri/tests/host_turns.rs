@@ -12,7 +12,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use kiroshi_app::account::session::{restore, AccountSession};
-use kiroshi_app::agent::commands::terminate_session;
+use kiroshi_app::agent::commands::{agent_cancel_turn, terminate_session};
+use kiroshi_app::agent::contract::RuntimeScope;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
@@ -45,6 +46,7 @@ const GRACE: &str = "b-grace";
 const NYX: &str = "b-nyx";
 const AGENT_EVENT: &str = kiroshi_app::agent::commands::EVENT_CHANNEL;
 const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORED_EVENT;
+const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
 const PATIENCE: Duration = Duration::from_secs(15);
 
 const A_ROOM: &str = "
@@ -197,13 +199,18 @@ impl Host {
 	}
 
 	async fn send_turn(&mut self, message: Value, summoned: &[&str]) -> Value {
+		let args = json!({ "message": message, "summoned": summoned });
+		self.called("conversation_send_turn", args).await
+	}
+
+	async fn called(&mut self, command: &str, args: Value) -> Value {
 		self.calls += 1;
 		let id = self.calls;
 		let frame = json!({
 			"id": id,
-			"command": "conversation_send_turn",
+			"command": command,
 			"sender": { "accountId": GUEST },
-			"args": { "message": message, "summoned": summoned },
+			"args": args,
 		});
 		self.member.send(Message::Text(frame.to_string().into())).await.expect("the frame leaves");
 		self.heard_until(|frames| frames.iter().any(|frame| frame["id"] == id)).await;
@@ -228,6 +235,57 @@ impl Host {
 			agent_events_in(frames, bot_id).any(|event| event["type"] == "turnEnded")
 		})
 		.await;
+	}
+
+	async fn speaking(&mut self, bot_id: &str) {
+		self.heard_until(|frames| {
+			agent_events_in(frames, bot_id).any(|event| event["type"] == "messageDelta")
+		})
+		.await;
+	}
+
+	fn scope_of(&self, bot_id: &str) -> Value {
+		published(&self.frames, AGENT_EVENT)
+			.find(|payload| payload["scope"]["botId"] == bot_id)
+			.map(|payload| payload["scope"].clone())
+			.expect("the companion was heard")
+	}
+
+	async fn stopped_after_a_handover(&mut self, heard_before_stop: usize) {
+		self.turns_closed_for(GRACE, 1).await;
+		self.heard_until(|frames| {
+			published(&frames[heard_before_stop..], CONVERSATION_UPDATED)
+				.any(|updated| updated["conversation"]["activeTurn"].is_null())
+		})
+		.await;
+
+		let grace_ended: Vec<Value> = self
+			.agent_events(GRACE)
+			.into_iter()
+			.filter(|event| event["type"] == "turnEnded")
+			.collect();
+		assert_eq!(grace_ended.len(), 1, "heard {grace_ended:#?}");
+		assert_eq!(grace_ended[0]["ended"]["outcome"], json!("cancelled"));
+		assert!(self.completed_at("t1").await.is_some(), "the stopped turn was left open");
+		assert_eq!(self.runs_of("t1").await, 0, "a run of the stopped turn was kept");
+		let ada_ended =
+			self.agent_events(ADA).iter().filter(|event| event["type"] == "turnEnded").count();
+		assert_eq!(ada_ended, 1, "the companion Grace named was summoned again");
+		let next = self.send_turn(sent("p2", "t2", "and now?"), &[GRACE]).await;
+		assert_eq!(next["status"], json!(200), "the stopped turn still holds the room: {next}");
+	}
+
+	async fn runs_of(&self, turn_id: &'static str) -> i64 {
+		database_of(&self.app)
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT count(*) FROM turn_runs WHERE turn_id = ?1",
+					[turn_id],
+					|row| row.get(0),
+				)?)
+			})
+			.await
+			.expect("the runs count")
 	}
 
 	async fn turns_closed_for(&mut self, bot_id: &str, closed: usize) {
@@ -495,6 +553,63 @@ fn a_turn_that_ended_for_its_companion_lets_the_next_send_in_and_hands_its_sessi
 			replies_of(&transcript, ADA).iter().map(|reply| reply.turn_id.as_str()).collect();
 		assert_eq!(turns, vec!["t1", "t2"], "the room holds {transcript:#?}");
 		assert_eq!(host.active_sessions_of(ADA).await, 1, "a host turn left a session active");
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_stop_after_a_handover_cancels_the_companion_handed_the_work_and_closes_the_turn() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("stop-on-host", "room_handover_held").await;
+
+		host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
+		host.speaking(GRACE).await;
+		let heard_before_stop = host.frames.len();
+		let handed_over: RuntimeScope =
+			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
+		agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), handed_over)
+			.await
+			.expect("the stop is taken");
+
+		host.stopped_after_a_handover(heard_before_stop).await;
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_stop_after_a_handover_ends_the_turn_as_a_stop_on_the_host_does() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("stop-from-member", "room_handover_held").await;
+
+		host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
+		host.speaking(GRACE).await;
+		let heard_before_stop = host.frames.len();
+		let scope = host.scope_of(ADA);
+		let stop = host.called("agent_cancel_turn", json!({ "scope": scope })).await;
+
+		assert_eq!(stop["status"], json!(200), "{stop}");
+		host.stopped_after_a_handover(heard_before_stop).await;
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_stop_starts_none_of_the_companions_still_awaited_in_the_turn() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("stop-awaited", "room_handover_held").await;
+
+		host.send_turn(sent("p1", "t1", "both of you, please"), &[ADA, GRACE]).await;
+		host.turn_ended_for(ADA).await;
+		host.speaking(GRACE).await;
+		let heard_before_stop = host.frames.len();
+		let scope = host.scope_of(ADA);
+		let stop = host.called("agent_cancel_turn", json!({ "scope": scope })).await;
+
+		assert_eq!(stop["status"], json!(200), "{stop}");
+		host.stopped_after_a_handover(heard_before_stop).await;
 		host.quit().await;
 	});
 }
