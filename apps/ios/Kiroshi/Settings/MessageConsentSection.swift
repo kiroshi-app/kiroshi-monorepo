@@ -24,6 +24,8 @@ struct MessageConsentSection: View {
             .tint(.primary)
         } header: {
             Text("Where your messages go")
+                .font(.footnote.weight(.semibold))
+                .textCase(nil)
         } footer: {
             Text(
                 "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to Anthropic. Turn this off and nothing leaves this iPhone until you agree again."
