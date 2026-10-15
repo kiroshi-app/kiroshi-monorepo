@@ -113,9 +113,7 @@ export const createJoinedHostsListen = ({
 		if (LOCAL_EVENTS.has(event)) {
 			return stopLocal
 		}
-		const stopJoined = listenToJoinedHosts(event, (heard, id) =>
-			handler(heard as Event<T>, id),
-		)
+		const stopJoined = listenToJoinedHosts(event, handler as Deliver)
 		return () => {
 			stopLocal()
 			stopJoined()
