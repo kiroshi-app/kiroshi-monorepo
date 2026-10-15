@@ -19,6 +19,10 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const LOADED_NAMES = ["Ada Martin", "Basile Roux", "Chloe Petit"]
 
+const SKELETON_HOLD_MS = 500
+
+const FRAME_MS = 1000 / 60
+
 type FrameProps = {
 	heightClass: string
 	anchor?: ListSkeletonAnchor
@@ -290,7 +294,7 @@ export const Pending310Ms = meta.story({
 		await expect(sighting.hiddenAt).not.toBeNull()
 		await expect(
 			(sighting.hiddenAt ?? 0) - (sighting.shownAt ?? 0),
-		).toBeGreaterThanOrEqual(500)
+		).toBeGreaterThanOrEqual(SKELETON_HOLD_MS - FRAME_MS)
 	},
 })
 
