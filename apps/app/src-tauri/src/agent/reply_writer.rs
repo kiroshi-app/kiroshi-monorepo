@@ -495,13 +495,7 @@ impl<R: Runtime> Store<R> {
 		message: &ChatMessage,
 	) -> Result<(), TranscriptStoreError> {
 		self.open_assistant(turn, &message.id, message.timestamp).await?;
-		announce_conversation(
-			&self.app,
-			self.database()?,
-			CONVERSATION_UPDATED,
-			&self.conversation_id,
-		)
-		.await;
+		self.announce_updated(self.database()?).await;
 		Ok(())
 	}
 
@@ -550,9 +544,13 @@ impl<R: Runtime> Store<R> {
 	) -> Result<(), TranscriptStoreError> {
 		let database = self.database()?;
 		database.messages().finalize_message(id.to_owned(), completion, settled_text).await?;
+		self.announce_updated(database).await;
+		Ok(())
+	}
+
+	async fn announce_updated(&self, database: &db::Database) {
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
-		Ok(())
 	}
 
 	async fn complete_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
