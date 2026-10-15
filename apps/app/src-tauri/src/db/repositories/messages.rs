@@ -328,6 +328,18 @@ impl MessagesRepository {
 		.await?
 	}
 
+	pub async fn expire_awaited_run(
+		&self,
+		turn_id: String,
+		bot_id: String,
+		expired_at: i64,
+	) -> Result<bool, TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(expired_awaited_run(connection, &turn_id, &bot_id, expired_at))
+		})
+		.await?
+	}
+
 	pub async fn complete_turn(
 		&self,
 		id: String,
@@ -836,6 +848,21 @@ fn abandoned_run(
 	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, abandoned_at])?;
 	transaction.commit()?;
 	Ok(())
+}
+
+fn expired_awaited_run(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_id: &str,
+	expired_at: i64,
+) -> Result<bool, TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	let released = transaction.execute(RELEASE_RUN, params![turn_id, bot_id, AWAITED])? > 0;
+	if released {
+		transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, expired_at])?;
+	}
+	transaction.commit()?;
+	Ok(released)
 }
 
 fn open_turn_with(

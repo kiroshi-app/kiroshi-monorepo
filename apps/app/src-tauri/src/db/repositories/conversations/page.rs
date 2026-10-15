@@ -697,10 +697,14 @@ mod tests {
 	}
 
 	async fn run_ended(database: &Database, bot_id: &str) {
+		run_ended_handing_to(database, bot_id, &[]).await;
+	}
+
+	async fn run_ended_handing_to(database: &Database, bot_id: &str, handed_to: &[&str]) {
 		let ended = EndedRun {
 			turn_id: "t1".to_owned(),
 			bot_id: bot_id.to_owned(),
-			handed_to: Vec::new(),
+			handed_to: handed_to.iter().map(|handed| (*handed).to_owned()).collect(),
 			ended_at: 60,
 		};
 		database.messages().end_run(ended).await.expect("the run ends");
@@ -748,6 +752,88 @@ mod tests {
 
 		run_started(&database, "b2").await;
 
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+	}
+
+	async fn awaited(database: &Database, bot_ids: &[&str]) {
+		let bot_ids = bot_ids.iter().map(|bot_id| (*bot_id).to_owned()).collect();
+		database.messages().await_runs("t1".to_owned(), bot_ids).await.expect("the runs wait");
+	}
+
+	async fn expired(database: &Database, bot_id: &str) -> bool {
+		database
+			.messages()
+			.expire_awaited_run("t1".to_owned(), bot_id.to_owned(), 70)
+			.await
+			.expect("the expiry runs")
+	}
+
+	async fn runs_of_t1(database: &Database) -> Vec<(String, String)> {
+		database
+			.call(|connection| {
+				let mut runs = connection.prepare(
+					"SELECT bot_id, state FROM turn_runs WHERE turn_id = 't1' ORDER BY bot_id",
+				)?;
+				let rows = runs.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+				Ok(rows.collect::<Result<Vec<_>, _>>()?)
+			})
+			.await
+			.expect("the runs read")
+	}
+
+	#[tokio::test]
+	async fn an_awaited_turn_run_past_its_start_deadline_is_released_and_completes_the_turn() {
+		let (database, _dir) = a_room_mid_turn().await;
+		run_started(&database, "b1").await;
+		run_ended_handing_to(&database, "b1", &["b2"]).await;
+		let while_awaited = active_turn_of_c01(&database).await;
+
+		let released = expired(&database, "b2").await;
+
+		assert!(while_awaited.is_some(), "the handover closed the turn");
+		assert!(released, "the awaited run was kept");
+		assert_eq!(runs_of_t1(&database).await, Vec::new());
+		assert_eq!(active_turn_of_c01(&database).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_turn_run_started_before_its_start_deadline_is_untouched_by_the_deadline() {
+		let (database, _dir) = a_room_mid_turn().await;
+		awaited(&database, &["b1"]).await;
+		run_started(&database, "b1").await;
+		let before = active_turn_of_c01(&database).await;
+
+		let released = expired(&database, "b1").await;
+
+		assert!(!released, "a started run was released");
+		assert_eq!(runs_of_t1(&database).await, vec![("b1".to_owned(), "running".to_owned())]);
+		assert_eq!(active_turn_of_c01(&database).await, before);
+	}
+
+	#[tokio::test]
+	async fn a_running_turn_run_keeps_the_turn_open_past_the_start_deadline_of_an_awaited_bot() {
+		let (database, _dir) = a_room_mid_turn().await;
+		run_started(&database, "b1").await;
+		awaited(&database, &["b2"]).await;
+
+		let released = expired(&database, "b2").await;
+
+		assert!(released, "the awaited run was kept");
+		assert_eq!(runs_of_t1(&database).await, vec![("b1".to_owned(), "running".to_owned())]);
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b1"]));
+	}
+
+	#[tokio::test]
+	async fn an_awaited_bot_starting_after_its_turn_run_expired_reopens_the_turn() {
+		let (database, _dir) = a_room_mid_turn().await;
+		run_started(&database, "b1").await;
+		run_ended_handing_to(&database, "b1", &["b2"]).await;
+		expired(&database, "b2").await;
+		let after_the_deadline = active_turn_of_c01(&database).await;
+
+		run_started(&database, "b2").await;
+
+		assert_eq!(after_the_deadline, None);
 		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
 	}
 

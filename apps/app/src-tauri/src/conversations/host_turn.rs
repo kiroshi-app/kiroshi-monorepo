@@ -10,6 +10,7 @@ use tokio::sync::{mpsc, watch};
 use super::commands::announce_conversation;
 use super::context::{bounded_context, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
+use super::turn_run_deadline::arm_start_deadlines;
 use crate::agent::commands::{
 	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, announce,
 	cancel_session_turn,
@@ -413,8 +414,9 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn awaited(&self, summoned: &[Summons]) -> Result<(), TranscriptStoreError> {
-		let bot_ids = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
-		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids).await?;
+		let bot_ids: Vec<String> = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
+		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids.clone()).await?;
+		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
 		Ok(())
 	}
 
@@ -528,8 +530,21 @@ fn missing(detail: String) -> TransportError {
 
 #[cfg(test)]
 mod tests {
+	use std::time::Duration;
+
+	use serde_json::{json, Value};
+	use tauri::test::mock_builder;
+	use tauri::Manager;
+
 	use super::*;
 	use crate::agent::contract::TurnEnded;
+	use crate::conversations::contract::UPDATED_EVENT;
+	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
+	use crate::db::repositories::conversations::{
+		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
+	};
+	use crate::db::repositories::messages::NewTurn;
+	use crate::test_app::an_app_of_its_own;
 
 	fn a_speaker() -> Speaker {
 		let scope = RuntimeScope {
@@ -568,5 +583,75 @@ mod tests {
 		);
 		assert_eq!(a_speaker().end_after(&session_ended), Some(SpeakerEnd::HandsOver));
 		assert_eq!(a_speaker().end_after(&still_speaking), None);
+	}
+
+	#[tokio::test]
+	async fn a_room_turn_releases_every_summoned_bot_that_never_starts_at_its_start_deadline() {
+		let app = an_app_of_its_own("host-turn-start-deadline", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let stored = database(app.handle()).expect("the database opens");
+		let conversations = stored.conversations();
+		conversations.ensure_default_bot().await.expect("the bot is seeded");
+		let identity = BotIdentity {
+			name: "Ada".to_owned(),
+			title: String::new(),
+			model: DEFAULT_BOT_MODEL.to_owned(),
+			avatar_blot: None,
+			avatar_image_path: None,
+			instructions: String::new(),
+			denied_tools: Vec::new(),
+			effort: None,
+		};
+		let ada = conversations
+			.create_bot(identity, Some("personal".to_owned()), None)
+			.await
+			.expect("the second bot is created")
+			.id;
+		let room = conversations
+			.create_conversation(ConversationDraft {
+				space_id: "personal".to_owned(),
+				section_id: None,
+				title: "Room".to_owned(),
+				bot_ids: vec![DEFAULT_BOT_ID.to_owned(), ada.clone()],
+			})
+			.await
+			.expect("the room is created");
+		let turn = NewTurn { id: "t1".to_owned(), conversation_id: room.id.clone(), started_at: 1 };
+		stored.messages().start_turn(turn).await.expect("the turn opens");
+		let (announced, mut updates) = mpsc::unbounded_channel();
+		app.handle().listen(UPDATED_EVENT, move |event| {
+			let payload: Value =
+				serde_json::from_str(event.payload()).expect("the payload is JSON");
+			announced
+				.send(payload["conversation"]["activeTurn"].clone())
+				.expect("the test listens");
+		});
+		let host_turn = HostTurn {
+			app: app.handle().clone(),
+			conversation_id: room.id.clone(),
+			turn_id: "t1".to_owned(),
+			prompt_id: "p1".to_owned(),
+		};
+		let summoned: Vec<Summons> = [DEFAULT_BOT_ID, ada.as_str()]
+			.into_iter()
+			.map(|bot_id| Summons { bot_id: bot_id.to_owned(), prompt_id: "p1".to_owned() })
+			.collect();
+
+		host_turn.await_runs(&summoned).await;
+		let mut heard = Vec::new();
+		let released = tokio::time::timeout(Duration::from_secs(10), async {
+			while let Some(active_turn) = updates.recv().await {
+				if active_turn.is_null() {
+					return true;
+				}
+				heard.push(active_turn);
+			}
+			false
+		})
+		.await;
+
+		assert_eq!(released, Ok(true), "the deadline left the turn working");
+		assert_eq!(heard, vec![json!({ "startedAt": 1, "botIds": [ada] })]);
 	}
 }
