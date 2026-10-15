@@ -390,7 +390,8 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	let edited = harness.runtime_of(&conversation, &bot, 5);
 	assert!(edited.spoken.contains(&briefed(SPANISH)), "got {}", edited.spoken);
 
-	std::fs::remove_dir_all(&bundle).expect("the bundle is taken away");
+	std::fs::rename(&bundle, bundle.with_file_name("taken-away"))
+		.expect("the bundle is taken away");
 	let unbundled = harness.open_run(&conversation, &bot, 6);
 	let refused = harness
 		.call(
