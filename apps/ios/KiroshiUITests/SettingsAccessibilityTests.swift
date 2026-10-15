@@ -6,7 +6,7 @@ final class SettingsAccessibilityTests: XCTestCase {
     static let alertMessage =
         "Studio, Home lab and Side project leave this iPhone until you sign in again."
     static let consentFooter =
-        "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to the model provider your Mac uses. Turn this off and nothing leaves this iPhone until you agree again."
+        "Messages you send here go to your computer through Kiroshi’s relay. Your computer passes them to the agent, which sends them to the model provider your computer uses. Turn this off and nothing leaves this iPhone until you agree again."
 
     override func setUp() async throws {
         continueAfterFailure = false
