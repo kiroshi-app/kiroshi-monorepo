@@ -1,24 +1,12 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router"
 import { cleanup, render, screen, within } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
 import { AUTHOR_URL, REPOSITORY_URL, WEBSITE_COPY } from "./copy"
 import { createSiteRouter } from "./router"
 import { SITE_PAGES_COPY } from "./site-pages-copy"
-
-const supportEmail = vi.hoisted(() => ({ value: "" }))
-
-vi.mock("./site-pages-copy", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("./site-pages-copy")>()
-	return {
-		...actual,
-		get SUPPORT_EMAIL() {
-			return supportEmail.value
-		},
-	}
-})
 
 const { privacy, terms, support } = SITE_PAGES_COPY
 
@@ -61,12 +49,10 @@ const PAGES = [
 	{ path: "/privacy", title: privacy.title },
 	{ path: "/terms", title: terms.title },
 	{ path: "/support", title: support.title },
+	{ path: "/contact", title: support.title },
 ]
 
-afterEach(() => {
-	cleanup()
-	supportEmail.value = ""
-})
+afterEach(cleanup)
 
 describe.each(PAGES)("$path", ({ path, title }) => {
 	it("renders one h1 naming the page", async () => {
@@ -119,26 +105,51 @@ describe("the terms page", () => {
 })
 
 describe("the support page", () => {
-	it("renders Contact, then Report a problem with a link to the issues", async () => {
+	it("renders its six sections in order", async () => {
 		await openPage("/support", support.title)
-		expect(sectionHeadings()).toEqual(["Contact", "Report a problem"])
+		expect(sectionHeadings()).toEqual([
+			"What to write to us about",
+			"How to reach us",
+			"What helps us answer",
+			"Privacy and account deletion",
+			"When we answer",
+			"Who runs Kiroshi",
+		])
+	})
+
+	it("links the support address as a mailto under How to reach us", async () => {
+		await openPage("/support", support.title)
+		const contact = screen.getByRole("heading", { name: "How to reach us" })
+			.parentElement as HTMLElement
 		expect(
-			screen.getByRole("link", { name: support.report.link }),
+			within(contact).getByRole("link", { name: "support@kiroshi.app" }),
+		).toHaveProperty("href", "mailto:support@kiroshi.app")
+	})
+
+	it("links bugs and feature requests to the GitHub issues", async () => {
+		await openPage("/support", support.title)
+		expect(
+			screen.getByRole("link", { name: support.contact.issuesLink }),
 		).toHaveProperty("href", `${REPOSITORY_URL}/issues`)
 	})
 
-	it("renders no mailto link while the support email is empty", async () => {
+	it("names who runs Kiroshi with no legal details", async () => {
 		await openPage("/support", support.title)
-		expect(document.querySelector('a[href^="mailto:"]')).toBeNull()
+		expect(
+			screen.getByText(
+				"Kiroshi, an independent project run from France by Steve Puget.",
+			),
+		).toBeTruthy()
+		expect(screen.getByRole("main").textContent).not.toMatch(
+			/SIREN|sole trader|\d{3} \d{3} \d{3}/i,
+		)
 	})
 
-	it("renders the support email as a mailto link under Contact", async () => {
-		supportEmail.value = "help@kiroshi.app"
-		await openPage("/support", support.title)
-		const contact = screen.getByRole("heading", { name: "Contact" })
-			.parentElement as HTMLElement
+	it("serves the same page at /contact without changing the URL", async () => {
+		const router = await openPage("/contact", support.title)
+		expect(router.state.location.pathname).toBe("/contact")
 		expect(
-			within(contact).getByRole("link", { name: "help@kiroshi.app" }),
-		).toHaveProperty("href", "mailto:help@kiroshi.app")
+			screen.getByRole("link", { name: "support@kiroshi.app" }),
+		).toHaveProperty("href", "mailto:support@kiroshi.app")
 	})
 })

@@ -72,32 +72,30 @@ export const TermsPage = () => (
 	</SitePage>
 )
 
-const SupportEmail = () => {
-	if (!SUPPORT_EMAIL) return null
-	return (
-		<p>
-			<a className={TEXT_LINK} href={`mailto:${SUPPORT_EMAIL}`}>
-				{SUPPORT_EMAIL}
-			</a>
-		</p>
-	)
-}
+const SupportEmail = () => (
+	<p>
+		<a className={TEXT_LINK} href={`mailto:${SUPPORT_EMAIL}`}>
+			{SUPPORT_EMAIL}
+		</a>
+	</p>
+)
 
 export const SupportPage = () => {
-	const { title, contact, report } = SITE_PAGES_COPY.support
+	const { title, topics, contact, details, privacy, response, operator } =
+		SITE_PAGES_COPY.support
 
 	return (
 		<SitePage title={title}>
-			<Section {...contact}>
+			<Section {...topics} />
+			<Section body={contact.body} heading={contact.heading}>
 				<SupportEmail />
-			</Section>
-			<Section body={report.body} heading={report.heading}>
 				<p>
 					<a className={TEXT_LINK} href={ISSUES_URL}>
-						{report.link}
+						{contact.issuesLink}
 					</a>
 				</p>
 			</Section>
+			{renderSections([details, privacy, response, operator])}
 		</SitePage>
 	)
 }
