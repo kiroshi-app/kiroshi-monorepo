@@ -833,6 +833,7 @@ export const createFakeTranscriptStore = (
 		lastActivityAt: conversation.updatedAt,
 		lastWord: lastWordOf(conversation.id),
 		soloBotId: null,
+		activeTurn: null,
 	})
 
 	const soloChatInPage = (bot: Bot, spaceId: string): ConversationInPage => {
@@ -851,6 +852,7 @@ export const createFakeTranscriptStore = (
 			lastActivityAt: lastWord?.at ?? 0,
 			lastWord,
 			soloBotId: bot.id,
+			activeTurn: null,
 		}
 	}
 

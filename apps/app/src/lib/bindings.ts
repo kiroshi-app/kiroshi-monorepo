@@ -259,6 +259,11 @@ export type AccountState = ({ kind: "signedOut"; reason: SignedOutReason | null 
 	kind: "signedIn",
 } & KiroshiAccount | ({ kind: "unreachable"; reason: string }) & { expiresAt?: never; failure?: never; verificationUrl?: never } | ({ kind: "failed"; failure: AccountFailure }) & { expiresAt?: never; reason?: never; verificationUrl?: never };
 
+export type ActiveTurn = {
+	startedAt: number,
+	botIds: string[],
+};
+
 export type ActivityEvent = {
 	id: string,
 	title: string,
@@ -652,6 +657,7 @@ export type ConversationInPage = {
 	lastActivityAt: number,
 	lastWord: LastWord | null,
 	soloBotId: string | null,
+	activeTurn: ActiveTurn | null,
 } & Conversation;
 
 export type ConversationKind = "main" | "topic" | "mission";

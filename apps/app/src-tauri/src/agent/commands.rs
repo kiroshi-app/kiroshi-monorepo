@@ -20,7 +20,7 @@ use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
 use crate::bundles;
 use crate::companions::host::CompanionHost;
-use crate::conversations::commands::{ready, space_of_the_conversation};
+use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::HostTurns;
 use crate::db;
@@ -30,7 +30,7 @@ use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
-use crate::events::{self, Frame, AGENT_EVENT};
+use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::json::JsonValue;
 use crate::mcp_oauth::refresh;
 use crate::mcp_oauth::reports::StandingHost;
@@ -1093,11 +1093,17 @@ async fn complete_unsubmitted_turns<R: Runtime>(
 			failure: (&db::DatabaseError::AppDataDir).into(),
 		});
 	};
-	let messages = ready(state.inner())?.messages();
+	let database = ready(state.inner())?;
+	let messages = database.messages();
+	let mut has_completed = false;
 	for id in messages.open_turns_without_reply(conversation_id.to_owned()).await? {
 		if owned.owns_turn(&id) && !owned.was_submitted(&id) {
 			messages.complete_turn(id, now_ms()).await?;
+			has_completed = true;
 		}
+	}
+	if has_completed {
+		announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
 	}
 	Ok(())
 }

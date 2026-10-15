@@ -1652,8 +1652,8 @@ const TWO_SPACES: &str = "
 			('c-shared', 'topic', 'elsewhere', 'Shared', 1, 1);
 	INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 		VALUES ('c-shared', 'b-shared', 'lead', 1, 0);
-	INSERT INTO turns (id, conversation_id, seq, started_at)
-		VALUES ('t-mine', 'c-mine', 1, 1), ('t-theirs', 'c-theirs', 1, 1);
+	INSERT INTO turns (id, conversation_id, seq, started_at, completed_at)
+		VALUES ('t-mine', 'c-mine', 1, 1, 1), ('t-theirs', 'c-theirs', 1, 1, 1);
 	INSERT INTO messages
 			(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
 		VALUES ('m-mine', 'c-mine', 't-mine', 1, 'user', 'mine', 'complete', 1),
@@ -3004,6 +3004,39 @@ fn a_relay_guest_hears_every_event_of_a_host_turn_in_the_shared_conversation_in_
 }
 
 #[test]
+fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("turn-ended").await;
+		let app = guest.harness.app.handle().clone();
+		let scope = a_live_scope_of("c-mine");
+		let run = commands::a_live_run(&app, scope.clone());
+		let turn =
+			agent::EventTurn { turn_id: "t-mine".to_owned(), conversation_id: "c-mine".to_owned() };
+		let ended = agent::AgentEvent::TurnEnded {
+			ended: agent::TurnEnded {
+				session_id: None,
+				outcome: agent::TurnOutcome::Completed,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		};
+
+		run.emit(ended.clone(), Some(turn.clone()));
+		let heard = guest.events_until_the_marker().await;
+
+		let emitted = agent::ScopedEvent { scope: Some(scope), turn: Some(turn), event: ended };
+		assert_eq!(
+			heard,
+			[as_forwarded((
+				commands::EVENT_CHANNEL,
+				serde_json::to_value(emitted).expect("a payload")
+			))]
+		);
+	});
+}
+
+#[test]
 fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept_off() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("host-wide-check").await;
@@ -3364,6 +3397,57 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 		assert_eq!(read_by_the_guest["conversations"].as_array().map(Vec::len), Some(2));
 		assert_eq!(solo_bot_of(&room["id"]), Some(Value::Null));
 		assert_eq!(solo_bot_of(&json!(host.conversation_id)), Some(json!("default")));
+	});
+}
+
+#[test]
+fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.turn("t1");
+		let read_by_the_guest = || async {
+			let page = host
+				.relayed(json!({
+					"id": 1,
+					"command": "conversation_page",
+					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
+					"sender": guest_sender(),
+				}))
+				.await;
+			page["conversations"]
+				.as_array()
+				.expect("the page holds a list")
+				.iter()
+				.find(|row| row["id"] == json!(host.conversation_id))
+				.map(|row| row["activeTurn"].clone())
+		};
+		direct(
+			&host.window,
+			"conversation_open_assistant_message",
+			json!({ "message": {
+				"id": "r1",
+				"conversationId": host.conversation_id,
+				"turnId": "t1",
+				"authorBotId": "default",
+				"repliedToMessageId": null,
+				"createdAt": 2,
+			} }),
+		);
+
+		let during_the_turn = read_by_the_guest().await;
+		direct(
+			&host.window,
+			"conversation_finalize_message",
+			json!({ "id": "r1", "completion": "complete", "settledText": null }),
+		);
+		let once_the_reply_settled = read_by_the_guest().await;
+		direct(&host.window, "conversation_complete_turn", json!({ "id": "t1", "completedAt": 3 }));
+		let after_the_turn = read_by_the_guest().await;
+
+		let speaking = Some(json!({ "startedAt": 1, "botIds": ["default"] }));
+		assert_eq!(during_the_turn, speaking);
+		assert_eq!(once_the_reply_settled, speaking);
+		assert_eq!(after_the_turn, Some(Value::Null));
 	});
 }
 
@@ -3827,6 +3911,7 @@ fn in_page(
 		last_activity_at,
 		last_word,
 		solo_bot_id: None,
+		active_turn: None,
 	})
 }
 
