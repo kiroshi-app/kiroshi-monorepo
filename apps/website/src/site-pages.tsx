@@ -91,7 +91,7 @@ export const SupportPage = () => {
 			<Section {...contact}>
 				<SupportEmail />
 			</Section>
-			<Section {...report}>
+			<Section body={report.body} heading={report.heading}>
 				<p>
 					<a className={TEXT_LINK} href={ISSUES_URL}>
 						{report.link}

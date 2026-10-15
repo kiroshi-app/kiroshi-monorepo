@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
-import { REPOSITORY_URL } from "./copy"
+import { AUTHOR_URL, REPOSITORY_URL, WEBSITE_COPY } from "./copy"
 import { createSiteRouter } from "./router"
 import { SITE_PAGES_COPY } from "./site-pages-copy"
 
@@ -50,6 +50,13 @@ const footerLinks = () =>
 		.getAllByRole("link")
 		.map((link) => [link.textContent, link.getAttribute("href")])
 
+const FOOTER_LINKS = [
+	[WEBSITE_COPY.credit, AUTHOR_URL],
+	[privacy.navLabel, "/privacy"],
+	[terms.navLabel, "/terms"],
+	[support.navLabel, "/support"],
+]
+
 const PAGES = [
 	{ path: "/privacy", title: privacy.title },
 	{ path: "/terms", title: terms.title },
@@ -76,14 +83,7 @@ describe.each(PAGES)("$path", ({ path, title }) => {
 
 	it("renders the footer with the credit and the three page links", async () => {
 		await openPage(path, title)
-		expect(footerLinks()).toEqual(
-			expect.arrayContaining([
-				["Made by Shoto", "https://github.com/shoto290"],
-				[privacy.navLabel, "/privacy"],
-				[terms.navLabel, "/terms"],
-				[support.navLabel, "/support"],
-			]),
-		)
+		expect(footerLinks()).toEqual(expect.arrayContaining(FOOTER_LINKS))
 	})
 })
 
@@ -91,14 +91,7 @@ describe("the home page", () => {
 	it("renders the same footer", async () => {
 		renderSite("/")
 		await screen.findByRole("contentinfo")
-		expect(footerLinks()).toEqual(
-			expect.arrayContaining([
-				["Made by Shoto", "https://github.com/shoto290"],
-				[privacy.navLabel, "/privacy"],
-				[terms.navLabel, "/terms"],
-				[support.navLabel, "/support"],
-			]),
-		)
+		expect(footerLinks()).toEqual(expect.arrayContaining(FOOTER_LINKS))
 	})
 })
 
