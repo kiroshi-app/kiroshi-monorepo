@@ -135,6 +135,9 @@ body.
   loses events of its own. A client that ignores replay may ignore it.
 - `seq`: 1 for the first frame of the epoch, then one more per frame. A client
   that ignores replay may ignore it.
+- `token`: present only on a frame replayed for a `relay_resume` call, and equal
+  to the token of that call. A client that ignores replay drops every frame that
+  carries it.
 
 The host forwards an event only when it concerns the shared space: an event about
 another space, or a host-wide `agent://event` (its `scope` is `null`), never
@@ -291,6 +294,8 @@ the space, at most 4 MiB of them, and drops the oldest first.
 
 A client keeps the `epoch` and the `seq` of the last event frame it applied:
 
+- A frame carrying a `token` that is not the one of its own pending resume was
+  replayed for another member: drop it, and change nothing.
 - A frame of the same epoch whose `seq` is at most the last applied is a
   duplicate: drop it.
 - A frame whose `seq` is the last applied plus one: apply it.
@@ -305,13 +310,16 @@ sends:
 ```
 
 The host sends every frame it kept with a `seq` above `since`, in order, as
-ordinary event frames, then answers:
+event frames carrying the call's `token`, then answers:
 
 ```json
 { "id": 9, "status": 200, "body": { "token": "a-random-token", "replayed": 3 } }
 ```
 
-The client applies the held frames in `seq` order, dropping duplicates. When the
+The client applies the held frames in `seq` order, dropping duplicates.
+When the host socket comes back on the same epoch, the host first sends every
+frame it recorded while it was away, without a `token`, so a member socket that
+stayed open only sees the `seq` continue. When the
 epoch is no longer the host's, or `since` is older than what the host kept, the
 host replays nothing and answers `{ "token": "a-random-token", "tooOld": true }`.
 

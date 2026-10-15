@@ -775,7 +775,9 @@ fn a_reopened_member_relay_resumes_delivers_the_replay_once_in_order_and_announc
 		let (mut events, _) =
 			tokio_tungstenite::connect_async(events_url).await.expect("the events socket opens");
 		for seq in [3, 2, 4, 2] {
-			send(&mut reopened, a_stamped_event(seq)).await;
+			let mut replayed = a_stamped_event(seq);
+			replayed["token"] = resume["args"]["token"].clone();
+			send(&mut reopened, replayed).await;
 		}
 		let body = json!({ "token": resume["args"]["token"], "replayed": 3 });
 		send(&mut reopened, json!({ "id": resume["id"], "status": 200, "body": body })).await;

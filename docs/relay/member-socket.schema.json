@@ -2646,6 +2646,10 @@
           "description": "1 for the first frame of the epoch, one more for each next frame.",
           "minimum": 1,
           "type": "integer"
+        },
+        "token": {
+          "description": "Present only on a frame replayed for a ResumeCallFrame: the token of that call. A member that did not send it drops the frame.",
+          "type": "string"
         }
       },
       "required": [

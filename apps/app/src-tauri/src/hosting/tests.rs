@@ -1218,11 +1218,13 @@ fn a_resume_inside_the_ring_replays_every_missed_frame_once_in_seq_order() {
 		for n in 1..5 {
 			numbered(&harness, n);
 		}
-		let last = numbered_through(&harness, &mut member, 5).await;
+		let mut last = numbered_through(&harness, &mut member, 5).await;
 
 		let (replayed, answer) = resumed_from(&mut member, &epoch, since).await;
 
 		assert_continues(&replayed, &epoch, since);
+		assert!(replayed.iter().all(|frame| frame["token"] == RESUME_TOKEN));
+		last["token"] = json!(RESUME_TOKEN);
 		assert_eq!(replayed.last(), Some(&last));
 		assert_eq!(replayed.iter().filter_map(number_of).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
 		assert_eq!(answer["status"], 200);
@@ -1246,6 +1248,30 @@ fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
 
 		assert!(replayed.is_empty());
 		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+	});
+}
+
+#[test]
+fn a_reopened_host_socket_first_sends_the_frames_recorded_while_it_was_down_in_seq_order() {
+	run(async {
+		let mut harness = Harness::signed_in("outage-pushed").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut member, is_a_members_change).await);
+
+		drop(member);
+		harness.reached(HostingState::Connecting).await;
+		numbered(&harness, 1);
+		numbered(&harness, 2);
+		let mut again = harness.member().await;
+		let mut pushed = Vec::new();
+		while pushed.last().and_then(number_of) != Some(2) {
+			pushed.push(next_stamped(&mut again, |frame| frame.get("event").is_some()).await);
+		}
+
+		assert_continues(&pushed, &epoch, since);
+		assert_eq!(pushed.iter().filter_map(number_of).collect::<Vec<_>>(), vec![1, 2]);
 	});
 }
 

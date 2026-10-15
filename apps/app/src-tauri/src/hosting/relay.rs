@@ -19,7 +19,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
-use super::replay::{self, Ring};
+use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::{entered, members, Hosting};
 use crate::account::cloud::RegisterError;
 use crate::account::session::{self, AccountSession};
@@ -115,8 +115,10 @@ async fn attempts<R: Runtime>(
 ) {
 	let mut backoff = Backoff::first();
 	let mut replaced = None;
+	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
-		let next = attempted(app, hosted, local, stop, &mut backoff, &mut replaced, ring).await;
+		let next =
+			attempted(app, hosted, local, stop, &mut backoff, &mut replaced, &mut relaying).await;
 		let instance_id = hosted.instance_id.as_deref();
 		match next {
 			Next::Stopped => return,
@@ -144,7 +146,7 @@ async fn attempted<R: Runtime>(
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
 	replaced: &mut Option<String>,
-	ring: &watch::Sender<Ring>,
+	relaying: &mut Relaying<'_>,
 ) -> Next {
 	let bearer = match app.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
@@ -173,7 +175,7 @@ async fn attempted<R: Runtime>(
 			entered(app, &hosted.space_id, Some(&instance_id), HostingState::Online);
 			let ids = Ids { space_id: &hosted.space_id, instance_id: &instance_id };
 			let ended = tokio::select! {
-				ended = online(app, *socket, local, stop, ids, ring) => ended,
+				ended = online(app, *socket, local, stop, ids, relaying) => ended,
 				never = members::polled(app, &hosted.space_id, &instance_id) => match never {},
 			};
 			match ended {
@@ -276,14 +278,15 @@ async fn online<R: Runtime>(
 	local: &LocalApi,
 	stop: &mut watch::Receiver<bool>,
 	ids: Ids<'_>,
-	ring: &watch::Sender<Ring>,
+	relaying: &mut Relaying<'_>,
 ) -> Ended {
 	let (mut sink, mut stream) = socket.split();
-	let mut recorded = ring.subscribe();
-	let (epoch, mut sent_seq) = {
-		let ring = recorded.borrow_and_update();
-		(ring.epoch().to_owned(), ring.last_seq())
-	};
+	let last_sent = &mut relaying.last_sent;
+	let mut recorded = relaying.ring.subscribe();
+	let unsent = recorded.borrow_and_update().rejoined(last_sent);
+	if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
+		return Ended::Dropped(reason);
+	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
 	let mut avatars = JoinSet::new();
@@ -307,7 +310,7 @@ async fn online<R: Runtime>(
 					}
 					Received::Answer(answer) => Message::text(answer),
 					Received::Resume(call) => {
-						let resumed = recorded.borrow().resumed(&call, sent_seq);
+						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
 						if let Err(reason) = all_sent(&mut sink, resumed.frames).await {
 							return Ended::Dropped(reason);
 						}
@@ -338,15 +341,14 @@ async fn online<R: Runtime>(
 				if changed.is_err() {
 					return Ended::Dropped("the event recorder ended".to_owned());
 				}
-				let followed = recorded.borrow_and_update().followed(&epoch, sent_seq);
-				let (frames, last_seq) = match followed {
-					Ok(fresh) => fresh,
+				let followed = recorded.borrow_and_update().followed(last_sent);
+				let unsent = match followed {
+					Ok(unsent) => unsent,
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
-				if let Err(reason) = all_sent(&mut sink, frames).await {
+				if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
 					return Ended::Dropped(reason);
 				}
-				sent_seq = last_seq;
 				continue;
 			}
 			_ = pings.tick() => Message::Ping(Vec::new().into()),
@@ -444,6 +446,18 @@ async fn fell_behind(sink: &mut Sink, missed: u64) -> Ended {
 async fn all_sent(sink: &mut Sink, frames: Vec<String>) -> Result<(), String> {
 	for frame in frames {
 		sent(sink, Message::text(frame)).await?;
+	}
+	Ok(())
+}
+
+async fn all_recorded_sent(
+	sink: &mut Sink,
+	unsent: Vec<Stamped>,
+	last_sent: &mut LastSent,
+) -> Result<(), String> {
+	for stamped in unsent {
+		sent(sink, Message::text(stamped.frame)).await?;
+		last_sent.seq = stamped.seq;
 	}
 	Ok(())
 }

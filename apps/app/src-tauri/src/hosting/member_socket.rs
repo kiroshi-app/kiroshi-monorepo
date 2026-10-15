@@ -168,6 +168,10 @@ fn frames() -> BTreeMap<String, Value> {
 						"type": "integer",
 						"minimum": 1,
 					},
+					"token": {
+						"description": "Present only on a frame replayed for a ResumeCallFrame: the token of that call. A member that did not send it drops the frame.",
+						"type": "string",
+					},
 				},
 				"required": ["event"],
 			}),

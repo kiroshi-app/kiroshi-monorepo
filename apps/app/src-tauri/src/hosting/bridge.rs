@@ -152,6 +152,11 @@ pub(super) fn forwarded(frame: &str, epoch: &str, seq: u64) -> String {
 	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq}}}")
 }
 
+pub(super) fn replayed(frame: &str, epoch: &str, seq: u64, token: &str) -> String {
+	let token = Value::from(token);
+	format!("{{\"event\":{frame},\"epoch\":\"{epoch}\",\"seq\":{seq},\"token\":{token}}}")
+}
+
 pub(super) async fn bridged<R: Runtime>(
 	app: AppHandle<R>,
 	local: LocalApi,
@@ -486,6 +491,14 @@ mod tests {
 		assert_eq!(
 			forwarded(r#"{"event":"a://b","payload":1}"#, "e-1", 7),
 			r#"{"event":{"event":"a://b","payload":1},"epoch":"e-1","seq":7}"#
+		);
+	}
+
+	#[test]
+	fn a_replayed_event_carries_the_resume_token_escaped() {
+		assert_eq!(
+			replayed(r#"{"event":"a://b","payload":1}"#, "e-1", 7, r#"t"1"#),
+			r#"{"event":{"event":"a://b","payload":1},"epoch":"e-1","seq":7,"token":"t\"1"}"#
 		);
 	}
 
