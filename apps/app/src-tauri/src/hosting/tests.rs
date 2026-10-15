@@ -53,7 +53,7 @@ use crate::conversations::contract::{
 };
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
-use crate::db::repositories::messages::{MessagePageQuery, MessageRole, NewTurn};
+use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole, NewTurn};
 use crate::db::{self, DatabaseState};
 use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
@@ -3450,6 +3450,80 @@ fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 		assert_eq!(during_the_turn, speaking);
 		assert_eq!(once_the_reply_settled, speaking);
 		assert_eq!(after_the_turn, Some(Value::Null));
+	});
+}
+
+#[test]
+fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_writes() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let ada = direct(
+			&host.window,
+			"conversation_create_bot",
+			json!({ "spaceId": PERSONAL, "identity": as_json(a_bot_identity()) }),
+		);
+		let ada = ada["id"].as_str().expect("the bot holds an id").to_owned();
+		let room = direct(
+			&host.window,
+			"conversation_create",
+			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": ["default", ada] }),
+		);
+		let room_id = room["id"].as_str().expect("the room holds an id").to_owned();
+		let state = host.app.state::<DatabaseState>();
+		let messages = state.as_ref().expect("the store is open").messages();
+		for bot_id in ["default", ada.as_str()] {
+			let turn =
+				NewTurn { id: "t1".to_owned(), conversation_id: room_id.clone(), started_at: 1 };
+			messages.start_run(turn, bot_id.to_owned()).await.expect("the run starts");
+		}
+		let reply = |id: &str, bot_id: &str| {
+			direct(
+				&host.window,
+				"conversation_open_assistant_message",
+				json!({ "message": {
+					"id": id,
+					"conversationId": room_id,
+					"turnId": "t1",
+					"authorBotId": bot_id,
+					"repliedToMessageId": null,
+					"createdAt": 2,
+				} }),
+			);
+		};
+		let ended = |bot_id: &str| EndedRun {
+			turn_id: "t1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			handed_to: Vec::new(),
+			ended_at: 3,
+		};
+		let read_by_the_guest = || async {
+			let page = host
+				.relayed(json!({
+					"id": 1,
+					"command": "conversation_page",
+					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
+					"sender": guest_sender(),
+				}))
+				.await;
+			page["conversations"]
+				.as_array()
+				.expect("the page holds a list")
+				.iter()
+				.find(|row| row["id"] == json!(room_id))
+				.map(|row| row["activeTurn"].clone())
+		};
+		reply("r1", "default");
+		reply("r2", &ada);
+
+		messages.end_run(ended("default")).await.expect("the first run ends");
+		let while_the_second_writes = read_by_the_guest().await;
+		messages.end_run(ended(&ada)).await.expect("the second run ends");
+		let after_the_last = read_by_the_guest().await;
+
+		let mut both = vec!["default".to_owned(), ada.clone()];
+		both.sort_unstable();
+		assert_eq!(while_the_second_writes, Some(json!({ "startedAt": 1, "botIds": both })));
+		assert_eq!(after_the_last, Some(Value::Null));
 	});
 }
 

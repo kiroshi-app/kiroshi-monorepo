@@ -42,6 +42,13 @@ pub struct NewTurn {
 	pub started_at: i64,
 }
 
+pub struct EndedRun {
+	pub turn_id: String,
+	pub bot_id: String,
+	pub handed_to: Vec<String>,
+	pub ended_at: i64,
+}
+
 pub struct NewAssistantMessage {
 	pub id: String,
 	pub conversation_id: String,
@@ -155,6 +162,16 @@ const COMPLETE_EARLIER_UNANSWERED_TURNS: &str = "UPDATE turns SET completed_at =
 			AND messages.role = 'assistant'
 			AND messages.completion_state IN ('pending', 'streaming'))";
 const COMPLETE_OPEN_TURNS: &str = "UPDATE turns SET completed_at = ?1 WHERE completed_at IS NULL";
+const REOPEN_TURN: &str = "UPDATE turns SET completed_at = NULL WHERE id = ?1";
+const COMPLETE_TURN_NO_BOT_RUNS_ON: &str = "UPDATE turns SET completed_at = ?2
+	WHERE id = ?1 AND completed_at IS NULL
+		AND NOT EXISTS (SELECT 1 FROM turn_runs WHERE turn_runs.turn_id = turns.id)";
+const HOLD_RUN: &str =
+	"INSERT OR IGNORE INTO turn_runs (turn_id, bot_id, state) VALUES (?1, ?2, ?3)";
+const RELEASE_RUN: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2 AND state = ?3";
+const RELEASE_EVERY_RUN: &str = "DELETE FROM turn_runs";
+const AWAITED: &str = "awaited";
+const RUNNING: &str = "running";
 const OPEN_TURNS_WITHOUT_REPLY: &str = "SELECT id FROM turns
 	WHERE conversation_id = ?1 AND completed_at IS NULL
 		AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.turn_id = turns.id
@@ -281,6 +298,34 @@ impl MessagesRepository {
 
 	pub async fn ensure_turn(&self, turn: NewTurn) -> Result<i64, TranscriptError> {
 		self.call_mut(move |connection| Ok(keep_turn(connection, turn))).await?
+	}
+
+	pub async fn start_run(&self, turn: NewTurn, bot_id: String) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| Ok(started_run(connection, &turn, &bot_id))).await?
+	}
+
+	pub async fn end_run(&self, ended: EndedRun) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| Ok(ended_run(connection, &ended))).await?
+	}
+
+	pub async fn await_runs(
+		&self,
+		turn_id: String,
+		bot_ids: Vec<String>,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| Ok(awaited_runs(connection, &turn_id, &bot_ids))).await?
+	}
+
+	pub async fn abandon_run(
+		&self,
+		turn_id: String,
+		bot_id: String,
+		abandoned_at: i64,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(abandoned_run(connection, &turn_id, &bot_id, abandoned_at))
+		})
+		.await?
 	}
 
 	pub async fn complete_turn(
@@ -596,6 +641,7 @@ pub(in crate::db) fn sweep_unfinished(
 	let interrupted_messages = transaction.execute(INTERRUPT_OPEN_MESSAGES, [])?;
 	let terminated_activities = transaction.execute(TERMINATE_OPEN_ACTIVITIES, [])?;
 	let completed_turns = transaction.execute(COMPLETE_OPEN_TURNS, [now_ms()])?;
+	transaction.execute(RELEASE_EVERY_RUN, [])?;
 	transaction.commit()?;
 	Ok(RecoveryReport { completed_turns, interrupted_messages, terminated_activities })
 }
@@ -739,6 +785,57 @@ fn insert_turn_once(transaction: &Transaction<'_>, turn: &NewTurn) -> Result<i64
 		params![turn.id, turn.conversation_id, turn.started_at],
 		|row| row.get(0),
 	)?)
+}
+
+fn started_run(
+	connection: &mut Connection,
+	turn: &NewTurn,
+	bot_id: &str,
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	insert_turn_once(&transaction, turn)?;
+	transaction.execute(RELEASE_RUN, params![turn.id, bot_id, AWAITED])?;
+	transaction.execute(HOLD_RUN, params![turn.id, bot_id, RUNNING])?;
+	transaction.execute(REOPEN_TURN, [&turn.id])?;
+	transaction.commit()?;
+	Ok(())
+}
+
+fn ended_run(connection: &mut Connection, ended: &EndedRun) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	transaction.execute(RELEASE_RUN, params![ended.turn_id, ended.bot_id, RUNNING])?;
+	for bot_id in &ended.handed_to {
+		transaction.execute(HOLD_RUN, params![ended.turn_id, bot_id, AWAITED])?;
+	}
+	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![ended.turn_id, ended.ended_at])?;
+	transaction.commit()?;
+	Ok(())
+}
+
+fn awaited_runs(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_ids: &[String],
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	for bot_id in bot_ids {
+		transaction.execute(HOLD_RUN, params![turn_id, bot_id, AWAITED])?;
+	}
+	transaction.commit()?;
+	Ok(())
+}
+
+fn abandoned_run(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_id: &str,
+	abandoned_at: i64,
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	transaction.execute(RELEASE_RUN, params![turn_id, bot_id, AWAITED])?;
+	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, abandoned_at])?;
+	transaction.commit()?;
+	Ok(())
 }
 
 fn open_turn_with(

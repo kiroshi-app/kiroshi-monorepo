@@ -15,10 +15,12 @@ use super::session::EventSink;
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
 use crate::conversations::commands::{announce_conversation, ready};
+use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::host_turn::present_bot_ids;
 use crate::db;
 use crate::db::repositories::conversations::{MISSION_KIND, TOPIC_KIND};
-use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
+use crate::db::repositories::messages::{EndedRun, NewAssistantMessage, NewTurn, TerminalState};
 use crate::db::DatabaseError;
 use crate::events::CONVERSATION_UPDATED;
 
@@ -402,13 +404,27 @@ impl<R: Runtime> Desk<R> {
 			return;
 		};
 		self.show_attachments(&turn).await;
-		if let Err(error) = self.store.complete_turn(&turn.id).await {
+		let handed_to = match completion {
+			TerminalState::Cancelled => Vec::new(),
+			_ => self.handed_to(&turn).await,
+		};
+		if let Err(error) = self.store.end_run(&turn.id, handed_to).await {
 			self.store.report(&turn.id, &error);
 		}
 	}
 }
 
 impl<R: Runtime> Desk<R> {
+	async fn handed_to(&self, turn: &OpenTurn) -> Vec<String> {
+		match self.store.handed_to(turn.written.values()).await {
+			Ok(handed_to) => handed_to,
+			Err(error) => {
+				self.store.report(&turn.id, &error);
+				Vec::new()
+			}
+		}
+	}
+
 	async fn show_attachments(&self, turn: &OpenTurn) {
 		let attached = self.attachments.take();
 		if attached.is_empty() {
@@ -485,7 +501,7 @@ impl<R: Runtime> Store<R> {
 			started_at: now_ms(),
 		};
 		let database = self.database()?;
-		database.messages().ensure_turn(turn).await?;
+		database.messages().start_run(turn, self.bot_id.clone()).await?;
 		self.owned.claim_turn(id);
 		self.announce_updated(database).await;
 		Ok(())
@@ -555,11 +571,36 @@ impl<R: Runtime> Store<R> {
 			.await;
 	}
 
-	async fn complete_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
+	async fn end_run(&self, id: &str, handed_to: Vec<String>) -> Result<(), TranscriptStoreError> {
+		let ended = EndedRun {
+			turn_id: id.to_owned(),
+			bot_id: self.bot_id.clone(),
+			handed_to,
+			ended_at: now_ms(),
+		};
 		let database = self.database()?;
-		database.messages().complete_turn(id.to_owned(), now_ms()).await?;
+		database.messages().end_run(ended).await?;
 		self.announce_updated(database).await;
 		Ok(())
+	}
+
+	async fn handed_to(
+		&self,
+		written: impl Iterator<Item = &String>,
+	) -> Result<Vec<String>, TranscriptStoreError> {
+		let mut mentioned: Vec<&str> = written
+			.flat_map(|text| mentioned_bot_ids(text))
+			.filter(|bot_id| *bot_id != self.bot_id)
+			.collect();
+		if mentioned.is_empty() {
+			return Ok(Vec::new());
+		}
+		let seats = self.database()?.conversations().seats(self.conversation_id.clone()).await?;
+		let present = present_bot_ids(&seats);
+		mentioned.retain(|bot_id| present.contains(bot_id));
+		mentioned.sort_unstable();
+		mentioned.dedup();
+		Ok(mentioned.into_iter().map(str::to_owned).collect())
 	}
 
 	async fn settled_mentions(
@@ -722,13 +763,17 @@ mod tests {
 	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
 	use super::*;
 	use crate::agent::commands;
-	use crate::db::repositories::conversations::DEFAULT_BOT_ID;
+	use crate::db::repositories::conversations::{
+		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
+	};
 	use crate::db::repositories::messages::{
 		MessageRole, MessageState, NewUserMessage, StoredMessage,
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	type Heard = (AgentEvent, Option<EventTurn>);
+
+	const PERSONAL_SPACE: &str = "personal";
 
 	impl TurnSink for mpsc::UnboundedSender<Heard> {
 		fn emit(&self, event: AgentEvent, turn: Option<EventTurn>) {
@@ -771,13 +816,50 @@ mod tests {
 		}
 
 		fn desk_telling(&self, inner: Arc<dyn TurnSink>) -> Desk<MockRuntime> {
+			self.desk_of_telling(DEFAULT_BOT_ID, inner)
+		}
+
+		fn desk_of(&self, bot_id: &str) -> Desk<MockRuntime> {
+			self.desk_of_telling(bot_id, Arc::new(Unheard))
+		}
+
+		fn desk_of_telling(&self, bot_id: &str, inner: Arc<dyn TurnSink>) -> Desk<MockRuntime> {
 			let store = Store {
 				app: self.app.handle().clone(),
 				conversation_id: self.conversation_id.clone(),
-				bot_id: DEFAULT_BOT_ID.to_owned(),
+				bot_id: bot_id.to_owned(),
 				owned: Arc::default(),
 			};
 			Desk { store, turn: None, attachments: self.attachments.clone(), inner }
+		}
+
+		async fn in_a_room_of_two(name: &str) -> (Self, String) {
+			let written = Self::new(name).await;
+			let conversations = written.database().conversations();
+			let identity = BotIdentity {
+				name: "Ada".to_owned(),
+				title: String::new(),
+				model: DEFAULT_BOT_MODEL.to_owned(),
+				avatar_blot: None,
+				avatar_image_path: None,
+				instructions: String::new(),
+				denied_tools: Vec::new(),
+				effort: None,
+			};
+			let ada = conversations
+				.create_bot(identity, Some(PERSONAL_SPACE.to_owned()), None)
+				.await
+				.expect("the second bot is created");
+			let room = conversations
+				.create_conversation(ConversationDraft {
+					space_id: PERSONAL_SPACE.to_owned(),
+					section_id: None,
+					title: "Room".to_owned(),
+					bot_ids: vec![DEFAULT_BOT_ID.to_owned(), ada.id.clone()],
+				})
+				.await
+				.expect("the room is created");
+			(Self { conversation_id: room.id, ..written }, ada.id)
 		}
 
 		async fn forwarded(&self, entries: Vec<Entry>) -> Vec<AgentEvent> {
@@ -1463,8 +1545,8 @@ mod tests {
 		assert_eq!(
 			rows,
 			[
-				(json!("hello"), started.clone()),
 				(json!("hello"), started),
+				(json!("hello"), speaking.clone()),
 				(json!("hello"), speaking.clone()),
 				(first_reply.clone(), speaking.clone()),
 				(first_reply, speaking.clone()),
@@ -1545,7 +1627,7 @@ mod tests {
 		};
 		let bots_of =
 			|update: &serde_json::Value| update["conversation"]["activeTurn"]["botIds"].clone();
-		assert_eq!(bots_of(started), json!([]));
+		assert_eq!(bots_of(started), json!([DEFAULT_BOT_ID]));
 		assert_eq!(bots_of(opened), json!([DEFAULT_BOT_ID]));
 		assert_eq!(bots_of(payload), json!([DEFAULT_BOT_ID]));
 		assert_eq!(completed["conversation"]["activeTurn"], json!(null));
@@ -1631,5 +1713,115 @@ mod tests {
 			Some(MessageState::Complete)
 		);
 		assert!(heard.lock().expect("the list is kept").is_empty(), "an update was announced");
+	}
+
+	fn last_active_turn(heard: &Mutex<Vec<serde_json::Value>>) -> serde_json::Value {
+		heard
+			.lock()
+			.expect("the list is kept")
+			.last()
+			.map(|payload| payload["conversation"]["activeTurn"].clone())
+			.expect("an update was announced")
+	}
+
+	fn working(bot_ids: &[&str]) -> serde_json::Value {
+		let mut bot_ids = bot_ids.to_vec();
+		bot_ids.sort_unstable();
+		json!({ "startedAt": 1, "botIds": bot_ids })
+	}
+
+	fn cancelled_turn() -> AgentEvent {
+		AgentEvent::TurnEnded {
+			ended: super::super::contract::TurnEnded {
+				session_id: None,
+				outcome: TurnOutcome::Cancelled,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		}
+	}
+
+	#[tokio::test]
+	async fn a_turn_two_bots_run_on_stays_open_until_the_last_of_them_ends_however_it_ends() {
+		let endings = [
+			("completed", turn_ended()),
+			("failed", AgentEvent::TurnChanged { state: TurnState::Failed }),
+			("cancelled", cancelled_turn()),
+		];
+		for (name, ending) in endings {
+			let (written, ada) = Written::in_a_room_of_two(&format!("two-bots-{name}")).await;
+			written.prompt("t1", "p1").await;
+			let heard = listen_to_updates(&written);
+			let mut first = written.desk_of(DEFAULT_BOT_ID);
+			let mut second = written.desk_of(&ada);
+			first.open_turn(submitted("t1", "p1")).await;
+			second.open_turn(submitted("t1", "p1")).await;
+			second.record(&AgentEvent::MessageStarted { message: streaming("m2") }).await;
+			second
+				.record(&AgentEvent::MessageDelta { id: "m2".into(), seq: 1, text: "half".into() })
+				.await;
+			first.record(&completed("m1", "first", 2)).await;
+
+			first.record(&ending).await;
+			let after_the_first = last_active_turn(&heard);
+			let first_completed_at = written.completed_at("t1").await;
+			second.record(&turn_ended()).await;
+			let after_the_second = last_active_turn(&heard);
+
+			assert_eq!(after_the_first, working(&[DEFAULT_BOT_ID, &ada]), "{name}");
+			assert_eq!(first_completed_at, None, "the first {name} run closed the turn");
+			assert_eq!(after_the_second, json!(null), "{name}");
+			assert!(written.completed_at("t1").await.is_some(), "the last run left it open");
+		}
+	}
+
+	#[tokio::test]
+	async fn a_bot_handing_over_keeps_the_turn_open_until_the_bot_it_handed_to_ends() {
+		let (written, ada) = Written::in_a_room_of_two("handover").await;
+		written.prompt("t1", "p1").await;
+		let heard = listen_to_updates(&written);
+		let mut lead = written.desk_of(DEFAULT_BOT_ID);
+		let mut handed = written.desk_of(&ada);
+		let handing = format!("<@{ada}> over to you");
+
+		lead.open_turn(submitted("t1", "p1")).await;
+		lead.record(&completed("m1", &handing, 2)).await;
+		lead.record(&turn_ended()).await;
+		let across_the_gap = last_active_turn(&heard);
+		let gap_completed_at = written.completed_at("t1").await;
+		handed.open_turn(submitted("t1", "m1")).await;
+		handed.record(&completed("m2", "done", 3)).await;
+		let while_handed_writes = last_active_turn(&heard);
+		handed.record(&turn_ended()).await;
+
+		assert_eq!(across_the_gap, working(&[DEFAULT_BOT_ID, &ada]));
+		assert_eq!(gap_completed_at, None, "the handover closed the turn");
+		assert_eq!(while_handed_writes, working(&[DEFAULT_BOT_ID, &ada]));
+		assert_eq!(last_active_turn(&heard), json!(null));
+		assert!(written.completed_at("t1").await.is_some(), "the handed run left it open");
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_run_hands_over_to_nobody() {
+		let (written, ada) = Written::in_a_room_of_two("cancelled-handover").await;
+		written.prompt("t1", "p1").await;
+		let heard = listen_to_updates(&written);
+		let mut lead = written.desk_of(DEFAULT_BOT_ID);
+
+		lead.open_turn(submitted("t1", "p1")).await;
+		lead.record(&completed("m1", &format!("<@{ada}> over to you"), 2)).await;
+		lead.record(&cancelled_turn()).await;
+		let runs_left: i64 = written
+			.database()
+			.call(|connection| {
+				Ok(connection.query_row("SELECT COUNT(*) FROM turn_runs", [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the runs count");
+
+		assert_eq!(last_active_turn(&heard), json!(null));
+		assert!(written.completed_at("t1").await.is_some(), "the cancelled turn was left open");
+		assert_eq!(runs_left, 0, "the cancelled run left a run behind");
 	}
 }

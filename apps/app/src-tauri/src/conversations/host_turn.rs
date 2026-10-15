@@ -14,7 +14,7 @@ use crate::agent::commands::{
 	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, announce,
 };
 use crate::agent::contract::{
-	AgentEvent, RuntimeScope, ScopedEvent, SubmittedTurn, TransportError,
+	AgentEvent, RuntimeScope, ScopedEvent, SubmittedTurn, TransportError, TurnOutcome,
 };
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
@@ -132,7 +132,7 @@ fn seated_mentions<'a>(text: &'a str, present: &[&str]) -> Vec<&'a str> {
 	mentioned_bot_ids(text).into_iter().filter(|bot_id| present.contains(bot_id)).collect()
 }
 
-fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
+pub(crate) fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
 	seats
 		.iter()
 		.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
@@ -181,18 +181,29 @@ struct Speaker {
 	written: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpeakerEnd {
+	HandsOver,
+	Cancelled,
+}
+
 impl Speaker {
-	fn is_done_after(&mut self, event: &AgentEvent) -> bool {
+	fn end_after(&mut self, event: &AgentEvent) -> Option<SpeakerEnd> {
 		match event {
 			AgentEvent::MessageStarted { message } | AgentEvent::MessageCompleted { message } => {
 				self.wrote(&message.id)
 			}
 			AgentEvent::MessageDelta { id, .. } => self.wrote(id),
-			AgentEvent::TurnEnded { .. } => return true,
-			AgentEvent::Failed { error } => return ends_the_session(error),
+			AgentEvent::TurnEnded { ended } if ended.outcome == TurnOutcome::Cancelled => {
+				return Some(SpeakerEnd::Cancelled)
+			}
+			AgentEvent::TurnEnded { .. } => return Some(SpeakerEnd::HandsOver),
+			AgentEvent::Failed { error } if ends_the_session(error) => {
+				return Some(SpeakerEnd::HandsOver)
+			}
 			_ => {}
 		}
-		false
+		None
 	}
 
 	fn wrote(&mut self, id: &str) {
@@ -232,11 +243,13 @@ impl<R: Runtime> HostTurn<R> {
 			else {
 				continue;
 			};
-			if !speaking[at].is_done_after(&scoped.event) {
+			let Some(end) = speaking[at].end_after(&scoped.event) else {
 				continue;
-			}
+			};
 			let done = speaking.remove(at);
-			self.note_handovers(&done, &mut waiting).await;
+			if end == SpeakerEnd::HandsOver {
+				self.note_handovers(&done, &mut waiting).await;
+			}
 			if speaking.is_empty() && waiting.is_empty() {
 				drop(held);
 				return self.shut_down(done.scope).await;
@@ -249,6 +262,7 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
+		self.await_runs(&summoned).await;
 		join_all(summoned.into_iter().map(|summons| self.begin(summons)))
 			.await
 			.into_iter()
@@ -343,21 +357,34 @@ impl<R: Runtime> HostTurn<R> {
 			}
 		};
 		eprintln!("{} could not run companion {bot_id}: {detail}", self.label());
-		self.end_failed().await;
+		self.abandon(bot_id).await;
 		if let Some(scope) = scope {
 			self.shut_down(scope).await;
 		}
 	}
 
-	async fn end_failed(&self) {
-		if let Err(error) = self.ended_failed().await {
-			eprintln!("{} could not be ended as failed: {error:?}", self.label());
+	async fn await_runs(&self, summoned: &[Summons]) {
+		if let Err(error) = self.awaited(summoned).await {
+			eprintln!("{} could not await its companions: {error:?}", self.label());
 		}
 	}
 
-	async fn ended_failed(&self) -> Result<(), TranscriptStoreError> {
+	async fn awaited(&self, summoned: &[Summons]) -> Result<(), TranscriptStoreError> {
+		let bot_ids = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
+		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids).await?;
+		Ok(())
+	}
+
+	async fn abandon(&self, bot_id: &str) {
+		if let Err(error) = self.abandoned(bot_id).await {
+			eprintln!("{} could not end the run of {bot_id} as failed: {error:?}", self.label());
+		}
+	}
+
+	async fn abandoned(&self, bot_id: &str) -> Result<(), TranscriptStoreError> {
 		let database = database(&self.app)?;
-		database.messages().complete_turn(self.turn_id.clone(), now_ms()).await?;
+		let messages = database.messages();
+		messages.abandon_run(self.turn_id.clone(), bot_id.to_owned(), now_ms()).await?;
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
 		Ok(())
@@ -432,4 +459,49 @@ fn hand_over(waiting: &mut Vec<Summons>, from: &str, summons: Summons) {
 
 fn missing(detail: String) -> TransportError {
 	TransportError::WriteFailed { detail }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::agent::contract::TurnEnded;
+
+	fn a_speaker() -> Speaker {
+		let scope = RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			runtime_session_id: "s1".to_owned(),
+			epoch: 1,
+		};
+		Speaker { scope, written: Vec::new() }
+	}
+
+	fn ended_as(outcome: TurnOutcome) -> AgentEvent {
+		AgentEvent::TurnEnded {
+			ended: TurnEnded {
+				session_id: None,
+				outcome,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		}
+	}
+
+	#[test]
+	fn a_speaker_hands_over_once_completed_or_its_session_ends_and_not_once_cancelled() {
+		let session_ended = AgentEvent::Failed { error: TransportError::NotStarted };
+		let still_speaking = AgentEvent::Failed { error: TransportError::NoActiveTurn };
+
+		assert_eq!(
+			a_speaker().end_after(&ended_as(TurnOutcome::Completed)),
+			Some(SpeakerEnd::HandsOver)
+		);
+		assert_eq!(
+			a_speaker().end_after(&ended_as(TurnOutcome::Cancelled)),
+			Some(SpeakerEnd::Cancelled)
+		);
+		assert_eq!(a_speaker().end_after(&session_ended), Some(SpeakerEnd::HandsOver));
+		assert_eq!(a_speaker().end_after(&still_speaking), None);
+	}
 }
