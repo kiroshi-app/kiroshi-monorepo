@@ -9,10 +9,12 @@
         }
 
         private var answers: [String: Answer]
+        private let log: URL?
         private(set) var requests: [URLRequest] = []
 
-        init(_ answers: [String: Answer] = [:]) {
+        init(_ answers: [String: Answer] = [:], log: URL? = nil) {
             self.answers = answers
+            self.log = log
         }
 
         func answer(_ path: String, with answer: Answer) {
@@ -22,6 +24,7 @@
         func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
             requests.append(request)
             guard let url = request.url else { throw URLError(.badURL) }
+            write(request.httpMethod ?? "GET", url.path(), to: log)
             switch answers[url.path(), default: .offline] {
             case .status(let status, let body):
                 let response = HTTPURLResponse(
@@ -35,6 +38,18 @@
                 continuation.finish()
                 throw CancellationError()
             }
+        }
+
+        private func write(_ method: String, _ path: String, to log: URL?) {
+            guard let log else { return }
+            let line = Data("\(method) \(path)\n".utf8)
+            guard let handle = try? FileHandle(forWritingTo: log) else {
+                try? line.write(to: log)
+                return
+            }
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line)
         }
     }
 #endif

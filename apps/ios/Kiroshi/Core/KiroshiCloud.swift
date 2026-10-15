@@ -21,6 +21,12 @@ enum ProviderSignInAnswer: Equatable, Sendable {
     case unreachable
 }
 
+enum AccountDeletionAnswer: Equatable, Sendable {
+    case deleted
+    case unauthenticated
+    case unreachable
+}
+
 enum SpacesAnswer: Equatable, Sendable {
     case spaces([Space])
     case unauthenticated
@@ -102,6 +108,18 @@ struct KiroshiCloud: Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         _ = try? await send(request)
+    }
+
+    func deleteAccount(bearer: String) async throws -> AccountDeletionAnswer {
+        var request = URLRequest(url: baseURL.appending(path: "me"))
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, _) = try await send(request) else { return .unreachable }
+        switch status {
+        case 204: return .deleted
+        case 401: return .unauthenticated
+        default: return .unreachable
+        }
     }
 
     private func session(from data: Data) -> Session? {

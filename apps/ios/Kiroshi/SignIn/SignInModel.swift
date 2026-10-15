@@ -53,8 +53,12 @@ final class SignInModel {
     private(set) var signingInWith: SignInProvider?
     private(set) var providerProblem: ProviderProblem?
     var isConfirmingSignOut = false
+    var isConfirmingDeletion = false
+    private(set) var isDeletingAccount = false
+    private(set) var hasFailedToDeleteAccount = false
     @ObservationIgnored var onSignOut: () -> Void = {}
     @ObservationIgnored private(set) var revocation: Task<Void, Never>?
+    @ObservationIgnored private(set) var deletion: Task<Void, Never>?
     private(set) var shell: SpaceStore?
 
     @ObservationIgnored private let cloud: KiroshiCloud
@@ -238,6 +242,34 @@ final class SignInModel {
         endSession()
     }
 
+    func deleteAccountTapped() {
+        isConfirmingDeletion = true
+    }
+
+    func deleteAccount() {
+        guard !isDeletingAccount, let session else { return }
+        isDeletingAccount = true
+        hasFailedToDeleteAccount = false
+        deletion = Task { [weak self] in await self?.delete(session) }
+    }
+
+    private func delete(_ deleted: Session) async {
+        let answer = try? await cloud.deleteAccount(bearer: deleted.bearer)
+        isDeletingAccount = false
+        switch answer {
+        case .deleted, .unauthenticated: forget(deleted)
+        case .unreachable: hasFailedToDeleteAccount = true
+        case nil: break
+        }
+    }
+
+    private func forget(_ deleted: Session) {
+        agreements.forget(account: deleted.accountId)
+        guard session == nil || session == deleted else { return }
+        lastSpace.clear()
+        endSession()
+    }
+
     private func startSigningIn(with provider: SignInProvider) {
         signingInWith = provider
         providerProblem = nil
@@ -305,6 +337,9 @@ final class SignInModel {
         emailProblem = nil
         providerProblem = nil
         isConfirmingSignOut = false
+        isConfirmingDeletion = false
+        isDeletingAccount = false
+        hasFailedToDeleteAccount = false
         path = []
         stage = .signedOut
     }
