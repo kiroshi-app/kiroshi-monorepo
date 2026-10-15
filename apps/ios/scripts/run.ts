@@ -76,7 +76,7 @@ const pickSimulator = () => {
 run("generate", ["bun", "run", "ios:generate"])
 const { udid } = pickSimulator()
 run("build", [
-	"xcodebuild",
+	"apps/ios/scripts/xcodebuild.sh",
 	"-quiet",
 	"-project",
 	"apps/ios/Kiroshi.xcodeproj",
