@@ -175,7 +175,7 @@ Delete account sits under Sign out, in its own section. It asks once (`Delete yo
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture delete-account-failed -requestLog /tmp/requests.log
 ```
 
-`DeleteAccountTests` deletes the account from `6.1` through its confirmation, lands on Welcome after exactly one `DELETE /me`, then opens `delete-account-failed`, tries again from the row and checks the session and Settings stay, with the failure line.
+`DeleteAccountTests` deletes the account from `6.1` through its confirmation, lands on Welcome after exactly one `DELETE /me`, then opens `delete-account-failed`, tries again from the row and checks the session and Settings stay, with the failure line. The version ends the list, under Delete account, so it never covers a row: `SettingsLargestTextTests` opens `delete-account-failed` at the largest text size, scrolls Settings to its end, checks every row and the failure line show whole, none under the version, then audits it.
 
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 

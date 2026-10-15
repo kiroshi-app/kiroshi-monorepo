@@ -34,13 +34,14 @@ struct SettingsView: View {
                     )
                 }
             }
+            Section {
+            } footer: {
+                BrandFooter()
+            }
         }
         .listStyle(.insetGrouped)
         .listSectionSpacing(22)
         .contentMargins(.top, 0, for: .scrollContent)
-        .safeAreaBar(edge: .bottom) {
-            BrandFooter()
-        }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -152,7 +153,8 @@ private struct BrandFooter: View {
                 .accessibilityHidden(true)
             Text(Self.version)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 10)
