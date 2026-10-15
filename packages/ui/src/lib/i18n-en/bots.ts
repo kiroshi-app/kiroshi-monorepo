@@ -128,7 +128,7 @@ const bots = {
 			failed: {
 				servers: "Couldn’t accept. Kiroshi’s servers didn’t answer.",
 				offline:
-					"Couldn’t accept, this Mac is offline. Try again once you’re connected.",
+					"Couldn’t accept, this computer is offline. Try again once you’re connected.",
 			},
 			withdrawn:
 				"{{email}} withdrew this invitation. Ask them to invite you again.",
@@ -141,9 +141,9 @@ const bots = {
 		signOut: {
 			title: "Sign out of Kiroshi?",
 			description:
-				"{{name}} leaves this Mac until you sign in again. Its conversations stay with {{email}}.",
+				"{{name}} leaves this computer until you sign in again. Its conversations stay with {{email}}.",
 			confirm: "Sign out",
-			notice: "Signed out. {{name}} left this Mac.",
+			notice: "Signed out. {{name}} left this computer.",
 		},
 	},
 	dialog: {
@@ -608,7 +608,7 @@ const bots = {
 		},
 		catalogue: {
 			loading: "Loading the applications catalogue…",
-			directory: "From Anthropic’s directory.",
+			directory: "From the curated directory.",
 			empty: "Nothing in this category yet.",
 			failed: "Couldn’t reach the applications catalogue.",
 			partlyFailed:

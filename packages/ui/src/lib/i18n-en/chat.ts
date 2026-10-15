@@ -157,7 +157,7 @@ const chat = {
 		placeholder: "Message",
 		send: "Send",
 		offline:
-			"{{space}} is offline. You can write again once {{host}}’s Mac is back.",
+			"{{space}} is offline. You can write again once {{host}}’s computer is back.",
 		commands: "Commands",
 		mentions: "Companions",
 		lead: "Lead",
@@ -258,13 +258,14 @@ const chat = {
 				"Only the host of this space can do that. Ask them to do it from their Kiroshi.",
 			hostOffline: {
 				title: "Couldn’t reach the host of this space",
-				description: "Its Mac is offline. Try again once it’s back online.",
+				description:
+					"Its computer is offline. Try again once it’s back online.",
 			},
 			joinRefused: {
 				unavailable: {
 					title: "Couldn’t open the spaces you joined",
 					description:
-						"Kiroshi can’t read its saved data on this Mac. Restart Kiroshi, then try again.",
+						"Kiroshi can’t read its saved data on this computer. Restart Kiroshi, then try again.",
 				},
 				storage: {
 					title: "Couldn’t read this space’s connection",

@@ -4059,7 +4059,7 @@ export const A1LocalSpace = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} A1: the reader's own space, kept on this Mac. Check the title bar holds one selector and nothing after it: the 10px square on a 3px radius without any state dot, the muted name, the chevron, no globe, no \`Share\` button and no pill. Pick \`A2SharedSpace\` once the space is shared.`,
+				story: `${MOCKUP} A1: the reader's own space, kept on this computer. Check the title bar holds one selector and nothing after it: the 10px square on a 3px radius without any state dot, the muted name, the chevron, no globe, no \`Share\` button and no pill. Pick \`A2SharedSpace\` once the space is shared.`,
 			},
 		},
 	},
@@ -4079,7 +4079,7 @@ export const A2SharedSpace = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} A2: the reader shares their own space from this Mac. Check the 7px online dot sits centred on the square's bottom end corner inside a 2px ring of the title bar background, that the selector names the space as shared, and that no pill follows it. Pick \`A3JoinedSpace\` for the same dot on a joined space.`,
+				story: `${MOCKUP} A2: the reader shares their own space from this computer. Check the 7px online dot sits centred on the square's bottom end corner inside a 2px ring of the title bar background, that the selector names the space as shared, and that no pill follows it. Pick \`A3JoinedSpace\` for the same dot on a joined space.`,
 			},
 		},
 	},
@@ -4133,7 +4133,7 @@ export const A4Connecting = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} A4: the reader's Mac is still reaching the host. Check the dot on the square is hollow, a 1.5px muted presence ring filled with the title bar background, and that the pill reading \`Connecting…\` sits 8px after the selector, centred in the bar. Pick \`A5NotConnected\` for the host that does not answer.`,
+				story: `${MOCKUP} A4: the reader's computer is still reaching the host. Check the dot on the square is hollow, a 1.5px muted presence ring filled with the title bar background, and that the pill reading \`Connecting…\` sits 8px after the selector, centred in the bar. Pick \`A5NotConnected\` for the host that does not answer.`,
 			},
 		},
 	},

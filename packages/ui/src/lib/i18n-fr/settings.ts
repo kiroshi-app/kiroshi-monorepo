@@ -21,7 +21,7 @@ const settings = {
 			body: "Hébergez un espace pour des personnes hors de votre réseau, ou rejoignez celui qu’on héberge pour vous.",
 			signIn: "Se connecter avec votre navigateur",
 			caption:
-				"Votre compte, votre offre et vos Mac connectés se trouvent sur kiroshi.app.",
+				"Votre compte, votre offre et vos ordinateurs connectés se trouvent sur kiroshi.app.",
 		},
 		waiting: {
 			label: "En attente de votre navigateur…",
@@ -40,12 +40,12 @@ const settings = {
 			manage: "Gérer le compte",
 			signOut: "Se déconnecter",
 			caption:
-				"Votre nom, votre offre et vos Mac connectés se gèrent sur kiroshi.app.",
+				"Votre nom, votre offre et vos ordinateurs connectés se gèrent sur kiroshi.app.",
 		},
 		signedOutFromTheSite: {
 			title: "Vous avez été déconnecté sur kiroshi.app",
 			description:
-				"Ce Mac a été déconnecté depuis Appareils. Reconnectez-vous pour utiliser vos espaces au-delà de votre réseau.",
+				"Cet ordinateur a été déconnecté depuis Appareils. Reconnectez-vous pour utiliser vos espaces au-delà de votre réseau.",
 		},
 		unreachable: {
 			title: "Impossible de joindre Kiroshi",
@@ -217,7 +217,7 @@ const settings = {
 		hosting: {
 			label: "Partager {{name}}",
 			description:
-				"Invitez des personnes qui ne sont pas sur votre réseau. {{name}} tourne sur ce Mac, elles y accèdent donc tant que Kiroshi est ouvert ici.",
+				"Invitez des personnes qui ne sont pas sur votre réseau. {{name}} tourne sur cet ordinateur, elles y accèdent donc tant que Kiroshi est ouvert ici.",
 			signedOut:
 				"Connectez-vous à Kiroshi pour inviter des personnes qui ne sont pas sur votre réseau.",
 			signIn: "Se connecter",

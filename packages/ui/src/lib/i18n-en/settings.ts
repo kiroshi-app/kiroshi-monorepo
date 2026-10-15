@@ -20,7 +20,8 @@ const settings = {
 			title: "Sign in to Kiroshi",
 			body: "Host a space for people who aren’t on your network, or join one someone hosts for you.",
 			signIn: "Sign in with your browser",
-			caption: "Your account, plan and signed-in Macs live on kiroshi.app.",
+			caption:
+				"Your account, plan and signed-in computers live on kiroshi.app.",
 		},
 		waiting: {
 			label: "Waiting for your browser…",
@@ -37,12 +38,13 @@ const settings = {
 			},
 			manage: "Manage account",
 			signOut: "Sign out",
-			caption: "Your name, plan and signed-in Macs are managed on kiroshi.app.",
+			caption:
+				"Your name, plan and signed-in computers are managed on kiroshi.app.",
 		},
 		signedOutFromTheSite: {
 			title: "You were signed out on kiroshi.app",
 			description:
-				"This Mac was signed out from Devices. Sign in again to use your spaces beyond your network.",
+				"This computer was signed out from Devices. Sign in again to use your spaces beyond your network.",
 		},
 		unreachable: {
 			title: "Couldn’t reach Kiroshi",
@@ -211,7 +213,7 @@ const settings = {
 		hosting: {
 			label: "Share {{name}}",
 			description:
-				"Invite people who aren’t on your network. {{name}} runs on this Mac, so they reach it while Kiroshi is open here.",
+				"Invite people who aren’t on your network. {{name}} runs on this computer, so they reach it while Kiroshi is open here.",
 			signedOut:
 				"Sign in to Kiroshi to invite people who aren’t on your network.",
 			signIn: "Sign in",

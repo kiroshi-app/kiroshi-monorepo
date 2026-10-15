@@ -705,7 +705,7 @@ export const ThemesDisabled = meta.story({
 const OFFLINE_HOST = { spaceName: "Studio", hostName: "Steve" }
 
 const OFFLINE_WORDING =
-	"Studio is offline. You can write again once Steve’s Mac is back."
+	"Studio is offline. You can write again once Steve’s computer is back."
 
 export const Offline = meta.story({
 	globals: { theme: "dark" },
@@ -714,7 +714,7 @@ export const Offline = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.7, dark only. The open space is joined and its host's Mac is offline, so there is nowhere to send to. Check the field gives its place to the offline wording in the muted 14px line on 24px, that nothing can be typed, attached or sent, that only the attach and send controls drop to 40% while the box keeps full opacity, unlike `ThemesDisabled`, which dims the whole pill, and that the wording is a polite status inside the form named `Message`, so a screen reader hears the change and still finds the composer.",
+					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.7, dark only. The open space is joined and its host's computer is offline, so there is nowhere to send to. Check the field gives its place to the offline wording in the muted 14px line on 24px, that nothing can be typed, attached or sent, that only the attach and send controls drop to 40% while the box keeps full opacity, unlike `ThemesDisabled`, which dims the whole pill, and that the wording is a polite status inside the form named `Message`, so a screen reader hears the change and still finds the composer.",
 			},
 		},
 	},

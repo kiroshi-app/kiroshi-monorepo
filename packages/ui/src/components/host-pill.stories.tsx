@@ -22,7 +22,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The state pill a guest's title bar shows beside the space selector while the Mac hosting the joined space is not answering yet, or not at all: `Connecting…` over a hollow dot, `Not connected` over the muted presence dot. A reachable host and a space shared from this Mac draw no pill, the dot on the selector's square says it. The words are its only readable content; it is a plain label, not a control, and carries no tooltip. `HostDot` is the dot it shares with the selector's square and the menu rows.",
+					"The state pill a guest's title bar shows beside the space selector while the computer hosting the joined space is not answering yet, or not at all: `Connecting…` over a hollow dot, `Not connected` over the muted presence dot. A reachable host and a space shared from this computer draw no pill, the dot on the selector's square says it. The words are its only readable content; it is a plain label, not a control, and carries no tooltip. `HostDot` is the dot it shares with the selector's square and the menu rows.",
 			},
 		},
 	},
@@ -51,7 +51,7 @@ export const Connecting = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${MOCKUP} A4: the guest's Mac is still reaching the host. Check the 24px pill is fully rounded with 8px before the 7px hollow dot and 10px after the label, that the dot is a 1.5px inner muted presence ring over the title bar background, that it reads \`Connecting…\` in the foreground at 12px and weight 500, and that it is no button and opens no tooltip. Pick \`NotConnected\` for the host that does not answer.`,
+				story: `${MOCKUP} A4: the guest's computer is still reaching the host. Check the 24px pill is fully rounded with 8px before the 7px hollow dot and 10px after the label, that the dot is a 1.5px inner muted presence ring over the title bar background, that it reads \`Connecting…\` in the foreground at 12px and weight 500, and that it is no button and opens no tooltip. Pick \`NotConnected\` for the host that does not answer.`,
 			},
 		},
 	},

@@ -22,7 +22,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Reports whether the local Claude Code CLI can be reached, as a single coloured dot inside the header's identity button. The copy stays for screen readers only, so the header carries no prose. It holds no action: recovery belongs to Notice or ChatEmptyState, which is why this never renders a button. It reports the CLI, never the turn — a running turn shows up in the transcript, not here.",
+					"Reports whether the local agent can be reached, as a single coloured dot inside the header's identity button. The copy stays for screen readers only, so the header carries no prose. It holds no action: recovery belongs to Notice or ChatEmptyState, which is why this never renders a button. It reports the CLI, never the turn — a running turn shows up in the transcript, not here.",
 			},
 		},
 	},

@@ -234,7 +234,7 @@ const expectSignOutQuestion = async (popup: HTMLElement) => {
 		within(popup).getByRole("heading", { name: "Sign out of Kiroshi?" }),
 	).toBeVisible()
 	await expect(popup).toHaveTextContent(
-		"Studio Nord leaves this Mac until you sign in again. Its conversations stay with lea@example.com.",
+		"Studio Nord leaves this computer until you sign in again. Its conversations stay with lea@example.com.",
 	)
 	const [cancel, signOut] = within(popup).getAllByRole("button")
 	await expect(cancel).toHaveAccessibleName("Cancel")
@@ -255,7 +255,7 @@ export const M12SignOut = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${SIGN_OUT_ARTBOARD} M12: the question before signing out of Kiroshi takes a joined Space off this Mac. Check Cancel comes first in outline and Sign out wears the destructive colour 8px after it, right-aligned, that the description names the Space and who keeps its conversations, and that Sign out reports \`onConfirm\` alone.`,
+				story: `${SIGN_OUT_ARTBOARD} M12: the question before signing out of Kiroshi takes a joined Space off this computer. Check Cancel comes first in outline and Sign out wears the destructive colour 8px after it, right-aligned, that the description names the Space and who keeps its conversations, and that Sign out reports \`onConfirm\` alone.`,
 			},
 		},
 	},

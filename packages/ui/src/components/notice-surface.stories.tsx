@@ -1199,13 +1199,13 @@ export const M13SignedOut = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M13: the info notice raised once signing out took a joined Space off this Mac, drawn on this surface with its close control and no action.`,
+				story: `${INVITED_ARTBOARD} M13: the info notice raised once signing out took a joined Space off this computer, drawn on this surface with its close control and no action.`,
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
 		await expectInfoNoticeClosing(
-			"Signed out. Studio Nord left this Mac.",
+			"Signed out. Studio Nord left this computer.",
 			userEvent,
 		)
 	},

@@ -166,7 +166,7 @@ const chat = {
 		placeholder: "Message",
 		send: "Envoyer",
 		offline:
-			"{{space}} est hors ligne. Vous pourrez écrire à nouveau dès que le Mac de {{host}} sera de retour.",
+			"{{space}} est hors ligne. Vous pourrez écrire à nouveau dès que l’ordinateur de {{host}} sera de retour.",
 		commands: "Commandes",
 		mentions: "Compagnons",
 		lead: "Meneur",
@@ -275,13 +275,13 @@ const chat = {
 			hostOffline: {
 				title: "Impossible de joindre l’hôte de cet espace",
 				description:
-					"Son Mac est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
+					"Son ordinateur est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
 			},
 			joinRefused: {
 				unavailable: {
 					title: "Impossible d’ouvrir les espaces rejoints",
 					description:
-						"Kiroshi ne peut pas lire son stockage sur ce Mac. Redémarrez Kiroshi, puis réessayez.",
+						"Kiroshi ne peut pas lire son stockage sur cet ordinateur. Redémarrez Kiroshi, puis réessayez.",
 				},
 				storage: {
 					title: "Impossible de lire la connexion à cet espace",
