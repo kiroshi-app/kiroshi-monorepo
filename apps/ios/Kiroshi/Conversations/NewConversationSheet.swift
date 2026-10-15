@@ -48,7 +48,7 @@ struct NewConversationSheet: View {
         if companions.isEmpty {
             ContentUnavailableView(
                 "No companions yet", systemImage: "person.2",
-                description: Text("Add one on your computer. It shows up here."))
+                description: Text("Add one on the computer where Kiroshi runs. It shows up here."))
         } else {
             List {
                 if creation == .failed {

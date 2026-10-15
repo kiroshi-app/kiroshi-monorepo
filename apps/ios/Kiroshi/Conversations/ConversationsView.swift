@@ -133,7 +133,7 @@ struct ConversationsView: View {
                 }
             } description: {
                 Text(
-                    "Add one to \(space.currentSpace?.name ?? "") on your computer. It shows up here."
+                    "Add one to \(space.currentSpace?.name ?? "") on the computer where Kiroshi runs. It shows up here."
                 )
             }
         case .loaded:
