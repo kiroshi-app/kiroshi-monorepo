@@ -125,6 +125,7 @@ const offlineRejection = async (): Promise<unknown> => {
 		}),
 		onDown: vi.fn(),
 		onUp: vi.fn(),
+		onReopened: vi.fn(),
 		onRefused: vi.fn(),
 	})
 	return host.invoke("conversation_send").then(

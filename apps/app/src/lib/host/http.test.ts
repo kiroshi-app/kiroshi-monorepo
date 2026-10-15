@@ -78,6 +78,7 @@ const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
 	const socketUrls: string[] = []
 	const onDown = vi.fn()
 	const onUp = vi.fn()
+	const onReopened = vi.fn()
 	const onRefused = vi.fn()
 	const host = createHttpHost({
 		host: HOST,
@@ -91,6 +92,7 @@ const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
 		},
 		onDown,
 		onUp,
+		onReopened,
 		onRefused,
 	})
 	return {
@@ -100,6 +102,7 @@ const hostOf = ({ answer = {}, unreachable = false }: HostSeed = {}) => {
 		socketUrls,
 		onDown,
 		onUp,
+		onReopened,
 		onRefused,
 	}
 }
@@ -312,6 +315,18 @@ describe("a host that is offline", () => {
 
 		expect(onDown).toHaveBeenCalledOnce()
 		expect(onUp).toHaveBeenCalledOnce()
+	})
+
+	it("reports no reopen when a request brings the host back up on an open socket", async () => {
+		const { host, fetch, sockets, onReopened } = hostOf({ answer: offline })
+		host.openEvents()
+		sockets[0]?.open()
+		await expect(host.invoke("bot_list")).rejects.toMatchObject(HOST_OFFLINE)
+
+		fetch.mockResolvedValueOnce(answerWith({}))
+		await host.invoke("bot_list")
+
+		expect(onReopened).not.toHaveBeenCalled()
 	})
 
 	it("reports nothing up when a request succeeds before the host was ever down", async () => {
@@ -536,6 +551,19 @@ describe("reconnecting the event socket", () => {
 		sockets[1]?.send({ event: "mission://changed", payload: {} })
 
 		expect(missions).toHaveBeenCalledOnce()
+	})
+
+	it("reports a reopen on each socket that opens after a drop, never on the first one", async () => {
+		const { host, sockets, onReopened } = hostOf()
+		await host.listen("mission://changed", () => undefined)
+		sockets[0]?.open()
+		expect(onReopened).not.toHaveBeenCalled()
+
+		sockets[0]?.drop()
+		vi.advanceTimersByTime(500)
+		sockets[1]?.open()
+
+		expect(onReopened).toHaveBeenCalledOnce()
 	})
 })
 

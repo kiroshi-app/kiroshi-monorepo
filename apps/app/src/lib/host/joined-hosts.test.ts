@@ -995,8 +995,8 @@ describe("a reopened member relay", () => {
 			}
 		}
 
-	const followingGarage = async () => {
-		const joined = joinedHostsOf()
+	const followingGarage = async (seed: Seed = {}) => {
+		const joined = joinedHostsOf(seed)
 		await joined.hosts.activate("garage")
 		joined.sockets[0]?.open()
 		const reread = vi.fn()
@@ -1004,10 +1004,72 @@ describe("a reopened member relay", () => {
 		return { ...joined, reread, stopFollowing, reopen: relayOf(joined.local) }
 	}
 
-	it("re-reads once the relay of the active joined Space reopens", async () => {
+	const missionFrame = (id: string) => ({
+		event: "mission://changed",
+		payload: { id },
+	})
+
+	const heardMissionIds = (missions: ReturnType<typeof vi.fn>) =>
+		missions.mock.calls.map(([{ payload }]) => payload.id)
+
+	const offlineOnce = () => {
+		const answers = [answerOffline]
+		return () => (answers.shift() ?? answerJoined)()
+	}
+
+	it("delivers the frames the relay replays in order and re-reads nothing", async () => {
+		const { hosts, sockets, reread } = await followingGarage({
+			answer: offlineOnce(),
+		})
+		const missions = vi.fn()
+		await hosts.listen("mission://changed", missions)
+		sockets[0]?.send(missionFrame("m1"))
+		await expect(hosts.invoke("bot_list")).rejects.toMatchObject({
+			kind: "hostOffline",
+		})
+
+		sockets[0]?.send(missionFrame("m2"))
+		sockets[0]?.send(missionFrame("m3"))
+		await hosts.invoke("bot_list")
+
+		expect(heardMissionIds(missions)).toEqual(["m1", "m2", "m3"])
+		expect(hosts.getState().connections.garage).toEqual({ status: "up" })
+		expect(reread).not.toHaveBeenCalled()
+	})
+
+	it("keeps delivering the frames of a joined Space that is not shown", async () => {
+		const { hosts, sockets, reread } = await followingGarage()
+		await hosts.connect("shed")
+		sockets[1]?.open()
+		const missions = vi.fn()
+		await hosts.listen("mission://changed", missions)
+
+		sockets[1]?.send(missionFrame("m1"))
+		sockets[1]?.send(missionFrame("m2"))
+
+		expect(heardMissionIds(missions)).toEqual(["m1", "m2"])
+		expect(reread).not.toHaveBeenCalled()
+	})
+
+	it("re-reads once when the relay answers that the gap is past what the host kept", async () => {
 		const { reread, reopen } = await followingGarage()
 
 		reopen("garage")
+
+		expect(reread).toHaveBeenCalledOnce()
+	})
+
+	it("re-reads once, back up, when the relay resyncs while the space is down", async () => {
+		const { hosts, reread, reopen } = await followingGarage({
+			answer: offlineOnce(),
+		})
+		await expect(hosts.invoke("bot_list")).rejects.toMatchObject({
+			kind: "hostOffline",
+		})
+
+		reopen("garage")
+		expect(reread).not.toHaveBeenCalled()
+		await hosts.invoke("bot_list")
 
 		expect(reread).toHaveBeenCalledOnce()
 	})
@@ -1029,7 +1091,16 @@ describe("a reopened member relay", () => {
 		expect(reread).not.toHaveBeenCalled()
 	})
 
-	it("re-reads once when the relay reopens before the socket", async () => {
+	it("re-reads once when the front event socket reopens", async () => {
+		const { sockets, reread } = await followingGarage()
+		sockets[0]?.drop()
+
+		sockets[0]?.open()
+
+		expect(reread).toHaveBeenCalledOnce()
+	})
+
+	it("re-reads once when the relay resyncs before the front event socket reopens", async () => {
 		const { sockets, reread, reopen } = await followingGarage()
 		sockets[0]?.drop()
 
@@ -1039,66 +1110,18 @@ describe("a reopened member relay", () => {
 		expect(reread).toHaveBeenCalledOnce()
 	})
 
-	it("re-reads once when the socket reopens before the relay", async () => {
+	it("re-reads again when the relay resyncs after the front event socket reopened", async () => {
 		const { sockets, reread, reopen } = await followingGarage()
 		sockets[0]?.drop()
-
 		sockets[0]?.open()
+
 		reopen("garage")
 
-		expect(reread).toHaveBeenCalledOnce()
+		expect(reread).toHaveBeenCalledTimes(2)
 	})
 
-	describe("ten seconds apart", () => {
-		const later = (milliseconds: number) =>
-			vi.setSystemTime(Date.now() + milliseconds)
-
-		beforeEach(() => {
-			vi.useFakeTimers({ toFake: ["Date"] })
-		})
-
-		afterEach(() => {
-			vi.useRealTimers()
-		})
-
-		it("re-reads on the next relay reopen once a socket reopen went unpaired for 10 seconds", async () => {
-			const { sockets, reread, reopen } = await followingGarage()
-			sockets[0]?.drop()
-			sockets[0]?.open()
-
-			later(10_001)
-			reopen("garage")
-
-			expect(reread).toHaveBeenCalledTimes(2)
-		})
-
-		it("re-reads once when the relay follows the socket within 10 seconds", async () => {
-			const { sockets, reread, reopen } = await followingGarage()
-			sockets[0]?.drop()
-			sockets[0]?.open()
-
-			later(9_000)
-			reopen("garage")
-
-			expect(reread).toHaveBeenCalledOnce()
-		})
-
-		it("re-reads once when the socket follows the relay within 10 seconds", async () => {
-			const { sockets, reread, reopen } = await followingGarage()
-			sockets[0]?.drop()
-			reopen("garage")
-
-			later(9_000)
-			sockets[0]?.open()
-
-			expect(reread).toHaveBeenCalledOnce()
-		})
-	})
-
-	it("re-reads again on the next reopen of the relay", async () => {
-		const { sockets, reread, reopen } = await followingGarage()
-		sockets[0]?.drop()
-		sockets[0]?.open()
+	it("re-reads again on the next resync of the relay", async () => {
+		const { reread, reopen } = await followingGarage()
 		reopen("garage")
 
 		reopen("garage")
