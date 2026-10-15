@@ -1066,14 +1066,25 @@ pub async fn agent_cancel_turn<R: Runtime>(
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 ) -> Result<(), TransportError> {
-	let cancelled = match state.live.session_for(&scope) {
+	if state.host_turns().stop(&scope.conversation_id) {
+		return Ok(());
+	}
+	cancel_session_turn(&app, &state, &scope).await
+}
+
+pub(crate) async fn cancel_session_turn<R: Runtime>(
+	app: &AppHandle<R>,
+	state: &AgentState,
+	scope: &RuntimeScope,
+) -> Result<(), TransportError> {
+	let cancelled = match state.live.session_for(scope) {
 		Ok(session) => session.cancel_turn().await,
 		Err(refused) => Err(refused),
 	};
 	if matches!(cancelled, Err(TransportError::NoActiveTurn | TransportError::NotStarted)) {
 		let conversation_id = &scope.conversation_id;
 		if let Err(error) =
-			complete_unsubmitted_turns(&app, &state.host_writes, conversation_id).await
+			complete_unsubmitted_turns(app, &state.host_writes, conversation_id).await
 		{
 			eprintln!(
 				"the host could not close the unsubmitted turns of conversation {conversation_id}: {error:?}"
