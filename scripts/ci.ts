@@ -134,7 +134,11 @@ export const GROUP_ORDER: Group[] = [
 	"ios",
 ]
 
-const POST_MERGE_GROUPS: Group[] = ["rust", "storybook", "ios"]
+const POST_MERGE_TRIGGERS: Partial<Record<Group, string>> = {
+	rust: "on a push to main and on a v* tag",
+	storybook: "on a push to main and on a v* tag",
+	ios: "on a push to main only",
+}
 
 // ci:fast is the pre-push check and must stay green and under 120 s with a
 // dozen agents loading the machine, which the full unit set cannot do. It
@@ -204,10 +208,12 @@ type GroupDecision = { group: Group; touched: TouchedJobs }
 const filterOf = (group: Exclude<Group, "lint">) =>
 	group === "rust-check" ? "rust" : group
 
-export const postMergeNote = (group: Group) =>
-	POST_MERGE_GROUPS.includes(group)
-		? `${group} is a post-merge job, CI runs it on a push to main and on a v* tag`
+export const postMergeNote = (group: Group) => {
+	const triggers = POST_MERGE_TRIGGERS[group]
+	return triggers
+		? `${group} is a post-merge job, CI runs it ${triggers}`
 		: undefined
+}
 
 export const skipReason = ({ group, touched }: GroupDecision) => {
 	if (group === "ios") return "run bun run ci ios to run it here"
