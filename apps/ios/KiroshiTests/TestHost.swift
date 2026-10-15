@@ -116,9 +116,9 @@ final class TestHost: Sendable {
             return ok(
                 call, FixtureHost.conversationPage(rows, cursor: args.cursor, limit: args.limit))
         case "conversation_bots":
-            let bots = companions.map(FixtureHost.botJSON)
+            let bots = companions.map { FixtureHost.botJSON($0) }
             return ok(call, "[\(bots.joined(separator: ","))]")
-        case "agent_pending_questions":
+        case "agent_pending_questions", "section_list":
             return ok(call, "[]")
         case "conversation_main_chat":
             guard let args = try? call.args(as: BotArgs.self) else { return nil }

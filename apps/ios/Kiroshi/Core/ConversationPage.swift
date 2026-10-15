@@ -9,6 +9,7 @@ struct ConversationInPage: Decodable, Sendable {
     let lastActivityAt: Int
     let lastWord: LastWord?
     let soloBotId: Companion.ID?
+    let sectionId: String?
     let pinPosition: Int?
 
     init(from decoder: any Decoder) throws {
@@ -17,6 +18,7 @@ struct ConversationInPage: Decodable, Sendable {
         lastActivityAt = try container.decode(Int.self, forKey: .lastActivityAt)
         lastWord = try container.decodeIfPresent(LastWord.self, forKey: .lastWord)
         soloBotId = try container.decodeIfPresent(String.self, forKey: .soloBotId)
+        sectionId = try container.decodeIfPresent(String.self, forKey: .sectionId)
         pinPosition = try container.decodeIfPresent(Int.self, forKey: .pinPosition)
     }
 
@@ -24,7 +26,23 @@ struct ConversationInPage: Decodable, Sendable {
         case lastActivityAt
         case lastWord
         case soloBotId
+        case sectionId
         case pinPosition
+    }
+
+    var groupPlace: PinPlace? {
+        guard soloBotId == nil else { return nil }
+        return PinPlace(id: group.id, sectionId: sectionId, pinPosition: pinPosition)
+    }
+}
+
+struct CompanionInRoster: Decodable, Sendable {
+    let companion: Companion
+    let place: PinPlace
+
+    init(from decoder: any Decoder) throws {
+        companion = try Companion(from: decoder)
+        place = try PinPlace(from: decoder)
     }
 }
 
