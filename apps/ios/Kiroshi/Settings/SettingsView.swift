@@ -11,8 +11,9 @@ struct SettingsView: View {
             Section {
                 AccountRow(email: model.signedInEmail)
             }
+            MessageConsentSection { shownPage = $0 }
             Section {
-                ForEach(KiroshiPage.allCases) { page in
+                ForEach([KiroshiPage.terms, .support]) { page in
                     Button(page.title) { shownPage = page }
                 }
             }

@@ -5,6 +5,8 @@ final class SettingsAccessibilityTests: XCTestCase {
     static let footer = "Your spaces stop working on this iPhone until you sign in again."
     static let alertMessage =
         "Studio, Home lab and Side project leave this iPhone until you sign in again."
+    static let consentFooter =
+        "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to Anthropic. Turn this off and nothing leaves this iPhone until you agree again."
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -44,7 +46,8 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(identifier: Self.footer).count, 1)
 
         try audit(app) { issue in
-            issue.auditType == .dynamicType && issue.element?.label == Self.footer
+            issue.auditType == .dynamicType
+                && [Self.footer, Self.consentFooter].contains(issue.element?.label)
         }
 
         app.buttons["Close"].tap()
