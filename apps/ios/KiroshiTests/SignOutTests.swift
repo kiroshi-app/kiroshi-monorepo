@@ -11,7 +11,8 @@ struct SignOutTests {
     func makeModel(sessions: any SessionStore) -> SignInModel {
         SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
-            sessions: sessions, lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(), relay: CloudFixture.relay)
     }
 
     @Test func signOutAsksForConfirmationFirst() async {
@@ -103,6 +104,7 @@ struct SignOutTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(),
             relay: RelayEnvironment(transport: relay, clock: TestRelayClock()))
         await model.loadSpaces()
         let shell = try #require(model.shell)

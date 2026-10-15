@@ -79,7 +79,8 @@ struct ProviderSignInModelTests {
             cloud: KiroshiCloud(
                 baseURL: KiroshiCloud.productionURL, transport: transport,
                 deviceName: "Sam's iPhone"),
-            sessions: sessions, lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay,
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(), relay: CloudFixture.relay,
             google: StubGoogle(outcome: google))
     }
 
@@ -136,8 +137,9 @@ struct ProviderSignInModelTests {
         #expect(
             sessions.saved
                 == Session(
-                    bearer: "fixture-bearer", email: CloudFixture.email, deviceName: "iPhone",
-                    platform: "ios"))
+                    bearer: "fixture-bearer", email: CloudFixture.email,
+                    userId: CloudFixture.userId,
+                    deviceName: "iPhone", platform: "ios"))
         #expect(model.stage == .loadingSpaces)
         #expect(model.signedInEmail == CloudFixture.email)
         #expect(model.signingInWith == nil)

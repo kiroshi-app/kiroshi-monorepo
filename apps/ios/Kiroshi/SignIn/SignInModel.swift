@@ -7,6 +7,7 @@ enum SignInStep: Hashable {
 
 enum AccountStage: Equatable {
     case signedOut
+    case agreeing
     case loadingSpaces
     case spaces([Space])
     case spacesUnreachable
@@ -59,6 +60,7 @@ final class SignInModel {
     @ObservationIgnored private let cloud: KiroshiCloud
     @ObservationIgnored private let sessions: any SessionStore
     @ObservationIgnored private let lastSpace: any LastSpaceStore
+    @ObservationIgnored private let agreements: any AgreementStore
     @ObservationIgnored private let relay: RelayEnvironment
     @ObservationIgnored private let google: any GoogleAuthorizing
     @ObservationIgnored private var appleNonce: String?
@@ -69,17 +71,26 @@ final class SignInModel {
         cloud: KiroshiCloud,
         sessions: any SessionStore,
         lastSpace: any LastSpaceStore,
+        agreements: any AgreementStore,
         relay: RelayEnvironment,
         google: any GoogleAuthorizing = GoogleSignInAuthorizer()
     ) {
         self.cloud = cloud
         self.sessions = sessions
         self.lastSpace = lastSpace
+        self.agreements = agreements
         self.relay = relay
         self.google = google
-        session = sessions.load()
-        stage = session == nil ? .signedOut : .loadingSpaces
+        let session = sessions.load()
+        self.session = session
+        stage = session.map { Self.stage(signedInAs: $0, agreements: agreements) } ?? .signedOut
         signedInEmail = session?.email ?? ""
+    }
+
+    private static func stage(signedInAs session: Session, agreements: any AgreementStore)
+        -> AccountStage
+    {
+        agreements.hasAgreed(account: session.accountId) ? .loadingSpaces : .agreeing
     }
 
     var needsNewCode: Bool {
@@ -210,6 +221,12 @@ final class SignInModel {
         }
     }
 
+    func agree() {
+        guard let session else { return }
+        agreements.agree(account: session.accountId)
+        stage = .loadingSpaces
+    }
+
     func signOutTapped() {
         isConfirmingSignOut = true
     }
@@ -254,7 +271,7 @@ final class SignInModel {
         signedInEmail = granted.email
         code = ""
         path = []
-        stage = .loadingSpaces
+        stage = Self.stage(signedInAs: granted, agreements: agreements)
     }
 
     private func makeShell(spaces: [Space], session: Session) -> SpaceStore {

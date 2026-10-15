@@ -5,7 +5,7 @@ struct SignInRootView: View {
 
     var body: some View {
         switch model.stage {
-        case .signedOut:
+        case .signedOut, .agreeing:
             NavigationStack(path: $model.path) {
                 WelcomeView(model: model)
                     .navigationDestination(for: SignInStep.self) { step in
@@ -13,6 +13,9 @@ struct SignInRootView: View {
                         case .code: CodeView(model: model)
                         }
                     }
+            }
+            .sheet(isPresented: .constant(model.stage == .agreeing)) {
+                AgreementSheet(model: model)
             }
         case .loadingSpaces:
             LoadingSpacesView(model: model)

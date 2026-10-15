@@ -36,6 +36,7 @@ struct KiroshiApp: App {
                     name: UIDevice.current.name, model: UIDevice.current.model)),
             sessions: KeychainSessionStore(),
             lastSpace: UserDefaultsLastSpaceStore(),
+            agreements: UserDefaultsAgreementStore(),
             relay: .live,
             google: GoogleSignInAuthorizer())
     }
