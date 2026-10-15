@@ -22,6 +22,7 @@
 		"baseline": "bun scripts/baseline.ts",
 		"test:baseline": "bun test scripts/baseline.test.ts",
 		"test:ci-changes": "bun test scripts/ci-changes.test.ts",
+		"test:red-main": "bun test scripts/red-main.test.ts",
 		"test:ci": "bun test scripts/ci.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",

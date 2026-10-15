@@ -26,7 +26,7 @@ use crate::account::cloud::RegisterError;
 use crate::account::session::{self, AccountSession};
 use crate::agent::commands::subscribed_with_pending_questions;
 use crate::db;
-use crate::host_api::events::SEND_PATIENCE;
+use crate::host_api::events::{FELL_BEHIND, SEND_PATIENCE};
 use crate::missions::github::installed_tls_provider;
 use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
@@ -323,10 +323,7 @@ async fn online<R: Runtime>(
 					}
 					Message::text(bridge::forwarded(&frame))
 				}
-				Err(RecvError::Lagged(missed)) => {
-					eprintln!("the relay of space {} missed {missed} events", ids.space_id);
-					continue;
-				}
+				Err(RecvError::Lagged(missed)) => return fell_behind(&mut sink, missed).await,
 				Err(RecvError::Closed) => return Ended::Dropped("the local event stream closed".to_owned()),
 			},
 			_ = pings.tick() => Message::Ping(Vec::new().into()),
@@ -402,6 +399,17 @@ async fn closed(sink: &mut Sink, ids: Ids<'_>) -> Ended {
 		),
 	}
 	Ended::Stopped
+}
+
+async fn fell_behind(sink: &mut Sink, missed: u64) -> Ended {
+	let close = CloseFrame { code: CloseCode::Again, reason: FELL_BEHIND.into() };
+	let reason = match sent(sink, Message::Close(Some(close))).await {
+		Ok(()) => format!("it fell {missed} events behind and closed with code 1013"),
+		Err(reason) => format!(
+			"it fell {missed} events behind and the 1013 close frame was not delivered: {reason}"
+		),
+	};
+	Ended::Dropped(reason)
 }
 
 pub(crate) async fn sent(sink: &mut Sink, message: Message) -> Result<(), String> {

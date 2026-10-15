@@ -7,16 +7,23 @@ import {
 	GATE,
 	GROUP_ORDER,
 	SIMULATOR_LOOKUP,
+	skipReason,
 } from "./ci"
 
 type WorkflowStep = {
 	name?: string
 	uses?: string
 	run?: string
+	if?: string
 	"timeout-minutes"?: number
 }
 
-type Workflow = { jobs: Record<string, { steps?: WorkflowStep[] }> }
+type Workflow = {
+	jobs: Record<
+		string,
+		{ if?: string; "timeout-minutes"?: number; steps?: WorkflowStep[] }
+	>
+}
 
 const workflow = Bun.YAML.parse(
 	readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
@@ -33,6 +40,15 @@ const SETUP_STEPS = new Set([
 ])
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
+
+const ON_PUSH_ONLY = "github.event_name == 'push' && "
+
+const EVERY_PATH_TOUCHED = {
+	rust: true,
+	vitest: true,
+	website: true,
+	ios: true,
+}
 
 const runStepsOf = (job: string) =>
 	(workflow.jobs[job]?.steps ?? []).filter((step) => step.run !== undefined)
@@ -53,6 +69,12 @@ describe("the gate", () => {
 
 		expect(new Set(names).size).toBe(names.length)
 	})
+
+	it("skips ios as a post-merge job, whatever the paths touched", () => {
+		expect(skipReason({ group: "ios", touched: EVERY_PATH_TOUCHED })).toBe(
+			"ios is a post-merge job, CI runs it on a push to main and on a v* tag: run bun run ci ios to run it here",
+		)
+	})
 })
 
 describe("ci:fast", () => {
@@ -64,7 +86,7 @@ describe("ci:fast", () => {
 	})
 })
 
-describe("the PR jobs of ci.yml", () => {
+describe("the jobs of ci.yml", () => {
 	it("gate exactly the groups of scripts/ci.ts, one job per group", () => {
 		const gatedJobs = Object.keys(workflow.jobs).filter(
 			(job) => !UNGATED_JOBS.has(job),
@@ -92,6 +114,21 @@ describe("the PR jobs of ci.yml", () => {
 		)
 
 		expect(stepTimeouts).toEqual([])
+	})
+
+	it("runs ios on a push only, never on a pull_request, within 60 minutes", () => {
+		expect(workflow.jobs.ios?.if?.startsWith(ON_PUSH_ONLY)).toBe(true)
+		expect(workflow.jobs.ios?.["timeout-minutes"]).toBe(60)
+	})
+
+	it("has verify expect ios skipped on a pull_request", () => {
+		const requireIos = (workflow.jobs.verify?.steps ?? []).find((step) =>
+			step.if?.startsWith("needs.ios.result"),
+		)
+
+		expect(requireIos?.if).toBe(
+			`needs.ios.result != (${ON_PUSH_ONLY}needs.changes.outputs.ios == 'true' && 'success' || 'skipped')`,
+		)
 	})
 
 	it("boots the simulator bun run ci looks up", () => {
