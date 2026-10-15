@@ -7,11 +7,6 @@ import type {
 import type { ConversationRuntimes } from "./conversation-runtimes"
 import type { ConversationWorker } from "./roster-conversations"
 import type { Conversation } from "./store-contract"
-import {
-	type ConversationPreviews,
-	type LastWord,
-	lastWordHeldIn,
-} from "./transcript-state"
 
 import { useControllerState } from "../use-controller"
 
@@ -94,22 +89,4 @@ export const useConversationWorkers = (
 		conversationIds,
 		(id) => workersIn(runtimes.heldFor(id)),
 		(workers) => workers.map(({ botId, kind }) => `${botId}:${kind}`).join(","),
-	)
-
-const heldWordIn = (
-	controller: ConversationController | null,
-): LastWord | undefined =>
-	controller ? lastWordHeldIn(controller.getState()) : undefined
-
-export const useConversationPreviews = (
-	runtimes: ConversationRuntimes,
-	conversationIds: string[],
-	stored: ConversationPreviews,
-): ConversationPreviews =>
-	useHeldRecord(
-		runtimes,
-		conversationIds,
-		(id) => heldWordIn(runtimes.heldFor(id)) ?? stored[id],
-		(word) =>
-			`${word?.at ?? ""}:${word?.authorBotId ?? ""}:${word?.text ?? ""}`,
 	)

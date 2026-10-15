@@ -13,10 +13,6 @@ import { useController } from "../use-controller"
 import type { BotPreviews } from "../bots/roster-controller"
 import { type RosterLine, runsIn, type SoloThreads } from "../bots/roster-line"
 import type { TranscriptStore } from "../conversations/store-port"
-import {
-	type LastWord,
-	lastWordHeldIn,
-} from "../conversations/transcript-state"
 
 export type Chat = {
 	state: ChatState
@@ -130,45 +126,3 @@ export const previewsIn = (
 	previews: PreviewsBySpaceId,
 	spaceId: string | null,
 ): BotPreviews => (spaceId ? (previews[spaceId] ?? NO_PREVIEWS) : NO_PREVIEWS)
-
-const previewSignatureOf = (shown: LineValue<LastWord | undefined>[]): string =>
-	shown
-		.map(
-			({ spaceId, botId, value }) =>
-				`${spaceId}/${botId}:${value?.at ?? ""}:${value?.text ?? ""}`,
-		)
-		.join("|")
-
-export type LinePreviewsMount = {
-	controller: ChatController
-	lines: RosterLine[]
-	stored: PreviewsBySpaceId
-	soloThreads: SoloThreads
-}
-
-export function useBotPreviews({
-	controller,
-	lines,
-	stored,
-	soloThreads,
-}: LinePreviewsMount): PreviewsBySpaceId {
-	const held = useRef<{
-		signature: string
-		previews: PreviewsBySpaceId
-	} | null>(null)
-
-	return useSyncExternalStore(controller.subscribe, () => {
-		const shown = lines.map(({ spaceId, botId }) => {
-			const state = controller.stateFor(botId)
-			const live = runsIn(soloThreads, state.conversationId, spaceId)
-				? lastWordHeldIn(state)
-				: undefined
-			return { spaceId, botId, value: live ?? stored[spaceId]?.[botId] }
-		})
-		const signature = previewSignatureOf(shown)
-		if (held.current?.signature !== signature) {
-			held.current = { signature, previews: bySpaceId(shown) }
-		}
-		return held.current.previews
-	})
-}

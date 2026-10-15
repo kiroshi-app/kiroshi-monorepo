@@ -16,12 +16,8 @@ import {
 	toSpaceBadges,
 	withBadges,
 } from "../chat/sidebar-badges"
-import { useBotPreviews } from "../chat/use-chat"
 import { toRosterConversations } from "../conversations/roster-conversations"
-import {
-	useConversationPreviews,
-	useConversationWorkers,
-} from "../conversations/use-conversation"
+import { useConversationWorkers } from "../conversations/use-conversation"
 import {
 	missionRingBadges,
 	missionsIn,
@@ -46,23 +42,12 @@ export const useRosterLists = ({
 	rosterView,
 	waitingMissionCount,
 }: RosterListsInput) => {
-	const { chat, conversationRuntimes, roster } = core
+	const { conversationRuntimes, roster } = core
 	const { badges, conversationBadges } = drivers
-	const { lines, now, rosters, working } = rosterLines
-	const { bots, missions, rosteredSpaceId, soloThreads } = rosterView
-	const {
-		conversationPreviews: storedConversationPreviews,
-		conversationRosters,
-		conversations,
-		previews: storedPreviews,
-	} = useControllerState(roster.controller)
-
-	const previews = useBotPreviews({
-		controller: chat.controller,
-		lines,
-		stored: storedPreviews,
-		soloThreads,
-	})
+	const { now, rosters, working } = rosterLines
+	const { bots, missions, rosteredSpaceId } = rosterView
+	const { conversationPreviews, conversationRosters, conversations, previews } =
+		useControllerState(roster.controller)
 
 	const rosterBots = useSharedStructure(
 		useRosterBots({
@@ -98,12 +83,6 @@ export const useRosterLists = ({
 	const conversationWorkers = useConversationWorkers(
 		conversationRuntimes,
 		conversationIds,
-	)
-
-	const conversationPreviews = useConversationPreviews(
-		conversationRuntimes,
-		conversationIds,
-		storedConversationPreviews,
 	)
 
 	const rosterConversations = useSharedStructure(
