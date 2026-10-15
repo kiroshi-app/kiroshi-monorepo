@@ -47,6 +47,8 @@ type JoinedHostsListenOptions = {
 	reportListenFailure: (reason: unknown) => UnlistenFn
 }
 
+export const isLocalEvent = (event: string) => LOCAL_EVENTS.has(event)
+
 const stopOnceAttached = (attaching: Promise<UnlistenFn>) => {
 	void attaching.then((unlisten) => unlisten())
 }
@@ -110,7 +112,7 @@ export const createJoinedHostsListen = ({
 		const stopLocal = await local.listen<T>(event, (heard) =>
 			handler(heard, null),
 		)
-		if (LOCAL_EVENTS.has(event)) {
+		if (isLocalEvent(event)) {
 			return stopLocal
 		}
 		const stopJoined = listenToJoinedHosts(event, handler as Deliver)

@@ -19,6 +19,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("./index", () => ({
 	isDesktopHost: vi.fn(),
 	listen: vi.fn(),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 
 vi.mock("../bindings", async (importOriginal) => ({

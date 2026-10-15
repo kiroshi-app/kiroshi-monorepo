@@ -15,6 +15,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("../host", () => ({
 	listen: vi.fn(async () => () => undefined),
 	onHostReconnected: vi.fn(),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 
 afterEach(() => {

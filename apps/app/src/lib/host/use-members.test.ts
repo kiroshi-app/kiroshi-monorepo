@@ -24,6 +24,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("./index", () => ({
 	isDesktopHost: () => true,
 	listen: vi.fn(async () => () => undefined),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
