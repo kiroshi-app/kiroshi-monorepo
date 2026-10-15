@@ -26,7 +26,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					'The blocking surface for a Claude Code `canUseTool` callback: the agent is paused until the user answers. `Allow once` maps to `{ behavior: "allow", updatedInput }` and `Deny` to `{ behavior: "deny", message }` — both one-shot. There is deliberately no `Always allow`, because persisting a rule means echoing a `localSettings` suggestion into `updatedPermissions`, which writes to `.claude/settings.local.json` and is out of scope for V0.1. `apps/app/src/components/thread-prompt.tsx:38` is the only caller: it names the tool, hands over the title the request carries, and leaves the status on its pending default.',
+					'The blocking surface for a `canUseTool` callback: the agent is paused until the user answers. `Allow once` maps to `{ behavior: "allow", updatedInput }` and `Deny` to `{ behavior: "deny", message }` — both one-shot. There is deliberately no `Always allow`, because persisting a rule means echoing a `localSettings` suggestion into `updatedPermissions`, which writes to `.claude/settings.local.json` and is out of scope for V0.1. `apps/app/src/components/thread-prompt.tsx:38` is the only caller: it names the tool, hands over the title the request carries, and leaves the status on its pending default.',
 			},
 		},
 	},

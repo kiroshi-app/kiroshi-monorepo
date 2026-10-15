@@ -165,7 +165,7 @@ export const Pinned = meta.story({
 		docs: {
 			description: {
 				story:
-					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached Claude has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on — it is given first, so it lands against the bubble on the reader's row as on every other. `packages/ui/src/components/turn.tsx:354` pins the retry of a prompt that failed, ahead of the copy `packages/ui/src/components/turn.tsx:363` adds.",
+					"Two actions on one bubble that must not behave alike. The retry is `alwaysVisible` — a prompt that never reached the agent has to show its way out before the reader goes looking — while the copy beside it stays behind a hover like every other. Check that the pinned one sits nearest the bubble, so the faded one never puts a gap between it and the words it acts on — it is given first, so it lands against the bubble on the reader's row as on every other. `packages/ui/src/components/turn.tsx:354` pins the retry of a prompt that failed, ahead of the copy `packages/ui/src/components/turn.tsx:363` adds.",
 			},
 		},
 	},

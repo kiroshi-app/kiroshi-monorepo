@@ -142,7 +142,7 @@ export const AtRest = meta.story({
 			canvas.queryByRole("button", { name: "Paste a configuration" }),
 		).not.toBeInTheDocument()
 		await expect(
-			canvas.queryByText("From Anthropic’s directory."),
+			canvas.queryByText("From the curated directory."),
 		).not.toBeInTheDocument()
 
 		const rail = canvasElement.querySelector('[data-slot="settings-rail"]')
@@ -195,7 +195,7 @@ export const CategorySelected = meta.story({
 
 		const head = canvas.getByRole("heading", { name: "Developer tools" })
 		await expect(head).toBeVisible()
-		await expect(canvas.getByText("From Anthropic’s directory.")).toBeVisible()
+		await expect(canvas.getByText("From the curated directory.")).toBeVisible()
 	},
 })
 
@@ -214,7 +214,7 @@ export const OnThisMachineSelected = meta.story({
 			canvas.getByRole("tab", { name: "On this machine" }),
 		).toHaveAttribute("aria-selected", "true")
 		await expect(
-			canvas.queryByText("From Anthropic’s directory."),
+			canvas.queryByText("From the curated directory."),
 		).not.toBeInTheDocument()
 	},
 })

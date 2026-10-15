@@ -126,7 +126,7 @@ const bots = {
 				servers:
 					"Impossible d’accepter. Les serveurs de Kiroshi n’ont pas répondu.",
 				offline:
-					"Impossible d’accepter, ce Mac est hors ligne. Réessayez une fois connecté.",
+					"Impossible d’accepter, cet ordinateur est hors ligne. Réessayez une fois connecté.",
 			},
 			withdrawn:
 				"{{email}} a retiré cette invitation. Demandez-lui de vous inviter à nouveau.",
@@ -139,9 +139,9 @@ const bots = {
 		signOut: {
 			title: "Se déconnecter de Kiroshi ?",
 			description:
-				"{{name}} quitte ce Mac jusqu’à votre prochaine connexion. Ses conversations restent chez {{email}}.",
+				"{{name}} quitte cet ordinateur jusqu’à votre prochaine connexion. Ses conversations restent chez {{email}}.",
 			confirm: "Se déconnecter",
-			notice: "Déconnecté. {{name}} a quitté ce Mac.",
+			notice: "Déconnecté. {{name}} a quitté cet ordinateur.",
 		},
 	},
 	dialog: {
@@ -624,7 +624,7 @@ const bots = {
 		},
 		catalogue: {
 			loading: "Chargement du catalogue d’applications…",
-			directory: "Depuis l’annuaire d’Anthropic.",
+			directory: "Depuis l’annuaire sélectionné.",
 			empty: "Rien dans cette catégorie pour l’instant.",
 			failed: "Impossible de joindre le catalogue d’applications.",
 			partlyFailed:

@@ -846,7 +846,7 @@ export const SignedOutFromTheSite = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3.13: this Mac was signed out from Devices on kiroshi.app. The panel is the signed out one unchanged, and the host raises a failure notice with the copy the catalogue holds under `account.signedOutFromTheSite`. Pressing Sign in with your browser signs in again.",
+					"Artboard 3.13: this computer was signed out from Devices on kiroshi.app. The panel is the signed out one unchanged, and the host raises a failure notice with the copy the catalogue holds under `account.signedOutFromTheSite`. Pressing Sign in with your browser signs in again.",
 			},
 		},
 	},

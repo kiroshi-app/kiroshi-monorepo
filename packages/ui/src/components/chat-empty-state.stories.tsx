@@ -21,7 +21,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The single surface Kiroshi shows before a conversation holds any message. It carries the whole first-run decision: either Claude Code answers and the reader is sent to the composer, or it does not and the reader is sent to setup. When it answers, the screen belongs to the companion — its face is the mark and its name is the title — so opening an empty conversation says which companion is about to be talked to. It owns its own copy and holds no sidebar, roster, suggestion or navigation — compose it above a composer, never inside a chat screen shell.",
+					"The single surface Kiroshi shows before a conversation holds any message. It carries the whole first-run decision: either the agent answers and the reader is sent to the composer, or it does not and the reader is sent to setup. When it answers, the screen belongs to the companion — its face is the mark and its name is the title — so opening an empty conversation says which companion is about to be talked to. It owns its own copy and holds no sidebar, roster, suggestion or navigation — compose it above a composer, never inside a chat screen shell.",
 			},
 		},
 	},
@@ -120,7 +120,7 @@ export const Unavailable = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when Kiroshi launched but its built-in agent is unreachable: the composer is disabled, so the empty state has to carry the only action left. This screen is about the agent, not about the companion — check that the companion's face and name give way to the alert mark and the agent copy, that the retry button is the single focusable target, and that the copy blames the unreachable agent rather than the prompt. Pick `WithSettings` when Claude Code answers and the composer is live. `apps/app/src/lib/chat/screen-model.ts:283` returns this status when the connection is neither ready nor checking.",
+					"Reach for this when Kiroshi launched but its built-in agent is unreachable: the composer is disabled, so the empty state has to carry the only action left. This screen is about the agent, not about the companion — check that the companion's face and name give way to the alert mark and the agent copy, that the retry button is the single focusable target, and that the copy blames the unreachable agent rather than the prompt. Pick `WithSettings` when the agent answers and the composer is live. `apps/app/src/lib/chat/screen-model.ts:283` returns this status when the connection is neither ready nor checking.",
 			},
 		},
 	},

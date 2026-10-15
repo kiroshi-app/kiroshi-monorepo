@@ -24,7 +24,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The header's leading control: who the reader is talking to, whether Claude Code answers, and the way into that companion's settings, in one ghost button. It is the only focusable thing on that row — the connection mark inside it is decorative markup, never a second target — so the header stays one tab stop. Reach for it in an app header; the sidebar's own companion rows are `AppSidebar`, not this.",
+					"The header's leading control: who the reader is talking to, whether the agent answers, and the way into that companion's settings, in one ghost button. It is the only focusable thing on that row — the connection mark inside it is decorative markup, never a second target — so the header stays one tab stop. Reach for it in an app header; the sidebar's own companion rows are `AppSidebar`, not this.",
 			},
 		},
 	},

@@ -1495,7 +1495,7 @@ export const MembersLongIdentity = meta.story({
 })
 
 const SHARE_DESCRIPTION =
-	"Invite people who aren’t on your network. Studio runs on this Mac, so they reach it while Kiroshi is open here."
+	"Invite people who aren’t on your network. Studio runs on this computer, so they reach it while Kiroshi is open here."
 
 const NOT_SHARED_HINT = "Turn on Share Studio to invite someone."
 

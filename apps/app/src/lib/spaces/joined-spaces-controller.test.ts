@@ -279,7 +279,7 @@ describe("watching the joined spaces", () => {
 			expect.objectContaining({
 				title: "Couldn’t open the spaces you joined",
 				description:
-					"Kiroshi can’t read its saved data on this Mac. Restart Kiroshi, then try again.",
+					"Kiroshi can’t read its saved data on this computer. Restart Kiroshi, then try again.",
 			}),
 		)
 	})

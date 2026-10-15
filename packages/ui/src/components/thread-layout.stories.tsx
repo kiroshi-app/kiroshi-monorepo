@@ -446,7 +446,7 @@ export const Pending = meta.story({
 		pending: (
 			<ToolApproval
 				tool="Bash"
-				description="Claude wants to clear the build output before rebuilding it."
+				description="The agent wants to clear the build output before rebuilding it."
 				parameters={[
 					{ id: "command", label: "command", value: "bun run build" },
 				]}

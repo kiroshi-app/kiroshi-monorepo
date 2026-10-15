@@ -17,12 +17,11 @@ const ARTBOARD_ITEMS: readonly FaqItem[] = [
 	{
 		question: "Where do my conversations live?",
 		answer:
-			"On your computer. Conversations, companions and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by Claude, so what you send goes through your Claude account.",
+			"On your computer. Conversations, companions and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by the agent, so what you send goes through your model provider.",
 	},
 	{
-		question: "Which Macs can run it?",
-		answer:
-			"Any Mac on macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
+		question: "Which macOS versions can run it?",
+		answer: "macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
 	},
 	{
 		question: "Is there a Windows or Linux version?",

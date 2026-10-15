@@ -1270,7 +1270,7 @@ export const M10FailedOffline = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M10: accepting failed because this Mac is offline. Same row as M9 with the offline cause.`,
+				story: `${INVITED_ARTBOARD} M10: accepting failed because this computer is offline. Same row as M9 with the offline cause.`,
 			},
 		},
 	},
@@ -1281,7 +1281,7 @@ export const M10FailedOffline = meta.story({
 		const menu = await openSwitcher(canvasElement)
 		await expectFailedRow(
 			invitationNamed(menu, INVITED.name),
-			"Couldn’t accept, this Mac is offline. Try again once you’re connected.",
+			"Couldn’t accept, this computer is offline. Try again once you’re connected.",
 			args.onRetryInvitation,
 			userEvent.click,
 		)
