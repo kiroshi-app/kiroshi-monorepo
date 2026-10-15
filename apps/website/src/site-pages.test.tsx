@@ -81,15 +81,60 @@ describe("the home page", () => {
 	})
 })
 
+const sectionNamed = (heading: string) =>
+	screen.getByRole("heading", { level: 2, name: heading })
+		.parentElement as HTMLElement
+
+const mainText = () => screen.getByRole("main").textContent ?? ""
+
 describe("the privacy page", () => {
-	it("renders its four sections in order", async () => {
+	it("renders its sixteen sections in order", async () => {
 		await openPage("/privacy", privacy.title)
 		expect(sectionHeadings()).toEqual([
-			"What we collect",
-			"Where messages go",
-			"Third-party AI providers",
-			"How to delete your account",
+			"Who we are",
+			"The short version",
+			"Your account",
+			"Spaces and members",
+			"Messages and conversations",
+			"Your model provider",
+			"Applications and secrets",
+			"The website and sign-in",
+			"Logs",
+			"Third parties",
+			"How long we keep things",
+			"Deleting your account",
+			"Your rights",
+			"Children",
+			"Changes to this policy",
+			"Contact",
 		])
+	})
+
+	it("contains no unfinished copy", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(mainText()).not.toMatch(/\[|todo|placeholder|lorem/i)
+	})
+
+	it("names the controller with no company form or registration", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(mainText()).toContain(
+			"Kiroshi, an independent project run from France by Steve Puget",
+		)
+		expect(mainText()).not.toMatch(/\b(SAS|SARL|EURL|SIREN|SIRET|RCS)\b/)
+	})
+
+	it("lists what account deletion leaves behind", async () => {
+		await openPage("/privacy", privacy.title)
+		const deletion = sectionNamed("Deleting your account")
+		expect(deletion.textContent).toContain("in the iPhone app")
+		expect(within(deletion).getAllByRole("listitem")).toHaveLength(6)
+	})
+
+	it("states the contact, the minimum age and the last update", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(sectionNamed("Contact").textContent).toContain("support@kiroshi.app")
+		expect(sectionNamed("Children").textContent).toContain("16")
+		expect(mainText()).toContain("Last updated: 15 October 2026.")
 	})
 })
 

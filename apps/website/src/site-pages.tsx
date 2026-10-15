@@ -7,9 +7,11 @@ import { SITE_PAGES_COPY, SUPPORT_EMAIL } from "./site-pages-copy"
 
 const TEXT_LINK = `${FOCUS_RING} rounded-sm text-foreground underline underline-offset-4 transition-colors hover:text-muted-foreground`
 
+type SectionBlock = string | readonly string[]
+
 type PageSection = {
 	heading: string
-	body: string | readonly string[]
+	body: string | readonly SectionBlock[]
 }
 
 type SitePageProps = {
@@ -49,13 +51,33 @@ type SectionProps = PageSection & {
 	children?: ReactNode
 }
 
+type SectionBlockViewProps = {
+	block: SectionBlock
+}
+
+const SectionBlockView = ({ block }: SectionBlockViewProps) => {
+	if (typeof block === "string")
+		return <p className="text-muted-foreground">{block}</p>
+	return (
+		<ul className="flex list-disc flex-col gap-1 ps-5 text-muted-foreground">
+			{block.map((item) => (
+				<li key={item}>{item}</li>
+			))}
+		</ul>
+	)
+}
+
+const toBlocks = (body: PageSection["body"]) =>
+	typeof body === "string" ? [body] : body
+
+const blockKey = (block: SectionBlock) =>
+	typeof block === "string" ? block : block.join()
+
 const Section = ({ heading, body, children }: SectionProps) => (
 	<section className="flex flex-col gap-2 text-reading">
 		<h2 className="font-medium text-foreground">{heading}</h2>
-		{[body].flat().map((paragraph) => (
-			<p className="text-muted-foreground" key={paragraph}>
-				{paragraph}
-			</p>
+		{toBlocks(body).map((block) => (
+			<SectionBlockView block={block} key={blockKey(block)} />
 		))}
 		{children}
 	</section>
