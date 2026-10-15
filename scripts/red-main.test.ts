@@ -29,10 +29,10 @@ const job = (name: string, conclusion: string): Job => ({ name, conclusion })
 
 const mergedBy: PullRequest = { number: 12, authorLogin: "octocat" }
 
-const fakeGitHub = (run: Run, pullRequests: PullRequest[] = []): GitHub => ({
+const fakeGitHub = (run: Run): GitHub => ({
 	readRun: async () => run,
 	readJobs: async () => [job("rust", "failure"), job("verify", "failure")],
-	readPullRequests: async () => pullRequests,
+	readPullRequests: async () => [mergedBy],
 })
 
 const linearAnswering = (...bodies: object[]) => {
