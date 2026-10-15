@@ -70,11 +70,17 @@ fn active_rows() -> String {
 			(SELECT MIN(open_turn.started_at) FROM turns AS open_turn
 				WHERE open_turn.conversation_id = conversations.id
 					AND open_turn.completed_at IS NULL) AS open_turn_started_at,
-			(SELECT json_group_array(reply.author_bot_id)
-				FILTER (WHERE reply.author_bot_id IS NOT NULL) FROM turns AS open_turn
-				JOIN messages AS reply ON reply.turn_id = open_turn.id AND reply.role = 'assistant'
-				WHERE open_turn.conversation_id = conversations.id
-					AND open_turn.completed_at IS NULL) AS open_turn_bot_ids
+			(SELECT json_group_array(working.bot_id) FROM (
+				SELECT reply.author_bot_id AS bot_id FROM turns AS open_turn
+					JOIN messages AS reply
+						ON reply.turn_id = open_turn.id AND reply.role = 'assistant'
+					WHERE open_turn.conversation_id = conversations.id
+						AND open_turn.completed_at IS NULL AND reply.author_bot_id IS NOT NULL
+				UNION ALL
+				SELECT run.bot_id FROM turns AS open_turn
+					JOIN turn_runs AS run ON run.turn_id = open_turn.id
+					WHERE open_turn.conversation_id = conversations.id
+						AND open_turn.completed_at IS NULL) AS working) AS open_turn_bot_ids
 		FROM conversations
 		LEFT JOIN conversation_participants AS solo_seat
 			ON conversations.kind = '{CHAT_KIND}' AND solo_seat.conversation_id = conversations.id
@@ -248,7 +254,9 @@ fn last_word(row: &Row<'_>, at: i64) -> rusqlite::Result<LastWord> {
 mod tests {
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::repositories::messages::{NewAssistantMessage, TerminalState};
+	use crate::db::repositories::messages::{
+		EndedRun, NewAssistantMessage, NewTurn, TerminalState,
+	};
 	use crate::db::{open, Database};
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -682,6 +690,85 @@ mod tests {
 		assert_eq!(active_turn_of_c01(&database).await, None);
 	}
 
+	async fn run_started(database: &Database, bot_id: &str) {
+		let turn =
+			NewTurn { id: "t1".to_owned(), conversation_id: "c01".to_owned(), started_at: 41 };
+		database.messages().start_run(turn, bot_id.to_owned()).await.expect("the run starts");
+	}
+
+	async fn run_ended(database: &Database, bot_id: &str) {
+		let ended = EndedRun {
+			turn_id: "t1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			handed_to: Vec::new(),
+			ended_at: 60,
+		};
+		database.messages().end_run(ended).await.expect("the run ends");
+	}
+
+	#[tokio::test]
+	async fn a_turn_stays_open_while_a_bot_still_runs_on_it_and_names_the_bots_running() {
+		let (database, _dir) = a_room_mid_turn().await;
+
+		run_started(&database, "b1").await;
+		run_started(&database, "b2").await;
+		let both_running = active_turn_of_c01(&database).await;
+		reply_opened(&database, "r1", "t1", "b1").await;
+		run_ended(&database, "b1").await;
+		let one_ended = active_turn_of_c01(&database).await;
+		run_ended(&database, "b2").await;
+
+		assert_eq!(both_running, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(one_ended, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(active_turn_of_c01(&database).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_bot_abandoned_before_its_run_leaves_the_turn_to_the_bot_still_awaited() {
+		let (database, _dir) = a_room_mid_turn().await;
+		let messages = database.messages();
+
+		messages
+			.await_runs("t1".to_owned(), vec!["b1".to_owned(), "b2".to_owned()])
+			.await
+			.expect("the runs are awaited");
+		messages.abandon_run("t1".to_owned(), "b1".to_owned(), 50).await.expect("abandoned");
+		let one_abandoned = active_turn_of_c01(&database).await;
+		run_started(&database, "b2").await;
+		run_ended(&database, "b2").await;
+
+		assert_eq!(one_abandoned, open_turn_of(40, &["b2"]));
+		assert_eq!(active_turn_of_c01(&database).await, None);
+	}
+
+	#[tokio::test]
+	async fn a_run_started_on_a_completed_turn_reopens_it() {
+		let (database, _dir) = a_room_mid_turn().await;
+		completed(&database, "t1").await;
+
+		run_started(&database, "b2").await;
+
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+	}
+
+	#[tokio::test]
+	async fn the_restart_sweep_closes_a_turn_bots_still_ran_on_and_forgets_their_runs() {
+		let (database, _dir) = a_room_mid_turn().await;
+		run_started(&database, "b1").await;
+		run_started(&database, "b2").await;
+
+		database.messages().recover_unfinished().await.expect("the sweep runs");
+		let runs_left: i64 = database
+			.call(|connection| {
+				Ok(connection.query_row("SELECT COUNT(*) FROM turn_runs", [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the runs count");
+
+		assert_eq!(active_turn_of_c01(&database).await, None);
+		assert_eq!(runs_left, 0, "the sweep left runs behind");
+	}
+
 	#[tokio::test]
 	async fn the_open_turn_reads_its_turns_and_replies_through_their_indexes() {
 		let (database, _dir) = planted(String::new()).await;
@@ -689,7 +776,7 @@ mod tests {
 		for statement in [page_statement(None), by_id_statement()] {
 			let plan = plan(&database, statement).await;
 
-			for table in ["open_turn", "reply"] {
+			for table in ["open_turn", "reply", "run"] {
 				assert!(
 					plan.iter().any(|step| step.starts_with(&format!("SEARCH {table} USING"))),
 					"the open turn reads no {table} through an index: {plan:?}"

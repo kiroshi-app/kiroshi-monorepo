@@ -58,6 +58,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 49, statements: SPACE_MEMBER_ROLES_DROPPED },
 	Migration { version: 50, statements: CONVERSATION_ACTIVITY },
 	Migration { version: 51, statements: SOLO_CONVERSATION_ACTIVITY },
+	Migration { version: 52, statements: TURN_RUNS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1117,6 +1118,15 @@ CREATE INDEX conversations_and_solos_by_activity
 DROP INDEX conversations_by_activity;
 ";
 
+const TURN_RUNS: &str = "
+CREATE TABLE turn_runs (
+	turn_id TEXT NOT NULL REFERENCES turns (id) ON DELETE CASCADE,
+	bot_id TEXT NOT NULL,
+	state TEXT NOT NULL CHECK (state IN ('awaited', 'running')),
+	PRIMARY KEY (turn_id, bot_id, state)
+);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1221,6 +1231,7 @@ mod tests {
 	const SPACE_MEMBER_ROLES_STEP: u32 = 48;
 	const SPACE_MEMBER_ROLES_DROPPED_STEP: u32 = 49;
 	const CONVERSATION_ACTIVITY_STEP: u32 = 50;
+	const TURN_RUNS_STEP: u32 = 52;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3797,6 +3808,43 @@ mod tests {
 		assert_eq!(last_activity_of(&connection, "silent"), 50, "a new message did not move it");
 		assert_eq!(last_activity_of(&connection, "spoken"), 9, "an older message moved it back");
 		assert_eq!(last_activity_of(&connection, "fresh"), 60, "a new room starts at zero");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn turn_runs_install_beside_the_turns_already_kept_and_go_with_their_turn() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(TURN_RUNS_STEP)).expect("the shipped schema");
+		connection
+			.execute_batch(&format!(
+				"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+					VALUES ('room', 'topic', 'personal', 'Room', 1, 1);
+				{}",
+				a_message_at("room", "m1", 1, 2),
+			))
+			.expect("the rows are inserted");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		write(
+			&connection,
+			"INSERT INTO turn_runs (turn_id, bot_id, state) VALUES ('t-m1', 'b1', 'running')",
+		)
+		.expect("a run of a kept turn is accepted");
+		let unknown_state = write(
+			&connection,
+			"INSERT INTO turn_runs (turn_id, bot_id, state) VALUES ('t-m1', 'b2', 'paused')",
+		);
+		write(&connection, "DELETE FROM turns WHERE id = 't-m1'").expect("the turn goes");
+		let runs_left: i64 = connection
+			.query_row("SELECT COUNT(*) FROM turn_runs", [], |row| row.get(0))
+			.expect("the runs count");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert!(unknown_state.is_err(), "a run in an unknown state was accepted");
+		assert_eq!(runs_left, 0, "a run outlived its turn");
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

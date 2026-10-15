@@ -132,7 +132,7 @@ fn seated_mentions<'a>(text: &'a str, present: &[&str]) -> Vec<&'a str> {
 	mentioned_bot_ids(text).into_iter().filter(|bot_id| present.contains(bot_id)).collect()
 }
 
-fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
+pub(crate) fn present_bot_ids(seats: &[Seat]) -> Vec<&str> {
 	seats
 		.iter()
 		.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
@@ -249,6 +249,7 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
+		self.await_runs(&summoned).await;
 		join_all(summoned.into_iter().map(|summons| self.begin(summons)))
 			.await
 			.into_iter()
@@ -343,21 +344,34 @@ impl<R: Runtime> HostTurn<R> {
 			}
 		};
 		eprintln!("{} could not run companion {bot_id}: {detail}", self.label());
-		self.end_failed().await;
+		self.abandon(bot_id).await;
 		if let Some(scope) = scope {
 			self.shut_down(scope).await;
 		}
 	}
 
-	async fn end_failed(&self) {
-		if let Err(error) = self.ended_failed().await {
-			eprintln!("{} could not be ended as failed: {error:?}", self.label());
+	async fn await_runs(&self, summoned: &[Summons]) {
+		if let Err(error) = self.awaited(summoned).await {
+			eprintln!("{} could not await its companions: {error:?}", self.label());
 		}
 	}
 
-	async fn ended_failed(&self) -> Result<(), TranscriptStoreError> {
+	async fn awaited(&self, summoned: &[Summons]) -> Result<(), TranscriptStoreError> {
+		let bot_ids = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
+		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids).await?;
+		Ok(())
+	}
+
+	async fn abandon(&self, bot_id: &str) {
+		if let Err(error) = self.abandoned(bot_id).await {
+			eprintln!("{} could not end the run of {bot_id} as failed: {error:?}", self.label());
+		}
+	}
+
+	async fn abandoned(&self, bot_id: &str) -> Result<(), TranscriptStoreError> {
 		let database = database(&self.app)?;
-		database.messages().complete_turn(self.turn_id.clone(), now_ms()).await?;
+		let messages = database.messages();
+		messages.abandon_run(self.turn_id.clone(), bot_id.to_owned(), now_ms()).await?;
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
 			.await;
 		Ok(())
