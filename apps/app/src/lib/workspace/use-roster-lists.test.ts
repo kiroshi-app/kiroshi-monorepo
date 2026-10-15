@@ -85,9 +85,8 @@ describe("useRosterLists", () => {
 			title: "Walls",
 			botIds: [BOT],
 		})
-		const conversationId = conversation.id
 		await saidIn(store, {
-			conversationId,
+			conversationId: conversation.id,
 			content: "Older word",
 			authorBotId: null,
 			createdAt: 1,
@@ -95,7 +94,7 @@ describe("useRosterLists", () => {
 		const held = createConversationController(createScriptedDriver(), store)
 		await act(() => held.open(conversation))
 		await saidIn(store, {
-			conversationId,
+			conversationId: conversation.id,
 			content: "Newer word",
 			authorBotId: BOT,
 			createdAt: 2,
@@ -116,7 +115,7 @@ describe("useRosterLists", () => {
 			(participant) => participant.botId === BOT,
 		)
 		const row = result.current.rosterConversations.find(
-			({ id }) => id === conversationId,
+			({ id }) => id === conversation.id,
 		)
 		expect(held.getState().messages.map(({ content }) => content)).toEqual([
 			"Older word",
