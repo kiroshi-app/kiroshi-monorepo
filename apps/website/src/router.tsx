@@ -171,6 +171,12 @@ const supportRoute = createRoute({
 	component: SupportPage,
 })
 
+const contactRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/contact",
+	component: SupportPage,
+})
+
 const routeTree = rootRoute.addChildren([
 	homeRoute,
 	loginRoute,
@@ -180,6 +186,7 @@ const routeTree = rootRoute.addChildren([
 	privacyRoute,
 	termsRoute,
 	supportRoute,
+	contactRoute,
 ])
 
 export const createSiteRouter = (history?: RouterHistory) =>
