@@ -5,6 +5,7 @@ import type { ReactNode } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { lineHeightOf } from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { SidebarMenuRow } from "@workspace/ui/components/sidebar-menu-row"
 import { Item } from "@workspace/ui/components/ui/item"
@@ -123,7 +124,9 @@ export const LongContent = meta.story({
 		const label = canvas.getByText(LONG_CONVERSATION)
 
 		await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth)
-		await expect(label.getBoundingClientRect().height).toBeLessThan(28)
+		await expect(label.getBoundingClientRect().height).toBeLessThanOrEqual(
+			lineHeightOf(label),
+		)
 	},
 })
 

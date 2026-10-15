@@ -2,7 +2,10 @@ import { useState } from "react"
 import { expect, fn, screen, waitFor } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { A11Y_CONTRAST_AWAITING_DESIGN_DECISION } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	lineHeightOf,
+} from "@workspace/storybook/story-utils"
 import {
 	RoutineRow,
 	type RoutineRowProps,
@@ -116,7 +119,9 @@ export const LongContent = meta.story({
 		const badge = canvas.getByText("Stopped itself")
 
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-		await expect(title.getBoundingClientRect().height).toBeLessThan(24)
+		await expect(title.getBoundingClientRect().height).toBeLessThanOrEqual(
+			lineHeightOf(title),
+		)
 		await expect(routine.getBoundingClientRect().width).toBe(32)
 		await expect(badge.scrollWidth).toBe(badge.clientWidth)
 	},

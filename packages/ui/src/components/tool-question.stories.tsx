@@ -7,6 +7,7 @@ import {
 	expectControlFrame,
 	expectInverseAtRest,
 	isInBrowserRunner,
+	lineHeightOf,
 	realPointer,
 	slotIn,
 	tokenStyleIn,
@@ -1237,8 +1238,8 @@ export const ApplicationScope = meta.story({
 
 		await expect(mark.getBoundingClientRect().width).toBe(22)
 		await expect(question.firstElementChild).toBe(mark)
-		await expect(question.getBoundingClientRect().height).toBeLessThanOrEqual(
-			24,
+		await expect(question.getBoundingClientRect().height).toBeLessThan(
+			2 * lineHeightOf(question),
 		)
 		await expect(
 			Math.abs(verticalCentreOf(mark) - verticalCentreOf(question)),
