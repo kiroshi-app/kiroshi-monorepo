@@ -159,6 +159,7 @@ struct ConversationsView: View {
                             Button("Pin", systemImage: "pin") {
                                 store.pin(summary.id)
                             }
+                            .tint(.yellow)
                         }
                     }
                     .onAppear {
