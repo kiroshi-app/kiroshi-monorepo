@@ -138,6 +138,14 @@ Between your email and Sign out, Privacy Policy, Terms of Use and Support open `
 
 `KiroshiUITests` opens the sheet from both tabs of `2.1`, checks `6.1` opens it once, on Conversations only, opens each of the three pages from `6.1` and closes it, cancels then confirms Sign out from `6.2`, and runs the accessibility audit on `6.1` and `6.2`.
 
+Delete account sits under Sign out, in its own section. It asks once (`Delete your account?`), then calls the cloud's `DELETE /me` with the bearer (`KiroshiCloud.deleteAccount(bearer:)`). A `204`, or a `401` from an account already gone, ends the session the way Sign out does and also forgets the last Space and this account's agreement, so nothing of it stays on the iPhone. Any other answer keeps everything and shows `Couldn’t delete your account. Check your connection and try again.` under the row; tapping it again tries again. While the call runs the row shows its progress and can't be tapped. `6.1` and `6.2` answer `DELETE /me` with `204`, `delete-account` opens on its confirmation, `deleting-account` on the call still running, and `delete-account-failed` on the failure line, the cloud answering `500`. `-requestLog <path>` makes the scripted cloud append each request it gets (`DELETE /me`) to that file, which is how `DeleteAccountTests` counts the calls:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture delete-account-failed -requestLog /tmp/requests.log
+```
+
+`DeleteAccountTests` deletes the account from `6.1` through its confirmation, lands on Welcome after exactly one `DELETE /me`, then opens `delete-account-failed`, tries again from the row and checks the session and Settings stay, with the failure line.
+
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 
 ```bash

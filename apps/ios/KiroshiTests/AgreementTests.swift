@@ -21,6 +21,17 @@ struct UserDefaultsAgreementStoreTests {
         #expect(store.hasAgreed(account: "sam"))
         #expect(store.hasAgreed(account: "alex"))
     }
+
+    @Test func forgetsOnlyTheAccountDeleted() {
+        store.agree(account: "sam")
+        store.agree(account: "alex")
+
+        store.forget(account: "sam")
+
+        #expect(!store.hasAgreed(account: "sam"))
+        #expect(store.hasAgreed(account: "alex"))
+        #expect(UserDefaults.standard.stringArray(forKey: store.key) == ["alex"])
+    }
 }
 
 @MainActor

@@ -3,6 +3,7 @@ import Foundation
 protocol AgreementStore {
     func hasAgreed(account: String) -> Bool
     func agree(account: String)
+    func forget(account: String)
 }
 
 struct UserDefaultsAgreementStore: AgreementStore {
@@ -15,6 +16,10 @@ struct UserDefaultsAgreementStore: AgreementStore {
     func agree(account: String) {
         guard !hasAgreed(account: account) else { return }
         UserDefaults.standard.set(agreedAccounts + [account], forKey: key)
+    }
+
+    func forget(account: String) {
+        UserDefaults.standard.set(agreedAccounts.filter { $0 != account }, forKey: key)
     }
 
     private var agreedAccounts: [String] {

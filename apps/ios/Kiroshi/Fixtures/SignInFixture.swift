@@ -38,6 +38,10 @@
             """#)
         static let signOutPath = "/api/auth/sign-out"
         static let signedOut = ScriptedTransport.Answer.status(200, #"{"status":true}"#)
+        static let accountPath = "/me"
+        static let accountDeleted = ScriptedTransport.Answer.status(204, "")
+        static let accountNotDeleted = error(
+            500, code: "INTERNAL_SERVER_ERROR", message: "Internal server error")
         static let relay = RelayEnvironment(
             transport: FixtureRelayTransport(onlineSpaceIds: [studioId, homeLabId]),
             clock: ContinuousRelayClock())
@@ -118,11 +122,18 @@
         case missionsHostOffline = "5.4"
         case settings = "6.1"
         case signOutAlert = "6.2"
+        case deleteAccount = "delete-account"
+        case deleteAccountFailed = "delete-account-failed"
+        case deletingAccount = "deleting-account"
 
         @MainActor static var opened: SignInFixture?
 
         static var launchArgument: SignInFixture? {
             UserDefaults.standard.string(forKey: "fixture").flatMap(SignInFixture.init(rawValue:))
+        }
+
+        static var requestLog: URL? {
+            UserDefaults.standard.string(forKey: "requestLog").map { URL(filePath: $0) }
         }
 
         fileprivate var answers: [String: ScriptedTransport.Answer] {
@@ -152,10 +163,22 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
-            case .keychain, .seededKeychain, .settings, .signOutAlert, .agreement:
+            case .keychain, .seededKeychain, .settings, .signOutAlert, .deleteAccount, .agreement:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
+                    CloudFixture.accountPath: CloudFixture.accountDeleted,
+                ]
+            case .deleteAccountFailed:
+                [
+                    CloudFixture.spacesPath: CloudFixture.threeSpaces,
+                    CloudFixture.signOutPath: CloudFixture.signedOut,
+                    CloudFixture.accountPath: CloudFixture.accountNotDeleted,
+                ]
+            case .deletingAccount:
+                [
+                    CloudFixture.spacesPath: CloudFixture.threeSpaces,
+                    CloudFixture.accountPath: .pending,
                 ]
             case .missions, .missionThread, .missionWorking, .slowMission, .noMissions,
                 .missionsHostOffline:
@@ -179,7 +202,8 @@
             case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .agreement, .missions,
                 .missionThread,
                 .missionWorking,
-                .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert:
+                .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert,
+                .deleteAccount, .deleteAccountFailed, .deletingAccount:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
                 .swipedThread, .noCompanion,
@@ -225,7 +249,8 @@
         }
 
         var opensSettings: Bool {
-            [.settings, .signOutAlert].contains(self)
+            [.settings, .signOutAlert, .deleteAccount, .deleteAccountFailed, .deletingAccount]
+                .contains(self)
         }
 
         var isOnHome: Bool {
@@ -320,7 +345,7 @@
             let model = SignInModel(
                 cloud: KiroshiCloud(
                     baseURL: KiroshiCloud.productionURL,
-                    transport: ScriptedTransport(fixture.answers)),
+                    transport: ScriptedTransport(fixture.answers, log: SignInFixture.requestLog)),
                 sessions: fixture.sessions,
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
                 agreements: fixture.agreements,
@@ -350,6 +375,10 @@
                 model.sendNewCodeTapped()
             case .signOutAlert:
                 model.signOutTapped()
+            case .deleteAccount:
+                model.deleteAccountTapped()
+            case .deleteAccountFailed, .deletingAccount:
+                model.deleteAccount()
             case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
                 .agreement, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,

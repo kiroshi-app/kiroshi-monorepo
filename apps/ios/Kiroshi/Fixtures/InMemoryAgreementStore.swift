@@ -13,5 +13,9 @@
         func agree(account: String) {
             agreed.insert(account)
         }
+
+        func forget(account: String) {
+            agreed.remove(account)
+        }
     }
 #endif
