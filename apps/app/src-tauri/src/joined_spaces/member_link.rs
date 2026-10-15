@@ -16,7 +16,7 @@ const HELD_FRAMES: usize = 1024;
 
 pub(super) const LEARN_BOUND: Duration = Duration::from_secs(30);
 
-const BUFFERED_EVENTS: usize = 256;
+pub(super) const BUFFERED_EVENTS: usize = 2 * HELD_FRAMES;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Presence {
@@ -29,11 +29,6 @@ pub(super) enum Presence {
 pub(super) struct Answer {
 	pub(super) status: u16,
 	pub(super) body: Value,
-}
-
-struct Session {
-	calls: mpsc::Sender<String>,
-	events: broadcast::Sender<Frame>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -75,7 +70,8 @@ impl Sequence {
 }
 
 pub(super) struct MemberLink {
-	session: Mutex<Option<Session>>,
+	calls: Mutex<Option<mpsc::Sender<String>>>,
+	events: Mutex<Option<broadcast::Sender<Frame>>>,
 	pending: Mutex<HashMap<u64, oneshot::Sender<Answer>>>,
 	presence: watch::Sender<Presence>,
 	next_call: AtomicU64,
@@ -85,7 +81,8 @@ pub(super) struct MemberLink {
 impl MemberLink {
 	pub(super) fn new() -> Self {
 		Self {
-			session: Mutex::new(None),
+			calls: Mutex::new(None),
+			events: Mutex::new(Some(broadcast::channel(BUFFERED_EVENTS).0)),
 			pending: Mutex::new(HashMap::new()),
 			presence: watch::channel(Presence::Connecting).0,
 			next_call: AtomicU64::new(1),
@@ -93,8 +90,12 @@ impl MemberLink {
 		}
 	}
 
-	fn session(&self) -> MutexGuard<'_, Option<Session>> {
-		self.session.lock().unwrap_or_else(PoisonError::into_inner)
+	fn calls(&self) -> MutexGuard<'_, Option<mpsc::Sender<String>>> {
+		self.calls.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn events(&self) -> MutexGuard<'_, Option<broadcast::Sender<Frame>>> {
+		self.events.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
 	fn pending(&self) -> MutexGuard<'_, HashMap<u64, oneshot::Sender<Answer>>> {
@@ -124,8 +125,7 @@ impl MemberLink {
 	}
 
 	pub(super) fn opened(&self, calls: mpsc::Sender<String>) -> Resync {
-		let events = broadcast::channel(BUFFERED_EVENTS).0;
-		*self.session() = Some(Session { calls, events });
+		*self.calls() = Some(calls);
 		self.presence.send_replace(Presence::Online);
 		let mut sequence = self.sequence();
 		match &*sequence {
@@ -139,7 +139,7 @@ impl MemberLink {
 	}
 
 	pub(super) fn closed(&self, presence: Presence) {
-		self.session().take();
+		self.calls().take();
 		self.pending().clear();
 		let mut sequence = self.sequence();
 		if let Sequence::Resuming(applied, _) = &*sequence {
@@ -147,6 +147,11 @@ impl MemberLink {
 		}
 		drop(sequence);
 		self.presence.send_replace(presence);
+	}
+
+	pub(super) fn ended(&self, presence: Presence) {
+		self.closed(presence);
+		self.events().take();
 	}
 
 	pub(super) fn resume_deadline(&self) -> Option<Instant> {
@@ -176,11 +181,11 @@ impl MemberLink {
 	}
 
 	pub(super) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
-		self.session().as_ref().map(|session| session.events.subscribe())
+		self.events().as_ref().map(broadcast::Sender::subscribe)
 	}
 
 	pub(super) async fn called(&self, command: &str, args: Value) -> Option<Answer> {
-		let calls = self.session().as_ref()?.calls.clone();
+		let calls = self.calls().clone()?;
 		let id = self.next_call.fetch_add(1, Ordering::Relaxed);
 		let (answer, answered) = oneshot::channel();
 		self.pending().insert(id, answer);
@@ -305,11 +310,11 @@ impl MemberLink {
 	}
 
 	fn heard(&self, event: String) {
-		let session = self.session();
-		let Some(session) = session.as_ref() else {
+		let events = self.events();
+		let Some(events) = events.as_ref() else {
 			return;
 		};
-		if session.events.receiver_count() > 0 && session.events.send(event.into()).is_err() {
+		if events.receiver_count() > 0 && events.send(event.into()).is_err() {
 			eprintln!("a relayed event found no listener left");
 		}
 	}
@@ -358,7 +363,23 @@ mod tests {
 
 		assert!(answer.is_none());
 		assert_eq!(*link.presence().borrow(), Presence::Down);
-		assert!(link.subscribed().is_none());
+		assert!(link.subscribed().is_some());
+	}
+
+	#[tokio::test]
+	async fn a_link_ended_for_good_closes_every_subscriber_and_takes_no_new_one() {
+		for presence in [Presence::Ended, Presence::Down] {
+			let link = MemberLink::new();
+			let (calls, _sent) = mpsc::channel(4);
+			link.opened(calls);
+			let mut heard = link.subscribed().expect("a subscriber");
+
+			link.ended(presence);
+
+			assert_eq!(heard.recv().await, Err(broadcast::error::RecvError::Closed));
+			assert!(link.subscribed().is_none());
+			assert_eq!(*link.presence().borrow(), presence);
+		}
 	}
 
 	#[tokio::test]
@@ -443,6 +464,64 @@ mod tests {
 		assert_eq!(answered, Resync::InStep);
 		assert_eq!(delivered(&mut heard), vec![4, 5, 6]);
 		assert_eq!(link.resume_deadline(), None);
+	}
+
+	#[test]
+	fn a_subscriber_taken_before_a_drop_hears_the_resumed_frames_in_order_with_no_reread() {
+		let link = an_open_link_applied_to("e-1", 3);
+		let mut heard = link.subscribed().expect("a subscriber");
+		assert_eq!(link.received(&stamped("e-1", 4)), Resync::InStep);
+		link.closed(Presence::Down);
+		let (calls, _sent) = mpsc::channel(4);
+
+		let args = resume_args(&link.opened(calls));
+		let resynced = [
+			link.received(&stamped("e-1", 7)),
+			link.received(&replayed("e-1", 6, &args["token"])),
+			link.received(&replayed("e-1", 5, &args["token"])),
+			link.received(&resume_answer(&args, json!({ "replayed": 2 }))),
+			link.received(&stamped("e-1", 8)),
+		];
+
+		assert_eq!(args["since"], 4);
+		assert_eq!(
+			resynced,
+			[Resync::InStep, Resync::InStep, Resync::InStep, Resync::InStep, Resync::InStep]
+		);
+		assert_eq!(delivered(&mut heard), vec![4, 5, 6, 7, 8]);
+	}
+
+	#[test]
+	fn a_resume_releasing_every_held_frame_at_once_reaches_a_subscriber_without_lagging() {
+		let link = an_open_link_applied_to("e-1", 0);
+		let mut heard = link.subscribed().expect("a subscriber");
+		link.closed(Presence::Down);
+		let (calls, _sent) = mpsc::channel(4);
+		let args = resume_args(&link.opened(calls));
+		let last = u64::try_from(HELD_FRAMES).expect("a seq");
+
+		assert!((1..=last).all(|seq| link.received(&stamped("e-1", seq)) == Resync::InStep));
+		let answered = link.received(&resume_answer(&args, json!({ "replayed": 0 })));
+
+		assert_eq!(answered, Resync::InStep);
+		assert_eq!(delivered(&mut heard), (1..=last).collect::<Vec<_>>());
+		assert_eq!(heard.try_recv(), Err(broadcast::error::TryRecvError::Empty));
+	}
+
+	#[test]
+	fn an_epoch_change_while_resuming_rereads_once_for_the_gap() {
+		let link = an_open_link_applied_to("e-1", 3);
+		let mut heard = link.subscribed().expect("a subscriber");
+		link.closed(Presence::Down);
+		let (calls, _sent) = mpsc::channel(4);
+		let args = resume_args(&link.opened(calls));
+
+		let switched = link.received(&stamped("e-2", 1));
+		let late_answer = link.received(&resume_answer(&args, json!({ "replayed": 0 })));
+		let next = link.received(&stamped("e-2", 2));
+
+		assert_eq!((switched, late_answer, next), (Resync::Reread, Resync::InStep, Resync::InStep));
+		assert_eq!(delivered(&mut heard), vec![1, 2]);
 	}
 
 	#[test]
