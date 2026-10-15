@@ -8,7 +8,7 @@ export const WEBSITE_COPY = {
 	githubAction: "View on GitHub",
 	mobileNote:
 		"Desktop today, mobile soon. Open this page on your computer to download.",
-	fineprint: "Runs on your Claude subscription · MIT",
+	fineprint: "Runs on the model provider you choose · MIT",
 	creditSeparator: "·",
 	credit: "Made by Shoto",
 	creditDestination: "Made by Shoto, on GitHub",
@@ -34,11 +34,11 @@ export const WEBSITE_COPY = {
 	},
 	yours: {
 		title: "Yours, and it stays that way.",
-		subtitle: "Everything they learn sits on your Mac.",
+		subtitle: "Everything they learn sits on your computer.",
 		columns: [
 			{
 				name: "Local-first",
-				body: "Companions, skills and conversations live in a folder on your Mac, not on a server.",
+				body: "Companions, skills and conversations live in a folder on your computer, not on a server.",
 			},
 			{
 				name: "It learns as you go",
@@ -104,17 +104,16 @@ export const WEBSITE_COPY = {
 			{
 				question: "Do I need a subscription?",
 				answer:
-					"Yes, a Claude subscription you’re signed in to. Kiroshi ships the agent that answers and runs it on your own sign-in, so there’s no API key to paste. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
+					"Yes, an account with the model provider you choose, such as a Claude subscription or an Anthropic API key. Kiroshi ships the agent that answers and runs it on your own account. Kiroshi is free on your computer. Pro, which takes your spaces online, is free during the beta.",
 			},
 			{
 				question: "Where do my conversations live?",
 				answer:
-					"On your computer. Conversations, companions and what they learn are kept in a local folder, and they’re all there on the next launch. Replies are written by Claude, so what you send goes through your Claude account.",
+					"On your computer. Conversations, companions and what they learn are kept in a local folder, and they’re all there on the next launch. Replies are written by the model provider you configured, so what you send goes through your account with it.",
 			},
 			{
-				question: "Which Macs can run it?",
-				answer:
-					"Any Mac on macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
+				question: "Which macOS versions does it run on?",
+				answer: "macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
 			},
 			{
 				question: "Is there a Windows or Linux version?",
