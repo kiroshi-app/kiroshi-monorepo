@@ -866,12 +866,12 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(SHORT_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 17,
-			  "appSidebar": 5,
+			  "appSidebar": 6,
 			  "cacheEvents": 21,
 			  "chunks": 11,
 			  "quietTurn": 2,
-			  "rosterBots": 5,
-			  "rosterBotsBySpace": 5,
+			  "rosterBots": 6,
+			  "rosterBotsBySpace": 6,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -883,12 +883,12 @@ describe("PRF1 render baseline", () => {
 		expect(await measureTurn(LONG_TURN_CHUNKS)).toMatchInlineSnapshot(`
 			{
 			  "app": 28,
-			  "appSidebar": 5,
+			  "appSidebar": 6,
 			  "cacheEvents": 32,
 			  "chunks": 22,
 			  "quietTurn": 2,
-			  "rosterBots": 5,
-			  "rosterBotsBySpace": 5,
+			  "rosterBots": 6,
+			  "rosterBotsBySpace": 6,
 			  "streamingTurn": 2,
 			}
 		`)

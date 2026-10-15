@@ -9,10 +9,13 @@ import { useRosterLists } from "./use-roster-lists"
 
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
+import { rosterLinesIn } from "../bots/roster-line"
 import {
-	type ConversationController,
-	createConversationController,
-} from "../conversations/conversation-controller"
+	type ChatController,
+	createChatController,
+} from "../chat/chat-controller"
+import { createConversationController } from "../conversations/conversation-controller"
+import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { createScriptedDriver } from "../conversations/scripted-driver"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -50,31 +53,66 @@ const saidIn = async (store: TranscriptStore, said: Said) => {
 	})
 }
 
-type RosterListsWiring = {
-	roster: RosterController
-	held: ConversationController
+type HeldChat = Pick<ChatController, "subscribe" | "stateFor">
+
+type HeldConversations = Pick<ConversationRuntimes, "subscribe" | "heldFor">
+
+const NO_HELD_CHAT: HeldChat = {
+	subscribe: () => () => undefined,
+	stateFor: () => {
+		throw new Error("no chat is held")
+	},
 }
 
-const rosterListsOn = ({ roster, held }: RosterListsWiring) =>
-	({
+const NO_HELD_CONVERSATIONS: HeldConversations = {
+	subscribe: () => () => undefined,
+	heldFor: () => null,
+}
+
+type RosterListsWiring = {
+	roster: RosterController
+	chat?: HeldChat
+	conversationRuntimes?: HeldConversations
+}
+
+const rosterListsOn = ({
+	roster,
+	chat = NO_HELD_CHAT,
+	conversationRuntimes = NO_HELD_CONVERSATIONS,
+}: RosterListsWiring) => {
+	const { bots, rosters, soloThreads } = roster.getState()
+	return {
 		core: {
-			chat: { controller: { subscribe: () => () => undefined } },
-			conversationRuntimes: {
-				subscribe: held.subscribe,
-				heldFor: () => held,
-			},
+			chat: { controller: chat },
+			conversationRuntimes,
 			roster: { controller: roster, state: { isRosterPending: false } },
 		},
 		drivers: { badges: {}, conversationBadges: {} },
-		rosterLines: { lines: [], now: 0, rosters: {}, working: {} },
-		rosterView: {
-			bots: [],
-			missions: [],
-			rosteredSpaceId: SPACE,
-			soloThreads: {},
+		rosterLines: {
+			lines: rosterLinesIn(rosters),
+			now: 0,
+			rosters,
+			working: {},
 		},
+		rosterView: { bots, missions: [], rosteredSpaceId: SPACE, soloThreads },
 		waitingMissionCount: 0,
-	}) as unknown as Parameters<typeof useRosterLists>[0]
+	} as unknown as Parameters<typeof useRosterLists>[0]
+}
+
+const loadedRoster = async (store: TranscriptStore) => {
+	const roster = mountRoster(store)
+	await roster.load({
+		spaces: [{ spaceRowId: SPACE, spaceId: SPACE }],
+		spaceRowId: SPACE,
+		lastRowId: null,
+	})
+	return roster
+}
+
+const renderRosterLists = (wiring: RosterListsWiring) =>
+	renderHook(() => useRosterLists(rosterListsOn(wiring)), {
+		wrapper: createQueryTestWrapper().wrapper,
+	}).result
 
 describe("useRosterLists", () => {
 	it("shows the stored last word on a row whose held controller settled on an older one", async () => {
@@ -99,17 +137,12 @@ describe("useRosterLists", () => {
 			authorBotId: BOT,
 			createdAt: 2,
 		})
-		const roster = mountRoster(store)
-		await roster.load({
-			spaces: [{ spaceRowId: SPACE, spaceId: SPACE }],
-			spaceRowId: SPACE,
-			lastRowId: null,
-		})
+		const roster = await loadedRoster(store)
 
-		const { result } = renderHook(
-			() => useRosterLists(rosterListsOn({ roster, held })),
-			{ wrapper: createQueryTestWrapper().wrapper },
-		)
+		const result = renderRosterLists({
+			roster,
+			conversationRuntimes: { subscribe: held.subscribe, heldFor: () => held },
+		})
 
 		const speaker = conversation.participants.find(
 			(participant) => participant.botId === BOT,
@@ -125,5 +158,33 @@ describe("useRosterLists", () => {
 			lastSpeaker: speaker?.name,
 			lastActivityAt: 2,
 		})
+	})
+
+	it("shows the stored last word on a companion row whose held solo thread settled on an older one", async () => {
+		const store = createFakeTranscriptStore()
+		const soloThread = await store.mainChat(BOT, null)
+		await saidIn(store, {
+			conversationId: soloThread.id,
+			content: "Older word",
+			authorBotId: null,
+			createdAt: 1,
+		})
+		const chat = createChatController(createScriptedDriver(), store)
+		await act(() => chat.open(BOT, null).then(() => undefined))
+		await saidIn(store, {
+			conversationId: soloThread.id,
+			content: "Newer word",
+			authorBotId: null,
+			createdAt: 2,
+		})
+		const roster = await loadedRoster(store)
+
+		const result = renderRosterLists({ roster, chat })
+
+		const row = result.current.rosterBots.find(({ id }) => id === BOT)
+		expect(chat.stateFor(BOT).messages.map(({ content }) => content)).toEqual([
+			"Older word",
+		])
+		expect(row).toMatchObject({ lastMessage: "Newer word", lastActivityAt: 2 })
 	})
 })

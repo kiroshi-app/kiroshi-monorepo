@@ -7,9 +7,9 @@ import { withLineBadges } from "../chat/sidebar-badges"
 import type { useBotBadges } from "../chat/use-bot-badges"
 import {
 	activityIn,
+	type PreviewsBySpaceId,
 	previewsIn,
 	type useBotActivity,
-	type useBotPreviews,
 } from "../chat/use-chat"
 import type { Bot } from "../conversations/store-contract"
 import {
@@ -23,7 +23,7 @@ type RosterBotsInput = {
 	bots: Bot[]
 	missions: ReturnType<typeof missionsBySpaceId>
 	now: number
-	previews: ReturnType<typeof useBotPreviews>
+	previews: PreviewsBySpaceId
 	rosteredSpaceId: string | null
 	working: ReturnType<typeof useBotActivity>
 }
