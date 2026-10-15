@@ -1,11 +1,13 @@
 mod bundled;
 mod common;
+mod event_log;
 
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
+use event_log::EventLog;
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
@@ -19,7 +21,6 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
-const POLL: Duration = Duration::from_millis(25);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -38,7 +39,7 @@ fn a_run(epoch: i64) -> Value {
 
 struct Harness {
 	window: WebviewWindow<MockRuntime>,
-	log: Arc<Mutex<Vec<ScopedEvent>>>,
+	log: Arc<EventLog<ScopedEvent>>,
 	_app: AppOfItsOwn,
 }
 
@@ -53,11 +54,11 @@ fn launch() -> Harness {
 		.build()
 		.expect("window builds");
 
-	let log: Arc<Mutex<Vec<ScopedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+	let log = Arc::new(EventLog::new());
 	let sink = log.clone();
 	app.listen(EVENT_CHANNEL, move |event| {
 		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
-			sink.lock().expect("event log").push(parsed);
+			sink.push(parsed);
 		}
 	});
 
@@ -98,26 +99,17 @@ impl Harness {
 	}
 
 	fn events(&self) -> Vec<ScopedEvent> {
-		self.log.lock().expect("event log").clone()
+		self.log.held()
 	}
 
 	fn forget_events(&self) {
-		self.log.lock().expect("event log").clear();
+		self.log.forget();
 	}
 
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ScopedEvent]) -> Option<T>) -> T {
-		let deadline = Instant::now() + DEADLINE;
-		loop {
-			let seen = self.events();
-			if let Some(found) = ready(&seen) {
-				return found;
-			}
-			assert!(
-				Instant::now() < deadline,
-				"waited {DEADLINE:?} for {expected} and only saw {seen:#?}"
-			);
-			std::thread::sleep(POLL);
-		}
+		self.log.until(DEADLINE, ready).unwrap_or_else(|| {
+			panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events())
+		})
 	}
 }
 

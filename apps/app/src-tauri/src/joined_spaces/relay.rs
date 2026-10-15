@@ -123,6 +123,21 @@ impl RelayGuests {
 	pub(crate) fn turn(&self) -> &tokio::sync::Mutex<()> {
 		&self.turn
 	}
+
+	#[cfg(test)]
+	pub(crate) fn stopping(&self, id: &str) -> Option<watch::Receiver<bool>> {
+		self.guests().get(id).map(|guest| guest.stop.subscribe())
+	}
+
+	#[cfg(test)]
+	pub(crate) fn link_dropped(&self, id: &str) -> impl std::future::Future<Output = ()> {
+		let presence = self.reached(id).map(|reached| reached.link.presence());
+		async move {
+			let mut presence = presence.expect("a guest runs");
+			let dropped = presence.wait_for(|now| *now == Presence::Down).await;
+			dropped.map(drop).expect("the link is held");
+		}
+	}
 }
 
 fn is_signed_in<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {

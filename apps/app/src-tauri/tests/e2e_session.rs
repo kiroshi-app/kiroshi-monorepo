@@ -1,5 +1,6 @@
 mod bundled;
 mod common;
+mod event_log;
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -7,6 +8,7 @@ use std::time::{Duration, Instant};
 use bundled::bundled_bots;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
+use event_log::EventLog;
 use kiroshi_app::agent::commands::{terminate_session, EVENT_CHANNEL};
 use kiroshi_app::agent::contract::{
 	AgentEvent, CheckReport, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
@@ -30,7 +32,7 @@ const POLL: Duration = Duration::from_millis(25);
 struct Harness {
 	app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
-	log: Arc<Mutex<Vec<ScopedEvent>>>,
+	log: Arc<EventLog<ScopedEvent>>,
 	run: Mutex<RuntimeScope>,
 }
 
@@ -76,11 +78,11 @@ fn launch() -> Harness {
 		.build()
 		.expect("window builds");
 
-	let log: Arc<Mutex<Vec<ScopedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+	let log = Arc::new(EventLog::new());
 	let sink = log.clone();
 	app.listen(EVENT_CHANNEL, move |event| {
 		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
-			sink.lock().expect("event log").push(parsed);
+			sink.push(parsed);
 		}
 	});
 
@@ -122,30 +124,21 @@ impl Harness {
 	}
 
 	fn events(&self) -> Vec<AgentEvent> {
-		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
+		agent_events(&self.log.held())
 	}
 
 	fn scoped_events(&self) -> Vec<ScopedEvent> {
-		self.log.lock().expect("event log").clone()
+		self.log.held()
 	}
 
 	fn forget_events(&self) {
-		self.log.lock().expect("event log").clear();
+		self.log.forget();
 	}
 
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[AgentEvent]) -> Option<T>) -> T {
-		let deadline = Instant::now() + DEADLINE;
-		loop {
-			let seen = self.events();
-			if let Some(found) = ready(&seen) {
-				return found;
-			}
-			assert!(
-				Instant::now() < deadline,
-				"waited {DEADLINE:?} for {expected} and only saw {seen:#?}"
-			);
-			std::thread::sleep(POLL);
-		}
+		self.log.until(DEADLINE, |scoped| ready(&agent_events(scoped))).unwrap_or_else(|| {
+			panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events())
+		})
 	}
 }
 
@@ -225,6 +218,18 @@ fn is_alive(pid: i32) -> bool {
 }
 
 #[cfg(unix)]
+fn gone_in_time(pid: i32) -> bool {
+	let deadline = Instant::now() + DEADLINE;
+	while is_alive(pid) {
+		if Instant::now() >= deadline {
+			return false;
+		}
+		std::thread::sleep(POLL);
+	}
+	true
+}
+
+#[cfg(unix)]
 fn shut_down_leaving_no_orphan(harness: &Harness) {
 	let pid_file = orphan_pid_file();
 	let _ = std::fs::remove_file(&pid_file);
@@ -247,7 +252,7 @@ fn shut_down_leaving_no_orphan(harness: &Harness) {
 		Ok(Value::Null)
 	);
 	harness.quit();
-	harness.wait_for("the grandchild to be gone", |_| (!is_alive(orphan)).then_some(()));
+	assert!(gone_in_time(orphan), "the grandchild outlived the quit");
 
 	std::env::remove_var("FAKE_AGENT_PID_FILE");
 	let _ = std::fs::remove_file(&pid_file);
@@ -612,4 +617,8 @@ fn cancelling_a_live_session_before_any_submit_closes_the_turn_the_host_opened()
 	assert_eq!(cancelled, Err(serde_json::to_value(TransportError::NoActiveTurn).expect("json")));
 	assert!(stored.completed_at("t1").is_some(), "the unsubmitted host turn was left open");
 	stored.close();
+}
+
+fn agent_events(scoped: &[ScopedEvent]) -> Vec<AgentEvent> {
+	scoped.iter().map(|scoped| scoped.event.clone()).collect()
 }

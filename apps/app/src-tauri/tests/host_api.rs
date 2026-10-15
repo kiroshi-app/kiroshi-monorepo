@@ -1,7 +1,6 @@
 mod common;
 
 use std::fmt::Display;
-use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -260,18 +259,16 @@ impl Client {
 			.expect("the connection ends cleanly");
 	}
 
-	async fn closed_by_the_host(&mut self) {
-		let mut rest = Vec::new();
-		let ending = timeout(PATIENCE, self.0.read_to_end(&mut rest))
-			.await
-			.expect("the host closes the connection in time");
-		if let Err(failure) = ending {
-			assert_eq!(failure.kind(), ErrorKind::ConnectionReset);
-		}
-	}
-
 	async fn heard_until(mut self, last: String) {
 		while self.text().await != last {}
+	}
+
+	async fn reset_without_reading(&mut self) {
+		let payload = [b'x'; u16::MAX as usize];
+		let length = u16::MAX.to_be_bytes();
+		let mut frame = vec![0x80 | TEXT, 0x80 | 126, length[0], length[1], 0, 0, 0, 0];
+		frame.extend_from_slice(&payload);
+		while self.0.write_all(&frame).await.is_ok() {}
 	}
 
 	async fn send(&mut self, opcode: u8, data: &[u8]) {
@@ -692,11 +689,12 @@ async fn a_client_that_stops_reading_is_dropped_while_the_others_keep_hearing() 
 	let hearing = tokio::spawn(reading.heard_until(later));
 
 	host.emit_bulk(BUFFERED_FRAMES - 24).await;
-	tokio::time::sleep(SEND_PATIENCE + Duration::from_secs(1)).await;
 	host.emit("later");
 
 	timeout(PATIENCE, hearing).await.expect("the reading client heard in time").expect("heard");
-	stalled.closed_by_the_host().await;
+	timeout(SEND_PATIENCE + PATIENCE, stalled.reset_without_reading())
+		.await
+		.expect("the host dropped the stalled client in time");
 }
 
 fn stored(path: &Path, bytes: &str) {

@@ -1,11 +1,13 @@
 mod common;
+mod event_log;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
+use event_log::EventLog;
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
 use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
@@ -21,7 +23,6 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const DEADLINE: Duration = Duration::from_secs(10);
-const POLL: Duration = Duration::from_millis(25);
 
 const TURN: &str = "t1";
 const NAME: &str = "Camille";
@@ -33,7 +34,7 @@ const DESK: &str = "TICKET_DESK";
 struct Harness {
 	app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
-	log: Arc<Mutex<Vec<ScopedEvent>>>,
+	log: Arc<EventLog<ScopedEvent>>,
 }
 
 fn launch() -> Harness {
@@ -50,11 +51,11 @@ fn launch_as(name: &str) -> Harness {
 		.build()
 		.expect("window builds");
 
-	let log: Arc<Mutex<Vec<ScopedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+	let log = Arc::new(EventLog::new());
 	let sink = log.clone();
 	app.listen(EVENT_CHANNEL, move |event| {
 		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
-			sink.lock().expect("event log").push(parsed);
+			sink.push(parsed);
 		}
 	});
 
@@ -80,26 +81,17 @@ impl Harness {
 	}
 
 	fn events(&self) -> Vec<AgentEvent> {
-		self.log.lock().expect("event log").iter().map(|scoped| scoped.event.clone()).collect()
+		agent_events(&self.log.held())
 	}
 
 	fn forget_events(&self) {
-		self.log.lock().expect("event log").clear();
+		self.log.forget();
 	}
 
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[AgentEvent]) -> Option<T>) -> T {
-		let deadline = Instant::now() + DEADLINE;
-		loop {
-			let seen = self.events();
-			if let Some(found) = ready(&seen) {
-				return found;
-			}
-			assert!(
-				Instant::now() < deadline,
-				"waited {DEADLINE:?} for {expected} and only saw {seen:#?}"
-			);
-			std::thread::sleep(POLL);
-		}
+		self.log.until(DEADLINE, |scoped| ready(&agent_events(scoped))).unwrap_or_else(|| {
+			panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events())
+		})
 	}
 
 	fn create_bot(&self) -> String {
@@ -398,7 +390,8 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 	let edited = harness.runtime_of(&conversation, &bot, 5);
 	assert!(edited.spoken.contains(&briefed(SPANISH)), "got {}", edited.spoken);
 
-	std::fs::remove_dir_all(&bundle).expect("the bundle is taken away");
+	std::fs::rename(&bundle, bundle.with_file_name("taken-away"))
+		.expect("the bundle is taken away");
 	let unbundled = harness.open_run(&conversation, &bot, 6);
 	let refused = harness
 		.call(
@@ -504,4 +497,8 @@ fn plugin_of(harness: &Harness, space: &str) -> PathBuf {
 
 fn plugged_into(plugin: &Path) -> String {
 	format!("space<{}>", plugin.display())
+}
+
+fn agent_events(scoped: &[ScopedEvent]) -> Vec<AgentEvent> {
+	scoped.iter().map(|scoped| scoped.event.clone()).collect()
 }

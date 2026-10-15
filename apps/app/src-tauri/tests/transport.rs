@@ -4,7 +4,7 @@ mod removed_on_drop;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use kiroshi_app::agent::commands::start_with_fallback;
 use kiroshi_app::agent::contract::{
@@ -14,13 +14,12 @@ use kiroshi_app::agent::contract::{
 };
 use kiroshi_app::agent::protocol::AuthorizeRequest;
 use kiroshi_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
-use kiroshi_app::agent::sidecar::{self, Opening, Sidecar, SidecarOptions, SHUTDOWN_GRACE};
+use kiroshi_app::agent::sidecar::{self, Opening, Sidecar, SidecarOptions};
 use kiroshi_app::environment::contract::Values;
 use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const SETTLE: Duration = Duration::from_millis(400);
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
 const LADDER_CEILING: Duration = Duration::from_secs(12);
@@ -126,12 +125,14 @@ impl Harness {
 	}
 }
 
-async fn drain_after_settling(events: &mut mpsc::UnboundedReceiver<AgentEvent>) -> Vec<AgentEvent> {
-	tokio::time::sleep(SETTLE).await;
+async fn drained(mut events: mpsc::UnboundedReceiver<AgentEvent>) -> Vec<AgentEvent> {
 	let mut seen = Vec::new();
-	while let Ok(event) = events.try_recv() {
-		seen.push(event);
-	}
+	let closed = async {
+		while let Some(event) = events.recv().await {
+			seen.push(event);
+		}
+	};
+	tokio::time::timeout(DEADLINE, closed).await.expect("every sender let the channel close");
 	seen
 }
 
@@ -431,16 +432,17 @@ async fn a_refused_resume_keeps_its_crash_off_the_channel() {
 		start_with_fallback(sidecar.clone(), options("resume_crash"), Some("dead-id".into()), sink)
 			.await
 			.expect("the fresh start rescues the launch");
-	let mut harness = Harness { session: started.session, sidecar, events };
-	let seen = drain_after_settling(&mut harness.events).await;
+	started.session.shutdown().await;
+	drop(started.session);
+	drop(sidecar);
+	let seen = drained(events).await;
 
 	assert!(!reports_a_crash(&seen), "the refused attempt reached the reader: {seen:#?}");
-	harness.session.shutdown().await;
 }
 
 #[tokio::test]
 async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
-	let (tx, mut events) = mpsc::unbounded_channel();
+	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
 	let error = Session::start(sidecar().await, options("startup_timeout"), sink)
@@ -449,7 +451,7 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 		.expect("handshake fails");
 	assert!(matches!(error, TransportError::StartupTimeout { .. }));
 
-	let seen = drain_after_settling(&mut events).await;
+	let seen = drained(events).await;
 
 	assert!(!reports_a_crash(&seen), "the killed child reported a crash of its own: {seen:#?}");
 }
@@ -458,7 +460,10 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 async fn the_commands_a_session_announces_reach_the_reader() {
 	let mut harness = start(options("commands")).await.expect("the session opens");
 
-	let seen = drain_after_settling(&mut harness.events).await;
+	let is_listed = |seen: &[AgentEvent]| {
+		seen.iter().any(|event| matches!(event, AgentEvent::CommandsListed { .. }))
+	};
+	let seen = harness.wait_for("the commands to be listed", is_listed).await;
 
 	assert_eq!(
 		seen.iter()
@@ -742,13 +747,15 @@ async fn answering_an_unknown_permission_is_rejected() {
 
 #[tokio::test]
 async fn closing_stdin_ends_a_healthy_sidecar_without_reaching_the_signal() {
-	let harness = start(options("normal")).await.expect("session starts");
+	let eof_file = an_eof_file();
+	let healthy =
+		sidecar_with(&[("FAKE_AGENT_EOF_FILE", eof_file.to_str().expect("a printable path"))])
+			.await;
+	let harness = start_on(healthy, options("normal")).await.expect("session starts");
 
-	let started = Instant::now();
 	harness.sidecar.shutdown().await;
-	let elapsed = started.elapsed();
 
-	assert!(elapsed < SHUTDOWN_GRACE, "shutdown waited {elapsed:?} instead of taking EOF");
+	assert!(eof_file.is_file(), "the sidecar was signalled before it read the end of its stdin");
 }
 
 #[tokio::test]
@@ -833,7 +840,7 @@ async fn shutdown_escalates_on_a_sidecar_that_ignores_stdin_close() {
 	let deaf = sidecar_with(&[("FAKE_AGENT_IGNORE_EOF", "1")]).await;
 	let (harness, orphan) = orphan_probe("deaf", deaf, options("orphan")).await;
 
-	tokio::time::timeout(Duration::from_secs(8), harness.sidecar.shutdown())
+	tokio::time::timeout(LADDER_CEILING, harness.sidecar.shutdown())
 		.await
 		.expect("the escalation keeps the shutdown bounded");
 
@@ -931,6 +938,10 @@ fn is_alive(pid: i32) -> bool {
 	unsafe { libc::kill(pid, 0) == 0 }
 }
 
+fn an_eof_file() -> RemovedOnDrop {
+	RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-sidecar-eof-{}", std::process::id())))
+}
+
 fn a_cancel_file(name: &str) -> RemovedOnDrop {
 	let path = RemovedOnDrop(
 		std::env::temp_dir().join(format!("kiroshi-oauth-cancel-{name}-{}", std::process::id())),
@@ -987,8 +998,9 @@ async fn a_flow_dropped_before_it_settled_cancels_itself_on_the_sidecar() {
 	assert!(matches!(opened, Opening::Authorization(_)));
 
 	drop(flow);
+	sidecar.checked(&Values::new()).await.expect("a later command is answered");
 
-	poll_until("the cancel to reach the sidecar", || cancel_file.is_file()).await;
+	assert!(cancel_file.is_file(), "the dropped flow left its sign-in running on the sidecar");
 	let _ = std::fs::remove_file(&cancel_file);
 }
 
@@ -1009,7 +1021,7 @@ async fn a_flow_the_caller_saw_settle_sends_no_cancel() {
 	assert!(matches!(opened, Opening::Settled(_)));
 
 	drop(flow);
-	tokio::time::sleep(SETTLE).await;
+	sidecar.checked(&Values::new()).await.expect("a later command is answered");
 
 	assert!(!cancel_file.is_file(), "a settled flow asked the sidecar to cancel");
 }

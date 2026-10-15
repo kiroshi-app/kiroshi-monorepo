@@ -138,7 +138,7 @@ tauri = { version = "2", features = ["test"] }
 # Already a dependency; named again so an integration test can build the pictures it
 # uploads and decode the ones the host stored, rather than checking bytes in.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
-tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "process", "io-util", "sync", "time", "rt-multi-thread", "test-util"] }
 libc = "0.2"
 # Already in the tree through tauri-specta; named so the member socket schema applies the
 # same serde rewrites bindings.ts gets.

@@ -221,15 +221,14 @@ pub(in crate::db) async fn count_of(database: &Database, table: &'static str) ->
 #[cfg(test)]
 mod tests {
 	use std::fs;
-	use std::sync::atomic::{AtomicU64, Ordering};
 	use std::time::Duration;
+
+	use futures_util::FutureExt;
 
 	use super::connection::{is_busy, temp_dir, FILE_NAME};
 	use super::*;
 
 	const CONTENDED_TIMEOUT: Duration = Duration::from_millis(300);
-	const HEARTBEAT: Duration = Duration::from_millis(10);
-	const MINIMUM_BEATS: u64 = 5;
 	const DEADLINE: Duration = Duration::from_secs(10);
 
 	async fn version(database: &Database) -> u32 {
@@ -309,37 +308,19 @@ mod tests {
 		let holder = connection::open(&dir.join(FILE_NAME)).expect("a second connection");
 		holder.execute_batch("BEGIN EXCLUSIVE;").expect("the write lock is held");
 
-		let beats = Arc::new(AtomicU64::new(0));
-		let heartbeat = tokio::spawn({
-			let beats = beats.clone();
-			async move {
-				loop {
-					tokio::time::sleep(HEARTBEAT).await;
-					beats.fetch_add(1, Ordering::Relaxed);
-				}
-			}
-		});
+		let mut contended = Box::pin(database.call_mut(|connection| {
+			let transaction = connection.transaction()?;
+			transaction.execute(A_CONVERSATION, [])?;
+			transaction.commit()?;
+			Ok(())
+		}));
+		let is_held_by_the_call = contended.as_mut().now_or_never().is_some();
+		let blocked = tokio::time::timeout(DEADLINE, contended).await;
 
-		let blocked = tokio::time::timeout(
-			DEADLINE,
-			database.call_mut(|connection| {
-				let transaction = connection.transaction()?;
-				transaction.execute(A_CONVERSATION, [])?;
-				transaction.commit()?;
-				Ok(())
-			}),
-		)
-		.await;
-		heartbeat.abort();
-
+		assert!(!is_held_by_the_call, "the runtime was held by a database call");
 		let refused =
 			blocked.expect("the call never came back").expect_err("the write was accepted");
 		assert!(is_busy(&refused), "the contended write failed as something else: {refused:?}");
-		assert!(
-			beats.load(Ordering::Relaxed) >= MINIMUM_BEATS,
-			"the runtime was held by a database call: {} beats",
-			beats.load(Ordering::Relaxed)
-		);
 
 		drop(holder);
 		drop(database);

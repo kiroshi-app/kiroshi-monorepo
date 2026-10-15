@@ -530,14 +530,19 @@ mod tests {
 		started: AtomicUsize,
 		in_flight: AtomicUsize,
 		peak: AtomicUsize,
+		turn: std::sync::Mutex<Option<Arc<Mutex<()>>>>,
+		outside_the_turn: AtomicUsize,
 	}
 
 	impl Reads {
-		async fn counted(&self) {
+		fn counted(&self) {
 			self.started.fetch_add(1, Ordering::SeqCst);
 			let in_flight = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
 			self.peak.fetch_max(in_flight, Ordering::SeqCst);
-			tokio::time::sleep(Duration::from_millis(30)).await;
+			let turn = self.turn.lock().expect("the reads").clone();
+			if turn.is_some_and(|turn| turn.try_lock().is_ok()) {
+				self.outside_the_turn.fetch_add(1, Ordering::SeqCst);
+			}
 			self.in_flight.fetch_sub(1, Ordering::SeqCst);
 		}
 	}
@@ -558,7 +563,7 @@ mod tests {
 		let router = axum::Router::new().route(
 			AVATAR_PATH,
 			axum::routing::get(move |Segment(file): Segment<String>| async move {
-				counted.counted().await;
+				counted.counted();
 				let png = [(axum::http::header::CONTENT_TYPE, "image/png")];
 				let max = MAX_AVATAR_BYTES as usize;
 				match file.as_str() {
@@ -653,6 +658,7 @@ mod tests {
 		}
 		let api = a_local_api().await;
 		let turn = Arc::new(Mutex::new(()));
+		*api.reads.turn.lock().expect("the reads") = Some(turn.clone());
 
 		let statuses = futures_util::future::join_all(files.map(|file| {
 			let answered =
@@ -667,5 +673,6 @@ mod tests {
 		assert_eq!(statuses, [StatusCode::OK; 3]);
 		assert_eq!(api.reads.started.load(Ordering::SeqCst), 3);
 		assert_eq!(api.reads.peak.load(Ordering::SeqCst), 1);
+		assert_eq!(api.reads.outside_the_turn.load(Ordering::SeqCst), 0);
 	}
 }

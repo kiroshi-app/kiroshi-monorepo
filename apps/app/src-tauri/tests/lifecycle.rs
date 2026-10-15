@@ -25,7 +25,6 @@ use tauri::{App, Manager};
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-const QUIT_INSIDE_THE_LADDER: Duration = Duration::from_millis(200);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -91,6 +90,14 @@ async fn shutdown(app: &App<MockRuntime>) -> Result<(), TransportError> {
 
 fn is_refused<T>(outcome: &Result<T, TransportError>) -> bool {
 	matches!(outcome, Err(TransportError::TransitionInProgress))
+}
+
+#[cfg(unix)]
+async fn opening_signalled(listener: &tokio::net::UnixListener) {
+	tokio::time::timeout(DEADLINE, listener.accept())
+		.await
+		.expect("the restart began opening its session in time")
+		.expect("the fake signalled its open");
 }
 
 async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
@@ -210,19 +217,25 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 	let _ = std::fs::remove_file(&pid_file);
 }
 
+#[cfg(unix)]
 #[test]
 fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 	let _serial = serial();
+	let opening = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-opening-{}.sock", std::process::id())),
+	);
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
 	std::env::set_var("FAKE_AGENT_SCENARIO", "slow_open");
+	std::env::set_var("FAKE_AGENT_OPENING_SOCKET", &*opening);
 
 	let app = app();
 	runtime().block_on(async {
 		start(&app).await.expect("the session the restart replaces starts");
+		let listener = tokio::net::UnixListener::bind(&*opening).expect("the opening socket binds");
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
-			tokio::time::sleep(QUIT_INSIDE_THE_LADDER).await;
+			opening_signalled(&listener).await;
 			terminate_session(app.state::<AgentState>().inner()).await;
 		});
 
@@ -240,6 +253,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
+	std::env::remove_var("FAKE_AGENT_OPENING_SOCKET");
 }
 
 #[test]

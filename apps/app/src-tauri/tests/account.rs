@@ -12,6 +12,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
+use kiroshi_app::account::contract::CHANGED_EVENT;
 use kiroshi_app::account::session::AccountSession;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
@@ -19,8 +20,9 @@ use kiroshi_app::environment::store;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{WebviewWindow, WebviewWindowBuilder};
+use tauri::{Listener, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
+use tokio::sync::watch;
 
 const BEARER: &str = "integration-bearer";
 const EMAIL: &str = "steve@example.com";
@@ -28,6 +30,7 @@ const REQUEST_ID: &str = "0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
 const VERIFICATION_URL: &str =
 	"https://kiroshi.app/authorize?request=0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
 const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
+const PATIENCE: Duration = Duration::from_secs(10);
 
 type Callbacks = Arc<Mutex<Vec<String>>>;
 
@@ -100,6 +103,7 @@ struct Host {
 	_app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
 	root: PathBuf,
+	noticed: Arc<watch::Sender<()>>,
 	_folder: Option<RemovedOnDrop>,
 }
 
@@ -132,7 +136,13 @@ impl Host {
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("window builds");
-		Self { _app: app, window, root: root.unwrap_or_default(), _folder: folder.ok() }
+		let noticed = Arc::new(watch::channel(()).0);
+		let noticing = noticed.clone();
+		app.listen_any(CHANGED_EVENT, move |_| {
+			noticing.send_replace(());
+		});
+		let root = root.unwrap_or_default();
+		Self { _app: app, window, root, noticed, _folder: folder.ok() }
 	}
 
 	fn call(&self, cmd: &str, body: Value) -> Result<Value, Value> {
@@ -157,14 +167,17 @@ impl Host {
 	}
 
 	async fn settled(&self) -> Value {
-		for _ in 0..200 {
+		let mut noticed = self.noticed.subscribe();
+		loop {
 			let state = self.state();
 			if state["kind"] != "waiting" {
 				return state;
 			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
+			tokio::time::timeout(PATIENCE, noticed.changed())
+				.await
+				.expect("the account stayed waiting")
+				.expect("the host listens");
 		}
-		panic!("the account stayed waiting");
 	}
 
 	fn stored(&self) -> Option<String> {

@@ -23,7 +23,6 @@ const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-const SETTLE: Duration = Duration::from_millis(500);
 
 const NAME: &str = "Camille";
 const BRIEF: &str = "Answer only in French.";
@@ -280,8 +279,26 @@ fn every_bundle_the_turn_changed_is_announced_once() {
 	);
 
 	harness.forget_events();
-	let quiet = harness.start_run(&conversation, &bot, 2);
-	harness.end_turn(&quiet);
-	std::thread::sleep(SETTLE);
-	assert!(evolutions(&harness.events()).is_empty(), "a quiet turn was announced");
+	let later = harness.start_run(&conversation, &bot, 2);
+	harness.end_turn(&later);
+	drop_a_skill(&project, "about-later");
+	harness.end_turn(&later);
+	harness.wait_for("the turn that changed the space to be announced", |seen| {
+		evolution_of(seen, EvolvedBundle::Space).map(drop)
+	});
+
+	assert_eq!(
+		evolved_bundles(&harness.events()),
+		[EvolvedBundle::Space],
+		"a quiet turn was announced"
+	);
+}
+
+fn evolved_bundles(seen: &[AgentEvent]) -> Vec<EvolvedBundle> {
+	seen.iter()
+		.filter_map(|event| match event {
+			AgentEvent::BotEvolved { bundle, .. } => Some(*bundle),
+			_ => None,
+		})
+		.collect()
 }
