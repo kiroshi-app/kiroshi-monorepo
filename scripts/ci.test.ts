@@ -39,6 +39,13 @@ const workflow = Bun.YAML.parse(
 	readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
 ) as Workflow
 
+const releaseWorkflow = Bun.YAML.parse(
+	readFileSync(
+		new URL("../.github/workflows/release.yml", import.meta.url),
+		"utf8",
+	),
+) as Workflow
+
 const SETUP_STEPS = new Set([
 	"Install dependencies",
 	"Drop the unused third-party apt sources",
@@ -52,6 +59,8 @@ const SETUP_STEPS = new Set([
 const UNGATED_JOBS = new Set(["changes", "verify"])
 
 const ON_PUSH_ONLY = "github.event_name == 'push' && "
+
+const ON_MAIN_ONLY = "github.ref == 'refs/heads/main' && "
 
 const ON_PULL_REQUEST_ONLY = "github.event_name == 'pull_request' && "
 
@@ -146,8 +155,13 @@ describe("the gate", () => {
 		expect(GROUP_ORDER.filter((group) => postMergeNote(group))).toEqual(
 			POST_MERGE_JOBS,
 		)
-		expect(postMergeNote("storybook")).toBe(
-			"storybook is a post-merge job, CI runs it on a push to main and on a v* tag",
+		for (const group of ["rust", "storybook"] as const) {
+			expect(postMergeNote(group)).toBe(
+				`${group} is a post-merge job, CI runs it on a push to main and on a v* tag`,
+			)
+		}
+		expect(postMergeNote("ios")).toBe(
+			"ios is a post-merge job, CI runs it on a push to main only",
 		)
 	})
 
@@ -226,12 +240,17 @@ describe("the jobs of ci.yml", () => {
 		expect(stepTimeouts).toEqual([])
 	})
 
-	it("runs ios on a push only, never on a pull_request, within 60 minutes", () => {
-		expect(workflow.jobs.ios?.if?.startsWith(ON_PUSH_ONLY)).toBe(true)
+	it("runs ios on a push to main only, never on a v* tag or a pull_request, within 60 minutes", () => {
+		const filter = "needs.changes.outputs.ios == 'true'"
+
+		expect(workflow.jobs.ios?.if).toBe(`${ON_MAIN_ONLY}${filter}`)
+		expect(verifyCondition("ios")).toBe(
+			`needs.ios.result != (${ON_MAIN_ONLY}${filter} && 'success' || 'skipped')`,
+		)
 		expect(workflow.jobs.ios?.["timeout-minutes"]).toBe(60)
 	})
 
-	it.each(POST_MERGE_JOBS)(
+	it.each(["rust", "storybook"])(
 		"runs %s on a push only and has verify expect it skipped on a pull_request",
 		(job) => {
 			const filter = `needs.changes.outputs.${job} == 'true'`
@@ -282,6 +301,21 @@ describe("the jobs of ci.yml", () => {
 		)
 
 		expect(installing).toEqual(["storybook"])
+	})
+
+	it("has the ci-green job of release.yml wait on the CI run alone, never on ios", () => {
+		const ciGreen = JSON.stringify(releaseWorkflow.jobs["ci-green"])
+
+		expect(ciGreen).toContain("--workflow ci.yml")
+		expect(ciGreen).not.toMatch(/\bios\b/)
+	})
+
+	it("has ci-green read the CI run of the tag, never another push run on its commit", () => {
+		const waitStep = releaseWorkflow.jobs["ci-green"]?.steps?.find((step) =>
+			step.run?.includes("gh run list"),
+		)
+
+		expect(waitStep?.run).toContain('--branch "$GITHUB_REF_NAME"')
 	})
 
 	it("boots the simulator bun run ci looks up", () => {

@@ -17,8 +17,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# PR gate: changes, lint, rust-check, vitest, website, verify.
-# Post-merge: rust, storybook and ios run on a push to main and on a v* tag, never on a pull_request.
+# pull_request: changes, lint, rust-check, vitest, website, verify.
+# push to main: changes, lint, vitest, website, rust, storybook, ios, verify.
+# v* tag: changes, lint, vitest, website, rust, storybook, verify. ios runs on a push to main only.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -215,7 +216,7 @@ jobs:
 
   ios:
     needs: changes
-    if: github.event_name == 'push' && needs.changes.outputs.ios == 'true'
+    if: github.ref == 'refs/heads/main' && needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
@@ -270,6 +271,6 @@ jobs:
         if: needs.storybook.result != (github.event_name == 'push' && needs.changes.outputs.storybook == 'true' && 'success' || 'skipped')
         run: exit 1
 
-      - name: Require ios to succeed when it ran on a push, and to be skipped otherwise
-        if: needs.ios.result != (github.event_name == 'push' && needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
+      - name: Require ios to succeed when it ran on a push to main, and to be skipped otherwise
+        if: needs.ios.result != (github.ref == 'refs/heads/main' && needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
         run: exit 1
