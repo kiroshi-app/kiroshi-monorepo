@@ -66,7 +66,7 @@ export const createHostedSpaces = (
 	}
 
 	readAll().catch((failure) =>
-		console.error("the hosted spaces of this Mac were not read", failure),
+		console.error("the hosted spaces of this computer were not read", failure),
 	)
 
 	return {
