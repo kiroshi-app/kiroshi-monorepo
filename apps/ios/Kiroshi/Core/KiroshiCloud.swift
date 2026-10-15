@@ -109,7 +109,7 @@ struct KiroshiCloud: Sendable {
             return nil
         }
         return Session(
-            bearer: granted.token, email: granted.user.email,
+            bearer: granted.token, email: granted.user.email, userId: granted.user.id,
             deviceName: granted.session?.deviceName, platform: granted.session?.platform)
     }
 
@@ -164,6 +164,7 @@ private struct IdTokenSignIn: Encodable {
 
 private struct GrantedSession: Decodable {
     struct User: Decodable {
+        let id: String
         let email: String
     }
 

@@ -36,7 +36,7 @@ struct KeychainSessionStoreTests {
         ]
         try #require(SecItemAdd(item as CFDictionary, nil) == errSecSuccess)
 
-        #expect(store.load() == CloudFixture.session)
+        #expect(store.load() == Session(bearer: "fixture-bearer", email: CloudFixture.email))
         store.clear()
     }
 }
