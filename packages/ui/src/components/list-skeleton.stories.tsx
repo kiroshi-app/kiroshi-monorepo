@@ -106,13 +106,10 @@ const emulateMotion = async (value: "no-preference" | "reduce") => {
 	})
 }
 
-const withMotionAllowed = async (run: () => Promise<void>) => {
+const allowMotionBeforeMount = async () => {
+	if (!isInBrowserRunner()) return
 	await emulateMotion("no-preference")
-	try {
-		await run()
-	} finally {
-		await emulateMotion("reduce")
-	}
+	return () => emulateMotion("reduce")
 }
 
 const phaseOf = (root: Element) => slotIn(root, "timed-list").dataset.phase
@@ -308,23 +305,22 @@ export const Fade = meta.story({
 			},
 		},
 	},
+	beforeEach: allowMotionBeforeMount,
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		await withMotionAllowed(async () => {
-			await waitFor(() => expect(phaseOf(canvasElement)).toBe("fade"), {
-				...FRAME_POLL,
-				timeout: 3000,
-			})
-			await expect(slotIn(canvasElement, "list-skeleton")).toBeInTheDocument()
-			await expect(slotIn(canvasElement, "loaded-list")).toBeInTheDocument()
-
-			await waitFor(() => expect(phaseOf(canvasElement)).toBe("content"), {
-				...FRAME_POLL,
-				timeout: 1000,
-			})
-			await expect(
-				canvasElement.querySelector('[data-slot="list-skeleton"]'),
-			).toBeNull()
+		await waitFor(() => expect(phaseOf(canvasElement)).toBe("fade"), {
+			...FRAME_POLL,
+			timeout: 3000,
 		})
+		await expect(slotIn(canvasElement, "list-skeleton")).toBeInTheDocument()
+		await expect(slotIn(canvasElement, "loaded-list")).toBeInTheDocument()
+
+		await waitFor(() => expect(phaseOf(canvasElement)).toBe("content"), {
+			...FRAME_POLL,
+			timeout: 1000,
+		})
+		await expect(
+			canvasElement.querySelector('[data-slot="list-skeleton"]'),
+		).toBeNull()
 	},
 })
