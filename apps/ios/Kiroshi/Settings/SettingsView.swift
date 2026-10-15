@@ -4,12 +4,19 @@ struct SettingsView: View {
     @Bindable var model: SignInModel
     let spaces: [Space]
     @Environment(\.dismiss) private var dismiss
+    @State private var shownPage: KiroshiPage?
 
     var body: some View {
         List {
             Section {
                 AccountRow(email: model.signedInEmail)
             }
+            Section {
+                ForEach(KiroshiPage.allCases) { page in
+                    Button(page.title) { shownPage = page }
+                }
+            }
+            .tint(.primary)
             Section {
                 Button("Sign out", role: .destructive, action: model.signOutTapped)
             } footer: {
@@ -31,6 +38,10 @@ struct SettingsView: View {
                 }
                 .tint(.primary)
             }
+        }
+        .fullScreenCover(item: $shownPage) { page in
+            SafariView(url: page.url)
+                .ignoresSafeArea()
         }
         .alert("Sign out of Kiroshi?", isPresented: $model.isConfirmingSignOut) {
             Button("Cancel", role: .cancel) {}

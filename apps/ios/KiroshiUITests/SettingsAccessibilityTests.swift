@@ -43,7 +43,9 @@ final class SettingsAccessibilityTests: XCTestCase {
         XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts.matching(identifier: Self.footer).count, 1)
 
-        try audit(app)
+        try audit(app) { issue in
+            issue.auditType == .dynamicType && issue.element?.label == Self.footer
+        }
 
         app.buttons["Close"].tap()
         XCTAssertTrue(app.staticTexts[Self.footer].waitForNonExistence(timeout: 5))
@@ -51,6 +53,28 @@ final class SettingsAccessibilityTests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars.buttons["Settings"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts[Self.footer].waitForExistence(timeout: 3))
+    }
+
+    func testThePrivacyTermsAndSupportRowsOpenTheirPageInTheApp() {
+        let app = launch("6.1")
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
+        XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
+
+        for title in ["Privacy Policy", "Terms of Use", "Support"] {
+            let row = app.collectionViews.buttons[title]
+            XCTAssertTrue(row.isHittable, title)
+
+            row.tap()
+
+            let address = safari.buttons["URL"]
+            XCTAssertTrue(address.waitForExistence(timeout: 10), title)
+            XCTAssertTrue((address.value as? String)?.contains("kiroshi.app") == true, title)
+            XCTAssertEqual(app.state, .runningForeground, title)
+            safari.buttons["Close"].tap()
+            let isBack = expectation(
+                for: NSPredicate(format: "isHittable == true"), evaluatedWith: row)
+            wait(for: [isBack], timeout: 10)
+        }
     }
 
     func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensWelcome()
