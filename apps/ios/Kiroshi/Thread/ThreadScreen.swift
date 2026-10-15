@@ -22,7 +22,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     ContentUnavailableView {
                         Label(failedTitle, systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text("Check that your computer is on, then try again.")
+                        Text("Check that the computer where Kiroshi runs is on, then try again.")
                     } actions: {
                         Button("Try Again") {
                             model.reload()

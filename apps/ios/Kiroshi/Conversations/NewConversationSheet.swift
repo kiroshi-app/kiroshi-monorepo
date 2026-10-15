@@ -55,7 +55,7 @@ struct NewConversationSheet: View {
                     Section {
                         Label {
                             Text(
-                                "Couldn’t create the conversation. Check that your computer is on, then try again."
+                                "Couldn’t create the conversation. Check that the computer where Kiroshi runs is on, then try again."
                             )
                         } icon: {
                             Image(systemName: "exclamationmark.triangle.fill")
