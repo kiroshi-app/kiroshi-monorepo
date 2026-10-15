@@ -59,7 +59,7 @@ use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
 use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::{self, Event};
+use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
@@ -1047,6 +1047,61 @@ fn stopping_closes_with_1000_clears_the_flag_and_keeps_the_instance() {
 		let heard =
 			harness.heard_until(|kinds| kinds.last().is_some_and(|kind| kind == "off")).await;
 		assert_eq!(heard.last().map(String::as_str), Some("off"));
+	});
+}
+
+#[test]
+fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
+	run(async {
+		let mut harness = Harness::signed_in("lagged").await;
+		harness.started().await;
+		let mut first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		members_heard(&mut first).await;
+
+		let (held, is_held) = tokio::sync::oneshot::channel();
+		let (release, released) = std::sync::mpsc::channel::<()>();
+		let app = harness.app.handle().clone();
+		let holding = tauri::async_runtime::spawn(async move {
+			let state = app.state::<DatabaseState>();
+			let database = state.as_ref().expect("the database");
+			database
+				.call(move |_| {
+					held.send(()).expect("the test waits for the lock");
+					released.recv().expect("the test releases the lock");
+					Ok(())
+				})
+				.await
+		});
+		is_held.await.expect("the database lock is held");
+		let lookup = json!({ "conversationId": "c-lagged" });
+		for _ in 0..BUFFERED_FRAMES + 2 {
+			events::emit(
+				harness.app.handle(),
+				Event::untyped(MESSAGE_STORED_EVENT),
+				lookup.clone(),
+			)
+			.expect("emitted");
+		}
+		release.send(()).expect("the holder waits");
+		holding.await.expect("the holder ends").expect("the lock is released");
+
+		let close = loop {
+			let frame =
+				tokio::time::timeout(PATIENCE, first.recv()).await.expect("a frame in time");
+			match frame {
+				Some(Ok(Message::Close(close))) => break close,
+				Some(Ok(_)) => continue,
+				other => panic!("the relay took no close frame: {other:?}"),
+			}
+		};
+		let _second = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let heard = harness.heard_until(|kinds| kinds.len() >= 4).await;
+
+		assert_eq!(close.map(|close| close.code), Some(1013));
+		assert_eq!(heard, vec!["connecting", "online", "connecting", "online"]);
+		assert_eq!(harness.attempts(), 2);
 	});
 }
 

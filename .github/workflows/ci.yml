@@ -14,6 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# PR gate: changes, lint, rust, vitest, website, verify.
+# Post-merge: ios runs on a push to main and on a v* tag, never on a pull_request.
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -149,7 +151,7 @@ jobs:
 
   ios:
     needs: changes
-    if: needs.changes.outputs.ios == 'true'
+    if: github.event_name == 'push' && needs.changes.outputs.ios == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
@@ -196,6 +198,6 @@ jobs:
         if: needs.website.result != (needs.changes.outputs.website == 'true' && 'success' || 'skipped')
         run: exit 1
 
-      - name: Require ios to succeed when it ran for a change, and to be skipped otherwise
-        if: needs.ios.result != (needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
+      - name: Require ios to succeed when it ran on a push, and to be skipped otherwise
+        if: needs.ios.result != (github.event_name == 'push' && needs.changes.outputs.ios == 'true' && 'success' || 'skipped')
         run: exit 1

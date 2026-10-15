@@ -20,6 +20,7 @@ export const GATE = {
 			name: "CI change detection unit tests",
 			command: "bun run test:ci-changes",
 		},
+		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -152,9 +153,9 @@ type TouchedJobs = ReturnType<typeof decideJobs>
 
 type GroupDecision = { group: Group; touched: TouchedJobs }
 
-const skipReason = ({ group, touched }: GroupDecision) => {
-	if (group === "ios" && process.platform !== "darwin") {
-		return "this host is not macOS"
+export const skipReason = ({ group, touched }: GroupDecision) => {
+	if (group === "ios") {
+		return "ios is a post-merge job, CI runs it on a push to main and on a v* tag: run bun run ci ios to run it here"
 	}
 	if (group === "lint" || touched[group]) return undefined
 	return "scripts/ci-changes.ts finds no path changed since the merge base with origin/main that touches it"
