@@ -465,6 +465,37 @@ mod tests {
 			.collect()
 	}
 
+	fn first_difference(held: &Value, live: &Value, path: String) -> Option<String> {
+		match (held, live) {
+			(Value::Object(held), Value::Object(live)) => {
+				let keys: BTreeSet<&String> = held.keys().chain(live.keys()).collect();
+				keys.into_iter().find_map(|key| match (held.get(key), live.get(key)) {
+					(Some(held), Some(live)) => {
+						first_difference(held, live, format!("{path}.{key}"))
+					}
+					_ => Some(format!("{path}.{key}")),
+				})
+			}
+			(Value::Array(held), Value::Array(live)) => {
+				let longest = held.len().max(live.len());
+				(0..longest).find_map(|index| match (held.get(index), live.get(index)) {
+					(Some(held), Some(live)) => {
+						first_difference(held, live, format!("{path}[{index}]"))
+					}
+					_ => Some(format!("{path}[{index}]")),
+				})
+			}
+			_ => (held != live).then_some(path),
+		}
+	}
+
+	fn differing_path(held: &str, live: &str) -> String {
+		let held: Value = serde_json::from_str(held).expect("the committed schema is json");
+		let live: Value = serde_json::from_str(live).expect("the generated schema is json");
+		first_difference(&held, &live, "$".to_owned())
+			.unwrap_or_else(|| "no json path, only its layout".to_owned())
+	}
+
 	fn assert_holds_exactly(section: &str, held: &BTreeSet<String>, reached: &BTreeSet<&str>) {
 		let reached: BTreeSet<String> = reached.iter().map(|name| (*name).to_owned()).collect();
 		let missing: Vec<&String> = reached.difference(held).collect();
@@ -498,8 +529,20 @@ mod tests {
 
 		assert!(
 			held == live,
-			"docs/relay/member-socket.schema.json differs from the specta types, regenerate it with `{REGENERATE}`"
+			"docs/relay/member-socket.schema.json differs from the specta types at {}, regenerate it with `{REGENERATE}`",
+			differing_path(&held, &live)
 		);
+	}
+
+	#[test]
+	fn a_differing_schema_names_its_first_differing_json_path() {
+		let held = r#"{ "commands": { "a": { "args": [1, 2] }, "b": 1 } }"#;
+		let live = r#"{ "commands": { "a": { "args": [1, 3] }, "b": 2 } }"#;
+		let grown = r#"{ "commands": { "a": { "args": [1, 2, 3] }, "b": 1 } }"#;
+
+		assert_eq!(differing_path(held, live), "$.commands.a.args[1]");
+		assert_eq!(differing_path(held, grown), "$.commands.a.args[2]");
+		assert_eq!(differing_path(held, &held.replace(' ', "")), "no json path, only its layout");
 	}
 
 	#[test]
