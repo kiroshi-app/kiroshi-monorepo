@@ -743,12 +743,20 @@
             {
                 launchPlanOpened.yield()
             }
-            guard command == "conversation_message_page", let leaving = script.hostLeavesAfter
-            else { return }
+            guard let leaving = script.hostLeavesAfter else { return }
+            let readOneByOne = script.companions.filter { script.messages[$0.id]?.last == nil }
             let leaves =
-                script.hostLeavesAfterThread
-                ? args["limit"] as? Int != 1
-                : await pages.next() == script.companions.count
+                switch command {
+                case "conversation_message_page" where script.hostLeavesAfterThread:
+                    args["limit"] as? Int != 1
+                case "conversation_message_page":
+                    await pages.next() == readOneByOne.count
+                case "conversation_page":
+                    !script.hostLeavesAfterThread && readOneByOne.isEmpty
+                        && args["cursor"] as? String == nil
+                default:
+                    false
+                }
             guard leaves else { return }
             push(.close(RelayClosure.hostOffline, after: leaving))
         }
