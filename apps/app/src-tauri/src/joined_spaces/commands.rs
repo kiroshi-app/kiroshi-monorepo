@@ -74,12 +74,9 @@ pub async fn joined_spaces_list(
 #[specta::specta]
 pub async fn joined_space_connect<R: Runtime>(
 	app: AppHandle<R>,
-	state: State<'_, db::DatabaseState>,
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	let found = ready(&state)?.joined_spaces().find(id.clone()).await?;
-	let found = found.ok_or(JoinedSpaceError::UnknownJoinedSpace { id })?;
-	relay::connected(&app, found.id).await
+	relay::connected(&app, id).await
 }
 
 #[tauri::command]
@@ -169,7 +166,7 @@ mod tests {
 		let app = app_over(&dir);
 		let added = held(&app).await;
 
-		let connection = joined_space_connect(app.handle().clone(), app.state(), added.id.clone())
+		let connection = joined_space_connect(app.handle().clone(), added.id.clone())
 			.await
 			.map(|found| found.id);
 
@@ -198,7 +195,7 @@ mod tests {
 			Err(JoinedSpaceError::UnknownJoinedSpace { id: added.id.clone() })
 		);
 		assert_eq!(
-			joined_space_connect(app.handle().clone(), app.state(), added.id.clone())
+			joined_space_connect(app.handle().clone(), added.id.clone())
 				.await
 				.map(|found| found.id),
 			Err(JoinedSpaceError::UnknownJoinedSpace { id: added.id })

@@ -371,7 +371,7 @@ async fn connect(
 	app: &App<MockRuntime>,
 	id: &str,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
-	joined_space_connect(app.handle().clone(), app.state(), id.to_owned()).await
+	joined_space_connect(app.handle().clone(), id.to_owned()).await
 }
 
 fn run(test: impl std::future::Future<Output = ()>) {
@@ -1007,21 +1007,25 @@ fn a_connect_waiting_on_the_turn_during_sign_out_answers_unknown_and_starts_no_g
 	run(async {
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
+		let guests = harness.app.state::<RelayGuests>();
 		harness.cloud.is_sign_out_open.send_replace(false);
 
-		let signing_out = sign_out(harness.app.handle());
+		let signing_out = async {
+			let signed_out = sign_out(harness.app.handle()).await;
+			(signed_out, guests.turn().try_lock().is_err())
+		};
 		let connecting = async {
-			let is_signing_out =
+			let is_holding_the_turn =
 				|| (harness.cloud.sign_outs_asked.load(Ordering::SeqCst) > 0).then_some(());
-			harness.noticed_until("the cloud sign out", is_signing_out).await;
-			let mut connecting = std::pin::pin!(harness.connect(&id));
-			assert!((&mut connecting).now_or_never().is_none(), "the connect skipped the turn");
+			harness.noticed_until("the sign out holding the turn", is_holding_the_turn).await;
+			let connecting = harness.connect(&id);
 			harness.cloud.is_sign_out_open.send_replace(true);
 			connecting.await
 		};
-		let (signed_out, connected) = tokio::join!(signing_out, connecting);
+		let ((signed_out, is_turn_handed_on), connected) = tokio::join!(signing_out, connecting);
 
 		signed_out.expect("the sign out");
+		assert!(is_turn_handed_on, "the connect skipped the turn");
 		assert_eq!(connected, Err(JoinedSpaceError::UnknownJoinedSpace { id: id.clone() }));
 		assert!(!is_guest_running(&harness, &id));
 		assert!(harness.members.try_recv().is_err());
