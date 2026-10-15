@@ -15,6 +15,17 @@ struct SettingsView: View {
             } footer: {
                 Text("Your spaces stop working on this iPhone until you sign in again.")
             }
+            Section {
+                DeleteAccountRow(
+                    isDeleting: model.isDeletingAccount, action: model.deleteAccountTapped)
+            } footer: {
+                if model.hasFailedToDeleteAccount {
+                    ProblemLabel(
+                        message:
+                            "Couldn’t delete your account. Check your connection and try again."
+                    )
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .listSectionSpacing(22)
@@ -38,6 +49,14 @@ struct SettingsView: View {
         } message: {
             Text(Self.signOutMessage(for: spaces))
         }
+        .alert("Delete your account?", isPresented: $model.isConfirmingDeletion) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive, action: model.deleteAccount)
+        } message: {
+            Text(
+                "Your Kiroshi account, your Space memberships and the Spaces you host are deleted. This can’t be undone."
+            )
+        }
     }
 
     static func signOutMessage(for spaces: [Space]) -> String {
@@ -51,6 +70,26 @@ struct SettingsView: View {
             let listed = names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
             return "\(listed) leave this iPhone until you sign in again."
         }
+    }
+}
+
+private struct DeleteAccountRow: View {
+    let isDeleting: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: .destructive, action: action) {
+            HStack {
+                Text("Delete account")
+                Spacer()
+                if isDeleting {
+                    ProgressView()
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .disabled(isDeleting)
+        .accessibilityValue(isDeleting ? Text("Deleting…") : Text(""))
     }
 }
 
@@ -123,5 +162,17 @@ private struct BrandFooter: View {
 
     #Preview("6.2 Sign out · confirmation alert") {
         SignInRootView(model: .fixture(.signOutAlert))
+    }
+
+    #Preview("Delete account · confirmation alert") {
+        SignInRootView(model: .fixture(.deleteAccount))
+    }
+
+    #Preview("Delete account · deleting") {
+        SignInRootView(model: .fixture(.deletingAccount))
+    }
+
+    #Preview("Delete account · failed") {
+        SignInRootView(model: .fixture(.deleteAccountFailed))
     }
 #endif
