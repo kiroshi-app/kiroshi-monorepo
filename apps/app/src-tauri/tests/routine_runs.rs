@@ -11,6 +11,7 @@ use kiroshi_app::agent::commands::{agent_live_sessions, terminate_session};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::conversations::commands::conversation_main_chat;
+use kiroshi_app::conversations::contract::UPDATED_EVENT;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageState, StoredMessage};
 use kiroshi_app::routines::commands::{routine_run_now, CHANGED_EVENT};
@@ -40,6 +41,7 @@ struct Host {
 	conversation_id: String,
 	routine: Routine,
 	changed: Arc<Mutex<Vec<String>>>,
+	updated: Arc<Mutex<Vec<Value>>>,
 	_scenario: RemovedOnDrop,
 }
 
@@ -116,6 +118,12 @@ fn hosting(app: AppOfItsOwn, scenario: RemovedOnDrop, name: &str, conversation_i
 			announced["conversationId"].as_str().expect("the change names a room");
 		heard.lock().expect("the change log").push(conversation_id.to_owned());
 	});
+	let updated: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+	let seen = updated.clone();
+	app.listen(UPDATED_EVENT, move |event| {
+		let announced: Value = serde_json::from_str(event.payload()).expect("the update is JSON");
+		seen.lock().expect("the update log").push(announced);
+	});
 
 	let routine = block_on(database_of(&app).routines().create(
 		RoutineDraft {
@@ -131,7 +139,7 @@ fn hosting(app: AppOfItsOwn, scenario: RemovedOnDrop, name: &str, conversation_i
 		SystemClock.now_ms(),
 	))
 	.expect("the routine is stored");
-	Host { app, conversation_id, routine, changed, _scenario: scenario }
+	Host { app, conversation_id, routine, changed, updated, _scenario: scenario }
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
@@ -225,6 +233,17 @@ impl Host {
 		changed.iter().filter(|id| **id == self.conversation_id).count()
 	}
 
+	fn updates(&self) -> Vec<Value> {
+		let updated = self.updated.lock().expect("the update log");
+		updated
+			.iter()
+			.filter(|announced| {
+				announced["conversation"]["id"].as_str() == Some(self.conversation_id.as_str())
+			})
+			.cloned()
+			.collect()
+	}
+
 	fn wait_for_changes(&self, expected: usize) {
 		self.wait_for("routine://changed for the routine conversation", |host| {
 			(host.changes() >= expected).then_some(())
@@ -288,6 +307,18 @@ fn assert_reported(host: &Host, run: &RoutineRun) {
 	assert_eq!(reported[0].turn_id, report.turn_id, "the run names another turn than the report");
 }
 
+fn assert_the_row_announced_once(host: &Host) {
+	let report = &host.replies()[0];
+	let updates = host.updates();
+	assert_eq!(updates.len(), 1, "the conversation was announced as {updates:#?}");
+	let row = &updates[0]["conversation"];
+	assert_eq!(row["lastWord"]["text"], REPORT_TEXT);
+	assert_eq!(row["lastWord"]["authorBotId"], BOT);
+	assert_eq!(row["lastWord"]["at"], report.created_at);
+	assert_eq!(row["lastActivityAt"], report.created_at);
+	assert_eq!(row["activeTurn"], Value::Null);
+}
+
 fn assert_failed(host: &Host, reason: &str) {
 	let run = host.closed_run();
 	assert_eq!(run.outcome, Some(RunOutcome::Failed), "the run closed as {run:?}");
@@ -307,6 +338,7 @@ fn a_schedule_fire_runs_in_the_host_and_writes_its_report() {
 	assert_reported(&host, &run);
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
+	assert_the_row_announced_once(&host);
 	host.quit();
 }
 
@@ -339,6 +371,7 @@ fn a_run_with_nothing_to_say_closes_nothing_and_writes_no_message() {
 	assert!(host.reported().is_empty());
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
+	assert!(host.updates().is_empty(), "a quiet run announced {:#?}", host.updates());
 	host.quit();
 }
 
@@ -458,5 +491,6 @@ fn a_report_that_cannot_be_written_closes_the_run_failed_and_writes_no_message()
 	assert!(host.reported().is_empty());
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
+	assert!(host.updates().is_empty(), "an unwritten report announced {:#?}", host.updates());
 	host.quit();
 }
