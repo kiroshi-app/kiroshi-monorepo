@@ -90,12 +90,11 @@ jobs:
             echo "::error::Release $GITHUB_REF_NAME is already published, nothing uploaded: $published"
             exit 1
           fi
-          drafts=$(jq -r 'select(.draft) | .id' <<< "$releases")
-          if [ "$(grep -c . <<< "$drafts")" -gt 1 ]; then
-            echo "::error::Release $GITHUB_REF_NAME has several drafts ($(tr '\n' ' ' <<< "$drafts")), keep one and re-run"
+          id=$(jq -r 'select(.draft) | .id' <<< "$releases")
+          if [ "$(grep -c . <<< "$id")" -gt 1 ]; then
+            echo "::error::Release $GITHUB_REF_NAME has several drafts ($(tr '\n' ' ' <<< "$id")), keep one and re-run"
             exit 1
           fi
-          id="$drafts"
           if [ -z "$id" ]; then
             id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
               -f tag_name="$GITHUB_REF_NAME" \
