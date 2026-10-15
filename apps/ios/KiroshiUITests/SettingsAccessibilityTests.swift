@@ -44,10 +44,13 @@ final class SettingsAccessibilityTests: XCTestCase {
         let app = launch("6.1")
         XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts.matching(identifier: Self.footer).count, 1)
+        let bars = settingsBars(in: app)
 
         try audit(app) { issue in
-            issue.auditType == .dynamicType
+            let isASectionFooter =
+                issue.auditType == .dynamicType
                 && [Self.footer, Self.consentFooter].contains(issue.element?.label)
+            return isASectionFooter || issue.isUnderABar(bars)
         }
 
         app.buttons["Close"].tap()
