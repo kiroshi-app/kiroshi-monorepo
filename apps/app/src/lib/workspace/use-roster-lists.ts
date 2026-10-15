@@ -18,10 +18,7 @@ import {
 } from "../chat/sidebar-badges"
 import { useBotPreviews } from "../chat/use-chat"
 import { toRosterConversations } from "../conversations/roster-conversations"
-import {
-	useConversationPreviews,
-	useConversationWorkers,
-} from "../conversations/use-conversation"
+import { useConversationWorkers } from "../conversations/use-conversation"
 import {
 	missionRingBadges,
 	missionsIn,
@@ -51,7 +48,7 @@ export const useRosterLists = ({
 	const { lines, now, rosters, working } = rosterLines
 	const { bots, missions, rosteredSpaceId, soloThreads } = rosterView
 	const {
-		conversationPreviews: storedConversationPreviews,
+		conversationPreviews,
 		conversationRosters,
 		conversations,
 		previews: storedPreviews,
@@ -98,12 +95,6 @@ export const useRosterLists = ({
 	const conversationWorkers = useConversationWorkers(
 		conversationRuntimes,
 		conversationIds,
-	)
-
-	const conversationPreviews = useConversationPreviews(
-		conversationRuntimes,
-		conversationIds,
-		storedConversationPreviews,
 	)
 
 	const rosterConversations = useSharedStructure(
