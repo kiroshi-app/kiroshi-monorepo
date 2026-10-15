@@ -47,7 +47,7 @@ impl Armed {
 		self.last_hold
 	}
 
-	fn is_still_held(&mut self, run: &TurnRun, hold: u64) -> bool {
+	fn disarm(&mut self, run: &TurnRun, hold: u64) -> bool {
 		if self.holds.get(run) != Some(&hold) {
 			return false;
 		}
@@ -93,7 +93,7 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 		time::sleep(start_within).await;
 		for (bot_id, hold) in holds {
 			let run = (held.turn_id.clone(), bot_id);
-			if locked(&armed).is_still_held(&run, hold) {
+			if locked(&armed).disarm(&run, hold) {
 				held.release(&run.1).await;
 			}
 		}
@@ -163,9 +163,9 @@ mod tests {
 		let earlier = armed.hold(run_of("ada"));
 		let later = armed.hold(run_of("ada"));
 
-		assert!(!armed.is_still_held(&run_of("ada"), earlier), "the earlier deadline fired");
-		assert!(armed.is_still_held(&run_of("ada"), later), "the later deadline was lost");
-		assert!(!armed.is_still_held(&run_of("ada"), later), "the deadline fired twice");
+		assert!(!armed.disarm(&run_of("ada"), earlier), "the earlier deadline fired");
+		assert!(armed.disarm(&run_of("ada"), later), "the later deadline was lost");
+		assert!(!armed.disarm(&run_of("ada"), later), "the deadline fired twice");
 	}
 
 	#[tokio::test]
