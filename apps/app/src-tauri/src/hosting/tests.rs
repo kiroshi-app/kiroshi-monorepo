@@ -1597,8 +1597,8 @@ const TWO_SPACES: &str = "
 			('c-shared', 'topic', 'elsewhere', 'Shared', 1, 1);
 	INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 		VALUES ('c-shared', 'b-shared', 'lead', 1, 0);
-	INSERT INTO turns (id, conversation_id, seq, started_at)
-		VALUES ('t-mine', 'c-mine', 1, 1), ('t-theirs', 'c-theirs', 1, 1);
+	INSERT INTO turns (id, conversation_id, seq, started_at, completed_at)
+		VALUES ('t-mine', 'c-mine', 1, 1, 1), ('t-theirs', 'c-theirs', 1, 1, 1);
 	INSERT INTO messages
 			(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
 		VALUES ('m-mine', 'c-mine', 't-mine', 1, 'user', 'mine', 'complete', 1),
@@ -3346,7 +3346,7 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 }
 
 #[test]
-fn a_guest_reads_the_open_turn_of_a_conversation_until_its_reply_settles() {
+fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.turn("t1");
@@ -3385,9 +3385,13 @@ fn a_guest_reads_the_open_turn_of_a_conversation_until_its_reply_settles() {
 			"conversation_finalize_message",
 			json!({ "id": "r1", "completion": "complete", "settledText": null }),
 		);
+		let once_the_reply_settled = read_by_the_guest().await;
+		direct(&host.window, "conversation_complete_turn", json!({ "id": "t1", "completedAt": 3 }));
 		let after_the_turn = read_by_the_guest().await;
 
-		assert_eq!(during_the_turn, Some(json!({ "startedAt": 1, "botIds": ["default"] })));
+		let speaking = Some(json!({ "startedAt": 1, "botIds": ["default"] }));
+		assert_eq!(during_the_turn, speaking);
+		assert_eq!(once_the_reply_settled, speaking);
 		assert_eq!(after_the_turn, Some(Value::Null));
 	});
 }

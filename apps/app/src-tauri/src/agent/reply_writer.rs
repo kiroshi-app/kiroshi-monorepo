@@ -484,8 +484,10 @@ impl<R: Runtime> Store<R> {
 			conversation_id: self.conversation_id.clone(),
 			started_at: now_ms(),
 		};
-		self.database()?.messages().ensure_turn(turn).await?;
+		let database = self.database()?;
+		database.messages().ensure_turn(turn).await?;
 		self.owned.claim_turn(id);
+		self.announce_updated(database).await;
 		Ok(())
 	}
 
@@ -554,7 +556,10 @@ impl<R: Runtime> Store<R> {
 	}
 
 	async fn complete_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
-		Ok(self.database()?.messages().complete_turn(id.to_owned(), now_ms()).await?)
+		let database = self.database()?;
+		database.messages().complete_turn(id.to_owned(), now_ms()).await?;
+		self.announce_updated(database).await;
+		Ok(())
 	}
 
 	async fn settled_mentions(
@@ -1437,7 +1442,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn one_agent_turn_announces_the_conversation_once_per_opened_and_settled_reply() {
+	async fn one_agent_turn_announces_its_conversation_open_from_its_start_to_its_completion() {
 		let written = Written::new("updates-per-turn").await;
 		let heard = listen_to_updates(&written);
 
@@ -1452,15 +1457,18 @@ mod tests {
 				(conversation["lastWord"]["text"].clone(), conversation["activeTurn"].clone())
 			})
 			.collect();
-		let open = json!({ "startedAt": 1, "botIds": [DEFAULT_BOT_ID] });
+		let started = json!({ "startedAt": 1, "botIds": [] });
+		let speaking = json!({ "startedAt": 1, "botIds": [DEFAULT_BOT_ID] });
 		let first_reply = json!("w1 w2 w3 w4 w5 w6 w7 w8 w9 w10");
 		assert_eq!(
 			rows,
 			[
-				(json!("hello"), json!(null)),
-				(json!("hello"), open.clone()),
-				(first_reply.clone(), json!(null)),
-				(first_reply, open),
+				(json!("hello"), started.clone()),
+				(json!("hello"), started),
+				(json!("hello"), speaking.clone()),
+				(first_reply.clone(), speaking.clone()),
+				(first_reply, speaking.clone()),
+				(json!("Done"), speaking),
 				(json!("Done"), json!(null)),
 			]
 		);
@@ -1468,6 +1476,52 @@ mod tests {
 			heard.last().map(|payload| &payload["conversation"]["lastWord"]),
 			Some(&json!({ "text": "Done", "at": 3, "authorBotId": DEFAULT_BOT_ID }))
 		);
+	}
+
+	async fn last_update_after(name: &str, ending: Entry) -> (serde_json::Value, Option<i64>) {
+		let written = Written::new(name).await;
+		written.prompt("t1", "p1").await;
+		let heard = listen_to_updates(&written);
+
+		written
+			.forwarded(vec![
+				Entry::Submitted(submitted("t1", "p1")),
+				Entry::Event(AgentEvent::MessageStarted { message: streaming("m1") }),
+				Entry::Event(AgentEvent::MessageDelta {
+					id: "m1".into(),
+					seq: 1,
+					text: "half".into(),
+				}),
+				ending,
+			])
+			.await;
+
+		let last = heard.lock().expect("the list is kept").last().cloned();
+		let last = last.expect("an update was announced");
+		(last["conversation"]["activeTurn"].clone(), written.completed_at("t1").await)
+	}
+
+	#[tokio::test]
+	async fn a_turn_ended_cancelled_or_failed_is_completed_and_announced_closed() {
+		let cancelled = AgentEvent::TurnEnded {
+			ended: super::super::contract::TurnEnded {
+				session_id: None,
+				outcome: TurnOutcome::Cancelled,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		};
+
+		let (after_cancel, cancel_completed_at) =
+			last_update_after("cancelled-turn", Entry::Event(cancelled)).await;
+		let (after_failure, failure_completed_at) =
+			last_update_after("failed-turn", Entry::Withdrawn).await;
+
+		assert_eq!(after_cancel, json!(null));
+		assert!(cancel_completed_at.is_some(), "the cancelled turn was left open");
+		assert_eq!(after_failure, json!(null));
+		assert!(failure_completed_at.is_some(), "the failed turn was left open");
 	}
 
 	#[tokio::test]
@@ -1482,11 +1536,15 @@ mod tests {
 		written.forwarded(turn).await;
 
 		let heard = heard.lock().expect("the list is kept");
-		let [opened, payload] = heard.as_slice() else {
-			panic!("two updates were expected, {} were heard", heard.len());
+		let [started, opened, payload, completed] = heard.as_slice() else {
+			panic!("four updates were expected, {} were heard", heard.len());
 		};
-		assert_eq!(opened["conversation"]["activeTurn"]["botIds"], json!([DEFAULT_BOT_ID]));
-		assert_eq!(payload["conversation"]["activeTurn"], json!(null));
+		let bots_of =
+			|update: &serde_json::Value| update["conversation"]["activeTurn"]["botIds"].clone();
+		assert_eq!(bots_of(started), json!([]));
+		assert_eq!(bots_of(opened), json!([DEFAULT_BOT_ID]));
+		assert_eq!(bots_of(payload), json!([DEFAULT_BOT_ID]));
+		assert_eq!(completed["conversation"]["activeTurn"], json!(null));
 		let conversation = &payload["conversation"];
 		let mut fields: Vec<&str> = conversation
 			.as_object()

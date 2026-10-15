@@ -67,14 +67,14 @@ fn active_rows() -> String {
 			conversations.last_activity_at AS last_activity_at, solo.bot_id AS solo_bot_id,
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id,
-			(SELECT MIN(open_turn.started_at) FROM messages AS open
-				JOIN turns AS open_turn ON open_turn.id = open.turn_id
-				WHERE open.conversation_id = conversations.id
-					AND open.completion_state IN ('pending', 'streaming')) AS open_turn_started_at,
-			(SELECT json_group_array(open.author_bot_id)
-				FILTER (WHERE open.author_bot_id IS NOT NULL) FROM messages AS open
-				WHERE open.conversation_id = conversations.id
-					AND open.completion_state IN ('pending', 'streaming')) AS open_turn_bot_ids
+			(SELECT MIN(open_turn.started_at) FROM turns AS open_turn
+				WHERE open_turn.conversation_id = conversations.id
+					AND open_turn.completed_at IS NULL) AS open_turn_started_at,
+			(SELECT json_group_array(reply.author_bot_id)
+				FILTER (WHERE reply.author_bot_id IS NOT NULL) FROM turns AS open_turn
+				JOIN messages AS reply ON reply.turn_id = open_turn.id AND reply.role = 'assistant'
+				WHERE open_turn.conversation_id = conversations.id
+					AND open_turn.completed_at IS NULL) AS open_turn_bot_ids
 		FROM conversations
 		LEFT JOIN conversation_participants AS solo_seat
 			ON conversations.kind = '{CHAT_KIND}' AND solo_seat.conversation_id = conversations.id
@@ -566,13 +566,13 @@ mod tests {
 		planted(format!("{A_SEATED_BOT}{}{A_ROOM_OF_TWO_BOTS_MID_TURN}", a_room("c01", 1))).await
 	}
 
-	async fn reply_opened(database: &Database, id: &str, bot_id: &str) {
+	async fn reply_opened(database: &Database, id: &str, turn_id: &str, bot_id: &str) {
 		database
 			.messages()
 			.open_assistant_message(NewAssistantMessage {
 				id: id.to_owned(),
 				conversation_id: "c01".to_owned(),
-				turn_id: "t1".to_owned(),
+				turn_id: turn_id.to_owned(),
 				author_bot_id: Some(bot_id.to_owned()),
 				replied_to_message_id: None,
 				created_at: 41,
@@ -589,6 +589,14 @@ mod tests {
 			.expect("the reply settles");
 	}
 
+	async fn completed(database: &Database, turn_id: &str) {
+		database
+			.messages()
+			.complete_turn(turn_id.to_owned(), 60)
+			.await
+			.expect("the turn completes");
+	}
+
 	async fn active_turn_of_c01(database: &Database) -> Option<ActiveTurn> {
 		let by_id = database
 			.conversations()
@@ -601,39 +609,73 @@ mod tests {
 		by_id.active_turn
 	}
 
-	fn open_turn_of(bot_ids: &[&str]) -> Option<ActiveTurn> {
+	fn open_turn_of(started_at: i64, bot_ids: &[&str]) -> Option<ActiveTurn> {
 		Some(ActiveTurn {
-			started_at: 40,
+			started_at,
 			bot_ids: bot_ids.iter().map(|id| (*id).to_owned()).collect(),
 		})
 	}
 
 	#[tokio::test]
-	async fn a_streaming_reply_opens_the_turn_of_its_room_until_the_last_one_settles() {
+	async fn a_turn_without_a_reply_yet_is_open_with_no_bot() {
 		let (database, _dir) = a_room_mid_turn().await;
-		let before = active_turn_of_c01(&database).await;
 
-		reply_opened(&database, "r1", "b2").await;
-		reply_opened(&database, "r2", "b1").await;
-		reply_opened(&database, "r3", "b2").await;
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &[]));
+	}
+
+	#[tokio::test]
+	async fn a_turn_stays_open_across_its_settled_replies_until_it_completes() {
+		let (database, _dir) = a_room_mid_turn().await;
+
+		reply_opened(&database, "r1", "t1", "b2").await;
+		reply_opened(&database, "r2", "t1", "b1").await;
 		database.messages().append_text("r1".into(), "half".into()).await.expect("a delta");
 		let streaming = active_turn_of_c01(&database).await;
 		settled(&database, "r1", TerminalState::Complete).await;
-		settled(&database, "r3", TerminalState::Cancelled).await;
-		let one_left = active_turn_of_c01(&database).await;
 		settled(&database, "r2", TerminalState::Failed).await;
+		let between_replies = active_turn_of_c01(&database).await;
+		reply_opened(&database, "r3", "t1", "b2").await;
+		settled(&database, "r3", TerminalState::Cancelled).await;
+		let all_settled = active_turn_of_c01(&database).await;
+		completed(&database, "t1").await;
 		let after = active_turn_of_c01(&database).await;
 
-		assert_eq!(before, None);
-		assert_eq!(streaming, open_turn_of(&["b1", "b2"]));
-		assert_eq!(one_left, open_turn_of(&["b1"]));
+		assert_eq!(streaming, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(between_replies, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(all_settled, open_turn_of(40, &["b1", "b2"]));
 		assert_eq!(after, None);
+	}
+
+	#[tokio::test]
+	async fn the_earliest_open_turn_dates_the_open_turn_and_every_open_turn_names_its_bots() {
+		let later = "INSERT INTO turns (id, conversation_id, seq, started_at)
+			VALUES ('t2', 'c01', 2, 50), ('t0', 'c01', 0, 30);";
+		let (database, _dir) = a_room_mid_turn().await;
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(later)?))
+			.await
+			.expect("the turns are planted");
+		reply_opened(&database, "r0", "t0", "b1").await;
+		reply_opened(&database, "r2", "t2", "b2").await;
+		completed(&database, "t0").await;
+
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+	}
+
+	#[tokio::test]
+	async fn a_completed_turn_is_closed_whatever_its_replies_still_read() {
+		let (database, _dir) = a_room_mid_turn().await;
+		reply_opened(&database, "r1", "t1", "b1").await;
+
+		completed(&database, "t1").await;
+
+		assert_eq!(active_turn_of_c01(&database).await, None);
 	}
 
 	#[tokio::test]
 	async fn the_restart_sweep_closes_the_turn_a_crash_left_open() {
 		let (database, _dir) = a_room_mid_turn().await;
-		reply_opened(&database, "r1", "b1").await;
+		reply_opened(&database, "r1", "t1", "b1").await;
 
 		database.messages().recover_unfinished().await.expect("the sweep runs");
 
@@ -641,20 +683,22 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_open_turn_reads_the_messages_of_its_room_through_their_index() {
+	async fn the_open_turn_reads_its_turns_and_replies_through_their_indexes() {
 		let (database, _dir) = planted(String::new()).await;
 
 		for statement in [page_statement(None), by_id_statement()] {
 			let plan = plan(&database, statement).await;
 
-			assert!(
-				plan.iter().any(|step| step.starts_with("SEARCH open USING")),
-				"the open turn reads no message through an index: {plan:?}"
-			);
-			assert!(
-				!plan.iter().any(|step| step.starts_with("SCAN open")),
-				"the open turn scans every message: {plan:?}"
-			);
+			for table in ["open_turn", "reply"] {
+				assert!(
+					plan.iter().any(|step| step.starts_with(&format!("SEARCH {table} USING"))),
+					"the open turn reads no {table} through an index: {plan:?}"
+				);
+				assert!(
+					!plan.iter().any(|step| step.starts_with(&format!("SCAN {table}"))),
+					"the open turn scans every {table}: {plan:?}"
+				);
+			}
 		}
 	}
 

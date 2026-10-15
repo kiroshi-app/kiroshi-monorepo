@@ -7,6 +7,7 @@ use futures_util::future::join_all;
 use tauri::{AppHandle, Listener, Runtime, State};
 use tokio::sync::mpsc;
 
+use super::commands::announce_conversation;
 use super::context::{bounded_context, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
 use crate::agent::commands::{
@@ -20,6 +21,7 @@ use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::conversations::Seat;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
+use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
 	database, detail_of, ends_the_session, listen, managed, NO_AGENT, NO_DATABASE,
 };
@@ -354,7 +356,11 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn ended_failed(&self) -> Result<(), TranscriptStoreError> {
-		Ok(database(&self.app)?.messages().complete_turn(self.turn_id.clone(), now_ms()).await?)
+		let database = database(&self.app)?;
+		database.messages().complete_turn(self.turn_id.clone(), now_ms()).await?;
+		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+			.await;
+		Ok(())
 	}
 
 	async fn note_handovers(&self, done: &Speaker, waiting: &mut Vec<Summons>) {
