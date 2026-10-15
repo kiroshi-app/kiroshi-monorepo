@@ -6,6 +6,7 @@ struct CompanionAvatar: View {
         case title
         case message
         case row
+        case pinned
         case header
         case hero
 
@@ -15,6 +16,7 @@ struct CompanionAvatar: View {
             case .title: 28
             case .message: 40
             case .row: 52
+            case .pinned: 56
             case .header: 52
             case .hero: 88
             }
@@ -26,6 +28,7 @@ struct CompanionAvatar: View {
             case .title: .caption2
             case .message: .body
             case .row: .subheadline
+            case .pinned: .caption
             case .header: .footnote
             case .hero: .title3
             }

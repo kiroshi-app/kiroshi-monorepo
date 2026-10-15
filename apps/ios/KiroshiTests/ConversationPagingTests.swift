@@ -179,14 +179,14 @@ struct ConversationPagingTests {
         }
         let (store, connection, following) = await follow(host)
 
-        #expect(store.summaries.prefix(2).map(\.subject.title) == ["Topic 1", "Topic 2"])
+        #expect(store.pinned.map(\.subject.title) == ["Topic 1", "Topic 2"])
         store.loadMore()
         await waitUntil { store.nextPage == .complete }
 
-        let ids = store.summaries.map(\.id)
+        let ids = (store.pinned + store.summaries).map(\.id)
         #expect(ids.count == 45)
         #expect(Set(ids).count == ids.count)
-        #expect(store.summaries.prefix(2).map(\.subject.title) == ["Topic 1", "Topic 2"])
+        #expect(store.pinned.map(\.subject.title) == ["Topic 1", "Topic 2"])
         following.cancel()
         await connection.stop()
     }
@@ -388,7 +388,8 @@ struct ConversationPagingTests {
             ]))
         let (store, connection, following) = await follow(host)
 
-        #expect(store.summaries.map(\.id) == ["pico", "juniper", "topic-1", "topic-2"])
+        #expect(store.pinned.map(\.id) == ["pico"])
+        #expect(store.summaries.map(\.id) == ["juniper", "topic-1", "topic-2"])
         following.cancel()
         await connection.stop()
     }

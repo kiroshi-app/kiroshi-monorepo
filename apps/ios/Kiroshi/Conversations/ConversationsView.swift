@@ -40,6 +40,20 @@ struct ConversationsView: View {
                         .disabled(store.phase != .loaded)
                     }
                 }
+                .alert(
+                    pinFailureTitle, isPresented: $store.isShowingPinFailure,
+                    presenting: store.pinFailure
+                ) { _ in
+                    Button("OK") {}
+                } message: { failure in
+                    switch failure.change {
+                    case .pin: Text("Check that your Mac is on, then swipe the row again.")
+                    case .unpin:
+                        Text(
+                            "Check that your Mac is on, then touch and hold \(failure.title) again."
+                        )
+                    }
+                }
                 .sheet(isPresented: $store.isPickingCompanions, onDismiss: store.stopPicking) {
                     NewConversationSheet(
                         companions: store.companions, creation: store.creation,
@@ -53,6 +67,14 @@ struct ConversationsView: View {
         ) {
             guard store.showsMissions, let connection = space.connection else { return }
             await missions.follow(connection)
+        }
+    }
+
+    private var pinFailureTitle: Text {
+        switch store.pinFailure?.change {
+        case .pin: Text("Couldn’t pin \(store.pinFailure?.title ?? "").")
+        case .unpin: Text("Couldn’t unpin \(store.pinFailure?.title ?? "").")
+        case nil: Text(verbatim: "")
         }
     }
 
@@ -97,7 +119,7 @@ struct ConversationsView: View {
                 }
                 .buttonStyle(.bordered)
             }
-        case .loaded where store.summaries.isEmpty:
+        case .loaded where store.summaries.isEmpty && store.pinned.isEmpty:
             ContentUnavailableView {
                 Label {
                     Text("No companions yet")
@@ -111,6 +133,18 @@ struct ConversationsView: View {
             }
         case .loaded:
             List {
+                if !store.pinned.isEmpty {
+                    PinnedStrip(pinned: store.pinned) {
+                        store.opened = $0
+                    } unpin: {
+                        store.unpin($0)
+                    }
+                    .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                    .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden, edges: .top)
+                    .listRowSeparatorTint(Color(.systemGray5))
+                }
                 ForEach(store.summaries) { summary in
                     Button {
                         store.opened = summary.subject
@@ -120,6 +154,13 @@ struct ConversationsView: View {
                     .listRowInsets(.vertical, 0)
                     .listRowSeparator(.hidden, edges: .top)
                     .listRowSeparatorTint(Color(.separator))
+                    .swipeActions(edge: .leading) {
+                        if store.canPin {
+                            Button("Pin", systemImage: "pin") {
+                                store.pin(summary.id)
+                            }
+                        }
+                    }
                     .onAppear {
                         store.rowAppeared(summary.id)
                     }

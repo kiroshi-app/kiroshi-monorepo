@@ -344,6 +344,11 @@
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
+            case .pinned:
+                script.pinned = [juniper.id, release042.id, otto.id]
+            case .pinRefused:
+                script.pinned = [juniper.id, release042.id, otto.id]
+                script.refusesPins = true
             case .thread, .swipedThread:
                 script.messages[juniper.id] =
                     (isPaged ? earlierNotes : []) + (hasHistory ? releaseHistory : [])
@@ -527,6 +532,8 @@
             var listPageSize = Int.max
             var threadPageSize = Int.max
             var missionFeed: [String] = []
+            var pinned: [String] = []
+            var refusesPins = false
         }
 
         static let spaceId = "space-studio"
@@ -550,11 +557,12 @@
             return #"{"contentType":"image/png","base64":"\#(png.base64EncodedString())"}"#
         }()
 
-        static func botJSON(_ companion: Companion) -> String {
+        static func botJSON(_ companion: Companion, pinPosition: Int? = nil) -> String {
             let tint = companion.tint.map { #""\#($0.rawValue)""# } ?? "null"
             let path = companion.picturePath.map { #""\#($0)""# } ?? "null"
+            let pin = pinPosition.map(String.init) ?? "null"
             return
-                #"{"id":"\#(companion.id)","name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
+                #"{"id":"\#(companion.id)","sectionId":null,"pinPosition":\#(pin),"name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
         }
 
         static func lastWordJSON(text: String, at: Int, by author: Companion.ID?) -> String {
@@ -564,7 +572,7 @@
         }
 
         struct PageRow {
-            let group: Group
+            var group: Group
             let lastActivityAt: Int
             let lastWord: String?
             var soloBotId: Companion.ID?
@@ -652,10 +660,12 @@
     actor FixtureHostTransport: RelayTransport {
         private let script: FixtureHost.Script
         private let companionsRefusal = FixtureOnce()
+        private let pins: FixturePins
         private var opened = 0
 
         init(script: FixtureHost.Script) {
             self.script = script
+            pins = FixturePins(script.pinned)
         }
 
         func open(_ request: URLRequest) async throws -> any RelaySocket {
@@ -663,7 +673,28 @@
                 throw RelayClosure(code: RelayClosure.hostOffline)
             }
             opened += 1
-            return FixtureHostSocket(script: script, companionsRefusal: companionsRefusal)
+            return FixtureHostSocket(
+                script: script, companionsRefusal: companionsRefusal, pins: pins)
+        }
+    }
+
+    final class FixturePins: Sendable {
+        private let ids: Mutex<[String]>
+
+        init(_ ids: [String]) {
+            self.ids = Mutex(ids)
+        }
+
+        var current: [String] {
+            ids.withLock { $0 }
+        }
+
+        func replace(with changed: [String]) -> Bool {
+            ids.withLock { ids in
+                guard ids != changed else { return false }
+                ids = changed
+                return true
+            }
         }
     }
 
@@ -695,6 +726,7 @@
 
         private let script: FixtureHost.Script
         private let companionsRefusal: FixtureOnce
+        private let pins: FixturePins
         private let pages = FixturePageCount()
         private let created = Mutex<[FixtureHost.Group]>([])
         private let inbound: AsyncStream<Inbound>
@@ -704,9 +736,10 @@
         private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
 
-        init(script: FixtureHost.Script, companionsRefusal: FixtureOnce) {
+        init(script: FixtureHost.Script, companionsRefusal: FixtureOnce, pins: FixturePins) {
             self.script = script
             self.companionsRefusal = companionsRefusal
+            self.pins = pins
             let (inbound, inboundContinuation) = AsyncStream.makeStream(of: Inbound.self)
             self.inbound = inbound
             self.inboundContinuation = inboundContinuation
@@ -808,7 +841,10 @@
                 refuse(id)
             case "conversation_bots":
                 guard script.answersCompanions else { return }
-                let bots = script.companions.map(FixtureHost.botJSON)
+                let pinned = pins.current
+                let bots = script.companions.map {
+                    FixtureHost.botJSON($0, pinPosition: pinned.firstIndex(of: $0.id))
+                }
                 reply(id, "[\(bots.joined(separator: ","))]")
                 if let working = script.workingCompanion {
                     push(
@@ -833,7 +869,12 @@
                         FixtureHost.soloRow(of: companion, last: $0)
                     }
                 }
-                let rows = groups + solos
+                let pinned = pins.current
+                let rows = (groups + solos).map { row in
+                    var row = row
+                    row.group.pinPosition = pinned.firstIndex(of: row.soloBotId ?? row.group.id)
+                    return row
+                }
                 let cursor = args["cursor"] as? String
                 reply(
                     id,
@@ -904,6 +945,17 @@
                 }
                 reply(id, group.json)
                 push(.frame(FixtureHost.groupEvent("conversation://created", group)))
+            case "section_list":
+                reply(id, "[]")
+            case "roster_pin":
+                let changed = (args["pins"] as? [[String: Any]] ?? []).compactMap {
+                    $0["id"] as? String
+                }
+                if script.refusesPins || !pins.replace(with: changed) {
+                    refuse(id)
+                } else {
+                    reply(id, "null")
+                }
             case "relay_avatar" where args["file"] as? String == "shoto.png":
                 reply(id, FixtureHost.picture)
             default:

@@ -14,8 +14,24 @@ struct ConversationRelay: Sendable {
 
     let connection: RelayConnection
 
-    func companions(in spaceId: String) async throws -> [Companion] {
-        try await ask("conversation_bots", SpaceArgs(spaceId: spaceId), as: [Companion].self)
+    func companions(in spaceId: String) async throws -> [CompanionInRoster] {
+        try await ask(
+            "conversation_bots", SpaceArgs(spaceId: spaceId), as: [CompanionInRoster].self)
+    }
+
+    func pins(in spaceId: String) async throws -> [RosterPin] {
+        async let sections = ask(
+            "section_list", SpaceArgs(spaceId: spaceId), as: [RosterSection].self)
+        async let companions = companions(in: spaceId)
+        let page = try await page(in: spaceId, after: nil)
+        let rows = (try await companions).map(\.place) + page.pinned.compactMap(\.groupPlace)
+        return try await RosterPins.of(rows, sections: sections)
+    }
+
+    func pin(_ pins: [RosterPin], in spaceId: String) async throws {
+        let args = RosterPinArgs(spaceId: spaceId, pins: pins)
+        let answer = try await connection.call("roster_pin", args: args)
+        guard answer.status == 200 else { throw Self.refusal(of: answer) }
     }
 
     func groups(in spaceId: String) async throws -> [GroupConversation] {
@@ -106,6 +122,11 @@ private struct InConversationArgs: Encodable {
 
 private struct SpaceArgs: Encodable {
     let spaceId: String
+}
+
+private struct RosterPinArgs: Encodable {
+    let spaceId: String
+    let pins: [RosterPin]
 }
 
 private struct CreateArgs: Encodable {

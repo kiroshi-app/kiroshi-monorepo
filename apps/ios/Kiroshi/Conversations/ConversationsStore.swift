@@ -16,6 +16,16 @@ final class ConversationsStore {
         case failed
     }
 
+    enum PinChange: Equatable {
+        case pin
+        case unpin
+    }
+
+    struct PinFailure: Equatable {
+        let change: PinChange
+        let title: String
+    }
+
     static let onlineDeadline = Duration.seconds(30)
     static let prefetchDistance = 5
 
@@ -23,6 +33,8 @@ final class ConversationsStore {
     private(set) var isOnline = false
     private(set) var nextPage = NextPage.complete
     private var listed: [ConversationSummary] = []
+    private var listedPinned: [ConversationSummary] = []
+    private(set) var pinFailure: PinFailure?
     private(set) var companions: [Companion] = []
     private(set) var creation = Creation.idle
     var path: [ConversationsRoute] = []
@@ -48,6 +60,8 @@ final class ConversationsStore {
     @ObservationIgnored private var creating: Task<Void, Never>?
     @ObservationIgnored private var paging: Task<Void, Never>?
     @ObservationIgnored private var merging: Task<Void, Never>?
+    @ObservationIgnored private var pinning: Task<Void, Never>?
+    @ObservationIgnored private var companionPins: [Companion.ID: Int] = [:]
     @ObservationIgnored private var rows: [ConversationSummary] = []
     @ObservationIgnored private var pinnedIds: [String] = []
     @ObservationIgnored private var nextCursor: String?
@@ -71,22 +85,41 @@ final class ConversationsStore {
     }
 
     var summaries: [ConversationSummary] {
-        listed.map { summary in
-            var summary = summary
-            summary.workingCompanionIds = Set(
-                work.workers(in: summary.conversationId).map(\.companionId))
-            guard summary.isWorking else { return summary }
-            let working = String(localized: "working…")
-            summary.timeLabel = String(localized: "Now")
-            switch summary.subject {
-            case .companion:
-                summary.preview = working
-            case .group(let group):
-                let worker = group.members.first { summary.workingCompanionIds.contains($0.id) }
-                summary.preview = worker.map { "\($0.name): \(working)" } ?? summary.preview
+        listed.map(decorated)
+    }
+
+    var pinned: [ConversationSummary] {
+        listedPinned.map(decorated)
+    }
+
+    var canPin: Bool {
+        phase == .loaded && !readsWholeList
+    }
+
+    var isShowingPinFailure: Bool {
+        get { pinFailure != nil }
+        set {
+            if !newValue {
+                pinFailure = nil
             }
-            return summary
         }
+    }
+
+    private func decorated(_ summary: ConversationSummary) -> ConversationSummary {
+        var summary = summary
+        summary.workingCompanionIds = Set(
+            work.workers(in: summary.conversationId).map(\.companionId))
+        guard summary.isWorking else { return summary }
+        let working = String(localized: "working…")
+        summary.timeLabel = String(localized: "Now")
+        switch summary.subject {
+        case .companion:
+            summary.preview = working
+        case .group(let group):
+            let worker = group.members.first { summary.workingCompanionIds.contains($0.id) }
+            summary.preview = worker.map { "\($0.name): \(working)" } ?? summary.preview
+        }
+        return summary
     }
 
     func follow(_ connection: RelayConnection) async {
@@ -96,7 +129,12 @@ final class ConversationsStore {
             phase = .loading
             rows = []
             listed = []
+            listedPinned = []
             pinnedIds = []
+            companionPins = [:]
+            pinning?.cancel()
+            pinning = nil
+            pinFailure = nil
             nextCursor = nil
             horizon = nil
             nextPage = .complete
@@ -123,12 +161,13 @@ final class ConversationsStore {
         }
         guard isFollowing(connection) else { return }
         isOnline = false
-        for task in [loading, paging, merging] {
+        for task in [loading, paging, merging, pinning] {
             task?.cancel()
         }
         loading = nil
         paging = nil
         merging = nil
+        pinning = nil
     }
 
     @discardableResult
@@ -240,6 +279,44 @@ final class ConversationsStore {
         }
     }
 
+    @discardableResult
+    func pin(_ id: ConversationSummary.ID) -> Task<Void, Never>? {
+        repin(id, .pin)
+    }
+
+    @discardableResult
+    func unpin(_ id: ConversationSummary.ID) -> Task<Void, Never>? {
+        repin(id, .unpin)
+    }
+
+    private func repin(_ id: ConversationSummary.ID, _ change: PinChange) -> Task<Void, Never>? {
+        guard canPin, pinning == nil, let spaceId, let relay,
+            let title = (listedPinned + listed).first(where: { $0.id == id })?.subject.title
+        else { return nil }
+        let task = Task {
+            do {
+                let pins = try await relay.pins(in: spaceId)
+                let changed =
+                    change == .pin
+                    ? RosterPins.pinning(id, in: pins) : RosterPins.unpinning(id, in: pins)
+                try await relay.pin(changed, in: spaceId)
+                guard !Task.isCancelled else { return }
+                pinning = nil
+                guard self.spaceId == spaceId else { return }
+                await reload()?.value
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                pinning = nil
+                guard self.spaceId == spaceId else { return }
+                pinFailure = PinFailure(change: change, title: title)
+            }
+        }
+        pinning = task
+        return task
+    }
+
     private func admit(_ group: GroupConversation) {
         guard phase == .loaded, !rows.contains(where: { $0.id == group.id }) else { return }
         publish(rows + [summary(of: group, lastMessage: nil)])
@@ -296,7 +373,8 @@ final class ConversationsStore {
         do {
             async let listedCompanions = relay.companions(in: spaceId)
             let page = try await firstPage(in: spaceId, through: relay)
-            let companions = try await listedCompanions
+            let roster = try await listedCompanions
+            let companions = roster.map(\.companion)
             let groups = page == nil ? try await relay.groups(in: spaceId) : []
             let paged = Self.summaries(of: page, among: companions)
             let pagedIds = Set(paged.map(\.id))
@@ -316,7 +394,11 @@ final class ConversationsStore {
                 return loaded
             }
             guard !Task.isCancelled, generation == self.generation else { return }
-            pinnedIds = page?.pinned.map { Self.subject(of: $0, among: companions).id } ?? []
+            companionPins = Dictionary(
+                uniqueKeysWithValues: roster.compactMap { entry in
+                    entry.place.pinPosition.map { (entry.companion.id, $0) }
+                })
+            pinnedIds = page.map { pinnedIds(of: $0, among: companions) } ?? []
             read(page)
             publish(paged + subjects.compactMap { loaded[$0.id] })
             self.companions = companions
@@ -384,11 +466,28 @@ final class ConversationsStore {
             guard !Task.isCancelled, generation == self.generation else { return }
             merging = nil
             guard let page else { return }
-            pinnedIds = page.pinned.map { Self.subject(of: $0, among: companions).id }
+            pinnedIds = pinnedIds(of: page, among: companions)
             let known = Set(rows.map(\.id))
             let unknown = Self.summaries(of: page, among: companions)
             publish(rows + unknown.filter { !known.contains($0.id) })
         }
+    }
+
+    private func pinnedIds(of page: ConversationPage, among companions: [Companion]) -> [String] {
+        let paged = page.pinned.map { row in
+            (id: Self.subject(of: row, among: companions).id, position: row.pinPosition ?? 0)
+        }
+        let pagedIds = Set(paged.map(\.id))
+        let unpaged = companions.compactMap { companion in
+            companionPins[companion.id].flatMap { position in
+                pagedIds.contains(companion.id) ? nil : (id: companion.id, position: position)
+            }
+        }
+        return (paged + unpaged).enumerated().sorted { left, right in
+            left.element.position == right.element.position
+                ? left.offset < right.offset : left.element.position < right.element.position
+        }
+        .map(\.element.id)
     }
 
     private func read(_ page: ConversationPage?) {
@@ -459,9 +558,9 @@ final class ConversationsStore {
             }
             return summary
         }
-        let pinned = pinnedIds.compactMap { id in rows.first { $0.id == id } }
+        listedPinned = pinnedIds.compactMap { id in rows.first { $0.id == id } }
         let unpinned = rows.filter { !pinnedIds.contains($0.id) && isWithinReadPages($0) }
-        listed = pinned + Self.ordered(unpinned)
+        listed = Self.ordered(unpinned)
     }
 
     private func isWithinReadPages(_ summary: ConversationSummary) -> Bool {
