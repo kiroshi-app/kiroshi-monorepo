@@ -1733,16 +1733,12 @@ mod tests {
 	fn cancelled_turn() -> AgentEvent {
 		AgentEvent::TurnEnded {
 			ended: super::super::contract::TurnEnded {
+				session_id: None,
 				outcome: TurnOutcome::Cancelled,
-				..turn_ended_as_completed()
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
 			},
-		}
-	}
-
-	fn turn_ended_as_completed() -> super::super::contract::TurnEnded {
-		match turn_ended() {
-			AgentEvent::TurnEnded { ended } => ended,
-			_ => unreachable!("turn_ended builds a TurnEnded"),
 		}
 	}
 
