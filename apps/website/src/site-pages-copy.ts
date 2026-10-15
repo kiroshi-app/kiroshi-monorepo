@@ -108,9 +108,9 @@ export const SITE_PAGES_COPY = {
 						"your account id when a sign-in with Apple fails;",
 						"the Space, the account and the reason when the relay refuses a message.",
 					],
-					"They don't record your IP address, and they don't log every request.",
+					"The relay's own log lines carry no IP address, and the relay writes no line per request.",
 					"To limit abuse, the relay holds your IP address and email address in memory for 1 to 10 minutes.",
-					"The Mac app sends no analytics and no crash reports, and keeps the agent's error output in memory only. The iPhone app has no analytics SDK and no tracking: its App Store privacy declaration lists your email address, name, user ID and other content you create, linked to you, and no tracking.",
+					"The Mac app sends no analytics and no crash reports, and keeps the agent's error output in memory only. The iPhone app has no analytics SDK and no tracking: its privacy manifest declares your email address, name, user ID and other content you create, linked to you, and no tracking.",
 				],
 			},
 			{
