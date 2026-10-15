@@ -11,10 +11,15 @@ import {
 	vi,
 } from "vitest"
 
-import { createConversationController } from "./conversation-controller"
+import {
+	type ConversationControllerOptions,
+	createConversationController,
+} from "./conversation-controller"
 import { withFakeHostWrites } from "./fake-host-writes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
+import { FOREIGN_SPEAKER_SILENCE_MS } from "./foreign-turns"
 import { createScriptedDriver } from "./scripted-driver"
+import type { Conversation, ConversationInPage } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
 import type { TranscriptMessage } from "./transcript-contract"
 import { message, seatBots } from "./transcript-fixtures"
@@ -328,7 +333,10 @@ const openSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
 	}
 }
 
-const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
+const openRoom = async (
+	prepare = NOTHING_TO_PREPARE,
+	options: ConversationControllerOptions = {},
+) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const [bot] = await seatBots(store, "personal", ["Ada"])
@@ -341,6 +349,7 @@ const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 	const botId = bot?.id ?? ""
 	const controller = createConversationController(driver, store, {
 		senderAccountId: () => MEMBER,
+		...options,
 	})
 	const detach = controller.attach()
 	await prepare({ store, driver, conversationId: conversation.id, botId })
@@ -353,6 +362,7 @@ const openRoom = async (prepare = NOTHING_TO_PREPARE) => {
 		controller,
 		detach,
 		botId,
+		conversation,
 		conversationId: conversation.id,
 	}
 }
@@ -1008,6 +1018,145 @@ describe("a turn the other Mac started", () => {
 		await settled()
 
 		expect(speakersOf(controller.getState())).toEqual([botId])
+		detach()
+	})
+})
+
+const STARTED_AT = 1_000
+
+const rowOf = (
+	conversation: Conversation,
+	openBotIds: string[] | null,
+): ConversationInPage => ({
+	...conversation,
+	lastActivityAt: STARTED_AT,
+	lastWord: null,
+	soloBotId: null,
+	activeTurn: openBotIds && { startedAt: STARTED_AT, botIds: openBotIds },
+})
+
+const startedWorkOf = ({
+	speakers,
+}: {
+	speakers: { work: { startedAt?: number } }[]
+}) => speakers.map(({ work }) => work.startedAt)
+
+describe("the working state the stored open turn carries", () => {
+	it("shows one unheard working line per bot the stored turn names", async () => {
+		const { controller, detach, botId, conversation } = await openRoom()
+
+		await act(() => controller.open(rowOf(conversation, [botId])))
+
+		expect(speakersOf(controller.getState())).toEqual([botId])
+		expect(workOf(controller.getState())).toEqual(["thinking"])
+		expect(startedWorkOf(controller.getState())).toEqual([STARTED_AT])
+		detach()
+	})
+
+	it("refines the stored line with the activity a live event names", async () => {
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom()
+		await act(() => controller.open(rowOf(conversation, [botId])))
+		const scope = { ...foreignScope(conversationId), botId }
+
+		await emitLocally("agent://event", {
+			scope,
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		expect(workOf(controller.getState())).toEqual(["searching"])
+		detach()
+	})
+
+	it("shows no working line while the stored turn is closed, whatever the live events left open", async () => {
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom()
+		const scope = { ...foreignScope(conversationId), botId }
+		await emitLocally("agent://event", {
+			scope,
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		await act(() => controller.open(rowOf(conversation, null)))
+
+		expect(speakersOf(controller.getState())).toEqual([])
+		detach()
+	})
+
+	it("closes a foreign speaker silent for a minute and rereads its row once", async () => {
+		const rereadRows: string[] = []
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom(NOTHING_TO_PREPARE, {
+				onForeignSpeakerSilent: (id) => rereadRows.push(id),
+			})
+		await act(() => controller.open(rowOf(conversation, [botId])))
+		vi.useFakeTimers()
+		onTestFinished(() => {
+			vi.useRealTimers()
+		})
+		await emitLocally("agent://event", {
+			scope: { ...foreignScope(conversationId), botId },
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		act(() => vi.advanceTimersByTime(FOREIGN_SPEAKER_SILENCE_MS - 1))
+
+		expect(workOf(controller.getState())).toEqual(["searching"])
+		expect(rereadRows).toEqual([])
+
+		act(() => vi.advanceTimersByTime(1))
+
+		expect(workOf(controller.getState())).toEqual(["thinking"])
+		expect(rereadRows).toEqual([conversationId])
+
+		act(() => vi.advanceTimersByTime(FOREIGN_SPEAKER_SILENCE_MS))
+
+		expect(rereadRows).toEqual([conversationId])
+		detach()
+	})
+
+	it("rebuilds the foreign speakers from the row reread once the joined host reconnects", async () => {
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom()
+		await joinHost()
+		await act(() => controller.open(rowOf(conversation, [botId])))
+		await emitOnHost("agent://event", {
+			scope: { ...foreignScope(conversationId), botId },
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+		expect(workOf(controller.getState())).toEqual(["searching"])
+
+		await reconnectHost()
+		await act(() => controller.open(rowOf(conversation, null)))
+
+		expect(speakersOf(controller.getState())).toEqual([])
+
+		await act(() => controller.open(rowOf(conversation, [botId])))
+
+		expect(speakersOf(controller.getState())).toEqual([botId])
+		expect(workOf(controller.getState())).toEqual(["thinking"])
+		detach()
+	})
+
+	it("keeps the speaker the reread row still names once the joined host reconnects", async () => {
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom()
+		await joinHost()
+		await act(() => controller.open(rowOf(conversation, [botId])))
+		await emitOnHost("agent://event", {
+			scope: { ...foreignScope(conversationId), botId },
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		await reconnectHost()
+		await act(() => controller.open(rowOf(conversation, [botId])))
+
+		expect(workOf(controller.getState())).toEqual(["searching"])
 		detach()
 	})
 })

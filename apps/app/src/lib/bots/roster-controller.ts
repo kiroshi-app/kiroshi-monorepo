@@ -164,6 +164,7 @@ export type RosterController = {
 	rereadSpaceSoon: (origin: SpaceOnHost) => void
 	rereadSpacesOfBotSoon: (botId: string) => void
 	catchUpWithHost: (hostId: string) => void
+	rereadConversationRow: (conversationId: string) => void
 	forgetConversation: (conversationId: string) => void
 	hostSpaceIdOf: (spaceRowId: string) => string
 	spacesOfBot: (botId: string) => string[]
@@ -826,6 +827,13 @@ export const createRosterController = (
 		})
 	}
 
+	const rereadConversationRow = (conversationId: string) => {
+		const spaceRowId = spaceOfConversation(conversationId)
+		if (spaceRowId !== undefined) {
+			void rereadRosterIn(spaceRowId)
+		}
+	}
+
 	const reviseRostersHolding = (
 		conversationId: string,
 		revise: (conversations: Conversation[]) => Conversation[],
@@ -999,6 +1007,7 @@ export const createRosterController = (
 		spacesOfBot,
 
 		spaceOfConversation,
+		rereadConversationRow,
 
 		enter: ({ lastRowId, ...space }: RosterEntry) => {
 			learn(space)

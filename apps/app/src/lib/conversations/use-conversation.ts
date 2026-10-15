@@ -3,12 +3,18 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import type {
 	ConversationController,
 	ConversationState,
+	SpeakingBot,
 } from "./conversation-controller"
 import type { ConversationRuntimes } from "./conversation-runtimes"
-import type { ConversationWorker } from "./roster-conversations"
+import {
+	type ConversationWorker,
+	type StoredConversation,
+	storedSpeakerIdsOf,
+} from "./roster-conversations"
 import type { Conversation } from "./store-contract"
 
 import { useControllerState } from "../use-controller"
+import { workingFor } from "../chat/working-kind"
 
 export type ConversationChat = {
 	state: ConversationState
@@ -36,7 +42,11 @@ export const useConversation = (
 
 export type ConversationWorkers = Record<string, ConversationWorker[]>
 
-const NO_WORKERS: ConversationWorker[] = []
+const NO_SPEAKERS: SpeakingBot[] = []
+
+const NO_WAITING: string[] = []
+
+const UNHEARD_KIND = workingFor([], false).kind
 
 export type SubscribableRuntimes = Pick<ConversationRuntimes, "subscribe">
 
@@ -63,18 +73,34 @@ export const useHeldRecord = <Value>(
 	})
 }
 
+const heardSpeakersIn = (
+	speakers: SpeakingBot[],
+	storedIds: string[] | undefined,
+): SpeakingBot[] =>
+	storedIds === undefined
+		? speakers
+		: speakers.filter(
+				({ botId, isForeign }) => !isForeign || storedIds.includes(botId),
+			)
+
 const workersIn = (
+	conversation: StoredConversation | undefined,
 	controller: ConversationController | null,
 ): ConversationWorker[] => {
-	if (!controller) {
-		return NO_WORKERS
-	}
-	const { speakers, waitingBotIds } = controller.getState()
+	const storedIds = conversation && storedSpeakerIdsOf(conversation)
+	const held = controller?.getState()
+	const heard = heardSpeakersIn(held?.speakers ?? NO_SPEAKERS, storedIds)
+	const unheardIds = (storedIds ?? []).filter(
+		(botId) => !heard.some((speaking) => speaking.botId === botId),
+	)
 	return [
-		...speakers.map(
+		...heard.map(
 			({ botId, work }): ConversationWorker => ({ botId, kind: work.kind }),
 		),
-		...waitingBotIds.map(
+		...unheardIds.map(
+			(botId): ConversationWorker => ({ botId, kind: UNHEARD_KIND }),
+		),
+		...(held?.waitingBotIds ?? NO_WAITING).map(
 			(botId): ConversationWorker => ({ botId, kind: "waiting" }),
 		),
 	]
@@ -82,11 +108,13 @@ const workersIn = (
 
 export const useConversationWorkers = (
 	runtimes: ConversationRuntimes,
-	conversationIds: string[],
-): ConversationWorkers =>
-	useHeldRecord(
+	conversations: StoredConversation[],
+): ConversationWorkers => {
+	const rows = new Map(conversations.map((row) => [row.id, row]))
+	return useHeldRecord(
 		runtimes,
-		conversationIds,
-		(id) => workersIn(runtimes.heldFor(id)),
+		[...rows.keys()],
+		(id) => workersIn(rows.get(id), runtimes.heldFor(id)),
 		(workers) => workers.map(({ botId, kind }) => `${botId}:${kind}`).join(","),
 	)
+}

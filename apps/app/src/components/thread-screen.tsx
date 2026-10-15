@@ -606,7 +606,7 @@ const ThreadEmptyState = ({
 }
 
 const stopOf = (speaking: SpeakingBot) => () => {
-	void speaking.stop()
+	void speaking.stop?.()
 }
 
 type ThreadRunProps = {
@@ -1087,7 +1087,7 @@ const ConversationThreadTail = ({
 					face={seated}
 					key={seated.id}
 					onStop={stopOf(speaking)}
-					stoppable
+					stoppable={speaking.stop !== null}
 					work={speaking.work}
 				/>
 			))}

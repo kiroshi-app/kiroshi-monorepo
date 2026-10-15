@@ -160,6 +160,45 @@ describe("useRosterLists", () => {
 		})
 	})
 
+	it.each([
+		{ openBotIds: [BOT], status: "working" },
+		{ openBotIds: null, status: "idle" },
+	])(
+		"shows the row $status when its stored open turn names $openBotIds",
+		async ({ openBotIds, status }) => {
+			const store = createFakeTranscriptStore()
+			const conversation = await store.createConversation({
+				spaceId: SPACE,
+				sectionId: null,
+				title: "Walls",
+				botIds: [BOT],
+			})
+			const roster = await loadedRoster(store)
+			act(() =>
+				roster.holdPageRow(
+					{ hostId: null, spaceId: SPACE },
+					{
+						...conversation,
+						lastActivityAt: 0,
+						lastWord: null,
+						soloBotId: null,
+						activeTurn: openBotIds && { startedAt: 1, botIds: openBotIds },
+					},
+				),
+			)
+
+			const result = renderRosterLists({ roster })
+
+			const row = result.current.rosterConversations.find(
+				({ id }) => id === conversation.id,
+			)
+			expect(row?.status).toBe(status)
+			expect(
+				row?.participants.map((participant) => participant.status),
+			).toEqual([status])
+		},
+	)
+
 	it("shows the stored last word on a companion row whose held solo thread settled on an older one", async () => {
 		const store = createFakeTranscriptStore()
 		const soloThread = await store.mainChat(BOT, null)
