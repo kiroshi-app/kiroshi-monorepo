@@ -72,14 +72,6 @@ export const TermsPage = () => (
 	</SitePage>
 )
 
-const SupportEmail = () => (
-	<p>
-		<a className={TEXT_LINK} href={`mailto:${SUPPORT_EMAIL}`}>
-			{SUPPORT_EMAIL}
-		</a>
-	</p>
-)
-
 export const SupportPage = () => {
 	const { title, topics, contact, details, privacy, response, operator } =
 		SITE_PAGES_COPY.support
@@ -88,7 +80,11 @@ export const SupportPage = () => {
 		<SitePage title={title}>
 			<Section {...topics} />
 			<Section body={contact.body} heading={contact.heading}>
-				<SupportEmail />
+				<p>
+					<a className={TEXT_LINK} href={`mailto:${SUPPORT_EMAIL}`}>
+						{SUPPORT_EMAIL}
+					</a>
+				</p>
 				<p>
 					<a className={TEXT_LINK} href={ISSUES_URL}>
 						{contact.issuesLink}
