@@ -1496,8 +1496,12 @@ mod tests {
 			])
 			.await;
 
-		let last = heard.lock().expect("the list is kept").last().cloned();
-		let last = last.expect("an update was announced");
+		let last = heard
+			.lock()
+			.expect("the list is kept")
+			.last()
+			.cloned()
+			.expect("an update was announced");
 		(last["conversation"]["activeTurn"].clone(), written.completed_at("t1").await)
 	}
 
