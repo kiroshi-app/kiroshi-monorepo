@@ -55,6 +55,30 @@ struct ConversationMappingTests {
                 == "Untitled conversation")
     }
 
+    @Test func readsTheCompanionAndPinOfAPageRow() throws {
+        let decode = { (row: String) in
+            try JSONDecoder().decode(ConversationInPage.self, from: Data(row.utf8))
+        }
+        let juniper = Companion(id: "juniper", name: "Juniper")
+        let solo = FixtureHost.Group(
+            id: "chat-juniper", title: "Chat", members: [juniper], createdAt: 1, pinPosition: 2)
+        let topic = FixtureHost.Group(
+            id: "topic", title: "Topic", members: [juniper], createdAt: 1)
+
+        let soloRow = try decode(
+            solo.pageJSON(lastActivityAt: 9, lastWord: nil, soloBotId: "juniper"))
+        let topicRow = try decode(topic.pageJSON(lastActivityAt: 9, lastWord: nil, soloBotId: nil))
+        let olderRow = try decode(
+            #"{"id":"t","title":"Old","createdAt":1,"participants":[],"lastActivityAt":9}"#)
+
+        #expect(soloRow.soloBotId == "juniper")
+        #expect(soloRow.pinPosition == 2)
+        #expect(topicRow.soloBotId == nil)
+        #expect(topicRow.pinPosition == nil)
+        #expect(olderRow.soloBotId == nil)
+        #expect(olderRow.pinPosition == nil)
+    }
+
     @Test func readsTheGroupEventsOfTheSpace() {
         let group = FixtureHost.Group(
             id: "g1", title: "Release crew", members: [Companion(id: "a", name: "Atlas")],
