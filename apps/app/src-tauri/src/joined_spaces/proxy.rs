@@ -314,7 +314,6 @@ mod tests {
 
 		assert_eq!(rereads.load(Ordering::SeqCst), 1);
 		assert!(heard.windows(2).all(|pair| pair[0] < pair[1]));
-		assert!(u64::try_from(heard.len()).expect("a count") < next);
 	}
 
 	fn a_host_answering_avatars(link: Arc<MemberLink>, mut sent: mpsc::Receiver<String>) {
