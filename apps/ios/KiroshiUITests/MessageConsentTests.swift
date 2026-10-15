@@ -7,7 +7,7 @@ final class MessageConsentTests: XCTestCase {
     static let note = "Not sent. Your draft stays here."
     static let emptyThread = "Nothing here yet. Your first message starts the conversation."
     static let disclosure =
-        "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to Anthropic."
+        "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to the model provider your Mac uses."
     static let sheetLabels = [
         title, disclosure, "Privacy Policy", "Agree and send", "Not now",
     ]

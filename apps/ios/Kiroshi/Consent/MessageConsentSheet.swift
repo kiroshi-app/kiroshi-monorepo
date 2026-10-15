@@ -43,7 +43,7 @@ struct MessageConsentSheet: View {
                 .font(.title2.bold())
                 .accessibilityAddTraits(.isHeader)
             Text(
-                "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to Anthropic."
+                "Messages you send here go to your Mac through Kiroshi’s relay. Your Mac passes them to the agent, which sends them to the model provider your Mac uses."
             )
             .foregroundStyle(.secondary)
             Button {
