@@ -73,7 +73,7 @@ export const SITE_PAGES_COPY = {
 			{
 				heading: "Your model provider",
 				body: [
-					"The desktop app runs the agent on your computer. Everything the agent works on goes to the model provider you configured: your conversations, skills, memory, files and tool results. It goes under your own account, with the account or key you entered, for example a Claude subscription or an Anthropic API key. Kiroshi has no model provider key of its own and doesn't route this traffic through its servers, so the provider's terms govern that data.",
+					"The desktop app runs the agent on your computer. Everything the agent works on goes to the model provider you configured: your conversations, skills, memory, files and tool results. It goes under your own account, with the subscription or key you entered, for example a Claude subscription or an Anthropic API key. Kiroshi has no model provider key of its own and doesn't route this traffic through its servers, so the provider's terms govern that data.",
 					"If you sign in to the model provider through the agent, the agent keeps that sign-in itself, outside Kiroshi's folder, under its own rules.",
 					"The agent keeps transcripts of its sessions on your computer, outside Kiroshi's folder, under its own retention.",
 					"The agent sends usage telemetry and error reports to the model provider you configured. Kiroshi doesn't turn them off.",
