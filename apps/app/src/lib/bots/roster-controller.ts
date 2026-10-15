@@ -65,6 +65,8 @@ import {
 	joinedRowIdOf,
 } from "../spaces/joined-spaces-controller"
 
+type SpaceOnHost = { hostId: string | null; spaceId: string | null }
+
 export type BotPreviews = Record<string, LastWord | undefined>
 
 export type RosterState = {
@@ -158,8 +160,8 @@ export type RosterController = {
 	load: (opening: RosterOpening) => Promise<void>
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
-	holdPageRow: (spaceId: string | null, row: ConversationInPage) => void
-	rereadSpaceSoon: (spaceId: string | null) => void
+	holdPageRow: (origin: SpaceOnHost, row: ConversationInPage) => void
+	rereadSpaceSoon: (origin: SpaceOnHost) => void
 	rereadSpacesOfBotSoon: (botId: string) => void
 	catchUpWithHost: (hostId: string) => void
 	forgetConversation: (conversationId: string) => void
@@ -340,6 +342,11 @@ const rosterIn = <Row>(
 const isJoined = ({ spaceRowId }: RosterSpace) => isJoinedRowId(spaceRowId)
 
 const isLocal = (space: RosterSpace) => !isJoined(space)
+
+const isRowOfHost = (spaceRowId: string, hostId: string | null) =>
+	hostId === null
+		? !isJoinedRowId(spaceRowId)
+		: spaceRowId === joinedRowIdOf(hostId)
 
 const heldSpaceRowIdsOf = ({ spaces, spaceRowId }: RosterChoice) => {
 	const listed = spaces.map((space) => space.spaceRowId)
@@ -762,13 +769,15 @@ export const createRosterController = (
 			? rereadInFull(spaceRowId)
 			: rereadHeadIn(spaceRowId).catch(() => rereadInFull(spaceRowId))
 
-	const heldRowIdOf = (spaceId: string | null) =>
+	const heldRowIdOf = ({ hostId, spaceId }: SpaceOnHost) =>
 		heldSpaceRowIdsOf(chosen()).find(
-			(spaceRowId) => hostSpaceIdOf(spaceRowId) === spaceId,
+			(spaceRowId) =>
+				isRowOfHost(spaceRowId, hostId) &&
+				hostSpaceIdOf(spaceRowId) === spaceId,
 		)
 
-	const holdPageRow = (spaceId: string | null, row: ConversationInPage) => {
-		const spaceRowId = heldRowIdOf(spaceId)
+	const holdPageRow = (origin: SpaceOnHost, row: ConversationInPage) => {
+		const spaceRowId = heldRowIdOf(origin)
 		if (spaceRowId === undefined) {
 			return
 		}
@@ -790,8 +799,8 @@ export const createRosterController = (
 		)
 	}
 
-	const rereadSpaceSoon = (spaceId: string | null) => {
-		const spaceRowId = heldRowIdOf(spaceId)
+	const rereadSpaceSoon = (origin: SpaceOnHost) => {
+		const spaceRowId = heldRowIdOf(origin)
 		if (spaceRowId !== undefined) {
 			rereadSoon(spaceRowId)
 		}

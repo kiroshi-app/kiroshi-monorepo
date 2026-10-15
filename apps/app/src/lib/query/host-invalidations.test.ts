@@ -12,12 +12,14 @@ import { createQueryTestWrapper } from "./query-test-wrapper"
 
 import { listen, onHostReconnected } from "@/lib/host"
 
+const shown = vi.hoisted(() => ({ hostId: null as string | null }))
+
 vi.mock("@/lib/host", () => ({
 	listen: vi.fn(),
 	onHostReconnected: vi.fn(),
 	joinedHosts: {
 		getState: () => ({
-			active: "garage",
+			active: shown.hostId,
 			connections: { garage: { status: "up" }, shed: { status: "down" } },
 		}),
 	},
@@ -26,29 +28,89 @@ vi.mock("@/lib/host", () => ({
 afterEach(() => {
 	cleanup()
 	vi.mocked(listen).mockReset()
+	shown.hostId = null
 })
 
-it("invalidates the given keys when the host event fires, and stops on unmount", async () => {
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+const mountInvalidationOf = (event: string) => {
 	const unlisten = vi.fn()
 	vi.mocked(listen).mockResolvedValue(unlisten)
 	const { queryClient, wrapper } = createQueryTestWrapper()
 	const invalidate = vi.spyOn(queryClient, "invalidateQueries")
-
-	const { unmount } = renderHook(
-		() => useInvalidateOnHostEvent("bots://changed", [["bots", "a"], ["bots"]]),
+	const hook = renderHook(
+		() => useInvalidateOnHostEvent(event, [["cached", "a"], ["cached"]]),
 		{ wrapper },
 	)
-	const [event, handler] = vi.mocked(listen).mock.calls[0]
-	handler({ event, id: 1, payload: null })
+	const emitFrom = (hostId: string | null) => {
+		const [event, handler] = vi.mocked(listen).mock.calls[0]
+		handler({ event, id: 1, payload: null }, hostId)
+	}
+	return { ...hook, unlisten, invalidate, emitFrom }
+}
 
-	expect(event).toBe("bots://changed")
+it("invalidates the given keys when the host event fires, and stops on unmount", async () => {
+	const { invalidate, emitFrom, unmount, unlisten } =
+		mountInvalidationOf("bots://changed")
+
+	emitFrom(null)
+
+	expect(listen).toHaveBeenCalledWith("bots://changed", expect.any(Function))
 	await vi.waitFor(() => {
-		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots", "a"] })
-		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots"] })
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached", "a"] })
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached"] })
 	})
 
 	unmount()
 	await vi.waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1))
+})
+
+it("invalidates the keys on an event from the shown joined host", async () => {
+	shown.hostId = "garage"
+	const { invalidate, emitFrom } = mountInvalidationOf("bots://changed")
+
+	emitFrom("garage")
+
+	await vi.waitFor(() =>
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached"] }),
+	)
+})
+
+it("invalidates nothing on an event from a host whose space is not shown", async () => {
+	shown.hostId = "garage"
+	const { invalidate, emitFrom } = mountInvalidationOf("bots://changed")
+
+	emitFrom(null)
+	emitFrom("shed")
+	await settle()
+
+	expect(invalidate).not.toHaveBeenCalled()
+})
+
+it("invalidates the keys on an app-wide local event while a joined space is shown", async () => {
+	shown.hostId = "garage"
+	const { invalidate, emitFrom } = mountInvalidationOf("account://changed")
+
+	emitFrom(null)
+
+	await vi.waitFor(() =>
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached"] }),
+	)
+})
+
+it("keeps the same subscription when the shown space changes", async () => {
+	const { invalidate, emitFrom, rerender, unlisten } =
+		mountInvalidationOf("bots://changed")
+
+	shown.hostId = "garage"
+	rerender()
+	emitFrom("garage")
+
+	await vi.waitFor(() =>
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached"] }),
+	)
+	expect(listen).toHaveBeenCalledOnce()
+	expect(unlisten).not.toHaveBeenCalled()
 })
 
 const isInvalidated = (

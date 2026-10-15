@@ -15,6 +15,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("../host", () => ({
 	listen: vi.fn(async () => () => undefined),
 	onHostReconnected: vi.fn(),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 
 afterEach(() => {
@@ -55,7 +56,7 @@ const installAnnounced = () => {
 	const [, announce] =
 		vi.mocked(listen).mock.calls.find(([event]) => event === INSTALLED_EVENT) ??
 		[]
-	announce?.({ event: INSTALLED_EVENT, id: 1, payload: null })
+	announce?.({ event: INSTALLED_EVENT, id: 1, payload: null }, null)
 }
 
 describe("useMcpServers", () => {

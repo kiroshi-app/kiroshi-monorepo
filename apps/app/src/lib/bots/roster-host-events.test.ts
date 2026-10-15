@@ -17,7 +17,7 @@ import { createFakeTranscriptStore } from "../conversations/fake-transcript-stor
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
-type HostHandler = (event: { payload: unknown }) => void
+type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
 
 const host = vi.hoisted(() => ({
 	handlers: new Map<string, HostHandler>(),
@@ -40,9 +40,13 @@ const LOCAL = { spaceRowId: "personal", spaceId: "personal" }
 
 const SHED_HOST = "shed"
 
-const emitOnHost = (event: string, payload: unknown) =>
+const emitOnHost = (
+	event: string,
+	payload: unknown,
+	hostId: string | null = null,
+) =>
 	act(async () => {
-		host.handlers.get(event)?.({ payload })
+		host.handlers.get(event)?.({ payload }, hostId)
 	})
 
 const reconnectHost = (hostId: string) =>
@@ -159,6 +163,61 @@ it("writes a conversation updated on the host into the roster of its space and r
 	)
 	expect(pageReads).not.toHaveBeenCalled()
 	expect(queryClient.isFetching()).toBe(0)
+})
+
+it("writes a conversation updated on a joined host into its roster while another space is shown and reads nothing", async () => {
+	const { store, shed, controller, pageReads } = await loadedRoster()
+	const topic = await firstTopicIn(store, shed.spaceId)
+	pageReads.mockClear()
+
+	await emitOnHost(
+		"conversation://updated",
+		{
+			spaceId: shed.spaceId,
+			conversation: { ...topic, title: "Renamed in the shed" },
+		},
+		SHED_HOST,
+	)
+
+	expect(controller.getState().spaceRowId).toBe(LOCAL.spaceRowId)
+	expect(topicTitlesIn(controller, shed.spaceRowId)).toEqual([
+		"Renamed in the shed",
+	])
+	expect(pageReads).not.toHaveBeenCalled()
+})
+
+it("writes a conversation only into the row of the host it came from", async () => {
+	const { store, garage, shed, controller } = await loadedRoster()
+	const garageTopic = await firstTopicIn(store, garage.spaceId)
+	const shedTopic = await firstTopicIn(store, shed.spaceId)
+
+	await emitOnHost(
+		"conversation://updated",
+		{
+			spaceId: garage.spaceId,
+			conversation: { ...garageTopic, title: "From the shed host" },
+		},
+		SHED_HOST,
+	)
+	await emitOnHost(
+		"conversation://updated",
+		{
+			spaceId: shed.spaceId,
+			conversation: { ...shedTopic, title: "From another joined host" },
+		},
+		"attic",
+	)
+	await emitOnHost("conversation://updated", {
+		spaceId: shed.spaceId,
+		conversation: { ...shedTopic, title: "From the local host" },
+	})
+
+	expect(topicTitlesIn(controller, garage.spaceRowId)).toEqual([
+		`Topic of ${garage.spaceId}`,
+	])
+	expect(topicTitlesIn(controller, shed.spaceRowId)).toEqual([
+		`Topic of ${shed.spaceId}`,
+	])
 })
 
 it("adds a conversation created on the host to the roster of its space and reads nothing", async () => {
@@ -318,7 +377,10 @@ it("notifies its subscribers once for several roster cache events in one tick", 
 	const stop = controller.subscribe(listener)
 
 	for (const title of ["First", "Second", "Third"]) {
-		controller.holdPageRow(garage.spaceId, { ...topic, title })
+		controller.holdPageRow(
+			{ hostId: null, spaceId: garage.spaceId },
+			{ ...topic, title },
+		)
 	}
 	await nextTick()
 

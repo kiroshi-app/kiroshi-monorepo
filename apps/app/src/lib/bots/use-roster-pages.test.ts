@@ -18,7 +18,7 @@ import type { ConversationPage } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
-type HostHandler = (event: { payload: unknown }) => void
+type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
 
 const host = vi.hoisted(() => ({
 	handlers: new Map<string, HostHandler>(),
@@ -65,7 +65,7 @@ const scrollToListEnd = () =>
 
 const emitOnHost = (event: string, payload: unknown) =>
 	act(async () => {
-		host.handlers.get(event)?.({ payload })
+		host.handlers.get(event)?.({ payload }, null)
 	})
 
 const reconnectHost = (hostId: string) =>

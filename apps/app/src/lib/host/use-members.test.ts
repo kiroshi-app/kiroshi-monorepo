@@ -24,6 +24,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("./index", () => ({
 	isDesktopHost: () => true,
 	listen: vi.fn(async () => () => undefined),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
@@ -127,7 +128,10 @@ const changeAnnounced = () => {
 			.mocked(listen)
 			.mock.calls.find(([event]) => event === HOSTING_MEMBERS_CHANGED_EVENT) ??
 		[]
-	announce?.({ event: HOSTING_MEMBERS_CHANGED_EVENT, id: 1, payload: null })
+	announce?.(
+		{ event: HOSTING_MEMBERS_CHANGED_EVENT, id: 1, payload: null },
+		null,
+	)
 }
 
 const STEVE_ROW: SpaceMember = {

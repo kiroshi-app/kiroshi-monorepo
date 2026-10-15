@@ -1,4 +1,4 @@
-import type { EventCallback, UnlistenFn } from "@tauri-apps/api/event"
+import type { Event, UnlistenFn } from "@tauri-apps/api/event"
 
 import type { HttpHost } from "./http"
 import type { LocalHost } from "./joined-hosts-invoke"
@@ -10,14 +10,17 @@ import {
 
 export type Listen = HttpHost["listen"]
 
-type Route = (event: string) => Listen
+export type HostEventCallback<T> = (
+	event: Event<T>,
+	hostId: string | null,
+) => void
+
+type Deliver = (event: Event<unknown>, hostId: string) => void
 
 type Subscription = {
 	event: string
-	handler: EventCallback<unknown>
-	route: Route
-	source: Listen
-	unlisten: UnlistenFn
+	deliver: Deliver
+	attachments: Map<string, Promise<UnlistenFn>>
 }
 
 export const JOINED_SPACE_CHANGED_EVENT = "joined-space://changed"
@@ -37,74 +40,97 @@ const LOCAL_EVENTS: ReadonlySet<string> = new Set([
 	"agent://sign-in-started",
 ])
 
-const unheard: Listen = async () => () => undefined
-
 type JoinedHostsListenOptions = {
 	local: LocalHost
-	activeHost: () => HttpHost | undefined
+	hosts: ReadonlyMap<string, HttpHost>
+	activeHostId: () => string | null
 	reportListenFailure: (reason: unknown) => UnlistenFn
+}
+
+export const isLocalEvent = (event: string) => LOCAL_EVENTS.has(event)
+
+const stopOnceAttached = (attaching: Promise<UnlistenFn>) => {
+	void attaching.then((unlisten) => unlisten())
 }
 
 export const createJoinedHostsListen = ({
 	local,
-	activeHost,
+	hosts,
+	activeHostId,
 	reportListenFailure,
 }: JoinedHostsListenOptions) => {
 	const subscriptions = new Set<Subscription>()
 
-	const listenerFor = (event: string): Listen => {
-		const joined = LOCAL_EVENTS.has(event) ? undefined : activeHost()
-		return joined ? joined.listen : local.listen
+	const attach = (subscription: Subscription, id: string, host: HttpHost) => {
+		const heard = (event: Event<unknown>) => {
+			if (subscriptions.has(subscription)) {
+				subscription.deliver(event, id)
+			}
+		}
+		subscription.attachments.set(
+			id,
+			host.listen(subscription.event, heard).catch(reportListenFailure),
+		)
 	}
 
-	const relocate = (subscription: Subscription) => {
-		const source = subscription.route(subscription.event)
-		if (source === subscription.source) {
-			return
+	const attachHost = (id: string, host: HttpHost) => {
+		for (const subscription of subscriptions) {
+			attach(subscription, id, host)
 		}
-		subscription.unlisten()
-		subscription.source = source
-		const attached = source(subscription.event, subscription.handler).catch(
-			reportListenFailure,
+	}
+
+	const detachHost = (id: string) => {
+		for (const { attachments } of subscriptions) {
+			const attaching = attachments.get(id)
+			attachments.delete(id)
+			if (attaching) {
+				stopOnceAttached(attaching)
+			}
+		}
+	}
+
+	const listenToJoinedHosts = (event: string, deliver: Deliver): UnlistenFn => {
+		const subscription: Subscription = {
+			event,
+			deliver,
+			attachments: new Map(),
+		}
+		subscriptions.add(subscription)
+		for (const [id, host] of hosts) {
+			attach(subscription, id, host)
+		}
+		return () => {
+			subscriptions.delete(subscription)
+			subscription.attachments.forEach(stopOnceAttached)
+		}
+	}
+
+	const listen = async <T>(
+		event: string,
+		handler: HostEventCallback<T>,
+	): Promise<UnlistenFn> => {
+		const stopLocal = await local.listen<T>(event, (heard) =>
+			handler(heard, null),
 		)
-		subscription.unlisten = () => {
-			attached.then((unlisten) => unlisten())
+		if (isLocalEvent(event)) {
+			return stopLocal
 		}
-		attached.then((unlisten) => {
-			if (subscription.source === source && subscriptions.has(subscription)) {
-				subscription.unlisten = unlisten
+		const stopJoined = listenToJoinedHosts(event, handler as Deliver)
+		return () => {
+			stopLocal()
+			stopJoined()
+		}
+	}
+
+	const listenToActiveHost = async <T>(
+		event: string,
+		handler: HostEventCallback<T>,
+	): Promise<UnlistenFn> =>
+		listenToJoinedHosts(event, (heard, id) => {
+			if (activeHostId() === id) {
+				handler(heard as Event<T>, id)
 			}
 		})
-	}
 
-	const relocateAll = () => {
-		for (const subscription of subscriptions) {
-			relocate(subscription)
-		}
-	}
-
-	const routedListen =
-		(route: Route): Listen =>
-		async (event, handler) => {
-			const source = route(event)
-			const subscription: Subscription = {
-				event,
-				handler: handler as EventCallback<unknown>,
-				route,
-				source,
-				unlisten: await source(event, handler),
-			}
-			subscriptions.add(subscription)
-			relocate(subscription)
-			return () => {
-				subscriptions.delete(subscription)
-				subscription.unlisten()
-			}
-		}
-
-	const listen = routedListen(listenerFor)
-
-	const listenToActiveHost = routedListen(() => activeHost()?.listen ?? unheard)
-
-	return { relocateAll, listen, listenToActiveHost }
+	return { attachHost, detachHost, listen, listenToActiveHost }
 }

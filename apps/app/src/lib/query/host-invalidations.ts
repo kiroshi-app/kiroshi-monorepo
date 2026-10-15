@@ -7,6 +7,7 @@ import {
 import { useEffect } from "react"
 
 import { joinedHosts, listen, onHostReconnected } from "@/lib/host"
+import { isLocalEvent } from "@/lib/host/joined-hosts-listen"
 import { LOCAL_HOST } from "@/lib/host/use-reachable-host"
 import {
 	isJoinedRowId,
@@ -34,6 +35,9 @@ const namesAnotherHostThan = (hostId: string) => {
 	return (queryKey: QueryKey) => queryKey.some(isOtherHost)
 }
 
+const concernsShownSpace = (event: string, hostId: string | null) =>
+	isLocalEvent(event) || hostId === joinedHosts.getState().active
+
 export const invalidateOnHostReconnect = (queryClient: QueryClient) =>
 	onHostReconnected((hostId) => {
 		const namesAnotherHost = namesAnotherHostThan(hostId)
@@ -52,7 +56,10 @@ export const useInvalidateOnHostEvent = (
 
 	useEffect(() => {
 		const keys: QueryKey[] = JSON.parse(keysHash)
-		const invalidate = () => {
+		const invalidate = (_heard: unknown, hostId: string | null) => {
+			if (!concernsShownSpace(event, hostId)) {
+				return
+			}
 			for (const queryKey of keys) {
 				void queryClient
 					.cancelQueries({ queryKey })

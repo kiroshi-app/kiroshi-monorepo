@@ -19,6 +19,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("./index", () => ({
 	isDesktopHost: vi.fn(),
 	listen: vi.fn(),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
 
 vi.mock("../bindings", async (importOriginal) => ({
@@ -115,7 +116,7 @@ beforeEach(() => {
 	})
 	vi.mocked(listen).mockImplementation(async (event, handler) => {
 		if (event === HOSTING_CHANGED_EVENT) {
-			changes.announce = () => handler({ event, id: 1, payload: null })
+			changes.announce = () => handler({ event, id: 1, payload: null }, null)
 		}
 		return unlisten
 	})

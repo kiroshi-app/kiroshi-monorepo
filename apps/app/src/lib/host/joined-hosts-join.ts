@@ -34,6 +34,7 @@ type JoinedHostsJoinOptions = Pick<
 	sharedSpaceIds: Map<string, string>
 	down: JoinedHostsDown
 	record: RecordJoinedHost
+	attachHost: (id: string, host: HttpHost) => void
 	reportJoinRefusal: NonNullable<JoinedHostsOptions["reportJoinRefusal"]>
 }
 
@@ -62,6 +63,7 @@ export const createJoinedHostsJoin = ({
 	sharedSpaceIds,
 	down,
 	record,
+	attachHost,
 	join,
 	fetch,
 	openSocket,
@@ -104,6 +106,7 @@ export const createJoinedHostsJoin = ({
 		})
 		hosts.set(id, host)
 		sharedSpaceIds.set(id, remoteSpaceId ?? id)
+		attachHost(id, host)
 		host.openEvents()
 		down.hearRelayReopens()
 		return host

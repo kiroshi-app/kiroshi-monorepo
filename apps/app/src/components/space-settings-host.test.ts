@@ -738,7 +738,8 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		let announce: (changed: MembersChanged) => void = () => undefined
 		vi.mocked(listen).mockImplementation(async (event, handler) => {
 			if (event === HOSTING_MEMBERS_CHANGED_EVENT) {
-				announce = (payload) => handler({ event, id: 0, payload } as never)
+				announce = (payload) =>
+					handler({ event, id: 0, payload } as never, null)
 			}
 			return () => undefined
 		})
