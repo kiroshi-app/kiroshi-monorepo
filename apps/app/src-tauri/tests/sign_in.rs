@@ -12,6 +12,7 @@ use kiroshi_app::agent::sign_in::{
 	agent_sign_in, agent_sign_in_cancel, agent_sign_in_code, SignInState, SIGN_IN_STARTED_CHANNEL,
 };
 use kiroshi_app::agent::AgentState;
+use kiroshi_app::environment::contract::Values;
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
@@ -75,6 +76,11 @@ async fn first_url(urls: &mut mpsc::UnboundedReceiver<Value>) -> Value {
 		.await
 		.expect("the url is emitted in time")
 		.expect("the listener is still attached")
+}
+
+async fn answered_after_the_cancel(app: &App<MockRuntime>) {
+	let sidecar = app.state::<AgentState>().sidecar().await.expect("the sidecar runs");
+	sidecar.checked(&Values::new()).await.expect("a later command is answered");
 }
 
 async fn wind_down(app: &App<MockRuntime>) {
@@ -194,6 +200,7 @@ fn a_dropped_invoke_leaves_no_sign_in_running_in_the_sidecar() {
 		first_url(&mut urls).await;
 		signing.abort();
 		let dropped = timeout(DEADLINE, signing).await.expect("the invoke is dropped in time");
+		answered_after_the_cancel(&app).await;
 		let again = tauri::async_runtime::spawn(agent_sign_in(handle.clone()));
 		let reopened = first_url(&mut urls).await;
 		let cancelled = std::fs::read_to_string(&received_file);
