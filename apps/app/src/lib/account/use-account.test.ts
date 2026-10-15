@@ -374,7 +374,7 @@ describe("useAccount", () => {
 				open: true,
 				title: "Sign out of Kiroshi?",
 				description:
-					"Studio Nord leaves this Mac until you sign in again. Its conversations stay with lea@example.com.",
+					"Studio Nord leaves this computer until you sign in again. Its conversations stay with lea@example.com.",
 				confirmLabel: "Sign out",
 			}),
 		)
@@ -384,7 +384,7 @@ describe("useAccount", () => {
 		expect(commands.accountSignOut).toHaveBeenCalledOnce()
 		expect(raiseTransientNotice).toHaveBeenCalledWith({
 			type: "info",
-			title: "Signed out. Studio Nord left this Mac.",
+			title: "Signed out. Studio Nord left this computer.",
 		})
 	})
 

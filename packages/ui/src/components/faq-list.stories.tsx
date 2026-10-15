@@ -17,7 +17,7 @@ const ARTBOARD_ITEMS: readonly FaqItem[] = [
 	{
 		question: "Where do my conversations live?",
 		answer:
-			"On your computer. Conversations, companions and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by the agent, so what you send goes through your Claude account.",
+			"On your computer. Conversations, companions and what they learn are kept in a local folder, and they're all there on the next launch. Replies are written by the agent, so what you send goes through your model provider.",
 	},
 	{
 		question: "Which macOS versions can run it?",

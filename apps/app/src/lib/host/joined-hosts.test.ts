@@ -141,12 +141,12 @@ const LANGUAGES: Language[] = ["en", "fr"]
 const HOST_OFFLINE_NOTICES: Record<Language, NoticeMessage> = {
 	en: {
 		title: "Couldn’t reach the host of this space",
-		description: "Its Mac is offline. Try again once it’s back online.",
+		description: "Its computer is offline. Try again once it’s back online.",
 	},
 	fr: {
 		title: "Impossible de joindre l’hôte de cet espace",
 		description:
-			"Son Mac est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
+			"Son ordinateur est hors ligne. Réessayez une fois qu’il est de nouveau en ligne.",
 	},
 }
 

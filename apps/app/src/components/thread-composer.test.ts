@@ -202,7 +202,7 @@ describe("ThreadComposer", () => {
 
 	describe("in a joined space", () => {
 		const OFFLINE_NOTICE =
-			"Studio Nord is offline. You can write again once lea@example.com’s Mac is back."
+			"Studio Nord is offline. You can write again once lea@example.com’s computer is back."
 
 		const hostOf = (isOnline: boolean): OpenJoinedHost => ({
 			spaceName: "Studio Nord",
