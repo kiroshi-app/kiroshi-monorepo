@@ -1,6 +1,6 @@
 [package]
 name = "kiroshi-app"
-version = "0.23.3"
+version = "0.24.1"
 description = "Kiroshi desktop app"
 edition = "2021"
 license = "MIT"
