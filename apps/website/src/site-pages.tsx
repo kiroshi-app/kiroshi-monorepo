@@ -9,7 +9,7 @@ const TEXT_LINK = `${FOCUS_RING} rounded-sm text-foreground underline underline-
 
 type PageSection = {
 	heading: string
-	body: string
+	body: string | readonly string[]
 }
 
 type SitePageProps = {
@@ -52,7 +52,11 @@ type SectionProps = PageSection & {
 const Section = ({ heading, body, children }: SectionProps) => (
 	<section className="flex flex-col gap-2 text-reading">
 		<h2 className="font-medium text-foreground">{heading}</h2>
-		<p className="text-muted-foreground">{body}</p>
+		{[body].flat().map((paragraph) => (
+			<p className="text-muted-foreground" key={paragraph}>
+				{paragraph}
+			</p>
+		))}
 		{children}
 	</section>
 )
@@ -66,11 +70,22 @@ export const PrivacyPage = () => (
 	</SitePage>
 )
 
-export const TermsPage = () => (
-	<SitePage title={SITE_PAGES_COPY.terms.title}>
-		{renderSections(SITE_PAGES_COPY.terms.sections)}
-	</SitePage>
-)
+export const TermsPage = () => {
+	const { title, sections, contact } = SITE_PAGES_COPY.terms
+
+	return (
+		<SitePage title={title}>
+			{renderSections(sections)}
+			<Section {...contact}>
+				<p>
+					<a className={TEXT_LINK} href={`mailto:${SUPPORT_EMAIL}`}>
+						{SUPPORT_EMAIL}
+					</a>
+				</p>
+			</Section>
+		</SitePage>
+	)
+}
 
 export const SupportPage = () => {
 	const { title, topics, contact, details, privacy, response, operator } =
