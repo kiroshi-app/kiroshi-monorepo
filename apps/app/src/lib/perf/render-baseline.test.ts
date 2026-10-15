@@ -113,7 +113,7 @@ vi.mock("@/lib/applications/application-transport", async (importOriginal) => {
 	}
 })
 
-type HostHandler = (event: { payload: unknown }) => void
+type HostHandler = (event: { payload: unknown }, hostId: string | null) => void
 
 const hostEvents = vi.hoisted(() => new Map<string, Set<HostHandler>>())
 
@@ -443,7 +443,7 @@ const mountApp = async (replyFor?: (prompt: string) => string) => {
 const emitOnHost = (event: string, payload: unknown) =>
 	act(async () => {
 		for (const handler of [...(hostEvents.get(event) ?? [])]) {
-			handler({ payload })
+			handler({ payload }, null)
 		}
 	})
 
