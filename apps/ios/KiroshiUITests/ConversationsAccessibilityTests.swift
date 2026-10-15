@@ -66,7 +66,8 @@ final class ConversationsAccessibilityTests: XCTestCase {
     func testNoCompanionSaysWhereToAddOneAndPassesTheAudit() throws {
         let app = launch("2.3")
         XCTAssertTrue(app.staticTexts["No companions yet"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Add one to Studio on your Mac. It shows up here."].exists)
+        XCTAssertTrue(
+            app.staticTexts["Add one to Studio on your computer. It shows up here."].exists)
 
         try auditTheHome(app)
     }
@@ -83,7 +84,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
         let app = launch("2.5")
         XCTAssertTrue(
             app.staticTexts[
-                "Side project is offline. You can write again once sam@example.com’s Mac is back."
+                "Side project is offline. You can write again once sam@example.com’s computer is back."
             ].waitForExistence(timeout: 15))
         XCTAssertTrue(row("Juniper", in: app).exists)
 

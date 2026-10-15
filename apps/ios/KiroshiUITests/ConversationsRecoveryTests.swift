@@ -19,7 +19,7 @@ final class ConversationsRecoveryTests: XCTestCase {
             "conversations-recovering", "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityXXXL")
         XCTAssertTrue(failure(in: app).waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Check that your Mac is on, then try again."].exists)
+        XCTAssertTrue(app.staticTexts["Check that your computer is on, then try again."].exists)
         let navigationBar = app.navigationBars.firstMatch.frame
 
         try audit(app) { issue in

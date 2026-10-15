@@ -47,10 +47,10 @@ struct ConversationsView: View {
                     Button("OK") {}
                 } message: { failure in
                     switch failure.change {
-                    case .pin: Text("Check that your Mac is on, then swipe the row again.")
+                    case .pin: Text("Check that your computer is on, then swipe the row again.")
                     case .unpin:
                         Text(
-                            "Check that your Mac is on, then touch and hold \(failure.title) again."
+                            "Check that your computer is on, then touch and hold \(failure.title) again."
                         )
                     }
                 }
@@ -112,7 +112,7 @@ struct ConversationsView: View {
             ContentUnavailableView {
                 Label("Couldn’t load your companions.", systemImage: "exclamationmark.triangle")
             } description: {
-                Text("Check that your Mac is on, then try again.")
+                Text("Check that your computer is on, then try again.")
             } actions: {
                 Button("Try Again") {
                     store.reload()
@@ -129,7 +129,9 @@ struct ConversationsView: View {
                         .accessibilityHidden(true)
                 }
             } description: {
-                Text("Add one to \(space.currentSpace?.name ?? "") on your Mac. It shows up here.")
+                Text(
+                    "Add one to \(space.currentSpace?.name ?? "") on your computer. It shows up here."
+                )
             }
         case .loaded:
             List {

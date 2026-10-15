@@ -48,7 +48,7 @@ struct NoSpaceView: View {
                 .font(.title2.bold())
                 .accessibilityAddTraits(.isHeader)
             Text(
-                "Turn on hosting for a space on your Mac, or ask someone to invite you. It shows up here."
+                "Turn on hosting for a space on your computer, or ask someone to invite you. It shows up here."
             )
             .foregroundStyle(.secondary)
             Text("Signed in as \(model.signedInEmail)")

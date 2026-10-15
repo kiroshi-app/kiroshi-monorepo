@@ -50,7 +50,7 @@ final class ThreadAccessibilityTests: XCTestCase {
         let app = launch("3.4")
         XCTAssertTrue(
             app.staticTexts[
-                "Side project is offline. You can write again once sam@example.com’s Mac is back."
+                "Side project is offline. You can write again once sam@example.com’s computer is back."
             ].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["They’re waiting for your read."].exists)
         XCTAssertFalse(composer(in: app).isEnabled)
