@@ -136,7 +136,7 @@ fn executable(candidate: PathBuf) -> bool {
 
 fn absent(command: &str) -> String {
 	format!(
-		"the command {command} is on no directory of your PATH, so this application would not start on this machine"
+		"the command {command} is on no directory of your PATH, so this application would not start on this computer"
 	)
 }
 
