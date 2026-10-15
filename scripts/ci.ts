@@ -215,9 +215,7 @@ export const skipReason = ({ group, touched }: GroupDecision) => {
 	return "scripts/ci-changes.ts finds no path changed since the merge base with origin/main that touches it"
 }
 
-const ensureSimulator = () => {
-	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
-	if (process.env.SIMULATOR) return
+const lookUpSimulator = () => {
 	const simulator = captured({
 		command: ["bash", "-c", SIMULATOR_LOOKUP],
 		operation: "finding the iPhone 17 simulator",
@@ -225,7 +223,18 @@ const ensureSimulator = () => {
 	if (simulator.length === 0) {
 		throw new Error("no available iPhone 17 simulator on the pinned iOS")
 	}
+	return simulator
+}
+
+const ensureSimulator = () => {
+	// biome-ignore lint/suspicious/noUndeclaredEnvVars: scripts/ci.ts runs outside turbo, its cache never reads this variable
+	const simulator = process.env.SIMULATOR || lookUpSimulator()
 	process.env.SIMULATOR = simulator
+	if (process.env.CI) return
+	captured({
+		command: ["xcrun", "simctl", "bootstatus", simulator, "-b"],
+		operation: `booting the simulator ${simulator}`,
+	})
 }
 
 type Labelled = { label: string; step: Step }
