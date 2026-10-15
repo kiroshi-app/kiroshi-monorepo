@@ -13,6 +13,7 @@ use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::host_api::cors;
+use kiroshi_app::host_api::events::SEND_PATIENCE;
 use kiroshi_app::host_api::invoke::MAX_BODY_BYTES;
 use kiroshi_app::missions::commands::MissionChanged;
 use kiroshi_app::missions::contract::MissionState;
@@ -260,6 +261,14 @@ impl Client {
 
 	async fn heard_until(mut self, last: String) {
 		while self.text().await != last {}
+	}
+
+	async fn reset_without_reading(&mut self) {
+		let payload = [b'x'; u16::MAX as usize];
+		let length = u16::MAX.to_be_bytes();
+		let mut frame = vec![0x80 | TEXT, 0x80 | 126, length[0], length[1], 0, 0, 0, 0];
+		frame.extend_from_slice(&payload);
+		while self.0.write_all(&frame).await.is_ok() {}
 	}
 
 	async fn send(&mut self, opcode: u8, data: &[u8]) {
@@ -670,11 +679,11 @@ async fn a_client_that_falls_behind_is_closed_without_blocking_the_emitter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_client_that_stops_reading_does_not_hold_back_the_others() {
+async fn a_client_that_stops_reading_is_dropped_while_the_others_keep_hearing() {
 	let host = Host::new();
 	let server = host.started();
 	let token = host.token();
-	let _stalled = server.slow_listening(&token).await;
+	let mut stalled = server.slow_listening(&token).await;
 	let reading = server.listening(&token).await;
 	let later = relayed_change("later");
 	let hearing = tokio::spawn(reading.heard_until(later));
@@ -683,6 +692,9 @@ async fn a_client_that_stops_reading_does_not_hold_back_the_others() {
 	host.emit("later");
 
 	timeout(PATIENCE, hearing).await.expect("the reading client heard in time").expect("heard");
+	timeout(SEND_PATIENCE + PATIENCE, stalled.reset_without_reading())
+		.await
+		.expect("the host dropped the stalled client in time");
 }
 
 fn stored(path: &Path, bytes: &str) {
