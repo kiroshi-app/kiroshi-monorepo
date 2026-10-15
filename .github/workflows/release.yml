@@ -23,7 +23,7 @@ jobs:
           started=$SECONDS
           while :; do
             elapsed=$((SECONDS - started))
-            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --commit "$GITHUB_SHA" --limit 1 \
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --limit 1 \
               --json status,url,conclusion --jq '.[] | [.status, .url, .conclusion] | @tsv')
             if [ -n "$run" ]; then
               IFS=$'\t' read -r status url conclusion <<< "$run"

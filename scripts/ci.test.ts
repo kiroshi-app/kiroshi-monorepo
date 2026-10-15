@@ -310,6 +310,14 @@ describe("the jobs of ci.yml", () => {
 		expect(ciGreen).not.toMatch(/\bios\b/)
 	})
 
+	it("has ci-green read the CI run of the tag, never another push run on its commit", () => {
+		const waitStep = releaseWorkflow.jobs["ci-green"]?.steps?.find((step) =>
+			step.run?.includes("gh run list"),
+		)
+
+		expect(waitStep?.run).toContain('--branch "$GITHUB_REF_NAME"')
+	})
+
 	it("boots the simulator bun run ci looks up", () => {
 		expect(
 			stepNamed("ios", "Boot the simulator while the app builds")?.run,
