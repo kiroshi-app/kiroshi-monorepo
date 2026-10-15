@@ -60,7 +60,8 @@ final class SettingsAccessibilityTests: XCTestCase {
 
     func testThePrivacyTermsAndSupportRowsOpenTheirPageInTheApp() {
         let app = launch("6.1")
-        let safari = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
+        let address = app.buttons["URL"]
+        let close = app.buttons.matching(NSPredicate(format: "identifier == 'Close'")).firstMatch
         XCTAssertTrue(signOutRow(app).waitForExistence(timeout: 10))
 
         for title in ["Privacy Policy", "Terms of Use", "Support"] {
@@ -69,20 +70,19 @@ final class SettingsAccessibilityTests: XCTestCase {
 
             row.tap()
 
-            let address = safari.buttons["URL"]
-            let close = safari.buttons["Close"]
-            XCTAssertTrue(becomesHittable(close), title)
-            XCTAssertTrue((address.value as? String)?.contains("kiroshi.app") == true, title)
+            XCTAssertTrue(address.waitForExistence(timeout: 30), title)
+            XCTAssertTrue(
+                becomes(address, NSPredicate(format: "value CONTAINS 'kiroshi.app'")), title)
             XCTAssertEqual(app.state, .runningForeground, title)
             close.tap()
-            XCTAssertTrue(becomesHittable(row), title)
+            XCTAssertTrue(address.waitForNonExistence(timeout: 10), title)
+            XCTAssertTrue(becomes(row, NSPredicate(format: "isHittable == true")), title)
         }
     }
 
-    func becomesHittable(_ element: XCUIElement) -> Bool {
-        let hittable = expectation(
-            for: NSPredicate(format: "isHittable == true"), evaluatedWith: element)
-        return XCTWaiter().wait(for: [hittable], timeout: 10) == .completed
+    func becomes(_ element: XCUIElement, _ predicate: NSPredicate) -> Bool {
+        let met = expectation(for: predicate, evaluatedWith: element)
+        return XCTWaiter().wait(for: [met], timeout: 10) == .completed
     }
 
     func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensWelcome()
