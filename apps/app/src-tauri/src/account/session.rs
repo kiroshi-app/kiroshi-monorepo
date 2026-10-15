@@ -352,12 +352,14 @@ mod tests {
 	const POLL_SECRET: &str = "poll-secret-that-never-leaves";
 	const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
 	const PATIENCE: Duration = Duration::from_secs(15);
+	const PAST_THE_FIRST_POLL: Duration = Duration::from_secs(10);
 
 	#[derive(Clone, Default)]
 	struct Cloudy {
 		create_status: Option<StatusCode>,
 		interval: u64,
 		expires_at: Option<String>,
+		expires_in: Option<Duration>,
 		closes_after_create: bool,
 		poll_answers: Arc<Mutex<VecDeque<(StatusCode, Value)>>>,
 		sign_out_status: Option<StatusCode>,
@@ -425,6 +427,14 @@ mod tests {
 		(status, [(header::CONTENT_TYPE, "application/json")], body.to_string())
 	}
 
+	fn expiry_of(cloudy: &Cloudy) -> String {
+		match (cloudy.expires_in, &cloudy.expires_at) {
+			(Some(expires_in), _) => (Utc::now() + expires_in).to_rfc3339(),
+			(None, Some(expires_at)) => expires_at.clone(),
+			(None, None) => EXPIRES_AT.to_owned(),
+		}
+	}
+
 	async fn created(Served(cloudy): Served<Cloudy>, body: String) -> Answered {
 		let body: Value = serde_json::from_str(&body).expect("a json body");
 		cloudy.created.lock().expect("the stub").push(body);
@@ -440,7 +450,7 @@ mod tests {
 				"id": REQUEST_ID,
 				"pollSecret": POLL_SECRET,
 				"verificationURL": verification_url(),
-				"expiresAt": cloudy.expires_at.as_deref().unwrap_or(EXPIRES_AT),
+				"expiresAt": expiry_of(&cloudy),
 				"interval": cloudy.interval
 			}),
 		)
@@ -764,8 +774,7 @@ mod tests {
 	#[test]
 	fn a_request_left_pending_past_its_expiry_fails_expired() {
 		run(async {
-			let expires_at = (Utc::now() + Duration::from_millis(300)).to_rfc3339();
-			let cloudy = Cloudy { expires_at: Some(expires_at), ..Cloudy::default() };
+			let cloudy = Cloudy { expires_in: Some(PAST_THE_FIRST_POLL), ..Cloudy::default() };
 			let harness = Harness::new("pending-past-expiry", &stub(cloudy.clone()).await);
 
 			harness.sign_in().await.expect("the sign-in starts");
