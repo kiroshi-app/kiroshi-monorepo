@@ -35,13 +35,6 @@ extension XCTestCase {
         try app.performAccessibilityAudit(for: .all.subtracting(.contrast), handle)
     }
 
-    @MainActor func settingsBars(in app: XCUIApplication) -> [CGRect] {
-        let versionBar = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH 'Kiroshi '")
-        ).firstMatch
-        return [app.navigationBars.firstMatch.frame, versionBar.frame]
-    }
-
     @MainActor func assertNoDaySeparatorWhile(
         _ loading: XCUIElement, in app: XCUIApplication,
         file: StaticString = #filePath, line: UInt = #line
@@ -84,14 +77,5 @@ extension XCTestCase {
             .map(\.label)
         app.terminate()
         return Set(shown)
-    }
-}
-
-extension XCUIAccessibilityAuditIssue {
-    @MainActor func isUnderABar(_ bars: [CGRect]) -> Bool {
-        guard [.contrast, .dynamicType].contains(auditType), let frame = element?.frame else {
-            return false
-        }
-        return bars.contains { $0.intersects(frame) }
     }
 }
