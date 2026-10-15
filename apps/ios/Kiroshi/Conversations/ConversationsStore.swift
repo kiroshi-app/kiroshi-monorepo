@@ -298,9 +298,11 @@ final class ConversationsStore {
             let page = try await firstPage(in: spaceId, through: relay)
             let companions = try await listedCompanions
             let groups = page == nil ? try await relay.groups(in: spaceId) : []
+            let paged = Self.summaries(of: page, among: companions)
+            let pagedIds = Set(paged.map(\.id))
             let subjects =
                 groups.map(ConversationSubject.group)
-                + companions.map(ConversationSubject.companion)
+                + companions.filter { !pagedIds.contains($0.id) }.map(ConversationSubject.companion)
             let loaded = try await withThrowingTaskGroup(of: ConversationSummary.self) { tasks in
                 for subject in subjects {
                     tasks.addTask {
@@ -314,9 +316,9 @@ final class ConversationsStore {
                 return loaded
             }
             guard !Task.isCancelled, generation == self.generation else { return }
-            pinnedIds = page?.pinned.map(\.group.id) ?? []
+            pinnedIds = page?.pinned.map { Self.subject(of: $0, among: companions).id } ?? []
             read(page)
-            publish(Self.summaries(of: page) + subjects.compactMap { loaded[$0.id] })
+            publish(paged + subjects.compactMap { loaded[$0.id] })
             self.companions = companions
             phase = .loaded
             if let opening, let subject = rows.first(where: { $0.id == opening })?.subject {
@@ -357,7 +359,8 @@ final class ConversationsStore {
             paging = nil
             read(page)
             let known = Set(rows.map(\.id))
-            publish(rows + Self.summaries(of: page).filter { !known.contains($0.id) })
+            let unknown = Self.summaries(of: page, among: companions)
+            publish(rows + unknown.filter { !known.contains($0.id) })
         } catch {
             guard !Task.isCancelled, generation == self.generation else { return }
             paging = nil
@@ -381,9 +384,10 @@ final class ConversationsStore {
             guard !Task.isCancelled, generation == self.generation else { return }
             merging = nil
             guard let page else { return }
-            pinnedIds = page.pinned.map(\.group.id)
+            pinnedIds = page.pinned.map { Self.subject(of: $0, among: companions).id }
             let known = Set(rows.map(\.id))
-            publish(rows + Self.summaries(of: page).filter { !known.contains($0.id) })
+            let unknown = Self.summaries(of: page, among: companions)
+            publish(rows + unknown.filter { !known.contains($0.id) })
         }
     }
 
@@ -395,14 +399,26 @@ final class ConversationsStore {
         nextPage = nextCursor == nil ? .complete : .available
     }
 
-    private static func summaries(of page: ConversationPage?) -> [ConversationSummary] {
+    private static func summaries(of page: ConversationPage?, among companions: [Companion])
+        -> [ConversationSummary]
+    {
         guard let page else { return [] }
         return (page.pinned + page.conversations).map { row in
             ConversationSummary(
-                subject: .group(row.group), conversationId: row.group.id,
+                subject: subject(of: row, among: companions), conversationId: row.group.id,
                 lastMessage: row.lastWord.map(MessagePreview.init),
                 activeAt: Date(milliseconds: row.lastActivityAt))
         }
+    }
+
+    private static func subject(of row: ConversationInPage, among companions: [Companion])
+        -> ConversationSubject
+    {
+        guard let soloBotId = row.soloBotId,
+            let companion = companions.first(where: { $0.id == soloBotId })
+                ?? row.group.authors.first(where: { $0.id == soloBotId })
+        else { return .group(row.group) }
+        return .companion(companion)
     }
 
     private nonisolated static func summary(
