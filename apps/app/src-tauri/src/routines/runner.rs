@@ -20,11 +20,13 @@ use crate::agent::contract::{
 	TransportError, TurnEnded, TurnOutcome,
 };
 use crate::agent::reply_writer::settled_mentions;
-use crate::conversations::commands::{conversation_open_runtime_session, ready};
+use crate::conversations::commands::{
+	announce_conversation, conversation_open_runtime_session, ready,
+};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
 use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
-use crate::events::{self, AGENT_EVENT};
+use crate::events::{self, AGENT_EVENT, CONVERSATION_UPDATED};
 
 const CANCELLED_REASON: &str = "the run's turn was cancelled";
 
@@ -208,6 +210,7 @@ async fn write_report<R: Runtime>(
 	messages.append_text(message_id.clone(), text.clone()).await?;
 	messages.finalize_message(message_id.clone(), TerminalState::Complete, None).await?;
 	messages.complete_turn(turn_id.clone(), SystemClock.now_ms()).await?;
+	announce_conversation(app, database, CONVERSATION_UPDATED, &scope.conversation_id).await;
 	announce_report(
 		app,
 		report_event(
