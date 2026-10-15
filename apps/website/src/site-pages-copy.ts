@@ -8,8 +8,6 @@ const REPOSITORY_ADDRESS = REPOSITORY_URL.replace(/^https:\/\//, "")
 
 const { pro } = WEBSITE_COPY.pricing
 
-const PLACEHOLDER = "This section is being written."
-
 export const SITE_PAGES_COPY = {
 	footerNavigation: "Site",
 	homeLink: "Kiroshi home",

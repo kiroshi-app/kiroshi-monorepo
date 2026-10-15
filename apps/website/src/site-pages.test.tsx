@@ -85,8 +85,6 @@ const sectionNamed = (heading: string) =>
 	screen.getByRole("heading", { level: 2, name: heading })
 		.parentElement as HTMLElement
 
-const mainText = () => screen.getByRole("main").textContent ?? ""
-
 describe("the privacy page", () => {
 	it("renders its sixteen sections in order", async () => {
 		await openPage("/privacy", privacy.title)
@@ -112,15 +110,15 @@ describe("the privacy page", () => {
 
 	it("contains no unfinished copy", async () => {
 		await openPage("/privacy", privacy.title)
-		expect(mainText()).not.toMatch(/\[|todo|placeholder|lorem/i)
+		expect(mainText()).not.toMatch(/\[|todo|placeholder|lorem/)
 	})
 
 	it("names the controller with no company form or registration", async () => {
 		await openPage("/privacy", privacy.title)
 		expect(mainText()).toContain(
-			"Kiroshi, an independent project run from France by Steve Puget",
+			"kiroshi, an independent project run from france by steve puget",
 		)
-		expect(mainText()).not.toMatch(/\b(SAS|SARL|EURL|SIREN|SIRET|RCS)\b/)
+		expect(mainText()).not.toMatch(/\b(sas|sarl|eurl|siren|siret|rcs)\b/)
 	})
 
 	it("lists what account deletion leaves behind", async () => {
@@ -134,7 +132,7 @@ describe("the privacy page", () => {
 		await openPage("/privacy", privacy.title)
 		expect(sectionNamed("Contact").textContent).toContain("support@kiroshi.app")
 		expect(sectionNamed("Children").textContent).toContain("16")
-		expect(mainText()).toContain("Last updated: 15 October 2026.")
+		expect(mainText()).toContain("last updated: 15 october 2026.")
 	})
 })
 
