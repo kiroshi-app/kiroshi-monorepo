@@ -23,6 +23,8 @@ use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
+const GROUP_PATIENCE: Duration = Duration::from_secs(10);
+const GROUP_POLL: Duration = Duration::from_millis(25);
 
 struct Live {
 	session: Session,
@@ -273,6 +275,17 @@ impl Live {
 	async fn run_turn(&mut self, prompt: &str) -> Vec<AgentEvent> {
 		self.session.submit_prompt(prompt).await.expect("prompt accepted");
 		self.collect().await
+	}
+
+	async fn streaming(&mut self) {
+		let deadline = tokio::time::Instant::now() + TURN_TIMEOUT;
+		loop {
+			match tokio::time::timeout_at(deadline, self.events.recv()).await {
+				Ok(Some(AgentEvent::MessageStarted { .. })) => return,
+				Ok(Some(_)) => {}
+				Ok(None) | Err(_) => panic!("the turn did not stream within {TURN_TIMEOUT:?}"),
+			}
+		}
 	}
 
 	async fn collect_until_settled(&mut self) -> Vec<AgentEvent> {
@@ -823,7 +836,7 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 		)
 		.await
 		.expect("prompt accepted");
-	tokio::time::sleep(Duration::from_secs(6)).await;
+	live.streaming().await;
 
 	live.session.cancel_turn().await.expect("cancel accepted");
 	let events = live.collect().await;
@@ -841,8 +854,7 @@ async fn stop_interrupts_a_live_turn_and_leaves_no_orphan() {
 	);
 
 	live.sidecar.shutdown().await;
-	tokio::time::sleep(Duration::from_secs(1)).await;
-	assert!(!group_alive(pid), "shutdown left agent processes behind");
+	assert!(group_gone(pid).await, "shutdown left agent processes behind");
 }
 
 #[tokio::test]
@@ -865,6 +877,17 @@ async fn a_captured_id_resumes_the_conversation() {
 #[cfg(unix)]
 fn group_alive(pid: u32) -> bool {
 	unsafe { libc::killpg(pid as libc::pid_t, 0) == 0 }
+}
+
+async fn group_gone(pid: u32) -> bool {
+	let deadline = tokio::time::Instant::now() + GROUP_PATIENCE;
+	while group_alive(pid) {
+		if tokio::time::Instant::now() >= deadline {
+			return false;
+		}
+		tokio::time::sleep(GROUP_POLL).await;
+	}
+	true
 }
 
 #[cfg(not(unix))]

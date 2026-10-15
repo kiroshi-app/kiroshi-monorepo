@@ -137,13 +137,9 @@ fn a_message_appended_to_a_mission_thread_stays_out_of_the_feed_while_a_topic_on
 	appended(&window, &topic_id);
 
 	let topic_update =
-		updates.recv_timeout(Duration::from_secs(5)).expect("the topic update is announced");
+		updates.recv_timeout(Duration::from_secs(10)).expect("the topic update is announced");
 	assert_eq!(topic_update["conversation"]["id"], json!(topic_id));
-	assert_eq!(
-		updates.recv_timeout(Duration::from_millis(200)).ok(),
-		None,
-		"a second feed update was announced"
-	);
+	assert_eq!(updates.try_recv().ok(), None, "a second feed update was announced");
 }
 
 #[test]
@@ -253,12 +249,24 @@ fn opened_in(home: &Home, conversation_id: &str, bot_id: &str, objective: &str) 
 		tauri::async_runtime::block_on(database.missions().open(draft, format!("key-{objective}")))
 			.expect("the mission opens")
 			.id;
-	a_moment();
+	let latest = id.clone();
+	tauri::async_runtime::block_on(database.call(move |connection| {
+		let sql = "UPDATE missions SET opened_at = (SELECT MAX(opened_at) + 1 FROM missions)
+			WHERE id = ?1";
+		Ok(connection.execute(sql, [latest])?)
+	}))
+	.expect("the mission opens after every other");
 	id
 }
 
-fn a_moment() {
-	std::thread::sleep(std::time::Duration::from_millis(2));
+fn closed_long_ago(home: &Home, mission_id: &str) {
+	let state = home.app.state::<db::DatabaseState>();
+	let database = state.as_ref().expect("the database opens");
+	let closed = mission_id.to_owned();
+	tauri::async_runtime::block_on(database.call(move |connection| {
+		Ok(connection.execute("UPDATE missions SET closed_at = 1 WHERE id = ?1", [closed])?)
+	}))
+	.expect("the closing is backdated");
 }
 
 fn closed_at(window: &WebviewWindow<MockRuntime>, mission_id: &str) -> i64 {
@@ -285,8 +293,9 @@ fn the_space_feed_holds_the_open_and_recently_closed_missions_of_that_space_only
 	let closed_later = opened_in(&home, &billing, BOT, "closed-later");
 	let closed_earlier = opened_in(&home, &crashes, BOT, "closed-earlier");
 	opened_in(&home, &elsewhere, &stranger, "other-space");
-	let closed_since = closed_at(&window, &closed_earlier) + 1;
-	a_moment();
+	closed_at(&window, &closed_earlier);
+	closed_long_ago(&home, &closed_earlier);
+	let closed_since = 2;
 	assert!(closed_at(&window, &closed_later) >= closed_since);
 
 	let feed = call(

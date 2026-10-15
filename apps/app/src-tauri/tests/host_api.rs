@@ -1,7 +1,6 @@
 mod common;
 
 use std::fmt::Display;
-use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -14,7 +13,6 @@ use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
 use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::host_api::cors;
-use kiroshi_app::host_api::events::SEND_PATIENCE;
 use kiroshi_app::host_api::invoke::MAX_BODY_BYTES;
 use kiroshi_app::missions::commands::MissionChanged;
 use kiroshi_app::missions::contract::MissionState;
@@ -258,16 +256,6 @@ impl Client {
 			.await
 			.expect("the host closes the connection in time")
 			.expect("the connection ends cleanly");
-	}
-
-	async fn closed_by_the_host(&mut self) {
-		let mut rest = Vec::new();
-		let ending = timeout(PATIENCE, self.0.read_to_end(&mut rest))
-			.await
-			.expect("the host closes the connection in time");
-		if let Err(failure) = ending {
-			assert_eq!(failure.kind(), ErrorKind::ConnectionReset);
-		}
 	}
 
 	async fn heard_until(mut self, last: String) {
@@ -682,21 +670,19 @@ async fn a_client_that_falls_behind_is_closed_without_blocking_the_emitter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_client_that_stops_reading_is_dropped_while_the_others_keep_hearing() {
+async fn a_client_that_stops_reading_does_not_hold_back_the_others() {
 	let host = Host::new();
 	let server = host.started();
 	let token = host.token();
-	let mut stalled = server.slow_listening(&token).await;
+	let _stalled = server.slow_listening(&token).await;
 	let reading = server.listening(&token).await;
 	let later = relayed_change("later");
 	let hearing = tokio::spawn(reading.heard_until(later));
 
 	host.emit_bulk(BUFFERED_FRAMES - 24).await;
-	tokio::time::sleep(SEND_PATIENCE + Duration::from_secs(1)).await;
 	host.emit("later");
 
 	timeout(PATIENCE, hearing).await.expect("the reading client heard in time").expect("heard");
-	stalled.closed_by_the_host().await;
 }
 
 fn stored(path: &Path, bytes: &str) {

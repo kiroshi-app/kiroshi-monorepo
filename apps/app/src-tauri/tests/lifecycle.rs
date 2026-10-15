@@ -25,7 +25,6 @@ use tauri::{App, Manager};
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-const QUIT_INSIDE_THE_LADDER: Duration = Duration::from_millis(200);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -222,7 +221,6 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 		start(&app).await.expect("the session the restart replaces starts");
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
-			tokio::time::sleep(QUIT_INSIDE_THE_LADDER).await;
 			terminate_session(app.state::<AgentState>().inner()).await;
 		});
 

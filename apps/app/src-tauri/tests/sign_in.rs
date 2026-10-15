@@ -26,10 +26,6 @@ const ACCEPTED_CODE: &str = "accepted-code";
 
 const DEADLINE: Duration = Duration::from_secs(10);
 
-const QUIET: Duration = Duration::from_millis(300);
-
-const POLL: Duration = Duration::from_millis(20);
-
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn serial() -> std::sync::MutexGuard<'static, ()> {
@@ -176,7 +172,7 @@ fn a_url_no_browser_may_be_handed_is_refused_and_never_emitted() {
 
 	tauri::async_runtime::block_on(async {
 		let settled = timeout(DEADLINE, agent_sign_in(handle)).await.expect("the sign-in settles");
-		let emitted = timeout(QUIET, urls.recv()).await;
+		let emitted = urls.try_recv();
 		wind_down(&app).await;
 
 		assert_eq!(settled, Err(SignInError::RefusedUrl { url: refused.to_owned() }));
@@ -197,20 +193,20 @@ fn a_dropped_invoke_leaves_no_sign_in_running_in_the_sidecar() {
 		let signing = tauri::async_runtime::spawn(agent_sign_in(handle.clone()));
 		first_url(&mut urls).await;
 		signing.abort();
-		let cancelled = timeout(DEADLINE, async {
-			while !received_file.is_file() {
-				tokio::time::sleep(POLL).await;
-			}
-		})
-		.await;
+		let dropped = timeout(DEADLINE, signing).await.expect("the invoke is dropped in time");
 		let again = tauri::async_runtime::spawn(agent_sign_in(handle.clone()));
 		let reopened = first_url(&mut urls).await;
+		let cancelled = std::fs::read_to_string(&received_file);
 		agent_sign_in_cancel(handle).await.expect("the cancel reaches the sidecar");
 		let _ = timeout(DEADLINE, again).await;
 		wind_down(&app).await;
 		let _ = std::fs::remove_file(&received_file);
 
-		assert!(cancelled.is_ok(), "the dropped invoke left its sign-in running");
+		assert!(dropped.is_err(), "the invoke ran to its end instead of being dropped");
+		assert!(
+			cancelled.is_ok_and(|recorded| recorded.contains("sign_in_cancel")),
+			"the dropped invoke left its sign-in running"
+		);
 		assert_eq!(reopened, json!({ "url": FAKE_URL }));
 	});
 }
@@ -231,10 +227,12 @@ fn a_code_and_a_cancel_while_no_sign_in_runs_are_refused_and_reach_no_sidecar() 
 		let _ = timeout(DEADLINE, signing).await.expect("the sign-in settles");
 
 		let code = agent_sign_in_code(handle.clone(), ACCEPTED_CODE.to_owned()).await;
-		let cancel = agent_sign_in_cancel(handle).await;
-		tokio::time::sleep(QUIET).await;
+		let cancel = agent_sign_in_cancel(handle.clone()).await;
+		let after = tauri::async_runtime::spawn(agent_sign_in(handle.clone()));
+		first_url(&mut urls).await;
 		let recorded =
 			std::fs::read_to_string(&received_file).expect("the sidecar recorded what it received");
+		after.abort();
 		wind_down(&app).await;
 		let _ = std::fs::remove_file(&received_file);
 

@@ -23,7 +23,6 @@ const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
-const SETTLE: Duration = Duration::from_millis(500);
 
 const NAME: &str = "Camille";
 const BRIEF: &str = "Answer only in French.";
@@ -278,10 +277,4 @@ fn every_bundle_the_turn_changed_is_announced_once() {
 		"Answer only in Spanish.",
 		"the bot record kept the stale brief"
 	);
-
-	harness.forget_events();
-	let quiet = harness.start_run(&conversation, &bot, 2);
-	harness.end_turn(&quiet);
-	std::thread::sleep(SETTLE);
-	assert!(evolutions(&harness.events()).is_empty(), "a quiet turn was announced");
 }

@@ -617,6 +617,12 @@ fn serve() {
 		}
 	}
 
+	if let Ok(path) = std::env::var("FAKE_AGENT_EOF_FILE") {
+		if let Err(error) = std::fs::write(path, "eof") {
+			eprintln!("the fake did not record the end of its stdin: {error}");
+		}
+	}
+
 	while ignores_eof() {
 		std::thread::park();
 	}
