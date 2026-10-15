@@ -6,14 +6,14 @@ use serde_json::{json, Value};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, watch};
-use tokio::time::{interval_at, sleep, timeout, Instant};
+use tokio::time::{interval_at, sleep, sleep_until, timeout, Instant};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::commands::{announce_change, announce_reconnection, announce_removal, ready};
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
-use super::member_link::{MemberLink, Presence, LEARN_BOUND};
+use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::proxy;
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError};
 use crate::account::session::{self, AccountSession};
@@ -457,17 +457,16 @@ async fn online<R: Runtime>(
 	let link = &linked.link;
 	let (mut sink, mut stream) = socket.split();
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
-	link.opened(calls_in);
-	if let Err(failure) = announce_reconnection(app, linked.id.clone()) {
-		eprintln!(
-			"joined space {} reopened its member relay and the front was not told: {failure:?}",
-			linked.id
-		);
+	if let Some(resume) = resynced(app, linked, link.opened(calls_in)) {
+		if let Err(reason) = sent(&mut sink, resume).await {
+			return Ended::Dropped(reason);
+		}
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
+		let resume_deadline = link.resume_deadline();
 		let outgoing = tokio::select! {
 			_ = stop.changed() => {
 				let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
@@ -479,10 +478,10 @@ async fn online<R: Runtime>(
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
 				match frame {
-					Some(Ok(Message::Text(text))) => {
-						link.received(text.as_str());
-						continue;
-					}
+					Some(Ok(Message::Text(text))) => match resynced(app, linked, link.received(text.as_str())) {
+						Some(resume) => resume,
+						None => continue,
+					},
 					Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
 					Some(Ok(_)) => continue,
 					Some(Err(error)) => return Ended::Dropped(format!("the member relay socket failed: {error}")),
@@ -490,6 +489,11 @@ async fn online<R: Runtime>(
 				}
 			}
 			Some(call) = calls.recv() => Message::text(call),
+			_ = sleep_until(resume_deadline.unwrap_or_else(Instant::now)), if resume_deadline.is_some() => {
+				eprintln!("joined space {} heard no answer to its relay resume", linked.id);
+				resynced(app, linked, link.resume_lapsed());
+				continue;
+			}
 			_ = pings.tick() => Message::Ping(Vec::new().into()),
 			_ = &mut silence => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
@@ -497,6 +501,22 @@ async fn online<R: Runtime>(
 		};
 		if let Err(reason) = sent(&mut sink, outgoing).await {
 			return Ended::Dropped(reason);
+		}
+	}
+}
+
+fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> Option<Message> {
+	match resync {
+		Resync::InStep => None,
+		Resync::Resume(frame) => Some(Message::text(frame)),
+		Resync::Reread => {
+			if let Err(failure) = announce_reconnection(app, linked.id.clone()) {
+				eprintln!(
+					"joined space {} must reread its host and the front was not told: {failure:?}",
+					linked.id
+				);
+			}
+			None
 		}
 	}
 }

@@ -1,15 +1,18 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
-use tokio::time::timeout;
+use tokio::time::{timeout, Instant};
 
 use crate::events::Frame;
+use crate::hosting::replay::RESUME_COMMAND;
 
 const CALL_BOUND: Duration = Duration::from_secs(300);
+
+const HELD_FRAMES: usize = 1024;
 
 pub(super) const LEARN_BOUND: Duration = Duration::from_secs(30);
 
@@ -33,11 +36,50 @@ struct Session {
 	events: broadcast::Sender<Frame>,
 }
 
+#[derive(Debug, PartialEq)]
+pub(super) enum Resync {
+	InStep,
+	Resume(String),
+	Reread,
+}
+
+#[derive(Clone)]
+struct Applied {
+	epoch: String,
+	seq: u64,
+}
+
+struct Resuming {
+	token: String,
+	deadline: Instant,
+	held: BTreeMap<u64, String>,
+}
+
+enum Sequence {
+	Unknown,
+	Applied(Applied),
+	Resuming(Applied, Resuming),
+}
+
+struct Stamped<'a> {
+	event: String,
+	epoch: &'a str,
+	seq: u64,
+	replay_token: Option<&'a str>,
+}
+
+impl Sequence {
+	fn awaits_the_replay_of(&self, token: &str) -> bool {
+		matches!(self, Sequence::Resuming(_, resuming) if resuming.token == token)
+	}
+}
+
 pub(super) struct MemberLink {
 	session: Mutex<Option<Session>>,
 	pending: Mutex<HashMap<u64, oneshot::Sender<Answer>>>,
 	presence: watch::Sender<Presence>,
 	next_call: AtomicU64,
+	sequence: Mutex<Sequence>,
 }
 
 impl MemberLink {
@@ -47,6 +89,7 @@ impl MemberLink {
 			pending: Mutex::new(HashMap::new()),
 			presence: watch::channel(Presence::Connecting).0,
 			next_call: AtomicU64::new(1),
+			sequence: Mutex::new(Sequence::Unknown),
 		}
 	}
 
@@ -56,6 +99,10 @@ impl MemberLink {
 
 	fn pending(&self) -> MutexGuard<'_, HashMap<u64, oneshot::Sender<Answer>>> {
 		self.pending.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn sequence(&self) -> MutexGuard<'_, Sequence> {
+		self.sequence.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
 	pub(super) fn presence(&self) -> watch::Receiver<Presence> {
@@ -76,16 +123,56 @@ impl MemberLink {
 		self.presence.send_replace(Presence::Connecting);
 	}
 
-	pub(super) fn opened(&self, calls: mpsc::Sender<String>) {
+	pub(super) fn opened(&self, calls: mpsc::Sender<String>) -> Resync {
 		let events = broadcast::channel(BUFFERED_EVENTS).0;
 		*self.session() = Some(Session { calls, events });
 		self.presence.send_replace(Presence::Online);
+		let mut sequence = self.sequence();
+		match &*sequence {
+			Sequence::Applied(applied) => {
+				let (resuming, frame) = self.resume_from(applied);
+				*sequence = Sequence::Resuming(applied.clone(), resuming);
+				Resync::Resume(frame)
+			}
+			Sequence::Unknown | Sequence::Resuming(..) => Resync::Reread,
+		}
 	}
 
 	pub(super) fn closed(&self, presence: Presence) {
 		self.session().take();
 		self.pending().clear();
+		let mut sequence = self.sequence();
+		if let Sequence::Resuming(applied, _) = &*sequence {
+			*sequence = Sequence::Applied(applied.clone());
+		}
+		drop(sequence);
 		self.presence.send_replace(presence);
+	}
+
+	pub(super) fn resume_deadline(&self) -> Option<Instant> {
+		match &*self.sequence() {
+			Sequence::Resuming(_, resuming) => Some(resuming.deadline),
+			Sequence::Unknown | Sequence::Applied(_) => None,
+		}
+	}
+
+	pub(super) fn resume_lapsed(&self) -> Resync {
+		let mut sequence = self.sequence();
+		if !matches!(*sequence, Sequence::Resuming(..)) {
+			return Resync::InStep;
+		}
+		*sequence = Sequence::Unknown;
+		Resync::Reread
+	}
+
+	fn resume_from(&self, applied: &Applied) -> (Resuming, String) {
+		let id = self.next_call.fetch_add(1, Ordering::Relaxed);
+		let token = uuid::Uuid::new_v4().to_string();
+		let args = json!({ "epoch": applied.epoch, "since": applied.seq, "token": token });
+		let frame = json!({ "id": id, "command": RESUME_COMMAND, "args": args }).to_string();
+		let resuming =
+			Resuming { token, deadline: Instant::now() + CALL_BOUND, held: BTreeMap::new() };
+		(resuming, frame)
 	}
 
 	pub(super) fn subscribed(&self) -> Option<broadcast::Receiver<Frame>> {
@@ -106,13 +193,97 @@ impl MemberLink {
 		answered
 	}
 
-	pub(super) fn received(&self, text: &str) {
+	pub(super) fn received(&self, text: &str) -> Resync {
 		let Ok(frame) = serde_json::from_str::<Value>(text) else {
-			return eprintln!("the member relay sent a frame that is not json");
+			eprintln!("the member relay sent a frame that is not json");
+			return Resync::InStep;
 		};
 		if let Some(event) = frame.get("event") {
-			return self.heard(event.to_string());
+			let epoch = frame.get("epoch").and_then(Value::as_str);
+			let seq = frame.get("seq").and_then(Value::as_u64);
+			let (Some(epoch), Some(seq)) = (epoch, seq) else {
+				self.heard(event.to_string());
+				return Resync::InStep;
+			};
+			let replay_token = frame.get("token").and_then(Value::as_str);
+			return self.sequenced(Stamped { event: event.to_string(), epoch, seq, replay_token });
 		}
+		if let Some(body) = frame.get("body").filter(|body| is_a_resume_answer(body)) {
+			return self.resume_answered(body);
+		}
+		self.answered(&frame);
+		Resync::InStep
+	}
+
+	fn sequenced(&self, stamped: Stamped<'_>) -> Resync {
+		let mut sequence = self.sequence();
+		if stamped.replay_token.is_some_and(|token| !sequence.awaits_the_replay_of(token)) {
+			return Resync::InStep;
+		}
+		match &mut *sequence {
+			Sequence::Applied(applied) if applied.epoch == stamped.epoch => {
+				if stamped.seq <= applied.seq {
+					return Resync::InStep;
+				}
+				if stamped.seq == applied.seq + 1 {
+					applied.seq = stamped.seq;
+					self.heard(stamped.event);
+					return Resync::InStep;
+				}
+				let (mut resuming, frame) = self.resume_from(applied);
+				resuming.held.insert(stamped.seq, stamped.event);
+				*sequence = Sequence::Resuming(applied.clone(), resuming);
+				Resync::Resume(frame)
+			}
+			Sequence::Resuming(applied, resuming) if applied.epoch == stamped.epoch => {
+				if stamped.seq > applied.seq {
+					resuming.held.insert(stamped.seq, stamped.event);
+				}
+				if resuming.held.len() <= HELD_FRAMES {
+					return Resync::InStep;
+				}
+				*sequence = Sequence::Unknown;
+				Resync::Reread
+			}
+			Sequence::Unknown => {
+				self.adopted(&mut sequence, stamped);
+				Resync::InStep
+			}
+			Sequence::Applied(_) | Sequence::Resuming(..) => {
+				self.adopted(&mut sequence, stamped);
+				Resync::Reread
+			}
+		}
+	}
+
+	fn adopted(&self, sequence: &mut Sequence, stamped: Stamped<'_>) {
+		*sequence =
+			Sequence::Applied(Applied { epoch: stamped.epoch.to_owned(), seq: stamped.seq });
+		self.heard(stamped.event);
+	}
+
+	fn resume_answered(&self, body: &Value) -> Resync {
+		let mut sequence = self.sequence();
+		let Sequence::Resuming(applied, resuming) = &mut *sequence else {
+			return Resync::InStep;
+		};
+		if body["token"] != resuming.token.as_str() {
+			return Resync::InStep;
+		}
+		if body["tooOld"] == true {
+			*sequence = Sequence::Unknown;
+			return Resync::Reread;
+		}
+		let mut caught_up = applied.clone();
+		for (seq, event) in std::mem::take(&mut resuming.held) {
+			caught_up.seq = seq;
+			self.heard(event);
+		}
+		*sequence = Sequence::Applied(caught_up);
+		Resync::InStep
+	}
+
+	fn answered(&self, frame: &Value) {
 		let (Some(id), Some(status)) = (
 			frame.get("id").and_then(Value::as_u64),
 			frame
@@ -142,6 +313,11 @@ impl MemberLink {
 			eprintln!("a relayed event found no listener left");
 		}
 	}
+}
+
+fn is_a_resume_answer(body: &Value) -> bool {
+	body.get("token").is_some_and(Value::is_string)
+		&& (body.get("replayed").is_some() || body.get("tooOld").is_some())
 }
 
 #[cfg(test)]
@@ -199,5 +375,180 @@ mod tests {
 			serde_json::from_str::<Value>(&frame).expect("json"),
 			json!({ "event": "a://b", "payload": 1 })
 		);
+	}
+
+	fn stamped(epoch: &str, seq: u64) -> String {
+		json!({ "event": { "event": "a://b", "payload": seq }, "epoch": epoch, "seq": seq })
+			.to_string()
+	}
+
+	fn replayed(epoch: &str, seq: u64, token: &Value) -> String {
+		let event = json!({ "event": "a://b", "payload": seq });
+		json!({ "event": event, "epoch": epoch, "seq": seq, "token": token }).to_string()
+	}
+
+	fn resume_args(resync: &Resync) -> Value {
+		let Resync::Resume(frame) = resync else {
+			panic!("a resume, not {resync:?}");
+		};
+		let frame: Value = serde_json::from_str(frame).expect("a json resume");
+		assert_eq!(frame["command"], RESUME_COMMAND);
+		frame["args"].clone()
+	}
+
+	fn resume_answer(args: &Value, body: Value) -> String {
+		let mut body = body;
+		body["token"] = args["token"].clone();
+		json!({ "id": 99, "status": 200, "body": body }).to_string()
+	}
+
+	fn delivered(heard: &mut broadcast::Receiver<Frame>) -> Vec<u64> {
+		let mut payloads = Vec::new();
+		while let Ok(frame) = heard.try_recv() {
+			let frame: Value = serde_json::from_str(&frame).expect("json");
+			assert_eq!(frame.get("epoch"), None);
+			assert_eq!(frame.get("seq"), None);
+			payloads.push(frame["payload"].as_u64().expect("a payload"));
+		}
+		payloads
+	}
+
+	fn an_open_link_applied_to(epoch: &str, seq: u64) -> MemberLink {
+		let link = MemberLink::new();
+		let (calls, _sent) = mpsc::channel(4);
+		assert_eq!(link.opened(calls), Resync::Reread);
+		assert_eq!(link.received(&stamped(epoch, seq)), Resync::InStep);
+		link
+	}
+
+	#[test]
+	fn a_reopened_link_resumes_from_its_last_applied_seq_and_delivers_the_replay_once_in_order() {
+		let link = an_open_link_applied_to("e-1", 3);
+		link.closed(Presence::Down);
+		let (calls, _sent) = mpsc::channel(4);
+
+		let resume = link.opened(calls);
+		let mut heard = link.subscribed().expect("an open session");
+		let args = resume_args(&resume);
+		let live = link.received(&stamped("e-1", 6));
+		let replayed = [5, 3, 4, 5].map(|seq| link.received(&replayed("e-1", seq, &args["token"])));
+		let answered = link.received(&resume_answer(&args, json!({ "replayed": 3 })));
+
+		assert_eq!((args["epoch"].clone(), args["since"].clone()), (json!("e-1"), json!(3)));
+		assert!(args["token"].is_string());
+		assert_eq!(
+			(live, replayed),
+			(Resync::InStep, [Resync::InStep, Resync::InStep, Resync::InStep, Resync::InStep])
+		);
+		assert_eq!(answered, Resync::InStep);
+		assert_eq!(delivered(&mut heard), vec![4, 5, 6]);
+		assert_eq!(link.resume_deadline(), None);
+	}
+
+	#[test]
+	fn a_too_old_answer_rereads_and_adopts_the_next_frame() {
+		let link = an_open_link_applied_to("e-1", 3);
+		link.closed(Presence::Down);
+		let (calls, _sent) = mpsc::channel(4);
+		let args = resume_args(&link.opened(calls));
+		let mut heard = link.subscribed().expect("an open session");
+
+		let answered = link.received(&resume_answer(&args, json!({ "tooOld": true })));
+		let next = [40, 41, 41].map(|seq| link.received(&stamped("e-1", seq)));
+
+		assert_eq!(answered, Resync::Reread);
+		assert_eq!(next, [Resync::InStep, Resync::InStep, Resync::InStep]);
+		assert_eq!(delivered(&mut heard), vec![40, 41]);
+	}
+
+	#[test]
+	fn a_gap_on_a_live_link_holds_frames_resumes_and_drops_a_duplicate() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+
+		let gap = link.received(&stamped("e-1", 3));
+		let args = resume_args(&gap);
+		let held = [4, 2].map(|seq| link.received(&stamped("e-1", seq)));
+		let delivered_before_the_answer = delivered(&mut heard);
+		link.received(&resume_answer(&args, json!({ "replayed": 1 })));
+		let after = [4, 5].map(|seq| link.received(&stamped("e-1", seq)));
+
+		assert_eq!(args["since"], 1);
+		assert_eq!(held, [Resync::InStep, Resync::InStep]);
+		assert!(delivered_before_the_answer.is_empty());
+		assert_eq!(after, [Resync::InStep, Resync::InStep]);
+		assert_eq!(delivered(&mut heard), vec![2, 3, 4, 5]);
+	}
+
+	#[test]
+	fn a_resume_answer_bearing_another_token_is_ignored() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let args = resume_args(&link.received(&stamped("e-1", 3)));
+
+		let foreign = link
+			.received(&resume_answer(&json!({ "token": "not-mine" }), json!({ "tooOld": true })));
+		link.received(&stamped("e-1", 2));
+		let delivered_on_the_foreign_answer = delivered(&mut heard);
+		link.received(&resume_answer(&args, json!({ "replayed": 1 })));
+
+		assert_eq!(foreign, Resync::InStep);
+		assert!(delivered_on_the_foreign_answer.is_empty());
+		assert_eq!(delivered(&mut heard), vec![2, 3]);
+	}
+
+	#[test]
+	fn a_frame_of_another_epoch_is_adopted_delivered_and_rereads() {
+		let link = an_open_link_applied_to("e-1", 7);
+		let mut heard = link.subscribed().expect("an open session");
+
+		let switched = link.received(&stamped("e-2", 1));
+		let next = link.received(&stamped("e-2", 2));
+
+		assert_eq!((switched, next), (Resync::Reread, Resync::InStep));
+		assert_eq!(delivered(&mut heard), vec![1, 2]);
+	}
+
+	#[test]
+	fn a_lapsed_resume_rereads_and_adopts_the_next_frame() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		resume_args(&link.received(&stamped("e-1", 3)));
+		assert!(link.resume_deadline().is_some());
+
+		let lapsed = link.resume_lapsed();
+		let next = link.received(&stamped("e-1", 9));
+
+		assert_eq!((lapsed, next), (Resync::Reread, Resync::InStep));
+		assert_eq!(link.resume_deadline(), None);
+		assert_eq!(delivered(&mut heard), vec![9]);
+	}
+
+	#[test]
+	fn a_link_that_awaits_no_replay_drops_one_meant_for_another_member_and_adopts_the_live_frame() {
+		let link = MemberLink::new();
+		let (calls, _sent) = mpsc::channel(4);
+		assert_eq!(link.opened(calls), Resync::Reread);
+		let mut heard = link.subscribed().expect("an open session");
+
+		let foreign = link.received(&replayed("e-1", 2, &json!("not-mine")));
+		let live = [5, 6].map(|seq| link.received(&stamped("e-1", seq)));
+
+		assert_eq!((foreign, live), (Resync::InStep, [Resync::InStep, Resync::InStep]));
+		assert_eq!(delivered(&mut heard), vec![5, 6]);
+	}
+
+	#[test]
+	fn a_resuming_link_holds_only_the_frames_replayed_for_its_own_token() {
+		let link = an_open_link_applied_to("e-1", 1);
+		let mut heard = link.subscribed().expect("an open session");
+		let args = resume_args(&link.received(&stamped("e-1", 4)));
+
+		let foreign = link.received(&replayed("e-1", 2, &json!("not-mine")));
+		let own = link.received(&replayed("e-1", 3, &args["token"]));
+		link.received(&resume_answer(&args, json!({ "replayed": 1 })));
+
+		assert_eq!((foreign, own), (Resync::InStep, Resync::InStep));
+		assert_eq!(delivered(&mut heard), vec![3, 4]);
 	}
 }

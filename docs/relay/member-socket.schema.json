@@ -2623,8 +2623,12 @@
       ]
     },
     "EventFrame": {
-      "description": "An event the host published, forwarded inside one more event key.",
+      "description": "An event the host published, forwarded inside one more event key. epoch and seq place it in the host's replay ring of the space.",
       "properties": {
+        "epoch": {
+          "description": "Drawn once per hosting run of the space, and again when the host loses events.",
+          "type": "string"
+        },
         "event": {
           "properties": {
             "event": {
@@ -2637,6 +2641,15 @@
             "payload"
           ],
           "type": "object"
+        },
+        "seq": {
+          "description": "1 for the first frame of the epoch, one more for each next frame.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "token": {
+          "description": "Present only on a frame replayed for a ResumeCallFrame: the token of that call. A member that did not send it drops the frame.",
+          "type": "string"
         }
       },
       "required": [
@@ -4845,6 +4858,101 @@
         "turnId",
         "routineTitle",
         "triggerSourceId"
+      ],
+      "type": "object"
+    },
+    "ResumeAnswerFrame": {
+      "description": "The answer to a ResumeCallFrame, sent after the replayed event frames. The relay hands it to every member: only the one that sent token takes it.",
+      "properties": {
+        "body": {
+          "oneOf": [
+            {
+              "properties": {
+                "replayed": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "token": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "token",
+                "replayed"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "token": {
+                  "type": "string"
+                },
+                "tooOld": {
+                  "const": true
+                }
+              },
+              "required": [
+                "token",
+                "tooOld"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
+        "status": {
+          "const": 200
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "body"
+      ],
+      "type": "object"
+    },
+    "ResumeCallFrame": {
+      "description": "A call frame asking the host to replay every frame of epoch above since. The host answers it itself.",
+      "properties": {
+        "args": {
+          "properties": {
+            "epoch": {
+              "type": "string"
+            },
+            "since": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "token": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "epoch",
+            "since",
+            "token"
+          ],
+          "type": "object"
+        },
+        "command": {
+          "const": "relay_resume"
+        },
+        "id": {
+          "type": [
+            "string",
+            "number"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "command",
+        "args"
       ],
       "type": "object"
     },

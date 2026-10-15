@@ -750,6 +750,62 @@ fn every_open_of_the_member_relay_announces_one_reconnection_and_none_while_down
 	});
 }
 
+fn a_stamped_event(seq: u64) -> Value {
+	let event = json!({ "event": "conversation://changed", "payload": { "seq": seq } });
+	json!({ "event": event, "epoch": "epoch-1", "seq": seq })
+}
+
+#[test]
+fn a_reopened_member_relay_resumes_delivers_the_replay_once_in_order_and_announces_nothing() {
+	run(async {
+		let mut harness = Harness::new(Some(BEARER)).await;
+		let id = harness.accepted().await;
+		let (connection, mut member) = connected(&mut harness, &id).await;
+		harness.heard_until(RECONNECTED_EVENT, 1).await;
+		send(&mut member, a_stamped_event(1)).await;
+
+		closed_offline(&harness, &id, &mut member, &connection).await;
+		let mut reopened = harness.member().await;
+		let resume = call(&mut reopened).await;
+		let events_url = format!(
+			"{}/api/events?token={}",
+			connection.host_url.replacen("http", "ws", 1),
+			connection.token
+		);
+		let (mut events, _) =
+			tokio_tungstenite::connect_async(events_url).await.expect("the events socket opens");
+		for seq in [3, 2, 4, 2] {
+			let mut replayed = a_stamped_event(seq);
+			replayed["token"] = resume["args"]["token"].clone();
+			send(&mut reopened, replayed).await;
+		}
+		let body = json!({ "token": resume["args"]["token"], "replayed": 3 });
+		send(&mut reopened, json!({ "id": resume["id"], "status": 200, "body": body })).await;
+		send(&mut reopened, a_stamped_event(5)).await;
+		let mut delivered = Vec::new();
+		for _ in 0..4 {
+			let event = tokio::time::timeout(PATIENCE, events.next())
+				.await
+				.expect("an event in time")
+				.expect("the socket is open")
+				.expect("a readable event");
+			let event: Value =
+				serde_json::from_str(event.to_text().expect("a text event")).expect("json");
+			delivered.push(event);
+		}
+
+		assert_eq!(resume["command"], "relay_resume");
+		assert_eq!(
+			(resume["args"]["epoch"].clone(), resume["args"]["since"].clone()),
+			(json!("epoch-1"), json!(1))
+		);
+		let expected: Vec<Value> =
+			(2..=5).map(|seq| a_stamped_event(seq)["event"].clone()).collect();
+		assert_eq!(delivered, expected);
+		assert_eq!(harness.heard(RECONNECTED_EVENT), vec![json!({ "id": id })]);
+	});
+}
+
 #[test]
 fn a_row_the_host_wrote_while_the_link_was_down_answers_a_call_made_on_the_reconnection() {
 	run(async {

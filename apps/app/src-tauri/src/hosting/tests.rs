@@ -25,6 +25,7 @@ use super::contract::{
 };
 use super::members::{invite, list, remove, withdraw};
 use super::reach;
+use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::{resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::session::restore;
@@ -561,7 +562,7 @@ async fn ended_on_its_own(relay: watch::Sender<bool>) {
 	tokio::time::timeout(PATIENCE, relay.closed()).await.expect("the relay ended on its own");
 }
 
-async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
+async fn next_json(member: &mut WebSocket) -> Value {
 	loop {
 		let frame = tokio::time::timeout(PATIENCE, member.recv())
 			.await
@@ -569,10 +570,37 @@ async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> V
 			.expect("the socket is open")
 			.expect("a readable frame");
 		if let Message::Text(text) = frame {
-			let frame: Value = serde_json::from_str(text.as_str()).expect("a json frame");
-			if wanted(&frame) {
-				return frame;
-			}
+			return serde_json::from_str(text.as_str()).expect("a json frame");
+		}
+	}
+}
+
+async fn next_stamped(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
+	loop {
+		let frame = next_json(member).await;
+		if wanted(&frame) {
+			return frame;
+		}
+	}
+}
+
+fn unstamped(mut frame: Value) -> Value {
+	if let Some(fields) = frame.as_object_mut().filter(|fields| fields.contains_key("event")) {
+		let epoch = fields.remove("epoch");
+		let seq = fields.remove("seq");
+		assert!(
+			epoch.as_ref().is_some_and(Value::is_string) && seq.as_ref().is_some_and(Value::is_u64),
+			"an event frame carries its epoch {epoch:?} and seq {seq:?}"
+		);
+	}
+	frame
+}
+
+async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
+	loop {
+		let frame = unstamped(next_json(member).await);
+		if wanted(&frame) {
+			return frame;
 		}
 	}
 }
@@ -1038,7 +1066,7 @@ fn the_first_member_announcement_of_an_online_space_crosses_the_relay() {
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
-		let first = next_text(&mut member, |_| true).await;
+		let first = members_heard(&mut member).await;
 
 		let announced = harness.heard_member_lists();
 		assert_eq!(announced.len(), 1);
@@ -1078,7 +1106,7 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 		harness.started().await;
 		let mut first = harness.member().await;
 		harness.reached(HostingState::Online).await;
-		members_heard(&mut first).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut first, is_a_members_change).await);
 
 		let (held, is_held) = tokio::sync::oneshot::channel();
 		let (release, released) = std::sync::mpsc::channel::<()>();
@@ -1116,13 +1144,160 @@ fn a_lagged_event_broadcast_closes_with_1013_and_reconnects() {
 				other => panic!("the relay took no close frame: {other:?}"),
 			}
 		};
-		let _second = harness.member().await;
+		let mut second = harness.member().await;
 		harness.reached(HostingState::Online).await;
 		let heard = harness.heard_until(|kinds| kinds.len() >= 4).await;
+		let (replayed, answer) = resumed_from(&mut second, &epoch, since).await;
 
 		assert_eq!(close.map(|close| close.code), Some(1013));
 		assert_eq!(heard, vec!["connecting", "online", "connecting", "online"]);
 		assert_eq!(harness.attempts(), 2);
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+	});
+}
+
+const RESUME_TOKEN: &str = "resume-token";
+
+fn is_a_members_change(frame: &Value) -> bool {
+	frame["event"]["event"] == MEMBERS_CHANGED_EVENT && frame["event"]["payload"]["n"].is_null()
+}
+
+fn stamp_of(frame: &Value) -> (String, u64) {
+	let epoch = frame["epoch"].as_str().expect("an epoch").to_owned();
+	(epoch, frame["seq"].as_u64().expect("a seq"))
+}
+
+fn numbered(harness: &Harness, n: usize) {
+	let payload = json!({ "spaceId": PERSONAL, "n": n });
+	events::emit(harness.app.handle(), Event::untyped(MEMBERS_CHANGED_EVENT), payload)
+		.expect("emitted");
+}
+
+async fn numbered_through(harness: &Harness, member: &mut WebSocket, n: usize) -> Value {
+	numbered(harness, n);
+	next_stamped(member, |frame| frame["event"]["payload"]["n"] == n).await
+}
+
+fn number_of(frame: &Value) -> Option<u64> {
+	frame["event"]["payload"]["n"].as_u64()
+}
+
+async fn resumed_from(member: &mut WebSocket, epoch: &str, since: u64) -> (Vec<Value>, Value) {
+	let args = json!({ "epoch": epoch, "since": since, "token": RESUME_TOKEN });
+	let call = json!({ "id": "resume", "command": RESUME_COMMAND, "args": args });
+	send(member, &call.to_string()).await;
+	let mut heard = Vec::new();
+	loop {
+		let frame = next_json(member).await;
+		if frame.get("event").is_some() {
+			heard.push(frame);
+		} else if frame["id"] == "resume" {
+			let count = frame["body"]["replayed"].as_u64().unwrap_or(0) as usize;
+			let replayed = heard.split_off(heard.len() - count);
+			return (replayed, frame);
+		}
+	}
+}
+
+fn assert_continues(replayed: &[Value], epoch: &str, since: u64) {
+	let stamps: Vec<(String, u64)> = replayed.iter().map(stamp_of).collect();
+	let expected: Vec<(String, u64)> =
+		(since + 1..).take(replayed.len()).map(|seq| (epoch.to_owned(), seq)).collect();
+	assert_eq!(stamps, expected);
+}
+
+#[test]
+fn a_resume_inside_the_ring_replays_every_missed_frame_once_in_seq_order() {
+	run(async {
+		let mut harness = Harness::signed_in("resume").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut member, is_a_members_change).await);
+		for n in 1..5 {
+			numbered(&harness, n);
+		}
+		let mut last = numbered_through(&harness, &mut member, 5).await;
+
+		let (replayed, answer) = resumed_from(&mut member, &epoch, since).await;
+
+		assert_continues(&replayed, &epoch, since);
+		assert!(replayed.iter().all(|frame| frame["token"] == RESUME_TOKEN));
+		last["token"] = json!(RESUME_TOKEN);
+		assert_eq!(replayed.last(), Some(&last));
+		assert_eq!(replayed.iter().filter_map(number_of).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+		assert_eq!(answer["status"], 200);
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "replayed": replayed.len() }));
+	});
+}
+
+#[test]
+fn a_resume_from_beyond_the_ring_bound_answers_too_old() {
+	run(async {
+		let mut harness = Harness::signed_in("resume-too-old").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut member, is_a_members_change).await);
+		for n in 1..=RING_FRAMES + 2 {
+			numbered_through(&harness, &mut member, n).await;
+		}
+
+		let (replayed, answer) = resumed_from(&mut member, &epoch, since).await;
+
+		assert!(replayed.is_empty());
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "tooOld": true }));
+	});
+}
+
+#[test]
+fn a_reopened_host_socket_first_sends_the_frames_recorded_while_it_was_down_in_seq_order() {
+	run(async {
+		let mut harness = Harness::signed_in("outage-pushed").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut member, is_a_members_change).await);
+
+		drop(member);
+		harness.reached(HostingState::Connecting).await;
+		numbered(&harness, 1);
+		numbered(&harness, 2);
+		let mut again = harness.member().await;
+		let mut pushed = Vec::new();
+		while pushed.last().and_then(number_of) != Some(2) {
+			pushed.push(next_stamped(&mut again, |frame| frame.get("event").is_some()).await);
+		}
+
+		assert_continues(&pushed, &epoch, since);
+		assert_eq!(pushed.iter().filter_map(number_of).collect::<Vec<_>>(), vec![1, 2]);
+	});
+}
+
+#[test]
+fn a_host_socket_reconnection_keeps_the_epoch_and_continues_the_seq() {
+	run(async {
+		let mut harness = Harness::signed_in("resume-reconnected").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (epoch, since) = stamp_of(&next_stamped(&mut member, is_a_members_change).await);
+
+		drop(member);
+		harness.reached(HostingState::Connecting).await;
+		numbered(&harness, 1);
+		let mut again = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let (replayed, answer) = resumed_from(&mut again, &epoch, since).await;
+		let live = numbered_through(&harness, &mut again, 2).await;
+
+		assert_continues(&replayed, &epoch, since);
+		assert_eq!(replayed.iter().filter_map(number_of).collect::<Vec<_>>(), vec![1]);
+		assert_eq!(answer["body"], json!({ "token": RESUME_TOKEN, "replayed": replayed.len() }));
+		let (live_epoch, live_seq) = stamp_of(&live);
+		assert_eq!(live_epoch, epoch);
+		assert!(live_seq > since + replayed.len() as u64, "{live_seq} follows the replay");
 	});
 }
 

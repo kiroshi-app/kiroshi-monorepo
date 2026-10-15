@@ -7,6 +7,7 @@ mod member_socket;
 mod members;
 mod reach;
 pub(crate) mod relay;
+pub(crate) mod replay;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};

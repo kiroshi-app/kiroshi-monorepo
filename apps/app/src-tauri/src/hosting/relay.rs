@@ -8,7 +8,6 @@ use reqwest::StatusCode;
 use tauri::http::{header, HeaderValue};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpStream;
-use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinSet;
 use tokio::time::{interval_at, sleep, timeout, Instant};
@@ -20,11 +19,10 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
-use super::reach;
+use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::{entered, members, Hosting};
 use crate::account::cloud::RegisterError;
 use crate::account::session::{self, AccountSession};
-use crate::agent::commands::subscribed_with_pending_questions;
 use crate::db;
 use crate::host_api::events::{FELL_BEHIND, SEND_PATIENCE};
 use crate::missions::github::installed_tls_provider;
@@ -98,24 +96,42 @@ pub(super) async fn hosted<R: Runtime>(
 	local: LocalApi,
 	mut stop: watch::Receiver<bool>,
 ) {
+	let ring = watch::channel(Ring::started()).0;
+	let space_id = hosted.space_id.clone();
+	tokio::select! {
+		() = attempts(&app, &mut hosted, &local, &mut stop, &ring) => return,
+		() = replay::recorded(&app, &space_id, &ring) => {}
+	}
+	let reason = "the local event stream closed".to_owned();
+	entered(&app, &space_id, hosted.instance_id.as_deref(), HostingState::Failed { reason });
+}
+
+async fn attempts<R: Runtime>(
+	app: &AppHandle<R>,
+	hosted: &mut Hosted,
+	local: &LocalApi,
+	stop: &mut watch::Receiver<bool>,
+	ring: &watch::Sender<Ring>,
+) {
 	let mut backoff = Backoff::first();
 	let mut replaced = None;
+	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
 		let next =
-			attempted(&app, &mut hosted, &local, &mut stop, &mut backoff, &mut replaced).await;
+			attempted(app, hosted, local, stop, &mut backoff, &mut replaced, &mut relaying).await;
 		let instance_id = hosted.instance_id.as_deref();
 		match next {
 			Next::Stopped => return,
 			Next::Reregister => continue,
-			Next::Settled(state) => return entered(&app, &hosted.space_id, instance_id, state),
+			Next::Settled(state) => return entered(app, &hosted.space_id, instance_id, state),
 			Next::Retry(reason) => {
 				eprintln!(
 					"hosting of space {} (instance {}) lost its relay: {reason}",
 					hosted.space_id,
 					instance_id.unwrap_or("none")
 				);
-				entered(&app, &hosted.space_id, instance_id, HostingState::Connecting);
-				if until_stopped(&mut stop, sleep(backoff.step())).await.is_none() {
+				entered(app, &hosted.space_id, instance_id, HostingState::Connecting);
+				if until_stopped(stop, sleep(backoff.step())).await.is_none() {
 					return;
 				}
 			}
@@ -130,6 +146,7 @@ async fn attempted<R: Runtime>(
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
 	replaced: &mut Option<String>,
+	relaying: &mut Relaying<'_>,
 ) -> Next {
 	let bearer = match app.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
@@ -158,7 +175,7 @@ async fn attempted<R: Runtime>(
 			entered(app, &hosted.space_id, Some(&instance_id), HostingState::Online);
 			let ids = Ids { space_id: &hosted.space_id, instance_id: &instance_id };
 			let ended = tokio::select! {
-				ended = online(app, *socket, local, stop, ids) => ended,
+				ended = online(app, *socket, local, stop, ids, relaying) => ended,
 				never = members::polled(app, &hosted.space_id, &instance_id) => match never {},
 			};
 			match ended {
@@ -261,17 +278,14 @@ async fn online<R: Runtime>(
 	local: &LocalApi,
 	stop: &mut watch::Receiver<bool>,
 	ids: Ids<'_>,
+	relaying: &mut Relaying<'_>,
 ) -> Ended {
 	let (mut sink, mut stream) = socket.split();
-	let (pending, mut heard) = subscribed_with_pending_questions(app);
-	let mut guest_events = reach::GuestEvents::new(ids.space_id);
-	for frame in pending {
-		if !guest_events.reach_the_guest(app, &frame).await {
-			continue;
-		}
-		if let Err(reason) = sent(&mut sink, Message::text(bridge::forwarded(&frame))).await {
-			return Ended::Dropped(reason);
-		}
+	let last_sent = &mut relaying.last_sent;
+	let mut recorded = relaying.ring.subscribe();
+	let unsent = recorded.borrow_and_update().rejoined(last_sent);
+	if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
+		return Ended::Dropped(reason);
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
@@ -295,6 +309,13 @@ async fn online<R: Runtime>(
 						continue;
 					}
 					Received::Answer(answer) => Message::text(answer),
+					Received::Resume(call) => {
+						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
+						if let Err(reason) = all_sent(&mut sink, resumed.frames).await {
+							return Ended::Dropped(reason);
+						}
+						Message::text(resumed.answer)
+					}
 					Received::Nothing => continue,
 					Received::Ended(ended) => return ended,
 				}
@@ -316,16 +337,20 @@ async fn online<R: Runtime>(
 					continue;
 				}
 			},
-			frame = heard.recv() => match frame {
-				Ok(frame) => {
-					if !guest_events.reach_the_guest(app, &frame).await {
-						continue;
-					}
-					Message::text(bridge::forwarded(&frame))
+			changed = recorded.changed() => {
+				if changed.is_err() {
+					return Ended::Dropped("the event recorder ended".to_owned());
 				}
-				Err(RecvError::Lagged(missed)) => return fell_behind(&mut sink, missed).await,
-				Err(RecvError::Closed) => return Ended::Dropped("the local event stream closed".to_owned()),
-			},
+				let followed = recorded.borrow_and_update().followed(last_sent);
+				let unsent = match followed {
+					Ok(unsent) => unsent,
+					Err(missed) => return fell_behind(&mut sink, missed).await,
+				};
+				if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
+					return Ended::Dropped(reason);
+				}
+				continue;
+			}
 			_ = pings.tick() => Message::Ping(Vec::new().into()),
 			_ = &mut silence => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
@@ -342,6 +367,7 @@ enum Received {
 	Call(bridge::MemberCall),
 	Avatar(bridge::AvatarCall),
 	Answer(String),
+	Resume(replay::ResumeCall),
 	Nothing,
 	Ended(Ended),
 }
@@ -351,6 +377,11 @@ fn received(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Receiv
 		Some(Ok(Message::Text(text))) => {
 			if let Some(answer) = bridge::shared_space_answer(text.as_str(), ids.space_id) {
 				return Received::Answer(answer);
+			}
+			match replay::resume_call(text.as_str()) {
+				Some(Ok(call)) => return Received::Resume(call),
+				Some(Err(refusal)) => return Received::Answer(refusal),
+				None => {}
 			}
 			match bridge::avatar_call(text.as_str()) {
 				Some(Ok(call)) => return Received::Avatar(call),
@@ -410,6 +441,25 @@ async fn fell_behind(sink: &mut Sink, missed: u64) -> Ended {
 		),
 	};
 	Ended::Dropped(reason)
+}
+
+async fn all_sent(sink: &mut Sink, frames: Vec<String>) -> Result<(), String> {
+	for frame in frames {
+		sent(sink, Message::text(frame)).await?;
+	}
+	Ok(())
+}
+
+async fn all_recorded_sent(
+	sink: &mut Sink,
+	unsent: Vec<Stamped>,
+	last_sent: &mut LastSent,
+) -> Result<(), String> {
+	for stamped in unsent {
+		sent(sink, Message::text(stamped.frame)).await?;
+		last_sent.seq = stamped.seq;
+	}
+	Ok(())
 }
 
 pub(crate) async fn sent(sink: &mut Sink, message: Message) -> Result<(), String> {
