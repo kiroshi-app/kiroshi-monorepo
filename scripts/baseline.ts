@@ -538,20 +538,12 @@ const requestedScopes = (argv: string[]): Scope[] => {
 	return chosen.length === 0 ? FULL_SCOPES : chosen
 }
 
-const SUBSET_SCOPES: Scope[] = ["changed"]
-
-const assertSubsetScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
-	const subsets = scopes.filter((scope) => SUBSET_SCOPES.includes(scope))
-	if (subsets.length === 0) return
-	if (
-		subsets.length > 1 ||
-		scopes.includes("vitest") ||
-		argv.includes("--prune")
-	) {
-		throw new Error(
-			`the ${subsets.join(" and ")} scope reads a subset of the vitest scope: run it alone, without vitest and without --prune`,
-		)
-	}
+const assertChangedScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
+	if (!scopes.includes("changed")) return
+	if (!scopes.includes("vitest") && !argv.includes("--prune")) return
+	throw new Error(
+		"the changed scope reads a subset of the vitest scope: run it without vitest and without --prune",
+	)
 }
 
 type Collected = { live: Live; suites: string[] }
@@ -617,7 +609,7 @@ const collect = (scopes: Scope[]): Collected => {
 
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
-	assertSubsetScopeChecksAlone(scopes, argv)
+	assertChangedScopeChecksAlone(scopes, argv)
 	const collected = collect(scopes)
 	if (argv.includes("--prune")) return prune(collected)
 	if (argv.includes("--update")) return update(collected.live)
