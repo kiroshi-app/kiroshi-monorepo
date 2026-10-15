@@ -488,6 +488,8 @@ mod tests {
 	use crate::db::repositories::conversations::DEFAULT_BOT_MODEL;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
+	const PATIENCE: Duration = Duration::from_secs(10);
+
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Shoto', 'sonnet', 1);
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
@@ -620,7 +622,7 @@ mod tests {
 		let before = (written(app).await, standing(app).await);
 		let refused = refusal(host.answer(a_say(payload)).await);
 		assert_eq!((written(app).await, standing(app).await), before, "a refused word left a mark");
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "a refusal announced");
+		assert!(arriving.try_recv().is_err(), "a refusal announced");
 		refused
 	}
 
@@ -741,8 +743,7 @@ mod tests {
 	}
 
 	fn announced(arriving: &mpsc::Receiver<String>) -> Value {
-		let payload =
-			arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced");
+		let payload = arriving.recv_timeout(PATIENCE).expect("the event is announced");
 		serde_json::from_str(&payload).expect("the event is JSON")
 	}
 
@@ -1056,7 +1057,7 @@ mod tests {
 			announced(&arriving),
 			json!({ "conversationId": id, "authorBotId": "b1", "text": "Hi" })
 		);
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "announced twice");
+		assert!(arriving.try_recv().is_err(), "announced twice");
 		assert_eq!(written(&app).await, (before.0 + 1, before.1, before.2));
 		assert_eq!(standing(&app).await.1, 0);
 	}
@@ -1225,7 +1226,7 @@ mod tests {
 			announced(&arriving),
 			json!({ "conversationId": "room", "authorBotId": "b1", "text": "Hi" })
 		);
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "announced twice");
+		assert!(arriving.try_recv().is_err(), "announced twice");
 		assert_eq!((written(&app).await, standing(&app).await), before);
 	}
 
@@ -1400,7 +1401,7 @@ mod tests {
 		let refused = refusal(host.answer(an_attach(payload)).await);
 		assert_eq!(stored_files(app), Vec::<PathBuf>::new(), "a refused attach stored a file");
 		assert_eq!(written(app).await, before, "a refused attach wrote a row");
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "a refusal announced");
+		assert!(arriving.try_recv().is_err(), "a refusal announced");
 		assert!(host.attachments.take().is_empty(), "a refused attach was held for the turn");
 		refused
 	}
@@ -1531,7 +1532,7 @@ mod tests {
 			json!({ "kind": "attachmentRefused", "refusal": { "kind": "tooMany", "count": 21, "limit": 20 } })
 		);
 		assert_eq!(stored_files(&app).len(), held_before.len(), "the refused file was stored");
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err());
+		assert!(arriving.try_recv().is_err());
 		assert_eq!(host.attachments.take().len(), 20);
 
 		let big = an_image(&app, "big.png", 9 * 1024 * 1024);

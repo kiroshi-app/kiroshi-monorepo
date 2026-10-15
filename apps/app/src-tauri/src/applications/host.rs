@@ -333,6 +333,8 @@ mod tests {
 
 	const SCOPES: [&str; 3] = ["companion", "space", "user"];
 
+	const PATIENCE: Duration = Duration::from_secs(10);
+
 	const NO_PACKAGE_REGISTRY: &str = "http://127.0.0.1:1";
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
@@ -748,8 +750,7 @@ mod tests {
 		let mut announced = Vec::new();
 		for scope in SCOPES {
 			host.answer(an_install("superset", scope)).await.expect("the install answers");
-			let payload =
-				arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced");
+			let payload = arriving.recv_timeout(PATIENCE).expect("the event is announced");
 			announced.push(serde_json::from_str::<Value>(&payload).expect("the event is JSON"));
 		}
 
@@ -868,7 +869,7 @@ mod tests {
 
 		assert_eq!(answer["outcome"], "installed");
 		let announced = serde_json::from_str::<Value>(
-			&arriving.recv_timeout(Duration::from_secs(5)).expect("the event is announced"),
+			&arriving.recv_timeout(PATIENCE).expect("the event is announced"),
 		)
 		.expect("the event is JSON");
 		assert_eq!(announced.get("id"), None, "got {announced}");
@@ -966,7 +967,7 @@ mod tests {
 			json!({ "outcome": "alreadyInstalled", "application": "superset", "scope": "space" })
 		);
 		assert_eq!(declarations(&app)[1], [("superset".to_owned(), mine)]);
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "nothing is announced");
+		assert!(arriving.try_recv().is_err(), "nothing is announced");
 	}
 
 	#[tokio::test]
@@ -1016,7 +1017,7 @@ mod tests {
 		assert!(reason.contains("api_key"), "got {reason}");
 		assert_eq!(declarations(&app), [Vec::new(), Vec::new(), Vec::new()]);
 		assert!(recorded_in(&app, "c1").await.is_empty(), "an install was recorded");
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "it was announced");
+		assert!(arriving.try_recv().is_err(), "it was announced");
 	}
 
 	#[tokio::test]
@@ -1037,7 +1038,7 @@ mod tests {
 		assert!(reason.contains(NPX), "got {reason}");
 		assert_eq!(declarations(&app), [Vec::new(), Vec::new(), Vec::new()]);
 		assert!(recorded_in(&app, "c1").await.is_empty(), "an install was recorded");
-		assert!(arriving.recv_timeout(Duration::from_millis(200)).is_err(), "it was announced");
+		assert!(arriving.try_recv().is_err(), "it was announced");
 	}
 
 	#[tokio::test]

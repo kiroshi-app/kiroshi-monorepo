@@ -1384,7 +1384,14 @@ mod tests {
 			.create_conversation(a_draft(&home_of(repository, &bot).await, &[&bot]))
 			.await
 			.expect("the room is opened");
-		tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+		let backdated = room.id.clone();
+		database
+			.call(move |connection| {
+				let sql = "UPDATE conversations SET updated_at = 1 WHERE id = ?1";
+				Ok(connection.execute(sql, [backdated])?)
+			})
+			.await
+			.expect("the room is backdated");
 
 		let edited = repository
 			.update_conversation(
@@ -1411,7 +1418,7 @@ mod tests {
 		assert_eq!(edited.title, "Shipping");
 		assert_eq!(edited.instructions, "stay on the release");
 		assert_eq!(edited.section_id, Some(section.id));
-		assert!(edited.updated_at > room.updated_at, "an edited room kept its update time");
+		assert!(edited.updated_at > 1, "an edited room kept its update time");
 		assert!(
 			format!("{refused:?}").contains("UnknownConversation"),
 			"an edit on a room the file does not hold was accepted: {refused:?}"
@@ -1486,7 +1493,6 @@ mod tests {
 			.create_bot(an_identity("Nyx"), Some(home.clone()), None)
 			.await
 			.expect("the bot");
-		tokio::time::sleep(std::time::Duration::from_millis(2)).await;
 		database
 			.spaces()
 			.add_bot(bot.id.clone(), joined.id.clone(), None)

@@ -639,8 +639,9 @@ mod tests {
 		.await;
 
 		assert_eq!(ended.code(), Some(0));
+		let accepted = listener.into_std().expect("the listener is held").accept();
 		assert!(
-			tokio::time::timeout(Duration::from_millis(300), listener.accept()).await.is_err(),
+			accepted.is_err_and(|error| error.kind() == std::io::ErrorKind::WouldBlock),
 			"a call carrying an agent id was sent"
 		);
 

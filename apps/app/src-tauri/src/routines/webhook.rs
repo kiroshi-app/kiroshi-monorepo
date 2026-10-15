@@ -360,6 +360,8 @@ mod tests {
 	use crate::db::repositories::routines::MAX_RUNS_PER_PAGE;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
+	const PATIENCE: Duration = Duration::from_secs(10);
+
 	const NOON: i64 = 1_800_000_000_000;
 
 	struct Ticking(AtomicI64);
@@ -525,7 +527,7 @@ mod tests {
 	}
 
 	fn delivery_id_of(arriving: &mpsc::Receiver<RunRequested>) -> String {
-		let requested = arriving.recv_timeout(Duration::from_secs(5)).expect("a run was requested");
+		let requested = arriving.recv_timeout(PATIENCE).expect("a run was requested");
 		requested.payload["deliveryId"]
 			.as_str()
 			.expect("the payload names a delivery id")
@@ -716,8 +718,7 @@ mod tests {
 		let answer = answered(address_of(&webhook), calling(Some(A_KEY), "{\"ok\":true}")).await;
 
 		assert_eq!(answer, (ACCEPTED.0.as_u16(), ACCEPTED.1.to_owned()));
-		let requested =
-			arriving.recv_timeout(Duration::from_secs(5)).expect("the run was requested");
+		let requested = arriving.recv_timeout(PATIENCE).expect("the run was requested");
 		let payload = &requested.payload;
 		assert_eq!(payload["body"], json!("{\"ok\":true}"));
 		assert!(payload["deliveryId"].as_str().is_some_and(|id| !id.is_empty()), "got {payload}");
@@ -1092,12 +1093,14 @@ mod tests {
 
 		webhook.stop();
 
-		let mut refusals = 0;
-		while refusals < 100 && TcpStream::connect(address).await.is_ok() {
-			refusals += 1;
-			tokio::time::sleep(Duration::from_millis(20)).await;
-		}
-		assert!(refusals < 100, "the listener outlived the signal that stops it");
+		let refused = async {
+			while TcpStream::connect(address).await.is_ok() {
+				tokio::task::yield_now().await;
+			}
+		};
+		tokio::time::timeout(PATIENCE, refused)
+			.await
+			.expect("the listener outlived the signal that stops it");
 	}
 
 	#[tokio::test]

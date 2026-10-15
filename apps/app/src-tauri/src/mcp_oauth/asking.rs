@@ -217,7 +217,6 @@ impl AuthorizationAnswers {
 mod tests {
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::sync::Arc;
-	use std::time::Instant;
 
 	use axum::http::{HeaderMap, Method, StatusCode as Answered, Uri};
 	use axum::Router;
@@ -227,6 +226,12 @@ mod tests {
 	use super::*;
 
 	const NOW: i64 = 1_800_000_000_000;
+
+	const PATIENCE: Duration = Duration::from_secs(10);
+
+	const HELD_UNDER_THE_BOUND: Duration = Duration::from_secs(6);
+
+	const SERVERS_ASKED_TOGETHER: usize = 4;
 
 	const NAMING_A_SERVER: &str = r#"{"authorization_servers":["https://auth.granola.test"]}"#;
 
@@ -238,11 +243,15 @@ mod tests {
 	struct Served {
 		asked: Asked,
 		root_names_a_server: bool,
+		arrivals: Arc<signal::Sender<usize>>,
+		released: Arc<signal::Sender<usize>>,
 	}
 
 	struct Stub {
 		base: String,
 		asked: Asked,
+		arrivals: Arc<signal::Sender<usize>>,
+		released: Arc<signal::Sender<usize>>,
 		_stop: signal::Sender<bool>,
 	}
 
@@ -258,7 +267,14 @@ mod tests {
 				.expect("the stub binds");
 			let address: SocketAddr = listener.local_addr().expect("the stub is named");
 			let (stop, halted) = signal::channel(false);
-			let served = Served { asked: asked.clone(), root_names_a_server };
+			let arrivals = Arc::new(signal::channel(0).0);
+			let released = Arc::new(signal::channel(usize::MAX).0);
+			let served = Served {
+				asked: asked.clone(),
+				root_names_a_server,
+				arrivals: arrivals.clone(),
+				released: released.clone(),
+			};
 			let router = Router::new().fallback(answer_named).with_state(served);
 			let mut halting = halted;
 			tokio::spawn(async move {
@@ -268,7 +284,7 @@ mod tests {
 					})
 					.await;
 			});
-			Stub { base: format!("http://{address}"), asked, _stop: stop }
+			Stub { base: format!("http://{address}"), asked, arrivals, released, _stop: stop }
 		}
 
 		fn at(&self, answer: &str) -> String {
@@ -282,6 +298,42 @@ mod tests {
 		async fn initializes(&self) -> usize {
 			self.asked().await.iter().filter(|(method, _)| method == Method::POST).count()
 		}
+
+		async fn reached(&self, name: &str, count: usize) {
+			let mut arrivals = self.arrivals.subscribe();
+			while named_in(&self.asked().await, name) < count {
+				tokio::time::timeout(PATIENCE, arrivals.changed())
+					.await
+					.expect("the stub was reached in time")
+					.expect("the stub records");
+			}
+		}
+
+		async fn initialized_past_the_bound(
+			&self,
+			answers: &AuthorizationAnswers,
+			urls: HashSet<String>,
+			now: i64,
+		) -> HashSet<String> {
+			let stalled = async {
+				self.reached("stalled", 2).await;
+				tokio::time::pause();
+			};
+			let (asking, ()) = tokio::join!(answers.asked_within(urls, now, PATIENCE), stalled);
+			tokio::time::resume();
+			asking
+		}
+	}
+
+	fn named_in(asked: &[(Method, String)], name: &str) -> usize {
+		asked.iter().filter(|(_, path)| path.contains(&format!("/{name}/"))).count()
+	}
+
+	fn initialized_together(asked: &[(Method, String)]) -> usize {
+		asked
+			.iter()
+			.filter(|(method, path)| method == Method::POST && path.contains("/slow-401/"))
+			.count()
 	}
 
 	async fn answer_named(
@@ -290,11 +342,24 @@ mod tests {
 		uri: Uri,
 	) -> (Answered, HeaderMap, String) {
 		let path = uri.path().to_owned();
-		served.asked.lock().await.push((method.clone(), path.clone()));
+		let rank = {
+			let mut asked = served.asked.lock().await;
+			asked.push((method.clone(), path.clone()));
+			named_in(&asked, "slowly")
+		};
+		served.arrivals.send_modify(|arrivals| *arrivals += 1);
 		let name = path.trim_start_matches(PROTECTED_RESOURCE_METADATA);
 		let name = name.trim_start_matches('/').split('/').next().unwrap_or_default().to_owned();
 		if name.starts_with("slowly") {
-			tokio::time::sleep(Duration::from_millis(120)).await;
+			let mut released = served.released.subscribe();
+			let held = released.wait_for(|released| *released >= rank).await;
+			held.map(drop).expect("the stub releases");
+		}
+		if method == Method::POST && name == "slow-401" {
+			let mut arrivals = served.arrivals.subscribe();
+			while initialized_together(&served.asked.lock().await) < SERVERS_ASKED_TOGETHER {
+				arrivals.changed().await.expect("the stub records");
+			}
 		}
 		if method == Method::GET {
 			return metadata_of(&served, &path, &name);
@@ -342,14 +407,8 @@ mod tests {
 			"request-timeout" => Answered::REQUEST_TIMEOUT,
 			"too-many" => Answered::TOO_MANY_REQUESTS,
 			"unavailable" => Answered::SERVICE_UNAVAILABLE,
-			"stalled" => {
-				tokio::time::sleep(Duration::from_millis(2000)).await;
-				Answered::UNAUTHORIZED
-			}
-			"slow-401" => {
-				tokio::time::sleep(Duration::from_millis(400)).await;
-				Answered::UNAUTHORIZED
-			}
+			"stalled" => std::future::pending().await,
+			"slow-401" => Answered::UNAUTHORIZED,
 			_ => Answered::OK,
 		};
 		(status, headers, String::new())
@@ -482,7 +541,7 @@ mod tests {
 		let answers = AuthorizationAnswers::default();
 		let stalled = urls(&stub, &["stalled"]);
 
-		let asking = answers.asked_within(stalled.clone(), NOW, Duration::from_millis(200)).await;
+		let asking = stub.initialized_past_the_bound(&answers, stalled.clone(), NOW).await;
 
 		assert!(asking.is_empty());
 		assert!(holds_no_answer_for(&answers, &stalled));
@@ -494,9 +553,9 @@ mod tests {
 		let answers = AuthorizationAnswers::default();
 		let stalled = urls(&stub, &["stalled"]);
 
-		answers.asked_within(stalled.clone(), NOW, Duration::from_millis(200)).await;
+		stub.initialized_past_the_bound(&answers, stalled.clone(), NOW).await;
 		let one_round = stub.asked().await.len();
-		let second = answers.asked_within(stalled, NOW + 1, Duration::from_millis(200)).await;
+		let second = answers.asked_within(stalled, NOW + 1, PATIENCE).await;
 
 		assert!(second.is_empty());
 		assert_eq!(one_round, 3);
@@ -507,20 +566,28 @@ mod tests {
 	async fn the_bound_is_taken_over_every_request_sent_for_one_url() {
 		let stub = Stub::serving().await;
 		let answers = AuthorizationAnswers::default();
+		stub.released.send_replace(0);
 
-		let asking =
-			answers.asked_within(urls(&stub, &["slowly"]), NOW, Duration::from_millis(200)).await;
+		let held_one_by_one = async {
+			for rank in 1..=2 {
+				stub.reached("slowly", rank).await;
+				tokio::time::pause();
+				tokio::time::advance(HELD_UNDER_THE_BOUND).await;
+				tokio::time::resume();
+				stub.released.send_replace(rank);
+			}
+		};
+		let (asking, ()) = tokio::join!(
+			answers.asked_within(urls(&stub, &["slowly"]), NOW, PATIENCE),
+			held_one_by_one
+		);
 
 		assert!(asking.is_empty());
 		assert!(holds_no_answer_for(&answers, &urls(&stub, &["slowly"])));
 
-		let unbounded = answers
-			.asked_within(
-				urls(&stub, &["slowly"]),
-				NOW + NO_ANSWER_HELD_MS,
-				Duration::from_millis(1000),
-			)
-			.await;
+		stub.released.send_replace(usize::MAX);
+		let unbounded =
+			answers.asked_within(urls(&stub, &["slowly"]), NOW + NO_ANSWER_HELD_MS, PATIENCE).await;
 
 		assert_eq!(unbounded, urls(&stub, &["slowly"]));
 	}
@@ -560,7 +627,7 @@ mod tests {
 			answers.answered(url, true, NOW - ANSWER_HELD_MS);
 		}
 
-		let asking = answers.asked_within(stalled.clone(), NOW, Duration::from_millis(200)).await;
+		let asking = stub.initialized_past_the_bound(&answers, stalled.clone(), NOW).await;
 
 		assert!(asking.is_empty());
 		assert!(holds_no_answer_for(&answers, &stalled));
@@ -569,13 +636,13 @@ mod tests {
 	#[tokio::test]
 	async fn several_servers_are_asked_at_the_same_time() {
 		let stub = Stub::serving().await;
-		let asked: HashSet<String> =
-			(0..4).map(|each| format!("{}?each={each}", stub.at("slow-401"))).collect();
-		let started = Instant::now();
+		let asked: HashSet<String> = (0..SERVERS_ASKED_TOGETHER)
+			.map(|each| format!("{}?each={each}", stub.at("slow-401")))
+			.collect();
 
-		let asking = AuthorizationAnswers::default().asking_authorization(asked.clone(), NOW).await;
+		let asking =
+			AuthorizationAnswers::default().asked_within(asked.clone(), NOW, PATIENCE).await;
 
 		assert_eq!(asking, asked);
-		assert!(started.elapsed() < Duration::from_millis(1200), "{:?}", started.elapsed());
 	}
 }

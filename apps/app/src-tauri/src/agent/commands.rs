@@ -1815,22 +1815,23 @@ mod tests {
 	#[test]
 	fn the_report_names_every_run_the_host_holds_in_the_order_they_started() {
 		let live = Live::<&str>::default();
+		held_since(&live, another_bots_run(), ONE_START);
+		let before = now_ms();
 		live.take_over(a_scope());
-		std::thread::sleep(std::time::Duration::from_millis(2));
-		live.take_over(another_bots_run());
+		let after = now_ms();
 
 		let held = live.report();
 
 		assert_eq!(
 			held.iter().map(|run| run.runtime_session_id.as_str()).collect::<Vec<_>>(),
-			["r1", "r9"],
+			["r9", "r1"],
 			"the runs were not reported in the order they started"
 		);
-		assert_eq!((held[0].bot_id.as_str(), held[0].conversation_id.as_str()), ("b1", "c1"));
-		assert_eq!((held[1].bot_id.as_str(), held[1].conversation_id.as_str()), ("b2", "c2"));
+		assert_eq!((held[0].bot_id.as_str(), held[0].conversation_id.as_str()), ("b2", "c2"));
+		assert_eq!((held[1].bot_id.as_str(), held[1].conversation_id.as_str()), ("b1", "c1"));
 		assert!(
-			held[0].started_at < held[1].started_at,
-			"a later run started before an earlier one"
+			(before..=after).contains(&held[1].started_at),
+			"a run took over without the moment it started"
 		);
 	}
 
