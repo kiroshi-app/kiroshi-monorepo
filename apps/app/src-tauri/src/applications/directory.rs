@@ -745,6 +745,7 @@ pub(crate) mod tests {
 	use axum::response::{IntoResponse, Response as Answered};
 	use axum::routing::get;
 	use axum::Router;
+	use futures_util::FutureExt;
 	use reqwest::StatusCode;
 	use serde_json::{json, to_value};
 	use tauri::test::mock_builder;
@@ -759,9 +760,9 @@ pub(crate) mod tests {
 
 	const NOON_INSTANT: &str = "2023-11-14T22:13:20.000Z";
 
-	const SHORT_BOUND: Duration = Duration::from_millis(100);
+	const PATIENCE: Duration = Duration::from_secs(10);
 
-	const AT_ONCE: Duration = Duration::from_secs(1);
+	const HELD_BACK_BOUND: Duration = Duration::from_secs(20);
 
 	struct Stopped(i64);
 
@@ -800,6 +801,7 @@ pub(crate) mod tests {
 		asked: Recorded<Vec<(String, String)>>,
 		queried: Recorded<Vec<String>>,
 		is_open: signal::Sender<bool>,
+		arrivals: signal::Sender<usize>,
 	}
 
 	impl Served {
@@ -809,6 +811,14 @@ pub(crate) mod tests {
 
 		fn release(&self) {
 			self.is_open.send_replace(true);
+		}
+
+		async fn reached(&self) {
+			let mut arrivals = self.arrivals.subscribe();
+			tokio::time::timeout(PATIENCE, arrivals.wait_for(|count| *count > 0))
+				.await
+				.expect("the stub was reached in time")
+				.expect("the stub records");
 		}
 
 		fn refuses_once(&self) -> bool {
@@ -867,6 +877,7 @@ pub(crate) mod tests {
 			asked: Recorded::new(Vec::new()),
 			queried: Recorded::new(Vec::new()),
 			is_open: signal::channel(true).0,
+			arrivals: signal::channel(0).0,
 		});
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the stub binds");
@@ -884,6 +895,7 @@ pub(crate) mod tests {
 		let asked = (tier.clone(), cursor.clone().unwrap_or_default());
 		held.asked.lock().expect("the stub records").push(asked);
 		held.queried.lock().expect("the stub records").push(query);
+		held.arrivals.send_modify(|count| *count += 1);
 		held.is_open.subscribe().wait_for(|is_open| *is_open).await.expect("the stub opens");
 		if held.refuses_once() {
 			return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -1011,13 +1023,16 @@ pub(crate) mod tests {
 		drop(directory.reading.lock().await);
 	}
 
-	fn bounded(
-		directory: Arc<Directory>,
-		first_read_wait: Duration,
-		refresh_bound: Duration,
-	) -> Arc<Directory> {
+	async fn held_past_its_bound(held: &Served, directory: &Directory) {
+		held.reached().await;
+		tokio::time::pause();
+		settled(directory).await;
+		tokio::time::resume();
+	}
+
+	fn bounded(directory: Arc<Directory>, refresh_bound: Duration) -> Arc<Directory> {
 		let directory = Arc::into_inner(directory).expect("the directory is held once");
-		Arc::new(Directory { first_read_wait, refresh_bound, ..directory })
+		Arc::new(Directory { refresh_bound, ..directory })
 	}
 
 	fn refreshes_heard(app: &AppOfItsOwn) -> tokio::sync::mpsc::UnboundedReceiver<String> {
@@ -1623,10 +1638,10 @@ pub(crate) mod tests {
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
 		planted(&directory, feed_stale(a_cache_read_at(NOON, &["seed"]).await));
 
-		let (searched, named, curated) = tokio::time::timeout(AT_ONCE, async {
+		let (searched, named, curated) = async {
 			tokio::join!(directory.searched(""), directory.named("two"), directory.curated())
-		})
-		.await
+		}
+		.now_or_never()
 		.expect("the reads answer while the refresh is held back");
 		held.release();
 		settled(&directory).await;
@@ -1646,8 +1661,9 @@ pub(crate) mod tests {
 		let directory = Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1)));
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
 
-		let answered = tokio::time::timeout(AT_ONCE, directory.searched(""))
-			.await
+		let answered = directory
+			.searched("")
+			.now_or_never()
 			.expect("the read answers while the refresh is held back")
 			.expect("the search answers");
 		let is_refreshing = directory.reading.try_lock().is_err();
@@ -1669,17 +1685,14 @@ pub(crate) mod tests {
 		let (base, held) = serving(vec![a_page(&["fresh"])]).await;
 		held.hold_back();
 		let clock = Moving::at(NOON + REREAD_MS + 1);
-		let directory = bounded(
-			Directory::timed(base, None, Box::new(clock.clone())),
-			FIRST_READ_WAIT,
-			SHORT_BOUND,
-		);
+		let directory =
+			bounded(Directory::timed(base, None, Box::new(clock.clone())), HELD_BACK_BOUND);
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
 
 		directory.searched("").await.expect("the search answers");
 		let passed_at = NOON + 2 * REREAD_MS;
 		clock.set(passed_at);
-		settled(&directory).await;
+		held_past_its_bound(&held, &directory).await;
 		let passed = directory.searched("").await.expect("the search answers");
 		clock.set(passed_at + RETRY_MS);
 		directory.searched("").await.expect("the search answers");
@@ -1695,7 +1708,7 @@ pub(crate) mod tests {
 		assert!(
 			matches!(
 				&passed.registry_failure,
-				Some(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within 100ms")
+				Some(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within 20s")
 			),
 			"got {:?}",
 			passed.registry_failure
@@ -1710,15 +1723,16 @@ pub(crate) mod tests {
 	async fn a_read_with_nothing_held_waits_for_the_first_read_no_longer_than_its_bound() {
 		let (base, held) = serving(vec![a_page(&["one"])]).await;
 		held.hold_back();
-		let directory = bounded(
-			Directory::timed(base, None, Box::new(Stopped(NOON))),
-			SHORT_BOUND,
-			REFRESH_BOUND,
-		);
+		let directory = Directory::timed(base, None, Box::new(Stopped(NOON)));
 
-		let waited = tokio::time::timeout(AT_ONCE, directory.searched(""))
-			.await
-			.expect("the read answers within its wait");
+		let reading = tokio::spawn({
+			let directory = directory.clone();
+			async move { directory.searched("").await }
+		});
+		held.reached().await;
+		tokio::time::pause();
+		let waited = reading.await.expect("the read ran");
+		tokio::time::resume();
 		held.release();
 		settled(&directory).await;
 		let landed = directory.searched("").await.expect("the search answers");
@@ -1726,7 +1740,7 @@ pub(crate) mod tests {
 		assert!(
 			matches!(
 				&waited,
-				Err(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("100ms")
+				Err(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within the 10s")
 			),
 			"got {waited:?}"
 		);
@@ -1759,12 +1773,16 @@ pub(crate) mod tests {
 
 		directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
-		let announced = tokio::time::timeout(AT_ONCE, heard.recv()).await.expect("announced");
+		let announced = tokio::time::timeout(PATIENCE, heard.recv()).await.expect("announced");
+		let landings = directory.landed.subscribe();
 		directory.searched("").await.expect("the search answers");
-		let again = tokio::time::timeout(SHORT_BOUND, heard.recv()).await;
+		settled(&directory).await;
 
 		assert_eq!(announced.as_deref(), Some("null"));
-		assert!(again.is_err(), "a read with nothing due was announced");
+		assert!(
+			!landings.has_changed().expect("the directory is held"),
+			"a read with nothing due was announced"
+		);
 	}
 
 	#[tokio::test]
@@ -1779,11 +1797,11 @@ pub(crate) mod tests {
 		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
-		let announced = tokio::time::timeout(AT_ONCE, heard.recv()).await.expect("announced");
+		let announced = tokio::time::timeout(PATIENCE, heard.recv()).await.expect("announced");
+		let landings = directory.landed.subscribe();
 		clock.set(NOON + REREAD_MS + 1 + RETRY_MS);
 		let reread = directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
-		let again = tokio::time::timeout(SHORT_BOUND, heard.recv()).await;
 
 		assert_eq!(announced.as_deref(), Some("null"));
 		assert_eq!(names(&reread.applications), ["one"]);
@@ -1793,7 +1811,10 @@ pub(crate) mod tests {
 			Some(ApplicationsError::RegistryRefused { status: 500 })
 		);
 		assert_eq!(held.reads().len(), 1);
-		assert!(again.is_err(), "a read within the retry minute was announced");
+		assert!(
+			!landings.has_changed().expect("the directory is held"),
+			"a read within the retry minute was announced"
+		);
 	}
 
 	#[tokio::test]
@@ -1804,17 +1825,17 @@ pub(crate) mod tests {
 		held.hold_back();
 		let directory = bounded(
 			Directory::timed(base, None, Box::new(Stopped(NOON + REREAD_MS + 1))),
-			FIRST_READ_WAIT,
-			SHORT_BOUND,
+			HELD_BACK_BOUND,
 		);
 		planted(&directory, a_cache_read_at(NOON, &["one"]).await);
 		tokio::spawn(announcing(app.handle().clone(), directory.landed.subscribe()));
 
 		directory.searched("").await.expect("the search answers");
-		let announced = tokio::time::timeout(AT_ONCE, heard.recv()).await.expect("announced");
+		held_past_its_bound(&held, &directory).await;
+		let announced = tokio::time::timeout(PATIENCE, heard.recv()).await.expect("announced");
+		let landings = directory.landed.subscribe();
 		let reread = directory.searched("").await.expect("the search answers");
 		settled(&directory).await;
-		let again = tokio::time::timeout(SHORT_BOUND, heard.recv()).await;
 		held.release();
 
 		assert_eq!(announced.as_deref(), Some("null"));
@@ -1823,13 +1844,16 @@ pub(crate) mod tests {
 		assert!(
 			matches!(
 				&reread.registry_failure,
-				Some(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within 100ms")
+				Some(ApplicationsError::RegistryUnreadable { detail }) if detail.contains("within 20s")
 			),
 			"got {:?}",
 			reread.registry_failure
 		);
 		assert_eq!(held.reads().len(), 1);
-		assert!(again.is_err(), "a read within the retry minute was announced");
+		assert!(
+			!landings.has_changed().expect("the directory is held"),
+			"a read within the retry minute was announced"
+		);
 	}
 
 	#[tokio::test]
