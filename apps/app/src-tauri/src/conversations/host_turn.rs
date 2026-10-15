@@ -627,11 +627,13 @@ mod tests {
 				.send(payload["conversation"]["activeTurn"].clone())
 				.expect("the test listens");
 		});
+		let (stop, stopped) = watch::channel(false);
 		let host_turn = HostTurn {
 			app: app.handle().clone(),
 			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
+			stopped,
 		};
 		let summoned: Vec<Summons> = [DEFAULT_BOT_ID, ada.as_str()]
 			.into_iter()
@@ -653,5 +655,6 @@ mod tests {
 
 		assert_eq!(released, Ok(true), "the deadline left the turn working");
 		assert_eq!(heard, vec![json!({ "startedAt": 1, "botIds": [ada] })]);
+		drop(stop);
 	}
 }
