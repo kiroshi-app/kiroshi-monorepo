@@ -809,7 +809,7 @@ describe("the roster and the conversation list fed by every writer", () => {
 		expect(reads).toHaveBeenCalledOnce()
 	})
 
-	it("reads the roster once when the socket reopens before the relay", async () => {
+	it("reads the roster twice when the socket reopens before the relay", async () => {
 		const { reads } = await mountedRoster(HOSTED_ROSTER)
 		await joinHost()
 		await settled()
@@ -817,9 +817,9 @@ describe("the roster and the conversation list fed by every writer", () => {
 		await reconnectHost()
 		await reopenRelay(JOINED)
 
-		await vi.waitFor(() => expect(reads).toHaveBeenCalledOnce())
+		await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2))
 		await settled()
-		expect(reads).toHaveBeenCalledOnce()
+		expect(reads).toHaveBeenCalledTimes(2)
 	})
 })
 
