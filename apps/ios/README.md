@@ -191,6 +191,18 @@ Conversations and Missions read their lists 30 rows at a time: page one on openi
 
 A Conversation thread opens on its last 50 messages; reaching the top reads the 50 before the oldest one held (`beforeSeq`), until `hasMore` is `false`, with a `ProgressView` at the top meanwhile. The message at the top of the screen stays where it is when the older page lands: SwiftUI doesn't keep a `LazyVStack`'s position on a prepend on iOS 27, so the thread scrolls back to the message `ThreadAnchor` picks. `ThreadAnchorTests` cover that choice; no UI test measures the scroll itself.
 
+## Pinned conversations
+
+The conversations pinned on the Mac sit in a strip of avatars above the Conversations list (artboard D of page "Épinglés, explorations"), in the host's pin order: the `pinned` rows of `conversation_page`, plus each companion `conversation_bots` gives a `pinPosition` whose own conversation isn't on the page. The list below holds the rest, by last activity. A tap on an avatar opens its conversation; a long press offers Unpin (a `Menu` with a primary action, since a `.contextMenu` inside a `List` row belongs to the whole row). A swipe right on a row offers Pin, the system swipe action. A Mac without `conversation_page` pins nothing and offers no swipe.
+
+`roster_pin` replaces the Space's whole pin list (sections, companions, conversations), so pin and unpin first read it back from the host (`section_list`, `conversation_bots`, the pinned rows of `conversation_page`), rebuild it as the desktop does (`RosterPins`, after `roster-pins.ts`), append or remove the one row, keep the order, send it, then read page one again. Nothing moves before the host answers; a refusal shows `Couldn’t pin Atlas.` with the gesture to try again.
+
+`pinned` opens on Juniper, Release 0.42 and Otto pinned; the scripted host keeps the list it's sent and refuses one that repeats it, so a second `roster_pin` for the same swipe shows the refusal. `pin-refused` refuses every pin. `PinnedStripTests` checks the strip's order and the list, audits it, opens Release 0.42 from the strip, unpins Otto, and pins Atlas with a swipe:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture pinned
+```
+
 ## Companion avatars
 
 `CompanionAvatar` draws what the desktop draws: `CompanionAvatarEngine` runs `Kiroshi/Resources/companion-avatar.js` (built from `packages/ui` by `bun run avatar:build`, never edited by hand) in JavaScriptCore, caches the idle drawing per name, tint and theme, and computes a frame at 30 fps while the companion works, idle under Reduce Motion. A companion with a picture shows it once `relay_avatar` answers; until then, or when it fails, the drawn avatar stays. `CompanionAvatarTests` replays every case of `packages/ui/src/components/companion-avatar.fixture.jsonl` from the repo, so `bun run ios:test` fails when the bundle and the fixture part ways. In the Conversations fixtures, Shoto has a picture and Otto no tint.
