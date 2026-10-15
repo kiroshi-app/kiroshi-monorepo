@@ -16,6 +16,13 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
     static let hiveCounters: Set<String> = ["+3"]
 
+    static let noCompanionsTitle = "No companions yet"
+    static let noCompanionsDescription =
+        "Add one to Studio on the computer where Kiroshi runs. It shows up here."
+    static let readableTextWhoseSizeContentUnavailableViewCaps: Set<String> = [
+        noCompanionsTitle, noCompanionsDescription,
+    ]
+
     override func setUp() async throws {
         continueAfterFailure = true
     }
@@ -24,7 +31,9 @@ final class ConversationsAccessibilityTests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
     }
 
-    func auditTheHome(_ app: XCUIApplication) throws {
+    func auditTheHome(
+        _ app: XCUIApplication, acceptingCappedSizeOf readableText: Set<String> = []
+    ) throws {
         let tabBar = app.tabBars.firstMatch.frame
         let navigationBar = app.navigationBars.firstMatch.frame
         try audit(app) { issue in
@@ -35,7 +44,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
             return switch issue.auditType {
             case .textClipped: Self.truncatedPreviews.contains(label)
             case .contrast: isUnderTheTabBar
-            case .dynamicType: isInTheNavigationBar
+            case .dynamicType: isInTheNavigationBar || readableText.contains(label)
             default: false
             }
         }
@@ -65,11 +74,11 @@ final class ConversationsAccessibilityTests: XCTestCase {
 
     func testNoCompanionSaysWhereToAddOneAndPassesTheAudit() throws {
         let app = launch("2.3")
-        XCTAssertTrue(app.staticTexts["No companions yet"].waitForExistence(timeout: 10))
-        XCTAssertTrue(
-            app.staticTexts["Add one to Studio on your computer. It shows up here."].exists)
+        XCTAssertTrue(app.staticTexts[Self.noCompanionsTitle].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts[Self.noCompanionsDescription].exists)
 
-        try auditTheHome(app)
+        try auditTheHome(
+            app, acceptingCappedSizeOf: Self.readableTextWhoseSizeContentUnavailableViewCaps)
     }
 
     func testLoadingShowsPlaceholderRowsAndPassesTheAudit() throws {
