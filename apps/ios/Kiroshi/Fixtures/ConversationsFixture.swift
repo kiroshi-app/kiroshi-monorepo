@@ -388,7 +388,7 @@
                 script.refusesThread = true
             case .slowThread:
                 script.messages[juniper.id] = longThread
-                script.threadAnswersAfter = .seconds(2)
+                script.threadAnswersAfter = .seconds(5)
             case .longReply:
                 script.messages[juniper.id] = longThread
                 script.replyParagraphs = longReplyParagraphs
