@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test"
 import { readFileSync } from "node:fs"
 
 import {
+	CHANGED_UNIT_TESTS,
 	FAST_STEP_NAMES,
 	fastSteps,
 	GATE,
@@ -78,11 +79,21 @@ describe("the gate", () => {
 })
 
 describe("ci:fast", () => {
-	it("names only steps the full gate runs, with the same command", () => {
-		const gate = GROUP_ORDER.flatMap((group) => GATE[group])
+	const gate = GROUP_ORDER.flatMap((group) => GATE[group])
 
-		expect(fastSteps().map((step) => step.name)).toEqual(FAST_STEP_NAMES)
-		for (const step of fastSteps()) expect(gate).toContainEqual(step)
+	it("runs the named gate steps with the same command, then the changed unit tests", () => {
+		const steps = fastSteps()
+
+		expect(steps.map((step) => step.name)).toEqual([
+			...FAST_STEP_NAMES,
+			CHANGED_UNIT_TESTS.name,
+		])
+		for (const step of steps.slice(0, -1)) expect(gate).toContainEqual(step)
+	})
+
+	it("leaves the full unit set and the perf set to the gate", () => {
+		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
+		for (const step of GATE.vitest) expect(fastSteps()).not.toContainEqual(step)
 	})
 })
 
