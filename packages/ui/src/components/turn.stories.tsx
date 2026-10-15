@@ -7,6 +7,7 @@ import {
 	expectCompanionPictureShape,
 	glyphIn,
 	isInBrowserRunner,
+	lineHeightOf,
 	realPointer,
 	shown,
 	slotIn,
@@ -1343,7 +1344,9 @@ export const ReportedByLongTitle = meta.story({
 		if (!icon) throw new globalThis.Error("The line drew no trigger icon")
 
 		await expect(title.scrollWidth).toBeGreaterThan(title.clientWidth)
-		await expect(title.getBoundingClientRect().height).toBeLessThan(24)
+		await expect(title.getBoundingClientRect().height).toBeLessThanOrEqual(
+			lineHeightOf(title),
+		)
 		await expect(icon.getBoundingClientRect().width).toBeCloseTo(12, 0)
 	},
 })
@@ -1414,7 +1417,9 @@ export const FootnotedSqueezed = meta.story({
 		const bubble = slotIn(canvasElement, "message-bubble")
 		const column = slotIn(canvasElement, "message").parentElement as HTMLElement
 
-		await expect(note.getBoundingClientRect().height).toBeGreaterThan(20)
+		await expect(note.getBoundingClientRect().height).toBeGreaterThan(
+			lineHeightOf(note),
+		)
 		await expect(note.getBoundingClientRect().left).toBeCloseTo(
 			bubble.getBoundingClientRect().left,
 			0,
@@ -2100,14 +2105,17 @@ export const ReaderUnbrokenSqueezed = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const article = slotIn(canvasElement, "message")
-		const bubble = slotIn(
-			article,
-			"message-bubble-content",
-		).getBoundingClientRect()
+		const content = slotIn(article, "message-bubble-content")
+		const bubble = content.getBoundingClientRect()
+		const { paddingTop, paddingBottom } = getComputedStyle(content)
+		const oneLineHeight =
+			lineHeightOf(content) +
+			Number.parseFloat(paddingTop) +
+			Number.parseFloat(paddingBottom)
 		const column = article.parentElement as HTMLElement
 
 		await expectReaderRow(article)
-		await expect(bubble.height).toBeGreaterThan(44)
+		await expect(bubble.height).toBeGreaterThan(oneLineHeight)
 		await expect(bubble.left).toBeGreaterThanOrEqual(
 			column.getBoundingClientRect().left,
 		)

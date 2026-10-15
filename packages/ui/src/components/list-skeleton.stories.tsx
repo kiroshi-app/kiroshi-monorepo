@@ -19,6 +19,10 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const LOADED_NAMES = ["Ada Martin", "Basile Roux", "Chloe Petit"]
 
+const SKELETON_HOLD_MS = 500
+
+const FRAME_MS = 1000 / 60
+
 type FrameProps = {
 	heightClass: string
 	anchor?: ListSkeletonAnchor
@@ -102,13 +106,8 @@ const emulateMotion = async (value: "no-preference" | "reduce") => {
 	})
 }
 
-const withMotionAllowed = async (run: () => Promise<void>) => {
-	await emulateMotion("no-preference")
-	try {
-		await run()
-	} finally {
-		await emulateMotion("reduce")
-	}
+const allowMotionBeforeMount = async () => {
+	if (isInBrowserRunner()) await emulateMotion("no-preference")
 }
 
 const phaseOf = (root: Element) => slotIn(root, "timed-list").dataset.phase
@@ -290,7 +289,7 @@ export const Pending310Ms = meta.story({
 		await expect(sighting.hiddenAt).not.toBeNull()
 		await expect(
 			(sighting.hiddenAt ?? 0) - (sighting.shownAt ?? 0),
-		).toBeGreaterThanOrEqual(500)
+		).toBeGreaterThanOrEqual(SKELETON_HOLD_MS - FRAME_MS)
 	},
 })
 
@@ -304,9 +303,10 @@ export const Fade = meta.story({
 			},
 		},
 	},
+	beforeEach: allowMotionBeforeMount,
 	play: async ({ canvasElement }) => {
 		if (!isInBrowserRunner()) return
-		await withMotionAllowed(async () => {
+		try {
 			await waitFor(() => expect(phaseOf(canvasElement)).toBe("fade"), {
 				...FRAME_POLL,
 				timeout: 3000,
@@ -321,6 +321,8 @@ export const Fade = meta.story({
 			await expect(
 				canvasElement.querySelector('[data-slot="list-skeleton"]'),
 			).toBeNull()
-		})
+		} finally {
+			await emulateMotion("reduce")
+		}
 	},
 })

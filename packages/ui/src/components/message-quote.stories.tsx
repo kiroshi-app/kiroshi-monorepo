@@ -1,6 +1,7 @@
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
+import { lineHeightOf } from "@workspace/storybook/story-utils"
 import {
 	MessageBubble,
 	MessageBubbleContent,
@@ -107,7 +108,9 @@ export const LongContent = meta.story({
 		const excerpt = canvas.getByText(EXCERPT)
 
 		await expect(excerpt.scrollWidth).toBeGreaterThan(excerpt.clientWidth)
-		await expect(excerpt.getBoundingClientRect().height).toBeLessThanOrEqual(16)
+		await expect(excerpt.getBoundingClientRect().height).toBeLessThanOrEqual(
+			lineHeightOf(excerpt),
+		)
 	},
 })
 

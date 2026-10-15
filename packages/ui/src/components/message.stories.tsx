@@ -2,7 +2,10 @@ import type { ReactNode } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { listExhaustively } from "@workspace/storybook/story-utils"
+import {
+	lineHeightOf,
+	listExhaustively,
+} from "@workspace/storybook/story-utils"
 import {
 	Message,
 	MessageAuthor,
@@ -250,6 +253,8 @@ export const AuthorWithLongTitle = meta.story({
 
 		await expect(title).toHaveTextContent(LONG_TITLE)
 		await expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth)
-		await expect(header.getBoundingClientRect().height).toBeLessThan(24)
+		await expect(header.getBoundingClientRect().height).toBeLessThanOrEqual(
+			lineHeightOf(header.firstElementChild as Element),
+		)
 	},
 })

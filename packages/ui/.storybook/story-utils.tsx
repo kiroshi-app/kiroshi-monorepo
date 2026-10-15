@@ -173,6 +173,9 @@ export const widthInRems = (element: HTMLElement) =>
 	element.getBoundingClientRect().width /
 	Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
 
+export const lineHeightOf = (element: Element) =>
+	Number.parseFloat(getComputedStyle(element).lineHeight)
+
 export const tokenLengthOf = (token: string) => {
 	const probe = document.createElement("div")
 	probe.style.width = `var(${token})`
