@@ -65,7 +65,7 @@ import {
 	joinedRowIdOf,
 } from "../spaces/joined-spaces-controller"
 
-export type SpaceOnHost = { hostId: string | null; spaceId: string | null }
+type SpaceOnHost = { hostId: string | null; spaceId: string | null }
 
 export type BotPreviews = Record<string, LastWord | undefined>
 
