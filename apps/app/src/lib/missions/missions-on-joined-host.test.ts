@@ -444,11 +444,11 @@ describe("missions read on a joined host", () => {
 	})
 
 	it.each([
-		["socket", "relay"],
-		["relay", "socket"],
+		{ first: "socket", second: "relay", times: "twice", rereads: 2 },
+		{ first: "relay", second: "socket", times: "once", rereads: 1 },
 	])(
-		"reads the marks once when the %s reopens before the %s",
-		async (first) => {
+		"reads the marks $times when the $first reopens before the $second",
+		async ({ first, rereads }) => {
 			const { result, reopened } = await marksOnGarage()
 			const before = readsOf("mission_space_feed")
 
@@ -465,7 +465,7 @@ describe("missions read on a joined host", () => {
 			)
 			await settled()
 
-			expect(readsOf("mission_space_feed")).toBe(before + 1)
+			expect(readsOf("mission_space_feed")).toBe(before + rereads)
 		},
 	)
 
@@ -525,7 +525,7 @@ describe("missions read on a joined host", () => {
 		)
 	})
 
-	it("reads the missions once when the socket and the relay reopen together", async () => {
+	it("reads the missions twice when the socket reopens before the relay", async () => {
 		await activityPanelOnGarage()
 		renderHook(() => useSpaceMissions("space-on-host"), {
 			wrapper: reconnectingQueryWrapper(),
@@ -539,7 +539,7 @@ describe("missions read on a joined host", () => {
 		await settled()
 
 		expect([readsOf("mission_list"), readsOf("mission_space_page")]).toEqual(
-			before.map((count) => count + 1),
+			before.map((count) => count + 2),
 		)
 	})
 

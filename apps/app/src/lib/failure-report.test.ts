@@ -60,6 +60,7 @@ const memberHostAnswering = (fetch: typeof globalThis.fetch) =>
 		}),
 		onDown: () => undefined,
 		onUp: () => undefined,
+		onReopened: () => undefined,
 		onRefused: raiseRefusalNotice,
 	})
 

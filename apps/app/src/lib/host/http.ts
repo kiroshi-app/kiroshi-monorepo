@@ -35,6 +35,7 @@ export type HttpHostOptions = HostConnection & {
 	openSocket: (url: string) => HostSocket
 	onDown: () => void
 	onUp: () => void
+	onReopened: () => void
 	onRefused: (refusal: HostRefusal) => void
 }
 
@@ -208,6 +209,7 @@ export const createHttpHost = ({
 	openSocket,
 	onDown,
 	onUp,
+	onReopened,
 	onRefused,
 }: HttpHostOptions): HttpHost => {
 	const listeners = new Map<string, Set<EventCallback<unknown>>>()
@@ -215,6 +217,7 @@ export const createHttpHost = ({
 	let failedAttempts = 0
 	let presence: Presence = "unknown"
 	let isClosed = false
+	let hasDropped = false
 
 	const refuse = (command: string, reason: unknown, status?: number): never => {
 		const message = messageOf(reason)
@@ -309,12 +312,18 @@ export const createHttpHost = ({
 
 	const connect = () => {
 		const opened = openSocket(eventsUrlOf({ host, token }))
-		opened.onopen = markUp
+		opened.onopen = () => {
+			if (hasDropped) {
+				onReopened()
+			}
+			markUp()
+		}
 		opened.onmessage = (message) => deliver(message.data)
 		opened.onclose = () => {
 			if (isClosed) {
 				return
 			}
+			hasDropped = true
 			markDown()
 			setTimeout(connect, reconnectDelay(failedAttempts))
 			failedAttempts += 1
