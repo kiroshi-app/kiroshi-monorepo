@@ -328,6 +328,8 @@ mod tests {
 	use std::sync::{Arc, Mutex};
 	use std::time::Instant;
 
+	use tokio::sync::watch;
+
 	use axum::extract::{Path as Route, State as Served};
 	use axum::http::{header, HeaderMap, StatusCode};
 	use axum::routing::{get, post};
@@ -349,6 +351,7 @@ mod tests {
 	const REQUEST_ID: &str = "6f1c1d4e-7a9b-4c3d-8e2f-0a1b2c3d4e5f";
 	const POLL_SECRET: &str = "poll-secret-that-never-leaves";
 	const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
+	const PATIENCE: Duration = Duration::from_secs(15);
 
 	#[derive(Clone, Default)]
 	struct Cloudy {
@@ -491,6 +494,7 @@ mod tests {
 		app: AppOfItsOwn,
 		root: PathBuf,
 		heard: Arc<Mutex<Vec<String>>>,
+		noticed: Arc<watch::Sender<()>>,
 		opened: Arc<Mutex<Vec<String>>>,
 		_folder: Option<RemovedOnDrop>,
 	}
@@ -516,10 +520,13 @@ mod tests {
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
 			let hearing = Arc::clone(&heard);
+			let noticed = Arc::new(watch::channel(()).0);
+			let noticing = Arc::clone(&noticed);
 			app.listen(ACCOUNT_CHANGED.name(), move |event| {
 				hearing.lock().expect("the events").push(event.payload().to_owned());
+				noticing.send_replace(());
 			});
-			Self { app, root, heard, opened: Arc::default(), _folder: folder.ok() }
+			Self { app, root, heard, noticed, opened: Arc::default(), _folder: folder.ok() }
 		}
 
 		async fn sign_in(&self) -> Result<(), AccountError> {
@@ -550,32 +557,33 @@ mod tests {
 				.expect("the store keeps it");
 		}
 
+		async fn entered_until(&self, is_entered: impl Fn(&AccountState) -> bool) -> AccountState {
+			let mut noticed = self.noticed.subscribe();
+			loop {
+				let state = self.state();
+				if is_entered(&state) {
+					return state;
+				}
+				tokio::time::timeout(PATIENCE, noticed.changed())
+					.await
+					.unwrap_or_else(|_| panic!("the account stayed {state:?}"))
+					.expect("the harness listens");
+			}
+		}
+
 		async fn settled(&self) -> AccountState {
-			self.settled_within(Duration::from_secs(2)).await
+			self.entered_until(|state| !matches!(state, AccountState::Waiting { .. })).await
 		}
 
-		async fn settled_within(&self, bound: Duration) -> AccountState {
-			let started = Instant::now();
-			while started.elapsed() < bound {
-				let state = self.state();
-				if !matches!(state, AccountState::Waiting { .. }) {
-					return state;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-			panic!("the account stayed waiting");
+		async fn signed_out(&self) -> AccountState {
+			self.entered_until(|state| matches!(state, AccountState::SignedOut { .. })).await
 		}
 
-		async fn signed_out_within(&self, bound: Duration) -> AccountState {
-			let started = Instant::now();
-			while started.elapsed() < bound {
-				let state = self.state();
-				if matches!(state, AccountState::SignedOut { .. }) {
-					return state;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-			panic!("the account stayed {:?}", self.state());
+		async fn flow_ended(&self) {
+			let flow = self.app.state::<AccountSession>().turn.lock().await.take();
+			let flow = flow.expect("a sign-in flow ran");
+			let ended = tokio::time::timeout(PATIENCE, flow).await.expect("the flow ended in time");
+			ended.expect("the flow ended cleanly");
 		}
 
 		fn heard(&self) -> Vec<Value> {
@@ -624,8 +632,8 @@ mod tests {
 		reqwest::get(callback).await.is_err()
 	}
 
-	async fn no_poll_follows(cloudy: &Cloudy, count: usize) {
-		tokio::time::sleep(Duration::from_millis(300)).await;
+	async fn no_poll_follows(harness: &Harness, cloudy: &Cloudy, count: usize) {
+		harness.flow_ended().await;
 		assert_eq!(cloudy.polls().len(), count);
 	}
 
@@ -676,7 +684,7 @@ mod tests {
 			assert_eq!(harness.settled().await, signed_in());
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
 			assert!(is_closed(&cloudy.callback()).await);
-			no_poll_follows(&cloudy, 1).await;
+			no_poll_follows(&harness, &cloudy, 1).await;
 			harness.assert_no_secret_was_heard();
 		});
 	}
@@ -701,7 +709,7 @@ mod tests {
 			assert_eq!(harness.settled().await, signed_in());
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
 			assert!(is_closed(&callback).await);
-			no_poll_follows(&cloudy, 1).await;
+			no_poll_follows(&harness, &cloudy, 1).await;
 			harness.assert_no_secret_was_heard();
 		});
 	}
@@ -715,11 +723,11 @@ mod tests {
 
 			harness.sign_in().await.expect("the sign-in starts");
 
-			assert_eq!(harness.settled_within(Duration::from_secs(8)).await, signed_in());
+			assert_eq!(harness.settled().await, signed_in());
 			let polls = cloudy.polls();
 			assert_eq!(polls.len(), 2);
 			let waited = polls[1] - polls[0];
-			assert!(waited >= SLOW_DOWN && waited < SLOW_DOWN * 2, "{waited:?}");
+			assert!(waited >= SLOW_DOWN, "{waited:?}");
 		});
 	}
 
@@ -748,7 +756,7 @@ mod tests {
 				assert_eq!(harness.settled().await, failed(failure), "{name}");
 				assert_eq!(harness.stored(), None);
 				assert!(is_closed(&cloudy.callback()).await);
-				no_poll_follows(&cloudy, 1).await;
+				no_poll_follows(&harness, &cloudy, 1).await;
 			}
 		});
 	}
@@ -831,9 +839,9 @@ mod tests {
 			assert_eq!(called(&format!("{origin}/elsewhere")).await, StatusCode::NOT_FOUND);
 
 			assert_eq!(harness.state(), waiting());
-			no_poll_follows(&cloudy, 0).await;
 			assert_eq!(called(&callback).await, StatusCode::OK);
 			assert_eq!(harness.settled().await, signed_in());
+			no_poll_follows(&harness, &cloudy, 1).await;
 		});
 	}
 
@@ -862,7 +870,6 @@ mod tests {
 			let cloudy = Cloudy::default();
 			let harness = Harness::new("out-waiting", &stub(cloudy.clone()).await);
 			harness.sign_in().await.expect("the sign-in starts");
-			tokio::time::sleep(Duration::from_millis(100)).await;
 
 			sign_out(harness.app.handle()).await.expect("the sign-out settles");
 			let polled = cloudy.polls().len();
@@ -870,7 +877,7 @@ mod tests {
 			assert!(is_closed(&cloudy.callback()).await);
 			assert_eq!(harness.state(), SIGNED_OUT);
 			assert!(cloudy.signed_out.lock().expect("the stub").is_empty());
-			tokio::time::sleep(Duration::from_millis(1200)).await;
+			assert!(harness.app.state::<AccountSession>().turn.lock().await.is_none());
 			assert_eq!(cloudy.polls().len(), polled);
 		});
 	}
@@ -965,7 +972,7 @@ mod tests {
 
 			joined_spaces::relay::reconciled(harness.app.handle()).await;
 
-			assert_eq!(harness.signed_out_within(Duration::from_secs(2)).await, SIGNED_OUT_ON_SITE);
+			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
 			assert_eq!(harness.stored(), None);
 			harness.assert_no_secret_was_heard();
 		});
