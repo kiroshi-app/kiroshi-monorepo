@@ -4,6 +4,7 @@ type FilteredJobs = {
 	rust: boolean
 	vitest: boolean
 	website: boolean
+	storybook: boolean
 	ios: boolean
 }
 
@@ -27,6 +28,7 @@ const EVERY_JOB: FilteredJobs = {
 	rust: true,
 	vitest: true,
 	website: true,
+	storybook: true,
 	ios: true,
 }
 
@@ -52,6 +54,9 @@ const touchesWebsite = (path: string) =>
 		!fileName(path).includes(".stories.") &&
 		!path.startsWith("packages/ui/.storybook/"))
 
+const touchesStorybook = (path: string) =>
+	isUnder(path, ["packages/ui/", "scripts/", "baselines/"])
+
 const touchesIos = (path: string) =>
 	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
 
@@ -61,6 +66,7 @@ export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 		rust: paths.some(touchesRust),
 		vitest: paths.some(touchesVitest),
 		website: paths.some(touchesWebsite),
+		storybook: paths.some(touchesStorybook),
 		ios: paths.some(touchesIos),
 	}
 }

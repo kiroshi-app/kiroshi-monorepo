@@ -6,6 +6,8 @@ import {
 	compareItems,
 	compareStories,
 	mergeVerdicts,
+	splitByOwner,
+	TESTS,
 	testedStoryIds,
 	vitestFailures,
 	withOrdinals,
@@ -54,6 +56,58 @@ describe("baseline items", () => {
 			"same",
 			"same #2",
 		])
+	})
+})
+
+describe("baseline entries owned by the suites that ran", () => {
+	const committed = [
+		"app :: src/a.test.ts :: stays red",
+		"storybook :: src/b.stories.tsx :: Plays",
+		"sidecar :: src/c.test.ts :: times out",
+	]
+
+	it("owns the test entries of the suites that ran and keeps the others", () => {
+		expect(
+			splitByOwner({ area: TESTS, committed, suites: ["app", "sidecar"] }),
+		).toEqual({
+			owned: [
+				"app :: src/a.test.ts :: stays red",
+				"sidecar :: src/c.test.ts :: times out",
+			],
+			others: ["storybook :: src/b.stories.tsx :: Plays"],
+		})
+	})
+
+	it("never reports the entry of a suite that did not run as stale", () => {
+		const { owned } = splitByOwner({
+			area: TESTS,
+			committed,
+			suites: ["storybook"],
+		})
+
+		expect(
+			compareItems({
+				area: TESTS,
+				committed: owned,
+				live: ["storybook :: src/b.stories.tsx :: Plays"],
+			}).warnings,
+		).toEqual([])
+	})
+
+	it("matches a suite on its whole name, not a prefix of it", () => {
+		expect(
+			splitByOwner({
+				area: TESTS,
+				committed: ["storybook :: src/b.stories.tsx :: Plays"],
+				suites: ["story"],
+			}).owned,
+		).toEqual([])
+	})
+
+	it("owns every entry of an area that is not split by suite", () => {
+		expect(
+			splitByOwner({ area: "stories", committed: ["a--b"], suites: [] }),
+		).toEqual({ owned: ["a--b"], others: [] })
 	})
 })
 

@@ -2,8 +2,20 @@ import { describe, expect, it } from "bun:test"
 
 import { decideJobs } from "./ci-changes"
 
-const none = { rust: false, vitest: false, website: false, ios: false }
-const every = { rust: true, vitest: true, website: true, ios: true }
+const none = {
+	rust: false,
+	vitest: false,
+	website: false,
+	storybook: false,
+	ios: false,
+}
+const every = {
+	rust: true,
+	vitest: true,
+	website: true,
+	storybook: true,
+	ios: true,
+}
 
 const onPullRequest = (...paths: string[]) =>
 	decideJobs({ event: "pull_request", paths })
@@ -22,22 +34,31 @@ describe("ci changes", () => {
 		expect(onPullRequest(".github/workflows/release.yml")).toEqual(every)
 	})
 
-	it("runs only vitest on a story under packages/ui", () => {
+	it("runs vitest and storybook on a story under packages/ui", () => {
 		expect(
 			onPullRequest("packages/ui/src/components/button.stories.tsx"),
-		).toEqual({ ...none, vitest: true })
+		).toEqual({ ...none, vitest: true, storybook: true })
 		expect(onPullRequest("packages/ui/.storybook/preview.tsx")).toEqual({
 			...none,
 			vitest: true,
+			storybook: true,
 		})
 	})
 
-	it("runs vitest and website on a component under packages/ui", () => {
+	it("runs vitest, website and storybook on a component under packages/ui", () => {
 		expect(onPullRequest("packages/ui/src/components/button.tsx")).toEqual({
 			...none,
 			vitest: true,
 			website: true,
+			storybook: true,
 		})
+	})
+
+	it("runs vitest and storybook on the scripts and baselines the gate reads", () => {
+		const both = { ...none, vitest: true, storybook: true }
+
+		expect(onPullRequest("scripts/baseline.ts")).toEqual(both)
+		expect(onPullRequest("baselines/tests.txt")).toEqual(both)
 	})
 
 	it("runs only rust on a Rust file under src-tauri", () => {

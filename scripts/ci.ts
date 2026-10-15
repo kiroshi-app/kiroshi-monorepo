@@ -12,6 +12,29 @@ const APP = "apps/app"
 const SIMULATOR_DESTINATION =
 	'-destination "platform=iOS Simulator,id=$SIMULATOR"'
 
+const RUSTFMT: Step = {
+	name: "Rustfmt",
+	command: "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+	cwd: APP,
+}
+
+const BUILD_SIDECAR: Step = {
+	name: "Build sidecar",
+	command: "bun run --filter sidecar build",
+}
+
+const CLIPPY: Step = {
+	name: "Clippy",
+	command:
+		"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
+	cwd: APP,
+}
+
+const BINDINGS_MATCH: Step = {
+	name: "Bindings match the command surface",
+	command: "git diff --exit-code apps/app/src/lib/bindings.ts",
+}
+
 export const GATE = {
 	lint: [
 		{ name: "Biome format", command: "bun run format" },
@@ -43,42 +66,44 @@ export const GATE = {
 				"bun run avatar:build && git diff --exit-code apps/ios/Kiroshi/Resources",
 		},
 	],
-	rust: [
+	"rust-check": [
+		RUSTFMT,
+		BUILD_SIDECAR,
+		CLIPPY,
 		{
-			name: "Rustfmt",
-			command: "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-			cwd: APP,
-		},
-		{ name: "Build sidecar", command: "bun run --filter sidecar build" },
-		{
-			name: "Clippy",
+			name: "Regenerate the bindings",
 			command:
-				"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
+				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test bindings",
 			cwd: APP,
 		},
+		BINDINGS_MATCH,
+	],
+	vitest: [
+		{
+			name: "Unit tests, website, sidecar and story ids against the baseline",
+			command: "bun run baseline vitest",
+		},
+	],
+	website: [
+		{ name: "Build website", command: "bun run --filter=website build" },
+	],
+	rust: [
+		RUSTFMT,
+		BUILD_SIDECAR,
+		CLIPPY,
 		{
 			name: "Test",
 			command:
 				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
 			cwd: APP,
 		},
-		{
-			name: "Bindings match the command surface",
-			command: "git diff --exit-code apps/app/src/lib/bindings.ts",
-		},
+		BINDINGS_MATCH,
 	],
-	vitest: [
+	storybook: [
 		{
-			name: "Unit tests and story ids against the baseline",
-			command: "bun run baseline unit",
+			name: "Stories played in chromium against the baseline",
+			command: "bun run baseline storybook",
 		},
-		{
-			name: "Tests and stories against the baseline",
-			command: "bun run baseline vitest",
-		},
-	],
-	website: [
-		{ name: "Build website", command: "bun run --filter=website build" },
 	],
 	ios: [
 		{ name: "Generate", command: "bun run ios:generate" },
@@ -99,14 +124,24 @@ export const GATE = {
 
 export type Group = keyof typeof GATE
 
-export const GROUP_ORDER: Group[] = ["lint", "rust", "vitest", "website", "ios"]
+export const GROUP_ORDER: Group[] = [
+	"lint",
+	"rust-check",
+	"vitest",
+	"website",
+	"rust",
+	"storybook",
+	"ios",
+]
+
+const POST_MERGE_GROUPS: Group[] = ["rust", "storybook", "ios"]
 
 // ci:fast is the pre-push check and must stay green and under 120 s with a
 // dozen agents loading the machine, which the full unit set cannot do. It
 // runs the format, Biome and knip against the baseline, the types, and only
 // the apps/app and packages/ui unit test files changed since origin/main,
-// never a file of the apps/app perf project. bun run ci and the CI vitest
-// job keep the rest: the full unit set, the perf set, the story ids, the
+// never a file of the apps/app perf project. bun run ci and the CI jobs
+// keep the rest: the full unit set, the perf set, the story ids, the
 // stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
 	"Biome format",
@@ -166,11 +201,17 @@ type TouchedJobs = ReturnType<typeof decideJobs>
 
 type GroupDecision = { group: Group; touched: TouchedJobs }
 
+const filterOf = (group: Exclude<Group, "lint">) =>
+	group === "rust-check" ? "rust" : group
+
+export const postMergeNote = (group: Group) =>
+	POST_MERGE_GROUPS.includes(group)
+		? `${group} is a post-merge job, CI runs it on a push to main and on a v* tag`
+		: undefined
+
 export const skipReason = ({ group, touched }: GroupDecision) => {
-	if (group === "ios") {
-		return "ios is a post-merge job, CI runs it on a push to main and on a v* tag: run bun run ci ios to run it here"
-	}
-	if (group === "lint" || touched[group]) return undefined
+	if (group === "ios") return "run bun run ci ios to run it here"
+	if (group === "lint" || touched[filterOf(group)]) return undefined
 	return "scripts/ci-changes.ts finds no path changed since the merge base with origin/main that touches it"
 }
 
@@ -219,6 +260,8 @@ const runGate = () => {
 		paths: pathsChangedSinceMain(),
 	})
 	return GROUP_ORDER.every((group) => {
+		const note = postMergeNote(group)
+		if (note !== undefined) console.log(`\nci  ${note}`)
 		const skipped = skipReason({ group, touched })
 		if (skipped === undefined) return runGroup(group)
 		console.log(`\nci  skipped ${group}: ${skipped}`)

@@ -13,6 +13,8 @@ import { pathsChangedSinceMain } from "./ci"
 
 export const STORIES = "stories"
 
+export const TESTS = "tests"
+
 export type Verdict = { failures: string[]; warnings: string[] }
 
 export type SuiteOutcome = { suite: string; red: boolean; items: string[] }
@@ -59,6 +61,18 @@ export const compareStories = ({
 	}
 }
 
+type Ownership = { area: string; committed: string[]; suites: string[] }
+
+export const splitByOwner = ({ area, committed, suites }: Ownership) => {
+	if (area !== TESTS) return { owned: committed, others: [] }
+	const isOwned = (entry: string) =>
+		suites.some((suite) => entry.startsWith(`${suite} :: `))
+	return {
+		owned: committed.filter(isOwned),
+		others: committed.filter((entry) => !isOwned(entry)),
+	}
+}
+
 export const assertRedSuitesAreAttributed = (outcomes: SuiteOutcome[]) => {
 	const unattributed = outcomes
 		.filter((outcome) => outcome.red && outcome.items.length === 0)
@@ -98,7 +112,6 @@ const UPDATE = "bun run baseline:update"
 type VitestAssertion = {
 	fullName: string
 	status: string
-	meta?: { storyId?: string }
 }
 
 type VitestFile = {
@@ -129,7 +142,17 @@ const UI_SUITE: VitestSuite = {
 	name: "ui",
 	filter: "@workspace/ui",
 	script: "test",
+	project: "unit",
 }
+
+const STORYBOOK_SUITE: VitestSuite = {
+	name: "storybook",
+	filter: "@workspace/ui",
+	script: "test",
+	project: "storybook",
+}
+
+const SIDECAR_SUITE = "sidecar"
 
 const VITEST_SUITES: VitestSuite[] = [
 	APP_SUITE,
@@ -139,7 +162,7 @@ const VITEST_SUITES: VitestSuite[] = [
 
 const UNIT_SUITES: UnitSuite[] = [
 	{ ...APP_SUITE, project: "unit", root: "apps/app" },
-	{ ...UI_SUITE, project: "unit", root: "packages/ui" },
+	{ ...UI_SUITE, root: "packages/ui" },
 ]
 
 const TEST_FILE = /\.test\.tsx?$/
@@ -235,15 +258,6 @@ const failuresIn = ({ suite, file }: FileInSuite) => {
 export const vitestFailures = ({ suite, report }: SuiteReport) =>
 	report.testResults.flatMap((file) => failuresIn({ suite, file }))
 
-const storyIds = (reports: VitestReport[]) =>
-	reports.flatMap((report) =>
-		report.testResults.flatMap((file) =>
-			file.assertionResults.flatMap(
-				(assertion) => assertion.meta?.storyId ?? [],
-			),
-		),
-	)
-
 const TESTED_STORY_TAG = "test"
 
 type StorybookIndexEntry = { id: string; type: string; tags?: string[] }
@@ -320,9 +334,9 @@ const sidecarOutcome = (into: string): SuiteOutcome => {
 	].map((match) => {
 		const tag = match[1] ?? ""
 		const file = repoPath(attributeOf({ tag, name: "file" }), SIDECAR)
-		return `sidecar :: ${file} :: ${attributeOf({ tag, name: "name" })}`
+		return `${SIDECAR_SUITE} :: ${file} :: ${attributeOf({ tag, name: "name" })}`
 	})
-	return { suite: "sidecar", red: exitCode !== 0, items }
+	return { suite: SIDECAR_SUITE, red: exitCode !== 0, items }
 }
 
 type BiomeDiagnostic = {
@@ -451,18 +465,14 @@ const collectVitest = (): Live => {
 	const into = newReportFolder()
 	const ran = runSuites({ suites: VITEST_SUITES, into })
 	return {
-		tests: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
-		[STORIES]: storyIds(ran.map(({ report }) => report)),
+		[TESTS]: attributedFailures([...ran.map(outcomeOf), sidecarOutcome(into)]),
+		[STORIES]: indexedStoryIds(into),
 	}
 }
 
-const collectUnit = (): Live => {
-	const into = newReportFolder()
-	const ran = runSuites({ suites: UNIT_SUITES, into })
-	return {
-		tests: attributedFailures(ran.map(outcomeOf)),
-		[STORIES]: indexedStoryIds(into),
-	}
+const collectStorybook = (): Live => {
+	const ran = runSuites({ suites: [STORYBOOK_SUITE], into: newReportFolder() })
+	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
 const existingChangedPaths = () =>
@@ -485,7 +495,7 @@ const collectChanged = (): Live => {
 	const ran = UNIT_SUITES.flatMap((suite) =>
 		runChangedTests({ suite, paths, into }),
 	)
-	return { tests: attributedFailures(ran.map(outcomeOf)) }
+	return { [TESTS]: attributedFailures(ran.map(outcomeOf)) }
 }
 
 const collectLint = (): Live => ({
@@ -493,16 +503,26 @@ const collectLint = (): Live => ({
 	knip: knipItems(),
 })
 
+type ScopeRun = { collect: () => Live; suites: string[] }
+
+const suiteNames = (suites: VitestSuite[]) => suites.map((suite) => suite.name)
+
 const SCOPES = {
-	vitest: collectVitest,
-	lint: collectLint,
-	unit: collectUnit,
-	changed: collectChanged,
-}
+	vitest: {
+		collect: collectVitest,
+		suites: [...suiteNames(VITEST_SUITES), SIDECAR_SUITE],
+	},
+	storybook: {
+		collect: collectStorybook,
+		suites: suiteNames([STORYBOOK_SUITE]),
+	},
+	lint: { collect: collectLint, suites: [] },
+	changed: { collect: collectChanged, suites: suiteNames(UNIT_SUITES) },
+} satisfies Record<string, ScopeRun>
 
 type Scope = keyof typeof SCOPES
 
-const FULL_SCOPES: Scope[] = ["vitest", "lint"]
+const FULL_SCOPES: Scope[] = ["vitest", "storybook", "lint"]
 
 const isScope = (name: string): name is Scope => name in SCOPES
 
@@ -518,7 +538,7 @@ const requestedScopes = (argv: string[]): Scope[] => {
 	return chosen.length === 0 ? FULL_SCOPES : chosen
 }
 
-const SUBSET_SCOPES: Scope[] = ["unit", "changed"]
+const SUBSET_SCOPES: Scope[] = ["changed"]
 
 const assertSubsetScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
 	const subsets = scopes.filter((scope) => SUBSET_SCOPES.includes(scope))
@@ -534,16 +554,26 @@ const assertSubsetScopeChecksAlone = (scopes: Scope[], argv: string[]) => {
 	}
 }
 
-const compareArea = ({ area, items }: AreaItems) => {
-	const committed = readItems(area)
+type Collected = { live: Live; suites: string[] }
+
+type OwnedArea = AreaItems & { suites: string[] }
+
+const compareArea = ({ area, items, suites }: OwnedArea) => {
+	const { owned: committed } = splitByOwner({
+		area,
+		committed: readItems(area),
+		suites,
+	})
 	return area === STORIES
 		? compareStories({ committed, live: items })
 		: compareItems({ area, committed, live: items })
 }
 
-const check = (live: Live) => {
+const check = ({ live, suites }: Collected) => {
 	const verdict = mergeVerdicts(
-		Object.entries(live).map(([area, items]) => compareArea({ area, items })),
+		Object.entries(live).map(([area, items]) =>
+			compareArea({ area, items, suites }),
+		),
 	)
 	for (const warning of verdict.warnings) console.warn(`warning  ${warning}`)
 	if (verdict.failures.length === 0) {
@@ -563,28 +593,35 @@ const update = (live: Live) => {
 	return 0
 }
 
-const prune = (live: Live) => {
-	for (const [area, items] of Object.entries(live)) writeItems({ area, items })
+const prune = ({ live, suites }: Collected) => {
+	for (const [area, items] of Object.entries(live)) {
+		const { others } = splitByOwner({
+			area,
+			committed: readItems(area),
+			suites,
+		})
+		writeItems({ area, items: [...others, ...items] })
+	}
 	return 0
 }
 
-const collect = (scopes: Scope[]): Live => {
+const collect = (scopes: Scope[]): Collected => {
 	const live: Live = {}
 	for (const scope of scopes) {
-		for (const [area, found] of Object.entries(SCOPES[scope]())) {
-			live[area] = withOrdinals(found)
+		for (const [area, found] of Object.entries(SCOPES[scope].collect())) {
+			live[area] = [...(live[area] ?? []), ...withOrdinals(found)]
 		}
 	}
-	return live
+	return { live, suites: scopes.flatMap((scope) => SCOPES[scope].suites) }
 }
 
 const main = (argv: string[]) => {
 	const scopes = requestedScopes(argv)
 	assertSubsetScopeChecksAlone(scopes, argv)
-	const live = collect(scopes)
-	if (argv.includes("--prune")) return prune(live)
-	if (argv.includes("--update")) return update(live)
-	return check(live)
+	const collected = collect(scopes)
+	if (argv.includes("--prune")) return prune(collected)
+	if (argv.includes("--update")) return update(collected.live)
+	return check(collected)
 }
 
 if (import.meta.main) {
