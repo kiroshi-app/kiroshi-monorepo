@@ -3,7 +3,8 @@
 	"ignoreWorkspaces": ["apps/app/sidecar"],
 	"ignore": [
 		"apps/app/src/lib/bindings.ts",
-		"apps/ios/Kiroshi/Resources/companion-avatar.js"
+		"apps/ios/Kiroshi/Resources/companion-avatar.js",
+		"apps/ios/build/**"
 	],
 	"ignoreDependencies": ["babel-plugin-react-compiler"],
 	"ignoreBinaries": ["xcodegen"],
