@@ -21,6 +21,7 @@ type WorkflowStep = {
 	run?: string
 	if?: string
 	"timeout-minutes"?: number
+	with?: Record<string, unknown>
 }
 
 type Workflow = {
@@ -316,6 +317,40 @@ describe("the jobs of ci.yml", () => {
 		)
 
 		expect(waitStep?.run).toContain('--branch "$GITHUB_REF_NAME"')
+	})
+
+	it("has release.yml publish only after the draft job and every desktop job", () => {
+		expect(releaseWorkflow.jobs.publish?.needs).toEqual(["draft", "release"])
+	})
+
+	it("has both tauri-action steps upload into the draft job's release, kept a draft", () => {
+		const tauriSteps = (releaseWorkflow.jobs.release?.steps ?? []).filter(
+			(step) => step.uses?.startsWith("tauri-apps/tauri-action@"),
+		)
+
+		expect(tauriSteps).toHaveLength(2)
+		for (const step of tauriSteps) {
+			expect(step.with?.releaseId).toMatch(
+				/^\$\{\{ needs\.draft\.outputs\.release-id \}\}$/,
+			)
+			expect(step.with?.releaseDraft).toBe(true)
+			expect(step.with?.tagName).toBeUndefined()
+		}
+	})
+
+	it("has exactly one step of release.yml publish the release", () => {
+		const publishing = Object.entries(releaseWorkflow.jobs).flatMap(
+			([job, { steps }]) =>
+				(steps ?? [])
+					.filter(
+						(step) =>
+							step.run?.includes("draft=false") ||
+							step.with?.releaseDraft === false,
+					)
+					.map((step) => `${job}/${step.name}`),
+		)
+
+		expect(publishing).toEqual(["publish/Publish the draft release"])
 	})
 
 	it("boots the simulator bun run ci looks up", () => {

@@ -47,8 +47,71 @@ jobs:
             sleep 30
           done
 
-  release:
+  draft:
     needs: ci-green
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.draft.outputs.id }}
+      notes: ${{ steps.notes.outputs.body }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Read release notes from tag
+        id: notes
+        shell: bash
+        run: |
+          body="$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")"
+          if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
+            body="See the assets to download and install this version."
+          fi
+          {
+            echo "body<<RELEASE_NOTES_EOF"
+            echo "$body"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or reuse the draft release of the tag
+        id: draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.body }}
+        run: |
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -c --arg tag "$GITHUB_REF_NAME" '.[] | select(.tag_name == $tag) | {id, draft, html_url}')
+          published=$(jq -r 'select(.draft | not) | .html_url' <<< "$releases")
+          if [ -n "$published" ]; then
+            echo "::error::Release $GITHUB_REF_NAME is already published, nothing uploaded: $published"
+            exit 1
+          fi
+          drafts=$(jq -r 'select(.draft) | .id' <<< "$releases")
+          if [ "$(grep -c . <<< "$drafts")" -gt 1 ]; then
+            echo "::error::Release $GITHUB_REF_NAME has several drafts ($(tr '\n' ' ' <<< "$drafts")), keep one and re-run"
+            exit 1
+          fi
+          id="$drafts"
+          if [ -z "$id" ]; then
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              -f name="Kiroshi $GITHUB_REF_NAME" \
+              -f body="$RELEASE_NOTES" \
+              -F draft=true \
+              -F prerelease=false \
+              --jq .id)
+            echo "Created draft release $id for $GITHUB_REF_NAME"
+          else
+            echo "Reusing draft release $id for $GITHUB_REF_NAME"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: draft
     permissions:
       contents: write
     strategy:
@@ -86,20 +149,6 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read release notes from tag
-        id: notes
-        shell: bash
-        run: |
-          body="$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")"
-          if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
-            body="See the assets to download and install this version."
-          fi
-          {
-            echo "body<<RELEASE_NOTES_EOF"
-            echo "$body"
-            echo "RELEASE_NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
@@ -136,9 +185,8 @@ jobs:
         continue-on-error: true
         with:
           projectPath: apps/app
-          tagName: ${{ github.ref_name }}
-          releaseName: "Kiroshi ${{ github.ref_name }}"
-          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseId: ${{ needs.draft.outputs.release-id }}
+          releaseBody: ${{ needs.draft.outputs.notes }}
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
@@ -149,10 +197,43 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         with:
           projectPath: apps/app
-          tagName: ${{ github.ref_name }}
-          releaseName: "Kiroshi ${{ github.ref_name }}"
-          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseId: ${{ needs.draft.outputs.release-id }}
+          releaseBody: ${{ needs.draft.outputs.notes }}
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
+
+  publish:
+    needs: [draft, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ID: ${{ needs.draft.outputs.release-id }}
+      UPDATER_PLATFORMS: darwin-aarch64 darwin-aarch64-app darwin-x86_64 darwin-x86_64-app linux-x86_64 linux-x86_64-deb windows-x86_64 windows-x86_64-nsis
+    steps:
+      - name: Check the updater platforms of the draft latest.json
+        shell: bash
+        run: |
+          asset=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            --jq '.[] | select(.name == "latest.json") | .url')
+          if [ -z "$asset" ]; then
+            echo "::error::Draft release of $GITHUB_REF_NAME has no latest.json, left as a draft"
+            exit 1
+          fi
+          actual=$(gh api -H "Accept: application/octet-stream" "$asset" | jq -r '.platforms | keys[]' | sort)
+          expected=$(tr ' ' '\n' <<< "$UPDATER_PLATFORMS" | sort)
+          missing=$(comm -23 <(echo "$expected") <(echo "$actual") | tr '\n' ' ')
+          extra=$(comm -13 <(echo "$expected") <(echo "$actual") | tr '\n' ' ')
+          if [ -n "$missing$extra" ]; then
+            echo "::error::latest.json of $GITHUB_REF_NAME left as a draft, missing platforms: [ $missing], extra platforms: [ $extra]"
+            exit 1
+          fi
+          echo "latest.json of $GITHUB_REF_NAME lists every updater platform"
+
+      - name: Publish the draft release
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"Published \(.tag_name): \(.html_url)"'
