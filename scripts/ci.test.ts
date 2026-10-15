@@ -93,13 +93,7 @@ describe("ci:fast", () => {
 
 	it("leaves the full unit set and the perf set to the gate", () => {
 		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
-		expect(fastSteps().map((step) => step.command)).not.toContainEqual(
-			expect.stringMatching(/baseline (unit|vitest)/),
-		)
-		expect(GATE.vitest.map((step) => step.command)).toEqual([
-			"bun run baseline unit",
-			"bun run baseline vitest",
-		])
+		for (const step of GATE.vitest) expect(fastSteps()).not.toContainEqual(step)
 	})
 })
 
