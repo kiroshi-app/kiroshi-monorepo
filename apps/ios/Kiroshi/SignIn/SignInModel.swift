@@ -7,7 +7,6 @@ enum SignInStep: Hashable {
 
 enum AccountStage: Equatable {
     case signedOut
-    case agreeing
     case loadingSpaces
     case spaces([Space])
     case spacesUnreachable
@@ -60,6 +59,7 @@ final class SignInModel {
     @ObservationIgnored private(set) var revocation: Task<Void, Never>?
     @ObservationIgnored private(set) var deletion: Task<Void, Never>?
     private(set) var shell: SpaceStore?
+    private(set) var consent: MessageConsent?
 
     @ObservationIgnored private let cloud: KiroshiCloud
     @ObservationIgnored private let sessions: any SessionStore
@@ -87,14 +87,8 @@ final class SignInModel {
         self.google = google
         let session = sessions.load()
         self.session = session
-        stage = session.map { Self.stage(signedInAs: $0, agreements: agreements) } ?? .signedOut
+        stage = session == nil ? .signedOut : .loadingSpaces
         signedInEmail = session?.email ?? ""
-    }
-
-    private static func stage(signedInAs session: Session, agreements: any AgreementStore)
-        -> AccountStage
-    {
-        agreements.hasAgreed(account: session.accountId) ? .loadingSpaces : .agreeing
     }
 
     var needsNewCode: Bool {
@@ -225,12 +219,6 @@ final class SignInModel {
         }
     }
 
-    func agree() {
-        guard let session else { return }
-        agreements.agree(account: session.accountId)
-        stage = .loadingSpaces
-    }
-
     func signOutTapped() {
         isConfirmingSignOut = true
     }
@@ -304,7 +292,7 @@ final class SignInModel {
         signedInEmail = granted.email
         code = ""
         path = []
-        stage = Self.stage(signedInAs: granted, agreements: agreements)
+        stage = .loadingSpaces
     }
 
     private func makeShell(spaces: [Space], session: Session) -> SpaceStore {
@@ -314,6 +302,7 @@ final class SignInModel {
             self?.leaveShell(exit)
         }
         onSignOut = { [weak shell] in shell?.leave() }
+        consent = MessageConsent(account: session.accountId, agreements: agreements)
         return shell
     }
 
@@ -332,6 +321,7 @@ final class SignInModel {
         sessions.clear()
         session = nil
         shell = nil
+        consent = nil
         signedInEmail = ""
         code = ""
         codeProblem = nil

@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct ThreadComposer<Model: ThreadModel>: View {
     @Bindable var model: Model
     let isHostOffline: Bool
+    let isDraftKept: Bool
+    let send: () -> Void
     @State private var isPickingPhotos = false
     @State private var isPickingFiles = false
     @State private var photos: [PhotosPickerItem] = []
@@ -21,6 +23,12 @@ struct ThreadComposer<Model: ThreadModel>: View {
             }
             if let problem {
                 ProblemLabel(message: "\(problem)")
+            }
+            if isDraftKept {
+                Label("Not sent. Your draft stays here.", systemImage: "info.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
             }
             if !model.attachments.isEmpty {
                 ScrollView(.horizontal) {
@@ -104,9 +112,7 @@ struct ThreadComposer<Model: ThreadModel>: View {
                 .frame(width: control, height: control)
                 .padding(.vertical, 6)
         } else if model.canSend {
-            Button {
-                model.send()
-            } label: {
+            Button(action: send) {
                 controlButton(systemImage: "arrow.up", font: .subheadline.weight(.semibold))
             }
             .accessibilityLabel("Send")

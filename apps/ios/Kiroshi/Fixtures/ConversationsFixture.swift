@@ -57,7 +57,15 @@
 
         static var draft: String {
             UserDefaults.standard.string(forKey: "draft")
-                ?? (SignInFixture.opened == .groupMention ? "@" : "")
+                ?? openingDraft
+        }
+
+        static var openingDraft: String {
+            switch SignInFixture.opened {
+            case .groupMention: "@"
+            case .agreement: "Tighten the intro of the launch post, two sentences max."
+            default: ""
+            }
         }
 
         static let juniper = Companion(
@@ -364,7 +372,7 @@
                 script.groups = []
             case .loadingCompanions:
                 script.answersCompanions = false
-            case .emptyThread:
+            case .emptyThread, .agreement:
                 script.messages[juniper.id] = []
             case .conversationsHostOffline:
                 script.hostLeavesAfter = .seconds(2)
@@ -424,7 +432,8 @@
 
         static func opening(_ fixture: SignInFixture) -> Companion.ID? {
             switch fixture {
-            case .thread, .emptyThread, .workingThread, .workingAfterReply, .threadHostOffline,
+            case .thread, .emptyThread, .agreement, .workingThread, .workingAfterReply,
+                .threadHostOffline,
                 .swipedThread,
                 .threadFailed, .slowThread, .longReply, .longName, .twoAsks:
                 juniper.id
