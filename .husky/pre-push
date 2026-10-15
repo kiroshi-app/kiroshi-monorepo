@@ -1,3 +1,4 @@
+unset GIT_DIR
 while read -r local_ref local_sha remote_ref remote_sha; do
 	case "$local_sha" in
 	*[!0]*) exec bun run ci:fast ;;
