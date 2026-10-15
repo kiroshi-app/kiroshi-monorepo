@@ -145,6 +145,16 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 Tap your initial, then Sign out. Relaunched with `-fixture keychain` after confirming, the app opens on Sign in: no session is left on the device.
 
+## Where your messages go
+
+Before the spaces load, a signed-in account that hasn't agreed yet on this iPhone gets the sheet `Where your messages go` (`AgreementSheet`, no artboard): its messages reach the Mac through the relay, then the model provider the Mac uses. `I agree` records the account in `UserDefaults` (`messageRoutingAgreements`, `UserDefaultsAgreementStore`), keyed by the cloud's user id, or the email for a session an older build saved, then loads the spaces; `Not now` signs out to Welcome. It shows again on a new device, after a reinstall or for another account. The cloud doesn't know about the agreement. Every fixture has agreed already except `agreement`, which opens on the sheet, and `keychain` and `keychain-seeded`, which read the real `UserDefaults`:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture agreement
+```
+
+`AgreementSheetTests` audits the sheet, at the largest text size too, and takes both ways out of it.
+
 ## Sign in with Apple and Google
 
 Welcome (`WelcomeView`) offers the email, then Sign in with Apple and Continue with Google. Both send the provider's ID token to the cloud's `POST /api/auth/sign-in/social` (`KiroshiCloud.signIn(with:)`), which answers the session body of the email code: the bearer goes to the Keychain the same way. Apple is the system `SignInWithAppleButton`, handed the SHA-256 of a fresh nonce (`Nonce`) whose raw value goes to the cloud with the token and, on the first authorization only, the full name. Google is GoogleSignIn-iOS (`GoogleSignInAuthorizer`, behind `GoogleAuthorizing`), its `serverClientID` the cloud's web client so the token's audience matches. A cancelled sheet goes back silently; a refused token says so under the buttons.
