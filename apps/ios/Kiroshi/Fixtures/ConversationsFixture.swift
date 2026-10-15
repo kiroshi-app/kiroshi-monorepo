@@ -388,7 +388,7 @@
                 script.refusesThread = true
             case .slowThread:
                 script.messages[juniper.id] = longThread
-                script.threadAnswersAfter = .seconds(2)
+                script.threadAnswersAfter = .seconds(5)
             case .longReply:
                 script.messages[juniper.id] = longThread
                 script.replyParagraphs = longReplyParagraphs
@@ -486,8 +486,12 @@
                     pinPosition: pinPosition)
             }
 
-            func pageJSON(lastActivityAt: Int, lastWord: String?) -> String {
-                "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null")}"
+            func pageJSON(lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?)
+                -> String
+            {
+                let solo = soloBotId.map { #""\#($0)""# } ?? "null"
+                return
+                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo)}"
             }
 
             var json: String {
@@ -563,6 +567,18 @@
             let group: Group
             let lastActivityAt: Int
             let lastWord: String?
+            var soloBotId: Companion.ID?
+        }
+
+        static func soloRow(of companion: Companion, last: Message) -> PageRow {
+            PageRow(
+                group: Group(
+                    id: chat(of: companion.id), title: "Chat", members: [companion], createdAt: 0),
+                lastActivityAt: last.createdAt,
+                lastWord: lastWordJSON(
+                    text: last.content, at: last.createdAt,
+                    by: last.isYours ? nil : companion.id),
+                soloBotId: companion.id)
         }
 
         static func conversationPage(_ rows: [PageRow], cursor: String?, limit: Int) -> String {
@@ -580,7 +596,9 @@
             let next = offset + limit < paged.count ? #""\#(offset + limit)""# : "null"
             let json = { (rows: [PageRow]) in
                 rows.map {
-                    $0.group.pageJSON(lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord)
+                    $0.group.pageJSON(
+                        lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord,
+                        soloBotId: $0.soloBotId)
                 }
                 .joined(separator: ",")
             }
@@ -725,12 +743,20 @@
             {
                 launchPlanOpened.yield()
             }
-            guard command == "conversation_message_page", let leaving = script.hostLeavesAfter
-            else { return }
+            guard let leaving = script.hostLeavesAfter else { return }
+            let readOneByOne = script.companions.filter { script.messages[$0.id]?.last == nil }
             let leaves =
-                script.hostLeavesAfterThread
-                ? args["limit"] as? Int != 1
-                : await pages.next() == script.companions.count
+                switch command {
+                case "conversation_message_page" where script.hostLeavesAfterThread:
+                    args["limit"] as? Int != 1
+                case "conversation_message_page":
+                    await pages.next() == readOneByOne.count
+                case "conversation_page":
+                    !script.hostLeavesAfterThread && readOneByOne.isEmpty
+                        && args["cursor"] as? String == nil
+                default:
+                    false
+                }
             guard leaves else { return }
             push(.close(RelayClosure.hostOffline, after: leaving))
         }
@@ -796,12 +822,18 @@
                 reply(id, "[\(groups.map(\.json).joined(separator: ","))]")
                 listed.yield()
             case "conversation_page":
-                let rows = (script.groups + created.withLock { $0 }).map { group in
+                let groups = (script.groups + created.withLock { $0 }).map { group in
                     let last = script.messages[group.id]?.last
                     return FixtureHost.PageRow(
                         group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
                         lastWord: last?.lastWordJSON)
                 }
+                let solos = script.companions.compactMap { companion in
+                    script.messages[companion.id]?.last.map {
+                        FixtureHost.soloRow(of: companion, last: $0)
+                    }
+                }
+                let rows = groups + solos
                 let cursor = args["cursor"] as? String
                 reply(
                     id,

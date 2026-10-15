@@ -304,6 +304,133 @@ struct ConversationPagingTests {
         await connection.stop()
     }
 
+    func solo(of companion: Companion, at lastActivityAt: Int, pinned: Int? = nil)
+        -> FixtureHost.PageRow
+    {
+        FixtureHost.PageRow(
+            group: FixtureHost.Group(
+                id: "chat-\(companion.id)", title: "Chat", members: [companion], createdAt: 0,
+                pinPosition: pinned),
+            lastActivityAt: lastActivityAt,
+            lastWord: FixtureHost.lastWordJSON(
+                text: "Drafted.", at: lastActivityAt, by: companion.id),
+            soloBotId: companion.id)
+    }
+
+    func answeringPages(_ pages: [String?: [FixtureHost.PageRow]]) -> TestHost.Answer {
+        { call in
+            guard call.command == "conversation_page",
+                let args = try? call.args(as: TestHost.ListPageArgs.self),
+                let rows = pages[args.cursor]
+            else { return nil }
+            let next = args.cursor == nil && pages.count > 1 ? "next" : nil
+            let page = FixtureHost.conversationPage(rows, cursor: nil, limit: 30)
+            return TestHost.ok(
+                call,
+                page.replacingOccurrences(
+                    of: #""nextCursor":null"#,
+                    with: #""nextCursor":\#(next.map { #""\#($0)""# } ?? "null")"#))
+        }
+    }
+
+    @Test func aCompanionsOwnConversationIsListedOnceUnderTheCompanion() async throws {
+        let writer = Companion(id: "juniper", name: "Juniper", role: "Writer")
+        let crew = FixtureHost.Group(
+            id: "crew", title: "Release crew", members: [writer, pico], createdAt: 5_000)
+        let host = TestHost(
+            companions: [writer, pico],
+            answer: answeringPages([
+                nil: [
+                    solo(of: writer, at: 9_000), solo(of: pico, at: 7_000),
+                    TestHost.pageRow(crew, last: nil),
+                ]
+            ]))
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.summaries.map(\.id) == ["juniper", "pico", "crew"])
+        #expect(store.summaries.map(\.subject.title) == ["Juniper", "Pico", "Release crew"])
+        #expect(store.summaries.map(\.role) == ["Writer", nil, nil])
+        #expect(store.summaries.map(\.conversationId) == ["chat-juniper", "chat-pico", "crew"])
+        #expect(store.summaries.first?.preview == "Drafted.")
+        guard case .companion(let companion) = store.summaries.first?.subject else {
+            Issue.record("Expected Juniper's row to be the companion's")
+            return
+        }
+        #expect(companion == writer)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aCompanionWithoutItsOwnConversationOnThePageIsStillListed() async throws {
+        let host = TestHost(
+            companions: [juniper, pico],
+            messages: [
+                "chat-pico": [
+                    TestHost.message(
+                        "p1", in: "chat-pico", seq: 1, isYours: true, "Ship it.", at: 3_000)
+                ]
+            ],
+            answer: answeringPages([nil: [solo(of: juniper, at: 9_000)]]))
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.summaries.map(\.id) == ["juniper", "pico"])
+        #expect(store.summaries.map(\.conversationId) == ["chat-juniper", "chat-pico"])
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aPinnedCompanionConversationStaysPinnedUnderTheCompanion() async throws {
+        let host = TestHost(
+            companions: [juniper, pico], groups: topics(2),
+            answer: answeringPages([
+                nil: [solo(of: pico, at: 1, pinned: 1), solo(of: juniper, at: 9_000_000)]
+                    + topics(2).map { TestHost.pageRow($0, last: nil) }
+            ]))
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.summaries.map(\.id) == ["pico", "juniper", "topic-1", "topic-2"])
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aCompanionsOwnConversationOnPageTwoIsNotListedTwice() async throws {
+        let groups = topics(2)
+        let host = TestHost(
+            companions: [juniper],
+            messages: [
+                "chat-juniper": [
+                    TestHost.message(
+                        "j1", in: "chat-juniper", seq: 1, isYours: false, "Drafted.", at: 1,
+                        by: "juniper")
+                ]
+            ],
+            answer: answeringPages([
+                nil: groups.map { TestHost.pageRow($0, last: nil) },
+                "next": [solo(of: juniper, at: 1)],
+            ]))
+        let (store, connection, following) = await follow(host)
+        #expect(store.summaries.map(\.id) == ["topic-1", "topic-2"])
+
+        store.loadMore()
+        await waitUntil { store.nextPage == .complete }
+
+        #expect(store.summaries.map(\.id) == ["topic-1", "topic-2", "juniper"])
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aMacWithoutPagesListsEachCompanionOnce() async throws {
+        let host = TestHost(companions: [juniper, pico], groups: topics(1)) { call in
+            guard call.command == "conversation_page" else { return nil }
+            return TestHost.refused(call, status: 403, #""this command belongs to the host""#)
+        }
+        let (store, connection, following) = await follow(host)
+
+        #expect(store.summaries.map(\.id).sorted() == ["juniper", "pico", "topic-1"])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func openingAsksForOnePageAndNoMessagePerConversation() async throws {
         let host = TestHost(groups: topics(3))
         let (store, connection, following) = await follow(host)
