@@ -19,7 +19,7 @@ const PERMISSION_DIRECTIVE = "/permission"
 const QUESTION_DIRECTIVE = "/question"
 
 export function defaultReply(prompt: string): string {
-	return `Simulated reply to "${prompt}".\n\nThe fake driver streams this text piece by piece to reproduce a whole Claude Code turn.\n\nEach paragraph lands in the thread as soon as it is finished.`
+	return `Simulated reply to "${prompt}".\n\nThe fake driver streams this text piece by piece to reproduce a whole turn of the agent.\n\nEach paragraph lands in the thread as soon as it is finished.`
 }
 
 function toChunks(reply: string): string[] {

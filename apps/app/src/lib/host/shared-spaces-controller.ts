@@ -64,7 +64,7 @@ export const createSharedSpacesController = (
 		watched = session
 		const detach = transport.onChanged(onChanged).catch((failure: unknown) => {
 			console.error(
-				"the members of this Mac's spaces are not followed",
+				"the members of this computer's spaces are not followed",
 				failure,
 			)
 			return undefined
