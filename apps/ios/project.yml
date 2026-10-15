@@ -26,6 +26,8 @@ targets:
         excludes: [Resources]
       - path: Kiroshi/Resources/companion-avatar.js
         buildPhase: resources
+      - path: Kiroshi/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn

@@ -23,6 +23,11 @@ final class SignInAccessibilityTests: XCTestCase {
         issue.auditType == .contrast && issue.element?.isEnabled == false
     }
 
+    static func isAppleButtonWithoutItsDimmedTrait(_ issue: XCUIAccessibilityAuditIssue) -> Bool {
+        issue.auditType == .trait && issue.element?.isEnabled == false
+            && issue.element?.label.contains("with Apple") == true
+    }
+
     static func isScrollingTextField(_ issue: XCUIAccessibilityAuditIssue) -> Bool {
         issue.auditType == .textClipped && issue.element?.elementType == .textField
     }
@@ -45,6 +50,7 @@ final class SignInAccessibilityTests: XCTestCase {
                 }
                 try audit(app) { issue in
                     Self.isDimmedWhileSigningIn(issue) || Self.isScrollingTextField(issue)
+                        || Self.isAppleButtonWithoutItsDimmedTrait(issue)
                 }
                 if fixture == "1.1" {
                     try tapTheEmailFieldThenCheckEveryActionStaysAboveTheKeyboard(app)

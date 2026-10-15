@@ -249,9 +249,10 @@ final class SignInModel {
     ) async {
         defer { signingInWith = nil }
         switch outcome {
-        case .authorized(let idToken, let name):
+        case .authorized(let idToken, let name, let authorizationCode):
             let credential = ProviderCredential(
-                provider: provider, idToken: idToken, nonce: nonce, name: name)
+                provider: provider, idToken: idToken, nonce: nonce, name: name,
+                authorizationCode: authorizationCode)
             guard let answer = try? await cloud.signIn(with: credential) else { return }
             switch answer {
             case .signedIn(let granted): begin(granted)

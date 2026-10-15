@@ -4,43 +4,44 @@ import SwiftUI
 struct AppleSignInButton: View {
     let model: SignInModel
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.authorizationController) private var authorizationController
-    @State private var authorization: Task<Void, Never>?
+    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 52
 
     private var isSigningIn: Bool { model.signingInWith == .apple }
+    private var fill: Color { colorScheme == .dark ? .white : .black }
 
     var body: some View {
-        Button("Sign in with Apple", action: signInTapped)
-            .buttonStyle(
-                ProviderButtonStyle(
-                    logo: .buttonHeight(Image("AppleLogo")),
-                    fill: colorScheme == .dark ? .white : .black,
-                    foreground: colorScheme == .dark ? .black : .white,
-                    stroke: nil,
-                    isSigningIn: isSigningIn)
-            )
+        SignInWithAppleButton(.signIn, onRequest: configure, onCompletion: completed)
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(height: height)
+            .clipShape(.capsule)
+            .overlay {
+                if isSigningIn {
+                    ProgressView()
+                        .tint(colorScheme == .dark ? .black : .white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(fill, in: .capsule)
+                }
+            }
             .accessibilityLabel(isSigningIn ? "Signing in with Apple…" : "Sign in with Apple")
             .providerAvailability(isBusy: model.isBusy, isSigningIn: isSigningIn)
-            .onDisappear { authorization?.cancel() }
     }
 
-    private func signInTapped() {
-        let request = ASAuthorizationAppleIDProvider().createRequest()
+    private func configure(_ request: ASAuthorizationAppleIDRequest) {
         request.requestedScopes = [.fullName, .email]
         request.nonce = model.appleRequestNonce()
-        authorization?.cancel()
-        authorization = Task {
-            model.appleCompleted(await outcome(of: request))
-        }
     }
 
-    private func outcome(of request: ASAuthorizationAppleIDRequest) async -> ProviderOutcome {
-        do {
-            let result = try await authorizationController.performRequest(request)
-            guard case .appleID(let credential) = result else { return .failed }
-            return ProviderOutcome(apple: .success(credential))
-        } catch {
-            return ProviderOutcome(apple: .failure(error))
+    private func completed(_ result: Result<ASAuthorization, any Error>) {
+        switch result {
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential
+            else {
+                model.appleCompleted(.failed)
+                return
+            }
+            model.appleCompleted(ProviderOutcome(apple: .success(credential)))
+        case .failure(let error):
+            model.appleCompleted(ProviderOutcome(apple: .failure(error)))
         }
     }
 }
@@ -54,7 +55,7 @@ struct GoogleSignInButton: View {
         Button("Continue with Google", action: model.continueWithGoogle)
             .buttonStyle(
                 ProviderButtonStyle(
-                    logo: .inSlot(Image("GoogleG")),
+                    logo: Image("GoogleG"),
                     fill: Color("GoogleFill"),
                     foreground: Color("GoogleLabel"),
                     stroke: Color("GoogleStroke"),
@@ -65,25 +66,23 @@ struct GoogleSignInButton: View {
     }
 }
 
-private enum ProviderLogo {
-    case inSlot(Image)
-    case buttonHeight(Image)
-}
-
 private struct ProviderButtonStyle: ButtonStyle {
-    let logo: ProviderLogo
+    let logo: Image
     let fill: Color
     let foreground: Color
-    let stroke: Color?
+    let stroke: Color
     let isSigningIn: Bool
     @ScaledMetric(relativeTo: .body) private var logoSide: CGFloat = 20
     @ScaledMetric(relativeTo: .body) private var slotSide: CGFloat = 24
 
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 0) {
-            slottedLogo
+            logo
+                .resizable()
+                .scaledToFit()
+                .frame(width: logoSide, height: logoSide)
                 .frame(width: slotSide, height: slotSide)
-                .alignmentGuide(.logoCentre) { $0[HorizontalAlignment.center] }
+                .accessibilityHidden(true)
             configuration.label
                 .font(.body.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -103,48 +102,16 @@ private struct ProviderButtonStyle: ButtonStyle {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: 52)
         .foregroundStyle(foreground)
-        .background(alignment: Alignment(horizontal: .logoCentre, vertical: .center)) {
-            if case .buttonHeight(let image) = logo, !isSigningIn {
-                image
-                    .resizable()
-                    .scaledToFit()
-                    .accessibilityHidden(true)
-            }
-        }
         .background(fill, in: .capsule)
         .clipShape(.capsule)
         .overlay {
-            if let stroke {
-                Capsule()
-                    .strokeBorder(stroke, lineWidth: 1)
-            }
+            Capsule()
+                .strokeBorder(stroke, lineWidth: 1)
         }
         .contentShape(.capsule)
         .compositingGroup()
         .opacity(configuration.isPressed ? 0.8 : 1)
     }
-
-    @ViewBuilder private var slottedLogo: some View {
-        if case .inSlot(let image) = logo {
-            image
-                .resizable()
-                .scaledToFit()
-                .frame(width: logoSide, height: logoSide)
-                .accessibilityHidden(true)
-        } else {
-            Color.clear
-        }
-    }
-}
-
-extension HorizontalAlignment {
-    private enum LogoCentre: AlignmentID {
-        static func defaultValue(in context: ViewDimensions) -> CGFloat {
-            context[HorizontalAlignment.center]
-        }
-    }
-
-    fileprivate static let logoCentre = HorizontalAlignment(LogoCentre.self)
 }
 
 extension View {

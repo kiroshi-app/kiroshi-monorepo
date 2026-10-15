@@ -8,6 +8,7 @@ struct ProblemLabel: View {
             .font(.footnote)
             .foregroundStyle(Color(.systemRed))
             .padding(.horizontal, 4)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

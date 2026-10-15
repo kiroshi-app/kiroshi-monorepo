@@ -11,10 +11,11 @@ struct ProviderCredential: Equatable, Sendable {
     let idToken: String
     var nonce: String?
     var name: String?
+    var authorizationCode: String?
 }
 
 enum ProviderOutcome: Equatable, Sendable {
-    case authorized(idToken: String, name: String?)
+    case authorized(idToken: String, name: String?, authorizationCode: String? = nil)
     case cancelled
     case failed
 }
@@ -37,7 +38,11 @@ extension ProviderOutcome {
                 self = .failed
                 return
             }
-            self = .authorized(idToken: token, name: Self.name(of: credential.fullName))
+            self = .authorized(
+                idToken: token, name: Self.name(of: credential.fullName),
+                authorizationCode: credential.authorizationCode.flatMap {
+                    String(data: $0, encoding: .utf8)
+                })
         case .failure(let error):
             self = Self.isCancellation(error) ? .cancelled : .failed
         }
