@@ -155,6 +155,50 @@ struct ProviderSignInModelTests {
         #expect(try await lastRequestBody()["name"] == nil)
     }
 
+    @Test func appleSendsTheAuthorizationCodeUnchangedWhenItHasOne() async throws {
+        await transport.answer(CloudFixture.providerSignInPath, with: CloudFixture.signedIn)
+        let model = makeModel()
+
+        _ = await signInWithApple(
+            model,
+            outcome: .authorized(
+                idToken: "apple-id-token", name: nil, authorizationCode: "c1a2.0.rsxq.Zx9-_"))
+
+        #expect(try await lastRequestBody()["authorizationCode"] == "c1a2.0.rsxq.Zx9-_")
+    }
+
+    @Test func appleWithoutAnAuthorizationCodeLeavesItOut() async throws {
+        await transport.answer(CloudFixture.providerSignInPath, with: CloudFixture.signedIn)
+        let model = makeModel()
+
+        _ = await signInWithApple(model, outcome: .authorized(idToken: "apple-id-token", name: nil))
+
+        #expect(try await lastRequestBody().keys.contains("authorizationCode") == false)
+    }
+
+    @Test func eachAppleSheetSendsItsOwnCodeAndARetryNeverResendsTheLastOne() async throws {
+        await transport.answer(CloudFixture.providerSignInPath, with: Self.refusedToken)
+        let model = makeModel()
+        _ = await signInWithApple(
+            model,
+            outcome: .authorized(idToken: "apple-id-token", name: nil, authorizationCode: "first"))
+
+        _ = await signInWithApple(model, outcome: .authorized(idToken: "apple-id-token", name: nil))
+
+        #expect(try await lastRequestBody().keys.contains("authorizationCode") == false)
+    }
+
+    @Test func aGoogleSignInNeverCarriesAnAuthorizationCode() async throws {
+        await transport.answer(CloudFixture.providerSignInPath, with: CloudFixture.signedIn)
+        let model = makeModel()
+
+        await model.signInWithGoogle()
+
+        let body = try #require(await transport.requests.last?.httpBody)
+        let keys = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any]).keys
+        #expect(!keys.contains("authorizationCode"))
+    }
+
     @Test func googleSendsItsTokenWithoutNonceOrNameThenSignsIn() async throws {
         await transport.answer(CloudFixture.providerSignInPath, with: CloudFixture.signedIn)
         let model = makeModel()

@@ -67,7 +67,8 @@ struct KiroshiCloud: Sendable {
             "api/auth/sign-in/social",
             body: IdTokenSignIn(
                 provider: credential.provider.rawValue, idToken: credential.idToken,
-                nonce: credential.nonce, name: credential.name, deviceName: deviceName))
+                nonce: credential.nonce, name: credential.name,
+                authorizationCode: credential.authorizationCode, deviceName: deviceName))
         guard let (status, data) = try await send(request) else { return .unreachable }
         switch status {
         case 200:
@@ -158,8 +159,14 @@ private struct IdTokenSignIn: Encodable {
     let idToken: String
     let nonce: String?
     let name: String?
+    let authorizationCode: String?
     let deviceName: String
     let platform = "ios"
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, idToken, nonce, name, deviceName, platform
+        case authorizationCode = "authorizationCode"
+    }
 }
 
 private struct GrantedSession: Decodable {
