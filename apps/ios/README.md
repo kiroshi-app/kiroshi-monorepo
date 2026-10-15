@@ -165,7 +165,7 @@ Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of th
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
 ```
 
-Between your email and Sign out, Privacy Policy, Terms of Use and Support open `https://kiroshi.app/privacy`, `/terms` and `/support` (`KiroshiPage`) in an `SFSafariViewController` over the app, which its Close dismisses.
+Between your email and Sign out, Privacy Policy (in the section `Where your messages go`), Terms of Use and Support open `https://kiroshi.app/privacy`, `/terms` and `/support` (`KiroshiPage`) in an `SFSafariViewController` over the app, which its Close dismisses.
 
 `KiroshiUITests` opens the sheet from both tabs of `2.1`, checks `6.1` opens it once, on Conversations only, opens each of the three pages from `6.1` and closes it, cancels then confirms Sign out from `6.2`, and runs the accessibility audit on `6.1` and `6.2`.
 
@@ -188,13 +188,15 @@ Tap your initial, then Sign out. Relaunched with `-fixture keychain` after confi
 
 ## Where your messages go
 
-Before the spaces load, a signed-in account that hasn't agreed yet on this iPhone gets the sheet `Where your messages go` (`AgreementSheet`, no artboard): its messages reach the Mac through the relay, then the model provider the Mac uses. `I agree` records the account in `UserDefaults` (`messageRoutingAgreements`, `UserDefaultsAgreementStore`), keyed by the cloud's user id, or the email for a session an older build saved, then loads the spaces; `Not now` signs out to Welcome. It shows again on a new device, after a reinstall or for another account. The cloud doesn't know about the agreement. Every fixture has agreed already except `agreement`, which opens on the sheet, and `keychain` and `keychain-seeded`, which read the real `UserDefaults`:
+Sign-in goes straight to the spaces: nothing about where messages go shows there. The first Send of an account that hasn't agreed yet on this iPhone stops before anything reaches the relay, files included, and opens the half sheet `Where your messages go` over the Conversation (`MessageConsentSheet`, artboard "D · Half sheet" of the Paper file "Kiroshi, iOS AI consent"): its messages reach the Mac through the relay, then the agent, which sends them to Anthropic. `Agree and send` records the account in `UserDefaults` (`messageRoutingAgreements`, `UserDefaultsAgreementStore`), keyed by the cloud's user id, or the email for a session an older build saved, closes the sheet and sends the message once; that account is never asked again on this iPhone. `Not now`, or swiping the sheet down, sends nothing, keeps the draft in the composer and the person signed in, and shows `Not sent. Your draft stays here.` above it ("State · Not now, draft kept"); the next Send asks again. The same gate (`SendGate`, one per thread, reading the account's `MessageConsent`) guards a Conversation, a group and a Mission. At the accessibility text sizes the sheet opens at the large detent so its text scrolls above both actions.
+
+Settings holds the section `Where your messages go` ("Settings · Where your messages go"): `Send messages to the agent` shows the stored agreement, and turning it off withdraws it, so the next Send asks again. Once off, the toggle stays off until the next `Agree and send`. Its Privacy Policy row is the only one in Settings. It shows again on a new device, after a reinstall or for another account. The cloud doesn't know about the agreement. Every fixture has agreed already except `agreement`, which opens on Juniper's empty Conversation with a draft typed ("0 · Draft typed, before Send"), and `keychain` and `keychain-seeded`, which read the real `UserDefaults` and open on the spaces whatever it holds:
 
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture agreement
 ```
 
-`AgreementSheetTests` audits the sheet, at the largest text size too, and takes both ways out of it.
+`MessageConsentTests` sends from `agreement` and audits the sheet, at the largest text size too, agrees and sends once, then sends again without the sheet, takes Not now and swipes the sheet down, and turns the setting off from `3.2` before sending again.
 
 ## Sign in with Apple and Google
 
