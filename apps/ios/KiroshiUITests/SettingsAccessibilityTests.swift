@@ -67,14 +67,19 @@ final class SettingsAccessibilityTests: XCTestCase {
             row.tap()
 
             let address = safari.buttons["URL"]
-            XCTAssertTrue(address.waitForExistence(timeout: 10), title)
+            let close = safari.buttons["Close"]
+            XCTAssertTrue(becomesHittable(close), title)
             XCTAssertTrue((address.value as? String)?.contains("kiroshi.app") == true, title)
             XCTAssertEqual(app.state, .runningForeground, title)
-            safari.buttons["Close"].tap()
-            let isBack = expectation(
-                for: NSPredicate(format: "isHittable == true"), evaluatedWith: row)
-            wait(for: [isBack], timeout: 10)
+            close.tap()
+            XCTAssertTrue(becomesHittable(row), title)
         }
+    }
+
+    func becomesHittable(_ element: XCUIElement) -> Bool {
+        let hittable = expectation(
+            for: NSPredicate(format: "isHittable == true"), evaluatedWith: element)
+        return XCTWaiter().wait(for: [hittable], timeout: 10) == .completed
     }
 
     func testTheConfirmationPassesTheAuditCancelKeepsTheSheetAndSignOutOpensWelcome()
