@@ -35,6 +35,112 @@ struct UserDefaultsAgreementStoreTests {
 }
 
 @MainActor
+struct MessageConsentTests {
+    @Test func readsTheAgreementOfItsAccountOnly() {
+        let agreements = CloudFixture.agreements()
+
+        #expect(MessageConsent(account: CloudFixture.userId, agreements: agreements).hasAgreed)
+        #expect(!MessageConsent(account: "alex-id", agreements: agreements).hasAgreed)
+    }
+
+    @Test func agreeingAndWithdrawingAreStoredForTheAccount() {
+        let agreements = InMemoryAgreementStore()
+        let consent = MessageConsent(account: CloudFixture.userId, agreements: agreements)
+
+        consent.agree()
+
+        #expect(consent.hasAgreed)
+        #expect(agreements.agreed == [CloudFixture.userId])
+
+        consent.withdraw()
+
+        #expect(!consent.hasAgreed)
+        #expect(agreements.agreed.isEmpty)
+    }
+}
+
+@MainActor
+struct SendGateTests {
+    let agreements = InMemoryAgreementStore()
+    let gate = SendGate()
+    var consent: MessageConsent {
+        MessageConsent(account: CloudFixture.userId, agreements: agreements)
+    }
+
+    @Test func aFirstSendAsksAndSendsNothing() {
+        var sends = 0
+
+        gate.send(with: consent) { sends += 1 }
+
+        #expect(gate.isAsking)
+        #expect(sends == 0)
+        #expect(agreements.agreed.isEmpty)
+    }
+
+    @Test func agreeAndSendSendsOnceAndNeverAsksAgain() {
+        let consent = consent
+        var sends = 0
+        gate.send(with: consent) { sends += 1 }
+
+        gate.agreeAndSend(with: consent) { sends += 1 }
+        gate.agreeAndSend(with: consent) { sends += 1 }
+
+        #expect(sends == 1)
+        #expect(!gate.isAsking)
+        #expect(agreements.agreed == [CloudFixture.userId])
+
+        let nextThread = SendGate()
+        nextThread.send(with: self.consent) { sends += 1 }
+
+        #expect(!nextThread.isAsking)
+        #expect(sends == 2)
+    }
+
+    @Test func notNowKeepsTheDraftAndTheNextSendAsksAgain() {
+        let consent = consent
+        var sends = 0
+        gate.send(with: consent) { sends += 1 }
+
+        gate.notNow()
+
+        #expect(!gate.isAsking)
+        #expect(gate.isDraftKept)
+        #expect(sends == 0)
+        #expect(agreements.agreed.isEmpty)
+
+        gate.send(with: consent) { sends += 1 }
+
+        #expect(gate.isAsking)
+        #expect(sends == 0)
+    }
+
+    @Test func aSendThatGoesOutClearsTheNote() {
+        let consent = consent
+        gate.send(with: consent) {}
+        gate.notNow()
+
+        gate.send(with: consent) {}
+        gate.agreeAndSend(with: consent) {}
+
+        #expect(!gate.isDraftKept)
+    }
+
+    @Test func withdrawingMakesTheNextSendAsk() {
+        let consent = consent
+        consent.agree()
+        var sends = 0
+        gate.send(with: consent) { sends += 1 }
+        #expect(sends == 1)
+
+        consent.withdraw()
+        gate.send(with: consent) { sends += 1 }
+
+        #expect(gate.isAsking)
+        #expect(sends == 1)
+    }
+}
+
+@MainActor
 struct AgreementTests {
     let transport = ScriptedTransport()
 
@@ -45,70 +151,51 @@ struct AgreementTests {
             relay: CloudFixture.relay)
     }
 
-    @Test func aFirstSignInAsksBeforeLoadingTheSpaces() async {
+    @Test func aFirstSignInGoesStraightToTheSpaces() async {
         await transport.answer(CloudFixture.signInPath, with: CloudFixture.signedIn)
-        let sessions = InMemorySessionStore()
+        await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
         let agreements = InMemoryAgreementStore()
-        let model = makeModel(sessions: sessions, agreements: agreements)
+        let model = makeModel(sessions: InMemorySessionStore(), agreements: agreements)
         model.path = [.code]
         model.email = CloudFixture.email
         model.code = "482913"
 
         await model.signIn()
 
-        #expect(model.stage == .agreeing)
-        #expect(model.path.isEmpty)
-        #expect(sessions.saved?.userId == CloudFixture.userId)
+        #expect(model.stage == .loadingSpaces)
+
+        await model.loadSpaces()
+
+        #expect(model.stage == .spaces(CloudFixture.artboardSpaces))
+        #expect(model.consent?.hasAgreed == false)
         #expect(agreements.agreed.isEmpty)
     }
 
-    @Test func agreeingIsRememberedForTheAccountAndLoadsTheSpaces() {
+    @Test func theConsentFollowsTheSignedInAccountAndEndsWithTheSession() async {
+        await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
+        await transport.answer(CloudFixture.signOutPath, with: CloudFixture.signedOut)
         let agreements = InMemoryAgreementStore()
         let model = makeModel(
             sessions: InMemorySessionStore(CloudFixture.session), agreements: agreements)
-        #expect(model.stage == .agreeing)
-
-        model.agree()
-
         #expect(model.stage == .loadingSpaces)
-        #expect(agreements.agreed == [CloudFixture.userId])
-        let relaunched = makeModel(
-            sessions: InMemorySessionStore(CloudFixture.session), agreements: agreements)
-        #expect(relaunched.stage == .loadingSpaces)
-    }
+        await model.loadSpaces()
 
-    @Test func notNowSignsOutWithoutAgreeing() async {
-        await transport.answer(CloudFixture.signOutPath, with: CloudFixture.signedOut)
-        let sessions = InMemorySessionStore(CloudFixture.session)
-        let agreements = InMemoryAgreementStore()
-        let model = makeModel(sessions: sessions, agreements: agreements)
-
+        model.consent?.agree()
         model.signOut()
         await model.revocation?.value
 
-        #expect(model.stage == .signedOut)
-        #expect(sessions.saved == nil)
-        #expect(agreements.agreed.isEmpty)
-        #expect(await transport.requests.last?.url?.path() == CloudFixture.signOutPath)
-        let relaunched = makeModel(
-            sessions: InMemorySessionStore(CloudFixture.session), agreements: agreements)
-        #expect(relaunched.stage == .agreeing)
+        #expect(agreements.agreed == [CloudFixture.userId])
+        #expect(model.consent == nil)
     }
 
-    @Test func anotherAccountIsAskedAgain() {
-        let other = Session(bearer: "other-bearer", email: "alex@example.com", userId: "alex-id")
-        let model = makeModel(
-            sessions: InMemorySessionStore(other), agreements: CloudFixture.agreements())
-
-        #expect(model.stage == .agreeing)
-    }
-
-    @Test func aSessionSavedWithoutItsUserIdIsKnownByItsEmail() {
+    @Test func aSessionSavedWithoutItsUserIdIsKnownByItsEmail() async {
+        await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
         let saved = Session(bearer: "fixture-bearer", email: CloudFixture.email)
         let agreements = InMemoryAgreementStore()
         let model = makeModel(sessions: InMemorySessionStore(saved), agreements: agreements)
+        await model.loadSpaces()
 
-        model.agree()
+        model.consent?.agree()
 
         #expect(agreements.agreed == [CloudFixture.email])
     }

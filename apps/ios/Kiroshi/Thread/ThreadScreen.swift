@@ -10,6 +10,8 @@ struct ThreadScreen<Model: ThreadModel>: View {
     @State private var sentTop: CGFloat?
     @State private var headerOverhang: CGFloat = 0
     @State private var topShownId: ThreadMessage.ID?
+    @State private var gate = SendGate()
+    @Environment(MessageConsent.self) private var consent
 
     var body: some View {
         transcript
@@ -35,7 +37,19 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 }
             }
             .safeAreaBar(edge: .bottom) {
-                ThreadComposer(model: model, isHostOffline: space.offlineSpace != nil)
+                ThreadComposer(
+                    model: model, isHostOffline: space.offlineSpace != nil,
+                    isDraftKept: gate.isDraftKept
+                ) {
+                    gate.send(with: consent) { model.send() }
+                }
+            }
+            .sheet(isPresented: isAskingConsent) {
+                MessageConsentSheet {
+                    gate.agreeAndSend(with: consent) { model.send() }
+                } notNow: {
+                    gate.notNow()
+                }
             }
             .scrollEdgeEffectStyle(.soft, for: .bottom)
             .navigationBarTitleDisplayMode(.inline)
@@ -139,6 +153,14 @@ struct ThreadScreen<Model: ThreadModel>: View {
             guard scrolling != .followingTheBottom else { return }
             scrolling = .followingTheBottom
             position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+        }
+    }
+
+    private var isAskingConsent: Binding<Bool> {
+        Binding {
+            gate.isAsking
+        } set: { isShown in
+            if !isShown { gate.notNow() }
         }
     }
 

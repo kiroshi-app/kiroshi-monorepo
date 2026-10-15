@@ -163,7 +163,7 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
-            case .keychain, .seededKeychain, .settings, .signOutAlert, .deleteAccount, .agreement:
+            case .keychain, .seededKeychain, .settings, .signOutAlert, .deleteAccount:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
@@ -191,7 +191,7 @@
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
-                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused:
+                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused, .agreement:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -283,7 +283,7 @@
                 .threadFailed, .groupThread, .groupWorking, .groupFailed, .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
-                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused:
+                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused, .agreement:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(

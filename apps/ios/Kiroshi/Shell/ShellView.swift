@@ -25,6 +25,7 @@ struct ShellView: View {
         }
         .tint(.primary)
         .environment(store.pictures)
+        .environment(account.consent)
         .task(id: RelayFollow(spaceId: store.currentSpaceId, isInForeground: isInForeground)) {
             guard isInForeground else { return }
             await store.follow()

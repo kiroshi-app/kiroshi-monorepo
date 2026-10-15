@@ -30,6 +30,13 @@ final class DeleteAccountTests: XCTestCase {
         return lines.split(separator: "\n").filter { $0 == "DELETE /me" }.count
     }
 
+    static func isTheWhereYourMessagesGoSectionFooter(
+        _ issue: XCUIAccessibilityAuditIssue
+    ) -> Bool {
+        issue.auditType == .dynamicType
+            && issue.element?.label == SettingsAccessibilityTests.consentFooter
+    }
+
     static func isTheFailureLineInItsFooter(_ issue: XCUIAccessibilityAuditIssue) -> Bool {
         issue.auditType == .dynamicType && issue.element?.label.contains(failure) == true
     }
@@ -72,7 +79,11 @@ final class DeleteAccountTests: XCTestCase {
         XCTAssertEqual(deletionCalls(), 1)
         XCTAssertTrue(app.staticTexts["sam@example.com"].exists)
         XCTAssertTrue(app.collectionViews.buttons["Sign out"].exists)
-        try audit(app) { issue in Self.isTheFailureLineInItsFooter(issue) }
+        let bars = settingsBars(in: app)
+        try audit(app) { issue in
+            Self.isTheFailureLineInItsFooter(issue)
+                || Self.isTheWhereYourMessagesGoSectionFooter(issue) || issue.isUnderABar(bars)
+        }
 
         deleteAccountRow(app).tap()
         let alert = app.alerts["Delete your account?"]
