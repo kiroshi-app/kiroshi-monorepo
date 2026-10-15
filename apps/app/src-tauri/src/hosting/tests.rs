@@ -16,7 +16,7 @@ use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use super::authorship::Caller;
 use super::bridge::{belongs_to_the_host, LocalApi};
@@ -80,15 +80,14 @@ const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const PERSONAL: &str = "personal";
 const JOINED_SPACE_TOKEN: &str = "joined-space-token-of-the-host";
 const INVOKE_ROUTE: &str = "/api/invoke/{command}";
-const PATIENCE: Duration = Duration::from_secs(5);
+const PATIENCE: Duration = Duration::from_secs(10);
 const OWNER_EMAIL: &str = "owner@example.com";
 const POLL_EVERY: Duration = Duration::from_millis(100);
-const LONGER_THAN_THE_FIRST_BACKOFF: Duration = Duration::from_millis(1500);
 
 #[derive(Clone)]
 struct Relay {
 	refusal: Option<StatusCode>,
-	registration_delay: Arc<Mutex<Duration>>,
+	is_registration_open: Arc<watch::Sender<bool>>,
 	is_registration_down: Arc<AtomicBool>,
 	registered: Arc<Mutex<Vec<String>>>,
 	known: Arc<Mutex<HashSet<String>>>,
@@ -97,6 +96,7 @@ struct Relay {
 	members: Arc<Mutex<Vec<Value>>>,
 	member_calls: Arc<Mutex<Vec<String>>>,
 	member_answer: Arc<Mutex<Option<(StatusCode, Value)>>>,
+	noticed: Arc<watch::Sender<()>>,
 }
 
 fn cloud_member(user_id: &str, email: &str, role: &str, state: &str) -> Value {
@@ -105,6 +105,7 @@ fn cloud_member(user_id: &str, email: &str, role: &str, state: &str) -> Value {
 
 fn member_call(relay: &Relay, call: String) -> Option<Response> {
 	relay.member_calls.lock().expect("the relay").push(call);
+	relay.noticed.send_replace(());
 	let forced = relay.member_answer.lock().expect("the relay").clone();
 	forced.map(|(status, body)| answered_json(status, body))
 }
@@ -177,8 +178,9 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 		.lock()
 		.expect("the relay")
 		.push(body["name"].as_str().unwrap_or("").to_owned());
-	let delay = *relay.registration_delay.lock().expect("the relay");
-	tokio::time::sleep(delay).await;
+	relay.noticed.send_replace(());
+	let mut is_open = relay.is_registration_open.subscribe();
+	is_open.wait_for(|is_open| *is_open).await.expect("the relay opens");
 	relay.known.lock().expect("the relay").insert(id.clone());
 	answered_json(StatusCode::CREATED, json!({ "id": id, "name": body["name"], "role": "owner" }))
 }
@@ -380,7 +382,7 @@ impl Harness {
 		let (sockets_in, sockets) = mpsc::unbounded_channel();
 		let relay = Relay {
 			refusal,
-			registration_delay: Arc::default(),
+			is_registration_open: Arc::new(watch::channel(true).0),
 			is_registration_down: Arc::default(),
 			registered: Arc::default(),
 			known: Arc::default(),
@@ -394,6 +396,7 @@ impl Harness {
 			)])),
 			member_calls: Arc::default(),
 			member_answer: Arc::default(),
+			noticed: Arc::new(watch::channel(()).0),
 		};
 		let cloud = served(
 			Router::new()
@@ -428,15 +431,19 @@ impl Harness {
 		);
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		let hearing = Arc::clone(&heard);
+		let noticing = Arc::clone(&relay.noticed);
 		app.listen(CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event.payload()).expect("a json payload");
 			hearing.lock().expect("the events").push(payload);
+			noticing.send_replace(());
 		});
 		let heard_members = Arc::new(Mutex::new(Vec::new()));
 		let hearing_members = Arc::clone(&heard_members);
+		let noticing = Arc::clone(&relay.noticed);
 		app.listen(MEMBERS_CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event.payload()).expect("a json payload");
 			hearing_members.lock().expect("the events").push(payload);
+			noticing.send_replace(());
 		});
 		Self { app, relay, sockets, heard, heard_members, _temporary: vec![database, root] }
 	}
@@ -453,25 +460,38 @@ impl Harness {
 		self.reached_by(PERSONAL, expected).await;
 	}
 
+	async fn noticed_until<T>(&self, awaited: &str, found: impl Fn() -> Option<T>) -> T {
+		let mut noticed = self.relay.noticed.subscribe();
+		loop {
+			if let Some(found) = found() {
+				return found;
+			}
+			tokio::time::timeout(PATIENCE, noticed.changed())
+				.await
+				.unwrap_or_else(|_| panic!("{awaited} was not noticed within {PATIENCE:?}"))
+				.expect("the harness listens");
+		}
+	}
+
 	async fn reached_by(&self, space_id: &str, expected: HostingState) {
 		let current = || self.app.state::<Hosting>().current(space_id);
-		for _ in 0..500 {
-			if current() == expected {
-				return;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		panic!("space {space_id} stayed {:?}, never {expected:?}", current());
+		let awaited = format!("space {space_id} reaching {expected:?}");
+		self.noticed_until(&awaited, || (current() == expected).then_some(())).await;
 	}
 
 	async fn failed(&self) -> String {
-		for _ in 0..500 {
-			if let HostingState::Failed { reason } = self.state() {
-				return reason;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		panic!("the space stayed {:?}", self.state());
+		let reason = || match self.state() {
+			HostingState::Failed { reason } => Some(reason),
+			_ => None,
+		};
+		self.noticed_until("a failed space", reason).await
+	}
+
+	fn running_relay(&self) -> watch::Sender<bool> {
+		let hosting = self.app.state::<Hosting>();
+		let hosts = hosting.hosts();
+		let run = hosts.get(PERSONAL).and_then(|host| host.run.as_ref());
+		run.map(|run| run.stop.clone()).expect("a relay runs")
 	}
 
 	async fn started(&self) -> HostingState {
@@ -532,15 +552,13 @@ impl Harness {
 	}
 
 	async fn heard_until(&self, is_heard: impl Fn(&[String]) -> bool) -> Vec<String> {
-		for _ in 0..500 {
-			let kinds = self.heard_kinds();
-			if is_heard(&kinds) {
-				return kinds;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		self.heard_kinds()
+		let heard = || Some(self.heard_kinds()).filter(|kinds| is_heard(kinds));
+		self.noticed_until("the awaited hosting changes", heard).await
 	}
+}
+
+async fn ended_on_its_own(relay: watch::Sender<bool>) {
+	tokio::time::timeout(PATIENCE, relay.closed()).await.expect("the relay ended on its own");
 }
 
 async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
@@ -639,8 +657,9 @@ fn a_bearer_the_relay_refuses_needs_a_sign_in_and_is_not_retried() {
 		let harness = Harness::new("revoked", Some(StatusCode::UNAUTHORIZED), Some(BEARER)).await;
 
 		harness.started().await;
+		let relay = harness.running_relay();
 		harness.reached(HostingState::NeedsSignIn).await;
-		tokio::time::sleep(LONGER_THAN_THE_FIRST_BACKOFF).await;
+		ended_on_its_own(relay).await;
 
 		assert_eq!(harness.attempts(), 1);
 		assert_eq!(harness.state(), HostingState::NeedsSignIn);
@@ -653,8 +672,9 @@ fn an_instance_owned_by_another_account_fails_naming_403_and_is_not_retried() {
 		let harness = Harness::new("forbidden", Some(StatusCode::FORBIDDEN), Some(BEARER)).await;
 
 		harness.started().await;
+		let relay = harness.running_relay();
 		let reason = harness.failed().await;
-		tokio::time::sleep(LONGER_THAN_THE_FIRST_BACKOFF).await;
+		ended_on_its_own(relay).await;
 
 		assert!(reason.contains("403"), "{reason}");
 		assert_eq!(harness.attempts(), 1);
@@ -666,13 +686,14 @@ fn a_host_replaced_by_another_fails_naming_4001_and_does_not_reconnect() {
 	run(async {
 		let mut harness = Harness::signed_in("replaced").await;
 		harness.started().await;
+		let relay = harness.running_relay();
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
 		let close = CloseFrame { code: 4001, reason: "Host replaced".into() };
 		member.send(Message::Close(Some(close))).await.expect("the close leaves");
 		let reason = harness.failed().await;
-		tokio::time::sleep(LONGER_THAN_THE_FIRST_BACKOFF).await;
+		ended_on_its_own(relay).await;
 
 		assert!(reason.contains("4001"), "{reason}");
 		assert_eq!(harness.attempts(), 1);
@@ -1114,7 +1135,6 @@ fn a_second_start_answers_the_current_state_without_another_socket() {
 		harness.reached(HostingState::Online).await;
 
 		assert_eq!(harness.started().await, HostingState::Online);
-		tokio::time::sleep(Duration::from_millis(200)).await;
 
 		assert_eq!(harness.attempts(), 1);
 	});
@@ -1172,13 +1192,17 @@ fn a_registration_refused_401_needs_a_sign_in_and_opens_no_socket() {
 fn a_stop_during_registration_keeps_the_answered_instance_and_a_later_start_reuses_it() {
 	run(async {
 		let mut harness = Harness::signed_in("stop-registering").await;
-		*harness.relay.registration_delay.lock().expect("the relay") = Duration::from_millis(400);
+		harness.relay.is_registration_open.send_replace(false);
 
 		harness.started().await;
-		while harness.registered().is_empty() {
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		assert_eq!(harness.stopped().await, HostingState::Off);
+		let is_registering = || (!harness.registered().is_empty()).then_some(());
+		harness.noticed_until("a registration", is_registering).await;
+		let mut stopping = harness.running_relay().subscribe();
+		let (stopped, ()) = tokio::join!(harness.stopped(), async {
+			stopping.wait_for(|is_stopping| *is_stopping).await.expect("the relay is told");
+			harness.relay.is_registration_open.send_replace(true);
+		});
+		assert_eq!(stopped, HostingState::Off);
 		let (kept, flagged) = harness.stored().await;
 		harness.started().await;
 		let _member = harness.member().await;
@@ -1572,24 +1596,13 @@ fn an_online_space_polls_its_members_and_announces_only_a_changed_list() {
 		let _member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
-		let polled_a_few_times = || harness.member_calls().len() >= 4;
-		for _ in 0..500 {
-			if polled_a_few_times() {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		assert!(polled_a_few_times(), "{:?}", harness.member_calls());
+		let polled_a_few_times = || (harness.member_calls().len() >= 4).then_some(());
+		harness.noticed_until("four member polls", polled_a_few_times).await;
 		assert_eq!(harness.heard_member_lists().len(), 1);
 
 		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
-		for _ in 0..500 {
-			if harness.heard_member_lists().len() == 2 {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		let heard = harness.heard_member_lists();
+		let changed_twice = || Some(harness.heard_member_lists()).filter(|heard| heard.len() == 2);
+		let heard = harness.noticed_until("a second member list", changed_twice).await;
 		assert_eq!(heard.len(), 2);
 		assert_eq!(heard[1][1]["userId"], "guest");
 	});
@@ -1603,12 +1616,8 @@ fn an_online_space_polls_its_members_at_once_before_the_fifteen_seconds() {
 		let _member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
-		for _ in 0..500 {
-			if !harness.heard_member_lists().is_empty() {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
+		let is_listed = || (!harness.heard_member_lists().is_empty()).then_some(());
+		harness.noticed_until("a member list", is_listed).await;
 
 		assert_eq!(harness.heard_member_lists().len(), 1);
 		assert_eq!(harness.member_calls(), vec!["GET"]);
@@ -1627,8 +1636,8 @@ fn a_space_that_is_not_online_does_not_poll_its_members() {
 			Harness::polling_members("members-offline", None, Some(BEARER), POLL_EVERY).await;
 		harness.plant(INSTANCE).await;
 
-		tokio::time::sleep(POLL_EVERY * 3).await;
-
+		let hosts = harness.app.state::<Hosting>();
+		assert!(hosts.hosts().get(PERSONAL).and_then(|host| host.run.as_ref()).is_none());
 		assert!(harness.member_calls().is_empty());
 	});
 }
@@ -1660,8 +1669,6 @@ const TWO_SPACES: &str = "
 			('m-theirs', 'c-theirs', 't-theirs', 1, 'user', 'theirs', 'complete', 1);
 ";
 
-const PROBE_PATIENCE: Duration = Duration::from_millis(100);
-
 const A_JOINER: &str = "joiner-account";
 
 struct Guest {
@@ -1687,16 +1694,11 @@ impl Guest {
 	}
 
 	async fn relay_listens(&mut self) {
-		for probe in 0.. {
-			let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": probe }));
-			events::emit(self.harness.app.handle(), Event::untyped(probed.0), probed.1.clone())
-				.expect("emitted");
-			let expected = as_forwarded(probed);
-			let heard = next_text(&mut self.member, |frame| *frame == expected);
-			if tokio::time::timeout(PROBE_PATIENCE, heard).await.is_ok() {
-				return;
-			}
-		}
+		let probed = (CHANGED_EVENT, json!({ "spaceId": PERSONAL, "probe": 0 }));
+		events::emit(self.harness.app.handle(), Event::untyped(probed.0), probed.1.clone())
+			.expect("emitted");
+		let expected = as_forwarded(probed);
+		next_text(&mut self.member, |frame| *frame == expected).await;
 	}
 
 	async fn called(&mut self, command: &str, args: Value) -> Value {
