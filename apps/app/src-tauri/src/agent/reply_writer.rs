@@ -1812,7 +1812,16 @@ mod tests {
 		lead.open_turn(submitted("t1", "p1")).await;
 		lead.record(&completed("m1", &format!("<@{ada}> over to you"), 2)).await;
 		lead.record(&cancelled_turn()).await;
+		let runs_left: i64 = written
+			.database()
+			.call(|connection| {
+				Ok(connection.query_row("SELECT COUNT(*) FROM turn_runs", [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the runs count");
 
 		assert_eq!(last_active_turn(&heard), json!(null));
+		assert!(written.completed_at("t1").await.is_some(), "the cancelled turn was left open");
+		assert_eq!(runs_left, 0, "the cancelled run left a run behind");
 	}
 }
