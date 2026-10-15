@@ -16,6 +16,7 @@ struct SessionEndingTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: keychain, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(),
             relay: RelayEnvironment(transport: relay, clock: TestRelayClock()))
         return (model, keychain)
     }

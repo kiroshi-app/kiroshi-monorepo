@@ -12,7 +12,8 @@ struct SignInModelTests {
         SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
     }
 
     func modelOnCodeScreen(code: String = "482913") -> SignInModel {
@@ -40,7 +41,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         #expect(model.stage == .loadingSpaces)
         #expect(model.signedInEmail == CloudFixture.email)
@@ -100,8 +102,9 @@ struct SignInModelTests {
         #expect(
             sessions.saved
                 == Session(
-                    bearer: "fixture-bearer", email: CloudFixture.email, deviceName: "iPhone",
-                    platform: "ios"))
+                    bearer: "fixture-bearer", email: CloudFixture.email,
+                    userId: CloudFixture.userId,
+                    deviceName: "iPhone", platform: "ios"))
         #expect(model.stage == .loadingSpaces)
         #expect(model.signedInEmail == CloudFixture.email)
         #expect(model.path.isEmpty)
@@ -118,13 +121,14 @@ struct SignInModelTests {
             CloudFixture.signInPath,
             with: .status(
                 200,
-                #"{"token":"fixture-bearer","user":{"email":"sam@example.com"},"session":{"deviceName":"Sam's iPhone","platform":"ios"}}"#
+                #"{"token":"fixture-bearer","user":{"id":"7d3f1c2a-0000-4000-8000-000000000001","email":"sam@example.com"},"session":{"deviceName":"Sam's iPhone","platform":"ios"}}"#
             ))
         let model = SignInModel(
             cloud: KiroshiCloud(
                 baseURL: KiroshiCloud.productionURL, transport: transport,
                 deviceName: "Sam's iPhone"),
-            sessions: sessions, lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(), relay: CloudFixture.relay)
         model.email = CloudFixture.email
         model.code = "482913"
 
@@ -142,7 +146,7 @@ struct SignInModelTests {
             CloudFixture.signInPath,
             with: .status(
                 200,
-                #"{"token":"fixture-bearer","user":{"email":"sam@example.com"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z"}}"#
+                #"{"token":"fixture-bearer","user":{"id":"7d3f1c2a-0000-4000-8000-000000000001","email":"sam@example.com"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z"}}"#
             ))
         let model = modelOnCodeScreen()
 
@@ -292,7 +296,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         await model.loadSpaces()
 
@@ -316,7 +321,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: InMemorySessionStore(CloudFixture.session),
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         await model.loadSpaces()
 
@@ -331,7 +337,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         await model.loadSpaces()
 
@@ -346,7 +353,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         await model.loadSpaces()
 
@@ -359,7 +367,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: InMemorySessionStore(CloudFixture.session),
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
         await model.loadSpaces()
 
         model.checkAgain()
@@ -372,7 +381,8 @@ struct SignInModelTests {
         let model = SignInModel(
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
             sessions: sessions,
-            lastSpace: InMemoryLastSpaceStore(), relay: CloudFixture.relay)
+            lastSpace: InMemoryLastSpaceStore(), agreements: CloudFixture.agreements(),
+            relay: CloudFixture.relay)
 
         model.useAnotherAccount()
 

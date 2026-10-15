@@ -3,7 +3,8 @@
 
     enum CloudFixture {
         static let email = "sam@example.com"
-        static let session = Session(bearer: "fixture-bearer", email: email)
+        static let userId = "7d3f1c2a-0000-4000-8000-000000000001"
+        static let session = Session(bearer: "fixture-bearer", email: email, userId: userId)
         static let codeRequestPath = "/api/auth/email-otp/send-verification-otp"
         static let signInPath = "/api/auth/sign-in/email-otp"
         static let spacesPath = "/instances"
@@ -14,7 +15,7 @@
         static let signedIn = ScriptedTransport.Answer.status(
             200,
             #"""
-            {"token":"fixture-bearer","user":{"id":"7d3f1c2a-0000-4000-8000-000000000001","email":"sam@example.com","createdAt":"2026-10-10T12:00:00.000Z"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z","deviceName":"iPhone","platform":"ios"}}
+            {"token":"fixture-bearer","user":{"id":"\#(userId)","email":"sam@example.com","createdAt":"2026-10-10T12:00:00.000Z"},"session":{"expiresAt":"2026-10-17T12:00:00.000Z","deviceName":"iPhone","platform":"ios"}}
             """#)
         static let noSpaces = ScriptedTransport.Answer.status(200, "[]")
         static let twoSpaces = ScriptedTransport.Answer.status(
@@ -40,6 +41,10 @@
         static let relay = RelayEnvironment(
             transport: FixtureRelayTransport(onlineSpaceIds: [studioId, homeLabId]),
             clock: ContinuousRelayClock())
+
+        static func agreements() -> InMemoryAgreementStore {
+            InMemoryAgreementStore([userId])
+        }
 
         static func error(_ status: Int, code: String, message: String) -> ScriptedTransport.Answer
         {
@@ -70,6 +75,7 @@
         case noSpace = "1.10"
         case spaces
         case spacesUnreachable = "spaces-unreachable"
+        case agreement
         case keychain
         case seededKeychain = "keychain-seeded"
         case home = "2.1"
@@ -144,7 +150,7 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
-            case .keychain, .seededKeychain, .settings, .signOutAlert:
+            case .keychain, .seededKeychain, .settings, .signOutAlert, .agreement:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     CloudFixture.signOutPath: CloudFixture.signedOut,
@@ -168,7 +174,8 @@
 
         fileprivate var isSignedIn: Bool {
             switch self {
-            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .missions, .missionThread,
+            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .agreement, .missions,
+                .missionThread,
                 .missionWorking,
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert:
                 true
@@ -196,6 +203,14 @@
                 return keychain
             default:
                 return InMemorySessionStore(isSignedIn ? CloudFixture.session : nil)
+            }
+        }
+
+        fileprivate var agreements: any AgreementStore {
+            switch self {
+            case .keychain, .seededKeychain: UserDefaultsAgreementStore()
+            case .agreement: InMemoryAgreementStore()
+            default: CloudFixture.agreements()
             }
         }
 
@@ -303,6 +318,7 @@
                     transport: ScriptedTransport(fixture.answers)),
                 sessions: fixture.sessions,
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
+                agreements: fixture.agreements,
                 relay: fixture.relay,
                 google: FixtureGoogleAuthorizer())
             ConversationsFixture.opening = ConversationsFixture.opening(fixture)
@@ -330,7 +346,7 @@
             case .signOutAlert:
                 model.signOutTapped()
             case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
-                .keychain,
+                .agreement, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
