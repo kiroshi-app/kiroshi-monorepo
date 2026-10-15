@@ -33,6 +33,7 @@ import {
 	readSessionBearer,
 	saveBearer,
 } from "./relay"
+import { PrivacyPage, SupportPage, TermsPage } from "./site-pages"
 import { WebsitePage } from "./website-page"
 
 const HomePage = () => (
@@ -152,12 +153,33 @@ const accountRoute = createRoute({
 	errorComponent: LoginLoadFailure,
 })
 
+const privacyRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/privacy",
+	component: PrivacyPage,
+})
+
+const termsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/terms",
+	component: TermsPage,
+})
+
+const supportRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/support",
+	component: SupportPage,
+})
+
 const routeTree = rootRoute.addChildren([
 	homeRoute,
 	loginRoute,
 	authorizeRoute,
 	authorizeDoneRoute,
 	accountRoute,
+	privacyRoute,
+	termsRoute,
+	supportRoute,
 ])
 
 export const createSiteRouter = (history?: RouterHistory) =>

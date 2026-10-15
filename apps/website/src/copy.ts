@@ -149,6 +149,8 @@ export const REPOSITORY_URL = `https://github.com/${REPOSITORY_SLUG}`
 
 export const RELEASES_URL = `${REPOSITORY_URL}/releases`
 
+export const ISSUES_URL = `${REPOSITORY_URL}/issues`
+
 export const LATEST_RELEASE_URL = `https://api.github.com/repos/${REPOSITORY_SLUG}/releases/latest`
 
 export const SCENE_COPY = {
