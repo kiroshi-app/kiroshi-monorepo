@@ -170,7 +170,7 @@ describe("useRosterLists", () => {
 			createdAt: 1,
 		})
 		const chat = createChatController(createScriptedDriver(), store)
-		await act(() => chat.open(BOT, null).then(() => undefined))
+		await act(() => chat.open(BOT, null))
 		await saidIn(store, {
 			conversationId: soloThread.id,
 			content: "Newer word",
