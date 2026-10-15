@@ -134,7 +134,9 @@ Page 6 "Réglages" of "Kiroshi, iOS 2" is the sheet your initial, top left of th
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 6.2
 ```
 
-`KiroshiUITests` opens the sheet from both tabs of `2.1`, checks `6.1` opens it once, on Conversations only, cancels then confirms Sign out from `6.2`, and runs the accessibility audit on `6.1` and `6.2`.
+Between your email and Sign out, Privacy Policy, Terms of Use and Support open `https://kiroshi.app/privacy`, `/terms` and `/support` (`KiroshiPage`) in an `SFSafariViewController` over the app, which its Close dismisses.
+
+`KiroshiUITests` opens the sheet from both tabs of `2.1`, checks `6.1` opens it once, on Conversations only, opens each of the three pages from `6.1` and closes it, cancels then confirms Sign out from `6.2`, and runs the accessibility audit on `6.1` and `6.2`.
 
 Two more Debug fixtures keep the real Keychain and script the cloud (three spaces, Sign out answered), so signing out really empties the Keychain:
 
@@ -157,10 +159,11 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 
 ## Sign in with Apple and Google
 
-Welcome (`WelcomeView`) offers the email, then Sign in with Apple and Continue with Google. Both send the provider's ID token to the cloud's `POST /api/auth/sign-in/social` (`KiroshiCloud.signIn(with:)`), which answers the session body of the email code: the bearer goes to the Keychain the same way. Apple is the system `SignInWithAppleButton`, handed the SHA-256 of a fresh nonce (`Nonce`) whose raw value goes to the cloud with the token and, on the first authorization only, the full name. Google is GoogleSignIn-iOS (`GoogleSignInAuthorizer`, behind `GoogleAuthorizing`), its `serverClientID` the cloud's web client so the token's audience matches. A cancelled sheet goes back silently; a refused token says so under the buttons.
+Welcome (`WelcomeView`) offers the email, then Sign in with Apple and Continue with Google. Both send the provider's ID token to the cloud's `POST /api/auth/sign-in/social` (`KiroshiCloud.signIn(with:)`), which answers the session body of the email code: the bearer goes to the Keychain the same way. Apple is AuthenticationServices' own `SignInWithAppleButton` (black in light, white in dark, clipped to the Google button's capsule and height): Apple draws its logo and title centred together, where the artboard puts the logo in the left slot as Google's. It hands Apple the SHA-256 of a fresh nonce (`Nonce`) whose raw value goes to the cloud with the token, the credential's `authorizationCode` (decoded as UTF-8, read from the credential of that sheet only, never stored, so a new attempt goes through the Apple sheet again) and, on the first authorization only, the full name. The relay exchanges that code for a refresh token it revokes when the account is deleted; its JSON name is the `authorizationCode` case of `IdTokenSignIn.CodingKeys` in `Core/KiroshiCloud.swift`, and a Google sign-in never sends it. Google is GoogleSignIn-iOS (`GoogleSignInAuthorizer`, behind `GoogleAuthorizing`), its `serverClientID` the cloud's web client so the token's audience matches. A cancelled sheet goes back silently; a refused token says so under the buttons.
 
 - `GOOGLE_IOS_CLIENT_ID` in `project.yml` is the iOS OAuth client of Google Cloud without its `.apps.googleusercontent.com` suffix; `GIDClientID` and the reversed URL scheme are built from it.
 - The app target carries the `com.apple.developer.applesignin` entitlement, so the App ID needs the Sign in with Apple capability.
+- `Kiroshi/Resources/PrivacyInfo.xcprivacy`, declared in `project.yml`, is the app's privacy manifest: no tracking, the email address, name, user ID and messages (other user content) collected for the app's functionality and linked to the person, and `UserDefaults` read for reason `CA92.1` (the last Space shown, the accounts that agreed to where messages go, the Debug fixture arguments). GoogleSignIn and its dependencies ship their own manifests.
 - `Package.resolved` pins the Swift packages. Every generate copies it into the project, since Xcode Cloud resolves none on its own: after changing a package, resolve in Xcode and copy `Kiroshi.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` back. The packages check out under `build/`, which every generate marks for `swift format` to skip.
 
 `1.1b` and `1.1c` hold the tapped button's loading while the cloud's answer is pending, `1.1d` shows the cloud refusing the Apple token:
