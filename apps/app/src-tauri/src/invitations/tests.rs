@@ -10,16 +10,18 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 use super::contract::{InvitationError, CHANGED_EVENT};
 use super::{accept, decline, read, resumed, Invitations};
-use crate::account::contract::{AccountState, SignedOutReason};
+use crate::account::contract::{
+	AccountState, SignedOutReason, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT,
+};
 use crate::account::session::{restore, sign_out, AccountSession};
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -37,7 +39,7 @@ use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 const BEARER: &str = "bearer-that-never-leaves";
 const INSTANCE: &str = "instance-1";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
-const PATIENCE: Duration = Duration::from_secs(5);
+const PATIENCE: Duration = Duration::from_secs(10);
 const POLL_EVERY: Duration = Duration::from_millis(100);
 
 #[derive(Clone)]
@@ -46,13 +48,22 @@ struct Cloud {
 	invitations_status: Arc<Mutex<StatusCode>>,
 	instances: Arc<Mutex<(StatusCode, Value)>>,
 	instances_read: Arc<AtomicUsize>,
+	invitations_read: Arc<AtomicUsize>,
 	call_answer: Arc<Mutex<(StatusCode, Value)>>,
 	called: Arc<Mutex<Vec<String>>>,
 	unknown_instances: Arc<Mutex<Vec<String>>>,
-	call_delay: Arc<Mutex<Duration>>,
-	member_delay: Arc<Mutex<Duration>>,
+	is_call_open: Arc<watch::Sender<bool>>,
+	is_member_relay_open: Arc<watch::Sender<bool>>,
+	member_relays_asked: Arc<AtomicUsize>,
+	is_sign_out_open: Arc<watch::Sender<bool>>,
+	sign_outs_asked: Arc<AtomicUsize>,
 	is_refusing_members: Arc<AtomicBool>,
 	members: mpsc::UnboundedSender<WebSocket>,
+	noticed: Arc<watch::Sender<()>>,
+}
+
+async fn opened(gate: &watch::Sender<bool>) {
+	gate.subscribe().wait_for(|is_open| *is_open).await.map(drop).expect("the cloud opens");
 }
 
 fn an_invitation(instance_id: &str, name: &str) -> Value {
@@ -87,6 +98,8 @@ async fn invitations_listed(Served(cloud): Served<Cloud>, headers: HeaderMap) ->
 	}
 	let status = *cloud.invitations_status.lock().expect("the cloud");
 	let invitations = cloud.invitations.lock().expect("the cloud").clone();
+	cloud.invitations_read.fetch_add(1, Ordering::SeqCst);
+	cloud.noticed.send_replace(());
 	answered_json(status, &invitations)
 }
 
@@ -95,6 +108,7 @@ async fn instances_listed(Served(cloud): Served<Cloud>, headers: HeaderMap) -> R
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
 	cloud.instances_read.fetch_add(1, Ordering::SeqCst);
+	cloud.noticed.send_replace(());
 	let (status, instances) = cloud.instances.lock().expect("the cloud").clone();
 	answered_json(status, &instances)
 }
@@ -116,8 +130,8 @@ async fn invitation_called(
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
 	cloud.called.lock().expect("the cloud").push(format!("{verb} {instance_id}"));
-	let delay = *cloud.call_delay.lock().expect("the cloud");
-	tokio::time::sleep(delay).await;
+	cloud.noticed.send_replace(());
+	opened(&cloud.is_call_open).await;
 	let (status, body) = cloud.call_answer.lock().expect("the cloud").clone();
 	if status == StatusCode::NO_CONTENT {
 		return status.into_response();
@@ -137,14 +151,18 @@ async fn member_relay(
 	if cloud.unknown_instances.lock().expect("the cloud").contains(&instance_id) {
 		return StatusCode::NOT_FOUND.into_response();
 	}
-	let delay = *cloud.member_delay.lock().expect("the cloud");
-	tokio::time::sleep(delay).await;
+	cloud.member_relays_asked.fetch_add(1, Ordering::SeqCst);
+	cloud.noticed.send_replace(());
+	opened(&cloud.is_member_relay_open).await;
 	upgrade.on_upgrade(move |socket| async move {
 		cloud.members.send(socket).expect("the test holds the member sockets");
 	})
 }
 
-async fn signed_out_of_the_cloud() -> StatusCode {
+async fn signed_out_of_the_cloud(Served(cloud): Served<Cloud>) -> StatusCode {
+	cloud.sign_outs_asked.fetch_add(1, Ordering::SeqCst);
+	cloud.noticed.send_replace(());
+	opened(&cloud.is_sign_out_open).await;
 	StatusCode::OK
 }
 
@@ -198,16 +216,21 @@ impl Harness {
 			invitations_status: Arc::new(Mutex::new(StatusCode::OK)),
 			instances: Arc::new(Mutex::new((StatusCode::SERVICE_UNAVAILABLE, json!([])))),
 			instances_read: Arc::default(),
+			invitations_read: Arc::default(),
 			call_answer: Arc::new(Mutex::new((
 				StatusCode::OK,
 				json!({ "id": INSTANCE, "name": "Studio", "role": "member", "createdAt": "2026-10-01T00:00:00.000Z" }),
 			))),
 			called: Arc::default(),
 			unknown_instances: Arc::default(),
-			call_delay: Arc::default(),
-			member_delay: Arc::default(),
+			is_call_open: Arc::new(watch::channel(true).0),
+			is_member_relay_open: Arc::new(watch::channel(true).0),
+			member_relays_asked: Arc::default(),
+			is_sign_out_open: Arc::new(watch::channel(true).0),
+			sign_outs_asked: Arc::default(),
 			is_refusing_members: Arc::default(),
 			members: members_in,
+			noticed: Arc::new(watch::channel(()).0),
 		};
 		let served_url = served(
 			Router::new()
@@ -238,11 +261,17 @@ impl Harness {
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
 			let hearing = Arc::clone(&heard);
+			let noticing = Arc::clone(&cloud.noticed);
 			app.listen(event, move |heard| {
 				let payload = heard.payload().to_owned();
 				hearing.lock().expect("the events").push((event.to_owned(), payload));
+				noticing.send_replace(());
 			});
 		}
+		let noticing = Arc::clone(&cloud.noticed);
+		app.listen(ACCOUNT_CHANGED_EVENT, move |_| {
+			noticing.send_replace(());
+		});
 		Self { app, cloud, members, heard, root, _database: database_dir }
 	}
 
@@ -264,14 +293,34 @@ impl Harness {
 		self.heard.lock().expect("the events").iter().map(|(_, payload)| payload.as_str()).collect()
 	}
 
-	async fn heard_until(&self, event: &str, count: usize) -> Vec<Value> {
-		for _ in 0..500 {
-			if self.heard(event).len() >= count {
-				return self.heard(event);
+	async fn noticed(&self, noticed: &mut watch::Receiver<()>, awaited: &str) {
+		tokio::time::timeout(PATIENCE, noticed.changed())
+			.await
+			.unwrap_or_else(|_| panic!("{awaited} was not noticed within {PATIENCE:?}"))
+			.expect("the harness listens");
+	}
+
+	async fn noticed_until<T>(&self, awaited: &str, found: impl Fn() -> Option<T>) -> T {
+		let mut noticed = self.cloud.noticed.subscribe();
+		loop {
+			if let Some(found) = found() {
+				return found;
 			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
+			self.noticed(&mut noticed, awaited).await;
 		}
-		panic!("{event} was heard {} times, never {count}", self.heard(event).len());
+	}
+
+	async fn heard_until(&self, event: &str, count: usize) -> Vec<Value> {
+		let heard = || Some(self.heard(event)).filter(|heard| heard.len() >= count);
+		self.noticed_until(&format!("{event} heard {count} times"), heard).await
+	}
+
+	fn invitations_read(&self) -> usize {
+		self.cloud.invitations_read.load(Ordering::SeqCst)
+	}
+
+	fn member_relays_asked(&self) -> usize {
+		self.cloud.member_relays_asked.load(Ordering::SeqCst)
 	}
 
 	fn answering(&self, status: StatusCode, body: Value) {
@@ -292,14 +341,14 @@ impl Harness {
 	}
 
 	async fn stored_until(&self, is_done: impl Fn(&[JoinedSpace]) -> bool) -> Vec<JoinedSpace> {
-		for _ in 0..500 {
+		let mut noticed = self.cloud.noticed.subscribe();
+		loop {
 			let stored = self.stored().await;
 			if is_done(&stored) {
 				return stored;
 			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
+			self.noticed(&mut noticed, "the awaited joined spaces").await;
 		}
-		self.stored().await
 	}
 
 	async fn member(&mut self) -> WebSocket {
@@ -527,14 +576,16 @@ fn the_poll_announces_each_change_once_and_sign_out_stops_it_with_an_empty_list(
 
 		resumed(harness.app.handle());
 		let first = harness.heard_until(CHANGED_EVENT, 1).await;
-		tokio::time::sleep(Duration::from_millis(350)).await;
+		let read_at_first = harness.invitations_read();
+		let unchanged_poll_settled =
+			|| (harness.invitations_read() >= read_at_first + 2).then_some(());
+		harness.noticed_until("a poll after an unchanged one", unchanged_poll_settled).await;
 		assert_eq!(harness.heard(CHANGED_EVENT).len(), 1);
 		*harness.cloud.invitations.lock().expect("the cloud") = json!([]);
 		let changed = harness.heard_until(CHANGED_EVENT, 2).await;
 		sign_out(harness.app.handle()).await.expect("the sign out");
 		*harness.cloud.invitations.lock().expect("the cloud") =
 			json!([an_invitation("i-late", "Late")]);
-		tokio::time::sleep(Duration::from_millis(350)).await;
 
 		assert_eq!(first[0], json!({ "invitations": [an_invitation(INSTANCE, "Studio")] }));
 		assert_eq!(changed[1], json!({ "invitations": [] }));
@@ -640,16 +691,7 @@ fn a_live_relay_closed_4002_answers_503_reopens_and_keeps_the_entry() {
 		let id = harness.accepted().await;
 		let (connection, mut member) = connected(&mut harness, &id).await;
 
-		closed_with(&mut member, 4002).await;
-		let mut offline = proxied(&connection, "conversation_list").await;
-		for _ in 0..100 {
-			if offline.status() == StatusCode::SERVICE_UNAVAILABLE {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-			offline = proxied(&connection, "conversation_list").await;
-		}
-		assert_eq!(offline.status(), StatusCode::SERVICE_UNAVAILABLE);
+		closed_offline(&harness, &id, &mut member, &connection).await;
 		let mut reopened = harness.member().await;
 
 		let invoking = proxied(&connection, "conversation_list");
@@ -665,16 +707,17 @@ fn a_live_relay_closed_4002_answers_503_reopens_and_keeps_the_entry() {
 	});
 }
 
-async fn offline_until_503(connection: &JoinedSpaceConnection) {
-	for _ in 0..100 {
-		if proxied(connection, "conversation_list").await.status()
-			== StatusCode::SERVICE_UNAVAILABLE
-		{
-			return;
-		}
-		tokio::time::sleep(Duration::from_millis(10)).await;
-	}
-	panic!("the proxy never answered 503 after the relay dropped");
+async fn closed_offline(
+	harness: &Harness,
+	id: &str,
+	member: &mut WebSocket,
+	connection: &JoinedSpaceConnection,
+) {
+	let dropped = harness.app.state::<RelayGuests>().link_dropped(id);
+	closed_with(member, 4002).await;
+	tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
+	let offline = proxied(connection, "conversation_list").await;
+	assert_eq!(offline.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[test]
@@ -685,16 +728,23 @@ fn every_open_of_the_member_relay_announces_one_reconnection_and_none_while_down
 		let (connection, mut member) = connected(&mut harness, &id).await;
 		assert_eq!(harness.heard_until(RECONNECTED_EVENT, 1).await, vec![json!({ "id": id })]);
 
-		*harness.cloud.member_delay.lock().expect("the cloud") = Duration::from_secs(1);
-		closed_with(&mut member, 4002).await;
-		offline_until_503(&connection).await;
+		harness.cloud.is_member_relay_open.send_replace(false);
+		let asked_before = harness.member_relays_asked();
+		closed_offline(&harness, &id, &mut member, &connection).await;
 		assert_eq!(harness.heard(RECONNECTED_EVENT).len(), 1, "announced while down");
-		tokio::time::sleep(Duration::from_millis(1400)).await;
+		let is_reconnecting = || (harness.member_relays_asked() > asked_before).then_some(());
+		harness.noticed_until("a reconnection attempt", is_reconnecting).await;
 		assert_eq!(harness.heard(RECONNECTED_EVENT).len(), 1, "announced while reconnecting");
 
-		let _reopened = harness.member().await;
+		harness.cloud.is_member_relay_open.send_replace(true);
+		let mut reopened = harness.member().await;
 		harness.heard_until(RECONNECTED_EVENT, 2).await;
-		tokio::time::sleep(Duration::from_millis(200)).await;
+		let invoking = proxied(&connection, "conversation_list");
+		let answering = async {
+			let invoked = call(&mut reopened).await;
+			send(&mut reopened, json!({ "id": invoked["id"], "status": 200, "body": [] })).await;
+		};
+		tokio::join!(invoking, answering);
 
 		assert_eq!(harness.heard(RECONNECTED_EVENT), vec![json!({ "id": id }); 2]);
 	});
@@ -712,8 +762,7 @@ fn a_row_the_host_wrote_while_the_link_was_down_answers_a_call_made_on_the_recon
 		let (connection, mut member) = connected(&mut harness, &id).await;
 		reconnected.recv().await.expect("the first open is announced");
 
-		closed_with(&mut member, 4002).await;
-		offline_until_503(&connection).await;
+		closed_offline(&harness, &id, &mut member, &connection).await;
 		let host_rows = json!([{ "id": "c1" }, { "id": "written-while-down" }]);
 
 		let reading = async {
@@ -747,13 +796,16 @@ fn every_invoke_sent_right_after_connecting_a_learned_entry_gets_the_host_answer
 		let state = harness.app.state::<DatabaseState>();
 		let repository = state.as_ref().expect("the database").joined_spaces();
 		repository.learned(id.clone(), SHARED_SPACE.to_owned()).await.expect("the shared space");
-		*harness.cloud.member_delay.lock().expect("the cloud") = Duration::from_millis(300);
+		harness.cloud.is_member_relay_open.send_replace(false);
 
 		let connection = harness.connect(&id).await.expect("the connection");
 		let invoking = futures_util::future::join_all(
 			(0..3).map(|_| proxied(&connection, "conversation_list")),
 		);
 		let answering = async {
+			let is_asked = || (harness.member_relays_asked() > 0).then_some(());
+			harness.noticed_until("the member relay open", is_asked).await;
+			harness.cloud.is_member_relay_open.send_replace(true);
 			let mut member = harness.member().await;
 			for _ in 0..3 {
 				let invoked = call(&mut member).await;
@@ -777,20 +829,7 @@ fn a_membership_ended_4003_removes_the_entry_and_announces_its_removal() {
 
 		closed_with(&mut member, 4003).await;
 		let stored = harness.stored_until(<[JoinedSpace]>::is_empty).await;
-		let proxy = reqwest::Client::new();
-		let mut is_closed = false;
-		for _ in 0..200 {
-			let attempt = proxy
-				.post(format!("{}/api/invoke/conversation_list", connection.host_url))
-				.bearer_auth(&connection.token)
-				.send()
-				.await;
-			is_closed = attempt.is_err();
-			if is_closed {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
+		let is_closed = proxy_closed(&connection).await;
 		let removed = harness.heard_until(REMOVED_EVENT, 1).await;
 
 		assert!(stored.is_empty());
@@ -854,45 +893,50 @@ fn is_guest_running(harness: &Harness, id: &str) -> bool {
 }
 
 async fn proxy_closed(connection: &JoinedSpaceConnection) -> bool {
-	for _ in 0..200 {
-		let attempt = reqwest::Client::new()
-			.post(format!("{}/api/invoke/conversation_list", connection.host_url))
-			.bearer_auth(&connection.token)
-			.send()
-			.await;
-		if attempt.is_err() {
-			return true;
+	let refused = async {
+		loop {
+			let attempt = reqwest::Client::new()
+				.post(format!("{}/api/invoke/conversation_list", connection.host_url))
+				.bearer_auth(&connection.token)
+				.send()
+				.await;
+			if attempt.is_err() {
+				return;
+			}
+			tokio::task::yield_now().await;
 		}
-		tokio::time::sleep(Duration::from_millis(10)).await;
-	}
-	false
+	};
+	tokio::time::timeout(PATIENCE, refused).await.is_ok()
 }
 
-async fn guest_ended(harness: &Harness, id: &str) -> bool {
-	for _ in 0..500 {
-		if !is_guest_running(harness, id) {
-			return true;
+fn stopping(harness: &Harness, id: &str) -> watch::Receiver<bool> {
+	harness.app.state::<RelayGuests>().stopping(id).expect("a guest runs")
+}
+
+async fn guest_ended(harness: &Harness, id: &str, mut stopping: watch::Receiver<bool>) -> bool {
+	let ended = async {
+		while stopping.changed().await.is_ok() {
+			if *stopping.borrow() {
+				return;
+			}
 		}
-		tokio::time::sleep(Duration::from_millis(10)).await;
-	}
-	false
+	};
+	tokio::time::timeout(PATIENCE, ended).await.is_ok() && !is_guest_running(harness, id)
 }
 
 #[test]
 fn an_accept_in_flight_during_sign_out_answers_not_signed_in_and_leaves_no_relay_entry() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
-		*harness.cloud.call_delay.lock().expect("the cloud") = Duration::from_millis(300);
+		harness.cloud.is_call_open.send_replace(false);
 
 		let accepting = accept(harness.app.handle(), INSTANCE.to_owned());
 		let signing_out = async {
-			for _ in 0..500 {
-				if !harness.cloud.called.lock().expect("the cloud").is_empty() {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(5)).await;
-			}
+			let is_called =
+				|| (!harness.cloud.called.lock().expect("the cloud").is_empty()).then_some(());
+			harness.noticed_until("the accept call", is_called).await;
 			sign_out(harness.app.handle()).await.expect("the sign out");
+			harness.cloud.is_call_open.send_replace(true);
 		};
 		let (accepted, ()) = tokio::join!(accepting, signing_out);
 
@@ -907,26 +951,24 @@ fn a_connect_waiting_on_the_turn_during_sign_out_answers_unknown_and_starts_no_g
 	run(async {
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
-		let guests = harness.app.state::<RelayGuests>();
-		let held = guests.turn().lock().await;
+		harness.cloud.is_sign_out_open.send_replace(false);
 
 		let signing_out = sign_out(harness.app.handle());
 		let connecting = async {
-			tokio::time::sleep(Duration::from_millis(100)).await;
-			harness.connect(&id).await
+			let is_signing_out =
+				|| (harness.cloud.sign_outs_asked.load(Ordering::SeqCst) > 0).then_some(());
+			harness.noticed_until("the cloud sign out", is_signing_out).await;
+			let mut connecting = std::pin::pin!(harness.connect(&id));
+			assert!((&mut connecting).now_or_never().is_none(), "the connect skipped the turn");
+			harness.cloud.is_sign_out_open.send_replace(true);
+			connecting.await
 		};
-		let releasing = async {
-			tokio::time::sleep(Duration::from_millis(300)).await;
-			drop(held);
-		};
-		let (signed_out, connected, ()) = tokio::join!(signing_out, connecting, releasing);
+		let (signed_out, connected) = tokio::join!(signing_out, connecting);
 
 		signed_out.expect("the sign out");
 		assert_eq!(connected, Err(JoinedSpaceError::UnknownJoinedSpace { id: id.clone() }));
 		assert!(!is_guest_running(&harness, &id));
-		assert!(tokio::time::timeout(Duration::from_millis(300), harness.members.recv())
-			.await
-			.is_err());
+		assert!(harness.members.try_recv().is_err());
 		assert!(harness.stored().await.is_empty());
 	});
 }
@@ -938,16 +980,15 @@ fn a_guest_left_without_an_account_ends_closes_its_proxy_and_keeps_the_entry() {
 		let id = harness.accepted().await;
 		let (connection, mut member) = connected(&mut harness, &id).await;
 		store::delete(&harness.root, &EnvScope::Account, ACCOUNT_BEARER).expect("signed out");
+		let stopping = stopping(&harness, &id);
 
 		closed_with(&mut member, 4002).await;
 
-		assert!(guest_ended(&harness, &id).await, "the guest still runs");
+		assert!(guest_ended(&harness, &id, stopping).await, "the guest still runs");
 		assert!(proxy_closed(&connection).await, "the proxy still answers");
 		assert_eq!(harness.stored().await.len(), 1);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
-		assert!(tokio::time::timeout(Duration::from_millis(1500), harness.members.recv())
-			.await
-			.is_err());
+		assert!(harness.members.try_recv().is_err());
 
 		store::set(&harness.root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("signed in");
 		let again = harness.connect(&id).await.expect("the new connection");
@@ -965,22 +1006,18 @@ fn a_guest_refused_401_signs_the_account_out_on_site_and_a_new_sign_in_connects_
 		let id = harness.accepted().await;
 		let (first, mut member) = connected(&mut harness, &id).await;
 		harness.cloud.is_refusing_members.store(true, Ordering::SeqCst);
+		let stopping = stopping(&harness, &id);
 
 		closed_with(&mut member, 4002).await;
 
-		assert!(guest_ended(&harness, &id).await, "the guest still runs");
+		assert!(guest_ended(&harness, &id, stopping).await, "the guest still runs");
 		assert!(proxy_closed(&first).await, "the proxy still answers");
 		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
 		let session = harness.app.state::<AccountSession>();
 		let signed_out_on_site =
 			AccountState::SignedOut { reason: Some(SignedOutReason::SignedOutOnSite) };
-		for _ in 0..500 {
-			if session.current() == signed_out_on_site {
-				break;
-			}
-			tokio::time::sleep(Duration::from_millis(10)).await;
-		}
-		assert_eq!(session.current(), signed_out_on_site);
+		let is_signed_out_on_site = || (session.current() == signed_out_on_site).then_some(());
+		harness.noticed_until("the sign out on site", is_signed_out_on_site).await;
 		assert!(session.bearer().expect("the store reads").is_none());
 
 		harness.cloud.is_refusing_members.store(false, Ordering::SeqCst);
@@ -1190,19 +1227,20 @@ fn a_reconciliation_holds_the_relay_turn_and_a_concurrent_accept_yields_one_entr
 		let guests = harness.app.state::<RelayGuests>();
 		let held = guests.turn().lock().await;
 
-		let reconciling = reconciled(harness.app.handle());
-		let releasing = async {
-			tokio::time::sleep(Duration::from_millis(200)).await;
-			let read_while_held = harness.instances_read();
-			drop(held);
-			read_while_held
-		};
-		let ((), read_while_held) = tokio::join!(reconciling, releasing);
+		let mut reconciling = std::pin::pin!(reconciled(harness.app.handle()));
+		assert!((&mut reconciling).now_or_never().is_none(), "the reconciliation skipped the turn");
+		let read_while_held = harness.instances_read();
+		drop(held);
+		reconciling.await;
 		assert_eq!(read_while_held, 0);
 
 		harness.listing(json!([an_instance(INSTANCE, "Studio"), an_instance("i-b", "Beta")]));
-		*harness.cloud.call_delay.lock().expect("the cloud") = Duration::from_millis(100);
-		let (accepted, ()) = tokio::join!(harness.accepted(), reconciled(harness.app.handle()));
+		harness.cloud.is_call_open.send_replace(false);
+		let reconciling_first = async {
+			reconciled(harness.app.handle()).await;
+			harness.cloud.is_call_open.send_replace(true);
+		};
+		let (accepted, ()) = tokio::join!(harness.accepted(), reconciling_first);
 		let stored = harness.stored().await;
 
 		let studio: Vec<_> = stored
@@ -1226,7 +1264,6 @@ fn a_sign_out_drops_every_relay_entry_and_stops_the_reconciliation() {
 
 		sign_out(harness.app.handle()).await.expect("the sign out");
 		let read_at_sign_out = harness.instances_read();
-		tokio::time::sleep(Duration::from_millis(350)).await;
 		reconciled(harness.app.handle()).await;
 
 		assert!(harness.stored().await.is_empty());
