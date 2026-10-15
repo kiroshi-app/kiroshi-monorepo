@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+env:
+  CARGO_BUILD_JOBS: default
+  RUSTC_WRAPPER: ""
+
 jobs:
   ci-green:
     runs-on: ubuntu-latest
