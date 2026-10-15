@@ -55,6 +55,11 @@ bun run ci:fast   # before every push: biome, knip, types, unit tests, story ids
 bun run ci        # before opening a pull request: the exact checks of the PR jobs
 ```
 
+`git push` runs `bun run ci:fast` through the husky pre-push hook that
+`bun install` sets up, and refuses the push when it fails. A push that only
+deletes branches skips it. `--no-verify` is not used in this repo: fix the
+failure instead.
+
 `bun run ci` runs `scripts/ci.ts`, the one definition of the gate the pull
 request jobs run. Both must pass. Then fill in the pull request template: say what changed
 and why, and how a reviewer can see it working. Screenshots or a short capture
