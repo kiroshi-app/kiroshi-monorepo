@@ -235,22 +235,20 @@ impl MemberLink {
 				Resync::Reread
 			}
 			Sequence::Unknown => {
-				*sequence = Sequence::Applied(Applied {
-					epoch: stamped.epoch.to_owned(),
-					seq: stamped.seq,
-				});
-				self.heard(stamped.event);
+				self.adopted(&mut sequence, stamped);
 				Resync::InStep
 			}
 			Sequence::Applied(_) | Sequence::Resuming(..) => {
-				*sequence = Sequence::Applied(Applied {
-					epoch: stamped.epoch.to_owned(),
-					seq: stamped.seq,
-				});
-				self.heard(stamped.event);
+				self.adopted(&mut sequence, stamped);
 				Resync::Reread
 			}
 		}
+	}
+
+	fn adopted(&self, sequence: &mut Sequence, stamped: Stamped<'_>) {
+		*sequence =
+			Sequence::Applied(Applied { epoch: stamped.epoch.to_owned(), seq: stamped.seq });
+		self.heard(stamped.event);
 	}
 
 	fn resume_answered(&self, body: &Value) -> Resync {
