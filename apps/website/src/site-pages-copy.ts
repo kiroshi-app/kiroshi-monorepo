@@ -298,7 +298,7 @@ export const SITE_PAGES_COPY = {
 		},
 		details: {
 			heading: "What helps us answer",
-			body: "Tell us the app version, your macOS or iOS version, what happened, and what you expected to happen.",
+			body: "Tell us the app version, your operating system and its version (macOS, Windows, Linux or iOS), what happened, and what you expected to happen.",
 		},
 		privacy: {
 			heading: "Privacy and account deletion",

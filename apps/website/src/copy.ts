@@ -112,9 +112,8 @@ export const WEBSITE_COPY = {
 					"On your computer. Conversations, companions and what they learn are kept in a local folder, and they’re all there on the next launch. Replies are written by the model provider you configured, so what you send goes through your account with it.",
 			},
 			{
-				question: "What do I need to run it?",
-				answer:
-					"Any Mac on macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
+				question: "Which macOS versions does it run on?",
+				answer: "macOS 10.15 Catalina or later, Apple silicon and Intel alike.",
 			},
 			{
 				question: "Is there a Windows or Linux version?",
