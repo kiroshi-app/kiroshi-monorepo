@@ -277,7 +277,7 @@
 				},
 				"workspacePath": {
 					"type": "string",
-					"description": "The git checkout on this machine the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the agent hook in that checkout, so what an agent does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
+					"description": "The git checkout on this computer the work of the mission happens in, a linked worktree included. Only a git checkout is accepted, so the path names a directory holding a .git entry and nothing else is taken. A path given arms the agent hook in that checkout, so what an agent does there reaches the thread of the mission. Left out, the mission moves only on the lines, the escalations and the closing you write."
 				}
 			},
 			"required": [
