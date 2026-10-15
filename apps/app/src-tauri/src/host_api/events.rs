@@ -22,7 +22,7 @@ pub const PATH: &str = "/api/events";
 
 const TOKEN_PARAMETER: &str = "token=";
 
-const FELL_BEHIND: &str = "the client fell behind the event buffer";
+pub(crate) const FELL_BEHIND: &str = "the client fell behind the event buffer";
 
 pub const SEND_PATIENCE: Duration = Duration::from_secs(5);
 
