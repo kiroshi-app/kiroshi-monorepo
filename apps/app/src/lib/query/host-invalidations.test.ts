@@ -38,9 +38,10 @@ const mountInvalidationOf = (event: string) => {
 	vi.mocked(listen).mockResolvedValue(unlisten)
 	const { queryClient, wrapper } = createQueryTestWrapper()
 	const invalidate = vi.spyOn(queryClient, "invalidateQueries")
-	const hook = renderHook(() => useInvalidateOnHostEvent(event, [["cached"]]), {
-		wrapper,
-	})
+	const hook = renderHook(
+		() => useInvalidateOnHostEvent(event, [["cached", "a"], ["cached"]]),
+		{ wrapper },
+	)
 	const emitFrom = (hostId: string | null) => {
 		const [event, handler] = vi.mocked(listen).mock.calls[0]
 		handler({ event, id: 1, payload: null }, hostId)
@@ -49,22 +50,15 @@ const mountInvalidationOf = (event: string) => {
 }
 
 it("invalidates the given keys when the host event fires, and stops on unmount", async () => {
-	const unlisten = vi.fn()
-	vi.mocked(listen).mockResolvedValue(unlisten)
-	const { queryClient, wrapper } = createQueryTestWrapper()
-	const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+	const { invalidate, emitFrom, unmount, unlisten } =
+		mountInvalidationOf("bots://changed")
 
-	const { unmount } = renderHook(
-		() => useInvalidateOnHostEvent("bots://changed", [["bots", "a"], ["bots"]]),
-		{ wrapper },
-	)
-	const [event, handler] = vi.mocked(listen).mock.calls[0]
-	handler({ event, id: 1, payload: null }, null)
+	emitFrom(null)
 
-	expect(event).toBe("bots://changed")
+	expect(listen).toHaveBeenCalledWith("bots://changed", expect.any(Function))
 	await vi.waitFor(() => {
-		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots", "a"] })
-		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["bots"] })
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached", "a"] })
+		expect(invalidate).toHaveBeenCalledWith({ queryKey: ["cached"] })
 	})
 
 	unmount()
