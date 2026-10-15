@@ -9,7 +9,7 @@ use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use event_log::EventLog;
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
-use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent};
+use kiroshi_app::agent::contract::{AgentEvent, EvolvedBundle, RuntimeScope, ScopedEvent};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
@@ -195,9 +195,18 @@ impl Harness {
 	}
 
 	fn runtime_in(&self, conversation: &str, bot: &str, at: i64, cwd: Value) -> Answer {
+		let scope = self.started(conversation, bot, at, cwd);
+		self.answer_of(&scope)
+	}
+
+	fn started(&self, conversation: &str, bot: &str, at: i64, cwd: Value) -> RuntimeScope {
 		self.forget_events();
 		let scope = self.open_run(conversation, bot, at);
 		self.start(&scope, cwd);
+		scope
+	}
+
+	fn answer_of(&self, scope: &RuntimeScope) -> Answer {
 		self.call("agent_submit_prompt", json!({ "scope": scope, "text": "who are you?" }))
 			.expect("the prompt is taken");
 		self.wait_for("the child to say what it was started as", answered)
@@ -217,6 +226,12 @@ fn answered(seen: &[AgentEvent]) -> Option<Answer> {
 		}
 		_ => None,
 	})
+}
+
+fn bot_write_recorded(seen: &[AgentEvent]) -> Option<()> {
+	seen.iter()
+		.any(|event| matches!(event, AgentEvent::BotEvolved { bundle: EvolvedBundle::Bot, .. }))
+		.then_some(())
 }
 
 fn an_identity(instructions: Option<&str>) -> Value {
@@ -431,8 +446,12 @@ fn every_run_carries_the_identity_the_bot_holds_when_it_starts() {
 		.call("plugin_delete_mcp_server", json!({ "scope": a_bot_plugin(&bot), "name": "atlas" }))
 		.expect("the server is taken away");
 	assert!(!bundle.join(".mcp.json").exists(), "an empty server file was left behind");
-	let bare = harness.runtime_of(&conversation, &bot, 8);
+	let bare_run = harness.started(&conversation, &bot, 8, json!(std::env::temp_dir()));
+	std::fs::create_dir_all(skill.parent().expect("the skill directory")).expect("made");
+	std::fs::write(&skill, "how to bake bread").expect("the turn has a bot write to record");
+	let bare = harness.answer_of(&bare_run);
 	assert!(bare.spoken.contains("mcp<none>"), "got {}", bare.spoken);
+	harness.wait_for("the bot write of the turn to be recorded", bot_write_recorded);
 
 	let manifest_dir = bundle.join(".claude-plugin");
 	std::fs::remove_dir_all(&manifest_dir).expect("the manifest directory is taken away");
