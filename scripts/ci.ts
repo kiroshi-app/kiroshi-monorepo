@@ -20,6 +20,7 @@ export const GATE = {
 			name: "CI change detection unit tests",
 			command: "bun run test:ci-changes",
 		},
+		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
