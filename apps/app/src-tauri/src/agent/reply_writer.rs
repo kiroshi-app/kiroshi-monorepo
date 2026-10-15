@@ -18,6 +18,7 @@ use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::present_bot_ids;
+use crate::conversations::turn_run_deadline::arm_start_deadlines;
 use crate::db;
 use crate::db::repositories::conversations::{MISSION_KIND, TOPIC_KIND};
 use crate::db::repositories::messages::{EndedRun, NewAssistantMessage, NewTurn, TerminalState};
@@ -575,12 +576,13 @@ impl<R: Runtime> Store<R> {
 		let ended = EndedRun {
 			turn_id: id.to_owned(),
 			bot_id: self.bot_id.clone(),
-			handed_to,
+			handed_to: handed_to.clone(),
 			ended_at: now_ms(),
 		};
 		let database = self.database()?;
 		database.messages().end_run(ended).await?;
 		self.announce_updated(database).await;
+		arm_start_deadlines(&self.app, &self.conversation_id, id, &handed_to);
 		Ok(())
 	}
 
@@ -756,6 +758,8 @@ fn is_named_at(chars: &[char], from: usize, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+	use std::time::Duration;
+
 	use serde_json::json;
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::Listener;
@@ -763,6 +767,7 @@ mod tests {
 	use super::super::contract::{ActivityEvent, ActivityKind, ActivityStatus};
 	use super::*;
 	use crate::agent::commands;
+	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
@@ -1800,6 +1805,41 @@ mod tests {
 		assert_eq!(while_handed_writes, working(&[DEFAULT_BOT_ID, &ada]));
 		assert_eq!(last_active_turn(&heard), json!(null));
 		assert!(written.completed_at("t1").await.is_some(), "the handed run left it open");
+	}
+
+	#[tokio::test]
+	async fn a_bot_handed_the_turn_that_never_starts_releases_its_turn_run_at_the_start_deadline() {
+		let (written, ada) = Written::in_a_room_of_two("unstarted-handover").await;
+		written.app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		written.prompt("t1", "p1").await;
+		let (announced, mut updates) = mpsc::unbounded_channel();
+		written.app.handle().listen(crate::conversations::contract::UPDATED_EVENT, move |event| {
+			let payload: serde_json::Value =
+				serde_json::from_str(event.payload()).expect("the payload is JSON");
+			announced
+				.send(payload["conversation"]["activeTurn"].clone())
+				.expect("the test listens");
+		});
+		let mut lead = written.desk_of(DEFAULT_BOT_ID);
+
+		lead.open_turn(submitted("t1", "p1")).await;
+		lead.record(&completed("m1", &format!("<@{ada}> over to you"), 2)).await;
+		lead.record(&turn_ended()).await;
+		let before_the_release = tokio::time::timeout(Duration::from_secs(10), async {
+			let mut previous = None;
+			while let Some(active_turn) = updates.recv().await {
+				if active_turn.is_null() {
+					return previous;
+				}
+				previous = Some(active_turn);
+			}
+			None
+		})
+		.await
+		.expect("the deadline released the turn in time");
+
+		assert_eq!(before_the_release, Some(working(&[DEFAULT_BOT_ID, &ada])));
+		assert!(written.completed_at("t1").await.is_some(), "the unstarted bot left it open");
 	}
 
 	#[tokio::test]

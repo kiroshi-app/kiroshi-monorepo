@@ -69,6 +69,7 @@ pub fn run() {
 		.manage(mcp_oauth::reports::ApplicationReports::default())
 		.manage(mcp_oauth::asking::AuthorizationAnswers::default())
 		.manage(missions::commands::AnnouncedRunning::default())
+		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {

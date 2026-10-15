@@ -52,6 +52,7 @@ use crate::conversations::contract::{
 	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT,
 	UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
+use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole, NewTurn};
@@ -3699,6 +3700,72 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 		both.sort_unstable();
 		assert_eq!(while_the_second_writes, Some(json!({ "startedAt": 1, "botIds": both })));
 		assert_eq!(after_the_last, Some(Value::Null));
+	});
+}
+
+#[test]
+fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_deadline() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		host.app.manage(TurnRunDeadlines::after(Duration::ZERO));
+		let ada = direct(
+			&host.window,
+			"conversation_create_bot",
+			json!({ "spaceId": PERSONAL, "identity": as_json(a_bot_identity()) }),
+		);
+		let ada = ada["id"].as_str().expect("the bot holds an id").to_owned();
+		let room = direct(
+			&host.window,
+			"conversation_create",
+			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": ["default", ada] }),
+		);
+		let room_id = room["id"].as_str().expect("the room holds an id").to_owned();
+		let state = host.app.state::<DatabaseState>();
+		let messages = state.as_ref().expect("the store is open").messages();
+		let turn = NewTurn { id: "t1".to_owned(), conversation_id: room_id.clone(), started_at: 1 };
+		messages.start_run(turn, "default".to_owned()).await.expect("the run starts");
+		let read_by_the_guest = || async {
+			let page = host
+				.relayed(json!({
+					"id": 1,
+					"command": "conversation_page",
+					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
+					"sender": guest_sender(),
+				}))
+				.await;
+			page["conversations"]
+				.as_array()
+				.expect("the page holds a list")
+				.iter()
+				.find(|row| row["id"] == json!(room_id))
+				.map(|row| row["activeTurn"].clone())
+		};
+		let (announced, mut updates) = mpsc::unbounded_channel();
+		host.app.listen(CONVERSATION_UPDATED_EVENT, move |event| {
+			let payload: Value =
+				serde_json::from_str(event.payload()).expect("the payload is JSON");
+			announced
+				.send(payload["conversation"]["activeTurn"].clone())
+				.expect("the test listens");
+		});
+		let handed = EndedRun {
+			turn_id: "t1".to_owned(),
+			bot_id: "default".to_owned(),
+			handed_to: vec![ada.clone()],
+			ended_at: 2,
+		};
+
+		messages.end_run(handed).await.expect("the run ends handing over");
+		let while_awaited = read_by_the_guest().await;
+		arm_start_deadlines(host.app.handle(), &room_id, "t1", std::slice::from_ref(&ada));
+		let announced_at_the_deadline = tokio::time::timeout(PATIENCE, updates.recv())
+			.await
+			.expect("the deadline announced in time");
+		let after_the_deadline = read_by_the_guest().await;
+
+		assert_eq!(while_awaited, Some(json!({ "startedAt": 1, "botIds": [ada] })));
+		assert_eq!(announced_at_the_deadline, Some(Value::Null));
+		assert_eq!(after_the_deadline, Some(Value::Null));
 	});
 }
 

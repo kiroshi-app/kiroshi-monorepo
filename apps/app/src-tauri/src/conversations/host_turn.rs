@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 use super::commands::announce_conversation;
 use super::context::{bounded_context, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
+use super::turn_run_deadline::arm_start_deadlines;
 use crate::agent::commands::{
 	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, announce,
 };
@@ -370,8 +371,9 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	async fn awaited(&self, summoned: &[Summons]) -> Result<(), TranscriptStoreError> {
-		let bot_ids = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
-		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids).await?;
+		let bot_ids: Vec<String> = summoned.iter().map(|summons| summons.bot_id.clone()).collect();
+		database(&self.app)?.messages().await_runs(self.turn_id.clone(), bot_ids.clone()).await?;
+		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
 		Ok(())
 	}
 
