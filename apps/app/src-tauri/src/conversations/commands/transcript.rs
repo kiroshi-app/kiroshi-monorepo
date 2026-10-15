@@ -231,9 +231,13 @@ pub async fn conversation_open_assistant_message<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	message: NewAssistantMessage,
 ) -> Result<i64, TranscriptStoreError> {
-	let messages = ready(&state)?.messages();
+	let database = ready(&state)?;
+	let messages = database.messages();
 	if !owned_by_host(&app, |host| host.owns_message(&message.id)) {
-		return Ok(messages.open_assistant_message(message.into()).await?);
+		let conversation_id = message.conversation_id.clone();
+		let seq = messages.open_assistant_message(message.into()).await?;
+		announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await;
+		return Ok(seq);
 	}
 	match messages.message(message.conversation_id, message.id.clone()).await? {
 		Some(stored) => Ok(stored.seq),

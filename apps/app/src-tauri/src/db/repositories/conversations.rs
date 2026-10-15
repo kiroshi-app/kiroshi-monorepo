@@ -18,7 +18,7 @@ mod page;
 
 pub use avatar::AvatarBlot;
 pub use bots::{Bot, BotIdentity};
-pub use page::{ActiveConversation, ActivePage, LastWord};
+pub use page::{ActiveConversation, ActivePage, ActiveTurn, LastWord};
 
 use bots::{
 	bot, bot_at, bot_in, bots_of, counted_bots, created_bot, deleted_bot, ensured_default_bot,

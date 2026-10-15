@@ -494,7 +494,15 @@ impl<R: Runtime> Store<R> {
 		turn: &OpenTurn,
 		message: &ChatMessage,
 	) -> Result<(), TranscriptStoreError> {
-		self.open_assistant(turn, &message.id, message.timestamp).await
+		self.open_assistant(turn, &message.id, message.timestamp).await?;
+		announce_conversation(
+			&self.app,
+			self.database()?,
+			CONVERSATION_UPDATED,
+			&self.conversation_id,
+		)
+		.await;
+		Ok(())
 	}
 
 	async fn write_settled(
@@ -1431,7 +1439,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn one_agent_turn_announces_the_conversation_once_per_settled_message() {
+	async fn one_agent_turn_announces_the_conversation_once_per_opened_and_settled_reply() {
 		let written = Written::new("updates-per-turn").await;
 		let heard = listen_to_updates(&written);
 
@@ -1439,13 +1447,24 @@ mod tests {
 		written.forwarded(a_turn_with_ten_deltas_a_tool_call_and_two_replies()).await;
 
 		let heard = heard.lock().expect("the list is kept");
-		let last_words: Vec<_> = heard
+		let rows: Vec<_> = heard
 			.iter()
-			.map(|payload| payload["conversation"]["lastWord"]["text"].clone())
+			.map(|payload| {
+				let conversation = &payload["conversation"];
+				(conversation["lastWord"]["text"].clone(), conversation["activeTurn"].clone())
+			})
 			.collect();
+		let open = json!({ "startedAt": 1, "botIds": [DEFAULT_BOT_ID] });
+		let first_reply = json!("w1 w2 w3 w4 w5 w6 w7 w8 w9 w10");
 		assert_eq!(
-			last_words,
-			[json!("hello"), json!("w1 w2 w3 w4 w5 w6 w7 w8 w9 w10"), json!("Done")]
+			rows,
+			[
+				(json!("hello"), json!(null)),
+				(json!("hello"), open.clone()),
+				(first_reply.clone(), json!(null)),
+				(first_reply, open),
+				(json!("Done"), json!(null)),
+			]
 		);
 		assert_eq!(
 			heard.last().map(|payload| &payload["conversation"]["lastWord"]),
@@ -1465,9 +1484,11 @@ mod tests {
 		written.forwarded(turn).await;
 
 		let heard = heard.lock().expect("the list is kept");
-		let [payload] = heard.as_slice() else {
-			panic!("one update was expected, {} were heard", heard.len());
+		let [opened, payload] = heard.as_slice() else {
+			panic!("two updates were expected, {} were heard", heard.len());
 		};
+		assert_eq!(opened["conversation"]["activeTurn"]["botIds"], json!([DEFAULT_BOT_ID]));
+		assert_eq!(payload["conversation"]["activeTurn"], json!(null));
 		let conversation = &payload["conversation"];
 		let mut fields: Vec<&str> = conversation
 			.as_object()
@@ -1480,6 +1501,7 @@ mod tests {
 		assert_eq!(
 			fields,
 			[
+				"activeTurn",
 				"createdAt",
 				"id",
 				"instructions",

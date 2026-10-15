@@ -1,5 +1,23 @@
 {
   "$defs": {
+    "ActiveTurn": {
+      "properties": {
+        "botIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "startedAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startedAt",
+        "botIds"
+      ],
+      "type": "object"
+    },
     "ActivityEvent": {
       "properties": {
         "id": {
@@ -2134,6 +2152,16 @@
       "allOf": [
         {
           "properties": {
+            "activeTurn": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ActiveTurn"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "lastActivityAt": {
               "type": "integer"
             },
@@ -2161,7 +2189,8 @@
           "required": [
             "lastActivityAt",
             "lastWord",
-            "soloBotId"
+            "soloBotId",
+            "activeTurn"
           ],
           "type": "object"
         },

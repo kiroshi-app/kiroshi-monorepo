@@ -103,6 +103,7 @@ pub struct ConversationInPage {
 	pub last_activity_at: i64,
 	pub last_word: Option<LastWord>,
 	pub solo_bot_id: Option<String>,
+	pub active_turn: Option<ActiveTurn>,
 }
 
 impl ConversationInPage {
@@ -112,7 +113,21 @@ impl ConversationInPage {
 			last_activity_at: row.last_activity_at,
 			last_word: row.last_word.map(Into::into),
 			solo_bot_id: row.solo_bot_id,
+			active_turn: row.active_turn.map(Into::into),
 		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveTurn {
+	pub started_at: i64,
+	pub bot_ids: Vec<String>,
+}
+
+impl From<conversations::ActiveTurn> for ActiveTurn {
+	fn from(turn: conversations::ActiveTurn) -> Self {
+		Self { started_at: turn.started_at, bot_ids: turn.bot_ids }
 	}
 }
 
