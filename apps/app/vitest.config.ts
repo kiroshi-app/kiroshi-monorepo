@@ -13,12 +13,15 @@ const PERF_TESTS = [
 	"src/lib/sidebar/settings-subject.test.ts",
 ]
 
+const LOCAL_MAX_WORKERS = process.env.CI ? undefined : 4
+
 // biome-ignore lint/style/noDefaultExport: Vitest requires a default export
 export default defineConfig({
 	define: { __APP_VERSION__: JSON.stringify(version) },
 	plugins: [babel({ presets: [reactCompilerPreset().preset] })],
 	test: {
 		environment: "node",
+		maxWorkers: LOCAL_MAX_WORKERS,
 		projects: [
 			{
 				extends: true,

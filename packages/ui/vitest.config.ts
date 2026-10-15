@@ -11,6 +11,8 @@ const NO_PAGE_OR_POINTER_SHARED_BETWEEN_STORY_FILES = {
 	fileParallelism: false,
 }
 
+const LOCAL_MAX_WORKERS = process.env.CI ? undefined : 4
+
 export default defineConfig({
 	test: {
 		projects: [
@@ -24,6 +26,7 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					environment: "node",
+					maxWorkers: LOCAL_MAX_WORKERS,
 					include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
 				},
 			},
