@@ -58,8 +58,6 @@ const HOME_WORD = "The home thread remembers this."
 
 const AWAY_WORD = "The Vocca thread remembers that."
 
-const ARMED_CARD = "Ready to start?"
-
 const MOUNT_MS = 200
 
 const STEP_MS = 1
@@ -157,7 +155,7 @@ it("opens the solo thread of the space entered and leaves the one it left", asyn
 	await aSharedBot()
 
 	expect(threadText()).toContain(HOME_WORD)
-	expect(previewText()).toContain(ARMED_CARD)
+	expect(previewText()).toContain(HOME_WORD)
 
 	await enterSpace("Vocca")
 
