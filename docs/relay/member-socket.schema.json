@@ -2249,6 +2249,28 @@
       ],
       "type": "object"
     },
+    "ConversationNaming": {
+      "properties": {
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "icon"
+      ],
+      "type": "object"
+    },
     "ConversationPage": {
       "properties": {
         "conversations": {
@@ -7868,7 +7890,7 @@
       "ok": {
         "anyOf": [
           {
-            "type": "string"
+            "$ref": "#/$defs/ConversationNaming"
           },
           {
             "type": "null"
