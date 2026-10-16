@@ -33,7 +33,7 @@ pub async fn user_set_preferences<R: Runtime>(
 	let previous_channel = database.user().preferences().await?.update_channel;
 	let stored = database.user().set_preferences(preferences.into()).await?;
 	if stored.update_channel != previous_channel {
-		updates::commands::check_on(&app, stored.update_channel.into());
+		updates::check_on(&app, stored.update_channel.into());
 	}
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(UserPreferences::of(stored, dir.as_deref()))

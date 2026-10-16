@@ -40,11 +40,6 @@ pub fn running_companions(agent: State<'_, AgentState>) -> usize {
 	agent.live_session_count()
 }
 
-pub fn check_on<R: Runtime>(app: &AppHandle<R>, channel: UpdateChannel) {
-	let app = app.clone();
-	tauri::async_runtime::spawn(async move { flow::check(&app, Ok(channel)).await });
-}
-
 async fn current_channel<R: Runtime>(app: &AppHandle<R>) -> Result<UpdateChannel, String> {
 	let state = app.state::<db::DatabaseState>();
 	let database = state.as_ref().map_err(|failure| format!("{failure:?}"))?;
