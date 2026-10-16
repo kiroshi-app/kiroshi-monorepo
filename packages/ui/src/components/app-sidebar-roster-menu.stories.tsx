@@ -24,7 +24,7 @@ const SECTIONS = [SIDEBAR_SECTION]
 
 const SANDWICHED_SECTIONS = [{ ...SIDEBAR_SECTION, position: 1 }]
 
-const UNIQUE_KEY_WARNING = /unique "?key"? prop/
+const UNIQUE_KEY_WARNING = 'unique "key" prop'
 
 type LivePinnedZoneProps = {
 	bots?: AppSidebarBot[]
@@ -96,7 +96,7 @@ export const LooseRunSectionThenLooseRun = meta.story({
 			Node.DOCUMENT_POSITION_FOLLOWING,
 		)
 		const keyWarnings = mocked(console.error).mock.calls.filter((call) =>
-			call.some((part) => UNIQUE_KEY_WARNING.test(String(part))),
+			call.some((part) => String(part).includes(UNIQUE_KEY_WARNING)),
 		)
 		await expect(keyWarnings).toEqual([])
 	},
