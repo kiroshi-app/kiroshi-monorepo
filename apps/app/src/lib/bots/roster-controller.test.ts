@@ -4,6 +4,7 @@ import { cleanup } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { BotSettingsValue } from "@workspace/ui/components/bot-settings"
+import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
 import {
 	BOT_NAMES,
@@ -27,7 +28,15 @@ vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(async () => () => undefined),
 }))
 
-afterEach(cleanup)
+vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
+	...(await importOriginal()),
+	raiseFailureNotice: vi.fn(() => "notice-1"),
+}))
+
+afterEach(() => {
+	cleanup()
+	vi.mocked(raiseFailureNotice).mockClear()
+})
 
 const anEmptyStore = async (): Promise<TranscriptStore> => {
 	const store = createFakeTranscriptStore()
@@ -1419,7 +1428,7 @@ describe("createRosterController on conversations", () => {
 		})
 	})
 
-	it("puts back the icon the store holds when the write is refused", async () => {
+	it("raises one notice and puts back the icon the store holds when the write is refused", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded({
 			...store,
@@ -1431,9 +1440,16 @@ describe("createRosterController on conversations", () => {
 		controller.styleConversation(id, { icon: "Rocket" })
 		expect(controller.getState().conversations[0].icon).toBe("Rocket")
 
-		await vi.waitFor(() =>
-			expect(controller.getState().conversations[0].icon).toBeNull(),
-		)
+		await vi.waitFor(() => {
+			expect(controller.getState().conversations[0].icon).toBeNull()
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title:
+						"Couldn’t save your change to this conversation. Make it again to retry.",
+				}),
+			)
+		})
+		expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
 	})
 
 	it("stores the icon a naming carries with the title, in one write", async () => {

@@ -133,6 +133,11 @@ const PREVIEW_FAILURE: FailureMeta = {
 	raisedIn: "use-roster",
 }
 
+const CONVERSATION_WRITE_FAILURE: FailureMeta = {
+	failureNotice: () => ({ title: i18n.t("bots:roster.conversationUnsaved") }),
+	raisedIn: "roster-controller",
+}
+
 const ROSTER_REREAD_DELAY_MS = 250
 
 const soloThreadQueryOf = (
@@ -935,14 +940,17 @@ export const createRosterController = (
 		write: (id, value) => {
 			const conversation = heldConversation(id)
 			return conversation
-				? runMutation(queryClient, () =>
-						store.updateConversation(id, {
-							title: value.name,
-							instructions: value.instructions,
-							sectionId: conversation.sectionId,
-							icon: conversation.icon,
-							color: conversation.color,
-						}),
+				? runMutation(
+						queryClient,
+						() =>
+							store.updateConversation(id, {
+								title: value.name,
+								instructions: value.instructions,
+								sectionId: conversation.sectionId,
+								icon: conversation.icon,
+								color: conversation.color,
+							}),
+						CONVERSATION_WRITE_FAILURE,
 					)
 				: Promise.resolve(null)
 		},
