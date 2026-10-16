@@ -69,8 +69,11 @@ const signOutKnownSession = async (id: string) => {
 	}
 }
 
+const browserAndOsOf = ({ browser, os }: Session) =>
+	browser && os ? ACCOUNT_COPY.browserOnOs(browser, os) : browser || os || null
+
 const sessionNameOf = (session: Session) =>
-	session.deviceName ?? ACCOUNT_COPY.unknownDevice
+	session.deviceName ?? browserAndOsOf(session) ?? ACCOUNT_COPY.unknownDevice
 
 const MINUTE_MS = 60_000
 
@@ -83,8 +86,11 @@ const lastSeenOf = (lastSeenAt: number) => {
 	return sentenceCase(toRelativeTime(lastSeenAt, now))
 }
 
+const PHONE_OSES: ReadonlySet<string> = new Set(["iOS", "Android"])
+
 const deviceKindOf = (session: Session): DeviceKind => {
 	if (session.platform === "ios") return "phone"
+	if (PHONE_OSES.has(session.os ?? "")) return "phone"
 	if (/macbook/i.test(session.deviceName ?? "")) return "laptop"
 	return "desktop"
 }

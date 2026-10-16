@@ -7,12 +7,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
+import type { ComponentType } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
 import { ACCOUNT_COPY } from "./account-copy"
 import { LOGIN_COPY } from "./login-copy"
+import { DesktopMark, LaptopMark, PhoneMark } from "./page-marks"
 import { createSiteRouter } from "./router"
 
 const EMAIL = "alex@example.com"
@@ -24,6 +26,9 @@ const HOUR_MS = 3_600_000
 const MINI = "Alex’s Mac mini"
 const MAC = "Alex’s MacBook Pro"
 const IPHONE = "Alex’s iPhone"
+const WORKSTATION = "Alex’s workstation"
+const SAFARI_ON_MACOS = "Safari on macOS"
+const SAFARI_ON_IOS = "Safari on iOS"
 const DAY_MS = 24 * HOUR_MS
 const ME = "GET /me"
 const SESSIONS = "GET /me/sessions"
@@ -60,6 +65,8 @@ type SessionFixture = {
 	id: string
 	deviceName: string | null
 	platform: string | null
+	browser?: string | null
+	os?: string | null
 	lastSeenAgo: number
 	current: boolean
 }
@@ -99,6 +106,36 @@ const SESSION_FIXTURES: SessionFixture[] = [
 		lastSeenAgo: 2 * HOUR_MS,
 		current: false,
 	},
+]
+
+const browserSession = (
+	id: string,
+	browser: string | null,
+	os: string | null,
+): SessionFixture => ({
+	id,
+	deviceName: null,
+	platform: null,
+	browser,
+	os,
+	lastSeenAgo: HOUR_MS,
+	current: false,
+})
+
+const BROWSER_SESSION_FIXTURES: SessionFixture[] = [
+	{
+		...browserSession("workstation", "Firefox", "Linux"),
+		deviceName: WORKSTATION,
+	},
+	browserSession("safari-mac", "Safari", "macOS"),
+	browserSession("safari-iphone", "Safari", "iOS"),
+	browserSession("chrome", "Chrome", null),
+	browserSession("android", null, "Android"),
+	browserSession("bare", null, null),
+	browserSession("blank-browser", "", "macOS"),
+	browserSession("blank-os", "Chrome", ""),
+	browserSession("blank", "", ""),
+	browserSession("blank-and-null", "", null),
 ]
 
 const relayRoutes = (): RelayRoutes => ({
@@ -196,6 +233,26 @@ const rowOf = (name: string) => {
 }
 
 const rowSignOut = (name: string) => `Sign out ${name}`
+
+const markupOf = (Mark: ComponentType) => {
+	const { container, unmount } = render(<Mark />)
+	const markup = container.innerHTML
+	unmount()
+	return markup
+}
+
+const rowMarkup = (name: string) => rowOf(name).querySelector("svg")?.outerHTML
+
+const openAccountWithBrowserSessions = () => {
+	routes[SESSIONS] = {
+		body: {
+			sessions: [...SESSION_FIXTURES, ...BROWSER_SESSION_FIXTURES].map(
+				sessionBody,
+			),
+		},
+	}
+	return openAccount()
+}
 
 const confirmation = () => screen.findByRole("alertdialog")
 
@@ -361,7 +418,7 @@ describe("the signed-in devices", () => {
 		).toBeTruthy()
 	})
 
-	it("names a session without a device name Unknown device", async () => {
+	it("names a session the relay sends without device name, browser or os Unknown device", async () => {
 		await openAccount()
 
 		expect(
@@ -374,6 +431,68 @@ describe("the signed-in devices", () => {
 
 		expect(screen.getAllByText(ACCOUNT_COPY.thisDevice)).toHaveLength(1)
 		expect(within(rowOf(MINI)).getByText(ACCOUNT_COPY.thisDevice)).toBeTruthy()
+	})
+})
+
+describe("the browser sessions", () => {
+	it("names each row by device name, else browser on os, else either, else Unknown device", async () => {
+		await openAccountWithBrowserSessions()
+
+		expect(rowNames()).toEqual([
+			MINI,
+			MAC,
+			IPHONE,
+			ACCOUNT_COPY.unknownDevice,
+			WORKSTATION,
+			SAFARI_ON_MACOS,
+			SAFARI_ON_IOS,
+			"Chrome",
+			"Android",
+			ACCOUNT_COPY.unknownDevice,
+			"macOS",
+			"Chrome",
+			ACCOUNT_COPY.unknownDevice,
+			ACCOUNT_COPY.unknownDevice,
+		])
+	})
+
+	it("keeps the last seen text of a browser session", async () => {
+		await openAccountWithBrowserSessions()
+
+		expect(within(rowOf(SAFARI_ON_MACOS)).getByText("1 hour ago")).toBeTruthy()
+	})
+
+	it.each([
+		[MINI, DesktopMark],
+		[MAC, LaptopMark],
+		[IPHONE, PhoneMark],
+		[SAFARI_ON_IOS, PhoneMark],
+		["Android", PhoneMark],
+		[SAFARI_ON_MACOS, DesktopMark],
+		["Chrome", DesktopMark],
+	])("marks %s with its device icon", async (name, Mark) => {
+		const expected = markupOf(Mark)
+		await openAccountWithBrowserSessions()
+
+		expect(rowMarkup(name)).toBe(expected)
+	})
+
+	it("names a browser session in its sign-out confirmation", async () => {
+		await openAccountWithBrowserSessions()
+
+		press(rowSignOut(SAFARI_ON_MACOS))
+
+		const dialog = await confirmation()
+		expect(
+			within(dialog).getByRole("heading", {
+				name: "Sign out Safari on macOS?",
+			}),
+		).toBeTruthy()
+		expect(
+			within(dialog).getByText(
+				"You’ll need to sign in again on Safari on macOS.",
+			),
+		).toBeTruthy()
 	})
 })
 

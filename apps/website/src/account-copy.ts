@@ -16,6 +16,7 @@ export const ACCOUNT_COPY = {
 	devicesHeading: "Signed-in devices",
 	thisDevice: "This device",
 	unknownDevice: "Unknown device",
+	browserOnOs: (browser: string, os: string) => `${browser} on ${os}`,
 	activeNow: "Active now",
 	sessionCaption: (platform: string | null, lastSeen: string) =>
 		[platform && PLATFORM_APPS[platform], lastSeen].filter(Boolean).join(" · "),
