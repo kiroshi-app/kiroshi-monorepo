@@ -115,7 +115,9 @@ const settings = {
 		description:
 			"Copier le diagnostic place dans le presse-papiers les détails de l’ordinateur où Kiroshi tourne et ceux de l’agent, prêts pour un signalement de bug.",
 		copy: "Copier le diagnostic",
+		copyFailed: "Impossible de copier le diagnostic. Réessayez.",
 		reveal: "Afficher le journal",
+		revealFailed: "Impossible d’afficher le journal. Réessayez.",
 		clear: {
 			action: "Vider le journal",
 			title: "Vider le journal ?",
