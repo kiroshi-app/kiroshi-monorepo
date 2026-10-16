@@ -56,7 +56,7 @@ export const createFakeMissions = (): FakeMissions => {
 	const answers: [missionId: string, seq: number][] = []
 	const detailCalls: string[] = []
 	const readSides: [missionId: string, side: string | null][] = []
-	const joinedHostOfSpace = new Map<string, string>()
+	const joinedHostOfSpace = new Map<string | null, string>()
 	let rosterBlock: string | null = null
 	let isRosterRefused = false
 	let placed: Mission[] = []
@@ -85,8 +85,7 @@ export const createFakeMissions = (): FakeMissions => {
 		readSides,
 
 		read: createMissionEventRead({
-			sideOfSpace: (spaceId) =>
-				(spaceId && joinedHostOfSpace.get(spaceId)) ?? null,
+			sideOfSpace: (spaceId) => joinedHostOfSpace.get(spaceId) ?? null,
 			detailOn: (side, missionId) => {
 				readSides.push([missionId, side])
 				return fake.detail(missionId)
