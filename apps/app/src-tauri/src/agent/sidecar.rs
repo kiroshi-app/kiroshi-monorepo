@@ -748,7 +748,9 @@ async fn keep_stderr(mut stderr: tokio::process::ChildStderr, tail: StderrTail) 
 			}
 		};
 		tail.push(&chunk[..read]);
-		lines.fed(&chunk[..read]).iter().for_each(|line| logged_stderr(line));
+		for line in lines.fed(&chunk[..read]) {
+			logged_stderr(&line);
+		}
 	}
 	if let Some(rest) = lines.rest() {
 		logged_stderr(&rest);

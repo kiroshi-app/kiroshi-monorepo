@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use super::contract::{Diagnostics, InstallKind, LogFileError, Side};
-use crate::account::contract::AccountState;
+use crate::account::contract::{AccountPlan, AccountState};
 use crate::account::session::AccountSession;
 use crate::agent::AgentState;
 use crate::hosting::Hosting;
@@ -79,7 +79,7 @@ fn side<R: Runtime>(app: &AppHandle<R>) -> Side {
 	Side::Local
 }
 
-fn plan<R: Runtime>(app: &AppHandle<R>) -> Option<crate::account::contract::AccountPlan> {
+fn plan<R: Runtime>(app: &AppHandle<R>) -> Option<AccountPlan> {
 	match app.try_state::<AccountSession>()?.current() {
 		AccountState::SignedIn(account) => account.plan,
 		_ => None,

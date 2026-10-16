@@ -50,7 +50,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error:
 			.target(Target::new(TargetKind::Stderr))
 			.split(app)?;
 	app.plugin(plugin)?;
-	tauri_plugin_log::attach_logger(level, Box::new(PrivateLog::new(logger, file)))?;
+	tauri_plugin_log::attach_logger(level, Box::new(PrivateLog { inner: logger, file }))?;
 	Ok(())
 }
 
@@ -69,12 +69,6 @@ pub fn prepared(file: &Path) -> std::io::Result<()> {
 pub struct PrivateLog {
 	inner: Box<dyn log::Log>,
 	file: PathBuf,
-}
-
-impl PrivateLog {
-	pub fn new(inner: Box<dyn log::Log>, file: PathBuf) -> Self {
-		Self { inner, file }
-	}
 }
 
 impl log::Log for PrivateLog {
@@ -132,8 +126,7 @@ pub fn tail(file: &Path, lines: usize) -> std::io::Result<Vec<String>> {
 	let mut read = Vec::new();
 	opened.read_to_end(&mut read)?;
 	let text = String::from_utf8_lossy(&read);
-	let whole_lines = text.lines().skip(usize::from(skipped > 0));
-	let kept: Vec<&str> = whole_lines.collect();
+	let kept: Vec<&str> = text.lines().skip(usize::from(skipped > 0)).collect();
 	let first = kept.len().saturating_sub(lines);
 	Ok(kept[first..].iter().map(|line| scrub::scrubbed(line)).collect())
 }

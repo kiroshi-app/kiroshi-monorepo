@@ -1,4 +1,4 @@
-pub const LONGEST_STDERR_LINE: usize = 2048;
+const LONGEST_STDERR_LINE: usize = 2048;
 
 #[derive(Default)]
 pub struct StderrLines {

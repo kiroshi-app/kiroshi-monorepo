@@ -66,7 +66,7 @@ fn a_logger_in(folder: RemovedOnDrop, max_file_size: u128) -> LogFolder {
 		.max_file_size(max_file_size)
 		.split(app.handle())
 		.expect("the logger builds");
-	LogFolder { folder, logger: PrivateLog::new(inner, file) }
+	LogFolder { folder, logger: PrivateLog { inner, file } }
 }
 
 #[cfg(unix)]
