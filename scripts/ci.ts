@@ -84,9 +84,7 @@ export const GATE = {
 			command: "bun run baseline vitest",
 		},
 	],
-	website: [
-		{ name: "Build website", command: "bun run --filter=website build" },
-	],
+	website: [{ name: "Build website", command: "bun run build:website" }],
 	rust: [
 		RUSTFMT,
 		BUILD_SIDECAR,
