@@ -6,18 +6,18 @@ const LOG_LEVELS = { warn: 4, error: 5 } as const
 
 type ForwardedLevel = keyof typeof LOG_LEVELS
 
-const jsonOf = (part: unknown): string | undefined => {
+const serialized = (part: unknown): string => {
 	try {
-		return JSON.stringify(part)
+		return JSON.stringify(part) ?? String(part)
 	} catch {
-		return undefined
+		return String(part)
 	}
 }
 
 const textOf = (part: unknown): string => {
 	if (typeof part === "string") return part
 	if (part instanceof Error) return part.stack ?? String(part)
-	return jsonOf(part) ?? String(part)
+	return serialized(part)
 }
 
 const forwardToLogFile = (level: ForwardedLevel) => {
