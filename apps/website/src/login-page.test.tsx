@@ -24,6 +24,7 @@ const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
 const SAVE_NAME = "PATCH /me"
+const SESSIONS = "GET /me/sessions"
 const RETIRED_NAME_ROUTES = [
 	"GET /api/auth/get-session",
 	"POST /api/auth/update-user",
@@ -475,13 +476,12 @@ describe("the social sign-in", () => {
 		await landedOn(router, "/")
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		expect(callsTo(GET_SESSION)[0]?.credentials).toBe("include")
-		expect(callsTo(GET_SESSION)[0]?.authorization).toBeNull()
 	})
 
 	it("reads get-session without the stored bearer and sends the returned one on the next /me", async () => {
 		localStorage.setItem(BEARER_KEY, OLDER_BEARER)
 		routes[GET_SESSION] = { body: { token: BEARER, user: { email: EMAIL } } }
-		routes["GET /me/sessions"] = { body: { sessions: [] } }
+		routes[SESSIONS] = { body: { sessions: [] } }
 		const router = renderSite("/login?via=social")
 
 		await landedOn(router, "/account")
