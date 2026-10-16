@@ -131,6 +131,28 @@ const idsAnswered = (command: string, answer: unknown) => [
 	...conversationIdsNamedIn(answer),
 ]
 
+const WRITE_ID_KEYS = ["id", "turnId", "messageId"]
+
+const WRITE_ENVELOPES = ["turn", "message"]
+
+const COMMANDS_OPENING_A_WRITE: ReadonlySet<string> = new Set([
+	"conversation_start_turn",
+	"conversation_open_assistant_message",
+])
+
+const writeIdsAt = (holder: unknown): string[] =>
+	isFields(holder) ? WRITE_ID_KEYS.map((key) => holder[key]).filter(isText) : []
+
+const writeIdsOf = (args?: InvokeArgs): string[] =>
+	isFields(args)
+		? [args, ...WRITE_ENVELOPES.map((envelope) => args[envelope])].flatMap(
+				writeIdsAt,
+			)
+		: []
+
+const openedWriteIdsOf = (command: string, args?: InvokeArgs): string[] =>
+	COMMANDS_OPENING_A_WRITE.has(command) ? writeIdsOf(args) : []
+
 const leaveRefusalToCaller = () => undefined
 
 export const createConversationProvenance = () => {
@@ -149,7 +171,9 @@ export const createConversationProvenance = () => {
 
 	const sourcesNamedIn = (args?: InvokeArgs): Set<ConversationSource> =>
 		new Set(
-			conversationIdsOf(args).flatMap((id) => [...(sourcesById.get(id) ?? [])]),
+			[...conversationIdsOf(args), ...writeIdsOf(args)].flatMap((id) => [
+				...(sourcesById.get(id) ?? []),
+			]),
 		)
 
 	const isAnsweredOnlyHere =
@@ -164,6 +188,14 @@ export const createConversationProvenance = () => {
 		source: ConversationSource,
 	): string[] => heldIdsOf(args).filter(isAnsweredOnlyHere(source))
 
+	const recordSent = (
+		source: ConversationSource,
+		command: string,
+		args?: InvokeArgs,
+	) => {
+		learn(source, openedWriteIdsOf(command, args))
+	}
+
 	const record = <T>(
 		source: ConversationSource,
 		command: string,
@@ -176,5 +208,11 @@ export const createConversationProvenance = () => {
 		return answer
 	}
 
-	return { namesConversation, sourcesNamedIn, heldOnlyHereIn, record }
+	return {
+		namesConversation,
+		sourcesNamedIn,
+		heldOnlyHereIn,
+		recordSent,
+		record,
+	}
 }

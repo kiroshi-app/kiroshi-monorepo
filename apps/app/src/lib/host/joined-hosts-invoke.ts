@@ -186,6 +186,7 @@ export const createJoinedHostsInvoke = ({
 		call: Parameters<Invoke>,
 	): Promise<T> => {
 		const [command, args, options] = call
+		provenance.recordSent(target, command, args)
 		if (target === null) {
 			return provenance.record(null, command, local.invoke<T>(...call))
 		}

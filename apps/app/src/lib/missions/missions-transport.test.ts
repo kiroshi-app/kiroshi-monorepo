@@ -252,6 +252,37 @@ describe("the mission calls of the run driver while a joined space is active", (
 			return answerAsThisComputer(command)
 		}
 
+		const REPORT_WRITES = [
+			"conversation_start_turn",
+			"conversation_open_assistant_message",
+			"conversation_append_text",
+			"conversation_finalize_message",
+			"conversation_complete_turn",
+		]
+
+		const writeReportIn = async (
+			conversationId: string,
+			turnId: string,
+			messageId: string,
+		) => {
+			await conversationStore.startTurn({
+				id: turnId,
+				conversationId,
+				startedAt: 1,
+			})
+			await conversationStore.openAssistantMessage({
+				id: messageId,
+				conversationId,
+				turnId,
+				authorBotId: UNSEEN_BOT,
+				repliedToMessageId: null,
+				createdAt: 1,
+			})
+			await conversationStore.appendText(messageId, "The walls stand.")
+			await conversationStore.finalizeMessage(messageId, "complete")
+			await conversationStore.completeTurn(turnId, 2)
+		}
+
 		const runTheMissionOf = async () => {
 			await conversationStore.loadPage(THREAD, null)
 			await conversationStore.openRuntimeSession(
@@ -267,19 +298,7 @@ describe("the mission calls of the run driver while a joined space is active", (
 				runtimeSessionId: "r-1",
 				epoch: 1,
 			})
-			await conversationStore.startTurn({
-				id: "t-1",
-				conversationId: ORIGIN,
-				startedAt: 1,
-			})
-			await conversationStore.openAssistantMessage({
-				id: "msg-1",
-				conversationId: ORIGIN,
-				turnId: "t-1",
-				authorBotId: UNSEEN_BOT,
-				repliedToMessageId: null,
-				createdAt: 1,
-			})
+			await writeReportIn(ORIGIN, "t-1", "msg-1")
 		}
 
 		beforeEach(async () => {
@@ -299,9 +318,15 @@ describe("the mission calls of the run driver while a joined space is active", (
 				"conversation_message_page",
 				"conversation_open_runtime_session",
 				"agent_start_or_resume_session",
-				"conversation_start_turn",
-				"conversation_open_assistant_message",
+				...REPORT_WRITES,
 			])
+		})
+
+		it("keeps the report writes of a turn opened on the joined host on the joined host", async () => {
+			await writeReportIn("c-of-the-joined-space", "t-joined", "msg-joined")
+
+			expect(commandsSentToThisComputer()).toEqual([])
+			expect(commandsSentToTheJoinedHost()).toEqual(REPORT_WRITES)
 		})
 
 		it("keeps a conversation of the joined space on the joined host", async () => {
