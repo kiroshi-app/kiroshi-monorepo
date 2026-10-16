@@ -1649,7 +1649,9 @@ mod tests {
 			fields,
 			[
 				"activeTurn",
+				"color",
 				"createdAt",
+				"icon",
 				"id",
 				"instructions",
 				"lastActivityAt",
