@@ -41,6 +41,7 @@ type HiveCell = {
 type HiveOverflow = {
 	centre: HivePoint
 	side: number
+	path: string
 	hiddenCount: number
 	fontSize: number
 	baseline: number
@@ -123,6 +124,7 @@ const hiveLayout = ({ participants, size }: HiveLayoutInput): HiveLayout => {
 			? {
 					centre: centres[CELL_LIMIT - 1],
 					side: hexagonSide,
+					path: hexagonPath,
 					hiddenCount: participants.length - shown.length,
 					fontSize,
 					baseline: hexagon.halfWidth + fontSize * CAP_CENTRE_RATIO,
