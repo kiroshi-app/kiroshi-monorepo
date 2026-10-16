@@ -22,6 +22,12 @@ import {
 import type { Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { seatBots } from "../conversations/transcript-fixtures"
+import { joinFakeHost, leaveFakeHost } from "../host/fake-joined-hosts"
+
+vi.mock("../host", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../host")>()),
+	...(await import("../host/fake-joined-hosts")).fakeHostModule,
+}))
 
 const SPACE = "personal"
 
@@ -70,7 +76,6 @@ type Harness = {
 	soloTail: () => ChatState
 	openSolo: () => Promise<void>
 	speakInThread: (text: string) => Promise<void>
-	announceJoinedSpace: () => Promise<void>
 }
 
 type HarnessSeed = {
@@ -85,7 +90,6 @@ type HarnessSeed = {
 	reports?: [missionId: string, turnId: string | null][]
 	soloOrigin?: boolean
 	firstStartFails?: boolean
-	joinedSpaceId?: () => string | null
 }
 
 const CLOSING_INSTANT = 9
@@ -107,7 +111,6 @@ const createHarness = async ({
 	reports = [],
 	soloOrigin = false,
 	firstStartFails = false,
-	joinedSpaceId = () => null,
 }: HarnessSeed = {}): Promise<Harness> => {
 	const scripted = createScriptedDriver()
 	const starts: Started[] = []
@@ -203,14 +206,6 @@ const createHarness = async ({
 		missions.refuseReported()
 	}
 
-	const joinedSpaceWatchers = new Set<() => void>()
-	const watchJoinedSpace = (watcher: () => void) => {
-		joinedSpaceWatchers.add(watcher)
-		return () => {
-			joinedSpaceWatchers.delete(watcher)
-		}
-	}
-
 	const stop = startMissionRunDriver({
 		driver,
 		store,
@@ -218,8 +213,6 @@ const createHarness = async ({
 		chat,
 		missions,
 		reportFailure,
-		joinedSpaceId,
-		watchJoinedSpace,
 		now: () => 7,
 	})
 	await settled()
@@ -292,13 +285,6 @@ const createHarness = async ({
 
 	const soloTail = () => chat.stateFor(bot.id)
 
-	const announceJoinedSpace = async () => {
-		for (const watcher of [...joinedSpaceWatchers]) {
-			watcher()
-		}
-		await settled()
-	}
-
 	return {
 		driver,
 		store,
@@ -324,7 +310,6 @@ const createHarness = async ({
 		soloTail,
 		openSolo,
 		speakInThread,
-		announceJoinedSpace,
 	}
 }
 
@@ -1372,7 +1357,6 @@ describe("startMissionRunDriver", () => {
 
 describe("startMissionRunDriver while a joined space is active", () => {
 	const JOINED_SPACE = "garage"
-	let activeSpaceId: string | null
 	let harness: Harness
 
 	const sentToTheMissions = () => ({
@@ -1383,10 +1367,10 @@ describe("startMissionRunDriver while a joined space is active", () => {
 		answers: harness.missions.answers.length,
 	})
 
-	const endTurnInThread = async () => {
+	const endTurnInThreadOf = async (conversationId: string) => {
 		harness.driver.emit(
 			{
-				conversationId: harness.thread.id,
+				conversationId,
 				botId: harness.mission.botId,
 				runtimeSessionId: "a-host-session",
 				epoch: 1,
@@ -1397,109 +1381,106 @@ describe("startMissionRunDriver while a joined space is active", () => {
 	}
 
 	const joinTheSpace = async () => {
-		activeSpaceId = JOINED_SPACE
-		await harness.announceJoinedSpace()
+		await joinFakeHost(JOINED_SPACE)
+		await settled()
 	}
 
 	const leaveForALocalSpace = async () => {
-		activeSpaceId = null
-		await harness.announceJoinedSpace()
+		await leaveFakeHost(JOINED_SPACE)
+		await settled()
 	}
 
 	const startOn = async (spaceId: string | null, open?: MissionState) => {
-		activeSpaceId = spaceId
+		if (spaceId) {
+			await joinFakeHost(spaceId)
+		}
 		harness = await createHarness({
 			open,
 			openEvents: open === "done" ? closedBy("poller") : AGENT_ASKED,
-			joinedSpaceId: () => activeSpaceId,
 		})
 	}
 
-	afterEach(() => {
+	afterEach(async () => {
 		harness.stop()
+		await leaveFakeHost(JOINED_SPACE)
 		vi.restoreAllMocks()
 	})
 
-	it("reads no board and no unreported mission on start", async () => {
-		await startOn(JOINED_SPACE, "done")
+	it("keeps a live local run open and its turn running when a joined space becomes active", async () => {
+		await startOn(null, "done")
 
-		expect(sentToTheMissions()).toMatchObject({ boards: 0, unreported: 0 })
-		expect(harness.starts).toEqual([])
-	})
+		await joinTheSpace()
 
-	it("sends nothing when a host mission changes and a turn ends in its thread", async () => {
-		await startOn(JOINED_SPACE)
-		const before = sentToTheMissions()
-
-		await harness.enter("done", closedBy("poller"))
-		await harness.enter("waiting_bot")
-		await endTurnInThread()
-
-		expect(sentToTheMissions()).toEqual(before)
-		expect(harness.missions.rosterCalls).toEqual([])
-		expect(harness.starts).toEqual([])
+		expect(harness.originStarts()).toHaveLength(1)
 		expect(harness.agentCalls).toEqual([])
-		expect(spoken(harness.tail())).toEqual([])
 		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
 
-	it("opens no status run on a thread it learned before joining", async () => {
-		await startOn(null, "working")
+	it("writes the report and the reported mark of a run started on a local space whose whole turn runs on a joined space", async () => {
+		await startOn(null, "done")
 		await joinTheSpace()
-		const before = sentToTheMissions()
 
-		await endTurnInThread()
+		await harness.endTurn(reported("The walls stand, handing over."))
 
-		expect(sentToTheMissions()).toEqual(before)
-		expect(harness.originStarts()).toEqual([])
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls stand, handing over."],
+		])
+		expect(harness.missions.reports).toEqual([
+			[harness.mission.id, expect.any(String)],
+		])
+		expect(harness.originStarts()).toHaveLength(1)
+		expect(harness.agentCalls).toEqual(["shutdown"])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
 
-	it("catches up on the open and unreported local missions when leaving for a local space", async () => {
-		await startOn(JOINED_SPACE, "done")
+	it("writes the status of a local mission whose thread turn ends while a joined space is active", async () => {
+		await startOn(null)
+		await harness.enter("working")
+		await joinTheSpace()
 
-		await leaveForALocalSpace()
+		await endTurnInThreadOf(harness.thread.id)
+		await harness.endTurn(reported("The walls are half up."))
+
+		expect(spoken(harness.originTail())).toEqual([
+			[harness.mission.botId, "The walls are half up."],
+		])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("catches up on the open and unreported missions of this computer on a joined space", async () => {
+		await startOn(JOINED_SPACE, "done")
 
 		expect(sentToTheMissions()).toMatchObject({ boards: 1, unreported: 1 })
 		expect(harness.originStarts()).toHaveLength(1)
 	})
 
-	it("drives local mission changes again once back on a local space", async () => {
+	it("takes the mission changes of this computer on a joined space", async () => {
 		await startOn(JOINED_SPACE)
-		await leaveForALocalSpace()
 
 		await harness.enter("done", closedBy("poller"))
 
 		expect(harness.originStarts()).toHaveLength(1)
 	})
 
-	it("ends a held local run on this Mac when a joined space becomes active", async () => {
+	it("starts a mission once when back on a local space after its run ended on a joined space", async () => {
 		await startOn(null, "done")
-		expect(harness.originStarts()).toHaveLength(1)
-
 		await joinTheSpace()
 		await harness.endTurn(reported("The walls stand, handing over."))
 
-		expect(harness.agentCalls).toEqual(["shutdown"])
-		expect(harness.missions.reports).toEqual([])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
-	})
-
-	it("runs the ended local mission again once back on a local space", async () => {
-		await startOn(null, "done")
-		await joinTheSpace()
-
 		await leaveForALocalSpace()
+		await harness.announce("done")
 
-		expect(harness.originStarts()).toHaveLength(2)
+		expect(harness.originStarts()).toHaveLength(1)
+		expect(harness.missions.reports).toHaveLength(1)
 	})
 
-	it("does nothing when switching from one joined space to another", async () => {
-		await startOn(JOINED_SPACE, "done")
+	it("opens no run when a turn ends in a thread of the joined space", async () => {
+		await startOn(JOINED_SPACE)
+		const before = sentToTheMissions()
 
-		activeSpaceId = "workshop"
-		await harness.announceJoinedSpace()
+		await endTurnInThreadOf("a-thread-of-the-joined-space")
 
-		expect(sentToTheMissions()).toMatchObject({ boards: 0, unreported: 0 })
+		expect(sentToTheMissions()).toEqual(before)
 		expect(harness.starts).toEqual([])
 	})
 })

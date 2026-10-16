@@ -23,12 +23,14 @@ import { reportLocalWhen } from "../failure-report"
 const localFileSrc = (path: string): string =>
 	isDesktopHost() ? convertFileSrc(path) : path
 
+const thisComputer = {
+	invoke: tauriInvoke as Invoke,
+	listen: tauriListen,
+	fileSrc: localFileSrc,
+}
+
 export const joinedHosts = createJoinedHosts({
-	local: {
-		invoke: tauriInvoke as Invoke,
-		listen: tauriListen,
-		fileSrc: localFileSrc,
-	},
+	local: thisComputer,
 	join: (id) => commands.joinedSpaceConnect(id),
 	fetch: (input, init) => fetch(input, init),
 	openSocket: (url) => new WebSocket(url),
@@ -38,6 +40,10 @@ export const joinedHosts = createJoinedHosts({
 export const invoke = joinedHosts.invoke
 
 export const listen = joinedHosts.listen
+
+export const invokeOnThisComputer = thisComputer.invoke
+
+export const listenOnThisComputer = thisComputer.listen
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 

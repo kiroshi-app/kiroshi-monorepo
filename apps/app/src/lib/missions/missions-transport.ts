@@ -8,18 +8,53 @@ import type {
 	MissionSpacePage,
 } from "./mission-contract"
 
-import { activeJoinedSpaceId, invoke, listen } from "../host"
+import {
+	activeJoinedSpaceId,
+	invoke,
+	invokeOnThisComputer,
+	listen,
+	listenOnThisComputer,
+} from "../host"
+import type { Bot, Chat } from "../conversations/store-contract"
 
 export const MISSION_CHANGED_EVENT = "mission://changed"
 
 const NOT_ON_A_JOINED_SPACE: MissionOnBoard[] = []
 
+type MissionHost = {
+	invoke: typeof invoke
+	listen: typeof listenOnThisComputer
+}
+
+const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
+	board: () => invoke<MissionOnBoard[]>("mission_board"),
+	unreported: () => invoke<MissionOnBoard[]>("mission_unreported"),
+	reported: (missionId: string, turnId: string | null) =>
+		invoke<Mission>("mission_reported", { missionId, turnId }),
+	answered: (missionId: string, seq: number) =>
+		invoke<Mission>("mission_answered", { missionId, seq }),
+	detail: (missionId: string) =>
+		invoke<MissionDetail>("mission_detail", { missionId }),
+	rosterBlock: (conversationId: string, botId: string) =>
+		invoke<string | null>("conversation_roster_block", {
+			conversationId,
+			botId,
+		}),
+	onChanged: (listener: (changed: MissionChanged) => void) =>
+		listen<MissionChanged>(MISSION_CHANGED_EVENT, ({ payload }) =>
+			listener(payload),
+		),
+})
+
+const missionCallsOfTheActiveHost = missionCallsOn({ invoke, listen })
+
 const readBoardOfThisMac = () =>
 	activeJoinedSpaceId() === null
-		? invoke<MissionOnBoard[]>("mission_board")
+		? missionCallsOfTheActiveHost.board()
 		: Promise.resolve(NOT_ON_A_JOINED_SPACE)
 
 export const missionsTransport = {
+	...missionCallsOfTheActiveHost,
 	board: readBoardOfThisMac,
 	spaceFeed: (spaceId: string, closedSince: number) =>
 		invoke<MissionInSpace[]>("mission_space_feed", { spaceId, closedSince }),
@@ -35,25 +70,23 @@ export const missionsTransport = {
 			cursor,
 			limit,
 		}),
-	unreported: () => invoke<MissionOnBoard[]>("mission_unreported"),
-	reported: (missionId: string, turnId: string | null) =>
-		invoke<Mission>("mission_reported", { missionId, turnId }),
-	answered: (missionId: string, seq: number) =>
-		invoke<Mission>("mission_answered", { missionId, seq }),
 	close: (missionId: string) => invoke<Mission>("mission_close", { missionId }),
 	reopen: (missionId: string) =>
 		invoke<Mission>("mission_reopen", { missionId }),
-	detail: (missionId: string) =>
-		invoke<MissionDetail>("mission_detail", { missionId }),
-	rosterBlock: (conversationId: string, botId: string) =>
-		invoke<string | null>("conversation_roster_block", {
-			conversationId,
-			botId,
-		}),
 	list: (conversationId: string) =>
 		invoke<ConversationMissions>("mission_list", { conversationId }),
-	onChanged: (listener: (changed: MissionChanged) => void) =>
-		listen<MissionChanged>(MISSION_CHANGED_EVENT, ({ payload }) =>
-			listener(payload),
-		),
+}
+
+export const missionRunTransport = {
+	...missionCallsOn({
+		invoke: invokeOnThisComputer,
+		listen: listenOnThisComputer,
+	}),
+	bots: () =>
+		invokeOnThisComputer<Bot[]>("conversation_bots", { spaceId: null }),
+	mainChat: (botId: string) =>
+		invokeOnThisComputer<Chat>("conversation_main_chat", {
+			botId,
+			spaceId: null,
+		}),
 }

@@ -49,9 +49,6 @@ export const createMissionRunTake = ({
 	run,
 }: MissionRunTakeOptions) => {
 	const readBot = async (botId: string) => {
-		if (book.isOnJoinedSpace()) {
-			return null
-		}
 		try {
 			const seated = (await store.bots()).find(({ id }) => id === botId)
 
@@ -67,16 +64,12 @@ export const createMissionRunTake = ({
 
 	const summon = async (mission: Mission, state: SummonedMissionState) => {
 		const bot = await readBot(mission.botId)
-		if (!bot) {
-			return false
-		}
 		const thread = runtimes.runtimeFor(mission.threadConversationId)
 		await thread.open(toMissionConversation({ mission, bot }))
 
 		if (isSummonsDue(state, thread)) {
 			await thread.send(missionSummonsFor(state))
 		}
-		return true
 	}
 
 	const answerWhenAsked = async (mission: Mission) => {
@@ -96,9 +89,7 @@ export const createMissionRunTake = ({
 		events,
 	}: MissionDetail): Promise<MissionState | null> => {
 		if (isSummonedMissionState(mission.state)) {
-			if (!(await summon(mission, mission.state))) {
-				return null
-			}
+			await summon(mission, mission.state)
 			await answerWhenAsked(mission)
 			return mission.state
 		}
@@ -109,14 +100,11 @@ export const createMissionRunTake = ({
 			return null
 		}
 
-		return (await run({ cause, mission, events })) ? mission.state : null
+		await run({ cause, mission, events })
+		return mission.state
 	}
 
 	return async (changed: MissionChanged) => {
-		if (book.isOnJoinedSpace()) {
-			return
-		}
-
 		if (book.isBusy(changed.missionId)) {
 			book.kept.set(changed.missionId, changed)
 			return

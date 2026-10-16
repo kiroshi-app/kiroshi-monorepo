@@ -16,7 +16,7 @@ export type LiveMissionRun = {
 
 type MissionRunBookOptions = Pick<
 	MissionRunDriverOptions,
-	"driver" | "missions" | "reportFailure" | "joinedSpaceId"
+	"driver" | "missions" | "reportFailure"
 > & {
 	retake: (changed: MissionChanged) => void
 }
@@ -39,7 +39,6 @@ export const createMissionRunBook = ({
 	driver,
 	missions,
 	reportFailure,
-	joinedSpaceId,
 	retake,
 }: MissionRunBookOptions) => {
 	const live = new Map<string, LiveMissionRun>()
@@ -118,8 +117,6 @@ export const createMissionRunBook = ({
 		}
 	}
 
-	const isOnJoinedSpace = () => joinedSpaceId() !== null
-
 	const rememberThread = (mission: Mission) => {
 		missionIdOfThread.set(mission.threadConversationId, mission.id)
 	}
@@ -146,7 +143,6 @@ export const createMissionRunBook = ({
 		refuse,
 		expire,
 		readMission,
-		isOnJoinedSpace,
 		rememberThread,
 		runAt,
 	}

@@ -32,12 +32,7 @@ export const createMissionRunRoute = ({
 	const openStatusRun = async (threadConversationId: string) => {
 		const missionId = book.missionIdOfThread.get(threadConversationId)
 
-		if (
-			missionId === undefined ||
-			book.isStopped() ||
-			book.isOnJoinedSpace() ||
-			book.isBusy(missionId)
-		) {
+		if (missionId === undefined || book.isStopped() || book.isBusy(missionId)) {
 			return
 		}
 

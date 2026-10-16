@@ -1,9 +1,15 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { MissionChanged, MissionDetail } from "./mission-contract"
-import { MISSION_CHANGED_EVENT, missionsTransport } from "./missions-transport"
+import {
+	MISSION_CHANGED_EVENT,
+	missionRunTransport,
+	missionsTransport,
+} from "./missions-transport"
+
+import { joinedHosts } from "../host"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
@@ -126,4 +132,94 @@ it("hands every mission change to its listener", async () => {
 	})
 
 	expect(heard).toEqual([{ missionId: "m-1", state: "waiting_human" }])
+})
+
+describe("the mission calls of the run driver while a joined space is active", () => {
+	const JOINED_SPACE = "garage"
+
+	const joinedHost = vi.fn(
+		async (_input: URL | string) =>
+			new Response("null", { headers: { "content-type": "application/json" } }),
+	)
+
+	const unopenedSocket = class {
+		onopen = null
+		onmessage = null
+		onclose = null
+		close = () => undefined
+	}
+
+	const answerAsThisComputer = async (command: string) =>
+		command === "joined_space_connect"
+			? {
+					id: JOINED_SPACE,
+					hostUrl: "http://192.168.1.30:45367",
+					token: "joined",
+					remoteSpaceId: null,
+					name: JOINED_SPACE,
+				}
+			: null
+
+	const commandsSentToTheJoinedHost = () =>
+		joinedHost.mock.calls.map(([input]) => String(input).split("/").at(-1))
+
+	const commandsSentToThisComputer = () =>
+		hostInvoke.mock.calls.map(([command]) => command)
+
+	beforeEach(async () => {
+		vi.stubGlobal("fetch", joinedHost)
+		vi.stubGlobal("WebSocket", unopenedSocket)
+		hostInvoke.mockImplementation(answerAsThisComputer as typeof invoke)
+		await joinedHosts.activate(JOINED_SPACE)
+		hostInvoke.mockClear()
+	})
+
+	afterEach(async () => {
+		await joinedHosts.activate(null)
+		joinedHosts.forget(JOINED_SPACE)
+		joinedHost.mockClear()
+		vi.unstubAllGlobals()
+	})
+
+	it("reads a mission of the screens from the joined host", async () => {
+		await missionsTransport.detail("m-1")
+
+		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
+	})
+
+	it("sends every mission call of the run driver to this computer", async () => {
+		await missionRunTransport.board()
+		await missionRunTransport.unreported()
+		await missionRunTransport.detail("m-1")
+		await missionRunTransport.reported("m-1", "t-1")
+		await missionRunTransport.answered("m-1", 2)
+		await missionRunTransport.rosterBlock("c-1", "b-1")
+		await missionRunTransport.bots()
+		await missionRunTransport.mainChat("b-1")
+
+		expect(commandsSentToTheJoinedHost()).toEqual([])
+		expect(commandsSentToThisComputer()).toEqual([
+			"mission_board",
+			"mission_unreported",
+			"mission_detail",
+			"mission_reported",
+			"mission_answered",
+			"conversation_roster_block",
+			"conversation_bots",
+			"conversation_main_chat",
+		])
+	})
+
+	it("reads the companions and the main chat of the run driver on this computer whatever space is active", async () => {
+		await missionRunTransport.bots()
+		await missionRunTransport.mainChat("b-1")
+
+		expect(hostInvoke).toHaveBeenCalledWith("conversation_bots", {
+			spaceId: null,
+		})
+		expect(hostInvoke).toHaveBeenCalledWith("conversation_main_chat", {
+			botId: "b-1",
+			spaceId: null,
+		})
+	})
 })
