@@ -373,6 +373,7 @@ export const IconPopoverOpen = meta.story({
 
 		trigger.focus()
 		await userEvent.keyboard("{Enter}")
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
 		const marked = await screen.findByRole("button", {
 			name: "Message",
 			pressed: true,

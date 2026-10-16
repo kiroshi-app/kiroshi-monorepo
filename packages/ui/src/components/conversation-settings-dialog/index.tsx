@@ -60,12 +60,12 @@ const ROW_STEPS: Partial<Record<string, number>> = {
 const COLOUR_OPTIONS = [...BLOT_TINTS, undefined] as const
 
 const ICON_TRIGGER_CLASS =
-	"flex w-fit cursor-pointer items-center gap-2 rounded-control border border-input bg-muted py-1.25 ps-1.5 pe-2.5 text-foreground text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+	"flex w-fit cursor-pointer items-center gap-2 rounded-control border border-input bg-muted py-1.25 ps-1.5 pe-2.5 text-foreground text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 aria-expanded:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_3%)]"
 
 const ICON_POPUP_CLASS = cn(POPUP_CLASS, "w-auto gap-0 rounded-xl p-1.5 ring-0")
 
 const ICON_OPTION_CLASS =
-	"grid size-9 cursor-pointer place-items-center rounded-lg outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-muted data-pressed:inset-ring-1 data-pressed:inset-ring-foreground/10"
+	"grid size-9 cursor-pointer place-items-center rounded-lg outline-none not-data-pressed:hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-muted data-pressed:inset-ring-1 data-pressed:inset-ring-foreground/22"
 
 const COLOUR_OPTION_CLASS = cn(FIELD_OPTION_CLASS, "p-1")
 
