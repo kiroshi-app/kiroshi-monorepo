@@ -19,6 +19,9 @@ import { chat } from "@workspace/ui/lib/i18n-en/chat"
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
 
+const ICON_LABELS: Record<string, string> =
+	chat.conversationSettings.icon.option
+
 const DialogHost = (props: ConversationSettingsDialogProps) => {
 	const [open, setOpen] = useState(props.open)
 	const [value, setValue] = useState(props.value)
@@ -378,12 +381,7 @@ export const IconPopoverOpen = meta.story({
 		const icons = within(group).getAllByRole("button")
 
 		await expect(icons.map((icon) => icon.getAttribute("aria-label"))).toEqual(
-			conversationIcons.map(
-				(id) =>
-					chat.conversationSettings.icon.option[
-						id as keyof typeof chat.conversationSettings.icon.option
-					],
-			),
+			conversationIcons.map((id) => ICON_LABELS[id]),
 		)
 		await waitFor(() => expect(marked).toHaveFocus())
 		await userEvent.keyboard("{ArrowRight}")
