@@ -5,7 +5,11 @@ import { initialsOf } from "@workspace/ui/components/initials-avatar"
 import { toRelativeTime } from "@workspace/ui/lib/time-format"
 
 import { AUTHORIZE_COPY } from "./authorize-copy"
-import type { AuthorizeState, ClosedKind } from "./authorize-state"
+import {
+	type AuthorizeState,
+	type ClosedKind,
+	signOutBrowser,
+} from "./authorize-state"
 import { RelayFailureLine } from "./login-page"
 import {
 	AccountCard,
@@ -13,6 +17,7 @@ import {
 	BenefitList,
 	CardHeading,
 	DeviceLine,
+	FailureLine,
 	Footnote,
 	GhostButton,
 	LoginShell,
@@ -203,6 +208,27 @@ export const AuthorizePage = () => {
 	return <PendingAuthorization key={state.request} state={state} />
 }
 
+const BrowserStillSignedIn = () => {
+	const call = useRelayCall()
+	const [isSignedOut, setIsSignedOut] = useState(false)
+
+	const retry = () => {
+		if (call.isPending) return
+		void call.run(async () => {
+			await signOutBrowser()
+			setIsSignedOut(true)
+		})
+	}
+
+	if (isSignedOut) return null
+	return (
+		<FailureLine
+			message={AUTHORIZE_COPY.browserStillSignedIn}
+			onRetry={retry}
+		/>
+	)
+}
+
 export const AuthorizeDonePage = () => {
 	const state = authorizeDoneRoute.useLoaderData()
 
@@ -214,6 +240,7 @@ export const AuthorizeDonePage = () => {
 				lead={AUTHORIZE_COPY.doneLead(state.deviceName, state.email)}
 				title={AUTHORIZE_COPY.doneTitle}
 			/>
+			{state.isBrowserStillSignedIn ? <BrowserStillSignedIn /> : null}
 		</LoginShell>
 	)
 }

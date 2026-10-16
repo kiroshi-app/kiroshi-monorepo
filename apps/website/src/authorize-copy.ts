@@ -22,9 +22,10 @@ export const AUTHORIZE_COPY = {
 	approve: "Sign in",
 	cancel: "Cancel",
 	approveFootnote: "Didn’t start this from Kiroshi? Press Cancel.",
-	doneTitle: "You’re signed in",
+	doneTitle: "Your computer is signed in",
 	doneLead: (deviceName: string, email: string) =>
 		`Kiroshi on ${deviceName} is signed in as ${email}. You can close this tab and go back to Kiroshi.`,
+	browserStillSignedIn: "Couldn’t sign this browser out. It’s still signed in.",
 	expiredTitle: "This sign-in request expired",
 	expiredLead:
 		"Kiroshi on your computer stopped waiting. Go back to Kiroshi and press Sign in with your browser again.",
