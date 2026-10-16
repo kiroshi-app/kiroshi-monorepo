@@ -1159,6 +1159,16 @@ overlays-tooltiphint--on-focus
 overlays-tooltiphint--reduced-motion
 overlays-tooltiphint--with-side
 overlays-tooltiphint--without-content
+overlays-whatsnewdialog--beta-channel
+overlays-whatsnewdialog--beta-channel-dark
+overlays-whatsnewdialog--first-launch
+overlays-whatsnewdialog--first-launch-dark
+overlays-whatsnewdialog--from-about
+overlays-whatsnewdialog--from-about-dark
+overlays-whatsnewdialog--long-content
+overlays-whatsnewdialog--long-content-dark
+overlays-whatsnewdialog--without-a-visual
+overlays-whatsnewdialog--without-a-visual-dark
 primitives-accordion--default
 primitives-accordion--one-open
 primitives-avatar--default
