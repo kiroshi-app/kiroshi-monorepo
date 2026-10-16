@@ -328,6 +328,14 @@ export const LongGitCliffNotes = meta.story({
 			Number(getComputedStyle(scopeLabel).fontWeight),
 		).toBeGreaterThanOrEqual(600)
 		await expect(box.textContent).not.toMatch(/\*\*|#/)
+		const [entry, nextEntry] = scope.getAllByRole("listitem")
+		await expect(getComputedStyle(entry).lineHeight).toBe(
+			probedStyleOf("text-sm", "lineHeight"),
+		)
+		await expect(
+			nextEntry.getBoundingClientRect().top -
+				entry.getBoundingClientRect().bottom,
+		).toBeCloseTo(Number.parseFloat(probedStyleOf("gap-1.5", "rowGap")), 1)
 		await waitFor(() =>
 			expect(box.scrollHeight).toBeGreaterThan(box.clientHeight),
 		)

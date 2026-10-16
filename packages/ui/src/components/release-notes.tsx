@@ -9,8 +9,8 @@ type ReleaseNotesProps = {
 }
 
 const SIZE_CLASS = {
-	xs: "text-muted-foreground text-xs",
-	sm: "text-foreground text-sm",
+	xs: "text-muted-foreground text-xs leading-(--text-xs--line-height) [&_li]:mt-1",
+	sm: "text-foreground text-sm leading-(--text-sm--line-height) [&_li]:mt-1.5",
 } as const satisfies Record<ReleaseNotesSize, string>
 
 const RELEASE_NOTES_CLASS =

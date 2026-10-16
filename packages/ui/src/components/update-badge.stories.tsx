@@ -6,6 +6,7 @@ import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	listExhaustively,
 	opaque,
+	probedStyleOf,
 	settled,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -265,6 +266,14 @@ export const LongGitCliffNotes = meta.story({
 		).toBeGreaterThan(0)
 		await expect(notes.textContent).not.toMatch(/\*\*|#/)
 		await expect(within(notes).queryByRole("link")).toBeNull()
+		const [entry, nextEntry] = within(notes).getAllByRole("listitem")
+		await expect(getComputedStyle(entry).lineHeight).toBe(
+			probedStyleOf("text-xs", "lineHeight"),
+		)
+		await expect(
+			nextEntry.getBoundingClientRect().top -
+				entry.getBoundingClientRect().bottom,
+		).toBeCloseTo(Number.parseFloat(probedStyleOf("gap-1", "rowGap")), 1)
 
 		const restartTop = restart.getBoundingClientRect().top
 		notes.scrollTop = notes.scrollHeight
