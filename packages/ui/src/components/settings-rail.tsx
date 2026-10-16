@@ -103,8 +103,9 @@ const SettingsRailItem = ({
 						<ItemIcon aria-hidden="true" className="size-4 shrink-0" />
 						<span
 							className={cn(
-								iconsOnly && "sr-only",
-								!iconsOnly && hasIndicator && "min-w-0 flex-1 text-start",
+								iconsOnly
+									? "sr-only"
+									: hasIndicator && "min-w-0 flex-1 text-start",
 							)}
 						>
 							{label}

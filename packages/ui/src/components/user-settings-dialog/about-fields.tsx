@@ -141,7 +141,7 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 			<span
 				className={cn(
 					"flex items-start gap-1.5",
-					line.isEmphasized && cn("font-medium", TONE_CLASS[line.tone]),
+					line.isEmphasized && ["font-medium", TONE_CLASS[line.tone]],
 				)}
 			>
 				<StatusIcon
