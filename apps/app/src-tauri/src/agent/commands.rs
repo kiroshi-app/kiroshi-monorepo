@@ -632,12 +632,16 @@ pub(crate) fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
 	let Some(root) = environment::root(app) else {
 		return Values::new();
 	};
-	let held = connection::held(&root).unwrap_or_else(|failure| {
+	held_and_redacted(&root).unwrap_or_else(|failure| {
 		log::warn!("{ENV_UNREADABLE}: {failure:?}");
 		Values::new()
-	});
+	})
+}
+
+pub(crate) fn held_and_redacted(root: &Path) -> Result<Values, EnvError> {
+	let held = connection::held(root)?;
 	logging::scrub::remember_env_values(held.values());
-	held
+	Ok(held)
 }
 
 #[tauri::command]
@@ -687,7 +691,7 @@ async fn probed(
 		Err(error) => return (None, Err(error)),
 	};
 	let version = sidecar.version().to_owned();
-	let connection = match env_root.map(connection::held).transpose() {
+	let connection = match env_root.map(held_and_redacted).transpose() {
 		Ok(held) => held.unwrap_or_default(),
 		Err(error) => {
 			let detail = format!("{ENV_UNREADABLE}: {error:?}");

@@ -8,7 +8,7 @@ use tauri_plugin_log::TargetKind;
 use super::scrub::{remember_env_values, ENV_MASK};
 use super::stderr_lines::StderrLines;
 use super::{builder, clear, prepared, tail, PrivateLog, LOG_FILE_NAME};
-use crate::agent::commands::held_connection;
+use crate::agent::commands::{held_and_redacted, held_connection};
 use crate::environment::connection;
 use crate::environment::contract::ConnectionKind;
 use crate::environment::store as environment;
@@ -248,4 +248,23 @@ fn a_log_folder_whose_mode_cannot_be_tightened_fails_the_preparation() {
 
 	assert_eq!(refused.kind(), std::io::ErrorKind::PermissionDenied);
 	assert!(!owned_by_root.exists());
+}
+
+#[test]
+fn a_connection_value_read_by_the_account_probe_reaches_the_log_as_its_placeholder_only() {
+	let folder = a_log_folder("probe", 1 << 20);
+	let app = an_app_of_its_own("logging-probe", mock_builder());
+	let root = environment::root(app.handle()).expect("the env root resolves");
+	connection::hold(&root, ConnectionKind::ApiKey, "log-probed-connection-key")
+		.expect("the key is stored");
+
+	held_and_redacted(&root).expect("the probe reads the connection");
+	let mut lines = StderrLines::default();
+	for line in lines.fed(b"[agent check] refused log-probed-connection-key\n") {
+		folder.line(&line);
+	}
+
+	let written = folder.written();
+	assert!(!written.contains("log-probed-connection-key"), "{written}");
+	assert!(written.contains(&format!("refused {ENV_MASK}")), "{written}");
 }
