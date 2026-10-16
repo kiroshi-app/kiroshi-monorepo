@@ -22,7 +22,6 @@ use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
 use crate::db::repositories::conversations::Seat;
-use crate::db::repositories::messages::EndedRun;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
@@ -316,13 +315,11 @@ impl<R: Runtime> HostTurn<R> {
 		let database = database(&self.app)?;
 		for speaker in speaking {
 			let bot_id = &speaker.scope.bot_id;
-			let ended = EndedRun {
-				turn_id: self.turn_id.clone(),
-				bot_id: bot_id.clone(),
-				handed_to: Vec::new(),
-				ended_at: now_ms(),
-			};
-			if let Err(error) = database.messages().end_run(ended).await {
+			let cancelled = database
+				.messages()
+				.cancel_run(self.turn_id.clone(), bot_id.clone(), now_ms())
+				.await;
+			if let Err(error) = cancelled {
 				log::warn!("{} could not end the run of {bot_id}: {error:?}", self.label());
 			}
 		}
@@ -594,7 +591,9 @@ mod tests {
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
-	use crate::db::repositories::messages::NewTurn;
+	use crate::db::repositories::messages::{
+		MessagePageQuery, MessageState, NewAssistantMessage, NewTurn,
+	};
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
@@ -723,6 +722,33 @@ mod tests {
 		}
 	}
 
+	async fn a_streaming_reply(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
+		let messages = database(app).expect("the database opens").messages();
+		let id = format!("reply-of-{bot_id}");
+		let reply = NewAssistantMessage {
+			id: id.clone(),
+			conversation_id: room.id.clone(),
+			turn_id: "t1".to_owned(),
+			author_bot_id: Some(bot_id.to_owned()),
+			replied_to_message_id: None,
+			created_at: 2,
+		};
+		messages.open_assistant_message(reply).await.expect("the reply is opened");
+		messages.append_text(id, "half".to_owned()).await.expect("the reply streams");
+	}
+
+	async fn reply_states(app: &AppHandle<MockRuntime>, room: &Room) -> Vec<MessageState> {
+		let query =
+			MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
+		let page = database(app)
+			.expect("the database opens")
+			.messages()
+			.page_messages(query)
+			.await
+			.expect("the transcript reads");
+		page.messages.iter().map(|message| message.state).collect()
+	}
+
 	fn scope_in(room: &Room, bot_id: &str) -> RuntimeScope {
 		RuntimeScope {
 			conversation_id: room.id.clone(),
@@ -762,6 +788,9 @@ mod tests {
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
+		for bot_id in &room.bot_ids {
+			a_streaming_reply(app.handle(), &room, bot_id).await;
+		}
 		let mut announced = events::subscribed(app.handle());
 		let (mut reading, heard) = a_lagging_reader();
 		let turns = HostTurns::default();
@@ -782,6 +811,7 @@ mod tests {
 			assert_cancelled_before_shut_down(&events, scope);
 		}
 		assert_eq!(active_turns(&told), vec![Value::Null]);
+		assert_eq!(reply_states(app.handle(), &room).await, vec![MessageState::Cancelled; 2]);
 	}
 
 	#[tokio::test]

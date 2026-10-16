@@ -169,6 +169,8 @@ const COMPLETE_TURN_NO_BOT_RUNS_ON: &str = "UPDATE turns SET completed_at = ?2
 const HOLD_RUN: &str =
 	"INSERT OR IGNORE INTO turn_runs (turn_id, bot_id, state) VALUES (?1, ?2, ?3)";
 const RELEASE_RUN: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2 AND state = ?3";
+const CANCEL_OPEN_MESSAGES_OF_RUN: &str = "UPDATE messages SET completion_state = 'cancelled'
+	WHERE turn_id = ?1 AND author_bot_id = ?2 AND completion_state IN ('pending', 'streaming')";
 const RELEASE_EVERY_RUN: &str = "DELETE FROM turn_runs";
 const AWAITED: &str = "awaited";
 const RUNNING: &str = "running";
@@ -324,6 +326,18 @@ impl MessagesRepository {
 	) -> Result<(), TranscriptError> {
 		self.call_mut(move |connection| {
 			Ok(abandoned_run(connection, &turn_id, &bot_id, abandoned_at))
+		})
+		.await?
+	}
+
+	pub async fn cancel_run(
+		&self,
+		turn_id: String,
+		bot_id: String,
+		cancelled_at: i64,
+	) -> Result<(), TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(cancelled_run(connection, &turn_id, &bot_id, cancelled_at))
 		})
 		.await?
 	}
@@ -846,6 +860,20 @@ fn abandoned_run(
 	let transaction = write_transaction(connection)?;
 	transaction.execute(RELEASE_RUN, params![turn_id, bot_id, AWAITED])?;
 	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, abandoned_at])?;
+	transaction.commit()?;
+	Ok(())
+}
+
+fn cancelled_run(
+	connection: &mut Connection,
+	turn_id: &str,
+	bot_id: &str,
+	cancelled_at: i64,
+) -> Result<(), TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	transaction.execute(CANCEL_OPEN_MESSAGES_OF_RUN, params![turn_id, bot_id])?;
+	transaction.execute(RELEASE_RUN, params![turn_id, bot_id, RUNNING])?;
+	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, cancelled_at])?;
 	transaction.commit()?;
 	Ok(())
 }
@@ -1959,6 +1987,48 @@ mod tests {
 		database.messages().ensure_turn(fresh).await.expect("the turn is started");
 
 		assert_eq!(stored_turn(&database, "t9").await, ("c1".to_owned(), 7));
+	}
+
+	#[tokio::test]
+	async fn a_cancelled_run_cancels_only_the_open_replies_of_its_bot_in_its_turn() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		database
+			.call(|connection| {
+				Ok(connection.execute_batch(
+					"INSERT INTO bots (id, name, model, created_at)
+						VALUES ('b2', 'Second', 'sonnet', 1);
+					INSERT INTO conversation_participants
+						(conversation_id, bot_id, role, joined_at, join_seq)
+						VALUES ('c1', 'b2', 'assistant', 1, 1);",
+				)?)
+			})
+			.await
+			.expect("the second bot is seated");
+		let turn = NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 1 };
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.start_run(turn, "b1".into()).await.expect("the run starts");
+		let others =
+			NewAssistantMessage { author_bot_id: Some("b2".into()), ..a_reply("m3", None) };
+		for reply in [a_reply("m1", None), a_reply("m2", None), others] {
+			messages.open_assistant_message(reply).await.expect("the reply is opened");
+		}
+		for id in ["m1", "m3"] {
+			messages.append_text(id.into(), "half".into()).await.expect("a delta");
+		}
+		messages
+			.finalize_message("m2".into(), TerminalState::Complete, None)
+			.await
+			.expect("the reply settles");
+
+		messages.cancel_run("t1".into(), "b1".into(), 3).await.expect("the run is cancelled");
+
+		let stored = whole_transcript(&database, PAGE).await;
+		assert_eq!(
+			states(&stored),
+			vec![MessageState::Cancelled, MessageState::Complete, MessageState::Streaming]
+		);
 	}
 
 	#[tokio::test]
