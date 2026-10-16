@@ -7,6 +7,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 
+import { agentStderr } from "./agent-stderr"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 
@@ -62,7 +63,7 @@ const delegated = async (
 			settingSources: [],
 			persistSession: false,
 			pathToClaudeCodeExecutable: resolveExecutable(),
-			stderr: () => {},
+			stderr: agentStderr("delegate"),
 		},
 	})
 	try {

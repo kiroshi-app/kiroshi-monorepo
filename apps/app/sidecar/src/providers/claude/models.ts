@@ -2,6 +2,7 @@ import { tmpdir } from "node:os"
 
 import { type ModelInfo, query } from "@anthropic-ai/claude-agent-sdk"
 
+import { agentStderr } from "./agent-stderr"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 import { sessionEnv } from "./session-env"
@@ -12,7 +13,7 @@ export const modelsOptions = (connection?: Record<string, string>) => ({
 	cwd: tmpdir(),
 	pathToClaudeCodeExecutable: resolveExecutable(),
 	env: sessionEnv(connection),
-	stderr: () => {},
+	stderr: agentStderr("models"),
 })
 
 const UNRESOLVED_MODEL = "default"

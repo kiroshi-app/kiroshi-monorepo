@@ -76,6 +76,10 @@ impl Hosting {
 		self.hosts().get(space_id).map(|host| host.state.clone()).unwrap_or_default()
 	}
 
+	pub fn is_hosting(&self) -> bool {
+		self.hosts().values().any(|host| host.state.is_running())
+	}
+
 	fn hosts(&self) -> MutexGuard<'_, HashMap<String, Host>> {
 		self.hosts.lock().unwrap_or_else(PoisonError::into_inner)
 	}

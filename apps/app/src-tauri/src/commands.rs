@@ -3,8 +3,8 @@ use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
 	account, agent, applications, attachments, companions, conversations, environment, hosting,
-	invitations, joined_spaces, mcp_oauth, missions, notifications, plugins, routines, search,
-	sections, spaces, updates, user, window_controls,
+	invitations, joined_spaces, logging, mcp_oauth, missions, notifications, plugins, routines,
+	search, sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -59,6 +59,10 @@ fn commands<R: Runtime>() -> Commands<R> {
 		agent::commands::agent_start_or_resume_session::<tauri::Wry>,
 		agent::commands::agent_submit_prompt,
 		agent::commands::agent_cancel_turn::<tauri::Wry>,
+		logging::commands::diagnostics::<tauri::Wry>,
+		logging::commands::log_tail::<tauri::Wry>,
+		logging::commands::log_reveal::<tauri::Wry>,
+		logging::commands::log_clear::<tauri::Wry>,
 		agent::commands::agent_respond_to_permission,
 		agent::commands::agent_answer_question,
 		agent::commands::agent_shutdown::<tauri::Wry>,

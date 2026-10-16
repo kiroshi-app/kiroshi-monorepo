@@ -2,6 +2,7 @@ import { tmpdir } from "node:os"
 
 import { query } from "@anthropic-ai/claude-agent-sdk"
 
+import { agentStderr } from "./agent-stderr"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 import { sessionEnv } from "./session-env"
@@ -33,7 +34,7 @@ export const titleOptions = (connection?: Record<string, string>) => ({
 	persistSession: false,
 	pathToClaudeCodeExecutable: resolveExecutable(),
 	env: sessionEnv(connection),
-	stderr: () => {},
+	stderr: agentStderr("title"),
 })
 
 export const claudeTitle = async (

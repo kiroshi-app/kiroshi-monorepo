@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
@@ -40,7 +39,11 @@ pub fn settle<R: Runtime>(
 	};
 	match app.try_state::<LaunchOutcomeState>() {
 		Some(state) => state.record(outcome.clone()),
-		None => eprintln!("the launch outcome was not kept for a later read: {outcome:?}"),
+		None => log::warn!(
+			"the launch outcome was not kept for a later read: created={} refused={}",
+			outcome.created.is_some(),
+			outcome.refused.is_some()
+		),
 	}
 	if let Some(created) = outcome.created {
 		announce(app, COMPANION_CREATED, created);
@@ -50,13 +53,13 @@ pub fn settle<R: Runtime>(
 	}
 }
 
-pub(crate) fn announce<R: Runtime, P: Serialize + Clone + Debug>(
+pub(crate) fn announce<R: Runtime, P: Serialize + Clone>(
 	app: &AppHandle<R>,
 	event: Event<P>,
 	payload: P,
 ) {
 	if let Err(failure) = events::emit(app, event, payload.clone()) {
-		eprintln!("{} was not announced for {payload:?}: {failure}", event.name());
+		log::warn!("{} was not announced: {failure}", event.name());
 	}
 }
 
