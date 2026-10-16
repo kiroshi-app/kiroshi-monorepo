@@ -1314,7 +1314,7 @@ describe("createConversationController", () => {
 			expect(state.pendingPrompt).toBeNull()
 			expect(state.latestError?.error).toEqual({
 				kind: "readFailed",
-				detail: "Error: refused",
+				detail: "refused",
 			})
 		})
 
@@ -1853,7 +1853,7 @@ describe("failures the conversation carries to the screen", () => {
 
 		expect(controller.getState().latestError?.error).toEqual({
 			kind: "readFailed",
-			detail: "Error: refused",
+			detail: "refused",
 		})
 		detach()
 	})
