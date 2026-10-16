@@ -1,0 +1,4 @@
+{
+	"modes": ["default", "acceptEdits", "plan", "auto", "dontAsk"],
+	"fallback": "auto"
+}

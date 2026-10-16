@@ -3,9 +3,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::{
-	denies_changes, dir, object_at, serialised, settings_path, ALLOW_KEY, ASK_KEY, AUTO_MODE,
-	CHANGING_TOOLS, DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY, PERMISSION_MODES,
-	SETTINGS_NAME,
+	denies_changes, dir, object_at, serialised, settings_path, ALLOW_KEY, ASK_KEY, CHANGING_TOOLS,
+	DEFAULT_MODE_KEY, DENY_KEY, DIRECTORIES_KEY, PERMISSIONS_KEY, PERMISSION_MODES, SETTINGS_NAME,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -28,7 +27,7 @@ impl Default for BotPermissions {
 impl BotPermissions {
 	pub fn unruled(denies_changes: bool) -> Self {
 		Self {
-			default_mode: AUTO_MODE.to_owned(),
+			default_mode: PERMISSION_MODES.fallback.clone(),
 			allow: Vec::new(),
 			ask: Vec::new(),
 			deny: if denies_changes {
@@ -111,10 +110,10 @@ fn declared_mode(declared: &serde_json::Map<String, serde_json::Value>) -> Strin
 }
 
 fn accepted_mode(mode: &str) -> &str {
-	if PERMISSION_MODES.contains(&mode) {
+	if PERMISSION_MODES.modes.iter().any(|listed| listed == mode) {
 		mode
 	} else {
-		AUTO_MODE
+		&PERMISSION_MODES.fallback
 	}
 }
 
@@ -172,7 +171,10 @@ mod tests {
 
 		let read = permissions(&root, &bot.id).expect("the file rules on something");
 
-		assert_eq!(read.default_mode, AUTO_MODE, "a mode nobody may ask for was read back");
+		assert_eq!(
+			read.default_mode, PERMISSION_MODES.fallback,
+			"a mode nobody may ask for was read back"
+		);
 		assert_eq!(read.allow, vec!["Read".to_owned()], "a rule that is not text was read back");
 		assert!(read.ask.is_empty());
 		assert_eq!(read.deny, vec!["Bash(rm:*)".to_owned()]);
@@ -273,9 +275,29 @@ mod tests {
 		assert_eq!(
 			object_at(&settings_path(&root, &bot.id).expect("the bundle is held"))["permissions"]
 				["defaultMode"],
-			serde_json::json!(AUTO_MODE)
+			serde_json::json!(PERMISSION_MODES.fallback)
 		);
 
 		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn the_shared_modes_refuse_bypass_and_hold_their_fallback() {
+		assert!(
+			!PERMISSION_MODES.modes.iter().any(|mode| mode == "bypassPermissions"),
+			"the shared modes let a bot bypass every permission"
+		);
+		assert!(
+			PERMISSION_MODES.modes.contains(&PERMISSION_MODES.fallback),
+			"the shared fallback is not one of the shared modes"
+		);
+	}
+
+	#[test]
+	fn every_shared_mode_is_accepted_and_any_other_string_falls_back() {
+		for mode in &PERMISSION_MODES.modes {
+			assert_eq!(accepted_mode(mode), mode, "a shared mode was refused");
+		}
+		assert_eq!(accepted_mode("everything"), PERMISSION_MODES.fallback);
 	}
 }

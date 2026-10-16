@@ -2,18 +2,14 @@ import { readFileSync } from "node:fs"
 
 import type { PermissionMode, Settings } from "@anthropic-ai/claude-agent-sdk"
 
+import permissionModes from "@workspace/shared/permission-modes.json"
+
 import type { SessionRequest } from "../provider"
 import { describeError } from "../../describe-error"
 
-const AUTO: PermissionMode = "auto"
+const FALLBACK = permissionModes.fallback as PermissionMode
 
-const MODES = new Set<string>([
-	"acceptEdits",
-	"auto",
-	"default",
-	"dontAsk",
-	"plan",
-])
+const MODES = new Set<string>(permissionModes.modes)
 
 const RULE_KEYS = ["allow", "ask", "deny"] as const
 
@@ -25,7 +21,7 @@ const BYPASS = "bypassPermissions"
 
 const NOT_AN_OBJECT = "the settings file does not hold a JSON object"
 
-const REFUSED = `${BYPASS} is refused, this session opens under ${AUTO}.`
+const REFUSED = `${BYPASS} is refused, this session opens under ${FALLBACK}.`
 
 const dropped = (keys: string[]) =>
 	`keys outside the allowlist were dropped: ${keys.join(", ")}.`
@@ -73,7 +69,7 @@ const declaredStyle = (declared: Declared): string | undefined =>
 const NO_BYPASS = { disableBypassPermissionsMode: "disable" } as const
 
 const locked = (outputStyle?: string): SettingsOptions => ({
-	permissionMode: AUTO,
+	permissionMode: FALLBACK,
 	settings: {
 		permissions: { ...NO_BYPASS },
 		...(outputStyle ? { outputStyle } : {}),
@@ -92,7 +88,7 @@ const accepted = (
 	permissions: Declared,
 	outputStyle?: string,
 ): SettingsOptions => ({
-	permissionMode: declaredMode(permissions) ?? AUTO,
+	permissionMode: declaredMode(permissions) ?? FALLBACK,
 	settings: {
 		permissions: { ...declaredRules(permissions), ...NO_BYPASS },
 		...(outputStyle ? { outputStyle } : {}),
