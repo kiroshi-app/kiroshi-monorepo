@@ -305,10 +305,7 @@ export const FromAbout = meta.story({
 		await expect(scope.getByText("Version 0.23.3")).toBeVisible()
 		await expect(scope.getByText("Also in this version")).toBeVisible()
 
-		const primary = scope
-			.getAllByRole("button", { name: "Close" })
-			.find((button) => button !== closeButtonIn(dialog))
-		await primary?.click()
+		await scope.getByText("Close", { selector: "button" }).click()
 		await expect(args.onOpenChange).toHaveBeenCalledWith(
 			false,
 			expect.anything(),
