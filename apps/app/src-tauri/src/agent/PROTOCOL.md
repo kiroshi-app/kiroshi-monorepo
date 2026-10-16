@@ -212,6 +212,14 @@ turn that is started and never finished. What an MCP server provides is filtered
 out before the answer is written: those tools belong to a server rather than to
 the install.
 
+`title` answers `{"type":"title","title":…,"icon":…}`. The model is asked for the
+title on its first line and one icon name on its second, offered from
+`packages/shared/conversation-icons.json`. `title` is the first non-blank line, cut to
+sixty characters, or `null` when the answer holds none. `icon` is the first later line
+that names a listed icon once trimmed and compared without case, spelled as the list
+spells it, or `null` when no line does. The host reads a frame without `icon` as no
+icon, and `agent_title` answers `{ title, icon }`, or `null` when no title came back.
+
 Every other command names its session.
 
 | `type` | Carries | Becomes |

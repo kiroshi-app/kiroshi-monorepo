@@ -35,34 +35,54 @@ fn ask_for_a_title(window: &WebviewWindow<MockRuntime>, text: &str) -> Value {
 	.expect("the title crosses")
 }
 
-#[test]
-fn a_title_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answers_nothing() {
-	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+const ICON_ENV: &str = "FAKE_AGENT_TITLE_ICON";
 
-	let app = an_app_of_its_own(
-		"title",
+fn an_app_naming(name: &str) -> common::AppOfItsOwn {
+	an_app_of_its_own(
+		name,
 		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
-	);
-	let window = window(&app);
+	)
+}
+
+#[test]
+fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answers_nothing() {
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+	std::env::remove_var(ICON_ENV);
+
+	let app = an_app_naming("title");
+	let plain_window = window(&app);
 
 	assert_eq!(
-		ask_for_a_title(&window, "Migrer la base de données vers Postgres"),
-		json!("Migrer la base de données vers Postgres"),
-		"the runtime's line crossed changed"
+		ask_for_a_title(&plain_window, "Migrer la base de données vers Postgres"),
+		json!({ "title": "Migrer la base de données vers Postgres", "icon": null }),
+		"a title frame without an icon crossed changed"
 	);
 
 	assert_eq!(
-		ask_for_a_title(&window, "Rename every conversation"),
-		json!("Rename every conversation"),
+		ask_for_a_title(&plain_window, "Rename every conversation"),
+		json!({ "title": "Rename every conversation", "icon": null }),
 		"a second ask read a cache instead of the runtime"
 	);
 
 	assert_eq!(
-		ask_for_a_title(&window, "   \n  "),
+		ask_for_a_title(&plain_window, "   \n  "),
 		Value::Null,
 		"an empty answer crossed as a title"
 	);
 
 	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+
+	std::env::set_var(ICON_ENV, "Rocket");
+	let iconed = an_app_naming("title-icon");
+	let iconed_window = window(&iconed);
+
+	assert_eq!(
+		ask_for_a_title(&iconed_window, "Ship the release"),
+		json!({ "title": "Ship the release", "icon": "Rocket" }),
+		"the icon the runtime picked did not cross beside the title"
+	);
+
+	tauri::async_runtime::block_on(terminate_session(iconed.state::<AgentState>().inner()));
+	std::env::remove_var(ICON_ENV);
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }

@@ -147,13 +147,16 @@ export const createRouter = (
 			tools: await provider.tools(command.connection).catch(() => []),
 		})
 
-	const nameConversation = async (command: Command) =>
+	const nameConversation = async (command: Command) => {
+		const naming = await provider
+			.title(command.text ?? "", command.connection)
+			.catch(() => null)
 		write({
 			type: "title",
-			title: await provider
-				.title(command.text ?? "", command.connection)
-				.catch(() => null),
+			title: naming?.title ?? null,
+			icon: naming?.icon ?? null,
 		})
+	}
 
 	const startSignIn = async () =>
 		write({ type: SIGN_IN, ...(await provider.signIn(write)) })

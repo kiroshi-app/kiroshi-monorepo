@@ -245,6 +245,7 @@ fn sessionless_name(value: Value) -> String {
 		"title" => {
 			let held: Titled = read(value);
 			assert_eq!(held.title.as_deref(), Some("The release note of 0.21.2"));
+			assert_eq!(held.icon.as_deref(), Some("Rocket"));
 		}
 		"sign_in" => {
 			let held: SignedIn = read(value);

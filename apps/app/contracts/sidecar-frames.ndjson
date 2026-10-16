@@ -2,7 +2,7 @@
 {"type":"check","authenticated":true,"authMethod":"oauth","detail":"the probe answered","account":{"email":"someone@example.test","plan":"max"}}
 {"type":"models","models":[{"value":"claude-sonnet-4-5","supportedEffortLevels":["low","medium","high"]},{"value":"claude-opus-4-1","supportedEffortLevels":[]}]}
 {"type":"tools","tools":["Read","Write","WebFetch"]}
-{"type":"title","title":"The release note of 0.21.2"}
+{"type":"title","title":"The release note of 0.21.2","icon":"Rocket"}
 {"type":"sign_in","signedIn":false,"error":{"kind":"timedOut","detail":"the child outlasted its deadline"}}
 {"type":"sign_in_started","url":"https://claude.example.test/cai/oauth/authorize"}
 {"type":"oauth_started","url":"https://auth.example.test/authorize"}

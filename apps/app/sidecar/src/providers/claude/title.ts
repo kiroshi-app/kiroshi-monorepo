@@ -2,26 +2,39 @@ import { tmpdir } from "node:os"
 
 import { query } from "@anthropic-ai/claude-agent-sdk"
 
+import conversationIcons from "@workspace/shared/conversation-icons.json"
+
 import { agentStderr } from "./agent-stderr"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 import { sessionEnv } from "./session-env"
 
+import type { ConversationNaming } from "../provider"
+
 const TITLE_LIMIT = 60
 
 const INSTRUCTIONS = [
-	"Write a title for the text below.",
-	"Answer with the title alone, on a single line, at most sixty characters.",
+	"Write a title for the text below, then pick the icon of its subject.",
+	"Answer with the title alone on the first line, at most sixty characters.",
 	"Write it in the language of the text.",
 	"No quotes, no trailing punctuation, no explanation.",
+	"On the second line, answer one icon name alone, spelled as in this list:",
+	`${conversationIcons.join(", ")}.`,
 ].join(" ")
 
-export const shortTitle = (answer: string): string | null => {
-	const line = answer
+const listedIcon = (line: string) =>
+	conversationIcons.find((name) => name.toLowerCase() === line.toLowerCase())
+
+export const namingOf = (answer: string): ConversationNaming | null => {
+	const [first, ...later] = answer
 		.split("\n")
 		.map((candidate) => candidate.trim())
-		.find((candidate) => candidate.length > 0)
-	return line?.slice(0, TITLE_LIMIT).trim() || null
+		.filter((candidate) => candidate.length > 0)
+	const title = first?.slice(0, TITLE_LIMIT).trim()
+	if (!title) {
+		return null
+	}
+	return { title, icon: later.map(listedIcon).find(Boolean) ?? null }
 }
 
 const asked = (text: string) => `${INSTRUCTIONS}\n\n${text}`
@@ -40,7 +53,7 @@ export const titleOptions = (connection?: Record<string, string>) => ({
 export const claudeTitle = async (
 	text: string,
 	connection?: Record<string, string>,
-): Promise<string | null> => {
+): Promise<ConversationNaming | null> => {
 	if (!text.trim()) {
 		return null
 	}
@@ -53,7 +66,7 @@ export const claudeTitle = async (
 		prompts.push(asked(text))
 		for await (const message of run) {
 			if (message.type === "result") {
-				return message.subtype === "success" ? shortTitle(message.result) : null
+				return message.subtype === "success" ? namingOf(message.result) : null
 			}
 		}
 		return null

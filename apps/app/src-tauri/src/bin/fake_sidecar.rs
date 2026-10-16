@@ -662,7 +662,7 @@ fn answer_the_host(command: &Value) {
 		Some("tools") => emit_raw(&json!({ "type": "tools", "tools": tools() }).to_string()),
 		Some("title") => {
 			let asked = command["text"].as_str().unwrap_or("");
-			emit_raw(&json!({ "type": "title", "title": title(asked) }).to_string())
+			emit_raw(&titled(asked).to_string())
 		}
 		Some("mcp_oauth_authorize") => on_oauth_authorize(command),
 		Some("mcp_oauth_cancel") => on_oauth_cancel(),
@@ -814,6 +814,14 @@ fn offered_model(named: &str) -> Value {
 
 fn tools() -> Vec<String> {
 	named_list("FAKE_AGENT_TOOLS")
+}
+
+fn titled(asked: &str) -> Value {
+	let mut frame = json!({ "type": "title", "title": title(asked) });
+	if let Ok(icon) = std::env::var("FAKE_AGENT_TITLE_ICON") {
+		frame["icon"] = json!(icon);
+	}
+	frame
 }
 
 fn title(asked: &str) -> Option<String> {
