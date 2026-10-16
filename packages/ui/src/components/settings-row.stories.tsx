@@ -64,7 +64,6 @@ export const Default = meta.story({
 	},
 })
 
-const onWhatsNew = fn()
 const onReleaseNotes = fn()
 
 export const LinkRows = meta.story({
@@ -74,7 +73,7 @@ export const LinkRows = meta.story({
 				<SettingsLinkRow
 					icon={Icons.Next}
 					label="What’s new in 0.24.0"
-					onClick={onWhatsNew}
+					onClick={fn()}
 				/>
 				<SettingsLinkRow
 					aria-label="Release notes, opens in your browser"

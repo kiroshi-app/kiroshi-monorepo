@@ -49,17 +49,21 @@ type AboutFieldsProps = {
 
 type StatusTone = "muted" | "success" | "accent" | "destructive"
 
-const TONE_CLASS: Record<StatusTone, string> = {
+const ICON_TONE_CLASS: Record<StatusTone, string> = {
 	muted: "text-muted-foreground",
 	success: "text-success",
 	accent: "text-sidebar-primary",
 	destructive: "text-destructive",
 }
 
+const TEXT_TONE_CLASS: Record<StatusTone, string> = {
+	...ICON_TONE_CLASS,
+	success: "text-muted-foreground",
+}
+
 type StatusLine = {
 	icon: Icon
-	iconTone: StatusTone
-	textTone: StatusTone
+	tone: StatusTone
 	text: string
 	hint?: string
 }
@@ -72,8 +76,7 @@ const statusLineOf = (
 		case "upToDate":
 			return {
 				icon: Icons.Check,
-				iconTone: "success",
-				textTone: "muted",
+				tone: "success",
 				text: t("about.status.upToDate", {
 					when: toRelativeTime(update.checkedAt, Date.now()),
 				}),
@@ -81,46 +84,38 @@ const statusLineOf = (
 		case "checking":
 			return {
 				icon: Icons.Loading,
-				iconTone: "muted",
-				textTone: "muted",
+				tone: "muted",
 				text: t("about.status.checking"),
 			}
 		case "available":
 			return {
 				icon: Icons.ArrowUp,
-				iconTone: "accent",
-				textTone: "accent",
+				tone: "accent",
 				text: t("about.status.available", { version: update.version }),
 			}
 		case "downloading":
 			return {
 				icon: Icons.Loading,
-				iconTone: "accent",
-				textTone: "accent",
+				tone: "accent",
 				text: t("about.status.downloading", { version: update.version }),
 			}
-		case "ready":
-			return update.runningCompanions > 0
-				? {
-						icon: Icons.Retry,
-						iconTone: "accent",
-						textTone: "accent",
-						text: t("about.status.readyHeld", { version: update.version }),
-						hint: t("about.status.running", {
-							count: update.runningCompanions,
-						}),
-					}
-				: {
-						icon: Icons.Retry,
-						iconTone: "accent",
-						textTone: "accent",
-						text: t("about.status.ready", { version: update.version }),
-					}
+		case "ready": {
+			const isHeld = update.runningCompanions > 0
+			return {
+				icon: Icons.Retry,
+				tone: "accent",
+				text: t(isHeld ? "about.status.readyHeld" : "about.status.ready", {
+					version: update.version,
+				}),
+				hint: isHeld
+					? t("about.status.running", { count: update.runningCompanions })
+					: undefined,
+			}
+		}
 		case "failed":
 			return {
 				icon: Icons.Alert,
-				iconTone: "destructive",
-				textTone: "destructive",
+				tone: "destructive",
 				text: t("about.status.failed", { version: update.version }),
 				hint: t("about.status.failedHint"),
 			}
@@ -145,7 +140,7 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 			role="status"
 		>
 			<span
-				className={cn("flex items-start gap-1.5", TONE_CLASS[line.textTone])}
+				className={cn("flex items-start gap-1.5", TEXT_TONE_CLASS[line.tone])}
 			>
 				<StatusIcon
 					aria-hidden="true"
@@ -153,7 +148,7 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 						"pointer-events-none mt-0.5 size-3 shrink-0",
 						StatusIcon === Icons.Loading &&
 							"animate-spin motion-reduce:animate-none",
-						TONE_CLASS[line.iconTone],
+						ICON_TONE_CLASS[line.tone],
 					)}
 				/>
 				{line.text}
