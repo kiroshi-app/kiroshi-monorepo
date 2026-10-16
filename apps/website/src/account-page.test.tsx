@@ -7,7 +7,7 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react"
-import type { ReactNode } from "react"
+import type { ComponentType } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
@@ -230,8 +230,8 @@ const rowOf = (name: string) => {
 
 const rowSignOut = (name: string) => `Sign out ${name}`
 
-const markupOf = (mark: ReactNode) => {
-	const { container, unmount } = render(mark)
+const markupOf = (Mark: ComponentType) => {
+	const { container, unmount } = render(<Mark />)
 	const markup = container.innerHTML
 	unmount()
 	return markup
@@ -455,15 +455,15 @@ describe("the browser sessions", () => {
 	})
 
 	it.each([
-		[MINI, <DesktopMark key="desktop" />],
-		[MAC, <LaptopMark key="laptop" />],
-		[IPHONE, <PhoneMark key="phone" />],
-		[SAFARI_ON_IOS, <PhoneMark key="phone" />],
-		["Android", <PhoneMark key="phone" />],
-		[SAFARI_ON_MACOS, <DesktopMark key="desktop" />],
-		["Chrome", <DesktopMark key="desktop" />],
-	])("marks %s with its device icon", async (name, mark) => {
-		const expected = markupOf(mark)
+		[MINI, DesktopMark],
+		[MAC, LaptopMark],
+		[IPHONE, PhoneMark],
+		[SAFARI_ON_IOS, PhoneMark],
+		["Android", PhoneMark],
+		[SAFARI_ON_MACOS, DesktopMark],
+		["Chrome", DesktopMark],
+	])("marks %s with its device icon", async (name, Mark) => {
+		const expected = markupOf(Mark)
 		await openAccountWithBrowserSessions()
 
 		expect(rowMarkup(name)).toBe(expected)
