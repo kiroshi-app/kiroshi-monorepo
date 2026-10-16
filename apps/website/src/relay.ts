@@ -46,6 +46,8 @@ type Session = {
 	id: string
 	deviceName: string | null
 	platform: string | null
+	browser: string | null
+	os: string | null
 	lastSeenAt: number
 	isCurrent: boolean
 }
@@ -235,10 +237,15 @@ const nullableStringField = (body: unknown, field: string) => {
 	return value
 }
 
+const optionalStringField = (body: unknown, field: string) =>
+	fieldOf(body, field) === undefined ? null : nullableStringField(body, field)
+
 const sessionOf = (body: unknown): Session => ({
 	id: stringField(body, "id"),
 	deviceName: nullableStringField(body, "deviceName"),
 	platform: nullableStringField(body, "platform"),
+	browser: optionalStringField(body, "browser"),
+	os: optionalStringField(body, "os"),
 	lastSeenAt: timeField(body, "lastSeenAt"),
 	isCurrent: fieldOf(body, "current") === true,
 })
