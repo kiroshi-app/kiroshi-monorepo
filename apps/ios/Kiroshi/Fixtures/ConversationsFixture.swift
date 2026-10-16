@@ -147,6 +147,99 @@
             id: "group-release-042", title: "Release 0.42", members: [juniper, pico, mira],
             createdAt: 0)
 
+        static let subjectIcons: [FixtureHost.Group] = [
+            .init(
+                id: "group-space-switch", title: "Space switch drops local missions",
+                members: [atlas, pico], createdAt: 0),
+            .init(
+                id: "group-sidebar", title: "Sidebar width resets after restart",
+                members: [mira, pico], createdAt: 0, icon: "PanelLeft"),
+            .init(
+                id: "group-relay-audit", title: "Relay audit: session tokens",
+                members: [pico, juniper, otto], createdAt: 0, icon: "ShieldKey", color: "red"),
+            .init(
+                id: "group-onboarding", title: "Onboarding copy pass", members: [mira],
+                createdAt: 0, icon: "Pen", color: "purple"),
+            .init(
+                id: "group-unknown-device", title: "Unknown device on sign-in",
+                members: [atlas, juniper, pico, otto], createdAt: 0, icon: "Laptop"),
+            .init(
+                id: "group-updates", title: "Updates", members: [pico], createdAt: 0,
+                icon: "Download"),
+            .init(
+                id: "group-bug-report", title: "Bug report: log file export",
+                members: [shoto, juniper], createdAt: 0, icon: "Bug"),
+            .init(
+                id: "group-prod-deploy", title: "Prod deploy failed on Render", members: [juniper],
+                createdAt: 0, icon: "Rocket", color: "orange"),
+            .init(
+                id: "group-storybook", title: "Storybook baseline drift",
+                members: [shoto, juniper, atlas, pico, mira], createdAt: 0, icon: "BookOpen",
+                color: "green"),
+            .init(
+                id: "group-apple", title: "Sign in with Apple on iOS",
+                members: [pico, atlas, juniper], createdAt: 0, icon: "Smartphone"),
+            .init(
+                id: "group-pricing", title: "Pricing page: Pro card", members: [mira, juniper],
+                createdAt: 0, icon: "CreditCard"),
+            .init(
+                id: "group-release-notes", title: "Release notes for 0.9", members: [juniper],
+                createdAt: 0, icon: "Megaphone"),
+        ]
+
+        static let subjectIconMessages: [String: [FixtureHost.Message]] = Dictionary(
+            uniqueKeysWithValues: zip(
+                subjectIcons,
+                [
+                    ("Space switch is fixed on main.", false, 0, 22, 40),
+                    ("Pushed the fix, CI is running.", false, 0, 22, 13),
+                    ("Two findings, one of them blocking.", false, 0, 22, 3),
+                    ("The empty state is on artboard 3.", false, 0, 21, 50),
+                    ("Can you check the relay logs?", true, 0, 21, 12),
+                    ("Build 0.9.3 is on the update channel.", false, 0, 20, 15),
+                    ("Story added for the empty export.", false, 0, 19, 20),
+                    ("Redeployed, the health check is green.", false, 0, 17, 4),
+                    ("Baseline updated, three ids added.", false, 1, 18, 0),
+                    ("Waiting on the bearer exchange.", false, 1, 11, 0),
+                    ("The beta label sits next to the price.", false, 2, 15, 0),
+                    ("The draft is in the conversation.", false, 3, 10, 0),
+                ]
+            ).map { group, last in
+                (
+                    group.id,
+                    [
+                        FixtureHost.Message(
+                            id: "m-\(group.id)", isYours: last.1, content: last.0,
+                            daysAgo: last.2, hour: last.3, minute: last.4,
+                            author: last.1 ? nil : group.members.first?.id)
+                    ]
+                )
+            })
+
+        static var closeUpRows: [ConversationSummary] {
+            let members = [pico, juniper, atlas, mira, otto]
+            let happy = Companion(id: "happy-2", name: "Happy", role: "Product", tint: .orange)
+            let own = ConversationSummary(
+                subject: .companion(happy), timeLabel: "10:12 PM",
+                preview: "Three tickets are ready for Ni.")
+            let groups = [nil, CompanionTint.red].flatMap { color in
+                [1, 2, 3, 5].map { count in
+                    let participants = members.prefix(count).map {
+                        GroupConversation.Participant(
+                            botId: $0.id, name: $0.name, avatarBlot: $0.tint)
+                    }
+                    let group = GroupConversation(
+                        id: "close-up-\(color?.rawValue ?? "none")-\(count)",
+                        title: "Relay audit: session tokens", createdAt: 0,
+                        participants: participants, icon: .shieldKey, color: color)
+                    return ConversationSummary(
+                        subject: .group(group), timeLabel: "10:03 PM",
+                        preview: "Two findings, one of them blocking.")
+                }
+            }
+            return [own] + groups
+        }
+
         static let homeMessages: [String: [FixtureHost.Message]] = listMessages.merging([
             pico.id: [
                 .init(
@@ -352,6 +445,11 @@
             switch fixture {
             case .conversationsLive:
                 script.playsGroupChanges = true
+            case .conversationIcons:
+                script.companions = [juniper]
+                script.groups = subjectIcons
+                script.messages = subjectIconMessages.merging(
+                    [juniper.id: listMessages[juniper.id] ?? []]) { group, _ in group }
             case .pinned:
                 script.pinned = [juniper.id, release042.id, otto.id]
             case .pinRefused:
@@ -489,6 +587,8 @@
             let members: [Companion]
             let createdAt: Int
             var pinPosition: Int?
+            var icon: String?
+            var color: String?
 
             var conversation: GroupConversation {
                 try! JSONDecoder().decode(GroupConversation.self, from: Data(json.utf8))
@@ -497,7 +597,7 @@
             func renamed(_ title: String) -> Group {
                 Group(
                     id: id, title: title, members: members, createdAt: createdAt,
-                    pinPosition: pinPosition)
+                    pinPosition: pinPosition, icon: icon, color: color)
             }
 
             func pageJSON(lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?)
@@ -516,8 +616,10 @@
                     return
                         #"{"botId":"\#(companion.id)","role":"\#(role)","joinedAt":\#(index),"leftAt":null,"name":"\#(companion.name)","avatarBlot":\#(tint),"avatarImagePath":\#(path),"isDeleted":false}"#
                 }
+                let icon = icon.map { #""\#($0)""# } ?? "null"
+                let color = color.map { #""\#($0)""# } ?? "null"
                 return
-                    #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":\#(pinPosition.map(String.init) ?? "null"),"title":"\#(title)","instructions":"","createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
+                    #"{"id":"\#(id)","spaceId":"\#(FixtureHost.spaceId)","sectionId":null,"pinPosition":\#(pinPosition.map(String.init) ?? "null"),"title":"\#(title)","instructions":"","icon":\#(icon),"color":\#(color),"createdAt":\#(createdAt),"updatedAt":\#(createdAt),"participants":[\#(participants.joined(separator: ","))]}"#
             }
         }
 

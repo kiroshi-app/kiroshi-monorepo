@@ -43,7 +43,7 @@ struct Companion: Decodable, Hashable, Identifiable, Sendable {
     }
 }
 
-enum CompanionTint: String, Decodable, Hashable, Sendable {
+enum CompanionTint: String, CaseIterable, Decodable, Hashable, Sendable {
     case red
     case yellow
     case green

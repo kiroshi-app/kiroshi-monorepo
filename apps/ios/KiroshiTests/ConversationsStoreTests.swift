@@ -483,6 +483,39 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    @Test func anIconAndColourChangedOnTheMacRepaintTheGroupRow() async {
+        let host = hostWithGroups
+        let (store, connection, following) = await follow(host)
+        let group = { (id: String) -> GroupConversation? in
+            guard case .group(let group) = store.summaries.first(where: { $0.id == id })?.subject
+            else { return nil }
+            return group
+        }
+        #expect(group("group-release")?.icon == .messageSquare)
+        #expect(group("group-release")?.color == nil)
+
+        var release = releaseCrew
+        release.icon = "Rocket"
+        release.color = "orange"
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(release.json)}"#)
+        await waitUntil { group("group-release")?.icon == .rocket }
+        #expect(group("group-release")?.color == .orange)
+
+        release.icon = nil
+        release.color = nil
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(release.json)}"#)
+        await waitUntil { group("group-release")?.icon == .messageSquare }
+
+        #expect(group("group-release")?.color == nil)
+        #expect(store.summaries.count == 5)
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aCompanionWorkingInAGroupNamesItInTheRow() async {
         let host = hostWithGroups
         let (store, connection, following) = await follow(host)
