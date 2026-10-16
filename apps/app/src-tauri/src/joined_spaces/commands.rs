@@ -211,7 +211,7 @@ mod tests {
 		);
 	}
 
-	async fn removal_refused(api_url: &str, dir: &Path) -> (JoinedSpace, JoinedSpaceError) {
+	async fn removal_refused(api_url: &str, dir: &Path) -> JoinedSpaceError {
 		let app = app_reaching(dir, api_url);
 		let added = held(&app).await;
 
@@ -219,8 +219,8 @@ mod tests {
 			.await
 			.expect_err("the removal is refused");
 
-		assert_eq!(list(&app).await, vec![added.clone()]);
-		(added, refused)
+		assert_eq!(list(&app).await, vec![added]);
+		refused
 	}
 
 	fn heard(app: &App<MockRuntime>) -> Receiver<String> {
@@ -316,7 +316,7 @@ mod tests {
 		let (api_url, relay) = relay_answering(StatusCode::CONFLICT, Some(refusal)).await;
 		signed_in(&dir);
 
-		let (_, refused) = removal_refused(&api_url, &dir).await;
+		let refused = removal_refused(&api_url, &dir).await;
 
 		assert_eq!(refused, JoinedSpaceError::OwnerNotRemovable);
 		left_once(&relay);
@@ -328,7 +328,7 @@ mod tests {
 		let (api_url, relay) = relay_answering(StatusCode::INTERNAL_SERVER_ERROR, None).await;
 		signed_in(&dir);
 
-		let (_, refused) = removal_refused(&api_url, &dir).await;
+		let refused = removal_refused(&api_url, &dir).await;
 
 		let JoinedSpaceError::RelayUnreachable { detail } = refused else {
 			panic!("the refusal is {refused:?}");
@@ -342,7 +342,7 @@ mod tests {
 		let dir = temp_dir();
 		signed_in(&dir);
 
-		let (_, refused) = removal_refused(&unreached_url().await, &dir).await;
+		let refused = removal_refused(&unreached_url().await, &dir).await;
 
 		assert!(matches!(refused, JoinedSpaceError::RelayUnreachable { .. }), "{refused:?}");
 	}
@@ -352,7 +352,7 @@ mod tests {
 		let dir = temp_dir();
 		let (api_url, relay) = relay_answering(StatusCode::NO_CONTENT, None).await;
 
-		let (_, refused) = removal_refused(&api_url, &dir).await;
+		let refused = removal_refused(&api_url, &dir).await;
 
 		assert_eq!(refused, JoinedSpaceError::NeedsSignIn);
 		assert!(relay.asked().is_empty());
