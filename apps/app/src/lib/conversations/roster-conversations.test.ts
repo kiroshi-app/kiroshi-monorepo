@@ -194,6 +194,27 @@ describe("toRosterConversations", () => {
 		expect(row.timestamp).toBeUndefined()
 	})
 
+	it("draws the icon and the colour the room wears", () => {
+		const [row] = toRosterConversations(
+			[conversation({ icon: "Rocket", color: "cyan" })],
+			atRest(),
+			NOW,
+		)
+
+		expect(row).toMatchObject({ icon: "Rocket", color: "cyan" })
+	})
+
+	it("leaves the icon and the colour of a room that wears none blank", () => {
+		const [row] = toRosterConversations(
+			[conversation({ icon: null, color: null })],
+			atRest(),
+			NOW,
+		)
+
+		expect(row.icon).toBeUndefined()
+		expect(row.color).toBeUndefined()
+	})
+
 	it("draws the room of the most recent word first", () => {
 		const rows = toRosterConversations(
 			[

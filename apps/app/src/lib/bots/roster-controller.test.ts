@@ -1368,12 +1368,144 @@ describe("createRosterController on conversations", () => {
 		})
 	})
 
+	it("shows at once and stores the icon and the colour picked, beside the name and the instructions", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = (await controller.createConversation())?.id ?? ""
+		controller.describeConversation(id, {
+			name: "Menu",
+			instructions: "Stay short.",
+		})
+
+		controller.styleConversation(id, { icon: "Rocket" })
+		controller.styleConversation(id, { color: "cyan" })
+
+		expect(controller.getState().conversations[0]).toMatchObject({
+			icon: "Rocket",
+			color: "cyan",
+		})
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0]).toMatchObject({
+				title: "Menu",
+				instructions: "Stay short.",
+				icon: "Rocket",
+				color: "cyan",
+			})
+		})
+	})
+
+	it("stores no colour when none is picked", async () => {
+		const store = createFakeTranscriptStore()
+		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		await store.updateConversation(id, {
+			title: "Launch",
+			instructions: "",
+			sectionId: null,
+			icon: "Message",
+			color: "cyan",
+		})
+		const controller = await loaded(store)
+
+		controller.styleConversation(id, { color: null })
+
+		expect(controller.getState().conversations[0].color).toBeNull()
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0]).toMatchObject({
+				icon: "Message",
+				color: null,
+			})
+		})
+	})
+
+	it("puts back the icon the store holds when the write is refused", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded({
+			...store,
+			updateConversation: () =>
+				Promise.reject({ kind: "storage", failure: { kind: "staleWrite" } }),
+		})
+		const id = (await controller.createConversation())?.id ?? ""
+
+		controller.styleConversation(id, { icon: "Rocket" })
+		expect(controller.getState().conversations[0].icon).toBe("Rocket")
+
+		await vi.waitFor(() =>
+			expect(controller.getState().conversations[0].icon).toBeNull(),
+		)
+	})
+
+	it("stores the icon a naming carries with the title, in one write", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = (await controller.createConversation())?.id ?? ""
+		const sent = vi.spyOn(store, "updateConversation")
+
+		controller.nameConversation(id, { title: "Menu", icon: "Rocket" })
+
+		expect(controller.getState().conversations[0]).toMatchObject({
+			title: "Menu",
+			icon: "Rocket",
+		})
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0]).toMatchObject({
+				title: "Menu",
+				icon: "Rocket",
+			})
+		})
+		expect(sent).toHaveBeenCalledTimes(1)
+	})
+
+	it("keeps the icon a conversation wears when a naming brings another", async () => {
+		const store = createFakeTranscriptStore()
+		const id = (await (await loaded(store)).createConversation())?.id ?? ""
+		await store.updateConversation(id, {
+			title: "",
+			instructions: "",
+			sectionId: null,
+			icon: "Message",
+			color: null,
+		})
+		const controller = await loaded(store)
+
+		controller.nameConversation(id, { title: "Menu", icon: "Rocket" })
+
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0]).toMatchObject({
+				title: "Menu",
+				icon: "Message",
+			})
+		})
+	})
+
+	it("stores no icon when a naming brings none", async () => {
+		const store = createFakeTranscriptStore()
+		const controller = await loaded(store)
+		const id = (await controller.createConversation())?.id ?? ""
+
+		controller.nameConversation(id, { title: "Menu", icon: null })
+
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0]).toMatchObject({
+				title: "Menu",
+				icon: null,
+			})
+		})
+	})
+
 	it("stores the name a nameless conversation is given", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 		const created = await controller.createConversation()
 
-		controller.nameConversation(created?.id ?? "", "Menu")
+		controller.nameConversation(created?.id ?? "", {
+			title: "Menu",
+			icon: null,
+		})
 		expect(controller.getState().conversations[0].title).toBe("Menu")
 
 		await vi.waitFor(async () => {
@@ -1386,9 +1518,15 @@ describe("createRosterController on conversations", () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)
 		const created = await controller.createConversation()
-		controller.nameConversation(created?.id ?? "", "Launch")
+		controller.nameConversation(created?.id ?? "", {
+			title: "Launch",
+			icon: null,
+		})
 
-		controller.nameConversation(created?.id ?? "", "Menu")
+		controller.nameConversation(created?.id ?? "", {
+			title: "Menu",
+			icon: null,
+		})
 
 		expect(controller.getState().conversations[0].title).toBe("Launch")
 	})

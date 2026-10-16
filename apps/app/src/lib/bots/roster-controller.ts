@@ -38,10 +38,12 @@ import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
+import type { ConversationNaming } from "../agent/contract"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import {
 	isNameless,
 	presentParticipants,
+	toConversationSettingsValue,
 } from "../conversations/roster-conversations"
 import type {
 	Bot,
@@ -152,6 +154,8 @@ const soloThreadQueryOf = (
 type RosterQuery = ReturnType<typeof rosterQueryOf>
 type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
 
+export type ConversationStyle = Partial<Pick<Conversation, "icon" | "color">>
+
 export type RosterController = {
 	getState: () => RosterState
 	subscribe: (listener: () => void) => () => void
@@ -197,7 +201,8 @@ export type RosterController = {
 	editConversation: (id: string) => void
 	setConversationEditing: (isEditing: boolean) => void
 	describeConversation: (id: string, value: ConversationSettingsValue) => void
-	nameConversation: (id: string, title: string) => void
+	styleConversation: (id: string, style: ConversationStyle) => void
+	nameConversation: (id: string, naming: ConversationNaming) => void
 	setConversationLead: (
 		conversationId: string,
 		botId: string,
@@ -1264,12 +1269,25 @@ export const createRosterController = (
 			conversationWrites.push(id, value)
 		},
 
-		nameConversation: (id: string, title: string) => {
+		styleConversation: (id: string, style: ConversationStyle) => {
+			const conversation = heldConversation(id)
+			if (!conversation) {
+				return
+			}
+			applyConversation({ ...conversation, ...style })
+			conversationWrites.push(id, toConversationSettingsValue(conversation))
+		},
+
+		nameConversation: (id: string, { title, icon }: ConversationNaming) => {
 			const conversation = heldConversation(id)
 			if (!conversation || !isNameless(conversation)) {
 				return
 			}
-			applyConversation({ ...conversation, title })
+			applyConversation({
+				...conversation,
+				title,
+				icon: conversation.icon ?? icon,
+			})
 			conversationWrites.push(id, {
 				name: title,
 				instructions: conversation.instructions,

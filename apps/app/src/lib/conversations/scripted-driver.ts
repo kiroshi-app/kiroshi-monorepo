@@ -88,7 +88,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 				authenticated: true,
 				error: null,
 			}),
-		titleFor: () => Promise.resolve(null),
+		namingFor: () => Promise.resolve(null),
 		startOrResumeSession: () => Promise.resolve({ resumed: false }),
 		submitPrompt: (scope, prompt, turn) => {
 			submissions.push({ scope, prompt, turn })

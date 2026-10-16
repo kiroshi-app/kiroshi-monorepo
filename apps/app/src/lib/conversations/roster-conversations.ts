@@ -4,6 +4,8 @@ import type {
 	AppSidebarConversation,
 } from "@workspace/ui/components/app-sidebar"
 import type { ConversationSettingsValue } from "@workspace/ui/components/conversation-settings-dialog"
+import { conversationIconOf } from "@workspace/ui/components/conversation-subject-icon"
+import type { ConversationIconName } from "@workspace/ui/components/icons"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import type { MentionBot as PromptMentionBot } from "@workspace/ui/components/prompt-mention-menu"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -11,6 +13,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 
 import { type MentionBot, toMentionNames } from "./mentions"
 import type {
+	AvatarBlot,
 	Bot,
 	Conversation,
 	ConversationInPage,
@@ -141,6 +144,19 @@ export const toConversationSettingsValue = (
 	instructions: conversation.instructions,
 })
 
+export type ConversationLook = {
+	icon?: ConversationIconName
+	color?: AvatarBlot
+}
+
+export const toConversationLook = ({
+	icon,
+	color,
+}: Conversation): ConversationLook => ({
+	icon: icon === null ? undefined : conversationIconOf(icon),
+	color: color ?? undefined,
+})
+
 export type ConversationRosterActivity = {
 	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
@@ -199,6 +215,7 @@ export const toRosterConversations = (
 		return {
 			id: conversation.id,
 			name: conversationName(conversation),
+			...toConversationLook(conversation),
 			sectionId: conversation.sectionId,
 			pinPosition: conversation.pinPosition,
 			participants: toSeatedRows(seated, workers),

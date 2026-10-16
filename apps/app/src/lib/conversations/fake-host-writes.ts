@@ -277,7 +277,7 @@ export const withFakeHostWrites = (
 
 	return {
 		check: (scope) => driver.check(scope),
-		titleFor: (text) => driver.titleFor(text),
+		namingFor: (text) => driver.namingFor(text),
 		startOrResumeSession: (...opening) =>
 			driver.startOrResumeSession(...opening),
 		submitPrompt,

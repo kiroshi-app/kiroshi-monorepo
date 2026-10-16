@@ -54,6 +54,7 @@ import type {
 	ActivityEvent,
 	AgentEvent,
 	ChatMessage,
+	ConversationNaming,
 	PermissionDecision,
 	PermissionRequest,
 	QuestionAnswers,
@@ -176,7 +177,7 @@ export type CompanionArrivalListener = (
 export type ConversationControllerOptions = {
 	newId?: () => string
 	now?: () => number
-	onNamed?: (conversationId: string, title: string) => void
+	onNamed?: (conversationId: string, naming: ConversationNaming) => void
 	readReportedRuns?: ReportedRunsReader
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
@@ -1143,9 +1144,9 @@ export const createConversationController = (
 	}
 
 	const nameFrom = async (conversationId: string, text: string) => {
-		const title = await driver.titleFor(text).catch(() => null)
-		if (title) {
-			options.onNamed?.(conversationId, title)
+		const naming = await driver.namingFor(text).catch(() => null)
+		if (naming?.title) {
+			options.onNamed?.(conversationId, naming)
 		}
 	}
 

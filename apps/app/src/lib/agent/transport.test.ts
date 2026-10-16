@@ -47,12 +47,13 @@ it("hands every agent event to its subscriber with the host it came from", async
 	expect(heard).toEqual([[scoped, "host-1"]])
 })
 
-it("names a conversation with the title of the naming the host answered", async () => {
+it("names a conversation with the title and the icon the host answered", async () => {
 	vi.mocked(invoke).mockResolvedValueOnce({ title: "Ship it", icon: "Rocket" })
 
-	await expect(agentTransport.titleFor("Ship the release")).resolves.toBe(
-		"Ship it",
-	)
+	await expect(agentTransport.namingFor("Ship the release")).resolves.toEqual({
+		title: "Ship it",
+		icon: "Rocket",
+	})
 	expect(invoke).toHaveBeenCalledWith("agent_title", {
 		text: "Ship the release",
 	})
@@ -61,5 +62,5 @@ it("names a conversation with the title of the naming the host answered", async 
 it("names nothing when the host answered no naming", async () => {
 	vi.mocked(invoke).mockResolvedValueOnce(null)
 
-	await expect(agentTransport.titleFor("   ")).resolves.toBeNull()
+	await expect(agentTransport.namingFor("   ")).resolves.toBeNull()
 })

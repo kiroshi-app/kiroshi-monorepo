@@ -4,6 +4,7 @@ import {
 	leadOf,
 	presentParticipants,
 	toConversationBots,
+	toConversationLook,
 	toConversationSettingsValue,
 } from "@/lib/conversations/roster-conversations"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
@@ -27,8 +28,14 @@ export const ConversationSettingsHost = ({
 
 	return settingsConversation ? (
 		<ConversationSettingsDialog
+			{...toConversationLook(settingsConversation)}
 			leadId={leadOf(settingsConversation) ?? ""}
 			onClose={() => roster.controller.setConversationEditing(false)}
+			onColorChange={(color) =>
+				roster.controller.styleConversation(settingsConversation.id, {
+					color: color ?? null,
+				})
+			}
 			onDelete={() => {
 				void sidebarActions.onDeleteConversation(settingsConversation.id)
 			}}
@@ -38,6 +45,9 @@ export const ConversationSettingsHost = ({
 					botId,
 				)
 			}}
+			onIconChange={(icon) =>
+				roster.controller.styleConversation(settingsConversation.id, { icon })
+			}
 			onLeadChange={(botId) => {
 				void roster.controller.setConversationLead(
 					settingsConversation.id,
