@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useId, useState } from "react"
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { useCallback, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
@@ -8,8 +9,9 @@ import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Dialog,
 	DialogClose,
-	DialogContent,
 	DialogDescription,
+	DialogOverlay,
+	DialogPortal,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
 import { cn } from "@workspace/ui/lib/utils"
@@ -48,7 +50,12 @@ const COPY_OF = {
 } as const satisfies Record<WhatsNewDialogVariant, string>
 
 const SURFACE_CLASS =
-	"motion-reduce:duration-[0.01ms]! flex max-h-[calc(100dvh-3rem)] w-140 max-w-[calc(100vw-3rem)] flex-col gap-0 overflow-y-auto rounded-2xl p-0 sm:max-w-[calc(100vw-3rem)]"
+	"fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-3rem)] w-140 max-w-[calc(100vw-3rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-2xl bg-popover text-popover-foreground text-sm shadow-xl outline-none ring-1 ring-foreground/5 duration-100 motion-reduce:duration-[0.01ms]! data-closed:animate-out data-open:animate-in data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 dark:ring-foreground/10"
+
+const BACKDROP_CLASS_OF = {
+	"first-launch": undefined,
+	"from-about": "bg-black/18",
+} as const satisfies Record<WhatsNewDialogVariant, string | undefined>
 
 const useOverflowOf = () => {
 	const [overflows, setOverflows] = useState(false)
@@ -81,15 +88,23 @@ const NotesList = ({ legend, notes }: NotesListProps) => {
 			<div
 				className="max-h-59 overflow-y-auto pe-3.5 focus-visible:outline-offset-2"
 				data-slot="whats-new-notes"
-				tabIndex={overflows ? 0 : undefined}
+				{...(overflows && {
+					role: "region",
+					"aria-labelledby": legendId,
+					tabIndex: 0,
+				})}
 			>
 				<ul
-					aria-labelledby={legendId}
+					aria-labelledby={overflows ? undefined : legendId}
 					className="flex flex-col gap-1.5"
 					ref={listRef}
 				>
-					{notes.map((note) => (
-						<li className="flex gap-2.5 text-foreground text-sm" key={note}>
+					{notes.map((note, index) => (
+						<li
+							className="flex gap-2.5 text-foreground text-sm"
+							// biome-ignore lint/suspicious/noArrayIndexKey: notes never reorder, and two notes may read the same
+							key={index}
+						>
 							<span
 								aria-hidden="true"
 								className="flex h-5 w-1.5 shrink-0 items-center justify-center"
@@ -126,70 +141,79 @@ const WhatsNewDialog = ({
 }: WhatsNewDialogProps) => {
 	const { t } = useTranslation("common")
 	const copy = COPY_OF[variant]
+	const surfaceRef = useRef<HTMLDivElement>(null)
 
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent className={SURFACE_CLASS} showCloseButton={false}>
-				<DialogClose
-					aria-label={t("dialog.close")}
-					data-slot="whats-new-close"
-					render={
-						<Button
-							className={cn(
-								"absolute end-3 top-3 rounded-md",
-								visual && "bg-popover/70 dark:bg-popover/60",
-							)}
-							size="icon-sm"
-							variant="ghost"
-						/>
-					}
+			<DialogPortal>
+				<DialogOverlay className={BACKDROP_CLASS_OF[variant]} />
+				<DialogPrimitive.Popup
+					className={SURFACE_CLASS}
+					data-slot="dialog-content"
+					initialFocus={surfaceRef}
+					ref={surfaceRef}
 				>
-					<Icons.Close aria-hidden="true" className="size-4" />
-				</DialogClose>
-				{visual && (
-					<div className="h-41 shrink-0 overflow-hidden border-border border-b bg-primary/12 dark:bg-primary/14">
-						<img
-							alt={visual.alt}
-							className="size-full object-cover"
-							src={visual.src}
-						/>
-					</div>
-				)}
-				<div className="flex flex-col gap-4 p-6">
-					<div className="flex flex-col gap-1.5 pe-8">
-						<div className="flex items-center gap-2">
-							<p className="text-muted-foreground text-xs tabular-nums">
-								{t(`whatsNew.${copy}.eyebrow`, { version })}
-							</p>
-							{channel === "beta" && (
-								<span className="inline-flex h-5 items-center rounded-full bg-secondary px-2 font-medium text-foreground text-xs">
-									{t("whatsNew.beta")}
-								</span>
-							)}
+					<DialogClose
+						aria-label={t("dialog.close")}
+						data-slot="whats-new-close"
+						render={
+							<Button
+								className={cn(
+									"absolute end-3 top-3 rounded-md",
+									visual && "bg-popover/70 dark:bg-popover/60",
+								)}
+								size="icon-sm"
+								variant="ghost"
+							/>
+						}
+					>
+						<Icons.Close aria-hidden="true" className="size-4" />
+					</DialogClose>
+					{visual && (
+						<div className="h-41 shrink-0 overflow-hidden border-border border-b bg-primary/12 dark:bg-primary/14">
+							<img
+								alt={visual.alt}
+								className="size-full object-cover"
+								src={visual.src}
+							/>
 						</div>
-						<DialogTitle className="font-semibold text-foreground text-lg leading-6 tracking-[-0.01em]">
-							{headline}
-						</DialogTitle>
-						<DialogDescription>{subline}</DialogDescription>
-					</div>
-					{notes.length > 0 && (
-						<NotesList legend={t(`whatsNew.${copy}.legend`)} notes={notes} />
 					)}
-					<div className="flex items-center justify-between pt-1">
-						<Button
-							className="-ms-3 gap-1 rounded-lg ps-3 pe-2 text-muted-foreground"
-							onClick={() => onOpenReleaseNotes(releaseNotesUrl)}
-							variant="ghost"
-						>
-							{t("whatsNew.releaseNotes")}
-							<Icons.ExternalLink aria-hidden="true" className="size-4" />
-						</Button>
-						<DialogClose render={<Button className="rounded-lg px-3.5" />}>
-							{t(`whatsNew.${copy}.dismiss`)}
-						</DialogClose>
+					<div className="flex flex-col gap-4 p-6">
+						<div className="flex flex-col gap-1.5 pe-8">
+							<div className="flex items-center gap-2">
+								<p className="text-muted-foreground text-xs tabular-nums">
+									{t(`whatsNew.${copy}.eyebrow`, { version })}
+								</p>
+								{channel === "beta" && (
+									<span className="inline-flex h-5 items-center rounded-full bg-secondary px-2 font-medium text-foreground text-xs">
+										{t("whatsNew.beta")}
+									</span>
+								)}
+							</div>
+							<DialogTitle className="font-semibold text-foreground text-lg leading-6 tracking-[-0.01em]">
+								{headline}
+							</DialogTitle>
+							<DialogDescription>{subline}</DialogDescription>
+						</div>
+						{notes.length > 0 && (
+							<NotesList legend={t(`whatsNew.${copy}.legend`)} notes={notes} />
+						)}
+						<div className="flex items-center justify-between pt-1">
+							<Button
+								className="-ms-3 gap-1 rounded-lg ps-3 pe-2 text-muted-foreground"
+								onClick={() => onOpenReleaseNotes(releaseNotesUrl)}
+								variant="ghost"
+							>
+								{t("whatsNew.releaseNotes")}
+								<Icons.ExternalLink aria-hidden="true" className="size-4" />
+							</Button>
+							<DialogClose render={<Button className="rounded-lg px-3.5" />}>
+								{t(`whatsNew.${copy}.dismiss`)}
+							</DialogClose>
+						</div>
 					</div>
-				</div>
-			</DialogContent>
+				</DialogPrimitive.Popup>
+			</DialogPortal>
 		</Dialog>
 	)
 }

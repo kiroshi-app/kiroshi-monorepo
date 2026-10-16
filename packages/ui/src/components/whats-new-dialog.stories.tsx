@@ -2,7 +2,12 @@ import { useEffect, useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { lineHeightOf, settled, slotIn } from "@workspace/storybook/story-utils"
+import {
+	lineHeightOf,
+	probedStyleOf,
+	settled,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import {
 	HISTORY_DAYS,
 	HISTORY_OLDEST_DATE,
@@ -96,19 +101,45 @@ const routineVisual = (palette: VignettePalette): WhatsNewDialogVisual => ({
 	alt: "A routine card running on weekdays",
 })
 
-const NOTES = [
-	"The sidebar remembers how wide you left it.",
-	"Copying a message keeps its code blocks intact.",
-	"Conversations open faster on a slow connection.",
+const W1_NOTES = [
+	"Search across conversations is faster.",
+	"Renaming a companion no longer closes the app.",
 ]
 
-const LONG_NOTES = [
-	...NOTES,
-	"Search finds a companion by any word of its name, so a companion called Release manager answers to manager too.",
-	"Notifications name the mission they're about, and opening one lands you on the message that raised it rather than at the top.",
-	"Settings reopen on the tab you used last.",
-	"A branch name too long for its card now wraps onto a second line instead of running past the edge of the card.",
-	"Approvals you already answered on another device close here on their own, without a second click.",
+const W2_NOTES = [
+	"Secrets can be set for one space only.",
+	"Removing an attachment no longer clears the draft.",
+]
+
+const W3_NOTES = [
+	...W1_NOTES,
+	"Routines can run on a schedule you pick from a calendar.",
+	"Applications show when they need you to sign in again.",
+	"History lists what each companion kept, newest first.",
+	"Pinned messages stay at the top of a conversation, even after you scroll far back.",
+	"Missions waiting on you move to the top of the list.",
+	"Secrets can be set for one space only.",
+	"Approvals show how long a companion has been waiting.",
+	"Skills can be turned off without deleting them.",
+	"Spaces list who joined them, newest first.",
+	"Attachments keep their names when you send them.",
+	"Conversations show when a companion is still writing.",
+	"Missions link to the branch they're watching.",
+	"Routines skip a run while the computer is asleep.",
+	"Notifications open the conversation they came from.",
+	"Applications ask before reading a new folder.",
+	"The language setting applies without a restart.",
+	"Long messages fold after twenty lines.",
+]
+
+const W4_NOTES = [
+	"Approvals name the companion that's asking.",
+	"Removing an attachment no longer clears the draft.",
+]
+
+const W5_NOTES = [
+	"The sidebar remembers pinned conversations per space.",
+	"Applications reconnect after the computer wakes.",
 ]
 
 const RELEASE_NOTES_URL = "https://example.com/releases/0.24.0"
@@ -118,7 +149,7 @@ const FIRST_LAUNCH: WhatsNewDialogProps = {
 	visual: missionVisual(LIGHT_VIGNETTE),
 	headline: "Missions show the branch they're watching",
 	subline: "See where the work lands without asking the companion.",
-	notes: NOTES,
+	notes: W1_NOTES,
 	releaseNotesUrl: RELEASE_NOTES_URL,
 	variant: "first-launch",
 	channel: "stable",
@@ -151,20 +182,28 @@ export const FirstLaunch = meta.story({
 		docs: {
 			description: {
 				story:
-					"W1. The first launch after an update, with a visual. Check the band is 164px with the vignette full-bleed under the close button's backing, that the dialog is named by its headline and described by its subline, that Release notes hands back its URL and that Got it asks the host to close.",
+					"W1. The first launch after an update, with a visual. Focus lands on the surface itself with no ring, and the first Tab reaches the corner close button. Check the band is 164px with the vignette full-bleed under the close button's backing, that the dialog is named by its headline and described by its subline, that Release notes hands back its URL and that Got it asks the host to close.",
 			},
 		},
 	},
-	play: async ({ args }) => {
+	play: async ({ args, userEvent }) => {
 		const dialog = await dialogIn()
 		const scope = within(dialog)
+
+		await expect(document.activeElement).toBe(dialog)
+		await expect(getComputedStyle(dialog).outlineStyle).toBe("none")
+		await userEvent.tab()
+		await expect(closeButtonIn(dialog)).toHaveFocus()
 
 		await expect(dialog).toHaveAccessibleName(args.headline)
 		await expect(dialog).toHaveAccessibleDescription(args.subline)
 		const visual = scope.getByRole("img", { name: args.visual?.alt })
 		await expect(visual.parentElement?.getBoundingClientRect().height).toBe(164)
 		await expect(scope.getByText("New in 0.24.0")).toBeVisible()
-		await expect(scope.getByText("Also in this update")).toBeVisible()
+		await expect(
+			scope.getByRole("list", { name: "Also in this update" }),
+		).toBeVisible()
+		await expect(scope.queryByRole("region")).toBeNull()
 
 		await scope.getByRole("button", { name: "Release notes" }).click()
 		await expect(args.onOpenReleaseNotes).toHaveBeenCalledWith(
@@ -190,6 +229,7 @@ export const WithoutAVisual = meta.story({
 		visual: undefined,
 		headline: "Approvals name the companion that's asking",
 		subline: "Know who wants what before you answer.",
+		notes: W2_NOTES,
 	},
 	parameters: {
 		docs: {
@@ -216,26 +256,34 @@ export const WithoutAVisualDark = WithoutAVisual.extend({
 })
 
 export const LongContent = meta.story({
-	args: { notes: LONG_NOTES },
+	args: { notes: W3_NOTES },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"W3. Eight notes, several of them wrapping, more than the 236px list box holds. The list scrolls inside its box with a fade at its bottom edge while the header and footer stay where they are, and the box takes keyboard focus so it scrolls without a pointer.",
+					"W3. The eight notes the artboard draws come first, and the list runs on past them to more than twice the 236px box, the artboard showing only its top. The list scrolls inside its box with a fade at its bottom edge while the header and footer stay where they are, and the box takes keyboard focus so it scrolls without a pointer.",
 			},
 		},
 	},
 	play: async () => {
 		const dialog = await dialogIn()
 		const box = slotIn(dialog, "whats-new-notes")
-		const note = within(dialog).getByText(LONG_NOTES[0])
+		const scope = within(dialog)
+		const note = scope.getByText(W3_NOTES[0])
+		const list = scope.getByRole("list")
 
 		await waitFor(() =>
 			expect(box.scrollHeight - box.clientHeight).toBeGreaterThan(
 				lineHeightOf(note),
 			),
 		)
+		await expect(box.clientHeight).toBe(236)
+		await expect(list.offsetHeight).toBeGreaterThanOrEqual(2 * box.clientHeight)
 		await expect(box).toHaveAttribute("tabindex", "0")
+		await expect(
+			scope.getByRole("region", { name: "Also in this update" }),
+		).toBe(box)
+		await expect(list).not.toHaveAccessibleName()
 	},
 })
 
@@ -283,13 +331,14 @@ export const FromAbout = meta.story({
 		variant: "from-about",
 		headline: "Conversations reopen where you left off",
 		subline: "Come back to one and you land on the last message you read.",
+		notes: W4_NOTES,
 	},
 	render: (args) => <OverUserSettings {...args} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"W4. Opened from the About tab of the user settings, over that dialog and its own dimmed overlay. The eyebrow reads Version, the legend Also in this version, and the primary button Close.",
+					"W4. Opened from the About tab of the user settings, over that dialog and its 30% backdrop, with a lighter backdrop of its own at black 18% so the two stack rather than double. The eyebrow reads Version, the legend Also in this version, and the primary button Close.",
 			},
 		},
 	},
@@ -299,9 +348,11 @@ export const FromAbout = meta.story({
 		)
 		const scope = within(dialog)
 
-		await expect(
-			document.querySelectorAll("[data-slot=dialog-overlay]"),
-		).toHaveLength(2)
+		const overlays = document.querySelectorAll("[data-slot=dialog-overlay]")
+		await expect(overlays).toHaveLength(2)
+		await expect(getComputedStyle(overlays[1]).backgroundColor).toBe(
+			probedStyleOf("bg-black/18", "backgroundColor"),
+		)
 		await expect(scope.getByText("Version 0.23.3")).toBeVisible()
 		await expect(scope.getByText("Also in this version")).toBeVisible()
 
@@ -325,6 +376,7 @@ export const BetaChannel = meta.story({
 		headline: "Routines can run on a weekday schedule",
 		subline:
 			"Pick the days, and the companion runs it at the same time on each one.",
+		notes: W5_NOTES,
 	},
 	parameters: {
 		docs: {

@@ -96,7 +96,7 @@ const common = {
 	},
 	whatsNew: {
 		firstLaunch: {
-			eyebrow: "Nouveautés de la {{version}}",
+			eyebrow: "Nouveautés de la version {{version}}",
 			legend: "Aussi dans cette mise à jour",
 			dismiss: "Compris",
 		},
