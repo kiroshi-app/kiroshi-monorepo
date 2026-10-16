@@ -17,6 +17,11 @@ const every = {
 	ios: true,
 }
 
+const SHARED_ONLY_PATHS = [
+	"packages/shared/permission-modes.json",
+	"packages/shared/src/index.ts",
+]
+
 const onPullRequest = (...paths: string[]) =>
 	decideJobs({ event: "pull_request", paths })
 
@@ -86,30 +91,18 @@ describe("ci changes", () => {
 	})
 
 	it("runs every job but ios on paths only under packages/shared", () => {
-		expect(
-			onPullRequest(
-				"packages/shared/permission-modes.json",
-				"packages/shared/src/index.ts",
-			),
-		).toEqual({ ...every, ios: false })
+		expect(onPullRequest(...SHARED_ONLY_PATHS)).toEqual({
+			...every,
+			ios: false,
+		})
 	})
 
 	it("runs storybook on paths only under packages/shared, since packages/ui depends on it", () => {
-		expect(
-			onPullRequest(
-				"packages/shared/permission-modes.json",
-				"packages/shared/src/index.ts",
-			).storybook,
-		).toBe(true)
+		expect(onPullRequest(...SHARED_ONLY_PATHS).storybook).toBe(true)
 	})
 
 	it("runs website on paths only under packages/shared, since apps/website resolves it through packages/ui", () => {
-		expect(
-			onPullRequest(
-				"packages/shared/permission-modes.json",
-				"packages/shared/src/index.ts",
-			).website,
-		).toBe(true)
+		expect(onPullRequest(...SHARED_ONLY_PATHS).website).toBe(true)
 	})
 
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
