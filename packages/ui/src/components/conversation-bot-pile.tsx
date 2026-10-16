@@ -5,7 +5,7 @@ import type { ConversationParticipant } from "@workspace/ui/components/avatar-gr
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
 import { CAP_CENTRE_RATIO } from "@workspace/ui/components/hive-layout"
 import {
-	OUTER,
+	hexagonOfWidth,
 	roundedHexagonPath,
 } from "@workspace/ui/components/kiroshi-hexagon"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
@@ -16,11 +16,7 @@ const STEP = 10
 const KNOCKOUT_WIDTH = 1.5
 const COUNTER_FONT_SIZE = 6.3
 
-const HEXAGON = {
-	halfWidth: HEXAGON_SIDE / 2,
-	halfHeight: (OUTER.halfHeight * HEXAGON_SIDE) / (OUTER.halfWidth * 2),
-}
-const HEXAGON_PATH = roundedHexagonPath(HEXAGON)
+const HEXAGON = hexagonOfWidth(HEXAGON_SIDE)
 
 const HOLE = {
 	halfWidth: HEXAGON.halfWidth + KNOCKOUT_WIDTH,
@@ -107,11 +103,7 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 						size={HEXAGON_SIDE}
 						working={bot.working}
 					/>
-					<OutlinedHexagon
-						fill="none"
-						path={HEXAGON_PATH}
-						side={HEXAGON_SIDE}
-					/>
+					<OutlinedHexagon fill="none" side={HEXAGON_SIDE} />
 				</PileSlot>
 			))}
 			{isOverflowing ? (
@@ -122,7 +114,6 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 				>
 					<OutlinedHexagon
 						fill="var(--conversation-pile-overflow)"
-						path={HEXAGON_PATH}
 						side={HEXAGON_SIDE}
 					>
 						<text

@@ -87,11 +87,7 @@ const OverflowCell = ({ label, overflow }: OverflowCellProps) => (
 			height: overflow.side,
 		}}
 	>
-		<OutlinedHexagon
-			fill="var(--secondary)"
-			path={overflow.path}
-			side={overflow.side}
-		>
+		<OutlinedHexagon fill="var(--secondary)" side={overflow.side}>
 			<text
 				className={COUNTER_TEXT}
 				fontSize={overflow.fontSize}

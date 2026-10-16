@@ -4,18 +4,9 @@ import {
 	type ConversationIconName,
 	ConversationIcons,
 } from "@workspace/ui/components/icons"
-import {
-	OUTER,
-	roundedHexagonPath,
-} from "@workspace/ui/components/kiroshi-hexagon"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
 const CELL_SIDE = 40
-
-const CELL_PATH = roundedHexagonPath({
-	halfWidth: CELL_SIDE / 2,
-	halfHeight: (OUTER.halfHeight * CELL_SIDE) / (OUTER.halfWidth * 2),
-})
 
 const CELL = "relative grid size-10 shrink-0 place-items-center"
 
@@ -49,11 +40,7 @@ const ConversationSubjectIcon = ({
 			data-slot="conversation-subject-icon"
 			style={{ color: `var(${token}-foreground)` }}
 		>
-			<OutlinedHexagon
-				fill={`var(${token})`}
-				path={CELL_PATH}
-				side={CELL_SIDE}
-			/>
+			<OutlinedHexagon fill={`var(${token})`} side={CELL_SIDE} />
 			<span className={PICTOGRAM}>
 				<Pictogram
 					className="size-full"

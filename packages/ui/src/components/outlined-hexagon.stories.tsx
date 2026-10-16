@@ -2,10 +2,6 @@ import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn } from "@workspace/storybook/story-utils"
-import {
-	OUTER,
-	roundedHexagonPath,
-} from "@workspace/ui/components/kiroshi-hexagon"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
 const SIDE = 40
@@ -37,10 +33,6 @@ const meta = preview.meta({
 	],
 	args: {
 		side: SIDE,
-		path: roundedHexagonPath({
-			halfWidth: SIDE / 2,
-			halfHeight: (OUTER.halfHeight * SIDE) / (OUTER.halfWidth * 2),
-		}),
 		fill: "var(--secondary)",
 	},
 })

@@ -1,23 +1,23 @@
 import { type ReactNode, useId } from "react"
 
+import {
+	hexagonOfWidth,
+	roundedHexagonPath,
+} from "@workspace/ui/components/kiroshi-hexagon"
+
 const INSIDE_STROKE_WIDTH = 2
 
 const ART = "pointer-events-none absolute inset-0 size-full"
 
 type OutlinedHexagonProps = {
 	side: number
-	path: string
 	fill: string
 	children?: ReactNode
 }
 
-const OutlinedHexagon = ({
-	side,
-	path,
-	fill,
-	children,
-}: OutlinedHexagonProps) => {
+const OutlinedHexagon = ({ side, fill, children }: OutlinedHexagonProps) => {
 	const edgeClipId = useId()
+	const path = roundedHexagonPath(hexagonOfWidth(side))
 	return (
 		<svg
 			aria-hidden="true"

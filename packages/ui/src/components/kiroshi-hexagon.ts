@@ -35,6 +35,11 @@ const hexagonDistance = (x: number, y: number, apothem: number) => {
 	return Math.hypot(dx, dy) * Math.sign(dy)
 }
 
+const hexagonOfWidth = (width: number): RoundedHexagon => ({
+	halfWidth: width / 2,
+	halfHeight: (OUTER.halfHeight * width) / (OUTER.halfWidth * 2),
+})
+
 const isInsideRoundedHexagon = (
 	shape: RoundedHexagon,
 	x: number,
@@ -64,6 +69,7 @@ const roundedHexagonPath = (shape: RoundedHexagon) => {
 }
 
 export {
+	hexagonOfWidth,
 	isInsideRoundedHexagon,
 	OUTER,
 	type RoundedHexagon,
