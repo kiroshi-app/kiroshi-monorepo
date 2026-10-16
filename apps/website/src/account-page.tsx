@@ -70,7 +70,7 @@ const signOutKnownSession = async (id: string) => {
 }
 
 const browserAndOsOf = ({ browser, os }: Session) =>
-	browser && os ? ACCOUNT_COPY.browserOnOs(browser, os) : (browser ?? os)
+	browser && os ? ACCOUNT_COPY.browserOnOs(browser, os) : browser || os || null
 
 const sessionNameOf = (session: Session) =>
 	session.deviceName ?? browserAndOsOf(session) ?? ACCOUNT_COPY.unknownDevice

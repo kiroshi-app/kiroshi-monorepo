@@ -132,6 +132,10 @@ const BROWSER_SESSION_FIXTURES: SessionFixture[] = [
 	browserSession("chrome", "Chrome", null),
 	browserSession("android", null, "Android"),
 	browserSession("bare", null, null),
+	browserSession("blank-browser", "", "macOS"),
+	browserSession("blank-os", "Chrome", ""),
+	browserSession("blank", "", ""),
+	browserSession("blank-and-null", "", null),
 ]
 
 const relayRoutes = (): RelayRoutes => ({
@@ -444,6 +448,10 @@ describe("the browser sessions", () => {
 			SAFARI_ON_IOS,
 			"Chrome",
 			"Android",
+			ACCOUNT_COPY.unknownDevice,
+			"macOS",
+			"Chrome",
+			ACCOUNT_COPY.unknownDevice,
 			ACCOUNT_COPY.unknownDevice,
 		])
 	})
