@@ -1,8 +1,14 @@
-import { expect, within } from "storybook/test"
+import { expect, mocked, spyOn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { SidebarFrame, slotIn } from "@workspace/storybook/story-utils"
+import type {
+	AppSidebarBot,
+	AppSidebarConversation,
+	AppSidebarSection,
+} from "@workspace/ui/components/app-sidebar"
 import {
+	ATLAS,
 	BEACON,
 	DESK_ROOM,
 	SIDEBAR_BOTS,
@@ -16,12 +22,26 @@ import { PinnedZone } from "@workspace/ui/components/app-sidebar-roster-menu"
 
 const SECTIONS = [SIDEBAR_SECTION]
 
-const LivePinnedZone = () => {
+const SANDWICHED_SECTIONS = [{ ...SIDEBAR_SECTION, position: 1 }]
+
+const UNIQUE_KEY_WARNING = /unique "?key"? prop/
+
+type LivePinnedZoneProps = {
+	bots?: AppSidebarBot[]
+	conversations?: AppSidebarConversation[]
+	sections?: AppSidebarSection[]
+}
+
+const LivePinnedZone = ({
+	bots = SIDEBAR_BOTS,
+	conversations = SIDEBAR_CONVERSATIONS,
+	sections = SECTIONS,
+}: LivePinnedZoneProps) => {
 	const entries = rosterEntriesOf({
-		bots: SIDEBAR_BOTS,
-		conversations: SIDEBAR_CONVERSATIONS,
+		bots,
+		conversations,
 		naming: null,
-		sections: SECTIONS,
+		sections,
 	})
 	const drag = useRosterDrag({ entries, onLand: () => undefined })
 
@@ -35,7 +55,7 @@ const LivePinnedZone = () => {
 				edgeAt: drag.edgeAt,
 				lift: drag.rosterLift,
 				membershipsOf: () => [],
-				sections: SECTIONS,
+				sections,
 				slotFor: drag.slotFor,
 				spaces: SIDEBAR_SPACES,
 			}}
@@ -48,6 +68,38 @@ const meta = preview.meta({
 	component: PinnedZone,
 	tags: ["test-only"],
 	parameters: { layout: "fullscreen" },
+})
+
+export const LooseRunSectionThenLooseRun = meta.story({
+	beforeEach: () => {
+		const consoleError = spyOn(console, "error")
+		return () => consoleError.mockRestore()
+	},
+	render: () => (
+		<SidebarFrame>
+			<LivePinnedZone
+				bots={[{ ...ATLAS, pinPosition: 0 }, BEACON]}
+				conversations={[{ ...DESK_ROOM, pinPosition: 2 }]}
+				sections={SANDWICHED_SECTIONS}
+			/>
+		</SidebarFrame>
+	),
+	play: async ({ canvasElement }) => {
+		const zone = within(canvasElement)
+		const [atlas, beacon, deskRoom] = [ATLAS, BEACON, DESK_ROOM].map((row) =>
+			zone.getByText(row.name),
+		)
+		await expect(atlas.compareDocumentPosition(beacon)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(beacon.compareDocumentPosition(deskRoom)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		const keyWarnings = mocked(console.error).mock.calls.filter((call) =>
+			call.some((part) => UNIQUE_KEY_WARNING.test(String(part))),
+		)
+		await expect(keyWarnings).toEqual([])
+	},
 })
 
 export const PinnedSectionThenPinnedConversation = meta.story({

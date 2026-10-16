@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NAVIGATION_ROW_GAP } from "@workspace/ui/components/app-rail"
@@ -182,7 +182,12 @@ const PinnedZone = ({
 			{topLevel.length > 0 ? (
 				inRuns(topLevel).map((run) => {
 					const [entry] = run
-					if (!entry.section) return rosterMenuOf(run, true, rows)
+					if (!entry.section)
+						return (
+							<Fragment key={`run:${entry.id}`}>
+								{rosterMenuOf(run, true, rows)}
+							</Fragment>
+						)
 					const rank = topLevel.indexOf(entry)
 					const heldRows = rowsOf(entry.section.id)
 					const isLifted = entry.section.id === drag.liftedSectionId
