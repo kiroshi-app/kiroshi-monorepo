@@ -22,6 +22,7 @@ import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
 	endNotice,
 	type FailureReport,
+	type FailureSpecs,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
@@ -91,6 +92,51 @@ const REPORT: FailureReport = {
 	httpStatus: 503,
 	side: "host",
 }
+
+const SPECS: FailureSpecs = {
+	appVersion: "0.24.1",
+	commit: "ad6778ca",
+	installKind: "dmg",
+	os: "Darwin 25.0.0",
+	osBuild: "25A354",
+	arch: "aarch64",
+	ram: "16 GB",
+	agentVersion: "2.1.4",
+	provider: "subscription",
+	side: "host",
+	plan: "Pro",
+}
+
+const LOG_PATH = "/Users/ada/Library/Logs/Kiroshi/kiroshi.log"
+
+const LOG_LINE_COUNT = 200
+
+const LONG_LOG = Array.from({ length: LOG_LINE_COUNT }, (_, index) => {
+	const at = `2026-10-11T09:00:${String(index % 60).padStart(2, "0")}Z`
+	return index % 50 === 49
+		? `${at} ERROR run_routine  refused: /Users/ada/Projects/a-folder-with-an-unbreakable-name-that-runs-on-and-on/watched`
+		: `${at} INFO  routine step ${index + 1} of ${LOG_LINE_COUNT}`
+})
+
+const FULL_REPORT: FailureReport = {
+	specs: SPECS,
+	context: {
+		raisedAt: "2026-10-11T09:00:00.000Z",
+		raisedIn: "use-routine-run",
+		space: "Studio",
+		botId: "bot_01J9ZK",
+		botName: "Ada",
+		conversation: "conv_01J9ZM",
+		session: "sess_01J9ZN",
+		turn: "turn_7",
+		command: "run_routine",
+		httpStatus: 503,
+	},
+	log: { lines: LONG_LOG, path: LOG_PATH, lineCount: LOG_LINE_COUNT },
+}
+
+const REPORT_WARNING =
+	"Review before sharing: may contain file names and local paths."
 
 const REPORT_TEXT = [
 	"Kiroshi failure report",
@@ -505,7 +551,7 @@ export const WithReport = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure carrying a debug report, which draws a Copy control between the text and the close control. Pressing it puts the report on the clipboard as plain text a coding agent can read: a heading line, the notice description, then one `Label: value` line per field the report holds, in a fixed order, the absent ones left out. The notice title stays on screen but never enters the copy, since it can carry a companion name. The notice stays open after the copy. A failure raised without a report draws no Copy control at all. Pick `WithReportAndAction` for the same report beside a Retry, `ReportCopied` for the label the control wears right after a copy.",
+					"A failure carrying a debug report, which draws a Copy control between the text and the close control. Pressing it puts the report on the clipboard as plain text a coding agent can read: a heading line, the notice description, then one `Label: value` line per field the report holds, in a fixed order, the absent ones left out. The notice title stays on screen but never enters the copy, since it can carry a companion name. The notice stays open after the copy. This report carries none of the Specs, Context and Log groups, so it holds no warning line and no section header. A failure raised without a report draws no Copy control at all. Pick `WithReportAndAction` for the same report beside a Retry, `ReportCopied` for the label the control wears right after a copy.",
 			},
 		},
 	},
@@ -535,6 +581,82 @@ export const WithReport = meta.story({
 				window.Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy()
 		await expect(within(viewport()).getByText(FAILURE.title)).toBeVisible()
+
+		writeText.mockRestore()
+	},
+})
+
+export const WithFullReport = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() => raiseFailureNotice({ ...FAILURE, report: FULL_REPORT })}
+		/>
+	),
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A failure carrying all three groups and the last 200 lines of the log. The notice looks exactly like `WithReport`; only the copy grows. Check that it opens with the heading, then the warning to review it before sharing, then the description, then `-- Specs`, `-- Context` and `-- Log (last 200 lines of <path>)` in that order, each log line kept verbatim on its own line. Pick `WithSpecsOnlyReport` for a report holding one group, `WithReport` for one holding none.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await pressedCopy(canvasElement, userEvent)
+
+		await expect(writeText).toHaveBeenCalledOnce()
+		const lines = (writeText.mock.calls[0]?.[0] ?? "").split("\n")
+		const order = [
+			REPORT_WARNING,
+			"-- Specs",
+			"-- Context",
+			`-- Log (last ${LOG_LINE_COUNT} lines of ${LOG_PATH})`,
+		].map((line) => lines.indexOf(line))
+		await expect(order).not.toContain(-1)
+		await expect(order).toEqual([...order].sort((a, b) => a - b))
+		await expect(lines.slice(-LOG_LINE_COUNT)).toEqual(LONG_LOG)
+
+		writeText.mockRestore()
+	},
+})
+
+export const WithSpecsOnlyReport = meta.story({
+	render: () => (
+		<NoticeDemo
+			label="Run the routine"
+			raise={() => raiseFailureNotice({ ...FAILURE, report: { specs: SPECS } })}
+		/>
+	),
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A failure whose report holds the Specs group and nothing else. Check that the copy still carries the warning, then the Specs block, and that neither a Context nor a Log header is written for a group that is absent. Pick `WithFullReport` for all three groups.",
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const writeText = spyOn(
+			navigator.clipboard,
+			"writeText",
+		).mockResolvedValue()
+
+		await pressedCopy(canvasElement, userEvent)
+
+		await expect(writeText).toHaveBeenCalledOnce()
+		const text = writeText.mock.calls[0]?.[0] ?? ""
+		await expect(text).toContain(
+			`${REPORT_WARNING}\n${FAILURE.description}\n-- Specs\n`,
+		)
+		await expect(text).not.toContain("-- Context")
+		await expect(text).not.toContain("-- Log")
 
 		writeText.mockRestore()
 	},

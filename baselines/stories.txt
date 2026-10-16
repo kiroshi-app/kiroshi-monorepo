@@ -1117,8 +1117,10 @@ overlays-noticesurface--report-without-companion-name
 overlays-noticesurface--stacked
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog
+overlays-noticesurface--with-full-report
 overlays-noticesurface--with-report
 overlays-noticesurface--with-report-and-action
+overlays-noticesurface--with-specs-only-report
 overlays-popover--default
 overlays-popover--long-content
 overlays-popover--states
@@ -1503,6 +1505,8 @@ settings-space-spacesettingsdialog--transfer
 settings-user-appearancefields--dark
 settings-user-appearancefields--default
 settings-user-appearancefields--in-french
+settings-user-diagnosticsfields--clear-log-confirming
+settings-user-diagnosticsfields--idle
 settings-user-languagefields--back-to-the-machine
 settings-user-languagefields--chosen
 settings-user-languagefields--dark
@@ -1515,6 +1519,7 @@ settings-user-usersettingsdialog--appearance
 settings-user-usersettingsdialog--applications
 settings-user-usersettingsdialog--cant-reach-kiroshi
 settings-user-usersettingsdialog--default
+settings-user-usersettingsdialog--diagnostics
 settings-user-usersettingsdialog--empty
 settings-user-usersettingsdialog--history
 settings-user-usersettingsdialog--language-tab

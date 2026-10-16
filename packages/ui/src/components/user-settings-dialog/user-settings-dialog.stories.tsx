@@ -561,6 +561,39 @@ export const History = meta.story({
 	},
 })
 
+export const Diagnostics = meta.story({
+	args: {
+		diagnostics: {
+			onDiagnosticsCopy: fn(),
+			onLogReveal: fn(),
+			onLogClear: fn(),
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A host that passes diagnostics gets a Diagnostics entry at the foot of the rail, after History. Check that it is the last tab, that its panel carries Copy diagnostics, Reveal log and Clear log. Pick `History` for the entry above it.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const dialog = await dialogIn()
+		const tabs = within(dialog).getAllByRole("tab")
+		await expect(tabs.at(-1)).toHaveAccessibleName("Diagnostics")
+
+		await userEvent.click(
+			within(dialog).getByRole("tab", { name: "Diagnostics" }),
+		)
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "Diagnostics",
+		})
+		for (const name of ["Copy diagnostics", "Reveal log", "Clear log"]) {
+			await expect(within(panel).getByRole("button", { name })).toBeVisible()
+		}
+	},
+})
+
 export const AccountLoading = meta.story({
 	args: {
 		tab: "account",
