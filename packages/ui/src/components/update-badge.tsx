@@ -10,9 +10,11 @@ import {
 	PopoverPanelTrigger,
 } from "@workspace/ui/components/popover-panel"
 import { ProgressRing } from "@workspace/ui/components/progress-ring"
+import { ReleaseNotes } from "@workspace/ui/components/release-notes"
 import { TooltipButton } from "@workspace/ui/components/tooltip-button"
 import { TooltipHint } from "@workspace/ui/components/tooltip-hint"
 import { Button, buttonVariants } from "@workspace/ui/components/ui/button"
+import { useOverflowsParent } from "@workspace/ui/hooks/use-overflows-parent"
 import { cn } from "@workspace/ui/lib/utils"
 
 type UpdateBadgeStatus =
@@ -25,7 +27,7 @@ type UpdateBadgeStatus =
 interface UpdateBadgeProps {
 	status: UpdateBadgeStatus
 	version?: string
-	releaseNotes?: string[]
+	releaseNotes?: string
 	releaseNotesUrl?: string
 	progress?: number
 	activeBotCount?: number
@@ -118,9 +120,34 @@ const ReleaseNotesLink = ({ href }: ReleaseNotesLinkProps) => {
 	)
 }
 
+interface UpdateNotesProps {
+	body: string
+}
+
+const UpdateNotes = ({ body }: UpdateNotesProps) => {
+	const { t } = useTranslation("common")
+	const { overflows, contentRef } = useOverflowsParent()
+
+	return (
+		<div
+			data-slot="update-notes"
+			className="min-h-0 overflow-y-auto focus-visible:outline-offset-2"
+			{...(overflows && {
+				role: "region",
+				"aria-label": t("update.panel.notes"),
+				tabIndex: 0,
+			})}
+		>
+			<div ref={contentRef}>
+				<ReleaseNotes body={body} size="xs" />
+			</div>
+		</div>
+	)
+}
+
 interface UpdateReadyProps {
 	version?: string
-	releaseNotes: string[]
+	releaseNotes?: string
 	releaseNotesUrl?: string
 	activeBotCount: number
 	onRestart?: () => void
@@ -166,8 +193,11 @@ const UpdateReady = ({
 					<Icons.Restart />
 				</Button>
 			</PopoverPanelTrigger>
-			<PopoverPanelContent aria-label={title}>
-				<div data-slot="update-panel" className="flex flex-col gap-3">
+			<PopoverPanelContent
+				aria-label={title}
+				className="max-h-(--available-height)"
+			>
+				<div data-slot="update-panel" className="flex min-h-0 flex-col gap-3">
 					<div className="flex flex-col gap-1">
 						<p className="font-medium text-sm">{title}</p>
 						{version ? (
@@ -176,13 +206,7 @@ const UpdateReady = ({
 							</p>
 						) : null}
 					</div>
-					{releaseNotes.length > 0 ? (
-						<ul className="flex list-disc flex-col gap-1 pl-4 text-muted-foreground text-xs">
-							{releaseNotes.map((note) => (
-								<li key={note}>{note}</li>
-							))}
-						</ul>
-					) : null}
+					{releaseNotes?.trim() ? <UpdateNotes body={releaseNotes} /> : null}
 					{isBlocked ? (
 						<p className="text-bot-badge-attention text-xs">
 							{t("update.panel.botsBusy", { count: activeBotCount })}
@@ -208,7 +232,7 @@ const UpdateReady = ({
 const UpdateBadge = ({
 	status,
 	version,
-	releaseNotes = [],
+	releaseNotes,
 	releaseNotesUrl,
 	progress = 0,
 	activeBotCount = 0,

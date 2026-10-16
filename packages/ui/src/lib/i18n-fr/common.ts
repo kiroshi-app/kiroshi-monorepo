@@ -92,6 +92,7 @@ const common = {
 			restart: "Redémarrer maintenant",
 			postpone: "Me le rappeler plus tard",
 			releaseNotes: "Lire les notes de version complètes dans votre navigateur",
+			notes: "Notes de version",
 		},
 	},
 	whatsNew: {

@@ -624,6 +624,10 @@ feedback-notice--with-retry-label
 feedback-progressring--default
 feedback-progressring--values
 feedback-progressring--zero-value
+feedback-releasenotes--git-cliff-body
+feedback-releasenotes--git-cliff-body-small
+feedback-releasenotes--plain-text
+feedback-releasenotes--repeated-lines
 feedback-sidebarlistskeleton--dark
 feedback-sidebarlistskeleton--light
 feedback-skeleton--loading
@@ -633,6 +637,8 @@ feedback-updatebadge--default
 feedback-updatebadge--empty
 feedback-updatebadge--error
 feedback-updatebadge--loading
+feedback-updatebadge--long-git-cliff-notes
+feedback-updatebadge--long-git-cliff-notes-dark
 feedback-updatebadge--ready
 feedback-updatebadge--with-active-bots
 feedback-updatebadge--with-release-notes
@@ -1173,6 +1179,8 @@ overlays-whatsnewdialog--from-about
 overlays-whatsnewdialog--from-about-dark
 overlays-whatsnewdialog--long-content
 overlays-whatsnewdialog--long-content-dark
+overlays-whatsnewdialog--long-git-cliff-notes
+overlays-whatsnewdialog--long-git-cliff-notes-dark
 overlays-whatsnewdialog--without-a-visual
 overlays-whatsnewdialog--without-a-visual-dark
 primitives-accordion--default

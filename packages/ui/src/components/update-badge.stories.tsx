@@ -1,4 +1,4 @@
-import { expect, fn, within } from "storybook/test"
+import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -6,8 +6,11 @@ import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	listExhaustively,
 	opaque,
+	probedStyleOf,
+	settled,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
+import { GIT_CLIFF_BODY_0_24_2 } from "@workspace/ui/components/release-notes.fixtures"
 import {
 	UpdateBadge,
 	type UpdateBadgeStatus,
@@ -27,11 +30,20 @@ const RELEASE_NOTES_URL = "https://example.com/releases/0.4.0"
 
 const RELEASE_NOTES_LABEL = "Read the full release notes in your browser"
 
-const RELEASE_NOTES = [
+const RELEASE_NOTE_LINES = [
 	"Companions keep their transcript when the window is reopened.",
 	"Faster first paint on the workspace shell.",
 	"Fixes a crash when a tool result arrived after a stop.",
 ]
+
+const RELEASE_NOTES = RELEASE_NOTE_LINES.map((line) => `- ${line}`).join("\n")
+
+const WINDOW_VIEWPORT = {
+	window: { name: "Window", styles: { width: "1000px", height: "700px" } },
+}
+
+const isInsideViewport = ({ top, bottom }: DOMRect) =>
+	top >= 0 && bottom <= window.innerHeight
 
 const meta = preview.meta({
 	title: "Feedback/UpdateBadge",
@@ -133,7 +145,7 @@ export const Ready = meta.story({
 		const panel = await opaque(await body.findByRole("dialog"))
 
 		await expect(within(panel).getByText(`Version ${VERSION}`)).toBeVisible()
-		await expect(within(panel).getByText(RELEASE_NOTES[0])).toBeVisible()
+		await expect(within(panel).getByText(RELEASE_NOTE_LINES[0])).toBeVisible()
 		await expect(
 			body.queryByRole("link", { name: RELEASE_NOTES_LABEL }),
 		).toBeNull()
@@ -201,6 +213,80 @@ export const WithReleaseNotes = meta.story({
 			body.getByRole("button", { name: "Restart now" }),
 		).toBeEnabled()
 	},
+})
+
+export const LongGitCliffNotes = meta.story({
+	args: {
+		status: "ready",
+		version: "0.24.2",
+		releaseNotes: GIT_CLIFF_BODY_0_24_2,
+	},
+	globals: { viewport: { value: "window" } },
+	render: (args) => (
+		<div className="flex h-dvh items-end p-3">
+			<UpdateBadge {...args} />
+		</div>
+	),
+	parameters: {
+		layout: "fullscreen",
+		viewport: { options: WINDOW_VIEWPORT },
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Reach for this when the release notes are the real git-cliff body of 0.24.2, far taller than a 700px window, with the badge at the bottom of the rail. Check that the panel stays inside the window, that only the notes scroll while the title, version and buttons hold still, that each `###` heading reads as a section label over its entries, that every `**scope**` is bold with no asterisk left, and that `Restart now` stays on screen and clickable. Pick `Ready` for a summary short enough to read whole.",
+			},
+		},
+	},
+	play: async ({ canvasElement, args, userEvent }) => {
+		const body = within(canvasElement.ownerDocument.body)
+		const panel = await settled(await body.findByRole("dialog"))
+		const notes = await body.findByRole("region", { name: "Release notes" })
+		const restart = within(panel).getByRole("button", { name: "Restart now" })
+
+		await expect(window.innerHeight).toBe(700)
+		await waitFor(() =>
+			expect(isInsideViewport(panel.getBoundingClientRect())).toBe(true),
+		)
+		await expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(
+			window.innerHeight,
+		)
+		await waitFor(() =>
+			expect(notes.scrollHeight).toBeGreaterThan(notes.clientHeight),
+		)
+		await expect(panel.contains(notes)).toBe(true)
+		await expect(notes).toHaveAttribute("tabindex", "0")
+		await expect(within(panel).getByText("Update ready")).toBeVisible()
+		await expect(within(panel).getByText("Version 0.24.2")).toBeVisible()
+		await expect(
+			within(notes).getByRole("heading", { level: 3, name: "Features" }),
+		).toBeVisible()
+		await expect(
+			within(notes).getAllByText("ui", { selector: "strong" }).length,
+		).toBeGreaterThan(0)
+		await expect(notes.textContent).not.toMatch(/\*\*|#/)
+		await expect(within(notes).queryByRole("link")).toBeNull()
+		const [entry, nextEntry] = within(notes).getAllByRole("listitem")
+		await expect(getComputedStyle(entry).lineHeight).toBe(
+			probedStyleOf("text-xs", "lineHeight"),
+		)
+		await expect(
+			nextEntry.getBoundingClientRect().top -
+				entry.getBoundingClientRect().bottom,
+		).toBeCloseTo(Number.parseFloat(probedStyleOf("gap-1", "rowGap")), 1)
+
+		const restartTop = restart.getBoundingClientRect().top
+		notes.scrollTop = notes.scrollHeight
+		await expect(notes.scrollTop).toBeGreaterThan(0)
+		await expect(restart.getBoundingClientRect().top).toBe(restartTop)
+		await expect(isInsideViewport(restart.getBoundingClientRect())).toBe(true)
+		await userEvent.click(restart)
+		await expect(args.onRestart).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const LongGitCliffNotesDark = LongGitCliffNotes.extend({
+	globals: { theme: "dark" },
 })
 
 export const Error = meta.story({

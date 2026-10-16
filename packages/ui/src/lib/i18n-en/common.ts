@@ -87,6 +87,7 @@ const common = {
 			restart: "Restart now",
 			postpone: "Remind me later",
 			releaseNotes: "Read the full release notes in your browser",
+			notes: "Release notes",
 		},
 	},
 	whatsNew: {

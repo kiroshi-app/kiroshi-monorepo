@@ -34,14 +34,6 @@ const statusOf = ({ host }: UpdaterState): UpdateBadgeProps["status"] => {
 	}
 }
 
-const BULLET = /^[-*+]\s*/
-
-export const linesOf = (notes: string | null | undefined): string[] =>
-	(notes ?? "")
-		.split("\n")
-		.map((line) => line.trim().replace(BULLET, ""))
-		.filter((line) => line.length > 0)
-
 const RELEASE_TAG_URL =
 	"https://github.com/shoto290/kiroshi-monorepo/releases/tag"
 
@@ -55,7 +47,7 @@ export const toUpdateBadgeProps = ({
 }: UpdateBadgeInput): UpdateBadgeModel => ({
 	status: statusOf(state),
 	version: state.offeredVersion ?? undefined,
-	releaseNotes: linesOf(notes),
+	releaseNotes: notes ?? undefined,
 	releaseNotesUrl: state.offeredVersion
 		? releaseNotesUrlOf(state.offeredVersion)
 		: undefined,
