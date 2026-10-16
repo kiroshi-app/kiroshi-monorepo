@@ -134,6 +134,7 @@ const hiveLayout = ({ participants, size }: HiveLayoutInput): HiveLayout => {
 }
 
 export {
+	CAP_CENTRE_RATIO,
 	HIVE_DEFAULT_SIZE,
 	type HiveCell,
 	type HiveLayout,

@@ -33,6 +33,7 @@ interface SidebarListRowProps extends SidebarListRowElementProps {
 	trailing?: ReactNode
 	timestamp?: string
 	preview?: ReactNode
+	previewTrailing?: ReactNode
 	detail?: ReactNode
 	isWorking?: boolean
 	isNameMuted?: boolean
@@ -47,6 +48,7 @@ const SidebarListRow = ({
 	trailing,
 	timestamp,
 	preview,
+	previewTrailing,
 	detail,
 	isWorking = false,
 	isNameMuted = false,
@@ -83,6 +85,7 @@ const SidebarListRow = ({
 				nameSlot="roster-row-name"
 				preview={preview}
 				previewSlot="roster-row-preview"
+				previewTrailing={previewTrailing}
 				timestamp={timestamp}
 				timestampSlot="roster-row-timestamp"
 				trailing={trailing}

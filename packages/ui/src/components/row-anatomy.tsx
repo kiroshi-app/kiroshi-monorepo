@@ -45,6 +45,10 @@ const TIMESTAMP: Record<RowGeometry, string> = {
 	activity: "shrink-0 text-[11px] text-muted-foreground leading-5 tabular-nums",
 }
 
+const PREVIEW_LINE = "flex h-4 min-w-0 items-center justify-end gap-2"
+
+const PREVIEW_BESIDE_TRAILING = "min-w-0 flex-1 pe-0"
+
 const PREVIEW: Record<RowGeometry, string> = {
 	roster:
 		"h-4 truncate pe-3.5 text-muted-foreground text-xs leading-4 empty:h-0",
@@ -92,6 +96,7 @@ type RowAnatomyProps = RowAnatomyGeometry & {
 	trailing?: ReactNode
 	timestamp?: string
 	preview?: ReactNode
+	previewTrailing?: ReactNode
 	detail?: ReactNode
 	isWorking?: boolean
 	isNameMuted?: boolean
@@ -108,6 +113,7 @@ const RowAnatomy = ({
 	trailing,
 	timestamp,
 	preview,
+	previewTrailing,
 	detail,
 	isWorking = false,
 	isNameMuted = false,
@@ -116,50 +122,68 @@ const RowAnatomy = ({
 	nameSlot,
 	timestampSlot,
 	previewSlot,
-}: RowAnatomyProps) => (
-	<>
-		{media}
-		<span className={STACK[geometry]}>
-			<span className={NAME_LINE}>
-				<span
-					className={cn(
-						NAME[geometry],
-						isNameMuted && "text-muted-foreground",
-						isNameRegular && "font-normal",
-					)}
-					data-slot={nameSlot}
-				>
-					{name}
-				</span>
-				{trailing}
-				{timestamp === undefined ? null : (
-					<span className={TIMESTAMP[geometry]} data-slot={timestampSlot}>
-						{timestamp}
-					</span>
+}: RowAnatomyProps) => {
+	const previewText =
+		preview === undefined ? null : (
+			<span
+				className={cn(
+					PREVIEW[geometry],
+					previewTrailing && PREVIEW_BESIDE_TRAILING,
+				)}
+				data-slot={previewSlot}
+			>
+				{isWorking ? (
+					<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
+						{preview}
+					</TextShimmer>
+				) : (
+					preview
 				)}
 			</span>
-			{preview === undefined ? null : (
-				<span className={PREVIEW[geometry]} data-slot={previewSlot}>
-					{isWorking ? (
-						<TextShimmer className="inline" duration={WORKING_SHIMMER_DURATION}>
-							{preview}
-						</TextShimmer>
-					) : (
-						preview
+		)
+
+	return (
+		<>
+			{media}
+			<span className={STACK[geometry]}>
+				<span className={NAME_LINE}>
+					<span
+						className={cn(
+							NAME[geometry],
+							isNameMuted && "text-muted-foreground",
+							isNameRegular && "font-normal",
+						)}
+						data-slot={nameSlot}
+					>
+						{name}
+					</span>
+					{trailing}
+					{timestamp === undefined ? null : (
+						<span className={TIMESTAMP[geometry]} data-slot={timestampSlot}>
+							{timestamp}
+						</span>
 					)}
 				</span>
-			)}
-			{detail}
-			{badge ? (
-				<BotBadgeDot
-					badge={badge}
-					data-slot="bot-activity-dot"
-					placement="row"
-				/>
-			) : null}
-		</span>
-	</>
-)
+				{previewTrailing ? (
+					<span className={cn(PREVIEW_LINE, badge && "pe-3.5")}>
+						{previewText}
+						{previewTrailing}
+					</span>
+				) : (
+					previewText
+				)}
+				{detail}
+				{badge ? (
+					<BotBadgeDot
+						badge={badge}
+						data-slot="bot-activity-dot"
+						placement="row"
+					/>
+				) : null}
+			</span>
+		</>
+	)
+}
 
 export {
 	ACTIVITY_ROW_CLASS,

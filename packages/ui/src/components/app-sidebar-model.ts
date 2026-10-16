@@ -81,6 +81,8 @@ interface AppSidebarConversation {
 	status?: AppSidebarStatus
 	badge?: BotBadge
 	missions?: AppSidebarRowMission[]
+	icon?: string
+	color?: BotAvatarBlot
 }
 
 const poseOf = (bot: AppSidebarBot) => bot.pose ?? "thinking"

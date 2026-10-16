@@ -77,8 +77,14 @@ import {
 import {
 	BellIcon as BellFillIcon,
 	BookOpenIcon as BookOpenFillIcon,
+	BugIcon as BugFillIcon,
+	CalendarIcon as CalendarFillIcon,
+	ChartLineIcon as ChartLineFillIcon,
 	CloudIcon as CloudFillIcon,
 	CodeIcon as CodeFillIcon,
+	CreditCardIcon as CreditCardFillIcon,
+	DownloadIcon as DownloadFillIcon,
+	FileTextIcon as FileTextFillIcon,
 	FlagIcon as FlagFillIcon,
 	FolderIcon as FolderFillIcon,
 	GlobeIcon as GlobeFillIcon,
@@ -86,10 +92,20 @@ import {
 	ImageIcon as ImageFillIcon,
 	InfoIcon as InfoFillIcon,
 	LanguageIcon as LanguageFillIcon,
+	LaptopIcon as LaptopFillIcon,
+	LightbulbIcon as LightbulbFillIcon,
+	MegaphoneIcon as MegaphoneFillIcon,
 	MessageIcon as MessageFillIcon,
+	MessageSquareIcon as MessageSquareFillIcon,
+	PaletteIcon as PaletteFillIcon,
+	PanelLeftIcon as PanelLeftFillIcon,
+	PenIcon as PenFillIcon,
+	RocketIcon as RocketFillIcon,
 	ServerIcon as ServerFillIcon,
 	SettingsIcon as SettingsFillIcon,
 	ShieldIcon as ShieldFillIcon,
+	ShieldKeyIcon as ShieldKeyFillIcon,
+	SmartphoneIcon as SmartphoneFillIcon,
 	SparklesIcon as SparklesFillIcon,
 	TerminalIcon as TerminalFillIcon,
 	TriangleAlertIcon as TriangleAlertFillIcon,
@@ -300,4 +316,41 @@ const FillIcons = {
 
 type FillIconName = keyof typeof FillIcons
 
-export { type FillIconName, FillIcons, type Icon, type IconProps, Icons }
+const ConversationIcons = {
+	MessageSquare: MessageSquareFillIcon,
+	Bug: BugFillIcon,
+	Rocket: RocketFillIcon,
+	ShieldKey: ShieldKeyFillIcon,
+	Pen: PenFillIcon,
+	FileText: FileTextFillIcon,
+	Download: DownloadFillIcon,
+	Laptop: LaptopFillIcon,
+	Smartphone: SmartphoneFillIcon,
+	BookOpen: BookOpenFillIcon,
+	CreditCard: CreditCardFillIcon,
+	Megaphone: MegaphoneFillIcon,
+	PanelLeft: PanelLeftFillIcon,
+	Code: CodeFillIcon,
+	Terminal: TerminalFillIcon,
+	Server: ServerFillIcon,
+	Globe: GlobeFillIcon,
+	Palette: PaletteFillIcon,
+	Lightbulb: LightbulbFillIcon,
+	ChartLine: ChartLineFillIcon,
+	Calendar: CalendarFillIcon,
+	Users: UsersFillIcon,
+	Flag: FlagFillIcon,
+	Sparkles: SparklesFillIcon,
+} satisfies Record<string, Icon>
+
+type ConversationIconName = keyof typeof ConversationIcons
+
+export {
+	type ConversationIconName,
+	ConversationIcons,
+	type FillIconName,
+	FillIcons,
+	type Icon,
+	type IconProps,
+	Icons,
+}

@@ -6,7 +6,6 @@ import {
 	badgeOf,
 	heldBotsOf,
 	previewOf,
-	ROW_AVATAR_SIZE,
 	workingBotOf,
 } from "@workspace/ui/components/app-sidebar-model"
 import {
@@ -15,7 +14,8 @@ import {
 	ROW_ITEM,
 	type RosterRowSlot,
 } from "@workspace/ui/components/app-sidebar-roster-parts"
-import { AvatarGroup } from "@workspace/ui/components/avatar-group"
+import { ConversationBotPile } from "@workspace/ui/components/conversation-bot-pile"
+import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
 import {
 	PinGroup,
@@ -80,9 +80,9 @@ const ConversationRosterRow = ({
 						isActive={isSelected}
 						isWorking={Boolean(workingBotOf(conversation))}
 						media={
-							<AvatarGroup
-								participants={heldBotsOf(conversation)}
-								size={ROW_AVATAR_SIZE}
+							<ConversationSubjectIcon
+								color={conversation.color}
+								icon={conversation.icon}
 							/>
 						}
 						name={conversation.name}
@@ -91,6 +91,9 @@ const ConversationRosterRow = ({
 							onSelect?.(conversation.id)
 						}}
 						preview={previewOf(t, conversation) ?? ""}
+						previewTrailing={
+							<ConversationBotPile bots={heldBotsOf(conversation)} />
+						}
 						strips={missionStripsOf(conversation.missions)}
 						timestamp={conversation.timestamp ?? ""}
 					/>
