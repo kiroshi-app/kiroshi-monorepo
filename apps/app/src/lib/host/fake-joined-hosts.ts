@@ -62,7 +62,6 @@ export const fakeHostModule = {
 	listen: fakeJoinedHosts.listen,
 	listenToActiveHost: fakeJoinedHosts.listenToActiveHost,
 	activeJoinedSpaceId: fakeJoinedHosts.activeSpaceId,
-	onJoinedSpaceChange: fakeJoinedHosts.subscribe,
 	onHostReconnected: fakeJoinedHosts.onReconnected,
 }
 
