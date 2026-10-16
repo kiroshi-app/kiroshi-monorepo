@@ -77,6 +77,7 @@ type SettingsRailItemProps = {
 	label: string
 	value: string
 	iconsOnly: boolean
+	hasIndicator?: boolean
 	className?: string
 }
 
@@ -85,17 +86,32 @@ const SettingsRailItem = ({
 	label,
 	value,
 	iconsOnly,
+	hasIndicator = false,
 	className,
 }: SettingsRailItemProps) =>
 	named(
 		<Tabs.Tab
-			className={cn(RAIL_ITEM_CLASS, iconsOnly && "justify-center", className)}
+			className={cn(
+				RAIL_ITEM_CLASS,
+				iconsOnly && "relative justify-center",
+				className,
+			)}
 			render={(props, { active }) => {
 				const ItemIcon = (active ? FillIcons : Icons)[icon]
 				return (
 					<button {...props}>
 						<ItemIcon aria-hidden="true" className="size-4 shrink-0" />
 						<span className={iconsOnly ? "sr-only" : undefined}>{label}</span>
+						{hasIndicator ? (
+							<span
+								aria-hidden="true"
+								className={cn(
+									"pointer-events-none size-2 shrink-0 rounded-full bg-primary",
+									iconsOnly && "absolute end-2 top-2",
+								)}
+								data-slot="settings-rail-indicator"
+							/>
+						) : null}
 					</button>
 				)
 			}}

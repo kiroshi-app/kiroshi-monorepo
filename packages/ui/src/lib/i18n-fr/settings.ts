@@ -15,6 +15,7 @@ const settings = {
 		history: "Historique",
 		diagnostics: "Diagnostic",
 		danger: "Zone sensible",
+		about: "À propos",
 	},
 	account: {
 		signedOut: {
@@ -121,6 +122,61 @@ const settings = {
 			description:
 				"Chaque ligne que Kiroshi a écrite dans son journal sur cet ordinateur est supprimée. C’est irréversible.",
 			failed: "Impossible de vider le journal. Réessayez.",
+		},
+	},
+	about: {
+		updates: {
+			label: "Mises à jour",
+		},
+		version: "Version {{version}}",
+		status: {
+			upToDate: "À jour · Vérifié {{when}}",
+			checking: "Recherche de mises à jour…",
+			available: "Kiroshi {{version}} est disponible.",
+			downloading:
+				"Téléchargement de {{version}}. Vous pouvez continuer à travailler en attendant.",
+			ready:
+				"La {{version}} est prête. Redémarrez Kiroshi pour terminer la mise à jour.",
+			readyHeld: "La {{version}} est prête.",
+			running_one:
+				"{{count}} compagnon tourne encore. Arrêtez-le pour redémarrer.",
+			running_many:
+				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+			running_other:
+				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
+			failed: "Impossible de télécharger la {{version}}.",
+			failedHint: "Vérifiez votre connexion, puis téléchargez-la à nouveau.",
+		},
+		action: {
+			check: "Vérifier les mises à jour",
+			download: "Télécharger la mise à jour",
+			restart: "Redémarrer maintenant",
+			downloadAgain: "Télécharger à nouveau",
+		},
+		channel: {
+			label: "Canal de version",
+			description:
+				"La bêta reçoit les nouveautés plus tôt, avec quelques aspérités.",
+			option: {
+				stable: "Stable",
+				beta: "Bêta",
+			},
+		},
+		betaNotice: {
+			title: "Les versions bêta sont moins testées",
+			description:
+				"De retour sur Stable, vous gardez cette bêta jusqu’à ce que Stable la dépasse.",
+		},
+		whatsNew: {
+			label: "Montrer les nouveautés après une mise à jour",
+			description:
+				"La première fois que Kiroshi s’ouvre sur une nouvelle version, il montre ce qui a changé.",
+		},
+		kiroshi: {
+			label: "Kiroshi",
+			whatsNew: "Nouveautés de la {{version}}",
+			releaseNotes: "Notes de version",
+			releaseNotesName: "Notes de version, s’ouvre dans votre navigateur",
 		},
 	},
 	space: {

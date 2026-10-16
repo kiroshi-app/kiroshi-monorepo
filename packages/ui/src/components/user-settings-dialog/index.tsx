@@ -31,6 +31,11 @@ import {
 } from "@workspace/ui/components/settings-rail"
 import type { UserSettingsValue } from "@workspace/ui/components/user-settings"
 import {
+	AboutFields,
+	type AboutFieldsProps,
+	hasPendingUpdate,
+} from "@workspace/ui/components/user-settings-dialog/about-fields"
+import {
 	AccountPanel,
 	type AccountPanelProps,
 } from "@workspace/ui/components/user-settings-dialog/account-panel"
@@ -53,6 +58,8 @@ const ACCOUNT_TAB = "account"
 const APPEARANCE_TAB = "appearance"
 
 const DIAGNOSTICS_TAB = "diagnostics"
+
+const ABOUT_TAB = "about"
 
 const NO_APPLICATIONS: ApplicationsSection = {
 	servers: [],
@@ -77,6 +84,7 @@ type UserSettingsDialogProps = {
 	applications?: ApplicationsSection
 	account?: AccountPanelProps
 	diagnostics?: DiagnosticsFieldsProps
+	about?: AboutFieldsProps
 	tab?: string
 	history: PluginHistory
 	className?: string
@@ -98,6 +106,7 @@ const UserSettingsDialog = ({
 	applications,
 	account,
 	diagnostics,
+	about,
 	tab,
 	history,
 	className,
@@ -201,6 +210,15 @@ const UserSettingsDialog = ({
 							value={DIAGNOSTICS_TAB}
 						/>
 					) : null}
+					{about ? (
+						<SettingsRailItem
+							hasIndicator={hasPendingUpdate(about.update)}
+							icon="Info"
+							iconsOnly={iconsOnly}
+							label={t("rail.about")}
+							value={ABOUT_TAB}
+						/>
+					) : null}
 				</>
 			)}
 			sessions={{
@@ -254,6 +272,12 @@ const UserSettingsDialog = ({
 			{diagnostics ? (
 				<SettingsScrollingPanel value={DIAGNOSTICS_TAB}>
 					<DiagnosticsFields {...diagnostics} />
+				</SettingsScrollingPanel>
+			) : null}
+
+			{about ? (
+				<SettingsScrollingPanel value={ABOUT_TAB}>
+					<AboutFields {...about} />
 				</SettingsScrollingPanel>
 			) : null}
 		</SettingsDialogShell>
