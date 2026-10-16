@@ -22,6 +22,7 @@ import { DialogSurface } from "@workspace/ui/components/dialog-surface"
 import {
 	endNotice,
 	type FailureReport,
+	type FailureSpecs,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,
@@ -92,7 +93,7 @@ const REPORT: FailureReport = {
 	side: "host",
 }
 
-const SPECS: FailureReport["specs"] = {
+const SPECS: FailureSpecs = {
 	appVersion: "0.24.1",
 	commit: "ad6778ca",
 	installKind: "dmg",
@@ -110,11 +111,12 @@ const LOG_PATH = "/Users/ada/Library/Logs/Kiroshi/kiroshi.log"
 
 const LOG_LINE_COUNT = 200
 
-const LONG_LOG = Array.from({ length: LOG_LINE_COUNT }, (_, index) =>
-	index % 50 === 49
-		? `2026-10-11T09:00:${String(index % 60).padStart(2, "0")}Z ERROR run_routine  refused: /Users/ada/Projects/a-folder-with-an-unbreakable-name-that-runs-on-and-on/watched`
-		: `2026-10-11T09:00:${String(index % 60).padStart(2, "0")}Z INFO  routine step ${index + 1} of ${LOG_LINE_COUNT}`,
-)
+const LONG_LOG = Array.from({ length: LOG_LINE_COUNT }, (_, index) => {
+	const at = `2026-10-11T09:00:${String(index % 60).padStart(2, "0")}Z`
+	return index % 50 === 49
+		? `${at} ERROR run_routine  refused: /Users/ada/Projects/a-folder-with-an-unbreakable-name-that-runs-on-and-on/watched`
+		: `${at} INFO  routine step ${index + 1} of ${LOG_LINE_COUNT}`
+})
 
 const FULL_REPORT: FailureReport = {
 	specs: SPECS,
@@ -584,9 +586,6 @@ export const WithReport = meta.story({
 	},
 })
 
-const copiedText = (writeText: { mock: { calls: unknown[][] } }) =>
-	String(writeText.mock.calls[0]?.[0])
-
 export const WithFullReport = meta.story({
 	render: () => (
 		<NoticeDemo
@@ -612,7 +611,7 @@ export const WithFullReport = meta.story({
 		await pressedCopy(canvasElement, userEvent)
 
 		await expect(writeText).toHaveBeenCalledOnce()
-		const lines = copiedText(writeText).split("\n")
+		const lines = (writeText.mock.calls[0]?.[0] ?? "").split("\n")
 		const order = [
 			REPORT_WARNING,
 			"-- Specs",
@@ -652,7 +651,7 @@ export const WithSpecsOnlyReport = meta.story({
 		await pressedCopy(canvasElement, userEvent)
 
 		await expect(writeText).toHaveBeenCalledOnce()
-		const text = copiedText(writeText)
+		const text = writeText.mock.calls[0]?.[0] ?? ""
 		await expect(text).toContain(
 			`${REPORT_WARNING}\n${FAILURE.description}\n-- Specs\n`,
 		)
