@@ -49,10 +49,7 @@ const touchesVitest = (path: string) =>
 	(path.startsWith("apps/app/") && !path.startsWith("apps/app/src-tauri/"))
 
 const touchesWebsite = (path: string) =>
-	path.startsWith("apps/website/") ||
-	(path.startsWith("packages/ui/") &&
-		!fileName(path).includes(".stories.") &&
-		!path.startsWith("packages/ui/.storybook/"))
+	isUnder(path, ["apps/website/", "packages/ui/"])
 
 const touchesStorybook = (path: string) =>
 	isUnder(path, ["packages/ui/", "scripts/", "baselines/"])

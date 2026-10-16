@@ -34,16 +34,21 @@ describe("ci changes", () => {
 		expect(onPullRequest(".github/workflows/release.yml")).toEqual(every)
 	})
 
-	it("runs vitest and storybook on a story under packages/ui", () => {
+	it("runs vitest, website and storybook on a story under packages/ui, since tsc -b checks it", () => {
+		const uiJobs = { ...none, vitest: true, website: true, storybook: true }
+
 		expect(
 			onPullRequest("packages/ui/src/components/button.stories.tsx"),
-		).toEqual({ ...none, vitest: true, storybook: true })
-		expect(onPullRequest("packages/ui/.storybook/preview.tsx")).toEqual({
-			...none,
-			vitest: true,
-			storybook: true,
-		})
+		).toEqual(uiJobs)
+		expect(onPullRequest("packages/ui/.storybook/preview.tsx")).toEqual(uiJobs)
 	})
+
+	it.each(["package.json", "bun.lock", "turbo.json", "tsconfig.base.json"])(
+		"runs website when the root build input %s changed",
+		(path) => {
+			expect(onPullRequest(path).website).toBe(true)
+		},
+	)
 
 	it("runs vitest, website and storybook on a component under packages/ui", () => {
 		expect(onPullRequest("packages/ui/src/components/button.tsx")).toEqual({

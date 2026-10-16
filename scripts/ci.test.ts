@@ -144,6 +144,12 @@ describe("the gate", () => {
 		}
 	})
 
+	it("builds the website with the command the Render deploy runs", () => {
+		expect(GATE.website.map((step) => step.command)).toEqual([
+			"bun run build:website",
+		])
+	})
+
 	it("plays the stories in the storybook group only", () => {
 		const playing = GROUP_ORDER.filter((group) =>
 			GATE[group].some((step) => step.command.includes("baseline storybook")),
