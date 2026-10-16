@@ -19,6 +19,9 @@ type AboutFieldsInput = {
 	onWhatsNew: () => void
 }
 
+const hasCheckFailed = ({ host, offeredVersion }: UpdaterState) =>
+	host.kind === "failed" && offeredVersion === null
+
 export const toAboutUpdate = (state: UpdaterState): AboutUpdate => {
 	const { host, offeredVersion, checkedAt } = state
 	switch (host.kind) {
@@ -49,15 +52,12 @@ export const toAboutUpdate = (state: UpdaterState): AboutUpdate => {
 
 const raisePreferenceFailure = raiseUpdaterFailure("use-about-fields")
 
-const isCheckRefused = ({ getState }: UpdaterController) => {
-	const { host, offeredVersion } = getState()
-	return host.kind === "failed" && offeredVersion === null
-}
+const raiseCheckFailure = raiseUpdaterFailure("check-for-updates")
 
 const checkFrom = async (controller: UpdaterController) => {
 	await controller.check()
-	if (isCheckRefused(controller)) {
-		raiseUpdaterFailure("check-for-updates")()
+	if (hasCheckFailed(controller.getState())) {
+		raiseCheckFailure()
 	}
 }
 
