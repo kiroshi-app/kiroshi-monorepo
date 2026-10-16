@@ -20,7 +20,7 @@ use kiroshi_app::routines::contract::{
 	RoutineRun, RunOutcome, TriggerDecision, TriggerSource,
 };
 use kiroshi_app::routines::core::{self, Clock, SystemClock};
-use kiroshi_app::routines::runner::{RunTiming, Runner};
+use kiroshi_app::routines::runner::{RunTiming, Runner, RUN_TIMING};
 use kiroshi_app::routines::schedule::{self, Occurrence};
 use serde_json::{json, Value};
 use tauri::async_runtime::block_on;
@@ -30,6 +30,7 @@ use tauri::{App, Listener, Manager};
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const BOT: &str = "default";
+const SECOND_BOT: &str = "second";
 const EVERY_MINUTE: &str = "* * * * *";
 const REPORT_TEXT: &str = "The shift log changed.";
 const RUN_COST_USD: f64 = 0.0425;
@@ -125,21 +126,25 @@ fn hosting(app: AppOfItsOwn, scenario: RemovedOnDrop, name: &str, conversation_i
 		seen.lock().expect("the update log").push(announced);
 	});
 
-	let routine = block_on(database_of(&app).routines().create(
+	let routine = routine_on(&app, &conversation_id, BOT, name);
+	Host { app, conversation_id, routine, changed, updated, _scenario: scenario }
+}
+
+fn routine_on(app: &App<MockRuntime>, conversation_id: &str, bot_id: &str, name: &str) -> Routine {
+	block_on(database_of(app).routines().create(
 		RoutineDraft {
-			conversation_id: conversation_id.clone(),
-			bot_id: BOT.to_owned(),
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
 			title: "Nightly report".to_owned(),
 			instruction: "Read the shift log and report what changed.".to_owned(),
 			trigger_source_id: schedule::SOURCE_ID.to_owned(),
 			filter: Filter { match_mode: FilterMatchMode::All, rows: Vec::new() },
 			trigger_config: json!({ "expression": EVERY_MINUTE }),
 		},
-		format!("routine-key-{name}"),
+		format!("routine-key-{name}-{bot_id}"),
 		SystemClock.now_ms(),
 	))
-	.expect("the routine is stored");
-	Host { app, conversation_id, routine, changed, updated, _scenario: scenario }
+	.expect("the routine is stored")
 }
 
 fn database_of(app: &App<MockRuntime>) -> &db::Database {
@@ -193,20 +198,27 @@ impl Host {
 	}
 
 	fn run_now_timed(&self, timing: RunTiming) -> TriggerDecision {
+		self.run_routine_now(&self.routine, timing)
+	}
+
+	fn run_routine_now(&self, routine: &Routine, timing: RunTiming) -> TriggerDecision {
 		let runner = Runner::timed(self.app.handle().clone(), timing);
-		block_on(core::run_now(self.database(), &runner, &SystemClock, self.routine.id.clone()))
+		block_on(core::run_now(self.database(), &runner, &SystemClock, routine.id.clone()))
 			.expect("the routine runs now")
 	}
 
 	fn closed_run(&self) -> RoutineRun {
+		self.closed_run_of(&self.routine)
+	}
+
+	fn closed_run_of(&self, routine: &Routine) -> RoutineRun {
 		self.wait_for("the run to close", |host| {
-			host.runs().into_iter().find(|run| run.ended_at.is_some())
+			host.runs_of(routine).into_iter().find(|run| run.ended_at.is_some())
 		})
 	}
 
-	fn runs(&self) -> Vec<RoutineRun> {
-		block_on(self.database().routines().runs(self.routine.id.clone(), 10))
-			.expect("the runs read")
+	fn runs_of(&self, routine: &Routine) -> Vec<RoutineRun> {
+		block_on(self.database().routines().runs(routine.id.clone(), 10)).expect("the runs read")
 	}
 
 	fn reported(&self) -> Vec<ReportedRun> {
@@ -215,17 +227,21 @@ impl Host {
 	}
 
 	fn replies(&self) -> Vec<StoredMessage> {
+		self.messages_in(&self.conversation_id)
+			.into_iter()
+			.filter(|message| message.author_bot_id.as_deref() == Some(BOT))
+			.collect()
+	}
+
+	fn messages_in(&self, conversation_id: &str) -> Vec<StoredMessage> {
 		let query = MessagePageQuery {
-			conversation_id: self.conversation_id.clone(),
+			conversation_id: conversation_id.to_owned(),
 			before_seq: None,
 			limit: 50,
 		};
 		block_on(self.database().messages().page_messages(query))
 			.expect("the transcript reads")
 			.messages
-			.into_iter()
-			.filter(|message| message.author_bot_id.as_deref() == Some(BOT))
-			.collect()
 	}
 
 	fn changes(&self) -> usize {
@@ -492,5 +508,43 @@ fn a_report_that_cannot_be_written_closes_the_run_failed_and_writes_no_message()
 	host.wait_for_changes(1);
 	host.wait_for_no_live_session();
 	assert!(host.updates().is_empty(), "an unwritten report announced {:#?}", host.updates());
+	host.quit();
+}
+
+fn own_report(bot_id: &str) -> String {
+	vec![format!("{bot_id} read a line of the shift log."); 40].join(" ")
+}
+
+fn assert_reported_its_own_turn(host: &Host, routine: &Routine) {
+	let run = host.closed_run_of(routine);
+	assert_eq!(
+		run.outcome,
+		Some(RunOutcome::Ok),
+		"the run of {} closed as {run:?}",
+		routine.bot_id
+	);
+	let messages = host.messages_in(&routine.conversation_id);
+	assert_eq!(messages.len(), 1, "the conversation of {} holds {messages:#?}", routine.bot_id);
+	assert_eq!(messages[0].author_bot_id.as_deref(), Some(routine.bot_id.as_str()));
+	assert_eq!(messages[0].content, own_report(&routine.bot_id));
+	assert_eq!(messages[0].state, MessageState::Complete);
+}
+
+#[test]
+fn two_bots_running_a_routine_at_once_each_report_their_own_turn_on_their_own_conversation() {
+	let _serial = serial();
+	let host = launch("two-bots", "routine_report_own");
+	bundled_bots(&host.app, &[SECOND_BOT]);
+	let second_chat =
+		block_on(conversation_main_chat(host.app.state(), SECOND_BOT.to_owned(), None))
+			.expect("the second bot's main chat opens");
+	let second = routine_on(&host.app, &second_chat.id, SECOND_BOT, "two-bots");
+
+	assert!(is_started(&host.run_routine_now(&host.routine, RUN_TIMING)));
+	assert!(is_started(&host.run_routine_now(&second, RUN_TIMING)));
+
+	assert_reported_its_own_turn(&host, &host.routine);
+	assert_reported_its_own_turn(&host, &second);
+	host.wait_for_no_live_session();
 	host.quit();
 }

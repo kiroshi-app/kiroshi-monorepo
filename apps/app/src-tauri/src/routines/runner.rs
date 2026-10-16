@@ -1,8 +1,10 @@
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, EventId, Listener, Manager, Runtime, State};
+use tauri::async_runtime::JoinHandle;
+use tauri::{AppHandle, Manager, Runtime, State};
+use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 use tokio::time::{self, Instant};
 use uuid::Uuid;
@@ -27,7 +29,7 @@ use crate::conversations::commands::{
 use crate::conversations::contract::TranscriptStoreError;
 use crate::db;
 use crate::db::repositories::messages::{NewAssistantMessage, NewTurn, TerminalState};
-use crate::events::{self, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 
 const CANCELLED_REASON: &str = "the run's turn was cancelled";
 
@@ -88,9 +90,9 @@ async fn run<R: Runtime>(app: AppHandle<R>, timing: RunTiming, requested: RunReq
 	let (events, mut arriving) = mpsc::unbounded_channel();
 	let label = format!("routine run {}", requested.run_id);
 	let held = scope.clone();
-	let listening = listen(&app, label, move |heard| heard == &held, events);
-	let closing = drive(&app, timing, &requested, &scope, &mut arriving).await;
-	app.unlisten(listening);
+	let mut reading = listen(&app, label, move |heard| heard == &held, events);
+	let closing = drive(&app, timing, &requested, &scope, &mut arriving, &mut reading).await;
+	drop(reading);
 	close(&app, &requested, closing).await;
 	shut_down(&app, &requested.run_id, scope).await;
 }
@@ -101,6 +103,7 @@ async fn drive<R: Runtime>(
 	requested: &RunRequested,
 	scope: &RuntimeScope,
 	arriving: &mut mpsc::UnboundedReceiver<ScopedEvent>,
+	reading: &mut RelayReader,
 ) -> RunClosing {
 	let run_id = &requested.run_id;
 	let expiry = time::sleep(timing.deadline);
@@ -120,7 +123,7 @@ async fn drive<R: Runtime>(
 			_ = lease.tick() => renew(app, run_id).await,
 			arrived = arriving.recv() => {
 				let Some(scoped) = arrived else {
-					return failed(EVENTS_LOST_REASON);
+					return lost(reading).await;
 				};
 				if let Some(closing) = settled_by(app, run_id, scope, scoped.event).await {
 					return closing;
@@ -128,6 +131,10 @@ async fn drive<R: Runtime>(
 			}
 		}
 	}
+}
+
+async fn lost(reading: &mut RelayReader) -> RunClosing {
+	failed(&format!("{EVENTS_LOST_REASON}: {}", reading.failure().await))
 }
 
 async fn settled_by<R: Runtime>(
@@ -354,24 +361,80 @@ async fn closed<R: Runtime>(
 	Ok(())
 }
 
+pub(crate) struct RelayReader(JoinHandle<String>);
+
+impl RelayReader {
+	async fn failure(&mut self) -> String {
+		match (&mut self.0).await {
+			Ok(failure) => failure,
+			Err(error) => format!("the relay reader stopped: {error}"),
+		}
+	}
+}
+
+impl Drop for RelayReader {
+	fn drop(&mut self) {
+		self.0.abort();
+	}
+}
+
 pub(crate) fn listen<R: Runtime>(
 	app: &AppHandle<R>,
 	label: String,
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
-) -> EventId {
-	app.listen(EVENT_CHANNEL, move |heard| {
-		let scoped = match serde_json::from_str::<ScopedEvent>(heard.payload()) {
-			Ok(scoped) => scoped,
-			Err(error) => return eprintln!("{label} could not read an agent event: {error}"),
+) -> RelayReader {
+	let heard = events::subscribed(app);
+	RelayReader(tauri::async_runtime::spawn(relayed(heard, label, keeps, events)))
+}
+
+async fn relayed(
+	mut heard: broadcast::Receiver<Frame>,
+	label: String,
+	keeps: impl Fn(&RuntimeScope) -> bool,
+	events: mpsc::UnboundedSender<ScopedEvent>,
+) -> String {
+	let failure = loop {
+		let frame = match heard.recv().await {
+			Ok(frame) => frame,
+			Err(RecvError::Lagged(missed)) => break format!("the relay dropped {missed} frames"),
+			Err(RecvError::Closed) => break "the relay closed".to_owned(),
+		};
+		let scoped = match agent_event(&frame) {
+			Ok(Some(scoped)) => scoped,
+			Ok(None) => continue,
+			Err(failure) => break failure,
 		};
 		if !scoped.scope.as_ref().is_some_and(&keeps) {
-			return;
+			continue;
 		}
 		if events.send(scoped).is_err() {
-			eprintln!("{label} has stopped, an agent event of its session was dropped");
+			return format!("{label} has stopped");
 		}
-	})
+	};
+	eprintln!("{label} stopped reading agent events: {failure}");
+	failure
+}
+
+#[derive(Deserialize)]
+struct NamedFrame {
+	event: String,
+}
+
+#[derive(Deserialize)]
+struct AgentFrame {
+	payload: ScopedEvent,
+}
+
+fn agent_event(frame: &str) -> Result<Option<ScopedEvent>, String> {
+	let named: NamedFrame = serde_json::from_str(frame)
+		.map_err(|error| format!("a relay frame does not parse: {error}"))?;
+	if named.event != EVENT_CHANNEL {
+		return Ok(None);
+	}
+	serde_json::from_str::<AgentFrame>(frame)
+		.map(|framed| Some(framed.payload))
+		.map_err(|error| format!("an agent event does not parse: {error}"))
 }
 
 pub(crate) fn ends_the_session(error: &TransportError) -> bool {
@@ -429,7 +492,158 @@ pub(crate) fn database<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+	use std::time::Duration;
+
+	use tauri::test::mock_builder;
+
 	use super::*;
+	use crate::events::BUFFERED_FRAMES;
+	use crate::test_app::an_app_of_its_own;
+
+	const LABEL: &str = "routine run test";
+
+	fn a_scope(runtime_session_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "conversation-1".to_owned(),
+			bot_id: "bot-1".to_owned(),
+			runtime_session_id: runtime_session_id.to_owned(),
+			epoch: 1,
+		}
+	}
+
+	fn a_delta(scope: &RuntimeScope, seq: u64) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(scope.clone()),
+			turn: None,
+			event: AgentEvent::MessageDelta {
+				id: "message-1".to_owned(),
+				seq,
+				text: seq.to_string(),
+			},
+		}
+	}
+
+	fn framed(scoped: &ScopedEvent) -> Frame {
+		events::frame(AGENT_EVENT, scoped).expect("the event frames")
+	}
+
+	struct Reading {
+		arriving: mpsc::UnboundedReceiver<ScopedEvent>,
+		reader: RelayReader,
+	}
+
+	impl Reading {
+		async fn heard_until_closed(&mut self) -> Vec<ScopedEvent> {
+			let mut heard = Vec::new();
+			while let Some(scoped) = self.arriving.recv().await {
+				heard.push(scoped);
+			}
+			heard
+		}
+
+		async fn closing(&mut self) -> RunClosing {
+			lost(&mut self.reader).await
+		}
+	}
+
+	fn read_for(scope: &RuntimeScope, heard: broadcast::Receiver<Frame>) -> Reading {
+		let (events, arriving) = mpsc::unbounded_channel();
+		let held = scope.clone();
+		let keeps = move |scope: &RuntimeScope| scope == &held;
+		let reader = RelayReader(tauri::async_runtime::spawn(relayed(
+			heard,
+			LABEL.to_owned(),
+			keeps,
+			events,
+		)));
+		Reading { arriving, reader }
+	}
+
+	fn read_frames(scope: &RuntimeScope, frames: &[Frame]) -> Reading {
+		let (relay, heard) = broadcast::channel(frames.len().max(1));
+		for frame in frames {
+			relay.send(frame.clone()).expect("the reader is subscribed");
+		}
+		read_for(scope, heard)
+	}
+
+	fn reason_of(closing: &RunClosing) -> &str {
+		assert_eq!(closing.outcome, RunOutcome::Failed, "the run closed as {closing:?}");
+		closing.reason.as_deref().expect("a failed run names its reason")
+	}
+
+	#[tokio::test]
+	async fn a_run_hears_only_its_own_agent_events_in_the_order_they_were_emitted() {
+		let run = a_scope("session-1");
+		let another_run = a_scope("session-2");
+		let frames = [
+			framed(&a_delta(&run, 1)),
+			framed(&a_delta(&another_run, 1)),
+			Frame::from(r#"{"event":"conversation://updated","payload":null}"#),
+			framed(&ScopedEvent { scope: None, ..a_delta(&run, 9) }),
+			framed(&a_delta(&run, 2)),
+			framed(&a_delta(&run, 3)),
+			Frame::from(r#"{"event":"agent://event","payload":{"nope":1}}"#),
+		];
+		let mut reading = read_frames(&run, &frames);
+
+		let heard = reading.heard_until_closed().await;
+
+		assert_eq!(heard, vec![a_delta(&run, 1), a_delta(&run, 2), a_delta(&run, 3)]);
+	}
+
+	#[tokio::test]
+	async fn an_agent_event_that_does_not_parse_fails_the_run_naming_the_parse_error() {
+		let run = a_scope("session-1");
+		let frames = [Frame::from(r#"{"event":"agent://event","payload":{"nope":1}}"#)];
+		let mut reading = read_frames(&run, &frames);
+
+		assert!(reading.heard_until_closed().await.is_empty());
+		let closing = reading.closing().await;
+
+		let reason = reason_of(&closing);
+		assert!(
+			reason.starts_with(&format!("{EVENTS_LOST_REASON}: an agent event does not parse: ")),
+			"the run failed with {reason}"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_relay_that_dropped_frames_past_a_stalled_run_fails_it_with_their_count() {
+		let app = an_app_of_its_own("routine-runner-lag", mock_builder());
+		let run = a_scope("session-1");
+		let heard = events::subscribed(app.handle());
+		for seq in 0..(BUFFERED_FRAMES + 6) as u64 {
+			events::emit(app.handle(), AGENT_EVENT, a_delta(&run, seq)).expect("the event is sent");
+		}
+		let mut reading = read_for(&run, heard);
+
+		assert!(reading.heard_until_closed().await.is_empty());
+		let closing = time::timeout(Duration::from_secs(5), reading.closing())
+			.await
+			.expect("the run closes without waiting for its deadline");
+
+		assert_eq!(
+			reason_of(&closing),
+			format!("{EVENTS_LOST_REASON}: the relay dropped 6 frames")
+		);
+	}
+
+	#[tokio::test]
+	async fn a_dropped_reader_stops_reading_the_relay() {
+		let app = an_app_of_its_own("routine-runner-stop", mock_builder());
+		let run = a_scope("session-1");
+		let (events, mut arriving) = mpsc::unbounded_channel();
+		let held = run.clone();
+		let reader = listen(app.handle(), LABEL.to_owned(), move |scope| scope == &held, events);
+
+		drop(reader);
+
+		let stopped = time::timeout(Duration::from_secs(5), arriving.recv())
+			.await
+			.expect("the reader stops once dropped");
+		assert_eq!(stopped, None);
+	}
 
 	#[test]
 	fn the_report_event_names_the_stored_report_turn() {

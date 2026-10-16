@@ -4,7 +4,7 @@ use std::mem;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures_util::future::join_all;
-use tauri::{AppHandle, Listener, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 use tokio::sync::{mpsc, watch};
 
 use super::commands::announce_conversation;
@@ -191,7 +191,7 @@ pub(crate) async fn run<R: Runtime>(
 	let speaking = turn.wave(first).await;
 	tauri::async_runtime::spawn(async move {
 		turn.drive(held, speaking, heard).await;
-		turn.app.unlisten(listening);
+		drop(listening);
 	});
 }
 
@@ -534,7 +534,7 @@ mod tests {
 
 	use serde_json::{json, Value};
 	use tauri::test::mock_builder;
-	use tauri::Manager;
+	use tauri::{Listener, Manager};
 
 	use super::*;
 	use crate::agent::contract::TurnEnded;

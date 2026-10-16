@@ -268,6 +268,11 @@ fn emit_text_turn(key: &str, run: &Run, text: &str) {
 	);
 }
 
+fn own_turn(run: &Run) -> String {
+	let bot_id = Path::new(&run.cwd).file_name().unwrap_or_default().to_string_lossy();
+	vec![format!("{bot_id} read a line of the shift log."); 40].join(" ")
+}
+
 fn emit_tool_turn(key: &str) {
 	emit(
 		key,
@@ -421,6 +426,11 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 				run,
 				json!({ "outcome": "report", "report": "  The shift log changed.\n" }),
 			);
+		}
+		"routine_report_own" => {
+			let turn = own_turn(run);
+			emit_text_turn(key, run, &turn);
+			emit_structured_result(key, run, json!({ "outcome": "report", "report": turn }));
 		}
 		"routine_report_naming" => {
 			emit_structured_result(
