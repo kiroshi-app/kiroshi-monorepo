@@ -1,4 +1,4 @@
-import { expect } from "storybook/test"
+import { expect, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -73,6 +73,10 @@ export const ThreeBots = meta.story({
 				'[data-slot="conversation-bot-pile-overflow"]',
 			),
 		).toBeNull()
+		await expect(
+			slotIn(canvasElement, "conversation-bot-pile"),
+		).toHaveAttribute("aria-hidden", "true")
+		await expect(within(canvasElement).queryByRole("img")).toBeNull()
 	},
 })
 
@@ -85,7 +89,10 @@ export const FiveBotsShowTwoAndACounter = meta.story({
 		await expect(coveredIn(canvasElement)).toEqual([true, true])
 		await expect(widthOf(canvasElement)).toBe(34)
 		await expect(overflow).toHaveTextContent("+3")
-		await expect(pile).toHaveAttribute("aria-hidden", "true")
+		await expect(pile).not.toHaveAttribute("aria-hidden")
+		await expect(within(canvasElement).getByRole("img", { name: "+3" })).toBe(
+			pile,
+		)
 		const counter = overflow.querySelector("text") as SVGTextElement
 		await expect(getComputedStyle(counter).fontVariantNumeric).toBe(
 			"tabular-nums",

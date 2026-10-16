@@ -51,6 +51,7 @@ branding-ditheredfieldavatar--one-drawing-at-every-size
 branding-ditheredfieldavatar--one-glyph-in-every-colour
 branding-ditheredfieldavatar--one-screen-for-every-companion
 branding-ditheredfieldavatar--without-ground
+branding-outlinedhexagon--filled-with-an-inside-hairline
 branding-spacetint--default
 branding-spacetint--untinted
 branding-spacetint--variants
@@ -921,6 +922,7 @@ navigation-appsidebarconversationrow--row-in-pink
 navigation-appsidebarconversationrow--row-in-purple
 navigation-appsidebarconversationrow--row-in-red
 navigation-appsidebarconversationrow--row-in-yellow
+navigation-appsidebarconversationrow--row-with-a-badge-and-a-pile
 navigation-appsidebarconversationrow--row-with-five-bots
 navigation-appsidebarconversationrow--row-with-one-bot
 navigation-appsidebarconversationrow--row-with-three-bots

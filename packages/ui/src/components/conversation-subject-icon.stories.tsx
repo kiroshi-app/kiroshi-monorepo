@@ -29,7 +29,7 @@ const resolvedColourOf = (token: string, host: Element) => {
 
 const expectPair = async (canvasElement: HTMLElement, token: string) => {
 	const icon = slotIn(canvasElement, "conversation-subject-icon")
-	const cell = slotIn(icon, "conversation-subject-icon-cell")
+	const cell = slotIn(icon, "outlined-hexagon-face")
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
 	await expect(getComputedStyle(cell).fill).toBe(resolvedColourOf(token, icon))
 	await expect(getComputedStyle(icon).color).toBe(
@@ -129,7 +129,7 @@ export const RedShieldKeyDark = meta.story({
 	play: async ({ canvasElement }) => {
 		const icon = slotIn(canvasElement, "conversation-subject-icon")
 		await expect(
-			getComputedStyle(slotIn(icon, "conversation-subject-icon-cell")).fill,
+			getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill,
 		).toBe("rgb(86, 61, 51)")
 		await expect(getComputedStyle(icon).color).toBe("rgb(226, 177, 158)")
 	},

@@ -5684,7 +5684,7 @@ export const ConversationParticipants = meta.story({
 		docs: {
 			description: {
 				story:
-					"How many companions a room shows. They sit in a pile on the preview line, under the time: at most three 14px hexagons, 10px apart. A room of two shows two; a room of five shows two companions and a third hexagon counting the other three. The pile and the subject icon are decorative and hidden, so the room's name leads what a screen reader hears.",
+					"How many companions a room shows. They sit in a pile on the preview line, under the time: at most three 14px hexagons, 10px apart. A room of two shows two; a room of five shows two companions and a third hexagon counting the other three. The subject icon is decorative and hidden. The pile is hidden too while it shows every companion; once it counts the others, that count is the only thing a screen reader hears of it, as the label of the pile.",
 			},
 		},
 	},
@@ -5698,11 +5698,14 @@ export const ConversationParticipants = meta.story({
 			slotIn(crowd, "conversation-bot-pile-overflow"),
 		).toHaveTextContent("+3")
 
+		await expect(slotIn(pair, "conversation-bot-pile")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
+		await expect(slotIn(crowd, "conversation-bot-pile")).toHaveAccessibleName(
+			"+3",
+		)
 		for (const room of [pair, crowd]) {
-			await expect(slotIn(room, "conversation-bot-pile")).toHaveAttribute(
-				"aria-hidden",
-				"true",
-			)
 			await expect(slotIn(room, "conversation-subject-icon")).toHaveAttribute(
 				"aria-hidden",
 				"true",

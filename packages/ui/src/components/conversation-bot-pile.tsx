@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useId } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import type { ConversationParticipant } from "@workspace/ui/components/avatar-group"
@@ -8,13 +8,13 @@ import {
 	OUTER,
 	roundedHexagonPath,
 } from "@workspace/ui/components/kiroshi-hexagon"
+import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
 const PILE_LIMIT = 3
 const HEXAGON_SIDE = 14
 const STEP = 10
 const KNOCKOUT_WIDTH = 1.5
 const COUNTER_FONT_SIZE = 6.3
-const INSIDE_STROKE_WIDTH = 2
 
 const HEXAGON = {
 	halfWidth: HEXAGON_SIDE / 2,
@@ -43,41 +43,12 @@ const PILE = "relative block h-4 shrink-0"
 
 const SLOT = "absolute top-px size-3.5"
 
-const SLOT_ART = "pointer-events-none absolute inset-0 size-full"
-
 const COUNTER_TEXT = "font-bold tabular-nums"
 
 type PileBot = Omit<ConversationParticipant, "isPerson">
 
 type ConversationBotPileProps = {
 	bots: PileBot[]
-}
-
-type PileHexagonProps = {
-	fill: string
-	children?: ReactNode
-}
-
-const PileHexagon = ({ fill, children }: PileHexagonProps) => {
-	const edgeClipId = useId()
-	return (
-		<svg
-			aria-hidden="true"
-			className={SLOT_ART}
-			viewBox={`0 0 ${HEXAGON_SIDE} ${HEXAGON_SIDE}`}
-		>
-			<path
-				clipPath={`url(#${edgeClipId})`}
-				d={HEXAGON_PATH}
-				strokeWidth={INSIDE_STROKE_WIDTH}
-				style={{ fill, stroke: "var(--image-outline)" }}
-			/>
-			<clipPath id={edgeClipId}>
-				<path d={HEXAGON_PATH} />
-			</clipPath>
-			{children}
-		</svg>
-	)
 }
 
 type PileSlotProps = {
@@ -105,14 +76,19 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 	const isOverflowing = bots.length > PILE_LIMIT
 	const shown = isOverflowing ? bots.slice(0, PILE_LIMIT - 1) : bots
 	const slotCount = isOverflowing ? PILE_LIMIT : shown.length
+	const overflowLabel = isOverflowing
+		? t("roster.conversation.others", { count: bots.length - shown.length })
+		: null
 
 	if (slotCount === 0) return null
 
 	return (
 		<span
-			aria-hidden="true"
+			aria-hidden={overflowLabel ? undefined : "true"}
+			aria-label={overflowLabel ?? undefined}
 			className={PILE}
 			data-slot="conversation-bot-pile"
+			role="img"
 			style={{ width: HEXAGON_SIDE + STEP * (slotCount - 1) }}
 		>
 			{shown.map((bot, index) => (
@@ -131,7 +107,11 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 						size={HEXAGON_SIDE}
 						working={bot.working}
 					/>
-					<PileHexagon fill="none" />
+					<OutlinedHexagon
+						fill="none"
+						path={HEXAGON_PATH}
+						side={HEXAGON_SIDE}
+					/>
 				</PileSlot>
 			))}
 			{isOverflowing ? (
@@ -140,7 +120,11 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 					isCovered={false}
 					slot="conversation-bot-pile-overflow"
 				>
-					<PileHexagon fill="var(--conversation-pile-overflow)">
+					<OutlinedHexagon
+						fill="var(--conversation-pile-overflow)"
+						path={HEXAGON_PATH}
+						side={HEXAGON_SIDE}
+					>
 						<text
 							className={COUNTER_TEXT}
 							fontSize={COUNTER_FONT_SIZE}
@@ -149,11 +133,9 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 							x="50%"
 							y={HEXAGON.halfWidth + COUNTER_FONT_SIZE * CAP_CENTRE_RATIO}
 						>
-							{t("roster.conversation.others", {
-								count: bots.length - shown.length,
-							})}
+							{overflowLabel}
 						</text>
-					</PileHexagon>
+					</OutlinedHexagon>
 				</PileSlot>
 			) : null}
 		</span>

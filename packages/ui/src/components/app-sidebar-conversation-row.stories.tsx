@@ -85,10 +85,6 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 		.parentElement as HTMLElement
 
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
-	await expect(slotIn(row, "conversation-bot-pile")).toHaveAttribute(
-		"aria-hidden",
-		"true",
-	)
 	await expect([cell.width, cell.height]).toEqual([40, 40])
 	await expect(name.left - cell.right).toBe(10)
 	await expect(
@@ -102,7 +98,7 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 }
 
 const expectCellWears = async (row: HTMLElement, token: string) => {
-	const cell = slotIn(row, "conversation-subject-icon-cell")
+	const cell = slotIn(row, "outlined-hexagon-face")
 	await expect(cell.style.fill).toBe(`var(${token})`)
 	await expect(slotIn(row, "conversation-subject-icon").style.color).toBe(
 		`var(${token}-foreground)`,
@@ -219,6 +215,10 @@ export const RowWithThreeBots = meta.story({
 		await expect(
 			row.querySelector('[data-slot="conversation-bot-pile-overflow"]'),
 		).toBeNull()
+		await expect(slotIn(row, "conversation-bot-pile")).toHaveAttribute(
+			"aria-hidden",
+			"true",
+		)
 	},
 })
 
@@ -231,6 +231,28 @@ export const RowWithFiveBots = meta.story({
 		await expect(
 			slotIn(row, "conversation-bot-pile-overflow"),
 		).toHaveTextContent("+3")
+		await expect(within(row).getByRole("img", { name: "+3" })).toBe(
+			slotIn(row, "conversation-bot-pile"),
+		)
+	},
+})
+
+export const RowWithABadgeAndAPile = meta.story({
+	args: { conversation: { ...roomOf(FIVE_BOTS), badge: "done" } },
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const dot = boxOf(row, "bot-activity-dot")
+		const pile = boxOf(row, "conversation-bot-pile")
+		await expect(dot.width).toBeGreaterThan(0)
+		await expect(
+			pile.right <= dot.left ||
+				dot.right <= pile.left ||
+				pile.bottom <= dot.top ||
+				dot.bottom <= pile.top,
+		).toBe(true)
+		await expect(slotIn(row, "conversation-bot-pile")).toHaveAccessibleName(
+			"+3",
+		)
 	},
 })
 
