@@ -46,4 +46,10 @@ describe.each([
 			expect.any(String),
 		)
 	})
+
+	it("holds copy for the shared modes and no other", () => {
+		expect(new Set(Object.keys(catalogue.approvals.mode.option))).toEqual(
+			new Set(permissionModes.modes),
+		)
+	})
 })
