@@ -541,7 +541,7 @@ pub(crate) fn installed_tls_provider() {
 	});
 }
 
-fn headers() -> HeaderMap {
+pub(crate) fn headers() -> HeaderMap {
 	let mut headers = HeaderMap::new();
 	headers.insert(USER_AGENT, HeaderValue::from_static(AGENT));
 	headers.insert(ACCEPT, HeaderValue::from_static("application/vnd.github+json"));

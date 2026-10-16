@@ -95,6 +95,10 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 # Carries the bytes of a relayed avatar inside its JSON frame. Already in the tree under axum;
 # named here so no crate enters the lockfile through this line.
 base64 = "0.22"
+# Reads the version a release notes request names and orders the running version against the
+# one a manifest offers. Already in the tree under tauri-plugin-updater; named here so no crate
+# enters the lockfile through this line.
+semver = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

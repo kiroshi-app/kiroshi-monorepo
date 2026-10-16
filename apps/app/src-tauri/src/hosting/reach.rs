@@ -323,6 +323,11 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("user_preferences", Reach::HostOnly),
 	("user_set_preferences", Reach::HostOnly),
 	("user_set_profile_picture", Reach::HostOnly),
+	("update_state", Reach::HostOnly),
+	("check_for_updates", Reach::HostOnly),
+	("install_update", Reach::HostOnly),
+	("release_notes", Reach::HostOnly),
+	("running_companions", Reach::HostOnly),
 ];
 
 #[derive(Clone, Copy)]
@@ -365,6 +370,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::routines::commands::CHANGED_EVENT, IN_THE_CONVERSATION),
 	(crate::companions::contract::FIRST_RUN_DONE_EVENT, Audience::HostOnly),
 	(crate::window_controls::MAXIMIZE_BUTTON_EVENT, Audience::HostOnly),
+	(crate::updates::contract::CHANGED_EVENT, Audience::HostOnly),
 ];
 
 pub(super) fn reach_of(command: &str) -> Option<Reach> {

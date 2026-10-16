@@ -212,6 +212,11 @@ export const commands = {
 	userPreferences: () => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_preferences")),
 	userSetPreferences: (preferences: UserPreferences) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_preferences", { preferences })),
 	userSetProfilePicture: (bytes: number[]) => typedError<UserPreferences, UserPreferencesError>(__TAURI_INVOKE("user_set_profile_picture", { bytes })),
+	updateState: () => __TAURI_INVOKE<UpdateState>("update_state"),
+	checkForUpdates: () => __TAURI_INVOKE<UpdateState>("check_for_updates"),
+	installUpdate: () => __TAURI_INVOKE<UpdateState>("install_update"),
+	releaseNotes: (version: string) => typedError<ReleaseNotes, ReleaseNotesError>(__TAURI_INVOKE("release_notes", { version })),
+	runningCompanions: () => __TAURI_INVOKE<number>("running_companions"),
 };
 
 /* Constants */
@@ -232,6 +237,8 @@ export const JOINED_SPACE_RECONNECTED_EVENT = "joined-space://reconnected" as co
 export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
+
+export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 
 /* Types */
 export type Account = {
@@ -1128,6 +1135,14 @@ export type QuestionSubject = { kind: "applicationScope"; application: string };
 
 export type Refusal = "disabled" | "filter" | "dedupeValueMissing" | "alreadySeen";
 
+export type ReleaseNotes = {
+	version: string,
+	body: string | null,
+	visualUrl: string | null,
+};
+
+export type ReleaseNotesError = { kind: "invalidVersion"; version: string } | { kind: "unavailable"; version: string; detail: string };
+
 export type ReportedRun = {
 	turnId: string,
 	routineTitle: string,
@@ -1515,6 +1530,10 @@ export type TurnOutcome = "completed" | "cancelled" | "failed";
 
 export type TurnState = "idle" | "submitting" | "running" | "stopping" | "failed";
 
+export type UpdateChannel = "stable" | "beta";
+
+export type UpdateState = { kind: "upToDate" } | { kind: "checking" } | { kind: "available"; version: string } | { kind: "downloading"; downloadedBytes: number; totalBytes: number | null } | { kind: "readyToRestart"; version: string } | { kind: "failed"; message: string };
+
 export type UserPreferences = {
 	displayName: string,
 	profilePicturePath: string | null,
@@ -1530,6 +1549,9 @@ export type UserPreferences = {
 	firstRunDone?: boolean,
 	lastSpaceId: string | null,
 	lastBotIdBySpace?: { [key in string]: string },
+	updateChannel?: UpdateChannel,
+	showWhatsNew?: boolean,
+	lastSeenVersion?: string | null,
 };
 
 export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection };

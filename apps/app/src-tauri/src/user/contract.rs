@@ -7,6 +7,7 @@ use crate::avatars;
 use crate::conversations::contract::{AvatarRejection, StorageFailure};
 use crate::db::repositories::user;
 use crate::db::DatabaseError;
+use crate::updates::contract::UpdateChannel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +90,16 @@ pub struct UserPreferences {
 	pub last_space_id: Option<String>,
 	#[serde(default)]
 	pub last_bot_id_by_space: BTreeMap<String, String>,
+	#[serde(default)]
+	pub update_channel: UpdateChannel,
+	#[serde(default = "shows_whats_new_unless_told_otherwise")]
+	pub show_whats_new: bool,
+	#[serde(default)]
+	pub last_seen_version: Option<String>,
+}
+
+fn shows_whats_new_unless_told_otherwise() -> bool {
+	true
 }
 
 impl UserPreferences {
@@ -114,6 +125,9 @@ impl UserPreferences {
 			first_run_done: preferences.first_run_done,
 			last_space_id: preferences.last_space_id,
 			last_bot_id_by_space: preferences.last_bot_id_by_space,
+			update_channel: preferences.update_channel.into(),
+			show_whats_new: preferences.show_whats_new,
+			last_seen_version: preferences.last_seen_version,
 		}
 	}
 }
@@ -135,6 +149,9 @@ impl From<UserPreferences> for user::Preferences {
 			first_run_done: preferences.first_run_done,
 			last_space_id: preferences.last_space_id,
 			last_bot_id_by_space: preferences.last_bot_id_by_space,
+			update_channel: preferences.update_channel.into(),
+			show_whats_new: preferences.show_whats_new,
+			last_seen_version: preferences.last_seen_version,
 		}
 	}
 }

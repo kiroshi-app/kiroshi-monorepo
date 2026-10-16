@@ -4,7 +4,7 @@ use tauri_specta::{collect_commands, Builder, Commands};
 use crate::{
 	account, agent, applications, attachments, companions, conversations, environment, hosting,
 	invitations, joined_spaces, mcp_oauth, missions, notifications, plugins, routines, search,
-	sections, spaces, user, window_controls,
+	sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -19,6 +19,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("INVITATION_CHANGED_EVENT", invitations::contract::CHANGED_EVENT)
 		.constant("JOINED_SPACE_REMOVED_EVENT", joined_spaces::commands::REMOVED_EVENT)
 		.constant("JOINED_SPACE_RECONNECTED_EVENT", joined_spaces::commands::RECONNECTED_EVENT)
+		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<hosting::contract::HostingChanged>()
 		.typ::<hosting::contract::MembersChanged>()
@@ -191,5 +192,10 @@ fn commands<R: Runtime>() -> Commands<R> {
 		user::commands::user_preferences::<tauri::Wry>,
 		user::commands::user_set_preferences::<tauri::Wry>,
 		user::commands::user_set_profile_picture::<tauri::Wry>,
+		updates::commands::update_state,
+		updates::commands::check_for_updates::<tauri::Wry>,
+		updates::commands::install_update::<tauri::Wry>,
+		updates::commands::release_notes::<tauri::Wry>,
+		updates::commands::running_companions,
 	]
 }

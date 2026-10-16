@@ -31,6 +31,7 @@ pub mod spaces;
 pub mod termination;
 #[cfg(test)]
 mod test_app;
+pub mod updates;
 pub mod user;
 mod window_controls;
 
@@ -70,6 +71,7 @@ pub fn run() {
 		.manage(mcp_oauth::asking::AuthorizationAnswers::default())
 		.manage(missions::commands::AnnouncedRunning::default())
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
+		.manage(updates::Updates::default())
 		.setup(|app| {
 			app.manage(db::bootstrap(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
