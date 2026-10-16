@@ -8,6 +8,12 @@ const SCOPING_ID_KEYS = ["conversationId", "excludedConversationId"]
 
 const SCOPING_ENVELOPES = ["scope", "message", "turn", "draft"]
 
+const ANSWERED_CONVERSATION_ID_KEYS: ReadonlySet<string> = new Set([
+	"conversationId",
+	"threadConversationId",
+	"originConversationId",
+])
+
 const HELD_ID_KEYS = [
 	"botId",
 	"authorBotId",
@@ -96,7 +102,7 @@ const conversationIdsNamedIn = (value: unknown): string[] => {
 		return []
 	}
 	return Object.entries(value).flatMap(([key, inner]) =>
-		key === "conversationId" && isText(inner)
+		ANSWERED_CONVERSATION_ID_KEYS.has(key) && isText(inner)
 			? [inner]
 			: conversationIdsNamedIn(inner),
 	)

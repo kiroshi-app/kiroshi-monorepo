@@ -10,6 +10,8 @@ import {
 } from "./missions-transport"
 
 import { joinedHosts } from "../host"
+import { agentTransport } from "../agent/transport"
+import { conversationStore } from "../conversations/store-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
@@ -220,6 +222,96 @@ describe("the mission calls of the run driver while a joined space is active", (
 		expect(hostInvoke).toHaveBeenCalledWith("conversation_main_chat", {
 			botId: "b-1",
 			spaceId: null,
+		})
+	})
+
+	describe("a mission of this computer opened after the local ids were recalled", () => {
+		const RECALLED = "c-recalled"
+		const ORIGIN = "c-origin-opened-later"
+		const THREAD = "c-thread-opened-later"
+		const UNSEEN_BOT = "b-never-answered"
+
+		const OPENED_LATER: MissionDetail = {
+			mission: {
+				...DETAIL.mission,
+				id: "m-2",
+				botId: UNSEEN_BOT,
+				originConversationId: ORIGIN,
+				threadConversationId: THREAD,
+			},
+			events: [],
+		}
+
+		const answerAfterTheRecall = async (command: string) => {
+			if (command === "conversation_local_ids") {
+				return [RECALLED]
+			}
+			if (command === "mission_detail") {
+				return OPENED_LATER
+			}
+			return answerAsThisComputer(command)
+		}
+
+		const runTheMissionOf = async () => {
+			await conversationStore.loadPage(THREAD, null)
+			await conversationStore.openRuntimeSession(
+				ORIGIN,
+				UNSEEN_BOT,
+				1,
+				null,
+				null,
+			)
+			await agentTransport.startOrResumeSession({
+				conversationId: ORIGIN,
+				botId: UNSEEN_BOT,
+				runtimeSessionId: "r-1",
+				epoch: 1,
+			})
+			await conversationStore.startTurn({
+				id: "t-1",
+				conversationId: ORIGIN,
+				startedAt: 1,
+			})
+			await conversationStore.openAssistantMessage({
+				id: "msg-1",
+				conversationId: ORIGIN,
+				turnId: "t-1",
+				authorBotId: UNSEEN_BOT,
+				repliedToMessageId: null,
+				createdAt: 1,
+			})
+		}
+
+		beforeEach(async () => {
+			hostInvoke.mockImplementation(answerAfterTheRecall as typeof invoke)
+			await conversationStore.loadPage(RECALLED, null)
+			hostInvoke.mockClear()
+		})
+
+		it("opens its thread, its session and writes its report on this computer", async () => {
+			await missionRunTransport.detail("m-2")
+
+			await runTheMissionOf()
+
+			expect(commandsSentToTheJoinedHost()).toEqual([])
+			expect(commandsSentToThisComputer()).toEqual([
+				"mission_detail",
+				"conversation_message_page",
+				"conversation_open_runtime_session",
+				"agent_start_or_resume_session",
+				"conversation_start_turn",
+				"conversation_open_assistant_message",
+			])
+		})
+
+		it("keeps a conversation of the joined space on the joined host", async () => {
+			await missionRunTransport.detail("m-2")
+
+			await conversationStore.loadPage("c-of-the-joined-space", null)
+
+			expect(commandsSentToTheJoinedHost()).toEqual([
+				"conversation_message_page",
+			])
 		})
 	})
 })

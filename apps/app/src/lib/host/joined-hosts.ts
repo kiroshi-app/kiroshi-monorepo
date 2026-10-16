@@ -98,7 +98,7 @@ export const createJoinedHosts = ({
 		reportFailure,
 		reportJoinRefusal,
 	})
-	const invoke = createJoinedHostsInvoke({
+	const { invoke, invokeOnThisComputer } = createJoinedHostsInvoke({
 		store,
 		hosts,
 		sharedSpaceIds,
@@ -167,6 +167,7 @@ export const createJoinedHosts = ({
 		activate,
 		forget,
 		invoke,
+		invokeOnThisComputer,
 		activeSpaceId,
 		listen,
 		listenToActiveHost,

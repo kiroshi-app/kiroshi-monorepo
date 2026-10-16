@@ -41,7 +41,7 @@ export const invoke = joinedHosts.invoke
 
 export const listen = joinedHosts.listen
 
-export const invokeOnThisComputer = thisComputer.invoke
+export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
 
 export const listenOnThisComputer = thisComputer.listen
 
