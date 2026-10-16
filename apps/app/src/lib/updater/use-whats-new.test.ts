@@ -89,6 +89,9 @@ const launch = async (
 	return mounted
 }
 
+const unreadableNotes = () =>
+	Promise.reject({ kind: "unavailable", version: RUNNING, detail: "offline" })
+
 const settled = () => act(() => Promise.resolve())
 
 afterEach(() => {
@@ -242,25 +245,70 @@ describe("the What's new dialog at launch", () => {
 		expect(host.releaseNotesAsked()).toBe(0)
 	})
 
-	it("opens nothing and leaves the last seen version when the notes cannot be read", async () => {
-		const host = aHost({}, () =>
-			Promise.reject({
-				kind: "unavailable",
-				version: RUNNING,
-				detail: "offline",
-			}),
-		)
-		const { result } = await launch()
-		await waitFor(() => expect(raiseReportedFailure).toHaveBeenCalled())
+	it("opens nothing, raises no notice and leaves the last seen version when the notes cannot be read", async () => {
+		const host = aHost({}, unreadableNotes)
+		const mounted = await launch()
+		await waitFor(() => expect(host.releaseNotesAsked()).toBe(1))
+		await settled()
 
-		expect(result.current.whatsNew.dialog).toBeNull()
+		mounted.rerender({ version: RUNNING })
+		await settled()
+
+		expect(mounted.result.current.whatsNew.dialog).toBeNull()
+		expect(raiseReportedFailure).not.toHaveBeenCalled()
 		expect(host.record().lastSeenVersion).toBe("0.24.1")
+	})
+
+	it("stores the running version without opening on a fresh install, across a render and a remount", async () => {
+		const host = aHost({ lastSeenVersion: null })
+		const { wrapper } = createQueryTestWrapper()
+		const first = await launch(wrapper)
+		await settled()
+
+		first.rerender({ version: RUNNING })
+		await settled()
+
+		expect(first.result.current.whatsNew.dialog).toBeNull()
+		expect(host.record().lastSeenVersion).toBe(RUNNING)
+
+		first.unmount()
+		const remounted = await launch(wrapper)
+		await settled()
+
+		expect(remounted.result.current.whatsNew.dialog).toBeNull()
+		expect(host.releaseNotesAsked()).toBe(0)
 	})
 })
 
 describe("the What's new dialog from the About tab", () => {
 	beforeEach(() => {
 		hostInvoke.mockReset()
+		vi.mocked(raiseReportedFailure).mockClear()
+	})
+
+	it("raises the failure notice and opens nothing when the notes cannot be read", async () => {
+		aHost({ lastSeenVersion: RUNNING }, unreadableNotes)
+		const mounted = await launch()
+
+		act(() => mounted.result.current.whatsNew.openFromAbout())
+		await waitFor(() => expect(raiseReportedFailure).toHaveBeenCalledTimes(1))
+		mounted.rerender({ version: RUNNING })
+		await settled()
+
+		expect(mounted.result.current.whatsNew.dialog).toBeNull()
+		expect(raiseReportedFailure).toHaveBeenCalledTimes(1)
+	})
+
+	it("raises the notice once more for a second press on unreadable notes", async () => {
+		const host = aHost({ lastSeenVersion: RUNNING }, unreadableNotes)
+		const { result } = await launch()
+
+		act(() => result.current.whatsNew.openFromAbout())
+		await waitFor(() => expect(raiseReportedFailure).toHaveBeenCalledTimes(1))
+		act(() => result.current.whatsNew.openFromAbout())
+		await waitFor(() => expect(raiseReportedFailure).toHaveBeenCalledTimes(2))
+
+		expect(host.releaseNotesAsked()).toBe(2)
 	})
 
 	it("opens the from-about variant on a version already seen", async () => {

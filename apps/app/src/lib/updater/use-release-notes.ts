@@ -1,6 +1,5 @@
-import { skipToken, useQuery } from "@tanstack/react-query"
+import { queryOptions, skipToken, useQuery } from "@tanstack/react-query"
 
-import { updaterFailureNotice } from "./updater-failure"
 import { updaterQueryKeys } from "./updater-query-keys"
 
 import { commands, type ReleaseNotes } from "../bindings"
@@ -13,11 +12,12 @@ const readReleaseNotes = async (version: string): Promise<ReleaseNotes> => {
 	return result.data
 }
 
-export type ReadReleaseNotes = {
-	releaseNotes: ReleaseNotes | null
-	hasFailedToLoad: boolean
-	retry: () => void
-}
+export const releaseNotesQueryOf = (version: string) =>
+	queryOptions({
+		queryKey: updaterQueryKeys.releaseNotes(version),
+		queryFn: () => readReleaseNotes(version),
+		meta: { rendersErrorInline: true },
+	})
 
 type ReleaseNotesRequest = {
 	version: string | null
@@ -27,20 +27,14 @@ type ReleaseNotesRequest = {
 export const useReleaseNotes = ({
 	version,
 	isWanted,
-}: ReleaseNotesRequest): ReadReleaseNotes => {
-	const { data, isError, refetch } = useQuery({
-		queryKey: updaterQueryKeys.releaseNotes(version),
-		queryFn: version && isWanted ? () => readReleaseNotes(version) : skipToken,
-		meta: {
-			failureNotice: updaterFailureNotice,
-			raisedIn: "use-release-notes",
-		},
-	})
-	return {
-		releaseNotes: data ?? null,
-		hasFailedToLoad: isError,
-		retry: () => {
-			void refetch()
-		},
-	}
+}: ReleaseNotesRequest): ReleaseNotes | null => {
+	const { data } = useQuery(
+		version && isWanted
+			? releaseNotesQueryOf(version)
+			: {
+					queryKey: updaterQueryKeys.releaseNotes(version),
+					queryFn: skipToken,
+				},
+	)
+	return data ?? null
 }

@@ -15,7 +15,7 @@ type UpdateBadgeMount = {
 
 export const useUpdateBadge = ({ updater, working }: UpdateBadgeMount) => {
 	const busyBotCount = useMemo(() => busyBotCountIn(working), [working])
-	const { releaseNotes } = useReleaseNotes({
+	const releaseNotes = useReleaseNotes({
 		version: updater.state.offeredVersion,
 		isWanted: true,
 	})

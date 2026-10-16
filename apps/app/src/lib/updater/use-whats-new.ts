@@ -1,10 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
 import type { WhatsNewDialogProps } from "@workspace/ui/components/whats-new-dialog"
 
 import { openReleaseNotes } from "./open-release-notes"
 import { raiseUpdaterFailure } from "./updater-failure"
-import { useReleaseNotes } from "./use-release-notes"
+import { releaseNotesQueryOf, useReleaseNotes } from "./use-release-notes"
 import { toWhatsNewContent } from "./whats-new-model"
 
 import type { ReaderPreferences } from "../user/preferences-controller"
@@ -24,6 +25,8 @@ type WhatsNewInput = {
 
 const raiseVersionSeenFailure = raiseUpdaterFailure("use-whats-new")
 
+const raiseReleaseNotesFailure = raiseUpdaterFailure("use-release-notes")
+
 const hasReadWhatsNewPreferences = (preferences: ReaderPreferences) =>
 	preferences.showWhatsNew !== undefined
 
@@ -35,19 +38,29 @@ const isUnseen = (
 	hasReadWhatsNewPreferences(preferences) &&
 	preferences.lastSeenVersion !== runningVersion
 
+const isFreshInstall = (preferences: ReaderPreferences) =>
+	preferences.lastSeenVersion == null
+
 const isFirstLaunchDue = (
 	preferences: ReaderPreferences,
 	runningVersion: string | null,
 ) =>
 	isUnseen(preferences, runningVersion) &&
+	!isFreshInstall(preferences) &&
 	preferences.showWhatsNew === true &&
 	preferences.firstRunDone
 
-const useVersionSeenWhileHidden = ({ user, runningVersion }: WhatsNewInput) => {
+const isSeenWithoutDialog = (preferences: ReaderPreferences) =>
+	preferences.showWhatsNew === false || isFreshInstall(preferences)
+
+const useVersionSeenWithoutDialog = ({
+	user,
+	runningVersion,
+}: WhatsNewInput) => {
 	const markedVersion = useRef<string | null>(null)
 	const { preferences } = user.state
 	const versionToMark =
-		isUnseen(preferences, runningVersion) && preferences.showWhatsNew === false
+		isUnseen(preferences, runningVersion) && isSeenWithoutDialog(preferences)
 			? runningVersion
 			: null
 
@@ -66,6 +79,7 @@ export const useWhatsNew = ({
 	user,
 	runningVersion,
 }: WhatsNewInput): WhatsNew => {
+	const queryClient = useQueryClient()
 	const { preferences } = user.state
 	const [variant, setVariant] = useState<WhatsNewVariant>("first-launch")
 	const [isOpenedFromAbout, setIsOpenedFromAbout] = useState(false)
@@ -73,11 +87,11 @@ export const useWhatsNew = ({
 	const isFirstLaunchShown =
 		!hasClosedFirstLaunch && isFirstLaunchDue(preferences, runningVersion)
 	const isWanted = isOpenedFromAbout || isFirstLaunchShown
-	const { releaseNotes, hasFailedToLoad, retry } = useReleaseNotes({
+	const releaseNotes = useReleaseNotes({
 		version: runningVersion,
 		isWanted,
 	})
-	useVersionSeenWhileHidden({ user, runningVersion })
+	useVersionSeenWithoutDialog({ user, runningVersion })
 
 	const close = () => {
 		setIsOpenedFromAbout(false)
@@ -91,11 +105,15 @@ export const useWhatsNew = ({
 	}
 
 	const openFromAbout = () => {
-		setVariant("from-about")
-		setIsOpenedFromAbout(true)
-		if (hasFailedToLoad) {
-			retry()
+		if (runningVersion === null) {
+			return
 		}
+		queryClient
+			.ensureQueryData(releaseNotesQueryOf(runningVersion))
+			.then(() => {
+				setVariant("from-about")
+				setIsOpenedFromAbout(true)
+			}, raiseReleaseNotesFailure)
 	}
 
 	return {
