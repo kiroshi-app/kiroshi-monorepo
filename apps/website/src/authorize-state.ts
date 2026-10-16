@@ -134,7 +134,7 @@ const signOutBrowser = async () => {
 	clearBearer()
 }
 
-const isBrowserSignOutFailed = async () => {
+const hasBrowserSignOutFailed = async () => {
 	try {
 		await signOutBrowser()
 		return false
@@ -154,7 +154,7 @@ const loadApprovedState = async (request: string): Promise<DoneState> => {
 		kind: "signed-in",
 		deviceName: device.deviceName,
 		email: account.email,
-		isBrowserStillSignedIn: await isBrowserSignOutFailed(),
+		isBrowserStillSignedIn: await hasBrowserSignOutFailed(),
 	}
 }
 
