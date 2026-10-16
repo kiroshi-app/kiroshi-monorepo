@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { forwardConsoleToLogFile } from "./console-log-forwarding"
 
+import { createMissionEventRead } from "../missions/mission-event-read"
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
 const logInvoke = vi.mocked(invoke)
@@ -61,7 +63,37 @@ it("writes an error to the log file with its stack and still prints it", () => {
 	})
 })
 
-it.each(["log", "info", "debug"] as const)(
+it("writes an info line to the log file at the Info level and still prints it", () => {
+	const devtools = printed()
+	forwardConsoleToLogFile()
+
+	console.info("the relay reopened")
+
+	expect(devtools.info).toHaveBeenCalledWith("the relay reopened")
+	expect(logInvoke).toHaveBeenCalledExactlyOnceWith("plugin:log|log", {
+		level: 3,
+		message: "the relay reopened",
+	})
+})
+
+it("writes the skip of a mission its side cannot read to the log file on one line", async () => {
+	printed()
+	forwardConsoleToLogFile()
+	const read = createMissionEventRead({
+		sideOfSpace: () => "garage",
+		detailOn: () => Promise.reject({ kind: "unknownMission", id: "m-gone" }),
+	})
+
+	await read({ missionId: "m-gone", spaceId: "garage-space" })
+
+	expect(logInvoke).toHaveBeenCalledExactlyOnceWith("plugin:log|log", {
+		level: 3,
+		message:
+			"missions: skipped the change of a mission its side cannot read | mission: m-gone | space: garage-space | side: garage",
+	})
+})
+
+it.each(["log", "debug"] as const)(
 	"writes nothing to the log file for console.%s and still prints it",
 	(method) => {
 		const devtools = printed()

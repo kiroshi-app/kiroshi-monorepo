@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 
 import { hasTauriInternals } from "./tauri-internals"
 
-const LOG_LEVELS = { warn: 4, error: 5 } as const
+const LOG_LEVELS = { info: 3, warn: 4, error: 5 } as const
 
 type ForwardedLevel = keyof typeof LOG_LEVELS
 
@@ -33,6 +33,7 @@ const forwardToLogFile = (level: ForwardedLevel) => {
 
 export const forwardConsoleToLogFile = () => {
 	if (!hasTauriInternals()) return
+	forwardToLogFile("info")
 	forwardToLogFile("warn")
 	forwardToLogFile("error")
 }
