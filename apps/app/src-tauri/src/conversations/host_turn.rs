@@ -299,7 +299,7 @@ impl<R: Runtime> HostTurn<R> {
 		let failure = reading.failure().await;
 		log::error!("{} stopped hearing the sessions it runs: {failure}", self.label());
 		for speaker in &speaking {
-			announce(&self.app, Some(speaker.scope.clone()), ended_as_cancelled());
+			announce(&self.app, Some(speaker.scope.clone()), ended_as(TurnOutcome::Cancelled));
 		}
 		self.end_cancelled_runs(&speaking).await;
 		join_all(speaking.into_iter().map(|speaker| self.shut_down(speaker.scope))).await;
@@ -560,11 +560,11 @@ fn hand_over(waiting: &mut Vec<Summons>, from: &str, summons: Summons) {
 	waiting.push(summons);
 }
 
-fn ended_as_cancelled() -> AgentEvent {
+fn ended_as(outcome: TurnOutcome) -> AgentEvent {
 	AgentEvent::TurnEnded {
 		ended: TurnEnded {
 			session_id: None,
-			outcome: TurnOutcome::Cancelled,
+			outcome,
 			structured_output: None,
 			total_cost_usd: None,
 			model_usage: None,
@@ -607,18 +607,6 @@ mod tests {
 			epoch: 1,
 		};
 		Speaker { scope, written: Vec::new() }
-	}
-
-	fn ended_as(outcome: TurnOutcome) -> AgentEvent {
-		AgentEvent::TurnEnded {
-			ended: TurnEnded {
-				session_id: None,
-				outcome,
-				structured_output: None,
-				total_cost_usd: None,
-				model_usage: None,
-			},
-		}
 	}
 
 	#[test]
