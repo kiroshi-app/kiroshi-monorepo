@@ -50,7 +50,13 @@ export type MissionRunDriverOptions = {
 	now?: () => number
 }
 
-const isFromLocalHost = (hostId?: string | null) => (hostId ?? null) === null
+const onlyFromLocalHost =
+	<Heard>(handle: (heard: Heard) => void) =>
+	(heard: Heard, hostId?: string | null) => {
+		if (!hostId) {
+			handle(heard)
+		}
+	}
 
 const listening = (
 	opening: Promise<MissionRunUnsubscribe>,
@@ -130,19 +136,11 @@ export const startMissionRunDriver = ({
 	}
 
 	const changes = listening(
-		missions.onChanged((changed, hostId) => {
-			if (isFromLocalHost(hostId)) {
-				void consider(changed)
-			}
-		}),
+		missions.onChanged(onlyFromLocalHost((changed) => void consider(changed))),
 		"mission run driver: mission changes could not be listened to",
 	)
 	const events = listening(
-		driver.subscribe((event, hostId) => {
-			if (isFromLocalHost(hostId)) {
-				route(event)
-			}
-		}),
+		driver.subscribe(onlyFromLocalHost(route)),
 		"mission run driver: agent events could not be listened to",
 	)
 

@@ -18,11 +18,11 @@ export type FailureCorrelation = Pick<
 	| "conversation"
 	| "session"
 	| "turn"
-	| "count"
 >
 
 export type FailureFacts = FailureCorrelation & {
 	raisedIn: string
+	count?: number
 	command?: string
 	httpStatus?: number
 	side?: FailureSpecs["side"]
