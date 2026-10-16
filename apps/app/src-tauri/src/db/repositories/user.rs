@@ -22,6 +22,9 @@ const FIRST_RUN_DONE_KEY: &str = "user.first_run_done";
 const LAST_SPACE_ID_KEY: &str = "user.last_space_id";
 const LAST_BOT_ID_BY_SPACE_KEY: &str = "user.last_bot_id_by_space";
 const DROPPED_LAST_BOT_ID_KEY: &str = "user.last_bot_id";
+const UPDATE_CHANNEL_KEY: &str = "user.update_channel";
+const SHOW_WHATS_NEW_KEY: &str = "user.show_whats_new";
+const LAST_SEEN_VERSION_KEY: &str = "user.last_seen_version";
 
 const FIRST_COMPANION_SEEDED_KEY: &str = "app.first_companion_seeded";
 
@@ -93,6 +96,29 @@ impl SidebarTab {
 	}
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum UpdateChannel {
+	#[default]
+	Stable,
+	Beta,
+}
+
+impl UpdateChannel {
+	fn as_stored(self) -> &'static str {
+		match self {
+			UpdateChannel::Stable => "stable",
+			UpdateChannel::Beta => "beta",
+		}
+	}
+
+	fn of(stored: &str) -> Self {
+		match stored {
+			"beta" => UpdateChannel::Beta,
+			_ => UpdateChannel::Stable,
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preferences {
 	pub display_name: String,
@@ -109,6 +135,9 @@ pub struct Preferences {
 	pub first_run_done: bool,
 	pub last_space_id: Option<String>,
 	pub last_bot_id_by_space: BTreeMap<String, String>,
+	pub update_channel: UpdateChannel,
+	pub show_whats_new: bool,
+	pub last_seen_version: Option<String>,
 }
 
 impl Default for Preferences {
@@ -128,6 +157,9 @@ impl Default for Preferences {
 			first_run_done: false,
 			last_space_id: None,
 			last_bot_id_by_space: BTreeMap::new(),
+			update_channel: UpdateChannel::default(),
+			show_whats_new: true,
+			last_seen_version: None,
 		}
 	}
 }
@@ -236,6 +268,10 @@ fn stored_in(connection: &Connection) -> Result<Preferences, DatabaseError> {
 		last_bot_id_by_space: setting_in(connection, LAST_BOT_ID_BY_SPACE_KEY)?
 			.and_then(|stored| serde_json::from_str(&stored).ok())
 			.unwrap_or_default(),
+		update_channel: setting_in(connection, UPDATE_CHANNEL_KEY)?
+			.map_or(defaults.update_channel, |stored| UpdateChannel::of(&stored)),
+		show_whats_new: switch_in(connection, SHOW_WHATS_NEW_KEY)?,
+		last_seen_version: setting_in(connection, LAST_SEEN_VERSION_KEY)?,
 	})
 }
 
@@ -267,6 +303,15 @@ fn write_in(transaction: &Transaction<'_>, preferences: &Preferences) -> Result<
 	write_optional_in(transaction, LAST_SPACE_ID_KEY, preferences.last_space_id.as_deref())?;
 	let bots_by_space = bots_by_space_as_stored(&preferences.last_bot_id_by_space);
 	write_optional_in(transaction, LAST_BOT_ID_BY_SPACE_KEY, bots_by_space.as_deref())?;
+	SETTINGS.write(
+		transaction,
+		None,
+		UPDATE_CHANNEL_KEY,
+		preferences.update_channel.as_stored(),
+	)?;
+	write_switch_in(transaction, SHOW_WHATS_NEW_KEY, preferences.show_whats_new)?;
+	let last_seen_version = preferences.last_seen_version.as_deref();
+	write_optional_in(transaction, LAST_SEEN_VERSION_KEY, last_seen_version)?;
 	SETTINGS.clear(transaction, None, DROPPED_LAST_BOT_ID_KEY)?;
 	write_picture_in(transaction, preferences.avatar_image_path.as_deref())
 }
@@ -329,6 +374,9 @@ mod tests {
 				("space-one".to_owned(), "bot-one".to_owned()),
 				("space-two".to_owned(), "bot-two".to_owned()),
 			]),
+			update_channel: UpdateChannel::Beta,
+			show_whats_new: false,
+			last_seen_version: Some("0.24.1".to_owned()),
 		}
 	}
 
@@ -360,6 +408,9 @@ mod tests {
 				first_run_done: false,
 				last_space_id: None,
 				last_bot_id_by_space: BTreeMap::new(),
+				update_channel: UpdateChannel::Stable,
+				show_whats_new: true,
+				last_seen_version: None,
 			}
 		);
 	}
@@ -407,6 +458,11 @@ mod tests {
 			setting(&database, LAST_BOT_ID_BY_SPACE_KEY).await,
 			None,
 			"a bot per space taken off the record was left in the file"
+		);
+		assert_eq!(
+			setting(&database, LAST_SEEN_VERSION_KEY).await,
+			None,
+			"a last seen version taken off the record was left in the file"
 		);
 	}
 
@@ -734,5 +790,36 @@ mod tests {
 			database.user().preferences().await.expect("the record").language,
 			Some("br".to_owned())
 		);
+	}
+
+	#[tokio::test]
+	async fn the_update_preferences_are_stored_under_keys_of_their_own() {
+		let dir = temp_dir();
+		let database = open(&dir);
+
+		database.user().set_preferences(a_record()).await.expect("the write");
+
+		assert_eq!(setting(&database, UPDATE_CHANNEL_KEY).await.as_deref(), Some("beta"));
+		assert_eq!(setting(&database, SHOW_WHATS_NEW_KEY).await.as_deref(), Some("off"));
+		assert_eq!(setting(&database, LAST_SEEN_VERSION_KEY).await.as_deref(), Some("0.24.1"));
+	}
+
+	#[tokio::test]
+	async fn a_channel_outside_the_two_names_reads_as_stable() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		database
+			.call_mut(|connection| {
+				let transaction = write_transaction(connection)?;
+				SETTINGS.write(&transaction, None, UPDATE_CHANNEL_KEY, "nightly")?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+			.expect("the planted value");
+
+		let read = database.user().preferences().await.expect("the record");
+
+		assert_eq!(read.update_channel, UpdateChannel::Stable);
 	}
 }

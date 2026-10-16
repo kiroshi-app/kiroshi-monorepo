@@ -4,6 +4,7 @@ use super::contract::{UserPreferences, UserPreferencesError};
 use crate::avatars;
 use crate::db;
 use crate::file_store::FileStore;
+use crate::updates;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, UserPreferencesError> {
 	state.as_ref().map_err(|failure| UserPreferencesError::Unavailable { failure: failure.into() })
@@ -29,7 +30,11 @@ pub async fn user_set_preferences<R: Runtime>(
 ) -> Result<UserPreferences, UserPreferencesError> {
 	let dir = avatars::Avatars::dir(&app);
 	let database = ready(&state)?;
+	let previous_channel = database.user().preferences().await?.update_channel;
 	let stored = database.user().set_preferences(preferences.into()).await?;
+	if stored.update_channel != previous_channel {
+		updates::check_on(&app, stored.update_channel.into());
+	}
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(UserPreferences::of(stored, dir.as_deref()))
 }

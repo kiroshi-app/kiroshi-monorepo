@@ -525,6 +525,10 @@ impl AgentState {
 		&self.host_turns
 	}
 
+	pub fn live_session_count(&self) -> usize {
+		self.live.report().len()
+	}
+
 	fn claim(&self, scope: &RuntimeScope) -> Result<Claim<'_>, TransportError> {
 		let mut gate = self.gate.lock().expect("gate");
 		let run = run_key(scope);

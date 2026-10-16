@@ -104,6 +104,9 @@ fn a_record(picture: Value) -> Value {
 		"firstRunDone": true,
 		"lastSpaceId": "space-one",
 		"lastBotIdBySpace": { "space-one": "bot-one", "space-two": "bot-two" },
+		"updateChannel": "stable",
+		"showWhatsNew": false,
+		"lastSeenVersion": "0.24.1",
 	})
 }
 
@@ -168,6 +171,9 @@ fn a_record_nobody_has_written_crosses_as_the_defaults() {
 			"firstRunDone": false,
 			"lastSpaceId": null,
 			"lastBotIdBySpace": {},
+			"updateChannel": "stable",
+			"showWhatsNew": true,
+			"lastSeenVersion": null,
 		})
 	);
 }

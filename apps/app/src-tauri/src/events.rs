@@ -7,7 +7,7 @@ use tokio::sync::broadcast;
 
 use crate::{
 	account, agent, applications, companions, conversations, hosting, invitations, joined_spaces,
-	missions, notifications, routines, window_controls,
+	missions, notifications, routines, updates, window_controls,
 };
 
 pub const BUFFERED_FRAMES: usize = 1024;
@@ -102,6 +102,7 @@ declared! {
 	ROUTINE_CHANGED: routines::commands::RoutineChanged = routines::commands::CHANGED_EVENT,
 	MAXIMIZE_BUTTON: window_controls::MaximizeButtonPointer =
 		window_controls::MAXIMIZE_BUTTON_EVENT,
+	UPDATE_CHANGED: updates::contract::UpdateState = updates::contract::CHANGED_EVENT,
 }
 
 pub fn emit<R: Runtime, P: Serialize + Clone>(
