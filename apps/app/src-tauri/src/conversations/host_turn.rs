@@ -16,7 +16,7 @@ use crate::agent::commands::{
 	cancel_session_turn,
 };
 use crate::agent::contract::{
-	AgentEvent, RuntimeScope, ScopedEvent, SubmittedTurn, TransportError, TurnOutcome,
+	AgentEvent, RuntimeScope, ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome,
 };
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
@@ -297,8 +297,35 @@ impl<R: Runtime> HostTurn<R> {
 	async fn lost(&self, reading: &mut RelayReader, speaking: Vec<Speaker>, waiting: Vec<Summons>) {
 		let failure = reading.failure().await;
 		log::error!("{} stopped hearing the sessions it runs: {failure}", self.label());
+		for speaker in &speaking {
+			announce(&self.app, Some(speaker.scope.clone()), ended_as(TurnOutcome::Cancelled));
+		}
+		self.end_cancelled_runs(&speaking).await;
 		join_all(speaking.into_iter().map(|speaker| self.shut_down(speaker.scope))).await;
 		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
+	}
+
+	async fn end_cancelled_runs(&self, speaking: &[Speaker]) {
+		if let Err(error) = self.ended_cancelled_runs(speaking).await {
+			log::warn!("{} could not end the runs it cancelled: {error:?}", self.label());
+		}
+	}
+
+	async fn ended_cancelled_runs(&self, speaking: &[Speaker]) -> Result<(), TranscriptStoreError> {
+		let database = database(&self.app)?;
+		for speaker in speaking {
+			let bot_id = &speaker.scope.bot_id;
+			let cancelled = database
+				.messages()
+				.cancel_run(self.turn_id.clone(), bot_id.clone(), now_ms())
+				.await;
+			if let Err(error) = cancelled {
+				log::warn!("{} could not end the run of {bot_id}: {error:?}", self.label());
+			}
+		}
+		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &self.conversation_id)
+			.await;
+		Ok(())
 	}
 
 	async fn wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
@@ -530,6 +557,18 @@ fn hand_over(waiting: &mut Vec<Summons>, from: &str, summons: Summons) {
 	waiting.push(summons);
 }
 
+fn ended_as(outcome: TurnOutcome) -> AgentEvent {
+	AgentEvent::TurnEnded {
+		ended: TurnEnded {
+			session_id: None,
+			outcome,
+			structured_output: None,
+			total_cost_usd: None,
+			model_usage: None,
+		},
+	}
+}
+
 fn missing(detail: String) -> TransportError {
 	TransportError::WriteFailed { detail }
 }
@@ -539,19 +578,22 @@ mod tests {
 	use std::time::Duration;
 
 	use serde_json::{json, Value};
-	use tauri::test::mock_builder;
+	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{Listener, Manager};
 
 	use super::*;
 	use tokio::sync::broadcast;
 
-	use crate::agent::contract::{ConnectionState, TurnEnded};
+	use crate::agent::commands::EVENT_CHANNEL;
+	use crate::agent::contract::ConnectionState;
 	use crate::conversations::contract::UPDATED_EVENT;
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
-	use crate::db::repositories::messages::NewTurn;
+	use crate::db::repositories::messages::{
+		MessagePageQuery, MessageState, NewAssistantMessage, NewTurn,
+	};
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
@@ -564,18 +606,6 @@ mod tests {
 			epoch: 1,
 		};
 		Speaker { scope, written: Vec::new() }
-	}
-
-	fn ended_as(outcome: TurnOutcome) -> AgentEvent {
-		AgentEvent::TurnEnded {
-			ended: TurnEnded {
-				session_id: None,
-				outcome,
-				structured_output: None,
-				total_cost_usd: None,
-				model_usage: None,
-			},
-		}
 	}
 
 	#[test]
@@ -595,56 +625,220 @@ mod tests {
 		assert_eq!(a_speaker().end_after(&still_speaking), None);
 	}
 
-	fn a_scope(bot_id: &str) -> RuntimeScope {
+	fn told(announced: &mut broadcast::Receiver<Frame>) -> Vec<(String, Value)> {
+		let mut told = Vec::new();
+		while let Ok(frame) = announced.try_recv() {
+			let framed: Value = serde_json::from_str(&frame).expect("the frame is JSON");
+			let name = framed["event"].as_str().expect("the frame is named").to_owned();
+			told.push((name, framed["payload"].clone()));
+		}
+		told
+	}
+
+	fn agent_events(told: &[(String, Value)]) -> Vec<ScopedEvent> {
+		told.iter()
+			.filter(|(name, _)| name == EVENT_CHANNEL)
+			.map(|(_, payload)| serde_json::from_value(payload.clone()).expect("an agent event"))
+			.collect()
+	}
+
+	fn active_turns(told: &[(String, Value)]) -> Vec<Value> {
+		told.iter()
+			.filter(|(name, _)| name == UPDATED_EVENT)
+			.map(|(_, payload)| payload["conversation"]["activeTurn"].clone())
+			.collect()
+	}
+
+	fn shut_down_scopes(events: &[ScopedEvent]) -> Vec<RuntimeScope> {
+		let shut_down = AgentEvent::ConnectionChanged { state: ConnectionState::Checking };
+		let mut scopes: Vec<RuntimeScope> = events
+			.iter()
+			.filter(|scoped| scoped.event == shut_down)
+			.filter_map(|scoped| scoped.scope.clone())
+			.collect();
+		scopes.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
+		scopes
+	}
+
+	fn assert_cancelled_before_shut_down(events: &[ScopedEvent], scope: &RuntimeScope) {
+		let shut_down = AgentEvent::ConnectionChanged { state: ConnectionState::Checking };
+		let told_to = |event: &AgentEvent| {
+			events
+				.iter()
+				.position(|scoped| scoped.scope.as_ref() == Some(scope) && &scoped.event == event)
+		};
+		let cancelled = told_to(&ended_as(TurnOutcome::Cancelled));
+		let shut = told_to(&shut_down);
+		assert!(cancelled.is_some(), "{} never heard its reply cancelled", scope.bot_id);
+		assert!(cancelled < shut, "{} was shut down before its reply ended", scope.bot_id);
+	}
+
+	struct Room {
+		id: String,
+		bot_ids: Vec<String>,
+	}
+
+	async fn a_room_running(app: &AppHandle<MockRuntime>, names: &[&str]) -> Room {
+		let conversations = database(app).expect("the database opens").conversations();
+		let mut bot_ids = Vec::new();
+		for name in names {
+			let identity = BotIdentity {
+				name: (*name).to_owned(),
+				title: String::new(),
+				model: DEFAULT_BOT_MODEL.to_owned(),
+				avatar_blot: None,
+				avatar_image_path: None,
+				instructions: String::new(),
+				denied_tools: Vec::new(),
+				effort: None,
+			};
+			let created = conversations
+				.create_bot(identity, Some("personal".to_owned()), None)
+				.await
+				.expect("the bot is created");
+			bot_ids.push(created.id);
+		}
+		let room = conversations
+			.create_conversation(ConversationDraft {
+				space_id: "personal".to_owned(),
+				section_id: None,
+				title: "Room".to_owned(),
+				bot_ids: bot_ids.clone(),
+			})
+			.await
+			.expect("the room is created");
+		Room { id: room.id, bot_ids }
+	}
+
+	fn turn_in(room: &Room) -> NewTurn {
+		NewTurn { id: "t1".to_owned(), conversation_id: room.id.clone(), started_at: 1 }
+	}
+
+	async fn speaking_in(app: &AppHandle<MockRuntime>, room: &Room, bot_ids: &[String]) {
+		let messages = database(app).expect("the database opens").messages();
+		messages.start_turn(turn_in(room)).await.expect("the turn opens");
+		for bot_id in bot_ids {
+			messages.start_run(turn_in(room), bot_id.clone()).await.expect("the run starts");
+		}
+	}
+
+	async fn a_streaming_reply(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
+		let messages = database(app).expect("the database opens").messages();
+		let id = format!("reply-of-{bot_id}");
+		let reply = NewAssistantMessage {
+			id: id.clone(),
+			conversation_id: room.id.clone(),
+			turn_id: "t1".to_owned(),
+			author_bot_id: Some(bot_id.to_owned()),
+			replied_to_message_id: None,
+			created_at: 2,
+		};
+		messages.open_assistant_message(reply).await.expect("the reply is opened");
+		messages.append_text(id, "half".to_owned()).await.expect("the reply streams");
+	}
+
+	async fn reply_states(app: &AppHandle<MockRuntime>, room: &Room) -> Vec<MessageState> {
+		let query =
+			MessagePageQuery { conversation_id: room.id.clone(), before_seq: None, limit: 10 };
+		let page = database(app)
+			.expect("the database opens")
+			.messages()
+			.page_messages(query)
+			.await
+			.expect("the transcript reads");
+		page.messages.iter().map(|message| message.state).collect()
+	}
+
+	fn scope_in(room: &Room, bot_id: &str) -> RuntimeScope {
 		RuntimeScope {
-			conversation_id: "c1".to_owned(),
+			conversation_id: room.id.clone(),
 			bot_id: bot_id.to_owned(),
 			runtime_session_id: format!("session-of-{bot_id}"),
 			epoch: 1,
 		}
 	}
 
-	fn shut_down_scope(frame: &str) -> Option<RuntimeScope> {
-		let framed: Value = serde_json::from_str(frame).expect("the frame is JSON");
-		let scoped: ScopedEvent =
-			serde_json::from_value(framed["payload"].clone()).expect("an agent event");
-		let is_shut_down =
-			scoped.event == AgentEvent::ConnectionChanged { state: ConnectionState::Checking };
-		scoped.scope.filter(|_| is_shut_down)
-	}
-
-	#[tokio::test]
-	async fn a_group_turn_whose_reader_lags_shuts_down_every_speaker() {
-		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
-		app.manage(AgentState::default());
-		let mut announced = events::subscribed(app.handle());
+	fn a_lagging_reader() -> (RelayReader, mpsc::UnboundedReceiver<ScopedEvent>) {
 		let (relay, lagging) = broadcast::channel(1);
 		for _ in 0..3 {
 			relay.send(Frame::from(r#"{"event":"other","payload":null}"#)).expect("subscribed");
 		}
 		let (events, heard) = mpsc::unbounded_channel();
-		let mut reading = read(lagging, |_| true, events);
-		let turns = HostTurns::default();
-		let held = turns.hold("c1", "t1").expect("the turn is held");
-		let host_turn = HostTurn {
-			app: app.handle().clone(),
-			conversation_id: "c1".to_owned(),
+		(read(lagging, |_| true, events), heard)
+	}
+
+	fn a_host_turn(
+		app: &AppHandle<MockRuntime>,
+		room: &Room,
+		stopped: watch::Receiver<bool>,
+	) -> HostTurn<MockRuntime> {
+		HostTurn {
+			app: app.clone(),
+			conversation_id: room.id.clone(),
 			turn_id: "t1".to_owned(),
 			prompt_id: "p1".to_owned(),
-			stopped: held.stopped.clone(),
-		};
-		let speakers = vec![a_scope("b1"), a_scope("b2")];
+			stopped,
+		}
+	}
+
+	#[tokio::test]
+	async fn a_group_turn_whose_reader_lags_shuts_down_every_speaker() {
+		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		speaking_in(app.handle(), &room, &room.bot_ids).await;
+		for bot_id in &room.bot_ids {
+			a_streaming_reply(app.handle(), &room, bot_id).await;
+		}
+		let mut announced = events::subscribed(app.handle());
+		let (mut reading, heard) = a_lagging_reader();
+		let turns = HostTurns::default();
+		let held = turns.hold(&room.id, "t1").expect("the turn is held");
+		let host_turn = a_host_turn(app.handle(), &room, held.stopped.clone());
+		let mut speakers: Vec<RuntimeScope> =
+			room.bot_ids.iter().map(|bot_id| scope_in(&room, bot_id)).collect();
+		speakers.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
 		let speaking =
 			speakers.iter().map(|scope| Speaker { scope: scope.clone(), written: Vec::new() });
 
 		host_turn.drive(held, speaking.collect(), heard, &mut reading).await;
 
-		let mut shut_down = Vec::new();
-		while let Ok(frame) = announced.try_recv() {
-			shut_down.extend(shut_down_scope(&frame));
+		let told = told(&mut announced);
+		let events = agent_events(&told);
+		assert_eq!(shut_down_scopes(&events), speakers);
+		for scope in &speakers {
+			assert_cancelled_before_shut_down(&events, scope);
 		}
-		shut_down.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
-		assert_eq!(shut_down, speakers);
+		assert_eq!(active_turns(&told), vec![Value::Null]);
+		assert_eq!(reply_states(app.handle(), &room).await, vec![MessageState::Cancelled; 2]);
+	}
+
+	#[tokio::test]
+	async fn a_group_turn_whose_reader_lags_abandons_every_waiting_bot() {
+		let app = an_app_of_its_own("host-turn-reader-lag-waiting", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		let (speaker, waiter) = (room.bot_ids[0].clone(), room.bot_ids[1].clone());
+		speaking_in(app.handle(), &room, std::slice::from_ref(&speaker)).await;
+		let stored = database(app.handle()).expect("the database opens");
+		stored.messages().await_runs("t1".to_owned(), vec![waiter.clone()]).await.expect("held");
+		let mut announced = events::subscribed(app.handle());
+		let (mut reading, _heard) = a_lagging_reader();
+		let (_stop, stopped) = watch::channel(false);
+		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let speaking = vec![Speaker { scope: scope_in(&room, &speaker), written: Vec::new() }];
+		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
+
+		host_turn.lost(&mut reading, speaking, waiting).await;
+
+		let told = told(&mut announced);
+		assert_eq!(
+			active_turns(&told),
+			vec![json!({ "startedAt": 1, "botIds": [waiter] }), Value::Null]
+		);
+		assert_eq!(shut_down_scopes(&agent_events(&told)), vec![scope_in(&room, &speaker)]);
 	}
 
 	#[tokio::test]
