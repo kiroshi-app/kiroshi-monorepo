@@ -1,4 +1,8 @@
 import type { Mission, MissionChanged, MissionDetail } from "./mission-contract"
+import {
+	createMissionEventRead,
+	type ReadMissionOfEvent,
+} from "./mission-event-read"
 import type { OpenedMission } from "./opened-mission-controller"
 
 export type FakeMissions = {
@@ -14,6 +18,9 @@ export type FakeMissions = {
 	) => Promise<() => void>
 	detail: (missionId: string) => Promise<MissionDetail>
 	detailCalls: string[]
+	read: ReadMissionOfEvent
+	readSides: [missionId: string, side: string | null][]
+	joinSpace: (spaceId: string, hostId: string) => void
 	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
 	rosterCalls: [conversationId: string, botId: string][]
 	holdRosterBlock: (block: string | null) => void
@@ -48,6 +55,8 @@ export const createFakeMissions = (): FakeMissions => {
 	const reports: [missionId: string, turnId: string | null][] = []
 	const answers: [missionId: string, seq: number][] = []
 	const detailCalls: string[] = []
+	const readSides: [missionId: string, side: string | null][] = []
+	const joinedHostOfSpace = new Map<string | null, string>()
 	let rosterBlock: string | null = null
 	let isRosterRefused = false
 	let placed: Mission[] = []
@@ -67,12 +76,25 @@ export const createFakeMissions = (): FakeMissions => {
 	const isStillOwingAReport = (mission: Mission) =>
 		!isOpen(mission) && !reports.some(([missionId]) => missionId === mission.id)
 
-	return {
+	const fake: FakeMissions = {
 		opened,
 		rosterCalls,
 		reports,
 		answers,
 		detailCalls,
+		readSides,
+
+		read: createMissionEventRead({
+			sideOfSpace: (spaceId) => joinedHostOfSpace.get(spaceId) ?? null,
+			detailOn: (side, missionId) => {
+				readSides.push([missionId, side])
+				return fake.detail(missionId)
+			},
+		}),
+
+		joinSpace: (spaceId, hostId) => {
+			joinedHostOfSpace.set(spaceId, hostId)
+		},
 
 		rosterBlock: async (conversationId, botId) => {
 			rosterCalls.push([conversationId, botId])
@@ -213,4 +235,6 @@ export const createFakeMissions = (): FakeMissions => {
 			}
 		},
 	}
+
+	return fake
 }

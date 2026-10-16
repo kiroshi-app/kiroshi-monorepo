@@ -128,7 +128,12 @@ export const createMissionRunTake = ({
 
 		book.holding.add(changed.missionId)
 		try {
-			const detail = await book.readMission(changed.missionId)
+			const detail = await book.readMissionOfEvent(changed)
+
+			if (!detail) {
+				return
+			}
+
 			book.rememberThread(detail.mission)
 
 			if (await take(detail)) {

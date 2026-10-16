@@ -41,6 +41,10 @@ export const listen = joinedHosts.listen
 
 export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
 
+export const invokeOn = joinedHosts.invokeOn
+
+export const hostOfSpace = joinedHosts.hostOfSpace
+
 export const listenOnThisComputer = tauriListen
 
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId

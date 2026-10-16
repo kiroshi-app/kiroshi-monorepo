@@ -21,9 +21,9 @@ import type { Conversation } from "../conversations/store-contract"
 import type {
 	Mission,
 	MissionChanged,
-	MissionDetail,
 	MissionOnBoard,
 } from "../missions/mission-contract"
+import type { ReadMissionOfEvent } from "../missions/mission-event-read"
 import type { OpenedMission } from "../missions/opened-mission-controller"
 import type { UserPreferences } from "../user/preferences-contract"
 
@@ -60,7 +60,7 @@ type MissionsSource = {
 	onChanged: (
 		listener: (changed: MissionChanged) => void,
 	) => Promise<() => void>
-	detail: (missionId: string) => Promise<MissionDetail>
+	read: ReadMissionOfEvent
 	open: (opened: OpenedMission) => void
 }
 
@@ -101,6 +101,7 @@ export const startNotificationSource = ({
 	reportFailure,
 }: NotificationSourceOptions): (() => void) => {
 	const missionThreads = new Map<string, Mission>()
+	const missionSpaces = new Map<string, string | null>()
 
 	let windowFocus: boolean | undefined
 
@@ -127,6 +128,7 @@ export const startNotificationSource = ({
 			missions,
 			switches,
 			missionThreads,
+			missionSpaces,
 			currentFocus,
 			botNameOf,
 			deliver,
@@ -136,6 +138,7 @@ export const startNotificationSource = ({
 		roster,
 		spaces,
 		missions,
+		missionSpaces,
 		raiseWindow,
 		failWith,
 	})

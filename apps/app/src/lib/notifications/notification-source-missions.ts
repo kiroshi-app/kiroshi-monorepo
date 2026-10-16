@@ -14,6 +14,7 @@ type MissionThreadTrackingOptions = Pick<
 	"missions" | "switches"
 > & {
 	missionThreads: Map<string, Mission>
+	missionSpaces: Map<string, string | null>
 	currentFocus: () => boolean
 	botNameOf: (botId: string) => string | undefined
 	deliver: Deliver
@@ -23,6 +24,7 @@ export const createMissionThreadTracking = ({
 	missions,
 	switches,
 	missionThreads,
+	missionSpaces,
 	currentFocus,
 	botNameOf,
 	deliver,
@@ -30,6 +32,8 @@ export const createMissionThreadTracking = ({
 	const missionStates = createMissionStates()
 
 	const holdMissionThread = (mission: Mission) => {
+		missionSpaces.set(mission.id, mission.spaceId)
+
 		if (mission.closedAt === null) {
 			missionThreads.set(mission.threadConversationId, mission)
 			return
@@ -45,7 +49,13 @@ export const createMissionThreadTracking = ({
 
 		missionStates.remember(changed)
 
-		const { mission } = await missions.detail(changed.missionId)
+		const detail = await missions.read(changed)
+
+		if (!detail) {
+			return
+		}
+
+		const { mission } = detail
 		holdMissionThread(mission)
 
 		const { state } = changed

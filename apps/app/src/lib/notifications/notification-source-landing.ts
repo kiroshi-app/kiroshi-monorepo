@@ -6,6 +6,7 @@ type NotificationLandingOptions = Pick<
 	NotificationSourceOptions,
 	"chat" | "roster" | "spaces" | "missions" | "raiseWindow"
 > & {
+	missionSpaces: Map<string, string | null>
 	failWith: FailWith
 }
 
@@ -14,6 +15,7 @@ export const createNotificationLanding = ({
 	roster,
 	spaces,
 	missions,
+	missionSpaces,
 	raiseWindow,
 	failWith,
 }: NotificationLandingOptions) => {
@@ -25,7 +27,16 @@ export const createNotificationLanding = ({
 	}
 
 	const openMission = async (missionId: string) => {
-		const { mission } = await missions.detail(missionId)
+		const detail = await missions.read({
+			missionId,
+			spaceId: missionSpaces.get(missionId) ?? null,
+		})
+
+		if (!detail) {
+			return
+		}
+
+		const { mission } = detail
 		const spaceId = roster.spaceOfConversation(mission.originConversationId)
 
 		if (!spaceId) {

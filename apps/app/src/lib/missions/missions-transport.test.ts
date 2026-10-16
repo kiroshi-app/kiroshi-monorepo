@@ -192,10 +192,36 @@ describe("the mission calls of the run driver while a joined space is active", (
 		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
 	})
 
+	it("reads a changed mission of a local Space on this computer", async () => {
+		await missionsTransport.read({ missionId: "m-1", spaceId: "workshop" })
+
+		expect(commandsSentToTheJoinedHost()).toEqual([])
+		expect(hostInvoke).toHaveBeenCalledWith("mission_detail", {
+			missionId: "m-1",
+		})
+	})
+
+	it("reads a changed mission of the joined Space on its host", async () => {
+		await missionsTransport.read({ missionId: "m-1", spaceId: JOINED_SPACE })
+
+		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
+		expect(commandsSentToThisComputer()).toEqual([])
+	})
+
+	it("reads a changed mission of the joined Space on its host once a local Space is on screen", async () => {
+		await joinedHosts.activate(null)
+
+		await missionsTransport.read({ missionId: "m-1", spaceId: JOINED_SPACE })
+
+		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
+		expect(commandsSentToThisComputer()).toEqual([])
+	})
+
 	it("sends every mission call of the run driver to this computer", async () => {
 		await missionRunTransport.board()
 		await missionRunTransport.unreported()
 		await missionRunTransport.detail("m-1")
+		await missionRunTransport.read({ missionId: "m-1", spaceId: "workshop" })
 		await missionRunTransport.reported("m-1", "t-1")
 		await missionRunTransport.answered("m-1", 2)
 		await missionRunTransport.rosterBlock("c-1", "b-1")
@@ -206,6 +232,7 @@ describe("the mission calls of the run driver while a joined space is active", (
 		expect(commandsSentToThisComputer()).toEqual([
 			"mission_board",
 			"mission_unreported",
+			"mission_detail",
 			"mission_detail",
 			"mission_reported",
 			"mission_answered",

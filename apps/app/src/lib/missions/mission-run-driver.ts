@@ -3,6 +3,7 @@ import type {
 	MissionDetail,
 	MissionOnBoard,
 } from "./mission-contract"
+import type { ReadMissionOfEvent } from "./mission-event-read"
 import { createMissionRunBegin } from "./mission-run-begin"
 import { createMissionRunBook, reporting } from "./mission-run-book"
 import type { ReportMissionRunFailure } from "./mission-run-failure"
@@ -30,6 +31,7 @@ type MissionRunPort = {
 		listener: (changed: MissionChanged, hostId?: string | null) => void,
 	) => Promise<MissionRunUnsubscribe>
 	detail: (missionId: string) => Promise<MissionDetail>
+	read: ReadMissionOfEvent
 	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
 }
 

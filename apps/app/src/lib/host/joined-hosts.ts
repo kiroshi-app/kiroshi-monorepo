@@ -94,15 +94,16 @@ export const createJoinedHosts = ({
 		reportFailure,
 		reportJoinRefusal,
 	})
-	const { invoke, invokeOnThisComputer } = createJoinedHostsInvoke({
-		store,
-		hosts,
-		sharedSpaceIds,
-		local,
-		isDown: down.isDown,
-		invokeOnceOpen,
-		reportFailure,
-	})
+	const { invoke, invokeOn, invokeOnThisComputer, hostOfSpace } =
+		createJoinedHostsInvoke({
+			store,
+			hosts,
+			sharedSpaceIds,
+			local,
+			isDown: down.isDown,
+			invokeOnceOpen,
+			reportFailure,
+		})
 	const activeSpaceId = (): string | null => {
 		const { active } = store.getState()
 		return active ? (sharedSpaceIds.get(active) ?? null) : null
@@ -163,7 +164,9 @@ export const createJoinedHosts = ({
 		activate,
 		forget,
 		invoke,
+		invokeOn,
 		invokeOnThisComputer,
+		hostOfSpace,
 		activeSpaceId,
 		listen,
 		listenToActiveHost,

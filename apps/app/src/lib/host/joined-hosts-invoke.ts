@@ -227,7 +227,20 @@ export const createJoinedHostsInvoke = ({
 			: route()
 	}
 
-	const invokeOnThisComputer: Invoke = (...call) => sendTo(null, call)
+	const invokeOn =
+		(target: ConversationSource): Invoke =>
+		(...call) =>
+			sendTo(target, call)
 
-	return { invoke, invokeOnThisComputer }
+	const hostOfSpace = (spaceId: string | null): ConversationSource =>
+		[...sharedSpaceIds].find(
+			([, sharedSpaceId]) => sharedSpaceId === spaceId,
+		)?.[0] ?? null
+
+	return {
+		invoke,
+		invokeOn,
+		invokeOnThisComputer: invokeOn(null),
+		hostOfSpace,
+	}
 }

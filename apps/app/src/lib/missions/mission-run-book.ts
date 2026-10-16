@@ -1,4 +1,5 @@
-import type { Mission, MissionChanged } from "./mission-contract"
+import type { Mission, MissionChanged, MissionDetail } from "./mission-contract"
+import type { MissionEvent } from "./mission-event-read"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { createMissionRunFailures } from "./mission-run-failure"
 import type { MissionRunCall, MissionRunCause } from "./mission-run-prompt"
@@ -118,15 +119,26 @@ export const createMissionRunBook = ({
 		}
 	}
 
-	const readMission = async (missionId: string) => {
+	const readThrough = async <Read extends MissionDetail | null>(
+		missionId: string,
+		read: () => Promise<Read>,
+	): Promise<Read> => {
 		try {
-			const detail = await missions.detail(missionId)
-			rememberSpace({ missionId, spaceId: detail.mission.spaceId })
+			const detail = await read()
+			if (detail) {
+				rememberSpace({ missionId, spaceId: detail.mission.spaceId })
+			}
 			return detail
 		} catch (thrown) {
 			throw new Error("the mission could not be read", { cause: thrown })
 		}
 	}
+
+	const readMission = (missionId: string) =>
+		readThrough(missionId, () => missions.detail(missionId))
+
+	const readMissionOfEvent = (event: MissionEvent) =>
+		readThrough(event.missionId, () => missions.read(event))
 
 	const rememberThread = (mission: Mission) => {
 		missionIdOfThread.set(mission.threadConversationId, mission.id)
@@ -155,6 +167,7 @@ export const createMissionRunBook = ({
 		refuse,
 		expire,
 		readMission,
+		readMissionOfEvent,
 		rememberSpace,
 		rememberThread,
 		runAt,

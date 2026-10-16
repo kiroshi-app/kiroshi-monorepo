@@ -7,10 +7,13 @@ import type {
 	MissionOnBoard,
 	MissionSpacePage,
 } from "./mission-contract"
+import { createMissionEventRead } from "./mission-event-read"
 
 import {
 	activeJoinedSpaceId,
+	hostOfSpace,
 	invoke,
+	invokeOn,
 	invokeOnThisComputer,
 	listen,
 	listenOnThisComputer,
@@ -51,6 +54,12 @@ const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
 
 const missionCallsOfTheActiveHost = missionCallsOn({ invoke, listen })
 
+const readMissionOfEvent = createMissionEventRead({
+	sideOfSpace: (spaceId) => hostOfSpace(spaceId),
+	detailOn: (side, missionId) =>
+		invokeOn(side)<MissionDetail>("mission_detail", { missionId }),
+})
+
 const readBoardOfThisMac = () =>
 	activeJoinedSpaceId() === null
 		? missionCallsOfTheActiveHost.board()
@@ -59,6 +68,7 @@ const readBoardOfThisMac = () =>
 export const missionsTransport = {
 	...missionCallsOfTheActiveHost,
 	board: readBoardOfThisMac,
+	read: readMissionOfEvent,
 	spaceFeed: (spaceId: string, closedSince: number) =>
 		invoke<MissionInSpace[]>("mission_space_feed", { spaceId, closedSince }),
 	spacePage: (
@@ -85,6 +95,7 @@ export const missionRunTransport = {
 		invoke: invokeOnThisComputer,
 		listen: listenOnThisComputer,
 	}),
+	read: readMissionOfEvent,
 	bots: () =>
 		invokeOnThisComputer<Bot[]>("conversation_bots", { spaceId: null }),
 	mainChat: (botId: string) =>
