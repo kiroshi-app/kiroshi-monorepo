@@ -707,6 +707,23 @@ fn a_live_relay_closed_4002_answers_503_reopens_and_keeps_the_entry() {
 	});
 }
 
+#[test]
+fn a_relay_restarting_4005_drops_the_link_reopens_and_keeps_the_entry() {
+	run(async {
+		let mut harness = Harness::new(Some(BEARER)).await;
+		let id = harness.accepted().await;
+		let (_connection, mut member) = connected(&mut harness, &id).await;
+
+		let dropped = harness.app.state::<RelayGuests>().link_dropped(&id);
+		closed_with(&mut member, 4005).await;
+		tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
+		let _reopened = harness.member().await;
+
+		assert_eq!(harness.stored().await.len(), 1);
+		assert!(harness.heard(REMOVED_EVENT).is_empty());
+	});
+}
+
 async fn closed_offline(
 	harness: &Harness,
 	id: &str,
