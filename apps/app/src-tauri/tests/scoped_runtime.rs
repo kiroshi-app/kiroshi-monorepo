@@ -79,9 +79,9 @@ fn record_agent_events(mut heard: broadcast::Receiver<Frame>, log: &EventLog<Sco
 }
 
 fn agent_event(frame: &str) -> Option<ScopedEvent> {
-	let framed: Value = serde_json::from_str(frame).expect("a relay frame is json");
+	let mut framed: Value = serde_json::from_str(frame).expect("a relay frame is json");
 	(framed["event"] == EVENT_CHANNEL)
-		.then(|| serde_json::from_value(framed["payload"].clone()).expect("an agent event parses"))
+		.then(|| serde_json::from_value(framed["payload"].take()).expect("an agent event parses"))
 }
 
 impl Harness {
