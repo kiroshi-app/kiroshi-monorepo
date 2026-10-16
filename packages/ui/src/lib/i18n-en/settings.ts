@@ -13,6 +13,7 @@ const settings = {
 		skills: "Skills",
 		applications: "Applications",
 		history: "History",
+		diagnostics: "Diagnostics",
 		danger: "Danger zone",
 	},
 	account: {
@@ -104,6 +105,20 @@ const settings = {
 				dark: "Dark",
 				system: "System",
 			},
+		},
+	},
+	diagnostics: {
+		label: "Diagnostics",
+		description:
+			"Copy diagnostics puts the details of the computer where Kiroshi runs and of the agent on the clipboard, ready for a bug report.",
+		copy: "Copy diagnostics",
+		reveal: "Reveal log",
+		clear: {
+			action: "Clear log",
+			title: "Clear the log?",
+			description:
+				"Every line Kiroshi wrote to its log on this computer is deleted. This can’t be undone.",
+			failed: "Couldn’t clear the log. Try again.",
 		},
 	},
 	space: {

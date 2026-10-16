@@ -55,14 +55,55 @@ type TransientNotice = NoticeMessage & {
 	type?: TransientNoticeType
 }
 
-type FailureReport = {
+type FailureSide = "host" | "member" | "local"
+
+type FailureFields = {
 	appVersion?: string
 	platform?: string
 	raisedAt?: string
 	command?: string
 	httpStatus?: number
-	side?: "host" | "member" | "local"
+	side?: FailureSide
 	raisedIn?: string
+}
+
+type FailureSpecs = {
+	appVersion?: string
+	commit?: string
+	installKind?: string
+	os?: string
+	osBuild?: string
+	arch?: string
+	ram?: string
+	agentVersion?: string
+	provider?: string
+	side?: FailureSide
+	plan?: string
+}
+
+type FailureContext = {
+	raisedAt?: string
+	raisedIn?: string
+	space?: string
+	botId?: string
+	botName?: string
+	conversation?: string
+	session?: string
+	turn?: string
+	command?: string
+	httpStatus?: number
+}
+
+type FailureLog = {
+	lines: string[]
+	path: string
+	lineCount: number
+}
+
+type FailureReport = FailureFields & {
+	specs?: FailureSpecs
+	context?: FailureContext
+	log?: FailureLog
 }
 
 type ReportedFailure = Pick<NoticeMessage, "description"> & {
@@ -70,6 +111,9 @@ type ReportedFailure = Pick<NoticeMessage, "description"> & {
 }
 
 const FAILURE_REPORT_HEADING = "Kiroshi failure report"
+
+const FAILURE_REPORT_WARNING =
+	"Review before sharing: may contain file names and local paths."
 
 const FAILURE_REPORT_LABELS = {
 	appVersion: "App version",
@@ -79,18 +123,74 @@ const FAILURE_REPORT_LABELS = {
 	httpStatus: "HTTP status",
 	side: "Side",
 	raisedIn: "Raised in",
-} satisfies Record<keyof FailureReport, string>
+} satisfies Record<keyof FailureFields, string>
+
+const FAILURE_SPECS_LABELS = {
+	appVersion: "App version",
+	commit: "Commit",
+	installKind: "Install",
+	os: "OS",
+	osBuild: "OS build",
+	arch: "Arch",
+	ram: "RAM",
+	agentVersion: "Agent version",
+	provider: "Provider",
+	side: "Side",
+	plan: "Plan",
+} satisfies Record<keyof FailureSpecs, string>
+
+const FAILURE_CONTEXT_LABELS = {
+	raisedAt: "Time",
+	raisedIn: "Raised in",
+	space: "Space",
+	botId: "Bot id",
+	botName: "Bot name",
+	conversation: "Conversation",
+	session: "Session",
+	turn: "Turn",
+	command: "Command",
+	httpStatus: "HTTP status",
+} satisfies Record<keyof FailureContext, string>
 
 const onOneLine = (text = "") => text.replace(/\s+/g, " ").trim()
 
-const formatFailureReport = ({ description, report }: ReportedFailure) =>
+const labelledLines = <Field extends string>(
+	fields: Partial<Record<Field, string | number>>,
+	labels: Record<Field, string>,
+) =>
+	(Object.entries(labels) as [Field, string][])
+		.map(([field, label]) => {
+			const value = onOneLine(fields[field]?.toString())
+			return value && `${label}: ${value}`
+		})
+		.filter(Boolean)
+
+const section = (header: string, lines: string[]) =>
+	lines.length > 0 ? [header, ...lines].join("\n") : ""
+
+const formatFailureSpecs = (specs: FailureSpecs) =>
+	section("-- Specs", labelledLines(specs, FAILURE_SPECS_LABELS))
+
+const formatFailureContext = (context: FailureContext) =>
+	section("-- Context", labelledLines(context, FAILURE_CONTEXT_LABELS))
+
+const formatFailureLog = ({ lines, path, lineCount }: FailureLog) =>
+	[`-- Log (last ${lineCount} lines of ${onOneLine(path)})`, ...lines].join(
+		"\n",
+	)
+
+const formatFailureReport = ({
+	description,
+	report: { specs, context, log, ...fields },
+}: ReportedFailure) =>
 	[
 		FAILURE_REPORT_HEADING,
+		(specs || context || log) && FAILURE_REPORT_WARNING,
 		onOneLine(description),
-		...Object.entries(FAILURE_REPORT_LABELS).map(([field, label]) => {
-			const value = onOneLine(report[field as keyof FailureReport]?.toString())
-			return value && `${label}: ${value}`
-		}),
+		...labelledLines(fields, FAILURE_REPORT_LABELS),
+		specs && formatFailureSpecs(specs),
+		context && formatFailureContext(context),
+		log && formatFailureLog(log),
 	]
 		.filter(Boolean)
 		.join("\n")
@@ -340,8 +440,12 @@ const NoticeSurface = ({
 
 export {
 	endNotice,
+	type FailureContext,
+	type FailureLog,
 	type FailureReport,
+	type FailureSpecs,
 	formatFailureReport,
+	formatFailureSpecs,
 	type NoticeMessage,
 	NoticeSurface,
 	type NoticeSurfaceProps,

@@ -35,6 +35,10 @@ import {
 	type AccountPanelProps,
 } from "@workspace/ui/components/user-settings-dialog/account-panel"
 import { AppearanceFields } from "@workspace/ui/components/user-settings-dialog/appearance-fields"
+import {
+	DiagnosticsFields,
+	type DiagnosticsFieldsProps,
+} from "@workspace/ui/components/user-settings-dialog/diagnostics-fields"
 import { LanguageFields } from "@workspace/ui/components/user-settings-dialog/language-fields"
 import { NotificationFields } from "@workspace/ui/components/user-settings-dialog/notification-fields"
 import { usePushedPages } from "@workspace/ui/hooks/use-pushed-pages"
@@ -47,6 +51,8 @@ const APPLICATIONS_TAB = "mcp"
 const ACCOUNT_TAB = "account"
 
 const APPEARANCE_TAB = "appearance"
+
+const DIAGNOSTICS_TAB = "diagnostics"
 
 const NO_APPLICATIONS: ApplicationsSection = {
 	servers: [],
@@ -70,6 +76,7 @@ type UserSettingsDialogProps = {
 	skillFiles?: PluginSkillFiles
 	applications?: ApplicationsSection
 	account?: AccountPanelProps
+	diagnostics?: DiagnosticsFieldsProps
 	tab?: string
 	history: PluginHistory
 	className?: string
@@ -90,6 +97,7 @@ const UserSettingsDialog = ({
 	skillFiles,
 	applications,
 	account,
+	diagnostics,
 	tab,
 	history,
 	className,
@@ -185,6 +193,14 @@ const UserSettingsDialog = ({
 						label={t("rail.history")}
 						value={HISTORY_TAB}
 					/>
+					{diagnostics ? (
+						<SettingsRailItem
+							icon="Tool"
+							iconsOnly={iconsOnly}
+							label={t("rail.diagnostics")}
+							value={DIAGNOSTICS_TAB}
+						/>
+					) : null}
 				</>
 			)}
 			sessions={{
@@ -234,6 +250,12 @@ const UserSettingsDialog = ({
 			<SettingsScrollingPanel isFlush value={HISTORY_TAB}>
 				{historySession.panel}
 			</SettingsScrollingPanel>
+
+			{diagnostics ? (
+				<SettingsScrollingPanel value={DIAGNOSTICS_TAB}>
+					<DiagnosticsFields {...diagnostics} />
+				</SettingsScrollingPanel>
+			) : null}
 		</SettingsDialogShell>
 	)
 }

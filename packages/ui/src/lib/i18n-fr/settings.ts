@@ -13,6 +13,7 @@ const settings = {
 		skills: "Compétences",
 		applications: "Applications",
 		history: "Historique",
+		diagnostics: "Diagnostic",
 		danger: "Zone sensible",
 	},
 	account: {
@@ -106,6 +107,20 @@ const settings = {
 				dark: "Sombre",
 				system: "Système",
 			},
+		},
+	},
+	diagnostics: {
+		label: "Diagnostic",
+		description:
+			"Copier le diagnostic place dans le presse-papiers les détails de l’ordinateur où Kiroshi tourne et ceux de l’agent, prêts pour un signalement de bug.",
+		copy: "Copier le diagnostic",
+		reveal: "Afficher le journal",
+		clear: {
+			action: "Vider le journal",
+			title: "Vider le journal ?",
+			description:
+				"Chaque ligne que Kiroshi a écrite dans son journal sur cet ordinateur est supprimée. C’est irréversible.",
+			failed: "Impossible de vider le journal. Réessayez.",
 		},
 	},
 	space: {
