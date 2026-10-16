@@ -165,6 +165,7 @@ fn reopening_a_closed_mission_brings_it_back_to_working_and_tells_the_front() {
 		changes.try_iter().collect::<Vec<_>>(),
 		vec![json!({
 			"missionId": mission_id,
+			"spaceId": "personal",
 			"state": "working",
 			"stateSeq": reopened["stateSeq"],
 			"isAgentRunning": false,
