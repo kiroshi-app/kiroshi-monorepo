@@ -154,7 +154,7 @@ const soloThreadQueryOf = (
 type RosterQuery = ReturnType<typeof rosterQueryOf>
 type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
 
-export type ConversationStyle = Partial<Pick<Conversation, "icon" | "color">>
+type ConversationStyle = Partial<Pick<Conversation, "icon" | "color">>
 
 export type RosterController = {
 	getState: () => RosterState

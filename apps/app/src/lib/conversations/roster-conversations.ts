@@ -144,7 +144,7 @@ export const toConversationSettingsValue = (
 	instructions: conversation.instructions,
 })
 
-export type ConversationLook = {
+type ConversationLook = {
 	icon?: ConversationIconName
 	color?: AvatarBlot
 }
