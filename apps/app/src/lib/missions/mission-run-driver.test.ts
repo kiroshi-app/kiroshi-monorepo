@@ -1664,4 +1664,18 @@ describe("startMissionRunDriver raising a failure", () => {
 		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
 		expect(linesNaming("the mission could not be read")).toHaveLength(1)
 	})
+
+	it("logs nothing, raises nothing and leaves no timer for a failure raised after it stopped", async () => {
+		harness.missions.refuse(harness.mission.id)
+		harness.missions.stallDetail()
+		await harness.enter("waiting_bot")
+
+		harness.stop()
+		harness.missions.releaseDetail()
+		await settled()
+
+		expect(vi.getTimerCount()).toBe(0)
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(linesNaming("the mission could not be read")).toEqual([])
+	})
 })

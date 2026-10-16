@@ -122,7 +122,7 @@ export const createMissionRunBook = ({
 		isStopped: () => isStopped,
 		stop: () => {
 			isStopped = true
-			failures.flushAll()
+			failures.stop()
 		},
 		raiseFailure: failures.raise,
 		isBusy,
