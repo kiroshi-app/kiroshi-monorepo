@@ -91,6 +91,15 @@ pub enum MemberCallError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeaveCallError {
+	Revoked,
+	UnknownMembership,
+	OwnerNotRemovable,
+	Refused(String),
+	Unreachable(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InvitationCallError {
 	Revoked,
 	Offline(String),
@@ -411,16 +420,18 @@ impl Cloud {
 		&self,
 		bearer: &str,
 		instance_id: &str,
-	) -> Result<(), MemberCallError> {
+	) -> Result<(), LeaveCallError> {
 		let membership = self.at(&format!("{INSTANCES_PATH}/{instance_id}/membership"));
 		let answered = self
 			.answered(|client| client.delete(membership).bearer_auth(bearer))
 			.await
-			.map_err(MemberCallError::Unreachable)?;
-		if answered.status() == StatusCode::NOT_FOUND {
-			return Err(MemberCallError::UnknownMember);
+			.map_err(LeaveCallError::Unreachable)?;
+		match answered.status() {
+			StatusCode::UNAUTHORIZED => Err(LeaveCallError::Revoked),
+			StatusCode::NOT_FOUND => Err(LeaveCallError::UnknownMembership),
+			StatusCode::CONFLICT => Err(leave_conflicted(answered).await),
+			_ => successful(answered).map(drop).map_err(LeaveCallError::Refused),
 		}
-		member_call_answered(answered).await.map(drop)
 	}
 
 	pub async fn instances(&self, bearer: &str) -> Result<Vec<CloudInstance>, InstancesError> {
@@ -566,6 +577,21 @@ async fn already_joined(answered: reqwest::Response) -> InvitationCallError {
 			refusal.error.code
 		)),
 		Err(error) => InvitationCallError::Unreachable(format!(
+			"the cloud answered a conflict with an unreadable body: {error}"
+		)),
+	}
+}
+
+async fn leave_conflicted(answered: reqwest::Response) -> LeaveCallError {
+	match answered.json::<Refusal>().await {
+		Ok(refusal) if refusal.error.code == "OWNER_NOT_REMOVABLE" => {
+			LeaveCallError::OwnerNotRemovable
+		}
+		Ok(refusal) => LeaveCallError::Refused(format!(
+			"the cloud answered a conflict coded {}",
+			refusal.error.code
+		)),
+		Err(error) => LeaveCallError::Refused(format!(
 			"the cloud answered a conflict with an unreadable body: {error}"
 		)),
 	}

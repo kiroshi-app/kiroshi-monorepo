@@ -330,7 +330,7 @@ mod tests {
 
 		let refused = removal_refused(&api_url, &dir).await;
 
-		let JoinedSpaceError::RelayUnreachable { detail } = refused else {
+		let JoinedSpaceError::RelayRefused { detail } = refused else {
 			panic!("the refusal is {refused:?}");
 		};
 		assert!(detail.contains("500"), "{detail}");

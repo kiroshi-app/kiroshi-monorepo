@@ -15,7 +15,7 @@ use super::commands::{announce_change, announce_reconnection, announce_removal, 
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::proxy;
-use crate::account::cloud::{Cloud, CloudInstance, InstancesError, MemberCallError};
+use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
@@ -378,18 +378,16 @@ async fn membership_ended<R: Runtime>(
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
 	};
 	match cloud.leave_instance(&bearer, instance_id).await {
-		Ok(()) | Err(MemberCallError::UnknownMember) => Ok(()),
-		Err(MemberCallError::OwnerNotRemovable) => Err(JoinedSpaceError::OwnerNotRemovable),
-		Err(MemberCallError::Revoked) => {
+		Ok(()) | Err(LeaveCallError::UnknownMembership) => Ok(()),
+		Err(LeaveCallError::OwnerNotRemovable) => Err(JoinedSpaceError::OwnerNotRemovable),
+		Err(LeaveCallError::Revoked) => {
 			session::revoked(app, &bearer);
 			Err(JoinedSpaceError::SessionRevoked)
 		}
-		Err(MemberCallError::Unreachable(detail)) => {
+		Err(LeaveCallError::Refused(detail)) => Err(JoinedSpaceError::RelayRefused { detail }),
+		Err(LeaveCallError::Unreachable(detail)) => {
 			Err(JoinedSpaceError::RelayUnreachable { detail })
 		}
-		Err(refused) => Err(JoinedSpaceError::RelayUnreachable {
-			detail: format!("the cloud refused to end the membership: {refused:?}"),
-		}),
 	}
 }
 

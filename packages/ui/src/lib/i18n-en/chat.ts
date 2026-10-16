@@ -309,6 +309,11 @@ const chat = {
 					description:
 						"Kiroshi couldn’t reach its cloud. Check your network, then try again.",
 				},
+				relayRefused: {
+					title: "Couldn’t leave this space",
+					description:
+						"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
+				},
 				unexpected: {
 					title: "Something went wrong with this space",
 					description:

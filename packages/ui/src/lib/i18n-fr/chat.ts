@@ -326,6 +326,11 @@ const chat = {
 					description:
 						"Kiroshi n’a pas pu joindre son cloud. Vérifiez votre réseau, puis réessayez.",
 				},
+				relayRefused: {
+					title: "Impossible de quitter cet espace",
+					description:
+						"Le cloud de Kiroshi n’a pas confirmé votre départ. Réessayez dans un instant.",
+				},
 				unexpected: {
 					title: "Un problème est survenu avec cet espace",
 					description:

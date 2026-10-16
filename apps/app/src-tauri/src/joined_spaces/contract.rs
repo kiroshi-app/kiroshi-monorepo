@@ -97,6 +97,10 @@ pub enum JoinedSpaceError {
 	RelayUnreachable {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	RelayRefused {
+		detail: String,
+	},
 }
 
 impl From<DatabaseError> for JoinedSpaceError {
