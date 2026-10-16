@@ -560,7 +560,7 @@ mod tests {
 	}
 
 	fn read_frames(scope: &RuntimeScope, frames: &[Frame]) -> Reading {
-		let (relay, heard) = broadcast::channel(frames.len().max(1));
+		let (relay, heard) = broadcast::channel(frames.len());
 		for frame in frames {
 			relay.send(frame.clone()).expect("the reader is subscribed");
 		}
