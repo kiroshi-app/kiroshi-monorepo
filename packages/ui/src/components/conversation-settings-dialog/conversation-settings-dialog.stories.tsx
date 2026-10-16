@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
+import conversationIcons from "@workspace/shared/conversation-icons.json"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
@@ -14,14 +15,20 @@ import {
 	ConversationSettingsDialog,
 	type ConversationSettingsDialogProps,
 } from "@workspace/ui/components/conversation-settings-dialog"
+import { chat } from "@workspace/ui/lib/i18n-en/chat"
 
 const SEATED = CONVERSATION_BOTS.slice(0, 3)
+
+const ICON_LABELS: Record<string, string> =
+	chat.conversationSettings.icon.option
 
 const DialogHost = (props: ConversationSettingsDialogProps) => {
 	const [open, setOpen] = useState(props.open)
 	const [value, setValue] = useState(props.value)
 	const [participants, setParticipants] = useState(props.participants)
 	const [leadId, setLeadId] = useState(props.leadId)
+	const [icon, setIcon] = useState(props.icon)
+	const [color, setColor] = useState(props.color)
 
 	const dismiss = (id: string) => {
 		const left = participants.filter((bot) => bot.id !== id)
@@ -35,12 +42,22 @@ const DialogHost = (props: ConversationSettingsDialogProps) => {
 	return (
 		<ConversationSettingsDialog
 			{...props}
+			color={color}
+			icon={icon}
 			leadId={leadId}
 			onClose={() => {
 				setOpen(false)
 				props.onClose()
 			}}
+			onColorChange={(next) => {
+				setColor(next)
+				props.onColorChange?.(next)
+			}}
 			onDismiss={dismiss}
+			onIconChange={(next) => {
+				setIcon(next)
+				props.onIconChange?.(next)
+			}}
 			onLeadChange={(id) => {
 				setLeadId(id)
 				props.onLeadChange(id)
@@ -71,6 +88,18 @@ const openTab = async (
 	return dialog
 }
 
+const pictogramIn = (scope: Element) =>
+	scope.querySelector('[data-slot="conversation-subject-icon-pictogram"]')
+		?.innerHTML
+
+const headerMarkIn = (dialog: HTMLElement) => {
+	const mark = dialog.querySelector(
+		'header [data-slot="conversation-subject-icon"]',
+	)
+	if (!mark) throw new Error("The header drew no conversation icon")
+	return mark
+}
+
 const meta = preview.meta({
 	title: "Settings/Conversation/ConversationSettingsDialog",
 	component: ConversationSettingsDialog,
@@ -97,6 +126,8 @@ const meta = preview.meta({
 		onLeadChange: fn(),
 		onDismiss: fn(),
 		onDelete: fn(),
+		onIconChange: fn(),
+		onColorChange: fn(),
 	},
 	render: (args) => <DialogHost {...args} />,
 })
@@ -294,5 +325,118 @@ export const ParticipantsWithTitles = meta.story({
 		await expect(firstTitle?.compareDocumentPosition(lead as Node)).toBe(
 			Node.DOCUMENT_POSITION_FOLLOWING,
 		)
+	},
+})
+
+export const NothingSet = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation with no icon and no colour, on the general pane. Check that the header mark and the icon field both draw the neutral message cell, that the field reads `Message`, and that the fields run Name, Icon, Colour with `No colour` the current colour cell.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const inside = within(dialog)
+
+		const name = inside.getByRole("textbox", { name: "Name" })
+		const trigger = inside.getByRole("button", { name: "Icon Message" })
+		const none = inside.getByRole("radio", { name: "No colour" })
+
+		await expect(trigger).toHaveTextContent("Message")
+		await expect(none).toBeChecked()
+		await expect(name.compareDocumentPosition(trigger)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(trigger.compareDocumentPosition(none)).toBe(
+			Node.DOCUMENT_POSITION_FOLLOWING,
+		)
+		await expect(pictogramIn(headerMarkIn(dialog))).toBe(pictogramIn(trigger))
+		await expect(headerMarkIn(dialog).getBoundingClientRect().width).toBe(24)
+	},
+})
+
+export const IconPopoverOpen = meta.story({
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The icon popover over the general pane. Check that it opens below the field, start-aligned, with the 24 icons six to a row in the shared order and the current one marked; that the arrow keys move between icons without choosing one; that Escape closes it and hands focus back to the field; and that choosing an icon reports it, closes the popover and redraws both the header and the field.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const trigger = within(dialog).getByRole("button", { name: "Icon Message" })
+
+		trigger.focus()
+		await userEvent.keyboard("{Enter}")
+		await expect(trigger).toHaveAttribute("aria-expanded", "true")
+		const marked = await screen.findByRole("button", {
+			name: "Message",
+			pressed: true,
+		})
+		const group = marked.parentElement as HTMLElement
+		const icons = within(group).getAllByRole("button")
+
+		await expect(icons.map((icon) => icon.getAttribute("aria-label"))).toEqual(
+			conversationIcons.map((id) => ICON_LABELS[id]),
+		)
+		await waitFor(() => expect(marked).toHaveFocus())
+		await userEvent.keyboard("{ArrowRight}")
+		await expect(icons[1]).toHaveFocus()
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(icons[7]).toHaveFocus()
+		await expect(args.onIconChange).not.toHaveBeenCalled()
+
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(group).not.toBeInTheDocument())
+		await expect(trigger).toHaveFocus()
+
+		await userEvent.click(trigger)
+		const rocket = await screen.findByRole("button", { name: "Rocket" })
+		const rocketPictogram = pictogramIn(rocket)
+		await userEvent.click(rocket)
+
+		await expect(args.onIconChange).toHaveBeenCalledWith("Rocket")
+		await waitFor(() => expect(rocket).not.toBeInTheDocument())
+		const chosen = within(dialog).getByRole("button", { name: "Icon Rocket" })
+		await expect(pictogramIn(chosen)).toBe(rocketPictogram)
+		await expect(pictogramIn(headerMarkIn(dialog))).toBe(rocketPictogram)
+
+		await userEvent.click(chosen)
+		await expect(
+			await screen.findByRole("button", { name: "Rocket", pressed: true }),
+		).toBeVisible()
+	},
+})
+
+export const IconAndColourSet = meta.story({
+	args: { icon: "Rocket", color: "blue" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A conversation with its icon and colour chosen. Check that the header and the field draw the rocket in the blue pair, that every colour cell previews the rocket in its own tint with `No colour` last in the neutral pair, and that choosing a cell reports its tint, or nothing for `No colour`.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const dialog = await dialogIn()
+		const inside = within(dialog)
+
+		await expect(
+			inside.getByRole("button", { name: "Icon Rocket" }),
+		).toBeVisible()
+		await expect(inside.getByRole("radio", { name: "Blue" })).toBeChecked()
+
+		await userEvent.click(inside.getByRole("radio", { name: "No colour" }))
+		await expect(args.onColorChange).toHaveBeenLastCalledWith(undefined)
+
+		await userEvent.click(inside.getByRole("radio", { name: "Blue" }))
+		await expect(args.onColorChange).toHaveBeenLastCalledWith("blue")
+		await expect(inside.getByRole("radio", { name: "Blue" })).toBeChecked()
 	},
 })

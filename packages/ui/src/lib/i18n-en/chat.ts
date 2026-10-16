@@ -1,3 +1,5 @@
+import type { ConversationIconName } from "@workspace/ui/components/icons"
+
 const chat = {
 	emptyState: {
 		ready: {
@@ -394,6 +396,35 @@ const chat = {
 		name: {
 			label: "Name",
 			placeholder: "What this conversation is about",
+		},
+		icon: {
+			label: "Icon",
+			option: {
+				MessageSquare: "Message",
+				Bug: "Bug",
+				Rocket: "Rocket",
+				ShieldKey: "Shield",
+				Pen: "Pen",
+				FileText: "File",
+				Download: "Download",
+				Laptop: "Laptop",
+				Smartphone: "Phone",
+				BookOpen: "Book",
+				CreditCard: "Card",
+				Megaphone: "Megaphone",
+				PanelLeft: "Panel",
+				Code: "Code",
+				Terminal: "Terminal",
+				Server: "Server",
+				Globe: "Globe",
+				Palette: "Palette",
+				Lightbulb: "Lightbulb",
+				ChartLine: "Chart",
+				Calendar: "Calendar",
+				Users: "People",
+				Flag: "Flag",
+				Sparkles: "Sparkles",
+			} as const satisfies Record<ConversationIconName, string>,
 		},
 		instructions: {
 			label: "Instructions",
