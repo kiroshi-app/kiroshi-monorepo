@@ -34,9 +34,14 @@ const startUnlessAlreadyOpen = (
 	}
 }
 
+const canReplaceInvoke = (internals: TauriInternals) =>
+	Object.getOwnPropertyDescriptor(internals, "invoke")?.writable !== false
+
 const installTally = () => {
-	if (hasTauriInternals()) {
-		countLocalInvokes(Reflect.get(window, "__TAURI_INTERNALS__"))
+	if (!hasTauriInternals()) return
+	const internals: TauriInternals = Reflect.get(window, "__TAURI_INTERNALS__")
+	if (canReplaceInvoke(internals)) {
+		countLocalInvokes(internals)
 	}
 }
 
