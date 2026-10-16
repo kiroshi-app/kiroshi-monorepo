@@ -94,6 +94,20 @@ const common = {
 			releaseNotes: "Lire les notes de version complètes dans votre navigateur",
 		},
 	},
+	whatsNew: {
+		firstLaunch: {
+			eyebrow: "Nouveautés de la version {{version}}",
+			legend: "Aussi dans cette mise à jour",
+			dismiss: "Compris",
+		},
+		fromAbout: {
+			eyebrow: "Version {{version}}",
+			legend: "Aussi dans cette version",
+			dismiss: "Fermer",
+		},
+		beta: "Bêta",
+		releaseNotes: "Notes de version",
+	},
 } as const
 
 export { common }

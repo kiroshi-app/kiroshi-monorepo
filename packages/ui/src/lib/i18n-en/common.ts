@@ -89,6 +89,20 @@ const common = {
 			releaseNotes: "Read the full release notes in your browser",
 		},
 	},
+	whatsNew: {
+		firstLaunch: {
+			eyebrow: "New in {{version}}",
+			legend: "Also in this update",
+			dismiss: "Got it",
+		},
+		fromAbout: {
+			eyebrow: "Version {{version}}",
+			legend: "Also in this version",
+			dismiss: "Close",
+		},
+		beta: "Beta",
+		releaseNotes: "Release notes",
+	},
 } as const
 
 export { common }
