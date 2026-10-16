@@ -4,7 +4,7 @@ use std::mem;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures_util::future::join_all;
-use tauri::{AppHandle, Listener, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 use tokio::sync::{mpsc, watch};
 
 use super::commands::announce_conversation;
@@ -25,7 +25,7 @@ use crate::db::repositories::conversations::Seat;
 use crate::db::repositories::runtime_context::{Handover, ParticipantKey};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
-	database, detail_of, ends_the_session, listen, managed, NO_AGENT, NO_DATABASE,
+	database, detail_of, ends_the_session, listen, managed, RelayReader, NO_AGENT, NO_DATABASE,
 };
 
 type Running = Arc<Mutex<HashMap<String, RunningTurn>>>;
@@ -174,9 +174,7 @@ pub(crate) async fn run<R: Runtime>(
 	}
 	let (events, heard) = mpsc::unbounded_channel();
 	let conversation_id = message.conversation_id.clone();
-	let label = format!("host turn {}", message.turn_id);
-	let listening =
-		listen(&app, label, move |scope| scope.conversation_id == conversation_id, events);
+	let mut listening = listen(&app, move |scope| scope.conversation_id == conversation_id, events);
 	let first = summoned
 		.into_iter()
 		.map(|bot_id| Summons { bot_id, prompt_id: message.id.clone() })
@@ -190,8 +188,8 @@ pub(crate) async fn run<R: Runtime>(
 	};
 	let speaking = turn.wave(first).await;
 	tauri::async_runtime::spawn(async move {
-		turn.drive(held, speaking, heard).await;
-		turn.app.unlisten(listening);
+		turn.drive(held, speaking, heard, &mut listening).await;
+		drop(listening);
 	});
 }
 
@@ -258,6 +256,7 @@ impl<R: Runtime> HostTurn<R> {
 		held: HeldTurn,
 		mut speaking: Vec<Speaker>,
 		mut heard: mpsc::UnboundedReceiver<ScopedEvent>,
+		reading: &mut RelayReader,
 	) {
 		let mut stop = self.stopped.clone();
 		let mut waiting = Vec::new();
@@ -270,7 +269,7 @@ impl<R: Runtime> HostTurn<R> {
 				}
 			};
 			let Some(scoped) = heard_event else {
-				return log::warn!("{} stopped hearing the sessions it runs", self.label());
+				return self.lost(reading, speaking, waiting).await;
 			};
 			let Some(at) =
 				speaking.iter().position(|speaker| scoped.scope.as_ref() == Some(&speaker.scope))
@@ -293,6 +292,13 @@ impl<R: Runtime> HostTurn<R> {
 				speaking = self.wave(mem::take(&mut waiting)).await;
 			}
 		}
+	}
+
+	async fn lost(&self, reading: &mut RelayReader, speaking: Vec<Speaker>, waiting: Vec<Summons>) {
+		let failure = reading.failure().await;
+		log::error!("{} stopped hearing the sessions it runs: {failure}", self.label());
+		join_all(speaking.into_iter().map(|speaker| self.shut_down(speaker.scope))).await;
+		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 	}
 
 	async fn wave(&self, summoned: Vec<Summons>) -> Vec<Speaker> {
@@ -534,16 +540,20 @@ mod tests {
 
 	use serde_json::{json, Value};
 	use tauri::test::mock_builder;
-	use tauri::Manager;
+	use tauri::{Listener, Manager};
 
 	use super::*;
-	use crate::agent::contract::TurnEnded;
+	use tokio::sync::broadcast;
+
+	use crate::agent::contract::{ConnectionState, TurnEnded};
 	use crate::conversations::contract::UPDATED_EVENT;
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
 	use crate::db::repositories::messages::NewTurn;
+	use crate::events::{self, Frame};
+	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
 
 	fn a_speaker() -> Speaker {
@@ -583,6 +593,58 @@ mod tests {
 		);
 		assert_eq!(a_speaker().end_after(&session_ended), Some(SpeakerEnd::HandsOver));
 		assert_eq!(a_speaker().end_after(&still_speaking), None);
+	}
+
+	fn a_scope(bot_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: format!("session-of-{bot_id}"),
+			epoch: 1,
+		}
+	}
+
+	fn shut_down_scope(frame: &str) -> Option<RuntimeScope> {
+		let framed: Value = serde_json::from_str(frame).expect("the frame is JSON");
+		let scoped: ScopedEvent =
+			serde_json::from_value(framed["payload"].clone()).expect("an agent event");
+		let is_shut_down =
+			scoped.event == AgentEvent::ConnectionChanged { state: ConnectionState::Checking };
+		scoped.scope.filter(|_| is_shut_down)
+	}
+
+	#[tokio::test]
+	async fn a_group_turn_whose_reader_lags_shuts_down_every_speaker() {
+		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
+		app.manage(AgentState::default());
+		let mut announced = events::subscribed(app.handle());
+		let (relay, lagging) = broadcast::channel(1);
+		for _ in 0..3 {
+			relay.send(Frame::from(r#"{"event":"other","payload":null}"#)).expect("subscribed");
+		}
+		let (events, heard) = mpsc::unbounded_channel();
+		let mut reading = read(lagging, |_| true, events);
+		let turns = HostTurns::default();
+		let held = turns.hold("c1", "t1").expect("the turn is held");
+		let host_turn = HostTurn {
+			app: app.handle().clone(),
+			conversation_id: "c1".to_owned(),
+			turn_id: "t1".to_owned(),
+			prompt_id: "p1".to_owned(),
+			stopped: held.stopped.clone(),
+		};
+		let speakers = vec![a_scope("b1"), a_scope("b2")];
+		let speaking =
+			speakers.iter().map(|scope| Speaker { scope: scope.clone(), written: Vec::new() });
+
+		host_turn.drive(held, speaking.collect(), heard, &mut reading).await;
+
+		let mut shut_down = Vec::new();
+		while let Ok(frame) = announced.try_recv() {
+			shut_down.extend(shut_down_scope(&frame));
+		}
+		shut_down.sort_by(|one, other| one.bot_id.cmp(&other.bot_id));
+		assert_eq!(shut_down, speakers);
 	}
 
 	#[tokio::test]
