@@ -31,12 +31,12 @@ const performLogCommand = async (command: LogCommand) => {
 export const diagnosticsActions: DiagnosticsFieldsProps = {
 	onDiagnosticsCopy: () => {
 		copyDiagnostics().catch(() =>
-			reportFailure(i18n.t("common:notice.copyFailed")),
+			reportFailure(i18n.t("settings:diagnostics.copyFailed")),
 		)
 	},
 	onLogReveal: () => {
 		performLogCommand(commands.logReveal).catch(() =>
-			reportFailure(i18n.t("settings:diagnostics.reveal")),
+			reportFailure(i18n.t("settings:diagnostics.revealFailed")),
 		)
 	},
 	onLogClear: () =>

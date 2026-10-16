@@ -112,7 +112,7 @@ it("names the copy that failed when diagnostics cannot be read", async () => {
 	diagnosticsActions.onDiagnosticsCopy()
 
 	await vi.waitFor(() =>
-		expect(raisedTitles()).toEqual([i18n.t("common:notice.copyFailed")]),
+		expect(raisedTitles()).toEqual([i18n.t("settings:diagnostics.copyFailed")]),
 	)
 })
 
@@ -122,7 +122,7 @@ it("names the copy that failed when the clipboard refuses it", async () => {
 	diagnosticsActions.onDiagnosticsCopy()
 
 	await vi.waitFor(() =>
-		expect(raisedTitles()).toEqual([i18n.t("common:notice.copyFailed")]),
+		expect(raisedTitles()).toEqual([i18n.t("settings:diagnostics.copyFailed")]),
 	)
 })
 
@@ -139,7 +139,9 @@ it("names the reveal that failed when the log cannot be revealed", async () => {
 	diagnosticsActions.onLogReveal()
 
 	await vi.waitFor(() =>
-		expect(raisedTitles()).toEqual([i18n.t("settings:diagnostics.reveal")]),
+		expect(raisedTitles()).toEqual([
+			i18n.t("settings:diagnostics.revealFailed"),
+		]),
 	)
 })
 
