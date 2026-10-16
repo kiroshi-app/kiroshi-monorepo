@@ -31,7 +31,7 @@ pub async fn release_notes<R: Runtime>(
 	version: String,
 ) -> Result<ReleaseNotes, ReleaseNotesError> {
 	let cache = app.path().app_data_dir().ok().map(|dir| dir.join(release_notes::DIR_NAME));
-	release_notes::release_notes(cache.as_deref(), &version).await
+	release_notes::release_notes(cache.as_deref(), &version, release_notes::fetched).await
 }
 
 #[tauri::command]

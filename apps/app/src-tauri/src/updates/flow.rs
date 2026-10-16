@@ -44,9 +44,6 @@ impl Updates {
 
 	fn claim_install(&self) -> Result<Update, UpdateState> {
 		let mut held = self.held();
-		if !matches!(held.state, UpdateState::Available { .. }) {
-			return Err(held.state.clone());
-		}
 		let Some(update) = held.offered.take() else {
 			return Err(held.state.clone());
 		};

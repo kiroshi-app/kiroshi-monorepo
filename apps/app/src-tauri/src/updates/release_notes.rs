@@ -40,14 +40,7 @@ fn notes_of(version: &str, release: Release) -> ReleaseNotes {
 	ReleaseNotes { version: version.to_owned(), body: release.body, visual_url }
 }
 
-pub async fn release_notes(
-	cache: Option<&Path>,
-	version: &str,
-) -> Result<ReleaseNotes, ReleaseNotesError> {
-	remembered(cache, version, fetched).await
-}
-
-async fn remembered<Fetch, Fetching>(
+pub async fn release_notes<Fetch, Fetching>(
 	cache: Option<&Path>,
 	version: &str,
 	fetch: Fetch,
@@ -99,7 +92,7 @@ fn kept(file: &Path, notes: &ReleaseNotes) {
 	}
 }
 
-async fn fetched(version: String) -> Result<ReleaseNotes, String> {
+pub async fn fetched(version: String) -> Result<ReleaseNotes, String> {
 	installed_tls_provider();
 	let client = Client::builder()
 		.timeout(TIMEOUT)
@@ -173,9 +166,9 @@ mod tests {
 	async fn notes_answered_once_are_answered_from_the_cache_when_the_fetch_fails() {
 		let dir = temp_dir();
 
-		let first = remembered(Some(&dir), "0.25.0", |_| async { Ok(the_notes()) }).await;
+		let first = release_notes(Some(&dir), "0.25.0", |_| async { Ok(the_notes()) }).await;
 		let second =
-			remembered(Some(&dir), "0.25.0", |_| async { Err("offline".to_owned()) }).await;
+			release_notes(Some(&dir), "0.25.0", |_| async { Err("offline".to_owned()) }).await;
 
 		assert_eq!(first, Ok(the_notes()));
 		assert_eq!(second, Ok(the_notes()));
@@ -186,7 +179,7 @@ mod tests {
 		let dir = temp_dir();
 
 		let answered =
-			remembered(Some(&dir), "0.25.0", |_| async { Err("offline".to_owned()) }).await;
+			release_notes(Some(&dir), "0.25.0", |_| async { Err("offline".to_owned()) }).await;
 
 		assert_eq!(
 			answered,
@@ -201,7 +194,7 @@ mod tests {
 	async fn a_version_that_is_not_semver_never_reaches_the_cache_or_the_network() {
 		let dir = temp_dir();
 
-		let answered = remembered(Some(&dir), "../escape", |_| async { Ok(the_notes()) }).await;
+		let answered = release_notes(Some(&dir), "../escape", |_| async { Ok(the_notes()) }).await;
 
 		assert_eq!(
 			answered,
