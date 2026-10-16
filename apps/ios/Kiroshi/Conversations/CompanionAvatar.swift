@@ -106,7 +106,7 @@ struct FlatHexagon: View {
         }
     }
 
-    private static let ground: CompanionDrawing? = try? CompanionAvatarEngine.shared?.drawing(
+    static let ground: CompanionDrawing? = try? CompanionAvatarEngine.shared?.drawing(
         name: CompanionAvatarArt.placeholderName, tint: nil, pose: .idle, time: 0, theme: .light)
 }
 

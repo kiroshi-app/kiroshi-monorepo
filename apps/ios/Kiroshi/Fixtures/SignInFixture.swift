@@ -90,6 +90,7 @@
         case workingList = "2.6"
         case conversations
         case conversationsLive = "conversations-live"
+        case conversationIcons = "conversation-icons"
         case pinned
         case pinRefused = "pin-refused"
         case thread = "3.1"
@@ -183,7 +184,8 @@
             case .missions, .missionThread, .missionWorking, .slowMission, .noMissions,
                 .missionsHostOffline:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+            case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
+                .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
@@ -205,7 +207,8 @@
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert,
                 .deleteAccount, .deleteAccountFailed, .deletingAccount:
                 true
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+            case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
+                .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
@@ -275,7 +278,8 @@
         @MainActor fileprivate var relay: RelayEnvironment {
             let online: Set<Space.ID> = [CloudFixture.studioId, CloudFixture.homeLabId]
             switch self {
-            case .home, .homeMenu, .conversations, .conversationsLive, .thread, .threadHostOffline,
+            case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
+                .threadHostOffline,
                 .swipedThread, .noCompanion,
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
@@ -382,7 +386,7 @@
             case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
                 .agreement, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
-                .conversationsLive, .thread, .threadHostOffline, .swipedThread,
+                .conversationsLive, .conversationIcons, .thread, .threadHostOffline, .swipedThread,
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .workingAfterReply, .conversationsFailed,
                 .conversationsRecovering,

@@ -15,6 +15,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
     ]
 
     static let hiveCounters: Set<String> = ["+3"]
+    static let pileCounters: Set<String> = ["+2", "+3"]
 
     override func setUp() async throws {
         continueAfterFailure = true
@@ -136,6 +137,30 @@ final class ConversationsAccessibilityTests: XCTestCase {
             app.staticTexts["The changelog is merged, I’m tagging 0.42 next."]
                 .waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["Release crew"].exists)
+    }
+
+    func testSubjectIconsAndBotPilesPassTheAuditAndEachRowReadsItsMembers() throws {
+        let app = launch("conversation-icons")
+        let relay = row("Relay audit: session tokens", in: app)
+        XCTAssertTrue(relay.waitForExistence(timeout: 10))
+        XCTAssertEqual(relay.value as? String, "Pico, Juniper, and Otto")
+        XCTAssertEqual(
+            row("Storybook baseline drift", in: app).value as? String,
+            "Shoto, Juniper, Atlas, Pico, and Mira")
+        let tabBar = app.tabBars.firstMatch.frame
+        let navigationBar = app.navigationBars.firstMatch.frame
+
+        try audit(app) { issue in
+            let label = issue.element?.label ?? ""
+            let isUnderTheTabBar = issue.element.map { $0.frame.intersects(tabBar) } ?? false
+            let isInTheNavigationBar =
+                issue.element.map { navigationBar.contains($0.frame) } ?? false
+            return switch issue.auditType {
+            case .contrast: Self.pileCounters.contains(label) || isUnderTheTabBar
+            case .dynamicType: isInTheNavigationBar
+            default: false
+            }
+        }
     }
 
     func testAnOpenGroupFollowsItsRenameThenGoesBackToTheListWhenDeleted() {

@@ -62,10 +62,17 @@ struct GroupConversation: Decodable, Hashable, Sendable {
     let leadId: Companion.ID?
     let memberNames: String
     let createdAt: Int
+    let icon: ConversationIcon
+    let color: CompanionTint?
 
-    init(id: String, title: String, createdAt: Int, participants: [Participant]) {
+    init(
+        id: String, title: String, createdAt: Int, participants: [Participant],
+        icon: ConversationIcon = .messageSquare, color: CompanionTint? = nil
+    ) {
         self.id = id
         self.createdAt = createdAt
+        self.icon = icon
+        self.color = color
         let present = participants.filter(\.isPresent)
         members = present.map(\.companion)
         authors = participants.map(\.companion)
@@ -86,7 +93,10 @@ struct GroupConversation: Decodable, Hashable, Sendable {
             id: container.decode(String.self, forKey: .id),
             title: container.decode(String.self, forKey: .title),
             createdAt: container.decode(Int.self, forKey: .createdAt),
-            participants: container.decode([Participant].self, forKey: .participants))
+            participants: container.decode([Participant].self, forKey: .participants),
+            icon: ConversationIcon(
+                named: try? container.decodeIfPresent(String.self, forKey: .icon)),
+            color: try? container.decodeIfPresent(CompanionTint.self, forKey: .color))
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -94,5 +104,7 @@ struct GroupConversation: Decodable, Hashable, Sendable {
         case title
         case createdAt
         case participants
+        case icon
+        case color
     }
 }
