@@ -14,6 +14,7 @@ struct ConversationRow: View {
                     nameLayout {
                         Text(summary.subject.title)
                             .font(.headline)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                             .fixedSize(horizontal: false, vertical: true)
                         if let role = summary.role {
                             RoleBadge(role: role)
@@ -26,11 +27,21 @@ struct ConversationRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if let preview = summary.preview {
-                    Text(preview)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                if summary.preview != nil || pile != nil {
+                    HStack(spacing: 8) {
+                        if let preview = summary.preview {
+                            Text(preview)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Spacer(minLength: 0)
+                        }
+                        if let pile {
+                            ConversationBotPile(members: pile, working: summary.workingCompanionIds)
+                        }
+                    }
                 }
             }
             .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
@@ -49,8 +60,13 @@ struct ConversationRow: View {
         case .companion(let companion):
             CompanionAvatar(companion, size: .row, isWorking: summary.isWorking)
         case .group(let group):
-            GroupAvatar(group: group, size: .row, working: summary.workingCompanionIds)
+            ConversationIconCell(icon: group.icon, color: group.color)
         }
+    }
+
+    private var pile: [Companion]? {
+        guard case .group(let group) = summary.subject, !group.members.isEmpty else { return nil }
+        return group.members
     }
 
     private var memberNames: String {
@@ -83,3 +99,20 @@ struct RoleBadge: View {
             .background(Color(.systemGray5), in: .rect(cornerRadius: 6))
     }
 }
+
+#if DEBUG
+    #Preview("Row close-up · light") {
+        List(ConversationsFixture.closeUpRows) { ConversationRow(summary: $0) }
+            .listStyle(.plain)
+    }
+
+    #Preview("Row close-up · dark") {
+        List(ConversationsFixture.closeUpRows) { ConversationRow(summary: $0) }
+            .listStyle(.plain)
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Conversations · subject icons") {
+        SignInRootView(model: .fixture(.conversationIcons))
+    }
+#endif
