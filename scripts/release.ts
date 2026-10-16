@@ -11,7 +11,8 @@ const FILES = {
 	bunLock: `${ROOT}bun.lock`,
 }
 
-const SEMVER = /^\d+\.\d+\.\d+$/
+const SEMVER = /^\d+\.\d+\.\d+(-beta\.\d+)?$/
+const BETA_SUFFIX = /-beta\.\d+$/
 const BUMP_TYPES = ["patch", "minor", "major"] as const
 
 type BumpType = (typeof BUMP_TYPES)[number]
@@ -20,18 +21,7 @@ const isBumpType = (value: string): value is BumpType =>
 	(BUMP_TYPES as readonly string[]).includes(value)
 
 const usage =
-	"Usage: bun run release <patch|minor|major|X.Y.Z> [--notes <path>] [--dry-run]"
-
-const readNotes = async (path: string) => {
-	const file = Bun.file(path)
-	if (!(await file.exists())) throw new Error(`Notes file not found: ${path}`)
-	const notes = (await file.text()).trim()
-	if (!notes) throw new Error(`Notes file is empty: ${path}`)
-	return notes
-}
-
-const buildTagMessage = (tag: string, notes?: string) =>
-	notes ? `Release ${tag}\n\n${notes}` : `Release ${tag}`
+	"Usage: bun run release <patch|minor|major|X.Y.Z|X.Y.Z-beta.N> [--dry-run]"
 
 const readCurrentVersion = async () => {
 	const text = await Bun.file(FILES.tauriConf).text()
@@ -40,10 +30,14 @@ const readCurrentVersion = async () => {
 	return match[1]
 }
 
-const computeNext = (current: string, input: string) => {
+export const computeNext = (current: string, input: string) => {
 	if (SEMVER.test(input)) return input
 	if (!isBumpType(input))
 		throw new Error(`Invalid argument "${input}".\n${usage}`)
+	if (BETA_SUFFIX.test(current))
+		throw new Error(
+			`Current version ${current} is a beta, ${input} can't bump it: pass the explicit version, X.Y.Z or X.Y.Z-beta.N.`,
+		)
 	const [major, minor, patch] = current.split(".").map(Number)
 	if (input === "major") return `${major + 1}.0.0`
 	if (input === "minor") return `${major}.${minor + 1}.0`
@@ -67,26 +61,21 @@ const writeFile = async (path: string, transform: (text: string) => string) => {
 const run = async () => {
 	const args = Bun.argv.slice(2)
 	const dryRun = args.includes("--dry-run")
-	const notesIndex = args.indexOf("--notes")
-	const notesValueIndex = notesIndex === -1 ? -1 : notesIndex + 1
-	const notesPath = args[notesValueIndex]
-	const input = args.find(
-		(arg, index) => !arg.startsWith("--") && index !== notesValueIndex,
+	const input = args.find((arg) => !arg.startsWith("--"))
+	const hasUnknownFlag = args.some(
+		(arg) => arg.startsWith("--") && arg !== "--dry-run",
 	)
 
-	if (!input || (notesIndex !== -1 && !notesPath)) {
+	if (!input || hasUnknownFlag) {
 		console.error(usage)
 		process.exit(1)
 	}
-
-	const notes = notesPath ? await readNotes(notesPath) : undefined
 
 	const current = await readCurrentVersion()
 	const next = computeNext(current, input)
 	const tag = `v${next}`
 
 	console.log(`Release: ${current} -> ${next} (${tag})`)
-	if (notesPath) console.log(`Release notes: ${notesPath}`)
 
 	if (dryRun) {
 		console.log("Dry run — no files changed, no git operations.")
@@ -111,7 +100,7 @@ const run = async () => {
 
 	await $`git add ${FILES.tauriConf} ${FILES.appPkg} ${FILES.cargoToml} ${FILES.cargoLock} ${FILES.systemPlugin} ${FILES.bunLock}`
 	await $`git commit -m ${`chore(app): release ${tag}`}`
-	await $`git tag -a ${tag} --cleanup=verbatim -m ${buildTagMessage(tag, notes)}`
+	await $`git tag -a ${tag} --cleanup=verbatim -m ${`Release ${tag}`}`
 	await $`git push -u origin ${branch}`
 	await $`git push origin ${tag}`
 
@@ -122,4 +111,4 @@ const run = async () => {
 	console.log(`Pushed ${tag}. CI: ${repoUrl}/actions`)
 }
 
-await run()
+if (import.meta.main) await run()
