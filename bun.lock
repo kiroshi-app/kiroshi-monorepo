@@ -41,7 +41,7 @@
         "@types/react-dom": "^19.3.0",
         "@vitejs/plugin-react": "^6.1.2",
         "happy-dom": "^20.14.6",
-        "vite": "^8.3.4",
+        "vite": "catalog:",
         "vitest": "5.0.3",
       },
     },
@@ -72,7 +72,7 @@
         "@types/react-dom": "^19",
         "@vitejs/plugin-react": "^6",
         "happy-dom": "^20.14.6",
-        "vite": "^8",
+        "vite": "catalog:",
         "vitest": "5.0.3",
       },
     },
@@ -123,7 +123,7 @@
         "storybook": "10.6.1",
         "storybook-addon-pseudo-states": "10.6.1",
         "tailwindcss": "^4",
-        "vite": "^8.0.0",
+        "vite": "catalog:",
         "vitest": "5.0.3",
       },
     },
@@ -133,6 +133,9 @@
   },
   "overrides": {
     "katex": "^0.19.0",
+  },
+  "catalog": {
+    "vite": "^8.3.4",
   },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],
