@@ -49,21 +49,17 @@ type AboutFieldsProps = {
 
 type StatusTone = "muted" | "success" | "accent" | "destructive"
 
-const ICON_TONE_CLASS: Record<StatusTone, string> = {
+const TONE_CLASS: Record<StatusTone, string> = {
 	muted: "text-muted-foreground",
 	success: "text-success",
 	accent: "text-sidebar-primary",
 	destructive: "text-destructive",
 }
 
-const TEXT_TONE_CLASS: Record<StatusTone, string> = {
-	...ICON_TONE_CLASS,
-	success: "text-muted-foreground",
-}
-
 type StatusLine = {
 	icon: Icon
 	tone: StatusTone
+	isEmphasized?: boolean
 	text: string
 	hint?: string
 }
@@ -91,6 +87,7 @@ const statusLineOf = (
 			return {
 				icon: Icons.ArrowUp,
 				tone: "accent",
+				isEmphasized: true,
 				text: t("about.status.available", { version: update.version }),
 			}
 		case "downloading":
@@ -104,6 +101,7 @@ const statusLineOf = (
 			return {
 				icon: Icons.Retry,
 				tone: "accent",
+				isEmphasized: true,
 				text: t(isHeld ? "about.status.readyHeld" : "about.status.ready", {
 					version: update.version,
 				}),
@@ -116,6 +114,7 @@ const statusLineOf = (
 			return {
 				icon: Icons.Alert,
 				tone: "destructive",
+				isEmphasized: true,
 				text: t("about.status.failed", { version: update.version }),
 				hint: t("about.status.failedHint"),
 			}
@@ -140,7 +139,10 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 			role="status"
 		>
 			<span
-				className={cn("flex items-start gap-1.5", TEXT_TONE_CLASS[line.tone])}
+				className={cn(
+					"flex items-start gap-1.5",
+					line.isEmphasized && cn("font-medium", TONE_CLASS[line.tone]),
+				)}
 			>
 				<StatusIcon
 					aria-hidden="true"
@@ -148,7 +150,7 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 						"pointer-events-none mt-0.5 size-3 shrink-0",
 						StatusIcon === Icons.Loading &&
 							"animate-spin motion-reduce:animate-none",
-						ICON_TONE_CLASS[line.tone],
+						TONE_CLASS[line.tone],
 					)}
 				/>
 				{line.text}
@@ -159,6 +161,8 @@ const UpdateStatus = ({ update, id }: UpdateStatusProps) => {
 }
 
 const ACTION_CLASS = "rounded-lg"
+
+const DESTRUCTIVE_ACTION_CLASS = cn(ACTION_CLASS, "dark:bg-destructive/14")
 
 const OUTLINE_ACTION_CLASS = cn(
 	ACTION_CLASS,
@@ -227,7 +231,7 @@ const UpdateAction = ({
 		case "failed":
 			return (
 				<Button
-					className={ACTION_CLASS}
+					className={DESTRUCTIVE_ACTION_CLASS}
 					onClick={onDownload}
 					size="sm"
 					variant="destructive"

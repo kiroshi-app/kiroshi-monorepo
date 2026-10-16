@@ -41,8 +41,27 @@ const lightPanelIn = (canvasElement: HTMLElement) => {
 	return within(panels[0])
 }
 
+const expectHeadline = async (
+	canvasElement: HTMLElement,
+	isEmphasized: boolean,
+) => {
+	const status = slotIn(canvasElement, "about-update-status")
+	const headline = status.firstElementChild as HTMLElement
+	const icon = headline.querySelector("svg") as SVGElement
+	const { fontWeight, color } = getComputedStyle(headline)
+	await expect(fontWeight).toBe(isEmphasized ? "500" : "400")
+	await expect(color).toBe(getComputedStyle(isEmphasized ? icon : status).color)
+	return { headline, icon }
+}
+
+const renderAbout = (args: AboutFieldsProps) => (
+	<div className="w-[36rem]">
+		<AboutHost {...args} />
+	</div>
+)
+
 const UP_TO_DATE: AboutFieldsProps = {
-	version: "0.23.2",
+	version: "0.23.3",
 	channel: "stable",
 	update: { status: "upToDate", checkedAt: Date.now() - 2 * MINUTE },
 	showsWhatsNew: true,
@@ -59,11 +78,7 @@ const meta = preview.meta({
 	title: "Settings/User/AboutFields",
 	component: AboutFields,
 	globals: { theme_layout: "side-by-side" },
-	render: (args) => (
-		<div className="w-[36rem]">
-			<AboutHost {...args} />
-		</div>
-	),
+	render: renderAbout,
 	parameters: {
 		layout: "fullscreen",
 		docs: {
@@ -77,6 +92,12 @@ const meta = preview.meta({
 })
 
 export const UpToDate = meta.story({
+	loaders: [() => ({ checkedAt: Date.now() - 2 * MINUTE })],
+	render: (args, { loaded }) =>
+		renderAbout({
+			...args,
+			update: { status: "upToDate", checkedAt: loaded.checkedAt },
+		}),
 	parameters: {
 		docs: {
 			description: {
@@ -90,6 +111,8 @@ export const UpToDate = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"Up to date · Checked 2 minutes ago",
 		)
+		await expectHeadline(canvasElement, false)
+		await expect(panel.getByText("Kiroshi 0.23.3")).toBeVisible()
 
 		await userEvent.click(
 			panel.getByRole("button", { name: "Check for updates" }),
@@ -102,7 +125,7 @@ export const UpToDate = meta.story({
 		await expect(args.onShowsWhatsNewChange).toHaveBeenCalledWith(false)
 
 		await userEvent.click(
-			panel.getByRole("button", { name: "What’s new in 0.23.2" }),
+			panel.getByRole("button", { name: "What’s new in 0.23.3" }),
 		)
 		await expect(args.onWhatsNew).toHaveBeenCalledOnce()
 
@@ -130,6 +153,7 @@ export const Checking = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"Checking for updates…",
 		)
+		await expectHeadline(canvasElement, false)
 
 		const check = panel.getByRole("button", { name: "Check for updates" })
 		await expect(check).toBeDisabled()
@@ -161,6 +185,7 @@ export const UpdateAvailable = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"Kiroshi 0.24.0 is available.",
 		)
+		await expectHeadline(canvasElement, true)
 
 		await userEvent.click(
 			panel.getByRole("button", { name: "Download update" }),
@@ -185,6 +210,11 @@ export const Downloading = meta.story({
 			name: "Downloading 0.24.0. You can keep working meanwhile.",
 		})
 		await expect(progress).toHaveAttribute("aria-valuenow", "42")
+
+		const { headline, icon } = await expectHeadline(canvasElement, false)
+		await expect(getComputedStyle(icon).color).not.toBe(
+			getComputedStyle(headline).color,
+		)
 
 		const percentage = within(progress).getByText("42%")
 		await expect(getComputedStyle(percentage).fontVariantNumeric).toBe(
@@ -211,6 +241,7 @@ export const ReadyToRestart = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"0.24.0 is ready. Restart Kiroshi to finish updating.",
 		)
+		await expectHeadline(canvasElement, true)
 
 		await userEvent.click(panel.getByRole("button", { name: "Restart now" }))
 		await expect(args.onRestart).toHaveBeenCalledOnce()
@@ -234,6 +265,7 @@ export const CompanionsStillRunning = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"0.24.0 is ready.2 companions are still running. Stop them to restart.",
 		)
+		await expectHeadline(canvasElement, true)
 
 		const restart = panel.getByRole("button", { name: "Restart now" })
 		await expect(restart).toBeDisabled()
@@ -258,8 +290,15 @@ export const DownloadFailed = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"Couldn’t download 0.24.0.Check your connection, then download it again.",
 		)
+		await expectHeadline(canvasElement, true)
 
-		await userEvent.click(panel.getByRole("button", { name: "Download again" }))
+		const [light, dark] = slotsIn(canvasElement, "about-fields").map((theme) =>
+			within(theme).getByRole("button", { name: "Download again" }),
+		)
+		await expect(getComputedStyle(light).backgroundColor).toMatch(/0\.1\)$/)
+		await expect(getComputedStyle(dark).backgroundColor).toMatch(/0\.14\)$/)
+
+		await userEvent.click(light)
 		await expect(args.onDownload).toHaveBeenCalledOnce()
 	},
 })
@@ -282,6 +321,7 @@ export const BetaAvailable = meta.story({
 		await expect(panel.getByRole("status")).toHaveTextContent(
 			"Kiroshi 0.25.0-beta.1 is available.",
 		)
+		await expectHeadline(canvasElement, true)
 
 		const channel = panel.getByRole("radiogroup", { name: "Release channel" })
 		await expect(

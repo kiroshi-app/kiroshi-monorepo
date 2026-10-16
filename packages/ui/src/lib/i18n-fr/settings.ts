@@ -128,7 +128,7 @@ const settings = {
 		updates: {
 			label: "Mises à jour",
 		},
-		version: "Version {{version}}",
+		version: "Kiroshi {{version}}",
 		status: {
 			upToDate: "À jour · Vérifié {{when}}",
 			checking: "Recherche de mises à jour…",

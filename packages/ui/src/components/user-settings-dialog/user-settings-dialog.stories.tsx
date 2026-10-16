@@ -596,7 +596,7 @@ export const Diagnostics = meta.story({
 })
 
 const aboutIn = (update: AboutFieldsProps["update"]): AboutFieldsProps => ({
-	version: "0.23.2",
+	version: "0.23.3",
 	channel: "stable",
 	update,
 	showsWhatsNew: true,
@@ -620,7 +620,7 @@ export const About = meta.story({
 		docs: {
 			description: {
 				story:
-					"The dialog opened on About while an update waits. Check that About is the last item of the rail, wearing its filled icon and a primary dot after its label, and that the panel reads the update the dot announces. Pick `AboutWithoutAnUpdate` for the rail with nothing to announce.",
+					"The dialog opened on About while an update waits. Check that About is the last item of the rail, wearing its filled icon and a primary dot at its trailing edge, and that the panel reads the update the dot announces. Pick `AboutWithoutAnUpdate` for the rail with nothing to announce.",
 			},
 		},
 	},
@@ -632,6 +632,12 @@ export const About = meta.story({
 		await expect(about).toHaveAccessibleName("About")
 		await expect(about).toHaveAttribute("aria-selected", "true")
 		await expect(slotsIn(about, ABOUT_RAIL_INDICATOR)).toHaveLength(1)
+
+		const dot = slotIn(about, ABOUT_RAIL_INDICATOR).getBoundingClientRect()
+		const item = about.getBoundingClientRect()
+		await expect(Math.round(item.right - dot.right)).toBe(
+			Number.parseFloat(getComputedStyle(about).paddingInlineEnd),
+		)
 
 		const panel = await within(dialog).findByRole("tabpanel", {
 			name: "About",
