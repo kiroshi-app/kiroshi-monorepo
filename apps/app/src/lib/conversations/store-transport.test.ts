@@ -161,6 +161,8 @@ const WRITES: WriteCase[] = [
 				title: "Launch",
 				instructions: "Stay short.",
 				sectionId: null,
+				icon: "Message",
+				color: "cyan",
 			}),
 		call: [
 			"conversation_update",
@@ -169,6 +171,8 @@ const WRITES: WriteCase[] = [
 				title: "Launch",
 				instructions: "Stay short.",
 				sectionId: null,
+				icon: "Message",
+				color: "cyan",
 			},
 		],
 	},

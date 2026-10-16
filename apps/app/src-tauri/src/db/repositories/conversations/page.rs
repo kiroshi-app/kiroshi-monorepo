@@ -63,6 +63,7 @@ fn active_rows() -> String {
 		"SELECT conversations.id AS id, conversations.space_id AS space_id,
 			conversations.section_id AS section_id, {PIN_POSITION} AS pin_position,
 			conversations.title AS title, conversations.instructions AS instructions,
+			conversations.icon AS icon, conversations.color AS color,
 			conversations.created_at AS created_at, conversations.updated_at AS updated_at,
 			conversations.last_activity_at AS last_activity_at, solo.bot_id AS solo_bot_id,
 			word.content AS word_text, word.created_at AS word_at,

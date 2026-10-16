@@ -655,5 +655,34 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "conversation_describe",
+		"description": "Give a room you hold a seat in an icon or a colour, once the person asks for one or once its topic calls for one.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"conversation": {
+					"type": "string",
+					"description": "The id of the room you hold a seat in to describe."
+				},
+				"icon": {
+					"description": "The name of a Keyline icon drawn beside the title of the room, such as Message, left out to keep the one it wears.",
+					"type": "string"
+				},
+				"colour": {
+					"description": "One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears.",
+					"type": [
+						"string",
+						"null"
+					]
+				}
+			},
+			"required": [
+				"conversation"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

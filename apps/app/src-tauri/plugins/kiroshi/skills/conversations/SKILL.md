@@ -8,7 +8,7 @@ metadata:
 ---
 
 A room is a conversation of this space with a subject of its own and a seat for each
-companion the subject belongs to. You hold four tools for them, on the `kiroshi` server.
+companion the subject belongs to. You hold five tools for them, on the `kiroshi` server.
 
 - `conversation_open`, a new room led by you, answering the id of that room, its title and
   the companions seated in it.
@@ -18,6 +18,11 @@ companion the subject belongs to. You hold four tools for them, on the `kiroshi`
   companion's id, its name, and whether it was already seated.
 - `conversation_attach`, one image file shown to the person, here or in a room you hold a
   seat in, answering the path it was stored under and the id of that conversation.
+- `conversation_describe`, the icon or the colour of a room you hold a seat in, answering
+  the id of that room, its title, its icon and its colour. The icon is the name of a Keyline
+  icon, such as Message. The colour is one of red, yellow, green, cyan, blue, purple, pink or
+  orange, or null to give the room back its default colour. A field left out keeps what the
+  room wears.
 
 `companion_invite` seats a companion in this conversation, and in another room of the
 caller when a room id is passed.

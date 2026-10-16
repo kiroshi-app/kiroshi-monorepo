@@ -4009,6 +4009,8 @@ impl Guest {
 			"Renamed".to_owned(),
 			String::new(),
 			None,
+			None,
+			None,
 		)
 		.await
 		.expect("the conversation is updated")

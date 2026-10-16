@@ -68,6 +68,15 @@ pub struct ConversationSaid {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConversationDescribed {
+	pub conversation_id: String,
+	pub title: String,
+	pub icon: Option<String>,
+	pub colour: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationAttached {
 	pub path: String,
 	pub conversation_id: String,
@@ -101,6 +110,13 @@ pub enum CompanionError {
 	EmptyCompanionField,
 	EmptyTitleField,
 	EmptyMessageField,
+	EmptyIconField,
+	EmptyDescription,
+	#[serde(rename_all = "camelCase")]
+	UnknownColour {
+		colour: String,
+		accepted: Vec<String>,
+	},
 	#[serde(rename_all = "camelCase")]
 	AmbiguousCompanion {
 		companion: String,
@@ -165,6 +181,7 @@ impl From<TranscriptStoreError> for CompanionError {
 			}
 			TranscriptStoreError::Storage { failure } => CompanionError::Storage { failure },
 			TranscriptStoreError::NamelessBot => CompanionError::NamelessCompanion,
+			TranscriptStoreError::BlankIcon => CompanionError::EmptyIconField,
 			other => CompanionError::Unexpected { detail: format!("{other:?}") },
 		}
 	}

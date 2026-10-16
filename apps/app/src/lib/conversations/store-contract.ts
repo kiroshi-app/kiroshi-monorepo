@@ -41,6 +41,8 @@ export type {
 	TranscriptStoreError,
 } from "@/lib/bindings"
 
+import type { AvatarBlot } from "@/lib/bindings"
+
 export type ConversationDraft = {
 	spaceId: string
 	sectionId: string | null
@@ -52,4 +54,6 @@ export type ConversationEdit = {
 	title: string
 	instructions: string
 	sectionId: string | null
+	icon: string | null
+	color: AvatarBlot | null
 }

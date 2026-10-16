@@ -50,6 +50,8 @@ const A_ROOM: Conversation = {
 	pinPosition: null,
 	title: "Roadmap of the other space",
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: 1,
 	updatedAt: 1,
 	participants: [

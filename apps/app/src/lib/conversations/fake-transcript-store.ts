@@ -846,6 +846,8 @@ export const createFakeTranscriptStore = (
 			pinPosition: bot.pinPosition,
 			title: "",
 			instructions: "",
+			icon: null,
+			color: null,
 			createdAt: 0,
 			updatedAt: 0,
 			participants: [],
@@ -1495,6 +1497,8 @@ export const createFakeTranscriptStore = (
 				pinPosition: draft.sectionId === null ? null : nextPin(draft.spaceId),
 				title: draft.title,
 				instructions: "",
+				icon: null,
+				color: null,
 				createdAt: mintedConversations,
 				updatedAt: mintedConversations,
 			}

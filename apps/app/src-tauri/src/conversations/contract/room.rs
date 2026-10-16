@@ -49,6 +49,8 @@ pub struct Conversation {
 	pub pin_position: Option<i64>,
 	pub title: String,
 	pub instructions: String,
+	pub icon: Option<String>,
+	pub color: Option<AvatarBlot>,
 	pub created_at: i64,
 	pub updated_at: i64,
 	pub participants: Vec<Participant>,
@@ -63,6 +65,8 @@ impl Conversation {
 			pin_position: room.pin_position,
 			title: room.title,
 			instructions: room.instructions,
+			icon: room.icon,
+			color: room.color.map(Into::into),
 			created_at: room.created_at,
 			updated_at: room.updated_at,
 			participants: room
@@ -311,6 +315,8 @@ mod tests {
 					pin_position: None,
 					title: "Launch".into(),
 					instructions: String::new(),
+					icon: Some("Message".into()),
+					color: Some(conversations::AvatarBlot::Cyan),
 					created_at: 1,
 					updated_at: 2,
 					seats: vec![
@@ -345,6 +351,8 @@ mod tests {
 				"pinPosition": null,
 				"title": "Launch",
 				"instructions": "",
+				"icon": "Message",
+				"color": "cyan",
 				"createdAt": 1,
 				"updatedAt": 2,
 				"participants": [

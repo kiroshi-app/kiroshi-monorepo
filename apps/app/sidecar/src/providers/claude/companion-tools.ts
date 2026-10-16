@@ -63,6 +63,17 @@ const CAPTION = "A line read right above the image."
 const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
 
+const DESCRIBE =
+	"Give a room you hold a seat in an icon or a colour, once the person asks for one or once its topic calls for one."
+
+const DESCRIBED_ROOM = "The id of the room you hold a seat in to describe."
+
+const ICON =
+	"The name of a Keyline icon drawn beside the title of the room, such as Message, left out to keep the one it wears."
+
+const COLOUR =
+	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears."
+
 type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
@@ -87,6 +98,12 @@ const ATTACHED: ToolInput = {
 	path: z.string().describe(IMAGE_PATH),
 	caption: z.string().optional().describe(CAPTION),
 	conversation: z.string().optional().describe(ATTACH_ROOM),
+}
+
+const DESCRIBED: ToolInput = {
+	conversation: z.string().describe(DESCRIBED_ROOM),
+	icon: z.string().optional().describe(ICON),
+	colour: z.string().nullable().optional().describe(COLOUR),
 }
 
 const DRAFTED: ToolInput = {
@@ -158,5 +175,8 @@ export const companionTools = (
 	),
 	tool("conversation_attach", ATTACH, ATTACHED, (input) =>
 		attached(session, scope, input as AttachInput),
+	),
+	tool("conversation_describe", DESCRIBE, DESCRIBED, (input) =>
+		asked(session, "conversationDescribe", input),
 	),
 ]

@@ -89,6 +89,10 @@ pub async fn conversation_local_ids(
 
 #[tauri::command]
 #[specta::specta]
+#[expect(
+	clippy::too_many_arguments,
+	reason = "each field is a flat argument of the shipped conversation_update wire shape"
+)]
 pub async fn conversation_update<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
@@ -96,8 +100,10 @@ pub async fn conversation_update<R: Runtime>(
 	title: String,
 	instructions: String,
 	section_id: Option<String>,
+	icon: Option<String>,
+	color: Option<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let edit = ConversationEdit { title, instructions, section_id };
+	let edit = ConversationEdit { title, instructions, section_id, icon, color };
 	let database = ready(&state)?;
 	let updated = database.conversations().update_conversation(conversation_id, edit).await?;
 	let updated = drawn(&app, updated);
