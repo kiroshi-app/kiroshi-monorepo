@@ -150,9 +150,6 @@ const writeIdsOf = (args?: InvokeArgs): string[] =>
 			)
 		: []
 
-const openedWriteIdsOf = (command: string, args?: InvokeArgs): string[] =>
-	COMMANDS_OPENING_A_WRITE.has(command) ? writeIdsOf(args) : []
-
 const leaveRefusalToCaller = () => undefined
 
 export const createConversationProvenance = () => {
@@ -193,7 +190,9 @@ export const createConversationProvenance = () => {
 		command: string,
 		args?: InvokeArgs,
 	) => {
-		learn(source, openedWriteIdsOf(command, args))
+		if (COMMANDS_OPENING_A_WRITE.has(command)) {
+			learn(source, writeIdsOf(args))
+		}
 	}
 
 	const record = <T>(
