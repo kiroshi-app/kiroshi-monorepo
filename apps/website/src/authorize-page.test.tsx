@@ -37,7 +37,11 @@ type Reply = { status?: number; body?: unknown }
 
 type RelayRoutes = Record<string, Reply | Error | Promise<Reply>>
 
-type RelayCall = { route: string; authorization: string | null }
+type RelayCall = {
+	route: string
+	authorization: string | null
+	credentials: RequestCredentials | undefined
+}
 
 type Router = ReturnType<typeof createSiteRouter>
 
@@ -79,6 +83,7 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 	calls.push({
 		route,
 		authorization: new Headers(init?.headers).get("Authorization"),
+		credentials: init?.credentials,
 	})
 	const reply = await routes[route]
 	if (!reply) throw new Error(`The fake relay has no ${route}`)
@@ -87,6 +92,11 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 }
 
 const callsTo = (route: string) => calls.filter((call) => call.route === route)
+
+const expectBearerWithoutCredentials = (route: string) => {
+	expect(callsTo(route)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+	expect(callsTo(route)[0]?.credentials).toBeUndefined()
+}
 
 const renderSite = (path: string) => {
 	const router = createSiteRouter(
@@ -152,9 +162,8 @@ const expectCancelledCard = async () => {
 }
 
 const expectBrowserSignedOut = () => {
-	expect(callsTo(SIGN_OUT)).toEqual([
-		{ route: SIGN_OUT, authorization: `Bearer ${BEARER}` },
-	])
+	expect(callsTo(SIGN_OUT)).toHaveLength(1)
+	expectBearerWithoutCredentials(SIGN_OUT)
 	expect(localStorage.getItem(BEARER_KEY)).toBeNull()
 }
 
@@ -226,6 +235,7 @@ describe("Continue as", () => {
 		expect(screen.getByText(AUTHORIZE_COPY.proBadge)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.continueAs("Ada"))).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.anotherAccount)).toBeTruthy()
+		expectBearerWithoutCredentials(ME)
 		expectNoAppLink()
 	})
 
@@ -268,7 +278,7 @@ describe("the authorization page", () => {
 		expect(screen.getByText(DEVICE_CAPTION)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.approve)).toBeTruthy()
 		expect(button(AUTHORIZE_COPY.cancel)).toBeTruthy()
-		expect(callsTo(READ_REQUEST)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(READ_REQUEST)
 		expectNoAppLink()
 	})
 
@@ -285,7 +295,7 @@ describe("the authorization page", () => {
 		expect(
 			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
 		).toBeTruthy()
-		expect(callsTo(APPROVE)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(APPROVE)
 		await waitFor(expectBrowserSignedOut)
 		expect(calls.map((call) => call.route).slice(-1)).toEqual([SIGN_OUT])
 		expect(screen.queryByRole("alert")).toBeNull()
@@ -320,6 +330,7 @@ describe("the authorization page", () => {
 
 		await expectCancelledCard()
 		expect(callsTo(CANCEL)).toHaveLength(1)
+		expectBearerWithoutCredentials(CANCEL)
 		expect(callsTo(APPROVE)).toHaveLength(0)
 		expect(callsTo(SIGN_OUT)).toHaveLength(0)
 		expect(router.state.location.href).toBe(AUTHORIZE_PATH)
@@ -376,7 +387,7 @@ describe("the done page", () => {
 		expect(
 			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
 		).toBeTruthy()
-		expect(callsTo(READ_REQUEST)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(READ_REQUEST)
 	})
 
 	it("says the computer is signed in and the tab can be closed, without the word Mac", async () => {

@@ -39,7 +39,11 @@ type Reply = { status?: number; body?: unknown }
 
 type RelayRoutes = Record<string, Reply | Error | Promise<Reply>>
 
-type RelayCall = { route: string; authorization: string | null }
+type RelayCall = {
+	route: string
+	authorization: string | null
+	credentials: RequestCredentials | undefined
+}
 
 type Router = ReturnType<typeof createSiteRouter>
 
@@ -123,6 +127,7 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 	calls.push({
 		route,
 		authorization: new Headers(init?.headers).get("Authorization"),
+		credentials: init?.credentials,
 	})
 	const reply = await routes[route]
 	if (!reply) throw new Error(`The fake relay has no ${route}`)
@@ -131,6 +136,11 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 }
 
 const callsTo = (route: string) => calls.filter((call) => call.route === route)
+
+const expectBearerWithoutCredentials = (route: string) => {
+	expect(callsTo(route)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+	expect(callsTo(route)[0]?.credentials).toBeUndefined()
+}
 
 const renderSite = (path: string) => {
 	const router = createSiteRouter(
@@ -288,6 +298,7 @@ describe("the account", () => {
 		expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(NAME)
 		expect(screen.getByText(EMAIL)).toBeTruthy()
 		expect(screen.getByText("AR")).toBeTruthy()
+		expectBearerWithoutCredentials(ME)
 	})
 
 	it("names the plan and devices sections", async () => {
@@ -326,6 +337,7 @@ describe("the signed-in devices", () => {
 		await openAccount()
 
 		expect(rowNames()).toEqual([MINI, MAC, IPHONE, ACCOUNT_COPY.unknownDevice])
+		expectBearerWithoutCredentials(SESSIONS)
 	})
 
 	it("captions a session seen under a minute ago Active now", async () => {
@@ -425,7 +437,7 @@ describe("Sign out on a row", () => {
 		await pressAndConfirm(rowSignOut(MAC))
 
 		await waitFor(() => expect(callsTo(signOutOf("mac"))).toHaveLength(1))
-		expect(callsTo(signOutOf("mac"))[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(signOutOf("mac"))
 		expect(rowOf(MAC)).toBeTruthy()
 		reply.resolve(NO_CONTENT)
 		await waitFor(() => expect(screen.queryByText(MAC)).toBeNull())
@@ -496,9 +508,7 @@ describe("Sign out everywhere", () => {
 
 		await leftSignedOut(router)
 		expect(callsTo(SIGN_OUT_EVERYWHERE)).toHaveLength(1)
-		expect(callsTo(SIGN_OUT_EVERYWHERE)[0]?.authorization).toBe(
-			`Bearer ${BEARER}`,
-		)
+		expectBearerWithoutCredentials(SIGN_OUT_EVERYWHERE)
 	})
 
 	it("disables itself while pending, then shows what failed with a Retry", async () => {
@@ -559,7 +569,7 @@ describe("the account Sign out", () => {
 		expect(screen.queryByRole("alertdialog")).toBeNull()
 		await leftSignedOut(router)
 		expect(callsTo(SIGN_OUT)).toHaveLength(1)
-		expect(callsTo(SIGN_OUT)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(SIGN_OUT)
 		expect(callsTo(SIGN_OUT_EVERYWHERE)).toHaveLength(0)
 	})
 
