@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
+use serde::Deserialize;
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::db::repositories::conversations::{AvatarBlot, Bot};
@@ -74,9 +75,17 @@ const DIRECTORIES_KEY: &str = "additionalDirectories";
 const ALLOW_KEY: &str = "allow";
 const ASK_KEY: &str = "ask";
 const DENY_KEY: &str = "deny";
-const AUTO_MODE: &str = "auto";
 
-pub const PERMISSION_MODES: [&str; 5] = ["default", "acceptEdits", "plan", AUTO_MODE, "dontAsk"];
+#[derive(Deserialize)]
+struct PermissionModes {
+	modes: Vec<String>,
+	fallback: String,
+}
+
+static PERMISSION_MODES: LazyLock<PermissionModes> = LazyLock::new(|| {
+	serde_json::from_str(include_str!("../../../../packages/shared/permission-modes.json"))
+		.expect("the embedded permission modes hold a modes list and a fallback")
+});
 
 const MCP_NAME: &str = ".mcp.json";
 const SERVERS_KEY: &str = "mcpServers";

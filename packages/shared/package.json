@@ -1,0 +1,14 @@
+{
+	"name": "@workspace/shared",
+	"version": "0.0.1",
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/shoto290/kiroshi-monorepo.git"
+	},
+	"type": "module",
+	"exports": {
+		"./permission-modes.json": "./permission-modes.json"
+	}
+}

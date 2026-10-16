@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import permissionModes from "@workspace/shared/permission-modes.json"
+
 import { readBotSettings } from "./bot-settings"
 
 import type { SessionRequest } from "../provider"
@@ -161,5 +163,20 @@ describe("readBotSettings", () => {
 			expect(rejection).toBeTruthy()
 		}
 		expect(missing.options.settings?.outputStyle).toBe("Concise")
+	})
+
+	it("refuses bypass in the shared modes and holds their fallback among them", () => {
+		expect(permissionModes.modes).not.toContain("bypassPermissions")
+		expect(permissionModes.modes).toContain(permissionModes.fallback)
+	})
+
+	it("opens under every mode the shared file lists", () => {
+		for (const mode of permissionModes.modes) {
+			const { options } = readBotSettings(
+				declaring({ permissions: { defaultMode: mode } }),
+			)
+
+			expect<string>(options.permissionMode).toBe(mode)
+		}
 	})
 })

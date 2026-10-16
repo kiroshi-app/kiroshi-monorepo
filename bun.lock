@@ -51,6 +51,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.296",
         "@modelcontextprotocol/sdk": "^1.32.1",
+        "@workspace/shared": "workspace:*",
         "zod": "^4.6.5",
       },
     },
@@ -75,6 +76,10 @@
         "vite": "^8",
         "vitest": "5.0.3",
       },
+    },
+    "packages/shared": {
+      "name": "@workspace/shared",
+      "version": "0.0.1",
     },
     "packages/ui": {
       "name": "@workspace/ui",
@@ -825,6 +830,8 @@
     "@vitest/utils": ["@vitest/utils@5.0.3", "", { "dependencies": { "@vitest/pretty-format": "5.0.3", "convert-source-map": "^2.0.0", "tinyrainbow": "^3.1.1" } }, "sha512-77fDTZv8eu1CzlIfgPU2yrl5MXSUaUAOvgdZEeVm3X3WIxUubIX2SforqS6176lT32HCF6uBVMYVqfHxw7o6eg=="],
 
     "@webcontainer/env": ["@webcontainer/env@1.1.1", "", {}, "sha512-6aN99yL695Hi9SuIk1oC88l9o0gmxL1nGWWQ/kNy81HigJ0FoaoTXpytCj6ItzgyCEwA9kF1wixsTuv5cjsgng=="],
+
+    "@workspace/shared": ["@workspace/shared@workspace:packages/shared"],
 
     "@workspace/ui": ["@workspace/ui@workspace:packages/ui"],
 
