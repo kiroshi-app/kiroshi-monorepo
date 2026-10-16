@@ -303,6 +303,29 @@ const chat = {
 					description:
 						"La connexion à son hôte n’a pas pu s’ouvrir. Vérifiez votre réseau, puis réessayez.",
 				},
+				ownerNotRemovable: {
+					title: "Cet espace vous appartient",
+					description: "Le propriétaire d’un espace ne peut pas le quitter.",
+				},
+				needsSignIn: {
+					title: "Impossible de quitter cet espace",
+					description: "Vous êtes déconnecté. Connectez-vous, puis réessayez.",
+				},
+				sessionRevoked: {
+					title: "Impossible de quitter cet espace",
+					description:
+						"Votre session a pris fin. Reconnectez-vous, puis réessayez.",
+				},
+				sessionStore: {
+					title: "Impossible de quitter cet espace",
+					description:
+						"Kiroshi n’a pas pu lire votre connexion sur cet ordinateur. Redémarrez Kiroshi, puis réessayez.",
+				},
+				relayUnreachable: {
+					title: "Impossible de quitter cet espace",
+					description:
+						"Kiroshi n’a pas pu joindre son cloud. Vérifiez votre réseau, puis réessayez.",
+				},
 				unexpected: {
 					title: "Un problème est survenu avec cet espace",
 					description:

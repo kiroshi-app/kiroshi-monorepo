@@ -407,6 +407,22 @@ impl Cloud {
 		member_call_answered(answered).await.map(drop)
 	}
 
+	pub async fn leave_instance(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+	) -> Result<(), MemberCallError> {
+		let membership = self.at(&format!("{INSTANCES_PATH}/{instance_id}/membership"));
+		let answered = self
+			.answered(|client| client.delete(membership).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		if answered.status() == StatusCode::NOT_FOUND {
+			return Err(MemberCallError::UnknownMember);
+		}
+		member_call_answered(answered).await.map(drop)
+	}
+
 	pub async fn instances(&self, bearer: &str) -> Result<Vec<CloudInstance>, InstancesError> {
 		let answered = self
 			.answered(|client| client.get(self.at(INSTANCES_PATH)).bearer_auth(bearer))

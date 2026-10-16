@@ -287,6 +287,28 @@ const chat = {
 					description:
 						"The connection to its host couldn’t be opened. Check your network, then try again.",
 				},
+				ownerNotRemovable: {
+					title: "You own this space",
+					description: "An owner can’t leave their own space.",
+				},
+				needsSignIn: {
+					title: "Couldn’t leave this space",
+					description: "You’re signed out. Sign in, then try again.",
+				},
+				sessionRevoked: {
+					title: "Couldn’t leave this space",
+					description: "Your session ended. Sign in again, then try again.",
+				},
+				sessionStore: {
+					title: "Couldn’t leave this space",
+					description:
+						"Kiroshi couldn’t read your sign-in on this computer. Restart Kiroshi, then try again.",
+				},
+				relayUnreachable: {
+					title: "Couldn’t leave this space",
+					description:
+						"Kiroshi couldn’t reach its cloud. Check your network, then try again.",
+				},
 				unexpected: {
 					title: "Something went wrong with this space",
 					description:

@@ -15,7 +15,7 @@ use super::commands::{announce_change, announce_reconnection, announce_removal, 
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::proxy;
-use crate::account::cloud::{Cloud, CloudInstance, InstancesError};
+use crate::account::cloud::{Cloud, CloudInstance, InstancesError, MemberCallError};
 use crate::account::session::{self, AccountSession};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
@@ -348,14 +348,48 @@ async fn learned<R: Runtime>(
 	Ok(space_id.to_owned())
 }
 
-pub async fn closed<R: Runtime>(app: &AppHandle<R>, id: &str) {
-	let Some(guests) = app.try_state::<RelayGuests>() else {
-		return;
-	};
+pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
+	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
+	let state = app.state::<db::DatabaseState>();
+	let repository = ready(&state)?.joined_spaces();
+	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
+	let found = repository.find(id.to_owned()).await?.ok_or_else(unknown)?;
+	let JoinedReach::Relay { instance_id } = &found.reach;
+	membership_ended(app, &guests.cloud, instance_id).await?;
+	if !repository.remove(id.to_owned()).await? {
+		return Err(unknown());
+	}
 	let guest = guests.guests().remove(id);
 	if let Some(guest) = guest {
 		finished(id, guest).await;
+	}
+	Ok(())
+}
+
+async fn membership_ended<R: Runtime>(
+	app: &AppHandle<R>,
+	cloud: &Cloud,
+	instance_id: &str,
+) -> Result<(), JoinedSpaceError> {
+	let bearer = match app.state::<AccountSession>().bearer() {
+		Ok(Some(bearer)) => bearer,
+		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
+		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
+	};
+	match cloud.leave_instance(&bearer, instance_id).await {
+		Ok(()) | Err(MemberCallError::UnknownMember) => Ok(()),
+		Err(MemberCallError::OwnerNotRemovable) => Err(JoinedSpaceError::OwnerNotRemovable),
+		Err(MemberCallError::Revoked) => {
+			session::revoked(app, &bearer);
+			Err(JoinedSpaceError::SessionRevoked)
+		}
+		Err(MemberCallError::Unreachable(detail)) => {
+			Err(JoinedSpaceError::RelayUnreachable { detail })
+		}
+		Err(refused) => Err(JoinedSpaceError::RelayUnreachable {
+			detail: format!("the cloud refused to end the membership: {refused:?}"),
+		}),
 	}
 }
 
