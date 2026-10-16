@@ -261,6 +261,7 @@ describe("useSidebarMissions", () => {
 		act(() => {
 			announce({
 				missionId: "m-waiting",
+				spaceId: null,
 				state: "done",
 				stateSeq: 2,
 				isAgentRunning: false,
@@ -755,6 +756,7 @@ describe("the Missions tab read a page at a time", () => {
 			act(() =>
 				announce({
 					missionId: "m-0",
+					spaceId: null,
 					state: "working",
 					stateSeq: 2,
 					isAgentRunning: true,

@@ -958,6 +958,7 @@ export type MessageSearchQuery = {
 export type Mission = {
 	id: string,
 	originConversationId: string,
+	spaceId: string | null,
 	botId: string,
 	threadConversationId: string,
 	objective: string,
@@ -983,6 +984,15 @@ export type Mission = {
 export type MissionActivity = {
 	tool: string,
 	target: string,
+};
+
+export type MissionChanged = {
+	missionId: string,
+	spaceId: string | null,
+	state: MissionState,
+	stateSeq: number,
+	isAgentRunning: boolean,
+	lastActivityAt: number | null,
 };
 
 export type MissionDetail = {

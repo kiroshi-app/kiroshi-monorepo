@@ -21,6 +21,7 @@ const DETAIL: MissionDetail = {
 	mission: {
 		id: "m-1",
 		originConversationId: "c-1",
+		spaceId: null,
 		botId: "b-1",
 		threadConversationId: "c-2",
 		objective: "Ship the mission thread.",
@@ -92,6 +93,7 @@ it("leaves the mission alone when a change names another one", async () => {
 
 	announce({
 		missionId: "m-2",
+		spaceId: null,
 		state: "done",
 		stateSeq: 2,
 		isAgentRunning: false,
@@ -126,6 +128,7 @@ it("applies the activity of a change naming it before the reread returns", async
 	act(() =>
 		announce({
 			missionId: "m-1",
+			spaceId: null,
 			state: "working",
 			stateSeq: 2,
 			isAgentRunning: true,
@@ -144,6 +147,7 @@ it("applies the activity of a change naming it before the reread returns", async
 describe("when changes arrive in a burst", () => {
 	const A_CHANGE: MissionChanged = {
 		missionId: "m-1",
+		spaceId: null,
 		state: "working",
 		stateSeq: 2,
 		isAgentRunning: true,

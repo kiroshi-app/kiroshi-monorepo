@@ -978,6 +978,7 @@ mod tests {
 			announced,
 			vec![json!({
 				"missionId": mission.id,
+				"spaceId": null,
 				"state": state,
 				"stateSeq": seq,
 				"isAgentRunning": false,

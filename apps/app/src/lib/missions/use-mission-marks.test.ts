@@ -86,6 +86,7 @@ const OTHER_JOINED_FEED = [inSpace("m-other")]
 
 const A_CLOSE: MissionChanged = {
 	missionId: "m-local",
+	spaceId: null,
 	state: "closed",
 	stateSeq: 2,
 	isAgentRunning: false,

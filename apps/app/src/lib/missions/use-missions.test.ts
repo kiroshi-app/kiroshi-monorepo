@@ -32,6 +32,7 @@ const listenToMissions = vi.mocked(missionsTransport.onChanged)
 const MISSION: Mission = {
 	id: "m-1",
 	originConversationId: "c-1",
+	spaceId: null,
 	botId: "bot-1",
 	threadConversationId: "c-mission-1",
 	objective: "Rewrite the changelog parser",
@@ -115,6 +116,7 @@ describe("useMissions", () => {
 		act(() =>
 			announce({
 				missionId: "m-1",
+				spaceId: null,
 				state: "working",
 				stateSeq: 2,
 				isAgentRunning: true,
@@ -145,6 +147,7 @@ describe("useMissions", () => {
 		act(() =>
 			announce({
 				missionId: "m-2",
+				spaceId: null,
 				state: "working",
 				stateSeq: 2,
 				isAgentRunning: true,
@@ -238,6 +241,7 @@ describe("useMissions", () => {
 		act(() =>
 			announce({
 				missionId: "m-1",
+				spaceId: null,
 				state: "waiting_human",
 				stateSeq: 2,
 				isAgentRunning: true,
@@ -262,6 +266,7 @@ describe("useMissions", () => {
 	describe("when changes arrive in a burst", () => {
 		const A_CHANGE: MissionChanged = {
 			missionId: "m-1",
+			spaceId: null,
 			state: "working",
 			stateSeq: 2,
 			isAgentRunning: true,

@@ -233,6 +233,7 @@ const createHarness = async ({
 	const announce = async (state: MissionState) => {
 		missions.change({
 			missionId: mission.id,
+			spaceId: null,
 			state,
 			stateSeq: standingSeq,
 			isAgentRunning: false,
@@ -1538,6 +1539,7 @@ describe("startMissionRunDriver beside a joined host", () => {
 		harness.missions.change(
 			{
 				missionId: harness.mission.id,
+				spaceId: null,
 				state: "working",
 				stateSeq: harness.standingSeq() + 1,
 				isAgentRunning: false,
@@ -1579,6 +1581,18 @@ describe("startMissionRunDriver raising a failure", () => {
 		logged.mock.calls
 			.map(([line]) => String(line))
 			.filter((line) => line.startsWith(`mission run driver: ${reason}`))
+
+	const announceIn = async (spaceId: string | null) => {
+		harness.missions.change({
+			missionId: harness.mission.id,
+			spaceId,
+			state: "working",
+			stateSeq: harness.standingSeq() + 1,
+			isAgentRunning: false,
+			lastActivityAt: null,
+		})
+		await settled()
+	}
 
 	beforeEach(async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
@@ -1677,5 +1691,58 @@ describe("startMissionRunDriver raising a failure", () => {
 		expect(vi.getTimerCount()).toBe(0)
 		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 		expect(linesNaming("the mission could not be read")).toEqual([])
+	})
+
+	it("names the Space a mission change carried on the line and the card of a failed read", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		await announceIn("s1")
+		const raised = await failuresRaisedBy(harness)
+
+		expect(linesNaming("the mission could not be read")).toEqual([
+			expect.stringContaining(
+				`| mission: ${harness.mission.id} | space: s1 | side: local |`,
+			),
+		])
+		expect(raised).toHaveBeenCalledWith(expect.anything(), {
+			side: "local",
+			mission: harness.mission.id,
+			space: "s1",
+			count: 1,
+		})
+	})
+
+	it("leaves the Space out of the line and the card of a mission whose Space it never heard", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		await announceIn(null)
+		const raised = await failuresRaisedBy(harness)
+
+		expect(linesNaming("the mission could not be read")).toEqual([
+			expect.not.stringContaining("space:"),
+		])
+		expect(raised.mock.calls[0][1]).not.toHaveProperty("space")
+	})
+
+	it("names the Space it remembered for the thread when a status run cannot read its mission", async () => {
+		harness.missions.hold({
+			mission: {
+				...harness.mission,
+				spaceId: "s1",
+				stateSeq: harness.standingSeq() + 1,
+			},
+			events: AGENT_ASKED,
+		})
+		await announceIn("s1")
+		await settled()
+		harness.missions.refuse(harness.mission.id)
+
+		await harness.emitAtThread({
+			type: "turnEnded",
+			ended: { sessionId: null, outcome: "completed" },
+		})
+
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledWith(
+			expect.anything(),
+			{ side: "local", mission: harness.mission.id, space: "s1", count: 1 },
+		)
 	})
 })

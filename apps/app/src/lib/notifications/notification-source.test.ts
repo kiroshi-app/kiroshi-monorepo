@@ -281,6 +281,7 @@ const escalate = async (harness: Harness, state: MissionState) => {
 	harness.missions.hold({ mission, events: [] })
 	harness.missions.change({
 		missionId: mission.id,
+		spaceId: null,
 		state,
 		stateSeq: 2,
 		isAgentRunning: false,
@@ -632,6 +633,7 @@ describe("startNotificationSource on a mission thread", () => {
 		})
 		harness.missions.change({
 			missionId: "mission-1",
+			spaceId: null,
 			state: "done",
 			stateSeq: 3,
 			isAgentRunning: false,
@@ -951,6 +953,7 @@ describe("startNotificationSource on missions", () => {
 
 		harness.missions.change({
 			missionId: "mission-1",
+			spaceId: null,
 			state: "waiting_human",
 			stateSeq: 2,
 			isAgentRunning: false,

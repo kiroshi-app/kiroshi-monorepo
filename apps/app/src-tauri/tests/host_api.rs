@@ -288,6 +288,7 @@ fn relayed(event: &str, window_payload: &str) -> String {
 fn changed(marker: impl Display) -> MissionChanged {
 	MissionChanged {
 		mission_id: marker.to_string(),
+		space_id: None,
 		state: MissionState::Working,
 		state_seq: 1,
 		is_agent_running: true,

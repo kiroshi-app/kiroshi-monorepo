@@ -5,6 +5,7 @@ import type { ReporterFacts, UnreportedFailureNotice } from "../failure-report"
 type MissionRunFailure = {
 	reason: string
 	missionId: string
+	spaceId?: string
 	error?: unknown
 }
 
@@ -53,13 +54,14 @@ const causeOf = ({ reason, error }: MissionRunFailure) =>
 	JSON.stringify([reason, error === undefined ? null : detailOf(error)])
 
 const logLineOf = ({
-	failure: { reason, error, missionId },
+	failure: { reason, error, missionId, spaceId },
 	count,
 }: FailureBurst) =>
 	[
 		`mission run driver: ${reason}`,
 		error !== undefined && `error: ${detailOf(error)}`,
 		`mission: ${missionId}`,
+		spaceId && `space: ${spaceId}`,
 		`side: ${SIDE}`,
 		`count: ${count}`,
 	]
@@ -85,7 +87,12 @@ export const createMissionRunFailures = (
 				description: i18n.t("chat:missions.failure.run.description"),
 				cause,
 			},
-			{ side: SIDE, mission: burst.failure.missionId, count: burst.count },
+			{
+				side: SIDE,
+				mission: burst.failure.missionId,
+				...(burst.failure.spaceId ? { space: burst.failure.spaceId } : {}),
+				count: burst.count,
+			},
 		)
 	}
 

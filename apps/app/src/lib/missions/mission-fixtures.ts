@@ -11,6 +11,7 @@ import type { Json } from "@/lib/bindings"
 const A_MISSION: Mission = {
 	id: "mission-1",
 	originConversationId: "room-1",
+	spaceId: null,
 	botId: "bot-1",
 	threadConversationId: "thread-1",
 	objective: "Ship the walls",

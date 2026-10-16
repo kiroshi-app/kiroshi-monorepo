@@ -23,6 +23,7 @@ const DETAIL: MissionDetail = {
 	mission: {
 		id: "m-1",
 		originConversationId: "c-1",
+		spaceId: null,
 		botId: "b-1",
 		threadConversationId: "c-2",
 		objective: "Ship the mission thread.",
