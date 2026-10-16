@@ -43,7 +43,7 @@ const selectingMode = ({ position, label, hint }: SelectedMode) => ({
 	parameters: {
 		docs: {
 			description: {
-				story: `The answer at position ${position} of the shared modes, picked. Check that the field reads ${label} and the hint under it says what that answer lets through.`,
+				story: `${label}, picked. Check that the field reads it and the hint under it says what that answer lets through.`,
 			},
 		},
 	},
