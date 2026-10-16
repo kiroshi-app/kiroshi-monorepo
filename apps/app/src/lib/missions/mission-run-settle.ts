@@ -38,10 +38,6 @@ export const createMissionRunSettle = ({
 		missionId: string,
 		reportedTurnId: string | null,
 	) => {
-		if (book.isOnJoinedSpace()) {
-			return
-		}
-
 		try {
 			await missions.reported(missionId, reportedTurnId)
 		} catch (thrown) {
@@ -109,10 +105,6 @@ export const createMissionRunSettle = ({
 
 		if (report.outcome === "nothing") {
 			return settleNothingReported(held, settled)
-		}
-
-		if (book.isOnJoinedSpace()) {
-			return
 		}
 
 		try {

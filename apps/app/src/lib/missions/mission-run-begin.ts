@@ -75,12 +75,6 @@ export const createMissionRunBegin = ({
 
 	return async (call: MissionRunCall) => {
 		const rosterBlock = await rosterBlockOf(call)
-
-		if (book.isOnJoinedSpace()) {
-			return false
-		}
-
 		await begin({ ...call, rosterBlock })
-		return true
 	}
 }

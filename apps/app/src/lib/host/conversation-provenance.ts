@@ -8,6 +8,12 @@ const SCOPING_ID_KEYS = ["conversationId", "excludedConversationId"]
 
 const SCOPING_ENVELOPES = ["scope", "message", "turn", "draft"]
 
+const ANSWERED_CONVERSATION_ID_KEYS: ReadonlySet<string> = new Set([
+	"conversationId",
+	"threadConversationId",
+	"originConversationId",
+])
+
 const HELD_ID_KEYS = [
 	"botId",
 	"authorBotId",
@@ -96,7 +102,7 @@ const conversationIdsNamedIn = (value: unknown): string[] => {
 		return []
 	}
 	return Object.entries(value).flatMap(([key, inner]) =>
-		key === "conversationId" && isText(inner)
+		ANSWERED_CONVERSATION_ID_KEYS.has(key) && isText(inner)
 			? [inner]
 			: conversationIdsNamedIn(inner),
 	)
@@ -125,6 +131,25 @@ const idsAnswered = (command: string, answer: unknown) => [
 	...conversationIdsNamedIn(answer),
 ]
 
+const WRITE_ID_KEYS = ["id", "turnId", "messageId"]
+
+const WRITE_ENVELOPES = ["turn", "message"]
+
+const COMMANDS_OPENING_A_WRITE: ReadonlySet<string> = new Set([
+	"conversation_start_turn",
+	"conversation_open_assistant_message",
+])
+
+const writeIdsAt = (holder: unknown): string[] =>
+	isFields(holder) ? WRITE_ID_KEYS.map((key) => holder[key]).filter(isText) : []
+
+const writeIdsOf = (args?: InvokeArgs): string[] =>
+	isFields(args)
+		? [args, ...WRITE_ENVELOPES.map((envelope) => args[envelope])].flatMap(
+				writeIdsAt,
+			)
+		: []
+
 const leaveRefusalToCaller = () => undefined
 
 export const createConversationProvenance = () => {
@@ -143,7 +168,9 @@ export const createConversationProvenance = () => {
 
 	const sourcesNamedIn = (args?: InvokeArgs): Set<ConversationSource> =>
 		new Set(
-			conversationIdsOf(args).flatMap((id) => [...(sourcesById.get(id) ?? [])]),
+			[...conversationIdsOf(args), ...writeIdsOf(args)].flatMap((id) => [
+				...(sourcesById.get(id) ?? []),
+			]),
 		)
 
 	const isAnsweredOnlyHere =
@@ -158,6 +185,16 @@ export const createConversationProvenance = () => {
 		source: ConversationSource,
 	): string[] => heldIdsOf(args).filter(isAnsweredOnlyHere(source))
 
+	const recordSent = (
+		source: ConversationSource,
+		command: string,
+		args?: InvokeArgs,
+	) => {
+		if (COMMANDS_OPENING_A_WRITE.has(command)) {
+			learn(source, writeIdsOf(args))
+		}
+	}
+
 	const record = <T>(
 		source: ConversationSource,
 		command: string,
@@ -170,5 +207,11 @@ export const createConversationProvenance = () => {
 		return answer
 	}
 
-	return { namesConversation, sourcesNamedIn, heldOnlyHereIn, record }
+	return {
+		namesConversation,
+		sourcesNamedIn,
+		heldOnlyHereIn,
+		recordSent,
+		record,
+	}
 }

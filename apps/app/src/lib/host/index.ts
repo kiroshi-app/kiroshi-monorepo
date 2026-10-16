@@ -39,6 +39,10 @@ export const invoke = joinedHosts.invoke
 
 export const listen = joinedHosts.listen
 
+export const invokeOnThisComputer = joinedHosts.invokeOnThisComputer
+
+export const listenOnThisComputer = tauriListen
+
 export const activeJoinedSpaceId = joinedHosts.activeSpaceId
 
 const hostedSpaces = isDesktopHost() ? createHostedSpaces() : undefined

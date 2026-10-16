@@ -6,11 +6,7 @@ import type {
 	MissionOnBoard,
 } from "./mission-contract"
 import { createMissionRunBegin } from "./mission-run-begin"
-import {
-	createMissionRunBook,
-	type LiveMissionRun,
-	reporting,
-} from "./mission-run-book"
+import { createMissionRunBook, reporting } from "./mission-run-book"
 import { createMissionReportWriter } from "./mission-run-report"
 import { createMissionRunRoute } from "./mission-run-route"
 import { createMissionRunSettle } from "./mission-run-settle"
@@ -52,8 +48,6 @@ export type MissionRunDriverOptions = {
 	chat: Pick<ChatController, "reportRun">
 	missions: MissionRunPort
 	reportFailure: (notice: NoticeMessage) => void
-	joinedSpaceId: () => string | null
-	watchJoinedSpace: (listener: () => void) => () => void
 	now?: () => number
 }
 
@@ -73,18 +67,15 @@ export const startMissionRunDriver = ({
 	chat,
 	missions,
 	reportFailure,
-	joinedSpaceId,
-	watchJoinedSpace,
 	now = () => Date.now(),
 }: MissionRunDriverOptions): (() => void) => {
 	const book = createMissionRunBook({
 		driver,
 		missions,
 		reportFailure,
-		joinedSpaceId,
 		retake: (changed) => void consider(changed),
 	})
-	const { live, seqs, isOnJoinedSpace, rememberThread, end } = book
+	const { live, rememberThread, end } = book
 	const run = createMissionRunBegin({ driver, store, missions, book, now })
 	const consider = createMissionRunTake({
 		store,
@@ -128,10 +119,6 @@ export const startMissionRunDriver = ({
 	}
 
 	const catchUp = () => {
-		if (isOnJoinedSpace()) {
-			return
-		}
-
 		void catchUpOnOpenMissions().catch((reason) => {
 			console.error(
 				"mission run driver: the open missions could not be read",
@@ -139,31 +126,6 @@ export const startMissionRunDriver = ({
 			)
 		})
 		void catchUpOnUnreportedMissions().catch(reporting("mission_unreported"))
-	}
-
-	const interrupt = (held: LiveMissionRun) => {
-		seqs.forget(held.call.mission.id)
-		end(held)
-	}
-
-	let wasOnJoinedSpace = isOnJoinedSpace()
-
-	const followJoinedSpace = () => {
-		const isJoinedNow = isOnJoinedSpace()
-
-		if (isJoinedNow === wasOnJoinedSpace) {
-			return
-		}
-
-		wasOnJoinedSpace = isJoinedNow
-
-		if (!isJoinedNow) {
-			return catchUp()
-		}
-
-		for (const held of [...live.values()]) {
-			interrupt(held)
-		}
 	}
 
 	const changes = listening(
@@ -174,13 +136,11 @@ export const startMissionRunDriver = ({
 		driver.subscribe(route),
 		"mission run driver: agent events could not be listened to",
 	)
-	const stopWatchingJoinedSpace = watchJoinedSpace(followJoinedSpace)
 
 	catchUp()
 
 	return () => {
 		book.stop()
-		stopWatchingJoinedSpace()
 
 		for (const held of [...live.values()]) {
 			end(held)

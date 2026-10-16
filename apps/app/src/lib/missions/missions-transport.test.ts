@@ -1,9 +1,17 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { MissionChanged, MissionDetail } from "./mission-contract"
-import { MISSION_CHANGED_EVENT, missionsTransport } from "./missions-transport"
+import {
+	MISSION_CHANGED_EVENT,
+	missionRunTransport,
+	missionsTransport,
+} from "./missions-transport"
+
+import { joinedHosts } from "../host"
+import { agentTransport } from "../agent/transport"
+import { conversationStore } from "../conversations/store-transport"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }))
@@ -126,4 +134,209 @@ it("hands every mission change to its listener", async () => {
 	})
 
 	expect(heard).toEqual([{ missionId: "m-1", state: "waiting_human" }])
+})
+
+describe("the mission calls of the run driver while a joined space is active", () => {
+	const JOINED_SPACE = "garage"
+
+	const joinedHost = vi.fn(
+		async (_input: URL | string) =>
+			new Response("null", { headers: { "content-type": "application/json" } }),
+	)
+
+	const unopenedSocket = class {
+		onopen = null
+		onmessage = null
+		onclose = null
+		close = () => undefined
+	}
+
+	const answerAsThisComputer = async (command: string) =>
+		command === "joined_space_connect"
+			? {
+					id: JOINED_SPACE,
+					hostUrl: "http://192.168.1.30:45367",
+					token: "joined",
+					remoteSpaceId: null,
+					name: JOINED_SPACE,
+				}
+			: null
+
+	const commandsSentToTheJoinedHost = () =>
+		joinedHost.mock.calls.map(([input]) => String(input).split("/").at(-1))
+
+	const commandsSentToThisComputer = () =>
+		hostInvoke.mock.calls.map(([command]) => command)
+
+	beforeEach(async () => {
+		vi.stubGlobal("fetch", joinedHost)
+		vi.stubGlobal("WebSocket", unopenedSocket)
+		hostInvoke.mockImplementation(answerAsThisComputer as typeof invoke)
+		await joinedHosts.activate(JOINED_SPACE)
+		hostInvoke.mockClear()
+	})
+
+	afterEach(async () => {
+		await joinedHosts.activate(null)
+		joinedHosts.forget(JOINED_SPACE)
+		joinedHost.mockClear()
+		vi.unstubAllGlobals()
+	})
+
+	it("reads a mission of the screens from the joined host", async () => {
+		await missionsTransport.detail("m-1")
+
+		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
+	})
+
+	it("sends every mission call of the run driver to this computer", async () => {
+		await missionRunTransport.board()
+		await missionRunTransport.unreported()
+		await missionRunTransport.detail("m-1")
+		await missionRunTransport.reported("m-1", "t-1")
+		await missionRunTransport.answered("m-1", 2)
+		await missionRunTransport.rosterBlock("c-1", "b-1")
+		await missionRunTransport.bots()
+		await missionRunTransport.mainChat("b-1")
+
+		expect(commandsSentToTheJoinedHost()).toEqual([])
+		expect(commandsSentToThisComputer()).toEqual([
+			"mission_board",
+			"mission_unreported",
+			"mission_detail",
+			"mission_reported",
+			"mission_answered",
+			"conversation_roster_block",
+			"conversation_bots",
+			"conversation_main_chat",
+		])
+	})
+
+	it("reads the companions and the main chat of the run driver on this computer whatever space is active", async () => {
+		await missionRunTransport.bots()
+		await missionRunTransport.mainChat("b-1")
+
+		expect(hostInvoke).toHaveBeenCalledWith("conversation_bots", {
+			spaceId: null,
+		})
+		expect(hostInvoke).toHaveBeenCalledWith("conversation_main_chat", {
+			botId: "b-1",
+			spaceId: null,
+		})
+	})
+
+	describe("a mission of this computer opened after the local ids were recalled", () => {
+		const RECALLED = "c-recalled"
+		const ORIGIN = "c-origin-opened-later"
+		const THREAD = "c-thread-opened-later"
+		const UNSEEN_BOT = "b-never-answered"
+
+		const OPENED_LATER: MissionDetail = {
+			mission: {
+				...DETAIL.mission,
+				id: "m-2",
+				botId: UNSEEN_BOT,
+				originConversationId: ORIGIN,
+				threadConversationId: THREAD,
+			},
+			events: [],
+		}
+
+		const answerAfterTheRecall = async (command: string) => {
+			if (command === "conversation_local_ids") {
+				return [RECALLED]
+			}
+			if (command === "mission_detail") {
+				return OPENED_LATER
+			}
+			return answerAsThisComputer(command)
+		}
+
+		const REPORT_WRITES = [
+			"conversation_start_turn",
+			"conversation_open_assistant_message",
+			"conversation_append_text",
+			"conversation_finalize_message",
+			"conversation_complete_turn",
+		]
+
+		const writeReportIn = async (
+			conversationId: string,
+			turnId: string,
+			messageId: string,
+		) => {
+			await conversationStore.startTurn({
+				id: turnId,
+				conversationId,
+				startedAt: 1,
+			})
+			await conversationStore.openAssistantMessage({
+				id: messageId,
+				conversationId,
+				turnId,
+				authorBotId: UNSEEN_BOT,
+				repliedToMessageId: null,
+				createdAt: 1,
+			})
+			await conversationStore.appendText(messageId, "The walls stand.")
+			await conversationStore.finalizeMessage(messageId, "complete")
+			await conversationStore.completeTurn(turnId, 2)
+		}
+
+		const runTheMissionOf = async () => {
+			await conversationStore.loadPage(THREAD, null)
+			await conversationStore.openRuntimeSession(
+				ORIGIN,
+				UNSEEN_BOT,
+				1,
+				null,
+				null,
+			)
+			await agentTransport.startOrResumeSession({
+				conversationId: ORIGIN,
+				botId: UNSEEN_BOT,
+				runtimeSessionId: "r-1",
+				epoch: 1,
+			})
+			await writeReportIn(ORIGIN, "t-1", "msg-1")
+		}
+
+		beforeEach(async () => {
+			hostInvoke.mockImplementation(answerAfterTheRecall as typeof invoke)
+			await conversationStore.loadPage(RECALLED, null)
+			hostInvoke.mockClear()
+		})
+
+		it("opens its thread, its session and writes its report on this computer", async () => {
+			await missionRunTransport.detail("m-2")
+
+			await runTheMissionOf()
+
+			expect(commandsSentToTheJoinedHost()).toEqual([])
+			expect(commandsSentToThisComputer()).toEqual([
+				"mission_detail",
+				"conversation_message_page",
+				"conversation_open_runtime_session",
+				"agent_start_or_resume_session",
+				...REPORT_WRITES,
+			])
+		})
+
+		it("keeps the report writes of a turn opened on the joined host on the joined host", async () => {
+			await writeReportIn("c-of-the-joined-space", "t-joined", "msg-joined")
+
+			expect(commandsSentToThisComputer()).toEqual([])
+			expect(commandsSentToTheJoinedHost()).toEqual(REPORT_WRITES)
+		})
+
+		it("keeps a conversation of the joined space on the joined host", async () => {
+			await missionRunTransport.detail("m-2")
+
+			await conversationStore.loadPage("c-of-the-joined-space", null)
+
+			expect(commandsSentToTheJoinedHost()).toEqual([
+				"conversation_message_page",
+			])
+		})
+	})
 })

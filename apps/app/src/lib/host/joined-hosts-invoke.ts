@@ -134,7 +134,7 @@ export const createJoinedHostsInvoke = ({
 	isDown,
 	invokeOnceOpen,
 	reportFailure,
-}: JoinedHostsInvokeOptions): Invoke => {
+}: JoinedHostsInvokeOptions) => {
 	const provenance = createConversationProvenance()
 	let localIdsRecall: Promise<void> | null = null
 	let hasLocalIds = false
@@ -186,6 +186,7 @@ export const createJoinedHostsInvoke = ({
 		call: Parameters<Invoke>,
 	): Promise<T> => {
 		const [command, args, options] = call
+		provenance.recordSent(target, command, args)
 		if (target === null) {
 			return provenance.record(null, command, local.invoke<T>(...call))
 		}
@@ -205,7 +206,7 @@ export const createJoinedHostsInvoke = ({
 		return Promise.reject(new HostRefused(refusal.message, refusal))
 	}
 
-	return <T>(...call: Parameters<Invoke>): Promise<T> => {
+	const invoke = <T>(...call: Parameters<Invoke>): Promise<T> => {
 		const [command, args] = call
 		const { active } = store.getState()
 		if (
@@ -225,4 +226,8 @@ export const createJoinedHostsInvoke = ({
 			? recallLocalIds().then(route)
 			: route()
 	}
+
+	const invokeOnThisComputer: Invoke = (...call) => sendTo(null, call)
+
+	return { invoke, invokeOnThisComputer }
 }

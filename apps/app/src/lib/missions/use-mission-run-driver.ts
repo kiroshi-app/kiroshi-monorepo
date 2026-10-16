@@ -1,10 +1,9 @@
 import { useEffect } from "react"
 
 import { startMissionRunDriver } from "./mission-run-driver"
-import { missionsTransport } from "./missions-transport"
+import { missionRunTransport } from "./missions-transport"
 
 import { failureReporterIn } from "../failure-report"
-import { activeJoinedSpaceId, onJoinedSpaceChange } from "../host"
 import type { ChatController } from "../chat/chat-controller"
 import type { ChatDriver } from "../chat/driver"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
@@ -27,13 +26,15 @@ export const useMissionRunDriver = ({
 		() =>
 			startMissionRunDriver({
 				driver,
-				store,
+				store: {
+					openRuntimeSession: store.openRuntimeSession,
+					bots: missionRunTransport.bots,
+					mainChat: missionRunTransport.mainChat,
+				},
 				runtimes,
 				chat,
-				missions: missionsTransport,
+				missions: missionRunTransport,
 				reportFailure: failureReporterIn("mission-run-driver"),
-				joinedSpaceId: activeJoinedSpaceId,
-				watchJoinedSpace: onJoinedSpaceChange,
 			}),
 		[driver, store, runtimes, chat],
 	)

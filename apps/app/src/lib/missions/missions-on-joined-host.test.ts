@@ -70,6 +70,13 @@ vi.mock("../host", () => {
 			joinedHosts.listen(...args)) as JoinedHosts["listen"],
 		onHostReconnected: ((...args: Parameters<JoinedHosts["onReconnected"]>) =>
 			joinedHosts.onReconnected(...args)) as JoinedHosts["onReconnected"],
+		invokeOnThisComputer: ((
+			...args: Parameters<JoinedHosts["invokeOnThisComputer"]>
+		) =>
+			joinedHosts.invokeOnThisComputer(
+				...args,
+			)) as JoinedHosts["invokeOnThisComputer"],
+		listenOnThisComputer: async () => () => undefined,
 	}
 })
 
