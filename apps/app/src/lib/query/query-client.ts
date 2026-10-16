@@ -72,6 +72,9 @@ const createQueryCache = (): QueryCache => {
 	const noticedOutages = new WeakSet<Query<unknown, unknown>>()
 	return new QueryCache({
 		onError: (error, query) => {
+			if (isHostOffline(error)) {
+				return
+			}
 			const noticed = noticedFailureOf(error, query.meta, "query-cache")
 			if (!noticed || noticedOutages.has(query)) {
 				return

@@ -1,6 +1,7 @@
 import { isPostedRequest } from "./posted-question"
 import { withActivity } from "./working-kind"
 
+import { describeFailure } from "../failure-report"
 import type {
 	ActivityEvent,
 	AgentCommand,
@@ -158,7 +159,8 @@ const isTransportError = (reason: unknown): reason is TransportError => {
 	return kind !== null && Object.hasOwn(TRANSPORT_KINDS, kind)
 }
 
-const detailOf = (reason: unknown): string => kindIn(reason) ?? String(reason)
+const detailOf = (reason: unknown): string =>
+	kindIn(reason) ?? describeFailure(reason)
 
 export const toTransportError = (reason: unknown): TransportError =>
 	isTransportError(reason)

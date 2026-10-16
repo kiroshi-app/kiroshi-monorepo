@@ -5,14 +5,10 @@ import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import type { HostRefusal, HostSocket, HttpHost } from "./http"
 import { createJoinedHostsDown } from "./joined-hosts-down"
 import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
-import {
-	createJoinedHostsJoin,
-	describeRejection,
-	type JoinOutcome,
-} from "./joined-hosts-join"
+import { createJoinedHostsJoin, type JoinOutcome } from "./joined-hosts-join"
 import { createJoinedHostsListen } from "./joined-hosts-listen"
 
-import { failureReporterIn } from "../failure-report"
+import { describeFailure, failureReporterIn } from "../failure-report"
 import { createStore } from "../store"
 
 export { LOCAL_COMMANDS } from "./joined-hosts-invoke"
@@ -62,7 +58,7 @@ export const createJoinedHosts = ({
 	}
 
 	const reportListenFailure = (reason: unknown): UnlistenFn => {
-		reportFailure({ message: describeRejection(reason) })
+		reportFailure({ message: describeFailure(reason) })
 		return () => undefined
 	}
 

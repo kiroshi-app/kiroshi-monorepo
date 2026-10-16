@@ -8,9 +8,9 @@ import {
 import { HostRefused } from "./host-refused"
 import { type HttpHost, hostOnlyRefusalOf } from "./http"
 import type { JoinedHostsOptions, JoinedHostsState } from "./joined-hosts"
-import { describeRejection } from "./joined-hosts-join"
 import type { Listen } from "./joined-hosts-listen"
 
+import { describeFailure } from "../failure-report"
 import type { Store } from "../store"
 
 export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
@@ -145,7 +145,7 @@ export const createJoinedHostsInvoke = ({
 	const forgetLocalIdsRecall = (reason: unknown) => {
 		localIdsRecall = null
 		reportFailure({
-			message: describeRejection(reason),
+			message: describeFailure(reason),
 			command: LOCAL_IDS_COMMAND,
 		})
 	}

@@ -13,6 +13,7 @@ import {
 } from "./bindings"
 import {
 	buildFailureReport,
+	describeFailure,
 	type FailureFacts,
 	failureReporterIn,
 	raiseReportedFailure,
@@ -217,6 +218,67 @@ describe("buildFailureReport", () => {
 		expect(report.log).toBeUndefined()
 		expect(report.specs?.os).toBe("macOS")
 		expect(report.context?.raisedIn).toBe("use-account")
+	})
+})
+
+describe("describeFailure", () => {
+	it("shows the message of an Error", () => {
+		expect(describeFailure(new Error("disk full"))).toBe("disk full")
+	})
+
+	it("keeps a string as it is", () => {
+		expect(describeFailure("disk full")).toBe("disk full")
+	})
+
+	it("builds a sentence from the kind and the message of an object", () => {
+		expect(describeFailure({ kind: "storage", message: "disk full" })).toBe(
+			"storage: disk full",
+		)
+	})
+
+	it("builds a sentence from the kind alone when no message comes with it", () => {
+		expect(describeFailure({ kind: "unavailable", failure: {} })).toBe(
+			"unavailable",
+		)
+	})
+
+	it("builds a sentence from the kind and the detail when no message comes with it", () => {
+		expect(describeFailure({ kind: "undeliverable", detail: "no route" })).toBe(
+			"undeliverable: no route",
+		)
+	})
+
+	it("prefers the message over the detail when both come with it", () => {
+		expect(
+			describeFailure({
+				kind: "storage",
+				message: "disk full",
+				detail: "errno 28",
+			}),
+		).toBe("storage: disk full")
+	})
+
+	it("builds a sentence from the message alone when no kind comes with it", () => {
+		expect(describeFailure({ message: "disk full", code: 28 })).toBe(
+			"disk full",
+		)
+	})
+
+	it.each([
+		[{ code: 28 }, '{"code":28}'],
+		[[1, 2], "[1,2]"],
+		[42, "42"],
+		[null, "null"],
+		[undefined, "undefined"],
+	])("serializes %j", (reason, shown) => {
+		expect(describeFailure(reason)).toBe(shown)
+	})
+
+	it("never shows [object Object], even for an object it cannot serialize", () => {
+		const circular: Record<string, unknown> = {}
+		circular.self = circular
+
+		expect(describeFailure(circular)).not.toContain("[object Object]")
 	})
 })
 

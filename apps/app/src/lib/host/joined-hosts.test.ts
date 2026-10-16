@@ -136,6 +136,13 @@ const REFUSALS: JoinedSpaceError[] = [
 
 const REFUSAL_KINDS = REFUSALS.map(({ kind }) => kind)
 
+const CARDED_REFUSALS = REFUSALS.filter(({ kind }) => kind !== "hostOffline")
+
+const HOST_OFFLINE_REFUSAL: JoinedSpaceError = {
+	kind: "hostOffline",
+	id: "garage",
+}
+
 const LANGUAGES: Language[] = ["en", "fr"]
 
 const HOST_OFFLINE_NOTICES: Record<Language, NoticeMessage> = {
@@ -166,7 +173,7 @@ describe("a refused join", () => {
 	afterEach(() => activateLanguage("en"))
 
 	describe.each(LANGUAGES)("in %s", (language) => {
-		it.each(REFUSALS)(
+		it.each(CARDED_REFUSALS)(
 			"says why the $kind refusal happened in a sentence",
 			async (refusal) => {
 				activateLanguage(language)
@@ -184,23 +191,28 @@ describe("a refused join", () => {
 			},
 		)
 
-		it("raises the host offline notice on a hostOffline refusal", async () => {
+		it("raises no card on a hostOffline refusal and marks the host refused", async () => {
 			activateLanguage(language)
-
-			const notice = await refusedNoticeOf({
-				kind: "hostOffline",
-				id: "garage",
+			const { hosts, reportJoinRefusal, reportFailure } = joinedHostsOf({
+				join: async () => ({ status: "error", error: HOST_OFFLINE_REFUSAL }),
 			})
 
-			expect(notice).toEqual(HOST_OFFLINE_NOTICES[language])
+			await hosts.connect("garage")
+
+			expect(reportJoinRefusal).not.toHaveBeenCalled()
+			expect(reportFailure).not.toHaveBeenCalled()
+			expect(hosts.getState().connections.garage).toEqual({
+				status: "refused",
+				failure: HOST_OFFLINE_NOTICES[language].title,
+			})
 		})
 
 		it("gives every refusal kind its own sentence", async () => {
 			activateLanguage(language)
 
-			const notices = await Promise.all(REFUSALS.map(refusedNoticeOf))
+			const notices = await Promise.all(CARDED_REFUSALS.map(refusedNoticeOf))
 
-			expect(new Set(notices.map(textOf)).size).toBe(REFUSALS.length)
+			expect(new Set(notices.map(textOf)).size).toBe(CARDED_REFUSALS.length)
 		})
 	})
 })
@@ -240,14 +252,29 @@ describe("a join that throws", () => {
 	describe.each(LANGUAGES)("in %s", (language) => {
 		it("raises the notice of the refusal kind it throws", async () => {
 			activateLanguage(language)
-
-			const { notice, connection } = await thrownJoinOf({
-				kind: "hostOffline",
+			const refusal: JoinedSpaceError = {
+				kind: "unknownJoinedSpace",
 				id: "garage",
+			}
+
+			const { notice, connection } = await thrownJoinOf(refusal)
+
+			expect(notice).toEqual(await refusedNoticeOf(refusal))
+			expect(connection).toEqual({ status: "refused", failure: notice.title })
+		})
+
+		it("raises no card when it throws a hostOffline refusal", async () => {
+			activateLanguage(language)
+			const { hosts, reportJoinRefusal } = joinedHostsOf({
+				join: async () => {
+					throw HOST_OFFLINE_REFUSAL
+				},
 			})
 
-			expect(notice).toEqual(HOST_OFFLINE_NOTICES[language])
-			expect(connection).toEqual({
+			await hosts.connect("garage")
+
+			expect(reportJoinRefusal).not.toHaveBeenCalled()
+			expect(hosts.getState().connections.garage).toEqual({
 				status: "refused",
 				failure: HOST_OFFLINE_NOTICES[language].title,
 			})
@@ -582,7 +609,7 @@ describe("the active host", () => {
 		expect(hosts.activeSpaceId()).toBe("personal")
 	})
 
-	it("refuses a call made while the joined host opens when it cannot connect", async () => {
+	it("rejects a call made while the joined host opens as host offline when it cannot connect", async () => {
 		const { hosts, local } = joinedHostsOf({
 			join: async () => ({
 				status: "error",
@@ -594,8 +621,43 @@ describe("the active host", () => {
 		const answer = hosts.invoke("mission_list", { conversationId: "c1" })
 		await activating
 
-		await expect(answer).rejects.toThrow("Couldn’t open this space")
+		await expect(answer).rejects.toEqual({
+			kind: "hostOffline",
+			detail: "joined host garage: Couldn’t open this space",
+		})
 		expect(localCommands(local)).not.toContain("mission_list")
+	})
+
+	it("raises no card for a call made while the joined host opens on a cold start before its host is reachable", async () => {
+		const { hosts, reportFailure, reportJoinRefusal } = joinedHostsOf({
+			join: async () => ({ status: "error", error: HOST_OFFLINE_REFUSAL }),
+		})
+
+		const activating = hosts.activate("garage")
+		const answer = hosts.invoke("mission_list", { conversationId: "c1" })
+		await activating
+
+		await expect(answer).rejects.toMatchObject({ kind: "hostOffline" })
+		expect(reportJoinRefusal).not.toHaveBeenCalled()
+		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("reaches up with no card once the link opens after a cold start refused it", async () => {
+		const join = vi
+			.fn<JoinedHostsOptions["join"]>()
+			.mockResolvedValueOnce({ status: "error", error: HOST_OFFLINE_REFUSAL })
+			.mockImplementation(async (id) => joinedConnection(id))
+		const { hosts, sockets, reportFailure, reportJoinRefusal } = joinedHostsOf({
+			join,
+		})
+
+		await hosts.connect("garage")
+		await hosts.connect("garage")
+		sockets[0]?.open()
+
+		expect(hosts.getState().connections.garage).toEqual({ status: "up" })
+		expect(reportJoinRefusal).not.toHaveBeenCalled()
+		expect(reportFailure).not.toHaveBeenCalled()
 	})
 
 	it("sends a call to the local host once it is selected again while the joined host opens", async () => {

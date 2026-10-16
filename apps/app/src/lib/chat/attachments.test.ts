@@ -158,4 +158,11 @@ describe("a refused store", () => {
 			detail: "the bridge is gone",
 		})
 	})
+
+	it("serializes a plain object carrying no kind, never [object Object]", () => {
+		expect(toAttachmentStoreError({ code: 28 })).toEqual({
+			kind: "unwritable",
+			detail: '{"code":28}',
+		})
+	})
 })

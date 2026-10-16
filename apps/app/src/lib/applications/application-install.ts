@@ -8,6 +8,7 @@ import type {
 	InstallField,
 } from "./application-port"
 
+import { describeFailure } from "../failure-report"
 import {
 	declaredServers,
 	declareServer,
@@ -38,7 +39,7 @@ const refusalTextOf = (reason: unknown): string => {
 			? `${reason.kind}: ${reason.detail}`
 			: reason.kind
 	}
-	return String(reason)
+	return describeFailure(reason)
 }
 
 export const serverScopeOf = (owner: EnvOwner, name: string): EnvScope => ({

@@ -1,6 +1,6 @@
 import type { InvokeArgs } from "@tauri-apps/api/core"
 
-import { hostOfflineOf } from "./host-offline"
+import { hostOfflineOf, isHostOffline } from "./host-offline"
 import { createHttpHost, type HttpHost, isTimeout } from "./http"
 import {
 	isJoinedSpaceError,
@@ -19,6 +19,7 @@ import type {
 	JoinedSpaceConnection,
 	JoinedSpaceError,
 } from "../bindings"
+import { describeFailure } from "../failure-report"
 import type { Store } from "../store"
 
 export type JoinOutcome = Awaited<
@@ -37,9 +38,6 @@ type JoinedHostsJoinOptions = Pick<
 	attachHost: (id: string, host: HttpHost) => void
 	reportJoinRefusal: NonNullable<JoinedHostsOptions["reportJoinRefusal"]>
 }
-
-export const describeRejection = (reason: unknown): string =>
-	reason instanceof Error ? reason.message : String(reason)
 
 const settledBefore = <T>(
 	pending: Promise<T>,
@@ -79,7 +77,9 @@ export const createJoinedHostsJoin = ({
 
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
 		const notice = joinRefusalNoticeOf(error)
-		reportJoinRefusal(notice)
+		if (!isHostOffline(error)) {
+			reportJoinRefusal(notice)
+		}
 		return refuse(id, notice.title)
 	}
 
@@ -88,7 +88,7 @@ export const createJoinedHostsJoin = ({
 			return refuseJoin(id, reason)
 		}
 		reportJoinRefusal(unexpectedJoinNotice())
-		return refuse(id, describeRejection(reason))
+		return refuse(id, describeFailure(reason))
 	}
 
 	const openHost = (
@@ -143,12 +143,12 @@ export const createJoinedHostsJoin = ({
 		const connection = store.getState().connections[id]
 		const failure =
 			connection?.status === "refused" ? connection.failure : "unreachable"
-		return new Error(`joined host ${id}: ${failure}`)
+		return hostOfflineOf(`joined host ${id}: ${failure}`)
 	}
 
 	const goOffline = (id: string, reason: unknown): never => {
 		down.markDown(id)
-		throw hostOfflineOf(describeRejection(reason))
+		throw hostOfflineOf(describeFailure(reason))
 	}
 
 	const openConnectionBefore = async (id: string, signal?: AbortSignal) => {

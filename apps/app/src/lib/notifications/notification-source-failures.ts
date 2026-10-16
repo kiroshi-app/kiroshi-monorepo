@@ -5,14 +5,12 @@ import {
 	notificationFailureTitleFor,
 } from "./notification-words"
 
+import { describeFailure } from "../failure-report"
 import { isHostOffline } from "../host/host-offline"
 
 export type FailWith = (
 	failure: NotificationFailure,
 ) => (reason: unknown) => undefined
-
-const reasonOf = (reason: unknown): string =>
-	reason instanceof Error ? reason.message : String(reason)
 
 export const createFailWith = (
 	reportFailure: (notice: NoticeMessage) => void,
@@ -26,7 +24,7 @@ export const createFailWith = (
 		reportedFailures.add(failure)
 		reportFailure({
 			title: notificationFailureTitleFor(failure),
-			description: reasonOf(reason),
+			description: describeFailure(reason),
 		})
 	}
 }

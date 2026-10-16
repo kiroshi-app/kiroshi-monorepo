@@ -736,7 +736,14 @@ describe("toTransportError", () => {
 	it("describes a rejection carrying no kind as an unknown failure", () => {
 		expect(toTransportError(new Error("refused"))).toEqual({
 			kind: "unknownFailure",
-			detail: "Error: refused",
+			detail: "refused",
+		})
+	})
+
+	it("serializes a plain object carrying no kind, never [object Object]", () => {
+		expect(toTransportError({ code: 28 })).toEqual({
+			kind: "unknownFailure",
+			detail: '{"code":28}',
 		})
 	})
 })

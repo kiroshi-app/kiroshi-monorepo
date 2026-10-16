@@ -10,7 +10,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { hostOfflineOf } from "./host-offline"
 import { HostRefused } from "./host-refused"
 
-import { raiseReportedFailure } from "../failure-report"
+import { describeFailure, raiseReportedFailure } from "../failure-report"
 import { countInvoke } from "../perf/invoke-tally-devtools"
 
 export type HostSocket = Pick<
@@ -103,9 +103,6 @@ const refusalOf = async (response: Response): Promise<Refusal> => {
 
 export const isTimeout = (reason: unknown): boolean =>
 	reason instanceof DOMException && reason.name === "TimeoutError"
-
-const messageOf = (reason: unknown): string =>
-	reason instanceof Error ? reason.message : String(reason)
 
 const DEDICATED_REFUSAL_NOTICES: Record<number, () => NoticeMessage> = {
 	401: () => ({
@@ -220,7 +217,7 @@ export const createHttpHost = ({
 	let hasDropped = false
 
 	const refuse = (command: string, reason: unknown, status?: number): never => {
-		const message = messageOf(reason)
+		const message = describeFailure(reason)
 		onRefused({ message, command, status, side: "member" })
 		throw new HostRefused(message, reason)
 	}
@@ -304,7 +301,7 @@ export const createHttpHost = ({
 
 	const goOffline = (reason: unknown): never => {
 		markDown()
-		throw hostOfflineOf(messageOf(reason))
+		throw hostOfflineOf(describeFailure(reason))
 	}
 
 	const rejectNetworkFailure = (command: string, reason: unknown): never =>
