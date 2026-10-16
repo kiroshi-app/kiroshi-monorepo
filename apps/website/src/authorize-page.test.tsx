@@ -30,6 +30,7 @@ const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const READ_REQUEST = `GET /authorization-requests/${REQUEST_ID}`
 const APPROVE = `POST /authorization-requests/${REQUEST_ID}/approve`
 const CANCEL = `POST /authorization-requests/${REQUEST_ID}/cancel`
+const SIGN_OUT = "POST /api/auth/sign-out"
 const RETRY_LABEL = "Retry"
 
 type Reply = { status?: number; body?: unknown }
@@ -67,6 +68,7 @@ const relayRoutes = (): RelayRoutes => ({
 		},
 	},
 	[CANCEL]: { body: { status: "cancelled" } },
+	[SIGN_OUT]: { body: { success: true } },
 })
 
 let routes: RelayRoutes = {}
@@ -147,6 +149,19 @@ const expectCancelledCard = async () => {
 	expect(
 		screen.queryByRole("heading", { name: AUTHORIZE_COPY.expiredTitle }),
 	).toBeNull()
+}
+
+const expectBrowserSignedOut = () => {
+	expect(callsTo(SIGN_OUT)).toEqual([
+		{ route: SIGN_OUT, authorization: `Bearer ${BEARER}` },
+	])
+	expect(localStorage.getItem(BEARER_KEY)).toBeNull()
+}
+
+const expectNoBearerAfterSignOut = () => {
+	const signOutIndex = calls.findIndex((call) => call.route === SIGN_OUT)
+	const callsAfter = calls.slice(signOutIndex + 1)
+	expect(callsAfter.every((call) => call.authorization === null)).toBe(true)
 }
 
 const expectNoAppLink = () => {
@@ -257,7 +272,7 @@ describe("the authorization page", () => {
 		expectNoAppLink()
 	})
 
-	it("approves with the site bearer and lands on /authorize/done", async () => {
+	it("approves with the site bearer, lands on /authorize/done and signs this browser out", async () => {
 		const assign = vi.spyOn(window.location, "assign")
 		const router = await openApproval()
 		routes[READ_REQUEST] = requestWith("approved")
@@ -271,8 +286,24 @@ describe("the authorization page", () => {
 			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
 		).toBeTruthy()
 		expect(callsTo(APPROVE)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		await waitFor(expectBrowserSignedOut)
+		expect(calls.map((call) => call.route).slice(-1)).toEqual([SIGN_OUT])
+		expect(screen.queryByRole("alert")).toBeNull()
 		expect(assign).not.toHaveBeenCalled()
 		expectNoAppLink()
+	})
+
+	it("signs this browser out after a sign-in on /login too", async () => {
+		const router = renderSite(AUTHORIZE_PATH)
+		await landedOnLoginFor(router)
+		await signInByCode()
+		await heading(AUTHORIZE_COPY.approveTitle)
+		routes[READ_REQUEST] = requestWith("approved")
+
+		press(AUTHORIZE_COPY.approve)
+
+		await heading(AUTHORIZE_COPY.doneTitle)
+		await waitFor(expectBrowserSignedOut)
 	})
 
 	it("tells how long ago the request was made, without the word asked", async () => {
@@ -290,6 +321,7 @@ describe("the authorization page", () => {
 		await expectCancelledCard()
 		expect(callsTo(CANCEL)).toHaveLength(1)
 		expect(callsTo(APPROVE)).toHaveLength(0)
+		expect(callsTo(SIGN_OUT)).toHaveLength(0)
 		expect(router.state.location.href).toBe(AUTHORIZE_PATH)
 	})
 
@@ -347,16 +379,106 @@ describe("the done page", () => {
 		expect(callsTo(READ_REQUEST)[0]?.authorization).toBe(`Bearer ${BEARER}`)
 	})
 
-	it("shows the done page again on back navigation", async () => {
+	it("says the computer is signed in and the tab can be closed, without the word Mac", async () => {
+		await openDone()
+
+		const lead = AUTHORIZE_COPY.doneLead("the computer", EMAIL)
+		expect(AUTHORIZE_COPY.doneTitle).toBe("Your computer is signed in")
+		expect(lead).toContain(EMAIL)
+		expect(lead).toContain("You can close this tab")
+		for (const copy of [
+			AUTHORIZE_COPY.doneTitle,
+			lead,
+			AUTHORIZE_COPY.browserStillSignedIn,
+		]) {
+			expect(copy).not.toMatch(/\bMac\b|'/)
+		}
+	})
+
+	it("signs this browser out once the request and the account are read", async () => {
+		await openDone()
+
+		await waitFor(expectBrowserSignedOut)
+		expect(calls.map((call) => call.route).slice(-1)).toEqual([SIGN_OUT])
+		expect(screen.queryByRole("alert")).toBeNull()
+	})
+
+	it("makes no relay call with the old bearer once this browser is signed out", async () => {
 		const router = await openDone()
+		await waitFor(expectBrowserSignedOut)
+
 		await router.navigate({ to: "/account" })
-		await landedOn(router, "/account")
+
+		await landedOn(router, "/login")
+		expectNoBearerAfterSignOut()
+	})
+
+	it("goes to /login when loaded again without the bearer", async () => {
+		const router = await openDone()
+		await router.navigate({ to: "/" })
+		await landedOn(router, "/")
 
 		router.history.back()
 
-		await heading(AUTHORIZE_COPY.doneTitle)
-		expect(router.state.location.href).toBe(DONE_PATH)
-		expect(callsTo(READ_REQUEST)).toHaveLength(2)
+		await landedOn(router, "/login")
+		expect(router.state.location.search).toEqual({ redirect: DONE_PATH })
+		expect(callsTo(READ_REQUEST)).toHaveLength(1)
+		expect(callsTo(SIGN_OUT)).toHaveLength(1)
+	})
+
+	it("treats a 401 on the sign-out as an ended session", async () => {
+		routes[SIGN_OUT] = relayError(401, "UNAUTHENTICATED")
+		const router = await openDone()
+
+		expect(localStorage.getItem(BEARER_KEY)).toBeNull()
+		expect(router.state.location.pathname).toBe("/authorize/done")
+		expect(
+			screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
+		).toBeTruthy()
+		expect(screen.queryByRole("alert")).toBeNull()
+	})
+
+	it.each([
+		["network", new TypeError("Failed to fetch")],
+		["server", relayError(500, "INTERNAL")],
+	])(
+		"keeps the done page and the bearer on a %s failure of the sign-out, with a Retry that signs out only",
+		async (_, reply) => {
+			routes[SIGN_OUT] = reply
+			await openDone()
+
+			expect((await screen.findByRole("alert")).textContent).toBe(
+				AUTHORIZE_COPY.browserStillSignedIn,
+			)
+			expect(
+				screen.getByText(AUTHORIZE_COPY.doneLead(DEVICE_NAME, EMAIL)),
+			).toBeTruthy()
+			expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
+			const routesBeforeRetry = calls.map((call) => call.route)
+			routes = relayRoutes()
+
+			press(RETRY_LABEL)
+
+			await waitFor(() => expect(screen.queryByRole("alert")).toBeNull())
+			expect(calls.map((call) => call.route)).toEqual([
+				...routesBeforeRetry,
+				SIGN_OUT,
+			])
+			expect(localStorage.getItem(BEARER_KEY)).toBeNull()
+			await heading(AUTHORIZE_COPY.doneTitle)
+		},
+	)
+
+	it("keeps the failure line when the Retry fails again", async () => {
+		routes[SIGN_OUT] = relayError(503, "UNAVAILABLE")
+		await openDone()
+		await screen.findByRole("alert")
+
+		press(RETRY_LABEL)
+
+		await waitFor(() => expect(callsTo(SIGN_OUT)).toHaveLength(2))
+		await screen.findByRole("alert")
+		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 	})
 
 	it("shows the expired page without a request, without asking the relay", async () => {
@@ -383,6 +505,8 @@ describe("the done page", () => {
 			renderSite(DONE_PATH)
 
 			await heading(AUTHORIZE_COPY.expiredTitle)
+			expect(callsTo(SIGN_OUT)).toHaveLength(0)
+			expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		},
 	)
 })
@@ -432,6 +556,7 @@ describe("the expired page", () => {
 
 		await heading(AUTHORIZE_COPY.expiredTitle)
 		expect(router.state.location.pathname).toBe("/authorize")
+		expect(callsTo(SIGN_OUT)).toHaveLength(0)
 	})
 })
 

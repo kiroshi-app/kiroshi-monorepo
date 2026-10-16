@@ -5,9 +5,11 @@ import {
 	type AuthorizationRequest,
 	clearBearer,
 	isRelayFailure,
+	RelayError,
 	readAccount,
 	readAuthorizationRequest,
 	readBearer,
+	signOutCurrentSession,
 } from "./relay"
 
 const UUID_PATTERN =
@@ -116,7 +118,31 @@ const loadAuthorizeState = async ({
 
 type DoneState =
 	| { kind: "expired" }
-	| { kind: "signed-in"; deviceName: string; email: string }
+	| {
+			kind: "signed-in"
+			deviceName: string
+			email: string
+			isBrowserStillSignedIn: boolean
+	  }
+
+const signOutBrowser = async () => {
+	try {
+		await signOutCurrentSession()
+	} catch (error) {
+		if (!isRelayFailure(error, "unauthorized")) throw error
+	}
+	clearBearer()
+}
+
+const hasBrowserSignOutFailed = async () => {
+	try {
+		await signOutBrowser()
+		return false
+	} catch (error) {
+		if (error instanceof RelayError) return true
+		throw error
+	}
+}
 
 const loadApprovedState = async (request: string): Promise<DoneState> => {
 	const [device, account] = await Promise.all([
@@ -128,6 +154,7 @@ const loadApprovedState = async (request: string): Promise<DoneState> => {
 		kind: "signed-in",
 		deviceName: device.deviceName,
 		email: account.email,
+		isBrowserStillSignedIn: await hasBrowserSignOutFailed(),
 	}
 }
 
@@ -146,5 +173,6 @@ export {
 	loadDoneState,
 	requireAuthorizeBearer,
 	signInAgainOnUnauthorized,
+	signOutBrowser,
 	validateAuthorizeSearch,
 }
