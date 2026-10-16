@@ -14,10 +14,12 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
+use kiroshi_app::events::{self, Frame};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
-use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
+use tokio::sync::broadcast::{self, error::RecvError};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -55,14 +57,31 @@ fn launch() -> Harness {
 		.expect("window builds");
 
 	let log = Arc::new(EventLog::new());
+	let heard = events::subscribed(app.handle());
 	let sink = log.clone();
-	app.listen(EVENT_CHANNEL, move |event| {
-		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
-			sink.push(parsed);
-		}
-	});
+	std::thread::spawn(move || record_agent_events(heard, &sink));
 
 	Harness { _app: app, window, log }
+}
+
+fn record_agent_events(mut heard: broadcast::Receiver<Frame>, log: &EventLog<ScopedEvent>) {
+	loop {
+		match heard.blocking_recv() {
+			Ok(frame) => {
+				if let Some(scoped) = agent_event(&frame) {
+					log.push(scoped);
+				}
+			}
+			Err(RecvError::Closed) => return,
+			Err(RecvError::Lagged(missed)) => panic!("the relay dropped {missed} frames"),
+		}
+	}
+}
+
+fn agent_event(frame: &str) -> Option<ScopedEvent> {
+	let framed: Value = serde_json::from_str(frame).expect("a relay frame is json");
+	(framed["event"] == EVENT_CHANNEL)
+		.then(|| serde_json::from_value(framed["payload"].clone()).expect("an agent event parses"))
 }
 
 impl Harness {
@@ -86,7 +105,7 @@ impl Harness {
 	fn start(&self, run: &Value) -> Result<Value, Value> {
 		self.call(
 			"agent_start_or_resume_session",
-			json!({ "scope": run, "resume": Value::Null, "cwd": std::env::temp_dir() }),
+			json!({ "scope": run, "resume": Value::Null, "cwd": Value::Null }),
 		)
 	}
 
