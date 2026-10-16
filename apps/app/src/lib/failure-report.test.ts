@@ -242,6 +242,22 @@ describe("describeFailure", () => {
 		)
 	})
 
+	it("builds a sentence from the kind and the detail when no message comes with it", () => {
+		expect(describeFailure({ kind: "undeliverable", detail: "no route" })).toBe(
+			"undeliverable: no route",
+		)
+	})
+
+	it("prefers the message over the detail when both come with it", () => {
+		expect(
+			describeFailure({
+				kind: "storage",
+				message: "disk full",
+				detail: "errno 28",
+			}),
+		).toBe("storage: disk full")
+	})
+
 	it("builds a sentence from the message alone when no kind comes with it", () => {
 		expect(describeFailure({ message: "disk full", code: 28 })).toBe(
 			"disk full",

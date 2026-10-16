@@ -33,15 +33,22 @@ export type UnreportedFailureNotice = Omit<
 	"report"
 >
 
-type FailureFields = { kind?: unknown; message?: unknown }
+type FailureFields = { kind?: unknown; message?: unknown; detail?: unknown }
 
 const REPORT_READ_BUDGET = 500
 
 const fieldsOf = (reason: unknown): FailureFields =>
 	typeof reason === "object" && reason !== null ? reason : {}
 
-const sentenceOf = ({ kind, message }: FailureFields): string | undefined => {
-	const parts = [kind, message].filter(
+const textOf = (value: unknown): string | undefined =>
+	typeof value === "string" ? value : undefined
+
+const sentenceOf = ({
+	kind,
+	message,
+	detail,
+}: FailureFields): string | undefined => {
+	const parts = [kind, textOf(message) ?? detail].filter(
 		(part): part is string => typeof part === "string",
 	)
 	return parts.length > 0 ? parts.join(": ") : undefined

@@ -7,6 +7,8 @@ import type {
 } from "./attachments-contract"
 import { attachmentBlock } from "./message-attachments"
 
+import { describeFailure } from "../failure-report"
+
 export type StagedAttachment = PromptAttachment & {
 	file: File
 }
@@ -79,7 +81,7 @@ export function toAttachmentStoreError(reason: unknown): AttachmentStoreError {
 	if (typeof reason === "object" && reason !== null && "kind" in reason) {
 		return reason as AttachmentStoreError
 	}
-	return { kind: "unwritable", detail: String(reason) }
+	return { kind: "unwritable", detail: describeFailure(reason) }
 }
 
 export function describeAttachmentError(
