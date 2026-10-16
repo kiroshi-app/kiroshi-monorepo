@@ -77,5 +77,5 @@ bun run release <type> --notes /tmp/kiroshi-release-notes-v<next>.md
 
 Then report:
 
-- The tag it published and the CI URL it printed. CI builds the app and leaves the GitHub release as a **draft** — it is not live until someone publishes it.
+- The tag it published and the CI URL it printed. The Release run publishes the GitHub release once every desktop job is green, and leaves it a **draft** when one is red: re-run the failed jobs of that run, never publish the draft by hand.
 - That the version bump still has to reach `main`: hand off to `/git:create` for the release branch. Skipping it leaves `main` on the old version, and the next release recomputes the same tag and fails after rewriting the version files.
