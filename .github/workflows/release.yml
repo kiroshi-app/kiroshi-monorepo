@@ -56,17 +56,59 @@ jobs:
     outputs:
       release-id: ${{ steps.draft.outputs.id }}
       notes: ${{ steps.notes.outputs.body }}
+      prerelease: ${{ steps.channel.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Read release notes from tag
-        id: notes
+      - name: Resolve the channel and the notes range of the tag
+        id: channel
         shell: bash
         run: |
-          body="$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")"
+          stable='^v[0-9]+[.][0-9]+[.][0-9]+$'
+          beta='^v[0-9]+[.][0-9]+[.][0-9]+-beta[.][0-9]+$'
+          if [[ "$GITHUB_REF_NAME" =~ $stable ]]; then
+            prerelease=false
+            previous_pattern=$stable
+          elif [[ "$GITHUB_REF_NAME" =~ $beta ]]; then
+            prerelease=true
+            previous_pattern="$stable|$beta"
+          else
+            echo "::error::Tag $GITHUB_REF_NAME is neither a stable vX.Y.Z nor a beta vX.Y.Z-beta.N tag, nothing built"
+            exit 1
+          fi
+          previous=$(git tag --list 'v*' --sort=-creatordate \
+            | awk -v tag="$GITHUB_REF_NAME" -v pattern="$previous_pattern" \
+              'seen && !found && $0 ~ pattern { print; found = 1 } $0 == tag { seen = 1 }')
+          if [ -z "$previous" ]; then
+            echo "::error::No v* tag created before $GITHUB_REF_NAME to start its release notes from"
+            exit 1
+          fi
+          echo "Release notes of $GITHUB_REF_NAME cover $previous..$GITHUB_REF_NAME"
+          {
+            echo "prerelease=$prerelease"
+            echo "range=$previous..$GITHUB_REF_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      # The pipeline attaches no visual to a release.
+      # A whats-new.png asset is added by hand to the release when one exists.
+      - name: Generate the release notes from the commits of the range
+        id: changelog
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
+        with:
+          version: v2.14.2
+          config: cliff.toml
+          args: ${{ steps.channel.outputs.range }}
+
+      - name: Read the release notes
+        id: notes
+        shell: bash
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.content }}
+        run: |
+          body="$CHANGELOG"
           if [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ]; then
             body="See the assets to download and install this version."
           fi
@@ -82,6 +124,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NOTES: ${{ steps.notes.outputs.body }}
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
         run: |
           releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             | jq -c --arg tag "$GITHUB_REF_NAME" '.[] | select(.tag_name == $tag) | {id, draft, html_url}')
@@ -101,7 +144,7 @@ jobs:
               -f name="Kiroshi $GITHUB_REF_NAME" \
               -f body="$RELEASE_NOTES" \
               -F draft=true \
-              -F prerelease=false \
+              -F prerelease="$PRERELEASE" \
               --jq .id)
             echo "Created draft release $id for $GITHUB_REF_NAME"
           else
@@ -187,7 +230,7 @@ jobs:
           releaseId: ${{ needs.draft.outputs.release-id }}
           releaseBody: ${{ needs.draft.outputs.notes }}
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ needs.draft.outputs.prerelease }}
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
 
@@ -199,7 +242,7 @@ jobs:
           releaseId: ${{ needs.draft.outputs.release-id }}
           releaseBody: ${{ needs.draft.outputs.notes }}
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ needs.draft.outputs.prerelease }}
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
 
@@ -236,3 +279,25 @@ jobs:
       - name: Publish the draft release
         run: |
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false --jq '"Published \(.tag_name): \(.html_url)"'
+
+      - name: Mirror latest.json on the beta release
+        if: needs.draft.outputs.prerelease == 'true'
+        shell: bash
+        run: |
+          asset=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" \
+            --jq '.[] | select(.name == "latest.json") | .url')
+          gh api -H "Accept: application/octet-stream" "$asset" > "$RUNNER_TEMP/latest.json"
+          beta=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == "beta" and (.draft | not)) | .id')
+          if [ -z "$beta" ]; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name=beta \
+              -f target_commitish="$GITHUB_SHA" \
+              -f name="Kiroshi beta" \
+              -f body="Updater feed of the beta channel: its latest.json points at the newest vX.Y.Z-beta.N pre-release." \
+              -F prerelease=true \
+              -f make_latest=false \
+              --jq '"Created the beta release: \(.html_url)"'
+          fi
+          gh release upload beta "$RUNNER_TEMP/latest.json" --clobber --repo "$GITHUB_REPOSITORY"
+          echo "latest.json of $GITHUB_REF_NAME mirrored on the beta release"

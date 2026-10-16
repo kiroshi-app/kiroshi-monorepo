@@ -1,81 +1,90 @@
 ---
 name: release
-description: Publish an Kiroshi release end to end — read the commits since the last release, draft one to three user-facing highlights, and hand them to `bun run release` as the release notes.
-when_to_use: When shipping a new Kiroshi version — "release", "publish a release", "ship the next version", "cut a patch/minor/major" — including when the notes still have to be written from the commit history. Not for writing a changelog without publishing, and not for opening a plain pull request — use /git:create.
-argument-hint: "[patch|minor|major]"
+description: Publish a Kiroshi release end to end, stable or beta. Preview the release notes git-cliff will generate, pick the version, and run `bun run release`.
+when_to_use: When shipping a new Kiroshi version, "release", "publish a release", "ship the next version", "cut a patch/minor/major", "cut a beta". Not for writing a changelog without publishing, and not for opening a plain pull request: use /git:create.
+argument-hint: "[patch|minor|major|beta|X.Y.Z|X.Y.Z-beta.N]"
 disable-model-invocation: true
-allowed-tools: Bash, Write, Read, AskUserQuestion
+allowed-tools: Bash, Read, AskUserQuestion
 ---
 
 # Release Kiroshi
 
-This skill calls `scripts/release.ts`. It never edits that script or `.github/workflows/`.
+This skill calls `scripts/release.ts`. It never edits that script, `cliff.toml` or `.github/workflows/`.
+
+The release body is not written here. `.github/workflows/release.yml` generates it with git-cliff from the squash-merged PR titles of the tag's range. This skill only previews it.
 
 ## 1. Preflight
 
 One call:
 
 ```bash
-ANCHOR=$(git log -1 --format=%H --grep='^chore(app): release v' HEAD)
-echo "branch: $(git rev-parse --abbrev-ref HEAD)"
-echo "dirty:  $(git status --porcelain | wc -l)"
-echo "notes:  $(grep -c -- '--notes' scripts/release.ts)"
-git log ${ANCHOR:+$ANCHOR..}HEAD --no-merges --format='%s'
+git fetch --quiet --tags origin
+echo "branch:  $(git rev-parse --abbrev-ref HEAD)"
+echo "dirty:   $(git status --porcelain | wc -l)"
+echo "current: $(grep -m1 '"version"' apps/app/src-tauri/tauri.conf.json)"
+git tag --list 'v*' --sort=-creatordate | head -5
 ```
 
-The anchor is the last release **commit** reachable from HEAD, not the last tag: releases land on `main` squash-merged, so `v*` tags are usually unreachable and `git describe` fails. The grep matches the commit message `scripts/release.ts` writes, so the two stay in step. No anchor means no release yet — the range is the whole history.
-
-Stop, and publish nothing, when:
-
-- The commit list is empty — say nothing has landed since the last release.
-- `notes:` is `0` — `scripts/release.ts` does not carry `--notes` yet, so the notes would be silently dropped. Say so and stop.
-- `dirty:` is non-zero — the script refuses a dirty tree. Ask what to do; never commit or stash on your own.
+Stop, and publish nothing, when `dirty:` is non-zero: the script refuses a dirty tree. Ask what to do; never commit or stash on your own.
 
 ## 2. Version
 
-Use `$ARGUMENTS` when it is `patch`, `minor`, or `major`. Otherwise ask with `AskUserQuestion`, recommending what the commits justify: a new capability → `minor`, fixes and polish only → `patch`. While the version is `0.x`, a breaking change is also `minor` — never propose `major` without being asked for it.
+The channel and the version come from `$ARGUMENTS`, or from the request:
+
+- `patch`, `minor`, `major`: a stable bump. Refused by the script when `current` carries `-beta.N`: then the stable version is explicit, `X.Y.Z`, usually the `X.Y.Z` of the current beta.
+- `beta`, or the person asks for a beta: always an explicit `X.Y.Z-beta.N`.
+  - From a beta current `X.Y.Z-beta.N`: `X.Y.Z-beta.<N+1>`.
+  - From a stable current: `X.Y.Z` is the stable bump the commits justify, then `-beta.1`, or one past the highest `vX.Y.Z-beta.N` tag already listed.
+- An explicit `X.Y.Z` or `X.Y.Z-beta.N`: taken as given.
+
+When nothing says which, ask with `AskUserQuestion`, recommending what the commits justify: a new capability is `minor`, fixes and polish only are `patch`. While the version is `0.x`, a breaking change is also `minor`: never propose `major` without being asked for it.
 
 ```bash
-bun run release <type> --dry-run
+bun run release <type-or-version> --dry-run
 ```
 
-It reports the current and next version without touching anything. Take `<next>` from it.
+It reports the current and next version and the tag, without touching anything. Take `<next>` from it.
 
-## 3. Draft the notes
+## 3. Preview the notes
 
-Pick **one to three** highlights from the commit list. Rank by what a user would notice; drop the rest.
+The range is the one `release.yml` computes, from the most recently created tag of the channel to the tag about to be cut. That tag does not exist yet, so the end of the range is `HEAD`: the release commit the script adds on top is left out of the body anyway.
 
-One sentence per highlight, written for someone who does not read this repo:
+- Stable `<next>`: from the previous stable tag, betas skipped.
+- Beta `<next>`: from the previous tag of either channel.
 
-- Name what the user can now do, in the present tense.
-- No PR numbers, hashes, file or package names, commit-type prefixes, or internal vocabulary (`Tauri`, `IPC`, `store`, `hook`).
-- Under ~120 characters — the notes are read in a narrow panel.
+```bash
+STABLE='^v[0-9]+[.][0-9]+[.][0-9]+$'
+BETA='^v[0-9]+[.][0-9]+[.][0-9]+-beta[.][0-9]+$'
+PREVIOUS=$(git tag --list 'v*' --sort=-creatordate | grep -E -m1 "$STABLE")     # stable <next>
+PREVIOUS=$(git tag --list 'v*' --sort=-creatordate | grep -E -m1 "$STABLE|$BETA") # beta <next>
+echo "range: $PREVIOUS..HEAD"
+bunx git-cliff@2.14.2 --config cliff.toml "$PREVIOUS..HEAD"
+```
 
-| Instead of | Write |
-| :-- | :-- |
-| `feat(apps/app): wire the update badge to the updater (#116)` | The app now tells you when a new version is ready to install. |
-| `fix: debounce the chat driver reconnect loop` | Chat reconnects cleanly after a dropped connection. |
+Run only the `PREVIOUS=` line of the channel. `git-cliff@2.14.2` is the version `release.yml` pins.
 
-When the range holds nothing user-visible, write one sentence about the effect anyway ("Faster startup and a steadier window."). Never invent a feature that is not in the commits.
-
-Write them to `/tmp/kiroshi-release-notes-v<next>.md` — outside the repo, so the tree stays clean for the script's own check. One sentence per line, blank line between them. No headings, no bullets, no version number.
+An empty preview means the release goes out with the line `See the assets to download and install this version.` Say so before asking to publish.
 
 ## 4. Approve
 
-Show the sentences as written, with the target version and bump type, and name what the release will commit: the five version files and `bun.lock`. Ask with `AskUserQuestion`: publish, rewrite, or cancel. Publish nothing until the answer is publish.
+Show the preview as printed, with the target version, the channel and the bump type, and name what the release will commit: the five version files and `bun.lock`. Ask with `AskUserQuestion`: publish or cancel. Publish nothing until the answer is publish.
 
-Before publishing, confirm [`apps/app/SMOKE.md`](../../../apps/app/SMOKE.md) has been walked — `README.md` makes it the gate for tagging, and CI cannot run it.
+The body is built from the PR titles and is not edited here: when a line reads badly, cancel and say which title it comes from.
+
+Before publishing, confirm [`apps/app/SMOKE.md`](../../../apps/app/SMOKE.md) has been walked: `README.md` makes it the gate for tagging, and CI cannot run it.
 
 ## 5. Publish
 
-From a release branch — the script refuses `main`:
+From a release branch, the script refuses `main`:
 
 ```bash
 git checkout -b release/v<next>   # only when on main
-bun run release <type> --notes /tmp/kiroshi-release-notes-v<next>.md
+bun run release <type-or-version>
 ```
 
 Then report:
 
 - The tag it published and the CI URL it printed. The Release run publishes the GitHub release once every desktop job is green, and leaves it a **draft** when one is red: re-run the failed jobs of that run, never publish the draft by hand.
+- For a beta: the release is a pre-release, never the latest, and its `latest.json` is mirrored on the `beta` release that the beta channel polls.
+- That a `whats-new.png` asset, when there is one, is added by hand to the published release: the pipeline attaches no visual.
 - That the version bump still has to reach `main`: hand off to `/git:create` for the release branch. Skipping it leaves `main` on the old version, and the next release recomputes the same tag and fails after rewriting the version files.
