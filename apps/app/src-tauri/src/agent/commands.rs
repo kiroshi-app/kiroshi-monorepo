@@ -628,17 +628,16 @@ pub async fn agent_title<R: Runtime>(app: AppHandle<R>, text: String) -> Option<
 	app.state::<AgentState>().title(&text, &held_connection(&app)).await
 }
 
-fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
+pub(crate) fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
 	let Some(root) = environment::root(app) else {
 		return Values::new();
 	};
-	match connection::held(&root) {
-		Ok(held) => held,
-		Err(failure) => {
-			log::warn!("{ENV_UNREADABLE}: {failure:?}");
-			Values::new()
-		}
-	}
+	let held = connection::held(&root).unwrap_or_else(|failure| {
+		log::warn!("{ENV_UNREADABLE}: {failure:?}");
+		Values::new()
+	});
+	logging::scrub::remember_env_values(held.values());
+	held
 }
 
 #[tauri::command]

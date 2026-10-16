@@ -8,6 +8,10 @@ use tauri_plugin_log::TargetKind;
 use super::scrub::{remember_env_values, ENV_MASK};
 use super::stderr_lines::StderrLines;
 use super::{builder, clear, prepared, tail, PrivateLog, LOG_FILE_NAME};
+use crate::agent::commands::held_connection;
+use crate::environment::connection;
+use crate::environment::contract::ConnectionKind;
+use crate::environment::store as environment;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_app::an_app_of_its_own;
 
@@ -196,4 +200,52 @@ fn clearing_leaves_one_empty_log_file() {
 
 	assert_eq!(folder.names(), vec![format!("{LOG_FILE_NAME}.log")]);
 	assert_eq!(folder.written(), "");
+}
+
+#[test]
+fn a_held_connection_value_reaches_the_log_from_stderr_as_its_placeholder_only() {
+	let folder = a_log_folder("connection", 1 << 20);
+	let app = an_app_of_its_own("logging-connection", mock_builder());
+	let root = environment::root(app.handle()).expect("the env root resolves");
+	connection::hold(&root, ConnectionKind::ApiKey, "log-held-connection-key")
+		.expect("the key is stored");
+
+	held_connection(app.handle());
+	let mut lines = StderrLines::default();
+	for line in lines.fed(b"[agent title] refused log-held-connection-key\n") {
+		folder.line(&line);
+	}
+
+	let written = folder.written();
+	assert!(!written.contains("log-held-connection-key"), "{written}");
+	assert!(written.contains(&format!("refused {ENV_MASK}")), "{written}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_log_folder_left_open_to_others_is_closed_to_its_owner() {
+	use std::os::unix::fs::PermissionsExt;
+	let folder = RemovedOnDrop(
+		std::env::temp_dir().join(format!("kiroshi-log-open-{}", uuid::Uuid::new_v4())),
+	);
+	fs::create_dir_all(&*folder).expect("the folder is created");
+	fs::set_permissions(&*folder, fs::Permissions::from_mode(0o755)).expect("the folder opens");
+
+	prepared(&folder.join(format!("{LOG_FILE_NAME}.log"))).expect("the log file is prepared");
+
+	assert_eq!(mode_of(&folder), 0o700);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_log_folder_whose_mode_cannot_be_tightened_fails_the_preparation() {
+	if unsafe { libc::geteuid() } == 0 {
+		return;
+	}
+	let owned_by_root = Path::new("/usr").join(format!("{LOG_FILE_NAME}.log"));
+
+	let refused = prepared(&owned_by_root).expect_err("a folder of another owner is not tightened");
+
+	assert_eq!(refused.kind(), std::io::ErrorKind::PermissionDenied);
+	assert!(!owned_by_root.exists());
 }

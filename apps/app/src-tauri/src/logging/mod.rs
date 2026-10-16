@@ -24,6 +24,9 @@ const LOG_LEVEL: LevelFilter = LevelFilter::Info;
 #[cfg(unix)]
 const PRIVATE_FILE_MODE: u32 = 0o600;
 
+#[cfg(unix)]
+const PRIVATE_DIR_MODE: u32 = 0o700;
+
 pub fn builder(file: TargetKind) -> tauri_plugin_log::Builder {
 	tauri_plugin_log::Builder::new()
 		.clear_targets()
@@ -61,6 +64,7 @@ pub fn current_file<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
 pub fn prepared(file: &Path) -> std::io::Result<()> {
 	if let Some(dir) = file.parent() {
 		private_files::create_dir(dir)?;
+		kept_owner_only(dir)?;
 	}
 	opened_private(file)?;
 	kept_private(file)
@@ -101,6 +105,17 @@ fn opened_private(file: &Path) -> std::io::Result<fs::File> {
 #[cfg(not(unix))]
 fn opened_private(file: &Path) -> std::io::Result<fs::File> {
 	fs::OpenOptions::new().create(true).append(true).open(file)
+}
+
+#[cfg(unix)]
+fn kept_owner_only(dir: &Path) -> std::io::Result<()> {
+	use std::os::unix::fs::PermissionsExt;
+	fs::set_permissions(dir, fs::Permissions::from_mode(PRIVATE_DIR_MODE))
+}
+
+#[cfg(not(unix))]
+fn kept_owner_only(_dir: &Path) -> std::io::Result<()> {
+	Ok(())
 }
 
 #[cfg(unix)]
