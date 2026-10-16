@@ -33,7 +33,37 @@ export type UnreportedFailureNotice = Omit<
 	"report"
 >
 
+type FailureFields = { kind?: unknown; message?: unknown }
+
 const REPORT_READ_BUDGET = 500
+
+const fieldsOf = (reason: unknown): FailureFields =>
+	typeof reason === "object" && reason !== null ? reason : {}
+
+const sentenceOf = ({ kind, message }: FailureFields): string | undefined => {
+	const parts = [kind, message].filter(
+		(part): part is string => typeof part === "string",
+	)
+	return parts.length > 0 ? parts.join(": ") : undefined
+}
+
+const serialized = (reason: unknown): string => {
+	try {
+		return JSON.stringify(reason) ?? String(reason)
+	} catch {
+		return typeof reason
+	}
+}
+
+export const describeFailure = (reason: unknown): string => {
+	if (typeof reason === "string") {
+		return reason
+	}
+	if (reason instanceof Error) {
+		return reason.message
+	}
+	return sentenceOf(fieldsOf(reason)) ?? serialized(reason)
+}
 
 let isThisMacAlone: () => boolean = () => false
 

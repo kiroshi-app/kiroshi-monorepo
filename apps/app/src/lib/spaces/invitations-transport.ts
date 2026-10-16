@@ -8,6 +8,7 @@ import {
 	type InvitationError,
 	type JoinedSpace,
 } from "../bindings"
+import { describeFailure } from "../failure-report"
 
 export type InvitationsTransport = {
 	list: () => Promise<Invitation[]>
@@ -58,7 +59,7 @@ const describeRefusal = (reason: unknown): string => {
 	if (isInvitationError(reason)) {
 		return describeInvitationError(reason)
 	}
-	return reason instanceof Error ? reason.message : String(reason)
+	return describeFailure(reason)
 }
 
 export const refusalNoticeOf = (reason: unknown): NoticeMessage => ({

@@ -73,7 +73,7 @@ it("never retries a mutation, even against an offline host", async () => {
 })
 
 it("raises the declared failure notice once from the query cache", async () => {
-	await fetchFailing(hostOfflineOf("gone")).fetched
+	await fetchFailing(new Error("gone")).fetched
 
 	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(1))
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
@@ -82,6 +82,12 @@ it("raises the declared failure notice once from the query cache", async () => {
 			context: expect.objectContaining({ raisedIn: "query-client-test" }),
 		}),
 	})
+})
+
+it("raises no notice for a read the joined host could not answer while offline", async () => {
+	await fetchFailing(hostOfflineOf("gone")).fetched
+
+	expect(raiseFailureNotice).not.toHaveBeenCalled()
 })
 
 it("raises the declared failure notice once from the mutation cache", async () => {
