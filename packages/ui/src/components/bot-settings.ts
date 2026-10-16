@@ -1,3 +1,4 @@
+import permissionModes from "@workspace/shared/permission-modes.json"
 import {
 	BLOT_TINTS,
 	type BotAvatarBlot,
@@ -32,15 +33,9 @@ const readBotOutputStyle = (value: string): BotOutputStyle =>
 
 type BotPermissionMode = (typeof BOT_PERMISSION_MODES)[number]
 
-const BOT_PERMISSION_MODES = [
-	"default",
-	"acceptEdits",
-	"plan",
-	"auto",
-	"dontAsk",
-] as const
+const BOT_PERMISSION_MODES = permissionModes.modes
 
-const DEFAULT_BOT_PERMISSION_MODE: BotPermissionMode = "auto"
+const DEFAULT_BOT_PERMISSION_MODE: BotPermissionMode = permissionModes.fallback
 
 const readBotPermissionMode = (value: string): BotPermissionMode =>
 	BOT_PERMISSION_MODES.find((mode) => mode === value) ??
