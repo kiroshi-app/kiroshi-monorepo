@@ -47,7 +47,6 @@ import {
 	COMPANION_SILHOUETTE_SPACE,
 	silhouetteKey,
 } from "@workspace/ui/components/companion-silhouette"
-import { OUTER } from "@workspace/ui/components/kiroshi-hexagon"
 import {
 	SPACE_EARLIER_TODAY_MISSIONS,
 	SPACE_OPEN_MISSIONS,
@@ -488,9 +487,12 @@ const isClipped = (node: HTMLElement) => node.scrollWidth > node.clientWidth
 
 const previewShortfalls = (rows: HTMLElement[]) =>
 	rows.map((row) => {
-		const preview = slotIn(row, "roster-row-preview").getBoundingClientRect()
+		const lineEnd = (
+			row.querySelector<HTMLElement>('[data-slot="conversation-bot-pile"]') ??
+			slotIn(row, "roster-row-preview")
+		).getBoundingClientRect()
 		const column = slotIn(row, "roster-row-timestamp").getBoundingClientRect()
-		return Math.round(column.right - preview.right)
+		return Math.round(column.right - lineEnd.right)
 	})
 
 const rowsWithPreview = (rows: HTMLElement[]) =>
@@ -5637,8 +5639,8 @@ const conversationArgs = () => ({
 	onPinRoster: fn(),
 })
 
-const stackIn = (row: HTMLElement) =>
-	slotsIn(slotIn(row, "conversation-avatar"), "conversation-avatar-member")
+const pileIn = (row: HTMLElement) =>
+	slotsIn(slotIn(row, "conversation-bot-pile"), "conversation-bot-pile-bot")
 
 const LONG_SPEAKER = "Bartholomew Featherstonehaugh the Third"
 
@@ -5649,7 +5651,7 @@ export const Conversations = meta.story({
 		docs: {
 			description: {
 				story:
-					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the Hive of the room, one hexagon cell per companion in a fixed square so the column never widens. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
+					"A conversation is a room holding several companions of the space, and it lives in the roster among them rather than in a list of its own. Its row is built from the same parts as a companion row — a 40px avatar slot, the name, the time of the last message and one clipped line of that message — so the two kinds sit on the same columns and stand the same height, which is what this story checks across a mixed list. What changes is the slot: instead of one companion it carries the room's subject icon, a 40px hexagon cell, and the companions of the room move to a pile of small hexagons on the preview line, under the time. Pick `ConversationParticipants` for the stack on its own, `ConversationSelected` for the room a reader is in, `ConversationRowMenu` for what a right-click offers.",
 			},
 		},
 	},
@@ -5682,7 +5684,7 @@ export const ConversationParticipants = meta.story({
 		docs: {
 			description: {
 				story:
-					"How many companions a room shows. The slot draws the Hive: at most three rounded hexagon cells, one companion each, in the same square a companion row gives one avatar, so the column never moves. Two companions tile on the diagonal; a room of five shows two companions and a third cell counting the other three. That count is the only thing a screen reader hears, as the label of the square; a room within its three cells stays decorative and hidden, since a list of avatar labels in front of the room name would bury the name.",
+					"How many companions a room shows. They sit in a pile on the preview line, under the time: at most three 14px hexagons, 10px apart. A room of two shows two; a room of five shows two companions and a third hexagon counting the other three. The subject icon is decorative and hidden. The pile is hidden too while it shows every companion; once it counts the others, that count is the only thing a screen reader hears of it, as the label of the pile.",
 			},
 		},
 	},
@@ -5690,23 +5692,32 @@ export const ConversationParticipants = meta.story({
 		const pair = rowFor(canvasElement, "Launch review")
 		const crowd = rowFor(canvasElement, "Transport migration")
 
-		await expect(stackIn(pair)).toHaveLength(2)
-		await expect(stackIn(crowd)).toHaveLength(2)
+		await expect(pileIn(pair)).toHaveLength(2)
+		await expect(pileIn(crowd)).toHaveLength(2)
 		await expect(
-			slotIn(crowd, "conversation-avatar-overflow"),
+			slotIn(crowd, "conversation-bot-pile-overflow"),
 		).toHaveTextContent("+3")
 
-		await expect(slotIn(pair, "conversation-avatar")).toHaveAttribute(
+		await expect(slotIn(pair, "conversation-bot-pile")).toHaveAttribute(
 			"aria-hidden",
 			"true",
 		)
-		await expect(slotIn(crowd, "conversation-avatar")).toHaveAccessibleName(
+		await expect(slotIn(crowd, "conversation-bot-pile")).toHaveAccessibleName(
 			"+3",
 		)
+		for (const room of [pair, crowd]) {
+			await expect(slotIn(room, "conversation-subject-icon")).toHaveAttribute(
+				"aria-hidden",
+				"true",
+			)
+		}
 
-		const square = slotIn(crowd, "conversation-avatar").getBoundingClientRect()
-		await expect(Math.round(square.width)).toBe(Math.round(square.height))
-		await expect(Math.round(square.width)).toBe(
+		await expect(
+			Math.round(
+				slotIn(crowd, "conversation-subject-icon").getBoundingClientRect()
+					.width,
+			),
+		).toBe(
 			Math.round(
 				slotIn(
 					rowFor(canvasElement, "Atlas"),
@@ -5714,16 +5725,6 @@ export const ConversationParticipants = meta.story({
 				).getBoundingClientRect().width,
 			),
 		)
-
-		for (const cell of stackIn(crowd)) {
-			const tile = cell.getBoundingClientRect()
-			const centre = tile.top + tile.height / 2
-			const reach = (tile.height / 2) * (OUTER.halfHeight / OUTER.halfWidth)
-			await expect(tile.left).toBeGreaterThanOrEqual(square.left)
-			await expect(tile.right).toBeLessThanOrEqual(square.right)
-			await expect(centre - reach).toBeGreaterThanOrEqual(square.top)
-			await expect(centre + reach).toBeLessThanOrEqual(square.bottom)
-		}
 	},
 })
 
@@ -5746,7 +5747,7 @@ export const ConversationOfOneBot = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which — same name column, same preview, same time — so the kind is carried by the shape of the icon alone: a companion floats free at the full 40px of the slot, a room is one smaller Hive cell in its blot under a dot weave. The footprint is identical, so the column never moves; only what fills it changes. A room of one is still a room, which is why it gets the Hive cell rather than being flattened into the companion it holds.",
+					"A room holding one companion, sitting right above that same companion's own row. Nothing on the two lines of text says which is which, so the kind is carried by the left cell: a companion shows its own avatar, a room shows its subject icon and the companion it holds as one small hexagon under the time. The footprint is identical, so the column never moves. A room of one is still a room, which is why it keeps the subject icon rather than being flattened into the companion it holds.",
 			},
 		},
 	},
@@ -5754,18 +5755,20 @@ export const ConversationOfOneBot = meta.story({
 		const room = rowFor(canvasElement, "Atlas one to one")
 		const bot = rowFor(canvasElement, "Atlas")
 
-		const frame = slotIn(room, "conversation-avatar")
+		const cell = slotIn(room, "conversation-subject-icon")
 		const loose = slotIn(bot, "bot-identity-avatar")
 		await expect(
-			bot.querySelector('[data-slot="conversation-avatar"]'),
+			bot.querySelector('[data-slot="conversation-subject-icon"]'),
+		).toBeNull()
+		await expect(
+			bot.querySelector('[data-slot="conversation-bot-pile"]'),
 		).toBeNull()
 
-		await expect(Math.round(frame.getBoundingClientRect().width)).toBe(
+		await expect(Math.round(cell.getBoundingClientRect().width)).toBe(
 			Math.round(loose.getBoundingClientRect().width),
 		)
-		const [held] = stackIn(room)
-		await expect(stackIn(room)).toHaveLength(1)
-		await expect(held.getBoundingClientRect().width).toBeLessThan(
+		await expect(pileIn(room)).toHaveLength(1)
+		await expect(pileIn(room)[0].getBoundingClientRect().width).toBeLessThan(
 			loose.getBoundingClientRect().width,
 		)
 	},
@@ -5833,7 +5836,7 @@ export const BareRows = meta.story({
 		docs: {
 			description: {
 				story:
-					"A companion nobody has written to and a room nobody has spoken in, each above one that carries a line. Check that a row with nothing to preview centres its name on the avatar instead of leaving it riding above the middle: the preview line owns its height only while it holds words, and the pair of lines keeps the height of a full row either way, so the list stays on one rhythm and no row grows or shrinks as the first message lands. Pick `NoHistory` for the bare companion among four, `ConversationPreview` for the room that has something to say.",
+					"A companion nobody has written to and a room nobody has spoken in, each above one that carries a line. Check that a companion with nothing to preview centres its name on the avatar instead of leaving it riding above the middle, since its preview line owns its height only while it holds words; a room keeps the line for the pile of its companions under the time. The pair of lines keeps the height of a full row either way, so the list stays on one rhythm and no row grows or shrinks as the first message lands. Pick `NoHistory` for the bare companion among four, `ConversationPreview` for the room that has something to say.",
 			},
 		},
 	},
@@ -5846,7 +5849,7 @@ export const BareRows = meta.story({
 		await expect(slotIn(bareRoom, "roster-row-preview")).toBeEmptyDOMElement()
 
 		await expectNameOnAvatarCentre(bareBot, "bot-identity-avatar")
-		await expectNameOnAvatarCentre(bareRoom, "conversation-avatar")
+		await expect(slotIn(bareRoom, "conversation-bot-pile")).toBeVisible()
 
 		await expectAlignedRows(rows)
 	},
@@ -6017,7 +6020,7 @@ export const ConversationMissionStrips = meta.story({
 		await expect(slotIn(rows[0], "roster-row-timestamp")).toHaveTextContent(
 			"Tue",
 		)
-		await expectAvatarCentredOnRowPart(rows[0], "conversation-avatar")
+		await expectAvatarCentredOnRowPart(rows[0], "conversation-subject-icon")
 		await expectAlignedRows(rows)
 	},
 })

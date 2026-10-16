@@ -47,3 +47,18 @@ export const SelectedBot = meta.story({
 		await expect(args.onSelect).toHaveBeenCalledWith(ATLAS.id)
 	},
 })
+
+export const BotOwnRowKeepsItsAvatarAndNoPile = meta.story({
+	args: { isSelected: false },
+	play: async ({ canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		const avatar = slotIn(row, "bot-identity-avatar").getBoundingClientRect()
+		await expect([avatar.width, avatar.height]).toEqual([40, 40])
+		await expect(
+			row.querySelector('[data-slot="conversation-subject-icon"]'),
+		).toBeNull()
+		await expect(
+			row.querySelector('[data-slot="conversation-bot-pile"]'),
+		).toBeNull()
+	},
+})

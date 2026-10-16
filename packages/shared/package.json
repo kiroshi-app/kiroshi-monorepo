@@ -9,6 +9,7 @@
 	},
 	"type": "module",
 	"exports": {
+		"./conversation-icons.json": "./conversation-icons.json",
 		"./permission-modes.json": "./permission-modes.json"
 	}
 }

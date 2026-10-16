@@ -1,7 +1,6 @@
 "use client"
 
 import { motion, useReducedMotionConfig } from "motion/react"
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
@@ -17,6 +16,7 @@ import {
 	hiveLayout,
 } from "@workspace/ui/components/hive-layout"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
+import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 import { SPRING_LAYOUT, TRANSITION_NONE } from "@workspace/ui/lib/ease"
 
 const FRAME = "relative grid shrink-0"
@@ -25,11 +25,7 @@ const MEMBER_CELL = "absolute"
 
 const OVERFLOW_CELL = "pointer-events-none absolute"
 
-const OVERFLOW_ART = "block size-full"
-
 const COUNTER_TEXT = "font-bold tabular-nums"
-
-const OVERFLOW_EDGE_WIDTH = 2
 
 type ConversationParticipant = Pick<
 	BotIdentityAvatarProps,
@@ -81,46 +77,30 @@ type OverflowCellProps = {
 	overflow: HiveOverflow
 }
 
-const OverflowCell = ({ label, overflow }: OverflowCellProps) => {
-	const edgeClipId = useId()
-	return (
-		<span
-			className={OVERFLOW_CELL}
-			data-slot="conversation-avatar-overflow"
-			style={{
-				...hiveCellOrigin(overflow),
-				width: overflow.side,
-				height: overflow.side,
-			}}
-		>
-			<svg
-				aria-hidden="true"
-				className={OVERFLOW_ART}
-				viewBox={`0 0 ${overflow.side} ${overflow.side}`}
+const OverflowCell = ({ label, overflow }: OverflowCellProps) => (
+	<span
+		className={OVERFLOW_CELL}
+		data-slot="conversation-avatar-overflow"
+		style={{
+			...hiveCellOrigin(overflow),
+			width: overflow.side,
+			height: overflow.side,
+		}}
+	>
+		<OutlinedHexagon fill="var(--secondary)" side={overflow.side}>
+			<text
+				className={COUNTER_TEXT}
+				fontSize={overflow.fontSize}
+				style={{ fill: "var(--muted-foreground)" }}
+				textAnchor="middle"
+				x="50%"
+				y={overflow.baseline}
 			>
-				<path
-					clipPath={`url(#${edgeClipId})`}
-					d={overflow.path}
-					strokeWidth={OVERFLOW_EDGE_WIDTH}
-					style={{ fill: "var(--secondary)", stroke: "var(--image-outline)" }}
-				/>
-				<clipPath id={edgeClipId}>
-					<path d={overflow.path} />
-				</clipPath>
-				<text
-					className={COUNTER_TEXT}
-					fontSize={overflow.fontSize}
-					style={{ fill: "var(--muted-foreground)" }}
-					textAnchor="middle"
-					x="50%"
-					y={overflow.baseline}
-				>
-					{label}
-				</text>
-			</svg>
-		</span>
-	)
-}
+				{label}
+			</text>
+		</OutlinedHexagon>
+	</span>
+)
 
 const AvatarGroup = ({
 	participants,
