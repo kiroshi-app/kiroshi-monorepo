@@ -82,7 +82,7 @@ export const startMissionRunDriver = ({
 		reportFailure,
 		retake: (changed) => void consider(changed),
 	})
-	const { live, rememberThread, end } = book
+	const { live, rememberSpace, rememberThread, end } = book
 	const run = createMissionRunBegin({ driver, store, missions, book, now })
 	const consider = createMissionRunTake({
 		store,
@@ -103,6 +103,7 @@ export const startMissionRunDriver = ({
 		for (const { mission } of caughtUp) {
 			void consider({
 				missionId: mission.id,
+				spaceId: mission.spaceId,
 				state: mission.state,
 				stateSeq: mission.stateSeq,
 				isAgentRunning: mission.isAgentRunning,
@@ -116,6 +117,7 @@ export const startMissionRunDriver = ({
 
 		for (const { mission } of onBoard) {
 			rememberThread(mission)
+			rememberSpace({ missionId: mission.id, spaceId: mission.spaceId })
 		}
 
 		startRunsFor(onBoard.filter(({ mission }) => isTakenState(mission.state)))

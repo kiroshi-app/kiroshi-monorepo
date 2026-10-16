@@ -127,6 +127,7 @@ const SEND_FAILURE_TITLE = "Couldn’t send your answer"
 const missionOf = (bot: Bot, origin: Conversation): Mission => ({
 	id: "m-1",
 	originConversationId: origin.id,
+	spaceId: null,
 	botId: bot.id,
 	threadConversationId: THREAD_CONVERSATION,
 	objective: OBJECTIVE,
@@ -346,6 +347,7 @@ const missionChanges = () => {
 			for (const listener of [...listeners]) {
 				listener({
 					missionId: "m-1",
+					spaceId: null,
 					state: "working",
 					stateSeq: 1,
 					isAgentRunning: false,

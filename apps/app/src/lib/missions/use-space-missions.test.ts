@@ -84,6 +84,7 @@ describe("useSpaceMissions", () => {
 		act(() => {
 			announce({
 				missionId: "m-1",
+				spaceId: null,
 				state: "waiting_human",
 				stateSeq: 2,
 				isAgentRunning: false,
@@ -117,6 +118,7 @@ describe("useSpaceMissions", () => {
 		act(() => {
 			announce({
 				missionId: "m-1",
+				spaceId: null,
 				state: "done",
 				stateSeq: 2,
 				isAgentRunning: false,

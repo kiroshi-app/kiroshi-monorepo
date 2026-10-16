@@ -137,6 +137,7 @@ const { joinedHosts } = await import("../host")
 const missionOf = (id: string, objective: string): Mission => ({
 	id,
 	originConversationId: "c-1",
+	spaceId: null,
 	botId: "bot-on-host",
 	threadConversationId: `c-${id}`,
 	objective,

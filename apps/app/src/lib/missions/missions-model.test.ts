@@ -40,6 +40,7 @@ const missionIn = (state: MissionState): Mission => ({
 	stateSeq: 1,
 	isAgentRunning: false,
 	originConversationId: "c-1",
+	spaceId: null,
 	botId: "b-1",
 	threadConversationId: "c-mission-1",
 	objective: "Rewrite the changelog parser",
@@ -667,6 +668,7 @@ it("carries the kind, the source and the time of every event", () => {
 const mission = (over: Partial<Mission>): Mission => ({
 	id: "m-1",
 	originConversationId: "c-1",
+	spaceId: null,
 	botId: "b-1",
 	threadConversationId: "t-1",
 	objective: "Drive every roster line from its mission.",

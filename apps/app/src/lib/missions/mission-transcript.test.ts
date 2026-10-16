@@ -31,6 +31,7 @@ const rowOf = (
 const missionOf = (id: string, openedAt: number, botId = "bot-1"): Mission => ({
 	id,
 	originConversationId: "c-1",
+	spaceId: null,
 	botId,
 	threadConversationId: `c-${id}`,
 	objective: "Rewrite the changelog parser",

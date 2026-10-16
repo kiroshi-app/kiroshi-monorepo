@@ -3694,6 +3694,16 @@
             }
           ]
         },
+        "spaceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "state": {
           "$ref": "#/$defs/MissionState"
         },
@@ -3736,6 +3746,7 @@
       "required": [
         "id",
         "originConversationId",
+        "spaceId",
         "botId",
         "threadConversationId",
         "objective",
@@ -3792,6 +3803,16 @@
         "missionId": {
           "type": "string"
         },
+        "spaceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "state": {
           "$ref": "#/$defs/MissionState"
         },
@@ -3801,6 +3822,7 @@
       },
       "required": [
         "missionId",
+        "spaceId",
         "state",
         "stateSeq",
         "isAgentRunning",

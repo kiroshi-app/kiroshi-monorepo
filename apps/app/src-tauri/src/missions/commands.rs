@@ -44,6 +44,7 @@ const UNHEARD: &str = "no agent reaches this mission, it moves only on the lines
 #[serde(rename_all = "camelCase")]
 pub struct MissionChanged {
 	pub mission_id: String,
+	pub space_id: Option<String>,
 	pub state: MissionState,
 	pub state_seq: i64,
 	pub is_agent_running: bool,
@@ -68,6 +69,7 @@ pub(super) fn announce_change<R: Runtime>(
 		MISSION_CHANGED,
 		MissionChanged {
 			mission_id: mission.id.clone(),
+			space_id: mission.space_id.clone(),
 			state: mission.state,
 			state_seq: mission.state_seq,
 			is_agent_running: mission.is_agent_running,
@@ -757,6 +759,7 @@ mod tests {
 			vec![
 				json!({
 					"missionId": opened.id,
+					"spaceId": "personal",
 					"state": "waiting_bot",
 					"stateSeq": asked.state_seq,
 					"isAgentRunning": false,
@@ -764,6 +767,7 @@ mod tests {
 				}),
 				json!({
 					"missionId": opened.id,
+					"spaceId": "personal",
 					"state": "working",
 					"stateSeq": answered.state_seq,
 					"isAgentRunning": false,
@@ -771,6 +775,7 @@ mod tests {
 				}),
 				json!({
 					"missionId": opened.id,
+					"spaceId": "personal",
 					"state": "waiting_bot",
 					"stateSeq": asked_again.state_seq,
 					"isAgentRunning": false,
@@ -879,6 +884,7 @@ mod tests {
 			vec![
 				json!({
 					"missionId": opened.id,
+					"spaceId": "personal",
 					"state": "working",
 					"stateSeq": 1,
 					"isAgentRunning": false,
@@ -886,6 +892,7 @@ mod tests {
 				}),
 				json!({
 					"missionId": opened.id,
+					"spaceId": "personal",
 					"state": "waiting_human",
 					"stateSeq": 2,
 					"isAgentRunning": false,
@@ -893,6 +900,12 @@ mod tests {
 				}),
 			],
 			"the front was not told which mission moved and where it stands"
+		);
+		let read = mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		assert_eq!(
+			read.mission.space_id.as_deref(),
+			Some("personal"),
+			"the mission read does not name the Space of its conversation"
 		);
 	}
 

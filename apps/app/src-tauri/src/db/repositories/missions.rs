@@ -69,7 +69,9 @@ pub(in crate::db) const MISSION_COLUMNS: &str =
 	(SELECT created_at FROM mission_events
 		WHERE mission_events.mission_id = missions.id AND mission_events.kind = 'agent_stopped'
 		ORDER BY mission_events.seq DESC LIMIT 1) AS agent_stopped_at,
-	NULLIF(watch_branch, ''), NULLIF(watch_workspace_path, '')
+	NULLIF(watch_branch, ''), NULLIF(watch_workspace_path, ''),
+	(SELECT space_id FROM conversations
+		WHERE conversations.id = missions.origin_conversation_id) AS origin_space_id
 	FROM missions";
 
 const INSERT_MISSION: &str = "INSERT INTO missions
@@ -891,6 +893,7 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 	Ok(Mission {
 		id: row.get(0)?,
 		origin_conversation_id: row.get(1)?,
+		space_id: row.get(27)?,
 		bot_id: row.get(2)?,
 		thread_conversation_id: row.get(3)?,
 		objective: row.get(4)?,

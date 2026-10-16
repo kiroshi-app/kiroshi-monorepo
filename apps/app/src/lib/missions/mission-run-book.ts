@@ -22,6 +22,8 @@ type MissionRunBookOptions = Pick<
 
 export type MissionRunBook = ReturnType<typeof createMissionRunBook>
 
+type MissionSpace = Pick<MissionChanged, "missionId" | "spaceId">
+
 export const STATUS_CAUSE: MissionRunCause = "status"
 
 export const isClosingRun = ({ call }: LiveMissionRun) =>
@@ -40,6 +42,7 @@ export const createMissionRunBook = ({
 	const live = new Map<string, LiveMissionRun>()
 	const kept = new Map<string, MissionChanged>()
 	const missionIdOfThread = new Map<string, string>()
+	const spaceIdOfMission = new Map<string, string>()
 	const holding = new Set<string>()
 	const seqs = createMissionSeqs()
 	const failures = createMissionRunFailures(reportFailure)
@@ -47,7 +50,10 @@ export const createMissionRunBook = ({
 
 	const raiseFailure: typeof failures.raise = (failure) => {
 		if (!isStopped) {
-			failures.raise(failure)
+			failures.raise({
+				...failure,
+				spaceId: spaceIdOfMission.get(failure.missionId),
+			})
 		}
 	}
 
@@ -104,9 +110,19 @@ export const createMissionRunBook = ({
 		await refuse(held, "the mission run outlived its deadline")
 	}
 
+	const rememberSpace = ({ missionId, spaceId }: MissionSpace) => {
+		if (spaceId) {
+			spaceIdOfMission.set(missionId, spaceId)
+		} else {
+			spaceIdOfMission.delete(missionId)
+		}
+	}
+
 	const readMission = async (missionId: string) => {
 		try {
-			return await missions.detail(missionId)
+			const detail = await missions.detail(missionId)
+			rememberSpace({ missionId, spaceId: detail.mission.spaceId })
+			return detail
 		} catch (thrown) {
 			throw new Error("the mission could not be read", { cause: thrown })
 		}
@@ -139,6 +155,7 @@ export const createMissionRunBook = ({
 		refuse,
 		expire,
 		readMission,
+		rememberSpace,
 		rememberThread,
 		runAt,
 	}

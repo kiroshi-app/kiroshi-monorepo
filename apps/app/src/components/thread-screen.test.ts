@@ -819,6 +819,7 @@ const SOLO_ROUTINE: Routine = {
 const SOLO_MISSION: Mission = {
 	id: "m-1",
 	originConversationId: "c-bot-1",
+	spaceId: null,
 	botId: "bot-1",
 	threadConversationId: "c-mission-1",
 	objective: "Rewrite the changelog parser",
@@ -1413,6 +1414,7 @@ describe("ThreadScreen", () => {
 
 		announce.toPanel?.({
 			missionId: SOLO_MISSION.id,
+			spaceId: null,
 			state: "waiting_human",
 			stateSeq: 2,
 			isAgentRunning: false,
@@ -1499,6 +1501,7 @@ describe("ThreadScreen", () => {
 		})
 		announce.toPanel?.({
 			missionId: SOLO_MISSION.id,
+			spaceId: null,
 			state: "waiting_human",
 			stateSeq: 2,
 			isAgentRunning: false,

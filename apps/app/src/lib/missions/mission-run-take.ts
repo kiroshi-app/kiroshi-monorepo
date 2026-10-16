@@ -110,6 +110,8 @@ export const createMissionRunTake = ({
 	}
 
 	return async (changed: MissionChanged) => {
+		book.rememberSpace(changed)
+
 		if (book.isBusy(changed.missionId)) {
 			book.kept.set(changed.missionId, changed)
 			return

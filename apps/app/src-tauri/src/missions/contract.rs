@@ -157,6 +157,7 @@ impl MissionEntry {
 pub struct Mission {
 	pub id: String,
 	pub origin_conversation_id: String,
+	pub space_id: Option<String>,
 	pub bot_id: String,
 	pub thread_conversation_id: String,
 	pub objective: String,
