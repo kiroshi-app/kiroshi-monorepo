@@ -70,7 +70,6 @@ export const createMissionRunFailures = (
 	reportFailure: ReportMissionRunFailure,
 ) => {
 	const bursts = new Map<string, FailureBurst>()
-	let isStopped = false
 
 	const flush = (cause: string) => {
 		const burst = bursts.get(cause)
@@ -91,9 +90,6 @@ export const createMissionRunFailures = (
 	}
 
 	const raise = (failure: MissionRunFailure) => {
-		if (isStopped) {
-			return
-		}
 		const cause = causeOf(failure)
 		const burst = bursts.get(cause)
 		if (burst) {
@@ -107,12 +103,11 @@ export const createMissionRunFailures = (
 		})
 	}
 
-	const stop = () => {
-		isStopped = true
+	const flushAll = () => {
 		for (const cause of [...bursts.keys()]) {
 			flush(cause)
 		}
 	}
 
-	return { raise, stop }
+	return { raise, flushAll }
 }

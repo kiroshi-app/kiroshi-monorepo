@@ -45,6 +45,12 @@ export const createMissionRunBook = ({
 	const failures = createMissionRunFailures(reportFailure)
 	let isStopped = false
 
+	const raiseFailure: typeof failures.raise = (failure) => {
+		if (!isStopped) {
+			failures.raise(failure)
+		}
+	}
+
 	const isBusy = (missionId: string) =>
 		holding.has(missionId) || live.has(missionId)
 
@@ -85,7 +91,7 @@ export const createMissionRunBook = ({
 		forget(held)
 		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
 		shutdownSession(scope)
-		failures.raise({ reason, missionId: held.call.mission.id })
+		raiseFailure({ reason, missionId: held.call.mission.id })
 	}
 
 	const expire = async (missionId: string) => {
@@ -122,9 +128,9 @@ export const createMissionRunBook = ({
 		isStopped: () => isStopped,
 		stop: () => {
 			isStopped = true
-			failures.stop()
+			failures.flushAll()
 		},
-		raiseFailure: failures.raise,
+		raiseFailure,
 		isBusy,
 		shutdownSession,
 		takeAgain,
