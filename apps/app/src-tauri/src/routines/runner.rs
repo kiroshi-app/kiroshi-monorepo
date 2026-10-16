@@ -88,9 +88,8 @@ async fn run<R: Runtime>(app: AppHandle<R>, timing: RunTiming, requested: RunReq
 		Err(detail) => return close(&app, &requested, could_not_start(&detail)).await,
 	};
 	let (events, mut arriving) = mpsc::unbounded_channel();
-	let label = format!("routine run {}", requested.run_id);
 	let held = scope.clone();
-	let mut reading = listen(&app, label, move |heard| heard == &held, events);
+	let mut reading = listen(&app, move |heard| heard == &held, events);
 	let closing = drive(&app, timing, &requested, &scope, &mut arriving, &mut reading).await;
 	drop(reading);
 	close(&app, &requested, closing).await;
@@ -364,7 +363,7 @@ async fn closed<R: Runtime>(
 pub(crate) struct RelayReader(JoinHandle<String>);
 
 impl RelayReader {
-	async fn failure(&mut self) -> String {
+	pub(crate) async fn failure(&mut self) -> String {
 		match (&mut self.0).await {
 			Ok(failure) => failure,
 			Err(error) => format!("the relay reader stopped: {error}"),
@@ -380,40 +379,43 @@ impl Drop for RelayReader {
 
 pub(crate) fn listen<R: Runtime>(
 	app: &AppHandle<R>,
-	label: String,
 	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
 	events: mpsc::UnboundedSender<ScopedEvent>,
 ) -> RelayReader {
-	let heard = events::subscribed(app);
-	RelayReader(tauri::async_runtime::spawn(relayed(heard, label, keeps, events)))
+	read(events::subscribed(app), keeps, events)
+}
+
+pub(crate) fn read(
+	heard: broadcast::Receiver<Frame>,
+	keeps: impl Fn(&RuntimeScope) -> bool + Send + 'static,
+	events: mpsc::UnboundedSender<ScopedEvent>,
+) -> RelayReader {
+	RelayReader(tauri::async_runtime::spawn(relayed(heard, keeps, events)))
 }
 
 async fn relayed(
 	mut heard: broadcast::Receiver<Frame>,
-	label: String,
 	keeps: impl Fn(&RuntimeScope) -> bool,
 	events: mpsc::UnboundedSender<ScopedEvent>,
 ) -> String {
-	let failure = loop {
+	loop {
 		let frame = match heard.recv().await {
 			Ok(frame) => frame,
-			Err(RecvError::Lagged(missed)) => break format!("the relay dropped {missed} frames"),
-			Err(RecvError::Closed) => break "the relay closed".to_owned(),
+			Err(RecvError::Lagged(missed)) => return format!("the relay dropped {missed} frames"),
+			Err(RecvError::Closed) => return "the relay closed".to_owned(),
 		};
 		let scoped = match agent_event(&frame) {
 			Ok(Some(scoped)) => scoped,
 			Ok(None) => continue,
-			Err(failure) => break failure,
+			Err(failure) => return failure,
 		};
 		if !scoped.scope.as_ref().is_some_and(&keeps) {
 			continue;
 		}
 		if events.send(scoped).is_err() {
-			return format!("{label} has stopped");
+			return "the reader's owner stopped listening".to_owned();
 		}
-	};
-	eprintln!("{label} stopped reading agent events: {failure}");
-	failure
+	}
 }
 
 #[derive(Deserialize)]
@@ -500,8 +502,6 @@ mod tests {
 	use crate::events::BUFFERED_FRAMES;
 	use crate::test_app::an_app_of_its_own;
 
-	const LABEL: &str = "routine run test";
-
 	fn a_scope(runtime_session_id: &str) -> RuntimeScope {
 		RuntimeScope {
 			conversation_id: "conversation-1".to_owned(),
@@ -549,13 +549,7 @@ mod tests {
 	fn read_for(scope: &RuntimeScope, heard: broadcast::Receiver<Frame>) -> Reading {
 		let (events, arriving) = mpsc::unbounded_channel();
 		let held = scope.clone();
-		let keeps = move |scope: &RuntimeScope| scope == &held;
-		let reader = RelayReader(tauri::async_runtime::spawn(relayed(
-			heard,
-			LABEL.to_owned(),
-			keeps,
-			events,
-		)));
+		let reader = read(heard, move |scope| scope == &held, events);
 		Reading { arriving, reader }
 	}
 
@@ -635,7 +629,7 @@ mod tests {
 		let run = a_scope("session-1");
 		let (events, mut arriving) = mpsc::unbounded_channel();
 		let held = run.clone();
-		let reader = listen(app.handle(), LABEL.to_owned(), move |scope| scope == &held, events);
+		let reader = listen(app.handle(), move |scope| scope == &held, events);
 
 		drop(reader);
 
