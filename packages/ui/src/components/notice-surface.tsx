@@ -84,7 +84,9 @@ type FailureSpecs = {
 type FailureContext = {
 	raisedAt?: string
 	raisedIn?: string
+	side?: FailureSide
 	space?: string
+	mission?: string
 	botId?: string
 	botName?: string
 	conversation?: string
@@ -92,6 +94,7 @@ type FailureContext = {
 	turn?: string
 	command?: string
 	httpStatus?: number
+	count?: number
 }
 
 type FailureLog = {
@@ -142,7 +145,9 @@ const FAILURE_SPECS_LABELS = {
 const FAILURE_CONTEXT_LABELS = {
 	raisedAt: "Time",
 	raisedIn: "Raised in",
+	side: "Side",
 	space: "Space",
+	mission: "Mission",
 	botId: "Bot id",
 	botName: "Bot name",
 	conversation: "Conversation",
@@ -150,6 +155,7 @@ const FAILURE_CONTEXT_LABELS = {
 	turn: "Turn",
 	command: "Command",
 	httpStatus: "HTTP status",
+	count: "Count",
 } satisfies Record<keyof FailureContext, string>
 
 const onOneLine = (text = "") => text.replace(/\s+/g, " ").trim()
@@ -200,10 +206,11 @@ const formatFailureReport = ({
 
 type FailureNotice = NoticeMessage & {
 	report?: FailureReport
+	cause?: string
 	onClose?: () => void
 }
 
-type RaisedNotice = FailureNotice & {
+type RaisedNotice = Omit<FailureNotice, "cause"> & {
 	type: NoticeType
 	priority: "high" | "low"
 	timeout?: number
@@ -249,8 +256,8 @@ const raiseTransientNotice = ({
 
 const failuresOnSurface = new Map<string, string>()
 
-const raiseFailureNotice = ({ onClose, ...message }: FailureNotice) => {
-	const failure = JSON.stringify([message.title, message.description])
+const raiseFailureNotice = ({ onClose, cause, ...message }: FailureNotice) => {
+	const failure = cause ?? JSON.stringify([message.title, message.description])
 	const shown = failuresOnSurface.get(failure)
 	if (shown) return shown
 

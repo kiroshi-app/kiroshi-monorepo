@@ -128,6 +128,33 @@ describe("formatFailureReport", () => {
 		)
 	})
 
+	it("names the side, the mission and the count in the Context block", () => {
+		expect(
+			formatFailureReport({
+				description: "The mission run failed.",
+				report: {
+					context: {
+						raisedIn: "mission-run-driver",
+						side: "local",
+						mission: "m-1",
+						count: 3,
+					},
+				},
+			}),
+		).toBe(
+			[
+				"Kiroshi failure report",
+				"Review before sharing: may contain file names and local paths.",
+				"The mission run failed.",
+				"-- Context",
+				"Raised in: mission-run-driver",
+				"Side: local",
+				"Mission: m-1",
+				"Count: 3",
+			].join("\n"),
+		)
+	})
+
 	it("formats the Specs block alone", () => {
 		expect(
 			formatFailureSpecs({

@@ -5,8 +5,9 @@ import type {
 	MissionState,
 } from "./mission-contract"
 import type { createMissionRunBegin } from "./mission-run-begin"
-import { detailOf, type MissionRunBook } from "./mission-run-book"
+import type { MissionRunBook } from "./mission-run-book"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
+import { failureOf } from "./mission-run-failure"
 import type { MissionRunCause } from "./mission-run-prompt"
 import {
 	isSummonedMissionState,
@@ -58,7 +59,7 @@ export const createMissionRunTake = ({
 
 			return seated
 		} catch (thrown) {
-			throw new Error(`the mission bot could not be read: ${detailOf(thrown)}`)
+			throw new Error("the mission bot could not be read", { cause: thrown })
 		}
 	}
 
@@ -80,7 +81,11 @@ export const createMissionRunTake = ({
 		try {
 			await missions.answered(mission.id, mission.stateSeq)
 		} catch (thrown) {
-			book.raiseFailure(`the answer could not be recorded: ${detailOf(thrown)}`)
+			book.raiseFailure({
+				reason: "the answer could not be recorded",
+				error: thrown,
+				missionId: mission.id,
+			})
 		}
 	}
 
@@ -128,7 +133,7 @@ export const createMissionRunTake = ({
 				book.seqs.remember(changed.missionId, detail.mission.stateSeq)
 			}
 		} catch (thrown) {
-			book.raiseFailure(detailOf(thrown))
+			book.raiseFailure(failureOf(thrown, changed.missionId))
 		} finally {
 			book.holding.delete(changed.missionId)
 			book.takeAgain(changed.missionId)

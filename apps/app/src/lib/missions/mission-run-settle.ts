@@ -1,11 +1,11 @@
 import type { Mission } from "./mission-contract"
 import {
-	detailOf,
 	isClosingRun,
 	type LiveMissionRun,
 	type MissionRunBook,
 } from "./mission-run-book"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
+import { failureOf } from "./mission-run-failure"
 import type { createMissionReportWriter } from "./mission-run-report"
 
 import type { TurnEnded } from "../agent/contract"
@@ -29,7 +29,7 @@ export const createMissionRunSettle = ({
 			const { mission } = await book.readMission(missionId)
 			return mission
 		} catch (thrown) {
-			book.raiseFailure(detailOf(thrown))
+			book.raiseFailure(failureOf(thrown, missionId))
 			return null
 		}
 	}
@@ -41,7 +41,11 @@ export const createMissionRunSettle = ({
 		try {
 			await missions.reported(missionId, reportedTurnId)
 		} catch (thrown) {
-			book.raiseFailure(`the report could not be recorded: ${detailOf(thrown)}`)
+			book.raiseFailure({
+				reason: "the report could not be recorded",
+				error: thrown,
+				missionId,
+			})
 		}
 	}
 
@@ -60,15 +64,23 @@ export const createMissionRunSettle = ({
 		held: LiveMissionRun,
 		settled: Mission | null,
 	) => {
+		const missionId = held.call.mission.id
+
 		if (!isClosingRun(held)) {
-			return book.raiseFailure("the status mission run reported nothing")
+			return book.raiseFailure({
+				reason: "the status mission run reported nothing",
+				missionId,
+			})
 		}
 
 		if (!isClosed(settled)) {
 			return
 		}
 
-		book.raiseFailure("the closing mission run reported nothing")
+		book.raiseFailure({
+			reason: "the closing mission run reported nothing",
+			missionId,
+		})
 		await recordReport(settled.id, null)
 	}
 
@@ -90,16 +102,23 @@ export const createMissionRunSettle = ({
 	}
 
 	return async (held: LiveMissionRun, ended: TurnEnded) => {
+		const missionId = held.call.mission.id
 		const settled = await endOn(held)
 
 		if (ended.outcome !== "completed") {
-			return book.raiseFailure(`the mission run's turn was ${ended.outcome}`)
+			return book.raiseFailure({
+				reason: `the mission run's turn was ${ended.outcome}`,
+				missionId,
+			})
 		}
 
 		const report = readRunReport(ended.structuredOutput)
 
 		if (!report) {
-			book.raiseFailure("the mission run ended with no structured output")
+			book.raiseFailure({
+				reason: "the mission run ended with no structured output",
+				missionId,
+			})
 			return recordWhenOwed(settled, null)
 		}
 
@@ -111,7 +130,11 @@ export const createMissionRunSettle = ({
 			const reportedTurnId = await writeReport(held, report.text)
 			await recordWhenOwed(settled, reportedTurnId)
 		} catch (thrown) {
-			book.raiseFailure(`the report could not be written: ${detailOf(thrown)}`)
+			book.raiseFailure({
+				reason: "the report could not be written",
+				error: thrown,
+				missionId,
+			})
 		}
 	}
 }

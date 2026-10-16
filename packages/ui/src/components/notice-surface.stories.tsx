@@ -464,6 +464,27 @@ export const RepeatedFailure = meta.story({
 	},
 })
 
+export const FailuresOfTwoCauses = meta.story({
+	tags: ["test-only"],
+	render: () => <NoticeDemo label="Run the routine" raise={() => undefined} />,
+	play: async () => {
+		const kept = raiseFailureNotice({ ...FAILURE, cause: "folder-unreadable" })
+		await expect(
+			raiseFailureNotice({ ...FAILURE, cause: "folder-unreadable" }),
+		).toBe(kept)
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(1))
+
+		raiseFailureNotice({ ...FAILURE, cause: "disk-full" })
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(2))
+
+		for (const card of cardsOnSurface()) {
+			const close = card.querySelector<HTMLElement>("[data-slot=toast-close]")
+			close?.click()
+		}
+		await waitFor(() => expect(cardsOnSurface()).toHaveLength(0))
+	},
+})
+
 const retry = fn()
 
 export const WithAction = meta.story({

@@ -45,6 +45,6 @@ export type ChatDriver = {
 	shutdown: (scope: RuntimeScope) => Promise<void>
 	pendingQuestions: (conversationId: string) => Promise<ScopedEvent[]>
 	subscribe: (
-		onEvent: (event: ScopedEvent) => void,
+		onEvent: (event: ScopedEvent, hostId?: string | null) => void,
 	) => Promise<ChatDriverUnsubscribe>
 }

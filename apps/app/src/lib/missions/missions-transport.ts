@@ -40,9 +40,12 @@ const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
 			conversationId,
 			botId,
 		}),
-	onChanged: (listener: (changed: MissionChanged) => void) =>
-		listen<MissionChanged>(MISSION_CHANGED_EVENT, ({ payload }) =>
-			listener(payload),
+	onChanged: (
+		listener: (changed: MissionChanged, hostId?: string | null) => void,
+	) =>
+		listen<MissionChanged>(
+			MISSION_CHANGED_EVENT,
+			({ payload }, hostId?: string | null) => listener(payload, hostId),
 		),
 })
 

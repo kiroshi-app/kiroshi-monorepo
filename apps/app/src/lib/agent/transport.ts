@@ -74,10 +74,10 @@ export const agentTransport: ChatDriver = {
 	pendingQuestions: (conversationId: string) =>
 		invoke<ScopedEvent[]>("agent_pending_questions", { conversationId }),
 
-	subscribe: (onEvent: (event: ScopedEvent) => void) =>
-		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }) => {
+	subscribe: (onEvent) =>
+		listen<ScopedEvent>(EVENT_CHANNEL, ({ payload }, hostId) => {
 			traceAgentTurn(payload.event)
-			onEvent(payload)
+			onEvent(payload, hostId)
 		}),
 }
 

@@ -28,7 +28,7 @@ type Decided = {
 export type ScriptedDriver = ChatDriver & {
 	submissions: Submission[]
 	pushTo: (botId: string, events: AgentEvent[]) => void
-	emit: (scope: RuntimeScope, event: AgentEvent) => void
+	emit: (scope: RuntimeScope, event: AgentEvent, hostId?: string | null) => void
 	cancelled: string[]
 	answered: Answered[]
 	decided: Decided[]
@@ -37,7 +37,10 @@ export type ScriptedDriver = ChatDriver & {
 
 export const createScriptedDriver = (): ScriptedDriver => {
 	const listeners = new Set<
-		(scoped: { scope: RuntimeScope; event: AgentEvent }) => void
+		(
+			scoped: { scope: RuntimeScope; event: AgentEvent },
+			hostId?: string | null,
+		) => void
 	>()
 	const submissions: Submission[] = []
 	const cancelled: string[] = []
@@ -55,9 +58,13 @@ export const createScriptedDriver = (): ScriptedDriver => {
 		return last.scope
 	}
 
-	const emit = (scope: RuntimeScope, event: AgentEvent) => {
+	const emit = (
+		scope: RuntimeScope,
+		event: AgentEvent,
+		hostId: string | null = null,
+	) => {
 		for (const listener of listeners) {
-			listener({ scope, event })
+			listener({ scope, event }, hostId)
 		}
 	}
 

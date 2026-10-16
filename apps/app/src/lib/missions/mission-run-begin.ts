@@ -1,4 +1,4 @@
-import { detailOf, type MissionRunBook, reporting } from "./mission-run-book"
+import { type MissionRunBook, reporting } from "./mission-run-book"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { MISSION_RUN_OUTPUT_SCHEMA } from "./mission-run-output"
 import { type MissionRunCall, missionRunPromptFor } from "./mission-run-prompt"
@@ -69,7 +69,7 @@ export const createMissionRunBegin = ({
 			if (held) {
 				book.end(held)
 			}
-			throw new Error(`the mission run could not start: ${detailOf(thrown)}`)
+			throw new Error("the mission run could not start", { cause: thrown })
 		}
 	}
 
