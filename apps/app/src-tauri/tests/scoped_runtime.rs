@@ -2,8 +2,9 @@ mod bundled;
 mod common;
 mod event_log;
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
@@ -41,7 +42,7 @@ fn a_run(epoch: i64) -> Value {
 
 struct Harness {
 	window: WebviewWindow<MockRuntime>,
-	log: Arc<EventLog<ScopedEvent>>,
+	recorder: Arc<Recorder>,
 	_app: AppOfItsOwn,
 }
 
@@ -56,32 +57,88 @@ fn launch() -> Harness {
 		.build()
 		.expect("window builds");
 
-	let log = Arc::new(EventLog::new());
-	let heard = events::subscribed(app.handle());
-	let sink = log.clone();
-	std::thread::spawn(move || record_agent_events(heard, &sink));
+	let recorder = recording(events::subscribed(app.handle()));
 
-	Harness { _app: app, window, log }
+	Harness { _app: app, window, recorder }
 }
 
-fn record_agent_events(mut heard: broadcast::Receiver<Frame>, log: &EventLog<ScopedEvent>) {
-	loop {
-		match heard.blocking_recv() {
-			Ok(frame) => {
-				if let Some(scoped) = agent_event(&frame) {
-					log.push(scoped);
+#[derive(Clone)]
+enum Relayed {
+	Event(Box<ScopedEvent>),
+	RecorderStopped,
+}
+
+struct Recorder {
+	log: EventLog<Relayed>,
+	failure: OnceLock<String>,
+}
+
+fn recording(heard: broadcast::Receiver<Frame>) -> Arc<Recorder> {
+	let recorder = Arc::new(Recorder { log: EventLog::new(), failure: OnceLock::new() });
+	let writer = recorder.clone();
+	std::thread::spawn(move || writer.record(heard));
+	recorder
+}
+
+impl Recorder {
+	fn record(&self, mut heard: broadcast::Receiver<Frame>) {
+		let failure = loop {
+			match heard.blocking_recv() {
+				Ok(frame) => match agent_event(&frame) {
+					Ok(Some(scoped)) => self.log.push(Relayed::Event(Box::new(scoped))),
+					Ok(None) => {}
+					Err(failure) => break failure,
+				},
+				Err(RecvError::Closed) => return,
+				Err(RecvError::Lagged(missed)) => {
+					break format!("the relay dropped {missed} frames")
 				}
 			}
-			Err(RecvError::Closed) => return,
-			Err(RecvError::Lagged(missed)) => panic!("the relay dropped {missed} frames"),
+		};
+		self.failure.get_or_init(|| failure);
+		self.log.push(Relayed::RecorderStopped);
+	}
+
+	fn events(&self) -> Vec<ScopedEvent> {
+		heard(&self.log.held())
+	}
+
+	fn forget(&self) {
+		self.log.forget();
+	}
+
+	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ScopedEvent]) -> Option<T>) -> T {
+		let outcome = self.log.until(DEADLINE, |relayed| match self.failure.get() {
+			Some(failure) => Some(Err(failure.clone())),
+			None => ready(&heard(relayed)).map(Ok),
+		});
+		match outcome {
+			Some(Ok(found)) => found,
+			Some(Err(failure)) => panic!("the relay recorder failed before {expected}: {failure}"),
+			None => panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events()),
 		}
 	}
 }
 
-fn agent_event(frame: &str) -> Option<ScopedEvent> {
-	let mut framed: Value = serde_json::from_str(frame).expect("a relay frame is json");
-	(framed["event"] == EVENT_CHANNEL)
-		.then(|| serde_json::from_value(framed["payload"].take()).expect("an agent event parses"))
+fn heard(relayed: &[Relayed]) -> Vec<ScopedEvent> {
+	relayed
+		.iter()
+		.filter_map(|entry| match entry {
+			Relayed::Event(scoped) => Some(scoped.as_ref().clone()),
+			Relayed::RecorderStopped => None,
+		})
+		.collect()
+}
+
+fn agent_event(frame: &str) -> Result<Option<ScopedEvent>, String> {
+	let mut framed: Value = serde_json::from_str(frame)
+		.map_err(|error| format!("a relay frame is not json: {error}"))?;
+	if framed["event"] != EVENT_CHANNEL {
+		return Ok(None);
+	}
+	serde_json::from_value(framed["payload"].take())
+		.map(Some)
+		.map_err(|error| format!("an agent event does not parse: {error}"))
 }
 
 impl Harness {
@@ -118,17 +175,15 @@ impl Harness {
 	}
 
 	fn events(&self) -> Vec<ScopedEvent> {
-		self.log.held()
+		self.recorder.events()
 	}
 
 	fn forget_events(&self) {
-		self.log.forget();
+		self.recorder.forget();
 	}
 
 	fn wait_for<T>(&self, expected: &str, ready: impl Fn(&[ScopedEvent]) -> Option<T>) -> T {
-		self.log.until(DEADLINE, ready).unwrap_or_else(|| {
-			panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events())
-		})
+		self.recorder.wait_for(expected, ready)
 	}
 }
 
@@ -339,4 +394,40 @@ fn two_bots_answer_at_once_and_each_stream_stays_under_its_own_run() {
 	assert_eq!(harness.call("agent_shutdown", json!({ "scope": second })), Ok(Value::Null));
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
+}
+
+fn failure_of(recorder: &Recorder) -> String {
+	let started = Instant::now();
+	let failure = catch_unwind(AssertUnwindSafe(|| recorder.wait_for("an event", |_| None::<()>)))
+		.expect_err("the wait fails once the recorder has failed");
+	assert!(started.elapsed() < DEADLINE, "the wait outlived the recorder that failed");
+	failure.downcast_ref::<String>().cloned().expect("the panic carries its reason")
+}
+
+fn a_recorder_fed(frames: &[&str], capacity: usize) -> Arc<Recorder> {
+	let (relay, heard) = broadcast::channel(capacity);
+	for frame in frames {
+		relay.send(Frame::from(*frame)).expect("the recorder is subscribed");
+	}
+	recording(heard)
+}
+
+#[test]
+fn a_relay_that_dropped_frames_fails_the_wait_with_their_count() {
+	let frames = [r#"{"event":"other","payload":null}"#; 3];
+	let recorder = a_recorder_fed(&frames, 1);
+	recorder.forget();
+	assert!(failure_of(&recorder).contains("dropped 2 frames"));
+}
+
+#[test]
+fn a_frame_that_is_not_json_fails_the_wait_with_the_parse_failure() {
+	let recorder = a_recorder_fed(&["not json"], 1);
+	assert!(failure_of(&recorder).contains("a relay frame is not json"));
+}
+
+#[test]
+fn an_agent_event_that_does_not_parse_fails_the_wait_with_the_parse_failure() {
+	let recorder = a_recorder_fed(&[r#"{"event":"agent://event","payload":{"nope":1}}"#], 1);
+	assert!(failure_of(&recorder).contains("an agent event does not parse"));
 }
