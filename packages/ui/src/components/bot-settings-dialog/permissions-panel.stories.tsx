@@ -1,12 +1,16 @@
 import { useState } from "react"
-import { expect, fn, screen, waitFor } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { BLANK_BOT_PERMISSIONS } from "@workspace/ui/components/bot-settings"
+import {
+	BLANK_BOT_PERMISSIONS,
+	BOT_PERMISSION_MODES,
+} from "@workspace/ui/components/bot-settings"
 import {
 	PermissionsPanel,
 	type PermissionsPanelProps,
 } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 const PermissionsHost = (props: PermissionsPanelProps) => {
 	const [permissions, setPermissions] = useState(props.permissions)
@@ -22,6 +26,36 @@ const PermissionsHost = (props: PermissionsPanelProps) => {
 		/>
 	)
 }
+
+type SelectedMode = {
+	position: number
+	label: string
+	hint: string
+}
+
+const selectingMode = ({ position, label, hint }: SelectedMode) => ({
+	args: {
+		permissions: {
+			...BLANK_BOT_PERMISSIONS,
+			defaultMode: BOT_PERMISSION_MODES[position],
+		},
+	},
+	parameters: {
+		docs: {
+			description: {
+				story: `The answer at position ${position} of the shared modes, picked. Check that the field reads ${label} and the hint under it says what that answer lets through.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		const canvas = within(canvasElement)
+
+		await expect(
+			canvas.getByRole("combobox", { name: /Default answer/ }),
+		).toHaveTextContent(label)
+		await expect(canvas.getByText(hint)).toBeVisible()
+	},
+})
 
 const meta = preview.meta({
 	title: "Settings/Bot/PermissionsPanel",
@@ -76,6 +110,46 @@ export const Untouched = meta.story({
 	},
 })
 
+export const AskEveryTime = meta.story(
+	selectingMode({
+		position: 0,
+		label: "Ask every time",
+		hint: "You approve every tool the rules below don’t cover.",
+	}),
+)
+
+export const AcceptEdits = meta.story(
+	selectingMode({
+		position: 1,
+		label: "Accept edits",
+		hint: "File edits go through. You approve everything else.",
+	}),
+)
+
+export const PlanFirst = meta.story(
+	selectingMode({
+		position: 2,
+		label: "Plan first",
+		hint: "The companion reads and plans, and changes nothing until you approve.",
+	}),
+)
+
+export const DecideAlone = meta.story(
+	selectingMode({
+		position: 3,
+		label: "Decide alone",
+		hint: "The companion decides on its own, within the rules below.",
+	}),
+)
+
+export const NeverAsk = meta.story(
+	selectingMode({
+		position: 4,
+		label: "Never ask",
+		hint: "You’re never asked. Only the deny rules below stop the companion.",
+	}),
+)
+
 export const PickingTheMode = meta.story({
 	parameters: {
 		docs: {
@@ -91,6 +165,18 @@ export const PickingTheMode = meta.story({
 		)
 
 		const plan = await screen.findByRole("option", { name: "Plan first" })
+
+		await expect(
+			screen.getAllByRole("option").map((option) => option.textContent),
+		).toEqual(
+			BOT_PERMISSION_MODES.map((mode) =>
+				i18n.getResource(
+					i18n.language,
+					"bots",
+					`approvals.mode.option.${mode}.label`,
+				),
+			),
+		)
 
 		await expect(
 			screen.queryByRole("option", { name: /bypass/i }),

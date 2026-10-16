@@ -27,8 +27,10 @@ const PermissionsPanel = ({
 	const patch = (fields: Partial<BotPermissions>) =>
 		onPermissionsChange({ ...permissions, ...fields })
 
+	const modeCopy = t as (key: `approvals.mode.option.${string}`) => string
+
 	const modeOptions = BOT_PERMISSION_MODES.map((mode) => ({
-		label: t(`approvals.mode.option.${mode}.label`),
+		label: modeCopy(`approvals.mode.option.${mode}.label`),
 		value: mode,
 	}))
 
@@ -51,7 +53,7 @@ const PermissionsPanel = ({
 	return (
 		<>
 			<SettingsSelect
-				hint={t(
+				hint={modeCopy(
 					`approvals.mode.option.${readBotPermissionMode(permissions.defaultMode)}.hint`,
 				)}
 				label={t("approvals.mode.label")}

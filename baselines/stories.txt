@@ -1290,7 +1290,12 @@ settings-bot-mcpserverlaunch--with-revealed-value
 settings-bot-memorypanel--clearing
 settings-bot-memorypanel--default
 settings-bot-memorypanel--empty
+settings-bot-permissionspanel--accept-edits
+settings-bot-permissionspanel--ask-every-time
+settings-bot-permissionspanel--decide-alone
+settings-bot-permissionspanel--never-ask
 settings-bot-permissionspanel--picking-the-mode
+settings-bot-permissionspanel--plan-first
 settings-bot-permissionspanel--playground
 settings-bot-permissionspanel--refusing-a-malformed-rule
 settings-bot-permissionspanel--untouched
