@@ -1,10 +1,11 @@
 "use client"
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { useCallback, useId, useRef, useState } from "react"
+import { useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Icons } from "@workspace/ui/components/icons"
+import { ReleaseNotes } from "@workspace/ui/components/release-notes"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
 	Dialog,
@@ -14,6 +15,7 @@ import {
 	DialogPortal,
 	DialogTitle,
 } from "@workspace/ui/components/ui/dialog"
+import { useOverflowsParent } from "@workspace/ui/hooks/use-overflows-parent"
 import { cn } from "@workspace/ui/lib/utils"
 
 type WhatsNewDialogVariant = "first-launch" | "from-about"
@@ -30,7 +32,7 @@ type WhatsNewDialogProps = {
 	visual?: WhatsNewDialogVisual
 	headline: string
 	subline: string
-	notes: string[]
+	notes: string
 	releaseNotesUrl: string
 	variant: WhatsNewDialogVariant
 	channel: WhatsNewDialogChannel
@@ -41,7 +43,7 @@ type WhatsNewDialogProps = {
 
 type NotesListProps = {
 	legend: string
-	notes: string[]
+	notes: string
 }
 
 const COPY_OF = {
@@ -57,28 +59,9 @@ const BACKDROP_CLASS_OF = {
 	"from-about": "bg-black/18",
 } as const satisfies Record<WhatsNewDialogVariant, string | undefined>
 
-const useOverflowOf = () => {
-	const [overflows, setOverflows] = useState(false)
-
-	const listRef = useCallback((list: HTMLUListElement | null) => {
-		const box = list?.parentElement
-		if (!list || !box) return
-
-		const observer = new ResizeObserver(() =>
-			setOverflows(list.offsetHeight > box.clientHeight),
-		)
-		observer.observe(list)
-		observer.observe(box)
-
-		return () => observer.disconnect()
-	}, [])
-
-	return { overflows, listRef }
-}
-
 const NotesList = ({ legend, notes }: NotesListProps) => {
 	const legendId = useId()
-	const { overflows, listRef } = useOverflowOf()
+	const { overflows, contentRef } = useOverflowsParent()
 
 	return (
 		<section className="flex flex-col gap-2 border-border border-t pt-4">
@@ -94,27 +77,12 @@ const NotesList = ({ legend, notes }: NotesListProps) => {
 					tabIndex: 0,
 				})}
 			>
-				<ul
-					aria-labelledby={overflows ? undefined : legendId}
-					className="flex flex-col gap-1.5"
-					ref={listRef}
+				<div
+					ref={contentRef}
+					{...(!overflows && { role: "group", "aria-labelledby": legendId })}
 				>
-					{notes.map((note, index) => (
-						<li
-							className="flex gap-2.5 text-foreground text-sm"
-							// biome-ignore lint/suspicious/noArrayIndexKey: notes never reorder, and two notes may read the same
-							key={index}
-						>
-							<span
-								aria-hidden="true"
-								className="flex h-5 w-1.5 shrink-0 items-center justify-center"
-							>
-								<span className="size-1.25 rounded-full bg-muted-foreground" />
-							</span>
-							<span className="min-w-0 wrap-break-word">{note}</span>
-						</li>
-					))}
-				</ul>
+					<ReleaseNotes body={notes} size="sm" />
+				</div>
 				{overflows && (
 					<div
 						aria-hidden="true"
@@ -193,9 +161,9 @@ const WhatsNewDialog = ({
 							<DialogTitle className="font-semibold text-foreground text-lg leading-6 tracking-[-0.01em]">
 								{headline}
 							</DialogTitle>
-							<DialogDescription>{subline}</DialogDescription>
+							{subline && <DialogDescription>{subline}</DialogDescription>}
 						</div>
-						{notes.length > 0 && (
+						{notes.trim() && (
 							<NotesList legend={t(`whatsNew.${copy}.legend`)} notes={notes} />
 						)}
 						<div className="flex items-center justify-between pt-1">

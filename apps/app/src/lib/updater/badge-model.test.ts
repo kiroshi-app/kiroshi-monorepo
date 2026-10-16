@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { GIT_CLIFF_BODY_0_24_2 } from "@workspace/ui/components/release-notes.fixtures"
+
 import { toUpdateBadgeProps } from "./badge-model"
 import type { UpdaterState } from "./updater-controller"
 
@@ -80,16 +82,16 @@ describe("toUpdateBadgeProps", () => {
 		expect(props.status).toBe("error")
 	})
 
-	it("lists the release notes one line per change", () => {
+	it("hands the release notes down as the raw body", () => {
 		const props = propsOf(
 			stateOf({
 				host: { kind: "available", version: "1.4.0" },
 				offeredVersion: "1.4.0",
 			}),
-			"- Faster launches\n\n* Calmer sidebar\n",
+			GIT_CLIFF_BODY_0_24_2,
 		)
 
-		expect(props.releaseNotes).toEqual(["Faster launches", "Calmer sidebar"])
+		expect(props.releaseNotes).toBe(GIT_CLIFF_BODY_0_24_2)
 	})
 
 	it("links the release page of the offered version", () => {

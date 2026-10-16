@@ -13,6 +13,7 @@ import {
 	HISTORY_OLDEST_DATE,
 } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { BOT_SKILLS } from "@workspace/ui/components/plugin-settings/skills.fixtures"
+import { GIT_CLIFF_BODY_0_24_2 } from "@workspace/ui/components/release-notes.fixtures"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import {
 	WhatsNewDialog,
@@ -142,6 +143,9 @@ const W5_NOTES = [
 	"Applications reconnect after the computer wakes.",
 ]
 
+const bulletsOf = (notes: string[]) =>
+	notes.map((note) => `- ${note}`).join("\n")
+
 const RELEASE_NOTES_URL = "https://example.com/releases/0.24.0"
 
 const FIRST_LAUNCH: WhatsNewDialogProps = {
@@ -149,7 +153,7 @@ const FIRST_LAUNCH: WhatsNewDialogProps = {
 	visual: missionVisual(LIGHT_VIGNETTE),
 	headline: "Missions show the branch they're watching",
 	subline: "See where the work lands without asking the companion.",
-	notes: W1_NOTES,
+	notes: bulletsOf(W1_NOTES),
 	releaseNotesUrl: RELEASE_NOTES_URL,
 	variant: "first-launch",
 	channel: "stable",
@@ -201,7 +205,7 @@ export const FirstLaunch = meta.story({
 		await expect(visual.parentElement?.getBoundingClientRect().height).toBe(164)
 		await expect(scope.getByText("New in 0.24.0")).toBeVisible()
 		await expect(
-			scope.getByRole("list", { name: "Also in this update" }),
+			scope.getByRole("group", { name: "Also in this update" }),
 		).toBeVisible()
 		await expect(scope.queryByRole("region")).toBeNull()
 
@@ -229,7 +233,7 @@ export const WithoutAVisual = meta.story({
 		visual: undefined,
 		headline: "Approvals name the companion that's asking",
 		subline: "Know who wants what before you answer.",
-		notes: W2_NOTES,
+		notes: bulletsOf(W2_NOTES),
 	},
 	parameters: {
 		docs: {
@@ -256,7 +260,7 @@ export const WithoutAVisualDark = WithoutAVisual.extend({
 })
 
 export const LongContent = meta.story({
-	args: { notes: W3_NOTES },
+	args: { notes: bulletsOf(W3_NOTES) },
 	parameters: {
 		docs: {
 			description: {
@@ -290,6 +294,51 @@ export const LongContent = meta.story({
 export const LongContentDark = LongContent.extend({
 	globals: { theme: "dark" },
 	args: { visual: missionVisual(DARK_VIGNETTE) },
+})
+
+export const LongGitCliffNotes = meta.story({
+	args: {
+		version: "0.24.2",
+		visual: undefined,
+		headline: "What’s new in 0.24.2",
+		subline: "",
+		notes: GIT_CLIFF_BODY_0_24_2,
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The real git-cliff body of 0.24.2, which opens on a heading, so the headline falls back to naming the version and no subline is drawn. Each `###` heading reads as a section label over its entries inside the scrolling list, each `**scope**` is bold, and no `#` or asterisk is left on screen.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+		const box = slotIn(dialog, "whats-new-notes")
+		const scope = within(box)
+		const label = scope.getByRole("heading", { level: 3, name: "Features" })
+
+		await expect(dialog).toHaveAccessibleName("What’s new in 0.24.2")
+		await expect(dialog).not.toHaveAccessibleDescription()
+		await expect(label).toBeVisible()
+		await expect(label.nextElementSibling?.tagName).toBe("UL")
+		await expect(getComputedStyle(label).fontWeight).toBe("500")
+		const [scopeLabel] = scope.getAllByText("ui", { selector: "strong" })
+		await expect(
+			Number(getComputedStyle(scopeLabel).fontWeight),
+		).toBeGreaterThanOrEqual(600)
+		await expect(box.textContent).not.toMatch(/\*\*|#/)
+		await waitFor(() =>
+			expect(box.scrollHeight).toBeGreaterThan(box.clientHeight),
+		)
+		await expect(
+			within(dialog).getByRole("region", { name: "Also in this update" }),
+		).toBe(box)
+	},
+})
+
+export const LongGitCliffNotesDark = LongGitCliffNotes.extend({
+	globals: { theme: "dark" },
 })
 
 const OverUserSettings = ({ open, ...props }: WhatsNewDialogProps) => {
@@ -331,7 +380,7 @@ export const FromAbout = meta.story({
 		variant: "from-about",
 		headline: "Conversations reopen where you left off",
 		subline: "Come back to one and you land on the last message you read.",
-		notes: W4_NOTES,
+		notes: bulletsOf(W4_NOTES),
 	},
 	render: (args) => <OverUserSettings {...args} />,
 	parameters: {
@@ -376,7 +425,7 @@ export const BetaChannel = meta.story({
 		headline: "Routines can run on a weekday schedule",
 		subline:
 			"Pick the days, and the companion runs it at the same time on each one.",
-		notes: W5_NOTES,
+		notes: bulletsOf(W5_NOTES),
 	},
 	parameters: {
 		docs: {

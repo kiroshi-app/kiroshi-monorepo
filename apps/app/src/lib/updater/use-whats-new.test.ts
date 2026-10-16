@@ -114,7 +114,7 @@ describe("the What's new dialog at launch", () => {
 			version: RUNNING,
 			headline: "Missions show their branch",
 			subline: "See where the work lands.",
-			notes: ["Calmer sidebar"],
+			notes: "- Calmer sidebar",
 			visual: undefined,
 			channel: "stable",
 		})
