@@ -1,5 +1,3 @@
-import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
-
 import type {
 	MissionChanged,
 	MissionDetail,
@@ -7,6 +5,7 @@ import type {
 } from "./mission-contract"
 import { createMissionRunBegin } from "./mission-run-begin"
 import { createMissionRunBook, reporting } from "./mission-run-book"
+import type { ReportMissionRunFailure } from "./mission-run-failure"
 import { createMissionReportWriter } from "./mission-run-report"
 import { createMissionRunRoute } from "./mission-run-route"
 import { createMissionRunSettle } from "./mission-run-settle"
@@ -28,7 +27,7 @@ type MissionRunPort = {
 	reported: (missionId: string, turnId: string | null) => Promise<unknown>
 	answered: (missionId: string, seq: number) => Promise<unknown>
 	onChanged: (
-		listener: (changed: MissionChanged) => void,
+		listener: (changed: MissionChanged, hostId?: string | null) => void,
 	) => Promise<MissionRunUnsubscribe>
 	detail: (missionId: string) => Promise<MissionDetail>
 	rosterBlock: (conversationId: string, botId: string) => Promise<string | null>
@@ -47,9 +46,11 @@ export type MissionRunDriverOptions = {
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
 	chat: Pick<ChatController, "reportRun">
 	missions: MissionRunPort
-	reportFailure: (notice: NoticeMessage) => void
+	reportFailure: ReportMissionRunFailure
 	now?: () => number
 }
+
+const isFromLocalHost = (hostId?: string | null) => (hostId ?? null) === null
 
 const listening = (
 	opening: Promise<MissionRunUnsubscribe>,
@@ -129,11 +130,19 @@ export const startMissionRunDriver = ({
 	}
 
 	const changes = listening(
-		missions.onChanged((changed) => void consider(changed)),
+		missions.onChanged((changed, hostId) => {
+			if (isFromLocalHost(hostId)) {
+				void consider(changed)
+			}
+		}),
 		"mission run driver: mission changes could not be listened to",
 	)
 	const events = listening(
-		driver.subscribe(route),
+		driver.subscribe((event, hostId) => {
+			if (isFromLocalHost(hostId)) {
+				route(event)
+			}
+		}),
 		"mission run driver: agent events could not be listened to",
 	)
 

@@ -14,6 +14,7 @@ import {
 import {
 	buildFailureReport,
 	type FailureFacts,
+	failureReporterIn,
 	raiseReportedFailure,
 	reportLocalWhen,
 } from "./failure-report"
@@ -264,6 +265,23 @@ describe("raiseReportedFailure", () => {
 		expect(copiedText).toContain(`Bot id: ${BOT_ID}`)
 		expect(copiedText).toContain("Bot name: Atlas")
 		expect(copiedText).toContain(`Conversation: ${CONVERSATION_ID}`)
+	})
+
+	it("copies the side, the mission and the count a reporter hands it into Context", async () => {
+		failureReporterIn("mission-run-driver")(
+			{ title: "Mission run failed", cause: "the mission could not be read" },
+			{ side: "local", mission: "m-1", count: 3 },
+		)
+
+		const copiedText = await copiedTextOfRaisedNotice()
+		const context = copiedText.slice(copiedText.indexOf("-- Context"))
+		expect(context).toContain("Raised in: mission-run-driver")
+		expect(context).toContain("Side: local")
+		expect(context).toContain("Mission: m-1")
+		expect(context).toContain("Count: 3")
+		expect(failureNotice.mock.lastCall?.[0]?.cause).toBe(
+			"the mission could not be read",
+		)
 	})
 
 	it("scrubs the description before it reaches the notice", async () => {

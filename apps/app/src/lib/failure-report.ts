@@ -2,7 +2,6 @@ import {
 	type FailureContext,
 	type FailureReport,
 	type FailureSpecs,
-	type NoticeMessage,
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 
@@ -12,7 +11,14 @@ import { scrubFailureText } from "./failure-text-scrubber"
 
 export type FailureCorrelation = Pick<
 	FailureContext,
-	"space" | "botId" | "botName" | "conversation" | "session" | "turn"
+	| "space"
+	| "mission"
+	| "botId"
+	| "botName"
+	| "conversation"
+	| "session"
+	| "turn"
+	| "count"
 >
 
 export type FailureFacts = FailureCorrelation & {
@@ -22,7 +28,7 @@ export type FailureFacts = FailureCorrelation & {
 	side?: FailureSpecs["side"]
 }
 
-type UnreportedFailureNotice = Omit<
+export type UnreportedFailureNotice = Omit<
 	Parameters<typeof raiseFailureNotice>[0],
 	"report"
 >
@@ -53,7 +59,10 @@ const contextOf = ({
 	raisedIn,
 	command,
 	httpStatus,
+	side,
 	space,
+	mission,
+	count,
 	botId,
 	botName,
 	conversation,
@@ -62,7 +71,9 @@ const contextOf = ({
 }: FailureFacts): FailureContext => ({
 	raisedAt: new Date().toISOString(),
 	raisedIn,
+	side,
 	space,
+	mission,
 	botId,
 	botName: botName && scrubFailureText(botName),
 	conversation,
@@ -70,6 +81,7 @@ const contextOf = ({
 	turn,
 	command,
 	httpStatus,
+	count,
 })
 
 const specsOn = (
@@ -99,7 +111,12 @@ export const raiseReportedFailure = async (
 		report: await buildFailureReport(facts),
 	})
 
+export type ReporterFacts = Omit<FailureFacts, "raisedIn">
+
 export const failureReporterIn =
 	(raisedIn: string) =>
-	(notice: NoticeMessage): Promise<string> =>
-		raiseReportedFailure(notice, { raisedIn })
+	(
+		notice: UnreportedFailureNotice,
+		facts: ReporterFacts = {},
+	): Promise<string> =>
+		raiseReportedFailure(notice, { ...facts, raisedIn })

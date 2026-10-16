@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type MockInstance,
+	vi,
+} from "vitest"
 
 import { createFakeMissions, type FakeMissions } from "./fake-missions"
 import type { Mission, MissionEvent, MissionState } from "./mission-contract"
@@ -8,6 +16,7 @@ import {
 	RUN_DEADLINE_MS,
 	startMissionRunDriver,
 } from "./mission-run-driver"
+import { FAILURE_BURST_MS } from "./mission-run-failure"
 
 import type { AgentEvent, RuntimeScope, TurnEnded } from "../agent/contract"
 import { createChatController } from "../chat/chat-controller"
@@ -313,6 +322,11 @@ const createHarness = async ({
 	}
 }
 
+const failuresRaisedBy = async ({ reportFailure }: Harness) => {
+	await vi.advanceTimersByTimeAsync(FAILURE_BURST_MS)
+	return reportFailure
+}
+
 const spoken = ({ messages }: ConversationState) =>
 	messages.map(({ authorBotId, content }) => [authorBotId, content] as const)
 
@@ -365,6 +379,7 @@ describe("startMissionRunDriver", () => {
 		})
 
 	beforeEach(async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		harness = await createHarness()
 	})
 
@@ -412,7 +427,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("waiting_bot")
 
 		expect(harness.missions.answers).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("records no answer for a summon taken on working", async () => {
@@ -427,7 +442,7 @@ describe("startMissionRunDriver", () => {
 
 		await harness.enter("waiting_bot")
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("summons nobody when the thread of a mission entering working carries a message", async () => {
@@ -514,10 +529,11 @@ describe("startMissionRunDriver", () => {
 			await harness.enter("done", closedBy("poller"))
 			await harness.endTurn({ structuredOutput })
 
-			expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+			expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 			expect(logged).toHaveBeenCalledWith(
-				"mission run driver: the run failed",
-				"the closing mission run reported nothing",
+				expect.stringContaining(
+					"mission run driver: the closing mission run reported nothing",
+				),
 			)
 			expect(spoken(harness.originTail())).toEqual([])
 		},
@@ -529,10 +545,12 @@ describe("startMissionRunDriver", () => {
 			.mockImplementation(() => undefined)
 		await harness.enter("done", closedBy("poller"))
 		await harness.endTurn({ structuredOutput: undefined })
+		await failuresRaisedBy(harness)
 
 		expect(logged).toHaveBeenCalledWith(
-			"mission run driver: the run failed",
-			"the mission run ended with no structured output",
+			expect.stringContaining(
+				"mission run driver: the mission run ended with no structured output",
+			),
 		)
 	})
 
@@ -604,7 +622,7 @@ describe("startMissionRunDriver", () => {
 		})
 
 		expect(harness.agentCalls).toEqual(["cancelTurn", "shutdown"])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("ends a run that outlived its deadline and takes the mission again", async () => {
@@ -614,7 +632,7 @@ describe("startMissionRunDriver", () => {
 		await vi.advanceTimersByTimeAsync(RUN_DEADLINE_MS)
 
 		expect(harness.agentCalls).toEqual(["cancelTurn", "shutdown"])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 
 		vi.useRealTimers()
 		await harness.enter("done", closedBy("poller"))
@@ -693,7 +711,7 @@ describe("startMissionRunDriver", () => {
 		expect(spoken(harness.originTail())).toEqual([
 			[harness.mission.botId, "The walls stand, handing over."],
 		])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 		expect(logged).toHaveBeenCalledWith(
 			"mission run driver: conversation_main_chat failed",
 			expect.any(Error),
@@ -751,7 +769,7 @@ describe("startMissionRunDriver", () => {
 		expect(harness.driver.submissions[0].prompt).not.toContain(
 			"The room holds @ada.",
 		)
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 	})
 
 	it("starts no second run when its companion writes the state of the seq it runs on", async () => {
@@ -798,7 +816,7 @@ describe("startMissionRunDriver", () => {
 		await harness.endTurn(reported("The walls stand, handing over."))
 
 		expect(harness.originStarts()).toHaveLength(2)
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("takes a closing that landed while a summoned companion was speaking", async () => {
@@ -890,7 +908,7 @@ describe("startMissionRunDriver", () => {
 
 		await harness.endTurn(reported("The walls are half up."))
 
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 		expect(spoken(harness.originTail())).toEqual([
 			[harness.mission.botId, "The walls are half up."],
 		])
@@ -974,7 +992,7 @@ describe("startMissionRunDriver", () => {
 
 		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 		expect(harness.missions.reports).toEqual([])
 	})
 
@@ -1032,7 +1050,7 @@ describe("startMissionRunDriver", () => {
 		harness.missions.releaseDetail()
 		await settled()
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(harness.originStarts()[0].scope).toMatchObject({
 			conversationId: harness.origin.id,
@@ -1080,7 +1098,7 @@ describe("startMissionRunDriver", () => {
 
 		await harness.enter("done", closedBy("poller"))
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 		expect(spoken(harness.originTail())).toEqual([])
 	})
 
@@ -1090,7 +1108,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("done", closedBy("poller"))
 
 		expect(harness.originStarts()).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 
 		await harness.announce("done")
 
@@ -1104,7 +1122,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("done", closedBy("poller"))
 
 		expect(harness.originStarts()).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 
 		await harness.announce("done")
 
@@ -1115,7 +1133,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("done", closedBy("poller"))
 		await harness.endTurn({ outcome: "failed" })
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 		expect(spoken(harness.originTail())).toEqual([])
 	})
 
@@ -1152,7 +1170,7 @@ describe("startMissionRunDriver", () => {
 		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
 
 		expect(harness.missions.reports).toEqual([])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 	})
 
 	it("names a run that reported nothing on a mission closed while it ran", async () => {
@@ -1163,10 +1181,12 @@ describe("startMissionRunDriver", () => {
 		harness.hold("done", closedBy("claude-code"))
 
 		await harness.endTurn({ structuredOutput: { outcome: "nothing" } })
+		await failuresRaisedBy(harness)
 
 		expect(logged).toHaveBeenCalledWith(
-			"mission run driver: the run failed",
-			"the closing mission run reported nothing",
+			expect.stringContaining(
+				"mission run driver: the closing mission run reported nothing",
+			),
 		)
 		expect(harness.missions.reports).toEqual([[harness.mission.id, null]])
 	})
@@ -1219,7 +1239,7 @@ describe("startMissionRunDriver", () => {
 		await harness.endTurn(reported("The walls stand."))
 
 		expect(harness.missions.reports).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("raises a failure notice when the report cannot be recorded", async () => {
@@ -1230,7 +1250,7 @@ describe("startMissionRunDriver", () => {
 		})
 		await harness.endTurn(reported("The walls stand."))
 
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("starts no run for a mission whose report was recorded", async () => {
@@ -1340,7 +1360,7 @@ describe("startMissionRunDriver", () => {
 
 		expect(spoken(harness.tail())).toEqual([])
 		expect(harness.originStarts()).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 
 	it("raises a failure notice and summons nobody when the companion cannot be read", async () => {
@@ -1351,7 +1371,7 @@ describe("startMissionRunDriver", () => {
 		await harness.enter("working")
 
 		expect(spoken(harness.tail())).toEqual([])
-		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledTimes(1)
 	})
 })
 
@@ -1391,6 +1411,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 	}
 
 	const startOn = async (spaceId: string | null, open?: MissionState) => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		if (spaceId) {
 			await joinFakeHost(spaceId)
 		}
@@ -1403,6 +1424,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 	afterEach(async () => {
 		harness.stop()
 		await leaveFakeHost(JOINED_SPACE)
+		vi.useRealTimers()
 		vi.restoreAllMocks()
 	})
 
@@ -1413,7 +1435,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(harness.agentCalls).toEqual([])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 	})
 
 	it("writes the report and the reported mark of a run started on a local space whose whole turn runs on a joined space", async () => {
@@ -1430,7 +1452,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 		])
 		expect(harness.originStarts()).toHaveLength(1)
 		expect(harness.agentCalls).toEqual(["shutdown"])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 	})
 
 	it("writes the status of a local mission whose thread turn ends while a joined space is active", async () => {
@@ -1444,7 +1466,7 @@ describe("startMissionRunDriver while a joined space is active", () => {
 		expect(spoken(harness.originTail())).toEqual([
 			[harness.mission.botId, "The walls are half up."],
 		])
-		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
 	})
 
 	it("catches up on the open and unreported missions of this computer on a joined space", async () => {
@@ -1482,5 +1504,164 @@ describe("startMissionRunDriver while a joined space is active", () => {
 
 		expect(sentToTheMissions()).toEqual(before)
 		expect(harness.starts).toEqual([])
+	})
+})
+
+describe("startMissionRunDriver beside a joined host", () => {
+	const JOINED_HOST = "host-1"
+	let harness: Harness
+
+	const threadScope = () => {
+		const opened = harness.starts.find(
+			({ scope }) => scope.conversationId === harness.thread.id,
+		)
+		if (!opened) {
+			throw new Error("no thread session was opened")
+		}
+		return opened.scope
+	}
+
+	beforeEach(async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		harness = await createHarness()
+	})
+
+	afterEach(() => {
+		harness.stop()
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it("reads no mission and starts no run when a joined host announces a mission change", async () => {
+		harness.hold("working")
+
+		harness.missions.change(
+			{
+				missionId: harness.mission.id,
+				state: "working",
+				stateSeq: harness.standingSeq() + 1,
+				isAgentRunning: false,
+				lastActivityAt: null,
+			},
+			JOINED_HOST,
+		)
+		await settled()
+
+		expect(harness.missions.detailCalls).toEqual([])
+		expect(harness.starts).toEqual([])
+		expect(spoken(harness.tail())).toEqual([])
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+	})
+
+	it("opens no status run when a joined host ends a turn in a mission thread", async () => {
+		await harness.enter("working")
+		const readsBefore = harness.missions.detailCalls.length
+
+		harness.driver.emit(
+			threadScope(),
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "completed" } },
+			JOINED_HOST,
+		)
+		await settled()
+
+		expect(harness.originStarts()).toEqual([])
+		expect(harness.missions.detailCalls).toHaveLength(readsBefore)
+	})
+})
+
+describe("startMissionRunDriver raising a failure", () => {
+	const UNKNOWN_MISSION = { kind: "unknownMission", id: "m-gone" }
+	const LOCKED_STORAGE = { kind: "storage", failure: { reason: "locked" } }
+	let harness: Harness
+	let logged: MockInstance<typeof console.error>
+
+	const linesNaming = (reason: string) =>
+		logged.mock.calls
+			.map(([line]) => String(line))
+			.filter((line) => line.startsWith(`mission run driver: ${reason}`))
+
+	beforeEach(async () => {
+		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+		logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		harness = await createHarness()
+	})
+
+	afterEach(() => {
+		harness.stop()
+		vi.useRealTimers()
+		vi.restoreAllMocks()
+	})
+
+	it("logs one line naming the reason, the serialized error, the mission and the side", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		await harness.enter("waiting_bot")
+		await failuresRaisedBy(harness)
+
+		expect(linesNaming("the mission could not be read")).toEqual([
+			`mission run driver: the mission could not be read | error: {"kind":"unknownMission","id":"m-gone"} | mission: ${harness.mission.id} | side: local | count: 1`,
+		])
+	})
+
+	it("never logs nor reports [object Object] for a thrown plain object", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
+		await harness.enter("waiting_bot")
+		const raised = await failuresRaisedBy(harness)
+
+		expect(JSON.stringify(logged.mock.calls)).not.toContain("[object Object]")
+		expect(JSON.stringify(raised.mock.calls)).not.toContain("[object Object]")
+	})
+
+	it("hands the card the mission, the side and the cause it was raised for", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		await harness.enter("waiting_bot")
+
+		expect(await failuresRaisedBy(harness)).toHaveBeenCalledWith(
+			expect.objectContaining({ cause: expect.any(String) }),
+			{ side: "local", mission: harness.mission.id, count: 1 },
+		)
+	})
+
+	it("raises one card and one line carrying the count when a cause fails in a burst", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
+		await harness.enter("waiting_bot")
+		await harness.enter("working")
+		await harness.enter("waiting_bot")
+
+		const raised = await failuresRaisedBy(harness)
+
+		expect(raised).toHaveBeenCalledTimes(1)
+		expect(raised).toHaveBeenCalledWith(expect.anything(), {
+			side: "local",
+			mission: harness.mission.id,
+			count: 3,
+		})
+		expect(linesNaming("the mission could not be read")).toEqual([
+			expect.stringContaining("| count: 3"),
+		])
+	})
+
+	it("raises one card per cause even when every card carries the same title", async () => {
+		vi.spyOn(harness.missions, "detail")
+			.mockRejectedValueOnce(LOCKED_STORAGE)
+			.mockRejectedValueOnce(UNKNOWN_MISSION)
+		await harness.enter("waiting_bot")
+		await harness.enter("working")
+
+		const raised = await failuresRaisedBy(harness)
+
+		const [first, second] = raised.mock.calls.map(([notice]) => notice)
+		expect(raised).toHaveBeenCalledTimes(2)
+		expect(first.title).toBe(second.title)
+		expect(first.cause).not.toBe(second.cause)
+	})
+
+	it("raises the failures still counting when it stops", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
+		await harness.enter("waiting_bot")
+
+		harness.stop()
+
+		expect(harness.reportFailure).toHaveBeenCalledTimes(1)
+		expect(linesNaming("the mission could not be read")).toHaveLength(1)
 	})
 })

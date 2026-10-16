@@ -1,10 +1,10 @@
 import type { createMissionRunBegin } from "./mission-run-begin"
 import {
-	detailOf,
 	type LiveMissionRun,
 	type MissionRunBook,
 	STATUS_CAUSE,
 } from "./mission-run-book"
+import { failureOf } from "./mission-run-failure"
 import { type createMissionRunSettle, isClosed } from "./mission-run-settle"
 
 import type { ScopedEvent, TransportError } from "../agent/contract"
@@ -26,7 +26,11 @@ export const createMissionRunRoute = ({
 			return
 		}
 		book.end(held)
-		book.raiseFailure(`the mission run's session failed with ${error.kind}`)
+		book.raiseFailure({
+			reason: "the mission run's session failed",
+			error,
+			missionId: held.call.mission.id,
+		})
 	}
 
 	const openStatusRun = async (threadConversationId: string) => {
@@ -46,7 +50,7 @@ export const createMissionRunRoute = ({
 
 			await run({ cause: STATUS_CAUSE, mission, events })
 		} catch (thrown) {
-			book.raiseFailure(detailOf(thrown))
+			book.raiseFailure(failureOf(thrown, missionId))
 		} finally {
 			book.holding.delete(missionId)
 			book.takeAgain(missionId)

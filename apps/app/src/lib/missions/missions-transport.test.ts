@@ -118,11 +118,13 @@ it("reads the roster block of a conversation for a companion", async () => {
 	})
 })
 
-it("hands every mission change to its listener", async () => {
-	const heard: MissionChanged[] = []
+it("hands every mission change to its listener with the local host id", async () => {
+	const heard: [MissionChanged, string | null | undefined][] = []
 	hostListen.mockResolvedValueOnce(() => undefined)
 
-	await missionsTransport.onChanged((changed) => heard.push(changed))
+	await missionsTransport.onChanged((changed, hostId) =>
+		heard.push([changed, hostId]),
+	)
 
 	const [event, handler] = hostListen.mock.calls[0] ?? []
 	expect(event).toBe(MISSION_CHANGED_EVENT)
@@ -133,7 +135,7 @@ it("hands every mission change to its listener", async () => {
 		payload: { missionId: "m-1", state: "waiting_human" },
 	})
 
-	expect(heard).toEqual([{ missionId: "m-1", state: "waiting_human" }])
+	expect(heard).toEqual([[{ missionId: "m-1", state: "waiting_human" }, null]])
 })
 
 describe("the mission calls of the run driver while a joined space is active", () => {

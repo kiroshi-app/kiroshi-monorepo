@@ -1,7 +1,6 @@
-import { i18n } from "@workspace/ui/lib/i18n"
-
 import type { Mission, MissionChanged } from "./mission-contract"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
+import { createMissionRunFailures } from "./mission-run-failure"
 import type { MissionRunCall, MissionRunCause } from "./mission-run-prompt"
 import { createMissionSeqs } from "./mission-seqs"
 
@@ -28,9 +27,6 @@ export const STATUS_CAUSE: MissionRunCause = "status"
 export const isClosingRun = ({ call }: LiveMissionRun) =>
 	call.cause !== STATUS_CAUSE
 
-export const detailOf = (thrown: unknown) =>
-	thrown instanceof Error ? thrown.message : String(thrown)
-
 export const reporting = (command: string) => (reason: unknown) => {
 	console.error(`mission run driver: ${command} failed`, reason)
 }
@@ -46,15 +42,8 @@ export const createMissionRunBook = ({
 	const missionIdOfThread = new Map<string, string>()
 	const holding = new Set<string>()
 	const seqs = createMissionSeqs()
+	const failures = createMissionRunFailures(reportFailure)
 	let isStopped = false
-
-	const raiseFailure = (reason: unknown) => {
-		console.error("mission run driver: the run failed", reason)
-		reportFailure({
-			title: i18n.t("chat:missions.failure.run.title"),
-			description: i18n.t("chat:missions.failure.run.description"),
-		})
-	}
 
 	const isBusy = (missionId: string) =>
 		holding.has(missionId) || live.has(missionId)
@@ -96,7 +85,7 @@ export const createMissionRunBook = ({
 		forget(held)
 		await driver.cancelTurn(scope).catch(reporting("agent_cancel_turn"))
 		shutdownSession(scope)
-		raiseFailure(reason)
+		failures.raise({ reason, missionId: held.call.mission.id })
 	}
 
 	const expire = async (missionId: string) => {
@@ -113,7 +102,7 @@ export const createMissionRunBook = ({
 		try {
 			return await missions.detail(missionId)
 		} catch (thrown) {
-			throw new Error(`the mission could not be read: ${detailOf(thrown)}`)
+			throw new Error("the mission could not be read", { cause: thrown })
 		}
 	}
 
@@ -133,8 +122,9 @@ export const createMissionRunBook = ({
 		isStopped: () => isStopped,
 		stop: () => {
 			isStopped = true
+			failures.flushAll()
 		},
-		raiseFailure,
+		raiseFailure: failures.raise,
 		isBusy,
 		shutdownSession,
 		takeAgain,

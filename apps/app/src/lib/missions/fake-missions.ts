@@ -10,7 +10,7 @@ export type FakeMissions = {
 	answers: [missionId: string, seq: number][]
 	refuseAnswered: () => void
 	onChanged: (
-		listener: (changed: MissionChanged) => void,
+		listener: (changed: MissionChanged, hostId?: string | null) => void,
 	) => Promise<() => void>
 	detail: (missionId: string) => Promise<MissionDetail>
 	detailCalls: string[]
@@ -33,14 +33,16 @@ export type FakeMissions = {
 	refuseUnreported: () => void
 	refuseReported: () => void
 	refuse: (missionId: string) => void
-	change: (changed: MissionChanged) => void
+	change: (changed: MissionChanged, hostId?: string | null) => void
 }
 
 export const createFakeMissions = (): FakeMissions => {
 	const details = new Map<string, MissionDetail>()
 	const refused = new Set<string>()
 	const refusedOnce = new Set<string>()
-	const listeners = new Set<(changed: MissionChanged) => void>()
+	const listeners = new Set<
+		(changed: MissionChanged, hostId?: string | null) => void
+	>()
 	const opened: OpenedMission[] = []
 	const rosterCalls: [conversationId: string, botId: string][] = []
 	const reports: [missionId: string, turnId: string | null][] = []
@@ -205,9 +207,9 @@ export const createFakeMissions = (): FakeMissions => {
 			refused.add(missionId)
 		},
 
-		change: (changed) => {
+		change: (changed, hostId = null) => {
 			for (const listener of [...listeners]) {
-				listener(changed)
+				listener(changed, hostId)
 			}
 		},
 	}
