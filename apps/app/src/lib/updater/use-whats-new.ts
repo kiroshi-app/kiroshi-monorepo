@@ -41,17 +41,16 @@ const isUnseen = (
 const isFreshInstall = (preferences: ReaderPreferences) =>
 	preferences.lastSeenVersion == null
 
+const isSeenWithoutDialog = (preferences: ReaderPreferences) =>
+	preferences.showWhatsNew === false || isFreshInstall(preferences)
+
 const isFirstLaunchDue = (
 	preferences: ReaderPreferences,
 	runningVersion: string | null,
 ) =>
 	isUnseen(preferences, runningVersion) &&
-	!isFreshInstall(preferences) &&
-	preferences.showWhatsNew === true &&
+	!isSeenWithoutDialog(preferences) &&
 	preferences.firstRunDone
-
-const isSeenWithoutDialog = (preferences: ReaderPreferences) =>
-	preferences.showWhatsNew === false || isFreshInstall(preferences)
 
 const useVersionSeenWithoutDialog = ({
 	user,
