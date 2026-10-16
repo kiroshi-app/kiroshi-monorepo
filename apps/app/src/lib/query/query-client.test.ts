@@ -75,20 +75,24 @@ it("never retries a mutation, even against an offline host", async () => {
 it("raises the declared failure notice once from the query cache", async () => {
 	await fetchFailing(hostOfflineOf("gone")).fetched
 
-	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(1))
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
 		title: "Couldn’t read it.",
-		report: expect.objectContaining({ raisedIn: "query-client-test" }),
+		report: expect.objectContaining({
+			context: expect.objectContaining({ raisedIn: "query-client-test" }),
+		}),
 	})
 })
 
 it("raises the declared failure notice once from the mutation cache", async () => {
 	await executeFailingMutation().executed
 
-	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
+	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(1))
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
 		title: "Couldn’t read it.",
-		report: expect.objectContaining({ raisedIn: "query-client-test" }),
+		report: expect.objectContaining({
+			context: expect.objectContaining({ raisedIn: "query-client-test" }),
+		}),
 	})
 })
 
@@ -101,8 +105,10 @@ it("hands the failure to the notice it declares", async () => {
 		raisedIn: "query-client-test",
 	}).fetched
 
-	expect(raiseFailureNotice).toHaveBeenCalledWith(
-		expect.objectContaining({ description: "disk full" }),
+	await vi.waitFor(() =>
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ description: "disk full" }),
+		),
 	)
 })
 
@@ -158,7 +164,7 @@ it("raises one notice per outage of a read until it answers again", async () => 
 		new Error("c"),
 	])
 
-	expect(raiseFailureNotice).toHaveBeenCalledTimes(2)
+	await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledTimes(2))
 })
 
 it("opens no outage on a failure its meta keeps silent", async () => {
@@ -175,7 +181,9 @@ it("builds the failure notice from the failure the read met", async () => {
 
 	await fetchFailing("refused", titledByFailure).fetched
 
-	expect(raiseFailureNotice).toHaveBeenCalledWith(
-		expect.objectContaining({ title: "Couldn’t read it: refused" }),
+	await vi.waitFor(() =>
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "Couldn’t read it: refused" }),
+		),
 	)
 })

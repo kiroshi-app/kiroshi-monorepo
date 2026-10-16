@@ -336,7 +336,9 @@ describe("useApplications", () => {
 		expect(controller.getState().hasCatalogueFailed).toBe(true)
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: i18n.t("bots:applications.catalogue.unavailable"),
-			report: expect.objectContaining({ raisedIn: "use-applications" }),
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-applications" }),
+			}),
 		})
 	})
 

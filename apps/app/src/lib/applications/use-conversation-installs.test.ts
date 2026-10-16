@@ -95,7 +95,9 @@ describe("reading the installs of a conversation", () => {
 			expect.objectContaining({
 				title: "Couldn’t read the applications added to this conversation.",
 				report: expect.objectContaining({
-					raisedIn: "use-conversation-installs",
+					context: expect.objectContaining({
+						raisedIn: "use-conversation-installs",
+					}),
 				}),
 			}),
 		)

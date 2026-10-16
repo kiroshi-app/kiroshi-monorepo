@@ -69,6 +69,8 @@ it("keeps a failed read in state and raises it as a failure notice once", async 
 	expect(raiseFailureNotice).toHaveBeenCalledTimes(1)
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
 		title: "Couldn’t read the models this machine offers.",
-		report: expect.objectContaining({ raisedIn: "use-model-catalogue" }),
+		report: expect.objectContaining({
+			context: expect.objectContaining({ raisedIn: "use-model-catalogue" }),
+		}),
 	})
 })

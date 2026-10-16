@@ -181,7 +181,9 @@ describe("listing invitations", () => {
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
 			expect.objectContaining({
 				description: "disk full",
-				report: expect.objectContaining({ raisedIn: "use-invitations" }),
+				report: expect.objectContaining({
+					context: expect.objectContaining({ raisedIn: "use-invitations" }),
+				}),
 			}),
 		)
 	})

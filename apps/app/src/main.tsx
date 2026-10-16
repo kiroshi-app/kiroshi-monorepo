@@ -9,6 +9,7 @@ import { App } from "./App"
 
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
 import { revealWindow } from "@/lib/host"
+import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
 import { installInvokeTally } from "@/lib/perf/invoke-tally-devtools"
 import { exposeScrollTrace } from "@/lib/perf/scroll-trace-devtools"
 import { invalidateOnHostReconnect } from "@/lib/query/host-invalidations"
@@ -20,6 +21,7 @@ const reportRevealFailure = (reason: unknown) => {
 	console.error("reveal at start failed", reason)
 }
 
+forwardConsoleToLogFile()
 installInvokeTally()
 
 try {

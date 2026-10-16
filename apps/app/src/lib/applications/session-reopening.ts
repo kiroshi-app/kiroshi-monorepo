@@ -73,7 +73,11 @@ export const createSessionReopener = ({
 					name: application,
 				}),
 			},
-			{ raisedIn: "session-reopening" },
+			{
+				raisedIn: "session-reopening",
+				botId: companion.id,
+				botName: companion.name,
+			},
 		)
 	}
 

@@ -262,7 +262,9 @@ describe("useHosting notices", () => {
 		expect(reportFailure).not.toHaveBeenCalled()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
 			...COULDNT_HOST_HOME,
-			report: expect.objectContaining({ raisedIn: "use-hosting" }),
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-hosting" }),
+			}),
 		})
 	})
 
@@ -281,7 +283,9 @@ describe("useHosting notices", () => {
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t stop hosting Home",
 			description: "Turn it off again.",
-			report: expect.objectContaining({ raisedIn: "use-hosting" }),
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-hosting" }),
+			}),
 		})
 	})
 
@@ -295,7 +299,9 @@ describe("useHosting notices", () => {
 		expect(result.current).toBeUndefined()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
 			...COULDNT_HOST_HOME,
-			report: expect.objectContaining({ raisedIn: "use-hosting" }),
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-hosting" }),
+			}),
 		})
 	})
 

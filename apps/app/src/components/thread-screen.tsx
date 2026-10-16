@@ -183,6 +183,7 @@ import {
 	useSeatMentioned,
 	useSuggestedBots,
 } from "@/lib/conversations/use-conversation-seating"
+import type { FailureCorrelation } from "@/lib/failure-report"
 import type { OpenMission } from "@/lib/missions/mission-actions"
 import type { Mission } from "@/lib/missions/mission-contract"
 import type { SummonedMissionState } from "@/lib/missions/mission-summons"
@@ -298,6 +299,25 @@ const routinesScopeOf = (
 
 const speakerIdOf = (thread: LoadedThread, error: ChatError | undefined) =>
 	thread.kind === "bot" ? thread.bot.id : error?.botId
+
+type FailingThread = Pick<ThreadViewProps, "thread" | "bots" | "spaceId">
+
+const failureContextOf = (
+	{ thread, bots, spaceId }: FailingThread,
+	error: ChatError | undefined,
+): FailureCorrelation => {
+	const botId = speakerIdOf(thread, error)
+	const bot =
+		thread.kind === "bot" ? thread.bot : bots.find(({ id }) => id === botId)
+	return {
+		space: spaceId ?? undefined,
+		botId,
+		botName: bot?.name,
+		conversation: shownConversationIdOf(thread) ?? undefined,
+		session:
+			thread.kind === "bot" ? (thread.state.sessionId ?? undefined) : undefined,
+	}
+}
 
 const shownConversationIdOf = (thread: LoadedThread): string | null =>
 	thread.kind === "bot" ? thread.state.conversationId : thread.conversation.id
@@ -1371,7 +1391,7 @@ const useThreadAnnotations = (
 type ThreadAnnotations = ReturnType<typeof useThreadAnnotations>
 
 const useThreadActions = (
-	{ thread, bots: known, drafts, signIn }: ThreadViewProps,
+	{ thread, bots: known, drafts, signIn, spaceId }: ThreadViewProps,
 	seats: ThreadSeats,
 	annotations: ThreadAnnotations,
 ) => {
@@ -1433,6 +1453,10 @@ const useThreadActions = (
 	const offerSignIn = signInOfferOf(signIn, facts.bot?.id)
 	useSessionFailureNotice({
 		error: facts.latestError,
+		context: failureContextOf(
+			{ thread, bots: known, spaceId },
+			facts.latestError,
+		),
 		onDismiss: controller.dismissError,
 		onRestart: botController ? restart : undefined,
 		onSignIn: offerSignIn,

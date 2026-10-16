@@ -118,13 +118,17 @@ describe("useCompanionAnnouncements", () => {
 
 		await announcing(SEED_REFUSED_EVENT, REFUSAL)
 
-		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
-			title: expect.any(String),
-			description: REFUSAL.reason,
-			report: expect.objectContaining({
-				raisedIn: "use-companion-announcements",
+		await vi.waitFor(() =>
+			expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+				title: expect.any(String),
+				description: REFUSAL.reason,
+				report: expect.objectContaining({
+					context: expect.objectContaining({
+						raisedIn: "use-companion-announcements",
+					}),
+				}),
 			}),
-		})
+		)
 		expect(onCreated).not.toHaveBeenCalled()
 	})
 
@@ -156,13 +160,17 @@ describe("useCompanionAnnouncements", () => {
 
 		await announcing(SEED_REFUSED_EVENT, REFUSAL)
 
-		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
-			title: expect.any(String),
-			description: REFUSAL.reason,
-			report: expect.objectContaining({
-				raisedIn: "use-companion-announcements",
+		await vi.waitFor(() =>
+			expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
+				title: expect.any(String),
+				description: REFUSAL.reason,
+				report: expect.objectContaining({
+					context: expect.objectContaining({
+						raisedIn: "use-companion-announcements",
+					}),
+				}),
 			}),
-		})
+		)
 		expect(onCreated).not.toHaveBeenCalled()
 	})
 

@@ -338,7 +338,9 @@ describe("useMembers", () => {
 		expect(raiseFailureNotice).toHaveBeenCalledWith({
 			title: "Members",
 			description: "Something went wrong, nothing was changed.",
-			report: expect.objectContaining({ raisedIn: "use-members" }),
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-members" }),
+			}),
 		})
 		expect(panel().members).toEqual([])
 	})

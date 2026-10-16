@@ -92,7 +92,7 @@ export const readReportedCauses = async ({
 					title: i18n.t("chat:transcript.cause.unavailable.title"),
 					description,
 				},
-				{ raisedIn: "run-report" },
+				{ raisedIn: "run-report", conversation: conversationId },
 			)
 		}
 		return null

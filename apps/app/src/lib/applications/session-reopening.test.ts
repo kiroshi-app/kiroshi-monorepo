@@ -174,9 +174,11 @@ describe("session reopener", () => {
 		await reopenSessions({ scope: { kind: "user" }, application: "Linear" })
 
 		expect(reopen.mock.calls.flat().sort()).toEqual(["archivist", "drafter"])
-		expect(raiseFailureNotice.mock.calls[0]?.[0]).toMatchObject({
-			title: expect.stringContaining("Archivist"),
-		})
+		await vi.waitFor(() =>
+			expect(raiseFailureNotice.mock.calls[0]?.[0]).toMatchObject({
+				title: expect.stringContaining("Archivist"),
+			}),
+		)
 		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 })

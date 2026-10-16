@@ -363,16 +363,17 @@ describe("the refusal notice", () => {
 
 	const refusalReport = (httpStatus: number | undefined) =>
 		expect.objectContaining({
-			raisedIn: "host-refusal",
-			command: "bot_list",
-			httpStatus,
-			side: "member",
+			context: expect.objectContaining({
+				raisedIn: "host-refusal",
+				command: "bot_list",
+				httpStatus,
+			}),
 		})
 
 	beforeEach(() => failureNotice.mockClear())
 
-	it("asks to reopen the link when the host answers 401", () => {
-		raiseRefusalNotice(memberRefusal("no valid bearer token", 401))
+	it("asks to reopen the link when the host answers 401", async () => {
+		await raiseRefusalNotice(memberRefusal("no valid bearer token", 401))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "The host refused this call.",
@@ -381,8 +382,10 @@ describe("the refusal notice", () => {
 		})
 	})
 
-	it("names the host as the one to ask when the host keeps the command", () => {
-		raiseRefusalNotice(memberRefusal("this command belongs to the host", 403))
+	it("names the host as the one to ask when the host keeps the command", async () => {
+		await raiseRefusalNotice(
+			memberRefusal("this command belongs to the host", 403),
+		)
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",
@@ -392,8 +395,8 @@ describe("the refusal notice", () => {
 		})
 	})
 
-	it("names the shared space when the host keeps the command outside it", () => {
-		raiseRefusalNotice(
+	it("names the shared space when the host keeps the command outside it", async () => {
+		await raiseRefusalNotice(
 			memberRefusal("this command reaches outside the shared space", 403),
 		)
 
@@ -404,8 +407,8 @@ describe("the refusal notice", () => {
 		})
 	})
 
-	it("shows the host text when the host answers another status", () => {
-		raiseRefusalNotice(memberRefusal("the host broke", 500))
+	it("shows the host text when the host answers another status", async () => {
+		await raiseRefusalNotice(memberRefusal("the host broke", 500))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",
@@ -414,8 +417,8 @@ describe("the refusal notice", () => {
 		})
 	})
 
-	it("shows the host text when the host could not be reached", () => {
-		raiseRefusalNotice(memberRefusal("Failed to fetch"))
+	it("shows the host text when the host could not be reached", async () => {
+		await raiseRefusalNotice(memberRefusal("Failed to fetch"))
 
 		expect(failureNotice).toHaveBeenCalledExactlyOnceWith({
 			title: "Couldn’t send that request",

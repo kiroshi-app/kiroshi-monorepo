@@ -41,8 +41,18 @@ const leftOutApplication: ChatError = {
 	},
 }
 
+const THREAD_CONTEXT = {
+	space: "4f1c2e9a-7b3d-4c8e-9a1f-2b6d8e0c4a7f",
+	botId: "0b6d8e0c-4a7f-4f1c-9a1f-2e9a7b3d4c8e",
+	botName: "Atlas",
+	conversation: "9a1f2b6d-8e0c-4a7f-8c8e-4f1c2e9a7b3d",
+	session: "7b3d4c8e-9a1f-4b6d-8e0c-4a7f4f1c2e9a",
+}
+
 const mountOn = (error: ChatError, onDismiss = vi.fn()) =>
-	renderHook(() => useSessionFailureNotice({ error, onDismiss }))
+	renderHook(() =>
+		useSessionFailureNotice({ error, onDismiss, context: THREAD_CONTEXT }),
+	)
 
 beforeEach(() => {
 	failureNotice.mockClear()
@@ -90,14 +100,30 @@ it("fades a second refused resume of its own", () => {
 	expect(transientNotice).toHaveBeenCalledTimes(2)
 })
 
-it("keeps the sticky notice of every other failure", () => {
+it("keeps the sticky notice of every other failure", async () => {
 	mountOn(crashed)
 
+	await vi.waitFor(() =>
+		expect(failureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: i18n.t("chat:screen.notice.crashed"),
+			}),
+		),
+	)
 	expect(transientNotice).not.toHaveBeenCalled()
-	expect(failureNotice).toHaveBeenCalledWith(
-		expect.objectContaining({
-			title: i18n.t("chat:screen.notice.crashed"),
-		}),
+})
+
+it("reports the space, the bot, the conversation and the session of the thread", async () => {
+	mountOn(crashed)
+
+	await vi.waitFor(() =>
+		expect(failureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({
+				report: expect.objectContaining({
+					context: expect.objectContaining(THREAD_CONTEXT),
+				}),
+			}),
+		),
 	)
 })
 
