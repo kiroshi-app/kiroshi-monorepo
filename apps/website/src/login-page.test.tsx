@@ -16,6 +16,7 @@ import { createSiteRouter } from "./router"
 
 const EMAIL = "ada@example.com"
 const BEARER = "bearer-from-the-relay"
+const OLDER_BEARER = "bearer-of-an-older-session"
 const BEARER_KEY = "kiroshi.relay.bearer"
 const CODE_SENT_LINE = LOGIN_COPY.codeLead(EMAIL)
 const KEEP_SPACES = getDefaultNormalizer({ collapseWhitespace: false })
@@ -23,6 +24,7 @@ const SEND_CODE = "POST /api/auth/email-otp/send-verification-otp"
 const SIGN_IN = "POST /api/auth/sign-in/email-otp"
 const ME = "GET /me"
 const SAVE_NAME = "PATCH /me"
+const SESSIONS = "GET /me/sessions"
 const RETIRED_NAME_ROUTES = [
 	"GET /api/auth/get-session",
 	"POST /api/auth/update-user",
@@ -73,6 +75,11 @@ const answer = async (input: URL | string, init?: RequestInit) => {
 }
 
 const callsTo = (route: string) => calls.filter((call) => call.route === route)
+
+const expectBearerWithoutCredentials = (route: string) => {
+	expect(callsTo(route)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+	expect(callsTo(route)[0]?.credentials).toBeUndefined()
+}
 
 const renderSite = (path: string) => {
 	const router = createSiteRouter(
@@ -169,7 +176,7 @@ describe("the sign-in page", () => {
 		await landedOn(router, "/authorize")
 		expect(callsTo(SIGN_IN)[0]?.body).toEqual({ email: EMAIL, otp: "123456" })
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
-		expect(callsTo(ME)[0]?.authorization).toBe(`Bearer ${BEARER}`)
+		expectBearerWithoutCredentials(ME)
 	})
 
 	it("draws each digit in its own cell over a one-time-code input", async () => {
@@ -286,6 +293,7 @@ describe("the sign-in page", () => {
 
 			await landedOn(router, "/account")
 			expect(callsTo(SAVE_NAME)[0]?.body).toEqual({ name: "Ada Lovelace" })
+			expectBearerWithoutCredentials(SAVE_NAME)
 			for (const route of RETIRED_NAME_ROUTES) {
 				expect(callsTo(route)).toHaveLength(0)
 			}
@@ -468,6 +476,20 @@ describe("the social sign-in", () => {
 		await landedOn(router, "/")
 		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
 		expect(callsTo(GET_SESSION)[0]?.credentials).toBe("include")
+	})
+
+	it("reads get-session without the stored bearer and sends the returned one on the next /me", async () => {
+		localStorage.setItem(BEARER_KEY, OLDER_BEARER)
+		routes[GET_SESSION] = { body: { token: BEARER, user: { email: EMAIL } } }
+		routes[SESSIONS] = { body: { sessions: [] } }
+		const router = renderSite("/login?via=social")
+
+		await landedOn(router, "/account")
+		await waitFor(() => expect(callsTo(ME).length).toBeGreaterThan(0))
+		expect(callsTo(GET_SESSION)[0]?.authorization).toBeNull()
+		expect(callsTo(GET_SESSION)[0]?.credentials).toBe("include")
+		expect(localStorage.getItem(BEARER_KEY)).toBe(BEARER)
+		expectBearerWithoutCredentials(ME)
 	})
 
 	it("lands on /account after the return without a redirect", async () => {

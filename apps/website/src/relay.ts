@@ -62,6 +62,7 @@ type RelayRequest = {
 	method?: "GET" | "POST" | "PATCH" | "DELETE"
 	body?: unknown
 	credentials?: RequestCredentials
+	sendsBearer?: boolean
 }
 
 const NO_CONTENT = 204
@@ -97,23 +98,19 @@ const failureOf = async (response: Response): Promise<RelayFailure> => {
 	return (message && CODE_FAILURES.get(message)) || "unauthorized"
 }
 
-const headersFor = (body: unknown) => {
+const headersFor = ({ body, sendsBearer = true }: RelayRequest) => {
 	const headers = new Headers()
-	const bearer = readBearer()
+	const bearer = sendsBearer ? readBearer() : null
 	if (body !== undefined) headers.set("Content-Type", "application/json")
 	if (bearer) headers.set("Authorization", `Bearer ${bearer}`)
 	return headers
 }
 
-const send = async ({
-	path,
-	method = "GET",
-	body,
-	credentials,
-}: RelayRequest) => {
+const send = async (request: RelayRequest) => {
+	const { path, method = "GET", body, credentials } = request
 	const response = await fetch(new URL(path, RELAY_URL), {
 		method,
-		headers: headersFor(body),
+		headers: headersFor(request),
 		body: body === undefined ? undefined : JSON.stringify(body),
 		credentials,
 	}).catch((cause: unknown) => {
@@ -192,6 +189,7 @@ const readSessionBearer = async () => {
 	const session = await send({
 		path: "/api/auth/get-session",
 		credentials: "include",
+		sendsBearer: false,
 	})
 	return stringField(session, "token")
 }
