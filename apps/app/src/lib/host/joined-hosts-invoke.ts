@@ -48,6 +48,11 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"invitations_list",
 	"invitation_accept",
 	"invitation_decline",
+	"update_state",
+	"check_for_updates",
+	"install_update",
+	"release_notes",
+	"running_companions",
 	LOCAL_IDS_COMMAND,
 ])
 
