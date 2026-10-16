@@ -50,7 +50,7 @@ const AGENT_ASKED = missionEvents([
 ])
 
 const settled = async () => {
-	for (let round = 0; round < 20; round += 1) {
+	for (let round = 0; round < 30; round += 1) {
 		await Promise.resolve()
 	}
 }
@@ -1574,8 +1574,10 @@ describe("startMissionRunDriver beside a joined host", () => {
 describe("startMissionRunDriver raising a failure", () => {
 	const UNKNOWN_MISSION = { kind: "unknownMission", id: "m-gone" }
 	const LOCKED_STORAGE = { kind: "storage", failure: { reason: "locked" } }
+	const UNEXPECTED = { kind: "unexpected", detail: "the store went silent" }
 	let harness: Harness
 	let logged: MockInstance<typeof console.error>
+	let informed: MockInstance<typeof console.info>
 
 	const linesNaming = (reason: string) =>
 		logged.mock.calls
@@ -1597,6 +1599,7 @@ describe("startMissionRunDriver raising a failure", () => {
 	beforeEach(async () => {
 		vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
 		logged = vi.spyOn(console, "error").mockImplementation(() => undefined)
+		informed = vi.spyOn(console, "info").mockImplementation(() => undefined)
 		harness = await createHarness()
 	})
 
@@ -1607,13 +1610,27 @@ describe("startMissionRunDriver raising a failure", () => {
 	})
 
 	it("logs one line naming the reason, the serialized error, the mission and the side", async () => {
-		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
 		await harness.enter("waiting_bot")
 		await failuresRaisedBy(harness)
 
 		expect(linesNaming("the mission could not be read")).toEqual([
-			`mission run driver: the mission could not be read | error: {"kind":"unknownMission","id":"m-gone"} | mission: ${harness.mission.id} | side: local | count: 1`,
+			`mission run driver: the mission could not be read | error: {"kind":"storage","failure":{"reason":"locked"}} | mission: ${harness.mission.id} | side: local | count: 1`,
 		])
+	})
+
+	it("skips a change of a mission this computer cannot read with one info line and no card", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		await announceIn("s1")
+
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(linesNaming("the mission could not be read")).toEqual([])
+		expect(informed.mock.calls).toEqual([
+			[
+				`missions: skipped the change of a mission its side cannot read | mission: ${harness.mission.id} | space: s1 | side: local`,
+			],
+		])
+		expect(harness.originStarts()).toEqual([])
 	})
 
 	it("never logs nor reports [object Object] for a thrown plain object", async () => {
@@ -1626,7 +1643,7 @@ describe("startMissionRunDriver raising a failure", () => {
 	})
 
 	it("hands the card the mission, the side and the cause it was raised for", async () => {
-		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
 		await harness.enter("waiting_bot")
 
 		expect(await failuresRaisedBy(harness)).toHaveBeenCalledWith(
@@ -1657,7 +1674,7 @@ describe("startMissionRunDriver raising a failure", () => {
 	it("raises one card per cause even when every card carries the same title", async () => {
 		vi.spyOn(harness.missions, "detail")
 			.mockRejectedValueOnce(LOCKED_STORAGE)
-			.mockRejectedValueOnce(UNKNOWN_MISSION)
+			.mockRejectedValueOnce(UNEXPECTED)
 		await harness.enter("waiting_bot")
 		await harness.enter("working")
 
@@ -1694,7 +1711,7 @@ describe("startMissionRunDriver raising a failure", () => {
 	})
 
 	it("names the Space a mission change carried on the line and the card of a failed read", async () => {
-		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
 		await announceIn("s1")
 		const raised = await failuresRaisedBy(harness)
 
@@ -1712,7 +1729,7 @@ describe("startMissionRunDriver raising a failure", () => {
 	})
 
 	it("leaves the Space out of the line and the card of a mission whose Space it never heard", async () => {
-		vi.spyOn(harness.missions, "detail").mockRejectedValue(UNKNOWN_MISSION)
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
 		await announceIn(null)
 		const raised = await failuresRaisedBy(harness)
 

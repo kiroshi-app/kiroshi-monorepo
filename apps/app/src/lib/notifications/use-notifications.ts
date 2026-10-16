@@ -44,7 +44,7 @@ export const useNotifications = ({
 				missions: {
 					board: missionsTransport.board,
 					onChanged: missionsTransport.onChanged,
-					detail: missionsTransport.detail,
+					read: missionsTransport.read,
 					open: missions.open,
 				},
 				spokenWords,
