@@ -295,7 +295,6 @@ jobs:
               -f target_commitish="$GITHUB_SHA" \
               -f name="Kiroshi beta" \
               -f body="Updater feed of the beta channel: its latest.json points at the newest vX.Y.Z-beta.N pre-release." \
-              -F draft=false \
               -F prerelease=true \
               -f make_latest=false \
               --jq '"Created the beta release: \(.html_url)"'
