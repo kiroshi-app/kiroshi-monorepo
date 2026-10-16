@@ -839,7 +839,7 @@ export type JoinedSpaceConnection = {
 	name: string,
 };
 
-export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string };
+export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string };
 
 export type JoinedSpaceReconnected = {
 	id: string,

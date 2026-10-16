@@ -10,6 +10,12 @@ const NOTICE_KEYS = {
 	unknownJoinedSpace: "joinRefused.unknownJoinedSpace",
 	undeliverable: "joinRefused.undeliverable",
 	proxyUnavailable: "joinRefused.proxyUnavailable",
+	ownerNotRemovable: "joinRefused.ownerNotRemovable",
+	needsSignIn: "joinRefused.needsSignIn",
+	sessionRevoked: "joinRefused.sessionRevoked",
+	sessionStore: "joinRefused.sessionStore",
+	relayUnreachable: "joinRefused.relayUnreachable",
+	relayRefused: "joinRefused.relayRefused",
 } as const satisfies Record<JoinedSpaceError["kind"], string>
 
 export const isJoinedSpaceError = (

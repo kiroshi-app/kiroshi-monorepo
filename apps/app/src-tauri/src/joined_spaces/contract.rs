@@ -63,17 +63,44 @@ impl fmt::Debug for JoinedSpaceConnection {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum JoinedSpaceError {
 	#[serde(rename_all = "camelCase")]
-	Unavailable { failure: StorageFailure },
+	Unavailable {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	Storage { failure: StorageFailure },
+	Storage {
+		failure: StorageFailure,
+	},
 	#[serde(rename_all = "camelCase")]
-	UnknownJoinedSpace { id: String },
+	UnknownJoinedSpace {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	Undeliverable { detail: String },
+	Undeliverable {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	HostOffline { id: String },
+	HostOffline {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
-	ProxyUnavailable { detail: String },
+	ProxyUnavailable {
+		detail: String,
+	},
+	OwnerNotRemovable,
+	NeedsSignIn,
+	SessionRevoked,
+	#[serde(rename_all = "camelCase")]
+	SessionStore {
+		detail: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	RelayUnreachable {
+		detail: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	RelayRefused {
+		detail: String,
+	},
 }
 
 impl From<DatabaseError> for JoinedSpaceError {

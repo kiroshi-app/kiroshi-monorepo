@@ -448,6 +448,54 @@ describe("leaving a space", () => {
 				"Kiroshi couldn’t finish the request. Try again in a moment.",
 		})
 	})
+
+	it("keeps a space its owner tries to leave and says an owner can’t leave", async () => {
+		const gear = await leavingGarage()
+		const refusal = { kind: "ownerNotRemovable" }
+		gear.wire.transport.remove.mockRejectedValueOnce(refusal)
+
+		await expect(gear.joined.leave(GARAGE.id)).rejects.toBe(refusal)
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
+		expect(gear.hosts.forget).not.toHaveBeenCalled()
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: "You own this space",
+			description: "An owner can’t leave their own space.",
+		})
+	})
+
+	it("keeps a space the cloud could not be reached to leave and says to retry", async () => {
+		const gear = await leavingGarage()
+		const refusal = {
+			kind: "relayUnreachable",
+			detail: "the cloud answered 500",
+		}
+		gear.wire.transport.remove.mockRejectedValueOnce(refusal)
+
+		await expect(gear.joined.leave(GARAGE.id)).rejects.toBe(refusal)
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t leave this space",
+			description:
+				"Kiroshi couldn’t reach its cloud. Check your network, then try again.",
+		})
+	})
+
+	it("keeps a space the cloud refused to let go and says it didn’t confirm", async () => {
+		const gear = await leavingGarage()
+		const refusal = { kind: "relayRefused", detail: "the cloud answered 500" }
+		gear.wire.transport.remove.mockRejectedValueOnce(refusal)
+
+		await expect(gear.joined.leave(GARAGE.id)).rejects.toBe(refusal)
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([GARAGE])
+		expect(gear.reportFailure).toHaveBeenCalledExactlyOnceWith({
+			title: "Couldn’t leave this space",
+			description:
+				"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
+		})
+	})
 })
 
 const STUDIO: JoinedSpace = {
