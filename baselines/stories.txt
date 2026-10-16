@@ -683,6 +683,8 @@ forms-settingslistfield--themes-at-rest
 forms-settingslistfield--themes-filled
 forms-settingslistfield--themes-focus-visible
 forms-settingslistfield--themes-invalid
+forms-settingsrow--default
+forms-settingsrow--link-rows
 forms-settingsselect--default
 forms-settingsselect--disabled
 forms-settingsselect--empty
@@ -1512,6 +1514,14 @@ settings-space-spacesettingsdialog--members-withdraw-pending
 settings-space-spacesettingsdialog--opens-on-an-application
 settings-space-spacesettingsdialog--skills
 settings-space-spacesettingsdialog--transfer
+settings-user-aboutfields--beta-available
+settings-user-aboutfields--checking
+settings-user-aboutfields--companions-still-running
+settings-user-aboutfields--download-failed
+settings-user-aboutfields--downloading
+settings-user-aboutfields--ready-to-restart
+settings-user-aboutfields--up-to-date
+settings-user-aboutfields--update-available
 settings-user-appearancefields--dark
 settings-user-appearancefields--default
 settings-user-appearancefields--in-french
@@ -1524,6 +1534,8 @@ settings-user-languagefields--following-the-machine
 settings-user-notificationfields--all-off
 settings-user-notificationfields--default
 settings-user-notificationfields--in-french
+settings-user-usersettingsdialog--about
+settings-user-usersettingsdialog--about-without-an-update
 settings-user-usersettingsdialog--account-loading
 settings-user-usersettingsdialog--appearance
 settings-user-usersettingsdialog--applications

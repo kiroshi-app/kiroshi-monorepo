@@ -29,6 +29,7 @@ import {
 	type UserSettingsDialogProps,
 	type UserSettingsValue,
 } from "@workspace/ui/components/user-settings-dialog"
+import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 import type { AccountState } from "@workspace/ui/components/user-settings-dialog/account-panel"
 import { en } from "@workspace/ui/lib/i18n-en"
 
@@ -152,7 +153,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face, the same avatar the sidebar chip draws so the dialog is visibly the one that chip opened, then their name and the word Settings. Down the left is a rail: Account, how they are signed in to Kiroshi; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks; then Skills, Applications and History for their own plugin. It opens on the tab the host asks for, else on Account, or on Appearance for a host that passes no account. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence, so closing it is never a question. The language does not travel through the value: it is a prop of its own because the translation runtime is what the whole app reads from.",
+					"Everything a reader is to the app, in one overlay. A breadcrumb heads it with their own face, the same avatar the sidebar chip draws so the dialog is visibly the one that chip opened, then their name and the word Settings. Down the left is a rail: Account, how they are signed in to Kiroshi; Appearance, how the app is painted; Notifications, what it tells them about; Language, the one it speaks; then Skills, Applications and History for their own plugin; last, About, which Kiroshi this is and how it updates. It opens on the tab the host asks for, else on Account, or on Appearance for a host that passes no account. Same contract as a companion's settings and for the same reason: fully controlled, saving as you type, no draft, no debounce, no persistence, so closing it is never a question. The language does not travel through the value: it is a prop of its own because the translation runtime is what the whole app reads from.",
 			},
 		},
 	},
@@ -591,6 +592,80 @@ export const Diagnostics = meta.story({
 		for (const name of ["Copy diagnostics", "Reveal log", "Clear log"]) {
 			await expect(within(panel).getByRole("button", { name })).toBeVisible()
 		}
+	},
+})
+
+const aboutIn = (update: AboutFieldsProps["update"]): AboutFieldsProps => ({
+	version: "0.23.3",
+	channel: "stable",
+	update,
+	showsWhatsNew: true,
+	onChannelChange: fn(),
+	onShowsWhatsNewChange: fn(),
+	onCheck: fn(),
+	onDownload: fn(),
+	onRestart: fn(),
+	onWhatsNew: fn(),
+	onReleaseNotes: fn(),
+})
+
+const ABOUT_RAIL_INDICATOR = "settings-rail-indicator"
+
+export const About = meta.story({
+	args: {
+		about: aboutIn({ status: "available", version: "0.24.0" }),
+		tab: "about",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The dialog opened on About while an update waits. Check that About is the last item of the rail, wearing its filled icon and a primary dot at its trailing edge, and that the panel reads the update the dot announces. Pick `AboutWithoutAnUpdate` for the rail with nothing to announce.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+
+		const tabs = within(dialog).getAllByRole("tab")
+		const about = tabs[tabs.length - 1]
+		await expect(about).toHaveAccessibleName("About")
+		await expect(about).toHaveAttribute("aria-selected", "true")
+		await expect(slotsIn(about, ABOUT_RAIL_INDICATOR)).toHaveLength(1)
+
+		const dot = slotIn(about, ABOUT_RAIL_INDICATOR).getBoundingClientRect()
+		const item = about.getBoundingClientRect()
+		await expect(Math.round(item.right - dot.right)).toBe(
+			Number.parseFloat(getComputedStyle(about).paddingInlineEnd),
+		)
+
+		const panel = await within(dialog).findByRole("tabpanel", {
+			name: "About",
+		})
+		await expect(within(panel).getByRole("status")).toHaveTextContent(
+			"Kiroshi 0.24.0 is available.",
+		)
+	},
+})
+
+export const AboutWithoutAnUpdate = meta.story({
+	tags: ["test-only"],
+	args: {
+		about: aboutIn({ status: "checking" }),
+		tab: "about",
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"About while Kiroshi looks for an update. Check that the rail draws no dot, since nothing is waiting yet. Pick `About` for the dot.",
+			},
+		},
+	},
+	play: async () => {
+		const dialog = await dialogIn()
+
+		await expect(slotsIn(dialog, ABOUT_RAIL_INDICATOR)).toHaveLength(0)
 	},
 })
 

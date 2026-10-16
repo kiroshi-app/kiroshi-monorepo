@@ -15,6 +15,7 @@ const settings = {
 		history: "History",
 		diagnostics: "Diagnostics",
 		danger: "Danger zone",
+		about: "About",
 	},
 	account: {
 		signedOut: {
@@ -119,6 +120,54 @@ const settings = {
 			description:
 				"Every line Kiroshi wrote to its log on this computer is deleted. This can’t be undone.",
 			failed: "Couldn’t clear the log. Try again.",
+		},
+	},
+	about: {
+		updates: {
+			label: "Updates",
+		},
+		version: "Kiroshi {{version}}",
+		status: {
+			upToDate: "Up to date · Checked {{when}}",
+			checking: "Checking for updates…",
+			available: "Kiroshi {{version}} is available.",
+			downloading: "Downloading {{version}}. You can keep working meanwhile.",
+			ready: "{{version}} is ready. Restart Kiroshi to finish updating.",
+			readyHeld: "{{version}} is ready.",
+			running_one: "{{count}} companion is still running. Stop it to restart.",
+			running_other:
+				"{{count}} companions are still running. Stop them to restart.",
+			failed: "Couldn’t download {{version}}.",
+			failedHint: "Check your connection, then download it again.",
+		},
+		action: {
+			check: "Check for updates",
+			download: "Download update",
+			restart: "Restart now",
+			downloadAgain: "Download again",
+		},
+		channel: {
+			label: "Release channel",
+			description: "Beta gets new features sooner, with rougher edges.",
+			option: {
+				stable: "Stable",
+				beta: "Beta",
+			},
+		},
+		betaNotice: {
+			title: "Beta builds are tested less",
+			description: "Back on Stable, you keep this beta until Stable passes it.",
+		},
+		whatsNew: {
+			label: "Show what’s new after an update",
+			description:
+				"The first time Kiroshi opens on a new version, it shows what changed.",
+		},
+		kiroshi: {
+			label: "Kiroshi",
+			whatsNew: "What’s new in {{version}}",
+			releaseNotes: "Release notes",
+			releaseNotesName: "Release notes, opens in your browser",
 		},
 	},
 	space: {
