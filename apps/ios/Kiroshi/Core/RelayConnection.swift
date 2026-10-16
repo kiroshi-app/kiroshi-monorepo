@@ -297,6 +297,7 @@ private struct RelayEnding: Sendable {
         case RelayClosure.hostOffline: self.init(.hostOffline, retries: true)
         case RelayClosure.membershipEnded: self.init(.membershipEnded, retries: false)
         case RelayClosure.sessionRevoked: self.init(.signedOut, retries: false)
+        case RelayClosure.serverRestarting: self.init(.connecting, retries: true)
         default: self.init(.unreachable, retries: true)
         }
     }

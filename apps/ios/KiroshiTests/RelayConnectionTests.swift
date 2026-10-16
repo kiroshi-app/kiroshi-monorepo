@@ -177,6 +177,31 @@ struct RelayConnectionTests {
         await connection.stop()
     }
 
+    @Test func aRestartingRelayReconnectsWithoutEndingTheSession() async {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        await transport.nextOpening().refuse(502)
+        await clock.wakeNextSleep(of: .seconds(1))
+        let first = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(first)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+
+        first.push(.close(RelayClosure.serverRestarting))
+        await clock.wakeNextSleep(of: .seconds(1))
+        await transport.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "s-1"))
+
+        var heard: [RelayState] = []
+        for await update in updates {
+            guard case .state(let state) = update else { continue }
+            heard.append(state)
+            if state == .online(sharedSpaceId: "s-1") { break }
+        }
+        #expect(heard == [.connecting, .online(sharedSpaceId: "s-1")])
+        #expect(await connection.isRunning)
+        await connection.stop()
+    }
+
     @Test func theBackoffDoublesAndResetsOnceASocketOpens() async {
         let connection = makeConnection()
         let updates = await connection.updates()

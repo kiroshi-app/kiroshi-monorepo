@@ -19,6 +19,7 @@ struct RelayClosure: Error, Equatable {
     static let hostOffline = 4002
     static let membershipEnded = 4003
     static let sessionRevoked = 4004
+    static let serverRestarting = 4005
 
     let code: Int
 }
