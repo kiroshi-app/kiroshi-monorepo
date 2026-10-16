@@ -21,6 +21,8 @@ const bots = {
 		unavailable: "Couldn’t load your companions. Restart Kiroshi to retry.",
 		previewUnreadable:
 			"Couldn’t load the latest messages. Restart Kiroshi to retry.",
+		conversationUnsaved:
+			"Couldn’t save your change to this conversation. Make it again to retry.",
 		mission: {
 			state: {
 				waiting: "waiting for you",

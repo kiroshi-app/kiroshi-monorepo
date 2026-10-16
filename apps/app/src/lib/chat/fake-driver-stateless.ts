@@ -4,7 +4,7 @@ import { storedAttachmentPath } from "./message-attachments"
 
 type StatelessMethods = Pick<
 	ChatDriver,
-	"check" | "titleFor" | "storeAttachments" | "pendingQuestions"
+	"check" | "namingFor" | "storeAttachments" | "pendingQuestions"
 >
 
 const TITLE_LIMIT = 60
@@ -18,8 +18,10 @@ export const FAKE_STATELESS_METHODS: StatelessMethods = {
 			error: null,
 		}),
 
-	titleFor: (text: string) =>
-		Promise.resolve(text.trim().split("\n")[0]?.slice(0, TITLE_LIMIT) || null),
+	namingFor: (text: string) => {
+		const title = text.trim().split("\n")[0]?.slice(0, TITLE_LIMIT)
+		return Promise.resolve(title ? { title, icon: null } : null)
+	},
 
 	storeAttachments: (
 		conversationId: string,

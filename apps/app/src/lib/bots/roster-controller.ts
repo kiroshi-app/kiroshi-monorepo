@@ -38,10 +38,12 @@ import { failureReporterIn } from "../failure-report"
 import { createQueue } from "../queue"
 import { createStore } from "../store"
 import { createWriteLoop } from "../write-loop"
+import type { ConversationNaming } from "../agent/contract"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import {
 	isNameless,
 	presentParticipants,
+	toConversationSettingsValue,
 } from "../conversations/roster-conversations"
 import type {
 	Bot,
@@ -131,6 +133,11 @@ const PREVIEW_FAILURE: FailureMeta = {
 	raisedIn: "use-roster",
 }
 
+const CONVERSATION_WRITE_FAILURE: FailureMeta = {
+	failureNotice: () => ({ title: i18n.t("bots:roster.conversationUnsaved") }),
+	raisedIn: "roster-controller",
+}
+
 const ROSTER_REREAD_DELAY_MS = 250
 
 const soloThreadQueryOf = (
@@ -151,6 +158,8 @@ const soloThreadQueryOf = (
 
 type RosterQuery = ReturnType<typeof rosterQueryOf>
 type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
+
+type ConversationStyle = Partial<Pick<Conversation, "icon" | "color">>
 
 export type RosterController = {
 	getState: () => RosterState
@@ -197,7 +206,8 @@ export type RosterController = {
 	editConversation: (id: string) => void
 	setConversationEditing: (isEditing: boolean) => void
 	describeConversation: (id: string, value: ConversationSettingsValue) => void
-	nameConversation: (id: string, title: string) => void
+	styleConversation: (id: string, style: ConversationStyle) => void
+	nameConversation: (id: string, naming: ConversationNaming) => void
 	setConversationLead: (
 		conversationId: string,
 		botId: string,
@@ -930,14 +940,17 @@ export const createRosterController = (
 		write: (id, value) => {
 			const conversation = heldConversation(id)
 			return conversation
-				? runMutation(queryClient, () =>
-						store.updateConversation(id, {
-							title: value.name,
-							instructions: value.instructions,
-							sectionId: conversation.sectionId,
-							icon: conversation.icon,
-							color: conversation.color,
-						}),
+				? runMutation(
+						queryClient,
+						() =>
+							store.updateConversation(id, {
+								title: value.name,
+								instructions: value.instructions,
+								sectionId: conversation.sectionId,
+								icon: conversation.icon,
+								color: conversation.color,
+							}),
+						CONVERSATION_WRITE_FAILURE,
 					)
 				: Promise.resolve(null)
 		},
@@ -1264,12 +1277,25 @@ export const createRosterController = (
 			conversationWrites.push(id, value)
 		},
 
-		nameConversation: (id: string, title: string) => {
+		styleConversation: (id: string, style: ConversationStyle) => {
+			const conversation = heldConversation(id)
+			if (!conversation) {
+				return
+			}
+			applyConversation({ ...conversation, ...style })
+			conversationWrites.push(id, toConversationSettingsValue(conversation))
+		},
+
+		nameConversation: (id: string, { title, icon }: ConversationNaming) => {
 			const conversation = heldConversation(id)
 			if (!conversation || !isNameless(conversation)) {
 				return
 			}
-			applyConversation({ ...conversation, title })
+			applyConversation({
+				...conversation,
+				title,
+				icon: conversation.icon ?? icon,
+			})
 			conversationWrites.push(id, {
 				name: title,
 				instructions: conversation.instructions,

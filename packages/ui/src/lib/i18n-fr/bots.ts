@@ -13,6 +13,8 @@ const bots = {
 			"Impossible de charger vos compagnons. Redémarrez Kiroshi pour réessayer.",
 		previewUnreadable:
 			"Impossible de charger les derniers messages. Redémarrez Kiroshi pour réessayer.",
+		conversationUnsaved:
+			"Impossible d’enregistrer votre modification de cette conversation. Refaites-la pour réessayer.",
 		mission: {
 			state: {
 				waiting: "en attente de vous",

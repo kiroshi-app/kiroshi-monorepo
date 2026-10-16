@@ -165,6 +165,20 @@ it("writes a conversation updated on the host into the roster of its space and r
 	expect(queryClient.isFetching()).toBe(0)
 })
 
+it("writes the icon and the colour of a conversation updated on the host into its roster", async () => {
+	const { store, garage, controller } = await loadedRoster()
+	const topic = await firstTopicIn(store, garage.spaceId)
+
+	await emitOnHost("conversation://updated", {
+		spaceId: garage.spaceId,
+		conversation: { ...topic, icon: "Rocket", color: "cyan" },
+	})
+
+	expect(
+		controller.getState().conversationRosters[garage.spaceRowId],
+	).toMatchObject([{ icon: "Rocket", color: "cyan" }])
+})
+
 it("writes a conversation updated on a joined host into its roster while another space is shown and reads nothing", async () => {
 	const { store, shed, controller, pageReads } = await loadedRoster()
 	const topic = await firstTopicIn(store, shed.spaceId)

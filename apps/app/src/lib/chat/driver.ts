@@ -2,6 +2,7 @@ import type { SubmittedAttachment } from "./attachments-contract"
 
 import type {
 	CheckReport,
+	ConversationNaming,
 	PermissionDecision,
 	QuestionAnswers,
 	RuntimeScope,
@@ -14,7 +15,7 @@ type ChatDriverUnsubscribe = () => void
 
 export type ChatDriver = {
 	check: (scope: RuntimeScope | null) => Promise<CheckReport>
-	titleFor: (text: string) => Promise<string | null>
+	namingFor: (text: string) => Promise<ConversationNaming | null>
 	startOrResumeSession: (
 		scope: RuntimeScope,
 		resume?: string,

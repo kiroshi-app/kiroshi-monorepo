@@ -21,9 +21,8 @@ export const agentTransport: ChatDriver = {
 	check: (scope: RuntimeScope | null) =>
 		invoke<CheckReport>("agent_check", { scope }),
 
-	titleFor: async (text: string) =>
-		(await invoke<ConversationNaming | null>("agent_title", { text }))?.title ??
-		null,
+	namingFor: (text: string) =>
+		invoke<ConversationNaming | null>("agent_title", { text }),
 
 	startOrResumeSession: (
 		scope: RuntimeScope,
