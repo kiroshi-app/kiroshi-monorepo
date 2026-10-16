@@ -1,11 +1,16 @@
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { SearchPalette } from "@workspace/ui/components/search-palette"
+import { WhatsNewDialog } from "@workspace/ui/components/whats-new-dialog"
 
 import { BotSettingsHost } from "@/components/bot-settings-host"
 import { ConversationSettingsHost } from "@/components/conversation-settings-host"
 import { JoinedSpaceDialogs } from "@/components/joined-space-dialogs"
 import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { UserSettingsHost } from "@/components/user-settings-host"
+import { aboutFieldsOf } from "@/lib/updater/about-fields"
+import { useRunningVersion } from "@/lib/updater/use-running-version"
+import type { Updater } from "@/lib/updater/use-updater"
+import { useWhatsNew } from "@/lib/updater/use-whats-new"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -20,6 +25,7 @@ type AppDialogsProps = {
 	rosterLines: RosterLines
 	rosterView: RosterView
 	scopes: ApplicationScopes
+	updater: Updater
 }
 
 export const AppDialogs = ({
@@ -29,29 +35,43 @@ export const AppDialogs = ({
 	rosterLines,
 	rosterView,
 	scopes,
-}: AppDialogsProps) => (
-	<>
-		<BotSettingsHost
-			core={core}
-			panels={panels}
-			rosterLines={rosterLines}
-			rosterView={rosterView}
-			scopes={scopes}
-		/>
-		<ConversationSettingsHost
-			core={core}
-			rosterLines={rosterLines}
-			rosterView={rosterView}
-		/>
-		<SpaceSettingsHost core={core} panels={panels} scopes={scopes} />
-		<JoinedSpaceDialogs joinedSpaces={core.joinedSpaces} />
-		<UserSettingsHost
-			core={core}
-			overlay={overlay}
-			panels={panels}
-			scopes={scopes}
-		/>
-		<SearchPalette {...overlay.search.palette} />
-		<NoticeSurface />
-	</>
-)
+	updater,
+}: AppDialogsProps) => {
+	const runningVersion = useRunningVersion()
+	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
+	const about = aboutFieldsOf({
+		updater,
+		user: core.user,
+		runningVersion,
+		onWhatsNew: whatsNew.openFromAbout,
+	})
+
+	return (
+		<>
+			<BotSettingsHost
+				core={core}
+				panels={panels}
+				rosterLines={rosterLines}
+				rosterView={rosterView}
+				scopes={scopes}
+			/>
+			<ConversationSettingsHost
+				core={core}
+				rosterLines={rosterLines}
+				rosterView={rosterView}
+			/>
+			<SpaceSettingsHost core={core} panels={panels} scopes={scopes} />
+			<JoinedSpaceDialogs joinedSpaces={core.joinedSpaces} />
+			<UserSettingsHost
+				about={about}
+				core={core}
+				overlay={overlay}
+				panels={panels}
+				scopes={scopes}
+			/>
+			{whatsNew.dialog ? <WhatsNewDialog {...whatsNew.dialog} /> : null}
+			<SearchPalette {...overlay.search.palette} />
+			<NoticeSurface />
+		</>
+	)
+}

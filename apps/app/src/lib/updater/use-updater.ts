@@ -6,6 +6,7 @@ import {
 	type UpdaterController,
 	type UpdaterState,
 } from "./updater-controller"
+import { raiseUpdaterFailure } from "./updater-failure"
 
 import { useController } from "../use-controller"
 
@@ -16,7 +17,10 @@ export type Updater = {
 
 export const useUpdater = (): Updater => {
 	const { state, controller } = useController(() =>
-		createUpdaterController(createUpdater()),
+		createUpdaterController(
+			createUpdater(),
+			raiseUpdaterFailure("use-updater"),
+		),
 	)
 
 	useEffect(() => controller.start(), [controller])

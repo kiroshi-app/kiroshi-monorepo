@@ -1,36 +1,21 @@
 import { relaunch } from "@tauri-apps/plugin-process"
-import { check, type DownloadEvent } from "@tauri-apps/plugin-updater"
 
-import type { UpdateProgress, UpdaterPort } from "./updater-port"
+import type { HostUpdateState, UpdaterPort } from "./updater-port"
 
-const accumulate = (onProgress: (progress: UpdateProgress) => void) => {
-	let downloaded = 0
-	let total: number | null = null
-
-	return (event: DownloadEvent) => {
-		if (event.event === "Started") {
-			total = event.data.contentLength ?? null
-		}
-		if (event.event === "Progress") {
-			downloaded += event.data.chunkLength
-		}
-		onProgress({ downloaded, total })
-	}
-}
+import { commands, UPDATE_CHANGED_EVENT } from "../bindings"
+import { listen } from "../host/tauri"
 
 export const updaterTransport: UpdaterPort = {
-	check: async () => {
-		const update = await check()
-		if (!update) {
-			return null
-		}
-		return {
-			version: update.version,
-			notes: update.body ?? null,
-			install: (onProgress) =>
-				update.downloadAndInstall(accumulate(onProgress)),
-		}
-	},
+	check: () => commands.checkForUpdates(),
+
+	install: () => commands.installUpdate(),
+
+	countRunningCompanions: () => commands.runningCompanions(),
 
 	restart: () => relaunch(),
+
+	watch: (onChange) =>
+		listen<HostUpdateState>(UPDATE_CHANGED_EVENT, ({ payload }) =>
+			onChange(payload),
+		),
 }

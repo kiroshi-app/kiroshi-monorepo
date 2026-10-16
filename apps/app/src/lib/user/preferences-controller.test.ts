@@ -588,3 +588,60 @@ describe("the settings the chip opens", () => {
 		expect(controller.getState().isSettingsOpen).toBe(false)
 	})
 })
+
+describe("the update preferences of the About tab", () => {
+	const REFUSED = {
+		kind: "storage",
+		failure: { kind: "sqlite", detail: "disk I/O error" },
+	}
+
+	it("writes the channel into the record", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.setUpdateChannel("beta")
+
+		expect(controller.getState().preferences.updateChannel).toBe("beta")
+		expect(host()).toEqual({ ...DEFAULTS, updateChannel: "beta" })
+	})
+
+	it("writes the What's new switch into the record", async () => {
+		const host = aHost({ ...DEFAULTS, showWhatsNew: true })
+		const controller = await loaded()
+
+		await controller.setShowWhatsNew(false)
+
+		expect(controller.getState().preferences.showWhatsNew).toBe(false)
+		expect(host().showWhatsNew).toBe(false)
+	})
+
+	it("writes the version the reader has seen into the record", async () => {
+		const host = aHost()
+		const controller = await loaded()
+
+		await controller.markVersionSeen("0.25.0")
+
+		expect(controller.getState().preferences.lastSeenVersion).toBe("0.25.0")
+		expect(host().lastSeenVersion).toBe("0.25.0")
+	})
+
+	it("shows the stored channel again and rejects when the write is refused", async () => {
+		aHost({ ...DEFAULTS, updateChannel: "stable" })
+		const controller = await loaded()
+		hostInvoke.mockRejectedValue(REFUSED)
+
+		await expect(controller.setUpdateChannel("beta")).rejects.toEqual(REFUSED)
+
+		expect(controller.getState().preferences.updateChannel).toBe("stable")
+	})
+
+	it("shows the stored switch again and rejects when the write is refused", async () => {
+		aHost({ ...DEFAULTS, showWhatsNew: true })
+		const controller = await loaded()
+		hostInvoke.mockRejectedValue(REFUSED)
+
+		await expect(controller.setShowWhatsNew(false)).rejects.toEqual(REFUSED)
+
+		expect(controller.getState().preferences.showWhatsNew).toBe(true)
+	})
+})

@@ -1,26 +1,56 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vitest"
 
-import { createUpdaterController } from "./updater-controller"
-import type { AvailableUpdate, UpdaterPort } from "./updater-port"
+import {
+	createUpdaterController,
+	type ReportUpdaterFailure,
+} from "./updater-controller"
+import type { HostUpdateState, UpdaterPort } from "./updater-port"
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
 
-const release = (
-	overrides: Partial<AvailableUpdate> = {},
-): AvailableUpdate => ({
-	version: "0.2.0",
-	notes: "Faster launches",
-	install: async () => undefined,
-	...overrides,
-})
+const UP_TO_DATE: HostUpdateState = { kind: "upToDate" }
+const OFFERED: HostUpdateState = { kind: "available", version: "1.4.0" }
+const READY: HostUpdateState = { kind: "readyToRestart", version: "1.4.0" }
+const FAILED: HostUpdateState = { kind: "failed", message: "offline" }
 
-const portOf = (
-	check: UpdaterPort["check"],
-	restart: UpdaterPort["restart"] = async () => undefined,
-): UpdaterPort => ({ check, restart })
+type FakeHost = {
+	port: UpdaterPort
+	emit: (state: HostUpdateState) => void
+	isWatched: () => boolean
+}
 
-const settle = () => Promise.resolve()
+const fakeHostOf = (overrides: Partial<UpdaterPort> = {}): FakeHost => {
+	const listeners = new Set<(state: HostUpdateState) => void>()
+	const port: UpdaterPort = {
+		check: vi.fn(async () => UP_TO_DATE),
+		install: vi.fn(async () => READY),
+		countRunningCompanions: vi.fn(async () => 0),
+		restart: vi.fn(async () => undefined),
+		watch: async (onChange) => {
+			listeners.add(onChange)
+			return () => listeners.delete(onChange)
+		},
+		...overrides,
+	}
+	return {
+		port,
+		emit: (state) => {
+			for (const listener of listeners) listener(state)
+		},
+		isWatched: () => listeners.size > 0,
+	}
+}
+
+const settle = () => vi.advanceTimersByTimeAsync(0)
 
 const stubWindow = () => {
 	const listeners = new Set<() => void>()
@@ -44,10 +74,12 @@ const stubWindow = () => {
 
 describe("createUpdaterController", () => {
 	let focusWindow: ReturnType<typeof stubWindow>
+	let reportFailure: Mock<ReportUpdaterFailure>
 
 	beforeEach(() => {
 		vi.useFakeTimers()
 		focusWindow = stubWindow()
+		reportFailure = vi.fn<ReportUpdaterFailure>()
 	})
 
 	afterEach(() => {
@@ -55,315 +87,322 @@ describe("createUpdaterController", () => {
 		vi.unstubAllGlobals()
 	})
 
-	it("asks the endpoint once when the launch starts", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
+	const controllerOf = (host: FakeHost) =>
+		createUpdaterController(host.port, reportFailure)
+
+	it("checks once when the launch starts", async () => {
+		const host = fakeHostOf()
+		const controller = controllerOf(host)
 
 		controller.start()
 		await settle()
 
-		expect(check).toHaveBeenCalledTimes(1)
-		expect(controller.getState()).toEqual({
-			available: null,
-			progress: null,
-			isRestartPending: false,
-			error: null,
-		})
+		expect(host.port.check).toHaveBeenCalledTimes(1)
+		expect(controller.getState().host).toEqual(UP_TO_DATE)
 	})
 
-	it("exposes what a newer release says about itself", async () => {
-		const controller = createUpdaterController(
-			portOf(async () => release({ version: "1.4.0", notes: "Notes" })),
+	it("dates the check that found this build current", async () => {
+		vi.setSystemTime(1_000)
+		const controller = controllerOf(fakeHostOf())
+
+		vi.setSystemTime(5_000)
+		await controller.check()
+
+		expect(controller.getState().checkedAt).toBe(5_000)
+	})
+
+	it("remembers the version a check offered", async () => {
+		const controller = controllerOf(
+			fakeHostOf({ check: vi.fn(async () => OFFERED) }),
 		)
 
 		await controller.check()
 
-		expect(controller.getState().available).toEqual({
-			version: "1.4.0",
-			notes: "Notes",
-		})
+		expect(controller.getState().offeredVersion).toBe("1.4.0")
 	})
 
-	it("asks again every six hours", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
-
+	it("follows every state the host announces", async () => {
+		const host = fakeHostOf()
+		const controller = controllerOf(host)
 		controller.start()
-		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS)
-		expect(check).toHaveBeenCalledTimes(2)
+		await settle()
 
-		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS)
-		expect(check).toHaveBeenCalledTimes(3)
+		host.emit(OFFERED)
+		expect(controller.getState().host).toEqual(OFFERED)
+
+		const downloading: HostUpdateState = {
+			kind: "downloading",
+			downloadedBytes: 10,
+			totalBytes: 100,
+		}
+		host.emit(downloading)
+		expect(controller.getState().host).toEqual(downloading)
+		expect(controller.getState().offeredVersion).toBe("1.4.0")
 	})
 
-	it("stops asking once the launch lets go", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
+	it("forgets the offered version when a new check starts", async () => {
+		const host = fakeHostOf({ check: vi.fn(async () => OFFERED) })
+		const controller = controllerOf(host)
+		controller.start()
+		await settle()
 
-		const stop = controller.start()
+		host.emit({ kind: "checking" })
+
+		expect(controller.getState().offeredVersion).toBeNull()
+	})
+
+	it("stops following the host once the launch lets go", async () => {
+		const host = fakeHostOf()
+		const stop = controllerOf(host).start()
+		await settle()
+
+		stop()
+		await settle()
+
+		expect(host.isWatched()).toBe(false)
+	})
+
+	it("reports a host it cannot listen to", async () => {
+		const refusal = new Error("no event bridge")
+		const host = fakeHostOf({ watch: () => Promise.reject(refusal) })
+
+		controllerOf(host).start()
+		await settle()
+
+		expect(reportFailure).toHaveBeenCalledWith(refusal)
+	})
+
+	it("checks again every six hours", async () => {
+		const host = fakeHostOf()
+		controllerOf(host).start()
+
+		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS)
+		expect(host.port.check).toHaveBeenCalledTimes(2)
+
+		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS)
+		expect(host.port.check).toHaveBeenCalledTimes(3)
+	})
+
+	it("stops checking once the launch lets go", async () => {
+		const host = fakeHostOf()
+		const stop = controllerOf(host).start()
+
 		stop()
 		await vi.advanceTimersByTimeAsync(SIX_HOURS_MS * 3)
 
-		expect(check).toHaveBeenCalledTimes(1)
+		expect(host.port.check).toHaveBeenCalledTimes(1)
 	})
 
-	it("asks again when the window is read after four hours", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
+	it("checks again when the window is read after four hours", async () => {
+		const host = fakeHostOf()
+		controllerOf(host).start()
 
-		controller.start()
 		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
 		await focusWindow()
 
-		expect(check).toHaveBeenCalledTimes(2)
+		expect(host.port.check).toHaveBeenCalledTimes(2)
 	})
 
-	it("says nothing to the endpoint for a window read back within the four hours", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
+	it("checks nothing for a window read back within the four hours", async () => {
+		const host = fakeHostOf()
+		controllerOf(host).start()
 
-		controller.start()
 		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS - 1000)
 		await focusWindow()
 
-		expect(check).toHaveBeenCalledTimes(1)
-	})
-
-	it("asks the endpoint on a launch that follows a check straight away", async () => {
-		const check = vi.fn(async () => null)
-		createUpdaterController(portOf(check)).start()
-		await settle()
-
-		createUpdaterController(portOf(check)).start()
-		await settle()
-
-		expect(check).toHaveBeenCalledTimes(2)
+		expect(host.port.check).toHaveBeenCalledTimes(1)
 	})
 
 	it("leaves a running download alone when the window is read again", async () => {
-		let landDownload = () => {}
-		const check = vi.fn(async () =>
-			release({
-				install: () =>
-					new Promise<void>((resolve) => {
-						landDownload = resolve
-					}),
-			}),
-		)
-		const controller = createUpdaterController(portOf(check))
-
-		controller.start()
+		const host = fakeHostOf()
+		controllerOf(host).start()
 		await settle()
-		const installing = controller.install()
+
+		host.emit({ kind: "downloading", downloadedBytes: 0, totalBytes: null })
 		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
 		await focusWindow()
 
-		expect(check).toHaveBeenCalledTimes(1)
-		expect(controller.getState().progress).toBe(0)
-
-		landDownload()
-		await installing
+		expect(host.port.check).toHaveBeenCalledTimes(1)
 	})
 
 	it("leaves an install waiting for a restart alone when the window is read again", async () => {
-		const check = vi.fn(async () => release())
-		const controller = createUpdaterController(portOf(check))
-
-		controller.start()
+		const host = fakeHostOf()
+		controllerOf(host).start()
 		await settle()
-		await controller.install()
+
+		host.emit(READY)
 		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
 		await focusWindow()
 
-		expect(check).toHaveBeenCalledTimes(1)
+		expect(host.port.check).toHaveBeenCalledTimes(1)
 	})
 
 	it("stops listening to the window once the launch lets go", async () => {
-		const check = vi.fn(async () => null)
-		const controller = createUpdaterController(portOf(check))
+		const host = fakeHostOf()
+		const stop = controllerOf(host).start()
 
-		const stop = controller.start()
 		stop()
 		await vi.advanceTimersByTimeAsync(FOUR_HOURS_MS)
 		await focusWindow()
 
-		expect(check).toHaveBeenCalledTimes(1)
+		expect(host.port.check).toHaveBeenCalledTimes(1)
 	})
 
-	it("records an unreachable endpoint without throwing", async () => {
-		const controller = createUpdaterController(
-			portOf(async () => {
-				throw new Error("network unreachable")
+	it("reports a check the host refused and keeps the previous state", async () => {
+		const refusal = new Error("ipc closed")
+		const controller = controllerOf(
+			fakeHostOf({ check: vi.fn(() => Promise.reject(refusal)) }),
+		)
+		const before = controller.getState()
+
+		await controller.check()
+
+		expect(reportFailure).toHaveBeenCalledWith(refusal)
+		expect(controller.getState()).toEqual(before)
+	})
+
+	it("installs the offered release", async () => {
+		const host = fakeHostOf({ check: vi.fn(async () => OFFERED) })
+		const controller = controllerOf(host)
+		await controller.check()
+
+		await controller.install()
+
+		expect(host.port.install).toHaveBeenCalledTimes(1)
+	})
+
+	it("installs nothing while no release is offered", async () => {
+		const host = fakeHostOf()
+		const controller = controllerOf(host)
+		await controller.check()
+
+		await controller.install()
+
+		expect(host.port.install).not.toHaveBeenCalled()
+	})
+
+	it("checks again before downloading a release whose download failed", async () => {
+		const check = vi
+			.fn<UpdaterPort["check"]>()
+			.mockResolvedValueOnce(FAILED)
+			.mockResolvedValueOnce(OFFERED)
+		const host = fakeHostOf({ check })
+		const controller = controllerOf(host)
+		await controller.check()
+
+		await controller.install()
+
+		expect(check).toHaveBeenCalledTimes(2)
+		expect(host.port.install).toHaveBeenCalledTimes(1)
+	})
+
+	it("reports an install the host refused and keeps the offer on screen", async () => {
+		const refusal = new Error("ipc closed")
+		const controller = controllerOf(
+			fakeHostOf({
+				check: vi.fn(async () => OFFERED),
+				install: vi.fn(() => Promise.reject(refusal)),
 			}),
 		)
+		await controller.check()
 
+		await controller.install()
+
+		expect(reportFailure).toHaveBeenCalledWith(refusal)
+		expect(controller.getState().host).toEqual(OFFERED)
+	})
+
+	it("counts the running companions when the restart becomes ready", async () => {
+		const host = fakeHostOf({
+			check: vi.fn(async () => OFFERED),
+			countRunningCompanions: vi.fn(async () => 2),
+		})
+		const controller = controllerOf(host)
+		await controller.check()
+
+		await controller.install()
+		await settle()
+
+		expect(controller.getState().host).toEqual(READY)
+		expect(controller.getState().runningCompanions).toBe(2)
+	})
+
+	it("counts the running companions once for a ready state heard twice", async () => {
+		const host = fakeHostOf({ check: vi.fn(async () => OFFERED) })
+		const controller = controllerOf(host)
 		controller.start()
 		await settle()
 
-		expect(controller.getState()).toEqual({
-			available: null,
-			progress: null,
-			isRestartPending: false,
-			error: "network unreachable",
+		host.emit(READY)
+		await controller.install()
+		await settle()
+
+		expect(host.port.countRunningCompanions).toHaveBeenCalledTimes(1)
+	})
+
+	it("lands the ready state with the last count when counting fails", async () => {
+		const refusal = new Error("agent unreachable")
+		const host = fakeHostOf({
+			countRunningCompanions: vi.fn(() => Promise.reject(refusal)),
 		})
-	})
+		const controller = controllerOf(host)
+		controller.start()
+		await settle()
 
-	it("keeps a release a later failed check could not confirm", async () => {
-		const port = portOf(async () => release())
-		const controller = createUpdaterController(port)
+		host.emit(READY)
+		await settle()
 
-		await controller.check()
-		vi.spyOn(port, "check").mockRejectedValue(new Error("offline"))
-		await controller.check()
-
-		expect(controller.getState().available).toEqual({
-			version: "0.2.0",
-			notes: "Faster launches",
-		})
-		expect(controller.getState().error).toBe("offline")
-	})
-
-	it("clears the error once the endpoint answers again", async () => {
-		const port = portOf(async () => {
-			throw new Error("offline")
-		})
-		const controller = createUpdaterController(port)
-
-		await controller.check()
-		vi.spyOn(port, "check").mockResolvedValue(null)
-		await controller.check()
-
-		expect(controller.getState().error).toBeNull()
-	})
-
-	it("reports the download as it comes in", async () => {
-		const seen: (number | null)[] = []
-		const controller = createUpdaterController(
-			portOf(async () =>
-				release({
-					install: async (onProgress) => {
-						onProgress({ downloaded: 40, total: 100 })
-						onProgress({ downloaded: 100, total: 100 })
-					},
-				}),
-			),
-		)
-		await controller.check()
-		controller.subscribe(() => seen.push(controller.getState().progress))
-		await controller.install()
-
-		expect(seen).toEqual([0, 40, 100, null])
-	})
-
-	it("says nothing for the chunks inside a percent already shown", async () => {
-		const seen: (number | null)[] = []
-		const controller = createUpdaterController(
-			portOf(async () =>
-				release({
-					install: async (onProgress) => {
-						onProgress({ downloaded: 1, total: 1000 })
-						onProgress({ downloaded: 2, total: 1000 })
-						onProgress({ downloaded: 50, total: 1000 })
-					},
-				}),
-			),
-		)
-
-		await controller.check()
-		controller.subscribe(() => seen.push(controller.getState().progress))
-		await controller.install()
-
-		expect(seen).toEqual([0, 5, null])
-	})
-
-	it("installs nothing when no release was found", async () => {
-		const controller = createUpdaterController(portOf(async () => null))
-
-		await controller.check()
-		await controller.install()
-
-		expect(controller.getState().progress).toBeNull()
-		expect(controller.getState().error).toBeNull()
-	})
-
-	it("records a failed install and drops the progress", async () => {
-		const controller = createUpdaterController(
-			portOf(async () =>
-				release({
-					install: async () => {
-						throw new Error("signature refused")
-					},
-				}),
-			),
-		)
-
-		await controller.check()
-		await controller.install()
-
-		expect(controller.getState().progress).toBeNull()
-		expect(controller.getState().error).toBe("signature refused")
-	})
-
-	it("waits for a restart once the install has landed", async () => {
-		const controller = createUpdaterController(portOf(async () => release()))
-
-		await controller.check()
-		await controller.install()
-
-		expect(controller.getState().isRestartPending).toBe(true)
-		expect(controller.getState().progress).toBeNull()
-	})
-
-	it("leaves nothing waiting for a restart when the install failed", async () => {
-		const controller = createUpdaterController(
-			portOf(async () =>
-				release({
-					install: async () => {
-						throw new Error("signature refused")
-					},
-				}),
-			),
-		)
-
-		await controller.check()
-		await controller.install()
-
-		expect(controller.getState().isRestartPending).toBe(false)
+		expect(reportFailure).toHaveBeenCalledWith(refusal)
+		expect(controller.getState().host).toEqual(READY)
+		expect(controller.getState().runningCompanions).toBe(0)
 	})
 
 	it("starts the installed build when asked", async () => {
-		const restart = vi.fn(async () => undefined)
-		const controller = createUpdaterController(
-			portOf(async () => release(), restart),
-		)
+		const host = fakeHostOf()
+		const controller = controllerOf(host)
+		controller.start()
+		await settle()
+		host.emit(READY)
+		await settle()
 
-		await controller.check()
-		await controller.install()
 		await controller.restart()
 
-		expect(restart).toHaveBeenCalledTimes(1)
+		expect(host.port.restart).toHaveBeenCalledTimes(1)
 	})
 
 	it("starts nothing while no install has landed", async () => {
-		const restart = vi.fn(async () => undefined)
-		const controller = createUpdaterController(
-			portOf(async () => release(), restart),
-		)
+		const host = fakeHostOf()
+		const controller = controllerOf(host)
 
-		await controller.check()
 		await controller.restart()
 
-		expect(restart).not.toHaveBeenCalled()
+		expect(host.port.restart).not.toHaveBeenCalled()
+	})
+
+	it("reports a restart the process refused", async () => {
+		const refusal = new Error("relaunch refused")
+		const host = fakeHostOf({ restart: vi.fn(() => Promise.reject(refusal)) })
+		const controller = controllerOf(host)
+		controller.start()
+		await settle()
+		host.emit(READY)
+		await settle()
+
+		await controller.restart()
+
+		expect(reportFailure).toHaveBeenCalledWith(refusal)
 	})
 
 	it("tells its readers only when something changed", async () => {
+		const host = fakeHostOf({ check: vi.fn(async () => OFFERED) })
+		const controller = controllerOf(host)
 		const listener = vi.fn()
-		const controller = createUpdaterController(portOf(async () => null))
 		controller.subscribe(listener)
 
 		await controller.check()
+		host.emit(OFFERED)
 		await controller.check()
 
-		expect(listener).not.toHaveBeenCalled()
+		expect(listener).toHaveBeenCalledTimes(1)
 	})
 })

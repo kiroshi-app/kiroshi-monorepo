@@ -1,18 +1,13 @@
-export type UpdateProgress = {
-	downloaded: number
-	total: number | null
-}
+import type { UpdateState as HostUpdateState } from "../bindings"
 
-export type UpdateRelease = {
-	version: string
-	notes: string | null
-}
+export type { HostUpdateState }
 
-export type AvailableUpdate = UpdateRelease & {
-	install: (onProgress: (progress: UpdateProgress) => void) => Promise<void>
-}
+type StopWatching = () => void
 
 export type UpdaterPort = {
-	check: () => Promise<AvailableUpdate | null>
+	check: () => Promise<HostUpdateState>
+	install: () => Promise<HostUpdateState>
+	countRunningCompanions: () => Promise<number>
 	restart: () => Promise<void>
+	watch: (onChange: (state: HostUpdateState) => void) => Promise<StopWatching>
 }

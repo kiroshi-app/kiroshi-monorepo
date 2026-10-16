@@ -4,105 +4,108 @@ import { toUpdateBadgeProps } from "./badge-model"
 import type { UpdaterState } from "./updater-controller"
 
 const stateOf = (overrides: Partial<UpdaterState> = {}): UpdaterState => ({
-	available: null,
-	progress: null,
-	isRestartPending: false,
-	error: null,
+	host: { kind: "upToDate" },
+	offeredVersion: null,
+	checkedAt: 0,
+	runningCompanions: 0,
 	...overrides,
 })
 
-const release = { version: "1.4.0", notes: "Faster launches" }
-
-const propsOf = (state: UpdaterState, busyBotCount = 0) =>
-	toUpdateBadgeProps({ state, busyBotCount })
+const propsOf = (state: UpdaterState, notes: string | null = null) =>
+	toUpdateBadgeProps({ state, notes, busyBotCount: 0 })
 
 describe("toUpdateBadgeProps", () => {
 	it("shows nothing while this build is the current one", () => {
 		expect(propsOf(stateOf()).status).toBe("idle")
 	})
 
+	it("shows nothing while a check runs", () => {
+		expect(propsOf(stateOf({ host: { kind: "checking" } })).status).toBe("idle")
+	})
+
 	it("offers a release nothing has started downloading", () => {
-		const props = propsOf(stateOf({ available: release }))
+		const props = propsOf(
+			stateOf({
+				host: { kind: "available", version: "1.4.0" },
+				offeredVersion: "1.4.0",
+			}),
+		)
 
 		expect(props.status).toBe("available")
 		expect(props.version).toBe("1.4.0")
 	})
 
-	it("reports the download while it runs", () => {
-		const props = propsOf(stateOf({ available: release, progress: 42 }))
+	it("reports the download as a share of its total bytes", () => {
+		const props = propsOf(
+			stateOf({
+				host: { kind: "downloading", downloadedBytes: 42, totalBytes: 100 },
+				offeredVersion: "1.4.0",
+			}),
+		)
 
 		expect(props.status).toBe("downloading")
 		expect(props.progress).toBe(42)
 	})
 
-	it("asks for a restart once the install has landed", () => {
-		const props = propsOf(
-			stateOf({ available: release, isRestartPending: true }),
-		)
-
-		expect(props.status).toBe("ready")
-	})
-
-	it("keeps asking for the restart a later failed check could not confirm", () => {
+	it("reports no progress while the total size is unknown", () => {
 		const props = propsOf(
 			stateOf({
-				available: release,
-				isRestartPending: true,
-				error: "offline",
+				host: { kind: "downloading", downloadedBytes: 42, totalBytes: null },
+			}),
+		)
+
+		expect(props.progress).toBe(0)
+	})
+
+	it("asks for a restart once the install has landed", () => {
+		const props = propsOf(
+			stateOf({
+				host: { kind: "readyToRestart", version: "1.4.0" },
+				offeredVersion: "1.4.0",
 			}),
 		)
 
 		expect(props.status).toBe("ready")
+		expect(props.version).toBe("1.4.0")
 	})
 
 	it("offers the download again when it failed", () => {
 		const props = propsOf(
-			stateOf({ available: release, error: "signature refused" }),
+			stateOf({
+				host: { kind: "failed", message: "signature refused" },
+				offeredVersion: "1.4.0",
+			}),
 		)
 
 		expect(props.status).toBe("error")
 	})
 
-	it("hands the release notes down a line at a time", () => {
+	it("lists the release notes one line per change", () => {
 		const props = propsOf(
 			stateOf({
-				available: {
-					version: "1.4.0",
-					notes: "- Faster launches\n\n* Fewer crashes\n+ Smaller build\n",
-				},
+				host: { kind: "available", version: "1.4.0" },
+				offeredVersion: "1.4.0",
+			}),
+			"- Faster launches\n\n* Calmer sidebar\n",
+		)
+
+		expect(props.releaseNotes).toEqual(["Faster launches", "Calmer sidebar"])
+	})
+
+	it("links the release page of the offered version", () => {
+		const props = propsOf(
+			stateOf({
+				host: { kind: "available", version: "1.4.0" },
+				offeredVersion: "1.4.0",
 			}),
 		)
-
-		expect(props.releaseNotes).toEqual([
-			"Faster launches",
-			"Fewer crashes",
-			"Smaller build",
-		])
-	})
-
-	it("has no notes to hand down for a release that said nothing", () => {
-		const props = propsOf(
-			stateOf({ available: { version: "1.4.0", notes: null } }),
-		)
-
-		expect(props.releaseNotes).toEqual([])
-	})
-
-	it("points at the release the version was published as", () => {
-		const props = propsOf(stateOf({ available: release }))
 
 		expect(props.releaseNotesUrl).toBe(
 			"https://github.com/shoto290/kiroshi-monorepo/releases/tag/v1.4.0",
 		)
 	})
 
-	it("has no release to point at while this build is the current one", () => {
+	it("links nothing while no version is offered", () => {
 		expect(propsOf(stateOf()).releaseNotesUrl).toBeUndefined()
-	})
-
-	it("counts the companions a restart would interrupt", () => {
-		const props = propsOf(stateOf({ isRestartPending: true }), 2)
-
-		expect(props.activeBotCount).toBe(2)
 	})
 })
