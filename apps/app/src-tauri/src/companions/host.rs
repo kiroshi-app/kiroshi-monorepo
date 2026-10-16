@@ -1313,19 +1313,16 @@ mod tests {
 		json!({ "subtype": "companion", "operation": "conversationDescribe", "payload": payload })
 	}
 
-	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> (Value, Value) {
+	type Look = (Option<String>, Option<String>, i64);
+
+	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> Look {
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
 			.call(move |connection| {
 				Ok(connection.query_row(
 					"SELECT icon, color, updated_at FROM conversations WHERE id = ?1",
 					[conversation_id],
-					|row| {
-						let icon: Option<String> = row.get(0)?;
-						let colour: Option<String> = row.get(1)?;
-						let updated_at: i64 = row.get(2)?;
-						Ok((json!([icon, colour]), json!(updated_at)))
-					},
+					|row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
 				)?)
 			})
 			.await
