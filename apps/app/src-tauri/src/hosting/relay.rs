@@ -41,6 +41,8 @@ const CONNECT_BOUND: Duration = Duration::from_secs(20);
 
 const HOST_REPLACED: u16 = 4001;
 
+const SERVER_RESTARTING: u16 = 4005;
+
 pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub(crate) type Sink = SplitSink<Socket, Message>;
@@ -413,6 +415,9 @@ fn closed_by_relay(frame: Option<CloseFrame>, ids: Ids<'_>) -> Ended {
 	);
 	match code {
 		Some(HOST_REPLACED) => Ended::Replaced,
+		Some(SERVER_RESTARTING) => {
+			Ended::Dropped(format!("the relay is restarting (code {SERVER_RESTARTING})"))
+		}
 		_ => Ended::Dropped(format!("the relay closed the socket with code {code:?}")),
 	}
 }

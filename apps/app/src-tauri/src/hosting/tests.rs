@@ -750,6 +750,27 @@ fn a_dropped_socket_reconnects_after_the_first_backoff() {
 }
 
 #[test]
+fn a_relay_restarting_4005_reconnects_after_the_first_backoff() {
+	run(async {
+		let mut harness = Harness::signed_in("restarting").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let close = CloseFrame { code: 4005, reason: "Server restarting".into() };
+		member.send(Message::Close(Some(close))).await.expect("the close leaves");
+		harness.reached(HostingState::Connecting).await;
+		let _again = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let heard = harness.heard_until(|kinds| kinds.len() >= 4).await;
+
+		assert_eq!(heard, vec!["connecting", "online", "connecting", "online"]);
+		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
 fn a_member_call_reaches_the_local_api_with_the_host_token_and_its_answer_comes_back() {
 	run(async {
 		let mut harness = Harness::signed_in("invoke").await;

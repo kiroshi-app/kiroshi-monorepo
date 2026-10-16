@@ -29,6 +29,8 @@ const HOST_ABSENT: u16 = 4002;
 
 const MEMBERSHIP_ENDED: u16 = 4003;
 
+const SERVER_RESTARTING: u16 = 4005;
+
 const CALLS_IN_FLIGHT: usize = 64;
 
 pub struct RelayGuests {
@@ -531,6 +533,9 @@ fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 		Some(MEMBERSHIP_ENDED) => Ended::Evicted,
 		Some(HOST_ABSENT) => {
 			Ended::Dropped(format!("the relay room has no host (code {HOST_ABSENT})"))
+		}
+		Some(SERVER_RESTARTING) => {
+			Ended::Dropped(format!("the member relay is restarting (code {SERVER_RESTARTING})"))
 		}
 		code => Ended::Dropped(format!("the member relay closed the socket with code {code:?}")),
 	}

@@ -272,6 +272,7 @@ frame: a client fails the call it was sending, if any, by itself.
 | 4001 | the host socket | Another host took the instance over. | A member never receives it. The replaced host stops hosting and does not reconnect. |
 | 4002 | a member socket | The relay room has no host: the host left, or none was there when the socket opened. | Treat the space as offline; reconnect with backoff. |
 | 4003 | a member socket | The account's membership ended, or the instance was deleted. | Stop; do not reconnect; forget the space. |
+| 4005 | the host socket and every member socket | The relay is restarting for a deploy. | Reconnect with backoff. |
 | 1000 | the relay | The client leaves on purpose. | Sent by the client when it closes the socket. |
 
 Any other close code, and a socket that ends without a close frame, mean the
