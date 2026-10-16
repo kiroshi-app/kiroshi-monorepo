@@ -85,6 +85,40 @@ describe("ci changes", () => {
 		expect(onPullRequest("crates/relay/Cargo.toml").rust).toBe(true)
 	})
 
+	it("runs rust and vitest, not website, storybook or ios, on paths only under packages/shared", () => {
+		expect(
+			onPullRequest(
+				"packages/shared/permission-modes.json",
+				"packages/shared/src/index.ts",
+			),
+		).toEqual({ ...none, rust: true, vitest: true })
+	})
+
+	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
+		expect(onPullRequest("packages/shared/permission-modes.json").rust).toBe(
+			true,
+		)
+	})
+
+	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {
+		expect(onPullRequest("scripts/ci-changes.ts")).toEqual(every)
+	})
+
+	it("runs only vitest and storybook on scripts/ci-changes.test.ts alone, as any other script", () => {
+		expect(onPullRequest("scripts/ci-changes.test.ts")).toEqual({
+			...none,
+			vitest: true,
+			storybook: true,
+		})
+	})
+
+	it("leaves rust unselected on packages/ui and on a sibling like packages/sharedfoo", () => {
+		expect(onPullRequest("packages/ui/src/components/button.tsx").rust).toBe(
+			false,
+		)
+		expect(onPullRequest("packages/sharedfoo/index.ts").rust).toBe(false)
+	})
+
 	it("runs only vitest on an app file outside src-tauri", () => {
 		expect(onPullRequest("apps/app/src/main.tsx")).toEqual({
 			...none,

@@ -18,6 +18,7 @@ const SHARED_ROOT_FILES = [
 	"turbo.json",
 	"tsconfig.json",
 	"tsconfig.base.json",
+	"scripts/ci-changes.ts",
 ]
 
 const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
@@ -41,8 +42,11 @@ const isShared = (path: string) =>
 	SHARED_ROOT_FILES.includes(path) || isUnder(path, SHARED_ROOT_DIRECTORIES)
 
 const touchesRust = (path: string) =>
-	isUnder(path, ["apps/app/src-tauri/", "apps/app/sidecar/"]) ||
-	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
+	isUnder(path, [
+		"apps/app/src-tauri/",
+		"apps/app/sidecar/",
+		"packages/shared/",
+	]) || ["Cargo.toml", "Cargo.lock"].includes(fileName(path))
 
 const touchesVitest = (path: string) =>
 	isUnder(path, ["packages/", "scripts/", "baselines/"]) ||
