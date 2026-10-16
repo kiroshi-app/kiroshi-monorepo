@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
 use super::contract::{
-	CompanionCreated, CompanionError, CompanionInvited, ConversationAttached, ConversationOpened,
-	ConversationSaid, SeatedCompanion,
+	CompanionCreated, CompanionError, CompanionInvited, ConversationAttached,
+	ConversationDescribed, ConversationOpened, ConversationSaid, SeatedCompanion,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
@@ -18,12 +18,17 @@ use crate::attachments::{
 	refuse_block, refuse_file, store, Attachments, Rejection, SizedFile, IMAGE_EXTENSIONS,
 };
 use crate::conversations::commands::{
-	conversation_create_bot_from_draft, conversation_suggested_bots, ready, seat_participant,
+	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
+	seat_participant,
 };
-use crate::conversations::contract::{BotDraft, CompanionSpoke, TranscriptStoreError};
+use crate::conversations::contract::{AvatarBlot, BotDraft, CompanionSpoke, TranscriptStoreError};
 use crate::db;
-use crate::db::repositories::conversations::{Bot as StoredBot, ConversationDraft, TOPIC_KIND};
-use crate::events::{self, Event, COMPANION_CREATED, COMPANION_SPOKE, FIRST_RUN_DONE};
+use crate::db::repositories::conversations::{
+	self as stored, Bot as StoredBot, ConversationDescription, ConversationDraft, TOPIC_KIND,
+};
+use crate::events::{
+	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED, FIRST_RUN_DONE,
+};
 use crate::file_store::FileStore;
 
 #[derive(Debug)]
@@ -162,6 +167,33 @@ impl<R: Runtime> CompanionHost<R> {
 			},
 		)?;
 		Ok(ConversationSaid { conversation_id: asked.conversation, title })
+	}
+
+	async fn describe(
+		&self,
+		database: &db::Database,
+		asked: Described,
+	) -> Result<ConversationDescribed, CompanionError> {
+		if asked.icon.is_none() && asked.colour.is_none() {
+			return Err(CompanionError::EmptyDescription);
+		}
+		if let Some(Some(colour)) = &asked.colour {
+			refuse_unknown_colour(colour)?;
+		}
+		self.holds_seat(database, &asked.conversation).await?;
+		let description = ConversationDescription { icon: asked.icon, color: asked.colour };
+		let room = database
+			.conversations()
+			.describe_conversation(asked.conversation, description)
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &room.id).await;
+		Ok(ConversationDescribed {
+			conversation_id: room.id,
+			title: room.title,
+			icon: room.icon,
+			colour: room.color.map(|colour| colour.named().to_owned()),
+		})
 	}
 
 	async fn attach(
@@ -308,6 +340,19 @@ async fn carries_seats(
 	}
 }
 
+fn refuse_unknown_colour(colour: &str) -> Result<(), CompanionError> {
+	match stored::AvatarBlot::parse(colour) {
+		Some(_) => Ok(()),
+		None => Err(CompanionError::UnknownColour {
+			colour: colour.to_owned(),
+			accepted: AvatarBlot::ALL
+				.iter()
+				.map(|&blot| stored::AvatarBlot::from(blot).named().to_owned())
+				.collect(),
+		}),
+	}
+}
+
 async fn title_of(
 	database: &db::Database,
 	conversation_id: &str,
@@ -377,6 +422,10 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Attached = Self::read(payload)?;
 				Self::answered(self.attach(database, asked).await?)
 			}
+			Operation::ConversationDescribe => {
+				let asked: Described = Self::read(payload)?;
+				Self::answered(self.describe(database, asked).await?)
+			}
 		}
 	}
 }
@@ -401,6 +450,7 @@ pub enum Operation {
 	ConversationOpen,
 	ConversationSay,
 	ConversationAttach,
+	ConversationDescribe,
 }
 
 #[derive(Debug, Deserialize)]
@@ -436,6 +486,21 @@ struct Attached {
 	path: String,
 	caption: Option<String>,
 	conversation: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Described {
+	conversation: String,
+	icon: Option<String>,
+	#[serde(default, deserialize_with = "present")]
+	colour: Option<Option<String>>,
+}
+
+fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+	deserializer: D,
+) -> Result<Option<T>, D::Error> {
+	T::deserialize(deserializer).map(Some)
 }
 
 fn picked<'a>(roster: &'a [StoredBot], companion: &str) -> Result<&'a StoredBot, CompanionError> {
@@ -1242,6 +1307,123 @@ mod tests {
 
 		assert_eq!(said, json!({ "conversationId": "room", "title": "Plans" }));
 		assert_eq!(announced(&arriving)["conversationId"], json!("room"));
+	}
+
+	fn a_describe(payload: Value) -> Value {
+		json!({ "subtype": "companion", "operation": "conversationDescribe", "payload": payload })
+	}
+
+	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> (Value, Value) {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT icon, color, updated_at FROM conversations WHERE id = ?1",
+					[conversation_id],
+					|row| {
+						let icon: Option<String> = row.get(0)?;
+						let colour: Option<String> = row.get(1)?;
+						let updated_at: i64 = row.get(2)?;
+						Ok((json!([icon, colour]), json!(updated_at)))
+					},
+				)?)
+			})
+			.await
+			.expect("the look reads")
+	}
+
+	async fn describe_refused(
+		app: &App<MockRuntime>,
+		conversation_id: &'static str,
+		payload: Value,
+	) -> Value {
+		let updating = heard(app, crate::conversations::contract::UPDATED_EVENT);
+		let before = look_of(app, conversation_id).await;
+		let refused = refusal(serving(app, "c1").answer(a_describe(payload)).await);
+		assert_eq!(look_of(app, conversation_id).await, before, "a refused description wrote");
+		assert!(updating.try_recv().is_err(), "a refused description announced");
+		refused
+	}
+
+	#[tokio::test]
+	async fn a_seated_companion_describes_a_room_field_by_field_and_the_room_is_announced() {
+		let app = a_room("describe-seated").await;
+		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
+
+		let iconed = serving(&app, "c1")
+			.answer(a_describe(json!({ "conversation": "room", "icon": "Message" })))
+			.await
+			.expect("the icon is set");
+		let announced_room = announced(&updating);
+		let coloured = serving(&app, "c1")
+			.answer(a_describe(json!({ "conversation": "room", "colour": "cyan" })))
+			.await
+			.expect("the colour is set");
+		let uncoloured = serving(&app, "c1")
+			.answer(a_describe(json!({ "conversation": "room", "colour": null })))
+			.await
+			.expect("the colour is cleared");
+		let main = serving(&app, "c1")
+			.answer(a_describe(json!({ "conversation": "c1", "icon": "Star", "colour": "red" })))
+			.await
+			.expect("the main chat is described");
+
+		assert_eq!(
+			iconed,
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": null })
+		);
+		assert_eq!(announced_room["conversation"]["id"], json!("room"));
+		assert_eq!(announced_room["conversation"]["icon"], json!("Message"));
+		assert_eq!(
+			coloured,
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": "cyan" })
+		);
+		assert_eq!(
+			uncoloured,
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": null })
+		);
+		assert_eq!(
+			main,
+			json!({ "conversationId": "c1", "title": "Chat", "icon": "Star", "colour": "red" })
+		);
+	}
+
+	#[tokio::test]
+	async fn a_description_from_a_companion_without_a_live_seat_is_refused_naming_the_room() {
+		let app = a_room("describe-unseated").await;
+		planted(&app, ANOTHER_ROOM).await;
+
+		let refused =
+			describe_refused(&app, "unled", json!({ "conversation": "unled", "icon": "Message" }))
+				.await;
+
+		assert_eq!(refused, json!({ "kind": "callerNotSeated", "conversationId": "unled" }));
+	}
+
+	#[tokio::test]
+	async fn a_description_naming_nothing_a_blank_icon_or_an_unknown_colour_is_refused() {
+		let app = a_room("describe-refused").await;
+
+		let nothing = describe_refused(&app, "room", json!({ "conversation": "room" })).await;
+		let blank =
+			describe_refused(&app, "room", json!({ "conversation": "room", "icon": "  " })).await;
+		let teal = describe_refused(
+			&app,
+			"room",
+			json!({ "conversation": "room", "icon": "Message", "colour": "teal" }),
+		)
+		.await;
+
+		assert_eq!(nothing, json!({ "kind": "emptyDescription" }));
+		assert_eq!(blank, json!({ "kind": "emptyIconField" }));
+		assert_eq!(
+			teal,
+			json!({
+				"kind": "unknownColour",
+				"colour": "teal",
+				"accepted": ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"]
+			})
+		);
 	}
 
 	#[tokio::test]

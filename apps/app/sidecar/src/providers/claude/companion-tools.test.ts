@@ -81,6 +81,11 @@ const calls: [string, Record<string, unknown>, string][] = [
 		{ conversation: "c3", message: "Where to?" },
 		"conversationSay",
 	],
+	[
+		"conversation_describe",
+		{ conversation: "c3", icon: "Message", colour: null },
+		"conversationDescribe",
+	],
 ]
 
 const answers: Record<string, unknown> = {
@@ -97,6 +102,12 @@ const answers: Record<string, unknown> = {
 		],
 	},
 	conversationSay: { conversationId: "c3", title: "Trip" },
+	conversationDescribe: {
+		conversationId: "c3",
+		title: "Trip",
+		icon: "Message",
+		colour: null,
+	},
 }
 
 const NAMES_A_SEQUENCE = /\b(then|after|first|next|once|until)\b/i
@@ -187,6 +198,32 @@ describe("companionTools", () => {
 			...Object.values(say.inputSchema).map((held) => held.description),
 		]) {
 			expect(described).not.toMatch(NAMES_A_SEQUENCE)
+		}
+	})
+
+	it("takes the room it describes, an optional icon and an optional colour naming the eight", () => {
+		const describe = toolNamed(SESSION, "conversation_describe")
+		const { icon, colour } = describe.inputSchema
+
+		expect(Object.keys(describe.inputSchema)).toEqual([
+			"conversation",
+			"icon",
+			"colour",
+		])
+		expect(icon?.safeParse(undefined).success).toBe(true)
+		expect(colour?.safeParse(null).success).toBe(true)
+		expect(colour?.safeParse(undefined).success).toBe(true)
+		for (const name of [
+			"red",
+			"yellow",
+			"green",
+			"cyan",
+			"blue",
+			"purple",
+			"pink",
+			"orange",
+		]) {
+			expect(colour?.description).toContain(name)
 		}
 	})
 

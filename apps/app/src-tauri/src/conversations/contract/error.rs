@@ -81,6 +81,7 @@ pub enum TranscriptStoreError {
 		conversation_id: String,
 		bot_id: String,
 	},
+	BlankIcon,
 	#[serde(rename_all = "camelCase")]
 	UnknownMessage {
 		id: String,
@@ -211,6 +212,7 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 			conversations::ConversationError::UnknownParticipant { conversation_id, bot_id } => {
 				TranscriptStoreError::UnknownParticipant { conversation_id, bot_id }
 			}
+			conversations::ConversationError::BlankIcon => TranscriptStoreError::BlankIcon,
 			conversations::ConversationError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
 			}

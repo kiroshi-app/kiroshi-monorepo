@@ -250,6 +250,9 @@ mod tests {
 			"`conversation_attach`, one image file shown to the person, here or in a room you hold a seat in, answering the path it was stored under and the id of that conversation.",
 			"Reading an image with `Read` shows it to you and never to the person.",
 			"To show an image, call `conversation_attach`.",
+			"You hold five tools for them, on the `kiroshi` server.",
+			"`conversation_describe`, the icon or the colour of a room you hold a seat in, answering the id of that room, its title, its icon and its colour.",
+			"The colour is one of red, yellow, green, cyan, blue, purple, pink or orange, or null to give the room back its default colour.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}

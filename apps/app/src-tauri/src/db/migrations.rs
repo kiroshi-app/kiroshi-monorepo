@@ -59,6 +59,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 50, statements: CONVERSATION_ACTIVITY },
 	Migration { version: 51, statements: SOLO_CONVERSATION_ACTIVITY },
 	Migration { version: 52, statements: TURN_RUNS },
+	Migration { version: 53, statements: CONVERSATION_LOOK },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1127,6 +1128,12 @@ CREATE TABLE turn_runs (
 );
 ";
 
+const CONVERSATION_LOOK: &str = "
+ALTER TABLE conversations ADD COLUMN icon TEXT;
+ALTER TABLE conversations ADD COLUMN color TEXT
+	CHECK (color IN ('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange'));
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1232,6 +1239,7 @@ mod tests {
 	const SPACE_MEMBER_ROLES_DROPPED_STEP: u32 = 49;
 	const CONVERSATION_ACTIVITY_STEP: u32 = 50;
 	const TURN_RUNS_STEP: u32 = 52;
+	const CONVERSATION_LOOK_STEP: u32 = 53;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3845,6 +3853,82 @@ mod tests {
 		assert_eq!(version(&connection).expect("version"), latest_version());
 		assert!(unknown_state.is_err(), "a run in an unknown state was accepted");
 		assert_eq!(runs_left, 0, "a run outlived its turn");
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn conversations_kept_before_the_look_step_wear_no_icon_and_refuse_a_colour_outside_eight() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(CONVERSATION_LOOK_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), TURN_RUNS_STEP);
+		connection
+			.execute_batch(&format!("{BOTS_HOLDING_A_MEMBERSHIP}{FIXTURE}"))
+			.expect("the conversations this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		let looks = connection
+			.prepare("SELECT id, title, icon, color FROM conversations ORDER BY id")
+			.expect("the conversations carry the look columns")
+			.query_map([], |row| {
+				Ok((
+					row.get::<_, String>(0)?,
+					row.get::<_, String>(1)?,
+					row.get::<_, Option<String>>(2)?,
+					row.get::<_, Option<String>>(3)?,
+				))
+			})
+			.expect("query")
+			.collect::<Result<Vec<_>, _>>()
+			.expect("the looks read back");
+		assert_eq!(
+			looks,
+			vec![
+				("c1".to_owned(), "First".to_owned(), None, None),
+				("c2".to_owned(), "Second".to_owned(), None, None),
+			]
+		);
+		assert!(
+			write(&connection, "UPDATE conversations SET color = 'teal' WHERE id = 'c1'").is_err(),
+			"a colour outside the eight reached the file"
+		);
+		let kept: Option<String> = connection
+			.query_row("SELECT color FROM conversations WHERE id = 'c1'", [], |row| row.get(0))
+			.expect("the colour reads back");
+		assert_eq!(kept, None);
+		assert_eq!(
+			write(
+				&connection,
+				"UPDATE conversations SET icon = 'Message', color = 'cyan' WHERE id = 'c1'"
+			),
+			Ok(1)
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_fresh_file_gives_each_conversation_an_icon_and_a_colour_column() {
+		let dir = temp_dir();
+		let connection = fixture(&dir);
+
+		let looks: (Option<String>, Option<String>) = connection
+			.query_row("SELECT icon, color FROM conversations WHERE id = 'c2'", [], |row| {
+				Ok((row.get(0)?, row.get(1)?))
+			})
+			.expect("a fresh conversations table carries icon and color");
+
+		assert_eq!(looks, (None, None));
+		assert!(
+			write(&connection, "UPDATE conversations SET color = 'teal' WHERE id = 'c2'").is_err(),
+			"a colour outside the eight reached a fresh file"
+		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

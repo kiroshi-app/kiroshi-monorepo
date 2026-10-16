@@ -3006,6 +3006,83 @@ fn a_room_deleted_over_ipc_is_absent_from_the_list_of_its_space() {
 	);
 }
 
+fn dressed(
+	window: &WebviewWindow<MockRuntime>,
+	conversation_id: &str,
+	icon: Value,
+	color: Value,
+) -> Result<Value, Value> {
+	call(
+		window,
+		"conversation_update",
+		json!({
+			"conversationId": conversation_id,
+			"title": "Standup",
+			"instructions": "",
+			"sectionId": null,
+			"icon": icon,
+			"color": color
+		}),
+	)
+}
+
+fn look(conversation: &Value) -> (Value, Value) {
+	(conversation["icon"].clone(), conversation["color"].clone())
+}
+
+#[test]
+fn a_room_and_a_main_chat_updated_over_ipc_carry_their_icon_and_colour_on_every_read() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let room = id_of(&a_room(&window, &space, "Standup", vec![bot.clone()]));
+	let chat = call(&window, "conversation_main_chat", json!({ "botId": bot, "spaceId": space }))
+		.expect("the main chat");
+	let chat = chat["id"].as_str().expect("the chat holds an id").to_owned();
+
+	let answered = dressed(&window, &room, json!("Message"), json!("cyan")).expect("dressed");
+	let main = dressed(&window, &chat, json!("Star"), json!("orange")).expect("main dressed");
+	let page = call(&window, "conversation_page", json!({ "spaceId": space })).expect("the page")
+		["conversations"]
+		.clone();
+	let paged = |id: &str| {
+		page.as_array()
+			.and_then(|rows| rows.iter().find(|row| row["id"] == json!(id)))
+			.cloned()
+			.expect("the page holds the conversation")
+	};
+
+	assert_eq!(look(&answered), (json!("Message"), json!("cyan")));
+	assert_eq!(look(&room_of(&window, &space, &room)), (json!("Message"), json!("cyan")));
+	assert_eq!(look(&paged(&room)), (json!("Message"), json!("cyan")));
+	assert_eq!(look(&main), (json!("Star"), json!("orange")));
+	assert_eq!(look(&paged(&chat)), (json!("Star"), json!("orange")));
+
+	let cleared = dressed(&window, &chat, Value::Null, Value::Null).expect("main cleared");
+	assert_eq!(look(&cleared), (Value::Null, Value::Null));
+}
+
+#[test]
+fn an_update_with_a_colour_outside_eight_or_a_blank_icon_is_refused_and_changes_nothing() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	let space = a_space(&window, "Nest");
+	let bot = a_bot_in(&window, &space, "Nyx");
+	let room = id_of(&a_room(&window, &space, "Retro", vec![bot]));
+	dressed(&window, &room, json!("Message"), json!("red")).expect("dressed");
+	let before = room_of(&window, &space, &room);
+
+	let teal = dressed(&window, &room, json!("Message"), json!("teal"));
+	let blank = dressed(&window, &room, json!(" \n"), json!("blue"));
+
+	assert_eq!(teal.as_ref().map_err(|refusal| refusal["kind"].clone()), Err(json!("storage")));
+	assert_eq!(blank, Err(json!({ "kind": "blankIcon" })));
+	assert_eq!(room_of(&window, &space, &room), before, "a refused update moved the room");
+}
+
 #[test]
 fn listing_the_rooms_of_a_space_answers_with_that_space_alone() {
 	let home = Home::new();

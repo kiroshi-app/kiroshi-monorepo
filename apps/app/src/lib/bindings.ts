@@ -86,7 +86,7 @@ export const commands = {
 	conversationList: (spaceId: string) => typedError<Conversation[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
 	conversationPage: (spaceId: string, cursor: string | null, limit: number | null) => typedError<ConversationPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_page", { spaceId, cursor, limit })),
 	conversationLocalIds: () => typedError<string[], TranscriptStoreError>(__TAURI_INVOKE("conversation_local_ids")),
-	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId })),
+	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null, icon: string | null, color: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId, icon, color })),
 	conversationDelete: (conversationId: string) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_delete", { conversationId })),
 	conversationAddParticipant: (conversationId: string, botId: string, invitedByBotId: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_add_participant", { conversationId, botId, invitedByBotId })),
 	conversationRemoveParticipant: (conversationId: string, botId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_remove_participant", { conversationId, botId })),
@@ -659,6 +659,8 @@ export type Conversation = {
 	pinPosition: number | null,
 	title: string,
 	instructions: string,
+	icon: string | null,
+	color: AvatarBlot | null,
 	createdAt: number,
 	updatedAt: number,
 	participants: Participant[],
@@ -1497,7 +1499,7 @@ export type TranscriptPage = {
 
 export type TranscriptRole = "user" | "assistant";
 
-export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "unknownMessage"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
+export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unknownMessage"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
 
 export type TranscriptWindow = {
 	conversationId: string,

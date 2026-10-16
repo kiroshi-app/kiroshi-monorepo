@@ -2061,8 +2061,28 @@
     },
     "Conversation": {
       "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AvatarBlot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "createdAt": {
           "type": "integer"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "id": {
           "type": "string"
@@ -2120,6 +2140,8 @@
         "pinPosition",
         "title",
         "instructions",
+        "icon",
+        "color",
         "createdAt",
         "updatedAt",
         "participants"
@@ -6939,6 +6961,17 @@
         },
         {
           "properties": {
+            "kind": {
+              "const": "blankIcon"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "id": {
               "type": "string"
             },
@@ -9181,8 +9214,28 @@
     "conversation_update": {
       "args": {
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversationId": {
             "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "instructions": {
             "type": "string"
