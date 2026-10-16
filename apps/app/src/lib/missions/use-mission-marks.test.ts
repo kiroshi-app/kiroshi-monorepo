@@ -174,7 +174,9 @@ describe("useMissionMarks on a local Space", () => {
 			expect.objectContaining({
 				title: "Couldn’t load missions",
 				description: "Restart Kiroshi to retry.",
-				report: expect.objectContaining({ raisedIn: "use-mission-marks" }),
+				report: expect.objectContaining({
+					context: expect.objectContaining({ raisedIn: "use-mission-marks" }),
+				}),
 			}),
 		)
 		expect(result.current).toEqual([])

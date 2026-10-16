@@ -5,6 +5,7 @@ import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-di
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
 import { openedServerScope } from "@/lib/applications/application-settings"
 import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
+import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
@@ -71,6 +72,7 @@ export const UserSettingsHost = ({
 					catalogue: userApplications.mcpCatalogue,
 					serverToOpen: applicationToOpenOn({ kind: "user" }),
 				}}
+				diagnostics={diagnosticsActions}
 				history={userHistory}
 				tab={settingsTab}
 				onClose={() => {

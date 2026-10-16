@@ -116,7 +116,10 @@ export const useSuggestedBots = (conversationId: string | null) => {
 					{
 						title: i18n.t("chat:conversationSeating.unavailable"),
 					},
-					{ raisedIn: "use-conversation-seating" },
+					{
+						raisedIn: "use-conversation-seating",
+						conversation: conversationId,
+					},
 				)
 			},
 		)

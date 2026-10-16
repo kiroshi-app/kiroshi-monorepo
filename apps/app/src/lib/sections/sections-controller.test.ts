@@ -263,11 +263,13 @@ describe("createSectionsController", () => {
 		const controller = await entered(store)
 
 		expect(names(controller)).toEqual([])
-		expect(raiseFailureNotice).toHaveBeenCalledWith(
-			expect.objectContaining({
-				title:
-					"Couldn’t load the sections of this space. Restart Kiroshi to retry.",
-			}),
+		await vi.waitFor(() =>
+			expect(raiseFailureNotice).toHaveBeenCalledWith(
+				expect.objectContaining({
+					title:
+						"Couldn’t load the sections of this space. Restart Kiroshi to retry.",
+				}),
+			),
 		)
 	})
 

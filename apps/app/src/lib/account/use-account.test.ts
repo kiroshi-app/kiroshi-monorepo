@@ -93,7 +93,9 @@ const failureNotice = vi.mocked(raiseFailureNotice)
 
 const reported = (notice: NoticeMessage) => ({
 	...notice,
-	report: expect.objectContaining({ raisedIn: "use-account" }),
+	report: expect.objectContaining({
+		context: expect.objectContaining({ raisedIn: "use-account" }),
+	}),
 })
 
 const settling = () =>

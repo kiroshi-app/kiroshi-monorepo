@@ -229,7 +229,9 @@ it("raises the search notice when a read fails", async () => {
 	expect(raiseFailureNotice).toHaveBeenCalledWith({
 		title: "Couldn’t run the search",
 		description: "Edit your search to retry.",
-		report: expect.objectContaining({ raisedIn: "use-search" }),
+		report: expect.objectContaining({
+			context: expect.objectContaining({ raisedIn: "use-search" }),
+		}),
 	})
 	expect(result.current.isLoading).toBe(false)
 })

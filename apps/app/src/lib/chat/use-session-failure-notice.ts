@@ -14,11 +14,15 @@ import {
 	needsFreshSession,
 	noticeTitleFor,
 } from "@/lib/chat/screen-model"
-import { raiseReportedFailure } from "@/lib/failure-report"
+import {
+	type FailureCorrelation,
+	raiseReportedFailure,
+} from "@/lib/failure-report"
 import { isHostOffline } from "@/lib/host/host-offline"
 
 type SessionFailure = {
 	error: ChatError | undefined
+	context: FailureCorrelation
 	onDismiss: (id: string) => void
 	onRestart?: () => void
 	onSignIn?: () => void
@@ -32,7 +36,7 @@ type FailureReading = {
 
 type RaisedFailure = {
 	errorId: string
-	noticeId: string
+	noticeId: Promise<string>
 }
 
 const transportMessageOf = (
@@ -81,12 +85,13 @@ const release = (raised: RefObject<RaisedFailure | null>) => {
 	const current = raised.current
 	raised.current = null
 	if (current) {
-		endNotice(current.noticeId)
+		void current.noticeId.then(endNotice)
 	}
 }
 
 export const useSessionFailureNotice = ({
 	error,
+	context,
 	onDismiss,
 	onRestart,
 	onSignIn,
@@ -127,11 +132,11 @@ export const useSessionFailureNotice = ({
 					...transportMessageOf(t, { error, onRestart, onSignIn }),
 					onClose: dismissUnlessReleased,
 				},
-				{ raisedIn: "use-session-failure-notice" },
+				{ raisedIn: "use-session-failure-notice", ...context },
 			),
 		}
 		raised.current = failure
-	}, [errorId, error, onDismiss, onRestart, onSignIn, t])
+	}, [errorId, error, context, onDismiss, onRestart, onSignIn, t])
 
 	useEffect(() => () => release(raised), [])
 }

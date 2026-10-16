@@ -132,13 +132,13 @@ describe("scrubFailureText", () => {
 		expect(scrubFailureText(text)).toBe(text)
 	})
 
-	it.each([
-		"4f1c2e9a-7b3d-4c8e-9a1f-2b6d8e0c4a7f",
-		"00000000-0000-0000-0000-000000000000",
-		"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB",
-	])("masks the UUID %s", (uuid) => {
-		expect(scrubFailureText(`no conversation ${uuid} here`)).toBe(
-			"no conversation [redacted] here",
+	it("lets the Kiroshi ids and the agent session id through while it masks the URL, the home path, the email and the token", () => {
+		expect(
+			scrubFailureText(
+				"space 4f1c2e9a-7b3d-4c8e-9a1f-2b6d8e0c4a7f conversation ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB session 00000000-0000-0000-0000-000000000000 failed reading /Users/ada/notes.md from https://relay.kiroshi.app/upload for ada@example.com with Bearer k1r0sh1-host-bearer-0042",
+			),
+		).toBe(
+			"space 4f1c2e9a-7b3d-4c8e-9a1f-2b6d8e0c4a7f conversation ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB session 00000000-0000-0000-0000-000000000000 failed reading ~/notes.md from [redacted] for [redacted] with Bearer [redacted]",
 		)
 	})
 

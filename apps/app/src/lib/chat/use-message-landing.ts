@@ -39,7 +39,10 @@ export const useMessageLanding = ({
 					title: t("transcript.landing.unavailable.title"),
 					description: t("transcript.landing.unavailable.description"),
 				},
-				{ raisedIn: "use-message-landing" },
+				{
+					raisedIn: "use-message-landing",
+					conversation: taken.conversationId,
+				},
 			)
 		},
 		[onTaken, t],

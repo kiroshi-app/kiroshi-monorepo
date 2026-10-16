@@ -23,7 +23,7 @@ describe("reading the reported causes", () => {
 	it("raises its own notice when the causes cannot be read", async () => {
 		await expect(causesRefusedWith(new Error("no causes"))).resolves.toBeNull()
 
-		expect(raiseFailureNotice).toHaveBeenCalledOnce()
+		await vi.waitFor(() => expect(raiseFailureNotice).toHaveBeenCalledOnce())
 	})
 
 	it("raises no notice of its own when the host of the space is offline", async () => {
