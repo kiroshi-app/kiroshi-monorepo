@@ -17,6 +17,11 @@ const every = {
 	ios: true,
 }
 
+const SHARED_ONLY_PATHS = [
+	"packages/shared/permission-modes.json",
+	"packages/shared/src/index.ts",
+]
+
 const onPullRequest = (...paths: string[]) =>
 	decideJobs({ event: "pull_request", paths })
 
@@ -85,13 +90,19 @@ describe("ci changes", () => {
 		expect(onPullRequest("crates/relay/Cargo.toml").rust).toBe(true)
 	})
 
-	it("runs rust and vitest, not website, storybook or ios, on paths only under packages/shared", () => {
-		expect(
-			onPullRequest(
-				"packages/shared/permission-modes.json",
-				"packages/shared/src/index.ts",
-			),
-		).toEqual({ ...none, rust: true, vitest: true })
+	it("runs every job but ios on paths only under packages/shared", () => {
+		expect(onPullRequest(...SHARED_ONLY_PATHS)).toEqual({
+			...every,
+			ios: false,
+		})
+	})
+
+	it("runs storybook on paths only under packages/shared, since packages/ui depends on it", () => {
+		expect(onPullRequest(...SHARED_ONLY_PATHS).storybook).toBe(true)
+	})
+
+	it("runs website on paths only under packages/shared, since apps/website resolves it through packages/ui", () => {
+		expect(onPullRequest(...SHARED_ONLY_PATHS).website).toBe(true)
 	})
 
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
@@ -112,11 +123,17 @@ describe("ci changes", () => {
 		})
 	})
 
-	it("leaves rust unselected on packages/ui and on a sibling like packages/sharedfoo", () => {
+	it("leaves rust unselected on packages/ui", () => {
 		expect(onPullRequest("packages/ui/src/components/button.tsx").rust).toBe(
 			false,
 		)
-		expect(onPullRequest("packages/sharedfoo/index.ts").rust).toBe(false)
+	})
+
+	it("runs only vitest on a sibling like packages/sharedfoo", () => {
+		expect(onPullRequest("packages/sharedfoo/x.ts")).toEqual({
+			...none,
+			vitest: true,
+		})
 	})
 
 	it("runs only vitest on an app file outside src-tauri", () => {

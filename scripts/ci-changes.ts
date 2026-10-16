@@ -53,10 +53,10 @@ const touchesVitest = (path: string) =>
 	(path.startsWith("apps/app/") && !path.startsWith("apps/app/src-tauri/"))
 
 const touchesWebsite = (path: string) =>
-	isUnder(path, ["apps/website/", "packages/ui/"])
+	isUnder(path, ["apps/website/", "packages/ui/", "packages/shared/"])
 
 const touchesStorybook = (path: string) =>
-	isUnder(path, ["packages/ui/", "scripts/", "baselines/"])
+	isUnder(path, ["packages/ui/", "packages/shared/", "scripts/", "baselines/"])
 
 const touchesIos = (path: string) =>
 	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
