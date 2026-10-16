@@ -7,9 +7,9 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{broadcast, Mutex};
 
 use super::contract::{
-	AccountReport, AgentEvent, CheckReport, ConnectionState, EventTurn, EvolvedBundle, LiveSession,
-	OfferedModel, PermissionDecision, QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle,
-	SubmittedTurn, TransportError,
+	AccountReport, AgentEvent, CheckReport, ConnectionState, ConversationNaming, EventTurn,
+	EvolvedBundle, LiveSession, OfferedModel, PermissionDecision, QuestionRequest, RuntimeScope,
+	ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
 };
 use super::host::hosted;
 use super::protocol::{self, Checked};
@@ -575,7 +575,7 @@ impl AgentState {
 			.await
 	}
 
-	async fn title(&self, text: &str, connection: &Values) -> Option<String> {
+	async fn title(&self, text: &str, connection: &Values) -> Option<ConversationNaming> {
 		let sidecar = self.sidecar().await.ok()?;
 		sidecar.title(text, connection).await.ok().flatten()
 	}
@@ -624,7 +624,10 @@ pub async fn agent_tools<R: Runtime>(app: AppHandle<R>) -> Vec<String> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn agent_title<R: Runtime>(app: AppHandle<R>, text: String) -> Option<String> {
+pub async fn agent_title<R: Runtime>(
+	app: AppHandle<R>,
+	text: String,
+) -> Option<ConversationNaming> {
 	app.state::<AgentState>().title(&text, &held_connection(&app)).await
 }
 

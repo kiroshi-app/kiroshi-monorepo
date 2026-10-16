@@ -94,8 +94,13 @@ export type AgentProvider = {
 	title: (
 		text: string,
 		connection?: Record<string, string>,
-	) => Promise<string | null>
+	) => Promise<ConversationNaming | null>
 	open: (request: SessionRequest, emit: EmitFrame) => Promise<AgentSession>
+}
+
+export type ConversationNaming = {
+	title: string
+	icon: string | null
 }
 
 export type StageTarget = {

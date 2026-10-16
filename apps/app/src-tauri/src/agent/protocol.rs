@@ -396,6 +396,8 @@ pub fn listed<Item: DeserializeOwned>(
 pub struct Titled {
 	#[serde(default)]
 	pub title: Option<String>,
+	#[serde(default)]
+	pub icon: Option<String>,
 }
 
 pub const OAUTH_AUTHORIZE: &str = "mcp_oauth_authorize";

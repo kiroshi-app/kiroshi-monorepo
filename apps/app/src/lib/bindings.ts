@@ -45,7 +45,10 @@ export const commands = {
 	agentSignInCancel: () => typedError<null, SignInError>(__TAURI_INVOKE("agent_sign_in_cancel")),
 	agentModels: () => __TAURI_INVOKE<OfferedModel_Serialize[]>("agent_models"),
 	agentTools: () => __TAURI_INVOKE<string[]>("agent_tools"),
-	agentTitle: (text: string) => __TAURI_INVOKE<string | null>("agent_title", { text }),
+	agentTitle: (text: string) => __TAURI_INVOKE<{
+	title: string,
+	icon: string | null,
+} | null>("agent_title", { text }),
 	agentStartOrResumeSession: (scope: RuntimeScope, resume: string | null, cwd: string | null, outputSchema: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null) => typedError<SessionHandle, TransportError>(__TAURI_INVOKE("agent_start_or_resume_session", { scope, resume, cwd, outputSchema })),
 	agentSubmitPrompt: (scope: RuntimeScope, text: string, turn: {
 	turnId: string,
@@ -678,6 +681,11 @@ export type ConversationKind = "main" | "topic" | "mission";
 export type ConversationMissions = {
 	open: Mission[],
 	done: Mission[],
+};
+
+export type ConversationNaming = {
+	title: string,
+	icon: string | null,
 };
 
 export type ConversationPage = {

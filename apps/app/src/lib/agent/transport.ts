@@ -1,5 +1,6 @@
 import type {
 	CheckReport,
+	ConversationNaming,
 	LiveSession,
 	PermissionDecision,
 	QuestionAnswers,
@@ -20,7 +21,9 @@ export const agentTransport: ChatDriver = {
 	check: (scope: RuntimeScope | null) =>
 		invoke<CheckReport>("agent_check", { scope }),
 
-	titleFor: (text: string) => invoke<string | null>("agent_title", { text }),
+	titleFor: async (text: string) =>
+		(await invoke<ConversationNaming | null>("agent_title", { text }))?.title ??
+		null,
 
 	startOrResumeSession: (
 		scope: RuntimeScope,

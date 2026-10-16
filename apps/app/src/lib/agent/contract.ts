@@ -14,6 +14,7 @@ export type {
 	AgentCommand_Serialize as AgentCommand,
 	CheckReport_Serialize as CheckReport,
 	ConnectionState,
+	ConversationNaming,
 	EventTurn,
 	LiveSession,
 	PermissionDecision,

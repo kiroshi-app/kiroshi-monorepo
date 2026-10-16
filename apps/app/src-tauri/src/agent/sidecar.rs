@@ -13,7 +13,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
-use super::contract::{OfferedModel, TransportError};
+use super::contract::{ConversationNaming, OfferedModel, TransportError};
 use super::protocol::{
 	self, AuthorizeRequest, Authorized, Checked, OauthStarted, Ready, RefreshRequest,
 	RevocationRequest, Revoked, SignedIn, Titled,
@@ -279,13 +279,13 @@ impl Sidecar {
 		&self,
 		text: &str,
 		connection: &Values,
-	) -> Result<Option<String>, TransportError> {
+	) -> Result<Option<ConversationNaming>, TransportError> {
 		let answer = self
 			.ask_with(protocol::TITLE, protocol::title_command(text, connection), TITLE_TIMEOUT)
 			.await?;
 		let titled: Titled = serde_json::from_value(answer)
 			.map_err(|error| TransportError::InvalidFrame { detail: error.to_string() })?;
-		Ok(titled.title)
+		Ok(titled.title.map(|title| ConversationNaming { title, icon: titled.icon }))
 	}
 
 	async fn ask(
