@@ -113,7 +113,9 @@ const settings = {
 		description:
 			"Copy diagnostics puts the details of the computer where Kiroshi runs and of the agent on the clipboard, ready for a bug report.",
 		copy: "Copy diagnostics",
+		copyFailed: "Couldn’t copy the diagnostics. Try again.",
 		reveal: "Reveal log",
+		revealFailed: "Couldn’t reveal the log. Try again.",
 		clear: {
 			action: "Clear log",
 			title: "Clear the log?",
