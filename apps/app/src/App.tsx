@@ -187,6 +187,7 @@ export function App() {
 				rosterLines={rosterLines}
 				rosterView={rosterView}
 				scopes={scopes}
+				updater={drivers.updater}
 			/>
 		</>
 	)

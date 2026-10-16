@@ -48,6 +48,8 @@ vi.mock("@tauri-apps/api/event", async (original) => ({
 
 vi.mock("@tauri-apps/plugin-os", () => ({ platform: () => "macos" }))
 
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "0.25.0" }))
+
 vi.mock("@tauri-apps/api/window", () => ({
 	getCurrentWindow: () =>
 		new Proxy({}, { get: () => async () => () => undefined }),
@@ -138,6 +140,8 @@ const storeAnswer =
 				return { open: [], done: [] }
 			case "mission_space_page":
 				return { missions: [], nextCursor: null }
+			case "check_for_updates":
+				return { kind: "upToDate" }
 			default:
 				return command in answers ? answers[command] : []
 		}

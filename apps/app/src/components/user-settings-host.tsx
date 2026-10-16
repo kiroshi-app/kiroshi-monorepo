@@ -1,5 +1,6 @@
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
+import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
 import { openedServerScope } from "@/lib/applications/application-settings"
@@ -12,6 +13,7 @@ import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 import { USER_OWNER } from "@/lib/workspace/user-owner"
 
 type UserSettingsHostProps = {
+	about: AboutFieldsProps | undefined
 	core: WorkspaceCore
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
@@ -19,6 +21,7 @@ type UserSettingsHostProps = {
 }
 
 export const UserSettingsHost = ({
+	about,
 	core,
 	overlay,
 	panels,
@@ -52,6 +55,7 @@ export const UserSettingsHost = ({
 	return (
 		<>
 			<UserSettingsDialog
+				about={about}
 				account={accountPanel}
 				applications={{
 					servers: userApplications.mcpServers,

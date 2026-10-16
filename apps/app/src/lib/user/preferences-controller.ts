@@ -17,7 +17,7 @@ import {
 } from "./preferences-queue"
 
 import { createStore } from "../store"
-import type { SidebarTab } from "@/lib/bindings"
+import type { SidebarTab, UpdateChannel } from "@/lib/bindings"
 
 type NotificationField = Extract<keyof UserPreferences, `notify${string}`>
 
@@ -32,6 +32,11 @@ type LastBotOpened = {
 }
 
 export type ReaderPreferences = UserPreferences & MirroredPreferences
+
+type ReportedPreferences = Pick<
+	UserPreferences,
+	"updateChannel" | "showWhatsNew" | "lastSeenVersion"
+>
 
 export type UserState = {
 	preferences: ReaderPreferences
@@ -54,6 +59,9 @@ export type UserController = {
 	markFirstRunDone: () => Promise<void>
 	setLastBot: (opened: LastBotOpened) => Promise<void>
 	setLastSpace: (lastSpaceId: string) => Promise<void>
+	setUpdateChannel: (updateChannel: UpdateChannel) => Promise<void>
+	setShowWhatsNew: (showWhatsNew: boolean) => Promise<void>
+	markVersionSeen: (lastSeenVersion: string) => Promise<void>
 	uploadPicture: (file: File) => Promise<void>
 	removePicture: () => Promise<void>
 }
@@ -148,6 +156,17 @@ export const createUserController = (): UserController => {
 			.catch(restore)
 	}
 
+	const changeReported = (fields: ReportedPreferences) => {
+		show({ ...current().preferences, ...fields })
+		return changePreferences((record) => ({ ...record, ...fields })).then(
+			apply,
+			(failure: unknown) => {
+				restore()
+				throw failure
+			},
+		)
+	}
+
 	return {
 		getState: current,
 
@@ -223,6 +242,15 @@ export const createUserController = (): UserController => {
 			changeMirrored({ lastBotIdBySpace: botIdBySpaceWith(opened) }),
 
 		setLastSpace: (lastSpaceId: string) => changeMirrored({ lastSpaceId }),
+
+		setUpdateChannel: (updateChannel: UpdateChannel) =>
+			changeReported({ updateChannel }),
+
+		setShowWhatsNew: (showWhatsNew: boolean) =>
+			changeReported({ showWhatsNew }),
+
+		markVersionSeen: (lastSeenVersion: string) =>
+			changeReported({ lastSeenVersion }),
 
 		uploadPicture: async (file: File) => {
 			const bytes = new Uint8Array(await file.arrayBuffer())

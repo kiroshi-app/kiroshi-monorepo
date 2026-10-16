@@ -1,2 +1,3 @@
+dependencies :: apps/app/package.json :: @tauri-apps/plugin-updater
 exports :: apps/app/src/lib/routines/filter-vocabulary.ts :: NO_FILTER_VOCABULARY_DRIFT
 types :: apps/app/src/lib/routines/routine-contract.ts :: ReportRefusal
