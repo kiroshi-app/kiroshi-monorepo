@@ -149,7 +149,7 @@ impl ReplyWriter {
 
 	fn queue(&self, entry: Entry) {
 		if self.entries.send(entry).is_err() {
-			eprintln!("the reply writer of this run has stopped, an agent event was dropped");
+			log::warn!("the reply writer of this run has stopped, an agent event was dropped");
 		}
 	}
 }
@@ -489,7 +489,7 @@ impl<R: Runtime> Store<R> {
 	}
 
 	fn report(&self, id: &str, error: &TranscriptStoreError) {
-		eprintln!(
+		log::warn!(
 			"the host could not write {id} of conversation {}: {error:?}",
 			self.conversation_id
 		);

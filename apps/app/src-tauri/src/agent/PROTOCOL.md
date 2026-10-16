@@ -552,8 +552,16 @@ has no deadline of its own.
 
 ## What is deliberately not forwarded
 
-The sidecar's stderr is read so the pipe never fills and then discarded unread —
-it is the one channel that could carry an environment value. The sign-in probe
+The sidecar's stderr is read line by line and written to the install's log file
+(`kiroshi.log` in the app log directory), tagged `sidecar-stderr`. The Agent SDK
+stderr of every session, delegation, title, model and tool probe reaches the same
+pipe: the sidecar buffers it into whole lines tagged `[agent <source>]`, so a value
+split across two reads is never cut in half. Each line is capped at 2 KB, then passes
+through the host scrubber before it reaches the file: every value resolved from
+`env/space/*` and `env/bot/*` for a session becomes `[redacted-env]`, and URLs, the
+home path, emails and token shapes are masked with the patterns of
+`failure-text-scrubber.ts`. The host's own lines carry event names, ids, codes and
+durations, never a message body, a prompt or a tool argument. The sign-in probe
 returns an email, an org id, an org name and a subscription type; the provider
 module keeps the email and the subscription type, as the `email` and the `plan` of
 `account`, and drops the org id and the org name before it reaches the pipe. The host
@@ -564,8 +572,7 @@ of the account crosses: no token, no credential, no org. The output of `auth log
 but the url of `sign_in_started` and the reason a failed sign-in gave. Search locations are reported as labels
 (`$KIROSHI_AGENT_SIDECAR`, the app's own directory) rather than raw environment
 values, and `redact` collapses the home directory out of every path *and* every
-shell command before it crosses to React. There is no logging statement anywhere
-in the module.
+shell command before it crosses to React.
 
 ## The frozen catalogue
 

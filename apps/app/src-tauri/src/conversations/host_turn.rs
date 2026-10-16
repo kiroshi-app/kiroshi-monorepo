@@ -270,7 +270,7 @@ impl<R: Runtime> HostTurn<R> {
 				}
 			};
 			let Some(scoped) = heard_event else {
-				return eprintln!("{} stopped hearing the sessions it runs", self.label());
+				return log::warn!("{} stopped hearing the sessions it runs", self.label());
 			};
 			let Some(at) =
 				speaking.iter().position(|speaker| scoped.scope.as_ref() == Some(&speaker.scope))
@@ -399,7 +399,7 @@ impl<R: Runtime> HostTurn<R> {
 			Refusal::Stopped(scope) => (Some(scope), None),
 		};
 		if let Some(detail) = detail {
-			eprintln!("{} could not run companion {bot_id}: {detail}", self.label());
+			log::warn!("{} could not run companion {bot_id}: {detail}", self.label());
 		}
 		self.abandon(bot_id).await;
 		if let Some(scope) = scope {
@@ -409,7 +409,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn await_runs(&self, summoned: &[Summons]) {
 		if let Err(error) = self.awaited(summoned).await {
-			eprintln!("{} could not await its companions: {error:?}", self.label());
+			log::warn!("{} could not await its companions: {error:?}", self.label());
 		}
 	}
 
@@ -422,7 +422,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn abandon(&self, bot_id: &str) {
 		if let Err(error) = self.abandoned(bot_id).await {
-			eprintln!("{} could not end the run of {bot_id} as failed: {error:?}", self.label());
+			log::warn!("{} could not end the run of {bot_id} as failed: {error:?}", self.label());
 		}
 	}
 
@@ -442,7 +442,7 @@ impl<R: Runtime> HostTurn<R> {
 					hand_over(waiting, &done.scope.bot_id, summons);
 				}
 			}
-			Err(error) => eprintln!(
+			Err(error) => log::warn!(
 				"{} could not read the companions {} handed over to: {error:?}",
 				self.label(),
 				done.scope.bot_id
@@ -476,7 +476,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn cancel_speaker(&self, scope: &RuntimeScope) {
 		if let Err(error) = self.cancelled(scope).await {
-			eprintln!(
+			log::warn!(
 				"{} could not cancel the turn of companion {}: {error:?}",
 				self.label(),
 				scope.bot_id
@@ -495,7 +495,7 @@ impl<R: Runtime> HostTurn<R> {
 	async fn shut_down(&self, scope: RuntimeScope) {
 		let bot_id = scope.bot_id.clone();
 		if let Err(error) = self.shut(scope).await {
-			eprintln!("{} could not shut the session of {bot_id} down: {error:?}", self.label());
+			log::warn!("{} could not shut the session of {bot_id} down: {error:?}", self.label());
 		}
 	}
 

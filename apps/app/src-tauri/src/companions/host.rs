@@ -288,7 +288,7 @@ fn stored_copy(
 
 fn take_back(stored: &Path) {
 	if let Err(error) = fs::remove_file(stored) {
-		eprintln!("an attachment left behind by a refused post could not be removed: {error}");
+		log::warn!("an attachment left behind by a refused post could not be removed: {error}");
 	}
 }
 

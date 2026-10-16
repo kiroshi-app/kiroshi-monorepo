@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -19,6 +19,7 @@ use super::protocol::{
 	RevocationRequest, Revoked, SignedIn, Titled,
 };
 use crate::environment::contract::Values;
+use crate::logging::stderr_lines::StderrLines;
 
 pub const SIDECAR_OVERRIDE_ENV: &str = "KIROSHI_AGENT_SIDECAR";
 
@@ -46,6 +47,8 @@ const TERMINATE_GRACE: Duration = Duration::from_millis(500);
 const STDERR_TAIL_BYTES: usize = 4000;
 
 const STDERR_DRAIN_GRACE: Duration = Duration::from_millis(500);
+
+const STDERR_SOURCE: &str = "sidecar-stderr";
 
 const STARTUP_EXIT: &str = "the sidecar exited during startup";
 
@@ -136,6 +139,7 @@ pub struct Sidecar {
 	child: Arc<Mutex<Option<Child>>>,
 	pid: u32,
 	version: String,
+	provider: String,
 	capabilities: Vec<String>,
 	gone: Arc<AtomicBool>,
 	exit_report: ExitReport,
@@ -143,6 +147,7 @@ pub struct Sidecar {
 
 impl Sidecar {
 	pub async fn start(options: SidecarOptions) -> Result<Arc<Self>, TransportError> {
+		let spawned_at = Instant::now();
 		let mut child = spawn(&options)?;
 
 		let stdin = child.stdin.take().expect("stdin piped");
@@ -189,6 +194,12 @@ impl Sidecar {
 			}
 		};
 
+		log::info!(
+			"the sidecar is ready pid={pid} provider={} version={} took_ms={}",
+			announced.provider,
+			announced.version,
+			spawned_at.elapsed().as_millis()
+		);
 		Ok(Arc::new(Self {
 			stdin_tx: StdinChannel::new(Some(stdin_tx)),
 			routes,
@@ -196,6 +207,7 @@ impl Sidecar {
 			child,
 			pid,
 			version: announced.version,
+			provider: announced.provider,
 			capabilities: announced.capabilities,
 			gone,
 			exit_report,
@@ -208,6 +220,10 @@ impl Sidecar {
 
 	pub fn version(&self) -> &str {
 		&self.version
+	}
+
+	pub fn provider(&self) -> &str {
+		&self.provider
 	}
 
 	pub fn is_live(&self) -> bool {
@@ -598,11 +614,15 @@ struct ExitWatch {
 impl ExitWatch {
 	async fn record(self) {
 		let status = reap(&self.child, self.pid).await;
-		let detail = startup_detail(status, self.stderr, self.stderr_reader).await;
-		let crash = TransportError::Crashed {
-			code: status.and_then(|status| status.code()),
-			detail: Some(detail),
-		};
+		let detail = startup_detail(status, self.stderr.clone(), self.stderr_reader).await;
+		let code = status.and_then(|status| status.code());
+		log::info!(
+			"the sidecar exited pid={} code={code:?} signal={:?} last_stderr={:?}",
+			self.pid,
+			status.and_then(killing_signal),
+			self.stderr.last_line()
+		);
+		let crash = TransportError::Crashed { code, detail: Some(detail) };
 		*self.report.lock().expect("exit report") = Some(crash);
 	}
 }
@@ -680,6 +700,12 @@ impl StderrTail {
 		let written = String::from_utf8_lossy(&kept).trim().to_owned();
 		(!written.is_empty()).then_some(written)
 	}
+
+	fn last_line(&self) -> Option<String> {
+		self.kept().and_then(|written| {
+			written.lines().rev().map(str::trim).find(|line| !line.is_empty()).map(str::to_owned)
+		})
+	}
 }
 
 async fn startup_detail(
@@ -688,13 +714,10 @@ async fn startup_detail(
 	reader: JoinHandle<()>,
 ) -> String {
 	if tokio::time::timeout(STDERR_DRAIN_GRACE, reader).await.is_err() {
-		eprintln!("the sidecar left its stderr open past the drain grace");
+		log::warn!("the sidecar left its stderr open past the drain grace");
 	}
 	let killed = status.and_then(killing_signal).map(|signal| format!("killed by signal {signal}"));
-	let last_line = tail.kept().and_then(|written| {
-		written.lines().rev().map(str::trim).find(|line| !line.is_empty()).map(str::to_owned)
-	});
-	[Some(STARTUP_EXIT.to_owned()), killed, last_line]
+	[Some(STARTUP_EXIT.to_owned()), killed, tail.last_line()]
 		.into_iter()
 		.flatten()
 		.collect::<Vec<_>>()
@@ -713,12 +736,30 @@ fn killing_signal(_status: ExitStatus) -> Option<i32> {
 }
 
 async fn keep_stderr(mut stderr: tokio::process::ChildStderr, tail: StderrTail) {
+	let mut lines = StderrLines::default();
 	let mut chunk = [0u8; 4096];
-	while let Ok(read) = stderr.read(&mut chunk).await {
-		if read == 0 {
-			return;
-		}
+	loop {
+		let read = match stderr.read(&mut chunk).await {
+			Ok(0) => break,
+			Ok(read) => read,
+			Err(failure) => {
+				log::warn!(target: STDERR_SOURCE, "the sidecar stderr could not be read: {failure}");
+				break;
+			}
+		};
 		tail.push(&chunk[..read]);
+		for line in lines.fed(&chunk[..read]) {
+			logged_stderr(&line);
+		}
+	}
+	if let Some(rest) = lines.rest() {
+		logged_stderr(&rest);
+	}
+}
+
+fn logged_stderr(line: &str) {
+	if !line.trim().is_empty() {
+		log::info!(target: STDERR_SOURCE, "{line}");
 	}
 }
 

@@ -43,6 +43,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-os = "2"
 tauri-plugin-dialog = "2"
+# Writes the one rotated log file of the install to the app log directory.
+tauri-plugin-log = "2"
 # The one route from the Rust command surface to the TypeScript the front reads: the
 # Builder yields both the invoke handler and the exporter, so a command signature and its
 # mirror can no longer drift. The Tauri v2 line is a pre-release, so all three are pinned.
@@ -99,6 +101,12 @@ base64 = "0.22"
 # one a manifest offers. Already in the tree under tauri-plugin-updater; named here so no crate
 # enters the lockfile through this line.
 semver = "1"
+# The facade every host line is written through. Already in the tree under tauri; named here
+# so no crate enters the lockfile through this line.
+log = "0.4"
+# Scrubs every log line before it reaches the file. Already in the tree under tauri; named
+# here so no crate enters the lockfile through this line.
+regex = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

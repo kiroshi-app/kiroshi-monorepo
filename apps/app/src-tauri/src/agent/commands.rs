@@ -32,6 +32,7 @@ use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
 use crate::json::JsonValue;
+use crate::logging;
 use crate::mcp_oauth::refresh;
 use crate::mcp_oauth::reports::StandingHost;
 use crate::missions::host::MissionHost;
@@ -61,7 +62,7 @@ fn announce_in_turn<R: Runtime>(
 
 fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
 	if let Err(failure) = events::emit(app, AGENT_EVENT, scoped) {
-		eprintln!("a turn event was not announced: {failure}");
+		log::warn!("a turn event was not announced: {failure}");
 	}
 }
 
@@ -79,7 +80,7 @@ fn framed_question(asked: ScopedEvent) -> Option<Frame> {
 	match events::frame(AGENT_EVENT, &asked) {
 		Ok(frame) => Some(frame),
 		Err(failure) => {
-			eprintln!("a pending question did not serialize for a new listener: {failure}");
+			log::warn!("a pending question did not serialize for a new listener: {failure}");
 			None
 		}
 	}
@@ -627,17 +628,20 @@ pub async fn agent_title<R: Runtime>(app: AppHandle<R>, text: String) -> Option<
 	app.state::<AgentState>().title(&text, &held_connection(&app)).await
 }
 
-fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
+pub(crate) fn held_connection<R: Runtime>(app: &AppHandle<R>) -> Values {
 	let Some(root) = environment::root(app) else {
 		return Values::new();
 	};
-	match connection::held(&root) {
-		Ok(held) => held,
-		Err(failure) => {
-			eprintln!("{ENV_UNREADABLE}: {failure:?}");
-			Values::new()
-		}
-	}
+	held_and_redacted(&root).unwrap_or_else(|failure| {
+		log::warn!("{ENV_UNREADABLE}: {failure:?}");
+		Values::new()
+	})
+}
+
+pub(crate) fn held_and_redacted(root: &Path) -> Result<Values, EnvError> {
+	let held = connection::held(root)?;
+	logging::scrub::remember_env_values(held.values());
+	Ok(held)
 }
 
 #[tauri::command]
@@ -687,7 +691,7 @@ async fn probed(
 		Err(error) => return (None, Err(error)),
 	};
 	let version = sidecar.version().to_owned();
-	let connection = match env_root.map(connection::held).transpose() {
+	let connection = match env_root.map(held_and_redacted).transpose() {
 		Ok(held) => held.unwrap_or_default(),
 		Err(error) => {
 			let detail = format!("{ENV_UNREADABLE}: {error:?}");
@@ -747,7 +751,16 @@ async fn served_environment<R: Runtime>(
 	};
 	let owner = EnvOwner::Bot { id: bot_id.to_owned(), space_id: space_id.to_owned() };
 	let needs_authorization = refresh::before_open(&root, &owner, serving, sidecar).await;
-	awaiting_served(environment::resolve(&root, &owner), needs_authorization)
+	let resolved = environment::resolve(&root, &owner);
+	if let Ok(served) = &resolved {
+		redacted_from_the_log(served);
+	}
+	awaiting_served(resolved, needs_authorization)
+}
+
+fn redacted_from_the_log(served: &ResolvedEnv) {
+	let per_server = served.per_server.values().flat_map(|own| own.values());
+	logging::scrub::remember_env_values(served.base.values().chain(per_server));
 }
 
 fn awaiting_served(
@@ -816,7 +829,7 @@ fn unavailable_bundle(error: bundles::BundleUnavailable) -> TransportError {
 
 fn identity_refused(bot_id: &str, step: &str) -> TransportError {
 	let detail = format!("the session of bot {bot_id} did not start: {step}");
-	eprintln!("{detail}");
+	log::warn!("{detail}");
 	TransportError::SpawnFailed { detail }
 }
 
@@ -1090,7 +1103,7 @@ pub(crate) async fn cancel_session_turn<R: Runtime>(
 		if let Err(error) =
 			complete_unsubmitted_turns(app, &state.host_writes, conversation_id).await
 		{
-			eprintln!(
+			log::warn!(
 				"the host could not close the unsubmitted turns of conversation {conversation_id}: {error:?}"
 			);
 		}

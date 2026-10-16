@@ -52,6 +52,10 @@ export const commands = {
 	promptId: string,
 } | null) => typedError<null, TransportError>(__TAURI_INVOKE("agent_submit_prompt", { scope, text, turn })),
 	agentCancelTurn: (scope: RuntimeScope) => typedError<null, TransportError>(__TAURI_INVOKE("agent_cancel_turn", { scope })),
+	diagnostics: () => __TAURI_INVOKE<Diagnostics>("diagnostics"),
+	logTail: (lines: number) => typedError<string[], LogFileError>(__TAURI_INVOKE("log_tail", { lines })),
+	logReveal: () => typedError<null, LogFileError>(__TAURI_INVOKE("log_reveal")),
+	logClear: () => typedError<null, LogFileError>(__TAURI_INVOKE("log_clear")),
 	agentRespondToPermission: (scope: RuntimeScope, id: string, decision: PermissionDecision) => typedError<null, TransportError>(__TAURI_INVOKE("agent_respond_to_permission", { scope, id, decision })),
 	agentAnswerQuestion: (scope: RuntimeScope, id: string, answers: { [key in string]: string }, annotations: null | boolean | number | null | string | Json[] | { [key in string]: Json } | null) => typedError<null, TransportError>(__TAURI_INVOKE("agent_answer_question", { scope, id, answers, annotations })),
 	agentShutdown: (scope: RuntimeScope) => typedError<null, TransportError>(__TAURI_INVOKE("agent_shutdown", { scope })),
@@ -682,6 +686,21 @@ export type ConversationPage = {
 
 export type Destination = "companion" | "space" | "user";
 
+export type Diagnostics = {
+	appVersion: string,
+	gitCommit: string,
+	installKind: InstallKind,
+	osName: string,
+	osBuild: string,
+	arch: string,
+	ramBytes: number | null,
+	agentVersion: string | null,
+	provider: string | null,
+	agentError: TransportError | null,
+	side: Side,
+	plan: AccountPlan | null,
+};
+
 export type Disconnected = Disconnected_Serialize | Disconnected_Deserialize;
 
 export type Disconnected_Deserialize = {
@@ -785,6 +804,8 @@ export type InstallField = {
 	concealed: boolean,
 };
 
+export type InstallKind = "dev" | "installed";
+
 export type InstallRefusal = {
 	field: string,
 	reason: string,
@@ -855,6 +876,8 @@ export type LiveSession = {
 	runtimeSessionId: string,
 	startedAt: number,
 };
+
+export type LogFileError = { kind: "unresolved" } | { kind: "unreadable"; detail: string } | { kind: "unwritable"; detail: string } | { kind: "unrevealed"; detail: string };
 
 export type MaximizeButtonBounds = {
 	x: number,
@@ -1341,6 +1364,8 @@ export type SentMessage = {
 export type SessionHandle = {
 	resumed: boolean,
 };
+
+export type Side = "host" | "member" | "local";
 
 export type SidebarTab = "conversations" | "missions" | "companions" | "applications";
 

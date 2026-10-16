@@ -3,7 +3,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, Mutex};
@@ -216,6 +216,12 @@ struct Shared {
 	translator: Translator,
 	turn: TurnState,
 	shutting_down: bool,
+	running: Option<RunningTurn>,
+}
+
+struct RunningTurn {
+	id: Option<String>,
+	started_at: Instant,
 }
 
 impl Shared {
@@ -225,6 +231,22 @@ impl Shared {
 		}
 		self.turn = next;
 		Some(AgentEvent::TurnChanged { state: next })
+	}
+
+	fn turn_started(&mut self, session: &str, id: Option<String>) {
+		log::info!("the turn started session={session} turn={id:?}");
+		self.running = Some(RunningTurn { id, started_at: Instant::now() });
+	}
+
+	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) {
+		let Some(running) = self.running.take() else {
+			return;
+		};
+		log::info!(
+			"the turn ended session={session} turn={:?} outcome={outcome:?} took_ms={}",
+			running.id,
+			running.started_at.elapsed().as_millis()
+		);
 	}
 }
 
@@ -242,6 +264,7 @@ impl Session {
 		options: SessionOptions,
 		sink: Arc<dyn EventSink>,
 	) -> Result<Self, TransportError> {
+		let opening_at = Instant::now();
 		let resumed = options.resume.is_some();
 		let key = uuid::Uuid::new_v4().to_string();
 		let frames = sidecar.attach(&key);
@@ -250,6 +273,7 @@ impl Session {
 			translator: Translator::new(resumed),
 			turn: TurnState::Idle,
 			shutting_down: false,
+			running: None,
 		}));
 
 		let (opened_tx, opened_rx) = oneshot::channel::<Result<(), TransportError>>();
@@ -268,7 +292,8 @@ impl Session {
 			return Err(error);
 		}
 
-		match tokio::time::timeout(options.startup_timeout, opened_rx).await {
+		let logged_key = session.key.clone();
+		let opened = match tokio::time::timeout(options.startup_timeout, opened_rx).await {
 			Ok(Ok(Ok(()))) => Ok(session),
 			Ok(Ok(Err(error))) => {
 				session.shutdown().await;
@@ -287,7 +312,17 @@ impl Session {
 					timeout_ms: options.startup_timeout.as_millis() as u64,
 				})
 			}
+		};
+		let took_ms = opening_at.elapsed().as_millis();
+		match &opened {
+			Ok(_) => log::info!(
+				"the session opened session={logged_key} resumed={resumed} took_ms={took_ms}"
+			),
+			Err(_) => log::warn!(
+				"the session did not open session={logged_key} resumed={resumed} took_ms={took_ms}"
+			),
 		}
+		opened
 	}
 
 	pub fn resumed(&self) -> bool {
@@ -323,6 +358,7 @@ impl Session {
 			) {
 				return Err(TransportError::TurnAlreadyRunning);
 			}
+			shared.turn_started(&self.key, turn.as_ref().map(|turn| turn.turn_id.clone()));
 			shared.set_turn(TurnState::Submitting)
 		};
 		let handed = turn.is_some();
@@ -331,6 +367,9 @@ impl Session {
 		}
 		self.emit(entering);
 		let written = self.write(protocol::prompt_command(&self.key, text));
+		if written.is_err() {
+			self.shared.lock().await.turn_ended(&self.key, TurnOutcome::Failed);
+		}
 		if written.is_err() && handed {
 			self.sink.withdrawn();
 		}
@@ -517,7 +556,7 @@ async fn read_loop(
 					let _ = tx.send(Err(crashed(closed)));
 					return;
 				}
-				on_exit(shared, sink, Some(crashed(closed))).await;
+				on_exit(shared, sink, &desk.key, Some(crashed(closed))).await;
 				return;
 			}
 			_ => {}
@@ -537,7 +576,11 @@ async fn read_loop(
 				_ => None,
 			};
 			let events = guard.translator.ingest(frame);
-			let ending = turn_outcome(&events).and_then(|outcome| guard.set_turn(outcome.into()));
+			let outcome = turn_outcome(&events);
+			if let Some(outcome) = outcome {
+				guard.turn_ended(&desk.key, outcome);
+			}
+			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
 			(entering, events, ending)
 		};
 
@@ -550,12 +593,13 @@ async fn read_loop(
 		let _ = tx.send(Err(desk.sidecar.startup_crash()));
 		return;
 	}
-	on_exit(shared, sink, None).await;
+	on_exit(shared, sink, &desk.key, None).await;
 }
 
 async fn on_exit(
 	shared: Arc<Mutex<Shared>>,
 	sink: Arc<dyn EventSink>,
+	session: &str,
 	reason: Option<TransportError>,
 ) {
 	let failing = {
@@ -563,6 +607,7 @@ async fn on_exit(
 		if guard.shutting_down {
 			return;
 		}
+		guard.turn_ended(session, TurnOutcome::Failed);
 		guard.set_turn(TurnState::Failed)
 	};
 

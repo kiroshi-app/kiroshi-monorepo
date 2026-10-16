@@ -98,6 +98,10 @@ impl RelayGuests {
 		&self.cloud
 	}
 
+	pub fn is_joined(&self) -> bool {
+		!self.guests().is_empty()
+	}
+
 	fn guests(&self) -> MutexGuard<'_, HashMap<String, Guest>> {
 		self.guests.lock().unwrap_or_else(PoisonError::into_inner)
 	}

@@ -2,6 +2,7 @@ import { tmpdir } from "node:os"
 
 import { query } from "@anthropic-ai/claude-agent-sdk"
 
+import { agentStderr } from "./agent-stderr"
 import { resolveExecutable } from "./executable"
 import { createPromptStream } from "./prompt-stream"
 import { sessionEnv } from "./session-env"
@@ -17,7 +18,7 @@ export const toolsOptions = (connection?: Record<string, string>) => ({
 	cwd: tmpdir(),
 	pathToClaudeCodeExecutable: resolveExecutable(),
 	env: sessionEnv(connection),
-	stderr: () => {},
+	stderr: agentStderr("tools"),
 })
 
 export const claudeTools = async (connection?: Record<string, string>) => {

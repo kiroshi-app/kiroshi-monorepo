@@ -7,6 +7,7 @@ import {
 	type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 
+import { agentStderr } from "./agent-stderr"
 import { readBotSettings, type SettingsOptions } from "./bot-settings"
 import type { BundleScope } from "./bundle-writes"
 import { resolveExecutable } from "./executable"
@@ -153,7 +154,9 @@ export const buildOptions = (
 		settingSources: [],
 		strictMcpConfig: true,
 		pathToClaudeCodeExecutable: resolveExecutable(),
-		stderr: () => {},
+		stderr: agentStderr(
+			request.session ? `session ${request.session}` : "session",
+		),
 	}
 }
 

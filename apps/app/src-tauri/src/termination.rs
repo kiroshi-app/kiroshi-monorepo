@@ -6,11 +6,11 @@ use tauri::{AppHandle, Runtime};
 pub async fn exited_on_termination<R: Runtime>(app: AppHandle<R>) {
 	let requested = match termination_requested() {
 		Ok(requested) => requested,
-		Err(failure) => return eprintln!("no termination signal is listened to: {failure}"),
+		Err(failure) => return log::warn!("no termination signal is listened to: {failure}"),
 	};
 	match requested.await {
 		Ok(()) => app.exit(0),
-		Err(failure) => eprintln!("the termination signal was lost: {failure}"),
+		Err(failure) => log::warn!("the termination signal was lost: {failure}"),
 	}
 }
 

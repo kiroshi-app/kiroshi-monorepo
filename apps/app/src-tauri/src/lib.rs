@@ -17,6 +17,7 @@ pub mod hosting;
 pub mod invitations;
 pub mod joined_spaces;
 pub mod json;
+pub mod logging;
 pub mod mcp_oauth;
 pub mod missions;
 pub mod notifications;
@@ -73,6 +74,9 @@ pub fn run() {
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())
 		.setup(|app| {
+			if let Err(failure) = logging::install(app.handle()) {
+				eprintln!("the log file could not be opened: {failure}");
+			}
 			app.manage(db::bootstrap(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
