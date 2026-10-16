@@ -1334,6 +1334,40 @@ describe("createRosterController on conversations", () => {
 		})
 	})
 
+	it("keeps the icon and the colour a conversation wears when it is renamed or moved", async () => {
+		const store = createFakeTranscriptStore()
+		const section = await store.createSection("personal", "Rooms")
+		const created = await (await loaded(store)).createConversation()
+		const id = created?.id ?? ""
+		await store.updateConversation(id, {
+			title: "Launch",
+			instructions: "",
+			sectionId: null,
+			icon: "Message",
+			color: "cyan",
+		})
+		const controller = await loaded(store)
+		const sent = vi.spyOn(store, "updateConversation")
+
+		controller.describeConversation(id, { name: "Menu", instructions: "" })
+		await vi.waitFor(async () => {
+			const state = await reloaded(store)
+			expect(state.conversations[0].title).toBe("Menu")
+		})
+		await controller.moveConversationToSection(id, section.id)
+
+		expect(sent.mock.calls.map(([, edit]) => [edit.icon, edit.color])).toEqual([
+			["Message", "cyan"],
+			["Message", "cyan"],
+		])
+		expect((await store.conversations("personal"))[0]).toMatchObject({
+			title: "Menu",
+			sectionId: section.id,
+			icon: "Message",
+			color: "cyan",
+		})
+	})
+
 	it("stores the name a nameless conversation is given", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

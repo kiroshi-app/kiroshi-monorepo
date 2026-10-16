@@ -58,6 +58,8 @@ const conversationOf = (participants: Participant[]): Conversation => ({
 	pinPosition: null,
 	title: "Launch",
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: 1,
 	updatedAt: 1,
 	participants,

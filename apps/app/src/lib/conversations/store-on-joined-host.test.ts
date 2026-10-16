@@ -184,6 +184,8 @@ const GROUP: Conversation = {
 	pinPosition: null,
 	title: "Walls",
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: 0,
 	updatedAt: 0,
 	participants: [],

@@ -100,6 +100,8 @@ const LISTED: Conversation = {
 	pinPosition: null,
 	title: "Billing",
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: 1,
 	updatedAt: 1,
 	participants: [],

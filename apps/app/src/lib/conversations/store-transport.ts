@@ -328,13 +328,15 @@ export const conversationStore: TranscriptStore = {
 
 	updateConversation: (
 		conversationId: string,
-		{ title, instructions, sectionId }: ConversationEdit,
+		{ title, instructions, sectionId, icon, color }: ConversationEdit,
 	) =>
 		invoke<Conversation>("conversation_update", {
 			conversationId,
 			title,
 			instructions,
 			sectionId,
+			icon,
+			color,
 		}),
 
 	deleteConversation: (conversationId: string) =>

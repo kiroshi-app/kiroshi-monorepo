@@ -935,6 +935,8 @@ export const createRosterController = (
 							title: value.name,
 							instructions: value.instructions,
 							sectionId: conversation.sectionId,
+							icon: conversation.icon,
+							color: conversation.color,
 						}),
 					)
 				: Promise.resolve(null)
@@ -1233,6 +1235,8 @@ export const createRosterController = (
 					title: moved.title,
 					instructions: moved.instructions,
 					sectionId,
+					icon: moved.icon,
+					color: moved.color,
 				})
 			}).catch(reload),
 

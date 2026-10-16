@@ -113,6 +113,8 @@ const conversation = (
 	pinPosition: null,
 	title,
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: 0,
 	updatedAt: 0,
 	participants,

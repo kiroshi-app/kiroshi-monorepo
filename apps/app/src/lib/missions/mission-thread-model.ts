@@ -25,6 +25,8 @@ export const toMissionConversation = ({
 	pinPosition: null,
 	title: mission.objective,
 	instructions: "",
+	icon: null,
+	color: null,
 	createdAt: mission.openedAt,
 	updatedAt: mission.openedAt,
 	participants: [
