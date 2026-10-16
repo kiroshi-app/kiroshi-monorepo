@@ -97,6 +97,37 @@ describe("formatFailureReport", () => {
 		)
 	})
 
+	it.each([
+		["a Specs group with no field", { specs: {} }],
+		[
+			"a Context group whose only field is blank",
+			{ context: { session: " " } },
+		],
+		[
+			"a Log group with zero lines",
+			{ log: { lines: [], path: "/tmp/kiroshi.log", lineCount: 0 } },
+		],
+	])("writes no warning and no header for %s", (_, groups) => {
+		const reported = {
+			description: "The session could not be reopened.",
+			report: { command: "reopen_session" },
+		}
+
+		expect(
+			formatFailureReport({
+				...reported,
+				report: { ...reported.report, ...groups },
+			}),
+		).toBe(formatFailureReport(reported))
+		expect(formatFailureReport(reported)).toBe(
+			[
+				"Kiroshi failure report",
+				"The session could not be reopened.",
+				"Command: reopen_session",
+			].join("\n"),
+		)
+	})
+
 	it("formats the Specs block alone", () => {
 		expect(
 			formatFailureSpecs({

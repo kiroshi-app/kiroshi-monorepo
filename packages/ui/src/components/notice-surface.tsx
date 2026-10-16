@@ -175,25 +175,28 @@ const formatFailureContext = (context: FailureContext) =>
 	section("-- Context", labelledLines(context, FAILURE_CONTEXT_LABELS))
 
 const formatFailureLog = ({ lines, path, lineCount }: FailureLog) =>
-	[`-- Log (last ${lineCount} lines of ${onOneLine(path)})`, ...lines].join(
-		"\n",
-	)
+	section(`-- Log (last ${lineCount} lines of ${onOneLine(path)})`, lines)
 
 const formatFailureReport = ({
 	description,
 	report: { specs, context, log, ...fields },
-}: ReportedFailure) =>
-	[
-		FAILURE_REPORT_HEADING,
-		(specs || context || log) && FAILURE_REPORT_WARNING,
-		onOneLine(description),
-		...labelledLines(fields, FAILURE_REPORT_LABELS),
+}: ReportedFailure) => {
+	const sections = [
 		specs && formatFailureSpecs(specs),
 		context && formatFailureContext(context),
 		log && formatFailureLog(log),
+	].filter(Boolean)
+
+	return [
+		FAILURE_REPORT_HEADING,
+		sections.length > 0 && FAILURE_REPORT_WARNING,
+		onOneLine(description),
+		...labelledLines(fields, FAILURE_REPORT_LABELS),
+		...sections,
 	]
 		.filter(Boolean)
 		.join("\n")
+}
 
 type FailureNotice = NoticeMessage & {
 	report?: FailureReport
