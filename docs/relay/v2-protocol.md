@@ -230,9 +230,19 @@ word[i] = WORDS[bits[11·i .. 11·i + 11]]   for i in 0..6
 
 ## Test vectors
 
-`v2-crypto.json` was produced from the inputs it lists with Node's OpenSSL
-primitives, independently of the Rust code, and the Rust suite checks the Rust
-code against it. Every byte string is lowercase hex; `ctr` is a decimal string.
+`v2-crypto.json` is written by
+[`scripts/generate-v2-vectors.ts`](../../scripts/generate-v2-vectors.ts), from the
+repository root:
+
+```sh
+bun scripts/generate-v2-vectors.ts
+```
+
+The generator derives every value from the inputs it lists with bun's `node:crypto`
+and its own ChaCha20-Poly1305, independently of the Rust code, and formats the file
+with Biome. Run on an unchanged generator, it rewrites the committed file byte for
+byte. The Rust suite checks the Rust code against the file. Every byte string is
+lowercase hex; `ctr` is a decimal string.
 
 | Key | What a client checks |
 | --- | --- |
