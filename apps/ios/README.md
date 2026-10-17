@@ -62,6 +62,22 @@ apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiros
 
 The whole plan runs once, before the push, on the same simulator: `IOS_SIMULATOR="OPE-NN iPhone 17" bun run ios:test`, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet. Delete the simulator with the ticket: `xcrun simctl delete "$SIMULATOR"`.
 
+## Device keys and protocol v2
+
+The iPhone speaks protocol v2 of `docs/relay/v2-protocol.md`: every call leaves sealed and signed with its own device keys, and every answer or event is opened only once the host's signature verifies. The relay carries bytes it can neither read nor forge.
+
+- `DeviceKeyStore` creates an Ed25519 signing key and an X25519 agreement key once, in the session's Keychain service (`device-signing-key`, `device-agreement-key`, after first unlock, this device only, never synchronised). Sign out clears the session only; the keys stay. A Keychain failure other than "no item" leaves the identity unavailable, never replaced.
+- At the first load of an account's spaces, `POST /devices` registers both public keys; the answered id is kept per account (`relay-device.<account>`) and opens every socket with `?device=`. A `409 DEVICE_KEY_TAKEN` lands on `Couldn’t add this iPhone to your account` (`device-key-taken`); unreadable keys on `Couldn’t read this iPhone’s keys`.
+- `RelayCrypto` is the codec, checked against a byte for byte copy of `v2-crypto.json` in `KiroshiTests/Vectors` (`RelayCryptoVectorTests`), beside a Swift-made signature vector. `bip39-english.txt` ships in the app for the fingerprint, its SHA-256 checked when read.
+- `RelayConnection` persists its last sent `ctr` per Space and `key_id` before a frame leaves, and the last accepted per sender (`FrameCounters`, in the Keychain): it never sends again under a `key_id` whose counter can't be read back. A member frame carries no `from`; the relay adds it.
+- A Space whose key this iPhone doesn't hold shows `Join this Space` on both tabs, never as unreachable (`join-space`). Nothing writes a Space key yet: the join comes with OPE-1010, so `KeychainSpaceKeyStore` answers none today.
+
+In Debug, `RelayEnvironment(transport:clock:)` plays the host's side of v2 around any scripted socket (`HostSealingTransport` in `Fixtures/FixtureKeys.swift`): the scripted host keeps reading and writing plaintext, and the app goes through the real sealing, signatures and counters.
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture join-space
+```
+
 ## Xcode Cloud to TestFlight
 
 Every merge on `main` that touches `apps/ios` or `.xcode-version` is archived by Xcode Cloud and lands in TestFlight for the internal group. Nobody opens Xcode for it.

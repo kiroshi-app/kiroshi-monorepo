@@ -48,7 +48,8 @@ struct RelayConnectionTests {
 
         #expect(
             opening.request.url?.absoluteString
-                == "wss://api.kiroshi.app/instances/instance-1/relay/member")
+                == "wss://api.kiroshi.app/instances/instance-1/relay/member?device=\(FixtureKeys.memberRelayId)"
+        )
         #expect(
             opening.request.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-bearer")
         await connection.stop()
@@ -62,7 +63,8 @@ struct RelayConnectionTests {
 
         #expect(
             opening.request.url?.absoluteString
-                == "ws://localhost:3000/instances/instance-1/relay/member")
+                == "ws://localhost:3000/instances/instance-1/relay/member?device=\(FixtureKeys.memberRelayId)"
+        )
         await connection.stop()
     }
 

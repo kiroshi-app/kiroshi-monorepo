@@ -27,6 +27,13 @@ enum AccountDeletionAnswer: Equatable, Sendable {
     case unreachable
 }
 
+enum DeviceRegistrationAnswer: Equatable, Sendable {
+    case registered(relayId: String)
+    case keyTaken
+    case unauthenticated
+    case unreachable
+}
+
 enum SpacesAnswer: Equatable, Sendable {
     case spaces([Space])
     case unauthenticated
@@ -104,6 +111,33 @@ struct KiroshiCloud: Sendable {
         }
     }
 
+    func registerDevice(_ keys: DeviceKeys, bearer: String) async throws
+        -> DeviceRegistrationAnswer
+    {
+        var request = post(
+            "devices",
+            body: DeviceRegistration(
+                ed25519PublicKey: unpaddedBase64URL(keys.signing.publicKey.rawRepresentation),
+                x25519PublicKey: unpaddedBase64URL(keys.agreement.publicKey.rawRepresentation)))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, data) = try await send(request) else { return .unreachable }
+        switch status {
+        case 200, 201:
+            guard let device = try? JSONDecoder().decode(RegisteredDevice.self, from: data) else {
+                return .unreachable
+            }
+            return .registered(relayId: device.id)
+        case 401:
+            return .unauthenticated
+        case 409
+        where (try? JSONDecoder().decode(ErrorCode.self, from: data).error.code)
+            == "DEVICE_KEY_TAKEN":
+            return .keyTaken
+        default:
+            return .unreachable
+        }
+    }
+
     func signOut(bearer: String) async {
         var request = URLRequest(url: baseURL.appending(path: "api/auth/sign-out"))
         request.httpMethod = "POST"
@@ -139,6 +173,13 @@ struct KiroshiCloud: Sendable {
         case "Too many wrong codes, ask for a new one": return .tooManyWrongCodes
         default: return .wrongCode
         }
+    }
+
+    private func unpaddedBase64URL(_ bytes: Data) -> String {
+        bytes.base64EncodedString()
+            .replacing("+", with: "-")
+            .replacing("/", with: "_")
+            .replacing("=", with: "")
     }
 
     private func post(_ path: String, body: some Encodable) -> URLRequest {
@@ -185,6 +226,23 @@ private struct IdTokenSignIn: Encodable {
         case provider, idToken, nonce, name, deviceName, platform
         case authorizationCode = "authorizationCode"
     }
+}
+
+private struct DeviceRegistration: Encodable {
+    let ed25519PublicKey: String
+    let x25519PublicKey: String
+}
+
+private struct RegisteredDevice: Decodable {
+    let id: String
+}
+
+private struct ErrorCode: Decodable {
+    struct Detail: Decodable {
+        let code: String
+    }
+
+    let error: Detail
 }
 
 private struct GrantedSession: Decodable {

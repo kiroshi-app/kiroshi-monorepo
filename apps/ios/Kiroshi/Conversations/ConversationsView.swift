@@ -97,6 +97,8 @@ struct ConversationsView: View {
 
     @ViewBuilder private var content: some View {
         switch store.phase {
+        case .loading where space.spaceToJoin != nil:
+            JoinSpaceView(name: space.spaceToJoin?.name ?? "")
         case .loading where space.offlineSpace != nil:
             Color(.systemBackground)
         case .loading:
