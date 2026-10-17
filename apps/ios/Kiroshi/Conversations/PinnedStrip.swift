@@ -35,7 +35,9 @@ private struct PinnedChip: View {
             Button("Unpin", systemImage: "pin.slash", action: unpin)
         } label: {
             VStack(spacing: 4) {
-                avatar
+                ConversationAvatarView(
+                    avatar: ConversationAvatar(summary.subject), size: .pinned,
+                    isWorking: summary.isWorking)
                 Text(summary.subject.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -50,13 +52,15 @@ private struct PinnedChip: View {
         .accessibilityLabel("\(summary.subject.title), pinned")
         .accessibilityAction(named: "Unpin", unpin)
     }
-
-    @ViewBuilder private var avatar: some View {
-        switch summary.subject {
-        case .companion(let companion):
-            CompanionAvatar(companion, size: .pinned, isWorking: summary.isWorking)
-        case .group(let group):
-            GroupAvatar(group: group, size: .pinned, working: summary.workingCompanionIds)
-        }
-    }
 }
+
+#if DEBUG
+    #Preview("Pinned strip · solo, no colour, red") {
+        PinnedStrip(pinned: ConversationsFixture.everywhere, open: { _ in }, unpin: { _ in })
+    }
+
+    #Preview("Pinned strip · solo, no colour, red · dark") {
+        PinnedStrip(pinned: ConversationsFixture.everywhere, open: { _ in }, unpin: { _ in })
+            .preferredColorScheme(.dark)
+    }
+#endif

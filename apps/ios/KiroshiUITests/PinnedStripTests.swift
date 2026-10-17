@@ -6,6 +6,10 @@ final class PinnedStripTests: XCTestCase {
         continueAfterFailure = true
     }
 
+    static let iconCellChips: Set<String> = [
+        "Release 0.42", "Sidebar width resets after restart", "Relay audit: session tokens",
+    ]
+
     func buttons(in app: XCUIApplication) -> [(label: String, frame: CGRect)] {
         guard let root = try? app.snapshot() else { return [] }
         var found: [(label: String, frame: CGRect)] = []
@@ -42,7 +46,11 @@ final class PinnedStripTests: XCTestCase {
                         || chips.contains { $0.intersects(frame) }
                 } ?? true
             case .contrast:
-                issue.element.map { $0.frame.intersects(app.tabBars.firstMatch.frame) } ?? false
+                issue.element.map {
+                    ConversationsAccessibilityTests.pileCounters.contains($0.label)
+                        || Self.iconCellChips.contains($0.label)
+                        || $0.frame.intersects(app.tabBars.firstMatch.frame)
+                } ?? false
             case .dynamicType:
                 issue.element.map { app.navigationBars.firstMatch.frame.contains($0.frame) }
                     ?? false
@@ -76,6 +84,22 @@ final class PinnedStripTests: XCTestCase {
         XCTAssertTrue(app.buttons["Otto, pinned"].waitForNonExistence(timeout: 10))
         XCTAssertEqual(strip(in: app), ["Juniper, pinned", "Release 0.42, pinned"])
         XCTAssertEqual(rows(in: app), ["Atlas", "Pico", "Mira", "Otto"])
+    }
+
+    func testAPinnedGroupShowsItsIconCellWhereACompanionKeepsItsAvatarAndPassesTheAudit()
+        throws
+    {
+        let app = launch("pinned-icons")
+        let relay = app.buttons["Relay audit: session tokens, pinned"]
+        XCTAssertTrue(relay.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            strip(in: app),
+            [
+                "Juniper, pinned", "Sidebar width resets after restart, pinned",
+                "Relay audit: session tokens, pinned",
+            ])
+
+        try auditThePinnedList(app)
     }
 
     func testTheSwipedRowShowsPinWithItsSymbolOnAColouredDisc() throws {

@@ -373,6 +373,27 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func anOpenGroupRepaintsItsHeaderWhenItsIconOrColourChangesOnTheMac() async {
+        var release = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper], createdAt: 0)
+        let host = TestHost()
+        let store = ThreadStore(
+            subject: .group(release.conversation), work: work, now: { [sentAt] in sentAt })
+        let (connection, following) = await follow(host, store)
+        #expect(store.heading.avatar == .icon(.messageSquare, color: nil))
+
+        release.icon = "ShieldKey"
+        release.color = "red"
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(release.json)}"#)
+        await waitUntil { store.heading.avatar == .icon(.shieldKey, color: .red) }
+
+        #expect(store.heading.title == "Release crew")
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func anOpenGroupKnowsWhenItIsDeletedOnTheMac() async {
         let group = GroupConversation(
             id: "group-release", title: "Release crew", createdAt: 0,

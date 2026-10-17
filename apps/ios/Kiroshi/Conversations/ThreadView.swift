@@ -62,7 +62,8 @@ extension ThreadStore {
                 avatar: .companion(companion), working: working, title: companion.name,
                 subtitle: companion.role)
         case .group(let group):
-            ThreadHeading(avatar: .group(group), working: working, title: group.name)
+            ThreadHeading(
+                avatar: ConversationAvatar(subject), working: working, title: group.name)
         }
     }
 }

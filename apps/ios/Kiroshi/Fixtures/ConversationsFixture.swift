@@ -20,6 +20,10 @@
             UserDefaults.standard.bool(forKey: "history")
         }
 
+        static var opensEmpty: Bool {
+            UserDefaults.standard.bool(forKey: "emptyThread")
+        }
+
         static var isPaged: Bool {
             UserDefaults.standard.bool(forKey: "paged")
         }
@@ -187,6 +191,8 @@
                 createdAt: 0, icon: "Megaphone"),
         ]
 
+        static let pinnedIcons = ["group-sidebar", "group-relay-audit"]
+
         static let subjectIconMessages: [String: [FixtureHost.Message]] = Dictionary(
             uniqueKeysWithValues: zip(
                 subjectIcons,
@@ -238,6 +244,20 @@
                 }
             }
             return [own] + groups
+        }
+
+        static var everywhere: [ConversationSummary] {
+            ["happy-2", "close-up-none-3", "close-up-red-3"].compactMap { id in
+                closeUpRows.first { $0.id == id }
+            }
+        }
+
+        static var everywhereHeadings: [ThreadHeading] {
+            everywhere.map { summary in
+                ThreadHeading(
+                    avatar: ConversationAvatar(summary.subject), title: summary.subject.title,
+                    subtitle: summary.role)
+            }
         }
 
         static let homeMessages: [String: [FixtureHost.Message]] = listMessages.merging([
@@ -479,6 +499,12 @@
                     [juniper.id: listMessages[juniper.id] ?? []]) { group, _ in group }
             case .pinned:
                 script.pinned = [juniper.id, release042.id, otto.id]
+            case .pinnedIcons:
+                script.companions = [juniper]
+                script.groups = subjectIcons
+                script.messages = subjectIconMessages.filter { !pinnedIcons.contains($0.key) }
+                script.messages[juniper.id] = []
+                script.pinned = [juniper.id] + pinnedIcons
             case .pinRefused:
                 script.pinned = [juniper.id, release042.id, otto.id]
                 script.refusesPins = true
@@ -554,6 +580,9 @@
             default:
                 break
             }
+            if opensEmpty, let opening = opening(fixture) {
+                script.messages[opening] = []
+            }
             return script
         }
 
@@ -571,6 +600,8 @@
                 release042.id
             case .conversationNoMissions:
                 atlas.id
+            case .pinnedIcons:
+                UserDefaults.standard.string(forKey: "opening")
             default: nil
             }
         }

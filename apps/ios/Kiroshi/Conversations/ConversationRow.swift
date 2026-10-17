@@ -60,7 +60,7 @@ struct ConversationRow: View {
         case .companion(let companion):
             CompanionAvatar(companion, size: .row, isWorking: summary.isWorking)
         case .group(let group):
-            ConversationIconCell(icon: group.icon, color: group.color)
+            ConversationIconCell(icon: group.icon, color: group.color, size: .row)
         }
     }
 

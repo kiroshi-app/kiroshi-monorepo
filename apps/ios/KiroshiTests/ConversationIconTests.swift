@@ -58,6 +58,15 @@ struct ConversationIconTests {
         #expect(group.color == nil)
     }
 
+    @Test func aCompanionsOwnConversationKeepsItsAvatarWhereAGroupOfOneDrawsItsIconCell() throws {
+        let happy = Companion(id: "happy", name: "Happy", tint: .orange)
+        let group = try conversation(#""icon":"ShieldKey","color":"red","#)
+
+        #expect(group.members.count == 1)
+        #expect(ConversationAvatar(.companion(happy)) == .companion(happy))
+        #expect(ConversationAvatar(.group(group)) == .icon(.shieldKey, color: .red))
+    }
+
     @Test(arguments: [(1, 1, 0), (2, 2, 0), (3, 3, 0), (4, 2, 2), (5, 2, 3)])
     func thePileShowsThreeBotsThenTwoAndACount(members: Int, shown: Int, hidden: Int) {
         let bots = (0..<members).map { Companion(id: "bot-\($0)", name: "Bot \($0)") }

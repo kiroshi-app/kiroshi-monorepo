@@ -173,6 +173,27 @@ struct PinnedConversationsTests {
         await connection.stop()
     }
 
+    @Test func aPinnedGroupRepaintsItsChipWhenItsIconOrColourChangesOnTheMac() async {
+        let board = PinBoard(Self.othersPinned, sections: ["s-1"])
+        let host = pinningHost(board)
+        let (store, connection, following) = await follow(host)
+        let chip = { store.pinned.first.map { ConversationAvatar($0.subject) } }
+        #expect(chip() == .icon(.messageSquare, color: nil))
+        #expect(ConversationAvatar(store.pinned[1].subject) == .companion(pico))
+
+        var topic = topics[0]
+        topic.icon = "Rocket"
+        topic.color = "orange"
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(topic.json)}"#)
+        await waitUntil { chip() == .icon(.rocket, color: .orange) }
+
+        #expect(store.pinned.map(\.id) == ["topic-1", "pico", "juniper"])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aMacWithoutPagesPinsNothing() async {
         let pinned = topics.enumerated().map { index, topic in
             var topic = topic

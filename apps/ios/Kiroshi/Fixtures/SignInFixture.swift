@@ -92,6 +92,7 @@
         case conversationsLive = "conversations-live"
         case conversationIcons = "conversation-icons"
         case pinned
+        case pinnedIcons = "pinned-icons"
         case pinRefused = "pin-refused"
         case thread = "3.1"
         case emptyThread = "3.2"
@@ -195,7 +196,8 @@
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
-                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused, .agreement:
+                .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused,
+                .agreement:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
             }
@@ -219,7 +221,7 @@
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
-                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused:
+                .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused:
                 true
             default: false
             }
@@ -264,7 +266,7 @@
             rawValue.hasPrefix("2.")
                 || [
                     .missionsButton, .conversationMissions, .conversationNoMissions, .pinned,
-                    .pinRefused,
+                    .pinnedIcons, .pinRefused,
                 ].contains(self)
         }
 
@@ -292,7 +294,8 @@
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
-                .conversationMissions, .conversationNoMissions, .pinned, .pinRefused, .agreement:
+                .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused,
+                .agreement:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -400,7 +403,7 @@
                 .groupFailed, .groupMention, .slowThread, .longReply, .slowGroup, .longName,
                 .longGroup,
                 .twoAsks, .missionsButton, .conversationMissions, .conversationNoMissions, .pinned,
-                .pinRefused,
+                .pinnedIcons, .pinRefused,
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
                 .settings:

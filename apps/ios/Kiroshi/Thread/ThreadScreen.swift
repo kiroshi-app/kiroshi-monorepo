@@ -32,6 +32,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     .background(Color(.systemBackground))
                 case .empty:
                     EmptyThread(heading: heading)
+                        .contentMargins(.top, headerOverhang, for: .scrollContent)
                 case .loading, .shown:
                     EmptyView()
                 }

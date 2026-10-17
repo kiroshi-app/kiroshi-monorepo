@@ -45,6 +45,25 @@ final class ThreadAccessibilityTests: XCTestCase {
         try auditTheThread(app)
     }
 
+    func testAGroupsEmptyThreadShowsItsIconCellAndPassesTheAudit() throws {
+        let app = launch("pinned-icons", "-opening", "group-relay-audit")
+        XCTAssertTrue(
+            app.staticTexts["Nothing here yet. Your first message starts the conversation."]
+                .waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["Relay audit: session tokens"].exists)
+
+        try auditTheThread(app, iconCellLabels: ["Relay audit: session tokens"])
+    }
+
+    func testALongNamedCompanionsEmptyThreadScrollsAndPassesTheAudit() throws {
+        let app = launch("long-name", "-emptyThread", "YES")
+        XCTAssertTrue(
+            app.staticTexts["Nothing here yet. Your first message starts the conversation."]
+                .waitForExistence(timeout: 10))
+
+        try auditTheThread(app)
+    }
+
     func testAnOfflineHostKeepsTheThreadAndPassesTheAudit() throws {
         let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "3.4")
         let app = launch("3.4")
@@ -142,7 +161,8 @@ final class ThreadAccessibilityTests: XCTestCase {
     }
 
     func auditTheThread(
-        _ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>? = nil
+        _ app: XCUIApplication, onScreenAtTheLargestSize: Set<String>? = nil,
+        iconCellLabels: Set<String> = []
     ) throws {
         let titleBottom = titleBottom(in: app)
         let transcript = app.scrollViews.firstMatch.frame
@@ -154,7 +174,7 @@ final class ThreadAccessibilityTests: XCTestCase {
                     transcript.contains(element.frame) && !$0.contains(element.label)
                 } ?? false
             return switch issue.auditType {
-            case .contrast: isInTheTitle
+            case .contrast: isInTheTitle || iconCellLabels.contains(element.label)
             case .textClipped, .dynamicType: isInTheTitle || isScrolledOffScreenAtTheLargestSize
             default: false
             }
