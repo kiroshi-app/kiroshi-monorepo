@@ -80,11 +80,10 @@ it("writes the skip of a mission its side cannot read to the log file on one lin
 	printed()
 	forwardConsoleToLogFile()
 	const read = createMissionEventRead({
-		sideOfSpace: () => "garage",
 		detailOn: () => Promise.reject({ kind: "unknownMission", id: "m-gone" }),
 	})
 
-	await read({ missionId: "m-gone", spaceId: "garage-space" })
+	await read({ missionId: "m-gone", spaceId: "garage-space", hostId: "garage" })
 
 	expect(logInvoke).toHaveBeenCalledExactlyOnceWith("plugin:log|log", {
 		level: 3,

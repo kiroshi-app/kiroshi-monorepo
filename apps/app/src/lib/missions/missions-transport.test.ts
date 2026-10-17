@@ -142,10 +142,10 @@ it("hands every mission change to its listener with the local host id", async ()
 describe("the mission calls of the run driver while a joined space is active", () => {
 	const JOINED_SPACE = "garage"
 
-	const joinedHost = vi.fn(
-		async (_input: URL | string) =>
-			new Response("null", { headers: { "content-type": "application/json" } }),
-	)
+	const answerAsTheJoinedHost = async (_input: URL | string) =>
+		new Response("null", { headers: { "content-type": "application/json" } })
+
+	const joinedHost = vi.fn(answerAsTheJoinedHost)
 
 	const unopenedSocket = class {
 		onopen = null
@@ -192,8 +192,12 @@ describe("the mission calls of the run driver while a joined space is active", (
 		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
 	})
 
-	it("reads a changed mission of a local Space on this computer", async () => {
-		await missionsTransport.read({ missionId: "m-1", spaceId: "workshop" })
+	it("reads a changed mission heard on this computer on this computer", async () => {
+		await missionsTransport.read({
+			missionId: "m-1",
+			spaceId: "workshop",
+			hostId: null,
+		})
 
 		expect(commandsSentToTheJoinedHost()).toEqual([])
 		expect(hostInvoke).toHaveBeenCalledWith("mission_detail", {
@@ -201,27 +205,63 @@ describe("the mission calls of the run driver while a joined space is active", (
 		})
 	})
 
-	it("reads a changed mission of the joined Space on its host", async () => {
-		await missionsTransport.read({ missionId: "m-1", spaceId: JOINED_SPACE })
+	it("reads a changed mission heard on the joined host through its link", async () => {
+		await missionsTransport.read({
+			missionId: "m-1",
+			spaceId: JOINED_SPACE,
+			hostId: JOINED_SPACE,
+		})
 
 		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
 		expect(commandsSentToThisComputer()).toEqual([])
 	})
 
-	it("reads a changed mission of the joined Space on its host once a local Space is on screen", async () => {
+	it("reads a changed mission heard on the joined host through its link once a local Space is on screen", async () => {
 		await joinedHosts.activate(null)
 
-		await missionsTransport.read({ missionId: "m-1", spaceId: JOINED_SPACE })
+		await missionsTransport.read({
+			missionId: "m-1",
+			spaceId: JOINED_SPACE,
+			hostId: JOINED_SPACE,
+		})
 
 		expect(commandsSentToTheJoinedHost()).toEqual(["mission_detail"])
 		expect(commandsSentToThisComputer()).toEqual([])
+	})
+
+	it("reads a changed mission heard on this computer on this computer while the joined host shares its Space id and is offline, whichever Space is active", async () => {
+		joinedHost.mockRejectedValue(new TypeError("Failed to fetch"))
+		hostInvoke.mockImplementation((async (command: string) =>
+			command === "mission_detail"
+				? DETAIL
+				: answerAsThisComputer(command)) as typeof invoke)
+		const heardHere = { missionId: "m-1", spaceId: JOINED_SPACE, hostId: null }
+
+		const reads = [await missionsTransport.read(heardHere)]
+		await joinedHosts.activate(null)
+		reads.push(await missionsTransport.read(heardHere))
+		await joinedHosts.activate(JOINED_SPACE)
+		reads.push(await missionsTransport.read(heardHere))
+
+		expect(reads).toEqual([DETAIL, DETAIL, DETAIL])
+		expect(commandsSentToTheJoinedHost()).toEqual([])
+		expect(
+			commandsSentToThisComputer().filter(
+				(command) => command === "mission_detail",
+			),
+		).toHaveLength(3)
+		joinedHost.mockImplementation(answerAsTheJoinedHost)
 	})
 
 	it("sends every mission call of the run driver to this computer", async () => {
 		await missionRunTransport.board()
 		await missionRunTransport.unreported()
 		await missionRunTransport.detail("m-1")
-		await missionRunTransport.read({ missionId: "m-1", spaceId: "workshop" })
+		await missionRunTransport.read({
+			missionId: "m-1",
+			spaceId: "workshop",
+			hostId: null,
+		})
 		await missionRunTransport.reported("m-1", "t-1")
 		await missionRunTransport.answered("m-1", 2)
 		await missionRunTransport.rosterBlock("c-1", "b-1")

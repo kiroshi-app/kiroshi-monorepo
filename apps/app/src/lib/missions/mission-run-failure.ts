@@ -1,6 +1,7 @@
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ReporterFacts, UnreportedFailureNotice } from "../failure-report"
+import { isHostOffline } from "../host/host-offline"
 
 type MissionRunFailure = {
 	reason: string
@@ -80,6 +81,10 @@ export const createMissionRunFailures = (
 		}
 		clearTimeout(burst.window)
 		bursts.delete(cause)
+		if (isHostOffline(burst.failure.error)) {
+			console.warn(logLineOf(burst))
+			return
+		}
 		console.error(logLineOf(burst))
 		reportFailure(
 			{
