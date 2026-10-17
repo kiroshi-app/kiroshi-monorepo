@@ -219,15 +219,21 @@ frame recorded on an earlier socket never runs again.
 
 - A member's first frame on a socket is a hello: the plaintext `{"hello":{}}`,
   with no `challenge`.
-- The host answers a hello with a frame sealed to that device whose plaintext is
-  `{"hello":{}}` and whose header carries a fresh random 32-byte `challenge`. The
-  host holds that challenge for that device until the host socket ends.
+- The host answers every hello with a frame sealed to that device whose plaintext
+  is `{"hello":{}}` and whose header carries a fresh random 32-byte `challenge`.
+  The host holds that challenge for that device, in place of any it held before,
+  until the host socket ends.
 - A member carries the last challenge received from the host in the header of
   every later frame on that socket.
 - A member frame other than a hello that carries no challenge, or a challenge
   other than the one the host holds for its device, is stale: the host drops it,
-  runs nothing, and answers a hello with a fresh challenge to that device. The
-  member resends under the new challenge.
+  runs nothing, and answers a hello sealed to that device.
+  - When the host holds a challenge for that device, the answer carries that held
+    challenge, unchanged. A member with several frames in flight under a replaced
+    challenge gets the same challenge back for each of them, and its resends
+    under it run.
+  - When the host holds no challenge for that device, it draws a fresh one, holds
+    it, and the answer carries it.
 
 ## Sealed box
 

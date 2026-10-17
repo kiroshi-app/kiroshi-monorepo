@@ -51,7 +51,9 @@ pub(super) fn verified(
 		.ok()
 		.and_then(|bytes| VerifyingKey::from_bytes(&bytes).ok())
 		.ok_or(CryptoError::MalformedKey)?;
-	let device_id = DeviceId::from_hex(&row.device_id).ok_or(CryptoError::ForeignSender)?;
+	let device_id = DeviceId::from_hex(&row.device_id)
+		.filter(|device_id| *device_id == DeviceId::of(&signing))
+		.ok_or(CryptoError::ForeignSender)?;
 	Ok(Rostered {
 		device_id,
 		relay_device_id: row.relay_device_id.clone(),
@@ -193,5 +195,32 @@ mod tests {
 			verified(&host.signing_public(), "s-1", &a_member_row(&other, &member)),
 			Err(CryptoError::ForgedSignature)
 		);
+	}
+
+	#[tokio::test]
+	async fn a_host_signed_roster_row_whose_device_id_does_not_match_its_signing_key_resolves_no_sender(
+	) {
+		let dir = crate::db::connection::temp_dir();
+		let database = crate::db::open(&dir);
+		let host = DeviceKeys::generate().expect("randomness");
+		let member = DeviceKeys::generate().expect("randomness");
+		let other = DeviceKeys::generate().expect("randomness");
+		let mut row = a_member_row(&host, &member);
+		row.device_id = other.device_id().to_string();
+		row.signature = host.sign(&canonical_bytes("personal", &row)).to_bytes().to_vec();
+		database
+			.space_relay()
+			.rostered("personal".to_owned(), row.clone())
+			.await
+			.expect("rostered");
+
+		let sender =
+			sender_of(&database, "personal", &host, "r-1").await.expect("the roster reads");
+
+		assert_eq!(
+			verified(&host.signing_public(), "personal", &row),
+			Err(CryptoError::ForeignSender)
+		);
+		assert_eq!(sender, None);
 	}
 }

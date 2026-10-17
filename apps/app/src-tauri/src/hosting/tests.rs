@@ -5077,30 +5077,84 @@ fn a_seeded_member_says_hello_calls_gets_its_answer_and_hears_an_event_over_seal
 	});
 }
 
+const A_STALE_CHALLENGE: [u8; CHALLENGE_LENGTH] = [9; CHALLENGE_LENGTH];
+
+async fn next_hello(member: &mut MemberWire) -> Option<[u8; CHALLENGE_LENGTH]> {
+	loop {
+		let frame = member.next_sealed().await;
+		if is_a_hello(&frame) {
+			return frame.challenge;
+		}
+	}
+}
+
+async fn resent_runs(member: &mut MemberWire, challenge: Option<[u8; CHALLENGE_LENGTH]>) -> Value {
+	member.challenge = challenge;
+	send(member, r#"{"id": "resent", "command": "agent_models"}"#).await;
+	answer(member).await
+}
+
 #[test]
-fn a_frame_with_a_stale_challenge_is_dropped_and_answered_with_a_fresh_hello() {
+fn two_stale_frames_in_a_row_are_answered_with_the_same_challenge_and_a_resend_under_it_runs() {
 	run(async {
-		let (mut harness, effects) = Harness::applying_host_effects("stale-challenge").await;
+		let (mut harness, effects) = Harness::applying_host_effects("stale-twice").await;
 		harness.started().await;
 		let mut member = harness.member().await;
 		harness.reached(HostingState::Online).await;
-		let first = member.greeted().await.challenge;
+		let held = member.greeted().await.challenge;
 
-		let stale = r#"{"id": "stale", "command": "agent_models"}"#;
-		member.sealed_sent(stale, Some([9; CHALLENGE_LENGTH])).await;
-		let fresh = loop {
-			let frame = member.next_sealed().await;
-			if is_a_hello(&frame) {
-				break frame;
-			}
-		};
-		member.challenge = fresh.challenge;
-		send(&mut member, r#"{"id": "fresh", "command": "agent_models"}"#).await;
-		let answered = answer(&mut member).await;
+		for id in ["stale-1", "stale-2"] {
+			let call = json!({ "id": id, "command": "agent_models" }).to_string();
+			member.sealed_sent(&call, Some(A_STALE_CHALLENGE)).await;
+		}
+		let first = next_hello(&mut member).await;
+		let second = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, second).await;
 
-		assert_eq!(fresh.plaintext, json!({ "hello": {} }));
-		assert!(fresh.challenge.is_some() && fresh.challenge != first);
-		assert_eq!(answered["id"], json!("fresh"));
+		assert!(held.is_some());
+		assert_eq!((first, second), (held, held));
+		assert_eq!(answered["id"], json!("resent"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+	});
+}
+
+#[test]
+fn a_hello_replaces_the_held_challenge() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("hello-again").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let replaced = member.greeted().await.challenge;
+		let held = member.greeted().await.challenge;
+
+		member.sealed_sent(r#"{"id": "stale", "command": "agent_models"}"#, replaced).await;
+		let answered_with = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, answered_with).await;
+
+		assert!(held.is_some() && held != replaced);
+		assert_eq!(answered_with, held);
+		assert_eq!(answered["id"], json!("resent"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+	});
+}
+
+#[test]
+fn a_stale_frame_from_a_device_the_host_holds_no_challenge_for_draws_a_fresh_one() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("stale-unheld").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		member
+			.sealed_sent(r#"{"id": "stale", "command": "agent_models"}"#, Some(A_STALE_CHALLENGE))
+			.await;
+		let fresh = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, fresh).await;
+
+		assert!(fresh.is_some() && fresh != Some(A_STALE_CHALLENGE));
+		assert_eq!(answered["id"], json!("resent"));
 		assert_eq!(effects.reached(), ["agent_models"]);
 	});
 }

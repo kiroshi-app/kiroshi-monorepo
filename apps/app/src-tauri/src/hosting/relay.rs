@@ -426,6 +426,7 @@ async fn online<R: Runtime>(
 					}
 					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
 					Received::Hello(sender) => Outgoing::Hello(sender),
+					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
 						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
 						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
@@ -484,17 +485,22 @@ enum Received {
 	Answer(Rostered, String),
 	Resume(Rostered, replay::ResumeCall),
 	Hello(Rostered),
+	Stale(Rostered),
 }
 
 enum Outgoing {
 	Answer(Rostered, String),
 	Hello(Rostered),
+	Rechallenge(Rostered),
 	Ping,
 }
 
 fn received(wire: &Wire<'_>, opened: OpenedFrame, ids: Ids<'_>) -> Received {
-	if !wire.is_answerable(&opened) {
+	if opened.is_hello() {
 		return Received::Hello(opened.sender);
+	}
+	if !wire.is_current(&opened) {
+		return Received::Stale(opened.sender);
 	}
 	let OpenedFrame { sender, plaintext, .. } = opened;
 	let text = plaintext.as_str();
@@ -581,6 +587,9 @@ async fn delivered(sink: &mut Sink, wire: &mut Wire<'_>, outgoing: Outgoing) -> 
 			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(Ended::Failed)?)
 		}
 		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(Ended::Failed)?),
+		Outgoing::Rechallenge(to) => {
+			Message::text(wire.rechallenged(&to).await.map_err(Ended::Failed)?)
+		}
 	};
 	sent(sink, message).await.map_err(Ended::Dropped)
 }

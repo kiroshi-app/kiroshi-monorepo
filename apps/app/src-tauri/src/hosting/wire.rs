@@ -100,6 +100,13 @@ pub(super) struct Opened {
 	pub(super) plaintext: String,
 }
 
+impl Opened {
+	pub(super) fn is_hello(&self) -> bool {
+		serde_json::from_str::<Value>(&self.plaintext)
+			.is_ok_and(|plaintext| plaintext == json!({ "hello": {} }))
+	}
+}
+
 struct Fields {
 	key_id: u32,
 	ctr: u64,
@@ -193,11 +200,9 @@ impl<'a> Wire<'a> {
 		Ok(Opened { sender, challenge: frame.header.challenge, plaintext })
 	}
 
-	pub(super) fn is_answerable(&self, opened: &Opened) -> bool {
-		let is_hello = serde_json::from_str::<Value>(&opened.plaintext)
-			.is_ok_and(|plaintext| plaintext == json!({ "hello": {} }));
+	pub(super) fn is_current(&self, opened: &Opened) -> bool {
 		let held = self.challenges.get(&opened.sender.device_id);
-		!is_hello && opened.challenge.is_some() && opened.challenge.as_ref() == held
+		opened.challenge.is_some() && opened.challenge.as_ref() == held
 	}
 
 	pub(super) async fn hello(&mut self, to: &Rostered) -> Result<String, String> {
@@ -205,6 +210,13 @@ impl<'a> Wire<'a> {
 			fresh_challenge().map_err(|failure| format!("no challenge was drawn: {failure:?}"))?;
 		self.challenges.insert(to.device_id, challenge);
 		self.sealed_with(HELLO, Some(to), Some(challenge)).await
+	}
+
+	pub(super) async fn rechallenged(&mut self, to: &Rostered) -> Result<String, String> {
+		match self.challenges.get(&to.device_id).copied() {
+			Some(held) => self.sealed_with(HELLO, Some(to), Some(held)).await,
+			None => self.hello(to).await,
+		}
 	}
 
 	pub(super) async fn sealed(
