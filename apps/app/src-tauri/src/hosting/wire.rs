@@ -202,7 +202,7 @@ impl<'a> Wire<'a> {
 
 	pub(super) fn is_current(&self, opened: &Opened) -> bool {
 		let held = self.challenges.get(&opened.sender.device_id);
-		opened.challenge.is_some() && opened.challenge.as_ref() == held
+		held.is_some_and(|held| opened.challenge.as_ref() == Some(held))
 	}
 
 	pub(super) async fn hello(&mut self, to: &Rostered) -> Result<String, String> {
