@@ -42,7 +42,7 @@ const iconAlone = (line: string) =>
 
 const titleBeforeIcon = (line: string) => {
 	const [, title, name] = line.match(TRAILING_ICON) ?? []
-	const icon = name ? listedIcon(name) : undefined
+	const icon = name && listedIcon(name)
 	return title && icon ? { title, icon } : { title: line, icon: null }
 }
 
