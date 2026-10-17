@@ -4241,7 +4241,6 @@ fn a_relay_guest_hears_a_conversation_updated_whose_last_word_is_the_message_sen
 
 		let conversation = &heard["event"]["payload"]["conversation"];
 		assert_eq!(heard["event"]["payload"]["spaceId"], json!(PERSONAL));
-		assert_eq!(conversation["lastWord"]["authorName"], json!(HOST_NAME));
 		assert_eq!(
 			conversation["lastWord"],
 			json!({
