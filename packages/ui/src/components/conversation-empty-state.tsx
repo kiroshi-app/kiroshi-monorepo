@@ -89,6 +89,7 @@ const ConversationEmptyState = ({
 	...props
 }: ConversationEmptyStateProps) => {
 	const { t } = useTranslation("chat")
+	const [soloBot] = bots
 
 	if (bots.length === 0) {
 		return (
@@ -129,10 +130,10 @@ const ConversationEmptyState = ({
 					<ConversationSubjectIcon color={color} icon={icon} side={MARK_SIZE} />
 				) : (
 					<BotIdentityAvatar
-						blot={bots[0].blot}
-						image={bots[0].image}
-						name={bots[0].name}
-						seed={bots[0].id}
+						blot={soloBot.blot}
+						image={soloBot.image}
+						name={soloBot.name}
+						seed={soloBot.id}
 						size={MARK_SIZE}
 					/>
 				)
