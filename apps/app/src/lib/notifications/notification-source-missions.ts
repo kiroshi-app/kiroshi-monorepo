@@ -7,7 +7,10 @@ import {
 } from "./notification-words"
 
 import type { Mission, MissionChanged } from "../missions/mission-contract"
-import type { MissionEvent } from "../missions/mission-event-read"
+import {
+	type MissionEvent,
+	THIS_COMPUTER,
+} from "../missions/mission-event-read"
 import { createMissionStates } from "../missions/mission-states"
 
 type MissionThreadTrackingOptions = Pick<
@@ -20,8 +23,6 @@ type MissionThreadTrackingOptions = Pick<
 	botNameOf: (botId: string) => string | undefined
 	deliver: Deliver
 }
-
-const THIS_COMPUTER = null
 
 export const createMissionThreadTracking = ({
 	missions,

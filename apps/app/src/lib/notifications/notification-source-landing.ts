@@ -2,7 +2,10 @@ import type { NotificationTarget } from "./notification-port"
 import type { NotificationSourceOptions } from "./notification-source"
 import type { FailWith } from "./notification-source-failures"
 
-import type { MissionEvent } from "../missions/mission-event-read"
+import {
+	type MissionEvent,
+	THIS_COMPUTER,
+} from "../missions/mission-event-read"
 
 type NotificationLandingOptions = Pick<
 	NotificationSourceOptions,
@@ -11,8 +14,6 @@ type NotificationLandingOptions = Pick<
 	missionOrigins: Map<string, MissionEvent>
 	failWith: FailWith
 }
-
-const THIS_COMPUTER = null
 
 export const createNotificationLanding = ({
 	chat,

@@ -12,6 +12,8 @@ type MissionSides = {
 	detailOn: (hostId: string | null, missionId: string) => Promise<MissionDetail>
 }
 
+export const THIS_COMPUTER = null
+
 const LOCAL_SIDE = "local"
 
 const isUnknownMission = (reason: unknown): boolean =>

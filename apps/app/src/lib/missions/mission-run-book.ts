@@ -1,4 +1,5 @@
 import type { Mission, MissionChanged, MissionDetail } from "./mission-contract"
+import { THIS_COMPUTER } from "./mission-event-read"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { createMissionRunFailures } from "./mission-run-failure"
 import type { MissionRunCall, MissionRunCause } from "./mission-run-prompt"
@@ -23,8 +24,6 @@ type MissionRunBookOptions = Pick<
 export type MissionRunBook = ReturnType<typeof createMissionRunBook>
 
 type MissionSpace = Pick<MissionChanged, "missionId" | "spaceId">
-
-const THIS_COMPUTER = null
 
 export const STATUS_CAUSE: MissionRunCause = "status"
 
