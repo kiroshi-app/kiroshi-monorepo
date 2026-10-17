@@ -164,10 +164,7 @@ pub(super) async fn bridged<R: Runtime>(
 	if let Err(refusal) =
 		reach::stays_in_the_shared_space(&app, &shared_space_id, &call.command, &call.args).await
 	{
-		eprintln!(
-			"{}",
-			reach::refusal_line(&call.command, Some(&call.sender), &shared_space_id, &refusal)
-		);
+		eprintln!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
 	let hosting = app.state::<Hosting>();

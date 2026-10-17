@@ -403,13 +403,7 @@ pub(super) enum Offending {
 
 const LOGGED_VALUE_LIMIT: usize = 200;
 
-pub(super) fn refusal_line(
-	command: &str,
-	sender: Option<&str>,
-	shared_space_id: &str,
-	refusal: &Refusal,
-) -> String {
-	let sender = sender.map_or_else(|| "none".to_owned(), |sender| Value::from(sender).to_string());
+pub(super) fn refusal_line(command: &str, shared_space_id: &str, refusal: &Refusal) -> String {
 	let reason = match refusal {
 		Refusal::NoReach => "it has no reach".to_owned(),
 		Refusal::HostOnly => "its reach is HostOnly".to_owned(),
@@ -423,9 +417,7 @@ pub(super) fn refusal_line(
 			format!("{} failed the {} check with {value}", held.argument, held.check.kind())
 		}
 	};
-	format!(
-		"the relayed {command} from sender {sender} was refused outside shared space {shared_space_id}: {reason}"
-	)
+	format!("the relayed {command} was refused outside shared space {shared_space_id}: {reason}")
 }
 
 pub(super) async fn stays_in_the_shared_space<R: Runtime>(

@@ -2401,44 +2401,42 @@ fn the_shared_space_check_names_the_first_unheld_id_of_an_array() {
 }
 
 #[test]
-fn the_refusal_line_names_the_command_sender_space_argument_check_and_value() {
+fn the_refusal_line_names_the_command_space_argument_check_and_value_and_no_account() {
 	let refusal = reach::Refusal::Unheld {
 		held: held_of("conversation_message_page", 0),
 		offending: reach::Offending::Value(json!("c-theirs")),
 	};
 
 	assert_eq!(
-		reach::refusal_line("conversation_message_page", Some("acc-1"), PERSONAL, &refusal),
-		"the relayed conversation_message_page from sender \"acc-1\" was refused outside shared \
-		 space personal: /conversationId failed the Conversation check with \"c-theirs\""
+		reach::refusal_line("conversation_message_page", PERSONAL, &refusal),
+		"the relayed conversation_message_page was refused outside shared space personal: \
+		 /conversationId failed the Conversation check with \"c-theirs\""
 	);
 }
 
 #[test]
-fn the_refusal_line_logs_a_missing_value_as_absent_and_no_sender_as_none() {
+fn the_refusal_line_logs_a_missing_value_as_absent() {
 	let refusal = reach::Refusal::Unheld {
 		held: held_of("conversation_list", 0),
 		offending: reach::Offending::Absent,
 	};
 
 	assert_eq!(
-		reach::refusal_line("conversation_list", None, PERSONAL, &refusal),
-		"the relayed conversation_list from sender none was refused outside shared space \
-		 personal: /spaceId failed the Space check with absent"
+		reach::refusal_line("conversation_list", PERSONAL, &refusal),
+		"the relayed conversation_list was refused outside shared space personal: /spaceId \
+		 failed the Space check with absent"
 	);
 }
 
 #[test]
 fn the_refusal_line_names_the_reach_when_there_is_no_argument() {
 	assert_eq!(
-		reach::refusal_line("account_get", None, PERSONAL, &reach::Refusal::HostOnly),
-		"the relayed account_get from sender none was refused outside shared space personal: \
-		 its reach is HostOnly"
+		reach::refusal_line("account_get", PERSONAL, &reach::Refusal::HostOnly),
+		"the relayed account_get was refused outside shared space personal: its reach is HostOnly"
 	);
 	assert_eq!(
-		reach::refusal_line("unknown", None, PERSONAL, &reach::Refusal::NoReach),
-		"the relayed unknown from sender none was refused outside shared space personal: \
-		 it has no reach"
+		reach::refusal_line("unknown", PERSONAL, &reach::Refusal::NoReach),
+		"the relayed unknown was refused outside shared space personal: it has no reach"
 	);
 }
 
@@ -2449,7 +2447,7 @@ fn the_refusal_line_caps_the_value_at_200_characters() {
 		offending: reach::Offending::Value(json!("x".repeat(500))),
 	};
 
-	let line = reach::refusal_line("conversation_message_page", None, PERSONAL, &refusal);
+	let line = reach::refusal_line("conversation_message_page", PERSONAL, &refusal);
 
 	let value = line.rsplit(" with ").next().expect("a value is logged");
 	assert_eq!(value, format!("\"{}", "x".repeat(199)));
@@ -4748,11 +4746,10 @@ fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 		let refusal = shared_space_refusal(&guest, "application_installs", args).await;
 
 		assert_eq!(
-			reach::refusal_line("application_installs", Some(GUEST), PERSONAL, &refusal),
+			reach::refusal_line("application_installs", PERSONAL, &refusal),
 			format!(
-				"the relayed application_installs from sender \"{GUEST}\" was refused outside \
-				 shared space {PERSONAL}: /conversationId failed the Conversation check with \
-				 \"{GUEST_LOCAL_CONVERSATION}\""
+				"the relayed application_installs was refused outside shared space {PERSONAL}: \
+				 /conversationId failed the Conversation check with \"{GUEST_LOCAL_CONVERSATION}\""
 			)
 		);
 	});
