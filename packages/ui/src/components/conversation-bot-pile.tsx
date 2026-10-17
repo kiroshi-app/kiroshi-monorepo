@@ -1,8 +1,10 @@
 import type { CSSProperties, ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import type { ConversationParticipant } from "@workspace/ui/components/avatar-group"
-import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	BotIdentityAvatar,
+	type BotIdentityAvatarProps,
+} from "@workspace/ui/components/bot-identity-avatar"
 import { CAP_CENTRE_RATIO } from "@workspace/ui/components/hive-layout"
 import {
 	hexagonOfWidth,
@@ -40,6 +42,11 @@ const PILE = "relative block h-4 shrink-0"
 const SLOT = "absolute top-px size-3.5"
 
 const COUNTER_TEXT = "font-bold tabular-nums"
+
+type ConversationParticipant = Pick<
+	BotIdentityAvatarProps,
+	"name" | "blot" | "image" | "working" | "kind"
+> & { id: string; isPerson?: boolean }
 
 type PileBot = Omit<ConversationParticipant, "isPerson">
 
@@ -133,4 +140,8 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 	)
 }
 
-export { ConversationBotPile, type ConversationBotPileProps }
+export {
+	ConversationBotPile,
+	type ConversationBotPileProps,
+	type ConversationParticipant,
+}

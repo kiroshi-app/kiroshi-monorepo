@@ -2,8 +2,12 @@ import type { ReactNode } from "react"
 import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
-import type { ConversationParticipant } from "@workspace/ui/components/avatar-group"
+import {
+	expectSoloAvatarInBothThemes,
+	expectSubjectIconInBothThemes,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { Icons } from "@workspace/ui/components/icons"
 import { MISSION_BOT } from "@workspace/ui/components/missions.fixtures"
 import {
@@ -37,10 +41,7 @@ const ROUTINE_BOT = {
 	seed: "bot-noor-beltran",
 } as const
 
-const PARTICIPANTS: ConversationParticipant[] = [
-	{ id: "atlas", name: "Atlas", blot: "blue" },
-	{ id: "beacon", name: "Beacon", blot: "orange" },
-]
+const IDENTITY_SIDE = 32
 
 const KIND_ARGS: Record<SearchResultKind, SearchResultRowProps> = {
 	message: {
@@ -72,7 +73,7 @@ const KIND_ARGS: Record<SearchResultKind, SearchResultRowProps> = {
 		onOpen: fn(),
 	},
 	"chat-group": {
-		identity: { kind: "chat-group", participants: PARTICIPANTS },
+		identity: { kind: "chat-group" },
 		title: [{ key: "title", text: "Changelog cleanup" }],
 		timestamp: "Mon",
 		parts: [{ key: "participants", text: "Atlas and Beacon" }],
@@ -211,12 +212,15 @@ export const ChatGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"A room with several participants. Check that the identity is the held avatar group and not a single companion, that the title is a name and so takes weight 500, and that the context line is one sentence with no leading glyph in front of it. The palette draws it under `apps/app/src/App.tsx:1239`.",
+					"A room with several participants. Check that the identity is the room's 32px subject icon and not a single companion, that the title is a name and so takes weight 500, and that the context line is one sentence with no leading glyph in front of it. The palette draws it under `apps/app/src/App.tsx:1239`.",
 			},
 		},
 	},
 	play: async ({ canvas, canvasElement }) => {
-		await expect(slotIn(canvasElement, "conversation-avatar")).toBeVisible()
+		await expect(
+			slotIn(canvasElement, "conversation-subject-icon").getBoundingClientRect()
+				.width,
+		).toBe(IDENTITY_SIDE)
 		await expect(titleWeightOf(canvasElement)).toBe("500")
 		await expect(canvas.getByText("Atlas and Beacon")).toBeVisible()
 		await expect(
@@ -241,6 +245,62 @@ export const ChatSolo = meta.story({
 			slotIn(canvasElement, "search-result-row-parts").textContent,
 		).toBe("Ada Martin")
 	},
+})
+
+export const ThemesChatSolo = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: KIND_ARGS["chat-solo"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a one-companion thread in light and dark at once. Check that the companion's own 32px face leads the row in both themes, with no subject icon. Pick `ThemesChatGroup` for a room of several companions.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSoloAvatarInBothThemes(canvasElement, IDENTITY_SIDE),
+})
+
+export const ThemesChatGroup = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: KIND_ARGS["chat-group"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 32px subject icon on the neutral pair of each theme leads the row, the message square centred in it. Pick `ThemesChatGroupRed` for a coloured room.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon",
+			IDENTITY_SIDE,
+		),
+})
+
+export const ThemesChatGroupRed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		...KIND_ARGS["chat-group"],
+		identity: { kind: "chat-group", color: "red", icon: "ShieldKey" },
+	},
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 32px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesChatGroup` for a room with no colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon-red",
+			IDENTITY_SIDE,
+		),
 })
 
 export const Mission = meta.story({

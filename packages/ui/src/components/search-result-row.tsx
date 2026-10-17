@@ -1,11 +1,11 @@
 "use client"
 
-import {
-	AvatarGroup,
-	type ConversationParticipant,
-} from "@workspace/ui/components/avatar-group"
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	ConversationSubjectIcon,
+	type ConversationSubjectIconProps,
+} from "@workspace/ui/components/conversation-subject-icon"
 import { Icons } from "@workspace/ui/components/icons"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
 import {
@@ -25,7 +25,10 @@ import { cn } from "@workspace/ui/lib/utils"
 type SearchResultIdentity =
 	| { kind: "message"; bot: MissionBot }
 	| { kind: "message-from-you"; reader: string }
-	| { kind: "chat-group"; participants: ConversationParticipant[] }
+	| ({ kind: "chat-group" } & Pick<
+			ConversationSubjectIconProps,
+			"icon" | "color"
+	  >)
 	| { kind: "chat-solo"; bot: MissionBot }
 	| { kind: "mission"; bot: MissionBot; badge?: BotBadge; mark: MissionMark }
 	| { kind: "routine"; bot: MissionBot }
@@ -71,9 +74,10 @@ const SearchResultIdentityMark = ({
 }) => {
 	if (identity.kind === "chat-group")
 		return (
-			<AvatarGroup
-				participants={identity.participants}
-				size={MISSION_AVATAR_SIZE}
+			<ConversationSubjectIcon
+				color={identity.color}
+				icon={identity.icon}
+				side={MISSION_AVATAR_SIZE}
 			/>
 		)
 

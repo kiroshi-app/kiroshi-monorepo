@@ -103,7 +103,7 @@ export const InGroup = meta.story({
 		docs: {
 			description: {
 				story:
-					"Several avatars overlapped, with `AvatarGroupCount` closing the row. Check the overlap keeps each ring visible so the faces stay countable, and pick `Branding/AvatarGroup` for the conversation tile, which is a different component with the same name.",
+					"Several avatars overlapped, with `AvatarGroupCount` closing the row. Check the overlap keeps each ring visible so the faces stay countable, and pick `Navigation/ConversationSubjectIcon` for a conversation, which is a different component.",
 			},
 		},
 	},

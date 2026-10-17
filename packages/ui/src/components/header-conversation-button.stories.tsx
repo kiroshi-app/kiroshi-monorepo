@@ -1,7 +1,12 @@
 import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	expectSoloAvatarInBothThemes,
+	expectSubjectIconInBothThemes,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import { AppHeader } from "@workspace/ui/components/app-header"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -17,6 +22,8 @@ const CROWD: RosterBot[] = [
 	{ id: "otto", name: "Otto", blot: "pink" },
 ]
 
+const CELL_SIDE = 24
+
 const LONG_NAME =
 	"Migration of the legacy billing workspace and every archive it still answers for"
 
@@ -28,7 +35,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The leading control of a conversation header: the faces of the companions seated in the room, the name of the conversation, and the way into its settings, in one ghost button. It wears the same height and padding as `HeaderIdentityButton`, so a room and a one-to-one chat sit their identity at exactly the same place. Reach for it in an app header; a single companion's chat takes `HeaderIdentityButton` instead.",
+					"The leading control of a conversation header: the room's subject icon (or the face of its one companion), the name of the conversation, and the way into its settings, in one ghost button. It wears the same height and padding as `HeaderIdentityButton`, so a room and a one-to-one chat sit their identity at exactly the same place. Reach for it in an app header; a single companion's chat takes `HeaderIdentityButton` instead.",
 			},
 		},
 	},
@@ -44,7 +51,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this for the nominal room header: two companions seated, a short name, the settings closed. Check that faces, name and settings glyph read left to right on one row, that the whole thing is a single tab stop, and that activating it asks for the conversation settings. Pick `InLayout` to see it in the header it belongs to. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
+					"Reach for this for the nominal room header: two companions seated, a short name, the settings closed. Check that the 24px subject icon, name and settings glyph read left to right on one row, that the whole thing is a single tab stop, and that activating it asks for the conversation settings. Pick `InLayout` to see it in the header it belongs to. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
 			},
 		},
 	},
@@ -52,11 +59,10 @@ export const Default = meta.story({
 		const button = canvas.getByRole("button", {
 			name: "Billing migration · conversation settings",
 		})
-		const hive = slotIn(button, "conversation-avatar")
+		const icon = slotIn(button, "conversation-subject-icon")
 
-		await expect(Math.round(hive.getBoundingClientRect().width)).toBe(24)
-		await expect(slotsIn(hive, "conversation-avatar-member")).toHaveLength(2)
-		await expect(slotsIn(canvasElement, "bot-identity-avatar")).toHaveLength(2)
+		await expect(icon.getBoundingClientRect().width).toBe(CELL_SIDE)
+		await expect(slotsIn(canvasElement, "bot-identity-avatar")).toHaveLength(0)
 
 		await expect(button).toHaveAttribute("aria-expanded", "false")
 		await userEvent.click(button)
@@ -88,27 +94,17 @@ export const Crowded = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when the room is full. Check that the room still draws one 24px Hive icon, two companions and a `+3` cell, so the leading slot never widens with the room and it is the name that gives up room as the row fills. The `+3` cell keeps a companion's size and its own slot under the first companion, even though the button sizes the icons it holds. Pick `Default` for the usual pair. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
+					"Reach for this when the room is full. Check that the room still draws one 24px subject icon, so the leading slot never widens with the room and it is the name that gives up room as the row fills. Pick `Default` for the usual pair. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
 			},
 		},
 	},
 	play: async ({ canvas }) => {
-		const hive = slotIn(canvas.getByRole("button"), "conversation-avatar")
-		const members = slotsIn(hive, "conversation-avatar-member")
-		const counter = slotIn(hive, "conversation-avatar-overflow")
-		const cell = counter.getBoundingClientRect()
-		const drawn = (
-			counter.querySelector("path") as Element
-		).getBoundingClientRect()
-		const above = members[0].getBoundingClientRect()
+		const button = canvas.getByRole("button")
 
-		await expect(hive).toHaveAccessibleName("+3")
-		for (const member of members) {
-			const box = member.getBoundingClientRect()
-			await expect(cell.width).toBeCloseTo(box.width, 1)
-			await expect(cell.height).toBeCloseTo(box.height, 1)
-		}
-		await expect(drawn.top).toBeGreaterThanOrEqual(above.bottom)
+		await expect(slotsIn(button, "conversation-subject-icon")).toHaveLength(1)
+		await expect(
+			slotIn(button, "conversation-subject-icon").getBoundingClientRect().width,
+		).toBe(CELL_SIDE)
 	},
 })
 
@@ -124,6 +120,58 @@ export const SingleBot = meta.story({
 	},
 })
 
+export const ThemesSolo = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { bots: [NEST] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a one-companion room in light and dark at once. Check that the companion's own 24px face leads the button in both themes, with no subject icon. Pick `ThemesGroup` for a room of several companions.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSoloAvatarInBothThemes(canvasElement, CELL_SIDE),
+})
+
+export const ThemesGroup = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that a 24px subject icon on the neutral pair of each theme leads the button, the message square centred in it. Pick `ThemesGroupRed` for a coloured room.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon",
+			CELL_SIDE,
+		),
+})
+
+export const ThemesGroupRed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { color: "red", icon: "ShieldKey" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 24px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon-red",
+			CELL_SIDE,
+		),
+})
+
 export const LongContent = meta.story({
 	globals: { viewport: { value: "mobile" } },
 	args: { name: LONG_NAME },
@@ -132,7 +180,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this when a conversation is named in a sentence and the window is narrow. Check that the name clips with an ellipsis while the faces and the settings glyph stay fully in view — the name is what gives up room, never the header's width. Pick `Default` for a name that fits. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
+					"Reach for this when a conversation is named in a sentence and the window is narrow. Check that the name clips with an ellipsis while the subject icon and the settings glyph stay fully in view: the name is what gives up room, never the header's width. Pick `Default` for a name that fits. The app assembles it at `apps/app/src/components/thread-screen.tsx:348`.",
 			},
 		},
 	},

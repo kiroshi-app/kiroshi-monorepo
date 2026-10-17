@@ -69,10 +69,6 @@ const CHATS: SearchPaletteResult[] = [
 		id: "chat-changelog",
 		identity: {
 			kind: "chat-group",
-			participants: [
-				{ id: "atlas", name: "Atlas", blot: "blue" },
-				{ id: "beacon", name: "Beacon", blot: "orange" },
-			],
 		},
 		title: [{ key: "title", text: "Changelog cleanup" }],
 		timestamp: "Mon",

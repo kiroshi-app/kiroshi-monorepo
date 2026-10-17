@@ -3,6 +3,8 @@ import { expect, fn, userEvent } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	botIdentityAvatars,
+	expectSoloAvatarInBothThemes,
+	expectSubjectIconInBothThemes,
 	pictureOf,
 	slotIn,
 	slotsIn,
@@ -37,7 +39,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What a conversation shows in place of its transcript while nothing has been said in it. Unlike the single-bot empty state, this room is already set up — every seated bot is here and the lead is ready to answer — so the surface has nothing to configure and no error to report: it names the room, shows who is in it, and points down to the composer. It owns its own copy and draws no header, roster or composer — mount it as the only child of the transcript region.",
+					"What a conversation shows in place of its transcript while nothing has been said in it. Unlike the single-bot empty state, this room is already set up, every seated bot is here and the lead is ready to answer, so the surface has nothing to configure and no error to report: it names the room, shows its subject icon (or the face of its one companion), and points down to the composer. It owns its own copy and draws no header, roster or composer: mount it as the only child of the transcript region.",
 			},
 		},
 	},
@@ -52,7 +54,7 @@ export const Default = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this on a conversation just created with several companions: the room is seated and waiting on its first message. Check that the heading is the conversation's name — not a companion's — that every seated companion's face is shown above it, that the count in the copy matches the faces, and that the arrow hint is the only guidance so nothing competes with the composer below. Pick `SingleBot` for a room seated with one companion. `apps/app/src/components/thread-screen.tsx:504` seats it with every companion present in the conversation.",
+					"Reach for this on a conversation just created with several companions: the room is seated and waiting on its first message. Check that the heading is the conversation's name, not a companion's, that the room's 56px subject icon sits above it in place of the companions' faces, that the count in the copy matches the room, and that the arrow hint is the only guidance so nothing competes with the composer below. Pick `SingleBot` for a room seated with one companion. `apps/app/src/components/thread-screen.tsx:504` seats it with every companion present in the conversation.",
 			},
 		},
 	},
@@ -60,7 +62,10 @@ export const Default = meta.story({
 		await expect(
 			canvas.getByRole("heading", { name: "Ship the December release" }),
 		).toBeVisible()
-		await expect(botIdentityAvatars(canvasElement)).toHaveLength(3)
+		await expect(
+			slotIn(canvasElement, "conversation-subject-icon"),
+		).toBeVisible()
+		await expect(botIdentityAvatars(canvasElement)).toHaveLength(0)
 		await expect(canvas.getByText(/3 companions are ready/)).toBeVisible()
 	},
 })
@@ -82,13 +87,13 @@ export const SingleBot = meta.story({
 
 export const WithPicture = meta.story({
 	args: {
-		bots: [{ ...KEEPER, image: UPLOADED_AVATAR_IMAGE }, SCOUT, WARDEN],
+		bots: [{ ...KEEPER, image: UPLOADED_AVATAR_IMAGE }],
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Reach for this when one seated companion carries an uploaded picture and the others wear their dithered field. Check that the picture fills the same round box the drawing would, so the row of faces keeps one baseline and one rhythm. Pick `Default` when every companion wears its dithered field. The picture comes from the seated companion `apps/app/src/components/thread-screen.tsx:504` passes.",
+					"Reach for this when the one seated companion carries an uploaded picture. Check that the picture fills the same 56px box the drawing would. Pick `SingleBot` when the companion wears its dithered field. The picture comes from the seated companion `apps/app/src/components/thread-screen.tsx:504` passes.",
 			},
 		},
 	},
@@ -301,11 +306,67 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"Reach for this on a long-named room seated with more companions than fit one line. Check that the heading wraps inside its measure instead of stretching the surface, and that the faces wrap onto a second centered row rather than overflowing. Pick `Default` for the nominal room. The title and the seating come from `apps/app/src/components/thread-screen.tsx:507` and `apps/app/src/components/thread-screen.tsx:504`, neither of which shortens anything.",
+					"Reach for this on a long-named room seated with more companions than fit one line. Check that the heading wraps inside its measure instead of stretching the surface, and that the room still draws one 56px subject icon however many companions it seats. Pick `Default` for the nominal room. The title and the seating come from `apps/app/src/components/thread-screen.tsx:507` and `apps/app/src/components/thread-screen.tsx:504`, neither of which shortens anything.",
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
-		await expect(botIdentityAvatars(canvasElement)).toHaveLength(6)
+		await expect(
+			slotsIn(canvasElement, "conversation-subject-icon"),
+		).toHaveLength(1)
 	},
+})
+
+const THEMES_MARK_SIZE = 56
+
+export const ThemesSolo = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { bots: [KEEPER] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a one-companion room in light and dark at once. Check that the companion's own 56px face stands above the heading in both themes, with no subject icon. Pick `ThemesGroup` for a room of several companions.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSoloAvatarInBothThemes(canvasElement, THEMES_MARK_SIZE),
+})
+
+export const ThemesGroup = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions with no colour picked, in light and dark at once. Check that one 56px subject icon stands above the heading on the neutral pair of each theme, the message square centred in it. Pick `ThemesGroupRed` for a coloured room.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon",
+			THEMES_MARK_SIZE,
+		),
+})
+
+export const ThemesGroupRed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { color: "red", icon: "ShieldKey" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Reach for this to read a room of several companions coloured red, in light and dark at once. Check that the 56px subject icon wears the red pair of each theme and the picked pictogram. Pick `ThemesGroup` for a room with no colour.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) =>
+		expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon-red",
+			THEMES_MARK_SIZE,
+		),
 })

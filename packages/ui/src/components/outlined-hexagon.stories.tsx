@@ -13,7 +13,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The rounded Kiroshi hexagon filled with one colour and edged by a 1px hairline drawn inside the outline, so the shape never grows past its box. It fills the positioned box around it; the subject icon cell, the bot pile and the AvatarGroup counter draw on it.",
+					"The rounded Kiroshi hexagon filled with one colour and edged by a 1px hairline drawn inside the outline, so the shape never grows past its box. It fills the positioned box around it; the subject icon cell and the bot pile draw on it.",
 			},
 		},
 	},

@@ -32,7 +32,7 @@ const REVIEW: AppSidebarConversation = {
 }
 
 const AVATARS =
-	'[data-slot="bot-identity-avatar"], [data-slot="conversation-avatar"]'
+	'[data-slot="bot-identity-avatar"], [data-slot="conversation-subject-icon"]'
 
 const dotsInRoster = () => {
 	const { container } = render(

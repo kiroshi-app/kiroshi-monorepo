@@ -87,9 +87,7 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 	await expect(icon).toHaveAttribute("aria-hidden", "true")
 	await expect([cell.width, cell.height]).toEqual([40, 40])
 	await expect(name.left - cell.right).toBe(10)
-	await expect(
-		row.querySelector('[data-slot="conversation-avatar"]'),
-	).toBeNull()
+	await expect(slotsIn(row, "conversation-subject-icon")).toHaveLength(1)
 	await expect(previewLine.getBoundingClientRect().height).toBe(16)
 	await expect(previewLine).toContainElement(slotIn(row, "roster-row-preview"))
 	await expect(pile.right).toBeCloseTo(timestamp.right, 0)

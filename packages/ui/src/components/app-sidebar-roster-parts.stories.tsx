@@ -1,12 +1,19 @@
+import type { CSSProperties } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import {
+	expectSoloAvatarInBothThemes,
+	expectSubjectIconInBothThemes,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	ATLAS,
 	BEACON,
 	DESK_ROOM,
 } from "@workspace/ui/components/app-sidebar.fixtures"
+import type { AppSidebarConversation } from "@workspace/ui/components/app-sidebar-model"
 import {
 	BotRowAvatar,
 	InsertionLine,
@@ -44,11 +51,85 @@ export const InsertionMarkAbove = meta.story({
 	},
 })
 
-export const LiftedConversation = meta.story({
-	render: () => <LiftedRow conversation={DESK_ROOM} ref={() => undefined} />,
-	play: async ({ canvasElement }) => {
-		const lifted = slotIn(canvasElement.ownerDocument.body, "roster-lifted-bot")
+const LIFTED_SIDE = 40
+
+const POINTER = 48
+
+const POINTER_HOLDER: CSSProperties = {
+	"--lift-x": `${POINTER}px`,
+	"--lift-y": `${POINTER}px`,
+} as CSSProperties
+
+type LiftedConversationAtPointerProps = {
+	conversation: AppSidebarConversation
+}
+
+const LiftedConversationAtPointer = ({
+	conversation,
+}: LiftedConversationAtPointerProps) => (
+	<div
+		className="relative size-24 [transform:translateZ(0)]"
+		data-slot="lifted-pointer-holder"
+		style={POINTER_HOLDER}
+	>
+		<LiftedRow conversation={conversation} ref={() => undefined} />
+	</div>
+)
+
+const expectLiftedOnPointer = async (canvasElement: HTMLElement) => {
+	const holders = slotsIn(canvasElement, "lifted-pointer-holder")
+	await expect(holders).toHaveLength(2)
+	for (const holder of holders) {
+		const lifted = slotIn(holder, "roster-lifted-bot")
+		const at = holder.getBoundingClientRect()
+		const box = lifted.getBoundingClientRect()
 		await expect(lifted).toHaveAttribute("aria-hidden", "true")
+		await expect(getComputedStyle(lifted).filter).toContain("drop-shadow")
+		await expect(box.left + box.width / 2 - at.left).toBe(POINTER)
+		await expect(box.top + box.height / 2 - at.top).toBe(POINTER)
+	}
+}
+
+export const ThemesLiftedSolo = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => (
+		<LiftedConversationAtPointer
+			conversation={{ ...DESK_ROOM, participants: [ATLAS] }}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		await expectSoloAvatarInBothThemes(canvasElement, LIFTED_SIDE)
+		await expectLiftedOnPointer(canvasElement)
+	},
+})
+
+export const ThemesLiftedGroup = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => <LiftedConversationAtPointer conversation={DESK_ROOM} />,
+	play: async ({ canvasElement }) => {
+		await expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon",
+			LIFTED_SIDE,
+		)
+		await expectLiftedOnPointer(canvasElement)
+	},
+})
+
+export const ThemesLiftedGroupRed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	render: () => (
+		<LiftedConversationAtPointer
+			conversation={{ ...DESK_ROOM, color: "red", icon: "ShieldKey" }}
+		/>
+	),
+	play: async ({ canvasElement }) => {
+		await expectSubjectIconInBothThemes(
+			canvasElement,
+			"--conversation-icon-red",
+			LIFTED_SIDE,
+		)
+		await expectLiftedOnPointer(canvasElement)
 	},
 })
 
