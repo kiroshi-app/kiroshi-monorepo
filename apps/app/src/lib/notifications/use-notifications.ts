@@ -12,6 +12,7 @@ import type { ConversationRuntimes } from "../conversations/conversation-runtime
 import type { SpokenWords } from "../conversations/spoken-words"
 import { missionsTransport } from "../missions/missions-transport"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
+import type { JoinedSpacesController } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
 import type { UserController } from "../user/preferences-controller"
 
@@ -20,6 +21,7 @@ export type NotificationsMount = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
 	spaces: SpacesController
+	joinedSpaces: JoinedSpacesController
 	missions: OpenedMissionController
 	spokenWords: SpokenWords
 	user: UserController
@@ -30,6 +32,7 @@ export const useNotifications = ({
 	runtimes,
 	roster,
 	spaces,
+	joinedSpaces,
 	missions,
 	spokenWords,
 	user,
@@ -41,6 +44,7 @@ export const useNotifications = ({
 				runtimes,
 				roster,
 				spaces,
+				joinedSpaces,
 				missions: {
 					board: missionsTransport.board,
 					onChanged: missionsTransport.onChanged,
@@ -56,6 +60,6 @@ export const useNotifications = ({
 				playChime: createChime(),
 				reportFailure: failureReporterIn("notification-source"),
 			}),
-		[chat, runtimes, roster, spaces, missions, spokenWords, user],
+		[chat, runtimes, roster, spaces, joinedSpaces, missions, spokenWords, user],
 	)
 }

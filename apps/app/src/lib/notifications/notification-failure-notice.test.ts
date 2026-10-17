@@ -58,6 +58,7 @@ const idleRuntimes = {
 
 const emptyRoster = {
 	getState: () => ({ rosters: {}, conversations: [], conversationRosters: {} }),
+	subscribe: () => () => undefined,
 	spaceOfConversation: () => undefined,
 	hostSpaceIdOf: (spaceRowId: string) => spaceRowId,
 	select: () => undefined,
@@ -80,6 +81,10 @@ const watchAlongside = async ({
 		runtimes: idleRuntimes,
 		roster: emptyRoster,
 		spaces: { select: () => undefined },
+		joinedSpaces: {
+			getState: () => ({ joinedSpaces: [] }),
+			selectSpace: () => undefined,
+		},
 		missions: createFakeMissions(),
 		spokenWords: createSpokenWords(),
 		notifications,

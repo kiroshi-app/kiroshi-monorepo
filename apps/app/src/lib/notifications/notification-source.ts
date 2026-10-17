@@ -15,6 +15,7 @@ import {
 } from "./notification-source-requests"
 import { createSpokenWordNotifier } from "./notification-source-spoken"
 
+import type { JoinedSpace } from "../bindings"
 import type { ChatState } from "../chat/chat-state"
 import type { SpokenWords } from "../conversations/spoken-words"
 import type { Conversation } from "../conversations/store-contract"
@@ -48,6 +49,7 @@ type RosterSource = {
 		conversations: Conversation[]
 		conversationRosters: Record<string, Conversation[]>
 	}
+	subscribe: (listener: () => void) => () => void
 	spaceOfConversation: (conversationId: string) => string | undefined
 	hostSpaceIdOf: (spaceRowId: string) => string
 	select: (botId: string) => void
@@ -56,6 +58,11 @@ type RosterSource = {
 
 type SpacesSource = {
 	select: (spaceId: string) => void
+}
+
+type JoinedSpacesSource = {
+	getState: () => { joinedSpaces: Pick<JoinedSpace, "id">[] }
+	selectSpace: (rowId: string) => void
 }
 
 type MissionsSource = {
@@ -77,6 +84,7 @@ export type NotificationSourceOptions = {
 	runtimes: RuntimeSource
 	roster: RosterSource
 	spaces: SpacesSource
+	joinedSpaces: JoinedSpacesSource
 	missions: MissionsSource
 	spokenWords: Pick<SpokenWords, "subscribe">
 	notifications: NotificationPort
@@ -93,6 +101,7 @@ export const startNotificationSource = ({
 	runtimes,
 	roster,
 	spaces,
+	joinedSpaces,
 	missions,
 	spokenWords,
 	notifications,
@@ -136,10 +145,11 @@ export const startNotificationSource = ({
 			botNameOf,
 			deliver,
 		})
-	const activate = createNotificationLanding({
+	const { activate, dropPendingLanding } = createNotificationLanding({
 		chat,
 		roster,
 		spaces,
+		joinedSpaces,
 		missions,
 		missionOrigins,
 		raiseWindow,
@@ -172,6 +182,7 @@ export const startNotificationSource = ({
 		.catch(failWith("clicks"))
 
 	return () => {
+		dropPendingLanding()
 		stopChat()
 		stopRuntimes()
 		stopSpokenWords()

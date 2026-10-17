@@ -185,6 +185,7 @@ const createFakeRoster = (
 			)
 				? SPACE
 				: undefined,
+		subscribe: () => () => undefined,
 		hostSpaceIdOf: (spaceRowId: string) => spaceRowId,
 		select: vi.fn(),
 		selectConversation: vi.fn(),
@@ -199,6 +200,11 @@ const createFakeRoster = (
 		},
 	}
 }
+
+const createFakeJoinedSpaces = () => ({
+	getState: () => ({ joinedSpaces: [{ id: JOINED_HOST }] }),
+	selectSpace: vi.fn(),
+})
 
 const createFakeWindowFocus = () => {
 	let report: ((isFocused: boolean) => void) | undefined
@@ -220,6 +226,7 @@ type Harness = {
 	runtimes: ReturnType<typeof createFakeRuntimes>
 	roster: ReturnType<typeof createFakeRoster>
 	spaces: { select: ReturnType<typeof vi.fn> }
+	joinedSpaces: ReturnType<typeof createFakeJoinedSpaces>
 	missions: FakeMissions
 	notifications: FakeNotificationPort
 	spokenWords: ReturnType<typeof createSpokenWords>
@@ -240,6 +247,7 @@ const start = async (
 	const runtimes = createFakeRuntimes()
 	const roster = createFakeRoster(bots, conversations)
 	const spaces = { select: vi.fn() }
+	const joinedSpaces = createFakeJoinedSpaces()
 	const missions = createFakeMissions()
 	const notifications = createFakeNotificationPort()
 	const spokenWords = createSpokenWords()
@@ -252,6 +260,7 @@ const start = async (
 		runtimes,
 		roster,
 		spaces,
+		joinedSpaces,
 		missions,
 		spokenWords,
 		notifications,
@@ -270,6 +279,7 @@ const start = async (
 		runtimes,
 		roster,
 		spaces,
+		joinedSpaces,
 		missions,
 		notifications,
 		spokenWords,
@@ -675,12 +685,12 @@ describe("startNotificationSource on a mission thread", () => {
 		askedIn(harness, "q-1")
 
 		harness.notifications.activate(MISSION)
-		await Promise.resolve()
-		await Promise.resolve()
 
-		expect(harness.missions.opened).toEqual([
-			{ missionId: "mission-1", rowId: "bot-one", spaceId: "space-one" },
-		])
+		await vi.waitFor(() =>
+			expect(harness.missions.opened).toEqual([
+				{ missionId: "mission-1", rowId: "bot-one", spaceId: "space-one" },
+			]),
+		)
 	})
 })
 
@@ -1054,7 +1064,11 @@ describe("startNotificationSource on missions", () => {
 		await escalate(harness, "waiting_human", HEARD_ON_THE_JOINED_HOST)
 
 		harness.notifications.activate(MISSION)
-		await vi.waitFor(() => expect(harness.missions.opened).toHaveLength(1))
+		await vi.waitFor(() =>
+			expect(harness.joinedSpaces.selectSpace).toHaveBeenCalledWith(
+				`joined:${JOINED_HOST}`,
+			),
+		)
 
 		expect(harness.missions.readSides).toEqual([
 			["mission-1", JOINED_HOST],
