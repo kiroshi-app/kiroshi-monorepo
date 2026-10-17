@@ -4086,6 +4086,13 @@ impl Guest {
 			.expect("the message is appended")
 	}
 
+	async fn host_named(&self, display_name: &str) {
+		let database = db::open(&self.effects.database);
+		let mut preferences = database.user().preferences().await.expect("the preferences read");
+		preferences.display_name = display_name.to_owned();
+		database.user().set_preferences(preferences).await.expect("the host is named");
+	}
+
 	async fn user_message_sent(&self, conversation_id: &str) -> i64 {
 		let app = self.harness.app.handle().clone();
 		let message = a_user_message(conversation_id, &format!("t-new-{conversation_id}"));
@@ -4225,6 +4232,7 @@ fn a_relay_guest_hears_a_conversation_updated_in_the_shared_space_only() {
 fn a_relay_guest_hears_a_conversation_updated_whose_last_word_is_the_message_sent() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("last-word-sent").await;
+		guest.host_named(HOST_NAME).await;
 
 		guest.user_message_sent("c-theirs").await;
 		guest.user_message_sent("c-mine").await;
@@ -4235,7 +4243,13 @@ fn a_relay_guest_hears_a_conversation_updated_whose_last_word_is_the_message_sen
 		assert_eq!(heard["event"]["payload"]["spaceId"], json!(PERSONAL));
 		assert_eq!(
 			conversation["lastWord"],
-			json!({ "text": "hello", "at": 2, "authorBotId": null })
+			json!({
+				"text": "hello",
+				"at": 2,
+				"authorBotId": null,
+				"authorAccountId": null,
+				"authorName": HOST_NAME,
+			})
 		);
 		assert_eq!(conversation["lastActivityAt"], json!(2));
 		assert_eq!(*conversation, as_json(paged));
@@ -4257,7 +4271,13 @@ fn in_page(
 }
 
 fn the_last_word_of_mine() -> LastWord {
-	LastWord { text: Some("mine".to_owned()), at: 1, author_bot_id: None }
+	LastWord {
+		text: Some("mine".to_owned()),
+		at: 1,
+		author_bot_id: None,
+		author_account_id: None,
+		author_name: None,
+	}
 }
 
 fn seated_in(conversation: &Conversation, bot_id: &str) -> bool {

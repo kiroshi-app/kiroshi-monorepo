@@ -7,12 +7,14 @@ use super::{
 	Seat, CHAT_KIND, SEAT_COLUMNS, TOPIC_KIND,
 };
 use crate::db::repositories::keyset::{paged, Keyset, Page};
+use crate::db::repositories::messages::AccountAuthor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LastWord {
 	pub text: Option<String>,
 	pub at: i64,
 	pub author_bot_id: Option<String>,
+	pub author: AccountAuthor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,6 +70,7 @@ fn active_rows() -> String {
 			conversations.last_activity_at AS last_activity_at, solo.bot_id AS solo_bot_id,
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id,
+			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
 			(SELECT MIN(open_turn.started_at) FROM turns AS open_turn
 				WHERE open_turn.conversation_id = conversations.id
 					AND open_turn.completed_at IS NULL) AS open_turn_started_at,
@@ -248,6 +251,10 @@ fn last_word(row: &Row<'_>, at: i64) -> rusqlite::Result<LastWord> {
 		text: (!text.is_empty()).then(|| text.to_owned()),
 		at,
 		author_bot_id: row.get("word_author_bot_id")?,
+		author: AccountAuthor {
+			account_id: row.get("word_author_account_id")?,
+			name: row.get("word_author_name")?,
+		},
 	})
 }
 
@@ -434,11 +441,13 @@ mod tests {
 				)
 			})
 			.collect();
-		let blank = LastWord { text: None, at: 20, author_bot_id: None };
+		let blank =
+			LastWord { text: None, at: 20, author_bot_id: None, author: AccountAuthor::default() };
 		let greeted = LastWord {
 			text: Some("hello".to_owned()),
 			at: 40,
 			author_bot_id: Some("b1".to_owned()),
+			author: AccountAuthor::default(),
 		};
 		assert_eq!(
 			words,
@@ -450,6 +459,55 @@ mod tests {
 			]
 		);
 		assert_eq!(read.page.next, None);
+	}
+
+	#[tokio::test]
+	async fn the_last_word_names_the_person_who_wrote_it_and_no_person_for_a_bot() {
+		let rows = format!(
+			"{A_SEATED_BOT}{}{}
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('answered', 'b1', 'lead', 1, 0);
+			INSERT INTO turns (id, conversation_id, seq, started_at)
+				VALUES ('t-asked', 'asked', 1, 10), ('t-answered', 'answered', 1, 10);
+			INSERT INTO messages (id, conversation_id, turn_id, author_bot_id, seq, role, content,
+					completion_state, created_at, author_account_id, author_name)
+				VALUES
+					('m-asked', 'asked', 't-asked', NULL, 1, 'user', 'question', 'complete', 10,
+						'acc-ada', 'Ada'),
+					('m-answered-ask', 'answered', 't-answered', NULL, 1, 'user', 'question',
+						'complete', 10, 'acc-ada', 'Ada'),
+					('m-answered', 'answered', 't-answered', 'b1', 2, 'assistant', 'answer',
+						'complete', 20, NULL, NULL);",
+			a_room("asked", 1),
+			a_room("answered", 2),
+		);
+		let (database, _dir) = planted(rows).await;
+
+		let read = page(&database, None, 30).await;
+
+		let words: Vec<(&str, Option<&LastWord>)> = read
+			.page
+			.rows
+			.iter()
+			.map(|row| (row.conversation.id.as_str(), row.last_word.as_ref()))
+			.collect();
+		let asked = LastWord {
+			text: Some("question".to_owned()),
+			at: 10,
+			author_bot_id: None,
+			author: AccountAuthor {
+				account_id: Some("acc-ada".to_owned()),
+				name: Some("Ada".to_owned()),
+			},
+		};
+		let answered = LastWord {
+			text: Some("answer".to_owned()),
+			at: 20,
+			author_bot_id: Some("b1".to_owned()),
+			author: AccountAuthor::default(),
+		};
+		assert_eq!(words, vec![("answered", Some(&answered)), ("asked", Some(&asked))]);
 	}
 
 	#[tokio::test]

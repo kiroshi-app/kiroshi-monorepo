@@ -141,11 +141,19 @@ pub struct LastWord {
 	pub text: Option<String>,
 	pub at: i64,
 	pub author_bot_id: Option<String>,
+	pub author_account_id: Option<String>,
+	pub author_name: Option<String>,
 }
 
 impl From<conversations::LastWord> for LastWord {
 	fn from(word: conversations::LastWord) -> Self {
-		Self { text: word.text, at: word.at, author_bot_id: word.author_bot_id }
+		Self {
+			text: word.text,
+			at: word.at,
+			author_bot_id: word.author_bot_id,
+			author_account_id: word.author.account_id,
+			author_name: word.author.name,
+		}
 	}
 }
 
