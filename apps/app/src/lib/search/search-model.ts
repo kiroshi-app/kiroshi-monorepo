@@ -22,6 +22,7 @@ import type { SearchRead } from "./use-search-reads"
 
 import { rosterTimestamp } from "@/lib/bots/roster-timestamp"
 import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
+import { toConversationLook } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
 import { badgeOfMissionState } from "@/lib/missions/missions-model"
@@ -96,7 +97,11 @@ const identityOfChat = (
 	if (chat.kind === "main" && chat.botId) {
 		return { kind: "chat-solo", bot: botFaceOf(chat.botId, lookups) }
 	}
-	return { kind: "chat-group" }
+	const conversation = lookups.conversationOf(chat.conversationId)
+	return {
+		kind: "chat-group",
+		...(conversation && toConversationLook(conversation)),
+	}
 }
 
 const identityOfMessage = (

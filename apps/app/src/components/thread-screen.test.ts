@@ -32,6 +32,10 @@ import {
 
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
+import {
+	type ConversationIconName,
+	ConversationIcons,
+} from "@workspace/ui/components/icons"
 import type { MissionEventModel } from "@workspace/ui/components/mission"
 import {
 	type NoticeMessage,
@@ -86,7 +90,11 @@ import {
 	createScriptedDriver,
 	type ScriptedDriver,
 } from "@/lib/conversations/scripted-driver"
-import type { Bot, Space } from "@/lib/conversations/store-contract"
+import type {
+	Bot,
+	Conversation,
+	Space,
+} from "@/lib/conversations/store-contract"
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import type {
 	CompanionArrival,
@@ -2739,6 +2747,104 @@ describe("ThreadScreen", () => {
 
 		expect(landings.getState()).toBeNull()
 		expect(screen.getAllByText(UNREACHABLE_TITLE).length).toBeGreaterThan(0)
+	})
+})
+
+const HEADER_OF_WALLS = "Walls · conversation settings"
+
+const subjectIconIn = (surface: HTMLElement) =>
+	surface.querySelector<HTMLElement>('[data-slot="conversation-subject-icon"]')
+
+const pictogramIn = (surface: HTMLElement) =>
+	subjectIconIn(surface)?.querySelector(
+		'[data-slot="conversation-subject-icon-pictogram"]',
+	)?.innerHTML
+
+const drawnPictogramOf = (icon: ConversationIconName) => {
+	const { container, unmount } = renderWithoutQueries(
+		createElement(ConversationIcons[icon]),
+	)
+	const markup = container.querySelector("svg")?.innerHTML
+	unmount()
+	return markup
+}
+
+const wearing = (
+	thread: ConversationThread,
+	look: Pick<Conversation, "icon" | "color">,
+): ConversationThread => ({
+	...thread,
+	conversation: { ...thread.conversation, ...look },
+})
+
+describe("ThreadScreen wearing the look of a group conversation", () => {
+	let layout: FakeLayout
+
+	beforeEach(() => {
+		layout = fakeLayout()
+		vi.clearAllMocks()
+		listRoutines.mockResolvedValue([])
+		listRuns.mockResolvedValue([])
+		listSources.mockResolvedValue(SCHEDULE_DECLARED)
+		listMissions.mockResolvedValue({ open: [], done: [] })
+		listenToMissions.mockResolvedValue(() => undefined)
+	})
+
+	afterEach(() => {
+		cleanup()
+		layout.restore()
+	})
+
+	it("redraws the header with the icon and the colour of a conversation updated while open", async () => {
+		const room = await roomOf({ names: ["Ada", "Zoe"] })
+		const { rerender } = render(
+			screenOf(wearing(room.thread, { icon: null, color: null }), room.bots),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+		const header = screen.getByRole("button", { name: HEADER_OF_WALLS })
+		expect(pictogramIn(header)).toBe(drawnPictogramOf("MessageSquare"))
+		expect(subjectIconIn(header)?.style.color).toBe(
+			"var(--conversation-icon-foreground)",
+		)
+
+		rerender(
+			screenOf(
+				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
+				room.bots,
+			),
+		)
+		await settle()
+
+		const redrawn = screen.getByRole("button", { name: HEADER_OF_WALLS })
+		expect(pictogramIn(redrawn)).toBe(drawnPictogramOf("Rocket"))
+		expect(subjectIconIn(redrawn)?.style.color).toBe(
+			"var(--conversation-icon-cyan-foreground)",
+		)
+	})
+
+	it("draws the icon and the colour of a conversation with no message in its empty state", async () => {
+		const room = await roomOf({ names: ["Ada", "Zoe"] })
+		const { container } = render(
+			screenOf(
+				wearing(room.thread, { icon: "Rocket", color: "cyan" }),
+				room.bots,
+			),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		const emptyState = container.querySelector<HTMLElement>(
+			'[data-slot="conversation-empty-state"]',
+		)
+		expect(emptyState).not.toBeNull()
+		if (emptyState === null) {
+			return
+		}
+		expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
+		expect(subjectIconIn(emptyState)?.style.color).toBe(
+			"var(--conversation-icon-cyan-foreground)",
+		)
 	})
 })
 
