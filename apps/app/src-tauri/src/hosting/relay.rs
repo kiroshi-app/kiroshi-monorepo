@@ -207,7 +207,7 @@ async fn attempted<R: Runtime>(
 					reason: "another host took this instance over (relay close 4001)".to_owned(),
 				}),
 				Ended::Dropped(reason) => Next::Retry(reason),
-				Ended::Failed(reason) => Next::Settled(HostingState::Failed { reason }),
+				Ended::Failed(reason) => failed(reason),
 			}
 		}
 		Some(Opened::Revoked) => {

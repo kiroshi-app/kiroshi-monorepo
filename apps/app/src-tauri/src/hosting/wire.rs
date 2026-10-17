@@ -12,7 +12,7 @@ use crate::crypto::error::CryptoError;
 use crate::crypto::frame::{self, fresh_challenge, Frame, Header, CHALLENGE_LENGTH, VERSION};
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::crypto::subkey::Subkey;
-use crate::db::{Database, DatabaseState};
+use crate::db::{Database, DatabaseError, DatabaseState};
 use crate::spaces::commands::ready;
 
 pub(super) const HELLO: &str = r#"{"hello":{}}"#;
@@ -159,14 +159,14 @@ impl<'a> Wire<'a> {
 		}
 		let sender = roster::sender_of(self.database, self.space_id, &self.keys.device, wire_from)
 			.await
-			.map_err(|failure| Dropped::Unstored(format!("{failure:?}")))?
+			.map_err(unstored)?
 			.ok_or(Dropped::UnknownSender)?;
 		let counters = self.database.space_relay();
 		let device_id = sender.device_id.to_string();
 		let last = counters
 			.last_accepted(self.space_id.to_owned(), device_id.clone(), key_id)
 			.await
-			.map_err(|failure| Dropped::Unstored(format!("{failure:?}")))?;
+			.map_err(unstored)?;
 		if last.is_some_and(|last| fields.ctr <= last) {
 			return Err(Dropped::Refused(CryptoError::Replay));
 		}
@@ -184,7 +184,7 @@ impl<'a> Wire<'a> {
 		let is_advanced = counters
 			.accepted(self.space_id.to_owned(), device_id, key_id, fields.ctr)
 			.await
-			.map_err(|failure| Dropped::Unstored(format!("{failure:?}")))?;
+			.map_err(unstored)?;
 		if !is_advanced {
 			return Err(Dropped::Refused(CryptoError::Replay));
 		}
@@ -258,6 +258,10 @@ impl<'a> Wire<'a> {
 		self.next_ctr += 1;
 		Ok(ctr)
 	}
+}
+
+fn unstored(failure: DatabaseError) -> Dropped {
+	Dropped::Unstored(format!("{failure:?}"))
 }
 
 fn fields_of(envelope: &Value) -> Result<Fields, Dropped> {
