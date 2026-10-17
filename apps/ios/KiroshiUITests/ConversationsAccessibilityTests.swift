@@ -12,6 +12,9 @@ final class ConversationsAccessibilityTests: XCTestCase {
         "You: Let’s keep the grouped inset list for settings.",
         "Pico: All checks passed, the pull request is ready.",
         "All checks passed, the pull request is ready for review.",
+        "Ada Lovelace: Can we keep the grouped inset list for settings?",
+        "You: Send me the notes once they’re drafted.",
+        "Noor Haddad: Can you split the onboarding ticket in two?",
     ]
 
     static let pileCounters: Set<String> = ["+2", "+3"]
@@ -61,6 +64,25 @@ final class ConversationsAccessibilityTests: XCTestCase {
         XCTAssertTrue(
             app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Home lab'")).firstMatch
                 .exists)
+    }
+
+    func testAJoinedSpaceNamesWhoWroteEachLastMessageBeforeItsTextAndPassesTheAudit() throws {
+        let app = launchInEnglish("shared-list")
+        let design = row("Design review", in: app)
+        XCTAssertTrue(design.waitForExistence(timeout: 10))
+        let previews = [
+            ("Release crew", "Juniper: The changelog is merged, I’m tagging 0.42 next."),
+            ("Design review", "Ada Lovelace: Can we keep the grouped inset list for settings?"),
+            ("Juniper", "You: Send me the notes once they’re drafted."),
+            ("Atlas", "Noor Haddad: Can you split the onboarding ticket in two?"),
+            ("Pico", "Merge it once the checks pass."),
+        ]
+        for (name, preview) in previews {
+            let label = row(name, in: app).label
+            XCTAssertTrue(label.hasPrefix(name) && label.hasSuffix(preview), label)
+        }
+
+        try auditTheHome(app)
     }
 
     func testNoCompanionSaysWhereToAddOneAndPassesTheAudit() throws {

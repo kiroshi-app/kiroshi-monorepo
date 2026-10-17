@@ -213,6 +213,15 @@ private struct MissionsFollow: Hashable {
         SignInRootView(model: .fixture(.workingList))
     }
 
+    #Preview("Shared Space · who wrote last · light") {
+        SignInRootView(model: .fixture(.sharedList))
+    }
+
+    #Preview("Shared Space · who wrote last · dark") {
+        SignInRootView(model: .fixture(.sharedList))
+            .preferredColorScheme(.dark)
+    }
+
     #Preview("3.2 Thread") {
         SignInRootView(model: .fixture(.thread))
     }

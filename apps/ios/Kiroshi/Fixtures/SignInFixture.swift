@@ -105,6 +105,7 @@
         case threadFailed = "thread-failed"
         case groupThread = "group-thread"
         case sharedThread = "shared-thread"
+        case sharedList = "shared-list"
         case groupWorking = "group-working"
         case groupFailed = "group-failed"
         case groupMention = "group-mention"
@@ -192,7 +193,8 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
-                .threadFailed, .groupThread, .sharedThread, .groupWorking, .groupFailed,
+                .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
+                .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
@@ -217,7 +219,8 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
-                .threadFailed, .groupThread, .sharedThread, .groupWorking, .groupFailed,
+                .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
+                .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
@@ -252,7 +255,7 @@
             switch self {
             case .conversationsHostOffline, .missionsHostOffline, .threadHostOffline:
                 CloudFixture.sideProjectId
-            case .sharedThread: CloudFixture.homeLabId
+            case .sharedThread, .sharedList: CloudFixture.homeLabId
             default: nil
             }
         }
@@ -290,7 +293,8 @@
                 .loadingCompanions, .emptyThread,
                 .conversationsHostOffline, .workingList, .workingThread, .workingAfterReply,
                 .conversationsFailed, .conversationsRecovering,
-                .threadFailed, .groupThread, .sharedThread, .groupWorking, .groupFailed,
+                .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
+                .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
@@ -398,7 +402,7 @@
                 .noCompanion, .loadingCompanions, .emptyThread, .conversationsHostOffline,
                 .workingList, .workingThread, .workingAfterReply, .conversationsFailed,
                 .conversationsRecovering,
-                .threadFailed, .groupThread, .sharedThread,
+                .threadFailed, .groupThread, .sharedThread, .sharedList,
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .longReply, .slowGroup, .longName,
                 .longGroup,

@@ -392,6 +392,32 @@
                 daysAgo: 0, hour: 9, minute: 9),
         ]
 
+        static let sharedListMessages: [String: [FixtureHost.Message]] = [
+            designReview.id: [
+                .init(
+                    id: "l-ada", isYours: true,
+                    content: "Can we keep the grouped inset list for settings?", daysAgo: 0,
+                    hour: 9, minute: 20, accountId: "acc-ada", authorName: "Ada Lovelace")
+            ],
+            juniper.id: [
+                .init(
+                    id: "l-yours", isYours: true,
+                    content: "Send me the notes once they’re drafted.", daysAgo: 0, hour: 9,
+                    minute: 12, accountId: CloudFixture.userId, authorName: "Sam")
+            ],
+            atlas.id: [
+                .init(
+                    id: "l-host", isYours: true,
+                    content: "Can you split the onboarding ticket in two?", daysAgo: 0, hour: 8,
+                    minute: 47, accountId: "acc-noor", authorName: "Noor Haddad")
+            ],
+            pico.id: [
+                .init(
+                    id: "l-older", isYours: true, content: "Merge it once the checks pass.",
+                    daysAgo: 1, hour: 18, minute: 20)
+            ],
+        ]
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 38)
@@ -539,6 +565,8 @@
                 script.messages[releaseCrew.id] = groupThread
             case .sharedThread:
                 script.messages[releaseCrew.id] = sharedThread
+            case .sharedList:
+                script.messages.merge(sharedListMessages) { _, shared in shared }
             case .groupMention:
                 script.messages[releaseCrew.id] = releasePlanning + groupThread
             case .groupWorking:
@@ -641,7 +669,9 @@
             }
 
             var lastWordJSON: String {
-                FixtureHost.lastWordJSON(text: content, at: createdAt, by: isYours ? nil : author)
+                FixtureHost.lastWordJSON(
+                    text: content, at: createdAt, by: isYours ? nil : author,
+                    accountId: accountId, name: authorName)
             }
         }
 
@@ -740,10 +770,16 @@
                 #"{"id":"\#(companion.id)","sectionId":null,"pinPosition":\#(pin),"name":"\#(companion.name)","title":"\#(companion.role ?? "")","avatarBlot":\#(tint),"avatarImagePath":\#(path)}"#
         }
 
-        static func lastWordJSON(text: String, at: Int, by author: Companion.ID?) -> String {
+        static func lastWordJSON(
+            text: String, at: Int, by author: Companion.ID?, accountId: String? = nil,
+            name: String? = nil
+        ) -> String {
             let encoded = String(decoding: try! JSONEncoder().encode(text), as: UTF8.self)
             let author = author.map { #""\#($0)""# } ?? "null"
-            return #"{"text":\#(encoded),"at":\#(at),"authorBotId":\#(author)}"#
+            let account = accountId.map { #""\#($0)""# } ?? "null"
+            let name = name.map { #""\#($0)""# } ?? "null"
+            return
+                #"{"text":\#(encoded),"at":\#(at),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name)}"#
         }
 
         struct PageRow {
@@ -760,7 +796,8 @@
                 lastActivityAt: last.createdAt,
                 lastWord: lastWordJSON(
                     text: last.content, at: last.createdAt,
-                    by: last.isYours ? nil : companion.id),
+                    by: last.isYours ? nil : companion.id, accountId: last.accountId,
+                    name: last.authorName),
                 soloBotId: companion.id)
         }
 

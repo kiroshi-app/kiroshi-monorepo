@@ -153,7 +153,8 @@ final class TestHost: Sendable {
             lastWord: last.map {
                 FixtureHost.lastWordJSON(
                     text: $0.content, at: $0.createdAt,
-                    by: $0.role == .user ? nil : $0.authorBotId)
+                    by: $0.role == .user ? nil : $0.authorBotId, accountId: $0.authorAccountId,
+                    name: $0.authorName)
             })
     }
 
