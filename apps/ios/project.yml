@@ -28,6 +28,8 @@ targets:
         buildPhase: resources
       - path: Kiroshi/Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
+      - path: Kiroshi/Resources/bip39-english.txt
+        buildPhase: resources
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
