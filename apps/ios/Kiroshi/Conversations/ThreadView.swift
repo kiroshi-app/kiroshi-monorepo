@@ -104,6 +104,15 @@ extension ThreadStore {
         SignInRootView(model: .fixture(.groupThread))
     }
 
+    #Preview("Shared thread · you, a member, the host and the companions") {
+        SignInRootView(model: .fixture(.sharedThread))
+    }
+
+    #Preview("Shared thread · dark") {
+        SignInRootView(model: .fixture(.sharedThread))
+            .preferredColorScheme(.dark)
+    }
+
     #Preview("Long companion name") {
         SignInRootView(model: .fixture(.longName))
     }

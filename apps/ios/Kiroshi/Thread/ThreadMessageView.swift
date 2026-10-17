@@ -12,10 +12,10 @@ struct ThreadMessageView: View {
                 }
                 VStack(spacing: 4) {
                     MessageBubbles(
-                        isYours: message.isYours, bubbles: message.bubbles,
-                        author: message.author ?? soloCompanion,
+                        writer: message.writer, bubbles: message.bubbles,
+                        companion: message.author ?? soloCompanion, initials: message.initials,
                         showsAvatar: message.closesRun,
-                        name: message.opensRun ? message.author?.name : nil, time: message.time,
+                        name: message.opensRun ? message.authorName : nil, time: message.time,
                         accessibilityText: accessibilityText)
                     if !message.attachedFiles.isEmpty {
                         AttachedFiles(names: message.attachedFiles)
@@ -27,7 +27,7 @@ struct ThreadMessageView: View {
     }
 
     private var accessibilityText: Text {
-        guard let author = message.author else { return Text(message.rendered) }
-        return Text("\(author.name), \(message.rendered)")
+        guard let name = message.authorName else { return Text(message.rendered) }
+        return Text("\(name), \(message.rendered)")
     }
 }

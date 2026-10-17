@@ -61,6 +61,29 @@ final class GroupThreadTests: XCTestCase {
         XCTAssertFalse(element("Juniper, On it.", in: app).exists)
     }
 
+    func testAnotherMemberIsNamedBeforeTheirMessageAndOnlyYoursReadYou() throws {
+        let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "shared-thread")
+        let app = launch("shared-thread")
+        XCTAssertTrue(
+            element("Ada Lovelace, I read the notes, the settings fix is missing.", in: app)
+                .waitForExistence(timeout: 10))
+        XCTAssertTrue(element("Ada Lovelace, Hold the tag until it’s in, please.", in: app).exists)
+        XCTAssertTrue(
+            element("No name, The Mac stays on all day, go ahead.", in: app).exists)
+        XCTAssertTrue(element("Can you two get 0.42 out today?", in: app).exists)
+        XCTAssertTrue(element("Atlas, I’ll add the settings fix, then tag 0.42.", in: app).exists)
+        try auditTheGroup(app, onScreenAtTheLargestSize: onScreen)
+
+        app.navigationBars.buttons["BackButton"].tap()
+        let row = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Release crew")
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("The Mac stays on all day, go ahead."))
+        XCTAssertFalse(row.label.contains("You:"))
+        add(XCTAttachment(screenshot: app.screenshot()))
+    }
+
     func testTheMentionPickerPassesTheAudit() throws {
         let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "group-mention")
         let app = launch("group-mention")
