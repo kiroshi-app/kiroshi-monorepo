@@ -37,7 +37,7 @@ pub async fn user_set_preferences<R: Runtime>(
 		updates::check_on(&app, stored.update_channel.into());
 	}
 	if stored.display_name != previous.display_name {
-		session::named(&app, &stored.display_name).await;
+		session::stored_name_sent(&app);
 	}
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(UserPreferences::of(stored, dir.as_deref()))

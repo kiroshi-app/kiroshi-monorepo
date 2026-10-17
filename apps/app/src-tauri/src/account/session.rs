@@ -40,7 +40,16 @@ pub struct AccountSession {
 	root: Result<PathBuf, EnvError>,
 	current: Mutex<AccountState>,
 	turn: tokio::sync::Mutex<Option<JoinHandle<()>>>,
+	naming: Mutex<Option<Naming>>,
 }
+
+#[derive(Clone, PartialEq)]
+struct SentName {
+	account_id: String,
+	name: String,
+}
+
+type Naming = JoinHandle<Option<SentName>>;
 
 impl AccountSession {
 	pub fn new(root: Result<PathBuf, EnvError>, api_url: &str) -> Self {
@@ -53,6 +62,7 @@ impl AccountSession {
 			root,
 			current: Mutex::new(first),
 			turn: tokio::sync::Mutex::new(None),
+			naming: Mutex::new(None),
 		}
 	}
 
@@ -232,7 +242,7 @@ async fn approved<R: Runtime>(
 	entered(&app, next);
 	window_controls::raise_main(&app);
 	if is_signed_in {
-		stored_name_sent(&app).await;
+		stored_name_sent(&app);
 		hosting::resumed(&app).await;
 		invitations::resumed(&app);
 	}
@@ -281,7 +291,7 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	}
 	let is_signed_in = matches!(session.current(), AccountState::SignedIn(_));
 	if is_signed_in {
-		stored_name_sent(&app).await;
+		stored_name_sent(&app);
 	}
 	hosting::resumed(&app).await;
 	if is_signed_in {
@@ -289,44 +299,75 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	}
 }
 
-async fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
-	let read = match app.state::<DatabaseState>().as_ref() {
-		Ok(database) => database.user().preferences().await,
-		Err(failure) => {
-			return eprintln!(
-				"the display name was not sent: the database is unavailable: {failure:?}"
-			)
-		}
-	};
-	match read {
-		Ok(preferences) => named(app, &preferences.display_name).await,
-		Err(failure) => eprintln!("the display name was not read to be sent: {failure:?}"),
-	}
+pub fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
+	let session = app.state::<AccountSession>();
+	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
+	let previous = naming.take();
+	*naming = Some(tauri::async_runtime::spawn(sent_after(app.clone(), previous)));
 }
 
-pub async fn named<R: Runtime>(app: &AppHandle<R>, display_name: &str) {
-	let name = trimmed_to(display_name, DISPLAY_NAME_LIMIT);
-	if name.is_empty() {
-		return;
-	}
+async fn sent_after<R: Runtime>(app: AppHandle<R>, previous: Option<Naming>) -> Option<SentName> {
+	let last_sent = match previous {
+		Some(previous) => previous.await.unwrap_or_else(|error| {
+			eprintln!("the previous display name send ended abnormally: {error}");
+			None
+		}),
+		None => None,
+	};
+	name_sent(&app, last_sent).await
+}
+
+async fn name_sent<R: Runtime>(
+	app: &AppHandle<R>,
+	last_sent: Option<SentName>,
+) -> Option<SentName> {
 	let session = app.state::<AccountSession>();
-	if !matches!(session.current(), AccountState::SignedIn(_)) {
-		return;
+	let AccountState::SignedIn(account) = session.current() else {
+		return last_sent;
+	};
+	let Some(display_name) = stored_display_name(app).await else {
+		return last_sent;
+	};
+	let sending =
+		SentName { account_id: account.id, name: trimmed_to(&display_name, DISPLAY_NAME_LIMIT) };
+	if sending.name.is_empty() || last_sent.as_ref() == Some(&sending) {
+		return last_sent;
 	}
 	let bearer = match session.bearer() {
 		Ok(Some(bearer)) => bearer,
-		Ok(None) => return,
+		Ok(None) => return last_sent,
 		Err(error) => {
-			return eprintln!("the display name was not sent: the session store failed: {error:?}")
+			eprintln!("the display name was not sent: the session store failed: {error:?}");
+			return last_sent;
 		}
 	};
-	match session.cloud.rename(&bearer, &name).await {
-		Ok(()) => hosting::renamed(app),
-		Err(MeError::Revoked) => revoked(app, &bearer),
+	match session.cloud.rename(&bearer, &sending.name).await {
+		Ok(()) => {
+			hosting::renamed(app);
+			Some(sending)
+		}
+		Err(MeError::Revoked) => {
+			revoked(app, &bearer);
+			last_sent
+		}
 		Err(MeError::Unreachable(reason)) => {
 			eprintln!("the display name did not reach the cloud: {reason}");
+			last_sent
 		}
 	}
+}
+
+async fn stored_display_name<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+	let read = match app.state::<DatabaseState>().as_ref() {
+		Ok(database) => database.user().preferences().await,
+		Err(failure) => {
+			eprintln!("the display name was not sent: the database is unavailable: {failure:?}");
+			return None;
+		}
+	};
+	read.map(|preferences| preferences.display_name)
+		.inspect_err(|failure| eprintln!("the display name was not read to be sent: {failure:?}"))
+		.ok()
 }
 
 async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexGuard<'_, ()>> {
@@ -380,7 +421,7 @@ mod tests {
 	use std::sync::{Arc, Mutex};
 	use std::time::Instant;
 
-	use tokio::sync::watch;
+	use tokio::sync::{watch, Semaphore};
 
 	use axum::extract::{Path as Route, State as Served};
 	use axum::http::{header, HeaderMap, StatusCode};
@@ -420,6 +461,7 @@ mod tests {
 		instances_status: Option<StatusCode>,
 		account: Option<Value>,
 		rename_status: Option<StatusCode>,
+		rename_held: Option<Arc<Semaphore>>,
 		renamed: Arc<Mutex<Vec<Value>>>,
 		created: Arc<Mutex<Vec<Value>>>,
 		polls: Arc<Mutex<Vec<Instant>>>,
@@ -447,6 +489,20 @@ mod tests {
 
 		fn renamed(&self) -> Vec<Value> {
 			self.renamed.lock().expect("the stub").clone()
+		}
+
+		async fn renamed_once(&self) -> Vec<Value> {
+			tokio::time::timeout(PATIENCE, async {
+				loop {
+					let renamed = self.renamed();
+					if !renamed.is_empty() {
+						return renamed;
+					}
+					tokio::time::sleep(Duration::from_millis(10)).await;
+				}
+			})
+			.await
+			.expect("a rename reached the relay in time")
 		}
 	}
 
@@ -555,6 +611,9 @@ mod tests {
 		assert_eq!(bearer_of(&headers), BEARER);
 		let body: Value = serde_json::from_str(&body).expect("a json body");
 		cloudy.renamed.lock().expect("the stub").push(body.clone());
+		if let Some(held) = cloudy.rename_held {
+			held.acquire().await.expect("the hold stays open").forget();
+		}
 		answered_json(cloudy.rename_status.unwrap_or(StatusCode::OK), body)
 	}
 
@@ -629,6 +688,20 @@ mod tests {
 			let mut preferences = self.preferences().await;
 			preferences.display_name = display_name.to_owned();
 			self.database().user().set_preferences(preferences.into()).await.expect("stored");
+		}
+
+		async fn names_settled(&self) {
+			let session = self.app.state::<AccountSession>();
+			let naming = session.naming.lock().expect("the naming").take();
+			let Some(naming) = naming else {
+				return;
+			};
+			let last_sent = tokio::time::timeout(PATIENCE, naming)
+				.await
+				.expect("the name was sent in time")
+				.expect("the name was sent cleanly");
+			*session.naming.lock().expect("the naming") =
+				Some(tauri::async_runtime::spawn(async move { last_sent }));
 		}
 
 		async fn renamed_to(&self, display_name: &str) -> UserPreferences {
@@ -1048,6 +1121,7 @@ mod tests {
 
 			harness.sign_in().await.expect("the sign-in starts");
 			harness.flow_ended().await;
+			harness.names_settled().await;
 
 			assert_eq!(harness.state(), signed_in());
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Ada Lovelace" })]);
@@ -1063,6 +1137,7 @@ mod tests {
 			harness.store(BEARER);
 
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "é".repeat(80) })]);
 		});
@@ -1077,7 +1152,9 @@ mod tests {
 			restore(harness.app.handle().clone()).await;
 
 			harness.renamed_to(" Grace ").await;
-			harness.renamed_to(" Grace ").await;
+			harness.names_settled().await;
+			harness.renamed_to("Grace").await;
+			harness.names_settled().await;
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
 		});
@@ -1094,6 +1171,7 @@ mod tests {
 			restore(harness.app.handle().clone()).await;
 			harness.renamed_to("Grace").await;
 			harness.renamed_to("  ").await;
+			harness.names_settled().await;
 
 			assert_eq!(harness.state(), signed_in());
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
@@ -1107,6 +1185,7 @@ mod tests {
 			let harness = Harness::new("named-signed-out", &stub(cloudy.clone()).await);
 
 			harness.renamed_to("Grace").await;
+			harness.names_settled().await;
 
 			assert!(cloudy.renamed().is_empty());
 		});
@@ -1124,6 +1203,7 @@ mod tests {
 			restore(harness.app.handle().clone()).await;
 
 			let answered = harness.renamed_to("Grace").await;
+			harness.names_settled().await;
 
 			assert_eq!(answered.display_name, "Grace");
 			assert_eq!(harness.preferences().await, answered);
@@ -1146,6 +1226,50 @@ mod tests {
 			assert_eq!(answered.display_name, "Grace");
 			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
 			assert_eq!(harness.stored(), None);
+		});
+	}
+
+	#[test]
+	fn a_relay_holding_the_rename_holds_neither_the_save_nor_the_restore() {
+		run(async {
+			let held = Arc::new(Semaphore::new(0));
+			let cloudy = Cloudy { rename_held: Some(Arc::clone(&held)), ..Cloudy::default() };
+			let harness = Harness::new("named-held", &stub(cloudy.clone()).await);
+			harness.named_as("Ada").await;
+			harness.store(BEARER);
+
+			tokio::time::timeout(PATIENCE, restore(harness.app.handle().clone()))
+				.await
+				.expect("the restore answers while the relay holds the rename");
+			assert_eq!(cloudy.renamed_once().await, vec![json!({ "name": "Ada" })]);
+			let answered = tokio::time::timeout(PATIENCE, harness.renamed_to("Grace"))
+				.await
+				.expect("the save answers while the relay holds the rename");
+
+			assert_eq!(answered.display_name, "Grace");
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Ada" })]);
+			held.add_permits(2);
+			harness.names_settled().await;
+			assert_eq!(
+				cloudy.renamed(),
+				vec![json!({ "name": "Ada" }), json!({ "name": "Grace" })]
+			);
+		});
+	}
+
+	#[test]
+	fn two_renames_back_to_back_leave_the_second_name_last_on_the_relay() {
+		run(async {
+			let cloudy = Cloudy::default();
+			let harness = Harness::new("named-twice", &stub(cloudy.clone()).await);
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+
+			harness.renamed_to("Ada").await;
+			harness.renamed_to("Grace").await;
+			harness.names_settled().await;
+
+			assert_eq!(cloudy.renamed().last(), Some(&json!({ "name": "Grace" })));
 		});
 	}
 
