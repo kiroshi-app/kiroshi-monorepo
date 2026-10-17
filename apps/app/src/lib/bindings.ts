@@ -873,6 +873,8 @@ export type LastWord = {
 	text: string | null,
 	at: number,
 	authorBotId: string | null,
+	authorAccountId: string | null,
+	authorName: string | null,
 };
 
 export type LaunchOutcome = {

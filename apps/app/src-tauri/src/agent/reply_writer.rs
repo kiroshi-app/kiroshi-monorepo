@@ -1561,7 +1561,13 @@ mod tests {
 		);
 		assert_eq!(
 			heard.last().map(|payload| &payload["conversation"]["lastWord"]),
-			Some(&json!({ "text": "Done", "at": 3, "authorBotId": DEFAULT_BOT_ID }))
+			Some(&json!({
+				"text": "Done",
+				"at": 3,
+				"authorBotId": DEFAULT_BOT_ID,
+				"authorAccountId": null,
+				"authorName": null,
+			}))
 		);
 	}
 
@@ -1673,7 +1679,13 @@ mod tests {
 		assert_eq!(conversation["lastActivityAt"], conversation["createdAt"]);
 		assert_eq!(
 			conversation["lastWord"],
-			json!({ "text": "Here", "at": 2, "authorBotId": DEFAULT_BOT_ID })
+			json!({
+				"text": "Here",
+				"at": 2,
+				"authorBotId": DEFAULT_BOT_ID,
+				"authorAccountId": null,
+				"authorName": null,
+			})
 		);
 		assert_eq!(conversation["title"], json!("Chat"));
 		assert_eq!(conversation["instructions"], json!(""));

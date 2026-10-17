@@ -3105,7 +3105,27 @@
         "at": {
           "type": "integer"
         },
+        "authorAccountId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "authorBotId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "authorName": {
           "anyOf": [
             {
               "type": "string"
@@ -3129,7 +3149,9 @@
       "required": [
         "text",
         "at",
-        "authorBotId"
+        "authorBotId",
+        "authorAccountId",
+        "authorName"
       ],
       "type": "object"
     },
