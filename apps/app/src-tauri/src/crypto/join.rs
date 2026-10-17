@@ -2,13 +2,17 @@ use ed25519_dalek::VerifyingKey;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 use super::device_keys::{DeviceKeys, KEY_LENGTH};
 use super::error::CryptoError;
+use super::randomness::random_bytes;
 use super::sealed_box;
 
 const MAC_LENGTH: usize = 32;
 pub const PAYLOAD_LENGTH: usize = 2 * KEY_LENGTH + MAC_LENGTH;
+pub const SECRET_LENGTH: usize = 32;
+const ANSWER_DOMAIN: &[u8] = b"kiroshi/v2/join-answer";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JoinRequest {
@@ -34,6 +38,14 @@ pub fn open(secret: &[u8], host: &StaticSecret, sealed: &[u8]) -> Result<JoinReq
 			<[u8; KEY_LENGTH]>::try_from(agreement).map_err(|_| CryptoError::MalformedKey)?,
 		),
 	})
+}
+
+pub fn fresh_secret() -> Result<Zeroizing<[u8; SECRET_LENGTH]>, CryptoError> {
+	random_bytes::<SECRET_LENGTH>()
+}
+
+pub fn answer_mac(secret: &[u8], answer: &[u8]) -> [u8; MAC_LENGTH] {
+	keyed(secret, &[ANSWER_DOMAIN, answer].concat()).finalize().into_bytes().into()
 }
 
 fn payload(secret: &[u8], keys: &DeviceKeys) -> Vec<u8> {
@@ -67,6 +79,18 @@ mod tests {
 		let request = open(b"invitation", &host, &sealed).expect("the join opens");
 		assert_eq!(request.signing, keys.signing_public());
 		assert_eq!(request.agreement, keys.agreement_public());
+	}
+
+	#[test]
+	fn the_answer_mac_is_keyed_by_the_secret_and_bound_to_its_domain() {
+		let answer = br#"{"key_id":1}"#;
+		let expected = keyed(b"invitation", &[ANSWER_DOMAIN, answer].concat());
+		expected.verify_slice(&answer_mac(b"invitation", answer)).expect("the mac verifies");
+		assert_ne!(answer_mac(b"invitation", answer), answer_mac(b"guessed", answer));
+		assert_ne!(
+			answer_mac(b"invitation", answer),
+			keyed(b"invitation", answer).finalize().into_bytes().as_slice()
+		);
 	}
 
 	#[test]

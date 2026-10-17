@@ -144,6 +144,10 @@ export const commands = {
 	hostingInviteMember: (spaceId: string, email: string) => typedError<Member, MembersError>(__TAURI_INVOKE("hosting_invite_member", { spaceId, email })),
 	hostingWithdrawInvitation: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_withdraw_invitation", { spaceId, userId })),
 	hostingRemoveMember: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_remove_member", { spaceId, userId })),
+	hostingJoinLink: (spaceId: string, userId: string) => typedError<string, MembersError>(__TAURI_INVOKE("hosting_join_link", { spaceId, userId })),
+	hostingDeviceLink: (spaceId: string) => typedError<string, MembersError>(__TAURI_INVOKE("hosting_device_link", { spaceId })),
+	hostingDevices: (spaceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_devices", { spaceId })),
+	hostingRemoveDevice: (spaceId: string, deviceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_remove_device", { spaceId, deviceId })),
 	invitationsList: () => typedError<Invitation[], InvitationError>(__TAURI_INVOKE("invitations_list")),
 	invitationAccept: (instanceId: string) => typedError<JoinedSpace, InvitationError>(__TAURI_INVOKE("invitation_accept", { instanceId })),
 	invitationDecline: (instanceId: string) => typedError<null, InvitationError>(__TAURI_INVOKE("invitation_decline", { instanceId })),
@@ -255,6 +259,11 @@ export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 export type Account = {
 	email: string | null,
 	plan: string | null,
+};
+
+export type AccountDevices = {
+	accountId: string,
+	devices: RosterDevice[],
 };
 
 export type AccountError = { kind: "store"; detail: string } | { kind: "listener"; detail: string } | { kind: "signedIn" };
@@ -956,7 +965,7 @@ export type MembersChanged = {
 	members: Member[],
 };
 
-export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
+export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "noRandomness" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
 
 export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
 
@@ -1218,6 +1227,13 @@ export type ReportedRun = {
 	turnId: string,
 	routineTitle: string,
 	triggerSourceId: string,
+};
+
+export type RosterDevice = {
+	deviceId: string,
+	fingerprint: string[],
+	addedAt: number,
+	isHost: boolean,
 };
 
 export type RosterPin = {

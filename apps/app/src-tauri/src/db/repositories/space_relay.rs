@@ -1,4 +1,5 @@
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
+use zeroize::Zeroizing;
 
 use crate::db::{Access, DatabaseError};
 
@@ -9,6 +10,39 @@ const UPSERT_ROSTER_ROW: &str = "INSERT INTO space_roster (space_id, device_id, 
 		account_id = excluded.account_id, signing_public_key = excluded.signing_public_key,
 		agreement_public_key = excluded.agreement_public_key, fingerprint = excluded.fingerprint,
 		added_at = excluded.added_at, signature = excluded.signature";
+
+const INSERT_ROSTER_ROW: &str = "INSERT INTO space_roster (space_id, device_id, relay_device_id,
+	account_id, signing_public_key, agreement_public_key, fingerprint, added_at, signature)
+	VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+
+const SELECT_ROSTER: &str = "SELECT device_id, relay_device_id, account_id,
+	signing_public_key, agreement_public_key, fingerprint, added_at, signature
+	FROM space_roster WHERE space_id = ?1 ORDER BY device_id";
+
+const SELECT_ROSTER_VERSION: &str = "SELECT version FROM space_roster_versions WHERE space_id = ?1";
+
+const GROW_ROSTER_VERSION: &str = "INSERT INTO space_roster_versions (space_id, version)
+	VALUES (?1, 1) ON CONFLICT (space_id) DO UPDATE SET version = version + 1";
+
+const DELETE_ROSTER_ROW: &str = "DELETE FROM space_roster WHERE space_id = ?1 AND device_id = ?2";
+
+const DELETE_ROSTER_OF_ACCOUNT: &str =
+	"DELETE FROM space_roster WHERE space_id = ?1 AND account_id = ?2";
+
+const DELETE_UNUSED_JOIN_SECRET: &str = "DELETE FROM space_join_secrets
+	WHERE space_id = ?1 AND account_id = ?2 AND used_at IS NULL";
+
+const INSERT_JOIN_SECRET: &str =
+	"INSERT INTO space_join_secrets (space_id, account_id, secret) VALUES (?1, ?2, ?3)";
+
+const SELECT_JOIN_SECRETS: &str = "SELECT id, account_id, secret, used_at IS NOT NULL
+	FROM space_join_secrets WHERE space_id = ?1 ORDER BY id";
+
+const DELETE_JOIN_SECRETS_OF_ACCOUNT: &str =
+	"DELETE FROM space_join_secrets WHERE space_id = ?1 AND account_id = ?2";
+
+const SPEND_JOIN_SECRET: &str =
+	"UPDATE space_join_secrets SET used_at = ?2 WHERE id = ?1 AND used_at IS NULL";
 
 const SELECT_ROSTER_ROW: &str = "SELECT device_id, relay_device_id, account_id,
 	signing_public_key, agreement_public_key, fingerprint, added_at, signature
@@ -60,6 +94,30 @@ impl RosterRow {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Roster {
+	pub version: u64,
+	pub rows: Vec<RosterRow>,
+}
+
+pub struct JoinSecret {
+	pub id: i64,
+	pub account_id: String,
+	pub secret: Zeroizing<Vec<u8>>,
+	pub is_used: bool,
+}
+
+impl JoinSecret {
+	fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
+		Ok(Self {
+			id: row.get(0)?,
+			account_id: row.get(1)?,
+			secret: Zeroizing::new(row.get(2)?),
+			is_used: row.get(3)?,
+		})
+	}
+}
+
 pub struct SpaceRelayRepository {
 	access: Access,
 }
@@ -72,21 +130,135 @@ impl SpaceRelayRepository {
 	pub async fn rostered(&self, space_id: String, row: RosterRow) -> Result<(), DatabaseError> {
 		self.access
 			.call_mut(move |connection| {
-				connection.execute(
-					UPSERT_ROSTER_ROW,
-					params![
-						space_id,
-						row.device_id,
-						row.relay_device_id,
-						row.account_id,
-						row.signing_public_key,
-						row.agreement_public_key,
-						row.fingerprint,
-						row.added_at,
-						row.signature
-					],
-				)?;
+				let transaction = connection.transaction()?;
+				roster_row_written(&transaction, UPSERT_ROSTER_ROW, &space_id, &row)?;
+				roster_grown(&transaction, &space_id)?;
+				transaction.commit()?;
 				Ok(())
+			})
+			.await
+	}
+
+	pub async fn roster(&self, space_id: String) -> Result<Roster, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let rows = connection
+					.prepare_cached(SELECT_ROSTER)?
+					.query_map(params![space_id], RosterRow::read)?
+					.collect::<rusqlite::Result<Vec<_>>>()?;
+				let version = connection
+					.prepare_cached(SELECT_ROSTER_VERSION)?
+					.query_row(params![space_id], counter_of)
+					.optional()?
+					.unwrap_or(0);
+				Ok(Roster { version, rows })
+			})
+			.await
+	}
+
+	pub async fn device_revoked(
+		&self,
+		space_id: String,
+		device_id: String,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				let deleted =
+					transaction.execute(DELETE_ROSTER_ROW, params![space_id, device_id])?;
+				if deleted > 0 {
+					roster_grown(&transaction, &space_id)?;
+				}
+				transaction.commit()?;
+				Ok(deleted > 0)
+			})
+			.await
+	}
+
+	pub async fn account_revoked(
+		&self,
+		space_id: String,
+		account_id: String,
+	) -> Result<usize, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				transaction
+					.execute(DELETE_JOIN_SECRETS_OF_ACCOUNT, params![space_id, account_id])?;
+				let deleted =
+					transaction.execute(DELETE_ROSTER_OF_ACCOUNT, params![space_id, account_id])?;
+				if deleted > 0 {
+					roster_grown(&transaction, &space_id)?;
+				}
+				transaction.commit()?;
+				Ok(deleted)
+			})
+			.await
+	}
+
+	pub async fn join_secret_minted(
+		&self,
+		space_id: String,
+		account_id: String,
+		secret: Zeroizing<Vec<u8>>,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				transaction.execute(DELETE_UNUSED_JOIN_SECRET, params![space_id, account_id])?;
+				transaction.execute(
+					INSERT_JOIN_SECRET,
+					params![space_id, account_id, secret.as_slice()],
+				)?;
+				transaction.commit()?;
+				Ok(())
+			})
+			.await
+	}
+
+	pub async fn join_secrets(&self, space_id: String) -> Result<Vec<JoinSecret>, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let secrets = connection
+					.prepare_cached(SELECT_JOIN_SECRETS)?
+					.query_map(params![space_id], JoinSecret::read)?
+					.collect::<rusqlite::Result<Vec<_>>>()?;
+				Ok(secrets)
+			})
+			.await
+	}
+
+	pub async fn join_secrets_withdrawn(
+		&self,
+		space_id: String,
+		account_id: String,
+	) -> Result<(), DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				connection
+					.execute(DELETE_JOIN_SECRETS_OF_ACCOUNT, params![space_id, account_id])?;
+				Ok(())
+			})
+			.await
+	}
+
+	pub async fn admitted(
+		&self,
+		space_id: String,
+		secret_id: i64,
+		used_at: i64,
+		row: RosterRow,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				if transaction.execute(SPEND_JOIN_SECRET, params![secret_id, used_at])? == 0 {
+					return Ok(false);
+				}
+				roster_row_written(&transaction, INSERT_ROSTER_ROW, &space_id, &row)?;
+				roster_grown(&transaction, &space_id)?;
+				transaction.commit()?;
+				Ok(true)
 			})
 			.await
 	}
@@ -190,6 +362,34 @@ impl SpaceRelayRepository {
 	}
 }
 
+fn roster_row_written(
+	connection: &Connection,
+	statement: &str,
+	space_id: &str,
+	row: &RosterRow,
+) -> rusqlite::Result<()> {
+	connection.execute(
+		statement,
+		params![
+			space_id,
+			row.device_id,
+			row.relay_device_id,
+			row.account_id,
+			row.signing_public_key,
+			row.agreement_public_key,
+			row.fingerprint,
+			row.added_at,
+			row.signature
+		],
+	)?;
+	Ok(())
+}
+
+fn roster_grown(connection: &Connection, space_id: &str) -> rusqlite::Result<()> {
+	connection.execute(GROW_ROSTER_VERSION, params![space_id])?;
+	Ok(())
+}
+
 fn stored_counter(counter: u64) -> rusqlite::Result<i64> {
 	i64::try_from(counter).map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
 }
@@ -239,6 +439,146 @@ mod tests {
 		assert_eq!(by_device, Some(a_row("d1", "r1")));
 		assert_eq!(by_relay, Some(a_row("d1", "r1")));
 		assert_eq!(unknown, None);
+	}
+
+	async fn a_space_of_its_own(database: &crate::db::Database) {
+		database
+			.call_mut(|connection| {
+				connection.execute(
+					"INSERT INTO spaces (id, name, position, created_at) VALUES ('shared', 'Shared', 9, 1)",
+					[],
+				)?;
+				Ok(())
+			})
+			.await
+			.expect("a space");
+	}
+
+	async fn secrets_of(relay: &SpaceRelayRepository) -> Vec<(String, Vec<u8>, bool)> {
+		let secrets = relay.join_secrets(SPACE.to_owned()).await.expect("read");
+		secrets
+			.into_iter()
+			.map(|secret| (secret.account_id, secret.secret.to_vec(), secret.is_used))
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn a_fresh_secret_replaces_the_unused_one_of_its_account_and_a_withdraw_drops_them_all() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let relay = database.space_relay();
+		let minted = |account: &str, secret: u8| {
+			relay.join_secret_minted(
+				SPACE.to_owned(),
+				account.to_owned(),
+				Zeroizing::new(vec![secret]),
+			)
+		};
+
+		minted("a1", 1).await.expect("minted");
+		let id = relay.join_secrets(SPACE.to_owned()).await.expect("read")[0].id;
+		assert!(relay.admitted(SPACE.to_owned(), id, 5, a_row("d1", "r1")).await.expect("spent"));
+		minted("a1", 2).await.expect("minted");
+		minted("a1", 3).await.expect("minted");
+		minted("a2", 4).await.expect("minted");
+		let held = secrets_of(relay).await;
+		relay.join_secrets_withdrawn(SPACE.to_owned(), "a1".to_owned()).await.expect("withdrawn");
+
+		assert_eq!(
+			held,
+			vec![
+				("a1".to_owned(), vec![1], true),
+				("a1".to_owned(), vec![3], false),
+				("a2".to_owned(), vec![4], false)
+			]
+		);
+		assert_eq!(secrets_of(relay).await, vec![("a2".to_owned(), vec![4], false)]);
+	}
+
+	#[tokio::test]
+	async fn two_admissions_racing_on_one_secret_roster_exactly_one_device() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let relay = database.space_relay();
+		relay
+			.join_secret_minted(SPACE.to_owned(), "a1".to_owned(), Zeroizing::new(vec![1]))
+			.await
+			.expect("minted");
+		let id = relay.join_secrets(SPACE.to_owned()).await.expect("read")[0].id;
+
+		let (first, second) = tokio::join!(
+			relay.admitted(SPACE.to_owned(), id, 5, a_row("d1", "r1")),
+			relay.admitted(SPACE.to_owned(), id, 5, a_row("d2", "r2")),
+		);
+		let roster = relay.roster(SPACE.to_owned()).await.expect("read");
+
+		let admitted = [first.expect("written"), second.expect("written")];
+		assert_eq!(admitted.iter().filter(|admitted| **admitted).count(), 1);
+		assert_eq!(roster.rows.len(), 1);
+		assert_eq!(roster.version, 1);
+	}
+
+	#[tokio::test]
+	async fn the_roster_version_grows_by_one_on_every_roster_change_and_only_then() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		a_space_of_its_own(&database).await;
+		let relay = database.space_relay();
+		let version = || async { relay.roster(SPACE.to_owned()).await.expect("read").version };
+
+		let unwritten = version().await;
+		relay.rostered(SPACE.to_owned(), a_row("d1", "r1")).await.expect("stored");
+		relay
+			.rostered(
+				SPACE.to_owned(),
+				RosterRow { account_id: "a2".to_owned(), ..a_row("d2", "r2") },
+			)
+			.await
+			.expect("stored");
+		relay
+			.rostered(
+				SPACE.to_owned(),
+				RosterRow { account_id: "a2".to_owned(), ..a_row("d3", "r3") },
+			)
+			.await
+			.expect("stored");
+		relay.rostered("shared".to_owned(), a_row("d1", "r1")).await.expect("stored elsewhere");
+		let three = version().await;
+		let revoked =
+			relay.account_revoked(SPACE.to_owned(), "a2".to_owned()).await.expect("revoked");
+		let nobody =
+			relay.account_revoked(SPACE.to_owned(), "a9".to_owned()).await.expect("revoked");
+		let after_account = version().await;
+		let device =
+			relay.device_revoked(SPACE.to_owned(), "d1".to_owned()).await.expect("revoked");
+		let unknown =
+			relay.device_revoked(SPACE.to_owned(), "d9".to_owned()).await.expect("revoked");
+		let roster = relay.roster(SPACE.to_owned()).await.expect("read");
+		let elsewhere = relay.roster("shared".to_owned()).await.expect("read");
+
+		assert_eq!((unwritten, three, after_account), (0, 3, 4));
+		assert_eq!((revoked, nobody, device, unknown), (2, 0, true, false));
+		assert_eq!(roster, Roster { version: 5, rows: Vec::new() });
+		assert_eq!(elsewhere, Roster { version: 1, rows: vec![a_row("d1", "r1")] });
+	}
+
+	#[tokio::test]
+	async fn an_admission_onto_a_rostered_relay_device_lands_nothing_and_keeps_its_secret_unused() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let relay = database.space_relay();
+		relay.rostered(SPACE.to_owned(), a_row("d1", "r1")).await.expect("stored");
+		relay
+			.join_secret_minted(SPACE.to_owned(), "a1".to_owned(), Zeroizing::new(vec![1]))
+			.await
+			.expect("minted");
+		let id = relay.join_secrets(SPACE.to_owned()).await.expect("read")[0].id;
+
+		let refused = relay.admitted(SPACE.to_owned(), id, 5, a_row("d2", "r1")).await;
+
+		assert!(refused.is_err());
+		assert_eq!(secrets_of(relay).await, vec![("a1".to_owned(), vec![1], false)]);
+		assert_eq!(relay.roster(SPACE.to_owned()).await.expect("read").version, 1);
 	}
 
 	#[tokio::test]

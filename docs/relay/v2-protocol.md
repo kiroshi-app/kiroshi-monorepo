@@ -266,6 +266,202 @@ sealed  = sealed_box(host_agreement_public, payload)
 The host refuses a payload that is not 96 bytes or whose `mac` does not verify,
 compared in constant time.
 
+## Join link
+
+The host mints one link per pending invitation, and one per Space for a device of
+its own account:
+
+```
+https://kiroshi.app/join#<instance>.<host_agreement_public>.<invitation_secret>
+```
+
+- `instance` is the hosted Space instance id, as the relay knows it.
+- `host_agreement_public` is the host's 32-byte X25519 public key, unpadded
+  base64url (RFC 4648 §5, no `=`): 43 characters.
+- `invitation_secret` is 32 random bytes, unpadded base64url: 43 characters.
+
+The three parts are separated by `.`, which neither base64url nor an instance id
+carries. Everything after `#` stays on the device that opens the link: a browser
+never sends a fragment to a server.
+
+The Tauri commands that mint them:
+
+| Command | Answer |
+| --- | --- |
+| `hosting_join_link(spaceId, userId)` | A link whose secret admits a device under the account `userId`. Refused with `notPending` when that member is not pending, `unknownMember` when the Space has no such member. |
+| `hosting_device_link(spaceId)` | A link whose secret admits a device under the account of the host. |
+
+A secret admits exactly one device. Minting a link replaces the unused secret of
+the same account in that Space, if any: the earlier link then matches no secret.
+Withdrawing an invitation deletes every secret of that account in the Space, and
+so does removing a member. A used secret is kept, so a join that replays it is
+answered `used`. A link has no expiry.
+
+## Join frames
+
+A device outside the roster holds no subkey: its join frame is not a sealed v2
+frame and carries no `key_id`, `ctr`, `ct` or `sig`.
+
+### join (device to host)
+
+```json
+{ "v": 2, "instance": "…", "from": "…relay device id…", "join": "base64" }
+```
+
+`join` is the sealed join payload of [Join payload](#join-payload), standard base64
+with padding, sealed with the `invitation_secret` and the `host_agreement_public`
+of the link. As on every frame, the relay splices `from`.
+
+The host decides in this order, before any roster lookup of `from`:
+
+1. `join` is not base64, the sealed box does not open under the host agreement
+   key, or the payload is not 96 bytes: `join_refused` `"malformed"`.
+2. The payload `mac` verifies against no secret the host keeps for that Space:
+   `join_refused` `"unknown"`.
+3. It verifies against a used secret: `join_refused` `"used"`.
+4. It verifies against an unused secret. In one transaction the host marks the
+   secret used and stores a roster row it signs for the joining keys, under the
+   relay device id `from` and the account of that secret. When two joins race on
+   one secret, one of them is admitted and the other is answered `"used"`.
+
+A join whose signing key is already in the roster, or whose `from` already names
+a roster row, stores nothing, leaves its secret unused and is answered with
+nothing: the device waits for an answer that does not come, then asks for a new
+link.
+
+### joined (host to device)
+
+```json
+{ "v": 2, "instance": "…", "to": "…relay device id…", "joined": "base64" }
+```
+
+```
+answer = UTF-8 JSON key handover (below)
+mac    = HMAC-SHA256(key = invitation_secret, ascii("kiroshi/v2/join-answer") || answer)
+joined = sealed_box(device_agreement_public, mac || answer)
+```
+
+`device_agreement_public` is the one the join payload carried. The device opens
+the box, splits off the first 32 bytes as `mac` and compares it in constant time
+with the HMAC it computes over the rest. Only a holder of the secret can produce
+it, so a matching `mac` proves the answer comes from the host the link names: the
+device then trusts the host row of the roster set, and verifies the roster set
+signature with the `signing_public_key` of that row.
+
+The key handover, the same JSON in `joined` and `rekey`:
+
+```json
+{ "key_id": 1, "space_key": "base64, 32 bytes", "roster": { "…": "signed roster set" } }
+```
+
+### join_refused (host to device)
+
+```json
+{ "v": 2, "instance": "…", "to": "…relay device id…", "join_refused": "used" }
+```
+
+The value is `"used"`, `"unknown"` or `"malformed"`. Nothing in it is
+authenticated: the relay may forge or drop it, and the worst it achieves is a
+device that gives up on a link.
+
+## Signed roster set
+
+```json
+{
+  "space_id": "…",
+  "host": "…32 hex device_id of the host…",
+  "key_id": 2,
+  "version": 7,
+  "rows": [
+    { "device_id": "…32 hex…", "relay_device_id": "…", "account_id": "…", "signing_public_key": "base64", "agreement_public_key": "base64", "fingerprint": "six words", "added_at": 1767225600000, "signature": "base64" }
+  ],
+  "sig": "base64"
+}
+```
+
+- `space_id` is the host's own id for the Space, the one every row signature
+  covers. It is not the `instance`.
+- `rows` holds every roster row, the host's own included, each with the row
+  signature the host made when it stored it, ordered by `device_id`.
+- `version` grows by one on every change of the roster: a device admitted, a
+  device or a member removed, the host row rewritten. A device keeps the highest
+  version it verified and refuses a lower one.
+- `key_id` is the Space key the set was handed with.
+
+### Row signature
+
+```
+row_bytes = ascii("kiroshi/v2/roster")
+         || u64be(len(space_id))             || space_id
+         || u64be(len(device_id))            || ascii(device_id)
+         || u64be(len(relay_device_id))      || relay_device_id
+         || u64be(len(account_id))           || account_id
+         || u64be(32)                        || signing_public_key
+         || u64be(32)                        || agreement_public_key
+         || u64be(len(fingerprint))          || fingerprint
+         || i64be(added_at)
+signature = Ed25519_sign(host_signing_private, row_bytes)
+```
+
+Strings are UTF-8, `device_id` its 32 hex characters, `added_at` milliseconds
+since the Unix epoch. A row verifies when its signature verifies under the host
+signing key and `device_id` is the `device_id` of `signing_public_key`.
+
+### Set signature
+
+```
+set_bytes = ascii("kiroshi/v2/roster-set")
+         || u64be(len(space_id)) || space_id
+         || u64be(version)
+         || u32be(key_id)
+         || u64be(n)
+         || device_id_bytes(d1) || … || device_id_bytes(dn)
+sig = Ed25519_sign(host_signing_private, set_bytes)
+```
+
+`d1 … dn` are the `device_id`s of every row, sorted by their 16 raw bytes in
+ascending order. A device accepts a set only when every row verifies, `host`
+names a row, and `sig` verifies under the `signing_public_key` of that row. A set
+with a row added, removed or swapped fails `sig`.
+
+## Key rotation
+
+Removing a member (`hosting_remove_member`, once the relay answered) or one device
+(`hosting_remove_device`) deletes the matching roster rows, then the host stores a
+fresh random `space_key` under `key_id + 1`, starts its `ctr` and seals every
+later frame under it. A removed device keeps the old `space_key` and gets nothing
+sealed under the new one; its frames resolve to no roster row and are dropped.
+The host device cannot be removed. When the new key cannot be stored, the rows
+stay deleted and the command answers `keyNotRotated`.
+
+### rekey (host to device)
+
+On a rotation the host sends one rekey frame to every remaining device of the
+roster other than its own:
+
+```json
+{ "v": 2, "instance": "…", "to": "…relay device id…", "rekey": "base64", "sig": "base64" }
+```
+
+```
+rekey     = sealed_box(device_agreement_public, key handover)
+rekey_sig = ascii("kiroshi/v2/rekey")
+         || u64be(len(instance))  || instance
+         || device_id_bytes(to)
+         || u64be(len(rekey))     || rekey
+sig       = Ed25519_sign(host_signing_private, rekey_sig)
+```
+
+`to` in the signed bytes is the recipient's `device_id`, not its relay device id.
+A device verifies `sig` under the host signing key it holds before it opens the
+box, then accepts the handover only when its roster set verifies with a `version`
+at least the one it holds and a `key_id` above the one it holds.
+
+A rostered device that sends a frame under a `key_id` lower than the current one
+missed a rekey: the host drops the frame and sends that device its rekey frame
+again. A frame under a `key_id` above the current one is dropped with nothing
+sent.
+
 ## Fingerprint
 
 Six words a person compares between two screens:

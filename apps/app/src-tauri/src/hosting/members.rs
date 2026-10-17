@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
 use super::contract::{Member, MemberStatus, MembersChanged, MembersError};
-use super::Hosting;
+use super::{devices, links, Hosting};
 use crate::account::cloud::MemberCallError;
 use crate::account::contract::AccountState;
 use crate::account::session::{self, AccountSession};
@@ -97,6 +97,12 @@ async fn ended<R: Runtime>(
 		.remove_member(&bearer, &instance_id, &user_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
+	match expected {
+		MemberStatus::Joined => devices::account_revoked(app, &space_id, &user_id).await?,
+		MemberStatus::Pending | MemberStatus::Host => {
+			links::withdrawn(app, &space_id, &user_id).await?
+		}
+	}
 	read_back(app, &space_id, &instance_id).await
 }
 
@@ -120,7 +126,7 @@ pub(super) async fn polled<R: Runtime>(
 	}
 }
 
-async fn instance_of<R: Runtime>(
+pub(super) async fn instance_of<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
 ) -> Result<String, MembersError> {
@@ -165,7 +171,7 @@ fn normalized_email(raw: &str) -> Option<String> {
 	is_email.then_some(email)
 }
 
-async fn listed<R: Runtime>(
+pub(super) async fn listed<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
 ) -> Result<Vec<Member>, MembersError> {
