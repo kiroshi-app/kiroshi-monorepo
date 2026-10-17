@@ -83,6 +83,34 @@ struct DeviceRegistrationTests {
             await relay.relayDevices.relayId(for: CloudFixture.userId) == FixtureKeys.memberRelayId)
     }
 
+    @Test(arguments: [FixtureKeys.devicesPath, CloudFixture.spacesPath])
+    func aTransportThatThrowsLandsOnSpacesUnreachable(path: String) async {
+        await transport.answer(path, with: .offline)
+        let model = makeModel(
+            relay: RelayEnvironment(transport: TestRelayTransport(), clock: TestRelayClock()))
+
+        await model.loadSpaces()
+
+        #expect(model.stage == .spacesUnreachable)
+        #expect(model.shell == nil)
+    }
+
+    @Test(arguments: [FixtureKeys.devicesPath, CloudFixture.spacesPath])
+    func aCancelledLoadIsNotShownAsAFailure(path: String) async {
+        await transport.answer(path, with: .pending)
+        let model = makeModel(
+            relay: RelayEnvironment(transport: TestRelayTransport(), clock: TestRelayClock()))
+        let loading = Task { await model.loadSpaces() }
+        while await !transport.requests.contains(where: { $0.url?.path() == path }) {
+            await Task.yield()
+        }
+
+        loading.cancel()
+        await loading.value
+
+        #expect(model.stage == .loadingSpaces)
+    }
+
     @Test func keysTakenByAnotherAccountLandInTheStage() async {
         await transport.answer(
             FixtureKeys.devicesPath,

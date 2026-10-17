@@ -214,11 +214,15 @@ final class SignInModel {
     }
 
     func loadSpaces() async {
-        guard let session else { return }
-        guard let device = await registeredDevice(for: session),
-            let answer = try? await cloud.spaces(bearer: session.bearer),
-            self.session == session
-        else { return }
+        guard let session, let device = await registeredDevice(for: session) else { return }
+        let answer: SpacesAnswer
+        do {
+            answer = try await cloud.spaces(bearer: session.bearer)
+        } catch {
+            failToLoad(session, after: error)
+            return
+        }
+        guard self.session == session else { return }
         switch answer {
         case .spaces(let spaces):
             shell =
@@ -320,9 +324,14 @@ final class SignInModel {
         if let relayId = await relay.relayDevices.relayId(for: session.accountId) {
             return RelayDevice(keys: keys, relayId: relayId)
         }
-        guard let answer = try? await cloud.registerDevice(keys, bearer: session.bearer),
-            self.session == session
-        else { return nil }
+        let answer: DeviceRegistrationAnswer
+        do {
+            answer = try await cloud.registerDevice(keys, bearer: session.bearer)
+        } catch {
+            failToLoad(session, after: error)
+            return nil
+        }
+        guard self.session == session else { return nil }
         switch answer {
         case .registered(let relayId):
             try? await relay.relayDevices.save(relayId, for: session.accountId)
@@ -332,6 +341,11 @@ final class SignInModel {
         case .unreachable: stage = .spacesUnreachable
         }
         return nil
+    }
+
+    private func failToLoad(_ session: Session, after error: any Error) {
+        guard !(error is CancellationError), self.session == session else { return }
+        stage = .spacesUnreachable
     }
 
     private func makeShell(spaces: [Space], session: Session, device: RelayDevice) -> SpaceStore {
