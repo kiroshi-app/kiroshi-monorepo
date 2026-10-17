@@ -33,7 +33,14 @@ export type UnreportedFailureNotice = Omit<
 	"report"
 >
 
-type FailureFields = { kind?: unknown; message?: unknown; detail?: unknown }
+type FailureFields = {
+	kind?: unknown
+	message?: unknown
+	detail?: unknown
+	failure?: unknown
+	operation?: unknown
+	table?: unknown
+}
 
 const REPORT_READ_BUDGET = 500
 
@@ -43,15 +50,23 @@ const fieldsOf = (reason: unknown): FailureFields =>
 const textOf = (value: unknown): string | undefined =>
 	typeof value === "string" ? value : undefined
 
-const sentenceOf = ({
-	kind,
-	message,
-	detail,
-}: FailureFields): string | undefined => {
-	const parts = [kind, textOf(message) ?? detail].filter(
-		(part): part is string => typeof part === "string",
-	)
-	return parts.length > 0 ? parts.join(": ") : undefined
+const isText = (part: unknown): part is string => typeof part === "string"
+
+const placeOf = ({ operation, table }: FailureFields): string | undefined => {
+	const parts = [operation, table].filter(isText)
+	return parts.length > 0 ? `(${parts.join(" on ")})` : undefined
+}
+
+const sentenceOf = (fields: FailureFields): string | undefined => {
+	const nested = fieldsOf(fields.failure)
+	const said =
+		textOf(fields.message) ?? textOf(fields.detail) ?? textOf(nested.detail)
+	const parts = [fields.kind, said].filter(isText)
+	if (parts.length === 0) {
+		return undefined
+	}
+	const place = placeOf(nested) ?? placeOf(fields)
+	return [parts.join(": "), place].filter(isText).join(" ")
 }
 
 const serialized = (reason: unknown): string => {
