@@ -3,9 +3,10 @@ import SwiftUI
 struct ConversationIconCell: View {
     let icon: ConversationIcon
     let color: CompanionTint?
+    let size: CompanionAvatar.Size
 
     var body: some View {
-        ScaledIconCell(icon: icon, color: color)
+        ScaledIconCell(icon: icon, color: color, size: size)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .accessibilityHidden(true)
     }
@@ -17,11 +18,10 @@ private struct ScaledIconCell: View {
     private let glyphShare = 0.375
     @ScaledMetric private var side: CGFloat
 
-    init(icon: ConversationIcon, color: CompanionTint?) {
+    init(icon: ConversationIcon, color: CompanionTint?, size: CompanionAvatar.Size) {
         self.icon = icon
         self.color = color
-        let row = CompanionAvatar.Size.row
-        _side = ScaledMetric(wrappedValue: row.points, relativeTo: row.textStyle)
+        _side = ScaledMetric(wrappedValue: size.points, relativeTo: size.textStyle)
     }
 
     var body: some View {
