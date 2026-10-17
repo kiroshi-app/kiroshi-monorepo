@@ -13,6 +13,7 @@ use tokio::sync::{MutexGuard, Notify};
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
+use crate::db::DatabaseState;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, ACCOUNT_CHANGED};
@@ -29,6 +30,8 @@ const SIGNED_OUT_ON_SITE: AccountState =
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
 const DEVICE_NAME_LIMIT: usize = 64;
+
+const DISPLAY_NAME_LIMIT: usize = 80;
 
 const UNNAMED_DEVICE: &str = "Mac";
 
@@ -181,20 +184,24 @@ async fn device_name() -> String {
 }
 
 fn device_name_of(named: &str) -> String {
-	let mut utf16_units = 0;
-	let cut: String = named
-		.trim()
-		.chars()
-		.take_while(|character| {
-			utf16_units += character.len_utf16();
-			utf16_units <= DEVICE_NAME_LIMIT
-		})
-		.collect();
+	let cut = trimmed_to(named, DEVICE_NAME_LIMIT);
 	if cut.is_empty() {
 		UNNAMED_DEVICE.to_owned()
 	} else {
 		cut
 	}
+}
+
+fn trimmed_to(named: &str, utf16_limit: usize) -> String {
+	let mut utf16_units = 0;
+	named
+		.trim()
+		.chars()
+		.take_while(|character| {
+			utf16_units += character.len_utf16();
+			utf16_units <= utf16_limit
+		})
+		.collect()
 }
 
 fn left_until(expires_at: DateTime<Utc>) -> Duration {
@@ -225,6 +232,7 @@ async fn approved<R: Runtime>(
 	entered(&app, next);
 	window_controls::raise_main(&app);
 	if is_signed_in {
+		stored_name_sent(&app).await;
 		hosting::resumed(&app).await;
 		invitations::resumed(&app);
 	}
@@ -271,9 +279,52 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	if let Some(next) = next {
 		entered(&app, next);
 	}
+	if matches!(session.current(), AccountState::SignedIn(_)) {
+		stored_name_sent(&app).await;
+	}
 	hosting::resumed(&app).await;
 	if matches!(session.current(), AccountState::SignedIn(_)) {
 		invitations::resumed(&app);
+	}
+}
+
+async fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
+	let read = match app.state::<DatabaseState>().as_ref() {
+		Ok(database) => database.user().preferences().await,
+		Err(failure) => {
+			return eprintln!(
+				"the display name was not sent: the database is unavailable: {failure:?}"
+			)
+		}
+	};
+	match read {
+		Ok(preferences) => named(app, &preferences.display_name).await,
+		Err(failure) => eprintln!("the display name was not read to be sent: {failure:?}"),
+	}
+}
+
+pub async fn named<R: Runtime>(app: &AppHandle<R>, display_name: &str) {
+	let name = trimmed_to(display_name, DISPLAY_NAME_LIMIT);
+	if name.is_empty() {
+		return;
+	}
+	let session = app.state::<AccountSession>();
+	if !matches!(session.current(), AccountState::SignedIn(_)) {
+		return;
+	}
+	let bearer = match session.bearer() {
+		Ok(Some(bearer)) => bearer,
+		Ok(None) => return,
+		Err(error) => {
+			return eprintln!("the display name was not sent: the session store failed: {error:?}")
+		}
+	};
+	match session.cloud.rename(&bearer, &name).await {
+		Ok(()) => hosting::renamed(app),
+		Err(MeError::Revoked) => revoked(app, &bearer),
+		Err(MeError::Unreachable(reason)) => {
+			eprintln!("the display name did not reach the cloud: {reason}");
+		}
 	}
 }
 
@@ -343,6 +394,8 @@ mod tests {
 	use crate::db;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+	use crate::user::commands::user_set_preferences;
+	use crate::user::contract::UserPreferences;
 
 	const BEARER: &str = "bearer-that-never-leaves";
 	const REVOKED: &str = "bearer-the-cloud-forgot";
@@ -365,6 +418,8 @@ mod tests {
 		sign_out_status: Option<StatusCode>,
 		instances_status: Option<StatusCode>,
 		account: Option<Value>,
+		rename_status: Option<StatusCode>,
+		renamed: Arc<Mutex<Vec<Value>>>,
 		created: Arc<Mutex<Vec<Value>>>,
 		polls: Arc<Mutex<Vec<Instant>>>,
 		signed_out: Arc<Mutex<Vec<String>>>,
@@ -388,6 +443,10 @@ mod tests {
 		fn polls(&self) -> Vec<Instant> {
 			self.polls.lock().expect("the stub").clone()
 		}
+
+		fn renamed(&self) -> Vec<Value> {
+			self.renamed.lock().expect("the stub").clone()
+		}
 	}
 
 	fn approved() -> (StatusCode, Value) {
@@ -408,7 +467,7 @@ mod tests {
 		let router = Router::new()
 			.route("/authorization-requests", post(created))
 			.route("/authorization-requests/{id}/poll", post(poll))
-			.route("/me", get(me))
+			.route("/me", get(me).patch(renamed))
 			.route("/instances", get(instances))
 			.route("/api/auth/sign-out", post(signed_out))
 			.with_state(cloudy);
@@ -491,6 +550,13 @@ mod tests {
 		}
 	}
 
+	async fn renamed(Served(cloudy): Served<Cloudy>, headers: HeaderMap, body: String) -> Answered {
+		assert_eq!(bearer_of(&headers), BEARER);
+		let body: Value = serde_json::from_str(&body).expect("a json body");
+		cloudy.renamed.lock().expect("the stub").push(body.clone());
+		answered_json(cloudy.rename_status.unwrap_or(StatusCode::OK), body)
+	}
+
 	async fn instances(Served(cloudy): Served<Cloudy>) -> Answered {
 		answered_json(cloudy.instances_status.unwrap_or(StatusCode::OK), json!([]))
 	}
@@ -527,6 +593,7 @@ mod tests {
 			let app = an_app_of_its_own("account-session", mock_builder());
 			let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
 			app.manage(AccountSession::new(root.clone(), api_url));
+			app.manage(db::bootstrap(app.handle()));
 			let root = root.unwrap_or_default();
 			let heard = Arc::new(Mutex::new(Vec::new()));
 			let hearing = Arc::clone(&heard);
@@ -546,6 +613,30 @@ mod tests {
 				Ok(())
 			})
 			.await
+		}
+
+		fn database(&self) -> &db::Database {
+			self.app.state::<DatabaseState>().inner().as_ref().expect("the database opens")
+		}
+
+		async fn preferences(&self) -> UserPreferences {
+			let stored = self.database().user().preferences().await.expect("the preferences read");
+			UserPreferences::of(stored, None)
+		}
+
+		async fn named_as(&self, display_name: &str) {
+			let mut preferences = self.preferences().await;
+			preferences.display_name = display_name.to_owned();
+			self.database().user().set_preferences(preferences.into()).await.expect("stored");
+		}
+
+		async fn renamed_to(&self, display_name: &str) -> UserPreferences {
+			let mut preferences = self.preferences().await;
+			preferences.display_name = display_name.to_owned();
+			let handle = self.app.handle();
+			user_set_preferences(handle.clone(), handle.state(), preferences)
+				.await
+				.expect("the preferences are stored")
 		}
 
 		fn opened(&self) -> Vec<String> {
@@ -948,6 +1039,116 @@ mod tests {
 	}
 
 	#[test]
+	fn a_sign_in_sends_the_trimmed_display_name_to_the_cloud() {
+		run(async {
+			let cloudy = Cloudy::polled_with(vec![approved()]);
+			let harness = Harness::new("named-sign-in", &stub(cloudy.clone()).await);
+			harness.named_as("  Ada Lovelace  ").await;
+
+			harness.sign_in().await.expect("the sign-in starts");
+			harness.flow_ended().await;
+
+			assert_eq!(harness.state(), signed_in());
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Ada Lovelace" })]);
+		});
+	}
+
+	#[test]
+	fn a_restore_sends_the_display_name_cut_to_80_characters() {
+		run(async {
+			let cloudy = Cloudy::default();
+			let harness = Harness::new("named-restore", &stub(cloudy.clone()).await);
+			harness.named_as(&format!(" {} ", "é".repeat(100))).await;
+			harness.store(BEARER);
+
+			restore(harness.app.handle().clone()).await;
+
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "é".repeat(80) })]);
+		});
+	}
+
+	#[test]
+	fn a_rename_while_signed_in_sends_the_new_name_once() {
+		run(async {
+			let cloudy = Cloudy::default();
+			let harness = Harness::new("named-rename", &stub(cloudy.clone()).await);
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+
+			harness.renamed_to(" Grace ").await;
+			harness.renamed_to(" Grace ").await;
+
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
+		});
+	}
+
+	#[test]
+	fn an_empty_display_name_is_never_sent() {
+		run(async {
+			let cloudy = Cloudy::default();
+			let harness = Harness::new("named-empty", &stub(cloudy.clone()).await);
+			harness.named_as("   ").await;
+			harness.store(BEARER);
+
+			restore(harness.app.handle().clone()).await;
+			harness.renamed_to("Grace").await;
+			harness.renamed_to("  ").await;
+
+			assert_eq!(harness.state(), signed_in());
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
+		});
+	}
+
+	#[test]
+	fn a_rename_while_signed_out_sends_nothing() {
+		run(async {
+			let cloudy = Cloudy::default();
+			let harness = Harness::new("named-signed-out", &stub(cloudy.clone()).await);
+
+			harness.renamed_to("Grace").await;
+
+			assert!(cloudy.renamed().is_empty());
+		});
+	}
+
+	#[test]
+	fn a_500_on_the_rename_keeps_the_stored_preferences_and_the_answer() {
+		run(async {
+			let cloudy = Cloudy {
+				rename_status: Some(StatusCode::INTERNAL_SERVER_ERROR),
+				..Cloudy::default()
+			};
+			let harness = Harness::new("named-500", &stub(cloudy.clone()).await);
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+
+			let answered = harness.renamed_to("Grace").await;
+
+			assert_eq!(answered.display_name, "Grace");
+			assert_eq!(harness.preferences().await, answered);
+			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
+			assert_eq!(harness.state(), signed_in());
+		});
+	}
+
+	#[test]
+	fn a_401_on_the_rename_signs_out_on_site_and_deletes_the_bearer() {
+		run(async {
+			let cloudy =
+				Cloudy { rename_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
+			let harness = Harness::new("named-401", &stub(cloudy.clone()).await);
+			harness.store(BEARER);
+			restore(harness.app.handle().clone()).await;
+
+			let answered = harness.renamed_to("Grace").await;
+
+			assert_eq!(answered.display_name, "Grace");
+			assert_eq!(harness.signed_out().await, SIGNED_OUT_ON_SITE);
+			assert_eq!(harness.stored(), None);
+		});
+	}
+
+	#[test]
 	fn a_revoked_bearer_is_deleted_and_the_account_is_signed_out_on_site() {
 		run(async {
 			let harness = Harness::new("revoked", &stub(Cloudy::default()).await);
@@ -971,9 +1172,6 @@ mod tests {
 				Cloudy { instances_status: Some(StatusCode::UNAUTHORIZED), ..Cloudy::default() };
 			let api = stub(cloudy).await;
 			let harness = Harness::new("instances-401", &api);
-			let database = harness.root.join("db");
-			std::fs::create_dir_all(&database).expect("the database folder");
-			harness.app.manage::<db::DatabaseState>(Ok(db::open(&database)));
 			harness.app.manage(joined_spaces::relay::RelayGuests::new(&api));
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;

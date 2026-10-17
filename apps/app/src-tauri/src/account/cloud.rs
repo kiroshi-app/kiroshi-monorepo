@@ -329,6 +329,18 @@ impl Cloud {
 		})
 	}
 
+	pub async fn rename(&self, bearer: &str, name: &str) -> Result<(), MeError> {
+		let body = json!({ "name": name });
+		let answered = self
+			.answered(|client| client.patch(self.at(ME_PATH)).bearer_auth(bearer).json(&body))
+			.await
+			.map_err(MeError::Unreachable)?;
+		if answered.status() == StatusCode::UNAUTHORIZED {
+			return Err(MeError::Revoked);
+		}
+		successful(answered).map(drop).map_err(MeError::Unreachable)
+	}
+
 	pub async fn sign_out(&self, bearer: &str) -> Result<(), String> {
 		self.sent(|client| client.post(self.at(SIGN_OUT_PATH)).bearer_auth(bearer)).await.map(drop)
 	}

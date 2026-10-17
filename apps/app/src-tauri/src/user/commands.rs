@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{UserPreferences, UserPreferencesError};
+use crate::account::session;
 use crate::avatars;
 use crate::db;
 use crate::file_store::FileStore;
@@ -30,10 +31,13 @@ pub async fn user_set_preferences<R: Runtime>(
 ) -> Result<UserPreferences, UserPreferencesError> {
 	let dir = avatars::Avatars::dir(&app);
 	let database = ready(&state)?;
-	let previous_channel = database.user().preferences().await?.update_channel;
+	let previous = database.user().preferences().await?;
 	let stored = database.user().set_preferences(preferences.into()).await?;
-	if stored.update_channel != previous_channel {
+	if stored.update_channel != previous.update_channel {
 		updates::check_on(&app, stored.update_channel.into());
+	}
+	if stored.display_name != previous.display_name {
+		session::named(&app, &stored.display_name).await;
 	}
 	avatars::Avatars::sweep_referenced(database, dir.as_deref()).await;
 	Ok(UserPreferences::of(stored, dir.as_deref()))

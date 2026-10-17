@@ -242,6 +242,15 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) {
 	}
 }
 
+pub fn renamed<R: Runtime>(app: &AppHandle<R>) {
+	let Some(hosting) = app.try_state::<Hosting>() else {
+		return;
+	};
+	for host in hosting.hosts().values_mut() {
+		host.members = None;
+	}
+}
+
 pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
 	let Some(hosting) = app.try_state::<Hosting>() else {
 		return;
