@@ -294,6 +294,34 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn the_host_name_is_held_after_join_and_its_rename_reaches_the_front_on_the_next_read() {
+		let hosted_by = |name: Value| json!([{ "userId": "owner", "name": name, "role": "owner" }]);
+		let host_named = |name: Value| json!([{ "userId": "owner", "name": name, "role": "host" }]);
+		let dir = temp_dir();
+		let (api_url, relay) = relay_answering(hosted_by(json!("Ann"))).await;
+		signed_in(&dir);
+		let app = app_reaching(&dir, &api_url);
+		let mut hearing = heard(&app);
+		let joined = joined_space(&app).await;
+		let named = next(&mut hearing).await;
+		let held_after_join = stored_json(&app, &joined.id).await;
+
+		relay.answers(StatusCode::OK, hosted_by(json!("Annie")));
+		read(app.handle(), &joined).await;
+		let renamed = next(&mut hearing).await;
+
+		relay.answers(StatusCode::OK, hosted_by(Value::Null));
+		read(app.handle(), &joined).await;
+		let unnamed = next(&mut hearing).await;
+
+		assert_eq!(named["members"], host_named(json!("Ann")));
+		assert_eq!(held_after_join, host_named(json!("Ann")));
+		assert_eq!(renamed["members"], host_named(json!("Annie")));
+		assert_eq!(unnamed["members"], host_named(Value::Null));
+		assert_eq!(stored_json(&app, &joined.id).await, host_named(Value::Null));
+	}
+
+	#[tokio::test]
 	async fn an_identical_read_emits_nothing() {
 		let dir = temp_dir();
 		let (api_url, _relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
