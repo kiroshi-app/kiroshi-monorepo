@@ -55,6 +55,15 @@ final class ThreadAccessibilityTests: XCTestCase {
         try auditTheThread(app, iconCellLabels: ["Relay audit: session tokens"])
     }
 
+    func testALongNamedCompanionsEmptyThreadScrollsAndPassesTheAudit() throws {
+        let app = launch("long-name", "-emptyThread", "YES")
+        XCTAssertTrue(
+            app.staticTexts["Nothing here yet. Your first message starts the conversation."]
+                .waitForExistence(timeout: 10))
+
+        try auditTheThread(app)
+    }
+
     func testAnOfflineHostKeepsTheThreadAndPassesTheAudit() throws {
         let onScreen = labelsFullyOnScreenAtTheLargestSize(of: "3.4")
         let app = launch("3.4")

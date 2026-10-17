@@ -253,6 +253,12 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture pinned-icons -opening group-relay-audit
 ```
 
+An empty thread scrolls when its content outgrows the screen, centred while it fits, so a long name at the largest text size keeps the hero under the header and lets the text grow. `-emptyThread YES` empties the conversation a fixture opens: `long-name -emptyThread YES` is Juniper Wilhelmina Fitzgerald-Montgomery's empty thread, which `ThreadAccessibilityTests` audits with the group one:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture long-name -emptyThread YES
+```
+
 ## Companion avatars
 
 `CompanionAvatar` draws what the desktop draws: `CompanionAvatarEngine` runs `Kiroshi/Resources/companion-avatar.js` (built from `packages/ui` by `bun run avatar:build`, never edited by hand) in JavaScriptCore, caches the idle drawing per name, tint and theme, and computes a frame at 30 fps while the companion works, idle under Reduce Motion. A companion with a picture shows it once `relay_avatar` answers; until then, or when it fails, the drawn avatar stays. `CompanionAvatarTests` replays every case of `packages/ui/src/components/companion-avatar.fixture.jsonl` from the repo, so `bun run ios:test` fails when the bundle and the fixture part ways. In the Conversations fixtures, Shoto has a picture and Otto no tint.

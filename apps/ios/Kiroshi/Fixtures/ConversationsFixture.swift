@@ -20,6 +20,10 @@
             UserDefaults.standard.bool(forKey: "history")
         }
 
+        static var opensEmpty: Bool {
+            UserDefaults.standard.bool(forKey: "emptyThread")
+        }
+
         static var isPaged: Bool {
             UserDefaults.standard.bool(forKey: "paged")
         }
@@ -575,6 +579,9 @@
                 script.messages[releaseCrew.id] = groupThread
             default:
                 break
+            }
+            if opensEmpty, let opening = opening(fixture) {
+                script.messages[opening] = []
             }
             return script
         }
