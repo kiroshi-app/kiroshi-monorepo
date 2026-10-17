@@ -56,9 +56,19 @@ const working = (
 	kind,
 })
 
+const SELF = "account-self"
+
+const personNamedFromRecord: ConversationRosterActivity["personOf"] = ({
+	authorAccountId,
+}) => (authorAccountId === SELF ? undefined : "Lea")
+
 const atRest = (
 	previews: ConversationRosterActivity["previews"] = {},
-): ConversationRosterActivity => ({ working: {}, previews })
+): ConversationRosterActivity => ({
+	working: {},
+	previews,
+	personOf: personNamedFromRecord,
+})
 
 describe("toRosterConversations", () => {
 	it("draws a row carrying the title, the pin, the section and the participants in join order", () => {
@@ -156,6 +166,38 @@ describe("toRosterConversations", () => {
 		expect(speakerAfter([participant()])).toBeUndefined()
 	})
 
+	it("names the person who said the last word through the shared read", () => {
+		const [row] = toRosterConversations(
+			[conversation()],
+			atRest({
+				"c-1": {
+					text: "Menu is set.",
+					at: A_MINUTE_AGO,
+					person: { authorAccountId: null, authorName: "lea@example.com" },
+				},
+			}),
+			NOW,
+		)
+
+		expect(row.lastSpeaker).toBe("Lea")
+	})
+
+	it("names nobody when the reader's own account said the last word", () => {
+		const [row] = toRosterConversations(
+			[conversation()],
+			atRest({
+				"c-1": {
+					text: "Menu is set.",
+					at: A_MINUTE_AGO,
+					person: { authorAccountId: SELF, authorName: "Me" },
+				},
+			}),
+			NOW,
+		)
+
+		expect(row.lastSpeaker).toBeUndefined()
+	})
+
 	it("names nobody when the companion that spoke has left the room", () => {
 		expect(speakerAfter([participant({ leftAt: 4 })], "b-1")).toBeUndefined()
 	})
@@ -242,7 +284,11 @@ describe("toRosterConversations", () => {
 					],
 				}),
 			],
-			{ working: { "c-1": [working("b-2", "searching")] }, previews: {} },
+			{
+				working: { "c-1": [working("b-2", "searching")] },
+				previews: {},
+				personOf: personNamedFromRecord,
+			},
 			NOW,
 		)
 
@@ -260,7 +306,11 @@ describe("toRosterConversations", () => {
 	it("draws the room of a companion waiting its turn as working", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
-			{ working: { "c-1": [working("b-1", "waiting")] }, previews: {} },
+			{
+				working: { "c-1": [working("b-1", "waiting")] },
+				previews: {},
+				personOf: personNamedFromRecord,
+			},
 			NOW,
 		)
 
@@ -270,7 +320,7 @@ describe("toRosterConversations", () => {
 	it("draws a room nobody is answering in at rest", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
-			{ working: { "c-1": [] }, previews: {} },
+			{ working: { "c-1": [] }, previews: {}, personOf: personNamedFromRecord },
 			NOW,
 		)
 

@@ -63,7 +63,7 @@ const toPanelState = (
 
 export type SignOutLeaving = {
 	spaceNames: string
-	hostEmails: string
+	hostNames: string
 }
 
 type AccountSettings = {
@@ -76,15 +76,15 @@ const listed = (values: string[]) =>
 
 export const signOutLeavingOf = (
 	relaySpaces: JoinedSpace[],
-	hostEmailOf: (id: string) => string,
+	hostNameOf: (id: string) => string,
 ): SignOutLeaving | null => {
 	if (relaySpaces.length === 0) {
 		return null
 	}
-	const hostEmails = relaySpaces.map((joined) => hostEmailOf(joined.id))
+	const hostNames = relaySpaces.map((joined) => hostNameOf(joined.id))
 	return {
 		spaceNames: listed(relaySpaces.map((joined) => joined.name)),
-		hostEmails: listed([...new Set(hostEmails)].filter(Boolean)),
+		hostNames: listed([...new Set(hostNames)]),
 	}
 }
 
@@ -99,7 +99,7 @@ const signOutConfirmationOf = (
 	title: i18n.t("bots:spaces.signOut.title"),
 	description: i18n.t("bots:spaces.signOut.description", {
 		name: leaving.spaceNames,
-		email: leaving.hostEmails,
+		host: leaving.hostNames,
 	}),
 	confirmLabel: i18n.t("bots:spaces.signOut.confirm"),
 	onConfirm: signOut,

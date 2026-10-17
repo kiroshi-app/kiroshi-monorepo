@@ -136,14 +136,14 @@ const bots = {
 				"{{email}} withdrew this invitation. Ask them to invite you again.",
 		},
 		removed: {
-			notice: "{{email}} removed you from {{name}}.",
+			notice: "{{host}} removed you from {{name}}.",
 			noticeDescription:
 				"It’s gone from your spaces. Its conversations stay on {{host}}’s Kiroshi.",
 		},
 		signOut: {
 			title: "Sign out of Kiroshi?",
 			description:
-				"{{name}} leaves this computer until you sign in again. Its conversations stay with {{email}}.",
+				"{{name}} leaves this computer until you sign in again. Its conversations stay with {{host}}.",
 			confirm: "Sign out",
 			notice: "Signed out. {{name}} left this computer.",
 		},

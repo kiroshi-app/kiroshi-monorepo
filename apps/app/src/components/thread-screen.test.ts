@@ -3056,7 +3056,17 @@ const GUEST_ACCOUNT = "account-guest"
 
 const GUEST_IN_JOINED_SPACE: ThreadAuthorship = {
 	accountId: GUEST_ACCOUNT,
-	host: { kind: "joined", name: "lea@example.com" },
+	host: {
+		kind: "joined",
+		members: [
+			{
+				userId: "account-lea",
+				name: "Lea",
+				email: "lea@example.com",
+				status: "host",
+			},
+		],
+	},
 }
 
 const isAnchored = (content: Element) =>
@@ -3228,7 +3238,7 @@ describe("the first run in a solo thread", () => {
 		await settle()
 
 		expect(sentBubble()).toBe("user message")
-		expect(screen.queryByText("lea@example.com")).toBeNull()
+		expect(screen.queryByText("Lea")).toBeNull()
 	})
 
 	it("offers the sign-in when nobody is authenticated", async () => {

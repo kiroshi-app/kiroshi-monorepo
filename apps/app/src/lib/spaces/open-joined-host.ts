@@ -6,7 +6,7 @@ import type { JoinedHostState } from "../host/joined-hosts"
 
 export type OpenJoinedHost = {
 	spaceName: string
-	hostEmail: string
+	hostName: string
 	isOnline: boolean
 	isDown: boolean
 }
@@ -21,7 +21,7 @@ export const composerOfflineOf = (
 	host: OpenJoinedHost | null,
 ): PromptInputOffline | undefined =>
 	host?.isDown
-		? { spaceName: host.spaceName, hostName: host.hostEmail }
+		? { spaceName: host.spaceName, hostName: host.hostName }
 		: undefined
 
 export const OpenJoinedHostContext = createContext<OpenJoinedHost | null>(null)

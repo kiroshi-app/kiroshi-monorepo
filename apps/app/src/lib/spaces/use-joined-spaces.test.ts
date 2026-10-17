@@ -11,6 +11,7 @@ import { useOpenJoinedHost, useSwitcherSpaces } from "./use-joined-spaces"
 
 import type { Invitation, JoinedSpace } from "../bindings"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import { hostQueryKeys } from "../host/host-query-keys"
 import type { JoinedHostState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -96,7 +97,9 @@ const openStudio = async () => {
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
-	const emails = new Map<string, string>()
+	queryClient.setQueryData(hostQueryKeys.membersOf("studio"), [
+		{ userId: "u-lea", name: "Lea", email: "lea@example.com", status: "host" },
+	])
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -112,17 +115,8 @@ const openStudio = async () => {
 			onChanged: async () => () => undefined,
 			onRemoved: async () => () => undefined,
 		},
-		inviters: {
-			of: (id) => emails.get(id) ?? "",
-			remember: (id, email) => {
-				emails.set(id, email)
-			},
-			forget: (id) => {
-				emails.delete(id)
-			},
-		},
 	})
-	await joined.admit(STUDIO_SPACE, "lea@example.com")
+	await joined.admit(STUDIO_SPACE)
 	return { home, spaces, joined }
 }
 
@@ -142,12 +136,12 @@ const renderOpenHost = async (connection: JoinedHostState) => {
 	)
 }
 
-it("reads the inviter email and the host presence of the open joined space", async () => {
+it("reads the host name and the host presence of the open joined space", async () => {
 	const { result } = await renderOpenHost({ status: "up" })
 
 	expect(result.current).toEqual({
 		spaceName: "Studio Nord",
-		hostEmail: "lea@example.com",
+		hostName: "Lea",
 		isOnline: true,
 		isDown: false,
 	})

@@ -3,7 +3,9 @@ import type {
 	MembersFailure,
 	SpaceMember,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import { i18n } from "@workspace/ui/lib/i18n"
 
+import { memberNameOf } from "./member-names"
 import type { MembersAnswer, MembersTransport } from "./members-transport"
 
 import type { Member, MembersError } from "../bindings"
@@ -60,9 +62,14 @@ const reasonOf = <Reason extends string>(
 	error: MembersError | undefined,
 ): Reason | "generic" => (error && reasons[error.kind]) ?? "generic"
 
+const shownNameOf = (member: Member): string | undefined =>
+	member.status === "pending"
+		? member.name || undefined
+		: memberNameOf(member, i18n.t("chat:working.name"))
+
 export const toSpaceMember = (member: Member): SpaceMember => ({
 	id: member.userId,
-	name: member.name ?? undefined,
+	name: shownNameOf(member),
 	email: member.email,
 	status: member.status,
 })

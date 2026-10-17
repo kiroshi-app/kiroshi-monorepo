@@ -43,10 +43,18 @@ export const topicsIn = ({
 
 export const cursorAfter = ({ nextCursor }: RosterPage) => nextCursor
 
-const lastWordOf = ({ text, at, authorBotId }: StoredLastWord): LastWord => ({
-	text: text?.trim() || undefined,
-	at,
-	authorBotId: authorBotId ?? undefined,
+const humanAuthorOf = ({
+	authorBotId,
+	authorAccountId,
+	authorName,
+}: StoredLastWord): LastWord["person"] =>
+	authorBotId === null ? { authorAccountId, authorName } : undefined
+
+const lastWordOf = (word: StoredLastWord): LastWord => ({
+	text: word.text?.trim() || undefined,
+	at: word.at,
+	authorBotId: word.authorBotId ?? undefined,
+	person: humanAuthorOf(word),
 })
 
 const wordsOf = (

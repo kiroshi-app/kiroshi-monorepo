@@ -125,10 +125,16 @@ export const selectIsFirstLoadPending = (
 	conversationId: string,
 ): boolean => !state.conversations[conversationId]?.hasAnswered
 
+export type LastWordAuthor = Pick<
+	TranscriptMessage,
+	"authorAccountId" | "authorName"
+>
+
 export type LastWord = {
 	text?: string
 	at: number
 	authorBotId?: string
+	person?: LastWordAuthor
 }
 
 export type ConversationPreviews = Record<string, LastWord | undefined>

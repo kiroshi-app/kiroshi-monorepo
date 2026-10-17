@@ -16,6 +16,7 @@ import {
 	toSpaceBadges,
 	withBadges,
 } from "../chat/sidebar-badges"
+import { usePersonOf } from "../chat/thread-authorship"
 import { toRosterConversations } from "../conversations/roster-conversations"
 import { useConversationWorkers } from "../conversations/use-conversation"
 import {
@@ -48,6 +49,7 @@ export const useRosterLists = ({
 	const { bots, missions, rosteredSpaceId } = rosterView
 	const { conversationPreviews, conversationRosters, conversations, previews } =
 		useControllerState(roster.controller)
+	const personOf = usePersonOf()
 
 	const rosterBots = useSharedStructure(
 		useRosterBots({
@@ -89,7 +91,11 @@ export const useRosterLists = ({
 					withBadges(
 						toRosterConversations(
 							conversations,
-							{ working: conversationWorkers, previews: conversationPreviews },
+							{
+								working: conversationWorkers,
+								previews: conversationPreviews,
+								personOf,
+							},
 							now,
 						),
 						conversationBadges,
@@ -101,6 +107,7 @@ export const useRosterLists = ({
 				rosteredSpaceId,
 				conversationWorkers,
 				conversationPreviews,
+				personOf,
 				now,
 				conversationBadges,
 				missions,
@@ -121,6 +128,7 @@ export const useRosterLists = ({
 									{
 										working: conversationWorkers,
 										previews: conversationPreviews,
+										personOf,
 									},
 									now,
 								),
@@ -134,6 +142,7 @@ export const useRosterLists = ({
 				conversationRosters,
 				conversationWorkers,
 				conversationPreviews,
+				personOf,
 				now,
 				conversationBadges,
 				missions,

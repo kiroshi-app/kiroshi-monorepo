@@ -19,7 +19,11 @@ import type {
 	ConversationInPage,
 	Participant,
 } from "./store-contract"
-import type { ConversationPreviews, LastWord } from "./transcript-state"
+import type {
+	ConversationPreviews,
+	LastWord,
+	LastWordAuthor,
+} from "./transcript-state"
 
 import { avatarSrc } from "../host"
 import { rosterTimestamp } from "../bots/roster-timestamp"
@@ -160,6 +164,7 @@ export const toConversationLook = ({
 export type ConversationRosterActivity = {
 	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
+	personOf: (person: LastWordAuthor) => string | undefined
 }
 
 const lastSpokeAt = (
@@ -178,8 +183,12 @@ const mostRecentFirst = (
 const speakerNameAmong = (
 	seated: Participant[],
 	preview: LastWord | undefined,
+	personOf: ConversationRosterActivity["personOf"],
 ): string | undefined =>
-	seated.find((participant) => participant.botId === preview?.authorBotId)?.name
+	preview?.person
+		? personOf(preview.person)
+		: seated.find((participant) => participant.botId === preview?.authorBotId)
+				?.name
 
 const mentionBotsOf = (conversation: Conversation): MentionBot[] =>
 	conversation.participants.map(({ botId, name }) => ({ id: botId, name }))
@@ -220,7 +229,7 @@ export const toRosterConversations = (
 			pinPosition: conversation.pinPosition,
 			participants: toSeatedRows(seated, workers),
 			lastMessage: previewText(conversation, preview),
-			lastSpeaker: speakerNameAmong(seated, preview),
+			lastSpeaker: speakerNameAmong(seated, preview, activity.personOf),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
 			lastActivityAt: lastSpokeAt(conversation, activity),
 			status: workers.length > 0 ? "working" : "idle",

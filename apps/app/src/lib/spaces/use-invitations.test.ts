@@ -84,7 +84,7 @@ const changeAnnounced = () => {
 
 const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	const transport = transportFake(listed)
-	const admit = vi.fn(async (_joined: JoinedSpace, _hostEmail: string) => {})
+	const admit = vi.fn(async (_joined: JoinedSpace) => {})
 	const { result, rerender } = renderHook(
 		() =>
 			useInvitations(
@@ -206,7 +206,7 @@ describe("accepting an invitation", () => {
 
 		expect(gear.transport.accept).toHaveBeenCalledWith(STUDIO.instanceId)
 		expect(gear.rows()).toEqual([])
-		expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO, "lea@example.com")
+		expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO)
 	})
 
 	it("keeps an accepting row the refreshed list no longer carries", async () => {
@@ -248,7 +248,7 @@ describe("accepting an invitation", () => {
 			await gear.accept(STUDIO.instanceId)
 
 			expect(gear.transport.accept).toHaveBeenCalledTimes(2)
-			expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO, "lea@example.com")
+			expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO)
 		},
 	)
 

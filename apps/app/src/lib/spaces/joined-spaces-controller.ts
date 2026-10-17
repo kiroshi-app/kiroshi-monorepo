@@ -8,7 +8,6 @@ import {
 import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { type SpaceInviters, storedInviters } from "./space-inviters"
 import { spaceQueryKeys } from "./space-query-keys"
 import type { SpacesController } from "./spaces-controller"
 
@@ -30,6 +29,8 @@ import {
 	type JoinedHostState,
 	type JoinedHosts,
 } from "../host/joined-hosts"
+import { hostAmong, memberNameOf } from "../host/member-names"
+import { heldMembersOf } from "../host/members-query"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 
 export type JoinedSpacesState = {
@@ -50,8 +51,8 @@ export type JoinedSpacesController = {
 	askToLeave: () => void
 	setLeaveOpen: (isLeaveOpen: boolean) => void
 	leave: (id: string) => Promise<void>
-	admit: (joined: JoinedSpace, hostEmail: string) => Promise<void>
-	hostEmailOf: (id: string) => string
+	admit: (joined: JoinedSpace) => Promise<void>
+	hostNameOf: (id: string) => string
 }
 
 export type JoinedSpacesTransport = {
@@ -75,7 +76,6 @@ type JoinedSpacesControllerOptions = {
 	transport?: JoinedSpacesTransport
 	reportFailure?: (notice: NoticeMessage) => void
 	reportRemoval?: (notice: NoticeMessage) => void
-	inviters?: SpaceInviters
 }
 
 type CommandResult<T> =
@@ -238,7 +238,6 @@ export const createJoinedSpacesController = ({
 	transport = joinedSpacesTransport,
 	reportFailure = failureReporterIn("joined-spaces-controller"),
 	reportRemoval = raiseRemovalNotice,
-	inviters = storedInviters,
 }: JoinedSpacesControllerOptions): JoinedSpacesController => {
 	const choiceStore = createStore(initialJoinedSpacesChoice)
 	const listQuery = joinedSpaceListQueryOf(() => transport.list())
@@ -275,7 +274,6 @@ export const createJoinedSpacesController = ({
 	const leaveVanished = (gone: JoinedSpace[]) => {
 		for (const joined of gone) {
 			hosts.forget(joined.id)
-			inviters.forget(joined.id)
 		}
 		if (!gone.some(isOpenJoined)) {
 			return
@@ -352,21 +350,30 @@ export const createJoinedSpacesController = ({
 	const isOpen = (id: string) =>
 		hosts.getState().active === id || openJoined()?.id === id
 
-	const removalNoticeOf = (name: string, hostEmail: string) => ({
-		title: i18n.t("bots:spaces.removed.notice", { email: hostEmail, name }),
+	const heldHostOf = (id: string) => {
+		const joined = current().joinedSpaces.find((held) => held.id === id)
+		return (
+			joined && hostAmong(heldMembersOf(queryClient, hostSpaceIdOf(joined)))
+		)
+	}
+
+	const hostNameOf = (id: string) =>
+		memberNameOf(heldHostOf(id), i18n.t("chat:working.name"))
+
+	const removalNoticeOf = (name: string, hostName: string) => ({
+		title: i18n.t("bots:spaces.removed.notice", { host: hostName, name }),
 		description: i18n.t("bots:spaces.removed.noticeDescription", {
-			host: hostEmail,
+			host: hostName,
 		}),
 	})
 
 	const noteRemoval = ({ id, name }: JoinedSpaceRemoved) => {
-		const hostEmail = inviters.of(id)
+		const hostName = hostNameOf(id)
 		const wasOpen = isOpen(id)
 		const back = backSpaceId()
 		hosts.forget(id)
-		inviters.forget(id)
 		hold(heldWithout(id))
-		reportRemoval(removalNoticeOf(name, hostEmail))
+		reportRemoval(removalNoticeOf(name, hostName))
 		if (wasOpen && back) selectSpace(back)
 	}
 
@@ -411,8 +418,7 @@ export const createJoinedSpacesController = ({
 		reopenPending()
 	}
 
-	const admit = async (joined: JoinedSpace, hostEmail: string) => {
-		inviters.remember(joined.id, hostEmail)
+	const admit = async (joined: JoinedSpace) => {
 		hold([...heldWithout(joined.id), joined])
 		await hosts.connect(joined.id)
 		await read()
@@ -453,6 +459,6 @@ export const createJoinedSpacesController = ({
 		setLeaveOpen: (isLeaveOpen: boolean) => set({ isLeaveOpen }),
 		leave,
 		admit,
-		hostEmailOf: inviters.of,
+		hostNameOf,
 	}
 }

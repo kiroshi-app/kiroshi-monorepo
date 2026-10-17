@@ -151,6 +151,24 @@ describe("useMembers", () => {
 		expect(panel().members).toEqual([STEVE_ROW, SAM_PENDING_ROW])
 	})
 
+	it("names a member with no name by the unnamed copy, never by the email", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () =>
+				ok([
+					{ ...STEVE, name: null },
+					{ ...ALEX_JOINED, name: "" },
+					SAM_PENDING,
+				]),
+			),
+		})
+
+		expect(panel().members).toEqual([
+			{ ...STEVE_ROW, name: "No name" },
+			{ ...ALEX_JOINED_ROW, name: "No name" },
+			SAM_PENDING_ROW,
+		])
+	})
+
 	it("reads the members once for two panels on the same space", async () => {
 		const transport = createFakeTransport()
 		renderHook(
