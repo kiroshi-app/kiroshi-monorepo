@@ -74,7 +74,7 @@ const isUnknownConversation = (thrown: unknown): boolean => {
 
 const refusedAnswerOf = (thrown: unknown) =>
 	isRefusedWrite(thrown)
-		? `${thrown.command} answered ${describeFailure(thrown.cause)}`
+		? `${thrown.command} answered ${thrown.message}`
 		: describeFailure(thrown)
 
 const logSkipped = (
