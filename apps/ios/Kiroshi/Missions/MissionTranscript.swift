@@ -13,7 +13,7 @@ struct MissionTranscript: Equatable {
 
     init(
         of messages: [MissionThreadMessage], openedAt: Date, time: ConversationTime,
-        authorship: ThreadAuthorship = .hostedSignedOut
+        authorship: ThreadAuthorship = .unknownAccount
     ) {
         openedDay = time.dayLabel(for: openedAt)
         let shown = messages.sorted(by: { $0.seq < $1.seq }).compactMap {

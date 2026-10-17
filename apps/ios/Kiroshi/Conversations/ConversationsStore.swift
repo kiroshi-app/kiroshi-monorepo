@@ -53,7 +53,7 @@ final class ConversationsStore {
     }
 
     @ObservationIgnored private var instanceId: Space.ID?
-    @ObservationIgnored private var authorship = ThreadAuthorship.hostedSignedOut
+    @ObservationIgnored private var authorship = ThreadAuthorship.unknownAccount
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var opening: Companion.ID?
@@ -124,7 +124,7 @@ final class ConversationsStore {
     }
 
     func follow(
-        _ connection: RelayConnection, as authorship: ThreadAuthorship = .hostedSignedOut
+        _ connection: RelayConnection, as authorship: ThreadAuthorship = .unknownAccount
     ) async {
         self.authorship = authorship
         if instanceId != connection.instanceId {

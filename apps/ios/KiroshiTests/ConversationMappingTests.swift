@@ -24,7 +24,7 @@ struct ConversationMappingTests {
         #expect(message.role == .user)
         #expect(message.authorAccountId == nil)
         #expect(message.authorName == nil)
-        #expect(MessagePreview(message, authorship: .hostedSignedOut).line == "You: Hi")
+        #expect(MessagePreview(message, authorship: .unknownAccount).line == "You: Hi")
     }
 
     @Test func readsACompanionsRoleFromItsTitle() throws {

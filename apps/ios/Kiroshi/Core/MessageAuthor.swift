@@ -24,7 +24,7 @@ enum MessageAuthor: Hashable, Sendable {
 }
 
 struct ThreadAuthorship: Equatable, Sendable {
-    static let hostedSignedOut = ThreadAuthorship(accountId: nil, isHostedByYou: true)
+    static let unknownAccount = ThreadAuthorship(accountId: nil, isHostedByYou: true)
     static let unnamed = String(localized: "No name")
 
     let accountId: String?
@@ -35,6 +35,7 @@ struct ThreadAuthorship: Equatable, Sendable {
         name: String?
     ) -> MessageAuthor {
         guard role == .user, botId == nil else { return .companion(botId) }
+        guard let accountId else { return .you }
         guard let authorAccountId else {
             return isHostedByYou ? .you : .person(accountId: nil, name: Self.unnamed)
         }

@@ -39,7 +39,7 @@ final class MissionThreadStore {
         mission: Mission,
         missions: MissionsStore,
         work: CompanionWork,
-        authorship: ThreadAuthorship = .hostedSignedOut,
+        authorship: ThreadAuthorship = .unknownAccount,
         now: @escaping () -> Date = Date.init,
         newId: @escaping () -> String = { UUID().uuidString.lowercased() },
         calendar: Calendar = .current

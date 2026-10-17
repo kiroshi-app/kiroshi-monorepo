@@ -44,7 +44,7 @@ final class ThreadStore {
     init(
         subject: ConversationSubject,
         work: CompanionWork,
-        authorship: ThreadAuthorship = .hostedSignedOut,
+        authorship: ThreadAuthorship = .unknownAccount,
         draft: String = "",
         now: @escaping () -> Date = Date.init,
         makeId: @escaping () -> String = { UUID().uuidString.lowercased() },

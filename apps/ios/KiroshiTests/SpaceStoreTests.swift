@@ -32,6 +32,22 @@ struct SpaceStoreTests {
         }
     }
 
+    @Test func aSessionSavedWithoutItsUserIdKeepsYourMessagesYours() {
+        let store = SpaceStore(
+            spaces: [homeLab],
+            session: Session(bearer: "older-bearer", email: CloudFixture.email),
+            cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: http),
+            lastSpace: lastSpace, relay: RelayEnvironment(transport: relay, clock: clock),
+            exit: { _ in })
+        let yours = TranscriptMessage(
+            id: "m1", conversationId: "c1", seq: 1, role: .user, content: "Hi",
+            completion: .complete, createdAt: 1, authorBotId: nil,
+            authorAccountId: CloudFixture.userId, authorName: "Sam")
+
+        #expect(store.authorship.accountId == nil)
+        #expect(store.authorship.author(of: yours) == .you)
+    }
+
     @Test func reopensOnTheLastPickedSpace() {
         let store = makeStore(lastSpace: InMemoryLastSpaceStore("home-lab"))
 

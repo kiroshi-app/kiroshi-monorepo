@@ -50,11 +50,17 @@ struct MessageAuthorTests {
         }
     }
 
-    @Test func signedOutEveryAccountIsSomeoneElse() {
-        #expect(
-            ThreadAuthorship.hostedSignedOut.author(
-                role: .user, botId: nil, accountId: "acc-sam", name: "Sam")
-                == .person(accountId: "acc-sam", name: "Sam"))
+    @Test func withoutYourAccountIdEveryPersonsMessageStaysYours() {
+        let olderSession = ThreadAuthorship(accountId: nil, isHostedByYou: false)
+        for authorship in [olderSession, .unknownAccount] {
+            #expect(
+                authorship.author(role: .user, botId: nil, accountId: "acc-sam", name: "Sam")
+                    == .you)
+            #expect(authorship.author(role: .user, botId: nil, accountId: nil, name: nil) == .you)
+            #expect(
+                authorship.author(role: .assistant, botId: "atlas", accountId: nil, name: nil)
+                    == .companion("atlas"))
+        }
     }
 
     @Test func initialsAreTheFirstLetterOfTheFirstTwoWords() {
