@@ -98,6 +98,7 @@ import {
 import type { ReportedRunsReader } from "../routines/run-port"
 import {
 	causeOf,
+	type ReportTurnWrites,
 	readReportedCauses,
 	writeReportTurn,
 } from "../routines/run-report"
@@ -158,7 +159,7 @@ export type ConversationController = {
 	sendAgain: (messageId: string) => Promise<void>
 	reportRun: (draft: RunReportDraft) => Promise<string>
 	relayRunReport: (scope: RuntimeScope, message: ChatMessage) => Promise<void>
-	relaySpoken: (spoken: CompanionSpoke) => Promise<boolean>
+	relaySpoken: (spoken: CompanionSpoke, side: SpokenSide) => Promise<boolean>
 	pin: (messageId: string, blockIndex: number) => Promise<void>
 	unpin: (messageId: string, blockIndex: number) => Promise<void>
 	pins: () => Promise<MessagePin[]>
@@ -187,6 +188,11 @@ export type ConversationControllerOptions = {
 }
 
 type Seating = "held" | "unknown" | "unreadable"
+
+type SpokenSide = {
+	conversation: StoredConversation
+	writes: ReportTurnWrites
+}
 
 type AnswerPlace = Pick<NewUserMessage, "conversationId" | "turnId">
 
@@ -1346,19 +1352,19 @@ export const createConversationController = (
 		await relayReport(reported)
 	}
 
-	const relaySpoken = async ({
-		conversationId,
-		authorBotId,
-		text,
-	}: CompanionSpoke) => {
-		const seating = await readableSeatingFor(conversationId)
-
-		if (seating === "unknown" || !presentBotIds().includes(authorBotId)) {
+	const relaySpoken = async (
+		{ conversationId, authorBotId, text }: CompanionSpoke,
+		{ conversation: seated, writes }: SpokenSide,
+	) => {
+		if (conversation?.id !== conversationId) {
+			await open(seated)
+		}
+		if (!presentBotIds().includes(authorBotId)) {
 			return false
 		}
 		const spoken = await enqueue(() =>
 			writeReportTurn({
-				store,
+				store: writes,
 				draft: {
 					conversationId,
 					botId: authorBotId,

@@ -1,3 +1,4 @@
+import { RefusedWrite } from "./refused-write"
 import type {
 	AvatarBlot,
 	Bot,
@@ -46,8 +47,11 @@ import {
 	type TranscriptWindow,
 } from "./transcript-contract"
 
-import { activeJoinedSpaceId, invoke, listen } from "../host"
+import { activeJoinedSpaceId, invoke, invokeOn, listen } from "../host"
 import type { AgentCommand } from "@/lib/agent/contract"
+import type { ConversationSource } from "../host/conversation-provenance"
+import type { Invoke } from "../host/joined-hosts-invoke"
+import type { ReportTurnWrites } from "../routines/run-report"
 
 const spaceOrJoined = (spaceId?: string | null): string | null =>
 	spaceId ?? activeJoinedSpaceId()
@@ -63,10 +67,70 @@ export const arrivalsTransport = {
 			listener(payload),
 		),
 
-	onCompanionSpoke: (listener: (spoken: CompanionSpoke) => void) =>
-		listen<CompanionSpoke>(COMPANION_SPOKE_EVENT, ({ payload }) =>
-			listener(payload),
+	onCompanionSpoke: (
+		listener: (spoken: CompanionSpoke, side: ConversationSource) => void,
+	) =>
+		listen<CompanionSpoke>(COMPANION_SPOKE_EVENT, ({ payload }, side) =>
+			listener(payload, side),
 		),
+}
+
+const conversationReadsThrough = (call: Invoke) => ({
+	spaces: () => call<Space[]>("space_list"),
+
+	conversations: (spaceId: string) =>
+		call<Conversation[]>("conversation_list", { spaceId }),
+})
+
+const reportTurnWritesThrough = (call: Invoke): ReportTurnWrites => ({
+	startTurn: (turn: NewTurn) =>
+		call<number>("conversation_start_turn", { turn }),
+
+	completeTurn: (id: string, completedAt: number) =>
+		call<void>("conversation_complete_turn", { id, completedAt }),
+
+	openAssistantMessage: (message: NewAssistantMessage) =>
+		call<number>("conversation_open_assistant_message", { message }),
+
+	appendText: (id: string, delta: string) =>
+		call<void>("conversation_append_text", { id, delta }),
+
+	finalizeMessage: (
+		id: string,
+		completion: TerminalCompletion,
+		settledText?: string,
+	) =>
+		call<void>("conversation_finalize_message", {
+			id,
+			completion,
+			settledText,
+		}),
+})
+
+const refusalsNamed =
+	(call: Invoke, turnOf: () => string | undefined): Invoke =>
+	<T>(...sent: Parameters<Invoke>) =>
+		call<T>(...sent).catch((reason: unknown) => {
+			throw new RefusedWrite(sent[0], turnOf(), reason)
+		})
+
+export const conversationReadsOn = (side: ConversationSource) =>
+	conversationReadsThrough(invokeOn(side))
+
+export const reportTurnWritesOn = (
+	side: ConversationSource,
+): ReportTurnWrites => {
+	let turnId: string | undefined
+	const writes = reportTurnWritesThrough(
+		refusalsNamed(invokeOn(side), () => turnId),
+	)
+	return {
+		...writes,
+		startTurn: (turn) => {
+			turnId = turn.id
+			return writes.startTurn(turn)
+		},
+	}
 }
 
 export const transcriptEventsTransport = {
@@ -77,6 +141,9 @@ export const transcriptEventsTransport = {
 }
 
 export const conversationStore: TranscriptStore = {
+	...conversationReadsThrough(invoke),
+	...reportTurnWritesThrough(invoke),
+
 	loadPage: (conversationId: string, cursor: TranscriptCursor | null) =>
 		invoke<TranscriptPage>("conversation_message_page", {
 			conversationId,
@@ -90,8 +157,6 @@ export const conversationStore: TranscriptStore = {
 			seq,
 			limit: TRANSCRIPT_WINDOW_SIZE,
 		}),
-
-	spaces: () => invoke<Space[]>("space_list"),
 
 	createSpace: (name: string) => invoke<Space>("space_create", { name }),
 
@@ -298,9 +363,6 @@ export const conversationStore: TranscriptStore = {
 			{ signal },
 		),
 
-	conversations: (spaceId: string) =>
-		invoke<Conversation[]>("conversation_list", { spaceId }),
-
 	conversationPage: (
 		spaceId: string,
 		cursor: string | null,
@@ -453,32 +515,9 @@ export const conversationStore: TranscriptStore = {
 			conversationId,
 		}),
 
-	startTurn: (turn: NewTurn) =>
-		invoke<number>("conversation_start_turn", { turn }),
-
-	completeTurn: (id: string, completedAt: number) =>
-		invoke<void>("conversation_complete_turn", { id, completedAt }),
-
 	appendUserMessage: (message: NewUserMessage) =>
 		invoke<number>("conversation_append_user_message", { message }),
 
 	sendUserMessage: (message: NewUserMessage, summoned: string[]) =>
 		invoke<number>("conversation_send_user_message", { message, summoned }),
-
-	openAssistantMessage: (message: NewAssistantMessage) =>
-		invoke<number>("conversation_open_assistant_message", { message }),
-
-	appendText: (id: string, delta: string) =>
-		invoke<void>("conversation_append_text", { id, delta }),
-
-	finalizeMessage: (
-		id: string,
-		completion: TerminalCompletion,
-		settledText?: string,
-	) =>
-		invoke<void>("conversation_finalize_message", {
-			id,
-			completion,
-			settledText,
-		}),
 }

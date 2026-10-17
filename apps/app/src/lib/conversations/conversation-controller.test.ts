@@ -2841,11 +2841,14 @@ describe("the mentions a finished turn carries", () => {
 		const room = await roomSeating()
 		const started = vi.spyOn(room.store, "startTurn")
 
-		await room.controller.relaySpoken({
-			conversationId: room.conversation.id,
-			authorBotId: room.ada,
-			text: "Walls are up. <@ghost>, read it.",
-		})
+		await room.controller.relaySpoken(
+			{
+				conversationId: room.conversation.id,
+				authorBotId: room.ada,
+				text: "Walls are up. <@ghost>, read it.",
+			},
+			{ conversation: room.conversation, writes: room.store },
+		)
 		await settled()
 
 		expect(started).toHaveBeenCalledTimes(1)
@@ -2877,11 +2880,14 @@ describe("the mentions a finished turn carries", () => {
 		const room = await roomSeating()
 		await room.seat(room.iris)
 
-		await room.controller.relaySpoken({
-			conversationId: room.conversation.id,
-			authorBotId: room.ada,
-			text: `Walls are up. <@${room.iris}>, read it.`,
-		})
+		await room.controller.relaySpoken(
+			{
+				conversationId: room.conversation.id,
+				authorBotId: room.ada,
+				text: `Walls are up. <@${room.iris}>, read it.`,
+			},
+			{ conversation: room.conversation, writes: room.store },
+		)
 		await settled()
 
 		expect(submittedIn(room)).toEqual([room.iris])
