@@ -605,14 +605,12 @@ async fn join_answered(
 	hosted: &HostedSpace<'_>,
 	join: Result<Join, Refusal>,
 ) -> Result<(), Ended> {
-	match join {
-		Ok(join) => match hosted.answered(join).await {
-			Ok(answer) => sent(sink, Message::text(answer)).await.map_err(Ended::Dropped),
-			Err(refusal) => {
-				eprintln!("{}", wire::dropped_line(hosted.space_id, &refusal));
-				Ok(())
-			}
-		},
+	let answered = match join {
+		Ok(join) => hosted.answered(join).await,
+		Err(refusal) => Err(refusal),
+	};
+	match answered {
+		Ok(answer) => sent(sink, Message::text(answer)).await.map_err(Ended::Dropped),
 		Err(refusal) => {
 			eprintln!("{}", wire::dropped_line(hosted.space_id, &refusal));
 			Ok(())

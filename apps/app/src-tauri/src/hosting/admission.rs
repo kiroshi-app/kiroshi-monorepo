@@ -58,9 +58,7 @@ pub(super) fn join_of(text: &str) -> Option<Result<Join, Refusal>> {
 impl HostedSpace<'_> {
 	pub(super) async fn answered(&self, join: Join) -> Result<String, Refusal> {
 		let from = join.from.clone();
-		let answer =
-			self.decided(join).await.map_err(|cause| Refusal { from: Some(from), cause })?;
-		Ok(answer)
+		self.decided(join).await.map_err(|cause| Refusal { from: Some(from), cause })
 	}
 
 	async fn decided(&self, join: Join) -> Result<String, Dropped> {
