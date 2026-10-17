@@ -258,6 +258,40 @@ describe("describeFailure", () => {
 		).toBe("storage: disk full")
 	})
 
+	it("builds a sentence from the kind and the detail of the nested failure", () => {
+		expect(
+			describeFailure({
+				kind: "storage",
+				failure: { kind: "sqlite", detail: "FOREIGN KEY constraint failed" },
+			}),
+		).toBe("storage: FOREIGN KEY constraint failed")
+	})
+
+	it("names the operation and the table the nested failure was refused on", () => {
+		expect(
+			describeFailure({
+				kind: "storage",
+				failure: {
+					kind: "sqlite",
+					detail: "FOREIGN KEY constraint failed",
+					operation: "insert",
+					table: "turns",
+				},
+			}),
+		).toBe("storage: FOREIGN KEY constraint failed (insert on turns)")
+	})
+
+	it("names the operation and the table the failure carries beside its nested failure", () => {
+		expect(
+			describeFailure({
+				kind: "storage",
+				operation: "insert",
+				table: "turns",
+				failure: { kind: "sqlite", detail: "FOREIGN KEY constraint failed" },
+			}),
+		).toBe("storage: FOREIGN KEY constraint failed (insert on turns)")
+	})
+
 	it("builds a sentence from the message alone when no kind comes with it", () => {
 		expect(describeFailure({ message: "disk full", code: 28 })).toBe(
 			"disk full",

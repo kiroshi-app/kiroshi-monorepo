@@ -11,10 +11,16 @@ import type {
 	PluginScope,
 	TranscriptStoreError,
 } from "./store-contract"
-import { arrivalsTransport, conversationStore } from "./store-transport"
+import {
+	arrivalsTransport,
+	conversationStore,
+	reportTurnWritesOn,
+} from "./store-transport"
 import {
 	COMPANION_ARRIVED_EVENT,
+	COMPANION_SPOKE_EVENT,
 	type CompanionArrival,
+	type CompanionSpoke,
 	type TerminalCompletion,
 	TRANSCRIPT_PAGE_SIZE,
 	type TranscriptPage,
@@ -611,6 +617,48 @@ describe("arrivalsTransport", () => {
 
 		expect(event).toBe(COMPANION_ARRIVED_EVENT)
 		expect(listener).toHaveBeenCalledWith(arrival)
+	})
+})
+
+describe("the companion spoke listener", () => {
+	it("hands each word heard on this computer to its listener with this computer as its side", async () => {
+		const spoken: CompanionSpoke = {
+			conversationId: CONVERSATION,
+			authorBotId: "b-2",
+			text: "Walls are up.",
+		}
+		const listener = vi.fn()
+		hostListen.mockResolvedValue(() => undefined)
+
+		await arrivalsTransport.onCompanionSpoke(listener)
+		const [event, handler] = hostListen.mock.calls[0] ?? []
+		handler?.({ event: COMPANION_SPOKE_EVENT, id: 1, payload: spoken })
+
+		expect(event).toBe(COMPANION_SPOKE_EVENT)
+		expect(listener).toHaveBeenCalledWith(spoken, null)
+	})
+})
+
+describe("report turn writes pinned to this computer", () => {
+	it("names the refused command and the turn it started", async () => {
+		const failure: TranscriptStoreError = {
+			kind: "storage",
+			failure: { kind: "sqlite", detail: "FOREIGN KEY constraint failed" },
+		}
+		const writes = reportTurnWritesOn(null)
+		hostInvoke.mockResolvedValueOnce(1).mockRejectedValueOnce(failure)
+
+		await writes.startTurn(TURN)
+		const refused = await writes
+			.openAssistantMessage(ASSISTANT_MESSAGE)
+			.catch((reason: unknown) => reason)
+
+		expect(refused).toMatchObject({
+			command: "conversation_open_assistant_message",
+			turn: TURN.id,
+			cause: failure,
+			message: "storage: FOREIGN KEY constraint failed",
+		})
 	})
 })
 

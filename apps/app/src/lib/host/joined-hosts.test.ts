@@ -506,6 +506,29 @@ describe("the active host", () => {
 		expect(local.invoke).toHaveBeenCalledOnce()
 	})
 
+	it("keeps the calls pinned to this computer there when a joined space opens between them", async () => {
+		const { hosts, local, fetch } = joinedHostsOf()
+		const onThisComputer = hosts.invokeOn(null)
+
+		await onThisComputer("conversation_start_turn", {
+			turn: { id: "t-1", conversationId: "c-1", startedAt: 1 },
+		})
+		await hosts.activate("garage")
+		await onThisComputer("conversation_complete_turn", {
+			id: "t-1",
+			completedAt: 2,
+		})
+
+		expect(local.invoke.mock.calls.map(([command]) => command)).toEqual([
+			"conversation_start_turn",
+			"conversation_complete_turn",
+		])
+		expect(fetch).not.toHaveBeenCalledWith(
+			new URL(`${HOST}/api/invoke/conversation_complete_turn`),
+			expect.anything(),
+		)
+	})
+
 	it("stays on the local host when the joined space cannot connect", async () => {
 		const { hosts } = joinedHostsOf({
 			join: async () => ({

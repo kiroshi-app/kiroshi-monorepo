@@ -1,15 +1,23 @@
-import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import type { ConversationRuntimes } from "./conversation-runtimes"
+import { isRefusedWrite } from "./refused-write"
 import type { SpokenWords } from "./spoken-words"
+import type { Conversation } from "./store-contract"
 import type { CompanionSpoke } from "./transcript-contract"
 
+import {
+	describeFailure,
+	type ReporterFacts,
+	type UnreportedFailureNotice,
+} from "../failure-report"
 import { rowIdsIn } from "../chat/badge-source"
+import type { ConversationSource } from "../host/conversation-provenance"
+import type { ReportTurnWrites } from "../routines/run-report"
 
 type CompanionSpokePort = {
 	onCompanionSpoke: (
-		listener: (spoken: CompanionSpoke) => void,
+		listener: (spoken: CompanionSpoke, side: ConversationSource) => void,
 	) => Promise<() => void>
 }
 
@@ -25,53 +33,119 @@ type SpokenRosterPort = {
 	reload: () => Promise<void>
 }
 
+type ThisComputerPort = {
+	conversation: (conversationId: string) => Promise<Conversation | null>
+	writes: () => ReportTurnWrites
+}
+
 export type CompanionSpokeDriverOptions = {
 	runtimes: Pick<ConversationRuntimes, "runtimeFor">
 	roster: SpokenRosterPort
 	companions: CompanionSpokePort
 	spokenWords: Pick<SpokenWords, "announce">
-	reportFailure: (notice: NoticeMessage) => void
-	joinedSpaceId: () => string | null
+	thisComputer: ThisComputerPort
+	reportFailure: (
+		notice: UnreportedFailureNotice,
+		facts?: ReporterFacts,
+	) => unknown
 }
 
 type WriteSpoken = (spoken: CompanionSpoke, key: string) => Promise<boolean>
 
 const SEPARATOR = "\u0000"
 
+const GONE_FROM_THIS_COMPUTER = "this computer no longer holds the conversation"
+
 const keyOf = ({ conversationId, authorBotId, text }: CompanionSpoke) =>
 	[conversationId, authorBotId, text].join(SEPARATOR)
 
-const detailOf = (thrown: unknown) =>
-	thrown instanceof Error ? thrown.message : String(thrown)
+const causeOf = (thrown: unknown) =>
+	isRefusedWrite(thrown) ? thrown.cause : thrown
+
+const isUnknownConversation = (thrown: unknown): boolean => {
+	const cause = causeOf(thrown)
+	return (
+		typeof cause === "object" &&
+		cause !== null &&
+		"kind" in cause &&
+		cause.kind === "unknownConversation"
+	)
+}
+
+const refusedAnswerOf = (thrown: unknown) =>
+	isRefusedWrite(thrown)
+		? `${thrown.command} answered ${thrown.message}`
+		: describeFailure(thrown)
+
+const logSkipped = (
+	{ conversationId, authorBotId }: CompanionSpoke,
+	reason: string,
+) => {
+	console.info(
+		[
+			"companion spoke driver: wrote nothing for a word of a conversation gone from its side",
+			`conversation: ${conversationId}`,
+			`bot: ${authorBotId}`,
+			`reason: ${reason}`,
+		].join(" | "),
+	)
+}
+
+const factsOf = (
+	{ conversationId, authorBotId }: CompanionSpoke,
+	thrown: unknown,
+): ReporterFacts => ({
+	conversation: conversationId,
+	botId: authorBotId,
+	...(isRefusedWrite(thrown)
+		? { command: thrown.command, turn: thrown.turn }
+		: {}),
+})
 
 export const startCompanionSpokeDriver = ({
 	runtimes,
 	roster,
 	companions,
 	spokenWords,
+	thisComputer,
 	reportFailure,
-	joinedSpaceId,
 }: CompanionSpokeDriverOptions): (() => void) => {
 	const relayed = new Set<string>()
 	let isStopped = false
 
-	const raiseFailure = (thrown: unknown) => {
+	const raiseFailure = (thrown: unknown, facts?: ReporterFacts) => {
 		console.error("companion spoke driver:", thrown)
-		reportFailure({
-			title: i18n.t("chat:screen.transport.writeFailed", {
-				detail: detailOf(thrown),
-			}),
-		})
+		reportFailure(
+			{
+				title: i18n.t("chat:screen.transport.writeFailed", {
+					detail: describeFailure(thrown),
+				}),
+			},
+			facts,
+		)
 	}
 
-	const relay = async (spoken: CompanionSpoke, key: string) => {
+	const relayOnThisComputer = async (spoken: CompanionSpoke) => {
+		const conversation = await thisComputer.conversation(spoken.conversationId)
+		if (!conversation) {
+			logSkipped(spoken, GONE_FROM_THIS_COMPUTER)
+			return false
+		}
+		return runtimes
+			.runtimeFor(spoken.conversationId)
+			.relaySpoken(spoken, { conversation, writes: thisComputer.writes() })
+	}
+
+	const writeOnThisComputer: WriteSpoken = async (spoken, key) => {
 		try {
-			return await runtimes
-				.runtimeFor(spoken.conversationId)
-				.relaySpoken(spoken)
+			return await relayOnThisComputer(spoken)
 		} catch (thrown) {
+			if (isUnknownConversation(thrown)) {
+				logSkipped(spoken, refusedAnswerOf(thrown))
+				return false
+			}
 			relayed.delete(key)
-			raiseFailure(thrown)
+			raiseFailure(thrown, factsOf(spoken, thrown))
 			return false
 		}
 	}
@@ -96,8 +170,8 @@ export const startCompanionSpokeDriver = ({
 
 	const leaveToJoinedHost: WriteSpoken = async () => true
 
-	const writerAtHearing = (): WriteSpoken =>
-		joinedSpaceId() === null ? relay : leaveToJoinedHost
+	const writerOf = (side: ConversationSource): WriteSpoken =>
+		side === null ? writeOnThisComputer : leaveToJoinedHost
 
 	const relayAndAnnounce = async (
 		spoken: CompanionSpoke,
@@ -117,7 +191,7 @@ export const startCompanionSpokeDriver = ({
 		})
 	}
 
-	const take = (spoken: CompanionSpoke) => {
+	const take = (spoken: CompanionSpoke, side: ConversationSource) => {
 		const key = keyOf(spoken)
 
 		if (isStopped || relayed.has(key)) {
@@ -125,7 +199,7 @@ export const startCompanionSpokeDriver = ({
 		}
 
 		relayed.add(key)
-		void relayAndAnnounce(spoken, key, writerAtHearing())
+		void relayAndAnnounce(spoken, key, writerOf(side))
 	}
 
 	const listening = companions.onCompanionSpoke(take).catch((reason) => {

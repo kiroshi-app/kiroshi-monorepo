@@ -1,9 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
-
-import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { startCompanionSpokeDriver } from "./companion-spoke-driver"
 import {
@@ -11,6 +9,8 @@ import {
 	createConversationRuntimes,
 } from "./conversation-runtimes"
 import { createFakeTranscriptStore } from "./fake-transcript-store"
+import { readConversationInEverySpace } from "./read-conversation"
+import { RefusedWrite } from "./refused-write"
 import { createScriptedDriver, type ScriptedDriver } from "./scripted-driver"
 import { createSpokenWords, type SpokenWord } from "./spoken-words"
 import type { Conversation, Space } from "./store-contract"
@@ -18,12 +18,21 @@ import type { TranscriptStore } from "./store-port"
 import type { CompanionSpoke } from "./transcript-contract"
 import { seatBots } from "./transcript-fixtures"
 
+import type { ReporterFacts, UnreportedFailureNotice } from "../failure-report"
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
+import type { ConversationSource } from "../host/conversation-provenance"
 
-afterEach(cleanup)
+afterEach(() => {
+	cleanup()
+	vi.restoreAllMocks()
+})
 
 const SPACE = "personal"
+
+const THIS_COMPUTER = null
+
+const JOINED_HOST = "garage"
 
 const settled = async () => {
 	for (let round = 0; round < 60; round += 1) {
@@ -47,7 +56,8 @@ type Room = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
 	conversation: Conversation
-	notices: NoticeMessage[]
+	notices: UnreportedFailureNotice[]
+	facts: (ReporterFacts | undefined)[]
 	spoken: SpokenWord[]
 	announce: (spoken: CompanionSpoke) => Promise<void>
 	stop: () => void
@@ -56,16 +66,17 @@ type Room = {
 type Front = {
 	runtimes: ConversationRuntimes
 	roster: RosterController
-	notices: NoticeMessage[]
+	notices: UnreportedFailureNotice[]
+	facts: (ReporterFacts | undefined)[]
 	spoken: SpokenWord[]
-	hear: (spoken: CompanionSpoke) => void
+	hear: (spoken: CompanionSpoke, side?: ConversationSource) => void
 	stop: () => void
 }
 
 const startFront = async (
 	store: TranscriptStore,
 	driver: ScriptedDriver,
-	joinedSpaceId: () => string | null,
+	onThisComputer: TranscriptStore = store,
 ): Promise<Front> => {
 	const runtimes = createConversationRuntimes(driver, store)
 	const roster = mountRoster(store, { reportFailure: () => undefined })
@@ -79,8 +90,11 @@ const startFront = async (
 	spokenWords.subscribe((word) => {
 		spoken.push(word)
 	})
-	const notices: NoticeMessage[] = []
-	let heard: ((spoken: CompanionSpoke) => void) | null = null
+	const notices: UnreportedFailureNotice[] = []
+	const facts: (ReporterFacts | undefined)[] = []
+	let heard:
+		| ((spoken: CompanionSpoke, side: ConversationSource) => void)
+		| null = null
 	const stop = startCompanionSpokeDriver({
 		runtimes,
 		roster,
@@ -93,18 +107,26 @@ const startFront = async (
 				})
 			},
 		},
-		reportFailure: (notice) => {
-			notices.push(notice)
+		thisComputer: {
+			conversation: (conversationId) =>
+				readConversationInEverySpace(onThisComputer, conversationId),
+			writes: () => onThisComputer,
 		},
-		joinedSpaceId,
+		reportFailure: (notice, reported) => {
+			notices.push(notice)
+			facts.push(reported)
+		},
 	})
 	await settled()
 
-	const hear = (spoken: CompanionSpoke) => {
-		heard?.(spoken)
+	const hear = (
+		spoken: CompanionSpoke,
+		side: ConversationSource = THIS_COMPUTER,
+	) => {
+		heard?.(spoken, side)
 	}
 
-	return { runtimes, roster, notices, spoken, hear, stop }
+	return { runtimes, roster, notices, facts, spoken, hear, stop }
 }
 
 const createRoom = async (
@@ -118,7 +140,7 @@ const createRoom = async (
 		botIds: bots.map((bot) => bot.id),
 	})
 	const driver = createScriptedDriver()
-	const front = await startFront(store, driver, () => null)
+	const front = await startFront(store, driver)
 
 	const announce = async (spoken: CompanionSpoke) => {
 		front.hear(spoken)
@@ -338,7 +360,7 @@ describe("a companion speaking in a room the front never opened", () => {
 	})
 
 	it("raises a failure when companion messages cannot be listened to", async () => {
-		const notices: NoticeMessage[] = []
+		const notices: UnreportedFailureNotice[] = []
 		const store = createFakeTranscriptStore()
 		startCompanionSpokeDriver({
 			runtimes: createConversationRuntimes(createScriptedDriver(), store),
@@ -347,10 +369,13 @@ describe("a companion speaking in a room the front never opened", () => {
 			companions: {
 				onCompanionSpoke: () => Promise.reject(new Error("refused")),
 			},
+			thisComputer: {
+				conversation: () => Promise.resolve(null),
+				writes: () => store,
+			},
 			reportFailure: (notice) => {
 				notices.push(notice)
 			},
-			joinedSpaceId: () => null,
 		})
 		await settled()
 
@@ -534,8 +559,8 @@ const createSharedSpace = async (): Promise<SharedSpace> => {
 	const store = createFakeTranscriptStore()
 	const driver = createScriptedDriver()
 	const [ada, nyx, rex] = await seatBots(store, SPACE, ["Ada", "Nyx", "Rex"])
-	const host = await startFront(store, driver, () => null)
-	const member = await startFront(store, driver, () => SPACE)
+	const host = await startFront(store, driver)
+	const member = await startFront(store, driver)
 
 	const open = (title: string) =>
 		store.createConversation({
@@ -546,8 +571,8 @@ const createSharedSpace = async (): Promise<SharedSpace> => {
 		})
 
 	const hear = async (spoken: CompanionSpoke) => {
-		host.hear(spoken)
-		member.hear(spoken)
+		host.hear(spoken, THIS_COMPUTER)
+		member.hear(spoken, JOINED_HOST)
 		await settled()
 	}
 
@@ -655,111 +680,169 @@ describe("a room a companion opens, heard by the host and by a member Mac", () =
 	})
 })
 
-type HeldRosterReload = {
-	store: TranscriptStore
-	hold: () => void
-	release: () => void
+const FOREIGN_KEY_REFUSAL = {
+	kind: "storage",
+	failure: { kind: "sqlite", detail: "FOREIGN KEY constraint failed" },
 }
 
-const holdingRosterReload = (store: TranscriptStore): HeldRosterReload => {
-	let held: Promise<void> | null = null
-	let release: () => void = () => undefined
+const writesElsewhere = (store: TranscriptStore) => {
+	const sent: string[] = []
+	const refuse = (command: string) => () => {
+		sent.push(command)
+		return Promise.reject(FOREIGN_KEY_REFUSAL)
+	}
 	return {
+		sent,
 		store: {
 			...store,
-			bots: async (spaceId) => {
-				await held
-				return store.bots(spaceId)
-			},
+			startTurn: refuse("startTurn"),
+			openAssistantMessage: refuse("openAssistantMessage"),
+			appendText: refuse("appendText"),
+			finalizeMessage: refuse("finalizeMessage"),
+			completeTurn: refuse("completeTurn"),
 		},
-		hold: () => {
-			held = new Promise<void>((resolve) => {
-				release = resolve
-			})
-		},
-		release: () => release(),
 	}
 }
 
-type SwitchingFront = {
-	store: TranscriptStore
-	driver: ScriptedDriver
-	ada: string
-	nyx: string
-	room: Conversation
-	hearDuringReload: (
-		spoken: CompanionSpoke,
-		switchTo: string | null,
-	) => Promise<void>
-}
-
-const startSwitchingFront = async (
-	joinedAtStart: string | null,
-): Promise<SwitchingFront> => {
-	const holding = holdingRosterReload(createFakeTranscriptStore())
-	const driver = createScriptedDriver()
-	const [ada, nyx, rex] = await seatBots(holding.store, SPACE, [
+const startOnThisComputer = async (onThisComputer: TranscriptStore) => {
+	const [ada, nyx, rex] = await seatBots(onThisComputer, SPACE, [
 		"Ada",
 		"Nyx",
 		"Rex",
 	])
-	let joined = joinedAtStart
-	const front = await startFront(holding.store, driver, () => joined)
-	const room = await holding.store.createConversation({
+	const room = await onThisComputer.createConversation({
 		spaceId: SPACE,
 		sectionId: null,
 		title: "Walls",
 		botIds: [ada.id, nyx.id, rex.id],
 	})
-
-	const hearDuringReload = async (
-		spoken: CompanionSpoke,
-		switchTo: string | null,
-	) => {
-		holding.hold()
-		front.hear(spoken)
-		await settled()
-		joined = switchTo
-		holding.release()
-		await settled()
-	}
-
-	return {
-		store: holding.store,
-		driver,
-		ada: ada.id,
-		nyx: nyx.id,
-		room,
-		hearDuringReload,
-	}
+	return { ada: ada.id, room }
 }
 
-describe("a word heard while the joined space switches during the roster reload", () => {
-	it("is written and summons once when a joined space opens after it was heard", async () => {
-		const { store, driver, ada, nyx, room, hearDuringReload } =
-			await startSwitchingFront(null)
+const infoLines = () => {
+	const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
+	return () => info.mock.calls.map(([line]) => String(line))
+}
 
-		await hearDuringReload(
-			{ conversationId: room.id, authorBotId: ada, text: "@Nyx, read it." },
-			SPACE,
-		)
+describe("a word heard on this computer while a joined space is active", () => {
+	it("writes all five writes on this computer, never on the active space", async () => {
+		const local = createFakeTranscriptStore()
+		const { ada, room } = await startOnThisComputer(local)
+		const active = writesElsewhere(local)
+		const front = await startFront(active.store, createScriptedDriver(), local)
+
+		front.hear({ conversationId: room.id, authorBotId: ada, text: "Up." })
+		await settled()
 
 		expect(
-			(await spokenIn(store, room.id)).map(({ authorBotId }) => authorBotId),
-		).toEqual([ada])
-		expect(summonedBy(driver)).toEqual([nyx])
+			(await spokenIn(local, room.id)).map(({ content }) => content),
+		).toEqual(["Up."])
+		expect(active.sent).toEqual([])
+		expect(front.notices).toEqual([])
+	})
+})
+
+describe("a word of a conversation gone from its side", () => {
+	it("writes nothing, raises no card and logs one line naming the conversation and the bot", async () => {
+		const lines = infoLines()
+		const { store, conversation, notices, announce } = await createRoom()
+		const ada = idOf(conversation, "Ada")
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+		await store.deleteConversation(conversation.id)
+
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: ada,
+			text: "Gates are up.",
+		})
+
+		expect(notices).toEqual([])
+		expect(lines()).toHaveLength(1)
+		expect(lines()[0]).toContain(`conversation: ${conversation.id}`)
+		expect(lines()[0]).toContain(`bot: ${ada}`)
+		expect(lines()[0]).toContain("reason: ")
 	})
 
-	it("is left to the joined host when that space is left after it was heard", async () => {
-		const { store, driver, ada, room, hearDuringReload } =
-			await startSwitchingFront(SPACE)
+	it("takes the same path when a write answers that the conversation is unknown", async () => {
+		const lines = infoLines()
+		const base = createFakeTranscriptStore()
+		const { spoken, conversation, notices, announce } = await createRoom({
+			...base,
+			startTurn: (turn) =>
+				Promise.reject(
+					new RefusedWrite("conversation_start_turn", turn.id, {
+						kind: "unknownConversation",
+						id: turn.conversationId,
+					}),
+				),
+		})
+		const ada = idOf(conversation, "Ada")
 
-		await hearDuringReload(
-			{ conversationId: room.id, authorBotId: ada, text: "@Nyx, read it." },
-			null,
-		)
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
 
-		expect(await spokenIn(store, room.id)).toEqual([])
-		expect(summonedBy(driver)).toEqual([])
+		expect(notices).toEqual([])
+		expect(spoken).toEqual([])
+		expect(lines()).toHaveLength(1)
+		expect(lines()[0]).toContain("conversation_start_turn")
+	})
+})
+
+describe("a write of a spoken word that fails", () => {
+	it("raises one card naming the command, the conversation, the bot and the turn", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const base = createFakeTranscriptStore()
+		const { conversation, notices, facts, announce } = await createRoom({
+			...base,
+			openAssistantMessage: (message) =>
+				Promise.reject(
+					new RefusedWrite(
+						"conversation_open_assistant_message",
+						message.turnId,
+						FOREIGN_KEY_REFUSAL,
+					),
+				),
+		})
+		const ada = idOf(conversation, "Ada")
+
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: ada,
+			text: "Walls are up.",
+		})
+
+		expect(notices).toHaveLength(1)
+		expect(facts[0]).toEqual({
+			conversation: conversation.id,
+			botId: ada,
+			command: "conversation_open_assistant_message",
+			turn: expect.any(String),
+		})
+	})
+
+	it("shows the readable detail of the refusal, never [object Object]", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined)
+		const base = createFakeTranscriptStore()
+		const { conversation, notices, announce } = await createRoom({
+			...base,
+			startTurn: () => Promise.reject(FOREIGN_KEY_REFUSAL),
+		})
+
+		await announce({
+			conversationId: conversation.id,
+			authorBotId: idOf(conversation, "Ada"),
+			text: "Walls are up.",
+		})
+
+		expect(notices.map(({ title }) => title)).toEqual([
+			"Couldn’t send the message (storage: FOREIGN KEY constraint failed). Retry.",
+		])
 	})
 })

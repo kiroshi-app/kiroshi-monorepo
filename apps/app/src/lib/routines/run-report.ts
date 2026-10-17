@@ -20,8 +20,17 @@ type AssistantTurnDraft = {
 	runtimeSessionId: string | null
 }
 
+export type ReportTurnWrites = Pick<
+	TranscriptStore,
+	| "startTurn"
+	| "openAssistantMessage"
+	| "appendText"
+	| "finalizeMessage"
+	| "completeTurn"
+>
+
 export type ReportTurnWrite = {
-	store: TranscriptStore
+	store: ReportTurnWrites
 	draft: AssistantTurnDraft
 	newId: () => string
 	now: () => number
