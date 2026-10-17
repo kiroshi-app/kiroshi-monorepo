@@ -32,6 +32,7 @@ import type { Conversation } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { seatBots } from "../conversations/transcript-fixtures"
 import { joinFakeHost, leaveFakeHost } from "../host/fake-joined-hosts"
+import { hostOfflineOf } from "../host/host-offline"
 
 vi.mock("../host", async (importOriginal) => ({
 	...(await importOriginal<typeof import("../host")>()),
@@ -1616,6 +1617,37 @@ describe("startMissionRunDriver raising a failure", () => {
 
 		expect(linesNaming("the mission could not be read")).toEqual([
 			`mission run driver: the mission could not be read | error: {"kind":"storage","failure":{"reason":"locked"}} | mission: ${harness.mission.id} | side: local | count: 1`,
+		])
+	})
+
+	it("reads a change heard on this computer on this computer and writes that side on the failure line, whatever Space id a joined host shares", async () => {
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(LOCKED_STORAGE)
+		await announceIn("personal")
+		await failuresRaisedBy(harness)
+
+		expect(harness.missions.readSides).toEqual([[harness.mission.id, null]])
+		expect(linesNaming("the mission could not be read")).toEqual([
+			expect.stringContaining(
+				`| mission: ${harness.mission.id} | space: personal | side: local |`,
+			),
+		])
+	})
+
+	it("logs one line naming the mission, the Space and the side and raises no card when the host is offline", async () => {
+		const warned = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+		vi.spyOn(harness.missions, "detail").mockRejectedValue(
+			hostOfflineOf("joined host garage: unreachable"),
+		)
+		await announceIn("personal")
+
+		expect(await failuresRaisedBy(harness)).not.toHaveBeenCalled()
+		expect(linesNaming("the mission could not be read")).toEqual([])
+		expect(warned.mock.calls).toEqual([
+			[
+				expect.stringContaining(
+					`| mission: ${harness.mission.id} | space: personal | side: local |`,
+				),
+			],
 		])
 	})
 

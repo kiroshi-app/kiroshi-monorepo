@@ -11,7 +11,6 @@ import { createMissionEventRead } from "./mission-event-read"
 
 import {
 	activeJoinedSpaceId,
-	hostOfSpace,
 	invoke,
 	invokeOn,
 	invokeOnThisComputer,
@@ -55,9 +54,8 @@ const missionCallsOn = ({ invoke, listen }: MissionHost) => ({
 const missionCallsOfTheActiveHost = missionCallsOn({ invoke, listen })
 
 const readMissionOfEvent = createMissionEventRead({
-	sideOfSpace: (spaceId) => hostOfSpace(spaceId),
-	detailOn: (side, missionId) =>
-		invokeOn(side)<MissionDetail>("mission_detail", { missionId }),
+	detailOn: (hostId, missionId) =>
+		invokeOn(hostId)<MissionDetail>("mission_detail", { missionId }),
 })
 
 const readBoardOfThisMac = () =>

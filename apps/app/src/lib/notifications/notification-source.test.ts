@@ -986,9 +986,8 @@ describe("startNotificationSource on missions", () => {
 		expect(harness.notifications.sent).toEqual([])
 	})
 
-	it("reads a mission of a joined Space on that Space's host", async () => {
+	it("reads a mission heard on a joined host through the link of that host", async () => {
 		const harness = await start()
-		harness.missions.joinSpace(JOINED_SPACE, JOINED_HOST)
 
 		await escalate(harness, "waiting_human", HEARD_ON_THE_JOINED_HOST)
 
@@ -998,9 +997,23 @@ describe("startNotificationSource on missions", () => {
 		])
 	})
 
+	it("reads a mission heard on this computer on this computer and notifies it, whatever Space id a joined host shares", async () => {
+		const harness = await start()
+
+		await escalate(harness, "waiting_human", {
+			spaceId: JOINED_SPACE,
+			hostId: null,
+		})
+
+		expect(harness.missions.readSides).toEqual([["mission-1", null]])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
+		expect(harness.notifications.sent).toEqual([
+			{ target: MISSION, title: "Nyx", body: "Needs you on OPE-32" },
+		])
+	})
+
 	it("reads a mission of a local Space on this computer and notifies it, whichever Space is on screen", async () => {
 		const harness = await start()
-		harness.missions.joinSpace(JOINED_SPACE, JOINED_HOST)
 
 		await escalate(harness, "waiting_human", {
 			spaceId: "workshop",
@@ -1018,7 +1031,6 @@ describe("startNotificationSource on missions", () => {
 			.spyOn(console, "info")
 			.mockImplementation(() => undefined)
 		const harness = await start()
-		harness.missions.joinSpace(JOINED_SPACE, JOINED_HOST)
 		vi.spyOn(harness.missions, "detail").mockRejectedValue({
 			kind: "unknownMission",
 			id: "mission-1",
@@ -1037,9 +1049,8 @@ describe("startNotificationSource on missions", () => {
 		informed.mockRestore()
 	})
 
-	it("lands on a mission of a joined Space by reading it on that Space's host", async () => {
+	it("lands on a mission heard on a joined host by reading it through the link of that host", async () => {
 		const harness = await start()
-		harness.missions.joinSpace(JOINED_SPACE, JOINED_HOST)
 		await escalate(harness, "waiting_human", HEARD_ON_THE_JOINED_HOST)
 
 		harness.notifications.activate(MISSION)
@@ -1049,6 +1060,23 @@ describe("startNotificationSource on missions", () => {
 			["mission-1", JOINED_HOST],
 			["mission-1", JOINED_HOST],
 		])
+	})
+
+	it("lands on a mission heard on this computer by reading it on this computer, whatever Space id a joined host shares", async () => {
+		const harness = await start()
+		await escalate(harness, "waiting_human", {
+			spaceId: JOINED_SPACE,
+			hostId: null,
+		})
+
+		harness.notifications.activate(MISSION)
+		await vi.waitFor(() => expect(harness.missions.opened).toHaveLength(1))
+
+		expect(harness.missions.readSides).toEqual([
+			["mission-1", null],
+			["mission-1", null],
+		])
+		expect(harness.reportFailure).not.toHaveBeenCalled()
 	})
 
 	it("names the room and the companion that spoke in it", async () => {

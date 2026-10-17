@@ -1,5 +1,5 @@
 import type { Mission, MissionChanged, MissionDetail } from "./mission-contract"
-import type { MissionEvent } from "./mission-event-read"
+import { THIS_COMPUTER } from "./mission-event-read"
 import type { MissionRunDriverOptions } from "./mission-run-driver"
 import { createMissionRunFailures } from "./mission-run-failure"
 import type { MissionRunCall, MissionRunCause } from "./mission-run-prompt"
@@ -137,8 +137,10 @@ export const createMissionRunBook = ({
 	const readMission = (missionId: string) =>
 		readThrough(missionId, () => missions.detail(missionId))
 
-	const readMissionOfEvent = (event: MissionEvent) =>
-		readThrough(event.missionId, () => missions.read(event))
+	const readMissionOfEvent = ({ missionId, spaceId }: MissionSpace) =>
+		readThrough(missionId, () =>
+			missions.read({ missionId, spaceId, hostId: THIS_COMPUTER }),
+		)
 
 	const rememberThread = (mission: Mission) => {
 		missionIdOfThread.set(mission.threadConversationId, mission.id)

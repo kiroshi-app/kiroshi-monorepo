@@ -232,15 +232,9 @@ export const createJoinedHostsInvoke = ({
 		(...call) =>
 			sendTo(target, call)
 
-	const hostOfSpace = (spaceId: string | null): ConversationSource =>
-		[...sharedSpaceIds].find(
-			([, sharedSpaceId]) => sharedSpaceId === spaceId,
-		)?.[0] ?? null
-
 	return {
 		invoke,
 		invokeOn,
 		invokeOnThisComputer: invokeOn(null),
-		hostOfSpace,
 	}
 }

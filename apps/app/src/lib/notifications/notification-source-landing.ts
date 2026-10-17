@@ -2,11 +2,16 @@ import type { NotificationTarget } from "./notification-port"
 import type { NotificationSourceOptions } from "./notification-source"
 import type { FailWith } from "./notification-source-failures"
 
+import {
+	type MissionEvent,
+	THIS_COMPUTER,
+} from "../missions/mission-event-read"
+
 type NotificationLandingOptions = Pick<
 	NotificationSourceOptions,
 	"chat" | "roster" | "spaces" | "missions" | "raiseWindow"
 > & {
-	missionSpaces: Map<string, string | null>
+	missionOrigins: Map<string, MissionEvent>
 	failWith: FailWith
 }
 
@@ -15,7 +20,7 @@ export const createNotificationLanding = ({
 	roster,
 	spaces,
 	missions,
-	missionSpaces,
+	missionOrigins,
 	raiseWindow,
 	failWith,
 }: NotificationLandingOptions) => {
@@ -27,10 +32,13 @@ export const createNotificationLanding = ({
 	}
 
 	const openMission = async (missionId: string) => {
-		const detail = await missions.read({
-			missionId,
-			spaceId: missionSpaces.get(missionId) ?? null,
-		})
+		const detail = await missions.read(
+			missionOrigins.get(missionId) ?? {
+				missionId,
+				spaceId: null,
+				hostId: THIS_COMPUTER,
+			},
+		)
 
 		if (!detail) {
 			return

@@ -23,7 +23,10 @@ import type {
 	MissionChanged,
 	MissionOnBoard,
 } from "../missions/mission-contract"
-import type { ReadMissionOfEvent } from "../missions/mission-event-read"
+import type {
+	MissionEvent,
+	ReadMissionOfEvent,
+} from "../missions/mission-event-read"
 import type { OpenedMission } from "../missions/opened-mission-controller"
 import type { UserPreferences } from "../user/preferences-contract"
 
@@ -58,7 +61,7 @@ type SpacesSource = {
 type MissionsSource = {
 	board: () => Promise<Pick<MissionOnBoard, "mission">[]>
 	onChanged: (
-		listener: (changed: MissionChanged) => void,
+		listener: (changed: MissionChanged, hostId?: string | null) => void,
 	) => Promise<() => void>
 	read: ReadMissionOfEvent
 	open: (opened: OpenedMission) => void
@@ -101,7 +104,7 @@ export const startNotificationSource = ({
 	reportFailure,
 }: NotificationSourceOptions): (() => void) => {
 	const missionThreads = new Map<string, Mission>()
-	const missionSpaces = new Map<string, string | null>()
+	const missionOrigins = new Map<string, MissionEvent>()
 
 	let windowFocus: boolean | undefined
 
@@ -128,7 +131,7 @@ export const startNotificationSource = ({
 			missions,
 			switches,
 			missionThreads,
-			missionSpaces,
+			missionOrigins,
 			currentFocus,
 			botNameOf,
 			deliver,
@@ -138,7 +141,7 @@ export const startNotificationSource = ({
 		roster,
 		spaces,
 		missions,
-		missionSpaces,
+		missionOrigins,
 		raiseWindow,
 		failWith,
 	})
@@ -156,7 +159,8 @@ export const startNotificationSource = ({
 	const stopSpokenWords = spokenWords.subscribe(notifySpokenWord)
 	const missionChanges = missions
 		.onChanged(
-			(changed) => void missionChanged(changed).catch(failWith("send")),
+			(changed, hostId) =>
+				void missionChanged(changed, hostId ?? null).catch(failWith("send")),
 		)
 		.catch(failWith("send"))
 	void catchUpOnMissionThreads().catch(failWith("send"))
