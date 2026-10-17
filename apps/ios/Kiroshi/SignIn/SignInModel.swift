@@ -356,10 +356,7 @@ final class SignInModel {
         {
             return RelayDevice(keys: keys, relayId: relayId)
         }
-        guard let userId = session.userId else {
-            endSession()
-            return nil
-        }
+        guard let userId = await userId(of: session) else { return nil }
         await revocation?.value
         await relay.relayDevices.forget(session.accountId)
         guard self.session == session else { return nil }
@@ -382,6 +379,26 @@ final class SignInModel {
             return RelayDevice(keys: keys, relayId: relayId)
         case .challengeRefused, .proofRefused, .keyRefused, .refused:
             stage = .deviceRefused(.notAdded)
+        case .unauthenticated: endSession()
+        case .unreachable: stage = .spacesUnreachable
+        }
+        return nil
+    }
+
+    private func userId(of session: Session) async -> String? {
+        if let userId = session.userId {
+            return userId
+        }
+        let answer: AccountAnswer
+        do {
+            answer = try await cloud.account(bearer: session.bearer)
+        } catch {
+            failToLoad(session, after: error)
+            return nil
+        }
+        guard self.session == session else { return nil }
+        switch answer {
+        case .account(let userId): return userId
         case .unauthenticated: endSession()
         case .unreachable: stage = .spacesUnreachable
         }

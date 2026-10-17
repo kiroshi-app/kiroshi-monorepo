@@ -190,6 +190,7 @@ struct AgreementTests {
 
     @Test func aSessionSavedWithoutItsUserIdIsKnownByItsEmail() async {
         await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
+        await transport.answer(CloudFixture.accountPath, with: CloudFixture.account)
         let saved = Session(bearer: "fixture-bearer", email: CloudFixture.email)
         let agreements = InMemoryAgreementStore()
         let model = makeModel(sessions: InMemorySessionStore(saved), agreements: agreements)

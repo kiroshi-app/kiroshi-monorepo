@@ -40,6 +40,8 @@
         static let signedOut = ScriptedTransport.Answer.status(200, #"{"status":true}"#)
         static let accountPath = "/me"
         static let accountDeleted = ScriptedTransport.Answer.status(204, "")
+        static let account = ScriptedTransport.Answer.status(
+            200, #"{"id":"\#(userId)","email":"\#(email)","createdAt":"2026-10-10T12:00:00.000Z"}"#)
         static let accountNotDeleted = error(
             500, code: "INTERNAL_SERVER_ERROR", message: "Internal server error")
         static let relay = RelayEnvironment(

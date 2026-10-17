@@ -211,6 +211,38 @@ struct DeviceRegistrationTests {
         #expect(await self.relay.relayDevices.relayId(for: CloudFixture.userId) == "device-1")
     }
 
+    @Test func aSessionSavedWithoutItsUserIdSignsWithTheIdOfMe() async {
+        await transport.answer(CloudFixture.accountPath, with: CloudFixture.account)
+        let relay = fakeRelay()
+        let saved = Session(bearer: CloudFixture.session.bearer, email: CloudFixture.email)
+        let model = makeModel(transport: relay, session: saved)
+
+        await model.loadSpaces()
+
+        #expect(model.shell != nil)
+        #expect(await relay.count("GET", CloudFixture.accountPath) == 1)
+        #expect(await relay.devices(of: CloudFixture.userId) == ["device-1"])
+        #expect(await self.relay.relayDevices.relayId(for: CloudFixture.email) == "device-1")
+    }
+
+    @Test(
+        arguments: [
+            (CloudFixture.refused("Authentication required"), AccountStage.signedOut),
+            (ScriptedTransport.Answer.offline, .spacesUnreachable),
+        ])
+    func aSessionWithoutItsUserIdThatCannotReadMeRegistersNothing(
+        answer: ScriptedTransport.Answer, stage: AccountStage
+    ) async {
+        await transport.answer(CloudFixture.accountPath, with: answer)
+        let saved = Session(bearer: CloudFixture.session.bearer, email: CloudFixture.email)
+        let model = makeModel(transport: transport, session: saved)
+
+        await model.loadSpaces()
+
+        #expect(model.stage == stage)
+        #expect(await registrations() == 0)
+    }
+
     @Test func theFirstLoadOfARestoredSessionRegistersOnceAndKeepsTheRelayId() async {
         let model = makeModel(transport: transport)
 

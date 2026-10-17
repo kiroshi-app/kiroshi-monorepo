@@ -37,6 +37,12 @@ enum DeviceRegistrationAnswer: Equatable, Sendable {
     case unreachable
 }
 
+enum AccountAnswer: Equatable, Sendable {
+    case account(userId: String)
+    case unauthenticated
+    case unreachable
+}
+
 enum DeviceDeletionAnswer: Equatable, Sendable {
     case deleted
     case notFound
@@ -127,6 +133,21 @@ struct KiroshiCloud: Sendable {
         let answer = try await proveAndRegister(keys, userId: userId, bearer: bearer)
         guard answer == .challengeRefused else { return answer }
         return try await proveAndRegister(keys, userId: userId, bearer: bearer)
+    }
+
+    func account(bearer: String) async throws -> AccountAnswer {
+        var request = URLRequest(url: baseURL.appending(path: "me"))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, data) = try await send(request) else { return .unreachable }
+        switch status {
+        case 200:
+            guard let account = try? JSONDecoder().decode(Account.self, from: data) else {
+                return .unreachable
+            }
+            return .account(userId: account.id)
+        case 401: return .unauthenticated
+        default: return .unreachable
+        }
     }
 
     func deleteDevice(_ relayId: String, bearer: String) async throws -> DeviceDeletionAnswer {
@@ -277,6 +298,10 @@ private struct DeviceRegistration: Encodable {
     let x25519PublicKey: String
     let nonce: String
     let signature: String
+}
+
+private struct Account: Decodable {
+    let id: String
 }
 
 private struct IssuedChallenge: Decodable {
