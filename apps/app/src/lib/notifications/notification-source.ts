@@ -49,6 +49,7 @@ type RosterSource = {
 		conversations: Conversation[]
 		conversationRosters: Record<string, Conversation[]>
 	}
+	subscribe: (listener: () => void) => () => void
 	spaceOfConversation: (conversationId: string) => string | undefined
 	hostSpaceIdOf: (spaceRowId: string) => string
 	select: (botId: string) => void
@@ -144,7 +145,7 @@ export const startNotificationSource = ({
 			botNameOf,
 			deliver,
 		})
-	const activate = createNotificationLanding({
+	const { activate, dropPendingLanding } = createNotificationLanding({
 		chat,
 		roster,
 		spaces,
@@ -181,6 +182,7 @@ export const startNotificationSource = ({
 		.catch(failWith("clicks"))
 
 	return () => {
+		dropPendingLanding()
 		stopChat()
 		stopRuntimes()
 		stopSpokenWords()

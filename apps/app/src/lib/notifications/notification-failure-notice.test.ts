@@ -58,6 +58,7 @@ const idleRuntimes = {
 
 const emptyRoster = {
 	getState: () => ({ rosters: {}, conversations: [], conversationRosters: {} }),
+	subscribe: () => () => undefined,
 	spaceOfConversation: () => undefined,
 	hostSpaceIdOf: (spaceRowId: string) => spaceRowId,
 	select: () => undefined,

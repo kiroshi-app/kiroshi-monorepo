@@ -14,6 +14,8 @@ const relayHandlers = new Set<EventCallback<JoinedSpaceReconnected>>()
 
 const sockets: HostSocket[] = []
 
+const downHostIds = new Set<string>()
+
 const answerNull = async () =>
 	new Response("null", { headers: { "content-type": "application/json" } })
 
@@ -32,16 +34,19 @@ const fakeJoinedHosts = createJoinedHosts({
 		},
 		fileSrc: (path) => path,
 	},
-	join: async (id) => ({
-		status: "ok",
-		data: {
-			id,
-			hostUrl: FAKE_HOST_URL,
-			token: "joined",
-			remoteSpaceId: null,
-			name: id,
-		},
-	}),
+	join: async (id) =>
+		downHostIds.has(id)
+			? { status: "error", error: { kind: "hostOffline", id } }
+			: {
+					status: "ok",
+					data: {
+						id,
+						hostUrl: FAKE_HOST_URL,
+						token: "joined",
+						remoteSpaceId: null,
+						name: id,
+					},
+				},
 	fetch: answerNull,
 	openSocket: () => {
 		const socket: HostSocket = {
@@ -80,4 +85,8 @@ export const reopenFakeRelay = (id: string) => {
 	for (const handler of [...relayHandlers]) {
 		handler({ event: JOINED_SPACE_RECONNECTED_EVENT, id: 0, payload: { id } })
 	}
+}
+
+export const takeFakeHostDown = (id: string) => {
+	downHostIds.add(id)
 }

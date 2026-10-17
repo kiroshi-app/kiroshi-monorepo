@@ -185,6 +185,7 @@ const createFakeRoster = (
 			)
 				? SPACE
 				: undefined,
+		subscribe: () => () => undefined,
 		hostSpaceIdOf: (spaceRowId: string) => spaceRowId,
 		select: vi.fn(),
 		selectConversation: vi.fn(),
