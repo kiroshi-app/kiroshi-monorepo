@@ -151,6 +151,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_create_bot_from_draft", Reach::Scoped(SPACE_ID)),
 	("conversation_suggested_bots", Reach::Free),
 	("companion_launch_outcome", Reach::Free),
+	("get_device_identity", Reach::HostOnly),
 	("window_declare_maximize_button", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
 	("log_tail", Reach::HostOnly),

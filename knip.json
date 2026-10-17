@@ -9,6 +9,9 @@
 	"ignoreDependencies": ["babel-plugin-react-compiler"],
 	"ignoreBinaries": ["xcodegen"],
 	"workspaces": {
+		".": {
+			"entry": ["scripts/generate-v2-vectors.ts"]
+		},
 		"apps/app": {
 			"entry": ["src/main.tsx", "src/styles.css"]
 		},

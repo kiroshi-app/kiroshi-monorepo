@@ -7,6 +7,7 @@ pub mod bundles;
 pub mod commands;
 pub mod companions;
 pub mod conversations;
+pub mod crypto;
 pub mod db;
 mod descriptors;
 pub mod environment;
@@ -78,6 +79,7 @@ pub fn run() {
 				eprintln!("the log file could not be opened: {failure}");
 			}
 			app.manage(db::bootstrap(app.handle()));
+			app.manage(crypto::commands::load(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 			}

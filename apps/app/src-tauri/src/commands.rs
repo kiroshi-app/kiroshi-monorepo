@@ -2,9 +2,9 @@ use tauri::{ipc::Invoke, Runtime};
 use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
-	account, agent, applications, attachments, companions, conversations, environment, hosting,
-	invitations, joined_spaces, logging, mcp_oauth, missions, notifications, plugins, routines,
-	search, sections, spaces, updates, user, window_controls,
+	account, agent, applications, attachments, companions, conversations, crypto, environment,
+	hosting, invitations, joined_spaces, logging, mcp_oauth, missions, notifications, plugins,
+	routines, search, sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -81,6 +81,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_create_bot_from_draft::<tauri::Wry>,
 		conversations::commands::conversation_suggested_bots,
 		companions::launch::companion_launch_outcome,
+		crypto::commands::get_device_identity,
 		window_controls::window_declare_maximize_button::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,

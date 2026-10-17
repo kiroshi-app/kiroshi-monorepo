@@ -62,7 +62,7 @@ pub async fn log_clear<R: Runtime>(app: AppHandle<R>) -> Result<(), LogFileError
 	super::clear(&file).map_err(|error| LogFileError::Unwritable { detail: error.to_string() })
 }
 
-fn install_kind(identifier: &str) -> InstallKind {
+pub(crate) fn install_kind(identifier: &str) -> InstallKind {
 	if identifier.ends_with(DEV_IDENTIFIER_SUFFIX) {
 		return InstallKind::Dev;
 	}

@@ -41,6 +41,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"mission_unreported",
 	"notification_show",
 	"companion_launch_outcome",
+	"get_device_identity",
 	"account_state",
 	"account_sign_in",
 	"account_sign_out",
