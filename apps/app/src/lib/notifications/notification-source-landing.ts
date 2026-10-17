@@ -21,15 +21,16 @@ type NotificationLandingOptions = Pick<
 	failWith: FailWith
 }
 
-const LOCAL_SIDE = "local"
-
-const logOfflineMission = ({ missionId, spaceId, hostId }: MissionEvent) => {
+const logOfflineMission = (
+	{ missionId, spaceId }: MissionEvent,
+	hostId: string,
+) => {
 	console.info(
 		[
 			"notifications: the host of the clicked mission is offline",
 			`mission: ${missionId}`,
 			`space: ${spaceId ?? "none"}`,
-			`side: ${hostId ?? LOCAL_SIDE}`,
+			`side: ${hostId}`,
 		].join(" | "),
 	)
 }
@@ -84,7 +85,7 @@ export const createNotificationLanding = ({
 			throw reason
 		}
 		landOnSpace(joinedRowIdOf(origin.hostId))
-		logOfflineMission(origin)
+		logOfflineMission(origin, origin.hostId)
 		return null
 	}
 
