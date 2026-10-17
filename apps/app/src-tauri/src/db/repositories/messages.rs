@@ -1029,12 +1029,10 @@ fn refuse_unknown_conversation(
 	transaction: &Transaction<'_>,
 	conversation_id: &str,
 ) -> Result<(), TranscriptError> {
-	let exists: bool =
-		transaction.query_row(CONVERSATION_EXISTS, [conversation_id], |row| row.get(0))?;
-	match exists {
-		true => Ok(()),
-		false => Err(TranscriptError::UnknownConversation { id: conversation_id.into() }),
+	if !holds(transaction, CONVERSATION_EXISTS, params![conversation_id])? {
+		return Err(TranscriptError::UnknownConversation { id: conversation_id.into() });
 	}
+	Ok(())
 }
 
 fn refuse_unknown_parents(
@@ -1042,27 +1040,28 @@ fn refuse_unknown_parents(
 	message: &AppendedMessage,
 ) -> Result<(), TranscriptError> {
 	refuse_unknown_conversation(transaction, &message.conversation_id)?;
-	let turn_exists: bool = transaction.query_row(
-		TURN_IN_CONVERSATION_EXISTS,
-		params![message.turn_id, message.conversation_id],
-		|row| row.get(0),
-	)?;
-	if !turn_exists {
+	let turn = params![message.turn_id, message.conversation_id];
+	if !holds(transaction, TURN_IN_CONVERSATION_EXISTS, turn)? {
 		return Err(TranscriptError::UnknownTurn { id: message.turn_id.clone() });
 	}
 	let Some(bot_id) = &message.author_bot_id else {
 		return Ok(());
 	};
-	let seated: bool =
-		transaction
-			.query_row(SEAT_EXISTS, params![message.conversation_id, bot_id], |row| row.get(0))?;
-	match seated {
-		true => Ok(()),
-		false => Err(TranscriptError::UnknownParticipant {
+	if !holds(transaction, SEAT_EXISTS, params![message.conversation_id, bot_id])? {
+		return Err(TranscriptError::UnknownParticipant {
 			conversation_id: message.conversation_id.clone(),
 			bot_id: bot_id.clone(),
-		}),
+		});
 	}
+	Ok(())
+}
+
+fn holds(
+	transaction: &Transaction<'_>,
+	exists: &str,
+	params: impl rusqlite::Params,
+) -> rusqlite::Result<bool> {
+	transaction.query_row(exists, params, |row| row.get(0))
 }
 
 fn close_message(
