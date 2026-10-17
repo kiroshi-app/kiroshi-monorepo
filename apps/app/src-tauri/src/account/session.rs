@@ -279,11 +279,12 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	if let Some(next) = next {
 		entered(&app, next);
 	}
-	if matches!(session.current(), AccountState::SignedIn(_)) {
+	let is_signed_in = matches!(session.current(), AccountState::SignedIn(_));
+	if is_signed_in {
 		stored_name_sent(&app).await;
 	}
 	hosting::resumed(&app).await;
-	if matches!(session.current(), AccountState::SignedIn(_)) {
+	if is_signed_in {
 		invitations::resumed(&app);
 	}
 }
