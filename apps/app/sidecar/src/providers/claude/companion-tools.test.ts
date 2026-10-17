@@ -10,6 +10,8 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+import conversationIcons from "@workspace/shared/conversation-icons.json"
+
 import { type AttachScope, companionTools } from "./companion-tools"
 
 import type { SessionFrame } from "../provider"
@@ -83,7 +85,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 	],
 	[
 		"conversation_describe",
-		{ conversation: "c3", icon: "Message", colour: null },
+		{ conversation: "c3", icon: "Rocket", colour: null },
 		"conversationDescribe",
 	],
 ]
@@ -105,7 +107,7 @@ const answers: Record<string, unknown> = {
 	conversationDescribe: {
 		conversationId: "c3",
 		title: "Trip",
-		icon: "Message",
+		icon: "Rocket",
 		colour: null,
 	},
 }
@@ -225,6 +227,16 @@ describe("companionTools", () => {
 		]) {
 			expect(colour?.description).toContain(name)
 		}
+	})
+
+	it("describes the icon with a listed example and the file the list is read from", () => {
+		const { icon } = toolNamed(SESSION, "conversation_describe").inputSchema
+		const example = icon?.description?.match(/such as (\w+)/)?.[1] ?? ""
+
+		expect(conversationIcons).toContain(example)
+		expect(icon?.description).toContain(
+			"packages/shared/conversation-icons.json",
+		)
 	})
 
 	it("hands each call to the host of its session and speaks the answer back", async () => {

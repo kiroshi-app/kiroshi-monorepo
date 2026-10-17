@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test"
 import { claudeSourceExecutable } from "./build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
 import { CONNECTION_KEYS } from "./session-env"
-import { namingOf, titleOptions } from "./title"
+import { namingOf, titleOptions, titlePrompt } from "./title"
 
 process.env[EXECUTABLE_OVERRIDE_ENV] = claudeSourceExecutable()
 
@@ -77,8 +77,59 @@ describe("namingOf", () => {
 		})
 	})
 
+	it.each([
+		["a label", "Ship the beta\nIcon: Rocket"],
+		["bold", "Ship the beta\n**Rocket**"],
+		["a full stop", "Ship the beta\nRocket."],
+		["backticks", "Ship the beta\n`Rocket`"],
+		["a bolded label", "Ship the beta\n**Icon:** Rocket"],
+		["one line split by a bar", "Ship the beta | Rocket"],
+		["one line split by a dash", "Ship the beta - Rocket"],
+		["one line split by a colon", "Ship the beta: Rocket"],
+		["one line ending in a bold icon", "Ship the beta **Rocket**"],
+	])("reads the listed icon through %s", (_, answer) => {
+		expect(namingOf(answer)).toEqual({ title: "Ship the beta", icon: "Rocket" })
+	})
+
+	it("keeps a one line title whole when no listed icon closes it", () => {
+		expect(namingOf("L'équipe du jour")).toEqual({
+			title: "L'équipe du jour",
+			icon: null,
+		})
+		expect(namingOf("Fix the user's Bug")).toEqual({
+			title: "Fix the user's Bug",
+			icon: null,
+		})
+	})
+
+	it("keeps the title with no icon when a decorated line names no listed icon", () => {
+		expect(namingOf("Ship the beta\nIcon: **Beetle**")).toEqual({
+			title: "Ship the beta",
+			icon: null,
+		})
+		expect(namingOf("Ship the beta - Beetle")).toEqual({
+			title: "Ship the beta - Beetle",
+			icon: null,
+		})
+	})
+
 	it("answers no naming at all for an empty answer", () => {
 		expect(namingOf("")).toBeNull()
 		expect(namingOf("   \n  \n")).toBeNull()
+	})
+})
+
+describe("titlePrompt", () => {
+	it("shows one literal two line answer the parser reads back", () => {
+		const prompt = titlePrompt("We ship the beta on Monday")
+
+		expect(prompt).toContain(
+			"\n\nShip the beta to the first testers\nRocket\n\n",
+		)
+		expect(namingOf("Ship the beta to the first testers\nRocket")).toEqual({
+			title: "Ship the beta to the first testers",
+			icon: "Rocket",
+		})
+		expect(prompt.endsWith("We ship the beta on Monday")).toBe(true)
 	})
 })

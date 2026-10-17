@@ -3042,8 +3042,8 @@ fn a_room_and_a_main_chat_updated_over_ipc_carry_their_icon_and_colour_on_every_
 		.expect("the main chat");
 	let chat = chat["id"].as_str().expect("the chat holds an id").to_owned();
 
-	let answered = dressed(&window, &room, json!("Message"), json!("cyan")).expect("dressed");
-	let main = dressed(&window, &chat, json!("Star"), json!("orange")).expect("main dressed");
+	let answered = dressed(&window, &room, json!("MessageSquare"), json!("cyan")).expect("dressed");
+	let main = dressed(&window, &chat, json!("Sparkles"), json!("orange")).expect("main dressed");
 	let page = call(&window, "conversation_page", json!({ "spaceId": space })).expect("the page")
 		["conversations"]
 		.clone();
@@ -3054,32 +3054,45 @@ fn a_room_and_a_main_chat_updated_over_ipc_carry_their_icon_and_colour_on_every_
 			.expect("the page holds the conversation")
 	};
 
-	assert_eq!(look(&answered), (json!("Message"), json!("cyan")));
-	assert_eq!(look(&room_of(&window, &space, &room)), (json!("Message"), json!("cyan")));
-	assert_eq!(look(&paged(&room)), (json!("Message"), json!("cyan")));
-	assert_eq!(look(&main), (json!("Star"), json!("orange")));
-	assert_eq!(look(&paged(&chat)), (json!("Star"), json!("orange")));
+	assert_eq!(look(&answered), (json!("MessageSquare"), json!("cyan")));
+	assert_eq!(look(&room_of(&window, &space, &room)), (json!("MessageSquare"), json!("cyan")));
+	assert_eq!(look(&paged(&room)), (json!("MessageSquare"), json!("cyan")));
+	assert_eq!(look(&main), (json!("Sparkles"), json!("orange")));
+	assert_eq!(look(&paged(&chat)), (json!("Sparkles"), json!("orange")));
 
 	let cleared = dressed(&window, &chat, Value::Null, Value::Null).expect("main cleared");
 	assert_eq!(look(&cleared), (Value::Null, Value::Null));
 }
 
 #[test]
-fn an_update_with_a_colour_outside_eight_or_a_blank_icon_is_refused_and_changes_nothing() {
+fn an_update_with_a_colour_outside_eight_or_an_icon_off_the_list_is_refused_and_changes_nothing() {
 	let home = Home::new();
 	let app = home.app();
 	let window = window(&app);
 	let space = a_space(&window, "Nest");
 	let bot = a_bot_in(&window, &space, "Nyx");
 	let room = id_of(&a_room(&window, &space, "Retro", vec![bot]));
-	dressed(&window, &room, json!("Message"), json!("red")).expect("dressed");
+	dressed(&window, &room, json!("MessageSquare"), json!("red")).expect("dressed");
 	let before = room_of(&window, &space, &room);
 
-	let teal = dressed(&window, &room, json!("Message"), json!("teal"));
+	let teal = dressed(&window, &room, json!("MessageSquare"), json!("teal"));
 	let blank = dressed(&window, &room, json!(" \n"), json!("blue"));
+	let unlisted = dressed(&window, &room, json!("Message"), json!("blue"));
 
-	assert_eq!(teal.as_ref().map_err(|refusal| refusal["kind"].clone()), Err(json!("storage")));
+	assert_eq!(
+		teal.as_ref().map_err(|refusal| refusal["kind"].clone()),
+		Err(json!("unknownColour"))
+	);
 	assert_eq!(blank, Err(json!({ "kind": "blankIcon" })));
+	let unlisted = unlisted.expect_err("an icon off the list was stored");
+	assert_eq!(unlisted["kind"], json!("unlistedIcon"));
+	assert_eq!(unlisted["icon"], json!("Message"));
+	assert!(
+		unlisted["accepted"]
+			.as_array()
+			.is_some_and(|names| names.contains(&json!("MessageSquare"))),
+		"the refusal does not name the list: {unlisted}"
+	);
 	assert_eq!(room_of(&window, &space, &room), before, "a refused update moved the room");
 }
 

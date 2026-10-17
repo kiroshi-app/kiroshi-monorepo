@@ -69,7 +69,7 @@ const DESCRIBE =
 const DESCRIBED_ROOM = "The id of the room you hold a seat in to describe."
 
 const ICON =
-	"The name of a Keyline icon drawn beside the title of the room, such as Message, left out to keep the one it wears."
+	"The name of a Keyline icon drawn beside the title of the room, such as Rocket, spelled as listed in packages/shared/conversation-icons.json, left out to keep the one it wears. A name off that list is refused with the accepted names."
 
 const COLOUR =
 	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears."

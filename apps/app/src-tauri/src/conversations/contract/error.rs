@@ -83,6 +83,16 @@ pub enum TranscriptStoreError {
 	},
 	BlankIcon,
 	#[serde(rename_all = "camelCase")]
+	UnlistedIcon {
+		icon: String,
+		accepted: Vec<String>,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownColour {
+		colour: String,
+		accepted: Vec<String>,
+	},
+	#[serde(rename_all = "camelCase")]
 	UnknownMessage {
 		id: String,
 	},
@@ -213,11 +223,27 @@ impl From<conversations::ConversationError> for TranscriptStoreError {
 				TranscriptStoreError::UnknownParticipant { conversation_id, bot_id }
 			}
 			conversations::ConversationError::BlankIcon => TranscriptStoreError::BlankIcon,
+			conversations::ConversationError::UnlistedIcon { icon } => {
+				TranscriptStoreError::UnlistedIcon {
+					icon,
+					accepted: conversations::conversation_icons().to_vec(),
+				}
+			}
+			conversations::ConversationError::UnknownColour { colour } => {
+				TranscriptStoreError::UnknownColour { colour, accepted: accepted_colours() }
+			}
 			conversations::ConversationError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
 			}
 		}
 	}
+}
+
+fn accepted_colours() -> Vec<String> {
+	super::AvatarBlot::ALL
+		.iter()
+		.map(|&blot| conversations::AvatarBlot::from(blot).named().to_owned())
+		.collect()
 }
 
 #[cfg(test)]
