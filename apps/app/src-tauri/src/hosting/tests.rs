@@ -96,6 +96,8 @@ const OWNER_EMAIL: &str = "owner@example.com";
 const POLL_EVERY: Duration = Duration::from_millis(100);
 const MEMBER_ACCOUNT: &str = "member-account";
 const OWNER_ACCOUNT: &str = "owner";
+const OTHER_BEARER: &str = "bearer-of-another-account";
+const OTHER_ACCOUNT: &str = "another-account";
 const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
 
 #[derive(Clone)]
@@ -108,9 +110,11 @@ struct RelayDevice {
 #[derive(Clone, Default)]
 struct DeviceRelay {
 	devices: Arc<Mutex<Vec<RelayDevice>>>,
-	challenges: Arc<Mutex<Vec<String>>>,
+	challenges: Arc<Mutex<Vec<(String, &'static str)>>>,
 	issued: Arc<AtomicUsize>,
 	expiring: Arc<AtomicUsize>,
+	throttled: Arc<AtomicUsize>,
+	opened: Arc<Mutex<Vec<String>>>,
 	is_signature_tampered: Arc<AtomicBool>,
 	refusal: Arc<Mutex<Option<(StatusCode, &'static str)>>>,
 	bodies: Arc<Mutex<Vec<Value>>>,
@@ -141,9 +145,13 @@ impl DeviceRelay {
 		devices.iter().find(|device| device.ed25519 == ed25519).cloned()
 	}
 
-	fn is_a_device_of_the_owner(&self, id: &str) -> bool {
+	fn is_a_device_of(&self, account_id: &str, id: &str) -> bool {
 		let devices = self.devices.lock().expect("the relay");
-		devices.iter().any(|device| device.id == id && device.account_id == OWNER_ACCOUNT)
+		devices.iter().any(|device| device.id == id && device.account_id == account_id)
+	}
+
+	fn opened(&self) -> Vec<String> {
+		self.opened.lock().expect("the relay").clone()
 	}
 }
 
@@ -175,7 +183,7 @@ fn member_call(relay: &Relay, call: String) -> Option<Response> {
 }
 
 async fn members_listed(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
-	assert_eq!(bearer_of(&headers), BEARER);
+	assert!(account_of(&headers).is_some(), "an unknown bearer listed the members");
 	if let Some(forced) = member_call(&relay, "GET".to_owned()) {
 		return forced;
 	}
@@ -216,11 +224,22 @@ async fn member_removed(
 	StatusCode::NO_CONTENT.into_response()
 }
 
-async fn me() -> Response {
+async fn me(headers: HeaderMap) -> Response {
+	let Some(account_id) = account_of(&headers) else {
+		return StatusCode::UNAUTHORIZED.into_response();
+	};
 	answered_json(
 		StatusCode::OK,
-		json!({ "id": OWNER_ACCOUNT, "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
+		json!({ "id": account_id, "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
 	)
+}
+
+fn account_of(headers: &HeaderMap) -> Option<&'static str> {
+	match bearer_of(headers) {
+		BEARER => Some(OWNER_ACCOUNT),
+		OTHER_BEARER => Some(OTHER_ACCOUNT),
+		_ => None,
+	}
 }
 
 fn bearer_of(headers: &HeaderMap) -> &str {
@@ -250,17 +269,23 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 }
 
 async fn device_challenged(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
-	if bearer_of(&headers) != BEARER {
+	let Some(account_id) = account_of(&headers) else {
 		return StatusCode::UNAUTHORIZED.into_response();
-	}
+	};
 	let device = &relay.device;
+	let is_throttled =
+		device.throttled.try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+	if is_throttled.is_ok() {
+		let (status, refusal) = device_refused(StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED");
+		return answered_json(status, refusal);
+	}
 	device.issued.fetch_add(1, Ordering::SeqCst);
 	let nonce = [uuid::Uuid::new_v4().into_bytes(), uuid::Uuid::new_v4().into_bytes()].concat();
 	let nonce = BASE64_URL_SAFE_NO_PAD.encode(nonce);
 	let is_expired =
 		device.expiring.try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
 	if is_expired.is_err() {
-		device.challenges.lock().expect("the relay").push(nonce.clone());
+		device.challenges.lock().expect("the relay").push((nonce.clone(), account_id));
 	}
 	answered_json(
 		StatusCode::CREATED,
@@ -272,25 +297,31 @@ fn device_refused(status: StatusCode, code: &str) -> (StatusCode, Value) {
 	(status, json!({ "error": { "code": code, "message": code } }))
 }
 
+struct Proving<'a> {
+	body: &'a Value,
+	account_id: &'static str,
+}
+
 fn decoded(body: &Value, key: &str) -> Vec<u8> {
 	let text = body[key].as_str().unwrap_or_else(|| panic!("{key} is missing from {body}"));
 	BASE64_URL_SAFE_NO_PAD.decode(text).unwrap_or_else(|_| panic!("{key} is not base64url"))
 }
 
-fn is_proven(relay: &DeviceRelay, body: &Value) -> bool {
+fn is_proven(relay: &DeviceRelay, Proving { body, account_id }: Proving<'_>) -> bool {
 	let key: [u8; 32] = decoded(body, "ed25519PublicKey").try_into().expect("a 32-byte key");
 	let nonce = decoded(body, "nonce");
 	let mut signature: [u8; 64] = decoded(body, "signature").try_into().expect("64 bytes");
 	if relay.is_signature_tampered.load(Ordering::SeqCst) {
 		signature[0] ^= 1;
 	}
-	let signed = [DEVICE_REGISTER_CONTEXT, OWNER_ACCOUNT.as_bytes(), &key, &nonce].concat();
+	let signed = [DEVICE_REGISTER_CONTEXT, account_id.as_bytes(), &key, &nonce].concat();
 	let key = ed25519_dalek::VerifyingKey::from_bytes(&key).expect("a point");
 	let signature = ed25519_dalek::Signature::from_bytes(&signature);
 	verify(&key, &signed, &signature).is_ok()
 }
 
-fn device_answer(relay: &DeviceRelay, body: &Value) -> (StatusCode, Value) {
+fn device_answer(relay: &DeviceRelay, proving: Proving<'_>) -> (StatusCode, Value) {
+	let Proving { body, account_id } = proving;
 	if let Some((status, code)) = *relay.refusal.lock().expect("the relay") {
 		return device_refused(status, code);
 	}
@@ -299,12 +330,14 @@ fn device_answer(relay: &DeviceRelay, body: &Value) -> (StatusCode, Value) {
 	}
 	let nonce = body["nonce"].as_str().unwrap_or_default();
 	let mut challenges = relay.challenges.lock().expect("the relay");
-	let Some(issued) = challenges.iter().position(|issued| issued == nonce) else {
+	let Some(issued) =
+		challenges.iter().position(|(issued, to)| issued == nonce && *to == account_id)
+	else {
 		return device_refused(StatusCode::BAD_REQUEST, "DEVICE_CHALLENGE_INVALID");
 	};
 	challenges.remove(issued);
 	drop(challenges);
-	if !is_proven(relay, body) {
+	if !is_proven(relay, proving) {
 		return device_refused(StatusCode::FORBIDDEN, "DEVICE_PROOF_INVALID");
 	}
 	let ed25519 = body["ed25519PublicKey"].as_str().expect("a key").to_owned();
@@ -316,14 +349,14 @@ fn device_answer(relay: &DeviceRelay, body: &Value) -> (StatusCode, Value) {
 			devices.push(RelayDevice {
 				ed25519,
 				id: id.clone(),
-				account_id: OWNER_ACCOUNT.to_owned(),
+				account_id: account_id.to_owned(),
 			});
 			let answer = json!({ "id": id, "createdAt": created_at, "transferred": false });
 			(StatusCode::CREATED, answer)
 		}
 		Some(device) => {
-			let transferred = device.account_id != OWNER_ACCOUNT;
-			device.account_id = OWNER_ACCOUNT.to_owned();
+			let transferred = device.account_id != account_id;
+			device.account_id = account_id.to_owned();
 			let answer =
 				json!({ "id": device.id, "createdAt": created_at, "transferred": transferred });
 			(StatusCode::OK, answer)
@@ -336,12 +369,12 @@ async fn device_registered(
 	headers: HeaderMap,
 	body: String,
 ) -> Response {
-	if bearer_of(&headers) != BEARER {
+	let Some(account_id) = account_of(&headers) else {
 		return StatusCode::UNAUTHORIZED.into_response();
-	}
+	};
 	let body: Value = serde_json::from_str(&body).expect("a json body");
 	relay.device.bodies.lock().expect("the relay").push(body.clone());
-	let (status, answer) = device_answer(&relay.device, &body);
+	let (status, answer) = device_answer(&relay.device, Proving { body: &body, account_id });
 	relay.device.answers.lock().expect("the relay").push((status, answer.clone()));
 	relay.noticed.send_replace(());
 	answered_json(status, answer)
@@ -377,17 +410,18 @@ async fn host(
 	upgrade: WebSocketUpgrade,
 ) -> Response {
 	relay.attempts.fetch_add(1, Ordering::SeqCst);
-	if bearer_of(&headers) != BEARER {
+	let Some(account_id) = account_of(&headers) else {
 		return StatusCode::UNAUTHORIZED.into_response();
-	}
+	};
 	if let Some(status) = relay.refusal {
 		return status.into_response();
 	}
 	let device = query.as_deref().and_then(|query| query.strip_prefix("device="));
-	let is_a_device = device.is_some_and(|device| relay.device.is_a_device_of_the_owner(device));
-	if !is_a_device {
+	let Some(device) = device.filter(|device| relay.device.is_a_device_of(account_id, device))
+	else {
 		return StatusCode::FORBIDDEN.into_response();
-	}
+	};
+	relay.device.opened.lock().expect("the relay").push(device.to_owned());
 	if !relay.known.lock().expect("the relay").contains(&id) {
 		return StatusCode::NOT_FOUND.into_response();
 	}
@@ -5167,6 +5201,11 @@ async fn account_reached(harness: &Harness, expected: AccountState) {
 		.unwrap_or_else(|_| panic!("the account did not reach {expected:?}"));
 }
 
+fn bearer_stored(harness: &Harness, bearer: &str) {
+	let root = &harness._temporary[1];
+	store::set(root, &EnvScope::Account, ACCOUNT_BEARER, bearer).expect("the bearer is kept");
+}
+
 fn bearer_held(harness: &Harness) -> Option<String> {
 	harness.app.state::<AccountSession>().bearer().expect("the bearer reads")
 }
@@ -5218,6 +5257,71 @@ fn a_key_another_account_registered_moves_to_this_account_and_is_stored_under_it
 		assert_eq!(held_relay_device(&harness).await, Some(moved));
 		let device = harness.relay.device.device_of(&ed25519).expect("the device");
 		assert_eq!(device.account_id, OWNER_ACCOUNT);
+	});
+}
+
+#[test]
+fn an_account_signing_back_in_after_another_took_the_key_draws_a_new_challenge_and_registers_again()
+{
+	run(async {
+		let mut harness = Harness::signed_in("device-back").await;
+		harness.started().await;
+		let _first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		assert!(held_relay_device(&harness).await.is_some());
+
+		bearer_stored(&harness, OTHER_BEARER);
+		harness.started().await;
+		let _other = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		assert_eq!(held_relay_device(&harness).await, None);
+
+		bearer_stored(&harness, BEARER);
+		harness.started().await;
+		let _again = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let answers = harness.relay.device.answers();
+		assert_eq!(
+			harness.relay.device.statuses(),
+			vec![StatusCode::CREATED, StatusCode::OK, StatusCode::OK]
+		);
+		assert_eq!(
+			(&answers[1].1["transferred"], &answers[2].1["transferred"]),
+			(&json!(true), &json!(true))
+		);
+		assert_eq!(harness.relay.device.issued.load(Ordering::SeqCst), 3);
+		let answered_for_the_owner = answers[2].1["id"].as_str().expect("an id");
+		assert_eq!(
+			harness.relay.device.opened().last().map(String::as_str),
+			Some(answered_for_the_owner)
+		);
+		assert_eq!(held_relay_device(&harness).await.as_deref(), Some(answered_for_the_owner));
+		let device_id = harness.host_keys().device_id().to_string();
+		let other = relay_database(&harness)
+			.relay_devices()
+			.relay_device_id(OTHER_ACCOUNT.to_owned(), device_id);
+		assert_eq!(other.await.expect("the id reads"), None);
+	});
+}
+
+#[test]
+fn a_rate_limited_challenge_is_retried_and_the_device_registers() {
+	run(async {
+		let mut harness = Harness::signed_in("device-throttled").await;
+		harness.relay.device.throttled.store(1, Ordering::SeqCst);
+
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let answers = harness.relay.device.answers();
+		assert_eq!(harness.relay.device.throttled.load(Ordering::SeqCst), 0);
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::CREATED]);
+		let registered = answers[0].1["id"].as_str().expect("an id");
+		assert_eq!(harness.relay.device.opened(), vec![registered.to_owned()]);
 	});
 }
 

@@ -784,7 +784,9 @@ async fn device_call_answered(
 	if status == StatusCode::UNAUTHORIZED {
 		return Err(DeviceRegisterError::Revoked);
 	}
-	if !status.is_client_error() {
+	let is_transient =
+		matches!(status, StatusCode::REQUEST_TIMEOUT | StatusCode::TOO_MANY_REQUESTS);
+	if is_transient || !status.is_client_error() {
 		return successful(answered).map_err(DeviceRegisterError::Unreachable);
 	}
 	let code = answered.json::<Refusal>().await.ok().map(|refusal| refusal.error.code);
