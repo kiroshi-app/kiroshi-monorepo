@@ -71,6 +71,7 @@ export const commands = {
 	conversationCreateBotFromDraft: (draft: BotDraft, spaceId: string) => typedError<Bot, TranscriptStoreError>(__TAURI_INVOKE("conversation_create_bot_from_draft", { draft, spaceId })),
 	conversationSuggestedBots: () => __TAURI_INVOKE<SuggestedBot[]>("conversation_suggested_bots"),
 	companionLaunchOutcome: () => __TAURI_INVOKE<LaunchOutcome>("companion_launch_outcome"),
+	getDeviceIdentity: () => typedError<DeviceIdentity, DeviceKeysError>(__TAURI_INVOKE("get_device_identity")),
 	windowDeclareMaximizeButton: (bounds: {
 	x: number,
 	y: number,
@@ -698,6 +699,15 @@ export type ConversationPage = {
 };
 
 export type Destination = "companion" | "space" | "user";
+
+export type DeviceIdentity = {
+	deviceId: string,
+	signingPublicKey: string,
+	agreementPublicKey: string,
+	fingerprint: string[],
+};
+
+export type DeviceKeysError = { kind: "noProfileDirectory" } | { kind: "unreadable"; detail: string } | { kind: "unwritable"; detail: string } | { kind: "malformed" } | { kind: "noRandomness" };
 
 export type Diagnostics = {
 	appVersion: string,

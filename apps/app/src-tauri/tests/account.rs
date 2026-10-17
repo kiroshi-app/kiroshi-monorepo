@@ -15,6 +15,9 @@ use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::account::contract::CHANGED_EVENT;
 use kiroshi_app::account::session::AccountSession;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::crypto::commands::DeviceKeysState;
+use kiroshi_app::crypto::contract::DeviceKeysError;
+use kiroshi_app::crypto::key_store::{load_or_create, FileStore};
 use kiroshi_app::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use serde_json::{json, Value};
@@ -127,11 +130,16 @@ impl Host {
 
 	fn holding(folder: Result<RemovedOnDrop, EnvError>, api_url: &str) -> Self {
 		let root = folder.as_deref().map(Path::to_path_buf).map_err(EnvError::clone);
+		let device_keys = match &root {
+			Ok(root) => load_or_create(None, &device_keys_file(root)),
+			Err(_) => Err(DeviceKeysError::NoProfileDirectory),
+		};
 		let app = an_app_of_its_own(
 			"account",
 			mock_builder()
 				.invoke_handler(invoke_handler())
-				.manage(AccountSession::new(root.clone(), api_url)),
+				.manage(AccountSession::new(root.clone(), api_url))
+				.manage(DeviceKeysState::new(device_keys)),
 		);
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
@@ -187,6 +195,18 @@ impl Host {
 	}
 }
 
+fn device_keys_file(root: &Path) -> FileStore {
+	FileStore::at(root.join("device-keys"))
+}
+
+async fn signed_in(host: &Host, callbacks: &Callbacks) {
+	host.call("account_sign_in", json!({})).expect("the sign-in starts");
+	let callback =
+		callbacks.lock().expect("the stub").last().cloned().expect("a request was created");
+	reqwest::get(format!("{callback}&request={REQUEST_ID}")).await.expect("the callback");
+	assert_eq!(host.settled().await["kind"], "signedIn");
+}
+
 impl Drop for Host {
 	fn drop(&mut self) {
 		let _ = std::fs::remove_dir_all(&self.root);
@@ -226,6 +246,23 @@ fn the_callback_polls_signs_the_account_in_and_sign_out_deletes_the_bearer() {
 		host.call("account_sign_out", json!({})).expect("the sign-out settles");
 		assert_eq!(host.stored(), None);
 		assert_eq!(host.state(), json!({ "kind": "signedOut", "reason": null }));
+	});
+}
+
+#[test]
+fn a_sign_out_then_a_sign_in_answers_the_same_device_keys() {
+	tauri::async_runtime::block_on(async {
+		let callbacks = Callbacks::default();
+		let host = Host::new(&cloud(Arc::clone(&callbacks)).await);
+		signed_in(&host, &callbacks).await;
+		let identity = host.call("get_device_identity", json!({})).expect("the identity answers");
+
+		host.call("account_sign_out", json!({})).expect("the sign-out settles");
+		signed_in(&host, &callbacks).await;
+
+		assert_eq!(host.call("get_device_identity", json!({})), Ok(identity.clone()));
+		let stored = load_or_create(None, &device_keys_file(&host.root)).expect("the keys reload");
+		assert_eq!(identity["deviceId"], stored.device_id().to_string());
 	});
 }
 
