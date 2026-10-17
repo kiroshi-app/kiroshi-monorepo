@@ -535,6 +535,59 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    func release(in store: ConversationsStore) -> ConversationSummary? {
+        store.summaries.first { $0.id == "group-release" }
+    }
+
+    func atlasSays(_ content: String, to host: TestHost, in store: ConversationsStore) async {
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "r2", in: "group-release", seq: 2, isYours: false, content, at: 9_000,
+                by: atlas.id))
+        await waitUntil { release(in: store)?.lastMessage?.text == content }
+    }
+
+    @Test(arguments: [
+        ("<@juniper> can you look", "Atlas: @Juniper can you look"),
+        ("<@juniper> then <@atlas>, ship it", "Atlas: @Juniper then @Atlas, ship it"),
+        ("<@otto> left", "Atlas: @Unknown companion left"),
+    ])
+    func aMentionInThePreviewReadsAsInTheThread(content: String, preview: String) async {
+        let host = hostWithGroups
+        let (store, connection, following) = await follow(host)
+
+        await atlasSays(content, to: host, in: store)
+
+        let summary = release(in: store)
+        #expect(summary?.preview == preview)
+        let thread = ThreadMessage(
+            id: "r2", writer: .companion(atlas.id), text: content, sentAt: .now,
+            authors: summary?.subject.namedAuthors ?? [])
+        #expect(summary?.preview == "Atlas: \(String(thread.rendered.characters))")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aCompanionRenamedOnTheMacRenamesItsMentionInThePreview() async {
+        let host = hostWithGroups
+        let (store, connection, following) = await follow(host)
+        await atlasSays("<@juniper> can you look", to: host, in: store)
+
+        let renamed = FixtureHost.Group(
+            id: releaseCrew.id, title: releaseCrew.title,
+            members: [Companion(id: juniper.id, name: "Juno"), atlas],
+            createdAt: releaseCrew.createdAt)
+        host.push(
+            event: "conversation://updated",
+            payload: #"{"spaceId":"s-1","conversation":\#(renamed.json)}"#)
+        await waitUntil { release(in: store)?.preview == "Atlas: @Juno can you look" }
+
+        #expect(release(in: store)?.preview == "Atlas: @Juno can you look")
+        following.cancel()
+        await connection.stop()
+    }
+
     var created: FixtureHost.Group {
         FixtureHost.Group(id: "group-new", title: "", members: [juniper, pico], createdAt: 10_000)
     }
