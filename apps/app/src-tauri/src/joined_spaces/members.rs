@@ -251,8 +251,8 @@ mod tests {
 		Value::Array(members)
 	}
 
-	fn as_json(members: Vec<JoinedSpaceMember>) -> Value {
-		serde_json::to_value(members).expect("json")
+	async fn stored_json(app: &App<MockRuntime>, id: &str) -> Value {
+		serde_json::to_value(stored(app, id).await.expect("stored")).expect("json")
 	}
 
 	#[tokio::test]
@@ -267,10 +267,7 @@ mod tests {
 
 		let changed = next(&mut hearing).await;
 		assert_eq!(changed, json!({ "id": joined.id, "members": host_and(&[("bob", "Bob")]) }));
-		assert_eq!(
-			as_json(stored(&app, &joined.id).await.expect("stored")),
-			host_and(&[("bob", "Bob")])
-		);
+		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
 	}
 
 	#[tokio::test]
@@ -293,10 +290,7 @@ mod tests {
 
 		assert_eq!(renamed["members"], host_and(&[("bob", "Robert"), ("eve", "Eve")]));
 		assert_eq!(removed["members"], host_and(&[("bob", "Robert")]));
-		assert_eq!(
-			as_json(stored(&app, &joined.id).await.expect("stored")),
-			host_and(&[("bob", "Robert")])
-		);
+		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Robert")]));
 	}
 
 	#[tokio::test]
@@ -332,10 +326,7 @@ mod tests {
 			assert!(is_silent(&mut hearing).await, "{status}");
 		}
 
-		assert_eq!(
-			as_json(stored(&app, &joined.id).await.expect("stored")),
-			host_and(&[("bob", "Bob")])
-		);
+		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
 	}
 
 	#[tokio::test]
@@ -360,10 +351,7 @@ mod tests {
 		read(app.handle(), &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
-		assert_eq!(
-			as_json(stored(&app, &joined.id).await.expect("stored")),
-			host_and(&[("bob", "Bob")])
-		);
+		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
 	}
 
 	#[tokio::test]
@@ -382,10 +370,7 @@ mod tests {
 
 		let app = app_reaching(&dir, &api_url);
 
-		assert_eq!(
-			as_json(stored(&app, &joined.id).await.expect("stored")),
-			host_and(&[("bob", "Bob")])
-		);
+		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
 	}
 
 	#[tokio::test]
