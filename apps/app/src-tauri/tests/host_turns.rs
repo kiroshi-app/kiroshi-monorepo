@@ -119,7 +119,9 @@ async fn me() -> Response {
 	)
 }
 
-async fn guest_rostered(app: &App<MockRuntime>, host: &DeviceKeys) -> GuestDevice {
+async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
+	let host_keys = app.state::<DeviceKeysState>();
+	let host = host_keys.keys().expect("the host device keys");
 	let keys = DeviceKeys::generate().expect("randomness");
 	let agreement = keys.agreement_public();
 	let enrolled = Enrolled {
@@ -286,9 +288,7 @@ impl Host {
 			std::fs::remove_dir_all(&data_dir).expect("the previous data dir is cleared");
 		}
 		app.manage(db::bootstrap(app.handle()));
-		let host = DeviceKeys::generate().expect("randomness");
-		let host_secret = host.secret();
-		app.manage(DeviceKeysState::new(Ok(host)));
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
 		let identifier = app.config().identifier.clone();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(data_dir.clone())));
 		let root = data_dir.join("environment");
@@ -311,8 +311,7 @@ impl Host {
 			.await
 			.expect("the host reached the relay in time")
 			.expect("the relay is up");
-		let host = DeviceKeys::from_secret(&host_secret);
-		let guest = guest_rostered(&app, &host).await;
+		let guest = guest_rostered(&app).await;
 		let mut hosted = Self {
 			app,
 			_window: window,
