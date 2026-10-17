@@ -549,15 +549,20 @@ it("switches to the joined Space without a failure card when its host went offli
 it.each([
 	{
 		shared: "a shared Space it named",
+		hostId: "down-named",
 		remoteSpaceId: HOME,
 		landsOn: "joined:down-named",
 	},
-	{ shared: "no shared Space named yet", remoteSpaceId: null, landsOn: HOME },
+	{
+		shared: "no shared Space named yet",
+		hostId: "down-unnamed",
+		remoteSpaceId: null,
+		landsOn: HOME,
+	},
 ])(
 	"raises no card through the real joined spaces controller when a down host shares $shared",
-	async ({ remoteSpaceId, landsOn }) => {
+	async ({ hostId, remoteSpaceId, landsOn }) => {
 		const informed = silenceConsole()
-		const hostId = landsOn === HOME ? "down-unnamed" : "down-named"
 		takeFakeHostDown(hostId)
 		const world = await aWorld({
 			hosts: fakeHostModule.joinedHosts,

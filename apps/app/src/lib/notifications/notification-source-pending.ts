@@ -17,7 +17,6 @@ export const createPendingLandings = (subscribe: Subscribe) => {
 	const drop = () => {
 		clicks += 1
 		dropWaiting()
-		dropWaiting = keepNothing
 	}
 
 	const claim = () => {
