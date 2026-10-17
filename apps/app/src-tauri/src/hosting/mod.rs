@@ -8,7 +8,7 @@ mod members;
 mod reach;
 pub(crate) mod relay;
 pub(crate) mod replay;
-mod roster;
+pub mod roster;
 #[cfg(test)]
 mod sealing_member;
 mod wire;

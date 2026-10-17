@@ -16,15 +16,15 @@ pub(super) struct Rostered {
 	pub(super) signing: VerifyingKey,
 }
 
-pub(super) struct Enrolled<'a> {
-	pub(super) relay_device_id: &'a str,
-	pub(super) account_id: &'a str,
-	pub(super) signing: &'a VerifyingKey,
-	pub(super) agreement: &'a [u8; 32],
-	pub(super) added_at: i64,
+pub struct Enrolled<'a> {
+	pub relay_device_id: &'a str,
+	pub account_id: &'a str,
+	pub signing: &'a VerifyingKey,
+	pub agreement: &'a [u8; 32],
+	pub added_at: i64,
 }
 
-pub(super) fn signed_row(host: &DeviceKeys, space_id: &str, enrolled: &Enrolled<'_>) -> RosterRow {
+pub fn signed_row(host: &DeviceKeys, space_id: &str, enrolled: &Enrolled<'_>) -> RosterRow {
 	let mut row = RosterRow {
 		device_id: DeviceId::of(enrolled.signing).to_string(),
 		relay_device_id: enrolled.relay_device_id.to_owned(),
