@@ -149,6 +149,7 @@ export const commands = {
 	joinedSpacesList: () => typedError<JoinedSpace[], JoinedSpaceError>(__TAURI_INVOKE("joined_spaces_list")),
 	joinedSpaceConnect: (id: string) => typedError<JoinedSpaceConnection, JoinedSpaceError>(__TAURI_INVOKE("joined_space_connect", { id })),
 	joinedSpaceRemove: (id: string) => typedError<null, JoinedSpaceError>(__TAURI_INVOKE("joined_space_remove", { id })),
+	joinedSpaceMembers: (id: string) => typedError<JoinedSpaceMember[], JoinedSpaceError>(__TAURI_INVOKE("joined_space_members", { id })),
 	mcpOauthConnect: (owner: EnvOwner, name: string, url: string) => typedError<null, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_connect", { owner, name, url })),
 	mcpOauthCancel: () => typedError<null, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_cancel")),
 	mcpOauthDisconnect: (owner: EnvOwner, name: string, url: string) => typedError<Disconnected_Serialize, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_disconnect", { owner, name, url })),
@@ -238,6 +239,8 @@ export const HOSTING_CHANGED_EVENT = "hosting://changed" as const;
 export const HOSTING_MEMBERS_CHANGED_EVENT = "hosting://members-changed" as const;
 
 export const INVITATION_CHANGED_EVENT = "invitation://changed" as const;
+
+export const JOINED_SPACE_MEMBERS_CHANGED_EVENT = "joined-space://members-changed" as const;
 
 export const JOINED_SPACE_RECONNECTED_EVENT = "joined-space://reconnected" as const;
 
@@ -851,6 +854,17 @@ export type JoinedSpaceConnection = {
 
 export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string };
 
+export type JoinedSpaceMember = {
+	userId: string,
+	name: string | null,
+	role: JoinedSpaceRole,
+};
+
+export type JoinedSpaceMembersChanged = {
+	id: string,
+	members: JoinedSpaceMember[],
+};
+
 export type JoinedSpaceReconnected = {
 	id: string,
 };
@@ -859,6 +873,8 @@ export type JoinedSpaceRemoved = {
 	id: string,
 	name: string,
 };
+
+export type JoinedSpaceRole = "host" | "guest";
 
 export type Json = null | boolean | number | null | string | Json[] | { [key in string]: Json };
 

@@ -121,6 +121,7 @@ impl JoinedSpacesRepository {
 					return Ok(false);
 				}
 				write_in(&transaction, &stored)?;
+				super::joined_space_members::forgotten_in(&transaction, &id)?;
 				transaction.commit()?;
 				Ok(true)
 			})
@@ -128,7 +129,7 @@ impl JoinedSpacesRepository {
 	}
 }
 
-fn stored_in(connection: &Connection) -> Result<Vec<JoinedSpace>, DatabaseError> {
+pub(super) fn stored_in(connection: &Connection) -> Result<Vec<JoinedSpace>, DatabaseError> {
 	let Some(stored) = SETTINGS.read(connection, None, JOINED_SPACES_KEY)? else {
 		return Ok(Vec::new());
 	};

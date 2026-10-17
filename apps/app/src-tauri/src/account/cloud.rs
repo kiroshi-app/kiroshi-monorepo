@@ -148,6 +148,14 @@ pub struct CloudMember {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CloudRosterMember {
+	pub user_id: String,
+	pub name: Option<String>,
+	pub role: MemberRole,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum MemberRole {
 	Owner,
 	Member,
@@ -383,6 +391,24 @@ impl Cloud {
 		answered.json::<Vec<CloudMember>>().await.map_err(|error| {
 			MemberCallError::Unreachable(format!(
 				"the member list answered by the cloud did not parse: {error}"
+			))
+		})
+	}
+
+	pub async fn roster(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+	) -> Result<Vec<CloudRosterMember>, MemberCallError> {
+		let roster = self.at(&format!("{INSTANCES_PATH}/{instance_id}/roster"));
+		let answered = self
+			.answered(|client| client.get(roster).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		let answered = member_call_answered(answered).await?;
+		answered.json::<Vec<CloudRosterMember>>().await.map_err(|error| {
+			MemberCallError::Unreachable(format!(
+				"the roster answered by the relay did not parse: {error}"
 			))
 		})
 	}

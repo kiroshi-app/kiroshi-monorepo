@@ -96,6 +96,8 @@ declared! {
 		joined_spaces::commands::REMOVED_EVENT,
 	JOINED_SPACE_RECONNECTED: joined_spaces::commands::JoinedSpaceReconnected =
 		joined_spaces::commands::RECONNECTED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED: joined_spaces::members::JoinedSpaceMembersChanged =
+		joined_spaces::members::MEMBERS_CHANGED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

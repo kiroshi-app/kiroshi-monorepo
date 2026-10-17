@@ -14,7 +14,7 @@ use crate::events::{self, MEMBERS_CHANGED};
 use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
 
-pub(super) const MEMBERS_EVERY: Duration = Duration::from_secs(15);
+pub(crate) const MEMBERS_EVERY: Duration = Duration::from_secs(15);
 
 pub async fn list<R: Runtime>(
 	app: &AppHandle<R>,
