@@ -54,9 +54,16 @@ agreement_scalar`, in one of two places:
   The dev profile never calls the Keychain, since an ad-hoc signed dev build would be
   prompted on every rebuild.
 
-When the Keychain fails to read or to write, the keys go to the file instead and
-the failure is logged with its cause. A Keychain that answers "no item" while the
-file holds keys means an earlier fallback: the file's keys are used.
+Keys are generated only when the Keychain answered "no item", or where no
+Keychain is used. Every Keychain failure is logged with its cause.
+
+- The Keychain fails to read and the file holds keys: the file's keys are used.
+- The Keychain fails to read and the file holds none: the identity is reported
+  unavailable (`Unreadable`) and no key is written anywhere, so a passing Keychain
+  failure never replaces the identity.
+- The Keychain answers "no item" and the file holds keys, left there by an earlier
+  write fallback: the file's keys are used.
+- The Keychain fails to write freshly generated keys: they go to the file.
 
 A file or Keychain item that is not 64 bytes is refused and left in place: the
 identity is reported unavailable rather than replaced.

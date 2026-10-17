@@ -18,16 +18,22 @@ pub fn load_or_create(
 		return held_or_created(file);
 	};
 	match system.read() {
-		Ok(Some(secret)) => return Ok(DeviceKeys::from_secret(&secret)),
-		Ok(None) => {}
+		Ok(Some(secret)) => Ok(DeviceKeys::from_secret(&secret)),
+		Ok(None) => file_held_or_created_in(system, file),
 		Err(failure) => {
-			log::warn!(
-				"the {} did not read the device keys, the file store holds them: {failure:?}",
-				system.name()
-			);
-			return held_or_created(file);
+			log::warn!("the {} did not read the device keys: {failure:?}", system.name());
+			match file.read()? {
+				Some(secret) => Ok(DeviceKeys::from_secret(&secret)),
+				None => Err(failure),
+			}
 		}
 	}
+}
+
+fn file_held_or_created_in(
+	system: &dyn KeyStore,
+	file: &FileStore,
+) -> Result<DeviceKeys, DeviceKeysError> {
 	if let Some(secret) = file.read()? {
 		return Ok(DeviceKeys::from_secret(&secret));
 	}
@@ -201,12 +207,23 @@ mod tests {
 	}
 
 	#[test]
-	fn an_unreadable_system_store_falls_back_to_the_file() {
+	fn an_unreadable_system_store_with_no_file_answers_unreadable_and_writes_no_key() {
 		let profile = a_profile();
 		let system = SystemStore { is_unreadable: true, ..SystemStore::default() };
-		let first = device_id_of(load_or_create(Some(&system), &file_in(&profile)));
-		assert!(file_in(&profile).read().expect("the file reads").is_some());
-		assert_eq!(device_id_of(load_or_create(Some(&system), &file_in(&profile))), first);
+		let loaded = load_or_create(Some(&system), &file_in(&profile));
+		assert!(matches!(loaded, Err(DeviceKeysError::Unreadable { .. })));
+		assert_eq!(file_in(&profile).read(), Ok(None));
+		assert!(system.held.borrow().is_none());
+	}
+
+	#[test]
+	fn an_unreadable_system_store_answers_the_keys_of_the_file() {
+		let profile = a_profile();
+		file_in(&profile).write(&[3; 64]).expect("the file is planted");
+		let system = SystemStore { is_unreadable: true, ..SystemStore::default() };
+		let loaded = load_or_create(Some(&system), &file_in(&profile));
+		assert_eq!(device_id_of(loaded), DeviceKeys::from_secret(&[3; 64]).device_id().to_string());
+		assert!(system.held.borrow().is_none());
 	}
 
 	#[test]
