@@ -95,28 +95,54 @@ struct MessageAuthorTests {
         #expect(mission.authorAccountId == nil)
     }
 
-    @Test func onlyYourOwnMessagesReadYouInTheList() {
-        let sentAt = Date(milliseconds: 1)
+    @Test func theListNamesWhoWroteTheLastMessage() {
         let atlas = Companion(id: "atlas", name: "Atlas")
+        let preview = { (writer: MessageAuthor) in
+            MessagePreview(text: "Hi", writer: writer, sentAt: Date(milliseconds: 1))
+        }
+        let ada = preview(.person(accountId: "acc-ada", name: "Ada"))
 
-        #expect(MessagePreview(text: "Hi", writer: .you, sentAt: sentAt).line == "You: Hi")
+        #expect(preview(.you).line == "You: Hi")
+        #expect(preview(.you).line(among: [atlas]) == "You: Hi")
+        #expect(ada.line == "Ada: Hi")
+        #expect(ada.line(among: [atlas]) == "Ada: Hi")
+        #expect(preview(.person(accountId: nil, name: ThreadAuthorship.unnamed)).line == "Hi")
         #expect(
-            MessagePreview(
-                text: "Hi", writer: .person(accountId: "acc-ada", name: "Ada"), sentAt: sentAt
-            ).line(among: [atlas]) == "Hi")
-        #expect(
-            MessagePreview(text: "Hi", writer: .companion("atlas"), sentAt: sentAt).line(
-                among: [atlas]) == "Atlas: Hi")
-        #expect(
-            MessagePreview(text: "Hi", writer: .companion("atlas"), sentAt: sentAt).line == "Hi")
+            preview(.person(accountId: "acc-ada", name: ThreadAuthorship.unnamed)).line == "Hi")
+        #expect(preview(.companion("atlas")).line(among: [atlas]) == "Atlas: Hi")
+        #expect(preview(.companion("atlas")).line == "Hi")
+        #expect(preview(.companion("pico")).line(among: [atlas]) == "Hi")
+        #expect(preview(.companion(nil)).line(among: [atlas]) == "Hi")
     }
 
-    @Test func aLastWordWithoutACompanionReadsAsTheHosts() {
-        let word = LastWord(text: "Hi", at: 1, authorBotId: nil)
-        let spoken = LastWord(text: "Hi", at: 1, authorBotId: "atlas")
+    @Test func aLastWordNamesItsAuthorAsTheThreadDoes() {
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let word = { (botId: String?, accountId: String?, name: String?) in
+            LastWord(
+                text: "Hi", at: 1, authorBotId: botId, authorAccountId: accountId,
+                authorName: name)
+        }
+        let yours = word(nil, "acc-sam", "Sam")
+        let ada = word(nil, "acc-ada", "Ada Lovelace")
+        let older = word(nil, nil, nil)
 
-        #expect(MessagePreview(word, authorship: hosted).line == "You: Hi")
-        #expect(MessagePreview(word, authorship: joined).line == "Hi")
-        #expect(MessagePreview(spoken, authorship: hosted).writer == .companion("atlas"))
+        for authorship in [hosted, joined] {
+            #expect(MessagePreview(yours, authorship: authorship).line == "You: Hi")
+            #expect(MessagePreview(ada, authorship: authorship).line == "Ada Lovelace: Hi")
+            #expect(
+                MessagePreview(word(nil, "acc-ada", "  "), authorship: authorship).line == "Hi")
+            #expect(
+                MessagePreview(word("atlas", nil, nil), authorship: authorship).line(
+                    among: [atlas]) == "Atlas: Hi")
+            #expect(
+                MessagePreview(word("pico", nil, nil), authorship: authorship).line(
+                    among: [atlas]) == "Hi")
+        }
+        #expect(
+            MessagePreview(word(nil, "acc-noor", "Noor Haddad"), authorship: joined).line
+                == "Noor Haddad: Hi")
+        #expect(MessagePreview(older, authorship: hosted).line == "You: Hi")
+        #expect(MessagePreview(older, authorship: joined).line == "Hi")
+        #expect(MessagePreview(ada, authorship: .unknownAccount).line == "You: Hi")
     }
 }

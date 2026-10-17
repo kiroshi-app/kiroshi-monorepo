@@ -108,7 +108,7 @@ struct MessagePreview: Equatable {
             text: word.text ?? "",
             writer: authorship.author(
                 role: word.authorBotId == nil ? .user : .assistant, botId: word.authorBotId,
-                accountId: nil, name: nil),
+                accountId: word.authorAccountId, name: word.authorName),
             sentAt: Date(milliseconds: word.at))
     }
 
@@ -119,14 +119,20 @@ struct MessagePreview: Equatable {
     }
 
     var line: String {
-        writer == .you ? "You: \(text)" : text
+        line(among: [])
     }
 
     func line(among members: [Companion]) -> String {
-        guard let speaker = members.first(where: { $0.id == writer.companionId }) else {
-            return line
+        guard let author = author(among: members) else { return text }
+        return "\(author): \(text)"
+    }
+
+    private func author(among members: [Companion]) -> String? {
+        switch writer {
+        case .you: String(localized: "You")
+        case .person(_, let name): name == ThreadAuthorship.unnamed ? nil : name
+        case .companion(let id): members.first { $0.id == id }?.name
         }
-        return "\(speaker.name): \(text)"
     }
 }
 
