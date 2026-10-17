@@ -23,7 +23,8 @@ impl Subkey {
 		Self(subkey)
 	}
 
-	pub fn from_bytes(bytes: [u8; KEY_LENGTH]) -> Self {
+	#[cfg(test)]
+	pub(crate) fn from_bytes(bytes: [u8; KEY_LENGTH]) -> Self {
 		Self(bytes)
 	}
 

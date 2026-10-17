@@ -36,7 +36,7 @@ pub fn open(secret: &[u8], host: &StaticSecret, sealed: &[u8]) -> Result<JoinReq
 	})
 }
 
-pub(crate) fn payload(secret: &[u8], keys: &DeviceKeys) -> Vec<u8> {
+fn payload(secret: &[u8], keys: &DeviceKeys) -> Vec<u8> {
 	let public_keys =
 		[keys.signing_public().as_bytes().as_slice(), keys.agreement_public().as_bytes()].concat();
 	let mac = keyed(secret, &public_keys).finalize().into_bytes();

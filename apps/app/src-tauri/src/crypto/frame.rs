@@ -83,7 +83,7 @@ pub fn open(frame: &Frame, subkey: &Subkey, sender: &VerifyingKey) -> Result<Vec
 	decrypt(subkey, frame.header.ctr, &aad, &frame.ciphertext)
 }
 
-pub fn nonce_of(ctr: u64) -> [u8; NONCE_LENGTH] {
+fn nonce_of(ctr: u64) -> [u8; NONCE_LENGTH] {
 	let mut nonce = [0u8; NONCE_LENGTH];
 	nonce[4..].copy_from_slice(&ctr.to_be_bytes());
 	nonce

@@ -26,8 +26,8 @@ impl DeviceKeysState {
 pub fn load<R: Runtime>(app: &AppHandle<R>) -> DeviceKeysState {
 	let keys = app.path().app_data_dir().map_err(|_| DeviceKeysError::NoProfileDirectory).and_then(
 		|profile| {
-			let system =
-				system_store(install_kind(&app.config().identifier), &app.config().identifier);
+			let identifier = &app.config().identifier;
+			let system = system_store(install_kind(identifier), identifier);
 			load_or_create(system.as_deref(), &FileStore::at(profile.join(KEYS_FILE)))
 		},
 	);
