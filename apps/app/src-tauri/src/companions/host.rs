@@ -120,8 +120,13 @@ impl<R: Runtime> CompanionHost<R> {
 				bot_ids.push(seated.id.clone());
 			}
 		}
-		let draft =
-			ConversationDraft { space_id, section_id: None, title: title.to_owned(), bot_ids };
+		let draft = ConversationDraft {
+			space_id,
+			section_id: None,
+			title: title.to_owned(),
+			icon: Some(asked.icon),
+			bot_ids,
+		};
 		let room = database
 			.conversations()
 			.create_conversation(draft)
@@ -452,6 +457,7 @@ struct Invited {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Opened {
 	title: String,
+	icon: String,
 	#[serde(default)]
 	with: Vec<String>,
 	message: String,
@@ -652,9 +658,13 @@ mod tests {
 	}
 
 	async fn open_refused(app: &App<MockRuntime>, conversation_id: &str, payload: Value) -> Value {
-		let before = written(app).await;
+		let before = (written(app).await, standing(app).await);
 		let refused = refusal(serving(app, conversation_id).answer(an_open(payload)).await);
-		assert_eq!(written(app).await, before, "a refused opening wrote something");
+		assert_eq!(
+			(written(app).await, standing(app).await),
+			before,
+			"a refused opening wrote something"
+		);
 		refused
 	}
 
@@ -1066,7 +1076,7 @@ mod tests {
 
 		let opened = serving(&app, "c1")
 			.answer(an_open(
-				json!({ "title": " Trip ", "with": ["  aDA ", "b3"], "message": " Hi " }),
+				json!({ "title": " Trip ", "icon": "Rocket", "with": ["  aDA ", "b3"], "message": " Hi " }),
 			))
 			.await
 			.expect("it is opened");
@@ -1118,6 +1128,7 @@ mod tests {
 		let opened = serving(&app, "c1")
 			.answer(an_open(json!({
 				"title": "Trip",
+				"icon": "Rocket",
 				"with": ["b2", "ada", "SHOTO", "b1"],
 				"message": "Hi"
 			})))
@@ -1136,7 +1147,9 @@ mod tests {
 		let app = a_room("open-alone").await;
 
 		let opened = serving(&app, "c1")
-			.answer(an_open(json!({ "title": "Trip", "with": [], "message": "Hi" })))
+			.answer(an_open(
+				json!({ "title": "Trip", "icon": "Rocket", "with": [], "message": "Hi" }),
+			))
 			.await
 			.expect("it is opened");
 
@@ -1153,15 +1166,18 @@ mod tests {
 			let refused = open_refused(
 				&app,
 				"c1",
-				json!({ "title": "Trip", "with": ["b2", companion], "message": "Hi" }),
+				json!({ "title": "Trip", "icon": "Rocket", "with": ["b2", companion], "message": "Hi" }),
 			)
 			.await;
 
 			assert_eq!(refused, json!({ "kind": "unknownCompanion", "companion": companion }));
 		}
-		let refused =
-			open_refused(&app, "c1", json!({ "title": "Trip", "with": ["rex"], "message": "Hi" }))
-				.await;
+		let refused = open_refused(
+			&app,
+			"c1",
+			json!({ "title": "Trip", "icon": "Rocket", "with": ["rex"], "message": "Hi" }),
+		)
+		.await;
 		assert_eq!(refused["kind"], json!("ambiguousCompanion"));
 	}
 
@@ -1169,22 +1185,91 @@ mod tests {
 	async fn a_blank_title_or_message_is_refused_by_name_and_opens_nothing() {
 		let app = a_room("open-blank").await;
 
-		let title =
-			open_refused(&app, "c1", json!({ "title": "  ", "with": [], "message": "Hi" })).await;
-		let message =
-			open_refused(&app, "c1", json!({ "title": "Trip", "with": [], "message": " " })).await;
+		let title = open_refused(
+			&app,
+			"c1",
+			json!({ "title": "  ", "icon": "Rocket", "with": [], "message": "Hi" }),
+		)
+		.await;
+		let message = open_refused(
+			&app,
+			"c1",
+			json!({ "title": "Trip", "icon": "Rocket", "with": [], "message": " " }),
+		)
+		.await;
 
 		assert_eq!(title, json!({ "kind": "emptyTitleField" }));
 		assert_eq!(message, json!({ "kind": "emptyMessageField" }));
 	}
 
 	#[tokio::test]
+	async fn a_room_opens_with_its_title_and_its_icon_written_on_its_row() {
+		let app = a_room("open-icon").await;
+
+		let opened = serving(&app, "c1")
+			.answer(an_open(
+				json!({ "title": "Trip", "icon": "Rocket", "with": [], "message": "Hi" }),
+			))
+			.await
+			.expect("it is opened");
+
+		let id = opened["conversationId"].as_str().expect("the room is named").to_owned();
+		let row: (String, Option<String>) = ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT title, icon FROM conversations WHERE id = ?1",
+					[id],
+					|row| Ok((row.get(0)?, row.get(1)?)),
+				)?)
+			})
+			.await
+			.expect("the row reads");
+		assert_eq!(row, ("Trip".to_owned(), Some("Rocket".to_owned())));
+	}
+
+	#[tokio::test]
+	async fn a_room_opened_with_an_icon_off_the_list_is_refused_naming_the_list_and_opens_nothing()
+	{
+		let app = a_room("open-unlisted").await;
+
+		let refused = open_refused(
+			&app,
+			"c1",
+			json!({ "title": "Trip", "icon": "Message", "with": ["b2"], "message": "Hi" }),
+		)
+		.await;
+
+		assert_eq!(
+			refused,
+			json!({ "kind": "unlistedIcon", "icon": "Message", "accepted": conversation_icons() })
+		);
+	}
+
+	#[tokio::test]
+	async fn a_room_opened_without_an_icon_is_refused_naming_it_and_opens_nothing() {
+		let app = a_room("open-iconless").await;
+
+		let refused =
+			open_refused(&app, "c1", json!({ "title": "Trip", "with": [], "message": "Hi" })).await;
+
+		assert_eq!(refused["kind"], json!("unreadableRequest"));
+		assert!(
+			refused["detail"].as_str().is_some_and(|detail| detail.contains("icon")),
+			"got {refused}"
+		);
+	}
+
+	#[tokio::test]
 	async fn a_room_opened_from_a_conversation_belonging_to_no_space_is_refused() {
 		let app = a_room("open-spaceless").await;
 
-		let refused =
-			open_refused(&app, "nowhere", json!({ "title": "Trip", "with": [], "message": "Hi" }))
-				.await;
+		let refused = open_refused(
+			&app,
+			"nowhere",
+			json!({ "title": "Trip", "icon": "Rocket", "with": [], "message": "Hi" }),
+		)
+		.await;
 
 		assert_eq!(
 			refused,
@@ -1199,7 +1284,7 @@ mod tests {
 		let refused = open_refused(
 			&app,
 			"c1",
-			json!({ "title": "Trip", "with": [], "message": "Hi", "spaceId": "work" }),
+			json!({ "title": "Trip", "icon": "Rocket", "with": [], "message": "Hi", "spaceId": "work" }),
 		)
 		.await;
 

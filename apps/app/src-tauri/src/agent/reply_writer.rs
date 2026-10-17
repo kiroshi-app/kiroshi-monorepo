@@ -860,6 +860,7 @@ mod tests {
 					space_id: PERSONAL_SPACE.to_owned(),
 					section_id: None,
 					title: "Room".to_owned(),
+					icon: None,
 					bot_ids: vec![DEFAULT_BOT_ID.to_owned(), ada.id.clone()],
 				})
 				.await
