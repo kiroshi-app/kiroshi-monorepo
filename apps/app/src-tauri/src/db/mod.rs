@@ -1,6 +1,7 @@
 pub mod connection;
 pub mod migrations;
 pub mod repositories;
+pub mod result_code;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -9,6 +10,7 @@ use rusqlite::Connection;
 use tauri::{AppHandle, Runtime};
 
 pub use connection::DatabaseError;
+use connection::Located as _;
 use repositories::{
 	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
 	JoinedSpacesRepository, MessagesRepository, MissionsRepository, RoutinesRepository,
@@ -88,7 +90,7 @@ impl Database {
 	fn open(path: &Path) -> DatabaseState {
 		let mut connection = connection::open(path)?;
 		migrations::apply(&mut connection)?;
-		messages::sweep_unfinished(&mut connection)?;
+		messages::sweep_unfinished(&mut connection).at("sweep_unfinished", "messages")?;
 		let access = Access::new(connection);
 		Ok(Self {
 			application_installs: ApplicationInstallsRepository::new(access.clone()),

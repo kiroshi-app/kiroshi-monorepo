@@ -6571,11 +6571,41 @@
         },
         {
           "properties": {
+            "code": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "detail": {
               "type": "string"
             },
             "kind": {
               "const": "sqlite"
+            },
+            "operation": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "table": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -7043,6 +7073,21 @@
             },
             "kind": {
               "const": "unknownMessage"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownTurn"
             }
           },
           "required": [
