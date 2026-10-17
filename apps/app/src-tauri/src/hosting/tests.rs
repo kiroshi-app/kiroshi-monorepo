@@ -5757,6 +5757,22 @@ impl Harness {
 		relay.join_secrets(PERSONAL.to_owned()).await.expect("the secrets read").len()
 	}
 
+	#[cfg(unix)]
+	async fn removed_while_no_key_is_stored(
+		&self,
+		device: &SealingMember,
+	) -> Result<Vec<AccountDevices>, MembersError> {
+		use std::os::unix::fs::PermissionsExt;
+
+		let profile = self.app.path().app_data_dir().expect("the data folder resolves");
+		let permissions = |mode| std::fs::Permissions::from_mode(mode);
+		std::fs::set_permissions(&profile, permissions(0o500)).expect("the profile is locked");
+		let device_id = device.keys.device_id().to_string();
+		let removed = remove_device(self.app.handle(), PERSONAL.to_owned(), device_id).await;
+		std::fs::set_permissions(&profile, permissions(0o700)).expect("the profile is unlocked");
+		removed
+	}
+
 	async fn is_rotation_pending(&self) -> bool {
 		let state = self.app.state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").space_relay();
@@ -6068,8 +6084,6 @@ fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing(
 #[cfg(unix)]
 #[test]
 fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_rotates() {
-	use std::os::unix::fs::PermissionsExt;
-
 	run(async {
 		let mut harness = Harness::signed_in("join-unrotated").await;
 		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
@@ -6077,17 +6091,8 @@ fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_
 		let mut relay = harness.relay_side().await;
 		let link = harness.link_for("guest").await;
 		let guest = harness.joined(&mut relay, &link, "guest").await;
-		let profile = harness.app.path().app_data_dir().expect("the data folder resolves");
-		let permissions = |mode| std::fs::Permissions::from_mode(mode);
-		std::fs::set_permissions(&profile, permissions(0o500)).expect("the profile is locked");
 
-		let refused = remove_device(
-			harness.app.handle(),
-			PERSONAL.to_owned(),
-			guest.member.keys.device_id().to_string(),
-		)
-		.await;
-		std::fs::set_permissions(&profile, permissions(0o700)).expect("the profile is unlocked");
+		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
 		let left_pending =
 			(harness.is_rotation_pending().await, harness.space_key(PERSONAL).key_id);
 		let listed = harness.devices().await;
@@ -6166,8 +6171,6 @@ fn withdrawing_an_invitation_with_no_admitted_device_keeps_the_key_id() {
 #[cfg(unix)]
 #[test]
 fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
-	use std::os::unix::fs::PermissionsExt;
-
 	run(async {
 		let mut harness = Harness::signed_in("join-pending-online").await;
 		harness.seed(&[
@@ -6181,16 +6184,7 @@ fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
 		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
 		let joiner_link = harness.link_for("joiner").await;
 		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
-		let profile = harness.app.path().app_data_dir().expect("the data folder resolves");
-		let permissions = |mode| std::fs::Permissions::from_mode(mode);
-		std::fs::set_permissions(&profile, permissions(0o500)).expect("the profile is locked");
-		let refused = remove_device(
-			harness.app.handle(),
-			PERSONAL.to_owned(),
-			guest.member.keys.device_id().to_string(),
-		)
-		.await;
-		std::fs::set_permissions(&profile, permissions(0o700)).expect("the profile is unlocked");
+		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
 		let left_pending = harness.is_rotation_pending().await;
 
 		harness.stopped().await;
