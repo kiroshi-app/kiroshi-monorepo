@@ -113,6 +113,11 @@ pub enum CompanionError {
 	EmptyIconField,
 	EmptyDescription,
 	#[serde(rename_all = "camelCase")]
+	UnlistedIcon {
+		icon: String,
+		accepted: Vec<String>,
+	},
+	#[serde(rename_all = "camelCase")]
 	UnknownColour {
 		colour: String,
 		accepted: Vec<String>,
@@ -182,6 +187,12 @@ impl From<TranscriptStoreError> for CompanionError {
 			TranscriptStoreError::Storage { failure } => CompanionError::Storage { failure },
 			TranscriptStoreError::NamelessBot => CompanionError::NamelessCompanion,
 			TranscriptStoreError::BlankIcon => CompanionError::EmptyIconField,
+			TranscriptStoreError::UnlistedIcon { icon, accepted } => {
+				CompanionError::UnlistedIcon { icon, accepted }
+			}
+			TranscriptStoreError::UnknownColour { colour, accepted } => {
+				CompanionError::UnknownColour { colour, accepted }
+			}
 			other => CompanionError::Unexpected { detail: format!("{other:?}") },
 		}
 	}

@@ -3904,7 +3904,7 @@ mod tests {
 		assert_eq!(
 			write(
 				&connection,
-				"UPDATE conversations SET icon = 'Message', color = 'cyan' WHERE id = 'c1'"
+				"UPDATE conversations SET icon = 'MessageSquare', color = 'cyan' WHERE id = 'c1'"
 			),
 			Ok(1)
 		);

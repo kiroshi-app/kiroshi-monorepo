@@ -214,11 +214,22 @@ the install.
 
 `title` answers `{"type":"title","title":…,"icon":…}`. The model is asked for the
 title on its first line and one icon name on its second, offered from
-`packages/shared/conversation-icons.json`. `title` is the first non-blank line, cut to
-sixty characters, or `null` when the answer holds none. `icon` is the first later line
-that names a listed icon once trimmed and compared without case, spelled as the list
-spells it, or `null` when no line does. The host reads a frame without `icon` as no
+`packages/shared/conversation-icons.json`, and shown one literal two-line answer.
+`title` is the first non-blank line, cut to sixty characters, or `null` when the
+answer holds none. `icon` is the first later line that names a listed icon once a
+leading `label:` and the punctuation and symbols around it are stripped (`Icon: Rocket`,
+`**Rocket**`, `` `Rocket` ``, `Rocket.`) and compared without case, spelled as the list
+spells it. When no later line does, a first line closing on a separator and a listed
+icon (`Ship the beta | Rocket`) gives that icon, and the title is what comes before the
+separator. Otherwise `icon` is `null`. The host reads a frame without `icon` as no
 icon, and `agent_title` answers `{ title, icon }`, or `null` when no title came back.
+
+Every write of a conversation's `icon` goes through the repository, which refuses a
+name absent from that same file (`unlistedIcon`, carrying the accepted names) and a
+colour outside the eight tints (`unknownColour`), and leaves the row as it was. An
+update that resends the icon the row already stores is not checked against the list,
+so a room still wearing an icon stored before the list was enforced can be renamed
+and moved.
 
 Every other command names its session.
 

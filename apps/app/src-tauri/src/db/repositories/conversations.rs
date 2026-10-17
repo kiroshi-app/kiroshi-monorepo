@@ -14,10 +14,12 @@ use crate::db::{Access, DatabaseError};
 mod avatar;
 mod bots;
 mod effort;
+mod icon;
 mod page;
 
 pub use avatar::AvatarBlot;
 pub use bots::{Bot, BotIdentity};
+pub use icon::conversation_icons;
 pub use page::{ActiveConversation, ActivePage, ActiveTurn, LastWord};
 
 use bots::{
@@ -48,6 +50,8 @@ pub enum ConversationError {
 	SeveralSpaces { id: String },
 	UnknownParticipant { conversation_id: String, bot_id: String },
 	BlankIcon,
+	UnlistedIcon { icon: String },
+	UnknownColour { colour: String },
 }
 
 impl From<DatabaseError> for ConversationError {
@@ -781,16 +785,20 @@ fn updated_conversation(
 	edit: &ConversationEdit,
 ) -> Result<Conversation, ConversationError> {
 	refuse_blank_icon(edit.icon.as_deref())?;
+	refuse_unknown_colour(edit.color.as_deref())?;
 	let transaction = write_transaction(connection)?;
-	let home: Option<String> = transaction
-		.query_row("SELECT space_id FROM conversations WHERE id = ?1", [id], |row| row.get(0))
+	let (home, stored_icon): (Option<String>, Option<String>) = transaction
+		.query_row("SELECT space_id, icon FROM conversations WHERE id = ?1", [id], |row| {
+			Ok((row.get(0)?, row.get(1)?))
+		})
 		.optional()?
-		.flatten();
+		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })?;
+	refuse_unlisted_icon(edit.icon.as_deref(), stored_icon.as_deref())?;
 	let pin = match home {
 		Some(space_id) => pin_within(&transaction, &space_id, edit.section_id.as_deref())?,
 		None => None,
 	};
-	let written = transaction.execute(
+	transaction.execute(
 		"UPDATE conversations SET title = ?2, instructions = ?3, section_id = ?4, updated_at = ?5,
 			pin_position = ?6, icon = ?7, color = ?8
 			WHERE id = ?1",
@@ -805,7 +813,6 @@ fn updated_conversation(
 			edit.color
 		],
 	)?;
-	refuse_unknown_conversation(written, id)?;
 	let updated = conversation_of_any_kind_at(&transaction, id)?;
 	transaction.commit()?;
 	Ok(updated)
@@ -817,6 +824,8 @@ fn described_conversation(
 	description: &ConversationDescription,
 ) -> Result<Conversation, ConversationError> {
 	refuse_blank_icon(description.icon.as_deref())?;
+	refuse_unlisted_icon(description.icon.as_deref(), None)?;
+	refuse_unknown_colour(description.color.as_ref().and_then(Option::as_deref))?;
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE conversations SET icon = COALESCE(?2, icon),
@@ -839,6 +848,24 @@ fn described_conversation(
 fn refuse_blank_icon(icon: Option<&str>) -> Result<(), ConversationError> {
 	match icon {
 		Some(icon) if icon.trim().is_empty() => Err(ConversationError::BlankIcon),
+		_ => Ok(()),
+	}
+}
+
+fn refuse_unlisted_icon(icon: Option<&str>, kept: Option<&str>) -> Result<(), ConversationError> {
+	match icon {
+		Some(icon) if Some(icon) != kept && !icon::is_listed(icon) => {
+			Err(ConversationError::UnlistedIcon { icon: icon.to_owned() })
+		}
+		_ => Ok(()),
+	}
+}
+
+fn refuse_unknown_colour(colour: Option<&str>) -> Result<(), ConversationError> {
+	match colour {
+		Some(colour) if AvatarBlot::parse(colour).is_none() => {
+			Err(ConversationError::UnknownColour { colour: colour.to_owned() })
+		}
 		_ => Ok(()),
 	}
 }
@@ -1534,7 +1561,7 @@ mod tests {
 			repository.ensure_chat(bot.id.clone(), Some(home.clone())).await.expect("the chat");
 
 		let dressed = repository
-			.update_conversation(chat.id.clone(), a_look(Some("Message"), Some("cyan")))
+			.update_conversation(chat.id.clone(), a_look(Some("MessageSquare"), Some("cyan")))
 			.await
 			.expect("the main chat is dressed");
 		let listed = repository
@@ -1547,7 +1574,7 @@ mod tests {
 			.await
 			.expect("the main chat is cleared");
 
-		assert_eq!(look_of(&dressed), (Some("Message".to_owned()), Some(AvatarBlot::Cyan)));
+		assert_eq!(look_of(&dressed), (Some("MessageSquare".to_owned()), Some(AvatarBlot::Cyan)));
 		assert_eq!(look_of(&listed.conversation), look_of(&dressed));
 		assert_eq!(look_of(&cleared), (None, None));
 
@@ -1556,7 +1583,51 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_colour_outside_eight_or_a_blank_icon_is_refused_and_the_room_keeps_its_look() {
+	async fn a_room_keeping_an_icon_stored_off_the_list_is_renamed_and_refused_a_new_one() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
+		let room = repository
+			.create_conversation(a_draft(&home_of(repository, &bot).await, &[&bot]))
+			.await
+			.expect("the room is opened");
+		let planted = room.id.clone();
+		repository
+			.call(move |connection| {
+				Ok(connection.execute(
+					"UPDATE conversations SET icon = 'Message' WHERE id = ?1",
+					[planted],
+				)?)
+			})
+			.await
+			.expect("the off-list icon is planted");
+		let renamed_edit =
+			ConversationEdit { title: "Retro".to_owned(), ..a_look(Some("Message"), None) };
+
+		let renamed = repository
+			.update_conversation(room.id.clone(), renamed_edit)
+			.await
+			.expect("the rename keeps the stored icon");
+		let switched =
+			repository.update_conversation(room.id.clone(), a_look(Some("Foo"), None)).await;
+		let kept = repository.conversations(home_of(repository, &bot).await).await.expect("list");
+
+		assert_eq!(renamed.title, "Retro");
+		assert_eq!(renamed.icon.as_deref(), Some("Message"));
+		assert!(
+			matches!(&switched, Err(ConversationError::UnlistedIcon { icon }) if icon == "Foo"),
+			"{switched:?}"
+		);
+		assert_eq!(kept[0].title, "Retro");
+		assert_eq!(kept[0].icon.as_deref(), Some("Message"));
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_look_off_the_lists_is_refused_and_the_room_keeps_its_look() {
 		let dir = temp_dir();
 		let database = open(&dir);
 		let repository = database.conversations();
@@ -1566,33 +1637,59 @@ mod tests {
 			.await
 			.expect("the room is opened");
 		repository
-			.update_conversation(room.id.clone(), a_look(Some("Message"), Some("red")))
+			.update_conversation(room.id.clone(), a_look(Some("MessageSquare"), Some("red")))
 			.await
 			.expect("the room is dressed");
 
 		let teal = repository
-			.update_conversation(room.id.clone(), a_look(Some("Star"), Some("teal")))
+			.update_conversation(room.id.clone(), a_look(Some("Sparkles"), Some("teal")))
 			.await;
 		let blank =
 			repository.update_conversation(room.id.clone(), a_look(Some(" \t"), None)).await;
+		let unlisted =
+			repository.update_conversation(room.id.clone(), a_look(Some("Message"), None)).await;
 		let blank_description = repository
 			.describe_conversation(
 				room.id.clone(),
 				ConversationDescription { icon: Some(String::new()), color: None },
 			)
 			.await;
+		let unlisted_description = repository
+			.describe_conversation(
+				room.id.clone(),
+				ConversationDescription { icon: Some("Message".to_owned()), color: None },
+			)
+			.await;
+		let teal_description = repository
+			.describe_conversation(
+				room.id.clone(),
+				ConversationDescription { icon: None, color: Some(Some("teal".to_owned())) },
+			)
+			.await;
 		let kept = repository.conversations(home_of(repository, &bot).await).await.expect("list");
 
 		assert!(
-			matches!(teal, Err(ConversationError::Database(_))),
+			matches!(&teal, Err(ConversationError::UnknownColour { colour }) if colour == "teal"),
 			"a colour outside the eight was accepted: {teal:?}"
 		);
 		assert!(matches!(blank, Err(ConversationError::BlankIcon)), "{blank:?}");
 		assert!(
+			matches!(&unlisted, Err(ConversationError::UnlistedIcon { icon }) if icon == "Message"),
+			"{unlisted:?}"
+		);
+		assert!(
 			matches!(blank_description, Err(ConversationError::BlankIcon)),
 			"{blank_description:?}"
 		);
-		assert_eq!(look_of(&kept[0]), (Some("Message".to_owned()), Some(AvatarBlot::Red)));
+		assert!(
+			matches!(unlisted_description, Err(ConversationError::UnlistedIcon { .. })),
+			"{unlisted_description:?}"
+		);
+		assert!(
+			matches!(teal_description, Err(ConversationError::UnknownColour { .. })),
+			"{teal_description:?}"
+		);
+		assert_eq!(look_of(&kept[0]), (Some("MessageSquare".to_owned()), Some(AvatarBlot::Red)));
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");
@@ -1618,19 +1715,19 @@ mod tests {
 			)
 		};
 
-		let iconed = described(Some("Message"), None).await.expect("the icon is set");
+		let iconed = described(Some("MessageSquare"), None).await.expect("the icon is set");
 		let coloured = described(None, Some(Some("pink"))).await.expect("the colour is set");
 		let uncoloured = described(None, Some(None)).await.expect("the colour is cleared");
 		let missing = repository
 			.describe_conversation(
 				"missing".to_owned(),
-				ConversationDescription { icon: Some("Message".to_owned()), color: None },
+				ConversationDescription { icon: Some("MessageSquare".to_owned()), color: None },
 			)
 			.await;
 
-		assert_eq!(look_of(&iconed), (Some("Message".to_owned()), None));
-		assert_eq!(look_of(&coloured), (Some("Message".to_owned()), Some(AvatarBlot::Pink)));
-		assert_eq!(look_of(&uncoloured), (Some("Message".to_owned()), None));
+		assert_eq!(look_of(&iconed), (Some("MessageSquare".to_owned()), None));
+		assert_eq!(look_of(&coloured), (Some("MessageSquare".to_owned()), Some(AvatarBlot::Pink)));
+		assert_eq!(look_of(&uncoloured), (Some("MessageSquare".to_owned()), None));
 		assert_eq!(uncoloured.title, room.title, "a description moved the title");
 		assert!(
 			matches!(missing, Err(ConversationError::UnknownConversation { .. })),

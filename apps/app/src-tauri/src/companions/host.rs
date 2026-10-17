@@ -21,10 +21,10 @@ use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
 	seat_participant,
 };
-use crate::conversations::contract::{AvatarBlot, BotDraft, CompanionSpoke, TranscriptStoreError};
+use crate::conversations::contract::{BotDraft, CompanionSpoke, TranscriptStoreError};
 use crate::db;
 use crate::db::repositories::conversations::{
-	self as stored, Bot as StoredBot, ConversationDescription, ConversationDraft, TOPIC_KIND,
+	Bot as StoredBot, ConversationDescription, ConversationDraft, TOPIC_KIND,
 };
 use crate::events::{
 	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED, FIRST_RUN_DONE,
@@ -176,9 +176,6 @@ impl<R: Runtime> CompanionHost<R> {
 	) -> Result<ConversationDescribed, CompanionError> {
 		if asked.icon.is_none() && asked.colour.is_none() {
 			return Err(CompanionError::EmptyDescription);
-		}
-		if let Some(Some(colour)) = &asked.colour {
-			refuse_unknown_colour(colour)?;
 		}
 		self.holds_seat(database, &asked.conversation).await?;
 		let description = ConversationDescription { icon: asked.icon, color: asked.colour };
@@ -336,19 +333,6 @@ async fn carries_seats(
 		}),
 		None => Err(CompanionError::ConversationWithoutSpace {
 			conversation_id: conversation_id.to_owned(),
-		}),
-	}
-}
-
-fn refuse_unknown_colour(colour: &str) -> Result<(), CompanionError> {
-	match stored::AvatarBlot::parse(colour) {
-		Some(_) => Ok(()),
-		None => Err(CompanionError::UnknownColour {
-			colour: colour.to_owned(),
-			accepted: AvatarBlot::ALL
-				.iter()
-				.map(|&blot| stored::AvatarBlot::from(blot).named().to_owned())
-				.collect(),
 		}),
 	}
 }
@@ -550,7 +534,7 @@ mod tests {
 	use crate::agent::protocol::HostAnswer;
 	use crate::bundles;
 	use crate::conversations::contract::{COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT};
-	use crate::db::repositories::conversations::DEFAULT_BOT_MODEL;
+	use crate::db::repositories::conversations::{conversation_icons, DEFAULT_BOT_MODEL};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const PATIENCE: Duration = Duration::from_secs(10);
@@ -1348,10 +1332,11 @@ mod tests {
 		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
 
 		let iconed = serving(&app, "c1")
-			.answer(a_describe(json!({ "conversation": "room", "icon": "Message" })))
+			.answer(a_describe(json!({ "conversation": "room", "icon": "Rocket" })))
 			.await
 			.expect("the icon is set");
 		let announced_room = announced(&updating);
+		let stored_icon = look_of(&app, "room").await.0;
 		let coloured = serving(&app, "c1")
 			.answer(a_describe(json!({ "conversation": "room", "colour": "cyan" })))
 			.await
@@ -1361,27 +1346,30 @@ mod tests {
 			.await
 			.expect("the colour is cleared");
 		let main = serving(&app, "c1")
-			.answer(a_describe(json!({ "conversation": "c1", "icon": "Star", "colour": "red" })))
+			.answer(a_describe(
+				json!({ "conversation": "c1", "icon": "Sparkles", "colour": "red" }),
+			))
 			.await
 			.expect("the main chat is described");
 
 		assert_eq!(
 			iconed,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": null })
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": null })
 		);
+		assert_eq!(stored_icon.as_deref(), Some("Rocket"));
 		assert_eq!(announced_room["conversation"]["id"], json!("room"));
-		assert_eq!(announced_room["conversation"]["icon"], json!("Message"));
+		assert_eq!(announced_room["conversation"]["icon"], json!("Rocket"));
 		assert_eq!(
 			coloured,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": "cyan" })
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": "cyan" })
 		);
 		assert_eq!(
 			uncoloured,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Message", "colour": null })
+			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": null })
 		);
 		assert_eq!(
 			main,
-			json!({ "conversationId": "c1", "title": "Chat", "icon": "Star", "colour": "red" })
+			json!({ "conversationId": "c1", "title": "Chat", "icon": "Sparkles", "colour": "red" })
 		);
 	}
 
@@ -1391,28 +1379,34 @@ mod tests {
 		planted(&app, ANOTHER_ROOM).await;
 
 		let refused =
-			describe_refused(&app, "unled", json!({ "conversation": "unled", "icon": "Message" }))
+			describe_refused(&app, "unled", json!({ "conversation": "unled", "icon": "Rocket" }))
 				.await;
 
 		assert_eq!(refused, json!({ "kind": "callerNotSeated", "conversationId": "unled" }));
 	}
 
 	#[tokio::test]
-	async fn a_description_naming_nothing_a_blank_icon_or_an_unknown_colour_is_refused() {
+	async fn a_description_naming_nothing_or_off_the_lists_is_refused() {
 		let app = a_room("describe-refused").await;
 
 		let nothing = describe_refused(&app, "room", json!({ "conversation": "room" })).await;
 		let blank =
 			describe_refused(&app, "room", json!({ "conversation": "room", "icon": "  " })).await;
+		let unlisted =
+			describe_refused(&app, "room", json!({ "conversation": "room", "icon": "Message" }))
+				.await;
 		let teal = describe_refused(
 			&app,
 			"room",
-			json!({ "conversation": "room", "icon": "Message", "colour": "teal" }),
+			json!({ "conversation": "room", "icon": "Rocket", "colour": "teal" }),
 		)
 		.await;
 
 		assert_eq!(nothing, json!({ "kind": "emptyDescription" }));
 		assert_eq!(blank, json!({ "kind": "emptyIconField" }));
+		assert_eq!(unlisted["kind"], json!("unlistedIcon"));
+		assert_eq!(unlisted["icon"], json!("Message"));
+		assert_eq!(unlisted["accepted"], json!(conversation_icons()));
 		assert_eq!(
 			teal,
 			json!({

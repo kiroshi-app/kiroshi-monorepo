@@ -6994,6 +6994,50 @@
         },
         {
           "properties": {
+            "accepted": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "icon": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unlistedIcon"
+            }
+          },
+          "required": [
+            "kind",
+            "icon",
+            "accepted"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "accepted": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "colour": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownColour"
+            }
+          },
+          "required": [
+            "kind",
+            "colour",
+            "accepted"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "id": {
               "type": "string"
             },
