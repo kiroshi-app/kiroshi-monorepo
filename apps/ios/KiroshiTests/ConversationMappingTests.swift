@@ -27,6 +27,31 @@ struct ConversationMappingTests {
         #expect(MessagePreview(message, authorship: .unknownAccount).line == "You: Hi")
     }
 
+    @Test func readsWhoWroteTheLastWordAndAnOlderHostsWordWithoutIt() throws {
+        let decode = { (json: String) in
+            try JSONDecoder().decode(LastWord.self, from: Data(json.utf8))
+        }
+
+        #expect(
+            try decode(
+                #"{"text":"Hi","at":1,"authorBotId":null,"authorAccountId":"acc-ada","authorName":"Ada"}"#
+            )
+                == LastWord(
+                    text: "Hi", at: 1, authorBotId: nil, authorAccountId: "acc-ada",
+                    authorName: "Ada"))
+        #expect(
+            try decode(
+                #"{"text":"Hi","at":1,"authorBotId":"atlas","authorAccountId":null,"authorName":null}"#
+            )
+                == LastWord(
+                    text: "Hi", at: 1, authorBotId: "atlas", authorAccountId: nil, authorName: nil
+                ))
+        #expect(
+            try decode(#"{"text":"Hi","at":1,"authorBotId":null}"#)
+                == LastWord(
+                    text: "Hi", at: 1, authorBotId: nil, authorAccountId: nil, authorName: nil))
+    }
+
     @Test func readsACompanionsRoleFromItsTitle() throws {
         let decode = { (json: String) in
             try JSONDecoder().decode(Companion.self, from: Data(json.utf8))

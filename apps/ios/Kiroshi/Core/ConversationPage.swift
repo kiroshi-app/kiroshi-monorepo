@@ -50,4 +50,6 @@ struct LastWord: Decodable, Equatable, Sendable {
     let text: String?
     let at: Int
     let authorBotId: String?
+    let authorAccountId: String?
+    let authorName: String?
 }
