@@ -798,7 +798,7 @@ fn updated_conversation(
 		Some(space_id) => pin_within(&transaction, &space_id, edit.section_id.as_deref())?,
 		None => None,
 	};
-	let written = transaction.execute(
+	transaction.execute(
 		"UPDATE conversations SET title = ?2, instructions = ?3, section_id = ?4, updated_at = ?5,
 			pin_position = ?6, icon = ?7, color = ?8
 			WHERE id = ?1",
@@ -813,7 +813,6 @@ fn updated_conversation(
 			edit.color
 		],
 	)?;
-	refuse_unknown_conversation(written, id)?;
 	let updated = conversation_of_any_kind_at(&transaction, id)?;
 	transaction.commit()?;
 	Ok(updated)
