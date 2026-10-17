@@ -79,6 +79,8 @@
         case noSpace = "1.10"
         case spaces
         case spacesUnreachable = "spaces-unreachable"
+        case deviceKeyTaken = "device-key-taken"
+        case joinSpace = "join-space"
         case agreement
         case keychain
         case seededKeychain = "keychain-seeded"
@@ -167,6 +169,14 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
+            case .deviceKeyTaken:
+                [
+                    CloudFixture.spacesPath: CloudFixture.threeSpaces,
+                    FixtureKeys.devicesPath: CloudFixture.error(
+                        409, code: "DEVICE_KEY_TAKEN",
+                        message: "The ed25519 public key belongs to a device of another account"),
+                ]
+            case .joinSpace: [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .keychain, .seededKeychain, .settings, .signOutAlert, .deleteAccount:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
@@ -207,7 +217,8 @@
 
         fileprivate var isSignedIn: Bool {
             switch self {
-            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .agreement, .missions,
+            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .deviceKeyTaken, .joinSpace,
+                .agreement, .missions,
                 .missionThread,
                 .missionWorking,
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert,
@@ -333,6 +344,11 @@
                         onlineSpaceIds: online, onlineOnceSpaceIds: [CloudFixture.sideProjectId],
                         answers: MissionsFixture.answers),
                     clock: ContinuousRelayClock())
+            case .joinSpace:
+                return RelayEnvironment(
+                    transport: FixtureRelayTransport(onlineSpaceIds: online),
+                    clock: ContinuousRelayClock(),
+                    spaceKeys: FixtureSpaceKeys(missing: [CloudFixture.studioId]))
             default:
                 return CloudFixture.relay
             }
@@ -396,6 +412,7 @@
             case .deleteAccountFailed, .deletingAccount:
                 model.deleteAccount()
             case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
+                .deviceKeyTaken, .joinSpace,
                 .agreement, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .conversationIcons, .thread, .threadHostOffline, .swipedThread,

@@ -10,6 +10,12 @@ enum AccountStage: Equatable {
     case loadingSpaces
     case spaces([Space])
     case spacesUnreachable
+    case deviceRefused(DeviceProblem)
+}
+
+enum DeviceProblem: Equatable {
+    case keyTaken
+    case keysUnreadable
 }
 
 enum EmailProblem: Equatable {
@@ -208,11 +214,19 @@ final class SignInModel {
     }
 
     func loadSpaces() async {
-        guard let session else { return }
-        guard let answer = try? await cloud.spaces(bearer: session.bearer) else { return }
+        guard let session, let device = await registeredDevice(for: session) else { return }
+        let answer: SpacesAnswer
+        do {
+            answer = try await cloud.spaces(bearer: session.bearer)
+        } catch {
+            failToLoad(session, after: error)
+            return
+        }
+        guard self.session == session else { return }
         switch answer {
         case .spaces(let spaces):
-            shell = spaces.isEmpty ? nil : makeShell(spaces: spaces, session: session)
+            shell =
+                spaces.isEmpty ? nil : makeShell(spaces: spaces, session: session, device: device)
             stage = .spaces(spaces)
         case .unauthenticated: endSession()
         case .unreachable: stage = .spacesUnreachable
@@ -245,7 +259,9 @@ final class SignInModel {
         let answer = try? await cloud.deleteAccount(bearer: deleted.bearer)
         isDeletingAccount = false
         switch answer {
-        case .deleted, .unauthenticated: forget(deleted)
+        case .deleted, .unauthenticated:
+            await relay.relayDevices.forget(deleted.accountId)
+            forget(deleted)
         case .unreachable: hasFailedToDeleteAccount = true
         case nil: break
         }
@@ -295,9 +311,47 @@ final class SignInModel {
         stage = .loadingSpaces
     }
 
-    private func makeShell(spaces: [Space], session: Session) -> SpaceStore {
+    private func registeredDevice(for session: Session) async -> RelayDevice? {
+        let keys: DeviceKeys
+        do {
+            keys = try await relay.deviceKeys.keys()
+        } catch {
+            if self.session == session {
+                stage = .deviceRefused(.keysUnreadable)
+            }
+            return nil
+        }
+        if let relayId = await relay.relayDevices.relayId(for: session.accountId) {
+            return RelayDevice(keys: keys, relayId: relayId)
+        }
+        let answer: DeviceRegistrationAnswer
+        do {
+            answer = try await cloud.registerDevice(keys, bearer: session.bearer)
+        } catch {
+            failToLoad(session, after: error)
+            return nil
+        }
+        guard self.session == session else { return nil }
+        switch answer {
+        case .registered(let relayId):
+            try? await relay.relayDevices.save(relayId, for: session.accountId)
+            return RelayDevice(keys: keys, relayId: relayId)
+        case .keyTaken: stage = .deviceRefused(.keyTaken)
+        case .unauthenticated: endSession()
+        case .unreachable: stage = .spacesUnreachable
+        }
+        return nil
+    }
+
+    private func failToLoad(_ session: Session, after error: any Error) {
+        guard !(error is CancellationError), self.session == session else { return }
+        stage = .spacesUnreachable
+    }
+
+    private func makeShell(spaces: [Space], session: Session, device: RelayDevice) -> SpaceStore {
         let shell = SpaceStore(
-            spaces: spaces, session: session, cloud: cloud, lastSpace: lastSpace, relay: relay
+            spaces: spaces, session: session, device: device, cloud: cloud, lastSpace: lastSpace,
+            relay: relay
         ) { [weak self] exit in
             self?.leaveShell(exit)
         }

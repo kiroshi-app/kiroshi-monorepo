@@ -19,7 +19,7 @@ struct SpaceStoreTests {
     ) -> SpaceStore {
         SpaceStore(
             spaces: [studio, homeLab],
-            session: CloudFixture.session,
+            session: CloudFixture.session, device: FixtureKeys.device,
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: http),
             lastSpace: lastSpace ?? self.lastSpace,
             relay: RelayEnvironment(transport: relay, clock: clock),
@@ -36,6 +36,7 @@ struct SpaceStoreTests {
         let store = SpaceStore(
             spaces: [homeLab],
             session: Session(bearer: "older-bearer", email: CloudFixture.email),
+            device: FixtureKeys.device,
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: http),
             lastSpace: lastSpace, relay: RelayEnvironment(transport: relay, clock: clock),
             exit: { _ in })
@@ -156,7 +157,7 @@ struct SpaceStoreTests {
     @Test func theLastEndedMembershipLeavesTheShell() async {
         let (exits, exit) = AsyncStream<ShellExit>.makeStream()
         let store = SpaceStore(
-            spaces: [studio], session: CloudFixture.session,
+            spaces: [studio], session: CloudFixture.session, device: FixtureKeys.device,
             cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: http),
             lastSpace: lastSpace, relay: RelayEnvironment(transport: relay, clock: clock)
         ) { exit.yield($0) }

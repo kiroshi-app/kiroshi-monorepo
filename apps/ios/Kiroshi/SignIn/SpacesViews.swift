@@ -80,6 +80,49 @@ struct SpacesUnreachableView: View {
     }
 }
 
+struct DeviceRefusedView: View {
+    let model: SignInModel
+    let problem: DeviceProblem
+
+    var body: some View {
+        ScrollView {
+            ContentUnavailableView {
+                Label(title, systemImage: "iphone.slash")
+            } description: {
+                Text(description)
+            }
+        }
+        .defaultScrollAnchor(.center, for: .alignment)
+        .scrollBounceBehavior(.basedOnSize)
+        .signInGround()
+        .safeAreaBar(edge: .bottom) {
+            Group {
+                switch problem {
+                case .keyTaken: Button("Use another account", action: model.useAnotherAccount)
+                case .keysUnreadable: Button("Check again", action: model.checkAgain)
+                }
+            }
+            .secondaryAction()
+            .bottomActions()
+        }
+    }
+
+    private var title: LocalizedStringKey {
+        switch problem {
+        case .keyTaken: "Couldn’t add this iPhone to your account"
+        case .keysUnreadable: "Couldn’t read this iPhone’s keys"
+        }
+    }
+
+    private var description: LocalizedStringKey {
+        switch problem {
+        case .keyTaken:
+            "This iPhone is already linked to another Kiroshi account. Sign in with that account to use it here."
+        case .keysUnreadable: "Unlock your iPhone, then check again."
+        }
+    }
+}
+
 #if DEBUG
     #Preview("1.5 Signed in · loading spaces") {
         SignInRootView(model: .fixture(.loadingSpaces))
@@ -91,5 +134,9 @@ struct SpacesUnreachableView: View {
 
     #Preview("Spaces unreachable") {
         SignInRootView(model: .fixture(.spacesUnreachable))
+    }
+
+    #Preview("This iPhone linked to another account") {
+        SignInRootView(model: .fixture(.deviceKeyTaken))
     }
 #endif

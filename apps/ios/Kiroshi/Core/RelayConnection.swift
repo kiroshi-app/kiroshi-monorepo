@@ -1,9 +1,11 @@
+import CryptoKit
 import Foundation
 
 enum RelayCallError: Error, Equatable {
     case notConnected
     case connectionClosed
     case timedOut
+    case counterUnreadable
 }
 
 actor RelayConnection {
@@ -15,11 +17,15 @@ actor RelayConnection {
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
     private let request: URLRequest
+    private let device: RelayDevice
+    private let spaceKeys: SpaceKeys?
     private let transport: any RelayTransport
     private let clock: any RelayClock
+    private let counters: FrameCounters
     private var backoff: Backoff
     private var run: Task<Void, Never>?
     private var socket: (any RelaySocket)?
+    private var outbox: AsyncStream<RelayOutgoing>.Continuation?
     private var silentPings = 0
     private var nextCallId = 1
     private var pendingCalls: [Int: CheckedContinuation<RelayAnswer, any Error>] = [:]
@@ -30,13 +36,19 @@ actor RelayConnection {
         baseURL: URL,
         instanceId: Space.ID,
         bearer: String,
+        device: RelayDevice,
+        spaceKeys: SpaceKeys?,
         environment: RelayEnvironment,
         backoff: Backoff = Backoff()
     ) {
         self.instanceId = instanceId
-        request = Self.memberRequest(baseURL: baseURL, instanceId: instanceId, bearer: bearer)
+        request = Self.memberRequest(
+            baseURL: baseURL, instanceId: instanceId, bearer: bearer, device: device.relayId)
+        self.device = device
+        self.spaceKeys = spaceKeys
         transport = environment.transport
         clock = environment.clock
+        counters = environment.counters
         self.backoff = backoff
     }
 
@@ -62,6 +74,10 @@ actor RelayConnection {
 
     func start() {
         guard run == nil else { return }
+        guard spaceKeys != nil else {
+            publish(.needsJoin)
+            return
+        }
         backoff.reset()
         run = Task { await self.connectUntilStopped() }
     }
@@ -90,20 +106,14 @@ actor RelayConnection {
     private func call(
         _ command: String, args: (some Encodable)?, deadline: Duration
     ) async throws -> RelayAnswer {
-        guard let socket else { throw RelayCallError.notConnected }
+        guard socket != nil, let outbox else { throw RelayCallError.notConnected }
         let id = nextCallId
         nextCallId += 1
         let frame = try JSONEncoder().encode(RelayCallFrame(id: id, command: command, args: args))
-        let text = String(decoding: frame, as: UTF8.self)
         return try await withCheckedThrowingContinuation { continuation in
             pendingCalls[id] = continuation
+            outbox.yield(RelayOutgoing(id: id, plaintext: frame))
             callTasks[id] = Task { [clock] in
-                do {
-                    try await socket.send(text)
-                } catch {
-                    self.settle(id, with: .failure(RelayCallError.connectionClosed))
-                    return
-                }
                 do {
                     try await clock.sleep(for: deadline)
                 } catch {
@@ -143,15 +153,18 @@ actor RelayConnection {
         } catch {
             return RelayEnding(.unreachable, retries: true)
         }
-        guard !Task.isCancelled else {
+        guard !Task.isCancelled, let spaceKeys else {
             opened.close()
             return RelayEnding(.paused, retries: false)
         }
+        let (outgoing, outbox) = AsyncStream.makeStream(of: RelayOutgoing.self)
         socket = opened
+        self.outbox = outbox
         backoff.reset()
         silentPings = 0
         let ending = await withTaskGroup(of: RelayEnding?.self) { group in
             group.addTask { await self.receiveUntilClosed(opened) }
+            group.addTask { await self.sendUntilClosed(opened, outgoing, under: spaceKeys) }
             group.addTask { await self.keepAlive(opened) }
             group.addTask { await self.askSharedSpace() }
             var ending = RelayEnding(.unreachable, retries: true)
@@ -165,8 +178,10 @@ actor RelayConnection {
             group.cancelAll()
             return ending
         }
+        outbox.finish()
         if !Task.isCancelled {
             socket = nil
+            self.outbox = nil
             failPendingCalls()
         }
         return ending
@@ -175,13 +190,112 @@ actor RelayConnection {
     private func receiveUntilClosed(_ socket: any RelaySocket) async -> RelayEnding {
         do {
             while true {
-                heard(try await socket.receive())
+                await heard(try await socket.receive())
             }
         } catch let closure as RelayClosure {
             return RelayEnding(closeCode: closure.code)
         } catch {
             return RelayEnding(.unreachable, retries: true)
         }
+    }
+
+    private func sendUntilClosed(
+        _ socket: any RelaySocket, _ outgoing: AsyncStream<RelayOutgoing>,
+        under keys: SpaceKeys
+    ) async -> RelayEnding? {
+        for await call in outgoing {
+            do {
+                try await socket.send(try await seal(call.plaintext, under: keys))
+            } catch let failure as RelayCallError {
+                settle(call.id, with: .failure(failure))
+            } catch {
+                settle(call.id, with: .failure(RelayCallError.connectionClosed))
+            }
+        }
+        return nil
+    }
+
+    private func seal(_ plaintext: Data, under keys: SpaceKeys) async throws -> String {
+        let ctr: UInt64
+        do {
+            ctr = try await counters.nextSent(in: instanceId, keyId: keys.keyId)
+        } catch {
+            throw RelayCallError.counterUnreadable
+        }
+        guard let from = aadDeviceId(ofWire: device.relayId),
+            let header = FrameHeader(instance: instanceId, from: from, keyId: keys.keyId, ctr: ctr)
+        else { throw RelayCallError.connectionClosed }
+        let sealed = try await Self.sealing(
+            plaintext, header: header, spaceKey: keys.spaceKey, signer: device.keys.signing)
+        let frame = RelayWireFrame(
+            v: 2, instance: instanceId, from: nil, to: nil, keyId: keys.keyId, ctr: ctr,
+            challenge: nil, ct: sealed.ciphertext.base64EncodedString(),
+            sig: sealed.signature.base64EncodedString())
+        return String(decoding: try JSONEncoder().encode(frame), as: UTF8.self)
+    }
+
+    private func open(_ text: String, under keys: SpaceKeys) async -> Data? {
+        guard let frame = try? JSONDecoder().decode(RelayWireFrame.self, from: Data(text.utf8)),
+            frame.v == 2, frame.instance == instanceId, frame.keyId == keys.keyId,
+            let header = header(of: frame),
+            let ciphertext = Data(base64Encoded: frame.ct),
+            let signature = Data(base64Encoded: frame.sig),
+            let lastAccepted = try? await counters.lastAccepted(
+                in: instanceId, from: header.from, keyId: header.keyId),
+            let plaintext = try? await Self.opening(
+                SealedFrame(ciphertext: ciphertext, signature: signature), header: header,
+                lastAccepted: lastAccepted, sender: keys.hostSigningKey, spaceKey: keys.spaceKey)
+        else { return nil }
+        do {
+            try await counters.accept(
+                header.ctr, in: instanceId, from: header.from, keyId: header.keyId)
+        } catch {
+            return nil
+        }
+        return plaintext
+    }
+
+    private func header(of frame: RelayWireFrame) -> FrameHeader? {
+        guard let from = frame.from.flatMap(aadDeviceId(ofWire:)) else { return nil }
+        var to: String?
+        if let wireTo = frame.to {
+            guard let mapped = aadDeviceId(ofWire: wireTo) else { return nil }
+            to = mapped
+        }
+        var challenge: Data?
+        if let encoded = frame.challenge {
+            guard let decoded = Data(base64Encoded: encoded) else { return nil }
+            challenge = decoded
+        }
+        return FrameHeader(
+            instance: frame.instance, from: from, to: to, keyId: frame.keyId, ctr: frame.ctr,
+            challenge: challenge)
+    }
+
+    // TODO: The relay names a device by the UUID POST /devices answered (`?device=`, `from`,
+    // `to`), the AAD by the key-derived device_id of docs/relay/v2-protocol.md. This mapping is
+    // still being confirmed with the host side and may change.
+    private func aadDeviceId(ofWire relayId: String) -> String? {
+        if relayId == device.relayId {
+            return device.keys.deviceId
+        }
+        guard let spaceKeys, spaceKeys.hostRelayIds.contains(relayId) else { return nil }
+        return RelayCrypto.deviceId(of: spaceKeys.hostSigningKey)
+    }
+
+    @concurrent private static func sealing(
+        _ plaintext: Data, header: FrameHeader, spaceKey: SymmetricKey,
+        signer: Curve25519.Signing.PrivateKey
+    ) async throws -> SealedFrame {
+        try RelayCrypto.seal(plaintext, header: header, spaceKey: spaceKey, signer: signer)
+    }
+
+    @concurrent private static func opening(
+        _ frame: SealedFrame, header: FrameHeader, lastAccepted: UInt64,
+        sender: Curve25519.Signing.PublicKey, spaceKey: SymmetricKey
+    ) async throws(FrameRefusal) -> Data {
+        try RelayCrypto.open(
+            frame, header: header, lastAccepted: lastAccepted, sender: sender, spaceKey: spaceKey)
     }
 
     private func keepAlive(_ socket: any RelaySocket) async -> RelayEnding? {
@@ -227,9 +341,10 @@ actor RelayConnection {
         silentPings = 0
     }
 
-    private func heard(_ text: String) {
+    private func heard(_ text: String) async {
         silentPings = 0
-        let frame = Data(text.utf8)
+        guard let spaceKeys, let frame = await open(text, under: spaceKeys), !Task.isCancelled
+        else { return }
         guard let head = try? JSONDecoder().decode(RelayFrameHead.self, from: frame) else { return }
         if let event = head.event {
             broadcast(.event(RelayEvent(name: event.event, frame: frame)))
@@ -261,13 +376,14 @@ actor RelayConnection {
         }
     }
 
-    private static func memberRequest(baseURL: URL, instanceId: Space.ID, bearer: String)
-        -> URLRequest
-    {
+    private static func memberRequest(
+        baseURL: URL, instanceId: Space.ID, bearer: String, device: String
+    ) -> URLRequest {
         let http = baseURL.appending(path: "instances/\(instanceId)/relay/member")
         var components = URLComponents(url: http, resolvingAgainstBaseURL: false)
         let scheme = http.scheme == "http" ? "ws" : "wss"
         components?.scheme = scheme
+        components?.queryItems = [URLQueryItem(name: "device", value: device)]
         var request = URLRequest(url: components?.url ?? http)
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         return request
@@ -304,6 +420,11 @@ private struct RelayEnding: Sendable {
 }
 
 private struct RelayNoArgs: Encodable {}
+
+private struct RelayOutgoing: Sendable {
+    let id: Int
+    let plaintext: Data
+}
 
 private struct RelayCallFrame<Args: Encodable>: Encodable {
     let id: Int

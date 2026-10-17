@@ -13,7 +13,9 @@
         private(set) var requests: [URLRequest] = []
 
         init(_ answers: [String: Answer] = [:], log: URL? = nil) {
-            self.answers = answers
+            self.answers = [FixtureKeys.devicesPath: FixtureKeys.registered].merging(answers) {
+                _, scripted in scripted
+            }
             self.log = log
         }
 

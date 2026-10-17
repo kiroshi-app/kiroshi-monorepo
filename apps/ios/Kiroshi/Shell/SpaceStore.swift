@@ -13,12 +13,14 @@ final class SpaceStore {
     private(set) var currentSpaceId: Space.ID
     private(set) var connection: RelayConnection?
     private(set) var pictures: CompanionPictures?
+    private(set) var spaceIdsToJoin: Set<Space.ID> = []
     let email: String
     let accountId: String?
     let work = CompanionWork()
 
     @ObservationIgnored private let cloud: KiroshiCloud
     @ObservationIgnored private let bearer: String
+    @ObservationIgnored private let device: RelayDevice
     @ObservationIgnored private let lastSpace: any LastSpaceStore
     @ObservationIgnored private let relay: RelayEnvironment
     @ObservationIgnored private let exit: (ShellExit) -> Void
@@ -28,6 +30,7 @@ final class SpaceStore {
     init(
         spaces: [Space],
         session: Session,
+        device: RelayDevice,
         cloud: KiroshiCloud,
         lastSpace: any LastSpaceStore,
         relay: RelayEnvironment,
@@ -37,6 +40,7 @@ final class SpaceStore {
         email = session.email
         accountId = session.userId
         bearer = session.bearer
+        self.device = device
         self.cloud = cloud
         self.lastSpace = lastSpace
         self.relay = relay
@@ -61,6 +65,10 @@ final class SpaceStore {
         currentSpace.flatMap { $0.isHostOnline ? nil : $0 }
     }
 
+    var spaceToJoin: Space? {
+        currentSpace.flatMap { spaceIdsToJoin.contains($0.id) ? $0 : nil }
+    }
+
     func select(_ id: Space.ID) {
         guard spaces.contains(where: { $0.id == id }) else { return }
         currentSpaceId = id
@@ -71,8 +79,11 @@ final class SpaceStore {
         guard !hasLeft else { return }
         let spaceId = currentSpaceId
         work.forget()
+        let spaceKeys = await relay.spaceKeys.keys(for: spaceId, openedWith: device.keys)
+        guard !hasLeft else { return }
         let connection = RelayConnection(
-            baseURL: cloud.baseURL, instanceId: spaceId, bearer: bearer, environment: relay)
+            baseURL: cloud.baseURL, instanceId: spaceId, bearer: bearer, device: device,
+            spaceKeys: spaceKeys, environment: relay)
         self.connection = connection
         pictures = CompanionPictures(connection: connection)
         let updates = await connection.updates()
@@ -118,8 +129,11 @@ final class SpaceStore {
     private func apply(_ state: RelayState, to spaceId: Space.ID) {
         guard !hasLeft else { return }
         switch state {
-        case .online: setHost(of: spaceId, online: true)
+        case .online:
+            spaceIdsToJoin.remove(spaceId)
+            setHost(of: spaceId, online: true)
         case .hostOffline: setHost(of: spaceId, online: false)
+        case .needsJoin: spaceIdsToJoin.insert(spaceId)
         case .signedOut: exit(.signedOut)
         case .membershipEnded: forget(spaceId)
         case .paused, .connecting, .invitationPending, .unreachable: break

@@ -24,6 +24,8 @@ struct SignInRootView: View {
             }
         case .spacesUnreachable:
             SpacesUnreachableView(model: model)
+        case .deviceRefused(let problem):
+            DeviceRefusedView(model: model, problem: problem)
         }
     }
 }

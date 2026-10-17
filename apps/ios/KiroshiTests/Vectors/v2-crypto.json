@@ -1,0 +1,131 @@
+{
+	"protocol": 2,
+	"encoding": "every byte string is lowercase hex; ctr is a decimal string",
+	"word_list": "bip39-english.txt",
+	"devices": [
+		{
+			"signing_seed": "a8bc5c3b1694677c7abaab6ce55a659d848c967b554541da9f6d3f880d3b03a9",
+			"signing_public": "cb2536165e40b9a3ef7b42f8b3517aa5e35b602fff1fe0463d2ac0143fb32696",
+			"agreement_secret": "9c8cb5e6118967dc9b1810775fc106577b379f41e262f48a003ee574229e5089",
+			"agreement_public": "3335ee056c649c534ed02c38b096d5fe8a6b9948e1ae82f60bc0863f878e755b",
+			"device_id": "1fbf47b71f72cf6a9c89e3437c1eef48",
+			"fingerprint": [
+				"cabbage",
+				"when",
+				"universe",
+				"discover",
+				"coconut",
+				"relief"
+			]
+		},
+		{
+			"signing_seed": "68ac367977cdd9723e84862f95105dc1b8e162e1cb19a1be763a6824b585eaa9",
+			"signing_public": "7bb316d334edbf47889363ae10ea24c64a3e9851b5168b1233592bff70cd90fc",
+			"agreement_secret": "b557183f83fdfbdad0050c03afba8e05869cc9134311a8dbb5c252925f0654e5",
+			"agreement_public": "6b6470f76b7aabd8035fdb1fd0b4272d4e405feb53513b0681331120f7f97927",
+			"device_id": "f7dfe4447d6e5e5d01142c7be767d18d",
+			"fingerprint": ["water", "you", "baby", "width", "tourist", "company"]
+		},
+		{
+			"signing_seed": "ff01384cfdfd5382387c9ac1a1425a34c5b67bb77c2e2bf385604d29d30db541",
+			"signing_public": "70b21e5751cc19dfc0a054e7f1e1648857c812bcc7d4c10a43826eaf53086e7c",
+			"agreement_secret": "ac8964ba447012431ad3b8ba2997fd841f0b5655a1f926a13aebf9658f25a65b",
+			"agreement_public": "15c6c71b9378fb856ab5461ca57cfead838a5f6082f92334916c3a9aa3e2a715",
+			"device_id": "09cd8da730de7f3ea3bf4477d94bf58d",
+			"fingerprint": ["antenna", "hockey", "hawk", "giant", "tree", "palm"]
+		}
+	],
+	"subkeys": [
+		{
+			"space_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			"key_id": 0,
+			"device_id": "1fbf47b71f72cf6a9c89e3437c1eef48",
+			"subkey": "dd1386b6c8b0775645585468f5ddd7d743de2aa975e6c8a5097bb05ca62d10d1"
+		},
+		{
+			"space_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			"key_id": 16909060,
+			"device_id": "1fbf47b71f72cf6a9c89e3437c1eef48",
+			"subkey": "8031a6aea500b790d2039e8fc200ad3c0433a9c95670b63975aa9401d1dd1c15"
+		},
+		{
+			"space_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			"key_id": 7,
+			"device_id": "f7dfe4447d6e5e5d01142c7be767d18d",
+			"subkey": "48ccbc78f8b661202c1e4fef43eeb24a76700bf211cbb3bd1ac3666e82de432b"
+		}
+	],
+	"frames": [
+		{
+			"space_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			"subkey": "8031a6aea500b790d2039e8fc200ad3c0433a9c95670b63975aa9401d1dd1c15",
+			"signing_seed": "a8bc5c3b1694677c7abaab6ce55a659d848c967b554541da9f6d3f880d3b03a9",
+			"signing_public": "cb2536165e40b9a3ef7b42f8b3517aa5e35b602fff1fe0463d2ac0143fb32696",
+			"header": {
+				"v": 2,
+				"instance": "space-1",
+				"from": "1fbf47b71f72cf6a9c89e3437c1eef48",
+				"to": "f7dfe4447d6e5e5d01142c7be767d18d",
+				"key_id": 16909060,
+				"ctr": "1",
+				"challenge": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf"
+			},
+			"aad": "02000773706163652d311fbf47b71f72cf6a9c89e3437c1eef4801f7dfe4447d6e5e5d01142c7be767d18d01020304000000000000000101a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+			"plaintext": "7b226964223a372c22636f6d6d616e64223a22636f6e766572736174696f6e5f6c697374222c2261726773223a7b7d7d",
+			"ciphertext": "0000000000000000000000019dbf561568beb71c3475afcd5a0607bc055d9e6e29b8c4068bb4bbb48f46f1007b23a3d8f5866c4fe134c072fbf585f80f69259c7049559dd244d990cafd48ff",
+			"sig": "4d0dfb1527c514c5da6f718c23785106e33f3f0d25e540061f90c77709b5e32dedb9ad9c0a63bc580946c975454942fd66a9cd7f1c2071b74b8b0ad3f4f76e05"
+		},
+		{
+			"space_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+			"subkey": "4dfe2b3937f2d0fdb67d2b8ce083797afaab6e5340ad85495ee2e2be96978238",
+			"signing_seed": "68ac367977cdd9723e84862f95105dc1b8e162e1cb19a1be763a6824b585eaa9",
+			"signing_public": "7bb316d334edbf47889363ae10ea24c64a3e9851b5168b1233592bff70cd90fc",
+			"header": {
+				"v": 2,
+				"instance": "",
+				"from": "f7dfe4447d6e5e5d01142c7be767d18d",
+				"to": null,
+				"key_id": 0,
+				"ctr": "1099511627781",
+				"challenge": null
+			},
+			"aad": "020000f7dfe4447d6e5e5d01142c7be767d18d0000000000000001000000000500",
+			"plaintext": "",
+			"ciphertext": "000000000000010000000005a038365b2094a8e128202bb6ef4af5da",
+			"sig": "a9ee7638ee553ac27d8951a1080b4daf31415c799cb2f9b1c39a371633379654433fa004411cb0a4c6837b5301659a3427e89a122407c521749c7de6c072470b"
+		}
+	],
+	"sealed_boxes": [
+		{
+			"recipient_secret": "b557183f83fdfbdad0050c03afba8e05869cc9134311a8dbb5c252925f0654e5",
+			"recipient_public": "6b6470f76b7aabd8035fdb1fd0b4272d4e405feb53513b0681331120f7f97927",
+			"ephemeral_secret": "90a5a2a8a51e0f9c4405fdd055f32cfbc6a3c3d2773c57357a5c8adbdc184205",
+			"ephemeral_public": "b45786392fdb9717f3bd6233bbebbbba091a27d1329d3c833113a104c691dc7a",
+			"nonce": "f14e4ba200ab0096f3faf273",
+			"plaintext": "6b69726f736869207365616c656420626f78",
+			"sealed": "b45786392fdb9717f3bd6233bbebbbba091a27d1329d3c833113a104c691dc7af14e4ba200ab0096f3faf2730212ad9ff163b134c43587d7de46d3cda361d71454f2c6304e1ef7c0cbe88f554d89"
+		}
+	],
+	"join_payloads": [
+		{
+			"secret": "c4145dbdd10f8ee0332b1a80b257f6568a7cb404cf49bdcd54dc207bbb0dc360",
+			"signing_public": "cb2536165e40b9a3ef7b42f8b3517aa5e35b602fff1fe0463d2ac0143fb32696",
+			"agreement_public": "3335ee056c649c534ed02c38b096d5fe8a6b9948e1ae82f60bc0863f878e755b",
+			"payload": "cb2536165e40b9a3ef7b42f8b3517aa5e35b602fff1fe0463d2ac0143fb326963335ee056c649c534ed02c38b096d5fe8a6b9948e1ae82f60bc0863f878e755b00707f650078a8dea6e44d80547a34f73f471916c2d7a03dbf9c5ca84b55a258",
+			"host_secret": "ac8964ba447012431ad3b8ba2997fd841f0b5655a1f926a13aebf9658f25a65b",
+			"host_public": "15c6c71b9378fb856ab5461ca57cfead838a5f6082f92334916c3a9aa3e2a715",
+			"ephemeral_secret": "8be2f62e0908c4d9d0f40b3e3dcb350ca06d540524485745f5a9ed5cf723a258",
+			"nonce": "0211b8e98c4bf0657458045f",
+			"sealed": "1fde7201cd247dde4020e2ee239528d3a07cb5f13058019c250d7b5aeadf31690211b8e98c4bf0657458045fcbee1d42785e85b9a389d853d8c19487a4e09cb5d5819a6382106197b06f718b8d87b12df5ba52b85e7336d7974198ac8579cdcf45683bd73beb1ef16e94a66e310ec4d16a75a5409ca59276a59411478e16e11d7dbd06dc77aa5ceefa0ae54e8e45f6ff866decb3ae9b761db5c918b0"
+		}
+	],
+	"non_contributory_points": [
+		"0000000000000000000000000000000000000000000000000000000000000000",
+		"0100000000000000000000000000000000000000000000000000000000000000",
+		"e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800",
+		"5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157",
+		"ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+		"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+		"eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+	]
+}

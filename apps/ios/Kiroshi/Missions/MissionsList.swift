@@ -59,6 +59,8 @@ struct MissionsList: View {
                     Button("Try Again") { missions.retry() }
                 }
             }
+        } else if let spaceToJoin = space.spaceToJoin {
+            JoinSpaceView(name: spaceToJoin.name)
         } else if space.offlineSpace == nil {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
