@@ -421,21 +421,20 @@ async fn relay_device_deleted<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> R
 }
 
 async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {
-	let forgotten = match relay_device_owner(app) {
-		Ok(Some((account_id, device_id))) => match signed_in_database(app) {
-			Ok(database) => database
-				.relay_devices()
-				.forgotten(account_id, device_id)
-				.await
-				.map_err(|failure| format!("{failure:?}")),
-			Err(reason) => Err(reason),
-		},
-		Ok(None) => Ok(()),
-		Err(reason) => Err(reason),
-	};
-	if let Err(reason) = forgotten {
+	if let Err(reason) = held_relay_device_forgotten(app).await {
 		eprintln!("the relay device id of the signed-out account was not forgotten: {reason}");
 	}
+}
+
+async fn held_relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+	let Some((account_id, device_id)) = relay_device_owner(app)? else {
+		return Ok(());
+	};
+	signed_in_database(app)?
+		.relay_devices()
+		.forgotten(account_id, device_id)
+		.await
+		.map_err(|failure| format!("{failure:?}"))
 }
 
 fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, String)>, String> {
