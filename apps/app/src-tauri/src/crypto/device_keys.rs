@@ -3,6 +3,7 @@ use std::fmt;
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 use super::error::CryptoError;
 use super::randomness::random_bytes;
@@ -46,20 +47,21 @@ pub struct DeviceKeys {
 
 impl DeviceKeys {
 	pub fn generate() -> Result<Self, CryptoError> {
-		Ok(Self::from_secret(&random_bytes::<SECRET_LENGTH>()?))
+		let secret = random_bytes::<SECRET_LENGTH>()?;
+		Ok(Self::from_secret(&secret))
 	}
 
 	pub fn from_secret(secret: &DeviceSecret) -> Self {
 		let (signing_seed, agreement) = secret.split_at(KEY_LENGTH);
-		let mut seed = [0u8; KEY_LENGTH];
+		let mut seed = Zeroizing::new([0u8; KEY_LENGTH]);
 		seed.copy_from_slice(signing_seed);
-		let mut scalar = [0u8; KEY_LENGTH];
+		let mut scalar = Zeroizing::new([0u8; KEY_LENGTH]);
 		scalar.copy_from_slice(agreement);
-		Self { signing: SigningKey::from_bytes(&seed), agreement: StaticSecret::from(scalar) }
+		Self { signing: SigningKey::from_bytes(&seed), agreement: StaticSecret::from(*scalar) }
 	}
 
-	pub fn secret(&self) -> DeviceSecret {
-		let mut secret = [0u8; SECRET_LENGTH];
+	pub fn secret(&self) -> Zeroizing<DeviceSecret> {
+		let mut secret = Zeroizing::new([0u8; SECRET_LENGTH]);
 		secret[..KEY_LENGTH].copy_from_slice(self.signing.as_bytes());
 		secret[KEY_LENGTH..].copy_from_slice(self.agreement.as_bytes());
 		secret

@@ -1,14 +1,18 @@
 use std::path::PathBuf;
 
+use zeroize::Zeroizing;
+
 use super::contract::DeviceKeysError;
-use super::device_keys::{DeviceKeys, DeviceSecret};
+use super::device_keys::{DeviceKeys, DeviceSecret, SECRET_LENGTH};
 use crate::private_files;
 
 pub trait KeyStore {
 	fn name(&self) -> &'static str;
-	fn read(&self) -> Result<Option<DeviceSecret>, DeviceKeysError>;
+	fn read(&self) -> Result<Option<HeldSecret>, DeviceKeysError>;
 	fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError>;
 }
+
+pub type HeldSecret = Zeroizing<DeviceSecret>;
 
 pub fn load_or_create(
 	system: Option<&dyn KeyStore>,
@@ -57,8 +61,13 @@ fn held_or_created(store: &dyn KeyStore) -> Result<DeviceKeys, DeviceKeysError> 
 	Ok(keys)
 }
 
-fn secret_of(bytes: &[u8]) -> Result<DeviceSecret, DeviceKeysError> {
-	DeviceSecret::try_from(bytes).map_err(|_| DeviceKeysError::Malformed)
+fn secret_of(bytes: &[u8]) -> Result<HeldSecret, DeviceKeysError> {
+	if bytes.len() != SECRET_LENGTH {
+		return Err(DeviceKeysError::Malformed);
+	}
+	let mut secret = Zeroizing::new([0u8; SECRET_LENGTH]);
+	secret.copy_from_slice(bytes);
+	Ok(secret)
 }
 
 pub struct FileStore {
@@ -76,8 +85,8 @@ impl KeyStore for FileStore {
 		"file store"
 	}
 
-	fn read(&self) -> Result<Option<DeviceSecret>, DeviceKeysError> {
-		match std::fs::read(&self.path) {
+	fn read(&self) -> Result<Option<HeldSecret>, DeviceKeysError> {
+		match std::fs::read(&self.path).map(Zeroizing::new) {
 			Ok(bytes) => secret_of(&bytes).map(Some),
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
 			Err(error) => Err(DeviceKeysError::Unreadable { detail: error.to_string() }),
@@ -111,8 +120,10 @@ impl KeyStore for KeychainStore {
 		"Keychain"
 	}
 
-	fn read(&self) -> Result<Option<DeviceSecret>, DeviceKeysError> {
-		match security_framework::passwords::get_generic_password(&self.service, Self::ACCOUNT) {
+	fn read(&self) -> Result<Option<HeldSecret>, DeviceKeysError> {
+		let held =
+			security_framework::passwords::get_generic_password(&self.service, Self::ACCOUNT);
+		match held.map(Zeroizing::new) {
 			Ok(bytes) => secret_of(&bytes).map(Some),
 			Err(error) if error.code() == Self::ITEM_NOT_FOUND => Ok(None),
 			Err(error) => Err(DeviceKeysError::Unreadable { detail: error.to_string() }),
@@ -145,12 +156,12 @@ mod tests {
 			"system store"
 		}
 
-		fn read(&self) -> Result<Option<DeviceSecret>, DeviceKeysError> {
+		fn read(&self) -> Result<Option<HeldSecret>, DeviceKeysError> {
 			self.reads.set(self.reads.get() + 1);
 			if self.is_unreadable {
 				return Err(DeviceKeysError::Unreadable { detail: "locked".to_owned() });
 			}
-			Ok(*self.held.borrow())
+			Ok(self.held.borrow().map(Zeroizing::new))
 		}
 
 		fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError> {

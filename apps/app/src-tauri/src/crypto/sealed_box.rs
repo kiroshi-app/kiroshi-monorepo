@@ -3,6 +3,7 @@ use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
+use zeroize::Zeroizing;
 
 use super::device_keys::KEY_LENGTH;
 use super::error::CryptoError;
@@ -13,8 +14,8 @@ const INFO: &[u8] = b"kiroshi/v2/sealed-box";
 pub const OVERHEAD: usize = KEY_LENGTH + NONCE_LENGTH + TAG_LENGTH;
 
 pub fn seal(recipient: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-	let ephemeral = StaticSecret::from(random_bytes::<KEY_LENGTH>()?);
-	seal_with(&ephemeral, random_bytes::<NONCE_LENGTH>()?, recipient, plaintext)
+	let ephemeral = StaticSecret::from(*random_bytes::<KEY_LENGTH>()?);
+	seal_with(&ephemeral, *random_bytes::<NONCE_LENGTH>()?, recipient, plaintext)
 }
 
 pub(crate) fn seal_with(
@@ -60,11 +61,11 @@ fn cipher_of(
 	recipient: &PublicKey,
 ) -> ChaCha20Poly1305 {
 	let salt = [ephemeral_public.as_bytes().as_slice(), recipient.as_bytes()].concat();
-	let mut key = [0u8; KEY_LENGTH];
+	let mut key = Zeroizing::new([0u8; KEY_LENGTH]);
 	Hkdf::<Sha256>::new(Some(&salt), shared.as_bytes())
-		.expand(INFO, &mut key)
+		.expand(INFO, key.as_mut_slice())
 		.expect("32 bytes is within the HKDF-SHA256 output limit");
-	ChaCha20Poly1305::new(&key.into())
+	ChaCha20Poly1305::new(key.as_ref().into())
 }
 
 #[cfg(test)]
@@ -72,7 +73,7 @@ mod tests {
 	use super::*;
 
 	fn a_recipient() -> StaticSecret {
-		StaticSecret::from(random_bytes::<KEY_LENGTH>().expect("randomness"))
+		StaticSecret::from(*random_bytes::<KEY_LENGTH>().expect("randomness"))
 	}
 
 	#[test]

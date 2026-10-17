@@ -1,5 +1,6 @@
 use hkdf::Hkdf;
 use sha2::Sha256;
+use zeroize::Zeroizing;
 
 use super::device_keys::{DeviceId, KEY_LENGTH};
 
@@ -11,21 +12,21 @@ const INFO_PREFIX: &[u8] = b"kiroshi/v2";
 
 pub type SpaceKey = [u8; KEY_LENGTH];
 
-pub struct Subkey([u8; KEY_LENGTH]);
+pub struct Subkey(Zeroizing<[u8; KEY_LENGTH]>);
 
 impl Subkey {
 	pub fn derive(space_key: &SpaceKey, key_id: u32, sender: &DeviceId) -> Self {
 		let info = [INFO_PREFIX, &key_id.to_be_bytes(), sender.as_bytes()].concat();
-		let mut subkey = [0u8; KEY_LENGTH];
+		let mut subkey = Zeroizing::new([0u8; KEY_LENGTH]);
 		Hkdf::<Sha256>::new(Some(&SUBKEY_SALT), space_key)
-			.expand(&info, &mut subkey)
+			.expand(&info, subkey.as_mut_slice())
 			.expect("32 bytes is within the HKDF-SHA256 output limit");
 		Self(subkey)
 	}
 
 	#[cfg(test)]
 	pub(crate) fn from_bytes(bytes: [u8; KEY_LENGTH]) -> Self {
-		Self(bytes)
+		Self(Zeroizing::new(bytes))
 	}
 
 	pub fn as_bytes(&self) -> &[u8; KEY_LENGTH] {

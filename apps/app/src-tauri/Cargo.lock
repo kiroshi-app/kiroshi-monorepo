@@ -2572,6 +2572,7 @@ dependencies = [
  "uuid",
  "windows",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]

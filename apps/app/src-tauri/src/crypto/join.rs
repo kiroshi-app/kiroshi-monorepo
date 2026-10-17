@@ -56,7 +56,7 @@ mod tests {
 	use crate::crypto::randomness::random_bytes;
 
 	fn a_host() -> StaticSecret {
-		StaticSecret::from(random_bytes::<KEY_LENGTH>().expect("randomness"))
+		StaticSecret::from(*random_bytes::<KEY_LENGTH>().expect("randomness"))
 	}
 
 	#[test]
