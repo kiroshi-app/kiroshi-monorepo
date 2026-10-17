@@ -430,6 +430,46 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
+    @Test func aSpaceYouJoinedShowsTheHostAndOtherMembersAsPeople() async throws {
+        let shared = [
+            TestHost.message(
+                "m1", in: "chat-juniper", seq: 1, isYours: true, "Mine", at: 1, account: "acc-sam",
+                named: "Sam"),
+            TestHost.message(
+                "m2", in: "chat-juniper", seq: 2, isYours: true, "Ada's", at: 2,
+                account: "acc-ada", named: "Ada Lovelace"),
+            TestHost.message("m3", in: "chat-juniper", seq: 3, isYours: true, "The host's", at: 3),
+            TestHost.message(
+                "m4", in: "chat-juniper", seq: 4, isYours: false, "Juniper's", at: 4, by: "juniper"),
+        ]
+        let host = TestHost(messages: ["chat-juniper": shared]) { call in
+            call.command == "conversation_send_turn" ? TestHost.ok(call, "1") : nil
+        }
+        let store = ThreadStore(
+            subject: .companion(juniper), work: work,
+            authorship: ThreadAuthorship(accountId: "acc-sam", isHostedByYou: false),
+            now: { [sentAt] in sentAt }, makeId: { "sent" })
+        let (connection, following) = await follow(host, store)
+
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "m5", in: "chat-juniper", seq: 5, isYours: true, "Ada again", at: 5,
+                account: "acc-ada", named: "Ada Lovelace"))
+        await waitUntil { store.entries.count == 5 }
+        store.draft = "Sent from the phone"
+        await store.send()?.value
+
+        let ada = MessageAuthor.person(accountId: "acc-ada", name: "Ada Lovelace")
+        #expect(
+            store.entries.map(\.writer) == [
+                .you, ada, .person(accountId: nil, name: "No name"), .companion("juniper"), ada,
+                .you,
+            ])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func theStoredEchoOfASentMessageIsNotShownTwice() async throws {
         let host = TestHost { call in
             call.command == "conversation_send_turn" ? TestHost.ok(call, "1") : nil

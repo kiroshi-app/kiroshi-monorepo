@@ -23,7 +23,7 @@ struct ConversationsView: View {
                 .spaceChrome(store: space, account: account, section: .conversations)
                 .task(id: space.connection.map(ObjectIdentifier.init)) {
                     guard let connection = space.connection else { return }
-                    await store.follow(connection)
+                    await store.follow(connection, as: space.authorship)
                 }
                 .navigationDestination(for: ConversationsRoute.self) { route in
                     destination(route)

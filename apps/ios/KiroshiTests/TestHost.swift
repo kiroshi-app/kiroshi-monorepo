@@ -93,12 +93,13 @@ final class TestHost: Sendable {
 
     static func message(
         _ id: String, in conversationId: String, seq: Int, isYours: Bool, _ content: String,
-        at createdAt: Int, by author: Companion.ID? = nil
+        at createdAt: Int, by author: Companion.ID? = nil, account: String? = nil,
+        named name: String? = nil
     ) -> String {
         FixtureHost.messageJSON(
             id: id, conversationId: conversationId, seq: seq,
             role: isYours ? "user" : "assistant", content: content, createdAt: createdAt,
-            authorBotId: author)
+            authorBotId: author, authorAccountId: account, authorName: name)
     }
 
     private static func standard(

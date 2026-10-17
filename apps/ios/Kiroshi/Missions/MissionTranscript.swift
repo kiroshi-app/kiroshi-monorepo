@@ -11,9 +11,14 @@ struct MissionTranscript: Equatable {
 
     init() {}
 
-    init(of messages: [MissionThreadMessage], openedAt: Date, time: ConversationTime) {
+    init(
+        of messages: [MissionThreadMessage], openedAt: Date, time: ConversationTime,
+        authorship: ThreadAuthorship = .hostedSignedOut
+    ) {
         openedDay = time.dayLabel(for: openedAt)
-        let shown = messages.sorted(by: { $0.seq < $1.seq }).compactMap(shown)
+        let shown = messages.sorted(by: { $0.seq < $1.seq }).compactMap {
+            Self.shown($0, authorship: authorship)
+        }
         entries = ThreadLayout.mark(shown, time: time, shownDay: openedAt)
     }
 
@@ -27,16 +32,17 @@ struct MissionTranscript: Equatable {
         (messages.filter { $0.id != message.id } + [message]).sorted { $0.seq < $1.seq }
     }
 
-    private func shown(_ message: MissionThreadMessage) -> ThreadMessage? {
+    private static func shown(_ message: MissionThreadMessage, authorship: ThreadAuthorship)
+        -> ThreadMessage?
+    {
         let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { return nil }
-        let sentAt = Date(timeIntervalSince1970: TimeInterval(message.createdAt) / 1000)
-        guard message.role == .user, message.authorBotId == nil else {
-            return ThreadMessage(
-                id: message.id, isYours: false, text: content, sentAt: sentAt,
-                authorId: message.authorBotId)
-        }
-        guard !Self.summonses.contains(content) else { return nil }
-        return ThreadMessage(id: message.id, isYours: true, text: content, sentAt: sentAt)
+        let writer = authorship.author(
+            role: message.role, botId: message.authorBotId, accountId: message.authorAccountId,
+            name: message.authorName)
+        guard !writer.isWrittenByPerson || !summonses.contains(content) else { return nil }
+        return ThreadMessage(
+            id: message.id, writer: writer, text: content,
+            sentAt: Date(timeIntervalSince1970: TimeInterval(message.createdAt) / 1000))
     }
 }

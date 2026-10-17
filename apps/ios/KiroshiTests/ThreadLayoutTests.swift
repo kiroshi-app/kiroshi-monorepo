@@ -26,7 +26,7 @@ struct ThreadLayoutTests {
         isYours: Bool = false, inGroup: Bool = false
     ) -> ThreadMessage {
         ThreadMessage(
-            id: id, isYours: isYours, text: text, sentAt: date, authorId: author?.id,
+            id: id, writer: isYours ? .you : .companion(author?.id), text: text, sentAt: date,
             authors: inGroup ? [juniper, atlas] : [])
     }
 
@@ -130,6 +130,40 @@ struct ThreadLayoutTests {
             shown.map(\.time) == [
                 "2:05\u{202F}PM", "6:20\u{202F}PM", "9:38\u{202F}AM", "9:39\u{202F}AM",
             ])
+    }
+
+    @Test func aPersonsRunShowsTheNameOnItsFirstMessageAndTheAvatarOnItsLast() {
+        let ada = MessageAuthor.person(accountId: "acc-ada", name: "Ada Lovelace")
+        let host = MessageAuthor.person(accountId: nil, name: ThreadAuthorship.unnamed)
+        let entries = [
+            ThreadMessage(id: "you", writer: .you, text: "Ship it?", sentAt: at(9, 0)),
+            ThreadMessage(id: "ada-1", writer: ada, text: "Not yet.", sentAt: at(9, 1)),
+            ThreadMessage(id: "ada-2", writer: ada, text: "One fix left.", sentAt: at(9, 2)),
+            ThreadMessage(id: "host", writer: host, text: "Go ahead.", sentAt: at(9, 3)),
+            ThreadMessage(id: "ada-3", writer: ada, text: "Fine.", sentAt: at(9, 4)),
+            message("bot", "Tagging.", at: at(9, 5), by: atlas, inGroup: true),
+        ]
+        let shown = ThreadLayout.mark(entries, time: time)
+
+        #expect(shown.map(\.opensRun) == [true, true, false, true, true, true])
+        #expect(shown.map(\.closesRun) == [true, false, true, true, true, true])
+        #expect(
+            shown.map(\.authorName) == [
+                nil, "Ada Lovelace", "Ada Lovelace", "No name", "Ada Lovelace", "Atlas",
+            ])
+        #expect(shown.map(\.initials) == ["", "AL", "AL", "NN", "AL", ""])
+        #expect(shown.map(\.isYours) == [true, false, false, false, false, false])
+        #expect(shown[1].bubbles.map(\.position) == [.first])
+        #expect(shown[2].bubbles.map(\.position) == [.last])
+    }
+
+    @Test func aPersonsMessageKeepsItsParagraphsInOneBubble() {
+        let ada = MessageAuthor.person(accountId: "acc-ada", name: "Ada")
+        let shown = ThreadLayout.mark(
+            [ThreadMessage(id: "ada", writer: ada, text: "One.\n\nTwo.", sentAt: at(9, 0))],
+            time: time)
+
+        #expect(shown[0].bubbles.map { String($0.text.characters) } == ["One.\n\nTwo."])
     }
 
     @Test func aGroupRunNamesItsAuthorOnceAndBreaksWhenTheAuthorChanges() {

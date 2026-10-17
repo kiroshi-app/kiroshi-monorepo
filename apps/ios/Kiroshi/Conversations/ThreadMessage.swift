@@ -4,10 +4,10 @@ struct ThreadMessage: Identifiable, Equatable {
     static let runGap: TimeInterval = 5 * 60
 
     let id: String
-    let isYours: Bool
+    let writer: MessageAuthor
     let sentAt: Date
-    let authorId: Companion.ID?
     let author: Companion?
+    let initials: String
     private let authors: [Companion]
     private(set) var text: String
     private(set) var rendered: AttributedString
@@ -19,29 +19,44 @@ struct ThreadMessage: Identifiable, Equatable {
     var closesRun = true
 
     init(
-        id: String, isYours: Bool, text: String, sentAt: Date, authorId: Companion.ID? = nil,
-        authors: [Companion] = []
+        id: String, writer: MessageAuthor, text: String, sentAt: Date, authors: [Companion] = []
     ) {
         self.id = id
-        self.isYours = isYours
+        self.writer = writer
         self.sentAt = sentAt
-        self.authorId = isYours ? nil : authorId
         self.authors = authors
-        author = isYours ? nil : authors.first { $0.id == authorId }
+        author = authors.first { $0.id == writer.companionId }
+        initials = writer.personName.map(Initials.of) ?? ""
         self.text = text
-        let shown = Self.shown(text, isYours: isYours)
+        let shown = Self.shown(text, isWrittenByPerson: writer.isWrittenByPerson)
         attachedFiles = shown.files
-        rendered = Self.render(shown.text, isYours: isYours, authors: authors)
-        bubbles = Self.bubbles(of: shown.text, id: id, isYours: isYours, authors: authors)
+        rendered = Self.render(
+            shown.text, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+        bubbles = Self.bubbles(
+            of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+    }
+
+    var isYours: Bool {
+        writer == .you
+    }
+
+    var authorId: Companion.ID? {
+        writer.companionId
+    }
+
+    var authorName: String? {
+        writer.personName ?? author?.name
     }
 
     mutating func replaceText(_ text: String) {
         guard text != self.text else { return }
         self.text = text
-        let shown = Self.shown(text, isYours: isYours)
+        let shown = Self.shown(text, isWrittenByPerson: writer.isWrittenByPerson)
         attachedFiles = shown.files
-        rendered = Self.render(shown.text, isYours: isYours, authors: authors)
-        bubbles = Self.bubbles(of: shown.text, id: id, isYours: isYours, authors: authors)
+        rendered = Self.render(
+            shown.text, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+        bubbles = Self.bubbles(
+            of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
     }
 
     mutating func append(_ delta: String) {
@@ -49,37 +64,43 @@ struct ThreadMessage: Identifiable, Equatable {
     }
 
     func continues(_ previous: ThreadMessage, calendar: Calendar) -> Bool {
-        previous.isYours == isYours && previous.authorId == authorId
+        previous.writer == writer
             && sentAt.timeIntervalSince(previous.sentAt) <= Self.runGap
             && calendar.isDate(previous.sentAt, inSameDayAs: sentAt)
     }
 
-    private static func shown(_ text: String, isYours: Bool) -> (text: String, files: [String]) {
-        guard isYours else { return (text, []) }
+    private static func shown(_ text: String, isWrittenByPerson: Bool) -> (
+        text: String, files: [String]
+    ) {
+        guard isWrittenByPerson else { return (text, []) }
         let split = AttachmentBlock.split(text)
         guard !split.text.isEmpty else { return (split.names.joined(separator: "\n"), []) }
         return (split.text, split.names)
     }
 
     private static func bubbles(
-        of text: String, id: String, isYours: Bool, authors: [Companion]
+        of text: String, id: String, isWrittenByPerson: Bool, authors: [Companion]
     ) -> [Bubble] {
-        guard !isYours else {
+        guard !isWrittenByPerson else {
             let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !whole.isEmpty else { return [] }
-            return [Bubble(id: "\(id)-0", text: render(whole, isYours: true, authors: authors))]
+            return [
+                Bubble(
+                    id: "\(id)-0", text: render(whole, isWrittenByPerson: true, authors: authors))
+            ]
         }
         return Paragraphs.split(text).enumerated().map { index, paragraph in
             Bubble(
-                id: "\(id)-\(index)", text: render(paragraph, isYours: isYours, authors: authors))
+                id: "\(id)-\(index)",
+                text: render(paragraph, isWrittenByPerson: false, authors: authors))
         }
     }
 
-    private static func render(_ text: String, isYours: Bool, authors: [Companion])
+    private static func render(_ text: String, isWrittenByPerson: Bool, authors: [Companion])
         -> AttributedString
     {
         let shown = authors.isEmpty ? text : Mentions.names(in: text, among: authors)
-        guard !isYours else { return AttributedString(shown) }
+        guard !isWrittenByPerson else { return AttributedString(shown) }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: shown, options: options)) ?? AttributedString(shown)

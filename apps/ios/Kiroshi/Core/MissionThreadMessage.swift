@@ -1,8 +1,5 @@
 struct MissionThreadMessage: Decodable, Identifiable, Equatable, Sendable {
-    enum Role: String, Decodable, Sendable {
-        case user
-        case assistant
-    }
+    typealias Role = TranscriptMessage.Role
 
     let id: String
     let conversationId: String
@@ -11,4 +8,6 @@ struct MissionThreadMessage: Decodable, Identifiable, Equatable, Sendable {
     let content: String
     let createdAt: Int
     let authorBotId: String?
+    var authorAccountId: String?
+    var authorName: String?
 }
