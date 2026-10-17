@@ -451,7 +451,8 @@ fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, 
 }
 
 fn signed_in_database<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, String> {
-	app.state::<DatabaseState>()
+	app.try_state::<DatabaseState>()
+		.ok_or_else(|| "the database is not loaded".to_owned())?
 		.inner()
 		.as_ref()
 		.map_err(|failure| format!("the database is unavailable: {failure:?}"))
