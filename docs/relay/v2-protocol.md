@@ -163,6 +163,10 @@ sig              = Ed25519_sign(signing_private(from), AAD || ciphertext_bytes)
 `ct` carries `ciphertext_bytes`: 12 + plaintext length + 16 bytes. A sender never
 reuses a `ctr` under one `key_id`: the nonce is the counter.
 
+A sender persists its last `ctr` per `key_id` before the frame leaves, so a restart
+never reuses a nonce. A sender that cannot read back the last `ctr` of a `key_id`
+never sends under that `key_id` again.
+
 ### Open
 
 In this order, every step refusing the frame with a typed error:
@@ -178,6 +182,9 @@ In this order, every step refusing the frame with a typed error:
    (`Unauthentic`).
 
 Only a frame that passes every step records its `ctr` as the last accepted.
+
+A receiver persists its last accepted `ctr` per (`from`, `key_id`), so a frame
+replayed after a restart is refused.
 
 ## Sealed box
 
