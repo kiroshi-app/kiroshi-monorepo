@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 enum SignInStep: Hashable {
     case code
@@ -14,8 +15,12 @@ enum AccountStage: Equatable {
 }
 
 enum DeviceProblem: Equatable {
-    case keyTaken
+    case notAdded
     case keysUnreadable
+}
+
+enum SignOutNotice: Equatable {
+    case deviceMoved
 }
 
 enum EmailProblem: Equatable {
@@ -57,6 +62,7 @@ final class SignInModel {
     private(set) var codeProblem: CodeProblem?
     private(set) var signingInWith: SignInProvider?
     private(set) var providerProblem: ProviderProblem?
+    private(set) var signOutNotice: SignOutNotice?
     var isConfirmingSignOut = false
     var isConfirmingDeletion = false
     private(set) var isDeletingAccount = false
@@ -75,6 +81,7 @@ final class SignInModel {
     @ObservationIgnored private let google: any GoogleAuthorizing
     @ObservationIgnored private var appleNonce: String?
     @ObservationIgnored private var session: Session?
+    @ObservationIgnored private var needsRegistration = false
     @ObservationIgnored private var work: Task<Void, Never>?
 
     init(
@@ -171,6 +178,7 @@ final class SignInModel {
         email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         emailProblem = nil
         providerProblem = nil
+        signOutNotice = nil
         isRequestingCode = true
         defer { isRequestingCode = false }
         guard let answer = try? await cloud.requestCode(for: email) else { return }
@@ -238,8 +246,13 @@ final class SignInModel {
     }
 
     func signOut() {
-        if let bearer = session?.bearer {
-            revocation = Task { [cloud] in await cloud.signOut(bearer: bearer) }
+        if let session {
+            revocation = Task { [cloud, relay] in
+                if let relayId = await relay.relayDevices.relayId(for: session.accountId) {
+                    await Self.removeDevice(relayId, of: session, from: cloud)
+                }
+                await cloud.signOut(bearer: session.bearer)
+            }
         }
         endSession()
     }
@@ -274,10 +287,24 @@ final class SignInModel {
         endSession()
     }
 
+    private static func removeDevice(
+        _ relayId: String, of session: Session, from cloud: KiroshiCloud
+    )
+        async
+    {
+        guard let answer = try? await cloud.deleteDevice(relayId, bearer: session.bearer),
+            answer != .deleted
+        else { return }
+        deviceLog.notice(
+            "Couldn't remove this iPhone from the account at sign-out: \(String(describing: answer), privacy: .public)"
+        )
+    }
+
     private func startSigningIn(with provider: SignInProvider) {
         signingInWith = provider
         providerProblem = nil
         emailProblem = nil
+        signOutNotice = nil
     }
 
     private func finishSigningIn(
@@ -305,6 +332,8 @@ final class SignInModel {
     private func begin(_ granted: Session) {
         try? sessions.save(granted)
         session = granted
+        needsRegistration = true
+        signOutNotice = nil
         signedInEmail = granted.email
         code = ""
         path = []
@@ -321,22 +350,38 @@ final class SignInModel {
             }
             return nil
         }
-        if let relayId = await relay.relayDevices.relayId(for: session.accountId) {
+        guard self.session == session else { return nil }
+        if !needsRegistration,
+            let relayId = await relay.relayDevices.relayId(for: session.accountId)
+        {
             return RelayDevice(keys: keys, relayId: relayId)
         }
+        guard let userId = session.userId else {
+            endSession()
+            return nil
+        }
+        await revocation?.value
+        await relay.relayDevices.forget(session.accountId)
+        guard self.session == session else { return nil }
         let answer: DeviceRegistrationAnswer
         do {
-            answer = try await cloud.registerDevice(keys, bearer: session.bearer)
+            answer = try await cloud.registerDevice(keys, userId: userId, bearer: session.bearer)
         } catch {
             failToLoad(session, after: error)
             return nil
         }
         guard self.session == session else { return nil }
         switch answer {
-        case .registered(let relayId):
+        case .registered(let relayId, let transferred):
+            if transferred {
+                deviceLog.info("This iPhone moved to the account signing in")
+            }
             try? await relay.relayDevices.save(relayId, for: session.accountId)
+            guard self.session == session else { return nil }
+            needsRegistration = false
             return RelayDevice(keys: keys, relayId: relayId)
-        case .keyTaken: stage = .deviceRefused(.keyTaken)
+        case .challengeRefused, .proofRefused, .keyRefused, .refused:
+            stage = .deviceRefused(.notAdded)
         case .unauthenticated: endSession()
         case .unreachable: stage = .spacesUnreachable
         }
@@ -363,6 +408,12 @@ final class SignInModel {
     private func leaveShell(_ exit: ShellExit) {
         switch exit {
         case .signedOut: endSession()
+        case .deviceMoved:
+            if let bearer = session?.bearer {
+                revocation = Task { [cloud] in await cloud.signOut(bearer: bearer) }
+            }
+            endSession()
+            signOutNotice = .deviceMoved
         case .noSpaceLeft:
             shell = nil
             stage = .spaces([])
@@ -394,3 +445,5 @@ final class SignInModel {
         work = Task { await operation() }
     }
 }
+
+private let deviceLog = Logger(subsystem: "com.kiroshi.app.ios", category: "devices")

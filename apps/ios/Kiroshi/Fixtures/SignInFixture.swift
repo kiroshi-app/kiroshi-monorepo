@@ -79,7 +79,8 @@
         case noSpace = "1.10"
         case spaces
         case spacesUnreachable = "spaces-unreachable"
-        case deviceKeyTaken = "device-key-taken"
+        case deviceNotAdded = "device-not-added"
+        case deviceMoved = "device-moved"
         case joinSpace = "join-space"
         case agreement
         case keychain
@@ -169,12 +170,17 @@
             case .noSpace: [CloudFixture.spacesPath: CloudFixture.noSpaces]
             case .spaces: [CloudFixture.spacesPath: CloudFixture.twoSpaces]
             case .spacesUnreachable: [CloudFixture.spacesPath: .offline]
-            case .deviceKeyTaken:
+            case .deviceNotAdded:
                 [
                     CloudFixture.spacesPath: CloudFixture.threeSpaces,
                     FixtureKeys.devicesPath: CloudFixture.error(
-                        409, code: "DEVICE_KEY_TAKEN",
-                        message: "The ed25519 public key belongs to a device of another account"),
+                        403, code: "DEVICE_PROOF_INVALID",
+                        message: "The signature does not prove the ed25519 key"),
+                ]
+            case .deviceMoved:
+                [
+                    CloudFixture.spacesPath: CloudFixture.threeSpaces,
+                    CloudFixture.signOutPath: CloudFixture.signedOut,
                 ]
             case .joinSpace: [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .keychain, .seededKeychain, .settings, .signOutAlert, .deleteAccount:
@@ -217,7 +223,8 @@
 
         fileprivate var isSignedIn: Bool {
             switch self {
-            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .deviceKeyTaken, .joinSpace,
+            case .loadingSpaces, .noSpace, .spaces, .spacesUnreachable, .deviceNotAdded,
+                .deviceMoved, .joinSpace,
                 .agreement, .missions,
                 .missionThread,
                 .missionWorking,
@@ -344,6 +351,9 @@
                         onlineSpaceIds: online, onlineOnceSpaceIds: [CloudFixture.sideProjectId],
                         answers: MissionsFixture.answers),
                     clock: ContinuousRelayClock())
+            case .deviceMoved:
+                return RelayEnvironment(
+                    transport: DeviceMovedRelayTransport(), clock: ContinuousRelayClock())
             case .joinSpace:
                 return RelayEnvironment(
                     transport: FixtureRelayTransport(onlineSpaceIds: online),
@@ -362,6 +372,12 @@
             case .tooManyWrongCodes: "482931"
             default: ""
             }
+        }
+    }
+
+    struct DeviceMovedRelayTransport: RelayTransport {
+        func open(_ request: URLRequest) async throws -> any RelaySocket {
+            throw RelayClosure(code: RelayClosure.deviceRevoked)
         }
     }
 
@@ -412,7 +428,7 @@
             case .deleteAccountFailed, .deletingAccount:
                 model.deleteAccount()
             case .opening, .email, .loadingSpaces, .noSpace, .spaces, .spacesUnreachable,
-                .deviceKeyTaken, .joinSpace,
+                .deviceNotAdded, .deviceMoved, .joinSpace,
                 .agreement, .keychain,
                 .seededKeychain, .home, .homeMenu, .conversations,
                 .conversationsLive, .conversationIcons, .thread, .threadHostOffline, .swipedThread,

@@ -33,19 +33,33 @@ final class DeviceKeysAccessibilityTests: XCTestCase {
         XCTAssertTrue(joinThisSpace.waitForExistence(timeout: 10))
     }
 
-    func testKeysTakenByAnotherAccountSaySoAndPassTheAudit() throws {
-        let app = launch("device-key-taken")
-        XCTAssertTrue(
-            app.staticTexts["Couldn’t add this iPhone to your account"].waitForExistence(
-                timeout: 10))
+    func testARefusedProofSaysSoKeepsThePersonSignedInAndPassesTheAudit() throws {
+        let app = launch("device-not-added")
+        let title = app.staticTexts["Couldn’t add this iPhone to your account"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
         XCTAssertTrue(
             app.staticTexts[
-                "This iPhone is already linked to another Kiroshi account. Sign in with that account to use it here."
+                "Kiroshi couldn’t confirm this iPhone’s keys. Wait a moment, then check again."
             ].exists)
+        XCTAssertFalse(app.buttons["Use another account"].exists)
 
         try audit(app)
 
-        app.buttons["Use another account"].tap()
-        XCTAssertTrue(app.buttons["Sign in with Apple"].waitForExistence(timeout: 10))
+        app.buttons["Check again"].tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Sign in with Apple"].exists)
+    }
+
+    func testADeviceMovedToAnotherAccountLandsOnSignInWithOneSentence() throws {
+        let app = launch("device-moved")
+        let notice = app.staticTexts[
+            "This iPhone now belongs to another Kiroshi account, so you’ve been signed out."]
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Sign in with Apple"].exists)
+
+        try audit(app) { issue in
+            issue.auditType == .textClipped
+                && (issue.element == nil || issue.element?.elementType == .textField)
+        }
     }
 }

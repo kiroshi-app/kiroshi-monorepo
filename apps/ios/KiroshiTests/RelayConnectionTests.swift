@@ -147,6 +147,24 @@ struct RelayConnectionTests {
         #expect(await connection.isRunning == false)
     }
 
+    @Test(arguments: [false, true])
+    func aDeviceMovedToAnotherAccountClosesForGood(duringUpgrade: Bool) async {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        if duringUpgrade {
+            await transport.nextOpening().close(RelayClosure.deviceRevoked)
+        } else {
+            let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+            await transport.nextOpening().accept(socket)
+            await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+            socket.push(.close(RelayClosure.deviceRevoked))
+        }
+
+        await waitFor(.deviceMoved, in: updates)
+        #expect(await connection.isRunning == false)
+    }
+
     @Test func aSessionRevokedDuringTheUpgradeStops() async {
         let connection = makeConnection()
         let updates = await connection.updates()

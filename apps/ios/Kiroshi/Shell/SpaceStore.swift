@@ -3,6 +3,7 @@ import Observation
 
 enum ShellExit: Equatable {
     case signedOut
+    case deviceMoved
     case noSpaceLeft
 }
 
@@ -135,6 +136,7 @@ final class SpaceStore {
         case .hostOffline: setHost(of: spaceId, online: false)
         case .needsJoin: spaceIdsToJoin.insert(spaceId)
         case .signedOut: exit(.signedOut)
+        case .deviceMoved: exit(.deviceMoved)
         case .membershipEnded: forget(spaceId)
         case .paused, .connecting, .invitationPending, .unreachable: break
         }
