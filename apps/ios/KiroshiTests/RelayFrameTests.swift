@@ -8,6 +8,7 @@ import Testing
 @Suite(.timeLimit(.minutes(1)))
 struct RelayFrameTests {
     static let sentCounter = "frame-ctr.sent.instance-1.7"
+    static let challenge = Data(repeating: 0x5c, count: 32)
 
     let transport = TestRelayTransport()
     let clock = TestRelayClock()
@@ -42,17 +43,20 @@ struct RelayFrameTests {
     }
 
     func opened(_ frame: RelayWireFrame) throws -> SentCall {
+        try JSONDecoder().decode(SentCall.self, from: plaintext(of: frame))
+    }
+
+    func plaintext(of frame: RelayWireFrame) throws -> Data {
         let header = try #require(
             FrameHeader(
                 instance: frame.instance, from: FixtureKeys.member.deviceId, keyId: frame.keyId,
-                ctr: frame.ctr))
-        let plaintext = try RelayCrypto.open(
+                ctr: frame.ctr, challenge: frame.challenge.flatMap { Data(base64Encoded: $0) }))
+        return try RelayCrypto.open(
             SealedFrame(
                 ciphertext: try #require(Data(base64Encoded: frame.ct)),
                 signature: try #require(Data(base64Encoded: frame.sig))),
             header: header, lastAccepted: 0, sender: FixtureKeys.member.signing.publicKey,
             spaceKey: FixtureKeys.spaceKeys.spaceKey)
-        return try JSONDecoder().decode(SentCall.self, from: plaintext)
     }
 
     func hostFrame(
@@ -81,15 +85,17 @@ struct RelayFrameTests {
         await connection.start()
         let socket = ScriptedRelaySocket()
         await transport.nextOpening().accept(socket)
+        _ = try await nextFrame(socket)
+        socket.push(.frame(try hostFrame(#"{"hello":{}}"#, ctr: 1, challenge: Self.challenge)))
         let ask = try opened(try await nextFrame(socket))
         socket.push(
             .frame(
-                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"s-1"}}"#, ctr: 1)))
+                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"s-1"}}"#, ctr: 2)))
         await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
         return socket
     }
 
-    @Test func aCallLeavesSealedAndSignedWithoutFrom() async throws {
+    @Test func theSocketOpensWithAHelloSealedAndSignedWithoutFromOrChallenge() async throws {
         let connection = makeConnection()
         await connection.start()
         let socket = ScriptedRelaySocket()
@@ -104,8 +110,24 @@ struct RelayFrameTests {
         #expect(frame.challenge == nil)
         #expect(frame.keyId == 7)
         #expect(frame.ctr == 1)
-        let call = try opened(frame)
-        #expect(call.command == "relay_shared_space")
+        #expect(try plaintext(of: frame) == Data(#"{"hello":{}}"#.utf8))
+        await connection.stop()
+    }
+
+    @Test func aCallLeavesUnderTheChallengeOfTheHostHello() async throws {
+        let connection = makeConnection()
+        await connection.start()
+        let socket = ScriptedRelaySocket()
+        await transport.nextOpening().accept(socket)
+        _ = try await nextFrame(socket)
+
+        socket.push(.frame(try hostFrame(#"{"hello":{}}"#, ctr: 1, challenge: Self.challenge)))
+
+        let frame = try await nextFrame(socket)
+        #expect(frame.from == nil)
+        #expect(frame.challenge == Self.challenge.base64EncodedString())
+        #expect(frame.ctr == 2)
+        #expect(try opened(frame).command == "relay_shared_space")
         await connection.stop()
     }
 
@@ -117,10 +139,10 @@ struct RelayFrameTests {
         async let answer = connection.call("conversation_list", args: ["spaceId": "s-1"])
         let frame = try await nextFrame(socket)
 
-        #expect(frame.ctr == 2)
-        #expect(await keychain.items[Self.sentCounter] == Data([0, 0, 0, 0, 0, 0, 0, 2]))
+        #expect(frame.ctr == 3)
+        #expect(await keychain.items[Self.sentCounter] == Data([0, 0, 0, 0, 0, 0, 0, 3]))
         let call = try opened(frame)
-        socket.push(.frame(try hostFrame(#"{"id":\#(call.id),"status":200,"body":"ok"}"#, ctr: 2)))
+        socket.push(.frame(try hostFrame(#"{"id":\#(call.id),"status":200,"body":"ok"}"#, ctr: 3)))
         #expect(try await answer.body(as: String.self) == "ok")
         await connection.stop()
     }
@@ -183,14 +205,16 @@ struct RelayFrameTests {
         await second.start()
         let socket = ScriptedRelaySocket()
         await transport.nextOpening().accept(socket)
+        _ = try await nextFrame(socket)
+        socket.push(.frame(try hostFrame(#"{"hello":{}}"#, ctr: 3, challenge: Self.challenge)))
         let ask = try opened(try await nextFrame(socket))
         #expect(ask.command == "relay_shared_space")
         socket.push(
             .frame(
-                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"old"}}"#, ctr: 1)))
+                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"old"}}"#, ctr: 2)))
         socket.push(
             .frame(
-                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"s-1"}}"#, ctr: 2)))
+                try hostFrame(#"{"id":\#(ask.id),"status":200,"body":{"spaceId":"s-1"}}"#, ctr: 4)))
 
         var online: RelayState?
         for await update in updates {

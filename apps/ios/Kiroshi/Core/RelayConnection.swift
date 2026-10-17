@@ -6,6 +6,7 @@ enum RelayCallError: Error, Equatable {
     case connectionClosed
     case timedOut
     case counterUnreadable
+    case challengeRefused
 }
 
 actor RelayConnection {
@@ -13,6 +14,7 @@ actor RelayConnection {
     static let silentPingsBeforeDrop = 3
     static let sharedSpaceDeadline = Duration.seconds(30)
     static let callDeadline = Duration.seconds(300)
+    static let hello = Data(#"{"hello":{}}"#.utf8)
 
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
@@ -28,7 +30,9 @@ actor RelayConnection {
     private var outbox: AsyncStream<RelayOutgoing>.Continuation?
     private var silentPings = 0
     private var nextCallId = 1
+    private var challenge: Data?
     private var pendingCalls: [Int: CheckedContinuation<RelayAnswer, any Error>] = [:]
+    private var flights: [Int: RelayFlight] = [:]
     private var callTasks: [Int: Task<Void, Never>] = [:]
     private var subscribers: [UUID: AsyncStream<RelayUpdate>.Continuation] = [:]
 
@@ -87,6 +91,7 @@ actor RelayConnection {
         run = nil
         socket?.close()
         socket = nil
+        challenge = nil
         failPendingCalls()
         publish(.paused)
         for subscriber in subscribers.values {
@@ -106,13 +111,16 @@ actor RelayConnection {
     private func call(
         _ command: String, args: (some Encodable)?, deadline: Duration
     ) async throws -> RelayAnswer {
-        guard socket != nil, let outbox else { throw RelayCallError.notConnected }
+        guard socket != nil, outbox != nil else { throw RelayCallError.notConnected }
         let id = nextCallId
         nextCallId += 1
         let frame = try JSONEncoder().encode(RelayCallFrame(id: id, command: command, args: args))
         return try await withCheckedThrowingContinuation { continuation in
             pendingCalls[id] = continuation
-            outbox.yield(RelayOutgoing(id: id, plaintext: frame))
+            flights[id] = RelayFlight(plaintext: frame, stage: .awaitingChallenge)
+            if challenge != nil {
+                queue(id)
+            }
             callTasks[id] = Task { [clock] in
                 do {
                     try await clock.sleep(for: deadline)
@@ -157,9 +165,12 @@ actor RelayConnection {
             opened.close()
             return RelayEnding(.paused, retries: false)
         }
-        let (outgoing, outbox) = AsyncStream.makeStream(of: RelayOutgoing.self)
+        let (outgoing, outbox) = AsyncStream.makeStream(
+            of: RelayOutgoing.self, bufferingPolicy: .unbounded)
         socket = opened
+        challenge = nil
         self.outbox = outbox
+        outbox.yield(.hello)
         backoff.reset()
         silentPings = 0
         let ending = await withTaskGroup(of: RelayEnding?.self) { group in
@@ -182,6 +193,7 @@ actor RelayConnection {
         if !Task.isCancelled {
             socket = nil
             self.outbox = nil
+            challenge = nil
             failPendingCalls()
         }
         return ending
@@ -203,38 +215,65 @@ actor RelayConnection {
         _ socket: any RelaySocket, _ outgoing: AsyncStream<RelayOutgoing>,
         under keys: SpaceKeys
     ) async -> RelayEnding? {
-        for await call in outgoing {
-            do {
-                try await socket.send(try await seal(call.plaintext, under: keys))
-            } catch let failure as RelayCallError {
-                settle(call.id, with: .failure(failure))
-            } catch {
-                settle(call.id, with: .failure(RelayCallError.connectionClosed))
+        for await next in outgoing {
+            switch next {
+            case .hello:
+                do {
+                    let ctr = try await nextCtr(under: keys)
+                    try await socket.send(
+                        try await sealed(Self.hello, ctr: ctr, challenge: nil, under: keys))
+                } catch {
+                    failPendingCalls(with: error as? RelayCallError ?? .connectionClosed)
+                    return RelayEnding(.unreachable, retries: true)
+                }
+            case .call(let id):
+                await send(id, on: socket, under: keys)
             }
         }
         return nil
     }
 
-    private func seal(_ plaintext: Data, under keys: SpaceKeys) async throws -> String {
-        let ctr: UInt64
+    private func send(_ id: Int, on socket: any RelaySocket, under keys: SpaceKeys) async {
         do {
-            ctr = try await counters.nextSent(in: instanceId, keyId: keys.keyId)
+            let ctr = try await nextCtr(under: keys)
+            guard let plaintext = flights[id]?.plaintext, let challenge else { return }
+            flights[id]?.stage = .sent(under: challenge)
+            try await socket.send(
+                try await sealed(plaintext, ctr: ctr, challenge: challenge, under: keys))
+        } catch let failure as RelayCallError {
+            settle(id, with: .failure(failure))
+        } catch {
+            settle(id, with: .failure(RelayCallError.connectionClosed))
+        }
+    }
+
+    private func nextCtr(under keys: SpaceKeys) async throws -> UInt64 {
+        do {
+            return try await counters.nextSent(in: instanceId, keyId: keys.keyId)
         } catch {
             throw RelayCallError.counterUnreadable
         }
+    }
+
+    private func sealed(
+        _ plaintext: Data, ctr: UInt64, challenge: Data?, under keys: SpaceKeys
+    ) async throws -> String {
         guard let from = aadDeviceId(ofWire: device.relayId),
-            let header = FrameHeader(instance: instanceId, from: from, keyId: keys.keyId, ctr: ctr)
+            let header = FrameHeader(
+                instance: instanceId, from: from, keyId: keys.keyId, ctr: ctr,
+                challenge: challenge)
         else { throw RelayCallError.connectionClosed }
         let sealed = try await Self.sealing(
             plaintext, header: header, spaceKey: keys.spaceKey, signer: device.keys.signing)
         let frame = RelayWireFrame(
             v: 2, instance: instanceId, from: nil, to: nil, keyId: keys.keyId, ctr: ctr,
-            challenge: nil, ct: sealed.ciphertext.base64EncodedString(),
+            challenge: challenge?.base64EncodedString(),
+            ct: sealed.ciphertext.base64EncodedString(),
             sig: sealed.signature.base64EncodedString())
         return String(decoding: try JSONEncoder().encode(frame), as: UTF8.self)
     }
 
-    private func open(_ text: String, under keys: SpaceKeys) async -> Data? {
+    private func open(_ text: String, under keys: SpaceKeys) async -> RelayOpenedFrame? {
         guard let frame = try? JSONDecoder().decode(RelayWireFrame.self, from: Data(text.utf8)),
             frame.v == 2, frame.instance == instanceId, frame.keyId == keys.keyId,
             let header = header(of: frame),
@@ -252,7 +291,7 @@ actor RelayConnection {
         } catch {
             return nil
         }
-        return plaintext
+        return RelayOpenedFrame(header: header, plaintext: plaintext)
     }
 
     private func header(of frame: RelayWireFrame) -> FrameHeader? {
@@ -343,24 +382,52 @@ actor RelayConnection {
 
     private func heard(_ text: String) async {
         silentPings = 0
-        guard let spaceKeys, let frame = await open(text, under: spaceKeys), !Task.isCancelled
+        guard let spaceKeys, let opened = await open(text, under: spaceKeys), !Task.isCancelled
         else { return }
+        let frame = opened.plaintext
         guard let head = try? JSONDecoder().decode(RelayFrameHead.self, from: frame) else { return }
-        if let event = head.event {
+        if head.hello != nil {
+            guard opened.header.to == device.keys.deviceId, let fresh = opened.header.challenge
+            else { return }
+            heardChallenge(fresh)
+        } else if let event = head.event {
             broadcast(.event(RelayEvent(name: event.event, frame: frame)))
         } else if let id = head.id, let status = head.status {
             settle(id, with: .success(RelayAnswer(status: status, frame: frame)))
         }
     }
 
+    private func heardChallenge(_ fresh: Data) {
+        challenge = fresh
+        for (id, flight) in flights.sorted(by: { $0.key < $1.key }) {
+            switch flight.stage {
+            case .awaitingChallenge:
+                queue(id)
+            case .sent(let under) where under != fresh && flight.isResent:
+                settle(id, with: .failure(RelayCallError.challengeRefused))
+            case .sent(let under) where under != fresh:
+                flights[id]?.isResent = true
+                queue(id)
+            case .queued, .sent:
+                break
+            }
+        }
+    }
+
+    private func queue(_ id: Int) {
+        flights[id]?.stage = .queued
+        outbox?.yield(.call(id))
+    }
+
     private func settle(_ id: Int, with result: Result<RelayAnswer, any Error>) {
         callTasks.removeValue(forKey: id)?.cancel()
+        flights[id] = nil
         pendingCalls.removeValue(forKey: id)?.resume(with: result)
     }
 
-    private func failPendingCalls() {
+    private func failPendingCalls(with failure: RelayCallError = .connectionClosed) {
         for id in pendingCalls.keys {
-            settle(id, with: .failure(RelayCallError.connectionClosed))
+            settle(id, with: .failure(failure))
         }
     }
 
@@ -421,8 +488,25 @@ private struct RelayEnding: Sendable {
 
 private struct RelayNoArgs: Encodable {}
 
-private struct RelayOutgoing: Sendable {
-    let id: Int
+private enum RelayOutgoing: Sendable {
+    case hello
+    case call(Int)
+}
+
+private struct RelayFlight: Sendable {
+    enum Stage: Sendable {
+        case awaitingChallenge
+        case queued
+        case sent(under: Data)
+    }
+
+    let plaintext: Data
+    var stage: Stage
+    var isResent = false
+}
+
+private struct RelayOpenedFrame: Sendable {
+    let header: FrameHeader
     let plaintext: Data
 }
 
@@ -441,20 +525,25 @@ private struct RelayFrameHead: Decodable {
         let event: String
     }
 
+    struct Hello: Decodable {}
+
     enum CodingKeys: String, CodingKey {
         case id
         case status
         case event
+        case hello
     }
 
     let id: Int?
     let status: Int?
     let event: Event?
+    let hello: Hello?
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try? container.decodeIfPresent(Int.self, forKey: .id)
         status = try? container.decodeIfPresent(Int.self, forKey: .status)
         event = try? container.decodeIfPresent(Event.self, forKey: .event)
+        hello = try? container.decodeIfPresent(Hello.self, forKey: .hello)
     }
 }
