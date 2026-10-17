@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+	skipToken,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query"
 import { useState } from "react"
 
 import {
@@ -15,15 +20,22 @@ import {
 	type MemberAction,
 	type MemberActionRefusal,
 	membersAfter,
+	readMembers,
 	refusalOf,
 	toSpaceMember,
 } from "./member-actions"
-import { heldMembersOf, membersQueryOf, NO_MEMBERS } from "./members-query"
 import { type MembersTransport, membersTransport } from "./members-transport"
 
-import { HOSTING_MEMBERS_CHANGED_EVENT, type Member } from "../bindings"
+import {
+	HOSTING_MEMBERS_CHANGED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+	type JoinedSpaceMember,
+	type Member,
+} from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 import { isFirstReadPending } from "../query/last-read"
+import { joinedSpaceMembersQueryOf } from "../spaces/joined-space-members"
+import { spaceQueryKeys } from "../spaces/space-query-keys"
 
 export type MembersProps = Pick<
 	MembersPanelProps,
@@ -44,13 +56,30 @@ export type MembersProps = Pick<
 type MembersOptions = {
 	transport?: MembersTransport
 	reportSuccess?: (message: NoticeMessage) => void
+	joinedId?: string
 }
 
+const NO_MEMBERS: Member[] = []
+
 const NOT_REFUSED: MemberActionRefusal = {}
+
+const readFailure = (): NoticeMessage => ({
+	title: i18n.t("settings:rail.members"),
+	description: i18n.t("settings:space.transfer.reason.generic"),
+})
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
 })
+
+const asMember = ({ userId, name, role }: JoinedSpaceMember): Member => ({
+	userId,
+	name,
+	email: "",
+	status: role === "host" ? "host" : "joined",
+})
+
+const asMembers = (joined: JoinedSpaceMember[]) => joined.map(asMember)
 
 const hostFirst = (members: Member[]) => [
 	...members.filter((member) => member.status === "host"),
@@ -63,6 +92,7 @@ export const useMembers = (
 	{
 		transport = membersTransport,
 		reportSuccess = raiseTransientNotice,
+		joinedId,
 	}: MembersOptions = {},
 ): MembersProps | undefined => {
 	const queryClient = useQueryClient()
@@ -71,15 +101,32 @@ export const useMembers = (
 	const shownSpace = isDesktopHost() ? openSpace : null
 	const watchedId = isHosted ? shownSpace?.id : undefined
 
-	const membersRead = useQuery(membersQueryOf(watchedId, transport))
+	const hostedId = joinedId ? undefined : watchedId
+	const hostedRead = useQuery({
+		queryKey: hostQueryKeys.membersOf(hostedId),
+		queryFn: hostedId ? () => readMembers(transport, hostedId) : skipToken,
+		meta: { failureNotice: readFailure, raisedIn: "use-members" },
+	})
+	const joinedRead = useQuery({
+		...joinedSpaceMembersQueryOf(watchedId && joinedId),
+		select: asMembers,
+	})
+	const membersRead = joinedId ? joinedRead : hostedRead
 	const { data: members = NO_MEMBERS } = membersRead
 	useInvalidateOnHostEvent(HOSTING_MEMBERS_CHANGED_EVENT, [
 		hostQueryKeys.members(),
 	])
+	useInvalidateOnHostEvent(JOINED_SPACE_MEMBERS_CHANGED_EVENT, [
+		spaceQueryKeys.joinedMembers(),
+	])
+
+	const heldMembers = (spaceId: string) =>
+		queryClient.getQueryData<Member[]>(hostQueryKeys.membersOf(spaceId)) ??
+		NO_MEMBERS
 
 	const memberAction = useMutation({
 		mutationFn: (run: MemberAction) =>
-			membersAfter(transport, run, heldMembersOf(queryClient, run.spaceId)),
+			membersAfter(transport, run, heldMembers(run.spaceId)),
 		onSuccess: (answered, run) => {
 			queryClient.setQueryData(hostQueryKeys.membersOf(run.spaceId), answered)
 			if (run.action === "invite") setEmail("")

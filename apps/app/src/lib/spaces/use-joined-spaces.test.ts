@@ -5,13 +5,13 @@ import { afterEach, expect, it, vi } from "vitest"
 
 import type { InvitationsTransport } from "./invitations-transport"
 import { createJoinedSpacesController } from "./joined-spaces-controller"
+import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 import { useInvitations } from "./use-invitations"
 import { useOpenJoinedHost, useSwitcherSpaces } from "./use-joined-spaces"
 
 import type { Invitation, JoinedSpace } from "../bindings"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import { hostQueryKeys } from "../host/host-query-keys"
 import type { JoinedHostState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -97,8 +97,8 @@ const openStudio = async () => {
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
-	queryClient.setQueryData(hostQueryKeys.membersOf("studio"), [
-		{ userId: "u-lea", name: "Lea", email: "lea@example.com", status: "host" },
+	queryClient.setQueryData(spaceQueryKeys.joinedMembersOf(STUDIO_SPACE.id), [
+		{ userId: "u-lea", name: "Lea", role: "host" },
 	])
 	const joined = createJoinedSpacesController({
 		queryClient,

@@ -13,7 +13,7 @@ import {
 	usePersonOf,
 } from "./thread-authorship"
 
-import type { Member } from "../bindings"
+import type { JoinedSpaceMember } from "../bindings"
 
 const HOST = "account-host"
 const GUEST = "account-guest"
@@ -42,8 +42,8 @@ const LEA = "account-lea"
 const memberOf = (
 	userId: string,
 	name: string | null,
-	status: Member["status"] = "joined",
-): Member => ({ userId, name, email: `${userId}@example.com`, status })
+	role: JoinedSpaceMember["role"] = "guest",
+): JoinedSpaceMember => ({ userId, name, role })
 
 const joinedAsGuestWith = (hostName: string | null): ThreadAuthorship => ({
 	accountId: GUEST,

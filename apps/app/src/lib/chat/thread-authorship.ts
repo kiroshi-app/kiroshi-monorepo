@@ -2,13 +2,13 @@ import { createContext, useCallback, useContext } from "react"
 
 import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
-import type { Member } from "../bindings"
+import type { JoinedSpaceMember } from "../bindings"
 import type { TranscriptMessage } from "../conversations/transcript-contract"
 import { authorAmong, memberNameOf } from "../host/member-names"
 
 export type SpaceHost =
 	| { kind: "hosted"; ownAccountIds: readonly string[] }
-	| { kind: "joined"; members: readonly Member[] }
+	| { kind: "joined"; members: readonly JoinedSpaceMember[] }
 
 export type ThreadAuthorship = {
 	accountId: string | null
@@ -41,7 +41,7 @@ const isWrittenBySelf = (
 	)
 }
 
-const personNameOf = (
+export const personNameOf = (
 	authorship: ThreadAuthorship,
 	author: MessageAuthorship,
 	unnamed: string,

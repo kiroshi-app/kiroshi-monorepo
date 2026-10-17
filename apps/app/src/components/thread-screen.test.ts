@@ -3058,14 +3058,7 @@ const GUEST_IN_JOINED_SPACE: ThreadAuthorship = {
 	accountId: GUEST_ACCOUNT,
 	host: {
 		kind: "joined",
-		members: [
-			{
-				userId: "account-lea",
-				name: "Lea",
-				email: "lea@example.com",
-				status: "host",
-			},
-		],
+		members: [{ userId: "account-lea", name: "Lea", role: "host" }],
 	},
 }
 

@@ -113,20 +113,18 @@ export function App() {
 				onWidthChange={overlay.changeSidebarWidth}
 				isResizable={isSidebarResizable()}
 				sidebar={
-					<ThreadAuthorshipContext.Provider value={authorship}>
-						<WorkspaceSidebar
-							collapsedSectionIds={collapsedSectionIds}
-							core={core}
-							drivers={drivers}
-							overlay={overlay}
-							panels={panels}
-							rosterLines={rosterLines}
-							rosterView={rosterView}
-							sidebarMissions={sidebarMissions}
-							sidebarTab={sidebarTab}
-							switcher={switcher}
-						/>
-					</ThreadAuthorshipContext.Provider>
+					<WorkspaceSidebar
+						collapsedSectionIds={collapsedSectionIds}
+						core={core}
+						drivers={drivers}
+						overlay={overlay}
+						panels={panels}
+						rosterLines={rosterLines}
+						rosterView={rosterView}
+						sidebarMissions={sidebarMissions}
+						sidebarTab={sidebarTab}
+						switcher={switcher}
+					/>
 				}
 			>
 				<OpenJoinedHostContext.Provider value={joinedHost}>

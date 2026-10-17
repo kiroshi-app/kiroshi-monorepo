@@ -8,6 +8,7 @@ import {
 import type { Space as SwitcherSpace } from "@workspace/ui/components/space"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import { heldJoinedMembersOf } from "./joined-space-members"
 import { spaceQueryKeys } from "./space-query-keys"
 import type { SpacesController } from "./spaces-controller"
 
@@ -30,7 +31,6 @@ import {
 	type JoinedHosts,
 } from "../host/joined-hosts"
 import { hostAmong, memberNameOf } from "../host/member-names"
-import { heldMembersOf } from "../host/members-query"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 
 export type JoinedSpacesState = {
@@ -350,15 +350,11 @@ export const createJoinedSpacesController = ({
 	const isOpen = (id: string) =>
 		hosts.getState().active === id || openJoined()?.id === id
 
-	const heldHostOf = (id: string) => {
-		const joined = current().joinedSpaces.find((held) => held.id === id)
-		return (
-			joined && hostAmong(heldMembersOf(queryClient, hostSpaceIdOf(joined)))
-		)
-	}
-
 	const hostNameOf = (id: string) =>
-		memberNameOf(heldHostOf(id), i18n.t("chat:working.name"))
+		memberNameOf(
+			hostAmong(heldJoinedMembersOf(queryClient, id)),
+			i18n.t("chat:working.name"),
+		)
 
 	const removalNoticeOf = (name: string, hostName: string) => ({
 		title: i18n.t("bots:spaces.removed.notice", { host: hostName, name }),

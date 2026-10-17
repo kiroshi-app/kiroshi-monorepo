@@ -11,12 +11,16 @@ import {
 	rosterSpacesOf,
 	switcherSpacesOf,
 } from "./joined-spaces-controller"
+import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 
-import type { JoinedSpace, JoinedSpaceRemoved, Member } from "../bindings"
+import type {
+	JoinedSpace,
+	JoinedSpaceMember,
+	JoinedSpaceRemoved,
+} from "../bindings"
 import { createStore } from "../store"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
-import { hostQueryKeys } from "../host/host-query-keys"
 import type { JoinedHostState, JoinedHostsState } from "../host/joined-hosts"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -128,8 +132,11 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		reportFailure,
 		reportRemoval,
 		joined,
-		holdMembers: (spaceId: string, members: Member[]) =>
-			queryClient.setQueryData(hostQueryKeys.membersOf(spaceId), members),
+		holdMembers: (joinedId: string, members: JoinedSpaceMember[]) =>
+			queryClient.setQueryData(
+				spaceQueryKeys.joinedMembersOf(joinedId),
+				members,
+			),
 	}
 }
 
@@ -495,11 +502,10 @@ const STUDIO: JoinedSpace = {
 
 const STUDIO_ROW = "joined:joined-studio"
 
-const hostNamed = (name: string | null): Member => ({
+const hostNamed = (name: string | null): JoinedSpaceMember => ({
 	userId: "u-lea",
 	name,
-	email: "lea@example.com",
-	status: "host",
+	role: "host",
 })
 
 const REMOVED_NOTICE = {
@@ -510,7 +516,7 @@ const REMOVED_NOTICE = {
 
 const withStudio = async () => {
 	const gear = await gearFor([STUDIO])
-	gear.holdMembers("studio", [hostNamed("Lea")])
+	gear.holdMembers(STUDIO.id, [hostNamed("Lea")])
 	gear.joined.watch()
 	await settle()
 	return gear
@@ -544,7 +550,7 @@ describe("the host name of a joined space", () => {
 
 	it("falls back to the unnamed copy when the record carries no name", async () => {
 		const gear = await withStudio()
-		gear.holdMembers("studio", [hostNamed(null)])
+		gear.holdMembers(STUDIO.id, [hostNamed(null)])
 
 		expect(gear.joined.hostNameOf(STUDIO.id)).toBe("No name")
 	})

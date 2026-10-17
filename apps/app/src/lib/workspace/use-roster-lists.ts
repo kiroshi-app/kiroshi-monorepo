@@ -6,6 +6,7 @@ import { useRosterBots } from "./use-roster-bots"
 import { useRosterBotsBySpace } from "./use-roster-bots-by-space"
 import type { RosterLines } from "./use-roster-lines"
 import type { RosterView } from "./use-roster-view"
+import { useSpacePersonOf } from "./use-space-person-of"
 import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
@@ -16,7 +17,6 @@ import {
 	toSpaceBadges,
 	withBadges,
 } from "../chat/sidebar-badges"
-import { usePersonOf } from "../chat/thread-authorship"
 import { toRosterConversations } from "../conversations/roster-conversations"
 import { useConversationWorkers } from "../conversations/use-conversation"
 import {
@@ -49,7 +49,7 @@ export const useRosterLists = ({
 	const { bots, missions, rosteredSpaceId } = rosterView
 	const { conversationPreviews, conversationRosters, conversations, previews } =
 		useControllerState(roster.controller)
-	const personOf = usePersonOf()
+	const personOfSpace = useSpacePersonOf(core)
 
 	const rosterBots = useSharedStructure(
 		useRosterBots({
@@ -94,7 +94,7 @@ export const useRosterLists = ({
 							{
 								working: conversationWorkers,
 								previews: conversationPreviews,
-								personOf,
+								personOf: personOfSpace(rosteredSpaceId),
 							},
 							now,
 						),
@@ -107,7 +107,7 @@ export const useRosterLists = ({
 				rosteredSpaceId,
 				conversationWorkers,
 				conversationPreviews,
-				personOf,
+				personOfSpace,
 				now,
 				conversationBadges,
 				missions,
@@ -128,7 +128,7 @@ export const useRosterLists = ({
 									{
 										working: conversationWorkers,
 										previews: conversationPreviews,
-										personOf,
+										personOf: personOfSpace(spaceId),
 									},
 									now,
 								),
@@ -142,7 +142,7 @@ export const useRosterLists = ({
 				conversationRosters,
 				conversationWorkers,
 				conversationPreviews,
-				personOf,
+				personOfSpace,
 				now,
 				conversationBadges,
 				missions,
