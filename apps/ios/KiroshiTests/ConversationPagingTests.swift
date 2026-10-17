@@ -26,11 +26,12 @@ struct ConversationPagingTests {
         }
     }
 
-    func follow(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>)
-    {
+    func follow(_ host: TestHost, as authorship: ThreadAuthorship = .unknownAccount) async -> (
+        ConversationsStore, RelayConnection, Task<Void, Never>
+    ) {
         let connection = makeConnection()
         let store = ConversationsStore(work: work)
-        let following = Task { await store.follow(connection) }
+        let following = Task { await store.follow(connection, as: authorship) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
         await waitUntil { store.phase == .loaded }
@@ -331,6 +332,77 @@ struct ConversationPagingTests {
                     of: #""nextCursor":null"#,
                     with: #""nextCursor":\#(next.map { #""\#($0)""# } ?? "null")"#))
         }
+    }
+
+    @Test func eachRowNamesWhoWroteItsLastMessageInAJoinedSpace() async throws {
+        let juniper = Companion(id: "juniper", name: "Juniper")
+        let atlas = Companion(id: "atlas", name: "Atlas")
+        let crew = FixtureHost.Group(
+            id: "crew", title: "Release crew", members: [juniper, atlas], createdAt: 0)
+        let design = FixtureHost.Group(
+            id: "design", title: "Design review", members: [atlas], createdAt: 0)
+        let stray = FixtureHost.Group(
+            id: "stray", title: "Stray", members: [atlas], createdAt: 0)
+        let last = {
+            (
+                conversationId: String, at: Int, botId: Companion.ID?, account: String?,
+                name: String?
+            ) in
+            TestHost.transcriptMessage(
+                TestHost.message(
+                    "m-\(conversationId)", in: conversationId, seq: 1, isYours: botId == nil,
+                    "Hi", at: at, by: botId, account: account, named: name))
+        }
+        let solo = { (companion: Companion, row: FixtureHost.PageRow) in
+            var row = row
+            row.soloBotId = companion.id
+            return row
+        }
+        let host = TestHost(
+            companions: [juniper, atlas, pico],
+            answer: answeringPages([
+                nil: [
+                    TestHost.pageRow(crew, last: last("crew", 9_000, "juniper", nil, nil)),
+                    TestHost.pageRow(
+                        design, last: last("design", 8_000, nil, "acc-ada", "Ada Lovelace")),
+                    solo(
+                        juniper,
+                        TestHost.pageRow(
+                            FixtureHost.Group(
+                                id: "chat-juniper", title: "Chat", members: [juniper],
+                                createdAt: 0),
+                            last: last("chat-juniper", 7_000, nil, "acc-sam", "Sam"))),
+                    solo(
+                        atlas,
+                        TestHost.pageRow(
+                            FixtureHost.Group(
+                                id: "chat-atlas", title: "Chat", members: [atlas], createdAt: 0),
+                            last: last("chat-atlas", 6_000, nil, "acc-noor", "Noor Haddad"))),
+                    solo(
+                        pico,
+                        TestHost.pageRow(
+                            FixtureHost.Group(
+                                id: "chat-pico", title: "Chat", members: [pico], createdAt: 0),
+                            last: last("chat-pico", 5_000, nil, nil, nil))),
+                    TestHost.pageRow(stray, last: last("stray", 4_000, "gone", nil, nil)),
+                ]
+            ]))
+        let (store, connection, following) = await follow(
+            host, as: ThreadAuthorship(accountId: "acc-sam", isHostedByYou: false))
+
+        #expect(
+            store.summaries.map(\.preview) == [
+                "Juniper: Hi", "Ada Lovelace: Hi", "You: Hi", "Noor Haddad: Hi", "Hi", "Hi",
+            ])
+
+        host.push(
+            event: "conversation://message-stored",
+            payload: TestHost.message(
+                "late", in: "crew", seq: 2, isYours: true, "Hold the tag.", at: 10_000,
+                account: "acc-ada", named: "Ada Lovelace"))
+        await waitUntil { store.summaries.first?.preview == "Ada Lovelace: Hold the tag." }
+        following.cancel()
+        await connection.stop()
     }
 
     @Test func aCompanionsOwnConversationIsListedOnceUnderTheCompanion() async throws {
