@@ -26,7 +26,7 @@ use super::contract::{
 use super::members::{invite, list, remove, withdraw};
 use super::reach;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
-use super::{resumed, signed_out, start, stop, Hosting};
+use super::{renamed, resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::session::restore;
 use crate::account::session::AccountSession;
@@ -1706,6 +1706,23 @@ fn the_status_is_decided_on_the_cloud_list_not_on_a_stale_one() {
 
 		assert_eq!(user_ids(&removed), vec!["owner", "joiner"]);
 		assert_eq!(harness.member_calls(), vec!["GET", "GET", "DELETE guest", "GET"]);
+	});
+}
+
+#[test]
+fn a_sent_name_announces_the_unchanged_member_list_again_on_the_next_read() {
+	run(async {
+		let harness = Harness::hosted("members-renamed").await;
+		harness.listed().await.expect("the members list");
+		harness.listed().await.expect("the members list");
+		assert_eq!(harness.heard_member_lists().len(), 1);
+
+		renamed(harness.app.handle());
+		harness.listed().await.expect("the members list");
+
+		let announced = harness.heard_member_lists();
+		assert_eq!(announced.len(), 2);
+		assert_eq!(announced[0], announced[1]);
 	});
 }
 
