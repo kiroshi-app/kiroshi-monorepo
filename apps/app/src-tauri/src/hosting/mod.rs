@@ -9,6 +9,8 @@ mod reach;
 pub(crate) mod relay;
 pub(crate) mod replay;
 
+pub(crate) use members::MEMBERS_EVERY;
+
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;

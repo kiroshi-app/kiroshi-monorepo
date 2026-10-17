@@ -14,6 +14,7 @@ use tokio_tungstenite::tungstenite::Message;
 use super::commands::{announce_change, announce_reconnection, announce_removal, ready};
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
+use super::members;
 use super::proxy;
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
@@ -179,6 +180,7 @@ pub async fn joined<R: Runtime>(
 		name: name.or(held_name).unwrap_or(instance_id),
 	};
 	let joined = repository.join(candidate).await?;
+	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
 	Ok(JoinedSpace::presented(joined, guests.cloud()))
 }
@@ -315,7 +317,8 @@ async fn started<R: Runtime>(
 		.await
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
 	let linked = Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link) };
-	let run = tauri::async_runtime::spawn(guest_linked(app.clone(), linked, stopped));
+	let linked = guest_linked(app.clone(), linked, stopped);
+	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
 	let reached = Reached {
 		origin: origin.clone(),
 		token: token.bearer().to_owned(),

@@ -13,10 +13,10 @@ pub use connection::DatabaseError;
 use connection::Located as _;
 use repositories::{
 	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
-	JoinedSpacesRepository, MessagesRepository, MissionsRepository, RoutinesRepository,
-	RuntimeContextRepository, SearchRepository, SectionsRepository, SpaceChildrenRepository,
-	SpaceHostingRepository, SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository,
-	UserRepository,
+	JoinedSpaceMembersRepository, JoinedSpacesRepository, MessagesRepository, MissionsRepository,
+	RoutinesRepository, RuntimeContextRepository, SearchRepository, SectionsRepository,
+	SpaceChildrenRepository, SpaceHostingRepository, SpaceRowsRepository, SpaceSettingsRepository,
+	SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -71,6 +71,7 @@ pub struct Database {
 	application_installs: ApplicationInstallsRepository,
 	catalogue: CatalogueRepository,
 	conversations: ConversationsRepository,
+	joined_space_members: JoinedSpaceMembersRepository,
 	joined_spaces: JoinedSpacesRepository,
 	messages: MessagesRepository,
 	missions: MissionsRepository,
@@ -96,6 +97,7 @@ impl Database {
 			application_installs: ApplicationInstallsRepository::new(access.clone()),
 			catalogue: CatalogueRepository::new(access.clone()),
 			conversations: ConversationsRepository::new(access.clone()),
+			joined_space_members: JoinedSpaceMembersRepository::new(access.clone()),
 			joined_spaces: JoinedSpacesRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			missions: MissionsRepository::new(access.clone()),
@@ -139,6 +141,10 @@ impl Database {
 
 	pub fn conversations(&self) -> &ConversationsRepository {
 		&self.conversations
+	}
+
+	pub fn joined_space_members(&self) -> &JoinedSpaceMembersRepository {
+		&self.joined_space_members
 	}
 
 	pub fn joined_spaces(&self) -> &JoinedSpacesRepository {
