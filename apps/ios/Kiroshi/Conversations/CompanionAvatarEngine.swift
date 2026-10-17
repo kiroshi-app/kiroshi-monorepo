@@ -34,11 +34,9 @@ final class CompanionAvatarEngine {
 
     private let context: JSContext
     private let draw: JSValue
-    private let layOutHive: JSValue
     private let stringify: JSValue
     private var thrown: String?
     private var idle: [IdleKey: CompanionDrawing] = [:]
-    private var hives: [HiveKey: HiveLayout] = [:]
 
     convenience init(bundle: Bundle) throws {
         guard let url = bundle.url(forResource: "companion-avatar", withExtension: "js") else {
@@ -55,14 +53,11 @@ final class CompanionAvatarEngine {
             throw CompanionAvatarError.script(exception.toString() ?? "")
         }
         guard let draw = context.objectForKeyedSubscript("companionAvatar"), !draw.isUndefined,
-            let layOutHive = context.objectForKeyedSubscript("hiveLayout"),
-            !layOutHive.isUndefined,
             let stringify = context.evaluateScript("JSON.stringify"), !stringify.isUndefined
         else {
             throw CompanionAvatarError.missingEngine
         }
         self.draw = draw
-        self.layOutHive = layOutHive
         self.stringify = stringify
         context.exceptionHandler = { [weak self] _, exception in
             self?.thrown = exception?.toString() ?? ""
@@ -96,22 +91,6 @@ final class CompanionAvatarEngine {
         try call(draw, with: input)
     }
 
-    func hiveLayout(of members: [HiveLayout.Member], side: Double) throws -> HiveLayout {
-        let key = HiveKey(members: members, side: side)
-        if let cached = hives[key] { return cached }
-        let participants = members.map { member -> [String: Any] in
-            ["id": member.id, "working": member.isWorking]
-        }
-        let layout = try HiveLayout.decode(
-            hiveJSON(["participants": participants, "size": side]))
-        hives[key] = layout
-        return layout
-    }
-
-    func hiveJSON(_ input: [String: Any]) throws -> String {
-        try call(layOutHive, with: input)
-    }
-
     private func call(_ function: JSValue, with input: [String: Any]) throws -> String {
         thrown = nil
         let output = function.call(withArguments: [input])
@@ -123,11 +102,6 @@ final class CompanionAvatarEngine {
             throw CompanionAvatarError.unreadableDrawing
         }
         return json
-    }
-
-    private struct HiveKey: Hashable {
-        let members: [HiveLayout.Member]
-        let side: Double
     }
 
     private struct IdleKey: Hashable {

@@ -14,7 +14,6 @@ final class ConversationsAccessibilityTests: XCTestCase {
         "All checks passed, the pull request is ready for review.",
     ]
 
-    static let hiveCounters: Set<String> = ["+3"]
     static let pileCounters: Set<String> = ["+2", "+3"]
 
     override func setUp() async throws {
@@ -118,7 +117,7 @@ final class ConversationsAccessibilityTests: XCTestCase {
                 issue.element.map { navigationBar.contains($0.frame) } ?? false
             return switch issue.auditType {
             case .textClipped: Self.truncatedPreviews.contains(label)
-            case .contrast: Self.hiveCounters.contains(label) || isUnderTheTabBar
+            case .contrast: Self.pileCounters.contains(label) || isUnderTheTabBar
             case .dynamicType: isInTheNavigationBar
             default: false
             }
