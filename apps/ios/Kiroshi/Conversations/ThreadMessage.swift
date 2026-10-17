@@ -99,7 +99,7 @@ struct ThreadMessage: Identifiable, Equatable {
     private static func render(_ text: String, isWrittenByPerson: Bool, authors: [Companion])
         -> AttributedString
     {
-        let shown = authors.isEmpty ? text : Mentions.names(in: text, among: authors)
+        let shown = Mentions.shown(in: text, among: authors)
         guard !isWrittenByPerson else { return AttributedString(shown) }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace)

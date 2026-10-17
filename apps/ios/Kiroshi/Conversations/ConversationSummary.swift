@@ -118,6 +118,11 @@ struct MessagePreview: Equatable {
             sentAt: Date(milliseconds: message.timestamp))
     }
 
+    func naming(_ authors: [Companion]) -> MessagePreview {
+        MessagePreview(
+            text: Mentions.shown(in: text, among: authors), writer: writer, sentAt: sentAt)
+    }
+
     var line: String {
         line(among: [])
     }

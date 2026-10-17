@@ -558,11 +558,12 @@ final class ConversationsStore {
         rows = changed.map { summary in
             var summary = summary
             summary.timeLabel = summary.lastMessage.map { time.listLabel(for: $0.sentAt) }
+            let lastMessage = summary.lastMessage?.naming(summary.subject.namedAuthors)
             switch summary.subject {
             case .companion:
-                summary.preview = summary.lastMessage?.line
+                summary.preview = lastMessage?.line
             case .group(let group):
-                summary.preview = summary.lastMessage?.line(among: group.members)
+                summary.preview = lastMessage?.line(among: group.members)
             }
             return summary
         }
