@@ -1419,7 +1419,7 @@ export type SidebarTab = "conversations" | "missions" | "companions" | "applicat
 
 export type SignInError = { kind: "alreadyRunning" } | { kind: "notRunning" } | { kind: "cancelled" } | { kind: "timedOut" } | { kind: "refusedUrl"; url: string } | { kind: "flowTimedOut"; timeoutMs: number } | { kind: "failed"; detail: string } | { kind: "transport"; error: TransportError };
 
-export type SignedOutReason = "signedOutOnSite";
+export type SignedOutReason = "signedOutOnSite" | "deviceRevoked";
 
 export type Skill = {
 	id: string,

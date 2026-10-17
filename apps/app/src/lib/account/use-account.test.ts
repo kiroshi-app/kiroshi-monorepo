@@ -478,6 +478,20 @@ describe("useAccount", () => {
 		expect(failureNotice).toHaveBeenCalledTimes(2)
 	})
 
+	it("raises the device revoked notice when another account takes this computer", async () => {
+		await mountAccount()
+
+		await announce(SIGNED_IN)
+		await announce({ kind: "signedOut", reason: "deviceRevoked" })
+
+		expect(failureNotice).toHaveBeenCalledExactlyOnceWith(
+			reported({
+				title: "This computer is now signed in to another Kiroshi account.",
+				description: "Sign in again to use it here.",
+			}),
+		)
+	})
+
 	it("raises no notice when the account signs out without a reason", async () => {
 		await mountAccount()
 

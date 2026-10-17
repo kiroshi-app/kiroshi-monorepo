@@ -11,6 +11,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::Router;
+use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -30,8 +31,9 @@ use super::sealing_member::{HostFrame, SealingMember, Space};
 use super::wire::HELLO;
 use super::{renamed, resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
+use crate::account::contract::SignedOutReason;
 use crate::account::session::restore;
-use crate::account::session::AccountSession;
+use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;
 use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
@@ -56,7 +58,7 @@ use crate::conversations::contract::{
 };
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
-use crate::crypto::device_keys::DeviceKeys;
+use crate::crypto::device_keys::{verify, DeviceKeys};
 use crate::crypto::frame::CHALLENGE_LENGTH;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
@@ -93,6 +95,57 @@ const PATIENCE: Duration = Duration::from_secs(10);
 const OWNER_EMAIL: &str = "owner@example.com";
 const POLL_EVERY: Duration = Duration::from_millis(100);
 const MEMBER_ACCOUNT: &str = "member-account";
+const OWNER_ACCOUNT: &str = "owner";
+const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
+
+#[derive(Clone)]
+struct RelayDevice {
+	ed25519: String,
+	id: String,
+	account_id: String,
+}
+
+#[derive(Clone, Default)]
+struct DeviceRelay {
+	devices: Arc<Mutex<Vec<RelayDevice>>>,
+	challenges: Arc<Mutex<Vec<String>>>,
+	issued: Arc<AtomicUsize>,
+	expiring: Arc<AtomicUsize>,
+	is_signature_tampered: Arc<AtomicBool>,
+	refusal: Arc<Mutex<Option<(StatusCode, &'static str)>>>,
+	bodies: Arc<Mutex<Vec<Value>>>,
+	answers: Arc<Mutex<Vec<(StatusCode, Value)>>>,
+	deletion_status: Arc<Mutex<Option<StatusCode>>>,
+	account_calls: Arc<Mutex<Vec<String>>>,
+}
+
+impl DeviceRelay {
+	fn answers(&self) -> Vec<(StatusCode, Value)> {
+		self.answers.lock().expect("the relay").clone()
+	}
+
+	fn statuses(&self) -> Vec<StatusCode> {
+		self.answers().into_iter().map(|(status, _)| status).collect()
+	}
+
+	fn bodies(&self) -> Vec<Value> {
+		self.bodies.lock().expect("the relay").clone()
+	}
+
+	fn account_calls(&self) -> Vec<String> {
+		self.account_calls.lock().expect("the relay").clone()
+	}
+
+	fn device_of(&self, ed25519: &str) -> Option<RelayDevice> {
+		let devices = self.devices.lock().expect("the relay");
+		devices.iter().find(|device| device.ed25519 == ed25519).cloned()
+	}
+
+	fn is_a_device_of_the_owner(&self, id: &str) -> bool {
+		let devices = self.devices.lock().expect("the relay");
+		devices.iter().any(|device| device.id == id && device.account_id == OWNER_ACCOUNT)
+	}
+}
 
 #[derive(Clone)]
 struct Relay {
@@ -103,8 +156,7 @@ struct Relay {
 	known: Arc<Mutex<HashSet<String>>>,
 	attempts: Arc<AtomicUsize>,
 	sockets: mpsc::UnboundedSender<(WebSocket, String)>,
-	devices: Arc<Mutex<Vec<(Value, String)>>>,
-	is_device_key_taken: Arc<AtomicBool>,
+	device: DeviceRelay,
 	members: Arc<Mutex<Vec<Value>>>,
 	member_calls: Arc<Mutex<Vec<String>>>,
 	member_answer: Arc<Mutex<Option<(StatusCode, Value)>>>,
@@ -167,7 +219,7 @@ async fn member_removed(
 async fn me() -> Response {
 	answered_json(
 		StatusCode::OK,
-		json!({ "id": "owner", "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
+		json!({ "id": OWNER_ACCOUNT, "email": OWNER_EMAIL, "createdAt": "2026-10-01T00:00:00.000Z", "plan": "pro" }),
 	)
 }
 
@@ -197,6 +249,88 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 	answered_json(StatusCode::CREATED, json!({ "id": id, "name": body["name"], "role": "owner" }))
 }
 
+async fn device_challenged(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
+	if bearer_of(&headers) != BEARER {
+		return StatusCode::UNAUTHORIZED.into_response();
+	}
+	let device = &relay.device;
+	device.issued.fetch_add(1, Ordering::SeqCst);
+	let nonce = [uuid::Uuid::new_v4().into_bytes(), uuid::Uuid::new_v4().into_bytes()].concat();
+	let nonce = BASE64_URL_SAFE_NO_PAD.encode(nonce);
+	let is_expired =
+		device.expiring.try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+	if is_expired.is_err() {
+		device.challenges.lock().expect("the relay").push(nonce.clone());
+	}
+	answered_json(
+		StatusCode::CREATED,
+		json!({ "nonce": nonce, "expiresAt": "2099-10-01T00:00:00.000Z" }),
+	)
+}
+
+fn device_refused(status: StatusCode, code: &str) -> (StatusCode, Value) {
+	(status, json!({ "error": { "code": code, "message": code } }))
+}
+
+fn decoded(body: &Value, key: &str) -> Vec<u8> {
+	let text = body[key].as_str().unwrap_or_else(|| panic!("{key} is missing from {body}"));
+	BASE64_URL_SAFE_NO_PAD.decode(text).unwrap_or_else(|_| panic!("{key} is not base64url"))
+}
+
+fn is_proven(relay: &DeviceRelay, body: &Value) -> bool {
+	let key: [u8; 32] = decoded(body, "ed25519PublicKey").try_into().expect("a 32-byte key");
+	let nonce = decoded(body, "nonce");
+	let mut signature: [u8; 64] = decoded(body, "signature").try_into().expect("64 bytes");
+	if relay.is_signature_tampered.load(Ordering::SeqCst) {
+		signature[0] ^= 1;
+	}
+	let signed = [DEVICE_REGISTER_CONTEXT, OWNER_ACCOUNT.as_bytes(), &key, &nonce].concat();
+	let key = ed25519_dalek::VerifyingKey::from_bytes(&key).expect("a point");
+	let signature = ed25519_dalek::Signature::from_bytes(&signature);
+	verify(&key, &signed, &signature).is_ok()
+}
+
+fn device_answer(relay: &DeviceRelay, body: &Value) -> (StatusCode, Value) {
+	if let Some((status, code)) = *relay.refusal.lock().expect("the relay") {
+		return device_refused(status, code);
+	}
+	if body.get("nonce").is_none() || body.get("signature").is_none() {
+		return device_refused(StatusCode::BAD_REQUEST, "VALIDATION_ERROR");
+	}
+	let nonce = body["nonce"].as_str().unwrap_or_default();
+	let mut challenges = relay.challenges.lock().expect("the relay");
+	let Some(issued) = challenges.iter().position(|issued| issued == nonce) else {
+		return device_refused(StatusCode::BAD_REQUEST, "DEVICE_CHALLENGE_INVALID");
+	};
+	challenges.remove(issued);
+	drop(challenges);
+	if !is_proven(relay, body) {
+		return device_refused(StatusCode::FORBIDDEN, "DEVICE_PROOF_INVALID");
+	}
+	let ed25519 = body["ed25519PublicKey"].as_str().expect("a key").to_owned();
+	let mut devices = relay.devices.lock().expect("the relay");
+	let created_at = "2026-10-01T00:00:00.000Z";
+	match devices.iter_mut().find(|device| device.ed25519 == ed25519) {
+		None => {
+			let id = uuid::Uuid::new_v4().to_string();
+			devices.push(RelayDevice {
+				ed25519,
+				id: id.clone(),
+				account_id: OWNER_ACCOUNT.to_owned(),
+			});
+			let answer = json!({ "id": id, "createdAt": created_at, "transferred": false });
+			(StatusCode::CREATED, answer)
+		}
+		Some(device) => {
+			let transferred = device.account_id != OWNER_ACCOUNT;
+			device.account_id = OWNER_ACCOUNT.to_owned();
+			let answer =
+				json!({ "id": device.id, "createdAt": created_at, "transferred": transferred });
+			(StatusCode::OK, answer)
+		}
+	}
+}
+
 async fn device_registered(
 	Served(relay): Served<Relay>,
 	headers: HeaderMap,
@@ -205,14 +339,34 @@ async fn device_registered(
 	if bearer_of(&headers) != BEARER {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
-	if relay.is_device_key_taken.load(Ordering::SeqCst) {
-		let refusal = json!({ "error": { "code": "DEVICE_KEY_TAKEN", "message": "taken" } });
-		return answered_json(StatusCode::CONFLICT, refusal);
-	}
 	let body: Value = serde_json::from_str(&body).expect("a json body");
-	let id = uuid::Uuid::new_v4().to_string();
-	relay.devices.lock().expect("the relay").push((body, id.clone()));
-	answered_json(StatusCode::CREATED, json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z" }))
+	relay.device.bodies.lock().expect("the relay").push(body.clone());
+	let (status, answer) = device_answer(&relay.device, &body);
+	relay.device.answers.lock().expect("the relay").push((status, answer.clone()));
+	relay.noticed.send_replace(());
+	answered_json(status, answer)
+}
+
+async fn device_deleted(
+	Served(relay): Served<Relay>,
+	Path(id): Path<String>,
+	headers: HeaderMap,
+) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	relay.device.account_calls.lock().expect("the relay").push(format!("DELETE {id}"));
+	let forced = *relay.device.deletion_status.lock().expect("the relay");
+	if let Some(status) = forced {
+		return status.into_response();
+	}
+	let mut devices = relay.device.devices.lock().expect("the relay");
+	devices.retain(|device| device.id != id);
+	StatusCode::NO_CONTENT.into_response()
+}
+
+async fn cloud_signed_out(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	relay.device.account_calls.lock().expect("the relay").push("sign-out".to_owned());
+	StatusCode::OK.into_response()
 }
 
 async fn host(
@@ -230,9 +384,7 @@ async fn host(
 		return status.into_response();
 	}
 	let device = query.as_deref().and_then(|query| query.strip_prefix("device="));
-	let is_a_device = device.is_some_and(|device| {
-		relay.devices.lock().expect("the relay").iter().any(|(_, id)| id == device)
-	});
+	let is_a_device = device.is_some_and(|device| relay.device.is_a_device_of_the_owner(device));
 	if !is_a_device {
 		return StatusCode::FORBIDDEN.into_response();
 	}
@@ -426,8 +578,7 @@ impl Harness {
 			known: Arc::default(),
 			attempts: Arc::default(),
 			sockets: sockets_in,
-			devices: Arc::default(),
-			is_device_key_taken: Arc::default(),
+			device: DeviceRelay::default(),
 			members: Arc::new(Mutex::new(vec![cloud_member(
 				"owner",
 				OWNER_EMAIL,
@@ -442,6 +593,9 @@ impl Harness {
 			Router::new()
 				.route("/instances", post(registration))
 				.route("/devices", post(device_registered))
+				.route("/devices/challenge", post(device_challenged))
+				.route("/devices/{id}", delete(device_deleted))
+				.route("/api/auth/sign-out", post(cloud_signed_out))
 				.route("/instances/{id}/relay/host", get(host))
 				.route("/instances/{id}/members", get(members_listed).post(member_invited))
 				.route("/instances/{id}/members/{user_id}", delete(member_removed))
@@ -4956,18 +5110,24 @@ fn a_first_connect_registers_the_device_once_and_opens_the_host_socket_with_its_
 		harness.reached(HostingState::Online).await;
 
 		let host = harness.host_keys();
-		let devices = harness.relay.devices.lock().expect("the relay").clone();
-		let [(body, relay_device_id)] = devices.as_slice() else {
-			panic!("the device registered {} times", devices.len());
+		let bodies = harness.relay.device.bodies();
+		let [body] = bodies.as_slice() else {
+			panic!("the device registered {} times", bodies.len());
 		};
-		use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+		let sent: Vec<&str> =
+			body.as_object().expect("an object").keys().map(String::as_str).collect();
+		assert_eq!(sent, ["ed25519PublicKey", "nonce", "signature", "x25519PublicKey"]);
 		assert_eq!(
-			*body,
-			json!({
-				"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(host.signing_public().as_bytes()),
-				"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(host.agreement_public().as_bytes()),
-			})
+			(&body["ed25519PublicKey"], &body["x25519PublicKey"]),
+			(
+				&json!(BASE64_URL_SAFE_NO_PAD.encode(host.signing_public().as_bytes())),
+				&json!(BASE64_URL_SAFE_NO_PAD.encode(host.agreement_public().as_bytes()))
+			)
 		);
+		assert_eq!((decoded(body, "nonce").len(), decoded(body, "signature").len()), (32, 64));
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::CREATED]);
+		let answers = harness.relay.device.answers();
+		let relay_device_id = &answers[0].1["id"].as_str().expect("an id").to_owned();
 		let database = relay_database(&harness);
 		let held = database
 			.relay_devices()
@@ -4989,19 +5149,208 @@ fn a_first_connect_registers_the_device_once_and_opens_the_host_socket_with_its_
 	});
 }
 
+async fn held_relay_device(harness: &Harness) -> Option<String> {
+	let device_id = harness.host_keys().device_id().to_string();
+	let devices = relay_database(harness).relay_devices();
+	devices.relay_device_id(OWNER_ACCOUNT.to_owned(), device_id).await.expect("the id reads")
+}
+
+async fn account_reached(harness: &Harness, expected: AccountState) {
+	let session = harness.app.state::<AccountSession>();
+	let reached = async {
+		while session.current() != expected {
+			tokio::time::sleep(POLL_EVERY).await;
+		}
+	};
+	tokio::time::timeout(PATIENCE, reached)
+		.await
+		.unwrap_or_else(|_| panic!("the account did not reach {expected:?}"));
+}
+
+fn bearer_held(harness: &Harness) -> Option<String> {
+	harness.app.state::<AccountSession>().bearer().expect("the bearer reads")
+}
+
 #[test]
-fn a_device_key_another_account_holds_fails_naming_409_device_key_taken() {
+fn the_same_key_registered_again_by_the_same_account_answers_200_with_the_same_id() {
 	run(async {
-		let harness = Harness::signed_in("device-key-taken").await;
-		harness.relay.is_device_key_taken.store(true, Ordering::SeqCst);
+		let mut harness = Harness::signed_in("device-again").await;
+		harness.started().await;
+		let _first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		let device_id = harness.host_keys().device_id().to_string();
+		let devices = relay_database(&harness).relay_devices();
+		devices.forgotten(OWNER_ACCOUNT.to_owned(), device_id).await.expect("forgotten");
+
+		harness.started().await;
+		let _second = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let answers = harness.relay.device.answers();
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::CREATED, StatusCode::OK]);
+		assert_eq!(answers[1].1["id"], answers[0].1["id"]);
+		assert_eq!(answers[1].1["transferred"], json!(false));
+		assert_eq!(held_relay_device(&harness).await.as_deref(), answers[1].1["id"].as_str());
+	});
+}
+
+#[test]
+fn a_key_another_account_registered_moves_to_this_account_and_is_stored_under_it() {
+	run(async {
+		let mut harness = Harness::signed_in("device-moved").await;
+		let ed25519 =
+			BASE64_URL_SAFE_NO_PAD.encode(harness.host_keys().signing_public().as_bytes());
+		let moved = uuid::Uuid::new_v4().to_string();
+		harness.relay.device.devices.lock().expect("the relay").push(RelayDevice {
+			ed25519: ed25519.clone(),
+			id: moved.clone(),
+			account_id: "former-owner".to_owned(),
+		});
+
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let answers = harness.relay.device.answers();
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::OK]);
+		assert_eq!(answers[0].1["transferred"], json!(true));
+		assert_eq!(held_relay_device(&harness).await, Some(moved));
+		let device = harness.relay.device.device_of(&ed25519).expect("the device");
+		assert_eq!(device.account_id, OWNER_ACCOUNT);
+	});
+}
+
+#[test]
+fn a_signature_the_relay_cannot_verify_fails_naming_403_and_keeps_the_account_signed_in() {
+	run(async {
+		let harness = Harness::signed_in("device-proof-invalid").await;
+		restore(harness.app.handle().clone()).await;
+		harness.relay.device.is_signature_tampered.store(true, Ordering::SeqCst);
 
 		harness.started().await;
 		let relay = harness.running_relay();
 		let reason = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("409") && reason.contains("DEVICE_KEY_TAKEN"), "{reason}");
+		assert!(reason.contains("403 DEVICE_PROOF_INVALID"), "{reason}");
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::FORBIDDEN]);
 		assert_eq!(harness.attempts(), 0);
+		let account = harness.app.state::<AccountSession>().current();
+		assert!(matches!(account, AccountState::SignedIn(_)), "{account:?}");
+		assert_eq!(bearer_held(&harness).as_deref(), Some(BEARER));
+		assert_eq!(held_relay_device(&harness).await, None);
+	});
+}
+
+#[test]
+fn an_expired_challenge_is_drawn_again_once_and_the_device_registers() {
+	run(async {
+		let mut harness = Harness::signed_in("device-challenge-expired").await;
+		harness.relay.device.expiring.store(1, Ordering::SeqCst);
+
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let answers = harness.relay.device.answers();
+		assert_eq!(
+			harness.relay.device.statuses(),
+			vec![StatusCode::BAD_REQUEST, StatusCode::CREATED]
+		);
+		assert_eq!(answers[0].1["error"]["code"], "DEVICE_CHALLENGE_INVALID");
+		assert_eq!(harness.relay.device.issued.load(Ordering::SeqCst), 2);
+		assert_eq!(held_relay_device(&harness).await.as_deref(), answers[1].1["id"].as_str());
+	});
+}
+
+#[test]
+fn a_second_invalid_challenge_fails_naming_400_device_challenge_invalid() {
+	run(async {
+		let harness = Harness::signed_in("device-challenge-invalid").await;
+		harness.relay.device.expiring.store(2, Ordering::SeqCst);
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let reason = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert!(reason.contains("400 DEVICE_CHALLENGE_INVALID"), "{reason}");
+		assert_eq!(
+			harness.relay.device.statuses(),
+			vec![StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST]
+		);
+		assert_eq!(harness.relay.device.issued.load(Ordering::SeqCst), 2);
+		assert_eq!(harness.attempts(), 0);
+	});
+}
+
+#[test]
+fn a_409_from_the_device_registration_fails_naming_its_status_and_code_like_any_other_4xx() {
+	run(async {
+		let harness = Harness::signed_in("device-key-taken").await;
+		let refusal = Some((StatusCode::CONFLICT, "DEVICE_KEY_TAKEN"));
+		*harness.relay.device.refusal.lock().expect("the relay") = refusal;
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let reason = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert!(reason.contains("409 DEVICE_KEY_TAKEN"), "{reason}");
+		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::CONFLICT]);
+		assert_eq!(harness.attempts(), 0);
+	});
+}
+
+#[test]
+fn signing_out_deletes_the_relay_device_first_and_still_signs_out_when_the_relay_answers_500() {
+	run(async {
+		let mut harness = Harness::signed_in("device-sign-out").await;
+		restore(harness.app.handle().clone()).await;
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let relay_device_id = held_relay_device(&harness).await.expect("a registered device");
+		let device_id = harness.host_keys().device_id();
+		*harness.relay.device.deletion_status.lock().expect("the relay") =
+			Some(StatusCode::INTERNAL_SERVER_ERROR);
+
+		sign_out(harness.app.handle()).await.expect("the sign-out settles");
+
+		assert_eq!(
+			harness.relay.device.account_calls(),
+			vec![format!("DELETE {relay_device_id}"), "sign-out".to_owned()]
+		);
+		let account = harness.app.state::<AccountSession>().current();
+		assert_eq!(account, AccountState::SignedOut { reason: None });
+		assert_eq!(bearer_held(&harness), None);
+		assert_eq!(held_relay_device(&harness).await, None);
+		assert_eq!(harness.host_keys().device_id(), device_id);
+	});
+}
+
+#[test]
+fn a_device_revoked_4006_signs_the_account_out_with_its_reason_and_does_not_reconnect() {
+	run(async {
+		let mut harness = Harness::signed_in("device-revoked").await;
+		restore(harness.app.handle().clone()).await;
+		harness.started().await;
+		let relay = harness.running_relay();
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let close = CloseFrame { code: 4006, reason: "deviceRevoked".into() };
+		member.send(Message::Close(Some(close))).await.expect("the close leaves");
+		harness.reached(HostingState::NeedsSignIn).await;
+		ended_on_its_own(relay).await;
+		let revoked = AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRevoked) };
+		account_reached(&harness, revoked).await;
+
+		assert_eq!(harness.attempts(), 1);
+		assert_eq!(bearer_held(&harness), None);
+		assert_eq!(held_relay_device(&harness).await, None);
+		assert!(harness.relay.device.account_calls().is_empty());
 	});
 }
 

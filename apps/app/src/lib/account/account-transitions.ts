@@ -23,6 +23,10 @@ const NOTICE_KEYS_BY_TRANSITION = {
 		title: "settings:account.signedOutFromTheSite.title",
 		description: "settings:account.signedOutFromTheSite.description",
 	},
+	"signedOut:deviceRevoked": {
+		title: "settings:account.deviceRevoked.title",
+		description: "settings:account.deviceRevoked.description",
+	},
 } as const
 
 type NoticedTransition = keyof typeof NOTICE_KEYS_BY_TRANSITION

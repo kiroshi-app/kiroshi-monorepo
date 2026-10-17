@@ -13,7 +13,8 @@ use tokio::sync::{MutexGuard, Notify};
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
-use crate::db::DatabaseState;
+use crate::crypto::commands::DeviceKeysState;
+use crate::db::{Database, DatabaseState};
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, ACCOUNT_CHANGED};
@@ -26,6 +27,9 @@ const SIGNED_OUT: AccountState = AccountState::SignedOut { reason: None };
 
 const SIGNED_OUT_ON_SITE: AccountState =
 	AccountState::SignedOut { reason: Some(SignedOutReason::SignedOutOnSite) };
+
+const DEVICE_REVOKED: AccountState =
+	AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRevoked) };
 
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
@@ -384,22 +388,93 @@ pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError
 	closed(&mut waiting).await;
 	let _relay_turn = signed_in_work_stopped(app).await;
 	if let Some(bearer) = session.bearer()? {
+		if let Err(reason) = relay_device_deleted(app, &bearer).await {
+			eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
+		}
 		if let Err(reason) = session.cloud.sign_out(&bearer).await {
 			eprintln!(
 				"the cloud did not close the session, the bearer is deleted anyway: {reason}"
 			);
 		}
 	}
+	relay_device_forgotten(app).await;
 	session.forget_bearer()?;
 	entered(app, SIGNED_OUT);
 	Ok(())
 }
 
-pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
-	tauri::async_runtime::spawn(signed_out_on_site(app.clone(), bearer.to_owned()));
+async fn relay_device_deleted<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> Result<(), String> {
+	let Some((account_id, device_id)) = relay_device_owner(app)? else {
+		return Ok(());
+	};
+	let held = signed_in_database(app)?
+		.relay_devices()
+		.relay_device_id(account_id, device_id)
+		.await
+		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))?;
+	match held {
+		Some(relay_device_id) => {
+			app.state::<AccountSession>().cloud.delete_device(bearer, &relay_device_id).await
+		}
+		None => Ok(()),
+	}
 }
 
-async fn signed_out_on_site<R: Runtime>(app: AppHandle<R>, refused: String) {
+async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {
+	let forgotten = match relay_device_owner(app) {
+		Ok(Some((account_id, device_id))) => match signed_in_database(app) {
+			Ok(database) => database
+				.relay_devices()
+				.forgotten(account_id, device_id)
+				.await
+				.map_err(|failure| format!("{failure:?}")),
+			Err(reason) => Err(reason),
+		},
+		Ok(None) => Ok(()),
+		Err(reason) => Err(reason),
+	};
+	if let Err(reason) = forgotten {
+		eprintln!("the relay device id of the signed-out account was not forgotten: {reason}");
+	}
+}
+
+fn relay_device_owner<R: Runtime>(app: &AppHandle<R>) -> Result<Option<(String, String)>, String> {
+	let AccountState::SignedIn(account) = app.state::<AccountSession>().current() else {
+		return Ok(None);
+	};
+	let device_id = app
+		.try_state::<DeviceKeysState>()
+		.ok_or_else(|| "the device keys are not loaded".to_owned())?
+		.keys()
+		.map(|keys| keys.device_id().to_string())
+		.map_err(|failure| format!("the device keys are unavailable: {failure:?}"))?;
+	Ok(Some((account.id, device_id)))
+}
+
+fn signed_in_database<R: Runtime>(app: &AppHandle<R>) -> Result<&Database, String> {
+	app.state::<DatabaseState>()
+		.inner()
+		.as_ref()
+		.map_err(|failure| format!("the database is unavailable: {failure:?}"))
+}
+
+pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
+	tauri::async_runtime::spawn(signed_out_locally(
+		app.clone(),
+		bearer.to_owned(),
+		SIGNED_OUT_ON_SITE,
+	));
+}
+
+pub fn device_revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
+	tauri::async_runtime::spawn(signed_out_locally(app.clone(), bearer.to_owned(), DEVICE_REVOKED));
+}
+
+async fn signed_out_locally<R: Runtime>(
+	app: AppHandle<R>,
+	refused: String,
+	signed_out: AccountState,
+) {
 	let session = app.state::<AccountSession>();
 	let _turn = session.turn.lock().await;
 	match session.bearer() {
@@ -410,8 +485,9 @@ async fn signed_out_on_site<R: Runtime>(app: AppHandle<R>, refused: String) {
 		}
 	}
 	let _relay_turn = signed_in_work_stopped(&app).await;
+	relay_device_forgotten(&app).await;
 	let next = match session.forget_bearer() {
-		Ok(()) => SIGNED_OUT_ON_SITE,
+		Ok(()) => signed_out,
 		Err(error) => unstored(error),
 	};
 	entered(&app, next);
@@ -1319,7 +1395,8 @@ mod tests {
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
 
-			signed_out_on_site(harness.app.handle().clone(), REVOKED.to_owned()).await;
+			let app = harness.app.handle().clone();
+			signed_out_locally(app, REVOKED.to_owned(), SIGNED_OUT_ON_SITE).await;
 
 			assert_eq!(harness.state(), signed_in());
 			assert_eq!(harness.stored().as_deref(), Some(BEARER));
