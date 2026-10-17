@@ -7,12 +7,14 @@ protocol SessionStore {
     func clear()
 }
 
-struct KeychainError: Error {
+struct KeychainError: Error, Equatable {
     let status: OSStatus
 }
 
 struct KeychainSessionStore: SessionStore {
-    var service = "com.kiroshi.app.ios.session"
+    static let service = "com.kiroshi.app.ios.session"
+
+    var service = Self.service
 
     private var query: [String: Any] {
         [
