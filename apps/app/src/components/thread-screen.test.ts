@@ -2752,10 +2752,10 @@ describe("ThreadScreen", () => {
 
 const HEADER_OF_WALLS = "Walls · conversation settings"
 
-const subjectIconIn = (surface: HTMLElement) =>
-	surface.querySelector<HTMLElement>('[data-slot="conversation-subject-icon"]')
+const subjectIconIn = (surface: HTMLElement | null) =>
+	surface?.querySelector<HTMLElement>('[data-slot="conversation-subject-icon"]')
 
-const pictogramIn = (surface: HTMLElement) =>
+const pictogramIn = (surface: HTMLElement | null) =>
 	subjectIconIn(surface)?.querySelector(
 		'[data-slot="conversation-subject-icon-pictogram"]',
 	)?.innerHTML
@@ -2837,10 +2837,6 @@ describe("ThreadScreen wearing the look of a group conversation", () => {
 		const emptyState = container.querySelector<HTMLElement>(
 			'[data-slot="conversation-empty-state"]',
 		)
-		expect(emptyState).not.toBeNull()
-		if (emptyState === null) {
-			return
-		}
 		expect(pictogramIn(emptyState)).toBe(drawnPictogramOf("Rocket"))
 		expect(subjectIconIn(emptyState)?.style.color).toBe(
 			"var(--conversation-icon-cyan-foreground)",
