@@ -13,15 +13,34 @@ struct EmptyThread: View {
                     }
                 }
             } icon: {
-                switch heading.avatar {
-                case .companion(let companion):
-                    CompanionAvatar(companion, size: .hero)
-                case .group(let group):
-                    GroupAvatar(group: group, size: .hero)
-                }
+                ConversationAvatarView(avatar: heading.avatar, size: .hero)
             }
         } description: {
             Text("Nothing here yet. Your first message starts the conversation.")
         }
     }
 }
+
+#if DEBUG
+    private struct EmptyThreadsPreview: View {
+        var body: some View {
+            ScrollView {
+                VStack(spacing: 24) {
+                    let headings = ConversationsFixture.everywhereHeadings
+                    ForEach(headings.indices, id: \.self) { index in
+                        EmptyThread(heading: headings[index])
+                    }
+                }
+            }
+        }
+    }
+
+    #Preview("Empty thread · solo, no colour, red") {
+        EmptyThreadsPreview()
+    }
+
+    #Preview("Empty thread · solo, no colour, red · dark") {
+        EmptyThreadsPreview()
+            .preferredColorScheme(.dark)
+    }
+#endif

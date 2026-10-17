@@ -230,7 +230,9 @@ extension ThreadStoreTests {
     @Test func aGroupHeaderShowsTheGroupWhereAConversationShowsItsCompanion() {
         let store = makeGroupStore()
 
-        #expect(store.heading == ThreadHeading(avatar: .group(releaseCrew), title: "Release crew"))
+        #expect(
+            store.heading
+                == ThreadHeading(avatar: .icon(.messageSquare, color: nil), title: "Release crew"))
         #expect(store.heading.companion == nil)
         #expect(store.placeholder == "Message Release crew")
     }

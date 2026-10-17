@@ -1,12 +1,7 @@
 import SwiftUI
 
 struct ThreadHeading: Equatable {
-    enum Avatar: Equatable {
-        case companion(Companion?)
-        case group(GroupConversation)
-    }
-
-    var avatar: Avatar
+    var avatar: ConversationAvatar
     var working: Set<Companion.ID> = []
     var overline: String?
     var title: String
@@ -69,8 +64,10 @@ struct ThreadHeader: View {
 
     var body: some View {
         VStack(spacing: -ThreadHeaderLayout.overlap) {
-            avatar
-                .zIndex(1)
+            ConversationAvatarView(
+                avatar: heading.avatar, size: .header, isWorking: !heading.working.isEmpty
+            )
+            .zIndex(1)
             VStack(spacing: 0) {
                 if let overline = heading.overline {
                     Text(overline)
@@ -97,15 +94,6 @@ struct ThreadHeader: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityShowsLargeContentViewer()
-    }
-
-    @ViewBuilder private var avatar: some View {
-        switch heading.avatar {
-        case .companion(let companion):
-            CompanionAvatar(companion, size: .header, isWorking: !heading.working.isEmpty)
-        case .group(let group):
-            GroupAvatar(group: group, size: .header, working: heading.working)
-        }
     }
 }
 
@@ -169,11 +157,31 @@ struct ThreadHeader: View {
             hasTrailingItem: true)
     }
 
-    #Preview("Header · group") {
-        HeaderPreview(
-            heading: ThreadHeading(
-                avatar: .group(ConversationsFixture.releaseCrew.conversation),
-                title: ConversationsFixture.releaseCrew.title))
+    #Preview("Header · solo") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[0])
+    }
+
+    #Preview("Header · solo · dark") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[0])
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Header · icon, no colour") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[1])
+    }
+
+    #Preview("Header · icon, no colour · dark") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[1])
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Header · icon, red") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[2])
+    }
+
+    #Preview("Header · icon, red · dark") {
+        HeaderPreview(heading: ConversationsFixture.everywhereHeadings[2])
+            .preferredColorScheme(.dark)
     }
 
     #Preview("Header · mission") {
