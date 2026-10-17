@@ -75,7 +75,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 	["companion_invite", { companion: "Quill", conversation: "c2" }, "invite"],
 	[
 		"conversation_open",
-		{ title: "Trip", with: ["Quill"], message: "Where to?" },
+		{ title: "Trip", icon: "Rocket", with: ["Quill"], message: "Where to?" },
 		"conversationOpen",
 	],
 	[
@@ -185,10 +185,27 @@ describe("companionTools", () => {
 		expect(invite.description).not.toMatch(NAMES_A_SEQUENCE)
 	})
 
-	it("takes the title, the companions and the message of the room it opens", () => {
+	it("takes the title, the icon, the companions and the message of the room it opens", () => {
 		const open = toolNamed(SESSION, "conversation_open")
 
-		expect(Object.keys(open.inputSchema)).toEqual(["title", "with", "message"])
+		expect(Object.keys(open.inputSchema)).toEqual([
+			"title",
+			"icon",
+			"with",
+			"message",
+		])
+	})
+
+	it("requires the icon of the room it opens, described with a listed example and the list file", () => {
+		const { icon } = toolNamed(SESSION, "conversation_open").inputSchema
+		const example = icon?.description?.match(/such as (\w+)/)?.[1] ?? ""
+
+		expect(icon?.safeParse(undefined).success).toBe(false)
+		expect(icon?.safeParse("Rocket").success).toBe(true)
+		expect(conversationIcons).toContain(example)
+		expect(icon?.description).toContain(
+			"packages/shared/conversation-icons.json",
+		)
 	})
 
 	it("takes the room it speaks in and the message it says there, naming no sequence of work", () => {

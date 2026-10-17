@@ -873,6 +873,7 @@ mod tests {
 				space_id: elsewhere.id.clone(),
 				section_id: None,
 				title: "Room".to_owned(),
+				icon: None,
 				bot_ids: vec![bot.id.clone()],
 			})
 			.await
@@ -1071,6 +1072,7 @@ mod tests {
 				space_id: kept.clone(),
 				section_id: None,
 				title: "Room".to_owned(),
+				icon: None,
 				bot_ids: vec![shared.id.clone()],
 			})
 			.await
@@ -1161,6 +1163,7 @@ mod tests {
 				space_id: kept.id.clone(),
 				section_id: None,
 				title: "Room".to_owned(),
+				icon: None,
 				bot_ids: vec![dying.id.clone(), standing.id.clone()],
 			})
 			.await
@@ -1237,6 +1240,7 @@ mod tests {
 				space_id: home,
 				section_id: None,
 				title: "Room".to_owned(),
+				icon: None,
 				bot_ids: vec![bot.id.clone()],
 			})
 			.await

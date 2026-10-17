@@ -267,6 +267,7 @@ mod tests {
 				space_id: PERSONAL_SPACE_ID.to_owned(),
 				section_id: None,
 				title: "A mission".to_owned(),
+				icon: None,
 				bot_ids: vec![kept.id.clone()],
 			})
 			.await

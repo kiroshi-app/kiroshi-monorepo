@@ -40,7 +40,7 @@ pub async fn conversation_create<R: Runtime>(
 	title: String,
 	bot_ids: Vec<String>,
 ) -> Result<Conversation, TranscriptStoreError> {
-	let draft = ConversationDraft { space_id, section_id, title, bot_ids };
+	let draft = ConversationDraft { space_id, section_id, title, icon: None, bot_ids };
 	let database = ready(&state)?;
 	let created = drawn(&app, database.conversations().create_conversation(draft).await?);
 	announce_conversation(&app, database, CONVERSATION_CREATED, &created.id).await;

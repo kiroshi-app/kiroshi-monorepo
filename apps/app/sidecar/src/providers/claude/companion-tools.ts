@@ -68,6 +68,9 @@ const DESCRIBE =
 
 const DESCRIBED_ROOM = "The id of the room you hold a seat in to describe."
 
+const OPENED_ICON =
+	"The name of a Keyline icon drawn beside the title of the room, chosen with the title for the subject it names, such as Rocket, spelled as listed in packages/shared/conversation-icons.json. A name off that list is refused with the accepted names."
+
 const ICON =
 	"The name of a Keyline icon drawn beside the title of the room, such as Rocket, spelled as listed in packages/shared/conversation-icons.json, left out to keep the one it wears. A name off that list is refused with the accepted names."
 
@@ -85,6 +88,7 @@ const NAMED: ToolInput = {
 
 const OPENED: ToolInput = {
 	title: z.string().describe(TITLE),
+	icon: z.string().describe(OPENED_ICON),
 	with: z.array(z.string()).describe(WITH),
 	message: z.string().describe(MESSAGE),
 }

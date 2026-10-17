@@ -587,6 +587,10 @@
 					"type": "string",
 					"description": "The title of the room, read in the space's list of rooms."
 				},
+				"icon": {
+					"type": "string",
+					"description": "The name of a Keyline icon drawn beside the title of the room, chosen with the title for the subject it names, such as Rocket, spelled as listed in packages/shared/conversation-icons.json. A name off that list is refused with the accepted names."
+				},
 				"with": {
 					"type": "array",
 					"items": {
@@ -601,6 +605,7 @@
 			},
 			"required": [
 				"title",
+				"icon",
 				"with",
 				"message"
 			],

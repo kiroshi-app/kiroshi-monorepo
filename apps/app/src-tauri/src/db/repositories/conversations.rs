@@ -138,6 +138,7 @@ pub struct ConversationDraft {
 	pub space_id: String,
 	pub section_id: Option<String>,
 	pub title: String,
+	pub icon: Option<String>,
 	pub bot_ids: Vec<String>,
 }
 
@@ -704,15 +705,17 @@ fn created_conversation(
 	connection: &mut Connection,
 	draft: &ConversationDraft,
 ) -> Result<Conversation, ConversationError> {
+	refuse_blank_icon(draft.icon.as_deref())?;
+	refuse_unlisted_icon(draft.icon.as_deref(), None)?;
 	let transaction = write_transaction(connection)?;
 	let id = Uuid::new_v4().to_string();
 	let at = now();
 	let pin = pin_within(&transaction, &draft.space_id, draft.section_id.as_deref())?;
 	transaction.execute(
 		"INSERT INTO conversations
-			(id, kind, space_id, section_id, title, created_at, updated_at, pin_position)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)",
-		params![id, TOPIC_KIND, draft.space_id, draft.section_id, draft.title, at, pin],
+			(id, kind, space_id, section_id, title, icon, created_at, updated_at, pin_position)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8)",
+		params![id, TOPIC_KIND, draft.space_id, draft.section_id, draft.title, draft.icon, at, pin],
 	)?;
 	for (rank, bot_id) in draft.bot_ids.iter().enumerate() {
 		let role = match rank {
@@ -1278,6 +1281,7 @@ mod tests {
 			space_id: space_id.to_owned(),
 			section_id: None,
 			title: "Launch".to_owned(),
+			icon: None,
 			bot_ids: bots.iter().map(|bot| bot.id.clone()).collect(),
 		}
 	}
