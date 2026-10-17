@@ -34,7 +34,10 @@ import {
 } from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 import { isFirstReadPending } from "../query/last-read"
-import { joinedSpaceMembersQueryOf } from "../spaces/joined-space-members"
+import {
+	joinedSpaceMembersQueryOf,
+	membersReadFailure,
+} from "../spaces/joined-space-members"
 import { spaceQueryKeys } from "../spaces/space-query-keys"
 
 export type MembersProps = Pick<
@@ -62,11 +65,6 @@ type MembersOptions = {
 const NO_MEMBERS: Member[] = []
 
 const NOT_REFUSED: MemberActionRefusal = {}
-
-const readFailure = (): NoticeMessage => ({
-	title: i18n.t("settings:rail.members"),
-	description: i18n.t("settings:space.transfer.reason.generic"),
-})
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
@@ -105,7 +103,7 @@ export const useMembers = (
 	const hostedRead = useQuery({
 		queryKey: hostQueryKeys.membersOf(hostedId),
 		queryFn: hostedId ? () => readMembers(transport, hostedId) : skipToken,
-		meta: { failureNotice: readFailure, raisedIn: "use-members" },
+		meta: { failureNotice: membersReadFailure, raisedIn: "use-members" },
 	})
 	const joinedRead = useQuery({
 		...joinedSpaceMembersQueryOf(watchedId && joinedId),

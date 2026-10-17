@@ -4,6 +4,7 @@ import {
 	skipToken,
 } from "@tanstack/react-query"
 
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { spaceQueryKeys } from "./space-query-keys"
@@ -27,7 +28,7 @@ const membersOf = (result: MembersResult): JoinedSpaceMember[] => {
 	return result.data
 }
 
-const readFailure = () => ({
+export const membersReadFailure = (): NoticeMessage => ({
 	title: i18n.t("settings:rail.members"),
 	description: i18n.t("settings:space.transfer.reason.generic"),
 })
@@ -38,7 +39,10 @@ export const joinedSpaceMembersQueryOf = (joinedId: string | undefined) =>
 		queryFn: joinedId
 			? async () => membersOf(await commands.joinedSpaceMembers(joinedId))
 			: skipToken,
-		meta: { failureNotice: readFailure, raisedIn: "joined-space-members" },
+		meta: {
+			failureNotice: membersReadFailure,
+			raisedIn: "joined-space-members",
+		},
 	})
 
 export const heldJoinedMembersOf = (
