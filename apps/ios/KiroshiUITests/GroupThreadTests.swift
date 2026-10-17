@@ -69,7 +69,7 @@ final class GroupThreadTests: XCTestCase {
                 .waitForExistence(timeout: 10))
         XCTAssertTrue(element("Ada Lovelace, Hold the tag until it’s in, please.", in: app).exists)
         XCTAssertTrue(
-            element("No name, The Mac stays on all day, go ahead.", in: app).exists)
+            element("No name, My computer stays on all day, go ahead.", in: app).exists)
         XCTAssertTrue(element("Can you two get 0.42 out today?", in: app).exists)
         XCTAssertTrue(element("Atlas, I’ll add the settings fix, then tag 0.42.", in: app).exists)
         try auditTheGroup(app, onScreenAtTheLargestSize: onScreen)
@@ -79,7 +79,7 @@ final class GroupThreadTests: XCTestCase {
             NSPredicate(format: "label BEGINSWITH %@", "Release crew")
         ).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertTrue(row.label.contains("The Mac stays on all day, go ahead."))
+        XCTAssertTrue(row.label.contains("My computer stays on all day, go ahead."))
         XCTAssertFalse(row.label.contains("You:"))
         add(XCTAttachment(screenshot: app.screenshot()))
     }

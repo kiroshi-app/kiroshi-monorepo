@@ -368,7 +368,7 @@
                 id: "s-thanks", isYours: true, content: "Thanks, Atlas.", daysAgo: 0, hour: 9,
                 minute: 8, accountId: CloudFixture.userId, authorName: "Sam"),
             .init(
-                id: "s-host", isYours: true, content: "The Mac stays on all day, go ahead.",
+                id: "s-host", isYours: true, content: "My computer stays on all day, go ahead.",
                 daysAgo: 0, hour: 9, minute: 9),
         ]
 
