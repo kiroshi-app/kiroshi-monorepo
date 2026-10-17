@@ -53,4 +53,9 @@ struct MentionsTests {
             Mentions.names(in: "<@juniper-6> ping <@otto-5>", among: members)
                 == "@Juniper ping @Unknown companion")
     }
+
+    @Test func aTokenIsShownAsANameOnlyWhenTheAuthorsAreKnown() {
+        #expect(Mentions.shown(in: "<@atlas-3> look", among: members) == "@Atlas look")
+        #expect(Mentions.shown(in: "<@atlas-3> look", among: []) == "<@atlas-3> look")
+    }
 }
