@@ -5,14 +5,13 @@ import {
 	type AppSidebarBot,
 	type AppSidebarConversation,
 	type AppSidebarRowMission,
-	heldBotsOf,
 	isBusy,
 	poseOf,
 	ROW_AVATAR_SIZE,
 } from "@workspace/ui/components/app-sidebar-model"
-import { AvatarGroup } from "@workspace/ui/components/avatar-group"
 import { BotMissionStrip } from "@workspace/ui/components/bot-badge"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import { ConversationSubjectIcon } from "@workspace/ui/components/conversation-subject-icon"
 import { DitheredFieldAvatar } from "@workspace/ui/components/dithered-field-avatar"
 import { dropArea } from "@workspace/ui/hooks/use-roster-lift"
 import { cn } from "@workspace/ui/lib/utils"
@@ -162,6 +161,25 @@ const RosterDropArea = ({
 	</div>
 )
 
+interface LiftedConversationMarkProps {
+	conversation: AppSidebarConversation
+}
+
+const LiftedConversationMark = ({
+	conversation,
+}: LiftedConversationMarkProps) =>
+	conversation.participants.length > 1 ? (
+		<ConversationSubjectIcon
+			color={conversation.color}
+			icon={conversation.icon}
+			side={ROW_AVATAR_SIZE}
+		/>
+	) : (
+		conversation.participants.map((bot) => (
+			<BotRowAvatar bot={bot} key={bot.id} />
+		))
+	)
+
 interface LiftedRowProps {
 	bot?: AppSidebarBot
 	conversation?: AppSidebarConversation
@@ -176,10 +194,7 @@ const LiftedRow = ({ bot, conversation, ref }: LiftedRowProps) => (
 		ref={ref}
 	>
 		{conversation ? (
-			<AvatarGroup
-				participants={heldBotsOf(conversation)}
-				size={ROW_AVATAR_SIZE}
-			/>
+			<LiftedConversationMark conversation={conversation} />
 		) : null}
 		{bot ? <BotRowAvatar bot={bot} /> : null}
 	</span>

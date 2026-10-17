@@ -1,4 +1,3 @@
-import type { ConversationParticipant } from "@workspace/ui/components/avatar-group"
 import type { MissionBot } from "@workspace/ui/components/mission"
 import { missionTicketPlatform } from "@workspace/ui/components/mission-marks"
 import type {
@@ -23,10 +22,6 @@ import type { SearchRead } from "./use-search-reads"
 
 import { rosterTimestamp } from "@/lib/bots/roster-timestamp"
 import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
-import {
-	presentParticipants,
-	toConversationBots,
-} from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
 import { badgeOfMissionState } from "@/lib/missions/missions-model"
@@ -75,11 +70,6 @@ export const createSearchLookups = ({
 const botFaceOf = (botId: string, lookups: SearchLookups): MissionBot =>
 	toMissionFace(lookups.faceOf(botId) ?? { id: botId, name: "" })
 
-const participantsOf = (
-	conversation: Conversation | undefined,
-): ConversationParticipant[] =>
-	conversation ? toConversationBots(presentParticipants(conversation), []) : []
-
 const soloPart = () => ({ key: "kind", text: i18n.t("search:solo") })
 
 const rowOfChat = (chat: CatalogueChat): SearchRow | null => {
@@ -106,10 +96,7 @@ const identityOfChat = (
 	if (chat.kind === "main" && chat.botId) {
 		return { kind: "chat-solo", bot: botFaceOf(chat.botId, lookups) }
 	}
-	return {
-		kind: "chat-group",
-		participants: participantsOf(lookups.conversationOf(chat.conversationId)),
-	}
+	return { kind: "chat-group" }
 }
 
 const identityOfMessage = (

@@ -2,8 +2,11 @@
 
 import { useTranslation } from "react-i18next"
 
-import { AvatarGroup } from "@workspace/ui/components/avatar-group"
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	ConversationSubjectIcon,
+	type ConversationSubjectIconProps,
+} from "@workspace/ui/components/conversation-subject-icon"
 import { HEADER_IDENTITY_CLASS } from "@workspace/ui/components/header-identity-button"
 import { Icons } from "@workspace/ui/components/icons"
 import type { RosterBot } from "@workspace/ui/components/roster"
@@ -12,7 +15,10 @@ import { cn } from "@workspace/ui/lib/utils"
 
 const AVATAR_SIZE = 24
 
-type HeaderConversationButtonProps = {
+type HeaderConversationButtonProps = Pick<
+	ConversationSubjectIconProps,
+	"icon" | "color"
+> & {
 	name: string
 	bots: RosterBot[]
 	isSettingsOpen?: boolean
@@ -23,6 +29,8 @@ type HeaderConversationButtonProps = {
 const HeaderConversationButton = ({
 	name,
 	bots,
+	icon,
+	color,
 	isSettingsOpen = false,
 	onOpenSettings,
 	className,
@@ -39,7 +47,7 @@ const HeaderConversationButton = ({
 			variant="ghost"
 		>
 			{bots.length > 1 ? (
-				<AvatarGroup participants={bots} size={AVATAR_SIZE} />
+				<ConversationSubjectIcon color={color} icon={icon} side={AVATAR_SIZE} />
 			) : (
 				<span className="flex shrink-0 items-center gap-1">
 					{bots.map((bot) => (

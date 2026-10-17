@@ -298,6 +298,50 @@ export const realPointer = async () =>
 export const botIdentityAvatars = (canvasElement: HTMLElement) =>
 	slotsIn(canvasElement, "bot-identity-avatar")
 
+const colourOfToken = (token: string, host: Element) => {
+	const probe = document.createElement("span")
+	probe.style.color = `var(${token})`
+	host.append(probe)
+	const colour = getComputedStyle(probe).color
+	probe.remove()
+	return colour
+}
+
+const sidesOf = (element: Element) => {
+	const box = element.getBoundingClientRect()
+	return [box.width, box.height]
+}
+
+export const expectSubjectIconInBothThemes = async (
+	root: Element,
+	token: string,
+	side: number,
+) => {
+	const icons = slotsIn(root, "conversation-subject-icon")
+	await expect(icons).toHaveLength(2)
+	await expect(slotsIn(root, "bot-identity-avatar")).toHaveLength(0)
+	const fills = []
+	for (const icon of icons) {
+		const fill = getComputedStyle(slotIn(icon, "outlined-hexagon-face")).fill
+		await expect(icon).toHaveAttribute("aria-hidden", "true")
+		await expect(sidesOf(icon)).toEqual([side, side])
+		await expect(fill).toBe(colourOfToken(token, icon))
+		fills.push(fill)
+	}
+	await expect(fills[0]).not.toBe(fills[1])
+}
+
+export const expectSoloAvatarInBothThemes = async (
+	root: Element,
+	side: number,
+) => {
+	const avatars = slotsIn(root, "bot-identity-avatar")
+	await expect(avatars).toHaveLength(2)
+	await expect(slotsIn(root, "conversation-subject-icon")).toHaveLength(0)
+	for (const avatar of avatars)
+		await expect(sidesOf(avatar)).toEqual([side, side])
+}
+
 export const companionGlyphOf = (avatar: Element) =>
 	slotIn(avatar, "companion-field")
 

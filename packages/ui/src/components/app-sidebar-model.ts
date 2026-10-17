@@ -5,7 +5,6 @@ import type {
 	AppRailDots,
 	AppRailPanel,
 } from "@workspace/ui/components/app-rail"
-import type { ConversationParticipant } from "@workspace/ui/components/avatar-group"
 import type {
 	BotBadge,
 	BotMissionState,
@@ -13,6 +12,7 @@ import type {
 } from "@workspace/ui/components/bot-badge"
 import type { ActivityIndicatorKind } from "@workspace/ui/components/bot-identity-avatar"
 import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
+import type { ConversationParticipant } from "@workspace/ui/components/conversation-bot-pile"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 import type { MissionsPanelProps } from "@workspace/ui/components/missions-panel"

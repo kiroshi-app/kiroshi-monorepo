@@ -2,6 +2,10 @@ import { type ComponentProps, useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import { BotIdentityAvatar } from "@workspace/ui/components/bot-identity-avatar"
+import {
+	ConversationSubjectIcon,
+	type ConversationSubjectIconProps,
+} from "@workspace/ui/components/conversation-subject-icon"
 import { EmptyStateShell } from "@workspace/ui/components/empty-state-shell"
 import type { RosterBot } from "@workspace/ui/components/roster"
 import { Button } from "@workspace/ui/components/ui/button"
@@ -17,10 +21,11 @@ type SuggestionProps =
 type ConversationEmptyStateProps = Omit<
 	ComponentProps<"div">,
 	"children" | "title"
-> & {
-	title: string
-	bots: RosterBot[]
-} & SuggestionProps
+> &
+	Pick<ConversationSubjectIconProps, "icon" | "color"> & {
+		title: string
+		bots: RosterBot[]
+	} & SuggestionProps
 
 const MARK_SIZE = 56
 
@@ -76,6 +81,8 @@ const SuggestedBots = ({ bots, onPress }: SuggestedBotsProps) => {
 const ConversationEmptyState = ({
 	title,
 	bots,
+	icon,
+	color,
 	suggestedBots,
 	onSuggestedBotPress,
 	className,
@@ -118,18 +125,17 @@ const ConversationEmptyState = ({
 			})}
 			hint={t("conversationEmptyState.hint")}
 			mark={
-				<div className="flex flex-wrap items-center justify-center gap-2">
-					{bots.map((bot) => (
-						<BotIdentityAvatar
-							blot={bot.blot}
-							image={bot.image}
-							key={bot.id}
-							name={bot.name}
-							seed={bot.id}
-							size={MARK_SIZE}
-						/>
-					))}
-				</div>
+				bots.length > 1 ? (
+					<ConversationSubjectIcon color={color} icon={icon} side={MARK_SIZE} />
+				) : (
+					<BotIdentityAvatar
+						blot={bots[0].blot}
+						image={bots[0].image}
+						name={bots[0].name}
+						seed={bots[0].id}
+						size={MARK_SIZE}
+					/>
+				)
 			}
 			title={title}
 			{...props}
