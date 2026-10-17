@@ -424,6 +424,10 @@ extension ThreadStore: ThreadModel {
                 localized:
                     "Couldn’t send, the computer hosting this Space is offline. Tap Send again once it’s back."
             )
+        case .storageUnreadable:
+            String(
+                localized:
+                    "Couldn’t send. Kiroshi couldn’t read this iPhone’s secure storage. Try again.")
         case .stillWorking:
             String(
                 localized:
