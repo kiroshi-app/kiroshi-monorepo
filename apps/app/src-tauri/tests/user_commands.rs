@@ -193,6 +193,23 @@ fn a_written_record_is_answered_and_read_back_whole() {
 }
 
 #[test]
+fn a_rename_on_a_host_without_an_account_session_is_answered() {
+	let home = Home::new();
+	let app = home.app();
+	let window = window(&app);
+	call(&window, "user_set_preferences", json!({ "preferences": a_record(Value::Null) }))
+		.expect("the record is stored");
+	let mut renamed = a_record(Value::Null);
+	renamed["displayName"] = json!("Grace");
+
+	let answered = call(&window, "user_set_preferences", json!({ "preferences": renamed.clone() }))
+		.expect("the renamed record is stored");
+
+	assert_eq!(answered, renamed);
+	assert_eq!(read(&window), renamed);
+}
+
+#[test]
 fn a_scheme_outside_the_vocabulary_never_reaches_the_record() {
 	let home = Home::new();
 	let app = home.app();

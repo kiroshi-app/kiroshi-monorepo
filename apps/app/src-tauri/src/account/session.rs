@@ -300,7 +300,9 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 }
 
 pub fn stored_name_sent<R: Runtime>(app: &AppHandle<R>) {
-	let session = app.state::<AccountSession>();
+	let Some(session) = app.try_state::<AccountSession>() else {
+		return;
+	};
 	let mut naming = session.naming.lock().unwrap_or_else(PoisonError::into_inner);
 	let previous = naming.take();
 	*naming = Some(tauri::async_runtime::spawn(sent_after(app.clone(), previous)));
