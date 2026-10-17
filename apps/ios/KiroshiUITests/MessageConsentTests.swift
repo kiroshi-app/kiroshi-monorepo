@@ -25,8 +25,14 @@ final class MessageConsentTests: XCTestCase {
         app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text))
     }
 
-    func messages(_ text: String, in app: XCUIApplication) -> Int {
-        let frames = bubbles(text, in: app).allElementsBoundByIndex.map(\.frame)
+    func frames(of text: String, in element: any XCUIElementSnapshot) -> [CGRect] {
+        let isMatch = element.elementType == .staticText && element.label.contains(text)
+        return (isMatch ? [element.frame] : [])
+            + element.children.flatMap { frames(of: text, in: $0) }
+    }
+
+    func messages(_ text: String, in app: XCUIApplication) throws -> Int {
+        let frames = frames(of: text, in: try app.snapshot())
         return frames.filter { frame in
             !frames.contains { $0 != frame && $0.contains(frame) }
         }.count
@@ -75,7 +81,7 @@ final class MessageConsentTests: XCTestCase {
         try auditTheSheet(app)
     }
 
-    func testAgreeAndSendSendsOnceAndTheNextSendDoesNotAsk() {
+    func testAgreeAndSendSendsOnceAndTheNextSendDoesNotAsk() throws {
         let app = launch("agreement")
         openTheSheet(app)
 
@@ -84,7 +90,7 @@ final class MessageConsentTests: XCTestCase {
         XCTAssertTrue(sheetTitle(app).waitForNonExistence(timeout: 10))
         XCTAssertTrue(bubbles(Self.draft, in: app).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
-        XCTAssertEqual(messages(Self.draft, in: app), 1)
+        XCTAssertEqual(try messages(Self.draft, in: app), 1)
 
         let next = "One more pass on the title."
         composer(in: app).tap()
@@ -92,8 +98,9 @@ final class MessageConsentTests: XCTestCase {
         app.buttons["Send"].tap()
 
         XCTAssertTrue(bubbles(next, in: app).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
         XCTAssertFalse(sheetTitle(app).exists)
-        XCTAssertEqual(messages(Self.draft, in: app), 1)
+        XCTAssertEqual(try messages(Self.draft, in: app), 1)
     }
 
     func testNotNowKeepsTheDraftAndTheSessionAndSaysSo() throws {
