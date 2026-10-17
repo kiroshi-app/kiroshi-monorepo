@@ -53,6 +53,7 @@ final class ConversationsStore {
     }
 
     @ObservationIgnored private var instanceId: Space.ID?
+    @ObservationIgnored private var authorship = ThreadAuthorship.unknownAccount
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var opening: Companion.ID?
@@ -122,7 +123,10 @@ final class ConversationsStore {
         return summary
     }
 
-    func follow(_ connection: RelayConnection) async {
+    func follow(
+        _ connection: RelayConnection, as authorship: ThreadAuthorship = .unknownAccount
+    ) async {
+        self.authorship = authorship
         if instanceId != connection.instanceId {
             instanceId = connection.instanceId
             spaceId = nil
@@ -325,7 +329,8 @@ final class ConversationsStore {
     private func apply(_ event: ConversationEvent) {
         switch event {
         case .messageStored(let message):
-            guard update(message.conversationId, { $0.lastMessage = MessagePreview(message) })
+            let preview = MessagePreview(message, authorship: authorship)
+            guard update(message.conversationId, { $0.lastMessage = preview })
             else { return mergeFirstPage() }
         case .agent(let agent):
             guard let scope = agent.scope, case .messageCompleted(let message) = agent.change
@@ -376,15 +381,17 @@ final class ConversationsStore {
             let roster = try await listedCompanions
             let companions = roster.map(\.companion)
             let groups = page == nil ? try await relay.groups(in: spaceId) : []
-            let paged = Self.summaries(of: page, among: companions)
+            let paged = Self.summaries(of: page, among: companions, authorship: authorship)
             let pagedIds = Set(paged.map(\.id))
             let subjects =
                 groups.map(ConversationSubject.group)
                 + companions.filter { !pagedIds.contains($0.id) }.map(ConversationSubject.companion)
+            let authorship = authorship
             let loaded = try await withThrowingTaskGroup(of: ConversationSummary.self) { tasks in
                 for subject in subjects {
                     tasks.addTask {
-                        try await Self.summary(of: subject, in: spaceId, through: relay)
+                        try await Self.summary(
+                            of: subject, in: spaceId, through: relay, authorship: authorship)
                     }
                 }
                 var loaded: [String: ConversationSummary] = [:]
@@ -441,7 +448,7 @@ final class ConversationsStore {
             paging = nil
             read(page)
             let known = Set(rows.map(\.id))
-            let unknown = Self.summaries(of: page, among: companions)
+            let unknown = Self.summaries(of: page, among: companions, authorship: authorship)
             publish(rows + unknown.filter { !known.contains($0.id) })
         } catch {
             guard !Task.isCancelled, generation == self.generation else { return }
@@ -468,7 +475,7 @@ final class ConversationsStore {
             guard let page else { return }
             pinnedIds = pinnedIds(of: page, among: companions)
             let known = Set(rows.map(\.id))
-            let unknown = Self.summaries(of: page, among: companions)
+            let unknown = Self.summaries(of: page, among: companions, authorship: authorship)
             publish(rows + unknown.filter { !known.contains($0.id) })
         }
     }
@@ -498,14 +505,14 @@ final class ConversationsStore {
         nextPage = nextCursor == nil ? .complete : .available
     }
 
-    private static func summaries(of page: ConversationPage?, among companions: [Companion])
-        -> [ConversationSummary]
-    {
+    private static func summaries(
+        of page: ConversationPage?, among companions: [Companion], authorship: ThreadAuthorship
+    ) -> [ConversationSummary] {
         guard let page else { return [] }
         return (page.pinned + page.conversations).map { row in
             ConversationSummary(
                 subject: subject(of: row, among: companions), conversationId: row.group.id,
-                lastMessage: row.lastWord.map(MessagePreview.init),
+                lastMessage: row.lastWord.map { MessagePreview($0, authorship: authorship) },
                 activeAt: Date(milliseconds: row.lastActivityAt))
         }
     }
@@ -521,7 +528,8 @@ final class ConversationsStore {
     }
 
     private nonisolated static func summary(
-        of subject: ConversationSubject, in spaceId: String, through relay: ConversationRelay
+        of subject: ConversationSubject, in spaceId: String, through relay: ConversationRelay,
+        authorship: ThreadAuthorship
     ) async throws -> ConversationSummary {
         let conversationId: String
         switch subject {
@@ -542,7 +550,7 @@ final class ConversationsStore {
         }
         return ConversationSummary(
             subject: subject, conversationId: conversationId,
-            lastMessage: last.map(MessagePreview.init))
+            lastMessage: last.map { MessagePreview($0, authorship: authorship) })
     }
 
     private func publish(_ changed: [ConversationSummary]) {

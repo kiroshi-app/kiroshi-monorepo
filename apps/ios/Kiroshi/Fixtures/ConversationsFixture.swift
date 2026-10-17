@@ -345,6 +345,33 @@
                 minute: 7, author: atlas.id),
         ]
 
+        static let sharedThread: [FixtureHost.Message] = [
+            .init(
+                id: "s-ask", isYours: true, content: "Can you two get 0.42 out today?",
+                daysAgo: 0, hour: 9, minute: 2, accountId: CloudFixture.userId,
+                authorName: "Sam"),
+            .init(
+                id: "s-merged", isYours: false, content: "The changelog is merged.", daysAgo: 0,
+                hour: 9, minute: 4, author: juniper.id),
+            .init(
+                id: "s-ada-notes", isYours: true,
+                content: "I read the notes, the settings fix is missing.", daysAgo: 0, hour: 9,
+                minute: 5, accountId: "acc-ada", authorName: "Ada Lovelace"),
+            .init(
+                id: "s-ada-hold", isYours: true, content: "Hold the tag until it’s in, please.",
+                daysAgo: 0, hour: 9, minute: 5, accountId: "acc-ada", authorName: "Ada Lovelace"),
+            .init(
+                id: "s-split", isYours: false,
+                content: "I’ll add the settings fix, then tag 0.42.", daysAgo: 0, hour: 9,
+                minute: 7, author: atlas.id),
+            .init(
+                id: "s-thanks", isYours: true, content: "Thanks, Atlas.", daysAgo: 0, hour: 9,
+                minute: 8, accountId: CloudFixture.userId, authorName: "Sam"),
+            .init(
+                id: "s-host", isYours: true, content: "My computer stays on all day, go ahead.",
+                daysAgo: 0, hour: 9, minute: 9),
+        ]
+
         static let releaseNotesAsk = FixtureHost.Message(
             id: "m-ask", isYours: true, content: "Can you draft the release notes for 0.42?",
             daysAgo: 0, hour: 9, minute: 38)
@@ -484,6 +511,8 @@
                 script.refusesThread = true
             case .groupThread:
                 script.messages[releaseCrew.id] = groupThread
+            case .sharedThread:
+                script.messages[releaseCrew.id] = sharedThread
             case .groupMention:
                 script.messages[releaseCrew.id] = releasePlanning + groupThread
             case .groupWorking:
@@ -535,7 +564,8 @@
                 .swipedThread,
                 .threadFailed, .slowThread, .longReply, .longName, .twoAsks:
                 juniper.id
-            case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup:
+            case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup,
+                .sharedThread:
                 releaseCrew.id
             case .missionsButton, .conversationMissions:
                 release042.id
@@ -560,6 +590,8 @@
             let hour: Int
             let minute: Int
             var author: Companion.ID?
+            var accountId: String?
+            var authorName: String?
 
             var createdAt: Int {
                 let calendar = Calendar.current
@@ -573,7 +605,8 @@
                 FixtureHost.messageJSON(
                     id: id, conversationId: conversationId, seq: seq,
                     role: isYours ? "user" : "assistant", content: content,
-                    createdAt: createdAt, authorBotId: author)
+                    createdAt: createdAt, authorBotId: author, authorAccountId: accountId,
+                    authorName: authorName)
             }
 
             var lastWordJSON: String {
@@ -760,11 +793,14 @@
 
         static func messageJSON(
             id: String, conversationId: String, seq: Int, role: String, content: String,
-            createdAt: Int, authorBotId: String? = nil
+            createdAt: Int, authorBotId: String? = nil, authorAccountId: String? = nil,
+            authorName: String? = nil
         ) -> String {
             let author = authorBotId.map { #""\#($0)""# } ?? "null"
+            let account = authorAccountId.map { #""\#($0)""# } ?? "null"
+            let name = authorName.map { #""\#($0)""# } ?? "null"
             return
-                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":null,"authorName":null,"repliedToMessageId":null,"runtimeSessionId":null}"#
+                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name),"repliedToMessageId":null,"runtimeSessionId":null}"#
         }
     }
 
@@ -1143,7 +1179,7 @@
             let conversationId = sent["conversationId"] as? String ?? ""
             push(
                 .frame(
-                    #"{"event":{"event":"conversation://message-stored","payload":\#(FixtureHost.messageJSON(id: sent["id"] as? String ?? "", conversationId: conversationId, seq: 99, role: "user", content: sent["content"] as? String ?? "", createdAt: sent["createdAt"] as? Int ?? 0))}}"#
+                    #"{"event":{"event":"conversation://message-stored","payload":\#(FixtureHost.messageJSON(id: sent["id"] as? String ?? "", conversationId: conversationId, seq: 99, role: "user", content: sent["content"] as? String ?? "", createdAt: sent["createdAt"] as? Int ?? 0, authorAccountId: CloudFixture.userId, authorName: "Sam"))}}"#
                 ))
         }
 

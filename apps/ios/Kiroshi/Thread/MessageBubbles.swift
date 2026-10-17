@@ -8,9 +8,10 @@ struct MessageBubbles: View {
     static let timeWidth: CGFloat = 56
     static let timeGap: CGFloat = 8
 
-    let isYours: Bool
+    let writer: MessageAuthor
     let bubbles: [Bubble]
-    var author: Companion?
+    var companion: Companion?
+    var initials = ""
     var showsAvatar = false
     var name: String?
     let time: String
@@ -22,12 +23,7 @@ struct MessageBubbles: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             if !isYours {
-                if showsAvatar, let author {
-                    CompanionAvatar(author, size: .message)
-                } else {
-                    CompanionPlaceholder(size: .message)
-                        .hidden()
-                }
+                avatar
             }
             VStack(alignment: isYours ? .trailing : .leading, spacing: 4) {
                 if let name {
@@ -63,6 +59,22 @@ struct MessageBubbles: View {
                     }
                 }
             }
+        }
+    }
+
+    private var isYours: Bool {
+        writer == .you
+    }
+
+    @ViewBuilder private var avatar: some View {
+        switch writer {
+        case .person where showsAvatar:
+            PersonAvatar(initials: initials)
+        case .companion where showsAvatar && companion != nil:
+            CompanionAvatar(companion, size: .message)
+        case .you, .person, .companion:
+            CompanionPlaceholder(size: .message)
+                .hidden()
         }
     }
 }

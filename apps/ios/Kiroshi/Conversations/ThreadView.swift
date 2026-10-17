@@ -18,7 +18,8 @@ struct ThreadView: View {
             let draft = ""
         #endif
         _thread = State(
-            initialValue: ThreadStore(subject: subject, work: space.work, draft: draft))
+            initialValue: ThreadStore(
+                subject: subject, work: space.work, authorship: space.authorship, draft: draft))
     }
 
     var body: some View {
@@ -101,6 +102,15 @@ extension ThreadStore {
 
     #Preview("Group thread") {
         SignInRootView(model: .fixture(.groupThread))
+    }
+
+    #Preview("Shared thread · you, a member, the host and the companions") {
+        SignInRootView(model: .fixture(.sharedThread))
+    }
+
+    #Preview("Shared thread · dark") {
+        SignInRootView(model: .fixture(.sharedThread))
+            .preferredColorScheme(.dark)
     }
 
     #Preview("Long companion name") {

@@ -88,41 +88,42 @@ struct ConversationSummary: Identifiable, Equatable {
 
 struct MessagePreview: Equatable {
     let text: String
-    let isYours: Bool
+    let writer: MessageAuthor
     let sentAt: Date
-    let authorId: Companion.ID?
 
-    init(text: String, isYours: Bool, sentAt: Date, authorId: Companion.ID? = nil) {
+    init(text: String, writer: MessageAuthor, sentAt: Date) {
         self.text = text
-        self.isYours = isYours
+        self.writer = writer
         self.sentAt = sentAt
-        self.authorId = authorId
     }
 
-    init(_ message: TranscriptMessage) {
+    init(_ message: TranscriptMessage, authorship: ThreadAuthorship) {
         self.init(
-            text: message.content, isYours: message.role == .user,
-            sentAt: Date(milliseconds: message.createdAt), authorId: message.authorBotId)
+            text: message.content, writer: authorship.author(of: message),
+            sentAt: Date(milliseconds: message.createdAt))
     }
 
-    init(_ word: LastWord) {
+    init(_ word: LastWord, authorship: ThreadAuthorship) {
         self.init(
-            text: word.text ?? "", isYours: word.authorBotId == nil,
-            sentAt: Date(milliseconds: word.at), authorId: word.authorBotId)
+            text: word.text ?? "",
+            writer: authorship.author(
+                role: word.authorBotId == nil ? .user : .assistant, botId: word.authorBotId,
+                accountId: nil, name: nil),
+            sentAt: Date(milliseconds: word.at))
     }
 
     init(_ message: AgentEvent.Message, by authorId: Companion.ID?) {
         self.init(
-            text: message.text, isYours: message.role == .user,
-            sentAt: Date(milliseconds: message.timestamp), authorId: authorId)
+            text: message.text, writer: .companion(authorId),
+            sentAt: Date(milliseconds: message.timestamp))
     }
 
     var line: String {
-        isYours ? "You: \(text)" : text
+        writer == .you ? "You: \(text)" : text
     }
 
     func line(among members: [Companion]) -> String {
-        guard !isYours, let speaker = members.first(where: { $0.id == authorId }) else {
+        guard let speaker = members.first(where: { $0.id == writer.companionId }) else {
             return line
         }
         return "\(speaker.name): \(text)"

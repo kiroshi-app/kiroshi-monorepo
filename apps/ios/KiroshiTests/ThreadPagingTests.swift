@@ -123,7 +123,7 @@ struct ThreadPagingTests {
 
 struct ThreadAnchorTests {
     func messages(_ ids: String...) -> [ThreadMessage] {
-        ids.map { ThreadMessage(id: $0, isYours: false, text: $0, sentAt: .now) }
+        ids.map { ThreadMessage(id: $0, writer: .companion(nil), text: $0, sentAt: .now) }
     }
 
     @Test func anOlderPageKeepsTheMessageBeingRead() {

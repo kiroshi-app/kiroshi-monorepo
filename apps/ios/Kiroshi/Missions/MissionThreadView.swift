@@ -10,7 +10,8 @@ struct MissionThreadView: View {
         self.space = space
         _thread = State(
             initialValue: MissionThreadStore(
-                mission: mission, missions: missions, work: space.work))
+                mission: mission, missions: missions, work: space.work,
+                authorship: space.authorship))
     }
 
     var body: some View {

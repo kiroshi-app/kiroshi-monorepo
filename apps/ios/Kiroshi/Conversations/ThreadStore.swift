@@ -28,6 +28,7 @@ final class ThreadStore {
     var attachments: [PickedAttachment] = []
 
     @ObservationIgnored private let work: CompanionWork
+    @ObservationIgnored private let authorship: ThreadAuthorship
     @ObservationIgnored private var spaceId: String?
     @ObservationIgnored private var relay: ConversationRelay?
     @ObservationIgnored private var loading: Task<Void, Never>?
@@ -43,6 +44,7 @@ final class ThreadStore {
     init(
         subject: ConversationSubject,
         work: CompanionWork,
+        authorship: ThreadAuthorship = .unknownAccount,
         draft: String = "",
         now: @escaping () -> Date = Date.init,
         makeId: @escaping () -> String = { UUID().uuidString.lowercased() },
@@ -50,6 +52,7 @@ final class ThreadStore {
     ) {
         self.subject = subject
         self.work = work
+        self.authorship = authorship
         self.draft = draft
         self.now = now
         self.makeId = makeId
@@ -231,7 +234,7 @@ final class ThreadStore {
             try await relay.sendTurn(message, summoning: summoned)
             insert(
                 threadMessage(
-                    id: message.id, isYours: true, text: message.content,
+                    id: message.id, writer: .you, text: message.content,
                     sentAt: message.createdAt))
         } catch is CancellationError {
             return
@@ -258,12 +261,12 @@ final class ThreadStore {
         }
     }
 
-    private func threadMessage(
-        id: String, isYours: Bool, text: String, sentAt: Int, authorId: Companion.ID? = nil
-    ) -> ThreadMessage {
+    private func threadMessage(id: String, writer: MessageAuthor, text: String, sentAt: Int)
+        -> ThreadMessage
+    {
         ThreadMessage(
-            id: id, isYours: isYours, text: text, sentAt: Date(milliseconds: sentAt),
-            authorId: authorId, authors: subject.namedAuthors)
+            id: id, writer: writer, text: text, sentAt: Date(milliseconds: sentAt),
+            authors: subject.namedAuthors)
     }
 
     private func load(in spaceId: String, through relay: ConversationRelay) async {
@@ -318,17 +321,14 @@ final class ThreadStore {
 
     private func threadMessage(_ message: TranscriptMessage) -> ThreadMessage {
         threadMessage(
-            id: message.id, isYours: message.role == .user, text: message.content,
-            sentAt: message.createdAt, authorId: message.authorBotId)
+            id: message.id, writer: authorship.author(of: message), text: message.content,
+            sentAt: message.createdAt)
     }
 
     private func apply(_ event: ConversationEvent) {
         switch event {
         case .messageStored(let message) where message.conversationId == conversationId:
-            insert(
-                threadMessage(
-                    id: message.id, isYours: message.role == .user, text: message.content,
-                    sentAt: message.createdAt, authorId: message.authorBotId))
+            insert(threadMessage(message))
         case .agent(let agent) where agent.scope?.conversationId == conversationId:
             apply(agent.change, by: agent.scope?.botId)
         case .groupUpdated(let group) where subject.isGroup(group.id):
@@ -346,16 +346,16 @@ final class ThreadStore {
         case .messageStarted(let message):
             insert(
                 threadMessage(
-                    id: message.id, isYours: message.role == .user, text: message.text,
-                    sentAt: message.timestamp, authorId: authorId))
+                    id: message.id, writer: .companion(authorId), text: message.text,
+                    sentAt: message.timestamp))
         case .messageDelta(let id, let text):
             updateMessage(id) { $0.append(text) }
         case .messageCompleted(let message):
             if !updateMessage(message.id, { $0.replaceText(message.text) }) {
                 insert(
                     threadMessage(
-                        id: message.id, isYours: message.role == .user, text: message.text,
-                        sentAt: message.timestamp, authorId: authorId))
+                        id: message.id, writer: .companion(authorId), text: message.text,
+                        sentAt: message.timestamp))
             }
         case .turn, .activity, .permissionRequested, .questionRequested, .turnEnded, .failed,
             .other:

@@ -26,6 +26,7 @@ final class MissionThreadStore {
     private(set) var lastSentId: ThreadMessage.ID?
 
     @ObservationIgnored private let work: CompanionWork
+    @ObservationIgnored private let authorship: ThreadAuthorship
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let newId: () -> String
     @ObservationIgnored private let calendar: Calendar
@@ -38,6 +39,7 @@ final class MissionThreadStore {
         mission: Mission,
         missions: MissionsStore,
         work: CompanionWork,
+        authorship: ThreadAuthorship = .unknownAccount,
         now: @escaping () -> Date = Date.init,
         newId: @escaping () -> String = { UUID().uuidString.lowercased() },
         calendar: Calendar = .current
@@ -45,6 +47,7 @@ final class MissionThreadStore {
         self.mission = mission
         self.missions = missions
         self.work = work
+        self.authorship = authorship
         self.now = now
         self.newId = newId
         self.calendar = calendar
@@ -114,7 +117,7 @@ final class MissionThreadStore {
         transcript = MissionTranscript(
             of: messages,
             openedAt: Date(timeIntervalSince1970: TimeInterval(mission.openedAt) / 1000),
-            time: ConversationTime(now: now(), calendar: calendar))
+            time: ConversationTime(now: now(), calendar: calendar), authorship: authorship)
     }
 
     private func deliver(_ id: String, through relay: MissionsRelay) async {
@@ -139,7 +142,8 @@ final class MissionThreadStore {
             messages = MissionTranscript.upserting(
                 MissionThreadMessage(
                     id: message.id, conversationId: message.conversationId, seq: .max,
-                    role: .user, content: content, createdAt: message.createdAt, authorBotId: nil),
+                    role: .user, content: content, createdAt: message.createdAt, authorBotId: nil,
+                    authorAccountId: authorship.accountId),
                 into: messages)
             if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text {
                 draft = ""

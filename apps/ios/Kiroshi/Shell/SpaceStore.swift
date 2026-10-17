@@ -14,6 +14,7 @@ final class SpaceStore {
     private(set) var connection: RelayConnection?
     private(set) var pictures: CompanionPictures?
     let email: String
+    let accountId: String?
     let work = CompanionWork()
 
     @ObservationIgnored private let cloud: KiroshiCloud
@@ -34,6 +35,7 @@ final class SpaceStore {
     ) {
         self.spaces = spaces
         email = session.email
+        accountId = session.userId
         bearer = session.bearer
         self.cloud = cloud
         self.lastSpace = lastSpace
@@ -45,6 +47,10 @@ final class SpaceStore {
 
     var currentSpace: Space? {
         spaces.first { $0.id == currentSpaceId }
+    }
+
+    var authorship: ThreadAuthorship {
+        ThreadAuthorship(accountId: accountId, isHostedByYou: currentSpace?.role != .member)
     }
 
     var accountInitial: String {
