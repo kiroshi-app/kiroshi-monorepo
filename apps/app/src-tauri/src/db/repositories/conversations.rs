@@ -9,6 +9,7 @@ use super::bot_spaces;
 use super::sections;
 use crate::agent::contract::AgentCommand;
 use crate::bundles::BotPermissions;
+use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 
 mod avatar;
@@ -57,6 +58,15 @@ pub enum ConversationError {
 impl From<DatabaseError> for ConversationError {
 	fn from(error: DatabaseError) -> Self {
 		Self::Database(error)
+	}
+}
+
+impl Located for ConversationError {
+	fn at(self, operation: &'static str, table: &'static str) -> Self {
+		match self {
+			Self::Database(error) => Self::Database(error.at(operation, table)),
+			refused => refused,
+		}
 	}
 }
 
@@ -172,11 +182,13 @@ impl ConversationsRepository {
 	}
 
 	pub async fn ensure_default_bot(&self) -> Result<Bot, ConversationError> {
-		self.call_mut(|connection| Ok(ensured_default_bot(connection))).await?
+		self.call_mut(|connection| Ok(ensured_default_bot(connection)))
+			.await?
+			.at("ensure_default_bot", "bots")
 	}
 
 	pub async fn default_bot(&self) -> Result<Option<Bot>, ConversationError> {
-		self.call(|connection| Ok(stored_default_bot(connection))).await?
+		self.call(|connection| Ok(stored_default_bot(connection))).await?.at("default_bot", "bots")
 	}
 
 	pub async fn ensure_chat(
@@ -186,10 +198,11 @@ impl ConversationsRepository {
 	) -> Result<Chat, ConversationError> {
 		self.call_mut(move |connection| Ok(ensured_chat(connection, &bot_id, space_id.as_deref())))
 			.await?
+			.at("ensure_chat", "conversations")
 	}
 
 	pub async fn bot(&self, id: String) -> Result<Option<Bot>, ConversationError> {
-		Ok(self.call(move |connection| Ok(bot_at(connection, &id)?)).await?)
+		Ok(self.call(move |connection| Ok(bot_at(connection, &id)?)).await.at("bot", "bots")?)
 	}
 
 	pub async fn bot_in(
@@ -197,11 +210,16 @@ impl ConversationsRepository {
 		id: String,
 		space_id: String,
 	) -> Result<Option<Bot>, ConversationError> {
-		Ok(self.call(move |connection| Ok(bot_in(connection, &id, &space_id)?)).await?)
+		Ok(self
+			.call(move |connection| Ok(bot_in(connection, &id, &space_id)?))
+			.await
+			.at("bot_in", "bots")?)
 	}
 
 	pub async fn bots(&self, space_id: Option<String>) -> Result<Vec<Bot>, DatabaseError> {
-		self.call(move |connection| Ok(bots_of(connection, space_id.as_deref())?)).await
+		self.call(move |connection| Ok(bots_of(connection, space_id.as_deref())?))
+			.await
+			.at("bots", "bots")
 	}
 
 	pub async fn bots_by_presence(
@@ -217,10 +235,11 @@ impl ConversationsRepository {
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
+		.at("bots_by_presence", "bots")
 	}
 
 	pub async fn holds_a_bot(&self) -> Result<bool, DatabaseError> {
-		self.call(|connection| Ok(counted_bots(connection)? > 0)).await
+		self.call(|connection| Ok(counted_bots(connection)? > 0)).await.at("holds_a_bot", "bots")
 	}
 
 	pub async fn create_bot(
@@ -233,6 +252,7 @@ impl ConversationsRepository {
 			Ok(created_bot(connection, &identity, space_id.as_deref(), section_id.as_deref()))
 		})
 		.await?
+		.at("create_bot", "bots")
 	}
 
 	pub async fn update_bot(
@@ -240,11 +260,15 @@ impl ConversationsRepository {
 		id: String,
 		identity: BotIdentity,
 	) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(updated_bot(connection, &id, &identity))).await?
+		self.call_mut(move |connection| Ok(updated_bot(connection, &id, &identity)))
+			.await?
+			.at("update_bot", "bots")
 	}
 
 	pub async fn delete_bot(&self, id: String) -> Result<(), ConversationError> {
-		self.call_mut(move |connection| Ok(deleted_bot(connection, &id))).await?
+		self.call_mut(move |connection| Ok(deleted_bot(connection, &id)))
+			.await?
+			.at("delete_bot", "bots")
 	}
 
 	pub async fn set_avatar_image_path(
@@ -254,14 +278,19 @@ impl ConversationsRepository {
 	) -> Result<Bot, ConversationError> {
 		self.call_mut(move |connection| Ok(set_avatar_image_path(connection, &id, path.as_deref())))
 			.await?
+			.at("set_avatar_image_path", "bots")
 	}
 
 	pub async fn set_memory(&self, id: String, memory: String) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(set_memory(connection, &id, &memory))).await?
+		self.call_mut(move |connection| Ok(set_memory(connection, &id, &memory)))
+			.await?
+			.at("set_memory", "bots")
 	}
 
 	pub async fn pin_bot(&self, id: String) -> Result<Bot, ConversationError> {
-		self.call_mut(move |connection| Ok(pinned_bot(connection, &id))).await?
+		self.call_mut(move |connection| Ok(pinned_bot(connection, &id)))
+			.await?
+			.at("pin_bot", "bots")
 	}
 
 	pub async fn adopt_instructions(
@@ -276,7 +305,8 @@ impl ConversationsRepository {
 			)?;
 			Ok(refuse_if_untouched(written, &id))
 		})
-		.await?
+		.await
+		.at("adopt_instructions", "bots")?
 	}
 
 	pub async fn set_permissions(
@@ -285,7 +315,9 @@ impl ConversationsRepository {
 		permissions: BotPermissions,
 	) -> Result<Bot, ConversationError> {
 		let ruled = serde_json::to_string(&permissions).map_err(unserializable)?;
-		self.call_mut(move |connection| Ok(set_permissions(connection, &id, &ruled))).await?
+		self.call_mut(move |connection| Ok(set_permissions(connection, &id, &ruled)))
+			.await?
+			.at("set_permissions", "bots")
 	}
 
 	pub async fn adopt_permissions(
@@ -302,6 +334,7 @@ impl ConversationsRepository {
 			Ok(())
 		})
 		.await
+		.at("adopt_permissions", "bots")
 		.map_err(Into::into)
 	}
 
@@ -311,7 +344,8 @@ impl ConversationsRepository {
 				.execute("UPDATE bots SET memory = ?2 WHERE id = ?1", params![&id, memory])?;
 			Ok(refuse_if_untouched(written, &id))
 		})
-		.await?
+		.await
+		.at("adopt_memory", "bots")?
 	}
 
 	pub async fn record_bot_commands(
@@ -325,7 +359,8 @@ impl ConversationsRepository {
 				.execute("UPDATE bots SET commands = ?2 WHERE id = ?1", params![&id, listed])?;
 			Ok(refuse_if_untouched(written, &id))
 		})
-		.await?
+		.await
+		.at("record_bot_commands", "bots")?
 	}
 
 	pub async fn bot_commands(&self, id: String) -> Result<Vec<AgentCommand>, DatabaseError> {
@@ -336,6 +371,7 @@ impl ConversationsRepository {
 			Ok(stored.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default())
 		})
 		.await
+		.at("bot_commands", "bots")
 	}
 
 	pub async fn avatar_image_paths(&self) -> Result<Vec<String>, DatabaseError> {
@@ -347,6 +383,7 @@ impl ConversationsRepository {
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
+		.at("avatar_image_paths", "bots")
 	}
 
 	pub async fn conversation_ids(&self) -> Result<Vec<String>, DatabaseError> {
@@ -356,6 +393,7 @@ impl ConversationsRepository {
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
+		.at("conversation_ids", "conversations")
 	}
 
 	pub async fn participants(
@@ -373,20 +411,25 @@ impl ConversationsRepository {
 			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 		})
 		.await
+		.at("participants", "conversation_participants")
 	}
 
 	pub async fn create_conversation(
 		&self,
 		draft: ConversationDraft,
 	) -> Result<Conversation, ConversationError> {
-		self.call_mut(move |connection| Ok(created_conversation(connection, &draft))).await?
+		self.call_mut(move |connection| Ok(created_conversation(connection, &draft)))
+			.await?
+			.at("create_conversation", "conversations")
 	}
 
 	pub async fn conversations(
 		&self,
 		space_id: String,
 	) -> Result<Vec<Conversation>, ConversationError> {
-		self.call(move |connection| Ok(conversations_of_space(connection, &space_id))).await?
+		self.call(move |connection| Ok(conversations_of_space(connection, &space_id)))
+			.await?
+			.at("conversations", "conversations")
 	}
 
 	pub async fn update_conversation(
@@ -394,7 +437,9 @@ impl ConversationsRepository {
 		id: String,
 		edit: ConversationEdit,
 	) -> Result<Conversation, ConversationError> {
-		self.call_mut(move |connection| Ok(updated_conversation(connection, &id, &edit))).await?
+		self.call_mut(move |connection| Ok(updated_conversation(connection, &id, &edit)))
+			.await?
+			.at("update_conversation", "conversations")
 	}
 
 	pub async fn describe_conversation(
@@ -404,10 +449,13 @@ impl ConversationsRepository {
 	) -> Result<Conversation, ConversationError> {
 		self.call_mut(move |connection| Ok(described_conversation(connection, &id, &description)))
 			.await?
+			.at("describe_conversation", "conversations")
 	}
 
 	pub async fn delete_conversation(&self, id: String) -> Result<(), ConversationError> {
-		self.call_mut(move |connection| Ok(deleted_conversation(connection, &id))).await?
+		self.call_mut(move |connection| Ok(deleted_conversation(connection, &id)))
+			.await?
+			.at("delete_conversation", "conversations")
 	}
 
 	pub async fn add_participant(
@@ -425,6 +473,7 @@ impl ConversationsRepository {
 			))
 		})
 		.await?
+		.at("add_participant", "conversation_participants")
 	}
 
 	pub async fn remove_participant(
@@ -436,10 +485,13 @@ impl ConversationsRepository {
 			Ok(removed_participant(connection, &conversation_id, &bot_id))
 		})
 		.await?
+		.at("remove_participant", "conversation_participants")
 	}
 
 	pub async fn seats(&self, conversation_id: String) -> Result<Vec<Seat>, ConversationError> {
-		self.call(move |connection| Ok(seats_of(connection, &conversation_id))).await?
+		self.call(move |connection| Ok(seats_of(connection, &conversation_id)))
+			.await?
+			.at("seats", "conversation_participants")
 	}
 
 	pub async fn instructions(&self, conversation_id: String) -> Result<String, DatabaseError> {
@@ -451,10 +503,13 @@ impl ConversationsRepository {
 			Ok(stored.unwrap_or_default())
 		})
 		.await
+		.at("instructions", "conversations")
 	}
 
 	pub async fn space(&self, conversation_id: String) -> Result<Option<String>, DatabaseError> {
-		self.call(move |connection| space_of_conversation(connection, &conversation_id)).await
+		self.call(move |connection| space_of_conversation(connection, &conversation_id))
+			.await
+			.at("space", "conversations")
 	}
 
 	pub async fn kind(&self, conversation_id: String) -> Result<Option<String>, DatabaseError> {
@@ -465,6 +520,7 @@ impl ConversationsRepository {
 				.optional()?)
 		})
 		.await
+		.at("kind", "conversations")
 	}
 
 	pub async fn title(&self, conversation_id: String) -> Result<Option<String>, DatabaseError> {
@@ -475,14 +531,19 @@ impl ConversationsRepository {
 				.optional()?)
 		})
 		.await
+		.at("title", "conversations")
 	}
 
 	pub async fn oldest_bot_space(&self, bot_id: String) -> Result<Option<String>, DatabaseError> {
-		self.call(move |connection| Ok(oldest_space_of(connection, &bot_id)?)).await
+		self.call(move |connection| Ok(oldest_space_of(connection, &bot_id)?))
+			.await
+			.at("oldest_bot_space", "bot_spaces")
 	}
 
 	pub async fn bot_space_ids(&self, bot_id: String) -> Result<Vec<String>, DatabaseError> {
-		self.call(move |connection| Ok(bot_spaces::spaces_of(connection, &bot_id)?)).await
+		self.call(move |connection| Ok(bot_spaces::spaces_of(connection, &bot_id)?))
+			.await
+			.at("bot_space_ids", "bot_spaces")
 	}
 
 	pub async fn set_lead(
@@ -490,7 +551,9 @@ impl ConversationsRepository {
 		conversation_id: String,
 		bot_id: String,
 	) -> Result<Conversation, ConversationError> {
-		self.call_mut(move |connection| Ok(led_by(connection, &conversation_id, &bot_id))).await?
+		self.call_mut(move |connection| Ok(led_by(connection, &conversation_id, &bot_id)))
+			.await?
+			.at("set_lead", "conversation_participants")
 	}
 }
 

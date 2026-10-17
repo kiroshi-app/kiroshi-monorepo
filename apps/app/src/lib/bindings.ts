@@ -1451,7 +1451,7 @@ export type SpacePreferences = {
 	collapsedSectionIds?: string[],
 };
 
-export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mode: string } | { kind: "poisonedConnection" } | { kind: "callInterrupted" } | { kind: "staleWrite" } | { kind: "sqlite"; detail: string };
+export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mode: string } | { kind: "poisonedConnection" } | { kind: "callInterrupted" } | { kind: "staleWrite" } | { kind: "sqlite"; detail: string; operation?: string | null; table?: string | null; code?: string | null };
 
 export type SubmittedAttachment = {
 	name: string,
@@ -1507,7 +1507,7 @@ export type TranscriptPage = {
 
 export type TranscriptRole = "user" | "assistant";
 
-export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unlistedIcon"; icon: string; accepted: string[] } | { kind: "unknownColour"; colour: string; accepted: string[] } | { kind: "unknownMessage"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
+export type TranscriptStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "conflict"; id: string; field: string } | { kind: "invalidTransition"; id: string; from: string; to: string } | { kind: "unknownBot"; id: string } | { kind: "namelessBot" } | { kind: "unknownConversation"; id: string } | { kind: "foreignBot"; id: string } | { kind: "severalSpaces"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankIcon" } | { kind: "unlistedIcon"; icon: string; accepted: string[] } | { kind: "unknownColour"; colour: string; accepted: string[] } | { kind: "unknownMessage"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "unknownMessageSeq"; conversationId: string; seq: number } | { kind: "rejectedAvatarImage"; reason: AvatarRejection } | { kind: "unwritableBundle"; detail: string } | { kind: "unwritableEnvironment"; failure: EnvError } | { kind: "systemSkill"; id: string } | { kind: "unreadableHistory"; detail: string } | { kind: "unreadableSources"; path: string; reason: string } | { kind: "turnAlreadyRunning"; conversationId: string; turnId: string } | { kind: "unreadableCursor"; cursor: string };
 
 export type TranscriptWindow = {
 	conversationId: string,

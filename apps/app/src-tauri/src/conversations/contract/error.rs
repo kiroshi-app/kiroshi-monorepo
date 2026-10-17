@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::avatars;
 use crate::db::repositories::{conversations, messages};
+use crate::db::result_code::result_code_name;
 use crate::db::DatabaseError;
 use crate::environment::contract::EnvError;
 
@@ -19,6 +20,12 @@ pub enum StorageFailure {
 	#[serde(rename_all = "camelCase")]
 	Sqlite {
 		detail: String,
+		#[specta(optional)]
+		operation: Option<String>,
+		#[specta(optional)]
+		table: Option<String>,
+		#[specta(optional)]
+		code: Option<String>,
 	},
 }
 
@@ -30,10 +37,28 @@ impl From<&DatabaseError> for StorageFailure {
 			DatabaseError::PoisonedConnection => StorageFailure::PoisonedConnection,
 			DatabaseError::CallInterrupted => StorageFailure::CallInterrupted,
 			DatabaseError::Conflict => StorageFailure::StaleWrite,
-			DatabaseError::Sqlite(failure) => {
-				StorageFailure::Sqlite { detail: failure.to_string() }
-			}
+			DatabaseError::Sqlite(failure) => StorageFailure::Sqlite {
+				detail: failure.to_string(),
+				operation: None,
+				table: None,
+				code: code_of(failure),
+			},
+			DatabaseError::SqliteAt { operation, table, failure } => StorageFailure::Sqlite {
+				detail: failure.to_string(),
+				operation: Some((*operation).to_owned()),
+				table: Some((*table).to_owned()),
+				code: code_of(failure),
+			},
 		}
+	}
+}
+
+fn code_of(failure: &rusqlite::Error) -> Option<String> {
+	match failure {
+		rusqlite::Error::SqliteFailure(error, _) => {
+			result_code_name(error.extended_code).map(str::to_owned)
+		}
+		_ => None,
 	}
 }
 
@@ -94,6 +119,10 @@ pub enum TranscriptStoreError {
 	},
 	#[serde(rename_all = "camelCase")]
 	UnknownMessage {
+		id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownTurn {
 		id: String,
 	},
 	#[serde(rename_all = "camelCase")]
@@ -191,6 +220,15 @@ impl From<messages::TranscriptError> for TranscriptStoreError {
 			messages::TranscriptError::UnknownMessage { id } => {
 				TranscriptStoreError::UnknownMessage { id }
 			}
+			messages::TranscriptError::UnknownConversation { id } => {
+				TranscriptStoreError::UnknownConversation { id }
+			}
+			messages::TranscriptError::UnknownTurn { id } => {
+				TranscriptStoreError::UnknownTurn { id }
+			}
+			messages::TranscriptError::UnknownParticipant { conversation_id, bot_id } => {
+				TranscriptStoreError::UnknownParticipant { conversation_id, bot_id }
+			}
 			messages::TranscriptError::Database(failure) => {
 				TranscriptStoreError::Storage { failure: (&failure).into() }
 			}
@@ -252,6 +290,7 @@ mod tests {
 
 	use super::super::tests::assert_crosses_as;
 	use super::*;
+	use crate::db::connection::Located as _;
 
 	#[test]
 	fn a_lineage_failure_crosses_as_a_storage_refusal() {
@@ -273,8 +312,34 @@ mod tests {
 			(StorageFailure::CallInterrupted, json!({ "kind": "callInterrupted" })),
 			(StorageFailure::StaleWrite, json!({ "kind": "staleWrite" })),
 			(
-				StorageFailure::Sqlite { detail: "UNIQUE constraint failed".into() },
-				json!({ "kind": "sqlite", "detail": "UNIQUE constraint failed" }),
+				StorageFailure::Sqlite {
+					detail: "UNIQUE constraint failed".into(),
+					operation: Some("start_turn".into()),
+					table: Some("turns".into()),
+					code: Some("SQLITE_CONSTRAINT_UNIQUE".into()),
+				},
+				json!({
+					"kind": "sqlite",
+					"detail": "UNIQUE constraint failed",
+					"operation": "start_turn",
+					"table": "turns",
+					"code": "SQLITE_CONSTRAINT_UNIQUE",
+				}),
+			),
+			(
+				StorageFailure::Sqlite {
+					detail: "Query returned no rows".into(),
+					operation: None,
+					table: None,
+					code: None,
+				},
+				json!({
+					"kind": "sqlite",
+					"detail": "Query returned no rows",
+					"operation": null,
+					"table": null,
+					"code": null,
+				}),
 			),
 		] {
 			assert_crosses_as(failure, wire);
@@ -398,8 +463,41 @@ mod tests {
 		let sqlite = DatabaseError::Sqlite(rusqlite::Error::QueryReturnedNoRows);
 		assert_eq!(
 			StorageFailure::from(&sqlite),
-			StorageFailure::Sqlite { detail: rusqlite::Error::QueryReturnedNoRows.to_string() },
+			StorageFailure::Sqlite {
+				detail: rusqlite::Error::QueryReturnedNoRows.to_string(),
+				operation: None,
+				table: None,
+				code: None,
+			},
 			"a SQLite failure crossed as something other than its own account"
 		);
+	}
+
+	#[test]
+	fn a_located_sqlite_failure_names_its_operation_its_table_and_its_code() {
+		let refused = rusqlite::Error::SqliteFailure(
+			rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY),
+			Some("FOREIGN KEY constraint failed".into()),
+		);
+		let located = DatabaseError::Sqlite(refused).at("open_assistant_message", "messages");
+
+		assert_eq!(
+			StorageFailure::from(&located),
+			StorageFailure::Sqlite {
+				detail: "FOREIGN KEY constraint failed".into(),
+				operation: Some("open_assistant_message".into()),
+				table: Some("messages".into()),
+				code: Some("SQLITE_CONSTRAINT_FOREIGNKEY".into()),
+			}
+		);
+	}
+
+	#[test]
+	fn the_innermost_location_of_a_sqlite_failure_wins() {
+		let located = DatabaseError::Sqlite(rusqlite::Error::QueryReturnedNoRows)
+			.at("ensure_chat_in", "conversations")
+			.at("create_conversation", "conversations");
+
+		assert!(matches!(located, DatabaseError::SqliteAt { operation: "ensure_chat_in", .. }));
 	}
 }

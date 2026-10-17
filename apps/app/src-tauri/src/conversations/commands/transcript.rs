@@ -292,3 +292,88 @@ pub async fn conversation_finalize_message<R: Runtime>(
 fn owned_by_host<R: Runtime>(app: &AppHandle<R>, owns: impl Fn(&HostWrites) -> bool) -> bool {
 	app.try_state::<AgentState>().is_some_and(|agent| owns(agent.host_writes()))
 }
+
+#[cfg(test)]
+mod tests {
+	use serde_json::json;
+	use tauri::test::mock_builder;
+
+	use super::*;
+	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+
+	const ONE_SEATED_CONVERSATION: &str = "
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
+		INSERT INTO conversations (id, kind, title, created_at, updated_at)
+			VALUES ('c1', 'topic', 'First', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c1', 'b1', 'lead', 1, 0);
+	";
+
+	async fn a_host(name: &str) -> AppOfItsOwn {
+		let app = an_app_of_its_own(&format!("transcript-commands-{name}"), mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		database(&app)
+			.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_CONVERSATION)?))
+			.await
+			.expect("the conversation is planted");
+		app
+	}
+
+	fn database(app: &AppOfItsOwn) -> &db::Database {
+		app.state::<db::DatabaseState>().inner().as_ref().expect("the database opens")
+	}
+
+	fn a_turn(id: &str) -> NewTurn {
+		NewTurn { id: id.into(), conversation_id: "c1".into(), started_at: 1 }
+	}
+
+	#[tokio::test]
+	async fn a_turn_started_on_a_deleted_conversation_names_it_instead_of_failing_storage() {
+		let app = a_host("deleted").await;
+		database(&app)
+			.conversations()
+			.delete_conversation("c1".into())
+			.await
+			.expect("the conversation is deleted");
+
+		let refused =
+			conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1")).await;
+
+		assert_eq!(refused, Err(TranscriptStoreError::UnknownConversation { id: "c1".into() }));
+	}
+
+	#[tokio::test]
+	async fn a_foreign_key_failure_reaches_the_frontend_with_its_operation_table_and_code() {
+		let app = a_host("foreign-key").await;
+		conversation_start_turn(app.handle().clone(), app.state(), a_turn("t1"))
+			.await
+			.expect("the turn starts");
+		let reply = NewAssistantMessage {
+			id: "r1".into(),
+			conversation_id: "c1".into(),
+			turn_id: "t1".into(),
+			author_bot_id: Some("b1".into()),
+			replied_to_message_id: Some("no such message".into()),
+			created_at: 2,
+		};
+
+		let refused = conversation_open_assistant_message(app.handle().clone(), app.state(), reply)
+			.await
+			.expect_err("a reply to a missing message was stored");
+
+		assert_eq!(
+			serde_json::to_value(&refused).expect("the error serializes"),
+			json!({
+				"kind": "storage",
+				"failure": {
+					"kind": "sqlite",
+					"detail": "FOREIGN KEY constraint failed",
+					"operation": "open_assistant_message",
+					"table": "messages",
+					"code": "SQLITE_CONSTRAINT_FOREIGNKEY",
+				},
+			})
+		);
+	}
+}

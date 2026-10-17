@@ -3,6 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, Transact
 
 use super::arrivals::{self, Arrival, SeqSpan};
 use crate::agent::translate::now_ms;
+use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 
 mod activities;
@@ -21,7 +22,21 @@ pub enum TranscriptError {
 	Conflict { id: String, field: &'static str },
 	InvalidTransition { id: String, from: &'static str, to: &'static str },
 	UnknownMessage { id: String },
+	UnknownConversation { id: String },
+	UnknownTurn { id: String },
+	UnknownParticipant { conversation_id: String, bot_id: String },
 	Database(DatabaseError),
+}
+
+impl Located for TranscriptError {
+	fn at(self, operation: &'static str, table: &'static str) -> Self {
+		match self {
+			TranscriptError::Database(error) => {
+				TranscriptError::Database(error.at(operation, table))
+			}
+			refused => refused,
+		}
+	}
 }
 
 impl From<DatabaseError> for TranscriptError {
@@ -149,6 +164,11 @@ pub struct RecoveryReport {
 	pub terminated_activities: usize,
 }
 
+const CONVERSATION_EXISTS: &str = "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = ?1)";
+const TURN_IN_CONVERSATION_EXISTS: &str =
+	"SELECT EXISTS(SELECT 1 FROM turns WHERE id = ?1 AND conversation_id = ?2)";
+const SEAT_EXISTS: &str = "SELECT EXISTS(SELECT 1 FROM conversation_participants
+	WHERE conversation_id = ?1 AND bot_id = ?2)";
 const TURN_KEY: &str = "SELECT seq, conversation_id, started_at FROM turns WHERE id = ?1";
 const CONVERSATION_OF_TURN: &str = "SELECT conversation_id FROM turns WHERE id = ?1";
 const INSERT_TURN: &str = "INSERT INTO turns (id, conversation_id, seq, started_at)
@@ -295,19 +315,27 @@ impl MessagesRepository {
 	}
 
 	pub async fn start_turn(&self, turn: NewTurn) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(store_turn(connection, turn))).await?
+		self.call_mut(move |connection| Ok(store_turn(connection, turn)))
+			.await?
+			.at("start_turn", "turns")
 	}
 
 	pub async fn ensure_turn(&self, turn: NewTurn) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(keep_turn(connection, turn))).await?
+		self.call_mut(move |connection| Ok(keep_turn(connection, turn)))
+			.await?
+			.at("ensure_turn", "turns")
 	}
 
 	pub async fn start_run(&self, turn: NewTurn, bot_id: String) -> Result<(), TranscriptError> {
-		self.call_mut(move |connection| Ok(started_run(connection, &turn, &bot_id))).await?
+		self.call_mut(move |connection| Ok(started_run(connection, &turn, &bot_id)))
+			.await?
+			.at("start_run", "turn_runs")
 	}
 
 	pub async fn end_run(&self, ended: EndedRun) -> Result<(), TranscriptError> {
-		self.call_mut(move |connection| Ok(ended_run(connection, &ended))).await?
+		self.call_mut(move |connection| Ok(ended_run(connection, &ended)))
+			.await?
+			.at("end_run", "turn_runs")
 	}
 
 	pub async fn await_runs(
@@ -315,7 +343,9 @@ impl MessagesRepository {
 		turn_id: String,
 		bot_ids: Vec<String>,
 	) -> Result<(), TranscriptError> {
-		self.call_mut(move |connection| Ok(awaited_runs(connection, &turn_id, &bot_ids))).await?
+		self.call_mut(move |connection| Ok(awaited_runs(connection, &turn_id, &bot_ids)))
+			.await?
+			.at("await_runs", "turn_runs")
 	}
 
 	pub async fn abandon_run(
@@ -328,6 +358,7 @@ impl MessagesRepository {
 			Ok(abandoned_run(connection, &turn_id, &bot_id, abandoned_at))
 		})
 		.await?
+		.at("abandon_run", "turn_runs")
 	}
 
 	pub async fn cancel_run(
@@ -340,6 +371,7 @@ impl MessagesRepository {
 			Ok(cancelled_run(connection, &turn_id, &bot_id, cancelled_at))
 		})
 		.await?
+		.at("cancel_run", "turn_runs")
 	}
 
 	pub async fn expire_awaited_run(
@@ -352,6 +384,7 @@ impl MessagesRepository {
 			Ok(expired_awaited_run(connection, &turn_id, &bot_id, expired_at))
 		})
 		.await?
+		.at("expire_awaited_run", "turn_runs")
 	}
 
 	pub async fn complete_turn(
@@ -364,7 +397,8 @@ impl MessagesRepository {
 				connection.prepare_cached(COMPLETE_TURN)?.execute(params![id, completed_at])?;
 				Ok(())
 			})
-			.await?)
+			.await
+			.at("complete_turn", "turns")?)
 	}
 
 	pub async fn send_user_message(
@@ -374,6 +408,7 @@ impl MessagesRepository {
 	) -> Result<i64, TranscriptError> {
 		self.call_mut(move |connection| Ok(open_turn_with(connection, message, completed_at)))
 			.await?
+			.at("send_user_message", "messages")
 	}
 
 	pub async fn open_turns_without_reply(
@@ -388,21 +423,26 @@ impl MessagesRepository {
 					.collect::<Result<Vec<_>, _>>()?;
 				Ok(ids)
 			})
-			.await?)
+			.await
+			.at("open_turns_without_reply", "turns")?)
 	}
 
 	pub async fn open_assistant_message(
 		&self,
 		message: NewAssistantMessage,
 	) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(store_message(connection, message.into()))).await?
+		self.call_mut(move |connection| Ok(store_message(connection, message.into())))
+			.await?
+			.at("open_assistant_message", "messages")
 	}
 
 	pub async fn append_user_message(
 		&self,
 		message: NewUserMessage,
 	) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(store_message(connection, message.into()))).await?
+		self.call_mut(move |connection| Ok(store_message(connection, message.into())))
+			.await?
+			.at("append_user_message", "messages")
 	}
 
 	pub async fn append_text(&self, id: String, delta: String) -> Result<(), TranscriptError> {
@@ -411,7 +451,8 @@ impl MessagesRepository {
 				connection.prepare_cached(APPEND_TEXT)?.execute(params![id, delta])?;
 				Ok(())
 			})
-			.await?)
+			.await
+			.at("append_text", "messages")?)
 	}
 
 	pub async fn finalize_message(
@@ -424,6 +465,7 @@ impl MessagesRepository {
 			Ok(close_message(connection, &id, state, settled_text.as_deref()))
 		})
 		.await?
+		.at("finalize_message", "messages")
 	}
 
 	pub async fn replace_content(
@@ -431,7 +473,9 @@ impl MessagesRepository {
 		id: String,
 		content: String,
 	) -> Result<(), TranscriptError> {
-		self.call_mut(move |connection| Ok(rewrite_content(connection, &id, &content))).await?
+		self.call_mut(move |connection| Ok(rewrite_content(connection, &id, &content)))
+			.await?
+			.at("replace_content", "messages")
 	}
 
 	pub async fn page_messages(
@@ -468,14 +512,18 @@ impl MessagesRepository {
 				let arrivals = arrivals::within(connection, &query.conversation_id, span)?;
 				Ok(MessagePage { messages, arrivals, has_more })
 			})
-			.await?)
+			.await
+			.at("page_messages", "messages")?)
 	}
 
 	pub async fn messages_around(
 		&self,
 		query: MessagesAroundQuery,
 	) -> Result<Option<MessagesAround>, TranscriptError> {
-		Ok(self.call(move |connection| read_around(connection, &query)).await?)
+		Ok(self
+			.call(move |connection| read_around(connection, &query))
+			.await
+			.at("messages_around", "messages")?)
 	}
 
 	pub async fn message(
@@ -490,7 +538,8 @@ impl MessagesRepository {
 					.query_row(params![conversation_id, id], read_message)
 					.optional()?)
 			})
-			.await?)
+			.await
+			.at("message", "messages")?)
 	}
 
 	pub async fn pin_message(
@@ -504,6 +553,7 @@ impl MessagesRepository {
 			Ok(keep_pin(connection, &conversation_id, &id, block_index, pinned_at))
 		})
 		.await?
+		.at("pin_message", "message_pins")
 	}
 
 	pub async fn unpin_message(
@@ -516,6 +566,7 @@ impl MessagesRepository {
 			Ok(clear_pin(connection, &conversation_id, &id, block_index))
 		})
 		.await?
+		.at("unpin_message", "message_pins")
 	}
 
 	pub async fn pinned_messages(
@@ -530,7 +581,8 @@ impl MessagesRepository {
 					.collect::<Result<Vec<_>, _>>()?;
 				Ok(pins)
 			})
-			.await?)
+			.await
+			.at("pinned_messages", "message_pins")?)
 	}
 
 	pub async fn run_of_turn(&self, turn_id: String) -> Result<Option<String>, TranscriptError> {
@@ -541,7 +593,8 @@ impl MessagesRepository {
 					.query_row(params![turn_id], |row| row.get(0))
 					.optional()?)
 			})
-			.await?)
+			.await
+			.at("run_of_turn", "messages")?)
 	}
 
 	pub async fn conversation_of_message(
@@ -555,7 +608,8 @@ impl MessagesRepository {
 					.query_row(params![id], |row| row.get(0))
 					.optional()?)
 			})
-			.await?)
+			.await
+			.at("conversation_of_message", "messages")?)
 	}
 
 	pub async fn window_messages(
@@ -579,7 +633,8 @@ impl MessagesRepository {
 				messages.reverse();
 				Ok(messages)
 			})
-			.await?)
+			.await
+			.at("window_messages", "messages")?)
 	}
 
 	pub async fn latest_message(
@@ -600,7 +655,8 @@ impl MessagesRepository {
 					)
 					.optional()?)
 			})
-			.await?)
+			.await
+			.at("latest_message", "messages")?)
 	}
 
 	pub async fn last_seq(&self, conversation_id: String) -> Result<i64, TranscriptError> {
@@ -610,11 +666,14 @@ impl MessagesRepository {
 					.prepare_cached(LAST_MESSAGE_SEQ)?
 					.query_row(params![conversation_id], |row| row.get(0))?)
 			})
-			.await?)
+			.await
+			.at("last_seq", "messages")?)
 	}
 
 	pub async fn append_activity(&self, activity: NewActivity) -> Result<i64, TranscriptError> {
-		self.call_mut(move |connection| Ok(store_activity(connection, activity))).await?
+		self.call_mut(move |connection| Ok(store_activity(connection, activity)))
+			.await?
+			.at("append_activity", "activities")
 	}
 
 	pub async fn start_activity(&self, id: String) -> Result<(), TranscriptError> {
@@ -622,6 +681,7 @@ impl MessagesRepository {
 			Ok(advance_activity(connection, &id, ActivityStatus::Running))
 		})
 		.await?
+		.at("start_activity", "activities")
 	}
 
 	pub async fn finish_activity(
@@ -631,6 +691,7 @@ impl MessagesRepository {
 	) -> Result<(), TranscriptError> {
 		self.call_mut(move |connection| Ok(advance_activity(connection, &id, status.into())))
 			.await?
+			.at("finish_activity", "activities")
 	}
 
 	pub async fn activities_for_turn(
@@ -645,11 +706,12 @@ impl MessagesRepository {
 					.collect::<Result<Vec<_>, _>>()?;
 				Ok(activities)
 			})
-			.await?)
+			.await
+			.at("activities_for_turn", "activities")?)
 	}
 
 	pub async fn recover_unfinished(&self) -> Result<RecoveryReport, TranscriptError> {
-		Ok(self.call_mut(sweep_unfinished).await?)
+		Ok(self.call_mut(sweep_unfinished).await.at("recover_unfinished", "messages")?)
 	}
 }
 
@@ -780,6 +842,7 @@ fn store_turn(connection: &mut Connection, turn: NewTurn) -> Result<i64, Transcr
 		}
 		return Ok(stored.seq);
 	}
+	refuse_unknown_conversation(&transaction, &turn.conversation_id)?;
 	let seq = transaction.query_row(
 		INSERT_TURN,
 		params![turn.id, turn.conversation_id, turn.started_at],
@@ -806,6 +869,7 @@ fn insert_turn_once(transaction: &Transaction<'_>, turn: &NewTurn) -> Result<i64
 		}
 		return Ok(stored.seq);
 	}
+	refuse_unknown_conversation(transaction, &turn.conversation_id)?;
 	Ok(transaction.query_row(
 		INSERT_TURN,
 		params![turn.id, turn.conversation_id, turn.started_at],
@@ -937,6 +1001,7 @@ fn insert_message_once(
 		}
 		return Ok(stored.seq);
 	}
+	refuse_unknown_parents(transaction, &message)?;
 	let (content, state) = match message.content {
 		Some(authored) => (authored, MessageState::Complete),
 		None => (String::new(), MessageState::Pending),
@@ -958,6 +1023,45 @@ fn insert_message_once(
 		],
 		|row| row.get(0),
 	)?)
+}
+
+fn refuse_unknown_conversation(
+	transaction: &Transaction<'_>,
+	conversation_id: &str,
+) -> Result<(), TranscriptError> {
+	if !holds(transaction, CONVERSATION_EXISTS, params![conversation_id])? {
+		return Err(TranscriptError::UnknownConversation { id: conversation_id.into() });
+	}
+	Ok(())
+}
+
+fn refuse_unknown_parents(
+	transaction: &Transaction<'_>,
+	message: &AppendedMessage,
+) -> Result<(), TranscriptError> {
+	refuse_unknown_conversation(transaction, &message.conversation_id)?;
+	let turn = params![message.turn_id, message.conversation_id];
+	if !holds(transaction, TURN_IN_CONVERSATION_EXISTS, turn)? {
+		return Err(TranscriptError::UnknownTurn { id: message.turn_id.clone() });
+	}
+	let Some(bot_id) = &message.author_bot_id else {
+		return Ok(());
+	};
+	if !holds(transaction, SEAT_EXISTS, params![message.conversation_id, bot_id])? {
+		return Err(TranscriptError::UnknownParticipant {
+			conversation_id: message.conversation_id.clone(),
+			bot_id: bot_id.clone(),
+		});
+	}
+	Ok(())
+}
+
+fn holds(
+	transaction: &Transaction<'_>,
+	exists: &str,
+	params: impl rusqlite::Params,
+) -> rusqlite::Result<bool> {
+	transaction.query_row(exists, params, |row| row.get(0))
 }
 
 fn close_message(
@@ -2675,6 +2779,157 @@ mod tests {
 			stored_row(&database, "m2").await,
 			authored_row,
 			"a late delta grew a message that had ended"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn rows_in(database: &Database, table: &'static str) -> i64 {
+		database
+			.call(move |connection| {
+				Ok(connection
+					.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the rows are counted")
+	}
+
+	fn a_turn_in(conversation: &str) -> NewTurn {
+		NewTurn { id: "t9".into(), conversation_id: conversation.into(), started_at: 1 }
+	}
+
+	#[tokio::test]
+	async fn a_turn_for_a_missing_conversation_names_it_and_writes_nothing() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let turns_before = rows_in(&database, "turns").await;
+
+		let started = database.messages().start_turn(a_turn_in("gone")).await;
+		let ensured = database.messages().ensure_turn(a_turn_in("gone")).await;
+		let run = database.messages().start_run(a_turn_in("gone"), "b1".into()).await;
+
+		for refused in [started.map(|_| ()), ensured.map(|_| ()), run] {
+			assert!(
+				matches!(&refused, Err(TranscriptError::UnknownConversation { id }) if id == "gone"),
+				"a turn for a missing conversation answered {refused:?}"
+			);
+		}
+		assert_eq!(rows_in(&database, "turns").await, turns_before, "a refused turn left a row");
+		assert_eq!(rows_in(&database, "turn_runs").await, 0, "a refused run left a row");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_for_a_missing_conversation_names_it_and_writes_nothing() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let reply = NewAssistantMessage { conversation_id: "gone".into(), ..a_reply("r1", None) };
+		let user_message =
+			NewUserMessage { conversation_id: "gone".into(), ..a_user_message("m1", "hi", 1) };
+
+		let opened = database.messages().open_assistant_message(reply).await;
+		let appended = database.messages().append_user_message(user_message).await;
+
+		for refused in [opened, appended] {
+			assert!(
+				matches!(&refused, Err(TranscriptError::UnknownConversation { id }) if id == "gone"),
+				"a message for a missing conversation answered {refused:?}"
+			);
+		}
+		assert_eq!(rows_in(&database, "messages").await, 0, "a refused message left a row");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_for_a_turn_missing_from_its_conversation_names_the_turn_and_writes_nothing()
+	{
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c2").await;
+
+		let refused = database.messages().open_assistant_message(a_reply("r1", None)).await;
+
+		assert!(
+			matches!(&refused, Err(TranscriptError::UnknownTurn { id }) if id == "t1"),
+			"a message for a turn of another conversation answered {refused:?}"
+		);
+		assert_eq!(rows_in(&database, "messages").await, 0, "a refused message left a row");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_message_by_a_bot_without_a_seat_names_the_seat_and_writes_nothing() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let reply =
+			NewAssistantMessage { author_bot_id: Some("unseated".into()), ..a_reply("r1", None) };
+
+		let refused = database.messages().open_assistant_message(reply).await;
+
+		assert!(
+			matches!(
+				&refused,
+				Err(TranscriptError::UnknownParticipant { conversation_id, bot_id })
+					if conversation_id == "c1" && bot_id == "unseated"
+			),
+			"a message by a bot without a seat answered {refused:?}"
+		);
+		assert_eq!(rows_in(&database, "messages").await, 0, "a refused message left a row");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_user_message_opening_a_turn_in_a_missing_conversation_writes_neither() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let message =
+			NewUserMessage { conversation_id: "gone".into(), ..a_user_message("m1", "hi", 1) };
+
+		let refused = database.messages().send_user_message(message, None).await;
+
+		assert!(
+			matches!(&refused, Err(TranscriptError::UnknownConversation { id }) if id == "gone"),
+			"a user message for a missing conversation answered {refused:?}"
+		);
+		assert_eq!(rows_in(&database, "turns").await, 0, "a refused user message left a turn");
+		assert_eq!(rows_in(&database, "messages").await, 0, "a refused user message left a row");
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_foreign_key_failure_names_the_operation_and_the_table_it_hit() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+
+		let refused = database
+			.messages()
+			.open_assistant_message(a_reply("r1", Some("no such message")))
+			.await;
+
+		assert!(
+			matches!(
+				&refused,
+				Err(TranscriptError::Database(DatabaseError::SqliteAt {
+					operation: "open_assistant_message",
+					table: "messages",
+					failure: rusqlite::Error::SqliteFailure(code, _),
+				})) if code.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY
+			),
+			"a reply to a missing message answered {refused:?}"
 		);
 
 		drop(database);

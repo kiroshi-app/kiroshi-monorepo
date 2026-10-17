@@ -17,11 +17,31 @@ pub enum DatabaseError {
 	CallInterrupted,
 	Conflict,
 	Sqlite(rusqlite::Error),
+	SqliteAt { operation: &'static str, table: &'static str, failure: rusqlite::Error },
 }
 
 impl From<rusqlite::Error> for DatabaseError {
 	fn from(error: rusqlite::Error) -> Self {
 		DatabaseError::Sqlite(error)
+	}
+}
+
+pub trait Located {
+	fn at(self, operation: &'static str, table: &'static str) -> Self;
+}
+
+impl Located for DatabaseError {
+	fn at(self, operation: &'static str, table: &'static str) -> Self {
+		match self {
+			DatabaseError::Sqlite(failure) => DatabaseError::SqliteAt { operation, table, failure },
+			located => located,
+		}
+	}
+}
+
+impl<T, E: Located> Located for Result<T, E> {
+	fn at(self, operation: &'static str, table: &'static str) -> Self {
+		self.map_err(|error| error.at(operation, table))
 	}
 }
 
