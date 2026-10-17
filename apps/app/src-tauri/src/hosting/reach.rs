@@ -384,16 +384,6 @@ pub(super) fn reach_of(command: &str) -> Option<Reach> {
 	REACHES.iter().find(|(name, _)| *name == command).map(|(_, reach)| *reach)
 }
 
-pub(super) fn conversation_of<'a>(command: &str, args: &'a Value) -> Option<&'a str> {
-	let Some(Reach::Scoped(helds)) = reach_of(command) else {
-		return None;
-	};
-	helds
-		.iter()
-		.filter(|held| held.check == Check::Child(Conversation))
-		.find_map(|held| args.pointer(held.argument)?.as_str())
-}
-
 fn audience_of(event: &str) -> Option<Audience> {
 	AUDIENCES.iter().find(|(name, _)| *name == event).map(|(_, audience)| *audience)
 }

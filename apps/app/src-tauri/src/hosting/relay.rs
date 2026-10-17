@@ -20,10 +20,12 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
+use super::roster::{self, Rostered};
+use super::wire::{self, HostKeys, Opened as OpenedFrame, Refusal, Wire};
 use super::{entered, members, Hosting};
-use crate::account::cloud::RegisterError;
+use crate::account::cloud::{DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
-use crate::db;
+use crate::db::{self, Database};
 use crate::host_api::events::{FELL_BEHIND, SEND_PATIENCE};
 use crate::missions::github::installed_tls_provider;
 use crate::spaces::commands::ready;
@@ -53,6 +55,12 @@ pub(super) struct Hosted {
 	pub(super) instance_id: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+struct Serving<'a> {
+	local: &'a LocalApi,
+	keys: &'a HostKeys,
+}
+
 pub(crate) enum Opened {
 	Socket(Box<Socket>),
 	Revoked,
@@ -65,6 +73,7 @@ enum Ended {
 	Stopped,
 	Replaced,
 	Dropped(String),
+	Failed(String),
 }
 
 enum Next {
@@ -100,8 +109,16 @@ pub(super) async fn hosted<R: Runtime>(
 ) {
 	let ring = watch::channel(Ring::started()).0;
 	let space_id = hosted.space_id.clone();
+	let keys = match wire::host_keys(&app, &space_id).await {
+		Ok(keys) => keys,
+		Err(reason) => {
+			let instance_id = hosted.instance_id.as_deref();
+			return entered(&app, &space_id, instance_id, HostingState::Failed { reason });
+		}
+	};
+	let serving = Serving { local: &local, keys: &keys };
 	tokio::select! {
-		() = attempts(&app, &mut hosted, &local, &mut stop, &ring) => return,
+		() = attempts(&app, &mut hosted, serving, &mut stop, &ring) => return,
 		() = replay::recorded(&app, &space_id, &ring) => {}
 	}
 	let reason = "the local event stream closed".to_owned();
@@ -111,7 +128,7 @@ pub(super) async fn hosted<R: Runtime>(
 async fn attempts<R: Runtime>(
 	app: &AppHandle<R>,
 	hosted: &mut Hosted,
-	local: &LocalApi,
+	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
 	ring: &watch::Sender<Ring>,
 ) {
@@ -120,7 +137,7 @@ async fn attempts<R: Runtime>(
 	let mut relaying = Relaying::from_the_start_of(ring);
 	loop {
 		let next =
-			attempted(app, hosted, local, stop, &mut backoff, &mut replaced, &mut relaying).await;
+			attempted(app, hosted, serving, stop, &mut backoff, &mut replaced, &mut relaying).await;
 		let instance_id = hosted.instance_id.as_deref();
 		match next {
 			Next::Stopped => return,
@@ -144,7 +161,7 @@ async fn attempts<R: Runtime>(
 async fn attempted<R: Runtime>(
 	app: &AppHandle<R>,
 	hosted: &mut Hosted,
-	local: &LocalApi,
+	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
 	replaced: &mut Option<String>,
@@ -159,6 +176,10 @@ async fn attempted<R: Runtime>(
 			})
 		}
 	};
+	let relay_device_id = match relay_device(app, &bearer, &hosted.space_id, serving.keys).await {
+		Ok(relay_device_id) => relay_device_id,
+		Err(next) => return next,
+	};
 	let instance_id = match hosted.instance_id.clone() {
 		Some(instance_id) => instance_id,
 		None => match registered(app, &bearer, hosted, replaced.as_deref()).await {
@@ -167,7 +188,7 @@ async fn attempted<R: Runtime>(
 			Err(next) => return next,
 		},
 	};
-	let url = app.state::<Hosting>().cloud.host_relay_url(&instance_id);
+	let url = app.state::<Hosting>().cloud.host_relay_url(&instance_id, &relay_device_id);
 	let opened = until_stopped(stop, opened(url, &bearer)).await;
 	match opened {
 		None => Next::Stopped,
@@ -177,7 +198,7 @@ async fn attempted<R: Runtime>(
 			entered(app, &hosted.space_id, Some(&instance_id), HostingState::Online);
 			let ids = Ids { space_id: &hosted.space_id, instance_id: &instance_id };
 			let ended = tokio::select! {
-				ended = online(app, *socket, local, stop, ids, relaying) => ended,
+				ended = online(app, *socket, serving, stop, ids, relaying) => ended,
 				never = members::polled(app, &hosted.space_id, &instance_id) => match never {},
 			};
 			match ended {
@@ -186,6 +207,7 @@ async fn attempted<R: Runtime>(
 					reason: "another host took this instance over (relay close 4001)".to_owned(),
 				}),
 				Ended::Dropped(reason) => Next::Retry(reason),
+				Ended::Failed(reason) => Next::Settled(HostingState::Failed { reason }),
 			}
 		}
 		Some(Opened::Revoked) => {
@@ -205,6 +227,76 @@ async fn attempted<R: Runtime>(
 		}),
 		Some(Opened::Unreachable(reason)) => Next::Retry(reason),
 	}
+}
+
+fn failed(reason: String) -> Next {
+	Next::Settled(HostingState::Failed { reason })
+}
+
+async fn relay_device<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	space_id: &str,
+	keys: &HostKeys,
+) -> Result<String, Next> {
+	let cloud = &app.state::<Hosting>().cloud;
+	let account_id = match cloud.me(bearer).await {
+		Ok(account) => account.id,
+		Err(MeError::Revoked) => {
+			session::revoked(app, bearer);
+			return Err(Next::Settled(HostingState::NeedsSignIn));
+		}
+		Err(MeError::Unreachable(reason)) => return Err(Next::Retry(reason)),
+	};
+	let state = app.state::<db::DatabaseState>();
+	let database = ready(&state)
+		.map_err(|failure| failed(format!("the database is unavailable: {failure:?}")))?;
+	let relay_device_id = held_or_registered(app, bearer, database, &account_id, keys).await?;
+	roster::host_rostered(database, space_id, &keys.device, &relay_device_id, &account_id)
+		.await
+		.map_err(|failure| failed(format!("the host roster row was not stored: {failure:?}")))?;
+	Ok(relay_device_id)
+}
+
+async fn held_or_registered<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	database: &Database,
+	account_id: &str,
+	keys: &HostKeys,
+) -> Result<String, Next> {
+	let devices = database.relay_devices();
+	let device_id = keys.device.device_id().to_string();
+	let held = devices
+		.relay_device_id(account_id.to_owned(), device_id.clone())
+		.await
+		.map_err(|failure| failed(format!("the relay device id did not read: {failure:?}")))?;
+	if let Some(relay_device_id) = held {
+		return Ok(relay_device_id);
+	}
+	let signing = keys.device.signing_public();
+	let agreement = keys.device.agreement_public();
+	let cloud = &app.state::<Hosting>().cloud;
+	let relay_device_id =
+		match cloud.register_device(bearer, signing.as_bytes(), agreement.as_bytes()).await {
+			Ok(relay_device_id) => relay_device_id,
+			Err(DeviceRegisterError::Revoked) => {
+				session::revoked(app, bearer);
+				return Err(Next::Settled(HostingState::NeedsSignIn));
+			}
+			Err(DeviceRegisterError::KeyTaken) => {
+				return Err(failed(
+					"the device key belongs to another account (POST /devices answered 409 DEVICE_KEY_TAKEN)"
+						.to_owned(),
+				))
+			}
+			Err(DeviceRegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
+		};
+	devices
+		.registered(account_id.to_owned(), device_id, relay_device_id.clone())
+		.await
+		.map_err(|failure| failed(format!("the relay device id was not stored: {failure:?}")))?;
+	Ok(relay_device_id)
 }
 
 async fn registered<R: Runtime>(
@@ -277,17 +369,23 @@ struct Ids<'a> {
 async fn online<R: Runtime>(
 	app: &AppHandle<R>,
 	socket: Socket,
-	local: &LocalApi,
+	serving: Serving<'_>,
 	stop: &mut watch::Receiver<bool>,
 	ids: Ids<'_>,
 	relaying: &mut Relaying<'_>,
 ) -> Ended {
+	let state = app.state::<db::DatabaseState>();
+	let database = match ready(&state) {
+		Ok(database) => database,
+		Err(failure) => return Ended::Failed(format!("the database is unavailable: {failure:?}")),
+	};
+	let mut wire = Wire::new(database, serving.keys, ids.space_id, ids.instance_id);
 	let (mut sink, mut stream) = socket.split();
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
 	let unsent = recorded.borrow_and_update().rejoined(last_sent);
-	if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
-		return Ended::Dropped(reason);
+	if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, unsent, last_sent).await {
+		return ended;
 	}
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
@@ -301,38 +399,53 @@ async fn online<R: Runtime>(
 			_ = stop.changed() => return closed(&mut sink, ids).await,
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
-				match received(frame, ids) {
-					Received::Call(call) => {
-						invokes.spawn(bridge::bridged(app.clone(), local.clone(), ids.space_id.to_owned(), call));
+				let text = match frame {
+					Some(Ok(Message::Text(text))) => text,
+					unread => match unread_ended(unread, ids) {
+						Some(ended) => return ended,
+						None => continue,
+					},
+				};
+				let opened = match wire.opened(text.as_str()).await {
+					Ok(opened) => opened,
+					Err(refusal) => {
+						eprintln!("{}", wire::dropped_line(ids.space_id, &refusal));
 						continue;
 					}
-					Received::Avatar(call) => {
-						avatars.spawn(bridge::avatar_bridged(app.clone(), local.clone(), ids.space_id.to_owned(), avatar_turn.clone(), call));
+				};
+				match received(&wire, opened, ids) {
+					Received::Call(sender, call) => {
+						let bridged = bridge::bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), call);
+						invokes.spawn(async move { (sender, bridged.await) });
 						continue;
 					}
-					Received::Answer(answer) => Message::text(answer),
-					Received::Resume(call) => {
+					Received::Avatar(sender, call) => {
+						let bridged = bridge::avatar_bridged(app.clone(), serving.local.clone(), ids.space_id.to_owned(), avatar_turn.clone(), call);
+						avatars.spawn(async move { (sender, bridged.await) });
+						continue;
+					}
+					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
+					Received::Hello(sender) => Outgoing::Hello(sender),
+					Received::Resume(sender, call) => {
 						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
-						if let Err(reason) = all_sent(&mut sink, resumed.frames).await {
-							return Ended::Dropped(reason);
+						if let Err(ended) = all_sent(&mut sink, &mut wire, &sender, resumed.frames).await {
+							return ended;
 						}
-						Message::text(resumed.answer)
+						Outgoing::Answer(sender, resumed.answer)
 					}
-					Received::Nothing => continue,
-					Received::Ended(ended) => return ended,
 				}
 			}
 			Some(answer) = invokes.join_next(), if !invokes.is_empty() => match answer {
-				Ok(answer) => Message::text(answer),
+				Ok((sender, answer)) => Outgoing::Answer(sender, answer),
 				Err(failure) => {
 					eprintln!("a relayed invoke of space {} ended abnormally: {failure}", ids.space_id);
 					continue;
 				}
 			},
 			Some(answer) = avatars.join_next(), if !avatars.is_empty() => match answer {
-				Ok(answer) => {
+				Ok((sender, answer)) => {
 					held_turn = Some(answer.turn);
-					Message::text(answer.frame)
+					Outgoing::Answer(sender, answer.frame)
 				}
 				Err(failure) => {
 					eprintln!("a relayed avatar of space {} ended abnormally: {failure}", ids.space_id);
@@ -348,60 +461,73 @@ async fn online<R: Runtime>(
 					Ok(unsent) => unsent,
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
-				if let Err(reason) = all_recorded_sent(&mut sink, unsent, last_sent).await {
-					return Ended::Dropped(reason);
+				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, unsent, last_sent).await {
+					return ended;
 				}
 				continue;
 			}
-			_ = pings.tick() => Message::Ping(Vec::new().into()),
+			_ = pings.tick() => Outgoing::Ping,
 			_ = &mut silence => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
 			}
 		};
-		if let Err(reason) = sent(&mut sink, outgoing).await {
-			return Ended::Dropped(reason);
+		if let Err(ended) = delivered(&mut sink, &mut wire, outgoing).await {
+			return ended;
 		}
 		drop(held_turn);
 	}
 }
 
 enum Received {
-	Call(bridge::MemberCall),
-	Avatar(bridge::AvatarCall),
-	Answer(String),
-	Resume(replay::ResumeCall),
-	Nothing,
-	Ended(Ended),
+	Call(Rostered, bridge::MemberCall),
+	Avatar(Rostered, bridge::AvatarCall),
+	Answer(Rostered, String),
+	Resume(Rostered, replay::ResumeCall),
+	Hello(Rostered),
 }
 
-fn received(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Received {
+enum Outgoing {
+	Answer(Rostered, String),
+	Hello(Rostered),
+	Ping,
+}
+
+fn received(wire: &Wire<'_>, opened: OpenedFrame, ids: Ids<'_>) -> Received {
+	if !wire.is_answerable(&opened) {
+		return Received::Hello(opened.sender);
+	}
+	let OpenedFrame { sender, plaintext, .. } = opened;
+	let text = plaintext.as_str();
+	if let Some(answer) = bridge::shared_space_answer(text, ids.space_id) {
+		return Received::Answer(sender, answer);
+	}
+	match replay::resume_call(text) {
+		Some(Ok(call)) => return Received::Resume(sender, call),
+		Some(Err(refusal)) => return Received::Answer(sender, refusal),
+		None => {}
+	}
+	match bridge::avatar_call(text) {
+		Some(Ok(call)) => return Received::Avatar(sender, call),
+		Some(Err(refusal)) => return Received::Answer(sender, refusal),
+		None => {}
+	}
+	match bridge::member_call(text, &sender.account_id) {
+		Ok(call) => Received::Call(sender, call),
+		Err(refusal) => Received::Answer(sender, refusal),
+	}
+}
+
+fn unread_ended(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Option<Ended> {
 	match frame {
-		Some(Ok(Message::Text(text))) => {
-			if let Some(answer) = bridge::shared_space_answer(text.as_str(), ids.space_id) {
-				return Received::Answer(answer);
-			}
-			match replay::resume_call(text.as_str()) {
-				Some(Ok(call)) => return Received::Resume(call),
-				Some(Err(refusal)) => return Received::Answer(refusal),
-				None => {}
-			}
-			match bridge::avatar_call(text.as_str()) {
-				Some(Ok(call)) => return Received::Avatar(call),
-				Some(Err(refusal)) => return Received::Answer(refusal),
-				None => {}
-			}
-			match bridge::member_call(text.as_str()) {
-				Ok(call) => Received::Call(call),
-				Err(refusal) => Received::Answer(refusal),
-			}
+		Some(Ok(Message::Close(frame))) => Some(closed_by_relay(frame, ids)),
+		Some(Ok(Message::Binary(_))) => {
+			let refusal = Refusal { from: None, cause: wire::Dropped::NotV2 };
+			eprintln!("{}", wire::dropped_line(ids.space_id, &refusal));
+			None
 		}
-		Some(Ok(Message::Binary(_))) => Received::Answer(bridge::refused(None)),
-		Some(Ok(Message::Close(frame))) => Received::Ended(closed_by_relay(frame, ids)),
-		Some(Ok(_)) => Received::Nothing,
-		Some(Err(error)) => {
-			Received::Ended(Ended::Dropped(format!("the relay socket failed: {error}")))
-		}
-		None => Received::Ended(Ended::Dropped("the relay socket ended".to_owned())),
+		Some(Ok(_)) => None,
+		Some(Err(error)) => Some(Ended::Dropped(format!("the relay socket failed: {error}"))),
+		None => Some(Ended::Dropped("the relay socket ended".to_owned())),
 	}
 }
 
@@ -448,20 +574,47 @@ async fn fell_behind(sink: &mut Sink, missed: u64) -> Ended {
 	Ended::Dropped(reason)
 }
 
-async fn all_sent(sink: &mut Sink, frames: Vec<String>) -> Result<(), String> {
+async fn delivered(sink: &mut Sink, wire: &mut Wire<'_>, outgoing: Outgoing) -> Result<(), Ended> {
+	let message = match outgoing {
+		Outgoing::Ping => Message::Ping(Vec::new().into()),
+		Outgoing::Answer(to, answer) => {
+			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(Ended::Failed)?)
+		}
+		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(Ended::Failed)?),
+	};
+	sent(sink, message).await.map_err(Ended::Dropped)
+}
+
+async fn sealed_sent(
+	sink: &mut Sink,
+	wire: &mut Wire<'_>,
+	plaintext: &str,
+	to: Option<&Rostered>,
+) -> Result<(), Ended> {
+	let sealed = wire.sealed(plaintext, to).await.map_err(Ended::Failed)?;
+	sent(sink, Message::text(sealed)).await.map_err(Ended::Dropped)
+}
+
+async fn all_sent(
+	sink: &mut Sink,
+	wire: &mut Wire<'_>,
+	to: &Rostered,
+	frames: Vec<String>,
+) -> Result<(), Ended> {
 	for frame in frames {
-		sent(sink, Message::text(frame)).await?;
+		sealed_sent(sink, wire, &frame, Some(to)).await?;
 	}
 	Ok(())
 }
 
 async fn all_recorded_sent(
 	sink: &mut Sink,
+	wire: &mut Wire<'_>,
 	unsent: Vec<Stamped>,
 	last_sent: &mut LastSent,
-) -> Result<(), String> {
+) -> Result<(), Ended> {
 	for stamped in unsent {
-		sent(sink, Message::text(stamped.frame)).await?;
+		sealed_sent(sink, wire, &stamped.frame, None).await?;
 		last_sent.seq = stamped.seq;
 	}
 	Ok(())

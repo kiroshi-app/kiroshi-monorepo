@@ -14,9 +14,9 @@ use connection::Located as _;
 use repositories::{
 	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
 	JoinedSpaceMembersRepository, JoinedSpacesRepository, MessagesRepository, MissionsRepository,
-	RoutinesRepository, RuntimeContextRepository, SearchRepository, SectionsRepository,
-	SpaceChildrenRepository, SpaceHostingRepository, SpaceRowsRepository, SpaceSettingsRepository,
-	SpacesRepository, UserRepository,
+	RelayDevicesRepository, RoutinesRepository, RuntimeContextRepository, SearchRepository,
+	SectionsRepository, SpaceChildrenRepository, SpaceHostingRepository, SpaceRelayRepository,
+	SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -75,12 +75,14 @@ pub struct Database {
 	joined_spaces: JoinedSpacesRepository,
 	messages: MessagesRepository,
 	missions: MissionsRepository,
+	relay_devices: RelayDevicesRepository,
 	routines: RoutinesRepository,
 	runtime_context: RuntimeContextRepository,
 	search: SearchRepository,
 	sections: SectionsRepository,
 	space_children: SpaceChildrenRepository,
 	space_hosting: SpaceHostingRepository,
+	space_relay: SpaceRelayRepository,
 	space_rows: SpaceRowsRepository,
 	space_settings: SpaceSettingsRepository,
 	spaces: SpacesRepository,
@@ -101,12 +103,14 @@ impl Database {
 			joined_spaces: JoinedSpacesRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			missions: MissionsRepository::new(access.clone()),
+			relay_devices: RelayDevicesRepository::new(access.clone()),
 			routines: RoutinesRepository::new(access.clone()),
 			runtime_context: RuntimeContextRepository::new(access.clone()),
 			search: SearchRepository::new(access.clone()),
 			sections: SectionsRepository::new(access.clone()),
 			space_children: SpaceChildrenRepository::new(access.clone()),
 			space_hosting: SpaceHostingRepository::new(access.clone()),
+			space_relay: SpaceRelayRepository::new(access.clone()),
 			space_rows: SpaceRowsRepository::new(access.clone()),
 			space_settings: SpaceSettingsRepository::new(access.clone()),
 			spaces: SpacesRepository::new(access.clone()),
@@ -177,6 +181,14 @@ impl Database {
 
 	pub fn space_hosting(&self) -> &SpaceHostingRepository {
 		&self.space_hosting
+	}
+
+	pub fn space_relay(&self) -> &SpaceRelayRepository {
+		&self.space_relay
+	}
+
+	pub fn relay_devices(&self) -> &RelayDevicesRepository {
+		&self.relay_devices
 	}
 
 	pub fn space_children(&self) -> &SpaceChildrenRepository {

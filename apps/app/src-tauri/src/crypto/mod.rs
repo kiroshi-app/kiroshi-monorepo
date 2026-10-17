@@ -8,6 +8,7 @@ pub mod join;
 pub mod key_store;
 mod randomness;
 pub mod sealed_box;
+pub mod space_key;
 pub mod subkey;
 #[cfg(test)]
 mod vectors;

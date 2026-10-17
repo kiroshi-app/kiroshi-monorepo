@@ -8,8 +8,12 @@ use crate::private_files;
 
 pub trait KeyStore {
 	fn name(&self) -> &'static str;
-	fn read(&self) -> Result<Option<Zeroizing<DeviceSecret>>, DeviceKeysError>;
-	fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError>;
+	fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>, DeviceKeysError>;
+	fn write(&self, secret: &[u8]) -> Result<(), DeviceKeysError>;
+}
+
+fn secret_read(store: &dyn KeyStore) -> Result<Option<Zeroizing<DeviceSecret>>, DeviceKeysError> {
+	store.read()?.map(|bytes| secret_of(&bytes)).transpose()
 }
 
 pub fn load_or_create(
@@ -19,12 +23,12 @@ pub fn load_or_create(
 	let Some(system) = system else {
 		return held_or_created(file);
 	};
-	match system.read() {
+	match secret_read(system) {
 		Ok(Some(secret)) => Ok(DeviceKeys::from_secret(&secret)),
 		Ok(None) => file_held_or_created_in(system, file),
 		Err(failure) => {
 			log::warn!("the {} did not read the device keys: {failure:?}", system.name());
-			match file.read()? {
+			match secret_read(file)? {
 				Some(secret) => Ok(DeviceKeys::from_secret(&secret)),
 				None => Err(failure),
 			}
@@ -36,26 +40,26 @@ fn file_held_or_created_in(
 	system: &dyn KeyStore,
 	file: &FileStore,
 ) -> Result<DeviceKeys, DeviceKeysError> {
-	if let Some(secret) = file.read()? {
+	if let Some(secret) = secret_read(file)? {
 		return Ok(DeviceKeys::from_secret(&secret));
 	}
 	let keys = DeviceKeys::generate().map_err(|_| DeviceKeysError::NoRandomness)?;
-	if let Err(failure) = system.write(&keys.secret()) {
+	if let Err(failure) = system.write(keys.secret().as_slice()) {
 		log::warn!(
 			"the {} did not store the device keys, the file store holds them: {failure:?}",
 			system.name()
 		);
-		file.write(&keys.secret())?;
+		file.write(keys.secret().as_slice())?;
 	}
 	Ok(keys)
 }
 
 fn held_or_created(store: &dyn KeyStore) -> Result<DeviceKeys, DeviceKeysError> {
-	if let Some(secret) = store.read()? {
+	if let Some(secret) = secret_read(store)? {
 		return Ok(DeviceKeys::from_secret(&secret));
 	}
 	let keys = DeviceKeys::generate().map_err(|_| DeviceKeysError::NoRandomness)?;
-	store.write(&keys.secret())?;
+	store.write(keys.secret().as_slice())?;
 	Ok(keys)
 }
 
@@ -83,15 +87,15 @@ impl KeyStore for FileStore {
 		"file store"
 	}
 
-	fn read(&self) -> Result<Option<Zeroizing<DeviceSecret>>, DeviceKeysError> {
+	fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>, DeviceKeysError> {
 		match std::fs::read(&self.path).map(Zeroizing::new) {
-			Ok(bytes) => secret_of(&bytes).map(Some),
+			Ok(bytes) => Ok(Some(bytes)),
 			Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
 			Err(error) => Err(DeviceKeysError::Unreadable { detail: error.to_string() }),
 		}
 	}
 
-	fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError> {
+	fn write(&self, secret: &[u8]) -> Result<(), DeviceKeysError> {
 		private_files::replace_atomically(&self.path, secret)
 			.map_err(|error| DeviceKeysError::Unwritable { detail: error.to_string() })
 	}
@@ -100,15 +104,15 @@ impl KeyStore for FileStore {
 #[cfg(target_os = "macos")]
 pub struct KeychainStore {
 	service: String,
+	account: String,
 }
 
 #[cfg(target_os = "macos")]
 impl KeychainStore {
-	const ACCOUNT: &'static str = "device-keys";
 	const ITEM_NOT_FOUND: i32 = -25300;
 
-	pub fn for_service(service: &str) -> Self {
-		Self { service: service.to_owned() }
+	pub fn item(service: &str, account: &str) -> Self {
+		Self { service: service.to_owned(), account: account.to_owned() }
 	}
 }
 
@@ -118,18 +122,18 @@ impl KeyStore for KeychainStore {
 		"Keychain"
 	}
 
-	fn read(&self) -> Result<Option<Zeroizing<DeviceSecret>>, DeviceKeysError> {
+	fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>, DeviceKeysError> {
 		let held =
-			security_framework::passwords::get_generic_password(&self.service, Self::ACCOUNT);
+			security_framework::passwords::get_generic_password(&self.service, &self.account);
 		match held.map(Zeroizing::new) {
-			Ok(bytes) => secret_of(&bytes).map(Some),
+			Ok(bytes) => Ok(Some(bytes)),
 			Err(error) if error.code() == Self::ITEM_NOT_FOUND => Ok(None),
 			Err(error) => Err(DeviceKeysError::Unreadable { detail: error.to_string() }),
 		}
 	}
 
-	fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError> {
-		security_framework::passwords::set_generic_password(&self.service, Self::ACCOUNT, secret)
+	fn write(&self, secret: &[u8]) -> Result<(), DeviceKeysError> {
+		security_framework::passwords::set_generic_password(&self.service, &self.account, secret)
 			.map_err(|error| DeviceKeysError::Unwritable { detail: error.to_string() })
 	}
 }
@@ -154,19 +158,19 @@ mod tests {
 			"system store"
 		}
 
-		fn read(&self) -> Result<Option<Zeroizing<DeviceSecret>>, DeviceKeysError> {
+		fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>, DeviceKeysError> {
 			self.reads.set(self.reads.get() + 1);
 			if self.is_unreadable {
 				return Err(DeviceKeysError::Unreadable { detail: "locked".to_owned() });
 			}
-			Ok(self.held.borrow().map(Zeroizing::new))
+			Ok(self.held.borrow().map(|secret| Zeroizing::new(secret.to_vec())))
 		}
 
-		fn write(&self, secret: &DeviceSecret) -> Result<(), DeviceKeysError> {
+		fn write(&self, secret: &[u8]) -> Result<(), DeviceKeysError> {
 			if self.is_unwritable {
 				return Err(DeviceKeysError::Unwritable { detail: "denied".to_owned() });
 			}
-			*self.held.borrow_mut() = Some(*secret);
+			*self.held.borrow_mut() = Some(*secret_of(secret)?);
 			Ok(())
 		}
 	}
