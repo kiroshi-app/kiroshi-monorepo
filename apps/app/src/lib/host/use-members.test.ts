@@ -15,7 +15,10 @@ import type { MembersTransport } from "./members-transport"
 import { type MembersProps, useMembers } from "./use-members"
 
 import {
+	commands,
 	HOSTING_MEMBERS_CHANGED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+	type JoinedSpaceMember,
 	type Member,
 	type MembersError,
 } from "../bindings"
@@ -26,6 +29,13 @@ vi.mock("./index", () => ({
 	listen: vi.fn(async () => () => undefined),
 	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
 }))
+vi.mock("../bindings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../bindings")>()
+	return {
+		...actual,
+		commands: { ...actual.commands, joinedSpaceMembers: vi.fn() },
+	}
+})
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
 	raiseTransientNotice: vi.fn(),
@@ -149,6 +159,24 @@ describe("useMembers", () => {
 
 		expect(transport.list).toHaveBeenCalledWith("home")
 		expect(panel().members).toEqual([STEVE_ROW, SAM_PENDING_ROW])
+	})
+
+	it("names a member with no name by the unnamed copy, never by the email", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () =>
+				ok([
+					{ ...STEVE, name: null },
+					{ ...ALEX_JOINED, name: "" },
+					SAM_PENDING,
+				]),
+			),
+		})
+
+		expect(panel().members).toEqual([
+			{ ...STEVE_ROW, name: "No name" },
+			{ ...ALEX_JOINED_ROW, name: "No name" },
+			SAM_PENDING_ROW,
+		])
 	})
 
 	it("reads the members once for two panels on the same space", async () => {
@@ -529,5 +557,84 @@ describe("useMembers", () => {
 		})
 
 		expect(panel().isPending).toBe(false)
+	})
+})
+
+describe("useMembers on a joined space", () => {
+	const STUDIO = { id: "studio", name: "Studio Nord" }
+
+	const rosterAnswered = (roster: JoinedSpaceMember[]) =>
+		vi.mocked(commands.joinedSpaceMembers).mockResolvedValue({
+			status: "ok",
+			data: roster,
+		})
+
+	const watchStudio = () => {
+		const transport = createFakeTransport()
+		const hook = renderHook(
+			() => useMembers(STUDIO, true, { transport, joinedId: "joined-studio" }),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		return { transport, panel: () => shown(hook.result.current) }
+	}
+
+	const membersChangeAnnounced = () => {
+		const [, announce] =
+			vi
+				.mocked(listen)
+				.mock.calls.find(
+					([event]) => event === JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+				) ?? []
+		act(() => {
+			announce?.(
+				{
+					event: JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+					id: 1,
+					payload: { id: "joined-studio", members: [] },
+				},
+				null,
+			)
+		})
+	}
+
+	afterEach(() => vi.mocked(commands.joinedSpaceMembers).mockReset())
+
+	it("reads the roster of the joined space, never the hosted members", async () => {
+		rosterAnswered([
+			{ userId: "tom", name: "Tom", role: "guest" },
+			{ userId: "lea", name: "Lea", role: "host" },
+		])
+
+		const { panel, transport } = watchStudio()
+
+		await waitFor(() =>
+			expect(panel().members).toEqual([
+				{ id: "lea", name: "Lea", email: "", status: "host" },
+				{ id: "tom", name: "Tom", email: "", status: "joined" },
+			]),
+		)
+		expect(commands.joinedSpaceMembers).toHaveBeenCalledWith("joined-studio")
+		expect(transport.list).not.toHaveBeenCalled()
+	})
+
+	it("names a host with no name by the unnamed copy", async () => {
+		rosterAnswered([{ userId: "lea", name: "", role: "host" }])
+
+		const { panel } = watchStudio()
+
+		await waitFor(() =>
+			expect(panel().members.map((member) => member.name)).toEqual(["No name"]),
+		)
+	})
+
+	it("relabels the host once the joined roster changes", async () => {
+		rosterAnswered([{ userId: "lea", name: "Lea", role: "host" }])
+		const { panel } = watchStudio()
+		await waitFor(() => expect(panel().members[0]?.name).toBe("Lea"))
+
+		rosterAnswered([{ userId: "lea", name: "Léa Martin", role: "host" }])
+		membersChangeAnnounced()
+
+		await waitFor(() => expect(panel().members[0]?.name).toBe("Léa Martin"))
 	})
 })

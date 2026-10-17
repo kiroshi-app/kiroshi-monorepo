@@ -11,9 +11,14 @@ import {
 	rosterSpacesOf,
 	switcherSpacesOf,
 } from "./joined-spaces-controller"
+import { spaceQueryKeys } from "./space-query-keys"
 import { createSpacesController } from "./spaces-controller"
 
-import type { JoinedSpace, JoinedSpaceRemoved } from "../bindings"
+import type {
+	JoinedSpace,
+	JoinedSpaceMember,
+	JoinedSpaceRemoved,
+} from "../bindings"
 import { createStore } from "../store"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import type { JoinedHostState, JoinedHostsState } from "../host/joined-hosts"
@@ -98,19 +103,6 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 	}
 }
 
-const invitersFake = () => {
-	const emails = new Map<string, string>()
-	return {
-		of: (id: string) => emails.get(id) ?? "",
-		remember: (id: string, email: string) => {
-			emails.set(id, email)
-		},
-		forget: (id: string) => {
-			emails.delete(id)
-		},
-	}
-}
-
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const gearFor = async (listed: JoinedSpace[] = []) => {
@@ -123,7 +115,6 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 	const wire = transportFake(listed)
 	const reportFailure = vi.fn()
 	const reportRemoval = vi.fn()
-	const inviters = invitersFake()
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -131,7 +122,6 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		transport: wire.transport,
 		reportFailure,
 		reportRemoval,
-		inviters,
 	})
 	return {
 		home,
@@ -142,6 +132,11 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		reportFailure,
 		reportRemoval,
 		joined,
+		holdMembers: (joinedId: string, members: JoinedSpaceMember[]) =>
+			queryClient.setQueryData(
+				spaceQueryKeys.joinedMembersOf(joinedId),
+				members,
+			),
 	}
 }
 
@@ -507,16 +502,21 @@ const STUDIO: JoinedSpace = {
 
 const STUDIO_ROW = "joined:joined-studio"
 
-const HOST_EMAIL = "lea@example.com"
+const hostNamed = (name: string | null): JoinedSpaceMember => ({
+	userId: "u-lea",
+	name,
+	role: "host",
+})
 
 const REMOVED_NOTICE = {
-	title: "lea@example.com removed you from Studio Nord.",
+	title: "Lea removed you from Studio Nord.",
 	description:
-		"It’s gone from your spaces. Its conversations stay on lea@example.com’s Kiroshi.",
+		"It’s gone from your spaces. Its conversations stay on Lea’s Kiroshi.",
 }
 
 const withStudio = async () => {
 	const gear = await gearFor([STUDIO])
+	gear.holdMembers(STUDIO.id, [hostNamed("Lea")])
 	gear.joined.watch()
 	await settle()
 	return gear
@@ -529,7 +529,7 @@ describe("accepting an invited space", () => {
 		await settle()
 		gear.wire.hold([STUDIO])
 
-		await gear.joined.admit(STUDIO, HOST_EMAIL)
+		await gear.joined.admit(STUDIO)
 
 		expect(gear.joined.getState().joinedSpaces).toEqual([STUDIO])
 		expect(gear.hosts.connect).toHaveBeenCalledWith(STUDIO.id)
@@ -538,14 +538,36 @@ describe("accepting an invited space", () => {
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
 		)
-		expect(gear.joined.hostEmailOf(STUDIO.id)).toBe(HOST_EMAIL)
+	})
+})
+
+describe("the host name of a joined space", () => {
+	it("reads the host name from the member record of the space", async () => {
+		const gear = await withStudio()
+
+		expect(gear.joined.hostNameOf(STUDIO.id)).toBe("Lea")
+	})
+
+	it("falls back to the unnamed copy when the record carries no name", async () => {
+		const gear = await withStudio()
+		gear.holdMembers(STUDIO.id, [hostNamed(null)])
+
+		expect(gear.joined.hostNameOf(STUDIO.id)).toBe("No name")
+	})
+
+	it("falls back to the unnamed copy before the record is read", async () => {
+		const gear = await gearFor([STUDIO])
+		gear.joined.watch()
+		await settle()
+
+		expect(gear.joined.hostNameOf(STUDIO.id)).toBe("No name")
 	})
 })
 
 describe("a host removing the reader", () => {
 	it("drops the open space, raises the notice and opens the previous local space", async () => {
 		const gear = await withStudio()
-		await gear.joined.admit(STUDIO, HOST_EMAIL)
+		await gear.joined.admit(STUDIO)
 
 		gear.wire.evict(STUDIO)
 		await settle()
@@ -578,7 +600,7 @@ describe("a host removing the reader", () => {
 
 	it("drops a space that is not open and raises the notice", async () => {
 		const gear = await withStudio()
-		await gear.joined.admit(STUDIO, HOST_EMAIL)
+		await gear.joined.admit(STUDIO)
 		gear.joined.selectSpace(gear.home.id)
 
 		gear.wire.evict(STUDIO)
@@ -610,7 +632,7 @@ describe("a host removing the reader", () => {
 describe("a read dropping a joined space", () => {
 	it("moves the reader from an open relay space dropped by sign out to the local space", async () => {
 		const gear = await withStudio()
-		await gear.joined.admit(STUDIO, HOST_EMAIL)
+		await gear.joined.admit(STUDIO)
 		expect(gear.spaces.getState().selectedSpaceId).toBe("studio")
 
 		gear.wire.hold([])
@@ -621,12 +643,11 @@ describe("a read dropping a joined space", () => {
 		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
 		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
-		expect(gear.joined.hostEmailOf(STUDIO.id)).toBe("")
 	})
 
 	it("forgets a dropped space that is not open and keeps the selection", async () => {
 		const gear = await withStudio()
-		await gear.joined.admit(STUDIO, HOST_EMAIL)
+		await gear.joined.admit(STUDIO)
 		gear.joined.selectSpace(gear.home.id)
 
 		gear.wire.hold([])
@@ -635,7 +656,6 @@ describe("a read dropping a joined space", () => {
 
 		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
 		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
-		expect(gear.joined.hostEmailOf(STUDIO.id)).toBe("")
 	})
 })
 

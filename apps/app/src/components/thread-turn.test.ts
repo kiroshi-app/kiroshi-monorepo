@@ -129,7 +129,10 @@ const SIGNED_IN_HOSTING: ThreadAuthorship = {
 
 const SIGNED_IN_JOINED: ThreadAuthorship = {
 	accountId: SELF,
-	host: { kind: "joined", name: "lea@example.com" },
+	host: {
+		kind: "joined",
+		members: [{ userId: "account-lea", name: "Lea", role: "host" }],
+	},
 }
 
 const writtenBy = (
@@ -193,9 +196,7 @@ describe("whose user message a bubble shows", () => {
 			authorship: SIGNED_IN_JOINED,
 		})
 
-		expect(shownBubble().getAttribute("aria-label")).toBe(
-			"message from lea@example.com",
-		)
+		expect(shownBubble().getAttribute("aria-label")).toBe("message from Lea")
 	})
 
 	it("names a person with no name like an unnamed companion", () => {

@@ -1,12 +1,19 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, renderHook } from "@testing-library/react"
+import { listen } from "@tauri-apps/api/event"
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
 import { useRosterLists } from "./use-roster-lists"
 
+import {
+	commands,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+	type JoinedSpace,
+	type JoinedSpaceMember,
+} from "../bindings"
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
 import { rosterLinesIn } from "../bots/roster-line"
@@ -24,6 +31,13 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(async () => () => undefined),
 }))
+vi.mock("../bindings", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../bindings")>()
+	return {
+		...actual,
+		commands: { ...actual.commands, joinedSpaceMembers: vi.fn() },
+	}
+})
 
 afterEach(cleanup)
 
@@ -73,16 +87,22 @@ type RosterListsWiring = {
 	roster: RosterController
 	chat?: HeldChat
 	conversationRuntimes?: HeldConversations
+	joinedSpaces?: JoinedSpace[]
 }
+
+const SIGNED_IN = { kind: "signedIn", id: "account-self" }
 
 const rosterListsOn = ({
 	roster,
 	chat = NO_HELD_CHAT,
 	conversationRuntimes = NO_HELD_CONVERSATIONS,
+	joinedSpaces = [],
 }: RosterListsWiring) => {
-	const { bots, rosters, soloThreads } = roster.getState()
+	const { bots, rosters, soloThreads, spaceRowId } = roster.getState()
 	return {
 		core: {
+			account: { state: SIGNED_IN },
+			joinedSpaces: { state: { joinedSpaces } },
 			chat: { controller: chat },
 			conversationRuntimes,
 			roster: { controller: roster, state: { isRosterPending: false } },
@@ -94,7 +114,12 @@ const rosterListsOn = ({
 			rosters,
 			working: {},
 		},
-		rosterView: { bots, missions: [], rosteredSpaceId: SPACE, soloThreads },
+		rosterView: {
+			bots,
+			missions: [],
+			rosteredSpaceId: spaceRowId ?? SPACE,
+			soloThreads,
+		},
 		waitingMissionCount: 0,
 	} as unknown as Parameters<typeof useRosterLists>[0]
 }
@@ -225,5 +250,151 @@ describe("useRosterLists", () => {
 			"Older word",
 		])
 		expect(row).toMatchObject({ lastMessage: "Newer word", lastActivityAt: 2 })
+	})
+})
+
+const STUDIO: JoinedSpace = {
+	id: "joined-studio",
+	hostUrl: "wss://cloud.kiroshi.test/instances/studio/relay/member",
+	remoteSpaceId: "studio",
+	name: "Studio Nord",
+}
+
+const STUDIO_ROW = "joined:joined-studio"
+
+const LEA_HOST: JoinedSpaceMember = {
+	userId: "account-lea",
+	name: "Lea",
+	role: "host",
+}
+
+const hostedAndJoinedPanels = async (selectedRowId: string) => {
+	const store = createFakeTranscriptStore()
+	const mine = await store.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Walls",
+		botIds: [BOT],
+	})
+	const studio = await store.createSpace("Studio Nord")
+	const theirs = await store.createConversation({
+		spaceId: studio.id,
+		sectionId: null,
+		title: "Menu",
+		botIds: [],
+	})
+	const roster = mountRoster(store)
+	await roster.load({
+		spaces: [
+			{ spaceRowId: SPACE, spaceId: SPACE },
+			{ spaceRowId: STUDIO_ROW, spaceId: studio.id },
+		],
+		spaceRowId: selectedRowId,
+		lastRowId: null,
+	})
+	const pageRowOf = (
+		conversation: typeof mine,
+		authorAccountId: string | null,
+		authorName: string | null,
+	) => ({
+		...conversation,
+		lastActivityAt: 5,
+		lastWord: {
+			text: "Menu is set.",
+			at: 5,
+			authorBotId: null,
+			authorAccountId,
+			authorName,
+		},
+		soloBotId: null,
+		activeTurn: null,
+	})
+	act(() => {
+		roster.holdPageRow(
+			{ hostId: null, spaceId: SPACE },
+			pageRowOf(mine, null, null),
+		)
+		roster.holdPageRow(
+			{ hostId: STUDIO.id, spaceId: studio.id },
+			pageRowOf(theirs, LEA_HOST.userId, "lea@example.com"),
+		)
+	})
+	return { roster, mine, theirs }
+}
+
+const rosterAnswered = (roster: JoinedSpaceMember[]) =>
+	vi.mocked(commands.joinedSpaceMembers).mockResolvedValue({
+		status: "ok",
+		data: roster,
+	})
+
+const previewAuthorsOn = async (selectedRowId: string) => {
+	const { roster, mine, theirs } = await hostedAndJoinedPanels(selectedRowId)
+	const result = renderRosterLists({ roster, joinedSpaces: [STUDIO] })
+	const speakerOf = (spaceRowId: string, id: string) =>
+		result.current.rosterConversationsBySpace[spaceRowId]?.find(
+			(row) => row.id === id,
+		)?.lastSpeaker
+	return () => ({
+		hosted: speakerOf(SPACE, mine.id),
+		joined: speakerOf(STUDIO_ROW, theirs.id),
+	})
+}
+
+const membersChangeAnnounced = () => {
+	const [, announce] =
+		vi
+			.mocked(listen)
+			.mock.calls.find(
+				([event]) => event === JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+			) ?? []
+	act(() => {
+		announce?.({
+			event: JOINED_SPACE_MEMBERS_CHANGED_EVENT,
+			id: 1,
+			payload: { id: STUDIO.id, members: [] },
+		})
+	})
+}
+
+describe("the preview author of each panel", () => {
+	afterEach(() => vi.mocked(commands.joinedSpaceMembers).mockReset())
+
+	it.each([SPACE, STUDIO_ROW])(
+		"names each author from the space owning the conversation with %s selected",
+		async (selectedRowId) => {
+			rosterAnswered([LEA_HOST])
+
+			const authors = await previewAuthorsOn(selectedRowId)
+
+			await waitFor(() =>
+				expect(authors()).toEqual({ hosted: undefined, joined: "Lea" }),
+			)
+			expect(commands.joinedSpaceMembers).toHaveBeenCalledWith(STUDIO.id)
+		},
+	)
+
+	it.each([SPACE, STUDIO_ROW])(
+		"falls back to the unnamed copy, never the stored email, with %s selected",
+		async (selectedRowId) => {
+			rosterAnswered([{ ...LEA_HOST, name: null }])
+
+			const authors = await previewAuthorsOn(selectedRowId)
+
+			await waitFor(() =>
+				expect(authors()).toEqual({ hosted: undefined, joined: "No name" }),
+			)
+		},
+	)
+
+	it("relabels the joined panel once its members change", async () => {
+		rosterAnswered([LEA_HOST])
+		const authors = await previewAuthorsOn(SPACE)
+		await waitFor(() => expect(authors().joined).toBe("Lea"))
+
+		rosterAnswered([{ ...LEA_HOST, name: "Léa Martin" }])
+		membersChangeAnnounced()
+
+		await waitFor(() => expect(authors().joined).toBe("Léa Martin"))
 	})
 })

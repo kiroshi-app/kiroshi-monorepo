@@ -49,7 +49,7 @@ export const UserSettingsHost = ({
 		userSettings.name,
 		signOutLeavingOf(
 			joinedSpaces.state.joinedSpaces.filter(isRelaySpace),
-			joinedSpaces.controller.hostEmailOf,
+			joinedSpaces.controller.hostNameOf,
 		),
 	)
 

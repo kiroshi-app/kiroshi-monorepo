@@ -5,7 +5,9 @@ import type { WorkspaceCore } from "./use-workspace-core"
 import { storedOwnAccounts } from "../account/own-accounts"
 import { signedInAccountIdOf } from "../account/use-account"
 import type { SpaceHost, ThreadAuthorship } from "../chat/thread-authorship"
+import { NO_JOINED_MEMBERS } from "../spaces/joined-space-members"
 import { openJoinedSpaceOf } from "../spaces/joined-spaces-controller"
+import { useJoinedSpaceMembers } from "../spaces/use-joined-space-members"
 
 export const useThreadAuthorship = ({
 	account,
@@ -15,13 +17,15 @@ export const useThreadAuthorship = ({
 	const accountId = signedInAccountIdOf(account.state)
 	const { joinedSpaces: joined, openId } = joinedSpaces.state
 	const { selectedSpaceId } = spaces.state
-	const { hostEmailOf } = joinedSpaces.controller
+	const open = openJoinedSpaceOf(joined, openId, selectedSpaceId)
+	const [members = NO_JOINED_MEMBERS] = useJoinedSpaceMembers(
+		open ? [open.id] : [],
+	)
 
 	return useMemo(() => {
-		const open = openJoinedSpaceOf(joined, openId, selectedSpaceId)
 		const host: SpaceHost = open
-			? { kind: "joined", name: hostEmailOf(open.id) }
+			? { kind: "joined", members }
 			: { kind: "hosted", ownAccountIds: storedOwnAccounts.list() }
 		return { accountId, host }
-	}, [accountId, joined, openId, selectedSpaceId, hostEmailOf])
+	}, [accountId, open, members])
 }

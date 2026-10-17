@@ -1284,7 +1284,7 @@ const RemovedFromSpaceNotice = () => {
 	return (
 		<HeldInfoNotice
 			title={t("spaces.removed.notice", {
-				email: "lea@example.com",
+				host: "Lea",
 				name: "Studio Nord",
 			})}
 		/>
@@ -1329,7 +1329,7 @@ export const M8RemovedFromSpace = meta.story({
 	},
 	play: async ({ userEvent }) => {
 		await expectInfoNoticeClosing(
-			"lea@example.com removed you from Studio Nord.",
+			"Lea removed you from Studio Nord.",
 			userEvent,
 		)
 	},
@@ -1354,7 +1354,7 @@ export const M13SignedOut = meta.story({
 	},
 })
 
-const REMOVAL_TITLE = "steve@example.com removed you from Studio."
+const REMOVAL_TITLE = "Steve removed you from Studio."
 
 const REMOVAL_DESCRIPTION =
 	"It’s gone from your spaces. Its conversations stay on Steve’s Kiroshi."
@@ -1362,7 +1362,7 @@ const REMOVAL_DESCRIPTION =
 const RemovalNotice = () => {
 	const { t } = useTranslation("bots")
 	const title = t("spaces.removed.notice", {
-		email: "steve@example.com",
+		host: "Steve",
 		name: "Studio",
 	})
 	const description = t("spaces.removed.noticeDescription", { host: "Steve" })

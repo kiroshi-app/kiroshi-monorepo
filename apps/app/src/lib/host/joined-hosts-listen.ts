@@ -5,6 +5,7 @@ import type { LocalHost } from "./joined-hosts-invoke"
 
 import {
 	INVITATION_CHANGED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	JOINED_SPACE_REMOVED_EVENT,
 } from "../bindings"
 
@@ -30,6 +31,7 @@ const LOCAL_EVENTS: ReadonlySet<string> = new Set([
 	"hosting://changed",
 	JOINED_SPACE_CHANGED_EVENT,
 	JOINED_SPACE_REMOVED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	INVITATION_CHANGED_EVENT,
 	"window-maximize-button",
 	"notification://activated",

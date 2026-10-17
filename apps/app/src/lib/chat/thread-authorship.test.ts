@@ -13,6 +13,8 @@ import {
 	usePersonOf,
 } from "./thread-authorship"
 
+import type { JoinedSpaceMember } from "../bindings"
+
 const HOST = "account-host"
 const GUEST = "account-guest"
 
@@ -35,9 +37,34 @@ const hostedBy = (accountId: string | null): ThreadAuthorship => ({
 	host: { kind: "hosted", ownAccountIds: [HOST] },
 })
 
-const JOINED_AS_GUEST: ThreadAuthorship = {
+const LEA = "account-lea"
+
+const memberOf = (
+	userId: string,
+	name: string | null,
+	role: JoinedSpaceMember["role"] = "guest",
+): JoinedSpaceMember => ({ userId, name, role })
+
+const joinedAsGuestWith = (hostName: string | null): ThreadAuthorship => ({
 	accountId: GUEST,
-	host: { kind: "joined", name: "steve@example.com" },
+	host: {
+		kind: "joined",
+		members: [
+			memberOf(HOST, hostName, "host"),
+			memberOf(GUEST, "Tom"),
+			memberOf(LEA, null),
+		],
+	},
+})
+
+const HOST_ROW_NAMED_BY_EMAIL: MessageAuthorship = {
+	authorAccountId: HOST,
+	authorName: "account-host@example.com",
+}
+const LEA_ROW: MessageAuthorship = { authorAccountId: LEA, authorName: "Lea" }
+const GONE_ROW: MessageAuthorship = {
+	authorAccountId: "account-gone",
+	authorName: "Sam",
 }
 
 const authorsShownWith = (
@@ -76,10 +103,31 @@ describe("who wrote a message in a hosted space", () => {
 
 describe("who wrote a message in a joined space", () => {
 	it("keeps the rule: mine by account, the host when unattributed", () => {
-		expect(authorsShownWith(JOINED_AS_GUEST)).toEqual([
+		expect(authorsShownWith(joinedAsGuestWith("Steve"))).toEqual([
 			"Steve",
 			"mine",
-			"steve@example.com",
+			"Steve",
 		])
+	})
+
+	it("names the host from the member record, never from the stored email", () => {
+		expect(
+			authorsShownWith(joinedAsGuestWith("Steve"), [HOST_ROW_NAMED_BY_EMAIL]),
+		).toEqual(["Steve"])
+	})
+
+	it("shows the new name once the host renames themselves", () => {
+		expect(
+			authorsShownWith(joinedAsGuestWith("Steven"), [
+				HOST_ROW,
+				TYPED_SIGNED_OUT_ROW,
+			]),
+		).toEqual(["Steven", "Steven"])
+	})
+
+	it("falls back to the unnamed copy when the record carries no name", () => {
+		expect(
+			authorsShownWith(joinedAsGuestWith(null), [HOST_ROW, LEA_ROW, GONE_ROW]),
+		).toEqual(["No name", "No name", "No name"])
 	})
 })

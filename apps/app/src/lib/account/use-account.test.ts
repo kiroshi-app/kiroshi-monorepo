@@ -360,7 +360,7 @@ describe("useAccount", () => {
 					name: "Studio Nord",
 				},
 			],
-			() => "lea@example.com",
+			() => "Lea",
 		)
 		const { result } = renderHook(
 			() => useAccount(useWatchedAccount(), PROFILE_NAME, leaving),
@@ -376,7 +376,7 @@ describe("useAccount", () => {
 				open: true,
 				title: "Sign out of Kiroshi?",
 				description:
-					"Studio Nord leaves this computer until you sign in again. Its conversations stay with lea@example.com.",
+					"Studio Nord leaves this computer until you sign in again. Its conversations stay with Lea.",
 				confirmLabel: "Sign out",
 			}),
 		)

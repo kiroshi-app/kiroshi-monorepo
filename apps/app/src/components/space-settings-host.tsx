@@ -58,7 +58,9 @@ export const SpaceSettingsHost = ({
 			: null
 	const hosting = useHosting(editedSpace)
 	const isHosted = hosting?.hosting === "online" || editedJoinedSpace !== null
-	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted)
+	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted, {
+		joinedId: editedJoinedSpace ? joinedSpace?.id : undefined,
+	})
 
 	if (!selectedSpaceId) {
 		return null

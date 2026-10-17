@@ -19,10 +19,11 @@ import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { APPLICATIONS_TAB } from "@/lib/applications/connection-settings"
 import {
 	commands,
-	HOSTING_MEMBERS_CHANGED_EVENT,
+	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	type JoinedSpace,
+	type JoinedSpaceMember,
+	type JoinedSpaceMembersChanged,
 	type Member,
-	type MembersChanged,
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
@@ -59,6 +60,7 @@ vi.mock("@/lib/bindings", async (importOriginal) => {
 			hostingState: vi.fn(),
 			hostingStart: vi.fn(),
 			hostingStop: vi.fn(),
+			joinedSpaceMembers: vi.fn(),
 		},
 	}
 })
@@ -512,6 +514,23 @@ const removeSamOf = (dialog: HTMLElement) =>
 		name: i18n.t("settings:space.members.removeLabel", { name: "Sam Carter" }),
 	})
 
+const STEVE_HOSTING: JoinedSpaceMember = {
+	userId: "steve",
+	name: "Steve Puget",
+	role: "host",
+}
+
+const SAM_GUEST: JoinedSpaceMember = {
+	userId: "sam",
+	name: "Sam Carter",
+	role: "guest",
+}
+
+const answerJoinedMembers = (members: JoinedSpaceMember[]) =>
+	vi
+		.mocked(commands.joinedSpaceMembers)
+		.mockResolvedValue({ status: "ok", data: members })
+
 const answerMembers = (answers: Record<string, Member[]>) =>
 	vi
 		.mocked(invoke)
@@ -648,13 +667,14 @@ describe("SpaceSettingsHost members on the desktop", () => {
 
 	it("lists the host first, then the members read from the host, on a joined space", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
-		answerMembers({ hosting_members: [SAM_JOINED, HOST_ROW] })
+		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING])
 		const gear = await gearWithGarage()
 
 		const { dialog } = await openShareOf(gear, GARAGE_ROW)
 
 		await within(dialog).findByText("Sam Carter")
-		expect(invoke).toHaveBeenCalledWith("hosting_members", {
+		expect(commands.joinedSpaceMembers).toHaveBeenCalledWith(GARAGE.id)
+		expect(invoke).not.toHaveBeenCalledWith("hosting_members", {
 			spaceId: "garage",
 		})
 		const names = within(dialog)
@@ -734,10 +754,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 
 	it("refreshes the members of a joined space when its host announces a change", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
-		answerMembers({ hosting_members: [SAM_JOINED, HOST_ROW] })
-		let announce: (changed: MembersChanged) => void = () => undefined
+		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING])
+		let announce: (changed: JoinedSpaceMembersChanged) => void = () => undefined
 		vi.mocked(listen).mockImplementation(async (event, handler) => {
-			if (event === HOSTING_MEMBERS_CHANGED_EVENT) {
+			if (event === JOINED_SPACE_MEMBERS_CHANGED_EVENT) {
 				announce = (payload) =>
 					handler({ event, id: 0, payload } as never, null)
 			}
@@ -746,9 +766,9 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		const gear = await gearWithGarage()
 		const { dialog } = await openShareOf(gear, GARAGE_ROW)
 		await within(dialog).findByText("Sam Carter")
-		answerMembers({ hosting_members: [HOST_ROW] })
+		answerJoinedMembers([STEVE_HOSTING])
 
-		act(() => announce({ spaceId: "garage", members: [HOST_ROW] }))
+		act(() => announce({ id: GARAGE.id, members: [STEVE_HOSTING] }))
 
 		await waitFor(() =>
 			expect(within(dialog).queryByText("Sam Carter")).toBeNull(),

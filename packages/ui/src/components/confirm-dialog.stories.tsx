@@ -42,7 +42,7 @@ const SignOutConfirmation = ({
 			confirmLabel={t("spaces.signOut.confirm")}
 			defaultOpen
 			description={t("spaces.signOut.description", {
-				email: "lea@example.com",
+				host: "Lea",
 				name: "Studio Nord",
 			})}
 			onCancel={onCancel}
@@ -234,7 +234,7 @@ const expectSignOutQuestion = async (popup: HTMLElement) => {
 		within(popup).getByRole("heading", { name: "Sign out of Kiroshi?" }),
 	).toBeVisible()
 	await expect(popup).toHaveTextContent(
-		"Studio Nord leaves this computer until you sign in again. Its conversations stay with lea@example.com.",
+		"Studio Nord leaves this computer until you sign in again. Its conversations stay with Lea.",
 	)
 	const [cancel, signOut] = within(popup).getAllByRole("button")
 	await expect(cancel).toHaveAccessibleName("Cancel")

@@ -138,7 +138,7 @@ export const useInvitations = (
 				return
 			}
 			drop(invitation)
-			await joinedSpaces.admit(outcome.joined, invitation.inviterEmail)
+			await joinedSpaces.admit(outcome.joined)
 		},
 		onError: (_reason, invitation) => mark(invitation, null),
 		meta: NOTICED,

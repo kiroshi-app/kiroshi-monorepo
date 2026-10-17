@@ -134,14 +134,14 @@ const bots = {
 				"{{email}} a retiré cette invitation. Demandez-lui de vous inviter à nouveau.",
 		},
 		removed: {
-			notice: "{{email}} vous a retiré de {{name}}.",
+			notice: "{{host}} vous a retiré de {{name}}.",
 			noticeDescription:
 				"Il n’apparaît plus dans vos espaces. Ses conversations restent sur le Kiroshi de {{host}}.",
 		},
 		signOut: {
 			title: "Se déconnecter de Kiroshi ?",
 			description:
-				"{{name}} quitte cet ordinateur jusqu’à votre prochaine connexion. Ses conversations restent chez {{email}}.",
+				"{{name}} quitte cet ordinateur jusqu’à votre prochaine connexion. Ses conversations restent chez {{host}}.",
 			confirm: "Se déconnecter",
 			notice: "Déconnecté. {{name}} a quitté cet ordinateur.",
 		},
