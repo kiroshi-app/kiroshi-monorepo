@@ -119,20 +119,46 @@ The info is 10 + 4 + 16 = 30 bytes.
 One WebSocket text frame holding one JSON object:
 
 ```json
-{ "v": 2, "instance": "space-1", "from": "…32 hex…", "to": "…32 hex…", "key_id": 7, "ctr": 1, "challenge": "base64", "ct": "base64", "sig": "base64" }
+{ "v": 2, "instance": "space-1", "from": "…relay device uuid…", "to": "…relay device uuid…", "key_id": 7, "ctr": 1, "challenge": "base64", "ct": "base64", "sig": "base64" }
 ```
 
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `v` | number | Always `2`. |
 | `instance` | string | The hosted Space instance the frame belongs to. At most 65535 UTF-8 bytes. |
-| `from` | string | `device_id` of the sender. |
-| `to` | string, optional | `device_id` of the one recipient; absent for a frame to every member. |
+| `from` | string | Relay device id of the sender, written by the relay, never by the sender. |
+| `to` | string, optional | Relay device id of the one recipient; absent for a frame to every member. |
 | `key_id` | number | The `space_key` the subkey comes from. u32. |
 | `ctr` | number | The sender's counter under this `key_id`. u64, kept below 2^53 so a JSON number carries it exactly. |
 | `challenge` | string, optional | 32 bytes, base64. |
 | `ct` | string | The ciphertext bytes, base64. |
 | `sig` | string | 64 bytes, base64. |
+
+### Wire addressing
+
+The relay knows a device by the id `POST /devices` answered when that device
+registered its two public keys, a UUID: its relay device id. The wire carries
+relay device ids only; the AAD and the subkey carry the 32-hex `device_id` only.
+Each side maps one to the other through the roster of the Space, which holds both
+ids of every device with its public keys.
+
+- A sender never writes `from`. The relay splices `"from":"<relay device id>"` in
+  front of the frame, after its opening brace.
+- The host opens its relay socket with `?device=<its relay device id>`.
+- A host frame for one member carries `to` set to that member's relay device id,
+  and the AAD `to` set to that member's `device_id`. An answer to a call or a
+  `relay_resume`, the frames that `relay_resume` replays, and a hello answer go
+  to the one device that sent the call. An event carries no `to`.
+- A member frame goes to the host alone and carries no `to`, on the wire or in the
+  AAD.
+- A receiver resolves the wire `from` to a roster row by its relay device id, then
+  builds the AAD and the subkey from that row's `device_id`. The wire `from` names
+  a key the receiver already holds and is trusted for nothing else: a frame whose
+  `from` resolves to no roster row is dropped.
+
+The host drops a frame that is not `"v": 2`, resolves to no roster row or fails a
+step of Open. It sends nothing back and logs one line naming the Space, the wire
+`from` and the typed error, never the frame.
 
 ### AAD: canonical header bytes
 
@@ -185,6 +211,29 @@ Only a frame that passes every step records its `ctr` as the last accepted.
 
 A receiver persists its last accepted `ctr` per (`from`, `key_id`), so a frame
 replayed after a restart is refused.
+
+### Hello and challenge
+
+The challenge binds every member frame to the host socket it is read on, so a
+frame recorded on an earlier socket never runs again.
+
+- A member's first frame on a socket is a hello: the plaintext `{"hello":{}}`,
+  with no `challenge`.
+- The host answers every hello with a frame sealed to that device whose plaintext
+  is `{"hello":{}}` and whose header carries a fresh random 32-byte `challenge`.
+  The host holds that challenge for that device, in place of any it held before,
+  until the host socket ends.
+- A member carries the last challenge received from the host in the header of
+  every later frame on that socket.
+- A member frame other than a hello that carries no challenge, or a challenge
+  other than the one the host holds for its device, is stale: the host drops it,
+  runs nothing, and answers a hello sealed to that device.
+  - When the host holds a challenge for that device, the answer carries that held
+    challenge, unchanged. A member with several frames in flight under a replaced
+    challenge gets the same challenge back for each of them, and its resends
+    under it run.
+  - When the host holds no challenge for that device, it draws a fresh one, holds
+    it, and the answer carries it.
 
 ## Sealed box
 

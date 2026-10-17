@@ -63,10 +63,10 @@ pub(super) struct MemberCall {
 	id: Value,
 	command: String,
 	args: Value,
-	sender: Option<String>,
+	sender: String,
 }
 
-pub(super) fn member_call(text: &str) -> Result<MemberCall, String> {
+pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
 	let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
 	let id = frame.get("id").filter(|id| id.is_string() || id.is_number()).cloned();
 	let command = frame
@@ -82,9 +82,7 @@ pub(super) fn member_call(text: &str) -> Result<MemberCall, String> {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
 		}
 		(Some(id), Some(command), Some(args)) => {
-			let sender =
-				frame.pointer("/sender/accountId").and_then(Value::as_str).map(str::to_owned);
-			Ok(MemberCall { id, command: command.to_owned(), args, sender })
+			Ok(MemberCall { id, command: command.to_owned(), args, sender: sender.to_owned() })
 		}
 		(id, _, _) => Err(refused(id)),
 	}
@@ -166,24 +164,13 @@ pub(super) async fn bridged<R: Runtime>(
 	if let Err(refusal) =
 		reach::stays_in_the_shared_space(&app, &shared_space_id, &call.command, &call.args).await
 	{
-		eprintln!(
-			"{}",
-			reach::refusal_line(&call.command, call.sender.as_deref(), &shared_space_id, &refusal)
-		);
+		eprintln!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
-	if call.sender.is_none() {
-		eprintln!(
-			"a member frame reached the host without sender: {} in conversation {}",
-			call.command,
-			reach::conversation_of(&call.command, &call.args).unwrap_or("none")
-		);
-	}
 	let hosting = app.state::<Hosting>();
-	let vouched = call.sender.clone().map(|user_id| {
-		hosting.relayed.vouch(RelayedMember { space_id: shared_space_id.clone(), user_id })
-	});
-	match invoked(&local, &call, vouched.as_ref().map(|vouched| vouched.nonce.as_str())).await {
+	let member = RelayedMember { space_id: shared_space_id.clone(), user_id: call.sender.clone() };
+	let vouched = hosting.relayed.vouch(member);
+	match invoked(&local, &call, &vouched.nonce).await {
 		Ok((status, body)) => answer(call.id, status, body),
 		Err(reason) => answer(call.id, StatusCode::BAD_GATEWAY, json!(reason)),
 	}
@@ -192,16 +179,14 @@ pub(super) async fn bridged<R: Runtime>(
 async fn invoked(
 	local: &LocalApi,
 	call: &MemberCall,
-	relayed_member: Option<&str>,
+	relayed_member: &str,
 ) -> Result<(StatusCode, Value), String> {
-	let mut request = local
+	let request = local
 		.client
 		.post(format!("{}/api/invoke/{}", local.origin, call.command))
 		.bearer_auth(&local.token)
+		.header(RELAYED_MEMBER_HEADER, relayed_member)
 		.json(&call.args);
-	if let Some(nonce) = relayed_member {
-		request = request.header(RELAYED_MEMBER_HEADER, nonce);
-	}
 	let answered = request.send().await.map_err(|error| {
 		format!("the local host api could not be reached: {}", error.without_url())
 	})?;
@@ -324,28 +309,27 @@ mod tests {
 	#[test]
 	fn a_call_without_args_invokes_with_none() {
 		assert_eq!(
-			member_call(r#"{"id": 3, "command": "agent_models"}"#),
+			member_call(r#"{"id": 3, "command": "agent_models"}"#, "a1"),
 			Ok(MemberCall {
 				id: json!(3),
 				command: "agent_models".to_owned(),
 				args: json!({}),
-				sender: None,
+				sender: "a1".to_owned(),
 			})
 		);
 	}
 
 	#[test]
-	fn a_call_names_the_account_of_its_sender_and_never_of_its_from() {
-		let sent = |frame: Value| member_call(&frame.to_string()).map(|call| call.sender);
+	fn the_sender_is_the_roster_account_even_when_the_plaintext_carries_another_sender() {
+		let sent = |frame: Value| member_call(&frame.to_string(), "roster").map(|call| call.sender);
 
 		assert_eq!(
 			sent(json!({ "id": 1, "command": "agent_models", "sender": { "accountId": "a1" } })),
-			Ok(Some("a1".to_owned()))
+			Ok("roster".to_owned())
 		);
-		assert_eq!(sent(json!({ "id": 2, "command": "agent_models", "from": "a2" })), Ok(None));
 		assert_eq!(
-			sent(json!({ "id": 3, "command": "agent_models", "sender": { "accountId": 3 } })),
-			Ok(None)
+			sent(json!({ "id": 2, "command": "agent_models", "from": "a2" })),
+			Ok("roster".to_owned())
 		);
 	}
 
@@ -371,7 +355,7 @@ mod tests {
 			(r#"{"id": "b", "command": "space_list", "args": [1]}"#, json!("b")),
 			(r#"{"id": 9}"#, json!(9)),
 		] {
-			let refusal = member_call(frame).expect_err(frame);
+			let refusal = member_call(frame, "a1").expect_err(frame);
 			assert_eq!(status_of(&refusal), (id, json!(400)), "{frame}");
 		}
 	}
@@ -384,7 +368,7 @@ mod tests {
 			.map(|(command, _)| *command);
 		for command in host_only.chain(["a_command_nobody_classified"]) {
 			let frame = json!({ "id": "m", "command": command, "args": { "spaceId": "s" } });
-			let refusal = member_call(&frame.to_string()).expect_err(command);
+			let refusal = member_call(&frame.to_string(), "a1").expect_err(command);
 			assert_eq!(
 				serde_json::from_str::<Value>(&refusal).expect("a json answer"),
 				json!({ "id": "m", "status": 403, "body": HOST_ONLY_REFUSAL }),
@@ -475,13 +459,13 @@ mod tests {
 		for command in &plugin_commands {
 			let person =
 				json!({ "id": "m", "command": command, "args": { "scope": { "kind": "user" } } });
-			let refusal = member_call(&person.to_string()).expect_err(command);
+			let refusal = member_call(&person.to_string(), "a1").expect_err(command);
 			assert_eq!(status_of(&refusal), (json!("m"), json!(403)), "{command}");
 			for scope in
 				[json!({ "kind": "space", "id": "s" }), json!({ "kind": "bot", "id": "b" })]
 			{
 				let frame = json!({ "id": "m", "command": command, "args": { "scope": scope } });
-				assert!(member_call(&frame.to_string()).is_ok(), "{command} {scope}");
+				assert!(member_call(&frame.to_string(), "a1").is_ok(), "{command} {scope}");
 			}
 		}
 	}

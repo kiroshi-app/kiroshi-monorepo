@@ -11,6 +11,8 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
+use base64::prelude::{Engine as _, BASE64_STANDARD};
+use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
 use kiroshi_app::agent::commands::{agent_cancel_turn, terminate_session};
 use kiroshi_app::agent::contract::RuntimeScope;
@@ -18,12 +20,19 @@ use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::crypto::commands::{DeviceKeysState, SpaceKeys};
+use kiroshi_app::crypto::device_keys::{DeviceId, DeviceKeys};
+use kiroshi_app::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
+use kiroshi_app::crypto::space_key::HeldSpaceKey;
+use kiroshi_app::crypto::subkey::Subkey;
 use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageRole, StoredMessage};
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
 use kiroshi_app::hosting::commands::hosting_start;
+use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
+use kiroshi_app::logging::contract::InstallKind;
 use kiroshi_app::routines::webhook::{self, Webhook};
 use removed_on_drop::RemovedOnDrop;
 use serde_json::{json, Value};
@@ -39,6 +48,8 @@ const SCENARIO_ENV: &str = "FAKE_AGENT_SCENARIO_FILE";
 const BEARER: &str = "bearer-of-the-host";
 const PERSONAL: &str = "personal";
 const INSTANCE: &str = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+const HOST_DEVICE: &str = "0b7d3c2e-1f4a-4c5d-8e6f-7a8b9c0d1e2f";
+const GUEST_DEVICE: &str = "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
 const GUEST: &str = "guest";
 const ROOM: &str = "room-1";
 const ADA: &str = "b-ada";
@@ -78,6 +89,13 @@ async fn registered(body: String) -> Response {
 	)
 }
 
+async fn device_registered() -> Response {
+	answered_json(
+		StatusCode::CREATED,
+		json!({ "id": HOST_DEVICE, "createdAt": "2026-10-01T00:00:00.000Z" }),
+	)
+}
+
 async fn relay_opened(Served(cloud): Served<Cloud>, upgrade: WebSocketUpgrade) -> Response {
 	upgrade.on_upgrade(move |socket| async move {
 		cloud.sockets.send(socket).expect("the test holds the sockets");
@@ -99,6 +117,28 @@ async fn me() -> Response {
 		StatusCode::OK,
 		json!({ "id": "owner", "email": "owner@example.com", "createdAt": "2026-10-01T00:00:00.000Z" }),
 	)
+}
+
+async fn guest_rostered(app: &App<MockRuntime>) -> GuestDevice {
+	let host_keys = app.state::<DeviceKeysState>();
+	let host = host_keys.keys().expect("the host device keys");
+	let keys = DeviceKeys::generate().expect("randomness");
+	let agreement = keys.agreement_public();
+	let enrolled = Enrolled {
+		relay_device_id: GUEST_DEVICE,
+		account_id: GUEST,
+		signing: &keys.signing_public(),
+		agreement: agreement.as_bytes(),
+		added_at: 1,
+	};
+	let row = signed_row(host, PERSONAL, &enrolled);
+	database_of(app)
+		.space_relay()
+		.rostered(PERSONAL.to_owned(), row)
+		.await
+		.expect("the guest is rostered");
+	let space = app.state::<SpaceKeys>().held(PERSONAL).expect("the key reads").expect("a key");
+	GuestDevice { keys, host: host.signing_public(), space, ctr: 0, challenge: None }
 }
 
 fn answered_json(status: StatusCode, body: Value) -> Response {
@@ -139,10 +179,82 @@ fn sent(id: &str, turn_id: &str, content: &str) -> Value {
 	})
 }
 
+struct GuestDevice {
+	keys: DeviceKeys,
+	host: VerifyingKey,
+	space: HeldSpaceKey,
+	ctr: u64,
+	challenge: Option<[u8; CHALLENGE_LENGTH]>,
+}
+
+impl GuestDevice {
+	fn sealed(&mut self, plaintext: &str) -> String {
+		self.ctr += 1;
+		let header = Header {
+			instance: INSTANCE.to_owned(),
+			from: self.keys.device_id(),
+			to: None,
+			key_id: self.space.key_id,
+			ctr: self.ctr,
+			challenge: self.challenge,
+		};
+		let subkey = Subkey::derive(&self.space.key, self.space.key_id, &self.keys.device_id());
+		let sealed = frame::seal(header, plaintext.as_bytes(), &subkey, &self.keys)
+			.expect("the frame seals");
+		let mut envelope = json!({
+			"from": GUEST_DEVICE,
+			"v": 2,
+			"instance": INSTANCE,
+			"key_id": self.space.key_id,
+			"ctr": self.ctr,
+			"ct": BASE64_STANDARD.encode(&sealed.ciphertext),
+			"sig": BASE64_STANDARD.encode(sealed.sig.to_bytes()),
+		});
+		if let Some(challenge) = self.challenge {
+			envelope["challenge"] = json!(BASE64_STANDARD.encode(challenge));
+		}
+		envelope.to_string()
+	}
+
+	fn opened(&mut self, text: &str) -> Option<Value> {
+		let envelope: Value = serde_json::from_str(text).expect("a json frame");
+		let to = match envelope.get("to") {
+			None => None,
+			Some(to) if to == GUEST_DEVICE => Some(self.keys.device_id()),
+			Some(_) => return None,
+		};
+		let decoded = |key: &str| {
+			BASE64_STANDARD.decode(envelope[key].as_str().expect("base64")).expect("base64")
+		};
+		let challenge: Option<[u8; CHALLENGE_LENGTH]> =
+			envelope.get("challenge").map(|_| decoded("challenge").try_into().expect("32 bytes"));
+		let host = DeviceId::of(&self.host);
+		let header = Header {
+			instance: INSTANCE.to_owned(),
+			from: host,
+			to,
+			key_id: self.space.key_id,
+			ctr: envelope["ctr"].as_u64().expect("a ctr"),
+			challenge,
+		};
+		let sig = Signature::from_bytes(&decoded("sig").try_into().expect("64 bytes"));
+		let sealed = Frame { header, ciphertext: decoded("ct"), sig };
+		let subkey = Subkey::derive(&self.space.key, self.space.key_id, &host);
+		let plaintext = frame::open(&sealed, &subkey, &self.host).expect("the host frame opens");
+		let plaintext: Value = serde_json::from_slice(&plaintext).expect("a json plaintext");
+		if plaintext == json!({ "hello": {} }) {
+			self.challenge = challenge;
+			return None;
+		}
+		Some(plaintext)
+	}
+}
+
 struct Host {
 	app: App<MockRuntime>,
 	_window: WebviewWindow<MockRuntime>,
 	member: WebSocket,
+	guest: GuestDevice,
 	frames: Vec<Value>,
 	calls: u64,
 	_scenario: RemovedOnDrop,
@@ -156,6 +268,7 @@ impl Host {
 		let cloud = served(
 			Router::new()
 				.route("/instances", post(registered))
+				.route("/devices", post(device_registered))
 				.route("/instances/{id}/relay/host", get(relay_opened))
 				.route("/instances/{id}/members", get(members))
 				.route("/me", get(me))
@@ -175,6 +288,9 @@ impl Host {
 			std::fs::remove_dir_all(&data_dir).expect("the previous data dir is cleared");
 		}
 		app.manage(db::bootstrap(app.handle()));
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let identifier = app.config().identifier.clone();
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(data_dir.clone())));
 		let root = data_dir.join("environment");
 		store::set(&root, &EnvScope::Account, ACCOUNT_BEARER, BEARER).expect("the bearer is kept");
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root), &cloud));
@@ -195,7 +311,26 @@ impl Host {
 			.await
 			.expect("the host reached the relay in time")
 			.expect("the relay is up");
-		Self { app, _window: window, member, frames: Vec::new(), calls: 0, _scenario: scenario }
+		let guest = guest_rostered(&app).await;
+		let mut hosted = Self {
+			app,
+			_window: window,
+			member,
+			guest,
+			frames: Vec::new(),
+			calls: 0,
+			_scenario: scenario,
+		};
+		hosted.greeted().await;
+		hosted
+	}
+
+	async fn greeted(&mut self) {
+		let hello = self.guest.sealed(r#"{"hello":{}}"#);
+		self.member.send(Message::Text(hello.into())).await.expect("the hello leaves");
+		while self.guest.challenge.is_none() {
+			self.heard_one().await;
+		}
 	}
 
 	async fn send_turn(&mut self, message: Value, summoned: &[&str]) -> Value {
@@ -206,26 +341,28 @@ impl Host {
 	async fn called(&mut self, command: &str, args: Value) -> Value {
 		self.calls += 1;
 		let id = self.calls;
-		let frame = json!({
-			"id": id,
-			"command": command,
-			"sender": { "accountId": GUEST },
-			"args": args,
-		});
-		self.member.send(Message::Text(frame.to_string().into())).await.expect("the frame leaves");
+		let frame = json!({ "id": id, "command": command, "args": args });
+		let sealed = self.guest.sealed(&frame.to_string());
+		self.member.send(Message::Text(sealed.into())).await.expect("the frame leaves");
 		self.heard_until(|frames| frames.iter().any(|frame| frame["id"] == id)).await;
 		self.frames.iter().find(|frame| frame["id"] == id).cloned().expect("the call is answered")
 	}
 
 	async fn heard_until(&mut self, is_heard: impl Fn(&[Value]) -> bool) {
 		while !is_heard(&self.frames) {
-			let frame = timeout(PATIENCE, self.member.recv())
-				.await
-				.unwrap_or_else(|_| panic!("waited {PATIENCE:?}, heard {:#?}", self.frames))
-				.expect("the socket is open")
-				.expect("a readable frame");
-			if let Message::Text(text) = frame {
-				self.frames.push(serde_json::from_str(text.as_str()).expect("a json frame"));
+			self.heard_one().await;
+		}
+	}
+
+	async fn heard_one(&mut self) {
+		let frame = timeout(PATIENCE, self.member.recv())
+			.await
+			.unwrap_or_else(|_| panic!("waited {PATIENCE:?}, heard {:#?}", self.frames))
+			.expect("the socket is open")
+			.expect("a readable frame");
+		if let Message::Text(text) = frame {
+			if let Some(plaintext) = self.guest.opened(text.as_str()) {
+				self.frames.push(plaintext);
 			}
 		}
 	}

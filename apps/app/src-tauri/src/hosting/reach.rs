@@ -384,16 +384,6 @@ pub(super) fn reach_of(command: &str) -> Option<Reach> {
 	REACHES.iter().find(|(name, _)| *name == command).map(|(_, reach)| *reach)
 }
 
-pub(super) fn conversation_of<'a>(command: &str, args: &'a Value) -> Option<&'a str> {
-	let Some(Reach::Scoped(helds)) = reach_of(command) else {
-		return None;
-	};
-	helds
-		.iter()
-		.filter(|held| held.check == Check::Child(Conversation))
-		.find_map(|held| args.pointer(held.argument)?.as_str())
-}
-
 fn audience_of(event: &str) -> Option<Audience> {
 	AUDIENCES.iter().find(|(name, _)| *name == event).map(|(_, audience)| *audience)
 }
@@ -413,13 +403,7 @@ pub(super) enum Offending {
 
 const LOGGED_VALUE_LIMIT: usize = 200;
 
-pub(super) fn refusal_line(
-	command: &str,
-	sender: Option<&str>,
-	shared_space_id: &str,
-	refusal: &Refusal,
-) -> String {
-	let sender = sender.map_or_else(|| "none".to_owned(), |sender| Value::from(sender).to_string());
+pub(super) fn refusal_line(command: &str, shared_space_id: &str, refusal: &Refusal) -> String {
 	let reason = match refusal {
 		Refusal::NoReach => "it has no reach".to_owned(),
 		Refusal::HostOnly => "its reach is HostOnly".to_owned(),
@@ -433,9 +417,7 @@ pub(super) fn refusal_line(
 			format!("{} failed the {} check with {value}", held.argument, held.check.kind())
 		}
 	};
-	format!(
-		"the relayed {command} from sender {sender} was refused outside shared space {shared_space_id}: {reason}"
-	)
+	format!("the relayed {command} was refused outside shared space {shared_space_id}: {reason}")
 }
 
 pub(super) async fn stays_in_the_shared_space<R: Runtime>(

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
@@ -23,6 +24,10 @@ const SIGN_OUT_PATH: &str = "/api/auth/sign-out";
 const INSTANCES_PATH: &str = "/instances";
 
 const INVITATIONS_PATH: &str = "/invitations";
+
+const DEVICES_PATH: &str = "/devices";
+
+const DEVICE_KEY_TAKEN: &str = "DEVICE_KEY_TAKEN";
 
 const REQUEST_BOUND: Duration = Duration::from_secs(20);
 
@@ -75,6 +80,13 @@ pub enum InstancesError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegisterError {
 	Revoked,
+	Unreachable(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceRegisterError {
+	Revoked,
+	KeyTaken,
 	Unreachable(String),
 }
 
@@ -377,6 +389,38 @@ impl Cloud {
 		})
 	}
 
+	pub async fn register_device(
+		&self,
+		bearer: &str,
+		signing_public_key: &[u8],
+		agreement_public_key: &[u8],
+	) -> Result<String, DeviceRegisterError> {
+		let body = json!({
+			"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(signing_public_key),
+			"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(agreement_public_key),
+		});
+		let answered = self
+			.answered(|client| client.post(self.at(DEVICES_PATH)).bearer_auth(bearer).json(&body))
+			.await
+			.map_err(DeviceRegisterError::Unreachable)?;
+		match answered.status() {
+			StatusCode::UNAUTHORIZED => return Err(DeviceRegisterError::Revoked),
+			StatusCode::CONFLICT => return Err(device_conflicted(answered).await),
+			_ => {}
+		}
+		let answered = successful(answered).map_err(DeviceRegisterError::Unreachable)?;
+		let registered = answered.json::<Registered>().await.map_err(|error| {
+			DeviceRegisterError::Unreachable(format!(
+				"the registered device carried no readable id: {error}"
+			))
+		})?;
+		uuid::Uuid::parse_str(&registered.id).map(|id| id.to_string()).map_err(|error| {
+			DeviceRegisterError::Unreachable(format!(
+				"the registered device id is not a uuid: {error}"
+			))
+		})
+	}
+
 	pub async fn members(
 		&self,
 		bearer: &str,
@@ -541,8 +585,8 @@ impl Cloud {
 		self.at(&format!("{INSTANCES_PATH}/{instance_id}/members"))
 	}
 
-	pub fn host_relay_url(&self, instance_id: &str) -> String {
-		self.relay_url(instance_id, "host")
+	pub fn host_relay_url(&self, instance_id: &str, relay_device_id: &str) -> String {
+		format!("{}?device={relay_device_id}", self.relay_url(instance_id, "host"))
 	}
 
 	pub fn member_relay_url(&self, instance_id: &str) -> String {
@@ -635,6 +679,19 @@ async fn leave_conflicted(answered: reqwest::Response) -> LeaveCallError {
 	}
 }
 
+async fn device_conflicted(answered: reqwest::Response) -> DeviceRegisterError {
+	match answered.json::<Refusal>().await {
+		Ok(refusal) if refusal.error.code == DEVICE_KEY_TAKEN => DeviceRegisterError::KeyTaken,
+		Ok(refusal) => DeviceRegisterError::Unreachable(format!(
+			"the cloud answered a conflict coded {}",
+			refusal.error.code
+		)),
+		Err(error) => DeviceRegisterError::Unreachable(format!(
+			"the cloud answered a conflict with an unreadable body: {error}"
+		)),
+	}
+}
+
 async fn member_call_answered(
 	answered: reqwest::Response,
 ) -> Result<reqwest::Response, MemberCallError> {
@@ -683,12 +740,12 @@ mod tests {
 	#[test]
 	fn the_host_relay_is_reached_over_the_websocket_scheme_of_the_base() {
 		assert_eq!(
-			Cloud::new("https://api.kiroshi.app/").host_relay_url("i1"),
-			"wss://api.kiroshi.app/instances/i1/relay/host"
+			Cloud::new("https://api.kiroshi.app/").host_relay_url("i1", "d1"),
+			"wss://api.kiroshi.app/instances/i1/relay/host?device=d1"
 		);
 		assert_eq!(
-			Cloud::new("http://127.0.0.1:9").host_relay_url("i1"),
-			"ws://127.0.0.1:9/instances/i1/relay/host"
+			Cloud::new("http://127.0.0.1:9").host_relay_url("i1", "d1"),
+			"ws://127.0.0.1:9/instances/i1/relay/host?device=d1"
 		);
 	}
 

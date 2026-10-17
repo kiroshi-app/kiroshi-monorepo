@@ -80,6 +80,7 @@ pub fn run() {
 			}
 			app.manage(db::bootstrap(app.handle()));
 			app.manage(crypto::commands::load(app.handle()));
+			app.manage(crypto::commands::space_keys(app.handle()));
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 			}

@@ -60,6 +60,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 51, statements: SOLO_CONVERSATION_ACTIVITY },
 	Migration { version: 52, statements: TURN_RUNS },
 	Migration { version: 53, statements: CONVERSATION_LOOK },
+	Migration { version: 54, statements: RELAY_V2 },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1134,6 +1135,44 @@ ALTER TABLE conversations ADD COLUMN color TEXT
 	CHECK (color IN ('red', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'orange'));
 ";
 
+const RELAY_V2: &str = "
+CREATE TABLE relay_devices (
+	account_id TEXT NOT NULL,
+	device_id TEXT NOT NULL,
+	relay_device_id TEXT NOT NULL,
+	PRIMARY KEY (account_id, device_id)
+);
+
+CREATE TABLE space_roster (
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	device_id TEXT NOT NULL,
+	relay_device_id TEXT NOT NULL,
+	account_id TEXT NOT NULL,
+	signing_public_key BLOB NOT NULL,
+	agreement_public_key BLOB NOT NULL,
+	fingerprint TEXT NOT NULL,
+	added_at INTEGER NOT NULL,
+	signature BLOB NOT NULL,
+	PRIMARY KEY (space_id, device_id),
+	UNIQUE (space_id, relay_device_id)
+);
+
+CREATE TABLE relay_accepted_counters (
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	device_id TEXT NOT NULL,
+	key_id INTEGER NOT NULL,
+	ctr INTEGER NOT NULL,
+	PRIMARY KEY (space_id, device_id, key_id)
+);
+
+CREATE TABLE relay_reserved_counters (
+	space_id TEXT NOT NULL,
+	key_id INTEGER NOT NULL,
+	reserved INTEGER NOT NULL,
+	PRIMARY KEY (space_id, key_id)
+);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1240,6 +1279,7 @@ mod tests {
 	const CONVERSATION_ACTIVITY_STEP: u32 = 50;
 	const TURN_RUNS_STEP: u32 = 52;
 	const CONVERSATION_LOOK_STEP: u32 = 53;
+	const RELAY_V2_STEP: u32 = 54;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3854,6 +3894,52 @@ mod tests {
 		assert!(unknown_state.is_err(), "a run in an unknown state was accepted");
 		assert_eq!(runs_left, 0, "a run outlived its turn");
 
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_relay_v2_tables_install_on_a_kept_file_and_only_the_reserved_counter_outlives_its_space()
+	{
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(RELAY_V2_STEP)).expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), CONVERSATION_LOOK_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, position, created_at) VALUES ('s1', 'Shared', 1, 1);",
+			)
+			.expect("a space this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		connection
+			.execute_batch(
+				"INSERT INTO space_roster (space_id, device_id, relay_device_id, account_id,
+					signing_public_key, agreement_public_key, fingerprint, added_at, signature)
+					VALUES ('s1', 'd1', 'r1', 'a1', x'00', x'00', 'six words', 1, x'00');
+				INSERT INTO relay_accepted_counters (space_id, device_id, key_id, ctr)
+					VALUES ('s1', 'd1', 1, 7);
+				INSERT INTO relay_reserved_counters (space_id, key_id, reserved) VALUES ('s1', 1, 1000);
+				INSERT INTO relay_devices (account_id, device_id, relay_device_id) VALUES ('a1', 'd1', 'r1');
+				DELETE FROM spaces WHERE id = 's1';",
+			)
+			.expect("the relay rows are written, then their space goes");
+		let count = |table: &str| -> i64 {
+			connection
+				.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+				.expect("the rows count")
+		};
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(
+			[
+				count("space_roster"),
+				count("relay_accepted_counters"),
+				count("relay_reserved_counters"),
+				count("relay_devices"),
+			],
+			[0, 0, 1, 1]
+		);
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

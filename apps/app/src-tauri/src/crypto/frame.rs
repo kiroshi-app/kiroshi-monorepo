@@ -6,6 +6,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 
 use super::device_keys::{verify, DeviceId, DeviceKeys};
 use super::error::CryptoError;
+use super::randomness::random_bytes;
 use super::subkey::Subkey;
 
 pub const VERSION: u8 = 2;
@@ -81,6 +82,10 @@ pub fn open(frame: &Frame, subkey: &Subkey, sender: &VerifyingKey) -> Result<Vec
 	let aad = frame.header.aad()?;
 	verify(sender, &signed_bytes(&aad, &frame.ciphertext), &frame.sig)?;
 	decrypt(subkey, frame.header.ctr, &aad, &frame.ciphertext)
+}
+
+pub fn fresh_challenge() -> Result<[u8; CHALLENGE_LENGTH], CryptoError> {
+	random_bytes::<CHALLENGE_LENGTH>().map(|challenge| *challenge)
 }
 
 fn nonce_of(ctr: u64) -> [u8; NONCE_LENGTH] {

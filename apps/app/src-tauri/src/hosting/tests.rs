@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State as Served};
+use axum::extract::{Path, RawQuery, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -26,6 +26,8 @@ use super::contract::{
 use super::members::{invite, list, remove, withdraw};
 use super::reach;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
+use super::sealing_member::{HostFrame, SealingMember, Space};
+use super::wire::HELLO;
 use super::{renamed, resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::session::restore;
@@ -53,6 +55,10 @@ use crate::conversations::contract::{
 	UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
+use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
+use crate::crypto::device_keys::DeviceKeys;
+use crate::crypto::frame::CHALLENGE_LENGTH;
+use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole, NewTurn};
@@ -64,6 +70,7 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
+use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
 use crate::mcp_oauth::credentials;
@@ -85,6 +92,7 @@ const INVOKE_ROUTE: &str = "/api/invoke/{command}";
 const PATIENCE: Duration = Duration::from_secs(10);
 const OWNER_EMAIL: &str = "owner@example.com";
 const POLL_EVERY: Duration = Duration::from_millis(100);
+const MEMBER_ACCOUNT: &str = "member-account";
 
 #[derive(Clone)]
 struct Relay {
@@ -94,7 +102,9 @@ struct Relay {
 	registered: Arc<Mutex<Vec<String>>>,
 	known: Arc<Mutex<HashSet<String>>>,
 	attempts: Arc<AtomicUsize>,
-	sockets: mpsc::UnboundedSender<WebSocket>,
+	sockets: mpsc::UnboundedSender<(WebSocket, String)>,
+	devices: Arc<Mutex<Vec<(Value, String)>>>,
+	is_device_key_taken: Arc<AtomicBool>,
 	members: Arc<Mutex<Vec<Value>>>,
 	member_calls: Arc<Mutex<Vec<String>>>,
 	member_answer: Arc<Mutex<Option<(StatusCode, Value)>>>,
@@ -187,9 +197,28 @@ async fn registration(Served(relay): Served<Relay>, headers: HeaderMap, body: St
 	answered_json(StatusCode::CREATED, json!({ "id": id, "name": body["name"], "role": "owner" }))
 }
 
+async fn device_registered(
+	Served(relay): Served<Relay>,
+	headers: HeaderMap,
+	body: String,
+) -> Response {
+	if bearer_of(&headers) != BEARER {
+		return StatusCode::UNAUTHORIZED.into_response();
+	}
+	if relay.is_device_key_taken.load(Ordering::SeqCst) {
+		let refusal = json!({ "error": { "code": "DEVICE_KEY_TAKEN", "message": "taken" } });
+		return answered_json(StatusCode::CONFLICT, refusal);
+	}
+	let body: Value = serde_json::from_str(&body).expect("a json body");
+	let id = uuid::Uuid::new_v4().to_string();
+	relay.devices.lock().expect("the relay").push((body, id.clone()));
+	answered_json(StatusCode::CREATED, json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z" }))
+}
+
 async fn host(
 	Served(relay): Served<Relay>,
 	Path(id): Path<String>,
+	RawQuery(query): RawQuery,
 	headers: HeaderMap,
 	upgrade: WebSocketUpgrade,
 ) -> Response {
@@ -200,11 +229,18 @@ async fn host(
 	if let Some(status) = relay.refusal {
 		return status.into_response();
 	}
+	let device = query.as_deref().and_then(|query| query.strip_prefix("device="));
+	let is_a_device = device.is_some_and(|device| {
+		relay.devices.lock().expect("the relay").iter().any(|(_, id)| id == device)
+	});
+	if !is_a_device {
+		return StatusCode::FORBIDDEN.into_response();
+	}
 	if !relay.known.lock().expect("the relay").contains(&id) {
 		return StatusCode::NOT_FOUND.into_response();
 	}
 	upgrade.on_upgrade(move |socket| async move {
-		relay.sockets.send(socket).expect("the test holds the sockets");
+		relay.sockets.send((socket, id)).expect("the test holds the sockets");
 	})
 }
 
@@ -323,7 +359,7 @@ async fn served(router: Router) -> String {
 struct Harness {
 	app: AppOfItsOwn,
 	relay: Relay,
-	sockets: mpsc::UnboundedReceiver<WebSocket>,
+	sockets: mpsc::UnboundedReceiver<(WebSocket, String)>,
 	heard: Arc<Mutex<Vec<Value>>>,
 	heard_members: Arc<Mutex<Vec<Value>>>,
 	_temporary: Vec<RemovedOnDrop>,
@@ -390,6 +426,8 @@ impl Harness {
 			known: Arc::default(),
 			attempts: Arc::default(),
 			sockets: sockets_in,
+			devices: Arc::default(),
+			is_device_key_taken: Arc::default(),
 			members: Arc::new(Mutex::new(vec![cloud_member(
 				"owner",
 				OWNER_EMAIL,
@@ -403,6 +441,7 @@ impl Harness {
 		let cloud = served(
 			Router::new()
 				.route("/instances", post(registration))
+				.route("/devices", post(device_registered))
 				.route("/instances/{id}/relay/host", get(host))
 				.route("/instances/{id}/members", get(members_listed).post(member_invited))
 				.route("/instances/{id}/members/{user_id}", delete(member_removed))
@@ -420,6 +459,10 @@ impl Harness {
 		}
 		let app = an_app_of_its_own(&format!("hosting-{name}"), mock_builder());
 		app.manage::<DatabaseState>(Ok(db::open(&database)));
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let profile = app.path().app_data_dir().expect("the data folder resolves");
+		let identifier = app.config().identifier.clone();
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &cloud));
 		app.manage(RelayGuests::new(&cloud));
 		app.manage(
@@ -504,11 +547,49 @@ impl Harness {
 		stop(self.app.handle(), PERSONAL.to_owned()).await.expect("the hosting stops")
 	}
 
-	async fn member(&mut self) -> WebSocket {
-		tokio::time::timeout(PATIENCE, self.sockets.recv())
+	async fn member(&mut self) -> MemberWire {
+		self.member_of(MEMBER_ACCOUNT).await
+	}
+
+	async fn member_of(&mut self, account_id: &str) -> MemberWire {
+		self.member_in(PERSONAL, account_id).await
+	}
+
+	async fn member_in(&mut self, space_id: &str, account_id: &str) -> MemberWire {
+		let (socket, instance_id) = tokio::time::timeout(PATIENCE, self.sockets.recv())
 			.await
 			.expect("the host connected in time")
-			.expect("the relay is up")
+			.expect("the relay is up");
+		let device = SealingMember::new(account_id);
+		self.rostered(space_id, &device).await;
+		MemberWire {
+			socket,
+			instance_id,
+			host: self.host_keys().signing_public(),
+			space: self.space_key(space_id),
+			device,
+			ctr: 0,
+			challenge: None,
+			held: VecDeque::new(),
+			texts: Vec::new(),
+		}
+	}
+
+	fn host_keys(&self) -> DeviceKeys {
+		let state = self.app.state::<DeviceKeysState>();
+		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
+	}
+
+	fn space_key(&self, space_id: &str) -> HeldSpaceKey {
+		let held = self.app.state::<SpaceKeys>().held(space_id).expect("the space key reads");
+		held.expect("the hosted space holds a key")
+	}
+
+	async fn rostered(&self, space_id: &str, device: &SealingMember) {
+		let state = self.app.state::<DatabaseState>();
+		let roster = state.as_ref().expect("the database").space_relay();
+		let row = device.row(&self.host_keys(), space_id);
+		roster.rostered(space_id.to_owned(), row).await.expect("the member is rostered");
 	}
 
 	fn attempts(&self) -> usize {
@@ -563,20 +644,96 @@ async fn ended_on_its_own(relay: watch::Sender<bool>) {
 	tokio::time::timeout(PATIENCE, relay.closed()).await.expect("the relay ended on its own");
 }
 
-async fn next_json(member: &mut WebSocket) -> Value {
-	loop {
-		let frame = tokio::time::timeout(PATIENCE, member.recv())
-			.await
-			.expect("a frame in time")
-			.expect("the socket is open")
-			.expect("a readable frame");
-		if let Message::Text(text) = frame {
-			return serde_json::from_str(text.as_str()).expect("a json frame");
+struct MemberWire {
+	socket: WebSocket,
+	instance_id: String,
+	host: ed25519_dalek::VerifyingKey,
+	space: HeldSpaceKey,
+	device: SealingMember,
+	ctr: u64,
+	challenge: Option<[u8; CHALLENGE_LENGTH]>,
+	held: VecDeque<Value>,
+	texts: Vec<String>,
+}
+
+impl MemberWire {
+	fn space(&self) -> Space<'_> {
+		Space { instance_id: &self.instance_id, key: &self.space, host: &self.host }
+	}
+
+	async fn recv(&mut self) -> Option<Result<Message, axum::Error>> {
+		self.socket.recv().await
+	}
+
+	async fn send(&mut self, message: Message) -> Result<(), axum::Error> {
+		self.socket.send(message).await
+	}
+
+	async fn sealed_sent(&mut self, plaintext: &str, challenge: Option<[u8; CHALLENGE_LENGTH]>) {
+		self.ctr += 1;
+		let sealed = self.device.sealed(&self.space(), self.ctr, plaintext, challenge);
+		self.socket.send(Message::Text(sealed.into())).await.expect("the member frame leaves");
+	}
+
+	async fn said(&mut self, plaintext: &str) {
+		if self.challenge.is_none() {
+			self.greeted().await;
+		}
+		self.sealed_sent(plaintext, self.challenge).await;
+	}
+
+	async fn greeted(&mut self) -> HostFrame {
+		self.sealed_sent(HELLO, None).await;
+		loop {
+			let frame = self.next_sealed().await;
+			if is_a_hello(&frame) {
+				self.challenge = frame.challenge;
+				return frame;
+			}
+			self.held.push_back(frame.plaintext);
+		}
+	}
+
+	async fn next_sealed(&mut self) -> HostFrame {
+		loop {
+			let frame = tokio::time::timeout(PATIENCE, self.socket.recv())
+				.await
+				.expect("a frame in time")
+				.expect("the socket is open")
+				.expect("a readable frame");
+			let Message::Text(text) = frame else {
+				continue;
+			};
+			self.texts.push(text.as_str().to_owned());
+			if let Some(opened) = self.device.opened(&self.space(), text.as_str()) {
+				return opened;
+			}
+		}
+	}
+
+	async fn next_plaintext(&mut self) -> Value {
+		if let Some(held) = self.held.pop_front() {
+			return held;
+		}
+		loop {
+			let frame = self.next_sealed().await;
+			if !is_a_hello(&frame) {
+				return frame.plaintext;
+			}
+			self.challenge = frame.challenge;
 		}
 	}
 }
 
-async fn next_stamped(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
+fn is_a_hello(frame: &HostFrame) -> bool {
+	frame.plaintext == json!({ "hello": {} }) && frame.challenge.is_some()
+}
+
+async fn next_json(member: &mut MemberWire) -> Value {
+	member.next_plaintext().await
+}
+
+async fn next_stamped(member: &mut MemberWire, wanted: impl Fn(&Value) -> bool) -> Value {
 	loop {
 		let frame = next_json(member).await;
 		if wanted(&frame) {
@@ -597,7 +754,7 @@ fn unstamped(mut frame: Value) -> Value {
 	frame
 }
 
-async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> Value {
+async fn next_text(member: &mut MemberWire, wanted: impl Fn(&Value) -> bool) -> Value {
 	loop {
 		let frame = unstamped(next_json(member).await);
 		if wanted(&frame) {
@@ -606,16 +763,16 @@ async fn next_text(member: &mut WebSocket, wanted: impl Fn(&Value) -> bool) -> V
 	}
 }
 
-async fn members_heard(member: &mut WebSocket) -> Value {
+async fn members_heard(member: &mut MemberWire) -> Value {
 	next_text(member, |frame| frame["event"]["event"] == MEMBERS_CHANGED_EVENT).await
 }
 
-async fn answer(member: &mut WebSocket) -> Value {
+async fn answer(member: &mut MemberWire) -> Value {
 	next_text(member, |frame| frame.get("event").is_none()).await
 }
 
-async fn send(member: &mut WebSocket, text: &str) {
-	member.send(Message::Text(text.into())).await.expect("the member frame leaves");
+async fn send(member: &mut MemberWire, text: &str) {
+	member.said(text).await;
 }
 
 fn run(test: impl std::future::Future<Output = ()>) {
@@ -1044,15 +1201,10 @@ fn a_relay_guest_adding_a_server_to_a_space_plugin_reaches_the_host() {
 	run(async {
 		let (mut harness, effects) = Harness::applying_host_effects("plugin-space").await;
 		harness.started().await;
-		let mut member = harness.member().await;
+		let mut member = harness.member_of(A_JOINER).await;
 		let args = a_stdio_server_on(json!({ "kind": "space", "id": PERSONAL }));
 
-		let frame = json!({
-			"id": "p",
-			"command": "plugin_set_mcp_server",
-			"sender": { "accountId": A_JOINER },
-			"args": args,
-		});
+		let frame = json!({ "id": "p", "command": "plugin_set_mcp_server", "args": args });
 		send(&mut member, &frame.to_string()).await;
 		let answered = answer(&mut member).await;
 
@@ -1196,7 +1348,7 @@ fn numbered(harness: &Harness, n: usize) {
 		.expect("emitted");
 }
 
-async fn numbered_through(harness: &Harness, member: &mut WebSocket, n: usize) -> Value {
+async fn numbered_through(harness: &Harness, member: &mut MemberWire, n: usize) -> Value {
 	numbered(harness, n);
 	next_stamped(member, |frame| frame["event"]["payload"]["n"] == n).await
 }
@@ -1205,7 +1357,7 @@ fn number_of(frame: &Value) -> Option<u64> {
 	frame["event"]["payload"]["n"].as_u64()
 }
 
-async fn resumed_from(member: &mut WebSocket, epoch: &str, since: u64) -> (Vec<Value>, Value) {
+async fn resumed_from(member: &mut MemberWire, epoch: &str, since: u64) -> (Vec<Value>, Value) {
 	let args = json!({ "epoch": epoch, "since": since, "token": RESUME_TOKEN });
 	let call = json!({ "id": "resume", "command": RESUME_COMMAND, "args": args });
 	send(member, &call.to_string()).await;
@@ -1424,7 +1576,7 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 			database.spaces().create("Work".to_owned()).await.expect("the space").id
 		};
 		start(harness.app.handle(), work.clone()).await.expect("the hosting starts");
-		let mut member = harness.member().await;
+		let mut member = harness.member_in(&work, MEMBER_ACCOUNT).await;
 		harness.reached_by(&work, HostingState::Online).await;
 		members_heard(&mut member).await;
 
@@ -1888,7 +2040,7 @@ const A_JOINER: &str = "joiner-account";
 struct Guest {
 	harness: Harness,
 	effects: HostEffects,
-	member: WebSocket,
+	member: MemberWire,
 }
 
 impl Guest {
@@ -1899,7 +2051,7 @@ impl Guest {
 			.await
 			.expect("the two spaces are planted");
 		harness.started().await;
-		let mut member = harness.member().await;
+		let mut member = harness.member_of(A_JOINER).await;
 		harness.reached(HostingState::Online).await;
 		members_heard(&mut member).await;
 		let mut guest = Self { harness, effects, member };
@@ -1916,14 +2068,7 @@ impl Guest {
 	}
 
 	async fn called(&mut self, command: &str, args: Value) -> Value {
-		self.called_by(Some(A_JOINER), command, args).await
-	}
-
-	async fn called_by(&mut self, sender: Option<&str>, command: &str, args: Value) -> Value {
-		let mut frame = json!({ "id": command, "command": command, "args": args });
-		if let Some(sender) = sender {
-			frame["sender"] = json!({ "accountId": sender });
-		}
+		let frame = json!({ "id": command, "command": command, "args": args });
 		send(&mut self.member, &frame.to_string()).await;
 		answer(&mut self.member).await
 	}
@@ -2001,19 +2146,6 @@ fn a_member_reads_a_conversation_page() {
 		"conversation_message_page",
 		json!({ "conversationId": "c-mine", "beforeSeq": null, "limit": 50 }),
 	));
-}
-
-#[test]
-fn a_write_without_a_sender_reaches_the_local_api() {
-	run(async {
-		let mut guest = Guest::of_two_spaces("write-without-sender").await;
-
-		let answered =
-			guest.called_by(None, "conversation_send_turn", a_turn_summoning_a_bot()).await;
-
-		assert_eq!(answered["status"], json!(200), "{answered}");
-		assert_eq!(guest.effects.reached(), ["conversation_send_turn"]);
-	});
 }
 
 fn an_env_scope_of(space_id: &str) -> Value {
@@ -2269,44 +2401,42 @@ fn the_shared_space_check_names_the_first_unheld_id_of_an_array() {
 }
 
 #[test]
-fn the_refusal_line_names_the_command_sender_space_argument_check_and_value() {
+fn the_refusal_line_names_the_command_space_argument_check_and_value_and_no_account() {
 	let refusal = reach::Refusal::Unheld {
 		held: held_of("conversation_message_page", 0),
 		offending: reach::Offending::Value(json!("c-theirs")),
 	};
 
 	assert_eq!(
-		reach::refusal_line("conversation_message_page", Some("acc-1"), PERSONAL, &refusal),
-		"the relayed conversation_message_page from sender \"acc-1\" was refused outside shared \
-		 space personal: /conversationId failed the Conversation check with \"c-theirs\""
+		reach::refusal_line("conversation_message_page", PERSONAL, &refusal),
+		"the relayed conversation_message_page was refused outside shared space personal: \
+		 /conversationId failed the Conversation check with \"c-theirs\""
 	);
 }
 
 #[test]
-fn the_refusal_line_logs_a_missing_value_as_absent_and_no_sender_as_none() {
+fn the_refusal_line_logs_a_missing_value_as_absent() {
 	let refusal = reach::Refusal::Unheld {
 		held: held_of("conversation_list", 0),
 		offending: reach::Offending::Absent,
 	};
 
 	assert_eq!(
-		reach::refusal_line("conversation_list", None, PERSONAL, &refusal),
-		"the relayed conversation_list from sender none was refused outside shared space \
-		 personal: /spaceId failed the Space check with absent"
+		reach::refusal_line("conversation_list", PERSONAL, &refusal),
+		"the relayed conversation_list was refused outside shared space personal: /spaceId \
+		 failed the Space check with absent"
 	);
 }
 
 #[test]
 fn the_refusal_line_names_the_reach_when_there_is_no_argument() {
 	assert_eq!(
-		reach::refusal_line("account_get", None, PERSONAL, &reach::Refusal::HostOnly),
-		"the relayed account_get from sender none was refused outside shared space personal: \
-		 its reach is HostOnly"
+		reach::refusal_line("account_get", PERSONAL, &reach::Refusal::HostOnly),
+		"the relayed account_get was refused outside shared space personal: its reach is HostOnly"
 	);
 	assert_eq!(
-		reach::refusal_line("unknown", None, PERSONAL, &reach::Refusal::NoReach),
-		"the relayed unknown from sender none was refused outside shared space personal: \
-		 it has no reach"
+		reach::refusal_line("unknown", PERSONAL, &reach::Refusal::NoReach),
+		"the relayed unknown was refused outside shared space personal: it has no reach"
 	);
 }
 
@@ -2317,7 +2447,7 @@ fn the_refusal_line_caps_the_value_at_200_characters() {
 		offending: reach::Offending::Value(json!("x".repeat(500))),
 	};
 
-	let line = reach::refusal_line("conversation_message_page", None, PERSONAL, &refusal);
+	let line = reach::refusal_line("conversation_message_page", PERSONAL, &refusal);
 
 	let value = line.rsplit(" with ").next().expect("a value is logged");
 	assert_eq!(value, format!("\"{}", "x".repeat(199)));
@@ -3281,10 +3411,6 @@ const GUEST: &str = "guest-account";
 const GUEST_EMAIL: &str = "guest@example.com";
 const HOST_NAME: &str = "Ada on the host";
 
-fn guest_sender() -> Value {
-	json!({ "accountId": GUEST, "name": "Guest", "image": null })
-}
-
 struct Authoring {
 	app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
@@ -3363,13 +3489,22 @@ impl Authoring {
 	}
 
 	async fn relayed(&self, frame: Value) -> Value {
-		let answer = self.answered(frame).await;
+		self.relayed_by(GUEST, frame).await
+	}
+
+	async fn relayed_by(&self, account_id: &str, frame: Value) -> Value {
+		let answer = self.answered_by(account_id, frame).await;
 		assert_eq!(answer["status"], json!(200), "{answer}");
 		answer["body"].clone()
 	}
 
 	async fn answered(&self, frame: Value) -> Value {
-		let call = super::bridge::member_call(&frame.to_string()).expect("a member call");
+		self.answered_by(GUEST, frame).await
+	}
+
+	async fn answered_by(&self, account_id: &str, frame: Value) -> Value {
+		let call =
+			super::bridge::member_call(&frame.to_string(), account_id).expect("a member call");
 		let answer = super::bridge::bridged(
 			self.app.handle().clone(),
 			self.local.clone(),
@@ -3462,14 +3597,13 @@ fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_re
 		host.relayed(json!({
 			"id": 1,
 			"command": "conversation_send_user_message",
-			"sender": guest_sender(),
 			"args": host.sent("relayed"),
 		}))
 		.await;
 
 		let read_by_the_guest = host
 			.relayed(
-				json!({ "id": 2, "command": "conversation_message_page", "args": host.page(), "sender": guest_sender() }),
+				json!({ "id": 2, "command": "conversation_message_page", "args": host.page() }),
 			)
 			.await;
 		let read_by_the_host = direct(&host.window, "conversation_message_page", host.page());
@@ -3484,20 +3618,13 @@ fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_re
 }
 
 #[test]
-fn a_relayed_frame_stores_its_sender_over_a_forged_author_and_none_without_a_sender() {
+fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.relayed(json!({
 			"id": 1,
 			"command": "conversation_append_user_message",
-			"sender": guest_sender(),
 			"args": { "message": host.sent("vouched")["message"] },
-		}))
-		.await;
-		host.relayed(json!({
-			"id": 2,
-			"command": "conversation_send_user_message",
-			"args": host.sent("anonymous"),
 		}))
 		.await;
 
@@ -3505,10 +3632,7 @@ fn a_relayed_frame_stores_its_sender_over_a_forged_author_and_none_without_a_sen
 
 		assert_eq!(
 			Authoring::authors(&read),
-			vec![
-				(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL)),
-				(json!("anonymous"), Value::Null, Value::Null),
-			]
+			vec![(json!("vouched"), json!(GUEST), json!(GUEST_EMAIL))]
 		);
 		assert!(
 			host.app.state::<Hosting>().relayed.is_empty(),
@@ -3544,7 +3668,6 @@ fn a_guest_message_sent_on_a_turn_it_opens_lands_on_the_host_with_its_author() {
 			.relayed(json!({
 				"id": 1,
 				"command": "conversation_send_user_message",
-				"sender": guest_sender(),
 				"args": host.unstarted("first"),
 			}))
 			.await;
@@ -3570,7 +3693,6 @@ fn a_guest_message_refused_by_the_host_answers_a_text_naming_the_refusal() {
 			.answered(json!({
 				"id": 1,
 				"command": "conversation_send_user_message",
-				"sender": guest_sender(),
 				"args": elsewhere,
 			}))
 			.await;
@@ -3596,7 +3718,6 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 				"id": 1,
 				"command": "conversation_page",
 				"args": args,
-				"sender": guest_sender(),
 			}))
 			.await;
 		let read_by_the_host = direct(&host.window, "conversation_page", args);
@@ -3627,7 +3748,6 @@ fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 					"id": 1,
 					"command": "conversation_page",
 					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
-					"sender": guest_sender(),
 				}))
 				.await;
 			page["conversations"]
@@ -3716,7 +3836,6 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 					"id": 1,
 					"command": "conversation_page",
 					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
-					"sender": guest_sender(),
 				}))
 				.await;
 			page["conversations"]
@@ -3768,7 +3887,6 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 					"id": 1,
 					"command": "conversation_page",
 					"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
-					"sender": guest_sender(),
 				}))
 				.await;
 			page["conversations"]
@@ -3825,7 +3943,6 @@ fn a_guest_message_naming_a_turn_of_another_conversation_is_refused_and_not_writ
 			.answered(json!({
 				"id": 1,
 				"command": "conversation_send_user_message",
-				"sender": guest_sender(),
 				"args": borrowed,
 			}))
 			.await;
@@ -3845,7 +3962,6 @@ fn a_relayed_guest_message_keeps_its_author_in_a_reopened_store_read_by_either_s
 		host.relayed(json!({
 			"id": 1,
 			"command": "conversation_send_user_message",
-			"sender": guest_sender(),
 			"args": host.unstarted("relayed"),
 		}))
 		.await;
@@ -3856,7 +3972,7 @@ fn a_relayed_guest_message_keeps_its_author_in_a_reopened_store_read_by_either_s
 			Authoring::stored_authors(&reopened, &host.conversation_id).await;
 		let read_by_the_guest = host
 			.relayed(
-				json!({ "id": 2, "command": "conversation_message_page", "args": host.page(), "sender": guest_sender() }),
+				json!({ "id": 2, "command": "conversation_message_page", "args": host.page() }),
 			)
 			.await;
 
@@ -3876,7 +3992,6 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 		host.relayed(json!({
 			"id": 1,
 			"command": "conversation_send_user_message",
-			"sender": guest_sender(),
 			"args": host.unstarted("relayed"),
 		}))
 		.await;
@@ -3911,16 +4026,13 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 		host.relayed(json!({
 			"id": 2,
 			"command": "conversation_pin_message",
-			"sender": guest_sender(),
 			"args": pin,
 		}))
 		.await;
-		host.relayed(json!({
-			"id": 3,
-			"command": "conversation_pin_message",
-			"sender": { "accountId": "another-account" },
-			"args": pin,
-		}))
+		host.relayed_by(
+			"another-account",
+			json!({ "id": 3, "command": "conversation_pin_message", "args": pin }),
+		)
 		.await;
 		let state = host.app.state::<DatabaseState>();
 		let messages = state.as_ref().expect("the store is open").messages();
@@ -3939,12 +4051,14 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 		messages.complete_turn("relayed".to_owned(), 6).await.expect("the turn completes");
 		messages.recover_unfinished().await.expect("the restart sweep runs");
 		let duplicate = host
-			.answered(json!({
-				"id": 4,
-				"command": "conversation_append_user_message",
-				"sender": { "accountId": "another-account" },
-				"args": { "message": host.unstarted("relayed")["message"] },
-			}))
+			.answered_by(
+				"another-account",
+				json!({
+					"id": 4,
+					"command": "conversation_append_user_message",
+					"args": { "message": host.unstarted("relayed")["message"] },
+				}),
+			)
 			.await;
 
 		let read = Authoring::stored_authors(&host.reopened_store(), &conversation_id).await;
@@ -3955,33 +4069,21 @@ fn every_later_write_on_a_relayed_guest_message_or_its_turn_leaves_its_author_un
 }
 
 #[test]
-fn a_member_frame_names_the_conversation_its_reach_reads() {
-	let sent = json!({ "message": { "conversationId": "c1" }, "summoned": [] });
-	let paged = json!({ "conversationId": "c2", "beforeSeq": null, "limit": 50 });
-
-	assert_eq!(reach::conversation_of("conversation_send_user_message", &sent), Some("c1"));
-	assert_eq!(reach::conversation_of("conversation_message_page", &paged), Some("c2"));
-	assert_eq!(reach::conversation_of("conversation_message_page", &json!({})), None);
-	assert_eq!(reach::conversation_of("an_unknown_command", &paged), None);
-}
-
-#[test]
-fn a_relayed_frame_ignores_a_forged_from_and_stores_the_account_of_its_sender() {
+fn a_relayed_frame_stores_the_roster_account_whatever_its_plaintext_from_or_sender_says() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
 		host.relayed(json!({
 			"id": 1,
 			"command": "conversation_send_user_message",
-			"from": GUEST,
-			"args": host.unstarted("from-only"),
+			"from": "another-account",
+			"args": host.unstarted("forged-from"),
 		}))
 		.await;
 		host.relayed(json!({
 			"id": 2,
 			"command": "conversation_send_user_message",
-			"from": "another-account",
-			"sender": guest_sender(),
-			"args": host.unstarted("from-and-sender"),
+			"sender": { "accountId": "another-account" },
+			"args": host.unstarted("forged-sender"),
 		}))
 		.await;
 
@@ -3990,8 +4092,8 @@ fn a_relayed_frame_ignores_a_forged_from_and_stores_the_account_of_its_sender() 
 		assert_eq!(
 			Authoring::authors(&read),
 			vec![
-				(json!("from-only"), Value::Null, Value::Null),
-				(json!("from-and-sender"), json!(GUEST), json!(GUEST_EMAIL)),
+				(json!("forged-from"), json!(GUEST), json!(GUEST_EMAIL)),
+				(json!("forged-sender"), json!(GUEST), json!(GUEST_EMAIL)),
 			]
 		);
 	});
@@ -4644,11 +4746,10 @@ fn the_installs_refusal_names_the_conversation_the_host_does_not_hold() {
 		let refusal = shared_space_refusal(&guest, "application_installs", args).await;
 
 		assert_eq!(
-			reach::refusal_line("application_installs", Some(GUEST), PERSONAL, &refusal),
+			reach::refusal_line("application_installs", PERSONAL, &refusal),
 			format!(
-				"the relayed application_installs from sender \"{GUEST}\" was refused outside \
-				 shared space {PERSONAL}: /conversationId failed the Conversation check with \
-				 \"{GUEST_LOCAL_CONVERSATION}\""
+				"the relayed application_installs was refused outside shared space {PERSONAL}: \
+				 /conversationId failed the Conversation check with \"{GUEST_LOCAL_CONVERSATION}\""
 			)
 		);
 	});
@@ -4822,7 +4923,6 @@ fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_
 			.answered(json!({
 				"id": 1,
 				"command": "mcp_oauth_disconnect",
-				"sender": guest_sender(),
 				"args": {
 					"owner": the_default_bot(),
 					"name": "granola",
@@ -4835,5 +4935,280 @@ fn a_member_disconnecting_through_a_bot_served_by_a_grant_of_the_host_person_is_
 		assert_eq!(answered["body"], json!({ "kind": "refusedToAMember" }));
 		assert!(!before.is_empty());
 		assert_eq!(store::values(&root, &grant).expect("the grant reads"), before);
+	});
+}
+
+fn relay_database(harness: &Harness) -> &crate::db::Database {
+	let state = harness.app.state::<DatabaseState>().inner();
+	state.as_ref().expect("the database")
+}
+
+#[test]
+fn a_first_connect_registers_the_device_once_and_opens_the_host_socket_with_its_id() {
+	run(async {
+		let mut harness = Harness::signed_in("device").await;
+		harness.started().await;
+		let _first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		harness.started().await;
+		let _second = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let host = harness.host_keys();
+		let devices = harness.relay.devices.lock().expect("the relay").clone();
+		let [(body, relay_device_id)] = devices.as_slice() else {
+			panic!("the device registered {} times", devices.len());
+		};
+		use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+		assert_eq!(
+			*body,
+			json!({
+				"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(host.signing_public().as_bytes()),
+				"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(host.agreement_public().as_bytes()),
+			})
+		);
+		let database = relay_database(&harness);
+		let held = database
+			.relay_devices()
+			.relay_device_id("owner".to_owned(), host.device_id().to_string())
+			.await
+			.expect("the relay device id reads");
+		assert_eq!(held.as_ref(), Some(relay_device_id));
+		let host_row = database
+			.space_relay()
+			.roster_row(PERSONAL.to_owned(), host.device_id().to_string())
+			.await
+			.expect("the roster reads")
+			.expect("the host rosters its own device");
+		assert_eq!(
+			(host_row.relay_device_id, host_row.account_id),
+			(relay_device_id.clone(), "owner".to_owned())
+		);
+		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
+fn a_device_key_another_account_holds_fails_naming_409_device_key_taken() {
+	run(async {
+		let harness = Harness::signed_in("device-key-taken").await;
+		harness.relay.is_device_key_taken.store(true, Ordering::SeqCst);
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let reason = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert!(reason.contains("409") && reason.contains("DEVICE_KEY_TAKEN"), "{reason}");
+		assert_eq!(harness.attempts(), 0);
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_first_start_keeps_a_fresh_space_key_in_an_owner_only_file_and_never_in_sqlite() {
+	use std::os::unix::fs::PermissionsExt;
+
+	run(async {
+		let mut harness = Harness::signed_in("space-key").await;
+		harness.started().await;
+		let _member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let first = harness.space_key(PERSONAL);
+		harness.stopped().await;
+		harness.started().await;
+		let _again = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let profile = harness.app.path().app_data_dir().expect("the data folder resolves");
+		let file = profile.join(format!("space-key-{PERSONAL}"));
+		let mode = std::fs::metadata(&file).expect("the key file").permissions().mode();
+		let again = harness.space_key(PERSONAL);
+		assert_eq!((first.key_id, mode & 0o777), (1, 0o600));
+		assert_eq!(*again.key, *first.key);
+		let database_dir = &harness._temporary[0];
+		for entry in std::fs::read_dir(database_dir).expect("the database folder") {
+			let bytes = std::fs::read(entry.expect("an entry").path()).expect("a database file");
+			assert!(!bytes.windows(first.key.len()).any(|window| window == first.key.as_slice()));
+		}
+	});
+}
+
+#[test]
+fn a_seeded_member_says_hello_calls_gets_its_answer_and_hears_an_event_over_sealed_frames_only() {
+	run(async {
+		let mut harness = Harness::signed_in("v2-wire").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		let hello = member.greeted().await;
+		send(&mut member, r#"{"id": "c1", "command": "agent_models", "args": {"a": 1}}"#).await;
+		let answered = answer(&mut member).await;
+		let payload = json!({ "spaceId": PERSONAL, "n": 1 });
+		events::emit(harness.app.handle(), Event::untyped(CHANGED_EVENT), payload)
+			.expect("emitted");
+		let event =
+			next_text(&mut member, |frame| frame["event"]["payload"]["n"] == json!(1)).await;
+
+		assert_eq!(hello.plaintext, json!({ "hello": {} }));
+		assert_eq!(hello.challenge.map(|challenge| challenge.len()), Some(CHALLENGE_LENGTH));
+		assert_eq!(
+			answered,
+			json!({ "id": "c1", "status": 200, "body": { "command": "agent_models", "args": { "a": 1 } } })
+		);
+		assert_eq!(event["event"]["event"], json!(CHANGED_EVENT));
+		assert!(!member.texts.is_empty());
+		for text in &member.texts {
+			let envelope: Value = serde_json::from_str(text).expect("a json frame");
+			assert_eq!(envelope["v"], json!(2), "{text}");
+			assert!(envelope.get("from").is_none(), "{text}");
+			for field in ["instance", "key_id", "ctr", "ct", "sig"] {
+				assert!(envelope.get(field).is_some(), "{field} is missing from {text}");
+			}
+			for plaintext in ["agent_models", "command", "hello", CHANGED_EVENT] {
+				assert!(!text.contains(plaintext), "{plaintext} crossed in clear: {text}");
+			}
+		}
+	});
+}
+
+const A_STALE_CHALLENGE: [u8; CHALLENGE_LENGTH] = [9; CHALLENGE_LENGTH];
+
+async fn next_hello(member: &mut MemberWire) -> Option<[u8; CHALLENGE_LENGTH]> {
+	loop {
+		let frame = member.next_sealed().await;
+		if is_a_hello(&frame) {
+			return frame.challenge;
+		}
+	}
+}
+
+async fn resent_runs(member: &mut MemberWire, challenge: Option<[u8; CHALLENGE_LENGTH]>) -> Value {
+	member.challenge = challenge;
+	send(member, r#"{"id": "resent", "command": "agent_models"}"#).await;
+	answer(member).await
+}
+
+#[test]
+fn two_stale_frames_in_a_row_are_answered_with_the_same_challenge_and_a_resend_under_it_runs() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("stale-twice").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let held = member.greeted().await.challenge;
+
+		for id in ["stale-1", "stale-2"] {
+			let call = json!({ "id": id, "command": "agent_models" }).to_string();
+			member.sealed_sent(&call, Some(A_STALE_CHALLENGE)).await;
+		}
+		let first = next_hello(&mut member).await;
+		let second = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, second).await;
+
+		assert!(held.is_some());
+		assert_eq!((first, second), (held, held));
+		assert_eq!(answered["id"], json!("resent"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+	});
+}
+
+#[test]
+fn a_hello_replaces_the_held_challenge() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("hello-again").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		let replaced = member.greeted().await.challenge;
+		let held = member.greeted().await.challenge;
+
+		member.sealed_sent(r#"{"id": "stale", "command": "agent_models"}"#, replaced).await;
+		let answered_with = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, answered_with).await;
+
+		assert!(held.is_some() && held != replaced);
+		assert_eq!(answered_with, held);
+		assert_eq!(answered["id"], json!("resent"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+	});
+}
+
+#[test]
+fn a_stale_frame_from_a_device_the_host_holds_no_challenge_for_draws_a_fresh_one() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("stale-unheld").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+
+		member
+			.sealed_sent(r#"{"id": "stale", "command": "agent_models"}"#, Some(A_STALE_CHALLENGE))
+			.await;
+		let fresh = next_hello(&mut member).await;
+		let answered = resent_runs(&mut member, fresh).await;
+
+		assert!(fresh.is_some() && fresh != Some(A_STALE_CHALLENGE));
+		assert_eq!(answered["id"], json!("resent"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+	});
+}
+
+#[test]
+fn a_plaintext_frame_or_one_signed_outside_the_roster_gets_nothing_back() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("dropped-frames").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		member.greeted().await;
+
+		let plaintext = r#"{"id": "clear", "command": "agent_models"}"#;
+		member.send(Message::Text(plaintext.into())).await.expect("the frame leaves");
+		let impostor = SealingMember {
+			relay_device_id: member.device.relay_device_id.clone(),
+			..SealingMember::new(MEMBER_ACCOUNT)
+		};
+		let forged = impostor.sealed(
+			&member.space(),
+			1,
+			r#"{"id": "forged", "command": "agent_models"}"#,
+			member.challenge,
+		);
+		member.send(Message::Text(forged.into())).await.expect("the frame leaves");
+		send(&mut member, r#"{"id": "genuine", "command": "agent_models"}"#).await;
+		let answered = answer(&mut member).await;
+
+		assert_eq!(answered["id"], json!("genuine"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
+#[test]
+fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
+	run(async {
+		let mut harness = Harness::signed_in("unreadable-ctr").await;
+		harness.started().await;
+		let _first = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		harness.stopped().await;
+		relay_database(&harness)
+			.call_mut(|connection| {
+				Ok(connection.execute_batch("DELETE FROM relay_reserved_counters")?)
+			})
+			.await
+			.expect("the bound is lost");
+
+		harness.started().await;
+		let mut member = harness.member().await;
+		member.sealed_sent(HELLO, None).await;
+		let reason = harness.failed().await;
+
+		assert!(reason.contains("reserved ctr bound"), "{reason}");
+		let sent = tokio::time::timeout(PATIENCE, member.recv()).await.expect("the socket ends");
+		assert!(!matches!(sent, Some(Ok(Message::Text(_)))), "{sent:?}");
 	});
 }

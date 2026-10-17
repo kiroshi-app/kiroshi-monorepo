@@ -29,6 +29,19 @@ impl DeviceId {
 		Self(bytes)
 	}
 
+	pub fn from_hex(hex: &str) -> Option<Self> {
+		if hex.len() != 2 * DEVICE_ID_LENGTH
+			|| !hex.bytes().all(|digit| matches!(digit, b'0'..=b'9' | b'a'..=b'f'))
+		{
+			return None;
+		}
+		let mut id = [0u8; DEVICE_ID_LENGTH];
+		for (byte, pair) in id.iter_mut().zip(hex.as_bytes().chunks(2)) {
+			*byte = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+		}
+		Some(Self(id))
+	}
+
 	pub fn as_bytes(&self) -> &[u8; DEVICE_ID_LENGTH] {
 		&self.0
 	}
@@ -113,6 +126,15 @@ mod tests {
 		let id = DeviceKeys::generate().expect("randomness").device_id().to_string();
 		assert_eq!(id.len(), 32);
 		assert!(id.chars().all(|digit| matches!(digit, '0'..='9' | 'a'..='f')));
+	}
+
+	#[test]
+	fn a_device_id_reads_back_from_its_lowercase_hex_only() {
+		let id = DeviceKeys::generate().expect("randomness").device_id();
+		assert_eq!(DeviceId::from_hex(&id.to_string()), Some(id));
+		assert_eq!(DeviceId::from_hex(&id.to_string().to_uppercase()), None);
+		assert_eq!(DeviceId::from_hex(&id.to_string()[1..]), None);
+		assert_eq!(DeviceId::from_hex("a5d0b0f6-6f62-4d7e-9a3c-6f2b1e8c0d12"), None);
 	}
 
 	#[test]
