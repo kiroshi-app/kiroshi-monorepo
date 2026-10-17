@@ -226,7 +226,10 @@ icon, and `agent_title` answers `{ title, icon }`, or `null` when no title came 
 
 Every write of a conversation's `icon` goes through the repository, which refuses a
 name absent from that same file (`unlistedIcon`, carrying the accepted names) and a
-colour outside the eight tints (`unknownColour`), and leaves the row as it was.
+colour outside the eight tints (`unknownColour`), and leaves the row as it was. An
+update that resends the icon the row already stores is not checked against the list,
+so a room still wearing an icon stored before the list was enforced can be renamed
+and moved.
 
 Every other command names its session.
 
