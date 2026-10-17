@@ -168,6 +168,7 @@ import type { ConversationRuntimes } from "@/lib/conversations/conversation-runt
 import {
 	leadOf,
 	mentionableBots,
+	toConversationLook,
 } from "@/lib/conversations/roster-conversations"
 import type {
 	Bot,
@@ -414,6 +415,7 @@ const ThreadHeader = ({
 					/>
 				) : (
 					<HeaderConversationButton
+						{...toConversationLook(thread.conversation)}
 						bots={present}
 						isSettingsOpen={thread.isSettingsOpen}
 						name={thread.conversation.title}
@@ -569,6 +571,7 @@ const ConversationEmptySlot = ({
 
 	return (
 		<ConversationEmptyState
+			{...toConversationLook(conversation)}
 			bots={present}
 			onSuggestedBotPress={(bot) => promptRef.current?.mention(bot.name)}
 			suggestedBots={suggestedBots}

@@ -1,9 +1,10 @@
 import { expect, it, vi } from "vitest"
 
-import type { CatalogueMission } from "./catalogue-contract"
+import type { CatalogueChat, CatalogueMission } from "./catalogue-contract"
 import { createSearchLookups, toSearchGroups } from "./search-model"
 import type { SearchRead } from "./use-search-reads"
 
+import type { Conversation } from "@/lib/conversations/store-contract"
 import type { MissionState } from "@/lib/missions/mission-contract"
 
 const A_MISSION: CatalogueMission = {
@@ -18,9 +19,36 @@ const A_MISSION: CatalogueMission = {
 	spaceId: "work",
 }
 
-const readOf = (missions: CatalogueMission[]): SearchRead => ({
+const A_GROUP_CHAT: CatalogueChat = {
+	conversationId: "c-roadmap",
+	kind: "topic",
+	title: "Roadmap",
+	botId: null,
+	participants: ["Ada", "Zoe"],
+	spaceId: "work",
+}
+
+const roomWearing = (
+	look: Pick<Conversation, "icon" | "color">,
+): Conversation => ({
+	id: A_GROUP_CHAT.conversationId,
+	spaceId: "work",
+	sectionId: null,
+	pinPosition: null,
+	title: A_GROUP_CHAT.title,
+	instructions: "",
+	createdAt: 1,
+	updatedAt: 1,
+	participants: [],
+	...look,
+})
+
+const readOf = (
+	missions: CatalogueMission[],
+	chats: CatalogueChat[] = [],
+): SearchRead => ({
 	messages: [],
-	chats: [],
+	chats,
 	missions,
 	routines: [],
 })
@@ -54,4 +82,33 @@ it("gives a mission result the badge its own state carries", () => {
 		kind: "mission",
 		badge: "attention",
 	})
+})
+
+const identityOfGroupChatIn = (room: Conversation) => {
+	const groups = toSearchGroups({
+		read: readOf([], [A_GROUP_CHAT]),
+		recents: [],
+		query: "roadmap",
+		lookups: createSearchLookups({
+			rosters: {},
+			conversationRosters: { work: [room] },
+			readerName: "You",
+			now: 1,
+		}),
+		open: vi.fn(),
+	})
+
+	return groups.find((group) => group.kind === "chats")?.results[0].identity
+}
+
+it("gives a group chat result the icon and the colour its conversation wears", () => {
+	expect(
+		identityOfGroupChatIn(roomWearing({ icon: "Rocket", color: "cyan" })),
+	).toEqual({ kind: "chat-group", icon: "Rocket", color: "cyan" })
+})
+
+it("leaves the icon and the colour of a group chat result blank when its conversation wears none", () => {
+	expect(
+		identityOfGroupChatIn(roomWearing({ icon: null, color: null })),
+	).toEqual({ kind: "chat-group", icon: undefined, color: undefined })
 })
