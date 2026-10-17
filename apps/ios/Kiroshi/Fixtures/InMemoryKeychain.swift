@@ -1,5 +1,6 @@
 #if DEBUG
     import Foundation
+    import Security
 
     actor InMemoryKeychain: KeychainItems {
         private(set) var items: [String: Data]
@@ -21,6 +22,13 @@
         func read(_ account: String) throws(KeychainError) -> Data? {
             if let failure = failing[account] { throw failure }
             return items[account]
+        }
+
+        func add(_ data: Data, as account: String) throws(KeychainError) {
+            if let failure = failing[account] { throw failure }
+            guard items[account] == nil else { throw KeychainError(status: errSecDuplicateItem) }
+            items[account] = data
+            writes.append(account)
         }
 
         func write(_ data: Data, as account: String) throws(KeychainError) {

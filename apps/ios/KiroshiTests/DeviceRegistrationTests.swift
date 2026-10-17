@@ -99,7 +99,7 @@ struct DeviceRegistrationTests {
 
     @Test func unreadableDeviceKeysLandInTheStageWithoutRegistering() async {
         let keychain = InMemoryKeychain()
-        await keychain.fail(DeviceKeyStore.signingAccount, with: errSecInteractionNotAllowed)
+        await keychain.fail(DeviceKeyStore.account, with: errSecInteractionNotAllowed)
         let model = makeModel(
             relay: RelayEnvironment(
                 transport: TestRelayTransport(), clock: TestRelayClock(), keychain: keychain,

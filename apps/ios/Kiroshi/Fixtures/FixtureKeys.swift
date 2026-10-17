@@ -15,10 +15,7 @@
         static let spaceKeys = SpaceKeys(
             spaceKey: SymmetricKey(size: .bits256), keyId: 7,
             hostSigningKey: host.signing.publicKey, hostRelayIds: [hostRelayId])
-        static let memberKeychainItems = [
-            DeviceKeyStore.signingAccount: member.signing.rawRepresentation,
-            DeviceKeyStore.agreementAccount: member.agreement.rawRepresentation,
-        ]
+        static let memberKeychainItems = [DeviceKeyStore.account: member.rawRepresentation]
         static let devicesPath = "/devices"
         static let registered = ScriptedTransport.Answer.status(
             201, #"{"id":"\#(memberRelayId)","createdAt":"2026-10-17T09:00:00.000Z"}"#)

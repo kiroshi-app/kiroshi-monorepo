@@ -3,6 +3,7 @@ import Security
 
 protocol KeychainItems: Sendable {
     func read(_ account: String) async throws(KeychainError) -> Data?
+    func add(_ data: Data, as account: String) async throws(KeychainError)
     func write(_ data: Data, as account: String) async throws(KeychainError)
     func delete(_ account: String) async
 }
@@ -27,6 +28,14 @@ struct SystemKeychain: KeychainItems {
         }
     }
 
+    func add(_ data: Data, as account: String) throws(KeychainError) {
+        var item = query(account)
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let added = SecItemAdd(item as CFDictionary, nil)
+        guard added == errSecSuccess else { throw KeychainError(status: added) }
+    }
+
     func write(_ data: Data, as account: String) throws(KeychainError) {
         let updated = SecItemUpdate(
             query(account) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
@@ -34,11 +43,7 @@ struct SystemKeychain: KeychainItems {
             guard updated == errSecSuccess else { throw KeychainError(status: updated) }
             return
         }
-        var item = query(account)
-        item[kSecValueData as String] = data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let added = SecItemAdd(item as CFDictionary, nil)
-        guard added == errSecSuccess else { throw KeychainError(status: added) }
+        try add(data, as: account)
     }
 
     func delete(_ account: String) {

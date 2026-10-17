@@ -6,26 +6,39 @@ import Testing
 @testable import Kiroshi
 
 struct DeviceKeyStoreTests {
-    @Test func createsTheKeysOnceAndReadsThemBack() async throws {
+    @Test func createsTheKeysOnceInOneItemAndReadsThemBack() async throws {
         let keychain = InMemoryKeychain()
         let store = DeviceKeyStore(keychain: keychain)
 
         let created = try await store.keys()
         let read = try await store.keys()
 
-        #expect(read.signing.rawRepresentation == created.signing.rawRepresentation)
-        #expect(read.agreement.rawRepresentation == created.agreement.rawRepresentation)
-        #expect(
-            await keychain.writes == [
-                DeviceKeyStore.agreementAccount, DeviceKeyStore.signingAccount,
-            ])
+        #expect(read.rawRepresentation == created.rawRepresentation)
+        #expect(await keychain.writes == [DeviceKeyStore.account])
+        #expect(await keychain.items[DeviceKeyStore.account] == created.rawRepresentation)
+        #expect(created.rawRepresentation.prefix(32) == created.signing.rawRepresentation)
+        #expect(created.rawRepresentation.suffix(32) == created.agreement.rawRepresentation)
+    }
+
+    @Test func twoFirstLaunchReadsEndWithOneIdentity() async throws {
+        let keychain = InMemoryKeychain()
+        let store = DeviceKeyStore(keychain: keychain)
+
+        async let first = store.keys()
+        async let second = store.keys()
+        let (one, other) = try await (first, second)
+
+        #expect(one.deviceId == other.deviceId)
+        #expect(one.rawRepresentation == other.rawRepresentation)
+        #expect(await keychain.items[DeviceKeyStore.account] == one.rawRepresentation)
+        #expect(await keychain.writes == [DeviceKeyStore.account])
     }
 
     @Test func aFailingReadNeverReplacesTheIdentity() async throws {
         let keychain = InMemoryKeychain()
         let store = DeviceKeyStore(keychain: keychain)
         let created = try await store.keys()
-        await keychain.fail(DeviceKeyStore.signingAccount, with: errSecInteractionNotAllowed)
+        await keychain.fail(DeviceKeyStore.account, with: errSecInteractionNotAllowed)
 
         await #expect(
             throws: DeviceKeysUnavailable.unreadable(
@@ -34,27 +47,13 @@ struct DeviceKeyStoreTests {
             try await store.keys()
         }
 
-        await keychain.heal(DeviceKeyStore.signingAccount)
-        #expect(
-            try await store.keys().signing.rawRepresentation == created.signing.rawRepresentation)
-        #expect(await keychain.writes.count == 2)
+        await keychain.heal(DeviceKeyStore.account)
+        #expect(try await store.keys().rawRepresentation == created.rawRepresentation)
+        #expect(await keychain.writes.count == 1)
     }
 
-    @Test func aSigningKeyWithoutItsAgreementKeyIsNotReplaced() async {
-        let signing = Curve25519.Signing.PrivateKey().rawRepresentation
-        let keychain = InMemoryKeychain([DeviceKeyStore.signingAccount: signing])
-
-        await #expect(throws: DeviceKeysUnavailable.incomplete) {
-            try await DeviceKeyStore(keychain: keychain).keys()
-        }
-        #expect(await keychain.items == [DeviceKeyStore.signingAccount: signing])
-    }
-
-    @Test func aKeyOfTheWrongLengthIsLeftInPlace() async {
-        let items = [
-            DeviceKeyStore.signingAccount: Data(count: 31),
-            DeviceKeyStore.agreementAccount: Data(count: 32),
-        ]
+    @Test func anItemOfTheWrongLengthIsLeftInPlace() async {
+        let items = [DeviceKeyStore.account: Data(count: 63)]
         let keychain = InMemoryKeychain(items)
 
         await #expect(throws: DeviceKeysUnavailable.malformed) {
@@ -65,7 +64,7 @@ struct DeviceKeyStoreTests {
 
     @Test func keysThatCannotBeStoredAreNotHandedOut() async {
         let keychain = InMemoryKeychain()
-        await keychain.fail(DeviceKeyStore.signingAccount, with: errSecNotAvailable)
+        await keychain.fail(DeviceKeyStore.account, with: errSecNotAvailable)
 
         await #expect(
             throws: DeviceKeysUnavailable.unreadable(KeychainError(status: errSecNotAvailable))
@@ -82,8 +81,7 @@ struct KeychainDeviceKeyStoreTests {
     let sessions = KeychainSessionStore(service: service)
 
     @Test func signingOutLeavesTheDeviceKeysInPlace() async throws {
-        await keychain.delete(DeviceKeyStore.signingAccount)
-        await keychain.delete(DeviceKeyStore.agreementAccount)
+        await keychain.delete(DeviceKeyStore.account)
         let store = DeviceKeyStore(keychain: keychain)
         let created = try await store.keys()
         try sessions.save(CloudFixture.session)
@@ -91,20 +89,28 @@ struct KeychainDeviceKeyStoreTests {
         sessions.clear()
 
         #expect(sessions.load() == nil)
-        let kept = try await store.keys()
-        #expect(kept.signing.rawRepresentation == created.signing.rawRepresentation)
-        #expect(kept.agreement.rawRepresentation == created.agreement.rawRepresentation)
-        await keychain.delete(DeviceKeyStore.signingAccount)
-        await keychain.delete(DeviceKeyStore.agreementAccount)
+        #expect(try await store.keys().rawRepresentation == created.rawRepresentation)
+        await keychain.delete(DeviceKeyStore.account)
+    }
+
+    @Test func aSecondCreationKeepsTheStoredKeys() async throws {
+        await keychain.delete(DeviceKeyStore.account)
+        let stored = try await DeviceKeyStore(keychain: keychain).keys()
+
+        await #expect(throws: KeychainError(status: errSecDuplicateItem)) {
+            try await keychain.add(Data(count: 64), as: DeviceKeyStore.account)
+        }
+        #expect(try await keychain.read(DeviceKeyStore.account) == stored.rawRepresentation)
+        await keychain.delete(DeviceKeyStore.account)
     }
 
     @Test func theKeysStayOnThisDeviceAfterTheFirstUnlock() async throws {
-        await keychain.delete(DeviceKeyStore.signingAccount)
+        await keychain.delete(DeviceKeyStore.account)
         _ = try await DeviceKeyStore(keychain: keychain).keys()
         let lookup: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: DeviceKeyStore.signingAccount,
+            kSecAttrAccount as String: DeviceKeyStore.account,
             kSecReturnAttributes as String: true,
         ]
         var item: CFTypeRef?
@@ -115,7 +121,6 @@ struct KeychainDeviceKeyStoreTests {
             attributes[kSecAttrAccessible as String] as? String
                 == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
         #expect((attributes[kSecAttrSynchronizable as String] as? Bool ?? false) == false)
-        await keychain.delete(DeviceKeyStore.signingAccount)
-        await keychain.delete(DeviceKeyStore.agreementAccount)
+        await keychain.delete(DeviceKeyStore.account)
     }
 }

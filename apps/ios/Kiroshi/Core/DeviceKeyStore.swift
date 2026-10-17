@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Security
 
 struct DeviceKeys: Sendable {
     let signing: Curve25519.Signing.PrivateKey
@@ -8,49 +9,56 @@ struct DeviceKeys: Sendable {
     var deviceId: String {
         RelayCrypto.deviceId(of: signing.publicKey)
     }
+
+    var rawRepresentation: Data {
+        signing.rawRepresentation + agreement.rawRepresentation
+    }
 }
 
 enum DeviceKeysUnavailable: Error, Equatable {
     case unreadable(KeychainError)
     case malformed
-    case incomplete
 }
 
 struct DeviceKeyStore: Sendable {
-    static let signingAccount = "device-signing-key"
-    static let agreementAccount = "device-agreement-key"
+    static let account = "device-keys"
 
     let keychain: any KeychainItems
 
     func keys() async throws(DeviceKeysUnavailable) -> DeviceKeys {
-        guard let signing = try await read(Self.signingAccount) else { return try await create() }
-        guard let agreement = try await read(Self.agreementAccount) else { throw .incomplete }
-        guard signing.count == 32, agreement.count == 32,
-            let signingKey = try? Curve25519.Signing.PrivateKey(rawRepresentation: signing),
-            let agreementKey = try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: agreement)
-        else { throw .malformed }
-        return DeviceKeys(signing: signingKey, agreement: agreementKey)
+        guard let stored = try await read() else { return try await create() }
+        return try decode(stored)
     }
 
     private func create() async throws(DeviceKeysUnavailable) -> DeviceKeys {
-        let keys = DeviceKeys(
+        let fresh = DeviceKeys(
             signing: Curve25519.Signing.PrivateKey(),
-            agreement: Curve25519.KeyAgreement.PrivateKey()
-        )
+            agreement: Curve25519.KeyAgreement.PrivateKey())
         do {
-            try await keychain.write(keys.agreement.rawRepresentation, as: Self.agreementAccount)
-            try await keychain.write(keys.signing.rawRepresentation, as: Self.signingAccount)
+            try await keychain.add(fresh.rawRepresentation, as: Self.account)
+            return fresh
+        } catch let error where error.status == errSecDuplicateItem {
+            guard let stored = try await read() else { throw .unreadable(error) }
+            return try decode(stored)
         } catch {
             throw .unreadable(error)
         }
-        return keys
     }
 
-    private func read(_ account: String) async throws(DeviceKeysUnavailable) -> Data? {
+    private func read() async throws(DeviceKeysUnavailable) -> Data? {
         do {
-            return try await keychain.read(account)
+            return try await keychain.read(Self.account)
         } catch {
             throw .unreadable(error)
         }
+    }
+
+    private func decode(_ stored: Data) throws(DeviceKeysUnavailable) -> DeviceKeys {
+        guard stored.count == 64,
+            let signing = try? Curve25519.Signing.PrivateKey(rawRepresentation: stored.prefix(32)),
+            let agreement = try? Curve25519.KeyAgreement.PrivateKey(
+                rawRepresentation: stored.suffix(32))
+        else { throw .malformed }
+        return DeviceKeys(signing: signing, agreement: agreement)
     }
 }
