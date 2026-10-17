@@ -2,23 +2,43 @@ import type { NotificationTarget } from "./notification-port"
 import type { NotificationSourceOptions } from "./notification-source"
 import type { FailWith } from "./notification-source-failures"
 
+import { isHostOffline } from "../host/host-offline"
+import type { Mission } from "../missions/mission-contract"
 import {
 	type MissionEvent,
 	THIS_COMPUTER,
 } from "../missions/mission-event-read"
+import {
+	isJoinedRowId,
+	joinedRowIdOf,
+} from "../spaces/joined-spaces-controller"
 
 type NotificationLandingOptions = Pick<
 	NotificationSourceOptions,
-	"chat" | "roster" | "spaces" | "missions" | "raiseWindow"
+	"chat" | "roster" | "spaces" | "joinedSpaces" | "missions" | "raiseWindow"
 > & {
 	missionOrigins: Map<string, MissionEvent>
 	failWith: FailWith
+}
+
+const LOCAL_SIDE = "local"
+
+const logOfflineMission = ({ missionId, spaceId, hostId }: MissionEvent) => {
+	console.info(
+		[
+			"notifications: the host of the clicked mission is offline",
+			`mission: ${missionId}`,
+			`space: ${spaceId ?? "none"}`,
+			`side: ${hostId ?? LOCAL_SIDE}`,
+		].join(" | "),
+	)
 }
 
 export const createNotificationLanding = ({
 	chat,
 	roster,
 	spaces,
+	joinedSpaces,
 	missions,
 	missionOrigins,
 	raiseWindow,
@@ -31,29 +51,67 @@ export const createNotificationLanding = ({
 			: undefined
 	}
 
+	const originOf = (missionId: string): MissionEvent =>
+		missionOrigins.get(missionId) ?? {
+			missionId,
+			spaceId: null,
+			hostId: THIS_COMPUTER,
+		}
+
+	const localRowOf = (mission: Mission) => {
+		const rowId = roster.spaceOfConversation(mission.originConversationId)
+		return rowId && !isJoinedRowId(rowId) ? rowId : undefined
+	}
+
+	const landingRowOf = (hostId: string | null, mission: Mission) =>
+		hostId === THIS_COMPUTER
+			? (localRowOf(mission) ?? mission.spaceId)
+			: joinedRowIdOf(hostId)
+
+	const isHeldJoinedRow = (rowId: string) =>
+		joinedSpaces
+			.getState()
+			.joinedSpaces.some((joined) => joinedRowIdOf(joined.id) === rowId)
+
+	const landOnSpace = (rowId: string) => {
+		if (!isJoinedRowId(rowId) || isHeldJoinedRow(rowId)) {
+			joinedSpaces.selectSpace(rowId)
+		}
+	}
+
+	const landOnOfflineHost = (origin: MissionEvent, reason: unknown) => {
+		if (origin.hostId === THIS_COMPUTER || !isHostOffline(reason)) {
+			throw reason
+		}
+		landOnSpace(joinedRowIdOf(origin.hostId))
+		logOfflineMission(origin)
+		return null
+	}
+
 	const openMission = async (missionId: string) => {
-		const detail = await missions.read(
-			missionOrigins.get(missionId) ?? {
-				missionId,
-				spaceId: null,
-				hostId: THIS_COMPUTER,
-			},
-		)
+		const origin = originOf(missionId)
+		const detail = await missions
+			.read(origin)
+			.catch((reason: unknown) => landOnOfflineHost(origin, reason))
 
 		if (!detail) {
 			return
 		}
 
 		const { mission } = detail
-		const spaceId = roster.spaceOfConversation(mission.originConversationId)
+		const rowId = landingRowOf(origin.hostId, mission)
 
-		if (!spaceId) {
+		if (!rowId) {
 			return
 		}
 
+		if (roster.spaceOfConversation(mission.originConversationId) !== rowId) {
+			return landOnSpace(rowId)
+		}
+
 		roster.select(mission.botId)
-		spaces.select(roster.hostSpaceIdOf(spaceId))
-		missions.open({ missionId, rowId: mission.botId, spaceId })
+		landOnSpace(rowId)
+		missions.open({ missionId, rowId: mission.botId, spaceId: rowId })
 	}
 
 	const windowRaised = (): Promise<void> => {

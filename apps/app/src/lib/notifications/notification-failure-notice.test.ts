@@ -80,6 +80,10 @@ const watchAlongside = async ({
 		runtimes: idleRuntimes,
 		roster: emptyRoster,
 		spaces: { select: () => undefined },
+		joinedSpaces: {
+			getState: () => ({ joinedSpaces: [] }),
+			selectSpace: () => undefined,
+		},
 		missions: createFakeMissions(),
 		spokenWords: createSpokenWords(),
 		notifications,
