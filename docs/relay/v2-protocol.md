@@ -294,7 +294,7 @@ The Tauri commands that mint them:
 A secret admits exactly one device. Minting a link replaces the unused secret of
 the same account in that Space, if any: the earlier link then matches no secret.
 Withdrawing an invitation deletes every secret of that account in the Space, and
-so does removing a member. A used secret is kept, so a join that replays it is
+so does removing a member: see [Key rotation](#key-rotation) for the roster rows. A used secret is kept, so a join that replays it is
 answered `used`. A link has no expiry.
 
 ## Join frames
@@ -431,8 +431,24 @@ Removing a member (`hosting_remove_member`, once the relay answered) or one devi
 fresh random `space_key` under `key_id + 1`, starts its `ctr` and seals every
 later frame under it. A removed device keeps the old `space_key` and gets nothing
 sealed under the new one; its frames resolve to no roster row and are dropped.
-The host device cannot be removed. When the new key cannot be stored, the rows
-stay deleted and the command answers `keyNotRotated`.
+The host device cannot be removed.
+
+Withdrawing a pending invitation (`hosting_withdraw_invitation`, once the relay
+answered) is a removal too: a device admitted through that invitation's link is
+rostered under the invited account while the invitation is still pending. The host
+deletes every join secret and every roster row of that account, then rotates the
+key as above when at least one roster row was deleted. A withdrawal that deletes
+no roster row leaves `key_id` unchanged.
+
+The transaction that deletes roster rows also marks the Space as owing a
+rotation, and storing the new key clears the mark. When the new key cannot be
+stored, the rows stay deleted, the mark stays, and the command answers
+`keyNotRotated`. While the mark stays, the host rotates before it answers any
+members or devices command on that Space (`hosting_members`,
+`hosting_invite_member`, `hosting_withdraw_invitation`, `hosting_remove_member`,
+`hosting_join_link`, `hosting_device_link`, `hosting_devices`,
+`hosting_remove_device`) and when its socket for that Space comes online, so a
+failed rotation is never left behind by a retry that finds nothing to remove.
 
 ### rekey (host to device)
 

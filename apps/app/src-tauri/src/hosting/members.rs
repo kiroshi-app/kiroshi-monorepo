@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
 use super::contract::{Member, MemberStatus, MembersChanged, MembersError};
-use super::{devices, links, Hosting};
+use super::{devices, Hosting};
 use crate::account::cloud::MemberCallError;
 use crate::account::contract::AccountState;
 use crate::account::session::{self, AccountSession};
@@ -21,8 +21,7 @@ pub async fn list<R: Runtime>(
 	space_id: String,
 ) -> Result<Vec<Member>, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
-	let hosting = app.state::<Hosting>();
-	let _turn = hosting.members_turn.lock().await;
+	let _turn = devices::settled_turn(app, &space_id).await?;
 	let members = listed(app, &instance_id).await?;
 	announced_if_changed(app, &space_id, members.clone());
 	Ok(members)
@@ -40,7 +39,7 @@ pub async fn invite<R: Runtime>(
 	}
 	let bearer = bearer_of(app)?;
 	let hosting = app.state::<Hosting>();
-	let _turn = hosting.members_turn.lock().await;
+	let _turn = devices::settled_turn(app, &space_id).await?;
 	hosting
 		.cloud
 		.invite_member(&bearer, &instance_id, &email)
@@ -78,7 +77,7 @@ async fn ended<R: Runtime>(
 ) -> Result<Vec<Member>, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
 	let hosting = app.state::<Hosting>();
-	let _turn = hosting.members_turn.lock().await;
+	let _turn = devices::settled_turn(app, &space_id).await?;
 	let members = listed(app, &instance_id).await?;
 	let status = members
 		.iter()
@@ -98,9 +97,9 @@ async fn ended<R: Runtime>(
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	match expected {
-		MemberStatus::Joined => devices::account_revoked(app, &space_id, &user_id).await?,
+		MemberStatus::Joined => devices::member_removed(app, &space_id, &user_id).await?,
 		MemberStatus::Pending | MemberStatus::Host => {
-			links::withdrawn(app, &space_id, &user_id).await?
+			devices::invitation_withdrawn(app, &space_id, &user_id).await?
 		}
 	}
 	read_back(app, &space_id, &instance_id).await

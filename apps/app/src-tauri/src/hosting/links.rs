@@ -1,11 +1,11 @@
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 use zeroize::Zeroizing;
 
 use super::contract::{MemberStatus, MembersError};
-use super::devices::{database_of, host_device};
+use super::devices::{database_of, host_device, settled_turn};
 use super::members::{instance_of, listed};
-use super::{roster, Hosting};
+use super::roster;
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::join::fresh_secret;
 use crate::spaces::contract::SpaceError;
@@ -19,8 +19,7 @@ pub async fn join_link<R: Runtime>(
 ) -> Result<String, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
 	let host = host_device(app)?;
-	let hosting = app.state::<Hosting>();
-	let _turn = hosting.members_turn.lock().await;
+	let _turn = settled_turn(app, &space_id).await?;
 	let members = listed(app, &instance_id).await?;
 	let status = members
 		.iter()
@@ -39,24 +38,12 @@ pub async fn device_link<R: Runtime>(
 ) -> Result<String, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
 	let host = host_device(app)?;
+	let _turn = settled_turn(app, &space_id).await?;
 	let account_id = roster::host_account(database_of(app)?, &space_id, &host)
 		.await
 		.map_err(SpaceError::from)?
 		.ok_or(MembersError::NotHosting)?;
 	minted(app, &space_id, &instance_id, &host, account_id).await
-}
-
-pub(super) async fn withdrawn<R: Runtime>(
-	app: &AppHandle<R>,
-	space_id: &str,
-	user_id: &str,
-) -> Result<(), MembersError> {
-	database_of(app)?
-		.space_relay()
-		.join_secrets_withdrawn(space_id.to_owned(), user_id.to_owned())
-		.await
-		.map_err(SpaceError::from)?;
-	Ok(())
 }
 
 async fn minted<R: Runtime>(

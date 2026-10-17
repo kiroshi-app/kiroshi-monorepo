@@ -62,6 +62,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 53, statements: CONVERSATION_LOOK },
 	Migration { version: 54, statements: RELAY_V2 },
 	Migration { version: 55, statements: SPACE_JOIN },
+	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1194,6 +1195,12 @@ CREATE TABLE space_roster_versions (
 );
 ";
 
+const SPACE_KEY_ROTATIONS: &str = "
+CREATE TABLE space_key_rotations (
+	space_id TEXT PRIMARY KEY REFERENCES spaces (id) ON DELETE CASCADE
+);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1302,6 +1309,7 @@ mod tests {
 	const CONVERSATION_LOOK_STEP: u32 = 53;
 	const RELAY_V2_STEP: u32 = 54;
 	const SPACE_JOIN_STEP: u32 = 55;
+	const SPACE_KEY_ROTATIONS_STEP: u32 = 56;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -4001,6 +4009,36 @@ mod tests {
 		assert_eq!(version(&connection).expect("version"), latest_version());
 		assert!(second_unused.is_err(), "a second unused secret of one account was kept");
 		assert_eq!([count("space_join_secrets"), count("space_roster_versions")], [0, 0]);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_rotation_markers_install_on_a_kept_file_and_go_with_their_space() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SPACE_KEY_ROTATIONS_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), SPACE_JOIN_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, position, created_at) VALUES ('s1', 'Shared', 1, 1);",
+			)
+			.expect("a space this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		connection
+			.execute_batch(
+				"INSERT INTO space_key_rotations (space_id) VALUES ('s1');
+				DELETE FROM spaces WHERE id = 's1';",
+			)
+			.expect("a marker is written, then its space goes");
+		let left: i64 = connection
+			.query_row("SELECT COUNT(*) FROM space_key_rotations", [], |row| row.get(0))
+			.expect("the rows count");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(left, 0);
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

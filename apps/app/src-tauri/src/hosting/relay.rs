@@ -23,7 +23,7 @@ use super::contract::HostingState;
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
-use super::{admission, entered, handover, members, Hosting};
+use super::{admission, devices, entered, handover, members, Hosting};
 use crate::account::cloud::{DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
 use crate::db::{self, Database};
@@ -394,6 +394,12 @@ async fn online<R: Runtime>(
 	};
 	let mut rotations = serving.keys.space.clone();
 	rotations.borrow_and_update();
+	match devices::settled_turn(app, ids.space_id).await {
+		Ok(turn) => drop(turn),
+		Err(failure) => {
+			eprintln!("hosted space {} kept its pending key rotation: {failure:?}", ids.space_id);
+		}
+	}
 	let (mut sink, mut stream) = socket.split();
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();

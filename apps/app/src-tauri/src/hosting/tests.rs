@@ -5757,6 +5757,12 @@ impl Harness {
 		relay.join_secrets(PERSONAL.to_owned()).await.expect("the secrets read").len()
 	}
 
+	async fn is_rotation_pending(&self) -> bool {
+		let state = self.app.state::<DatabaseState>();
+		let relay = state.as_ref().expect("the database").space_relay();
+		relay.is_rotation_pending(PERSONAL.to_owned()).await.expect("the marker reads")
+	}
+
 	fn flagged_joined(&self, user_id: &str) {
 		for member in self.relay.members.lock().expect("the relay").iter_mut() {
 			if member["userId"] == user_id {
@@ -6061,7 +6067,7 @@ fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing(
 
 #[cfg(unix)]
 #[test]
-fn a_rotation_whose_key_is_not_stored_keeps_the_rows_deleted_and_answers_the_rotation_failure() {
+fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_rotates() {
 	use std::os::unix::fs::PermissionsExt;
 
 	run(async {
@@ -6082,13 +6088,127 @@ fn a_rotation_whose_key_is_not_stored_keeps_the_rows_deleted_and_answers_the_rot
 		)
 		.await;
 		std::fs::set_permissions(&profile, permissions(0o700)).expect("the profile is unlocked");
+		let left_pending =
+			(harness.is_rotation_pending().await, harness.space_key(PERSONAL).key_id);
+		let listed = harness.devices().await;
 
 		let Err(MembersError::KeyNotRotated { reason }) = refused else {
 			panic!("the rotation failure is not named: {refused:?}");
 		};
 		assert!(reason.contains("key_id 2"), "{reason}");
 		assert!(!reason.contains(&BASE64_STANDARD.encode(guest.space.key.as_slice())), "{reason}");
-		assert_eq!(device_ids(&harness.devices().await).len(), 1);
+		assert_eq!(left_pending, (true, 1));
+		assert_eq!(device_ids(&listed).len(), 1);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+#[test]
+fn withdrawing_an_invitation_whose_device_joined_revokes_it_and_rekeys_the_others_only() {
+	run(async {
+		let mut harness = Harness::signed_in("join-withdraw-admitted").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the invitation is withdrawn");
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+		joiner.space = space_key_of(&handover);
+		joiner.ctr = 0;
+		let answer = called(&mut relay, &mut joiner, &host).await;
+
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert_eq!(answer["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&guest.member));
+		assert_eq!(harness.join_secret_count().await, 1);
+		assert!(!harness.is_rotation_pending().await);
+		let accounts: Vec<String> =
+			device_ids(&harness.devices().await).into_iter().map(|(account, _)| account).collect();
+		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
+	});
+}
+
+#[test]
+fn withdrawing_an_invitation_with_no_admitted_device_keeps_the_key_id() {
+	run(async {
+		let mut harness = Harness::signed_in("join-withdraw-unused").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let _relay = harness.relay_side().await;
+		harness.link_for("guest").await;
+
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the invitation is withdrawn");
+
 		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+		assert_eq!(harness.join_secret_count().await, 0);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
+	use std::os::unix::fs::PermissionsExt;
+
+	run(async {
+		let mut harness = Harness::signed_in("join-pending-online").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let profile = harness.app.path().app_data_dir().expect("the data folder resolves");
+		let permissions = |mode| std::fs::Permissions::from_mode(mode);
+		std::fs::set_permissions(&profile, permissions(0o500)).expect("the profile is locked");
+		let refused = remove_device(
+			harness.app.handle(),
+			PERSONAL.to_owned(),
+			guest.member.keys.device_id().to_string(),
+		)
+		.await;
+		std::fs::set_permissions(&profile, permissions(0o700)).expect("the profile is unlocked");
+		let left_pending = harness.is_rotation_pending().await;
+
+		harness.stopped().await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let stale =
+			Space { instance_id: &relay.instance_id.clone(), key: &joiner.space, host: &host };
+		relay.sent(joiner.member.sealed(&stale, 50, HELLO, None)).await;
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+
+		assert!(matches!(refused, Err(MembersError::KeyNotRotated { .. })), "{refused:?}");
+		assert!(left_pending);
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
 	});
 }

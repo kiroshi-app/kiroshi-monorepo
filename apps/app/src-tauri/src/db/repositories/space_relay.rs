@@ -41,6 +41,13 @@ const SELECT_JOIN_SECRETS: &str = "SELECT id, account_id, secret, used_at IS NOT
 const DELETE_JOIN_SECRETS_OF_ACCOUNT: &str =
 	"DELETE FROM space_join_secrets WHERE space_id = ?1 AND account_id = ?2";
 
+const MARK_ROTATION_PENDING: &str =
+	"INSERT INTO space_key_rotations (space_id) VALUES (?1) ON CONFLICT (space_id) DO NOTHING";
+
+const SELECT_ROTATION_PENDING: &str = "SELECT 1 FROM space_key_rotations WHERE space_id = ?1";
+
+const DELETE_ROTATION_PENDING: &str = "DELETE FROM space_key_rotations WHERE space_id = ?1";
+
 const SPEND_JOIN_SECRET: &str =
 	"UPDATE space_join_secrets SET used_at = ?2 WHERE id = ?1 AND used_at IS NULL";
 
@@ -167,7 +174,7 @@ impl SpaceRelayRepository {
 				let deleted =
 					transaction.execute(DELETE_ROSTER_ROW, params![space_id, device_id])?;
 				if deleted > 0 {
-					roster_grown(&transaction, &space_id)?;
+					roster_revoked(&transaction, &space_id)?;
 				}
 				transaction.commit()?;
 				Ok(deleted > 0)
@@ -188,7 +195,7 @@ impl SpaceRelayRepository {
 				let deleted =
 					transaction.execute(DELETE_ROSTER_OF_ACCOUNT, params![space_id, account_id])?;
 				if deleted > 0 {
-					roster_grown(&transaction, &space_id)?;
+					roster_revoked(&transaction, &space_id)?;
 				}
 				transaction.commit()?;
 				Ok(deleted)
@@ -228,15 +235,22 @@ impl SpaceRelayRepository {
 			.await
 	}
 
-	pub async fn join_secrets_withdrawn(
-		&self,
-		space_id: String,
-		account_id: String,
-	) -> Result<(), DatabaseError> {
+	pub async fn is_rotation_pending(&self, space_id: String) -> Result<bool, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let pending = connection
+					.prepare_cached(SELECT_ROTATION_PENDING)?
+					.query_row(params![space_id], |_| Ok(()))
+					.optional()?;
+				Ok(pending.is_some())
+			})
+			.await
+	}
+
+	pub async fn rotation_settled(&self, space_id: String) -> Result<(), DatabaseError> {
 		self.access
 			.call_mut(move |connection| {
-				connection
-					.execute(DELETE_JOIN_SECRETS_OF_ACCOUNT, params![space_id, account_id])?;
+				connection.execute(DELETE_ROTATION_PENDING, params![space_id])?;
 				Ok(())
 			})
 			.await
@@ -385,6 +399,12 @@ fn roster_row_written(
 	Ok(())
 }
 
+fn roster_revoked(connection: &Connection, space_id: &str) -> rusqlite::Result<()> {
+	roster_grown(connection, space_id)?;
+	connection.execute(MARK_ROTATION_PENDING, params![space_id])?;
+	Ok(())
+}
+
 fn roster_grown(connection: &Connection, space_id: &str) -> rusqlite::Result<()> {
 	connection.execute(GROW_ROSTER_VERSION, params![space_id])?;
 	Ok(())
@@ -463,7 +483,8 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_fresh_secret_replaces_the_unused_one_of_its_account_and_a_withdraw_drops_them_all() {
+	async fn a_fresh_secret_replaces_the_unused_one_of_its_account_and_a_revocation_drops_them_all()
+	{
 		let dir = temp_dir();
 		let database = crate::db::open(&dir);
 		let relay = database.space_relay();
@@ -482,7 +503,7 @@ mod tests {
 		minted("a1", 3).await.expect("minted");
 		minted("a2", 4).await.expect("minted");
 		let held = secrets_of(relay).await;
-		relay.join_secrets_withdrawn(SPACE.to_owned(), "a1".to_owned()).await.expect("withdrawn");
+		relay.account_revoked(SPACE.to_owned(), "a1".to_owned()).await.expect("withdrawn");
 
 		assert_eq!(
 			held,
@@ -560,6 +581,33 @@ mod tests {
 		assert_eq!((revoked, nobody, device, unknown), (2, 0, true, false));
 		assert_eq!(roster, Roster { version: 5, rows: Vec::new() });
 		assert_eq!(elsewhere, Roster { version: 1, rows: vec![a_row("d1", "r1")] });
+	}
+
+	#[tokio::test]
+	async fn a_revocation_marks_a_rotation_pending_only_when_it_deletes_a_row_and_settling_clears_it(
+	) {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		let relay = database.space_relay();
+		let pending = || async { relay.is_rotation_pending(SPACE.to_owned()).await.expect("read") };
+		relay.rostered(SPACE.to_owned(), a_row("d1", "r1")).await.expect("stored");
+		relay.rostered(SPACE.to_owned(), a_row("d2", "r2")).await.expect("stored");
+
+		let untouched = pending().await;
+		relay.account_revoked(SPACE.to_owned(), "a9".to_owned()).await.expect("revoked");
+		relay.device_revoked(SPACE.to_owned(), "d9".to_owned()).await.expect("revoked");
+		let after_nothing = pending().await;
+		relay.device_revoked(SPACE.to_owned(), "d1".to_owned()).await.expect("revoked");
+		let after_device = pending().await;
+		relay.rotation_settled(SPACE.to_owned()).await.expect("settled");
+		let settled = pending().await;
+		relay.account_revoked(SPACE.to_owned(), "a1".to_owned()).await.expect("revoked");
+		let after_account = pending().await;
+
+		assert_eq!(
+			[untouched, after_nothing, after_device, settled, after_account],
+			[false, false, true, false, true]
+		);
 	}
 
 	#[tokio::test]
