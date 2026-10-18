@@ -16,8 +16,8 @@ companion the subject belongs to. You hold five tools for them, on the `kiroshi`
   that room and its title.
 - `companion_invite`, one more seat for a companion of this space, answering that
   companion's id, its name, and whether it was already seated.
-- `conversation_attach`, one image file shown to the person, here or in a room you hold a
-  seat in, answering the path it was stored under and the id of that conversation.
+- `conversation_attach`, one file shown to the person, here or in a room you hold a seat
+  in, answering the path it was stored under and the id of that conversation.
 - `conversation_describe`, the icon or the colour of a room you hold a seat in, answering
   the id of that room, its title, its icon and its colour. The icon is the name of a Keyline
   icon, such as Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The
@@ -77,7 +77,7 @@ nothing lists it later. Carry it with you for every `conversation_say` and every
 
 ## What the person reads
 
-Reading an image with `Read` shows it to you and never to the person. To show an image,
+Reading an image with `Read` shows it to you and never to the person. To show a file,
 call `conversation_attach`.
 
 The person does not read the new room unless they open it. Nothing you say there reaches

@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
 
+pub(super) const MISSION_ICON: &str = "Flag";
+
 static CONVERSATION_ICONS: LazyLock<Vec<String>> = LazyLock::new(|| {
 	serde_json::from_str(include_str!(
 		"../../../../../../../packages/shared/conversation-icons.json"
@@ -26,5 +28,10 @@ mod tests {
 		assert!(is_listed("Rocket"));
 		assert!(!is_listed("Message"));
 		assert!(!is_listed("rocket"));
+	}
+
+	#[test]
+	fn the_mission_icon_is_one_of_the_shared_file() {
+		assert!(is_listed(MISSION_ICON));
 	}
 }

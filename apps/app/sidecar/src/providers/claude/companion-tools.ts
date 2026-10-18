@@ -53,12 +53,13 @@ const ROOM = "The id of the room you hold a seat in to say it in."
 const SPOKEN = "What you say in that room, read there in your name."
 
 const ATTACH =
-	"Show an image file to the person, in this conversation or in a room you hold a seat in, once you want them to see it rather than only read it yourself."
+	"Show any file to the person, in this conversation or in a room you hold a seat in, once you want them to see it rather than only read it yourself: an image is shown inline, every other file is shown as an attachment they can open, 10 MB per file."
 
-const IMAGE_PATH =
-	"The path of the image file to show, absolute or relative to your working directory."
+const FILE_PATH =
+	"The path of the file to show, absolute or relative to your working directory: any file up to 10 MB, an image shown inline, every other file shown as an attachment."
 
-const CAPTION = "A line read right above the image."
+const CAPTION =
+	"A line read right above the file, the image shown inline or the attachment listed."
 
 const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
@@ -99,7 +100,7 @@ const SAID: ToolInput = {
 }
 
 const ATTACHED: ToolInput = {
-	path: z.string().describe(IMAGE_PATH),
+	path: z.string().describe(FILE_PATH),
 	caption: z.string().optional().describe(CAPTION),
 	conversation: z.string().optional().describe(ATTACH_ROOM),
 }

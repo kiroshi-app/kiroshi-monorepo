@@ -1093,16 +1093,20 @@ mod tests {
 		)
 	}
 
-	async fn thread_of(database: &Database, id: String) -> (String, Option<String>, String, i64) {
+	async fn thread_of(
+		database: &Database,
+		id: String,
+	) -> (String, Option<String>, String, Option<String>, i64) {
 		database
 			.call(move |connection| {
 				Ok(connection.query_row(
 					"SELECT conversations.kind, conversations.space_id, conversations.title,
+						conversations.icon,
 						(SELECT count(*) FROM conversation_participants
 							WHERE conversation_id = conversations.id AND bot_id = 'b1')
 						FROM conversations WHERE id = ?1",
 					[&id],
-					|row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+					|row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
 				)?)
 			})
 			.await
@@ -1124,8 +1128,14 @@ mod tests {
 		assert_eq!(opened.closed_at, None);
 		assert_eq!(
 			thread_of(&database, opened.thread_conversation_id.clone()).await,
-			("mission".to_owned(), Some("personal".to_owned()), "Fix the crash".to_owned(), 1,),
-			"the thread did not land in the space of the conversation with its bot seated"
+			(
+				"mission".to_owned(),
+				Some("personal".to_owned()),
+				"Fix the crash".to_owned(),
+				Some("Flag".to_owned()),
+				1,
+			),
+			"the thread did not land in the space of the conversation with its bot seated and its icon"
 		);
 		let detail = database.missions().detail(opened.id).await.expect("the mission reads");
 		assert_eq!(
