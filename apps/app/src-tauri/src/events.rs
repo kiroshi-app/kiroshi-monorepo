@@ -6,8 +6,8 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::broadcast;
 
 use crate::{
-	account, agent, applications, companions, conversations, hosting, invitations, joined_spaces,
-	missions, notifications, routines, updates, window_controls,
+	account, agent, applications, companions, conversations, devices, hosting, invitations,
+	joined_spaces, missions, notifications, routines, updates, window_controls,
 };
 
 pub const BUFFERED_FRAMES: usize = 1024;
@@ -86,6 +86,12 @@ declared! {
 		conversations::contract::COMPANION_ARRIVED_EVENT,
 	COMPANION_SPOKE: conversations::contract::CompanionSpoke =
 		conversations::contract::COMPANION_SPOKE_EVENT,
+	DEVICE_APPROVAL_CHANGED: devices::contract::DeviceApproval =
+		devices::contract::APPROVAL_CHANGED_EVENT,
+	DEVICE_APPROVAL_REQUESTED: devices::contract::DeviceApprovalRequested =
+		devices::contract::APPROVAL_REQUESTED_EVENT,
+	DEVICE_APPROVAL_SETTLED: devices::contract::DeviceApprovalSettled =
+		devices::contract::APPROVAL_SETTLED_EVENT,
 	HOSTING_CHANGED: hosting::contract::HostingChanged = hosting::contract::CHANGED_EVENT,
 	MEMBERS_CHANGED: hosting::contract::MembersChanged = hosting::contract::MEMBERS_CHANGED_EVENT,
 	INVITATION_CHANGED: invitations::contract::InvitationsChanged =

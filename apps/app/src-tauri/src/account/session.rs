@@ -15,6 +15,7 @@ use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
 use super::contract::{AccountError, AccountFailure, AccountState, SignedOutReason};
 use crate::crypto::commands::DeviceKeysState;
 use crate::db::{Database, DatabaseState};
+use crate::devices;
 use crate::environment::contract::{EnvError, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, ACCOUNT_CHANGED};
@@ -30,6 +31,9 @@ const SIGNED_OUT_ON_SITE: AccountState =
 
 const DEVICE_REVOKED: AccountState =
 	AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRevoked) };
+
+const DEVICE_REFUSED: AccountState =
+	AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRefused) };
 
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
@@ -247,7 +251,7 @@ async fn approved<R: Runtime>(
 	window_controls::raise_main(&app);
 	if is_signed_in {
 		stored_name_sent(&app);
-		hosting::resumed(&app).await;
+		devices::signed_in(&app).await;
 		invitations::resumed(&app);
 	}
 }
@@ -293,13 +297,12 @@ pub async fn restore<R: Runtime>(app: AppHandle<R>) {
 	if let Some(next) = next {
 		entered(&app, next);
 	}
-	let is_signed_in = matches!(session.current(), AccountState::SignedIn(_));
-	if is_signed_in {
+	if matches!(session.current(), AccountState::SignedIn(_)) {
 		stored_name_sent(&app);
-	}
-	hosting::resumed(&app).await;
-	if is_signed_in {
+		devices::signed_in(&app).await;
 		invitations::resumed(&app);
+	} else {
+		hosting::resumed(&app).await;
 	}
 }
 
@@ -377,6 +380,7 @@ async fn stored_display_name<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
 }
 
 async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexGuard<'_, ()>> {
+	devices::signed_out(app).await;
 	hosting::signed_out(app).await;
 	invitations::signed_out(app).await;
 	joined_spaces::relay::signed_out(app).await
@@ -413,9 +417,12 @@ async fn relay_device_deleted<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> R
 		.await
 		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))?;
 	match held {
-		Some(relay_device_id) => {
-			app.state::<AccountSession>().cloud.delete_device(bearer, &relay_device_id).await
-		}
+		Some(relay_device_id) => app
+			.state::<AccountSession>()
+			.cloud
+			.delete_device(bearer, &relay_device_id)
+			.await
+			.map_err(|failure| failure.to_string()),
 		None => Ok(()),
 	}
 }
@@ -468,6 +475,10 @@ pub fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
 
 pub fn device_revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
 	tauri::async_runtime::spawn(signed_out_locally(app.clone(), bearer.to_owned(), DEVICE_REVOKED));
+}
+
+pub fn device_refused<R: Runtime>(app: &AppHandle<R>, bearer: &str) {
+	tauri::async_runtime::spawn(signed_out_locally(app.clone(), bearer.to_owned(), DEVICE_REFUSED));
 }
 
 async fn signed_out_locally<R: Runtime>(

@@ -182,6 +182,9 @@ async fn begun<R: Runtime>(
 		(Err(error), _) => {
 			HostingState::Failed { reason: format!("the account session store failed: {error:?}") }
 		}
+		(Ok(Some(_)), _) if crate::devices::is_awaiting_approval(app) => HostingState::Failed {
+			reason: "this device awaits its approval by another device of the account".to_owned(),
+		},
 		(Ok(Some(_)), None) => {
 			HostingState::Failed { reason: "the local host api is not listening".to_owned() }
 		}

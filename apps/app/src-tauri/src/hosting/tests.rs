@@ -362,14 +362,18 @@ fn device_answer(relay: &DeviceRelay, proving: Proving<'_>) -> (StatusCode, Valu
 				id: id.clone(),
 				account_id: account_id.to_owned(),
 			});
-			let answer = json!({ "id": id, "createdAt": created_at, "transferred": false });
+			let answer = json!({ "id": id, "createdAt": created_at, "transferred": false, "status": "approved" });
 			(StatusCode::CREATED, answer)
 		}
 		Some(device) => {
 			let transferred = device.account_id != account_id;
 			device.account_id = account_id.to_owned();
-			let answer =
-				json!({ "id": device.id, "createdAt": created_at, "transferred": transferred });
+			let answer = json!({
+				"id": device.id,
+				"createdAt": created_at,
+				"transferred": transferred,
+				"status": "approved"
+			});
 			(StatusCode::OK, answer)
 		}
 	}

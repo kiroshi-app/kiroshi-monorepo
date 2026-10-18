@@ -192,7 +192,7 @@ async fn device_registered(Served(relay): Served<Relay>, body: String) -> Respon
 	};
 	answered_json(
 		StatusCode::CREATED,
-		json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false }),
+		json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false, "status": "approved" }),
 	)
 }
 

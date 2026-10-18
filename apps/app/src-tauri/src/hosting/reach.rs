@@ -152,6 +152,14 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_suggested_bots", Reach::Free),
 	("companion_launch_outcome", Reach::Free),
 	("get_device_identity", Reach::HostOnly),
+	("device_approval", Reach::HostOnly),
+	("device_approval_retry", Reach::HostOnly),
+	("device_approval_code_request", Reach::HostOnly),
+	("device_approval_code_submit", Reach::HostOnly),
+	("device_approve", Reach::HostOnly),
+	("device_refuse", Reach::HostOnly),
+	("devices_list", Reach::HostOnly),
+	("device_remove", Reach::HostOnly),
 	("window_declare_maximize_button", Reach::HostOnly),
 	("diagnostics", Reach::HostOnly),
 	("log_tail", Reach::HostOnly),
@@ -354,6 +362,9 @@ const IN_THE_SPACE: Audience = Audience::Scoped(space("/spaceId"));
 
 pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::account::contract::CHANGED_EVENT, Audience::HostOnly),
+	(crate::devices::contract::APPROVAL_CHANGED_EVENT, Audience::HostOnly),
+	(crate::devices::contract::APPROVAL_REQUESTED_EVENT, Audience::HostOnly),
+	(crate::devices::contract::APPROVAL_SETTLED_EVENT, Audience::HostOnly),
 	(
 		crate::agent::commands::EVENT_CHANNEL,
 		Audience::ScopedOrHostWide(child(Conversation, "/scope/conversationId")),
