@@ -222,7 +222,7 @@ impl<R: Runtime> CompanionHost<R> {
 					conversation_kind: kind,
 				})
 			}
-			None => return Err(CompanionError::ConversationWithoutSpace { conversation_id }),
+			None => return Err(CompanionError::UnknownConversation { conversation_id }),
 		}
 		let archived = database
 			.conversations()
@@ -1808,10 +1808,7 @@ mod tests {
 			})
 		);
 		assert_eq!(unled, json!({ "kind": "callerNotLead", "conversationId": "unled" }));
-		assert_eq!(
-			unknown,
-			json!({ "kind": "conversationWithoutSpace", "conversationId": "absent" })
-		);
+		assert_eq!(unknown, json!({ "kind": "unknownConversation", "conversationId": "absent" }));
 	}
 
 	#[tokio::test]
