@@ -506,6 +506,9 @@ const hostNamed = (name: string | null): JoinedSpaceMember => ({
 	userId: "u-lea",
 	name,
 	role: "host",
+	deviceId: "device-of-lea",
+	fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+	isPresent: true,
 })
 
 const REMOVED_NOTICE = {

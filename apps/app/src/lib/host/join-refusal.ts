@@ -16,6 +16,14 @@ const NOTICE_KEYS = {
 	sessionStore: "joinRefused.sessionStore",
 	relayUnreachable: "joinRefused.relayUnreachable",
 	relayRefused: "joinRefused.relayRefused",
+	malformedLink: "joinRefused.malformedLink",
+	linkUsed: "joinRefused.linkUsed",
+	noInvitation: "joinRefused.noInvitation",
+	notInRoster: "joinRefused.notInRoster",
+	badSignature: "joinRefused.badSignature",
+	removedByRotation: "joinRefused.removedByRotation",
+	needsJoinLink: "joinRefused.needsJoinLink",
+	keyStore: "joinRefused.keyStore",
 } as const satisfies Record<JoinedSpaceError["kind"], string>
 
 export const isJoinedSpaceError = (

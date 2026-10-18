@@ -518,12 +518,18 @@ const STEVE_HOSTING: JoinedSpaceMember = {
 	userId: "steve",
 	name: "Steve Puget",
 	role: "host",
+	deviceId: "device-of-steve",
+	fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+	isPresent: true,
 }
 
 const SAM_GUEST: JoinedSpaceMember = {
 	userId: "sam",
 	name: "Sam Carter",
 	role: "guest",
+	deviceId: "device-of-sam",
+	fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+	isPresent: true,
 }
 
 const answerJoinedMembers = (members: JoinedSpaceMember[]) =>

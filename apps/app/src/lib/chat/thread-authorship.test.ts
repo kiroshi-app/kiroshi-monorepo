@@ -43,7 +43,14 @@ const memberOf = (
 	userId: string,
 	name: string | null,
 	role: JoinedSpaceMember["role"] = "guest",
-): JoinedSpaceMember => ({ userId, name, role })
+): JoinedSpaceMember => ({
+	userId,
+	name,
+	role,
+	deviceId: `device-of-${userId}`,
+	fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+	isPresent: true,
+})
 
 const joinedAsGuestWith = (hostName: string | null): ThreadAuthorship => ({
 	accountId: GUEST,
