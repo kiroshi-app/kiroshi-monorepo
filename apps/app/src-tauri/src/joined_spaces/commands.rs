@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
+use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
 use super::relay::{self, RelayGuests};
 use super::{deep_link, held};
 use crate::db;
@@ -70,14 +70,18 @@ pub async fn joined_spaces_list<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	let stored = ready(&state)?.joined_spaces().list().await?;
 	let cloud = app.state::<RelayGuests>().inner().cloud();
-	stored
-		.into_iter()
-		.map(|joined| {
-			let JoinedReach::Relay { instance_id } = &joined.reach;
-			let state = held::state_of(&app, instance_id)?;
-			Ok(JoinedSpace::presented(joined, cloud, state))
-		})
-		.collect()
+	let listed = stored.into_iter().map(|joined| {
+		let JoinedReach::Relay { instance_id } = &joined.reach;
+		let state = held::state_of(&app, instance_id).unwrap_or_else(|failure| {
+			eprintln!(
+				"joined space {} is listed waiting for its host: its key did not read: {failure:?}",
+				joined.id
+			);
+			JoinedSpaceState::WaitingForHost
+		});
+		JoinedSpace::presented(joined, cloud, state)
+	});
+	Ok(listed.collect())
 }
 
 #[tauri::command]
@@ -123,7 +127,6 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
-	use super::super::contract::JoinedSpaceState;
 	use super::*;
 	use crate::account::session::AccountSession;
 	use crate::crypto::commands::SpaceKeys;
@@ -278,19 +281,21 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_joined_space_without_a_held_key_is_listed_waiting_for_its_host() {
+	async fn a_joined_space_without_a_held_key_or_whose_key_does_not_read_is_listed_waiting() {
 		let dir = temp_dir();
 		let app = app_over(&dir);
 		let keyless = held(&app).await;
 		let space = HeldSpaceKey::first().expect("randomness");
 		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
 		let keyed = held_over(&app, "instance-2", JoinedSpaceState::Online).await;
+		let unreadable = held_over(&app, "instance.3", JoinedSpaceState::WaitingForHost).await;
 
 		let listed = list(&app).await;
 
 		assert_eq!(keyless.state, JoinedSpaceState::WaitingForHost);
-		assert_eq!(listed.len(), 2);
+		assert_eq!(listed.len(), 3);
 		assert!(listed.contains(&keyless) && listed.contains(&keyed));
+		assert!(listed.contains(&unreadable));
 	}
 
 	#[tokio::test]

@@ -19,9 +19,7 @@ use super::relay::RelayGuests;
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
-use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Opened, Socket, PING_EVERY, SILENCE_BOUND,
-};
+use crate::hosting::relay::{opened, sent, until_stopped, Backoff, Opened, Socket, SILENCE_BOUND};
 
 pub(super) struct WaitingJoin {
 	stop: watch::Sender<bool>,
@@ -84,9 +82,13 @@ async fn waited<R: Runtime>(
 	loop {
 		match until_stopped(&mut stop, attempted(&app, &instance_id, &mut backoff)).await {
 			None => return,
-			Some(Attempt::Joined) => return joined_announced(&app, &id).await,
+			Some(Attempt::Joined) => {
+				left(&app, &id, &stop);
+				return joined_announced(&app, &id).await;
+			}
 			Some(Attempt::Ended(reason)) => {
-				return eprintln!("joined space {id} stopped waiting for its host: {reason}")
+				left(&app, &id, &stop);
+				return eprintln!("joined space {id} stopped waiting for its host: {reason}");
 			}
 			Some(Attempt::Dropped(reason)) => {
 				eprintln!("joined space {id} lost the socket it waits for its host on: {reason}")
@@ -148,7 +150,8 @@ async fn listened<R: Runtime>(
 	if let Err(reason) = sent(&mut sink, Message::text(join_frame(instance_id))).await {
 		return Attempt::Dropped(reason);
 	}
-	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
+	let every = app.state::<RelayGuests>().resend_every();
+	let mut beats = interval_at(Instant::now() + every, every);
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
@@ -173,9 +176,11 @@ async fn listened<R: Runtime>(
 					None => return Attempt::Dropped("the socket ended".to_owned()),
 				}
 			}
-			_ = pings.tick() => {
-				if let Err(reason) = sent(&mut sink, Message::Ping(Vec::new().into())).await {
-					return Attempt::Dropped(reason);
+			_ = beats.tick() => {
+				for beat in [Message::text(join_frame(instance_id)), Message::Ping(Vec::new().into())] {
+					if let Err(reason) = sent(&mut sink, beat).await {
+						return Attempt::Dropped(reason);
+					}
 				}
 			}
 			_ = &mut silence => {
@@ -215,8 +220,15 @@ async fn is_kept<R: Runtime>(
 	}
 }
 
+fn left<R: Runtime>(app: &AppHandle<R>, id: &str, stop: &watch::Receiver<bool>) {
+	let guests = app.state::<RelayGuests>();
+	let mut waiting = guests.waiting();
+	if waiting.get(id).is_some_and(|entry| entry.stop.subscribe().same_channel(stop)) {
+		waiting.remove(id);
+	}
+}
+
 async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
-	app.state::<RelayGuests>().waiting().remove(id);
 	if let Err(failure) = members_read(app, id).await {
 		eprintln!("the members of joined space {id} were not read after its join: {failure:?}");
 	}

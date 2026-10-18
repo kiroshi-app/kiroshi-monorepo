@@ -47,6 +47,7 @@ pub struct RelayGuests {
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	turn: tokio::sync::Mutex<()>,
 	answer_bound: Duration,
+	resend_every: Duration,
 }
 
 struct Guest {
@@ -105,6 +106,7 @@ impl RelayGuests {
 			waiting: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
 			answer_bound: HOST_ANSWER_BOUND,
+			resend_every: PING_EVERY,
 		}
 	}
 
@@ -117,8 +119,17 @@ impl RelayGuests {
 		&self.cloud
 	}
 
+	#[cfg(test)]
+	pub(crate) fn resending_every(self, resend_every: Duration) -> Self {
+		Self { resend_every, ..self }
+	}
+
 	pub(super) fn answer_bound(&self) -> Duration {
 		self.answer_bound
+	}
+
+	pub(super) fn resend_every(&self) -> Duration {
+		self.resend_every
 	}
 
 	fn removed(&self) -> MutexGuard<'_, HashSet<String>> {

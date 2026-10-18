@@ -43,6 +43,7 @@ const MEMBER_RELAY_ID: &str = "3b0c7a52-1d4e-4f8a-9b6c-0e2f4a6c8d10";
 const PATIENCE: Duration = Duration::from_secs(20);
 const POLL_EVERY: Duration = Duration::from_millis(50);
 const HOST_ANSWER_BOUND: Duration = Duration::from_secs(2);
+const RESEND_EVERY: Duration = Duration::from_millis(200);
 const HOST_ABSENT: u16 = 4002;
 
 #[derive(Clone)]
@@ -57,6 +58,7 @@ struct Room {
 	accepted: Vec<String>,
 	host: HostSide,
 	joins: Vec<Value>,
+	connections: usize,
 }
 
 #[derive(Clone)]
@@ -69,6 +71,7 @@ impl Relay {
 			accepted: Vec::new(),
 			host: HostSide::Absent,
 			joins: Vec::new(),
+			connections: 0,
 		})))
 	}
 
@@ -86,6 +89,10 @@ impl Relay {
 
 	fn joins(&self) -> Vec<Value> {
 		self.room().joins.clone()
+	}
+
+	fn connections(&self) -> usize {
+		self.room().connections
 	}
 
 	async fn served(&self) -> String {
@@ -205,6 +212,7 @@ async fn member_socket(
 	if !is_member(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
+	relay.room().connections += 1;
 	upgrade.on_upgrade(move |socket| membered(relay, socket))
 }
 
@@ -239,6 +247,7 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 struct Member {
 	app: AppOfItsOwn,
 	relay: Relay,
+	root: PathBuf,
 	_temporary: Vec<RemovedOnDrop>,
 }
 
@@ -261,9 +270,10 @@ impl Member {
 		let identifier = app.config().identifier.clone();
 		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
-		app.manage(RelayGuests::new(cloud).answering_within(HOST_ANSWER_BOUND));
+		let guests = RelayGuests::new(cloud).answering_within(HOST_ANSWER_BOUND);
+		app.manage(guests.resending_every(RESEND_EVERY));
 		app.manage(Invitations::new(cloud));
-		Self { app, relay, _temporary: vec![database, root] }
+		Self { app, relay, root: root.to_path_buf(), _temporary: vec![database, root] }
 	}
 
 	fn host(&self) -> SealingHost {
@@ -287,6 +297,15 @@ impl Member {
 		let state = self.app.state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").joined_space_relay();
 		relay.roster(INSTANCE.to_owned()).await.expect("the roster reads").map(|held| held.roster)
+	}
+
+	fn signed_out_of_the_store(&self) {
+		store::delete(&self.root, &EnvScope::Account, ACCOUNT_BEARER).expect("the bearer leaves");
+	}
+
+	fn signed_in_again(&self) {
+		store::set(&self.root, &EnvScope::Account, ACCOUNT_BEARER, MEMBER_BEARER)
+			.expect("the bearer is kept");
 	}
 
 	fn is_waiting(&self, id: &str) -> bool {
@@ -482,16 +501,17 @@ fn an_absent_a_pending_or_a_silent_host_stores_the_joined_space_waiting_for_its_
 }
 
 #[test]
-fn a_waiting_space_resends_its_join_on_every_connection_and_comes_online_once_answered() {
+fn a_waiting_socket_held_open_after_pending_resends_its_join_and_comes_online_once_answered() {
 	run(async {
 		let member = Member::new("join-flip").await;
 		let heard = changes_heard(&member.app);
+		member.relay.hosting(HostSide::Answering(member.host().pending()));
 		let joined = member.accepted().await.expect("the join waits");
 		let answer = member.host().joined();
 
 		relay::reconciled(member.app.handle()).await;
-		until("a join resent on a second connection", || async {
-			(member.relay.joins().len() >= 2).then_some(())
+		until("a join resent on the open socket", || async {
+			(member.relay.joins().len() >= 3).then_some(())
 		})
 		.await;
 		member.relay.hosting(HostSide::Answering(answer));
@@ -508,11 +528,33 @@ fn a_waiting_space_resends_its_join_on_every_connection_and_comes_online_once_an
 		.await;
 
 		let joins = member.relay.joins();
-		assert!(joins.len() >= 3, "{joins:?}");
+		assert!(joins.len() >= 4, "{joins:?}");
 		assert!(joins
 			.iter()
 			.all(|join| *join == json!({ "v": 2, "instance": INSTANCE, "join": {} })));
+		assert_eq!(member.relay.connections(), 2, "the accept and one waiting connection");
 		assert_eq!(member.listed().await[0].state, JoinedSpaceState::Online);
+	});
+}
+
+#[test]
+fn a_waiting_join_that_ended_signed_out_starts_again_on_the_next_reconciliation() {
+	run(async {
+		let member = Member::new("join-ended").await;
+		let joined = member.accepted().await.expect("the join waits");
+		relay::reconciled(member.app.handle()).await;
+		let was_waiting = member.is_waiting(&joined.id);
+
+		member.signed_out_of_the_store();
+		until("the waiting join to end", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+		member.signed_in_again();
+		relay::reconciled(member.app.handle()).await;
+
+		assert!(was_waiting);
+		assert!(member.is_waiting(&joined.id));
 	});
 }
 
