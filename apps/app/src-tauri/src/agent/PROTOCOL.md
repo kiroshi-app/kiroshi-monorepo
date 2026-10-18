@@ -605,6 +605,24 @@ Its operation `conversationRead`, from the tool `conversation_read`, takes a
   than that seq, and `cursor` is the seq to pass next, `null` once the first
   message is reached.
 
+Its operation `conversationSearch` finds where something was discussed, from the
+tool `conversation_search`, with `query` and an optional `kind` (`main`,
+`topic` or `mission`):
+
+- the space searched is the space of the session's conversation, never one the
+  payload names;
+- a `query` blank once trimmed is refused as `emptyQueryField` and nothing is
+  searched; one past `MAX_QUERY_CHARS` is refused as `queryTooLong`, the limit
+  named;
+- the answer is `{ "conversations", "messages" }`: `conversations` are the
+  chats `CatalogueRepository::search` matches by title and participants, each
+  `{ "id", "kind", "title", "participants" }`; `messages` are the hits of
+  `SearchRepository::messages`, in its order, each `{ "conversationId",
+  "conversationTitle", "messageId", "author", "createdAt", "snippet" }`, the
+  author `null` for the person and the snippet plain text;
+- both lists keep the caps those searches apply, and `kind` then drops every
+  entry of another kind; nothing matched answers two empty lists.
+
 ## Stop and shutdown
 
 - `interrupt` ends the turn with `result.subtype = "error_during_execution"` and

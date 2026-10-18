@@ -4,6 +4,7 @@ use crate::attachments::contract::AttachmentStoreError;
 use crate::attachments::Rejection;
 use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
 use crate::db::DatabaseError;
+use crate::search::contract::{CatalogueError, ConversationKind, MessageSearchError};
 
 pub const CREATED_EVENT: &str = "companion://created";
 
@@ -127,6 +128,33 @@ pub struct ConversationAttached {
 	pub conversation_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundConversation {
+	pub id: String,
+	pub kind: ConversationKind,
+	pub title: String,
+	pub participants: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundMessage {
+	pub conversation_id: String,
+	pub conversation_title: String,
+	pub message_id: String,
+	pub author: Option<String>,
+	pub created_at: i64,
+	pub snippet: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationsFound {
+	pub conversations: Vec<FoundConversation>,
+	pub messages: Vec<FoundMessage>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanionSeedRefused {
@@ -157,6 +185,11 @@ pub enum CompanionError {
 	EmptyMessageField,
 	EmptyIconField,
 	EmptyDescription,
+	EmptyQueryField,
+	#[serde(rename_all = "camelCase")]
+	QueryTooLong {
+		limit: usize,
+	},
 	#[serde(rename_all = "camelCase")]
 	UnlistedIcon {
 		icon: String,
@@ -258,6 +291,29 @@ impl From<TranscriptStoreError> for CompanionError {
 				CompanionError::UnknownColour { colour, accepted }
 			}
 			other => CompanionError::Unexpected { detail: format!("{other:?}") },
+		}
+	}
+}
+
+impl From<MessageSearchError> for CompanionError {
+	fn from(error: MessageSearchError) -> Self {
+		match error {
+			MessageSearchError::Unavailable { failure } => CompanionError::Unavailable { failure },
+			MessageSearchError::Storage { failure } => CompanionError::Storage { failure },
+			MessageSearchError::QueryTooLong { limit } => CompanionError::QueryTooLong { limit },
+		}
+	}
+}
+
+impl From<CatalogueError> for CompanionError {
+	fn from(error: CatalogueError) -> Self {
+		match error {
+			CatalogueError::Unavailable { failure } => CompanionError::Unavailable { failure },
+			CatalogueError::Storage { failure } => CompanionError::Storage { failure },
+			CatalogueError::QueryTooLong { limit } => CompanionError::QueryTooLong { limit },
+			CatalogueError::UnknownBot { id } => {
+				CompanionError::Unexpected { detail: format!("the catalogue names no bot {id}") }
+			}
 		}
 	}
 }

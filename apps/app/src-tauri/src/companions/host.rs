@@ -9,8 +9,9 @@ use tauri::{AppHandle, Runtime};
 
 use super::contract::{
 	AuthorKind, CompanionCreated, CompanionError, CompanionInvited, Conversation,
-	ConversationAttached, ConversationDescribed, ConversationRead, ConversationsListed,
-	LastMessage, MessageAuthor, ReadMessage, SeatedCompanion,
+	ConversationAttached, ConversationDescribed, ConversationRead, ConversationsFound,
+	ConversationsListed, FoundConversation, FoundMessage, LastMessage, MessageAuthor, ReadMessage,
+	SeatedCompanion,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
@@ -34,6 +35,9 @@ use crate::events::{
 	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED, FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
+use crate::search::contract::{
+	CatalogueChat, CatalogueScope, ConversationKind, MessageHit, MessageSearchQuery,
+};
 
 const LIST_LIMIT: Bound = Bound { default: 50, maximum: 200 };
 
@@ -200,6 +204,37 @@ impl<R: Runtime> CompanionHost<R> {
 		})
 	}
 
+	async fn search(
+		&self,
+		database: &db::Database,
+		asked: Searched,
+	) -> Result<ConversationsFound, CompanionError> {
+		if asked.query.trim().is_empty() {
+			return Err(CompanionError::EmptyQueryField);
+		}
+		let space_id = self.space(database).await?;
+		let hits = database
+			.search()
+			.messages(MessageSearchQuery { text: asked.query.clone(), space_id: space_id.clone() })
+			.await?;
+		let catalogue =
+			database.catalogue().search(CatalogueScope { query: asked.query, space_id }).await?;
+		let is_wanted = |kind: ConversationKind| asked.kind.is_none_or(|wanted| wanted == kind);
+		Ok(ConversationsFound {
+			conversations: catalogue
+				.chats
+				.into_iter()
+				.filter(|chat| is_wanted(chat.kind))
+				.map(found_conversation)
+				.collect(),
+			messages: hits
+				.into_iter()
+				.filter(|hit| is_wanted(hit.conversation_kind))
+				.map(found_message)
+				.collect(),
+		})
+	}
+
 	async fn attach(
 		&self,
 		database: &db::Database,
@@ -341,6 +376,26 @@ impl<R: Runtime> CompanionHost<R> {
 	) -> Result<(), CompanionError> {
 		events::emit(&self.app, event, payload)
 			.map_err(|error| CompanionError::Undeliverable { detail: error.to_string() })
+	}
+}
+
+fn found_conversation(chat: CatalogueChat) -> FoundConversation {
+	FoundConversation {
+		id: chat.conversation_id,
+		kind: chat.kind,
+		title: chat.title,
+		participants: chat.participants,
+	}
+}
+
+fn found_message(hit: MessageHit) -> FoundMessage {
+	FoundMessage {
+		conversation_id: hit.conversation_id,
+		conversation_title: hit.conversation_title,
+		message_id: hit.message_id,
+		author: hit.author_bot_id,
+		created_at: hit.created_at,
+		snippet: hit.snippet.into_iter().map(|part| part.text).collect(),
 	}
 }
 
@@ -566,6 +621,10 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Consulted = Self::read(payload)?;
 				Self::answered(self.consult(database, asked).await?)
 			}
+			Operation::ConversationSearch => {
+				let asked: Searched = Self::read(payload)?;
+				Self::answered(self.search(database, asked).await?)
+			}
 		}
 	}
 }
@@ -593,6 +652,7 @@ pub enum Operation {
 	ConversationDescribe,
 	ConversationList,
 	ConversationRead,
+	ConversationSearch,
 }
 
 #[derive(Debug, Deserialize)]
@@ -658,6 +718,13 @@ struct Consulted {
 	before: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Searched {
+	query: String,
+	kind: Option<ConversationKind>,
+}
+
 fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
 	deserializer: D,
 ) -> Result<Option<T>, D::Error> {
@@ -712,6 +779,7 @@ mod tests {
 	use crate::bundles;
 	use crate::conversations::contract::{COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT};
 	use crate::db::repositories::conversations::{conversation_icons, DEFAULT_BOT_MODEL};
+	use crate::search::contract::MAX_QUERY_CHARS;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const PATIENCE: Duration = Duration::from_secs(10);
@@ -770,6 +838,26 @@ mod tests {
 			VALUES ('studio', 'b1', 'lead', 1, 0);
 		UPDATE conversation_participants SET left_at = 2
 			WHERE conversation_id = 'unled' AND bot_id = 'b1';
+	";
+
+	const A_DISCUSSION: &str = "
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('elsewhere', 'topic', 'work', 'Studio', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('elsewhere', 'b5', 'lead', 1, 0);
+		INSERT INTO turns (id, conversation_id, seq, started_at) VALUES
+			('t-room', 'room', 1, 1), ('t-c1', 'c1', 1, 1), ('t-errand', 'errand', 1, 1),
+			('t-elsewhere', 'elsewhere', 1, 1);
+		INSERT INTO messages (id, conversation_id, turn_id, author_bot_id, seq, role, content,
+			completion_state, created_at) VALUES
+			('m-room', 'room', 't-room', NULL, 1, 'user',
+				'We should pick the lighthouse for the trip', 'complete', 5),
+			('m-c1', 'c1', 't-c1', 'b1', 1, 'assistant',
+				'The lighthouse keeper called', 'complete', 6),
+			('m-errand', 'errand', 't-errand', 'b1', 1, 'assistant',
+				'The lighthouse ships tonight', 'complete', 7),
+			('m-elsewhere', 'elsewhere', 't-elsewhere', 'b5', 1, 'assistant',
+				'A harbour drawn in the studio', 'complete', 8);
 	";
 
 	type Standing = (Vec<(String, String, String, i64, Option<i64>)>, i64);
@@ -911,6 +999,52 @@ mod tests {
 		let refused = refusal(serving(app, conversation_id).answer(an_invite(payload)).await);
 		assert_eq!(standing(app).await, before, "a refused invitation moved a seat or an arrival");
 		refused
+	}
+
+	async fn a_discussion(name: &str) -> AppOfItsOwn {
+		let app = a_room(name).await;
+		planted(&app, A_MISSION).await;
+		planted(&app, A_DISCUSSION).await;
+		app
+	}
+
+	fn a_search(payload: Value) -> Value {
+		json!({ "subtype": "companion", "operation": "conversationSearch", "payload": payload })
+	}
+
+	async fn searched_from(
+		app: &App<MockRuntime>,
+		conversation_id: &str,
+		bot_id: &str,
+		payload: Value,
+	) -> Value {
+		CompanionHost::new(
+			app.handle().clone(),
+			conversation_id.to_owned(),
+			bot_id.to_owned(),
+			Arc::default(),
+		)
+		.answer(a_search(payload))
+		.await
+		.expect("the search is answered")
+	}
+
+	fn message_ids(found: &Value) -> Vec<&str> {
+		found["messages"]
+			.as_array()
+			.expect("the messages are a list")
+			.iter()
+			.filter_map(|message| message["messageId"].as_str())
+			.collect()
+	}
+
+	fn conversation_ids(found: &Value) -> Vec<&str> {
+		found["conversations"]
+			.as_array()
+			.expect("the conversations are a list")
+			.iter()
+			.filter_map(|conversation| conversation["id"].as_str())
+			.collect()
 	}
 
 	fn asking(operation: &str) -> Value {
@@ -2290,5 +2424,92 @@ mod tests {
 				json!({ "kind": "unknownConversation", "conversationId": conversation })
 			);
 		}
+	}
+
+	#[tokio::test]
+	async fn a_word_said_in_one_room_is_found_there_by_a_bot_of_its_space_and_by_no_other() {
+		let app = a_discussion("search-spaces").await;
+
+		let here = searched_from(&app, "c1", "b1", json!({ "query": "pick lighthouse" })).await;
+		let there =
+			searched_from(&app, "elsewhere", "b5", json!({ "query": "pick lighthouse" })).await;
+
+		assert_eq!(
+			here["messages"],
+			json!([{
+				"conversationId": "room",
+				"conversationTitle": "Plans",
+				"messageId": "m-room",
+				"author": null,
+				"createdAt": 5,
+				"snippet": "We should pick the lighthouse for the trip"
+			}])
+		);
+		assert_eq!(there, json!({ "conversations": [], "messages": [] }));
+		let studio = searched_from(&app, "elsewhere", "b5", json!({ "query": "harbour" })).await;
+		assert_eq!(message_ids(&studio), vec!["m-elsewhere"]);
+		assert_eq!(studio["messages"][0]["author"], json!("b5"));
+		let rooms = searched_from(&app, "elsewhere", "b5", json!({ "query": "studio" })).await;
+		assert_eq!(
+			rooms["conversations"],
+			json!([{ "id": "elsewhere", "kind": "topic", "title": "Studio", "participants": ["Kai"] }])
+		);
+		let unseen = searched_from(&app, "c1", "b1", json!({ "query": "studio" })).await;
+		assert_eq!(unseen, json!({ "conversations": [], "messages": [] }));
+	}
+
+	#[tokio::test]
+	async fn a_word_nobody_said_and_no_room_wears_answers_two_empty_lists() {
+		let app = a_discussion("search-absent").await;
+
+		let found = searched_from(&app, "c1", "b1", json!({ "query": "zeppelin" })).await;
+
+		assert_eq!(found, json!({ "conversations": [], "messages": [] }));
+	}
+
+	#[tokio::test]
+	async fn a_kind_drops_every_conversation_and_every_message_of_another_kind() {
+		let app = a_discussion("search-kind").await;
+
+		let every = searched_from(&app, "c1", "b1", json!({ "query": "lighthouse" })).await;
+		let topics =
+			searched_from(&app, "c1", "b1", json!({ "query": "lighthouse", "kind": "topic" }))
+				.await;
+		let missions =
+			searched_from(&app, "c1", "b1", json!({ "query": "lighthouse", "kind": "mission" }))
+				.await;
+		let plans = searched_from(&app, "c1", "b1", json!({ "query": "plans" })).await;
+		let plans_of_missions =
+			searched_from(&app, "c1", "b1", json!({ "query": "plans", "kind": "mission" })).await;
+
+		let mut held = message_ids(&every);
+		held.sort_unstable();
+		assert_eq!(held, vec!["m-c1", "m-errand", "m-room"]);
+		assert_eq!(message_ids(&topics), vec!["m-room"]);
+		assert_eq!(message_ids(&missions), vec!["m-errand"]);
+		assert!(!conversation_ids(&plans).is_empty(), "the rooms titled Plans were not found");
+		assert!(plans["conversations"]
+			.as_array()
+			.expect("the conversations are a list")
+			.iter()
+			.all(|conversation| conversation["kind"] == json!("topic")));
+		assert_eq!(plans_of_missions, json!({ "conversations": [], "messages": [] }));
+	}
+
+	#[tokio::test]
+	async fn an_empty_or_overlong_query_is_refused_by_its_kind() {
+		let app = a_discussion("search-refused").await;
+		let host = serving(&app, "c1");
+
+		let blank = refusal(host.answer(a_search(json!({ "query": "  " }))).await);
+		let long = refusal(
+			host.answer(a_search(json!({ "query": "a".repeat(MAX_QUERY_CHARS + 1) }))).await,
+		);
+		let unknown =
+			refusal(host.answer(a_search(json!({ "query": "plans", "kind": "dm" }))).await);
+
+		assert_eq!(blank, json!({ "kind": "emptyQueryField" }));
+		assert_eq!(long, json!({ "kind": "queryTooLong", "limit": MAX_QUERY_CHARS }));
+		assert_eq!(unknown["kind"], json!("unreadableRequest"));
 	}
 }

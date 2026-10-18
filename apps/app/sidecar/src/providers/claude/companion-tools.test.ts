@@ -100,6 +100,11 @@ const calls: [string, Record<string, unknown>, string][] = [
 		{ conversation: "c3", limit: 5, before: 12 },
 		"conversationRead",
 	],
+	[
+		"conversation_search",
+		{ query: "lighthouse", kind: "topic" },
+		"conversationSearch",
+	],
 ]
 
 const A_CONVERSATION = {
@@ -141,6 +146,19 @@ const answers: Record<string, unknown> = {
 			},
 		],
 		cursor: null,
+	},
+	conversationSearch: {
+		conversations: [],
+		messages: [
+			{
+				conversationId: "c3",
+				conversationTitle: "Trip",
+				messageId: "m1",
+				author: null,
+				createdAt: 5,
+				snippet: "We should pick the lighthouse",
+			},
+		],
 	},
 }
 
@@ -277,6 +295,37 @@ describe("companionTools", () => {
 			"orange",
 		]) {
 			expect(colour?.description).toContain(name)
+		}
+	})
+
+	it("takes a required query and an optional kind among main, topic and mission", () => {
+		const search = toolNamed(SESSION, "conversation_search")
+		const { query, kind } = search.inputSchema
+
+		expect(Object.keys(search.inputSchema)).toEqual(["query", "kind"])
+		expect(query?.safeParse(undefined).success).toBe(false)
+		expect(kind?.safeParse(undefined).success).toBe(true)
+		for (const held of ["main", "topic", "mission"]) {
+			expect(kind?.safeParse(held).success).toBe(true)
+		}
+		expect(kind?.safeParse("dm").success).toBe(false)
+	})
+
+	it("describes the search scope, every answered field and what an empty answer means", () => {
+		const { description } = toolNamed(SESSION, "conversation_search")
+
+		for (const named of [
+			"space of this conversation",
+			"no other space",
+			"conversationId",
+			"conversationTitle",
+			"messageId",
+			"author",
+			"createdAt",
+			"snippet",
+			"two empty lists mean nothing",
+		]) {
+			expect(description).toContain(named)
 		}
 	})
 
