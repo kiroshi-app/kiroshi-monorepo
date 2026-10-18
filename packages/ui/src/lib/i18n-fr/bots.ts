@@ -120,6 +120,7 @@ const bots = {
 		invitations: {
 			label: "Invitations",
 			invitedBy: "Invité par {{email}}",
+			expires: "Expire le {{date}}",
 			accept: "Accepter",
 			decline: "Refuser",
 			joining: "Connexion…",
@@ -132,6 +133,10 @@ const bots = {
 			},
 			withdrawn:
 				"{{email}} a retiré cette invitation. Demandez-lui de vous inviter à nouveau.",
+			expired:
+				"Cette invitation a expiré le {{date}}. Demandez à {{email}} de vous inviter à nouveau.",
+			hostOffline:
+				"L’ordinateur de {{host}} est hors ligne. Vous pourrez accepter quand il sera de retour.",
 		},
 		removed: {
 			notice: "{{host}} vous a retiré de {{name}}.",

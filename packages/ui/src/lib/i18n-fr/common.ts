@@ -10,7 +10,7 @@ const common = {
 		leave: {
 			title: "Quitter {{name}} ?",
 			description:
-				"Rien n’est supprimé sur l’hôte. Vous pourrez le rejoindre à nouveau avec son lien.",
+				"Rien n’est supprimé sur l’hôte. Vous pourrez le rejoindre à nouveau avec une nouvelle invitation.",
 			action: "Quitter l’espace",
 		},
 	},

@@ -1053,6 +1053,8 @@ navigation-spaceswitcher--default
 navigation-spaceswitcher--drag-dot-nowhere
 navigation-spaceswitcher--drag-dot-to-place
 navigation-spaceswitcher--hosted-long-names
+navigation-spaceswitcher--invitation-expired
+navigation-spaceswitcher--invitation-host-offline
 navigation-spaceswitcher--invitation-long-content
 navigation-spaceswitcher--invitation-over-bot-badge
 navigation-spaceswitcher--invitation-without-join-entry
@@ -1537,6 +1539,7 @@ settings-space-spacesettingsdialog--mcp-servers
 settings-space-spacesettingsdialog--mcp-servers-unavailable
 settings-space-spacesettingsdialog--members-failure-copy
 settings-space-spacesettingsdialog--members-failure-regions
+settings-space-spacesettingsdialog--members-host-offline
 settings-space-spacesettingsdialog--members-i-1
 settings-space-spacesettingsdialog--members-i-2
 settings-space-spacesettingsdialog--members-i-3
@@ -1549,6 +1552,7 @@ settings-space-spacesettingsdialog--members-invite-failed
 settings-space-spacesettingsdialog--members-joined-and-pending
 settings-space-spacesettingsdialog--members-loading
 settings-space-spacesettingsdialog--members-long-identity
+settings-space-spacesettingsdialog--members-member-view
 settings-space-spacesettingsdialog--members-not-shared
 settings-space-spacesettingsdialog--members-remove-confirm
 settings-space-spacesettingsdialog--members-remove-failed
@@ -1556,6 +1560,7 @@ settings-space-spacesettingsdialog--members-share-failed
 settings-space-spacesettingsdialog--members-shared
 settings-space-spacesettingsdialog--members-sharing
 settings-space-spacesettingsdialog--members-signed-out
+settings-space-spacesettingsdialog--members-with-invitations
 settings-space-spacesettingsdialog--members-withdraw-failed
 settings-space-spacesettingsdialog--members-withdraw-pending
 settings-space-spacesettingsdialog--opens-on-an-application
