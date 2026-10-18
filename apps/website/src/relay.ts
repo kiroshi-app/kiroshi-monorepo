@@ -294,6 +294,13 @@ const cancelAuthorizationRequest = async (request: string) => {
 	await send({ path: `${authorizationPath(request)}/cancel`, method: "POST" })
 }
 
+const readInvitationStatus = async (invitation: string) => {
+	const answer = await send({
+		path: `/invitations/${encodeURIComponent(invitation)}`,
+	})
+	return stringField(answer, "status")
+}
+
 export {
 	type Account,
 	type AuthorizationRequest,
@@ -307,6 +314,7 @@ export {
 	readAccount,
 	readAuthorizationRequest,
 	readBearer,
+	readInvitationStatus,
 	readSessionBearer,
 	readSessions,
 	requestSocialSignIn,
