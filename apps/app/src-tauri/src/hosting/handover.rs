@@ -29,11 +29,11 @@ pub(super) async fn current(
 	keys: &HostKeys,
 	space_id: &str,
 ) -> Result<Handover, String> {
+	let space = keys.current_space_key();
 	let host = keys.device.signing_public();
 	let roster = roster::verified_roster(database, space_id, &host)
 		.await
 		.map_err(|failure| format!("the roster did not read: {failure:?}"))?;
-	let space = keys.current_space_key();
 	let mut handover = KeyHandover {
 		key_id: space.key_id,
 		space_key: BASE64_STANDARD.encode(space.key.as_slice()),
@@ -47,6 +47,10 @@ pub(super) async fn current(
 }
 
 impl Handover {
+	pub(super) fn holds(&self, device_id: &DeviceId) -> bool {
+		self.roster.rows.iter().any(|row| row.rostered.device_id == *device_id)
+	}
+
 	pub(super) fn members<'a>(&'a self, keys: &HostKeys) -> impl Iterator<Item = &'a Rostered> {
 		let host = keys.device.device_id();
 		self.roster

@@ -5,6 +5,7 @@ use zeroize::Zeroizing;
 use super::handover;
 use super::roster::{signed_row, Enrolled};
 use super::wire::{unstored, Dropped, HostKeys, Refusal};
+use crate::crypto::device_keys::DeviceId;
 use crate::crypto::frame::VERSION;
 use crate::crypto::join::{self, JoinRequest, PAYLOAD_LENGTH};
 use crate::crypto::sealed_box;
@@ -118,9 +119,21 @@ impl HostedSpace<'_> {
 			json!(secret.account_id),
 			json!(from)
 		);
+		self.joined(from, secret, request).await
+	}
+
+	pub(super) async fn joined(
+		&self,
+		from: &str,
+		secret: &JoinSecret,
+		request: &JoinRequest,
+	) -> Result<String, Dropped> {
 		let handover = handover::current(self.database, self.keys, self.space_id)
 			.await
 			.map_err(Dropped::Unstored)?;
+		if !handover.holds(&DeviceId::of(&request.signing)) {
+			return Ok(self.refused(from, JoinRefused::Used));
+		}
 		let mac = join::answer_mac(&secret.secret, &handover.plaintext);
 		let answer = Zeroizing::new([mac.as_slice(), &handover.plaintext].concat());
 		let joined = sealed_box::seal(&request.agreement, &answer).map_err(Dropped::Refused)?;

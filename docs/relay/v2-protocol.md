@@ -348,6 +348,15 @@ it, so a matching `mac` proves the answer comes from the host the link names: th
 device then trusts the host row of the roster set, and verifies the roster set
 signature with the `signing_public_key` of that row.
 
+The host builds every key handover by reading the current `key_id` and
+`space_key` first, then the roster. A device removed after the roster read is
+followed by a rotation to a key later than the one read; a device removed before
+it is not in the roster. So a join is answered `joined` only when the roster read
+after the key still holds the admitted device: when a removal landed between the
+admission and the handover, the join is answered `join_refused` `"used"` and no
+`joined` frame is sent. A rekey goes only to the devices of the roster read after
+its key.
+
 The key handover, the same JSON in `joined` and `rekey`:
 
 ```json
@@ -449,6 +458,11 @@ members or devices command on that Space (`hosting_members`,
 `hosting_join_link`, `hosting_device_link`, `hosting_devices`,
 `hosting_remove_device`) and when its socket for that Space comes online, so a
 failed rotation is never left behind by a retry that finds nothing to remove.
+
+When that rotation fails as the socket comes online, the host ends the socket
+session before it seals any frame on it, so it never serves frames under a key a
+removed device holds. The relay connection is retried with the usual backoff,
+and each new session tries the rotation again.
 
 ### rekey (host to device)
 

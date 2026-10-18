@@ -397,7 +397,7 @@ async fn online<R: Runtime>(
 	match devices::settled_turn(app, ids.space_id).await {
 		Ok(turn) => drop(turn),
 		Err(failure) => {
-			eprintln!("hosted space {} kept its pending key rotation: {failure:?}", ids.space_id);
+			return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 		}
 	}
 	let (mut sink, mut stream) = socket.split();
