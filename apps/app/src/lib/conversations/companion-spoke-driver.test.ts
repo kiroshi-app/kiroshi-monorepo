@@ -11,7 +11,11 @@ import {
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { readConversationInEverySpace } from "./read-conversation"
 import { RefusedWrite } from "./refused-write"
-import { createScriptedDriver, type ScriptedDriver } from "./scripted-driver"
+import {
+	createScriptedDriver,
+	type ScriptedDriver,
+	spoke,
+} from "./scripted-driver"
 import { createSpokenWords, type SpokenWord } from "./spoken-words"
 import type { Conversation, Space } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -789,6 +793,74 @@ describe("a handoff summons heard in a mission thread outside the feed", () => {
 			},
 		])
 		expect(summonedBy(driver)).toEqual([nyx])
+		expect(notices).toEqual([])
+	})
+})
+
+const A_HANDOFF_SUMMONS = (nyxName: string) =>
+	`@${nyxName} this mission is yours now, carry it out: Fix the crash`
+
+const wordsOf = async (
+	store: TranscriptStore,
+	conversationId: string,
+	botId: string,
+) =>
+	(await spokenIn(store, conversationId))
+		.filter(({ authorBotId }) => authorBotId === botId)
+		.map(({ content }) => content)
+
+const summonedWhileTheOwnerSpeaks = async () => {
+	const handed = await aHandedOffMissionThread()
+	await handed.runtimes
+		.runtimeFor(handed.thread.id)
+		.send("Carry out this mission.")
+	await settled()
+	handed.hear({
+		conversationId: handed.thread.id,
+		authorBotId: handed.ada,
+		text: A_HANDOFF_SUMMONS("Nyx"),
+	})
+	await settled()
+	return handed
+}
+
+describe("a handoff summons heard while the previous owner's turn runs in the thread", () => {
+	it("writes the summons once as a word of the previous owner before that turn ends", async () => {
+		const { driver, store, thread, ada, nyx, notices } =
+			await summonedWhileTheOwnerSpeaks()
+
+		expect(await wordsOf(store, thread.id, ada)).toEqual([
+			`<@${nyx}> this mission is yours now, carry it out: Fix the crash`,
+		])
+		expect(summonedBy(driver)).toEqual([ada])
+		expect(notices).toEqual([])
+	})
+
+	it("starts one turn for the successor once that turn completes, and none for its owner", async () => {
+		const { driver, store, thread, ada, nyx, notices } =
+			await summonedWhileTheOwnerSpeaks()
+
+		driver.pushTo(ada, spoke(ada, "Handed over."))
+		await settled()
+
+		expect(summonedBy(driver)).toEqual([ada, nyx])
+		expect(
+			(await wordsOf(store, thread.id, ada)).filter((word) =>
+				word.includes("this mission is yours now"),
+			),
+		).toHaveLength(1)
+		expect(notices).toEqual([])
+	})
+
+	it("still starts the successor turn once that turn ends in failure", async () => {
+		const { driver, ada, nyx, notices } = await summonedWhileTheOwnerSpeaks()
+
+		driver.pushTo(ada, [
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "failed" } },
+		])
+		await settled()
+
+		expect(summonedBy(driver)).toEqual([ada, nyx])
 		expect(notices).toEqual([])
 	})
 })
