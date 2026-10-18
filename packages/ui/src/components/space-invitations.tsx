@@ -58,7 +58,7 @@ const ACTION = "h-7 rounded-control px-3 text-compact"
 
 const PRIMARY_BUSY = "data-disabled:opacity-70"
 
-const SECONDARY_BUSY = "data-disabled:opacity-50"
+const HALF_WHEN_DISABLED = "data-disabled:opacity-50"
 
 const MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
 	month: "long",
@@ -210,7 +210,7 @@ const SpaceInvitationRow = ({
 					className={cn(
 						buttonVariants({ size: "sm" }),
 						ACTION,
-						isHostOffline ? SECONDARY_BUSY : PRIMARY_BUSY,
+						isHostOffline ? HALF_WHEN_DISABLED : PRIMARY_BUSY,
 					)}
 					closeOnClick={false}
 					disabled={isAccepting || isHostOffline}
@@ -234,7 +234,7 @@ const SpaceInvitationRow = ({
 					className={cn(
 						buttonVariants({ size: "sm", variant: "outline" }),
 						ACTION,
-						SECONDARY_BUSY,
+						HALF_WHEN_DISABLED,
 					)}
 					disabled={isAccepting}
 					nativeButton
