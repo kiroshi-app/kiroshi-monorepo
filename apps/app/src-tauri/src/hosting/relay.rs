@@ -394,11 +394,8 @@ async fn online<R: Runtime>(
 	};
 	let mut rotations = serving.keys.space.clone();
 	rotations.borrow_and_update();
-	match devices::settled_turn(app, ids.space_id).await {
-		Ok(turn) => drop(turn),
-		Err(failure) => {
-			return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
-		}
+	if let Err(failure) = devices::settled_turn(app, ids.space_id).await {
+		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
 	}
 	let (mut sink, mut stream) = socket.split();
 	let last_sent = &mut relaying.last_sent;
