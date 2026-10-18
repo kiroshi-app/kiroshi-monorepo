@@ -49,6 +49,13 @@ struct WelcomeView: View {
                 .font(.title.bold())
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 290)
+            if let notice = model.signOutNotice {
+                Label(notice.message, systemImage: "iphone.slash")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(.horizontal, 40)
         .padding(.vertical, 24)

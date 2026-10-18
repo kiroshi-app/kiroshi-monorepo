@@ -46,3 +46,12 @@ extension ProviderProblem {
         }
     }
 }
+
+extension SignOutNotice {
+    var message: LocalizedStringKey {
+        switch self {
+        case .deviceMoved:
+            "This iPhone now belongs to another Kiroshi account, so you’ve been signed out."
+        }
+    }
+}

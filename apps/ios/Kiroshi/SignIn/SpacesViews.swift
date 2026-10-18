@@ -96,28 +96,23 @@ struct DeviceRefusedView: View {
         .scrollBounceBehavior(.basedOnSize)
         .signInGround()
         .safeAreaBar(edge: .bottom) {
-            Group {
-                switch problem {
-                case .keyTaken: Button("Use another account", action: model.useAnotherAccount)
-                case .keysUnreadable: Button("Check again", action: model.checkAgain)
-                }
-            }
-            .secondaryAction()
-            .bottomActions()
+            Button("Check again", action: model.checkAgain)
+                .secondaryAction()
+                .bottomActions()
         }
     }
 
     private var title: LocalizedStringKey {
         switch problem {
-        case .keyTaken: "Couldn’t add this iPhone to your account"
+        case .notAdded: "Couldn’t add this iPhone to your account"
         case .keysUnreadable: "Couldn’t read this iPhone’s keys"
         }
     }
 
     private var description: LocalizedStringKey {
         switch problem {
-        case .keyTaken:
-            "This iPhone is already linked to another Kiroshi account. Sign in with that account to use it here."
+        case .notAdded:
+            "Kiroshi couldn’t confirm this iPhone’s keys. Wait a moment, then check again."
         case .keysUnreadable: "Unlock your iPhone, then check again."
         }
     }
@@ -136,7 +131,7 @@ struct DeviceRefusedView: View {
         SignInRootView(model: .fixture(.spacesUnreachable))
     }
 
-    #Preview("This iPhone linked to another account") {
-        SignInRootView(model: .fixture(.deviceKeyTaken))
+    #Preview("This iPhone not added to the account") {
+        SignInRootView(model: .fixture(.deviceNotAdded))
     }
 #endif

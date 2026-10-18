@@ -17,8 +17,19 @@
             hostSigningKey: host.signing.publicKey, hostRelayIds: [hostRelayId])
         static let memberKeychainItems = [DeviceKeyStore.account: member.rawRepresentation]
         static let devicesPath = "/devices"
-        static let registered = ScriptedTransport.Answer.status(
-            201, #"{"id":"\#(memberRelayId)","createdAt":"2026-10-17T09:00:00.000Z"}"#)
+        static let challengePath = "/devices/challenge"
+        static let nonce = Data((0..<32).map { UInt8($0) })
+        static let challenge = ScriptedTransport.Answer.status(
+            201,
+            #"{"nonce":"\#(nonce.unpaddedBase64URL)","expiresAt":"2026-10-17T09:01:00.000Z"}"#)
+        static let registered = registered(201, transferred: false)
+
+        static func registered(_ status: Int, transferred: Bool) -> ScriptedTransport.Answer {
+            .status(
+                status,
+                #"{"id":"\#(memberRelayId)","createdAt":"2026-10-17T09:00:00.000Z","transferred":\#(transferred)}"#
+            )
+        }
     }
 
     struct FixtureSpaceKeys: SpaceKeyStore {

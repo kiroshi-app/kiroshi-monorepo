@@ -94,4 +94,57 @@ struct SessionEndingTests {
         await expectSignedOutWithoutRevoking(model, keychain)
         #expect(await connection.isRunning == false)
     }
+
+    @Test(arguments: [false, true])
+    func aDeviceMovedToAnotherAccountSignsOutWithoutReconnecting(duringUpgrade: Bool) async throws {
+        await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
+        await transport.answer(CloudFixture.signOutPath, with: CloudFixture.signedOut)
+        let (model, keychain) = signedIn("device-moved-\(duringUpgrade)")
+        await model.loadSpaces()
+        let shell = try #require(model.shell)
+        let following = Task { await shell.follow() }
+        let opening = await relay.nextOpening()
+        let connection = try #require(shell.connection)
+
+        if duringUpgrade {
+            opening.close(RelayClosure.deviceRevoked)
+        } else {
+            let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+            opening.accept(socket)
+            for await update in await connection.updates() {
+                if case .state(.online) = update { break }
+            }
+            socket.push(.close(RelayClosure.deviceRevoked))
+        }
+        await following.value
+        await model.revocation?.value
+
+        #expect(model.stage == .signedOut)
+        #expect(model.signOutNotice == .deviceMoved)
+        #expect(model.shell == nil)
+        #expect(keychain.load() == nil)
+        #expect(await connection.isRunning == false)
+        #expect(await connection.state == .paused)
+        let paths = await transport.requests.compactMap { $0.url?.path() }
+        #expect(paths.contains(CloudFixture.signOutPath))
+        #expect(!paths.contains { $0.hasPrefix("/devices/") && $0 != FixtureKeys.challengePath })
+    }
+
+    @Test func signingInAgainClearsTheDeviceMovedNotice() async throws {
+        await transport.answer(CloudFixture.spacesPath, with: CloudFixture.threeSpaces)
+        await transport.answer(CloudFixture.codeRequestPath, with: CloudFixture.codeSent)
+        let (model, _) = signedIn("device-moved-notice")
+        await model.loadSpaces()
+        let shell = try #require(model.shell)
+        let following = Task { await shell.follow() }
+        await relay.nextOpening().close(RelayClosure.deviceRevoked)
+        await following.value
+        #expect(model.signOutNotice == .deviceMoved)
+
+        model.email = CloudFixture.email
+        await model.requestCode()
+
+        #expect(model.signOutNotice == nil)
+        model.revocation?.cancel()
+    }
 }

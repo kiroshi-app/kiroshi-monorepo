@@ -28,8 +28,24 @@ enum AccountDeletionAnswer: Equatable, Sendable {
 }
 
 enum DeviceRegistrationAnswer: Equatable, Sendable {
-    case registered(relayId: String)
-    case keyTaken
+    case registered(relayId: String, transferred: Bool)
+    case challengeRefused
+    case proofRefused
+    case keyRefused
+    case refused
+    case unauthenticated
+    case unreachable
+}
+
+enum AccountAnswer: Equatable, Sendable {
+    case account(userId: String)
+    case unauthenticated
+    case unreachable
+}
+
+enum DeviceDeletionAnswer: Equatable, Sendable {
+    case deleted
+    case notFound
     case unauthenticated
     case unreachable
 }
@@ -111,30 +127,39 @@ struct KiroshiCloud: Sendable {
         }
     }
 
-    func registerDevice(_ keys: DeviceKeys, bearer: String) async throws
+    func registerDevice(_ keys: DeviceKeys, userId: String, bearer: String) async throws
         -> DeviceRegistrationAnswer
     {
-        var request = post(
-            "devices",
-            body: DeviceRegistration(
-                ed25519PublicKey: unpaddedBase64URL(keys.signing.publicKey.rawRepresentation),
-                x25519PublicKey: unpaddedBase64URL(keys.agreement.publicKey.rawRepresentation)))
+        let answer = try await proveAndRegister(keys, userId: userId, bearer: bearer)
+        guard answer == .challengeRefused else { return answer }
+        return try await proveAndRegister(keys, userId: userId, bearer: bearer)
+    }
+
+    func account(bearer: String) async throws -> AccountAnswer {
+        var request = URLRequest(url: baseURL.appending(path: "me"))
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         guard let (status, data) = try await send(request) else { return .unreachable }
         switch status {
-        case 200, 201:
-            guard let device = try? JSONDecoder().decode(RegisteredDevice.self, from: data) else {
+        case 200:
+            guard let account = try? JSONDecoder().decode(Account.self, from: data) else {
                 return .unreachable
             }
-            return .registered(relayId: device.id)
-        case 401:
-            return .unauthenticated
-        case 409
-        where (try? JSONDecoder().decode(ErrorCode.self, from: data).error.code)
-            == "DEVICE_KEY_TAKEN":
-            return .keyTaken
-        default:
-            return .unreachable
+            return .account(userId: account.id)
+        case 401: return .unauthenticated
+        default: return .unreachable
+        }
+    }
+
+    func deleteDevice(_ relayId: String, bearer: String) async throws -> DeviceDeletionAnswer {
+        var request = URLRequest(url: baseURL.appending(path: "devices/\(relayId)"))
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, _) = try await send(request) else { return .unreachable }
+        switch status {
+        case 204: return .deleted
+        case 401: return .unauthenticated
+        case 404: return .notFound
+        default: return .unreachable
         }
     }
 
@@ -157,6 +182,53 @@ struct KiroshiCloud: Sendable {
         }
     }
 
+    private func proveAndRegister(_ keys: DeviceKeys, userId: String, bearer: String)
+        async throws -> DeviceRegistrationAnswer
+    {
+        var challenge = URLRequest(url: baseURL.appending(path: "devices/challenge"))
+        challenge.httpMethod = "POST"
+        challenge.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, data) = try await send(challenge) else { return .unreachable }
+        switch status {
+        case 201: break
+        case 401: return .unauthenticated
+        default: return .unreachable
+        }
+        guard let issued = try? JSONDecoder().decode(IssuedChallenge.self, from: data),
+            let nonce = Data(unpaddedBase64URL: issued.nonce),
+            nonce.count == DeviceProof.nonceLength
+        else { return .unreachable }
+        let signature = try keys.registrationSignature(userId: userId, nonce: nonce)
+        var request = post(
+            "devices",
+            body: DeviceRegistration(
+                ed25519PublicKey: keys.signing.publicKey.rawRepresentation.unpaddedBase64URL,
+                x25519PublicKey: keys.agreement.publicKey.rawRepresentation.unpaddedBase64URL,
+                nonce: issued.nonce, signature: signature.unpaddedBase64URL))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        return try await register(request)
+    }
+
+    private func register(_ request: URLRequest) async throws -> DeviceRegistrationAnswer {
+        guard let (status, data) = try await send(request) else { return .unreachable }
+        switch status {
+        case 200, 201:
+            guard let device = try? JSONDecoder().decode(RegisteredDevice.self, from: data) else {
+                return .unreachable
+            }
+            return .registered(relayId: device.id, transferred: device.transferred)
+        case 400
+        where (try? JSONDecoder().decode(ErrorCode.self, from: data).error.code)
+            == "DEVICE_CHALLENGE_INVALID":
+            return .challengeRefused
+        case 400: return .keyRefused
+        case 401: return .unauthenticated
+        case 403: return .proofRefused
+        case 402..<500: return .refused
+        default: return .unreachable
+        }
+    }
+
     private func session(from data: Data) -> Session? {
         guard let granted = try? JSONDecoder().decode(GrantedSession.self, from: data) else {
             return nil
@@ -173,13 +245,6 @@ struct KiroshiCloud: Sendable {
         case "Too many wrong codes, ask for a new one": return .tooManyWrongCodes
         default: return .wrongCode
         }
-    }
-
-    private func unpaddedBase64URL(_ bytes: Data) -> String {
-        bytes.base64EncodedString()
-            .replacing("+", with: "-")
-            .replacing("/", with: "_")
-            .replacing("=", with: "")
     }
 
     private func post(_ path: String, body: some Encodable) -> URLRequest {
@@ -231,10 +296,21 @@ private struct IdTokenSignIn: Encodable {
 private struct DeviceRegistration: Encodable {
     let ed25519PublicKey: String
     let x25519PublicKey: String
+    let nonce: String
+    let signature: String
+}
+
+private struct Account: Decodable {
+    let id: String
+}
+
+private struct IssuedChallenge: Decodable {
+    let nonce: String
 }
 
 private struct RegisteredDevice: Decodable {
     let id: String
+    let transferred: Bool
 }
 
 private struct ErrorCode: Decodable {

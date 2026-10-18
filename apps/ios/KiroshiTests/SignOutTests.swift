@@ -86,6 +86,54 @@ struct SignOutTests {
         #expect(model.stage == .signedOut)
     }
 
+    @Test func signingOutRemovesTheDeviceThenRevokesTheBearer() async throws {
+        let devicePath = "/devices/\(FixtureKeys.memberRelayId)"
+        await transport.answer(devicePath, with: .status(204, ""))
+        await transport.answer(CloudFixture.signOutPath, with: CloudFixture.signedOut)
+        let relay = RelayEnvironment(transport: TestRelayTransport(), clock: TestRelayClock())
+        try await relay.relayDevices.save(FixtureKeys.memberRelayId, for: CloudFixture.userId)
+        let model = SignInModel(
+            cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(), relay: relay)
+
+        model.signOut()
+        await model.revocation?.value
+
+        let requests = await transport.requests
+        #expect(
+            requests.map { "\($0.httpMethod ?? "") \($0.url?.path() ?? "")" }
+                == ["DELETE \(devicePath)", "POST \(CloudFixture.signOutPath)"])
+        #expect(
+            requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer fixture-bearer")
+        #expect(
+            try await relay.deviceKeys.keys().rawRepresentation
+                == FixtureKeys.member.rawRepresentation)
+    }
+
+    @Test(arguments: [ScriptedTransport.Answer.pending, .offline, .status(404, "")])
+    func signingOutNeverWaitsForTheDeviceRemoval(answer: ScriptedTransport.Answer) async throws {
+        let devicePath = "/devices/\(FixtureKeys.memberRelayId)"
+        await transport.answer(devicePath, with: answer)
+        let relay = RelayEnvironment(transport: TestRelayTransport(), clock: TestRelayClock())
+        try await relay.relayDevices.save(FixtureKeys.memberRelayId, for: CloudFixture.userId)
+        let model = SignInModel(
+            cloud: KiroshiCloud(baseURL: KiroshiCloud.productionURL, transport: transport),
+            sessions: sessions, lastSpace: InMemoryLastSpaceStore(),
+            agreements: CloudFixture.agreements(), relay: relay)
+
+        model.signOut()
+
+        #expect(sessions.saved == nil)
+        #expect(model.stage == .signedOut)
+        while await !transport.requests.contains(where: { $0.url?.path() == devicePath }) {
+            await Task.yield()
+        }
+        model.revocation?.cancel()
+        await model.revocation?.value
+        #expect(model.stage == .signedOut)
+    }
+
     @Test func signingOutTellsTheShell() {
         let model = makeModel(sessions: sessions)
         var signOuts = 0

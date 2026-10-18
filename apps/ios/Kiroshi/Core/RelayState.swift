@@ -8,6 +8,7 @@ enum RelayState: Equatable, Sendable {
     case unreachable
     case signedOut
     case membershipEnded
+    case deviceMoved
 }
 
 enum RelayUpdate: Sendable {

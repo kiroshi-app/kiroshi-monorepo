@@ -481,6 +481,7 @@ private struct RelayEnding: Sendable {
         case RelayClosure.membershipEnded: self.init(.membershipEnded, retries: false)
         case RelayClosure.sessionRevoked: self.init(.signedOut, retries: false)
         case RelayClosure.serverRestarting: self.init(.connecting, retries: true)
+        case RelayClosure.deviceRevoked: self.init(.deviceMoved, retries: false)
         default: self.init(.unreachable, retries: true)
         }
     }
