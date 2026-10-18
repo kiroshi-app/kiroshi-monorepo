@@ -8,8 +8,9 @@ use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
 use super::contract::{
-	CompanionCreated, CompanionError, CompanionInvited, ConversationAttached,
-	ConversationDescribed, ConversationOpened, ConversationSaid, SeatedCompanion,
+	AuthorKind, CompanionCreated, CompanionError, CompanionInvited, Conversation,
+	ConversationAttached, ConversationDescribed, ConversationRead, ConversationsListed,
+	LastMessage, MessageAuthor, ReadMessage, SeatedCompanion,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
@@ -24,12 +25,21 @@ use crate::conversations::commands::{
 use crate::conversations::contract::{BotDraft, CompanionSpoke, TranscriptStoreError};
 use crate::db;
 use crate::db::repositories::conversations::{
-	Bot as StoredBot, ConversationDescription, ConversationDraft, TOPIC_KIND,
+	Bot as StoredBot, ConversationDescription, ConversationDraft, ListedConversation, Listing,
+	Seat, LISTED_KINDS, TOPIC_KIND,
 };
+use crate::db::repositories::keyset;
+use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
 use crate::events::{
 	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED, FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
+
+const LIST_LIMIT: Bound = Bound { default: 50, maximum: 200 };
+
+const READ_LIMIT: Bound = Bound { default: 20, maximum: 100 };
+
+const LAST_MESSAGE_LENGTH: usize = 200;
 
 #[derive(Debug)]
 pub struct CompanionHost<R: Runtime> {
@@ -102,7 +112,7 @@ impl<R: Runtime> CompanionHost<R> {
 		&self,
 		database: &db::Database,
 		asked: Opened,
-	) -> Result<ConversationOpened, CompanionError> {
+	) -> Result<Conversation, CompanionError> {
 		let title = asked.title.trim();
 		if title.is_empty() {
 			return Err(CompanionError::EmptyTitleField);
@@ -140,29 +150,21 @@ impl<R: Runtime> CompanionHost<R> {
 				text: message.to_owned(),
 			},
 		)?;
-		Ok(ConversationOpened {
-			conversation_id: room.id,
-			title: room.title,
-			companions: room
-				.seats
-				.into_iter()
-				.map(|seat| SeatedCompanion { id: seat.bot_id, name: seat.name })
-				.collect(),
-		})
+		conversation_answer(database, room.id).await
 	}
 
 	async fn say(
 		&self,
 		database: &db::Database,
 		asked: Said,
-	) -> Result<ConversationSaid, CompanionError> {
+	) -> Result<Conversation, CompanionError> {
 		let message = asked.message.trim();
 		if message.is_empty() {
 			return Err(CompanionError::EmptyMessageField);
 		}
 		carries_seats(database, &asked.conversation).await?;
 		self.holds_seat(database, &asked.conversation).await?;
-		let title = title_of(database, &asked.conversation).await?;
+		let said = conversation_answer(database, asked.conversation.clone()).await?;
 		self.announce(
 			COMPANION_SPOKE,
 			CompanionSpoke {
@@ -171,7 +173,7 @@ impl<R: Runtime> CompanionHost<R> {
 				text: message.to_owned(),
 			},
 		)?;
-		Ok(ConversationSaid { conversation_id: asked.conversation, title })
+		Ok(said)
 	}
 
 	async fn describe(
@@ -273,6 +275,61 @@ impl<R: Runtime> CompanionHost<R> {
 		})
 	}
 
+	async fn list(
+		&self,
+		database: &db::Database,
+		asked: Listed,
+	) -> Result<ConversationsListed, CompanionError> {
+		let size = LIST_LIMIT.applied(asked.limit)?;
+		let kind = asked.kind.map(listed_kind).transpose()?;
+		let after = keyset::after(asked.cursor)
+			.map_err(|cursor| CompanionError::UnreadableCursor { cursor })?;
+		let listing = Listing {
+			space_id: self.space(database).await?,
+			kind,
+			seated_bot_id: (!asked.everywhere).then(|| self.bot_id.clone()),
+		};
+		let page = database
+			.conversations()
+			.listed_page(listing, after, size)
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		Ok(ConversationsListed {
+			conversations: page.rows.into_iter().map(conversation_of).collect(),
+			cursor: page.next.map(|next| next.encoded()),
+		})
+	}
+
+	async fn consult(
+		&self,
+		database: &db::Database,
+		asked: Consulted,
+	) -> Result<ConversationRead, CompanionError> {
+		let limit = READ_LIMIT.applied(asked.limit)?;
+		let space_id = self.space(database).await?;
+		let listed = database
+			.conversations()
+			.listed_conversation(asked.conversation.clone())
+			.await
+			.map_err(TranscriptStoreError::from)?
+			.filter(|listed| listed.active.conversation.space_id.as_ref() == Some(&space_id))
+			.ok_or_else(|| CompanionError::UnknownConversation {
+				conversation_id: asked.conversation.clone(),
+			})?;
+		let query = MessagePageQuery {
+			conversation_id: asked.conversation,
+			before_seq: asked.before,
+			limit,
+		};
+		let page =
+			database.messages().page_messages(query).await.map_err(TranscriptStoreError::from)?;
+		let cursor = page.messages.first().filter(|_| page.has_more).map(|oldest| oldest.seq);
+		let seats = &listed.active.conversation.seats;
+		let messages =
+			page.messages.into_iter().map(|stored| read_message(seats, stored)).collect();
+		Ok(ConversationRead { conversation: conversation_of(listed), messages, cursor })
+	}
+
 	async fn space(&self, database: &db::Database) -> Result<String, CompanionError> {
 		space_of(database, &self.conversation_id).await
 	}
@@ -342,13 +399,99 @@ async fn carries_seats(
 	}
 }
 
-async fn title_of(
+async fn conversation_answer(
 	database: &db::Database,
-	conversation_id: &str,
-) -> Result<String, CompanionError> {
-	database.conversations().title(conversation_id.to_owned()).await?.ok_or_else(|| {
-		CompanionError::ConversationWithoutSpace { conversation_id: conversation_id.to_owned() }
+	conversation_id: String,
+) -> Result<Conversation, CompanionError> {
+	let listed = database
+		.conversations()
+		.listed_conversation(conversation_id.clone())
+		.await
+		.map_err(TranscriptStoreError::from)?
+		.ok_or(CompanionError::UnknownConversation { conversation_id })?;
+	Ok(conversation_of(listed))
+}
+
+fn conversation_of(listed: ListedConversation) -> Conversation {
+	let ListedConversation { active, kind, is_archived } = listed;
+	let room = active.conversation;
+	let last_message = match active.last_word {
+		None => None,
+		Some(word) => Some(LastMessage {
+			author: author_of(&room.seats, word.author_bot_id, word.author).name,
+			text: word
+				.text
+				.map(|text| text.chars().take(LAST_MESSAGE_LENGTH).collect())
+				.unwrap_or_default(),
+			time: word.at,
+		}),
+	};
+	Conversation {
+		conversation_id: room.id,
+		kind,
+		title: room.title,
+		icon: room.icon,
+		colour: room.color.map(|colour| colour.named().to_owned()),
+		companions: room
+			.seats
+			.into_iter()
+			.filter(|seat| seat.left_at.is_none() && !seat.is_deleted)
+			.map(|seat| SeatedCompanion { id: seat.bot_id, name: seat.name })
+			.collect(),
+		last_message,
+		archived: is_archived,
+	}
+}
+
+fn read_message(seats: &[Seat], stored: StoredMessage) -> ReadMessage {
+	ReadMessage {
+		seq: stored.seq,
+		author: author_of(seats, stored.author_bot_id, stored.author),
+		time: stored.created_at,
+		text: stored.content,
+	}
+}
+
+fn author_of(
+	seats: &[Seat],
+	author_bot_id: Option<String>,
+	author: AccountAuthor,
+) -> MessageAuthor {
+	let Some(bot_id) = author_bot_id else {
+		return MessageAuthor {
+			kind: AuthorKind::Person,
+			id: author.account_id,
+			name: author.name,
+		};
+	};
+	let name = seats.iter().find(|seat| seat.bot_id == bot_id).map(|seat| seat.name.clone());
+	MessageAuthor { kind: AuthorKind::Companion, id: Some(bot_id), name }
+}
+
+fn listed_kind(kind: String) -> Result<String, CompanionError> {
+	if LISTED_KINDS.contains(&kind.as_str()) {
+		return Ok(kind);
+	}
+	Err(CompanionError::UnknownConversationKind {
+		conversation_kind: kind,
+		accepted: LISTED_KINDS.iter().map(|accepted| (*accepted).to_owned()).collect(),
 	})
+}
+
+struct Bound {
+	default: u32,
+	maximum: u32,
+}
+
+impl Bound {
+	fn applied(&self, limit: Option<i64>) -> Result<u32, CompanionError> {
+		let Some(limit) = limit else {
+			return Ok(self.default);
+		};
+		u32::try_from(limit).ok().filter(|held| (1..=self.maximum).contains(held)).ok_or(
+			CompanionError::LimitOutOfRange { limit, minimum: 1, maximum: i64::from(self.maximum) },
+		)
+	}
 }
 
 async fn space_of(
@@ -415,6 +558,14 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Described = Self::read(payload)?;
 				Self::answered(self.describe(database, asked).await?)
 			}
+			Operation::ConversationList => {
+				let asked: Listed = Self::read(payload)?;
+				Self::answered(self.list(database, asked).await?)
+			}
+			Operation::ConversationRead => {
+				let asked: Consulted = Self::read(payload)?;
+				Self::answered(self.consult(database, asked).await?)
+			}
 		}
 	}
 }
@@ -440,6 +591,8 @@ pub enum Operation {
 	ConversationSay,
 	ConversationAttach,
 	ConversationDescribe,
+	ConversationList,
+	ConversationRead,
 }
 
 #[derive(Debug, Deserialize)]
@@ -485,6 +638,24 @@ struct Described {
 	icon: Option<String>,
 	#[serde(default, deserialize_with = "present")]
 	colour: Option<Option<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Listed {
+	#[serde(default)]
+	everywhere: bool,
+	kind: Option<String>,
+	limit: Option<i64>,
+	cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Consulted {
+	conversation: String,
+	limit: Option<i64>,
+	before: Option<i64>,
 }
 
 fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
@@ -1086,12 +1257,17 @@ mod tests {
 			opened,
 			json!({
 				"conversationId": id,
+				"kind": "topic",
 				"title": "Trip",
+				"icon": "Rocket",
+				"colour": null,
 				"companions": [
 					{ "id": "b1", "name": "Shoto" },
 					{ "id": "b2", "name": "Ada" },
 					{ "id": "b3", "name": "Rex" }
-				]
+				],
+				"lastMessage": null,
+				"archived": false
 			})
 		);
 		let state = app.state::<db::DatabaseState>();
@@ -1355,7 +1531,7 @@ mod tests {
 			.await
 			.expect("it is said");
 
-		assert_eq!(said, json!({ "conversationId": "room", "title": "Plans" }));
+		assert_eq!(said, a_plans_room());
 		assert_eq!(
 			announced(&arriving),
 			json!({ "conversationId": "room", "authorBotId": "b1", "text": "Hi" })
@@ -1374,7 +1550,7 @@ mod tests {
 			.await
 			.expect("it is said");
 
-		assert_eq!(said, json!({ "conversationId": "room", "title": "Plans" }));
+		assert_eq!(said, a_plans_room());
 		assert_eq!(announced(&arriving)["conversationId"], json!("room"));
 	}
 
@@ -1827,5 +2003,292 @@ mod tests {
 
 		assert_eq!(unseated["kind"], json!("callerNotSeated"));
 		assert_eq!(seatless["kind"], json!("conversationWithoutSeats"));
+	}
+
+	fn a_plans_room() -> Value {
+		json!({
+			"conversationId": "room",
+			"kind": "topic",
+			"title": "Plans",
+			"icon": null,
+			"colour": null,
+			"companions": [{ "id": "b1", "name": "Shoto" }, { "id": "b2", "name": "Ada" }],
+			"lastMessage": null,
+			"archived": false
+		})
+	}
+
+	const A_HISTORY: &str = "
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at, archived_at)
+			VALUES ('shelved', 'topic', 'personal', 'Old plans', 5, 5, 6);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq, left_at)
+			VALUES ('shelved', 'b2', 'lead', 5, 0, NULL), ('room', 'b5', 'assistant', 25, 2, 35);
+		INSERT INTO turns (id, conversation_id, seq, started_at) VALUES
+			('t-room', 'room', 1, 10), ('t-unled', 'unled', 1, 40),
+			('t-errand', 'errand', 1, 15), ('t-studio', 'studio', 1, 50);
+		INSERT INTO messages (id, conversation_id, turn_id, seq, role, content, completion_state,
+			created_at, author_bot_id, author_account_id, author_name) VALUES
+			('m1', 'room', 't-room', 1, 'user', 'Where to?', 'complete', 10, NULL, 'u1', 'Alex'),
+			('m2', 'room', 't-room', 2, 'assistant', 'Lisbon', 'complete', 20, 'b2', NULL, NULL),
+			('m3', 'room', 't-room', 3, 'user', 'From afar', 'complete', 30, 'b5', NULL, NULL),
+			('m4', 'unled', 't-unled', 1, 'assistant', printf('%.250c', 'x'), 'complete', 40,
+				'b1', NULL, NULL),
+			('m5', 'errand', 't-errand', 1, 'assistant', 'Shipped', 'complete', 15, 'b1', NULL,
+				NULL),
+			('m6', 'studio', 't-studio', 1, 'assistant', 'Elsewhere', 'complete', 50, 'b1', NULL,
+				NULL);
+	";
+
+	const MANY_ROOMS: &str = "
+		WITH RECURSIVE counted(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM counted WHERE n < 60)
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			SELECT printf('many-%02d', n), 'topic', 'personal', 'Many', 100 + n, 100 + n
+			FROM counted;
+		INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t-many', 'room', 9, 1);
+		WITH RECURSIVE counted(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM counted WHERE n < 25)
+		INSERT INTO messages (id, conversation_id, turn_id, seq, role, content, completion_state,
+			created_at)
+			SELECT printf('many-%02d', n), 'room', 't-many', 10 + n, 'user', 'Hi', 'complete', n
+			FROM counted;
+	";
+
+	async fn a_history(name: &str) -> AppOfItsOwn {
+		let app = a_room(name).await;
+		planted(&app, A_MISSION).await;
+		planted(&app, ANOTHER_ROOM).await;
+		planted(&app, A_HISTORY).await;
+		app
+	}
+
+	fn a_list(payload: Value) -> Value {
+		json!({ "subtype": "companion", "operation": "conversationList", "payload": payload })
+	}
+
+	fn a_read(payload: Value) -> Value {
+		json!({ "subtype": "companion", "operation": "conversationRead", "payload": payload })
+	}
+
+	async fn listed(app: &App<MockRuntime>, payload: Value) -> Value {
+		serving(app, "c1").answer(a_list(payload)).await.expect("it is listed")
+	}
+
+	async fn read_back(app: &App<MockRuntime>, payload: Value) -> Value {
+		serving(app, "c1").answer(a_read(payload)).await.expect("it is read")
+	}
+
+	fn ids_of(answer: &Value) -> Vec<String> {
+		answer["conversations"]
+			.as_array()
+			.expect("the conversations are listed")
+			.iter()
+			.map(|listed| listed["conversationId"].as_str().expect("the id is named").to_owned())
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn the_list_holds_only_the_seats_the_caller_has_not_left_latest_activity_first() {
+		let app = a_history("list-seated").await;
+
+		let seated = listed(&app, json!({})).await;
+		let not_everywhere = listed(&app, json!({ "everywhere": false })).await;
+
+		assert_eq!(ids_of(&seated), vec!["room", "errand", "c1"]);
+		assert_eq!(not_everywhere, seated);
+		assert_eq!(seated["cursor"], Value::Null);
+	}
+
+	#[tokio::test]
+	async fn the_list_everywhere_holds_every_conversation_of_the_space_and_none_of_another() {
+		let app = a_history("list-everywhere").await;
+
+		let everywhere = listed(&app, json!({ "everywhere": true })).await;
+
+		assert_eq!(ids_of(&everywhere), vec!["unled", "room", "errand", "shelved", "c1"]);
+	}
+
+	#[tokio::test]
+	async fn a_listed_conversation_wears_its_kind_its_seats_its_last_message_and_its_archive() {
+		let app = a_history("list-shape").await;
+
+		let everywhere = listed(&app, json!({ "everywhere": true })).await;
+		let rows = everywhere["conversations"].as_array().expect("the conversations are listed");
+
+		assert_eq!(
+			rows[0],
+			json!({
+				"conversationId": "unled",
+				"kind": "topic",
+				"title": "Plans",
+				"icon": null,
+				"colour": null,
+				"companions": [],
+				"lastMessage": { "author": "Shoto", "text": "x".repeat(200), "time": 40 },
+				"archived": false
+			})
+		);
+		assert_eq!(
+			rows[1]["lastMessage"],
+			json!({ "author": "Kai", "text": "From afar", "time": 30 })
+		);
+		assert_eq!(rows[1]["companions"], a_plans_room()["companions"]);
+		assert_eq!(rows[2]["kind"], json!("mission"));
+		assert_eq!(rows[3]["archived"], json!(true));
+		assert_eq!(rows[3]["companions"], json!([{ "id": "b2", "name": "Ada" }]));
+		assert_eq!(rows[4]["kind"], json!("main"));
+		assert_eq!(rows[4]["lastMessage"], Value::Null);
+	}
+
+	#[tokio::test]
+	async fn the_list_keeps_only_the_kind_it_names_and_refuses_any_other_naming_the_three() {
+		let app = a_history("list-kind").await;
+
+		let kinds = [
+			("main", vec!["c1"]),
+			("topic", vec!["unled", "room", "shelved"]),
+			("mission", vec!["errand"]),
+		];
+		for (kind, ids) in kinds {
+			let answer = listed(&app, json!({ "everywhere": true, "kind": kind })).await;
+			assert_eq!(ids_of(&answer), ids, "{kind}");
+		}
+		let refused = refusal(serving(&app, "c1").answer(a_list(json!({ "kind": "chat" }))).await);
+
+		assert_eq!(
+			refused,
+			json!({
+				"kind": "unknownConversationKind",
+				"conversationKind": "chat",
+				"accepted": ["main", "topic", "mission"]
+			})
+		);
+	}
+
+	#[tokio::test]
+	async fn the_list_walks_its_pages_to_a_null_cursor_and_refuses_a_cursor_that_does_not_decode() {
+		let app = a_history("list-walk").await;
+		let mut cursor = Value::Null;
+		let mut pages = Vec::new();
+
+		loop {
+			let mut payload = json!({ "everywhere": true, "limit": 2 });
+			if !cursor.is_null() {
+				payload["cursor"] = cursor;
+			}
+			let page = listed(&app, payload).await;
+			pages.push(ids_of(&page));
+			cursor = page["cursor"].clone();
+			if cursor.is_null() {
+				break;
+			}
+		}
+		let refused =
+			refusal(serving(&app, "c1").answer(a_list(json!({ "cursor": "not a cursor" }))).await);
+
+		assert_eq!(pages, vec![vec!["unled", "room"], vec!["errand", "shelved"], vec!["c1"]]);
+		assert_eq!(refused, json!({ "kind": "unreadableCursor", "cursor": "not a cursor" }));
+	}
+
+	#[tokio::test]
+	async fn a_limit_left_out_reads_its_default_and_one_past_its_bounds_is_refused_naming_them() {
+		let app = a_history("list-limit").await;
+		planted(&app, MANY_ROOMS).await;
+
+		let defaulted = listed(&app, json!({ "everywhere": true })).await;
+		let widest = listed(&app, json!({ "everywhere": true, "limit": 200 })).await;
+		let read = read_back(&app, json!({ "conversation": "room" })).await;
+		let refused = |payload: Value| {
+			let host = serving(&app, "c1");
+			async move { refusal(host.answer(payload).await) }
+		};
+
+		assert_eq!(ids_of(&defaulted).len(), 50);
+		assert!(defaulted["cursor"].is_string());
+		assert_eq!(ids_of(&widest).len(), 65);
+		assert_eq!(widest["cursor"], Value::Null);
+		assert_eq!(read["messages"].as_array().expect("the messages are read").len(), 20);
+		for (payload, limit, maximum) in [
+			(a_list(json!({ "limit": 0 })), 0, 200),
+			(a_list(json!({ "limit": 201 })), 201, 200),
+			(a_read(json!({ "conversation": "room", "limit": 0 })), 0, 100),
+			(a_read(json!({ "conversation": "room", "limit": 101 })), 101, 100),
+		] {
+			assert_eq!(
+				refused(payload).await,
+				json!({ "kind": "limitOutOfRange", "limit": limit, "minimum": 1, "maximum": maximum })
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn a_read_answers_the_conversation_and_its_last_messages_newest_last_walking_to_the_first(
+	) {
+		let app = a_history("read").await;
+
+		let latest = read_back(&app, json!({ "conversation": "room", "limit": 2 })).await;
+		let older =
+			read_back(&app, json!({ "conversation": "room", "limit": 2, "before": 2 })).await;
+
+		let mut room = a_plans_room();
+		room["lastMessage"] = json!({ "author": "Kai", "text": "From afar", "time": 30 });
+		assert_eq!(
+			latest,
+			json!({
+				"conversation": room,
+				"messages": [
+					{
+						"seq": 2,
+						"author": { "kind": "companion", "id": "b2", "name": "Ada" },
+						"time": 20,
+						"text": "Lisbon"
+					},
+					{
+						"seq": 3,
+						"author": { "kind": "companion", "id": "b5", "name": "Kai" },
+						"time": 30,
+						"text": "From afar"
+					}
+				],
+				"cursor": 2
+			})
+		);
+		assert_eq!(
+			older["messages"],
+			json!([{
+				"seq": 1,
+				"author": { "kind": "person", "id": "u1", "name": "Alex" },
+				"time": 10,
+				"text": "Where to?"
+			}])
+		);
+		assert_eq!(older["cursor"], Value::Null);
+	}
+
+	#[tokio::test]
+	async fn a_read_answers_a_conversation_the_caller_left_or_never_sat_in_with_its_full_text() {
+		let app = a_history("read-unseated").await;
+
+		let left = read_back(&app, json!({ "conversation": "unled" })).await;
+		let never = read_back(&app, json!({ "conversation": "shelved" })).await;
+
+		assert_eq!(left["messages"][0]["text"], json!("x".repeat(250)));
+		assert_eq!(never["conversation"]["archived"], json!(true));
+		assert_eq!(never["messages"], json!([]));
+		assert_eq!(never["cursor"], Value::Null);
+	}
+
+	#[tokio::test]
+	async fn a_read_of_an_unknown_id_or_of_another_space_is_refused_alike_naming_only_the_id() {
+		let app = a_history("read-foreign").await;
+
+		for conversation in ["ghost", "studio", "drifting", "nowhere"] {
+			let refused = refusal(
+				serving(&app, "c1").answer(a_read(json!({ "conversation": conversation }))).await,
+			);
+			assert_eq!(
+				refused,
+				json!({ "kind": "unknownConversation", "conversationId": conversation })
+			);
+		}
 	}
 }

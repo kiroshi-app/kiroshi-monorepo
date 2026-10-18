@@ -53,17 +53,62 @@ pub struct SeatedCompanion {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConversationOpened {
-	pub conversation_id: String,
-	pub title: String,
-	pub companions: Vec<SeatedCompanion>,
+pub struct LastMessage {
+	pub author: Option<String>,
+	pub text: String,
+	pub time: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConversationSaid {
+pub struct Conversation {
 	pub conversation_id: String,
+	pub kind: String,
 	pub title: String,
+	pub icon: Option<String>,
+	pub colour: Option<String>,
+	pub companions: Vec<SeatedCompanion>,
+	pub last_message: Option<LastMessage>,
+	pub archived: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationsListed {
+	pub conversations: Vec<Conversation>,
+	pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AuthorKind {
+	Person,
+	Companion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageAuthor {
+	pub kind: AuthorKind,
+	pub id: Option<String>,
+	pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadMessage {
+	pub seq: i64,
+	pub author: MessageAuthor,
+	pub time: i64,
+	pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationRead {
+	pub conversation: Conversation,
+	pub messages: Vec<ReadMessage>,
+	pub cursor: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +188,25 @@ pub enum CompanionError {
 	#[serde(rename_all = "camelCase")]
 	CallerNotSeated {
 		conversation_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownConversation {
+		conversation_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnknownConversationKind {
+		conversation_kind: String,
+		accepted: Vec<String>,
+	},
+	#[serde(rename_all = "camelCase")]
+	LimitOutOfRange {
+		limit: i64,
+		minimum: i64,
+		maximum: i64,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnreadableCursor {
+		cursor: String,
 	},
 	#[serde(rename_all = "camelCase")]
 	UnreadableFile {
