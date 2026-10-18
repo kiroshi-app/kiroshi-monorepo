@@ -472,6 +472,9 @@ const STEVE: SpaceMember = {
 	status: "host",
 }
 
+const INVITE_HINT =
+	"Kiroshi emails them an invitation. It works once, for 7 days."
+
 const MEMBERS_PANEL = {
 	space: "Personal",
 	members: [STEVE],
@@ -492,7 +495,7 @@ const JOINED_HOST = "http://192.168.1.24:45367"
 const JOINED_HINT = "This space lives on another Kiroshi."
 
 const LEAVE_DESCRIPTION =
-	"Nothing is deleted on the host. You can join again with its link."
+	"Nothing is deleted on the host. You can join again with a new invitation."
 
 const RAIL = [
 	"Space",
@@ -741,7 +744,55 @@ const SAM_PENDING: SpaceMember = {
 	id: "sam",
 	email: "sam@example.com",
 	status: "pending",
+	expiresInDays: 6,
 }
+
+const SAM_PENDING_ROW = ["sam@example.com", "Invited · expires in 6 days"]
+
+const STEVE_ROW = ["S", "Steve", "steve@example.com", "Host"]
+
+const NOA: SpaceMember = {
+	id: "noa",
+	name: "Noa",
+	email: "noa@example.com",
+	status: "host",
+}
+
+const MAYA_FINGERPRINT = "orbit velvet canal fossil ripple mango"
+
+const MAYA: SpaceMember = {
+	id: "maya",
+	name: "Maya",
+	email: "maya@example.com",
+	status: "joined",
+	fingerprint: MAYA_FINGERPRINT,
+}
+
+const TOM_PENDING: SpaceMember = {
+	id: "tom",
+	email: "tom@example.com",
+	status: "pending",
+	expiresInDays: 6,
+}
+
+const SAM_EXPIRED: SpaceMember = {
+	id: "sam-expired",
+	email: "sam@example.com",
+	status: "expired",
+	sentAt: new Date(2026, 9, 9).getTime(),
+}
+
+const NOA_ROW = ["N", "Noa", "noa@example.com", "Host"]
+
+const MAYA_ROW = ["M", "Maya", "maya@example.com", MAYA_FINGERPRINT]
+
+const TOM_ROW = ["tom@example.com", "Invited · expires in 6 days"]
+
+const SAM_EXPIRED_ROW = [
+	"sam@example.com",
+	"Sent October 9, not used",
+	"Expired",
+]
 
 const STUDIO = "Studio"
 
@@ -790,19 +841,23 @@ const memberRowsIn = (panel: HTMLElement) =>
 const inviteFieldIn = (panel: HTMLElement) =>
 	within(panel).getByRole("textbox", { name: "Invite people" })
 
+const listNamed = (panel: HTMLElement, name: string) =>
+	within(panel).getByRole("list", { name })
+
 const expectRefusal = async (panel: HTMLElement, message: string) => {
 	const field = inviteFieldIn(panel)
 	await expect(field).toHaveAttribute("aria-invalid", "true")
 	await expect(field).toHaveAccessibleDescription(message)
+	await expect(filledRegionIn(slotIn(panel, "members-panel")).textContent).toBe(
+		message,
+	)
 	await expect(getComputedStyle(field).borderTopColor).toBe(
 		probedStyleOf("border-destructive", "borderTopColor", panel),
 	)
 	await expect(getComputedStyle(field).boxShadow).toContain(
 		probedStyleOf("text-destructive/20", "color", panel),
 	)
-	await expect(panel).not.toHaveTextContent(
-		"They join by signing in to Kiroshi with this email.",
-	)
+	await expect(panel).not.toHaveTextContent(INVITE_HINT)
 }
 
 export const MembersI1 = meta.story({
@@ -811,7 +866,7 @@ export const MembersI1 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I1. The Members tab of a hosted space: an empty invite field with Invite disabled, then the member list holding only the reader, tagged Host with no Remove.",
+					"Artboard I1. The Members tab of a hosted space: an empty invite field with Invite disabled, then the Members list holding only the reader, tagged Host with no action. With no invitation pending or expired, the Invitations section and its label are gone.",
 			},
 		},
 	},
@@ -820,12 +875,10 @@ export const MembersI1 = meta.story({
 		await expect(
 			within(panel).getByRole("button", { name: "Invite" }),
 		).toBeDisabled()
-		await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(
-			"They join by signing in to Kiroshi with this email.",
-		)
-		await expect(memberRowsIn(panel)).toEqual([
-			["S", "Steve", "steve@example.com", "Host"],
-		])
+		await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(INVITE_HINT)
+		await expect(memberRowsIn(panel)).toEqual([STEVE_ROW])
+		await expect(within(panel).queryByText("Invitations")).toBeNull()
+		await expect(slotsIn(panel, "members-section")).toHaveLength(1)
 	},
 })
 
@@ -835,7 +888,7 @@ export const MembersLoading = meta.story({
 		docs: {
 			description: {
 				story:
-					"The member list still on its way. Check that the invite form stays rendered, that member row skeletons sit inside one bordered frame filling the panel below it to the bottom, the last one cut by the edge, each at the height of a loaded member row with its divider, and that the panel reads busy.",
+					"Artboard 1.8. The member list still on its way. Check that the invite form stays rendered, that no Invitations section shows, that member row skeletons of three bars (10px name, 8px email, 8px fingerprint) sit inside one bordered frame under the Members label, filling the panel to the bottom, the last one cut by the edge, each at the height of a loaded member row with its fingerprint and divider, and that the panel reads busy.",
 			},
 		},
 	},
@@ -853,8 +906,14 @@ export const MembersLoading = meta.story({
 			Math.abs(frame.getBoundingClientRect().bottom - contentBottomOf(panel)),
 		).toBeLessThan(1)
 		const [firstRow] = slotsIn(list, "list-skeleton-row")
-		await expect(firstRow?.getBoundingClientRect().height).toBe(53)
+		await expect(firstRow?.getBoundingClientRect().height).toBe(71)
+		const bars = [...firstRow.querySelectorAll("[data-slot=skeleton]")]
+		await expect(bars.map((bar) => bar.getBoundingClientRect().height)).toEqual(
+			[28, 10, 8, 8],
+		)
 		await expect(slotsIn(panel, "space-member")).toHaveLength(0)
+		await expect(within(panel).queryByText("Invitations")).toBeNull()
+		await expect(within(panel).getByText("Members")).toBeVisible()
 	},
 })
 
@@ -893,18 +952,18 @@ export const MembersI3 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I3. Sam was invited: the field is empty again and Sam joins the list as Pending, a dashed avatar with the mail glyph and the address alone on the name line.",
+					"Artboard I3. Sam was invited: the field is empty again and Sam's invitation opens the Invitations section above Members, a dashed avatar with the mail glyph, the address on the name line and when it expires under it.",
 			},
 		},
 	},
 	play: async () => {
 		const panel = await membersPanelIn()
-		await expect(memberRowsIn(panel)).toEqual([
-			["S", "Steve", "steve@example.com", "Host"],
-			["sam@example.com", "Pending", "Remove"],
-		])
-		const pending = slotsIn(panel, "space-member").at(-1)
-		await expect(pending && glyphIn(pending, Icons.Mail)).not.toBe(null)
+		await expect(memberRowsIn(panel)).toEqual([SAM_PENDING_ROW, STEVE_ROW])
+		const [pending] = slotsIn(panel, "space-member")
+		await expect(glyphIn(pending, Icons.Mail)).not.toBe(null)
+		await expect(
+			within(listNamed(panel, "Invitations")).getAllByRole("listitem"),
+		).toEqual([pending])
 	},
 })
 
@@ -914,23 +973,25 @@ export const MembersI4 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I4. Sam accepted: the row shows the name over the address, a one-letter avatar and the Joined tag, lined up with Host above it.",
+					"Artboard I4. Sam accepted: the row shows the name over the address and a one-letter avatar, its trash action lined up with the Host row's empty slot above it.",
 			},
 		},
 	},
 	play: async () => {
 		const panel = await membersPanelIn()
 		await expect(memberRowsIn(panel)).toEqual([
-			["S", "Steve", "steve@example.com", "Host"],
-			["S", "Sam Carter", "sam@example.com", "Joined", "Remove"],
+			STEVE_ROW,
+			["S", "Sam Carter", "sam@example.com"],
 		])
 		const [host, joined] = slotsIn(panel, "space-member")
+		const remove = within(joined).getByRole("button", {
+			name: "Remove Sam Carter",
+		})
+		await expect(remove).toHaveTextContent("")
+		await expect(glyphIn(remove, Icons.Delete)).not.toBe(null)
 		await expect(
-			within(host).getByText("Host").getBoundingClientRect().right,
-		).toBe(within(joined).getByText("Joined").getBoundingClientRect().right)
-		await expect(
-			within(joined).getByRole("button", { name: "Remove Sam Carter" }),
-		).toHaveTextContent("Remove")
+			(host.lastElementChild as HTMLElement).getBoundingClientRect().right,
+		).toBe(remove.getBoundingClientRect().right)
 	},
 })
 
@@ -939,10 +1000,10 @@ export const MembersWithdrawPending = meta.story({
 	args: membersArgs({ members: [STEVE, SAM_PENDING] }),
 	play: async ({ userEvent }) => {
 		const panel = await membersPanelIn()
-		const remove = within(panel).getByRole("button", {
-			name: "Remove sam@example.com",
+		const withdraw = within(panel).getByRole("button", {
+			name: "Withdraw the invitation to sam@example.com",
 		})
-		await userEvent.click(remove)
+		await userEvent.click(withdraw)
 		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledOnce()
 		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledWith(SAM_PENDING)
 		await expect(MEMBERS_PANEL.onRemove).not.toHaveBeenCalled()
@@ -995,8 +1056,8 @@ export const MembersI5 = meta.story({
 export const MembersRemoveConfirm = meta.story({
 	args: membersArgs({
 		space: STUDIO,
-		members: [STEVE, LEA, SAM_PENDING],
-		removing: LEA,
+		members: [NOA, MAYA, TOM_PENDING],
+		removing: MAYA,
 	}),
 	parameters: {
 		docs: {
@@ -1007,9 +1068,9 @@ export const MembersRemoveConfirm = meta.story({
 		},
 	},
 	play: async ({ userEvent }) => {
-		const popup = await questionIn("Remove Lea from Studio?")
+		const popup = await questionIn("Remove Maya from Studio?")
 		await expect(popup).toHaveTextContent(
-			"Lea loses access right away. You can invite Lea again.",
+			"Maya loses access right away. You can invite Maya again.",
 		)
 		await expect(
 			within(popup)
@@ -1032,22 +1093,23 @@ export const MembersRemoveConfirm = meta.story({
 
 export const MembersI7 = meta.story({
 	args: membersArgs({
-		members: [STEVE, SAM_PENDING],
-		email: "sam@example.com",
+		space: STUDIO,
+		members: [NOA, MAYA, TOM_PENDING],
+		email: "tom@example.com",
 		refusal: "invited",
 	}),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard I7. The address is already invited: the field turns destructive, border and ring, and the helper becomes the refusal, read as the field's description.",
+					"Artboard I7. The address is already invited: the field turns destructive, border and ring, and the helper becomes the refusal, read as the field's description and announced through its status region. It is a state of the field, not a row.",
 			},
 		},
 	},
 	play: async () => {
 		await expectRefusal(
 			await membersPanelIn(),
-			"sam@example.com is already invited.",
+			"tom@example.com is already invited.",
 		)
 	},
 })
@@ -1129,9 +1191,7 @@ const expectInRowAlone = async (
 	const lineBox = line.getBoundingClientRect()
 	await expect(lineBox.left).toBe(nameBox.left)
 	await expect(lineBox.top).toBeGreaterThanOrEqual(nameBox.bottom)
-	await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(
-		"They join by signing in to Kiroshi with this email.",
-	)
+	await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(INVITE_HINT)
 }
 
 const EditableMembersPanel = (props: MembersPanelProps) => {
@@ -1159,7 +1219,7 @@ export const MembersInviteFailed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Kiroshi could not invite the address. The line takes the helper's place under the field, in the refusals' destructive text, and is announced once. The address is not wrong, so the field keeps its normal border and ring. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason.",
+					"Kiroshi could not invite the address. The field turns invalid like a refusal, border and ring, and the line takes the helper's place under it, announced once. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason.",
 			},
 		},
 	},
@@ -1169,14 +1229,7 @@ export const MembersInviteFailed = meta.story({
 			"Couldn’t invite sam@example.com. Nothing changed, try again."
 		const line = await failureLineIn(panel, message)
 		const field = inviteFieldIn(panel)
-		await expect(field).toHaveAccessibleDescription(message)
-		await expect(field).not.toHaveAttribute("aria-invalid")
-		await expect(getComputedStyle(field).borderTopColor).toBe(
-			probedStyleOf("border-input", "borderTopColor", panel),
-		)
-		await expect(getComputedStyle(field).boxShadow).not.toContain(
-			probedStyleOf("text-destructive/20", "color", panel),
-		)
+		await expectRefusal(panel, message)
 		await expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(
 			field.getBoundingClientRect().bottom,
 		)
@@ -1190,9 +1243,8 @@ export const MembersInviteFailed = meta.story({
 
 		await userEvent.click(within(panel).getByRole("button", { name: "Invite" }))
 		await expect(line).toBeEmptyDOMElement()
-		await expect(field).toHaveAccessibleDescription(
-			"They join by signing in to Kiroshi with this email.",
-		)
+		await expect(field).toHaveAccessibleDescription(INVITE_HINT)
+		await expect(field).not.toHaveAttribute("aria-invalid")
 	},
 })
 
@@ -1253,7 +1305,7 @@ export const MembersRemoveFailed = meta.story({
 		)
 		await expect(
 			slotsIn(panel, "space-member").findIndex((row) => row.contains(line)),
-		).toBe(2)
+		).toBe(3)
 		await expectInRowAlone(panel, line, "Sam Carter")
 	},
 })
@@ -1482,15 +1534,225 @@ export const MembersLongIdentity = meta.story({
 	}),
 	play: async () => {
 		const panel = await membersPanelIn()
-		const list = within(panel).getByRole("list")
-		for (const remove of within(list).getAllByRole("button")) {
-			await expect(remove.getBoundingClientRect().right).toBeLessThanOrEqual(
-				list.getBoundingClientRect().right,
-			)
+		for (const list of within(panel).getAllByRole("list")) {
+			for (const action of within(list).getAllByRole("button")) {
+				await expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(
+					list.getBoundingClientRect().right,
+				)
+			}
 		}
 		const name = within(panel).getByText(LONG_NAME)
 		await expect(name.getBoundingClientRect().height).toBe(20)
-		await expect(name.scrollWidth).toBeGreaterThan(name.clientWidth)
+		const remove = within(panel).getByRole("button", {
+			name: `Remove ${LONG_NAME}`,
+		})
+		await expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(
+			remove.getBoundingClientRect().left,
+		)
+	},
+})
+
+const STUDIO_MEMBERS = [TOM_PENDING, SAM_EXPIRED, NOA, MAYA]
+
+const rowOf = (panel: HTMLElement, text: string) => {
+	const row = within(panel).getByText(text).closest<HTMLElement>("li")
+	if (!row) throw new Error(`No member row holds ${text}`)
+	return row
+}
+
+const expectRowAction = async (action: HTMLElement) => {
+	const box = action.getBoundingClientRect()
+	await expect([box.width, box.height]).toEqual([28, 28])
+	await expect(action).toHaveTextContent("")
+	await expect(getComputedStyle(action).borderRadius).toBe("12px")
+	await expect(action.querySelector("svg")?.getBoundingClientRect().width).toBe(
+		16,
+	)
+}
+
+const expectFocusRingOnTab = async (
+	action: HTMLElement,
+	tab: () => Promise<void>,
+) => {
+	for (let step = 0; step < 12 && document.activeElement !== action; step++) {
+		await tab()
+	}
+	await expect(action).toHaveFocus()
+	await expect(action.matches(":focus-visible")).toBe(true)
+	await expect(getComputedStyle(action).boxShadow).not.toBe("none")
+}
+
+export const MembersWithInvitations = meta.story({
+	args: membersArgs({ space: STUDIO, members: STUDIO_MEMBERS }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Row 1, host view. Studio holds a pending and an expired invitation, so an Invitations section sits above the Members section, 24px apart, each a 12/16 medium label 6px over a bordered list with a 14px radius. Rows pad 8px block, 12px start, 8px end, 10px apart. Tom's pending invitation says when it expires and offers an X to withdraw it; Sam's expired one says when it was sent, wears the Expired tag and offers invite again in place of withdraw. Maya's row carries her fingerprint in the monospace face and a trash to remove her. Every action is icon-only, 28px square, named after the action and the person, with the focus ring under the keyboard.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const panel = await membersPanelIn()
+		const sections = slotsIn(panel, "members-section")
+		await expect(
+			sections.map((section) => section.firstElementChild?.textContent),
+		).toEqual(["Invitations", "Members"])
+		const [invitationsSection, membersSection] = sections
+		await expect(
+			membersSection.getBoundingClientRect().top -
+				invitationsSection.getBoundingClientRect().bottom,
+		).toBe(24)
+
+		const invitations = listNamed(panel, "Invitations")
+		const label = within(invitationsSection).getByText("Invitations")
+		await expect(
+			invitations.getBoundingClientRect().top -
+				label.getBoundingClientRect().bottom,
+		).toBe(6)
+		await expect(getComputedStyle(label).fontSize).toBe("12px")
+		await expect(getComputedStyle(label).lineHeight).toBe("16px")
+		await expect(getComputedStyle(label).fontWeight).toBe("500")
+		await expect(getComputedStyle(invitations).borderRadius).toBe("14px")
+		await expect(
+			getComputedStyle(listNamed(panel, "Members")).borderRadius,
+		).toBe("14px")
+
+		await expect(memberRowsIn(panel)).toEqual([
+			TOM_ROW,
+			SAM_EXPIRED_ROW,
+			NOA_ROW,
+			MAYA_ROW,
+		])
+		const row = rowOf(panel, "Maya")
+		const rowStyle = getComputedStyle(row)
+		await expect([
+			rowStyle.paddingTop,
+			rowStyle.paddingBottom,
+			rowStyle.paddingInlineStart,
+			rowStyle.paddingInlineEnd,
+			rowStyle.columnGap,
+		]).toEqual(["8px", "8px", "12px", "8px", "10px"])
+
+		const fingerprint = slotIn(row, "member-fingerprint")
+		await expect(fingerprint.previousElementSibling).toHaveTextContent(
+			"maya@example.com",
+		)
+		await expect(getComputedStyle(fingerprint).fontFamily).toContain(
+			"monospace",
+		)
+		await expect(getComputedStyle(fingerprint).fontSize).toBe("12px")
+		await expect(getComputedStyle(fingerprint).lineHeight).toBe("18px")
+
+		const withdraw = within(rowOf(panel, "tom@example.com")).getByRole(
+			"button",
+			{ name: "Withdraw the invitation to tom@example.com" },
+		)
+		const expired = rowOf(panel, "Sent October 9, not used")
+		const inviteAgain = within(expired).getByRole("button", {
+			name: "Invite sam@example.com again",
+		})
+		const remove = within(row).getByRole("button", { name: "Remove Maya" })
+		await expect(glyphIn(withdraw, Icons.Close)).not.toBe(null)
+		await expect(glyphIn(inviteAgain, Icons.Retry)).not.toBe(null)
+		await expect(glyphIn(remove, Icons.Delete)).not.toBe(null)
+		for (const action of [withdraw, inviteAgain, remove]) {
+			await expectRowAction(action)
+		}
+		await expect(within(expired).getAllByRole("button")).toEqual([inviteAgain])
+		const tag = within(expired).getByText("Expired")
+		await expect(tag.getBoundingClientRect().right).toBeLessThanOrEqual(
+			inviteAgain.getBoundingClientRect().left,
+		)
+		await expect(getComputedStyle(tag).color).toBe(
+			probedStyleOf("text-muted-foreground", "color", panel),
+		)
+		await expect(getComputedStyle(tag).backgroundColor).toBe(
+			probedStyleOf("bg-muted", "backgroundColor", panel),
+		)
+		await expect(within(rowOf(panel, "Noa")).queryByRole("button")).toBeNull()
+
+		await userEvent.click(withdraw)
+		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledWith(TOM_PENDING)
+		await userEvent.click(inviteAgain)
+		await expect(MEMBERS_PANEL.onInvite).toHaveBeenCalledWith("sam@example.com")
+		await userEvent.click(remove)
+		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledWith(MAYA)
+
+		inviteFieldIn(panel).focus()
+		for (const action of [withdraw, inviteAgain, remove]) {
+			await expectFocusRingOnTab(action, () => userEvent.tab())
+		}
+	},
+})
+
+const memberViewArgs = (panel: Partial<MembersPanelProps> = {}) => ({
+	...JOINED_ARGS,
+	value: { name: STUDIO },
+	tab: "members",
+	members: (
+		<MembersPanel
+			{...MEMBERS_PANEL}
+			members={[NOA, MAYA]}
+			space={STUDIO}
+			viewerId={MAYA.id}
+			{...panel}
+		/>
+	),
+})
+
+export const MembersMemberView = meta.story({
+	args: memberViewArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Row 9, member view. Maya opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, then the Members list. Noa's row wears the Host tag over an empty action slot; Maya's own row reads `(you)` and offers no action. Leave lives in the Danger zone tab, see `JoinedDanger`.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expect(slotsIn(panel, "share-card")).toHaveLength(0)
+		await expect(inviteFieldIn(panel)).toBeEnabled()
+		await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(INVITE_HINT)
+		await expect(memberRowsIn(panel)).toEqual([
+			NOA_ROW,
+			["M", "Maya (you)", "maya@example.com", MAYA_FINGERPRINT],
+		])
+		await expect(
+			within(listNamed(panel, "Members")).queryByRole("button"),
+		).toBeNull()
+		const own = rowOf(panel, "Maya (you)")
+		await expect(own.lastElementChild).toHaveAttribute("aria-hidden", "true")
+		await expect(own.lastElementChild?.getBoundingClientRect().width).toBe(28)
+	},
+})
+
+const HOST_OFFLINE_HINT =
+	"Studio is offline. You can invite people once Noa’s computer is back."
+
+export const MembersHostOffline = meta.story({
+	args: memberViewArgs({
+		members: [TOM_PENDING, NOA, MAYA],
+		blockedBy: "hostOffline",
+	}),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 9.3. Noa's computer is offline, so Maya can't invite anyone: the label, the field, Invite and every row action drop to 50% and are disabled, while the helper stays at full strength and names the host whose computer has to come back.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expectInviteBlocked(panel, HOST_OFFLINE_HINT)
+		const withdraw = within(panel).getByRole("button", {
+			name: "Withdraw the invitation to tom@example.com",
+		})
+		await expect(withdraw).toBeDisabled()
+		await expect(getComputedStyle(withdraw).opacity).toBe("0.5")
 	},
 })
 
@@ -1507,17 +1769,20 @@ const shareSwitchIn = (panel: HTMLElement) =>
 const expectNoQuestion = () =>
 	expect(screen.queryByRole("alertdialog")).toBe(null)
 
-const expectInviteBlocked = async (panel: HTMLElement) => {
+const expectInviteBlocked = async (
+	panel: HTMLElement,
+	hint = NOT_SHARED_HINT,
+) => {
 	const field = inviteFieldIn(panel)
 	const label = within(panel).getByText("Invite people")
-	const helper = within(panel).getByText(NOT_SHARED_HINT)
+	const helper = within(panel).getByText(hint)
+	const invite = within(panel).getByRole("button", { name: "Invite" })
 	await expect(field).toBeDisabled()
-	await expect(field).toHaveAccessibleDescription(NOT_SHARED_HINT)
-	await expect(
-		within(panel).getByRole("button", { name: "Invite" }),
-	).toBeDisabled()
+	await expect(field).toHaveAccessibleDescription(hint)
+	await expect(invite).toBeDisabled()
 	await expect(getComputedStyle(label).opacity).toBe("0.5")
 	await expect(getComputedStyle(field).opacity).toBe("0.5")
+	await expect(getComputedStyle(invite).opacity).toBe("0.5")
 	await expect(getComputedStyle(helper).opacity).toBe("1")
 }
 
@@ -1667,9 +1932,7 @@ export const MembersShared = meta.story({
 		await expect(
 			within(panel).getByRole("button", { name: "Invite" }),
 		).toBeEnabled()
-		await expect(field).toHaveAccessibleDescription(
-			"They join by signing in to Kiroshi with this email.",
-		)
+		await expect(field).toHaveAccessibleDescription(INVITE_HINT)
 	},
 })
 
@@ -1687,20 +1950,23 @@ export const MembersJoinedAndPending = meta.story({
 		const panel = await membersPanelIn()
 		await expect(shareSwitchIn(panel)).toBeChecked()
 		await expect(memberRowsIn(panel)).toEqual([
-			["S", "Steve", "steve@example.com", "Host"],
-			["L", "Lea", "lea@example.com", "Joined", "Remove"],
-			["sam@example.com", "Pending", "Remove"],
+			SAM_PENDING_ROW,
+			STEVE_ROW,
+			["L", "Lea", "lea@example.com"],
 		])
 	},
 })
 
 export const MembersSignedOut = meta.story({
-	args: notSharedArgs("signed-out"),
+	args: membersArgs(
+		{ space: STUDIO, isHosted: false, blockedBy: "signedOut" },
+		"signed-out",
+	),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Sharing goes through a Kiroshi account, so a signed-out reader gets no switch: the card says why and a primary Sign in, ending on the external-link glyph, takes the switch's place. Pressing it reports `onSignIn` once; where it leads is the app's call.",
+					"Sharing goes through a Kiroshi account, so a signed-out reader gets no switch: the card says why and a primary Sign in, ending on the external-link glyph, takes the switch's place, and the blocked invite field's helper says to sign in. Pressing Sign in reports `onSignIn` once; where it leads is the app's call.",
 			},
 		},
 	},
@@ -1713,7 +1979,7 @@ export const MembersSignedOut = meta.story({
 		)
 		const signIn = within(card).getByRole("button", { name: "Sign in" })
 		await expect(glyphIn(signIn, Icons.ExternalLink)).not.toBe(null)
-		await expectInviteBlocked(panel)
+		await expectInviteBlocked(panel, "Sign in to Kiroshi to invite someone.")
 
 		await userEvent.click(signIn)
 		await expect(args.onSignIn).toHaveBeenCalledOnce()

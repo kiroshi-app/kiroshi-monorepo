@@ -123,6 +123,7 @@ const bots = {
 		invitations: {
 			label: "Invitations",
 			invitedBy: "Invited by {{email}}",
+			expires: "Expires {{date}}",
 			accept: "Accept",
 			decline: "Decline",
 			joining: "Joining…",
@@ -134,6 +135,10 @@ const bots = {
 			},
 			withdrawn:
 				"{{email}} withdrew this invitation. Ask them to invite you again.",
+			expired:
+				"This invitation expired on {{date}}. Ask {{email}} to invite you again.",
+			hostOffline:
+				"{{host}}’s computer is offline. You can accept once it’s back.",
 		},
 		removed: {
 			notice: "{{host}} removed you from {{name}}.",

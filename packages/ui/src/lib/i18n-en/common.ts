@@ -10,7 +10,7 @@ const common = {
 		leave: {
 			title: "Leave {{name}}?",
 			description:
-				"Nothing is deleted on the host. You can join again with its link.",
+				"Nothing is deleted on the host. You can join again with a new invitation.",
 			action: "Leave space",
 		},
 	},
