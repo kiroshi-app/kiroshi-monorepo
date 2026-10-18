@@ -215,23 +215,19 @@ impl<R: Runtime> CompanionHost<R> {
 		let space_id = self.space(database).await?;
 		let hits = database
 			.search()
-			.messages(MessageSearchQuery { text: asked.query.clone(), space_id: space_id.clone() })
+			.messages(MessageSearchQuery {
+				text: asked.query.clone(),
+				space_id: space_id.clone(),
+				kind: asked.kind,
+			})
 			.await?;
-		let catalogue =
-			database.catalogue().search(CatalogueScope { query: asked.query, space_id }).await?;
-		let is_wanted = |kind: ConversationKind| asked.kind.is_none_or(|wanted| wanted == kind);
+		let catalogue = database
+			.catalogue()
+			.search(CatalogueScope { query: asked.query, space_id, kind: asked.kind })
+			.await?;
 		Ok(ConversationsFound {
-			conversations: catalogue
-				.chats
-				.into_iter()
-				.filter(|chat| is_wanted(chat.kind))
-				.map(found_conversation)
-				.collect(),
-			messages: hits
-				.into_iter()
-				.filter(|hit| is_wanted(hit.conversation_kind))
-				.map(found_message)
-				.collect(),
+			conversations: catalogue.chats.into_iter().map(found_conversation).collect(),
+			messages: hits.into_iter().map(found_message).collect(),
 		})
 	}
 
@@ -779,7 +775,8 @@ mod tests {
 	use crate::bundles;
 	use crate::conversations::contract::{COMPANION_ARRIVED_EVENT, COMPANION_SPOKE_EVENT};
 	use crate::db::repositories::conversations::{conversation_icons, DEFAULT_BOT_MODEL};
-	use crate::search::contract::MAX_QUERY_CHARS;
+	use crate::db::repositories::search::MAX_HITS;
+	use crate::search::contract::{MAX_MATCHES_PER_LIST, MAX_QUERY_CHARS};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const PATIENCE: Duration = Duration::from_secs(10);
@@ -1045,6 +1042,41 @@ mod tests {
 			.iter()
 			.filter_map(|conversation| conversation["id"].as_str())
 			.collect()
+	}
+
+	async fn a_crowd_of_beacons(app: &App<MockRuntime>) {
+		let rooms: Vec<String> = (0..=MAX_MATCHES_PER_LIST)
+			.map(|held| format!("('beacon-{held}', 'topic', 'personal', 'Beacon {held}', 10, 10)"))
+			.collect();
+		let said: Vec<String> = (1..=MAX_HITS + 1)
+			.map(|seq| {
+				format!(
+					"('m-crowd-{seq}', 'beacon-0', 't-crowd', NULL, {seq}, 'user',
+						'The beacon', 'complete', {})",
+					10 + seq
+				)
+			})
+			.collect();
+		let batch = format!(
+			"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at) VALUES
+				{},
+				('beacon-mission', 'mission', 'personal', 'Beacon mission', 0, 0);
+			INSERT INTO turns (id, conversation_id, seq, started_at) VALUES
+				('t-crowd', 'beacon-0', 1, 1), ('t-mission', 'beacon-mission', 1, 1);
+			INSERT INTO messages (id, conversation_id, turn_id, author_bot_id, seq, role, content,
+				completion_state, created_at) VALUES
+				{},
+				('m-mission', 'beacon-mission', 't-mission', NULL, 1, 'user',
+					'A long note on the harbour, the tides, the boats, the keepers and the beacon',
+					'complete', 1);",
+			rooms.join(", "),
+			said.join(", ")
+		);
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(move |connection| Ok(connection.execute_batch(&batch)?))
+			.await
+			.expect("the crowd is planted");
 	}
 
 	fn asking(operation: &str) -> Value {
@@ -2506,5 +2538,22 @@ mod tests {
 		assert_eq!(blank, json!({ "kind": "emptyQueryField" }));
 		assert_eq!(long, json!({ "kind": "queryTooLong", "limit": MAX_QUERY_CHARS }));
 		assert_eq!(unknown["kind"], json!("unreadableRequest"));
+	}
+
+	#[tokio::test]
+	async fn a_kind_is_counted_before_the_caps_so_a_crowd_of_another_kind_hides_nothing() {
+		let app = a_host("search-kind-caps").await;
+		a_crowd_of_beacons(&app).await;
+
+		let every = searched_from(&app, "c1", "b1", json!({ "query": "beacon" })).await;
+		let missions =
+			searched_from(&app, "c1", "b1", json!({ "query": "beacon", "kind": "mission" })).await;
+
+		assert_eq!(message_ids(&every).len(), MAX_HITS as usize);
+		assert!(!message_ids(&every).contains(&"m-mission"), "the crowd did not fill the cap");
+		assert_eq!(conversation_ids(&every).len(), MAX_MATCHES_PER_LIST);
+		assert!(!conversation_ids(&every).contains(&"beacon-mission"), "the rooms did not fill it");
+		assert_eq!(message_ids(&missions), vec!["m-mission"]);
+		assert_eq!(conversation_ids(&missions), vec!["beacon-mission"]);
 	}
 }

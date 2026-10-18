@@ -1,4 +1,5 @@
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::ToSql;
 use rusqlite::{params, Row};
 
 use crate::db::{Access, DatabaseError};
@@ -36,13 +37,23 @@ const SEARCH_MESSAGES: &str = "SELECT message_id, seq, conversation_id, kind, ti
 		JOIN conversations ON conversations.id = messages.conversation_id
 		WHERE message_search MATCH ?1
 	)
-	WHERE space_id = ?6
+	WHERE space_id = ?6 AND (?8 IS NULL OR kind = ?8)
 	ORDER BY relevance ASC, created_at DESC
 	LIMIT ?7";
 
 impl FromSql for ConversationKind {
 	fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
 		ConversationKind::parse(value.as_str()?).ok_or(FromSqlError::InvalidType)
+	}
+}
+
+impl ToSql for ConversationKind {
+	fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+		Ok(ToSqlOutput::from(match self {
+			ConversationKind::Main => "main",
+			ConversationKind::Topic => "topic",
+			ConversationKind::Mission => "mission",
+		}))
 	}
 }
 
@@ -77,7 +88,8 @@ impl SearchRepository {
 						ELLIPSIS,
 						SNIPPET_TOKENS,
 						query.space_id,
-						MAX_HITS
+						MAX_HITS,
+						query.kind
 					],
 					read_hit,
 				)?;

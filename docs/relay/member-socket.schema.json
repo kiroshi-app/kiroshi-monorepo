@@ -3785,6 +3785,16 @@
     },
     "MessageSearchQuery": {
       "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversationKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "spaceId": {
           "type": "string"
         },

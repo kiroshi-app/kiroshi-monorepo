@@ -620,8 +620,8 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
   `SearchRepository::messages`, in its order, each `{ "conversationId",
   "conversationTitle", "messageId", "author", "createdAt", "snippet" }`, the
   author `null` for the person and the snippet plain text;
-- both lists keep the caps those searches apply, and `kind` then drops every
-  entry of another kind; nothing matched answers two empty lists.
+- `kind` is applied inside both searches, before their caps: each list holds up
+  to its cap of entries of that kind; nothing matched answers two empty lists.
 
 ## Stop and shutdown
 
