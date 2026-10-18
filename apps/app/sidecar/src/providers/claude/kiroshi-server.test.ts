@@ -77,6 +77,7 @@ describe("kiroshiServer", () => {
 			"conversation_describe",
 			"conversation_list",
 			"conversation_read",
+			"conversation_close",
 		])
 	})
 })

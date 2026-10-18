@@ -9,9 +9,10 @@ use tauri::{AppHandle, Runtime};
 
 use super::contract::{
 	AuthorKind, CompanionCreated, CompanionError, CompanionInvited, Conversation,
-	ConversationAttached, ConversationDescribed, ConversationRead, ConversationsListed,
-	LastMessage, MessageAuthor, ReadMessage, SeatedCompanion,
+	ConversationAttached, ConversationClosed, ConversationDescribed, ConversationRead,
+	ConversationsListed, LastMessage, MessageAuthor, ReadMessage, SeatedCompanion,
 };
+use super::launch;
 use crate::agent::host::{Host, Refusal};
 use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
 use crate::attachments::contract::SubmittedAttachment;
@@ -22,16 +23,19 @@ use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
 	seat_participant,
 };
-use crate::conversations::contract::{BotDraft, CompanionSpoke, TranscriptStoreError};
+use crate::conversations::contract::{
+	BotDraft, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
+};
 use crate::db;
 use crate::db::repositories::conversations::{
 	Bot as StoredBot, ConversationDescription, ConversationDraft, ListedConversation, Listing,
-	Seat, LISTED_KINDS, TOPIC_KIND,
+	Seat, LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
 use crate::events::{
-	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED, FIRST_RUN_DONE,
+	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED, CONVERSATION_UPDATED,
+	FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
 
@@ -198,6 +202,67 @@ impl<R: Runtime> CompanionHost<R> {
 			icon: room.icon,
 			colour: room.color.map(|colour| colour.named().to_owned()),
 		})
+	}
+
+	async fn close(
+		&self,
+		database: &db::Database,
+		asked: Closed,
+	) -> Result<ConversationClosed, CompanionError> {
+		let conversation_id = asked.conversation;
+		match database.conversations().kind(conversation_id.clone()).await? {
+			Some(kind) if kind == TOPIC_KIND => self.leads(database, &conversation_id).await?,
+			Some(kind) if kind == MISSION_KIND => {
+				refuse_open_mission(database, &conversation_id).await?;
+				self.holds_seat(database, &conversation_id).await?;
+			}
+			Some(kind) => {
+				return Err(CompanionError::UnclosableConversation {
+					conversation_id,
+					conversation_kind: kind,
+				})
+			}
+			None => return Err(CompanionError::ConversationWithoutSpace { conversation_id }),
+		}
+		let archived = database
+			.conversations()
+			.archive_conversation(conversation_id)
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		launch::announce(
+			&self.app,
+			CONVERSATION_DELETED,
+			ConversationDeleted {
+				space_id: archived.space_id,
+				conversation_id: archived.id.clone(),
+			},
+		);
+		Ok(ConversationClosed {
+			conversation_id: archived.id,
+			title: archived.title,
+			archived: true,
+		})
+	}
+
+	async fn leads(
+		&self,
+		database: &db::Database,
+		conversation_id: &str,
+	) -> Result<(), CompanionError> {
+		let seats = database
+			.conversations()
+			.seats(conversation_id.to_owned())
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		match seats
+			.iter()
+			.any(|seat| seat.bot_id == self.bot_id && seat.left_at.is_none() && seat.is_lead())
+		{
+			true => Ok(()),
+			false => {
+				Err(CompanionError::CallerNotLead { conversation_id: conversation_id.to_owned() })
+			}
+		}
 	}
 
 	async fn attach(
@@ -399,6 +464,21 @@ async fn carries_seats(
 	}
 }
 
+async fn refuse_open_mission(
+	database: &db::Database,
+	conversation_id: &str,
+) -> Result<(), CompanionError> {
+	match database.missions().in_thread(conversation_id.to_owned(), 0).await? {
+		Some(threaded) if threaded.mission.closed_at.is_none() => {
+			Err(CompanionError::MissionStillOpen {
+				conversation_id: conversation_id.to_owned(),
+				mission_id: threaded.mission.id,
+			})
+		}
+		_ => Ok(()),
+	}
+}
+
 async fn conversation_answer(
 	database: &db::Database,
 	conversation_id: String,
@@ -566,6 +646,10 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Consulted = Self::read(payload)?;
 				Self::answered(self.consult(database, asked).await?)
 			}
+			Operation::ConversationClose => {
+				let asked: Closed = Self::read(payload)?;
+				Self::answered(self.close(database, asked).await?)
+			}
 		}
 	}
 }
@@ -593,6 +677,7 @@ pub enum Operation {
 	ConversationDescribe,
 	ConversationList,
 	ConversationRead,
+	ConversationClose,
 }
 
 #[derive(Debug, Deserialize)]
@@ -656,6 +741,12 @@ struct Consulted {
 	conversation: String,
 	limit: Option<i64>,
 	before: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Closed {
+	conversation: String,
 }
 
 fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
@@ -1632,6 +1723,115 @@ mod tests {
 			main,
 			json!({ "conversationId": "c1", "title": "Chat", "icon": "Sparkles", "colour": "red" })
 		);
+	}
+
+	const TWO_ERRANDS: &str = "
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at) VALUES
+			('running', 'mission', 'personal', 'Ship it', 1, 1),
+			('shipped', 'mission', 'personal', 'Shipped', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('running', 'b1', 'assistant', 1, 0), ('shipped', 'b1', 'assistant', 1, 0);
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+			objective, ticket_platform, ticket_external_id, ticket_url, ticket_title, opened_at,
+			closed_at) VALUES
+			('m1', 'c1', 'b1', 'running', 'Ship it', 'github', '1', 'https://kiroshi.test/1',
+				'Ship', 1, NULL),
+			('m2', 'c1', 'b1', 'shipped', 'Shipped', 'github', '2', 'https://kiroshi.test/2',
+				'Shipped', 1, 2);
+	";
+
+	fn a_close(conversation_id: &str) -> Value {
+		json!({
+			"subtype": "companion",
+			"operation": "conversationClose",
+			"payload": { "conversation": conversation_id },
+		})
+	}
+
+	async fn archived_at(app: &App<MockRuntime>, conversation_id: &'static str) -> Option<i64> {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT archived_at FROM conversations WHERE id = ?1",
+					[conversation_id],
+					|row| row.get(0),
+				)?)
+			})
+			.await
+			.expect("the archive reads")
+	}
+
+	async fn close_refused(app: &App<MockRuntime>, conversation_id: &'static str) -> Value {
+		let deleting = heard(app, crate::conversations::contract::DELETED_EVENT);
+		let refused = refusal(serving(app, "c1").answer(a_close(conversation_id)).await);
+		assert_eq!(archived_at(app, conversation_id).await, None, "a refused close archived");
+		assert!(deleting.try_recv().is_err(), "a refused close announced");
+		refused
+	}
+
+	#[tokio::test]
+	async fn the_lead_closes_a_room_once_and_it_leaves_the_roster_on_the_spot() {
+		let app = a_room("close-led").await;
+		let deleting = heard(&app, crate::conversations::contract::DELETED_EVENT);
+
+		let closed = serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let announced_room = announced(&deleting);
+		let first_archived_at = archived_at(&app, "room").await;
+		let closed_again =
+			serving(&app, "c1").answer(a_close("room")).await.expect("the room closes again");
+
+		let answer = json!({ "conversationId": "room", "title": "Plans", "archived": true });
+		assert_eq!(closed, answer);
+		assert_eq!(closed_again, answer);
+		assert_eq!(announced_room, json!({ "spaceId": "personal", "conversationId": "room" }));
+		assert!(first_archived_at.is_some(), "the close wrote no archived_at");
+		assert_eq!(archived_at(&app, "room").await, first_archived_at, "a second close moved it");
+		assert_eq!(roles_in(&app, "room").await.len(), 2, "a seat went with the close");
+	}
+
+	#[tokio::test]
+	async fn a_close_of_a_main_chat_an_unled_room_or_an_unknown_id_is_refused_and_archives_nothing()
+	{
+		let app = a_room("close-refused").await;
+
+		let main = close_refused(&app, "c1").await;
+		let unled = close_refused(&app, "unled").await;
+		let unknown = refusal(serving(&app, "c1").answer(a_close("absent")).await);
+
+		assert_eq!(
+			main,
+			json!({
+				"kind": "unclosableConversation",
+				"conversationId": "c1",
+				"conversationKind": "main",
+			})
+		);
+		assert_eq!(unled, json!({ "kind": "callerNotLead", "conversationId": "unled" }));
+		assert_eq!(
+			unknown,
+			json!({ "kind": "conversationWithoutSpace", "conversationId": "absent" })
+		);
+	}
+
+	#[tokio::test]
+	async fn a_mission_thread_closes_once_its_mission_has_closed_and_never_before() {
+		let app = a_room("close-mission").await;
+		planted(&app, TWO_ERRANDS).await;
+
+		let running = close_refused(&app, "running").await;
+		let shipped =
+			serving(&app, "c1").answer(a_close("shipped")).await.expect("the thread closes");
+
+		assert_eq!(
+			running,
+			json!({ "kind": "missionStillOpen", "conversationId": "running", "missionId": "m1" })
+		);
+		assert_eq!(
+			shipped,
+			json!({ "conversationId": "shipped", "title": "Shipped", "archived": true })
+		);
+		assert!(archived_at(&app, "shipped").await.is_some(), "the closed thread stayed open");
 	}
 
 	#[tokio::test]

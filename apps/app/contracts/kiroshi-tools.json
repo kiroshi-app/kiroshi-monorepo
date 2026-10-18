@@ -748,5 +748,23 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "conversation_close",
+		"description": "Archive a room you lead once its subject is settled, keeping every message in it.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"conversation": {
+					"type": "string",
+					"description": "The id of the room you lead to archive."
+				}
+			},
+			"required": [
+				"conversation"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

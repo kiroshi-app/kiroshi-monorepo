@@ -100,6 +100,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 		{ conversation: "c3", limit: 5, before: 12 },
 		"conversationRead",
 	],
+	["conversation_close", { conversation: "c3" }, "conversationClose"],
 ]
 
 const A_CONVERSATION = {
@@ -142,6 +143,7 @@ const answers: Record<string, unknown> = {
 		],
 		cursor: null,
 	},
+	conversationClose: { conversationId: "c3", title: "Trip", archived: true },
 }
 
 const NAMES_A_DEFAULT = /left out/
@@ -278,6 +280,12 @@ describe("companionTools", () => {
 		]) {
 			expect(colour?.description).toContain(name)
 		}
+	})
+
+	it("takes the room it closes and nothing else", () => {
+		const close = toolNamed(SESSION, "conversation_close")
+
+		expect(Object.keys(close.inputSchema)).toEqual(["conversation"])
 	})
 
 	it("describes the icon with a listed example and the file the list is read from", () => {

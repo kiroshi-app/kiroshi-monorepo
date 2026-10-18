@@ -103,6 +103,11 @@ const READ_LIMIT = "How many messages to answer, from 1 to 100; left out, 20."
 const BEFORE =
 	"The cursor the previous conversation_read answered, to read the messages strictly older than the ones it answered; left out, the latest messages are read, and a null cursor in the answer marks the first message of the conversation."
 
+const CLOSE =
+	"Archive a room you lead once its subject is settled, keeping every message in it."
+
+const CLOSED_ROOM = "The id of the room you lead to archive."
+
 type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
@@ -147,6 +152,10 @@ const CONSULTED: ToolInput = {
 	conversation: z.string().describe(READ_ROOM),
 	limit: z.number().int().optional().describe(READ_LIMIT),
 	before: z.number().int().optional().describe(BEFORE),
+}
+
+const CLOSED: ToolInput = {
+	conversation: z.string().describe(CLOSED_ROOM),
 }
 
 const DRAFTED: ToolInput = {
@@ -227,5 +236,8 @@ export const companionTools = (
 	),
 	tool("conversation_read", READ, CONSULTED, (input) =>
 		asked(session, "conversationRead", input),
+	),
+	tool("conversation_close", CLOSE, CLOSED, (input) =>
+		asked(session, "conversationClose", input),
 	),
 ]
