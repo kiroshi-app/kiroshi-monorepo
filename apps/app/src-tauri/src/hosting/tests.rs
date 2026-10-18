@@ -82,6 +82,7 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
+use crate::joined_spaces::test_host::joined_answer_held;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -5875,6 +5876,82 @@ fn a_join_link_used_twice_is_refused_as_used_and_a_payload_that_does_not_open_as
 			vec![
 				("guest".to_owned(), vec![first.member.keys.device_id().to_string()]),
 				("owner".to_owned(), vec![host]),
+			]
+		);
+	});
+}
+
+fn member_desktop(member: &SealingMember) -> (AppOfItsOwn, RemovedOnDrop) {
+	let database = temp_dir();
+	let app = an_app_of_its_own("hosting-member-desktop", mock_builder());
+	app.manage::<DatabaseState>(Ok(db::open(&database)));
+	app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&member.keys.secret()))));
+	let profile = app.path().app_data_dir().expect("the data folder resolves");
+	let identifier = app.config().identifier.clone();
+	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+	(app, database)
+}
+
+fn joined_bytes(answer: &Value) -> Vec<u8> {
+	let joined = answer["joined"].as_str().expect("a joined answer");
+	BASE64_STANDARD.decode(joined).expect("a base64 answer")
+}
+
+#[test]
+fn a_join_whose_answer_was_lost_is_answered_again_and_the_member_desktop_holds_its_key() {
+	run(async {
+		let mut harness = Harness::signed_in("join-lost-answer").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let raw_link = join_link(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("a join link");
+		let link = join_link_of(&raw_link);
+		let member = SealingMember::new("guest");
+
+		relay.sent(member.join_frame(&link, &link.secret)).await;
+		relay.addressed(&member, "joined").await;
+		let admitted = device_ids(&harness.devices().await);
+		relay.sent(member.join_frame(&link, &link.secret)).await;
+		let again = relay.addressed(&member, "joined").await;
+		let handover = member.joined_answer(&again, &link.secret);
+		let (desktop, _database) = member_desktop(&member);
+		let held = joined_answer_held(desktop.handle(), &raw_link, &joined_bytes(&again)).await;
+
+		assert_eq!(device_ids(&harness.devices().await), admitted);
+		assert_eq!(handover.key_id, harness.space_key(PERSONAL).key_id);
+		assert_eq!(held, Ok(Some((handover.key_id, handover.roster.version))));
+	});
+}
+
+#[test]
+fn a_rostered_device_joining_under_a_fresh_link_is_answered_and_leaves_that_link_unused() {
+	run(async {
+		let mut harness = Harness::signed_in("join-rostered-fresh").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let first = harness.link_for("guest").await;
+		let admitted = harness.joined(&mut relay, &first, "guest").await;
+		let fresh = harness.link_for("guest").await;
+
+		relay.sent(admitted.member.join_frame(&fresh, &fresh.secret)).await;
+		let answer = relay.addressed(&admitted.member, "joined").await;
+		let handover = admitted.member.joined_answer(&answer, &fresh.secret);
+		let state = harness.app.state::<DatabaseState>();
+		let relay_store = state.as_ref().expect("the database").space_relay();
+		let secrets = relay_store.join_secrets(PERSONAL.to_owned()).await.expect("the secrets");
+		let unused = secrets.iter().filter(|secret| !secret.is_used).count();
+
+		assert_eq!(unused, 1);
+		assert_eq!(handover.roster.rows.len(), admitted.rows.len());
+		let device_id = admitted.member.keys.device_id().to_string();
+		assert_eq!(
+			device_ids(&harness.devices().await),
+			vec![
+				("guest".to_owned(), vec![device_id]),
+				("owner".to_owned(), vec![harness.host_keys().device_id().to_string()]),
 			]
 		);
 	});

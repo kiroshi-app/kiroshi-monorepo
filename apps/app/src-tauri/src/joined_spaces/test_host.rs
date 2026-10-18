@@ -4,7 +4,10 @@ use base64::prelude::{Engine as _, BASE64_STANDARD};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Runtime};
 
-use super::held::{device_keys, kept};
+use super::contract::JoinedSpaceError;
+use super::held::{device_keys, held, kept};
+use super::join::handed;
+use super::join_link::parsed;
 use super::roster_set::fixtures::{handover_of, signed_set, Device};
 use super::roster_set::{verified_set, Handed};
 use crate::crypto::device_keys::DeviceKeys;
@@ -124,4 +127,16 @@ impl SealingHost {
 		let plaintext = serde_json::from_slice(&plaintext).expect("a json plaintext");
 		MemberFrame { plaintext, challenge: fields.challenge }
 	}
+}
+
+pub(crate) async fn joined_answer_held<R: Runtime>(
+	app: &AppHandle<R>,
+	link: &str,
+	joined: &[u8],
+) -> Result<Option<(u32, u64)>, JoinedSpaceError> {
+	let link = parsed(link).ok_or(JoinedSpaceError::MalformedLink)?;
+	let handed = handed(&link, &device_keys(app)?, joined)?;
+	kept(app, &link.instance_id, &handed).await?;
+	let held = held(app, &link.instance_id).await?;
+	Ok(held.map(|held| (held.space.key_id, held.roster.set.version)))
 }

@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use super::handover;
-use super::roster::{signed_row, Enrolled};
+use super::roster::{self, signed_row, Enrolled};
 use super::wire::{unstored, Dropped, HostKeys, Refusal};
 use crate::crypto::device_keys::DeviceId;
 use crate::crypto::frame::VERSION;
@@ -76,11 +76,37 @@ impl HostedSpace<'_> {
 			let request = join::open(&secret.secret, self.keys.device.agreement(), sealed).ok()?;
 			Some((secret, request))
 		});
-		match matched {
-			None => Ok(self.refused(&join.from, JoinRefused::Unknown)),
-			Some((secret, _)) if secret.is_used => Ok(self.refused(&join.from, JoinRefused::Used)),
-			Some((secret, request)) => self.admitted(&join.from, &secret, &request).await,
+		let Some((secret, request)) = matched else {
+			return Ok(self.refused(&join.from, JoinRefused::Unknown));
+		};
+		if self.is_rostered(&request).await? {
+			eprintln!(
+				"hosted space {} answered again the join of rostered device {} at relay device {}",
+				self.space_id,
+				DeviceId::of(&request.signing),
+				json!(join.from)
+			);
+			return self.joined(&join.from, &secret, &request).await;
 		}
+		if secret.is_used {
+			return Ok(self.refused(&join.from, JoinRefused::Used));
+		}
+		self.admitted(&join.from, &secret, &request).await
+	}
+
+	async fn is_rostered(&self, request: &JoinRequest) -> Result<bool, Dropped> {
+		let device_id = DeviceId::of(&request.signing).to_string();
+		let row = self
+			.database
+			.space_relay()
+			.roster_row(self.space_id.to_owned(), device_id)
+			.await
+			.map_err(unstored)?;
+		let host = self.keys.device.signing_public();
+		let rostered = row.and_then(|row| roster::verified(&host, self.space_id, &row).ok());
+		Ok(rostered.is_some_and(|rostered| {
+			rostered.signing == request.signing && rostered.agreement == request.agreement
+		}))
 	}
 
 	fn opens(&self, sealed: &[u8]) -> bool {

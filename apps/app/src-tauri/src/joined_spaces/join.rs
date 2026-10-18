@@ -256,7 +256,11 @@ fn refused(instance_id: &str, refusal: &str) -> JoinedSpaceError {
 	}
 }
 
-fn handed(link: &JoinLink, device: &DeviceKeys, joined: &[u8]) -> Result<Handed, JoinedSpaceError> {
+pub(super) fn handed(
+	link: &JoinLink,
+	device: &DeviceKeys,
+	joined: &[u8],
+) -> Result<Handed, JoinedSpaceError> {
 	let answer = join::opened_answer(link.secret.as_slice(), device.agreement(), joined)
 		.map_err(|_| JoinedSpaceError::BadSignature)?;
 	let handover: KeyHandover =
