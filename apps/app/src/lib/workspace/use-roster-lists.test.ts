@@ -258,6 +258,7 @@ const STUDIO: JoinedSpace = {
 	hostUrl: "wss://cloud.kiroshi.test/instances/studio/relay/member",
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
+	state: "online",
 }
 
 const STUDIO_ROW = "joined:joined-studio"

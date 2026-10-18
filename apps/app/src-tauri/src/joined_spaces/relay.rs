@@ -19,6 +19,7 @@ use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
+use super::waiting::{self, WaitingJoin};
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
 use crate::db;
@@ -43,6 +44,7 @@ pub struct RelayGuests {
 	cloud: Cloud,
 	guests: Mutex<HashMap<String, Guest>>,
 	removed: Mutex<HashSet<String>>,
+	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	turn: tokio::sync::Mutex<()>,
 	answer_bound: Duration,
 }
@@ -100,6 +102,7 @@ impl RelayGuests {
 			cloud: Cloud::new(api_url),
 			guests: Mutex::new(HashMap::new()),
 			removed: Mutex::new(HashSet::new()),
+			waiting: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
 			answer_bound: HOST_ANSWER_BOUND,
 		}
@@ -137,6 +140,17 @@ impl RelayGuests {
 		self.guests.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
+	pub(super) fn waiting(&self) -> MutexGuard<'_, HashMap<String, WaitingJoin>> {
+		self.waiting.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	async fn waiting_stopped(&self, id: &str) {
+		let waiting = self.waiting().remove(id);
+		if let Some(waiting) = waiting {
+			waiting.finished(id).await;
+		}
+	}
+
 	fn reached(&self, id: &str) -> Option<Reached> {
 		self.guests().get(id).map(|guest| Reached {
 			origin: guest.origin.clone(),
@@ -154,6 +168,11 @@ impl RelayGuests {
 	#[cfg(test)]
 	pub(crate) fn is_running(&self, id: &str) -> bool {
 		self.guests().contains_key(id)
+	}
+
+	#[cfg(test)]
+	pub(crate) fn is_waiting(&self, id: &str) -> bool {
+		self.waiting().contains_key(id)
 	}
 
 	#[cfg(test)]
@@ -211,13 +230,14 @@ pub async fn joined<R: Runtime>(
 		id: uuid::Uuid::new_v4().to_string(),
 		reach,
 		remote_space_id: None,
-		name: name.or(held_name).unwrap_or(instance_id),
+		name: name.or(held_name).unwrap_or_else(|| instance_id.clone()),
 	};
+	let state = held::state_of(app, &instance_id)?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
-	Ok(JoinedSpace::presented(joined, guests.cloud()))
+	Ok(JoinedSpace::presented(joined, guests.cloud(), state))
 }
 
 pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
@@ -227,6 +247,9 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 	let _turn = guests.turn.lock().await;
 	if let Err(failure) = memberships_followed(app, &guests).await {
 		eprintln!("the joined spaces did not follow the cloud memberships: {failure}");
+	}
+	if let Err(failure) = waiting::joins_started(app, &guests).await {
+		eprintln!("the joined spaces waiting for their host were not all followed: {failure:?}");
 	}
 }
 
@@ -302,6 +325,7 @@ async fn unlisted_dropped<R: Runtime>(
 	if let Some(guest) = guest {
 		finished(id, guest).await;
 	}
+	guests.waiting_stopped(id).await;
 	entry_evicted(app, id).await.map_err(described)
 }
 
@@ -344,7 +368,8 @@ async fn started<R: Runtime>(
 	if let Some(reached) = guests.reached(id) {
 		return Ok((found, reached));
 	}
-	let held = held::held(app, &instance_id).await?.ok_or(JoinedSpaceError::NeedsJoinLink)?;
+	let waiting = || JoinedSpaceError::WaitingForHost { id: id.to_owned() };
+	let held = held::held(app, &instance_id).await?.ok_or_else(waiting)?;
 	let link = Arc::new(MemberLink::new());
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
@@ -406,6 +431,7 @@ pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), Joined
 	if let Some(guest) = guest {
 		finished(id, guest).await;
 	}
+	guests.waiting_stopped(id).await;
 	Ok(())
 }
 
@@ -440,6 +466,10 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	let running: Vec<(String, Guest)> = guests.guests().drain().collect();
 	for (id, guest) in running {
 		finished(&id, guest).await;
+	}
+	let waiting: Vec<(String, WaitingJoin)> = guests.waiting().drain().collect();
+	for (id, waiting) in waiting {
+		waiting.finished(&id).await;
 	}
 	if let Err(failure) = relay_entries_dropped(app).await {
 		eprintln!("the relay spaces were not all dropped on sign out: {failure:?}");

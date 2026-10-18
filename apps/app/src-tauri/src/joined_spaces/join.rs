@@ -6,72 +6,54 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
+use zeroize::Zeroizing;
 
 use super::commands::ready;
 use super::contract::{JoinedSpace, JoinedSpaceError};
 use super::held::{self, device_keys};
-use super::join_link::{self, JoinLink};
 use super::relay::{self, RelayGuests, RelayJoinError};
 use super::roster_set::{verified_handover, Handed};
-use crate::account::cloud::{
-	Cloud, DeviceRegisterError, InstancesError, InvitationCallError, MeError,
-};
+use crate::account::cloud::{Cloud, DeviceRegisterError, MeError};
 use crate::account::session::{self, AccountSession};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::frame::VERSION;
-use crate::crypto::join;
+use crate::crypto::sealed_box;
 use crate::db;
 use crate::hosting::handover::KeyHandover;
 use crate::hosting::relay::{opened, Opened, Socket};
-use crate::invitations::{self, contract::InvitationError};
 
 const MEMBERSHIP_ENDED: u16 = 4003;
 
-enum Answered {
+const PENDING: &str = "pending";
+
+pub(super) enum Answer {
 	Joined(Vec<u8>),
 	Refused(String),
 }
 
-pub(super) async fn joined_by_link<R: Runtime>(
+pub async fn joined<R: Runtime>(
 	app: &AppHandle<R>,
-	link: &str,
+	instance_id: String,
+	name: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
-	let link = join_link::parsed(link).ok_or(JoinedSpaceError::MalformedLink)?;
 	let device = device_keys(app)?;
-	let sealed = join::seal(link.secret.as_slice(), &device, &link.host)
-		.map_err(|_| JoinedSpaceError::MalformedLink)?;
 	let bearer = bearer_of(app)?;
-	let guests = app.state::<RelayGuests>();
-	let cloud = guests.cloud();
-	let name = admitted(app, cloud, &bearer, &link.instance_id).await?;
-	let relay_device_id = relay_device_of(app, cloud, &bearer, &device).await?;
-	let frame = json!({
-		"v": VERSION,
-		"instance": link.instance_id,
-		"join": BASE64_STANDARD.encode(sealed),
-	});
-	let url = relay::member_socket_url(cloud, &link.instance_id, &relay_device_id);
-	let answered = answered(app, url, &bearer, frame.to_string(), &link.instance_id).await?;
-	let joined = match answered {
-		Answered::Joined(joined) => joined,
-		Answered::Refused(refusal) => return Err(refused(&link.instance_id, &refusal)),
-	};
-	let handed = handed(&link, &device, &joined)?;
-	if !held::kept(app, &link.instance_id, &handed).await? {
-		eprintln!(
-			"the join of instance {} answered a roster older than the one held",
-			link.instance_id
-		);
-		return Err(JoinedSpaceError::BadSignature);
+	let url = member_socket_of(app, &bearer, &device, &instance_id).await?;
+	if let Some(joined) = answered(app, url, &bearer, &instance_id).await? {
+		kept_answer(app, &instance_id, &device, &joined).await?;
 	}
-	relay::joined(app, link.instance_id, name).await.map_err(|failure| match failure {
+	relay::joined(app, instance_id, Some(name)).await.map_err(|failure| match failure {
 		RelayJoinError::SignedOut => JoinedSpaceError::NeedsSignIn,
 		RelayJoinError::Account(detail) => JoinedSpaceError::SessionStore { detail },
 		RelayJoinError::Joined(failure) => failure,
 	})
 }
 
-fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, JoinedSpaceError> {
+pub(super) fn join_frame(instance_id: &str) -> String {
+	json!({ "v": VERSION, "instance": instance_id, "join": {} }).to_string()
+}
+
+pub(super) fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, JoinedSpaceError> {
 	match app.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => Ok(bearer),
 		Ok(None) => Err(JoinedSpaceError::NeedsSignIn),
@@ -79,63 +61,20 @@ fn bearer_of<R: Runtime>(app: &AppHandle<R>) -> Result<String, JoinedSpaceError>
 	}
 }
 
-fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> JoinedSpaceError {
+pub(super) fn revoked<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> JoinedSpaceError {
 	session::revoked(app, bearer);
 	JoinedSpaceError::SessionRevoked
 }
 
-async fn admitted<R: Runtime>(
+pub(super) async fn member_socket_of<R: Runtime>(
 	app: &AppHandle<R>,
-	cloud: &Cloud,
 	bearer: &str,
+	device: &DeviceKeys,
 	instance_id: &str,
-) -> Result<Option<String>, JoinedSpaceError> {
-	let pending = match cloud.invitations(bearer).await {
-		Ok(listed) => listed.into_iter().find(|invitation| invitation.instance_id == instance_id),
-		Err(InvitationCallError::Revoked) => return Err(revoked(app, bearer)),
-		Err(InvitationCallError::Offline(detail) | InvitationCallError::Unreachable(detail)) => {
-			return Err(JoinedSpaceError::RelayUnreachable { detail })
-		}
-		Err(refusal) => {
-			return Err(JoinedSpaceError::RelayRefused { detail: format!("{refusal:?}") })
-		}
-	};
-	if let Some(invitation) = pending {
-		return match invitations::accept(app, instance_id.to_owned()).await {
-			Ok(joined) => Ok(Some(joined.name)),
-			Err(InvitationError::Withdrawn | InvitationError::UnknownInvitation) => {
-				Err(JoinedSpaceError::NoInvitation {
-					inviter_email: Some(invitation.inviter_email),
-				})
-			}
-			Err(failure) => Err(acceptance_failed(failure)),
-		};
-	}
-	let instances = match cloud.instances(bearer).await {
-		Ok(instances) => instances,
-		Err(InstancesError::Revoked) => return Err(revoked(app, bearer)),
-		Err(InstancesError::Unreachable(detail)) => {
-			return Err(JoinedSpaceError::RelayUnreachable { detail })
-		}
-	};
-	instances
-		.into_iter()
-		.find(|instance| instance.id == instance_id)
-		.map(|instance| Some(instance.name))
-		.ok_or(JoinedSpaceError::NoInvitation { inviter_email: None })
-}
-
-fn acceptance_failed(failure: InvitationError) -> JoinedSpaceError {
-	match failure {
-		InvitationError::NotSignedIn => JoinedSpaceError::NeedsSignIn,
-		InvitationError::Offline { reason } | InvitationError::ServersUnreachable { reason } => {
-			JoinedSpaceError::RelayUnreachable { detail: reason }
-		}
-		InvitationError::Storage { detail } => JoinedSpaceError::SessionStore { detail },
-		InvitationError::Withdrawn | InvitationError::UnknownInvitation => {
-			JoinedSpaceError::NoInvitation { inviter_email: None }
-		}
-	}
+) -> Result<String, JoinedSpaceError> {
+	let cloud = app.state::<RelayGuests>().inner().cloud();
+	let relay_device_id = relay_device_of(app, cloud, bearer, device).await?;
+	Ok(relay::member_socket_url(cloud, instance_id, &relay_device_id))
 }
 
 async fn relay_device_of<R: Runtime>(
@@ -179,27 +118,27 @@ async fn answered<R: Runtime>(
 	app: &AppHandle<R>,
 	url: String,
 	bearer: &str,
-	frame: String,
 	instance_id: &str,
-) -> Result<Answered, JoinedSpaceError> {
+) -> Result<Option<Vec<u8>>, JoinedSpaceError> {
 	let mut socket = match opened(url, bearer).await {
 		Opened::Socket(socket) => socket,
 		Opened::Revoked => return Err(revoked(app, bearer)),
 		Opened::Forbidden | Opened::Unknown => {
 			return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 		}
-		Opened::Unreachable(detail) => return Err(JoinedSpaceError::RelayUnreachable { detail }),
+		Opened::Unreachable(reason) => return Ok(waiting(instance_id, &reason)),
 	};
-	if let Err(failure) = socket.send(Message::text(frame)).await {
-		return Err(JoinedSpaceError::RelayUnreachable {
-			detail: format!("the join frame did not leave: {failure}"),
-		});
-	}
 	let bound = app.state::<RelayGuests>().answer_bound();
-	let offline = || JoinedSpaceError::HostOffline { id: instance_id.to_owned() };
-	let answered = timeout(bound, next_answer(&mut socket, instance_id))
-		.await
-		.unwrap_or_else(|_| Err(offline()));
+	let answered = match socket.send(Message::text(join_frame(instance_id))).await {
+		Err(failure) => {
+			Ok(waiting(instance_id, &format!("the join frame did not leave: {failure}")))
+		}
+		Ok(()) => {
+			timeout(bound, next_answer(&mut socket, instance_id)).await.unwrap_or_else(|_| {
+				Ok(waiting(instance_id, &format!("no joined answer came within {bound:?}")))
+			})
+		}
+	};
 	let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 	if let Err(failure) = socket.send(Message::Close(Some(close))).await {
 		eprintln!(
@@ -209,79 +148,92 @@ async fn answered<R: Runtime>(
 	answered
 }
 
-async fn next_answer(socket: &mut Socket, instance_id: &str) -> Result<Answered, JoinedSpaceError> {
+fn waiting(instance_id: &str, reason: &str) -> Option<Vec<u8>> {
+	eprintln!("the join of instance {instance_id} waits for its host: {reason}");
+	None
+}
+
+async fn next_answer(
+	socket: &mut Socket,
+	instance_id: &str,
+) -> Result<Option<Vec<u8>>, JoinedSpaceError> {
 	while let Some(frame) = socket.next().await {
 		match frame {
-			Ok(Message::Text(text)) => {
-				if let Some(answered) = answer_of(text.as_str()) {
-					return answered;
+			Ok(Message::Text(text)) => match answer_of(text.as_str()).transpose()? {
+				Some(Answer::Joined(joined)) => return Ok(Some(joined)),
+				Some(Answer::Refused(refusal)) if is_pending(&refusal) => {
+					return Ok(waiting(instance_id, "the host has not admitted this device yet"))
 				}
-			}
+				Some(Answer::Refused(refusal)) => return Err(refused(instance_id, &refusal)),
+				None => {}
+			},
 			Ok(Message::Close(Some(close))) if u16::from(close.code) == MEMBERSHIP_ENDED => {
 				return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 			}
 			Ok(Message::Close(close)) => {
-				eprintln!("the relay closed the join socket of instance {instance_id}: {close:?}");
-				return Err(JoinedSpaceError::HostOffline { id: instance_id.to_owned() });
+				return Ok(waiting(instance_id, &format!("the relay closed the socket: {close:?}")))
 			}
 			Ok(_) => {}
 			Err(failure) => {
-				return Err(JoinedSpaceError::RelayUnreachable {
-					detail: format!("the join socket failed: {failure}"),
-				})
+				return Ok(waiting(instance_id, &format!("the join socket failed: {failure}")))
 			}
 		}
 	}
-	Err(JoinedSpaceError::RelayUnreachable { detail: "the join socket ended".to_owned() })
+	Ok(waiting(instance_id, "the join socket ended"))
 }
 
-fn answer_of(text: &str) -> Option<Result<Answered, JoinedSpaceError>> {
+pub(super) fn answer_of(text: &str) -> Option<Result<Answer, JoinedSpaceError>> {
 	let envelope: Value = serde_json::from_str(text).ok()?;
 	if let Some(refusal) = envelope.get("join_refused").and_then(Value::as_str) {
-		return Some(Ok(Answered::Refused(refusal.to_owned())));
+		return Some(Ok(Answer::Refused(refusal.to_owned())));
 	}
 	let joined = envelope.get("joined")?;
 	let decoded = joined.as_str().and_then(|joined| BASE64_STANDARD.decode(joined).ok());
-	Some(decoded.map(Answered::Joined).ok_or(JoinedSpaceError::BadSignature))
+	Some(decoded.map(Answer::Joined).ok_or(JoinedSpaceError::BadSignature))
+}
+
+pub(super) fn is_pending(refusal: &str) -> bool {
+	refusal == PENDING
 }
 
 fn refused(instance_id: &str, refusal: &str) -> JoinedSpaceError {
 	eprintln!("the host of instance {instance_id} refused the join: {}", json!(refusal));
-	match refusal {
-		"used" | "unknown" => JoinedSpaceError::LinkUsed,
-		"malformed" => JoinedSpaceError::MalformedLink,
-		other => {
-			JoinedSpaceError::RelayRefused { detail: format!("join_refused {}", json!(other)) }
-		}
-	}
+	JoinedSpaceError::RelayRefused { detail: format!("join_refused {}", json!(refusal)) }
 }
 
-pub(super) fn handed(
-	link: &JoinLink,
+pub(super) async fn kept_answer<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
 	device: &DeviceKeys,
 	joined: &[u8],
-) -> Result<Handed, JoinedSpaceError> {
-	let answer = join::opened_answer(link.secret.as_slice(), device.agreement(), joined)
+) -> Result<(), JoinedSpaceError> {
+	let handed = handed(device, joined)?;
+	let held = held::roster(app, instance_id).await?;
+	if held.is_some_and(|held| held.host != handed.roster.host) {
+		eprintln!("the join of instance {instance_id} answered a host other than the one held");
+		return Err(JoinedSpaceError::BadSignature);
+	}
+	if !held::kept(app, instance_id, &handed).await? {
+		eprintln!("the join of instance {instance_id} answered a roster older than the one held");
+		return Err(JoinedSpaceError::BadSignature);
+	}
+	Ok(())
+}
+
+pub(super) fn handed(device: &DeviceKeys, joined: &[u8]) -> Result<Handed, JoinedSpaceError> {
+	let answer = sealed_box::open(device.agreement(), joined)
+		.map(Zeroizing::new)
 		.map_err(|_| JoinedSpaceError::BadSignature)?;
 	let handover: KeyHandover =
 		serde_json::from_slice(&answer).map_err(|_| JoinedSpaceError::BadSignature)?;
-	let handed = verified_handover(handover, None, &device.device_id())?;
-	if handed.roster.host.agreement != link.host {
-		return Err(JoinedSpaceError::BadSignature);
-	}
-	Ok(handed)
+	verified_handover(handover, None, &device.device_id())
 }
 
 #[cfg(test)]
 mod tests {
-	use zeroize::Zeroizing;
-
 	use super::super::roster_set::fixtures::{handover_of, signed_set, Device};
 	use super::*;
-	use crate::crypto::sealed_box;
 	use crate::crypto::space_key::HeldSpaceKey;
-
-	const SECRET: [u8; 32] = [5; 32];
 
 	struct Joining {
 		host: DeviceKeys,
@@ -296,20 +248,11 @@ mod tests {
 			}
 		}
 
-		fn link(&self, secret: [u8; 32]) -> JoinLink {
-			JoinLink {
-				instance_id: "instance-1".to_owned(),
-				host: self.host.agreement_public(),
-				secret: Zeroizing::new(secret),
-			}
-		}
-
 		fn joined(&self, devices: &[Device<'_>]) -> Vec<u8> {
 			let space = HeldSpaceKey::first().expect("randomness");
 			let set = signed_set(&self.host, space.key_id, 1, devices);
 			let answer = serde_json::to_vec(&handover_of(&space, set)).expect("a json handover");
-			let boxed = [join::answer_mac(&SECRET, &answer).as_slice(), &answer].concat();
-			sealed_box::seal(&self.member.agreement_public(), &boxed).expect("the box seals")
+			sealed_box::seal(&self.member.agreement_public(), &answer).expect("the box seals")
 		}
 
 		fn both(&self) -> [Device<'_>; 2] {
@@ -321,29 +264,28 @@ mod tests {
 	}
 
 	#[test]
-	fn a_joined_answer_under_the_link_secret_hands_the_key_and_the_roster() {
+	fn a_joined_answer_sealed_to_this_device_hands_the_key_and_the_roster() {
 		let joining = Joining::new();
 
-		let handed =
-			handed(&joining.link(SECRET), &joining.member, &joining.joined(&joining.both()));
+		let handed = handed(&joining.member, &joining.joined(&joining.both()));
 
 		let handed = handed.expect("the answer verifies");
 		assert_eq!(handed.space.key_id, 1);
 		assert_eq!(handed.roster.own.relay_device_id, "r-member");
+		assert_eq!(handed.roster.host.relay_device_id, "r-host");
 	}
 
 	#[test]
-	fn a_joined_answer_another_secret_keyed_or_another_host_signed_fails_the_signature() {
+	fn a_joined_answer_sealed_to_another_device_or_unreadable_fails_the_signature() {
 		let joining = Joining::new();
 		let joined = joining.joined(&joining.both());
-		let mut elsewhere = joining.link(SECRET);
-		elsewhere.host = DeviceKeys::generate().expect("randomness").agreement_public();
+		let elsewhere = DeviceKeys::generate().expect("randomness");
 
-		let guessed = handed(&joining.link([6; 32]), &joining.member, &joined).err();
-		let foreign = handed(&elsewhere, &joining.member, &joined).err();
+		let foreign = handed(&elsewhere, &joined).err();
+		let truncated = handed(&joining.member, &joined[..40]).err();
 
-		assert_eq!(guessed, Some(JoinedSpaceError::BadSignature));
 		assert_eq!(foreign, Some(JoinedSpaceError::BadSignature));
+		assert_eq!(truncated, Some(JoinedSpaceError::BadSignature));
 	}
 
 	#[test]
@@ -351,16 +293,26 @@ mod tests {
 		let joining = Joining::new();
 		let host_only = joining.joined(&joining.both()[..1]);
 
-		let refused = handed(&joining.link(SECRET), &joining.member, &host_only).err();
+		let refused = handed(&joining.member, &host_only).err();
 
 		assert_eq!(refused, Some(JoinedSpaceError::NotInRoster));
 	}
 
 	#[test]
-	fn every_join_refusal_maps_to_its_typed_error() {
-		assert_eq!(refused("i", "used"), JoinedSpaceError::LinkUsed);
-		assert_eq!(refused("i", "unknown"), JoinedSpaceError::LinkUsed);
-		assert_eq!(refused("i", "malformed"), JoinedSpaceError::MalformedLink);
+	fn the_join_frame_names_the_instance_and_carries_no_key() {
+		let frame: Value = serde_json::from_str(&join_frame("instance-1")).expect("a json frame");
+
+		assert_eq!(frame, json!({ "v": 2, "instance": "instance-1", "join": {} }));
+	}
+
+	#[test]
+	fn a_pending_refusal_is_told_apart_from_any_other() {
+		let pending = answer_of(r#"{"join_refused":"pending"}"#);
+		let other = answer_of(r#"{"join_refused":"later"}"#);
+
+		assert!(matches!(pending, Some(Ok(Answer::Refused(refusal))) if is_pending(&refusal)));
+		assert!(matches!(other, Some(Ok(Answer::Refused(refusal))) if !is_pending(&refusal)));
 		assert!(matches!(refused("i", "later"), JoinedSpaceError::RelayRefused { .. }));
+		assert!(answer_of(r#"{"hello":{}}"#).is_none());
 	}
 }

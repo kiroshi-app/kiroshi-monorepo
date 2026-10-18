@@ -345,15 +345,29 @@ const chat = {
 					description:
 						"Le cloud de Kiroshi n’a pas confirmé votre départ. Réessayez dans un instant.",
 				},
-				malformedLink: {
-					title: "Impossible de lire ce lien d’invitation",
-					description:
-						"Le lien est incomplet ou abîmé. Demandez un nouveau lien à l’hôte.",
+				invitationExpired: {
+					title: "Cette invitation a expiré",
+					description: "Demandez à l’hôte de vous inviter à nouveau.",
 				},
-				linkUsed: {
-					title: "Ce lien d’invitation a déjà servi",
+				invitationWithdrawn: {
+					title: "Cette invitation a été retirée",
 					description:
-						"Un lien n’admet qu’un seul ordinateur. Demandez un nouveau lien à l’hôte.",
+						"L’hôte l’a annulée. Demandez-lui de vous inviter à nouveau.",
+				},
+				invitationUsed: {
+					title: "Cette invitation a déjà servi",
+					description:
+						"Une invitation ne s’accepte qu’une fois. Demandez à l’hôte de vous inviter à nouveau.",
+				},
+				invitationOtherEmail: {
+					title: "Cette invitation vise une autre adresse",
+					description:
+						"Connectez-vous avec l’adresse invitée par l’hôte, puis acceptez-la à nouveau.",
+				},
+				couldNotAccept: {
+					title: "Impossible d’accepter cette invitation",
+					description:
+						"Le cloud de Kiroshi ne l’a pas prise en compte. Vérifiez votre connexion, puis réessayez.",
 				},
 				noInvitation: {
 					title: "Vous n’êtes pas invité dans cet espace",
@@ -375,10 +389,10 @@ const chat = {
 					description:
 						"Son hôte ne l’accepte plus. Demandez un nouveau lien à l’hôte pour le rejoindre.",
 				},
-				needsJoinLink: {
-					title: "Cet espace demande un lien d’invitation",
+				waitingForHost: {
+					title: "En attente de l’hôte",
 					description:
-						"Cet ordinateur n’a encore aucune clé pour lui. Demandez un lien à l’hôte, puis ouvrez-le ici.",
+						"Cet espace s’ouvrira dès que son hôte sera en ligne et acceptera cet ordinateur.",
 				},
 				keyStore: {
 					title: "Impossible de lire les clés de cet ordinateur",

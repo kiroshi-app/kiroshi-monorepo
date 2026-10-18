@@ -24,6 +24,7 @@ import { spaceQueryKeys } from "./space-query-keys"
 
 import { INVITATION_CHANGED_EVENT, type Invitation } from "../bindings"
 import { isDesktopHost } from "../host"
+import { joinRejectionNoticeOf } from "../host/join-refusal"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 
 type InvitationStatus =
@@ -47,6 +48,11 @@ const NO_INVITATIONS: Invitation[] = []
 const RAISED_IN = "use-invitations"
 
 const NOTICED = { failureNotice: refusalNoticeOf, raisedIn: RAISED_IN }
+
+const ACCEPT_NOTICED = {
+	failureNotice: joinRejectionNoticeOf,
+	raisedIn: RAISED_IN,
+}
 
 const identityOf = ({ instanceId, invitedAt }: Invitation) =>
 	`${instanceId}@${invitedAt}`
@@ -125,7 +131,7 @@ export const useInvitations = (
 
 	const acceptRun = useMutation({
 		mutationFn: (invitation: Invitation) =>
-			acceptOutcomeOf(transport, invitation.instanceId),
+			acceptOutcomeOf(transport, invitation.id),
 		onMutate: (invitation) =>
 			mark(invitation, { state: "accepting", invitation }),
 		onSuccess: async (outcome, invitation) => {
@@ -141,12 +147,12 @@ export const useInvitations = (
 			await joinedSpaces.admit(outcome.joined)
 		},
 		onError: (_reason, invitation) => mark(invitation, null),
-		meta: NOTICED,
+		meta: ACCEPT_NOTICED,
 	})
 
 	const declineRun = useMutation({
 		mutationFn: (invitation: Invitation) =>
-			declineOutcomeOf(transport, invitation.instanceId),
+			declineOutcomeOf(transport, invitation.id),
 		onSuccess: (outcome, invitation) =>
 			outcome.kind === "declined"
 				? drop(invitation)

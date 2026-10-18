@@ -7,7 +7,6 @@ use tauri::{AppHandle, Runtime};
 use super::contract::JoinedSpaceError;
 use super::held::{device_keys, held, kept};
 use super::join::handed;
-use super::join_link::parsed;
 use super::roster_set::fixtures::{handover_of, signed_set, Device};
 use super::roster_set::{verified_set, Handed};
 use crate::crypto::device_keys::DeviceKeys;
@@ -38,24 +37,65 @@ pub(crate) struct MemberFrame {
 }
 
 impl SealingHost {
+	pub(crate) fn new<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> Self {
+		Self {
+			instance_id: instance_id.to_owned(),
+			host: DeviceKeys::generate().expect("randomness"),
+			member: device_keys(app).expect("the member device keys"),
+			space: HeldSpaceKey::first().expect("randomness"),
+			ctr: AtomicU64::new(0),
+		}
+	}
+
 	pub(crate) async fn planted<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> Self {
-		let member = device_keys(app).expect("the member device keys");
-		let host = DeviceKeys::generate().expect("randomness");
-		let set = signed_set(
-			&host,
-			1,
-			1,
-			&[
-				Device { keys: &host, relay_device_id: HOST_RELAY_ID, account_id: "owner" },
-				Device { keys: &member, relay_device_id: MEMBER_RELAY_ID, account_id: "member" },
-			],
-		);
-		let roster = verified_set(set, None, &member.device_id()).expect("a verified set");
-		let space = HeldSpaceKey::first().expect("randomness");
-		let handed =
-			Handed { space: HeldSpaceKey { key_id: space.key_id, key: space.key.clone() }, roster };
+		let planted = Self::new(app, instance_id);
+		let set = signed_set(&planted.host, 1, 1, &planted.devices());
+		let roster = verified_set(set, None, &planted.member.device_id()).expect("a verified set");
+		let space = HeldSpaceKey { key_id: planted.space.key_id, key: planted.space.key.clone() };
+		let handed = Handed { space, roster };
 		assert!(kept(app, instance_id, &handed).await.expect("the roster is kept"));
-		Self { instance_id: instance_id.to_owned(), host, member, space, ctr: AtomicU64::new(0) }
+		planted
+	}
+
+	pub(crate) fn host_keys(&self) -> &DeviceKeys {
+		&self.host
+	}
+
+	fn devices(&self) -> [Device<'_>; 2] {
+		[
+			Device { keys: &self.host, relay_device_id: HOST_RELAY_ID, account_id: "owner" },
+			Device { keys: &self.member, relay_device_id: MEMBER_RELAY_ID, account_id: "member" },
+		]
+	}
+
+	pub(crate) fn joined(&self) -> String {
+		self.joined_rostering(&self.devices())
+	}
+
+	pub(crate) fn joined_without_the_member(&self) -> String {
+		self.joined_rostering(&self.devices()[..1])
+	}
+
+	fn joined_rostering(&self, devices: &[Device<'_>]) -> String {
+		let set = signed_set(&self.host, self.space.key_id, 1, devices);
+		let handover = serde_json::to_vec(&handover_of(&self.space, set)).expect("a json handover");
+		let sealed = sealed_box::seal(&self.member.agreement_public(), &handover).expect("sealed");
+		self.addressed("joined", json!(BASE64_STANDARD.encode(sealed)))
+	}
+
+	pub(crate) fn pending(&self) -> String {
+		self.addressed("join_refused", json!("pending"))
+	}
+
+	fn addressed(&self, answer: &str, value: Value) -> String {
+		let mut frame = json!({
+			"from": HOST_RELAY_ID,
+			"v": 2,
+			"instance": self.instance_id,
+			"to": MEMBER_RELAY_ID,
+		});
+		frame[answer] = value;
+		frame.to_string()
 	}
 
 	pub(crate) fn rekey(&self, key_id: u32, version: u64) -> String {
@@ -63,12 +103,8 @@ impl SealingHost {
 	}
 
 	pub(crate) fn rekey_signed_by(&self, signer: &DeviceKeys, key_id: u32, version: u64) -> String {
-		let devices = [
-			Device { keys: &self.host, relay_device_id: HOST_RELAY_ID, account_id: "owner" },
-			Device { keys: &self.member, relay_device_id: MEMBER_RELAY_ID, account_id: "member" },
-		];
 		let space = HeldSpaceKey::under(key_id).expect("randomness");
-		let set = signed_set(&self.host, key_id, version, &devices);
+		let set = signed_set(&self.host, key_id, version, &self.devices());
 		let handover = serde_json::to_vec(&handover_of(&space, set)).expect("a json handover");
 		let sealed = sealed_box::seal(&self.member.agreement_public(), &handover).expect("sealed");
 		let sig = signer.sign(&rekey_bytes(&self.instance_id, &self.member.device_id(), &sealed));
@@ -131,14 +167,13 @@ impl SealingHost {
 
 pub(crate) async fn joined_answer_held<R: Runtime>(
 	app: &AppHandle<R>,
-	link: &str,
+	instance_id: &str,
 	joined: &[u8],
 ) -> Result<Option<(u32, u64)>, JoinedSpaceError> {
-	let link = parsed(link).ok_or(JoinedSpaceError::MalformedLink)?;
-	let handed = handed(&link, &device_keys(app)?, joined)?;
-	if !kept(app, &link.instance_id, &handed).await? {
+	let handed = handed(&device_keys(app)?, joined)?;
+	if !kept(app, instance_id, &handed).await? {
 		return Ok(None);
 	}
-	let held = held(app, &link.instance_id).await?;
+	let held = held(app, instance_id).await?;
 	Ok(held.map(|held| (held.space.key_id, held.roster.set.version)))
 }

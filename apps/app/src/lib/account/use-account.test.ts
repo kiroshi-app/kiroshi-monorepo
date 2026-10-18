@@ -358,6 +358,7 @@ describe("useAccount", () => {
 					hostUrl: "wss://cloud.kiroshi.test/instances/studio/relay/member",
 					remoteSpaceId: "studio",
 					name: "Studio Nord",
+					state: "online",
 				},
 			],
 			() => "Lea",

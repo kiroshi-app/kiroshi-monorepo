@@ -70,6 +70,7 @@ use crate::crypto::device_keys::{verify, DeviceKeys};
 use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
 use crate::crypto::join::JoinRequest;
+use crate::crypto::sealed_box;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -5892,11 +5893,6 @@ fn member_desktop(member: &SealingMember) -> (AppOfItsOwn, RemovedOnDrop) {
 	(app, database)
 }
 
-fn joined_bytes(answer: &Value) -> Vec<u8> {
-	let joined = answer["joined"].as_str().expect("a joined answer");
-	BASE64_STANDARD.decode(joined).expect("a base64 answer")
-}
-
 #[test]
 fn a_join_whose_answer_was_lost_is_answered_again_and_the_member_desktop_holds_its_key() {
 	run(async {
@@ -5917,7 +5913,10 @@ fn a_join_whose_answer_was_lost_is_answered_again_and_the_member_desktop_holds_i
 		let again = relay.addressed(&member, "joined").await;
 		let handover = member.joined_answer(&again, &link.secret);
 		let (desktop, _database) = member_desktop(&member);
-		let held = joined_answer_held(desktop.handle(), &raw_link, &joined_bytes(&again)).await;
+		let unmacked = serde_json::to_vec(&handover).expect("a json handover");
+		let resealed =
+			sealed_box::seal(&member.keys.agreement_public(), &unmacked).expect("sealed");
+		let held = joined_answer_held(desktop.handle(), &link.instance_id, &resealed).await;
 
 		assert_eq!(device_ids(&harness.devices().await), admitted);
 		assert_eq!(handover.key_id, harness.space_key(PERSONAL).key_id);

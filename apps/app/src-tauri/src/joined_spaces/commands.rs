@@ -1,10 +1,11 @@
 use serde::Serialize;
-use tauri::{AppHandle, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime};
 
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::relay::{self, RelayGuests};
-use super::{deep_link, join};
+use super::{deep_link, held};
 use crate::db;
+use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
 
 pub const CHANGED_EVENT: &str = "joined-space://changed";
@@ -63,12 +64,20 @@ pub(super) fn announce_reconnection<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn joined_spaces_list(
-	state: State<'_, db::DatabaseState>,
-	guests: State<'_, RelayGuests>,
+pub async fn joined_spaces_list<R: Runtime>(
+	app: AppHandle<R>,
 ) -> Result<Vec<JoinedSpace>, JoinedSpaceError> {
+	let state = app.state::<db::DatabaseState>();
 	let stored = ready(&state)?.joined_spaces().list().await?;
-	Ok(stored.into_iter().map(|joined| JoinedSpace::presented(joined, guests.cloud())).collect())
+	let cloud = app.state::<RelayGuests>().inner().cloud();
+	stored
+		.into_iter()
+		.map(|joined| {
+			let JoinedReach::Relay { instance_id } = &joined.reach;
+			let state = held::state_of(&app, instance_id)?;
+			Ok(JoinedSpace::presented(joined, cloud, state))
+		})
+		.collect()
 }
 
 #[tauri::command]
@@ -78,15 +87,6 @@ pub async fn joined_space_connect<R: Runtime>(
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
 	relay::connected(&app, id).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn join_by_link<R: Runtime>(
-	app: AppHandle<R>,
-	link: String,
-) -> Result<JoinedSpace, JoinedSpaceError> {
-	join::joined_by_link(&app, &link).await
 }
 
 #[tauri::command]
@@ -123,12 +123,16 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
+	use super::super::contract::JoinedSpaceState;
 	use super::*;
 	use crate::account::session::AccountSession;
+	use crate::crypto::commands::SpaceKeys;
+	use crate::crypto::space_key::HeldSpaceKey;
 	use crate::db::connection::temp_dir;
 	use crate::db::repositories::joined_spaces::{self, JoinedReach};
 	use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 	use crate::environment::store;
+	use crate::logging::contract::InstallKind;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const API_URL: &str = "http://127.0.0.1:9";
@@ -146,6 +150,8 @@ mod tests {
 		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
 		app.manage(RelayGuests::new(api_url));
+		let identifier = app.config().identifier.clone();
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(dir.join("keys"))));
 		app
 	}
 
@@ -248,19 +254,43 @@ mod tests {
 	}
 
 	async fn held(app: &App<MockRuntime>) -> JoinedSpace {
+		held_over(app, INSTANCE, JoinedSpaceState::WaitingForHost).await
+	}
+
+	async fn held_over(
+		app: &App<MockRuntime>,
+		instance_id: &str,
+		state: JoinedSpaceState,
+	) -> JoinedSpace {
 		let candidate = joined_spaces::JoinedSpace {
 			id: uuid::Uuid::new_v4().to_string(),
-			reach: JoinedReach::Relay { instance_id: INSTANCE.to_owned() },
+			reach: JoinedReach::Relay { instance_id: instance_id.to_owned() },
 			remote_space_id: Some("remote-1".to_owned()),
 			name: "Studio".to_owned(),
 		};
-		let state = app.state::<db::DatabaseState>();
-		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;
-		JoinedSpace::presented(joined.expect("the join"), app.state::<RelayGuests>().cloud())
+		let database = app.state::<db::DatabaseState>();
+		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
+		JoinedSpace::presented(joined.expect("the join"), app.state::<RelayGuests>().cloud(), state)
 	}
 
 	async fn list(app: &App<MockRuntime>) -> Vec<JoinedSpace> {
-		joined_spaces_list(app.state(), app.state()).await.expect("the list")
+		joined_spaces_list(app.handle().clone()).await.expect("the list")
+	}
+
+	#[tokio::test]
+	async fn a_joined_space_without_a_held_key_is_listed_waiting_for_its_host() {
+		let dir = temp_dir();
+		let app = app_over(&dir);
+		let keyless = held(&app).await;
+		let space = HeldSpaceKey::first().expect("randomness");
+		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
+		let keyed = held_over(&app, "instance-2", JoinedSpaceState::Online).await;
+
+		let listed = list(&app).await;
+
+		assert_eq!(keyless.state, JoinedSpaceState::WaitingForHost);
+		assert_eq!(listed.len(), 2);
+		assert!(listed.contains(&keyless) && listed.contains(&keyed));
 	}
 
 	#[tokio::test]

@@ -34,6 +34,7 @@ const GARAGE: JoinedSpace = {
 	hostUrl: "http://192.168.1.20:45367",
 	remoteSpaceId: "garage",
 	name: "Garage",
+	state: "online",
 }
 
 const GARAGE_ROW = "joined:joined-garage"
@@ -43,6 +44,7 @@ const ATTIC: JoinedSpace = {
 	hostUrl: "http://192.168.1.21:45367",
 	remoteSpaceId: "attic",
 	name: "Attic",
+	state: "online",
 }
 
 const hostsFake = () => {
@@ -498,6 +500,7 @@ const STUDIO: JoinedSpace = {
 	hostUrl: "wss://cloud.kiroshi.test/instances/studio/relay/member",
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
+	state: "online",
 }
 
 const STUDIO_ROW = "joined:joined-studio"
@@ -667,6 +670,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	hostUrl: "http://192.168.1.22:45367",
 	remoteSpaceId: "personal",
 	name: "Personal",
+	state: "online",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

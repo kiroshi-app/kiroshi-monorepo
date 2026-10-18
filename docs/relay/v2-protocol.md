@@ -254,50 +254,36 @@ A sealed box is 32 + 12 + plaintext length + 16 bytes. The recipient computes
 `X25519(recipient_private, ephemeral_public)`, refuses it when not contributory,
 then derives the same key.
 
-## Join payload
+## Invitation accept
 
-A member joining a Space proves it holds the invitation secret and hands the host
-its two public keys:
-
-```
-mac     = HMAC-SHA256(key = invitation_secret, signing_public || agreement_public)
-payload = signing_public || agreement_public || mac                      96 bytes
-sealed  = sealed_box(host_agreement_public, payload)
-```
-
-The host refuses a payload that is not 96 bytes or whose `mac` does not verify,
-compared in constant time.
-
-## Join link
-
-The host mints one link per pending invitation, and one per Space for a device of
-its own account:
+A member joins a Space by accepting its invitation on the relay. No link, no
+secret and no key leaves the device for it: the host reads the member device keys
+from the relay device list, and trusts the roster it signs.
 
 ```
-https://kiroshi.app/join#<instance>.<host_agreement_public>.<invitation_secret>
+POST /invitations/{invitationId}/accept        bearer of the invited account
 ```
 
-- `instance` is the hosted Space instance id, as the relay knows it.
-- `host_agreement_public` is the host's 32-byte X25519 public key, unpadded
-  base64url (RFC 4648 §5, no `=`): 43 characters.
-- `invitation_secret` is 32 random bytes, unpadded base64url: 43 characters.
+`GET /invitations` lists the pending invitations of the account, each carrying
+`id`, `instanceId`, `instanceName`, `inviterEmail`, `invitedAt` and `expiresAt`.
 
-The three parts are separated by `.`, which neither base64url nor an instance id
-carries. Everything after `#` stays on the device that opens the link: a browser
-never sends a fragment to a server.
+| Answer | Meaning | Desktop answer |
+| --- | --- | --- |
+| 200 `{ instanceId, name }` | The account is now a member of the instance | the join below |
+| 409 `ALREADY_JOINED` | The account already accepted it | the join below, on the listed `instanceId` |
+| 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` | `invitationExpired` |
+| 410 `INVITATION_WITHDRAWN` | The host took it back | `invitationWithdrawn` |
+| 410 `INVITATION_USED` | It was already accepted | `invitationUsed` |
+| 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account | `invitationOtherEmail` |
+| 404 | No such invitation | `noInvitation` |
+| unreachable, any other status | | `couldNotAccept` |
 
-The Tauri commands that mint them:
+The Tauri command is `invitation_accept(invitationId)`. On every refusal of the
+accept the desktop stores no joined Space.
 
-| Command | Answer |
-| --- | --- |
-| `hosting_join_link(spaceId, userId)` | A link whose secret admits a device under the account `userId`. Refused with `notPending` when that member is not pending, `unknownMember` when the Space has no such member. |
-| `hosting_device_link(spaceId)` | A link whose secret admits a device under the account of the host. |
-
-A secret admits exactly one device. Minting a link replaces the unused secret of
-the same account in that Space, if any: the earlier link then matches no secret.
-Withdrawing an invitation deletes every secret of that account in the Space, and
-so does removing a member: see [Key rotation](#key-rotation) for the roster rows. A used secret is kept, so a join that replays it is
-answered `used`. A link has no expiry.
+A link `kiroshi://join?invitation=<invitationId>`, the id matching
+`[A-Za-z0-9_-]{1,128}`, opens the app and hands that invitation id to the front,
+which accepts it the same way. Any other `kiroshi://join` URL is ignored.
 
 ## Join frames
 
@@ -307,32 +293,13 @@ frame and carries no `key_id`, `ctr`, `ct` or `sig`.
 ### join (device to host)
 
 ```json
-{ "v": 2, "instance": "…", "from": "…relay device id…", "join": "base64" }
+{ "v": 2, "instance": "…", "from": "…relay device id…", "join": {} }
 ```
 
-`join` is the sealed join payload of [Join payload](#join-payload), standard base64
-with padding, sealed with the `invitation_secret` and the `host_agreement_public`
-of the link. As on every frame, the relay splices `from`.
-
-The host decides in this order, before any roster lookup of `from`:
-
-1. `join` is not base64, the sealed box does not open under the host agreement
-   key, or the payload is not 96 bytes: `join_refused` `"malformed"`.
-2. The payload `mac` verifies against no secret the host keeps for that Space:
-   `join_refused` `"unknown"`.
-3. Its signing and agreement keys both equal those of a device already in the
-   roster: `joined` with the current key handover, used or unused secret alike.
-   The host stores no roster row and leaves the secret as it was, so a device
-   whose `joined` answer was lost gets it again by sending the same join.
-4. It verifies against a used secret: `join_refused` `"used"`.
-5. It verifies against an unused secret. In one transaction the host marks the
-   secret used and stores a roster row it signs for the joining keys, under the
-   relay device id `from` and the account of that secret. When two joins race on
-   one secret, one of them is admitted and the other is answered `"used"`.
-
-A join on an unused secret whose signing key is already in the roster with
-another agreement key, or whose `from` already names a roster row, stores
-nothing, leaves its secret unused and is answered with nothing.
+`join` is an empty object: the device proves nothing in it. As on every frame,
+the relay splices `from`. The device sends it on the member socket of the instance
+right after the accept, and again on every connection of that socket while it
+holds no key for the Space.
 
 ### joined (host to device)
 
@@ -342,24 +309,24 @@ nothing, leaves its secret unused and is answered with nothing.
 
 ```
 answer = UTF-8 JSON key handover (below)
-mac    = HMAC-SHA256(key = invitation_secret, ascii("kiroshi/v2/join-answer") || answer)
-joined = sealed_box(device_agreement_public, mac || answer)
+joined = sealed_box(device_agreement_public, answer)
 ```
 
-`device_agreement_public` is the one the join payload carried. The device opens
-the box, splits off the first 32 bytes as `mac` and compares it in constant time
-with the HMAC it computes over the rest. Only a holder of the secret can produce
-it, so a matching `mac` proves the answer comes from the host the link names: the
-device then trusts the host row of the roster set, and verifies the roster set
-signature with the `signing_public_key` of that row.
+`device_agreement_public` is the one the relay device list carries for `to`. No
+mac guards it. The device opens the box, then verifies the roster set signature
+with the `signing_public_key` of the host row of that set:
+
+- On a first join the device trusts that host row. The 6-word
+  [Fingerprint](#fingerprint) of the host stays the manual check.
+- When the device already holds a roster for the instance, a host row that differs
+  from the held one is refused as `badSignature`, and the held roster is kept.
+- A roster that does not list the device itself is refused as `notInRoster`, and
+  no key is stored.
 
 The host builds every key handover by reading the current `key_id` and
 `space_key` first, then the roster. A device removed after the roster read is
 followed by a rotation to a key later than the one read; a device removed before
-it is not in the roster. So a join is answered `joined` only when the roster read
-after the key still holds the admitted device: when a removal landed between the
-admission and the handover, the join is answered `join_refused` `"used"` and no
-`joined` frame is sent. A rekey goes only to the devices of the roster read after
+it is not in the roster. A rekey goes only to the devices of the roster read after
 its key.
 
 The key handover, the same JSON in `joined` and `rekey`:
@@ -371,12 +338,23 @@ The key handover, the same JSON in `joined` and `rekey`:
 ### join_refused (host to device)
 
 ```json
-{ "v": 2, "instance": "…", "to": "…relay device id…", "join_refused": "used" }
+{ "v": 2, "instance": "…", "to": "…relay device id…", "join_refused": "pending" }
 ```
 
-The value is `"used"`, `"unknown"` or `"malformed"`. Nothing in it is
+`"pending"`: the host has not admitted the device yet. Nothing in it is
 authenticated: the relay may forge or drop it, and the worst it achieves is a
-device that gives up on a link.
+device that keeps waiting.
+
+### Waiting for the host
+
+When the host is offline, answers `"pending"`, or sends no `joined` within the
+answer bound, the desktop stores the joined Space anyway and answers it with
+`state: "waitingForHost"`. Every joined Space the device holds no key for is
+listed that way, and `joined_space_connect` answers `waitingForHost`. While the
+account is signed in, the desktop keeps one member socket per such Space, resends
+the `join` frame on every connection, and reconnects with the relay backoff. The
+first verified `joined` stores the key and the roster, closes that socket, and
+announces the Space changed; it is then listed `state: "online"`.
 
 ## Signed roster set
 

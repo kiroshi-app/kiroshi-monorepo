@@ -153,13 +153,18 @@ pub enum InvitationCallError {
 	Revoked,
 	Offline(String),
 	Unreachable(String),
+	Expired,
 	Withdrawn,
+	Used,
+	OtherEmail,
 	Unknown,
 	AlreadyJoined,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JoinedInstance {
+	pub instance_id: String,
 	pub name: String,
 }
 
@@ -644,14 +649,14 @@ impl Cloud {
 	pub async fn accept_invitation(
 		&self,
 		bearer: &str,
-		instance_id: &str,
+		invitation_id: &str,
 	) -> Result<JoinedInstance, InvitationCallError> {
-		let accept = self.invitation_url(instance_id, "accept")?;
+		let accept = self.invitation_url(invitation_id, "accept")?;
 		let answered = self.reached(|client| client.post(accept).bearer_auth(bearer)).await?;
 		let answered = invitation_call_answered(answered).await?;
 		answered.json::<JoinedInstance>().await.map_err(|error| {
 			InvitationCallError::Unreachable(format!(
-				"the accepted instance carried no readable name: {error}"
+				"the accepted instance carried no readable id and name: {error}"
 			))
 		})
 	}
@@ -659,21 +664,21 @@ impl Cloud {
 	pub async fn decline_invitation(
 		&self,
 		bearer: &str,
-		instance_id: &str,
+		invitation_id: &str,
 	) -> Result<(), InvitationCallError> {
-		let decline = self.invitation_url(instance_id, "decline")?;
+		let decline = self.invitation_url(invitation_id, "decline")?;
 		let answered = self.reached(|client| client.post(decline).bearer_auth(bearer)).await?;
 		invitation_call_answered(answered).await.map(drop)
 	}
 
-	fn invitation_url(&self, instance_id: &str, verb: &str) -> Result<Url, InvitationCallError> {
+	fn invitation_url(&self, invitation_id: &str, verb: &str) -> Result<Url, InvitationCallError> {
 		let mut invitation = Url::parse(&self.at(INVITATIONS_PATH)).map_err(|error| {
 			InvitationCallError::Unreachable(format!("the invitation url is unusable: {error}"))
 		})?;
 		invitation
 			.path_segments_mut()
 			.map_err(|()| InvitationCallError::Unreachable("the cloud url has no path".to_owned()))?
-			.push(instance_id)
+			.push(invitation_id)
 			.push(verb);
 		Ok(invitation)
 	}
@@ -742,22 +747,30 @@ async fn invitation_call_answered(
 	match answered.status() {
 		StatusCode::UNAUTHORIZED => Err(InvitationCallError::Revoked),
 		StatusCode::NOT_FOUND => Err(InvitationCallError::Unknown),
-		StatusCode::GONE => Err(InvitationCallError::Withdrawn),
-		StatusCode::CONFLICT => Err(already_joined(answered).await),
+		StatusCode::FORBIDDEN | StatusCode::GONE | StatusCode::CONFLICT => {
+			Err(invitation_refused(answered).await)
+		}
 		_ => successful(answered).map_err(InvitationCallError::Unreachable),
 	}
 }
 
-async fn already_joined(answered: reqwest::Response) -> InvitationCallError {
-	match answered.json::<Refusal>().await {
-		Ok(refusal) if refusal.error.code == "ALREADY_JOINED" => InvitationCallError::AlreadyJoined,
-		Ok(refusal) => InvitationCallError::Unreachable(format!(
-			"the cloud answered a conflict coded {}",
-			refusal.error.code
-		)),
-		Err(error) => InvitationCallError::Unreachable(format!(
-			"the cloud answered a conflict with an unreadable body: {error}"
-		)),
+async fn invitation_refused(answered: reqwest::Response) -> InvitationCallError {
+	let status = answered.status();
+	let code = match answered.json::<Refusal>().await {
+		Ok(refusal) => refusal.error.code,
+		Err(error) => {
+			return InvitationCallError::Unreachable(format!(
+				"the cloud answered {status} with an unreadable body: {error}"
+			))
+		}
+	};
+	match (status, code.as_str()) {
+		(StatusCode::GONE, "INVITATION_EXPIRED") => InvitationCallError::Expired,
+		(StatusCode::GONE, "INVITATION_WITHDRAWN") => InvitationCallError::Withdrawn,
+		(StatusCode::GONE, "INVITATION_USED") => InvitationCallError::Used,
+		(StatusCode::FORBIDDEN, "INVITATION_EMAIL_MISMATCH") => InvitationCallError::OtherEmail,
+		(StatusCode::CONFLICT, "ALREADY_JOINED") => InvitationCallError::AlreadyJoined,
+		_ => InvitationCallError::Unreachable(format!("the cloud answered {status} coded {code}")),
 	}
 }
 
