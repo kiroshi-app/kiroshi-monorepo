@@ -155,13 +155,17 @@ fn entered<R: Runtime>(app: &AppHandle<R>, devices: &Devices, next: DeviceApprov
 	}
 	eprintln!("this device entered approval {next:?}");
 	if next == DeviceApproval::Approved {
-		let resuming = app.clone();
-		*devices.hosts_resuming() =
-			Some(tauri::async_runtime::spawn(async move { hosting::resumed(&resuming).await }));
+		hosts_resumed(app, devices);
 	}
 	if let Err(error) = events::emit(app, DEVICE_APPROVAL_CHANGED, next) {
 		eprintln!("the device approval did not reach the front: {error}");
 	}
+}
+
+fn hosts_resumed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
+	let resuming = app.clone();
+	*devices.hosts_resuming() =
+		Some(tauri::async_runtime::spawn(async move { hosting::resumed(&resuming).await }));
 }
 
 async fn followed<R: Runtime>(app: AppHandle<R>) {
@@ -203,6 +207,7 @@ async fn registered_once_answered<R: Runtime>(app: &AppHandle<R>, devices: &Devi
 			}
 			Err(Unregistered::Refused(reason)) => {
 				eprintln!("this device did not register with the relay: {reason}");
+				hosts_resumed(app, devices);
 				return false;
 			}
 			Err(Unregistered::SignedOut) => return false,

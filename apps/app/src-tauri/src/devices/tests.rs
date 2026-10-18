@@ -28,7 +28,7 @@ use crate::db;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
-use crate::events::ACCOUNT_CHANGED;
+use crate::events::{ACCOUNT_CHANGED, HOSTING_CHANGED};
 use crate::hosting::contract::HostingState;
 use crate::hosting::Hosting;
 use crate::joined_spaces::commands::{join_by_link, joined_space_connect};
@@ -53,6 +53,7 @@ type Answer = (StatusCode, Value);
 #[derive(Clone)]
 struct Relay {
 	registered_status: Arc<Mutex<&'static str>>,
+	registration_refusal: Arc<Mutex<Option<Answer>>>,
 	current: Arc<Mutex<Answer>>,
 	listed: Arc<Mutex<Answer>>,
 	refusal: Arc<Mutex<Option<Answer>>>,
@@ -64,6 +65,7 @@ impl Relay {
 	fn answering(registered_status: &'static str, current: Answer) -> Self {
 		Self {
 			registered_status: Arc::new(Mutex::new(registered_status)),
+			registration_refusal: Arc::new(Mutex::new(None)),
 			current: Arc::new(Mutex::new(current)),
 			listed: Arc::new(Mutex::new((StatusCode::OK, json!([])))),
 			refusal: Arc::new(Mutex::new(None)),
@@ -92,6 +94,12 @@ impl Relay {
 		let body =
 			json!({ "error": { "code": code, "message": "refused", "status": status.as_u16() } });
 		*self.refusal.lock().expect("the relay") = Some((status, body));
+	}
+
+	fn refuses_registration(&self, status: StatusCode, code: &str) {
+		let body =
+			json!({ "error": { "code": code, "message": "refused", "status": status.as_u16() } });
+		*self.registration_refusal.lock().expect("the relay") = Some((status, body));
 	}
 
 	fn called(&self, call: &str) {
@@ -200,6 +208,9 @@ async fn challenged(Served(relay): Served<Relay>) -> Answered {
 async fn registered(Served(relay): Served<Relay>, body: String) -> Answered {
 	relay.called("POST /devices");
 	relay.bodies.lock().expect("the relay").push(serde_json::from_str(&body).expect("a json body"));
+	if let Some(refusal) = relay.registration_refusal.lock().expect("the relay").clone() {
+		return answered_json(refusal);
+	}
 	let status = *relay.registered_status.lock().expect("the relay");
 	answered_json((
 		StatusCode::OK,
@@ -301,6 +312,7 @@ impl Harness {
 			DEVICE_APPROVAL_CHANGED.name(),
 			DEVICE_APPROVAL_REQUESTED.name(),
 			DEVICE_APPROVAL_SETTLED.name(),
+			HOSTING_CHANGED.name(),
 		] {
 			let hearing = Arc::clone(&heard);
 			app.listen(name, move |event| {
@@ -924,5 +936,34 @@ fn no_device_list_is_read_while_pending() {
 		until(PATIENCE, || (harness.relay.count("GET /devices/current") >= 2).then_some(())).await;
 
 		assert_eq!(harness.relay.count("GET /devices"), 0);
+	});
+}
+
+#[test]
+fn a_refused_registration_resumes_the_hosted_spaces_once_and_keeps_the_approval_at_none() {
+	run(async {
+		let relay = Relay::approved();
+		relay.refuses_registration(StatusCode::BAD_REQUEST, "DEVICE_PROOF_INVALID");
+		let harness = Harness::new(relay, Some(BEARER)).await;
+		let state = harness.app.state::<DatabaseState>();
+		let hosting = state.as_ref().expect("the database").space_hosting();
+		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the space is flagged");
+
+		restore(harness.handle()).await;
+		let not_listening =
+			HostingState::Failed { reason: "the local host api is not listening".to_owned() };
+		until(PATIENCE, || (harness.hosting() == not_listening).then_some(())).await;
+		tokio::time::sleep(TICK * 4).await;
+
+		assert_eq!(
+			harness.heard(HOSTING_CHANGED.name()),
+			vec![json!({
+				"spaceId": PERSONAL,
+				"state": { "kind": "failed", "reason": "the local host api is not listening" }
+			})]
+		);
+		assert_eq!(harness.approval(), DeviceApproval::None);
+		assert!(harness.heard(DEVICE_APPROVAL_CHANGED.name()).is_empty());
+		assert_eq!(harness.relay.count("POST /devices"), 1);
 	});
 }
