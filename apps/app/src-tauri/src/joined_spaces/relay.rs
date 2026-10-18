@@ -26,7 +26,7 @@ use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Opened, Socket, PING_EVERY, SILENCE_BOUND,
+	opened, sent, until_stopped, Backoff, Opened, Sink, Socket, PING_EVERY, SILENCE_BOUND,
 };
 
 const HOST_ABSENT: u16 = 4002;
@@ -593,23 +593,11 @@ async fn sealed_session<R: Runtime>(
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
-		let message = match std::mem::replace(&mut outgoing, Outgoing::Nothing) {
-			Outgoing::Nothing => None,
-			Outgoing::Hello => {
-				hello_deadline = Instant::now() + answer_bound;
-				Some(wire.hello().await.map(Message::text))
-			}
-			Outgoing::Sealed(plaintext) => Some(wire.sealed(&plaintext).await.map(Message::text)),
-			Outgoing::Ping => Some(Ok(Message::Ping(Vec::new().into()))),
-		};
-		if let Some(message) = message {
-			let sent = match message {
-				Ok(message) => sent(&mut sink, message).await,
-				Err(reason) => Err(reason),
-			};
-			if let Err(reason) = sent {
-				return Ended::Dropped(reason);
-			}
+		if matches!(outgoing, Outgoing::Hello) {
+			hello_deadline = Instant::now() + answer_bound;
+		}
+		if let Err(reason) = delivered(&mut sink, wire, outgoing).await {
+			return Ended::Dropped(reason);
 		}
 		let is_greeted = wire.is_greeted();
 		let resume_deadline = link.resume_deadline();
@@ -643,6 +631,20 @@ async fn sealed_session<R: Runtime>(
 			}
 		};
 	}
+}
+
+async fn delivered(
+	sink: &mut Sink,
+	wire: &mut MemberWire<'_>,
+	outgoing: Outgoing,
+) -> Result<(), String> {
+	let message = match outgoing {
+		Outgoing::Nothing => return Ok(()),
+		Outgoing::Hello => Message::text(wire.hello().await?),
+		Outgoing::Sealed(plaintext) => Message::text(wire.sealed(&plaintext).await?),
+		Outgoing::Ping => Message::Ping(Vec::new().into()),
+	};
+	sent(sink, message).await
 }
 
 async fn heard<R: Runtime>(
