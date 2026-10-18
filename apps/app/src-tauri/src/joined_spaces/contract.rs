@@ -101,6 +101,20 @@ pub enum JoinedSpaceError {
 	RelayRefused {
 		detail: String,
 	},
+	MalformedLink,
+	LinkUsed,
+	#[serde(rename_all = "camelCase")]
+	NoInvitation {
+		inviter_email: Option<String>,
+	},
+	NotInRoster,
+	BadSignature,
+	RemovedByRotation,
+	NeedsJoinLink,
+	#[serde(rename_all = "camelCase")]
+	KeyStore {
+		detail: String,
+	},
 }
 
 impl From<DatabaseError> for JoinedSpaceError {

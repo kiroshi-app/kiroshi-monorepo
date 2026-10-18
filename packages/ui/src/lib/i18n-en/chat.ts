@@ -316,6 +316,46 @@ const chat = {
 					description:
 						"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
 				},
+				malformedLink: {
+					title: "Couldn’t read this join link",
+					description:
+						"The link is incomplete or damaged. Ask the host for a new link.",
+				},
+				linkUsed: {
+					title: "This join link was already used",
+					description:
+						"A link admits one computer only. Ask the host for a new link.",
+				},
+				noInvitation: {
+					title: "You’re not invited to this space",
+					description:
+						"Your account holds no invitation for it. Ask the host to invite you, then open the link again.",
+				},
+				notInRoster: {
+					title: "This computer isn’t in the space",
+					description:
+						"Its host didn’t list this computer. Ask the host for a new link.",
+				},
+				badSignature: {
+					title: "Couldn’t trust this space’s answer",
+					description:
+						"Its keys didn’t match what the host signed. Ask the host for a new link.",
+				},
+				removedByRotation: {
+					title: "This computer was removed from the space",
+					description:
+						"Its host no longer lets it in. Ask the host for a new link to join again.",
+				},
+				needsJoinLink: {
+					title: "This space needs a join link",
+					description:
+						"This computer holds no key for it yet. Ask the host for a join link, then open it here.",
+				},
+				keyStore: {
+					title: "Couldn’t read this computer’s keys",
+					description:
+						"Kiroshi couldn’t open the keys it keeps for your spaces. Restart Kiroshi, then try again.",
+				},
 				unexpected: {
 					title: "Something went wrong with this space",
 					description:

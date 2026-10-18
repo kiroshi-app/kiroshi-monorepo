@@ -331,6 +331,46 @@ const chat = {
 					description:
 						"Le cloud de Kiroshi n’a pas confirmé votre départ. Réessayez dans un instant.",
 				},
+				malformedLink: {
+					title: "Impossible de lire ce lien d’invitation",
+					description:
+						"Le lien est incomplet ou abîmé. Demandez un nouveau lien à l’hôte.",
+				},
+				linkUsed: {
+					title: "Ce lien d’invitation a déjà servi",
+					description:
+						"Un lien n’admet qu’un seul ordinateur. Demandez un nouveau lien à l’hôte.",
+				},
+				noInvitation: {
+					title: "Vous n’êtes pas invité dans cet espace",
+					description:
+						"Votre compte n’a aucune invitation pour lui. Demandez à l’hôte de vous inviter, puis rouvrez le lien.",
+				},
+				notInRoster: {
+					title: "Cet ordinateur ne fait pas partie de l’espace",
+					description:
+						"Son hôte n’a pas listé cet ordinateur. Demandez un nouveau lien à l’hôte.",
+				},
+				badSignature: {
+					title: "Impossible de se fier à la réponse de cet espace",
+					description:
+						"Ses clés ne correspondent pas à ce que l’hôte a signé. Demandez un nouveau lien à l’hôte.",
+				},
+				removedByRotation: {
+					title: "Cet ordinateur a été retiré de l’espace",
+					description:
+						"Son hôte ne l’accepte plus. Demandez un nouveau lien à l’hôte pour le rejoindre.",
+				},
+				needsJoinLink: {
+					title: "Cet espace demande un lien d’invitation",
+					description:
+						"Cet ordinateur n’a encore aucune clé pour lui. Demandez un lien à l’hôte, puis ouvrez-le ici.",
+				},
+				keyStore: {
+					title: "Impossible de lire les clés de cet ordinateur",
+					description:
+						"Kiroshi n’a pas pu ouvrir les clés qu’il garde pour vos espaces. Redémarrez Kiroshi, puis réessayez.",
+				},
 				unexpected: {
 					title: "Un problème est survenu avec cet espace",
 					description:

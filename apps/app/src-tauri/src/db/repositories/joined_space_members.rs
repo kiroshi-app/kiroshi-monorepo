@@ -20,6 +20,9 @@ pub struct JoinedSpaceMember {
 	pub user_id: String,
 	pub name: Option<String>,
 	pub role: JoinedSpaceRole,
+	pub device_id: String,
+	pub fingerprint: Vec<String>,
+	pub is_present: bool,
 }
 
 #[derive(
@@ -92,7 +95,14 @@ mod tests {
 	use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 
 	fn a_member(user_id: &str, name: &str, role: JoinedSpaceRole) -> JoinedSpaceMember {
-		JoinedSpaceMember { user_id: user_id.to_owned(), name: Some(name.to_owned()), role }
+		JoinedSpaceMember {
+			user_id: user_id.to_owned(),
+			name: Some(name.to_owned()),
+			role,
+			device_id: format!("device-of-{user_id}"),
+			fingerprint: vec!["abandon".to_owned(); 6],
+			is_present: true,
+		}
 	}
 
 	fn a_relay_space(id: &str) -> JoinedSpace {

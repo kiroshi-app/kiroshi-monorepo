@@ -49,6 +49,7 @@ pub fn run() {
 		.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
 			window_controls::raise_main(app);
 		}))
+		.plugin(tauri_plugin_deep_link::init())
 		.plugin(
 			tauri_plugin_window_state::Builder::default()
 				.with_state_flags(
@@ -84,6 +85,7 @@ pub fn run() {
 			if !window_controls::is_headless(std::env::args()) {
 				window_controls::open_main(app.handle());
 			}
+			joined_spaces::deep_link::install(app.handle());
 			app.manage(routines::sentinel::spawn(app.handle().clone()));
 			app.manage(routines::webhook::start(app.handle().clone()));
 			app.manage(missions::github::spawn(app.handle().clone()));

@@ -144,7 +144,9 @@ ids of every device with its public keys.
 
 - A sender never writes `from`. The relay splices `"from":"<relay device id>"` in
   front of the frame, after its opening brace.
-- The host opens its relay socket with `?device=<its relay device id>`.
+- The host opens its relay socket with `?device=<its relay device id>`, and so does a
+  member: the desktop reads its own relay device id from its row of the roster set it
+  holds, or from `POST /devices` before its join.
 - A host frame for one member carries `to` set to that member's relay device id,
   and the AAD `to` set to that member's `device_id`. An answer to a call or a
   `relay_resume`, the frames that `relay_resume` replays, and a hello answer go
@@ -318,16 +320,19 @@ The host decides in this order, before any roster lookup of `from`:
    key, or the payload is not 96 bytes: `join_refused` `"malformed"`.
 2. The payload `mac` verifies against no secret the host keeps for that Space:
    `join_refused` `"unknown"`.
-3. It verifies against a used secret: `join_refused` `"used"`.
-4. It verifies against an unused secret. In one transaction the host marks the
+3. Its signing and agreement keys both equal those of a device already in the
+   roster: `joined` with the current key handover, used or unused secret alike.
+   The host stores no roster row and leaves the secret as it was, so a device
+   whose `joined` answer was lost gets it again by sending the same join.
+4. It verifies against a used secret: `join_refused` `"used"`.
+5. It verifies against an unused secret. In one transaction the host marks the
    secret used and stores a roster row it signs for the joining keys, under the
    relay device id `from` and the account of that secret. When two joins race on
    one secret, one of them is admitted and the other is answered `"used"`.
 
-A join whose signing key is already in the roster, or whose `from` already names
-a roster row, stores nothing, leaves its secret unused and is answered with
-nothing: the device waits for an answer that does not come, then asks for a new
-link.
+A join on an unused secret whose signing key is already in the roster with
+another agreement key, or whose `from` already names a roster row, stores
+nothing, leaves its secret unused and is answered with nothing.
 
 ### joined (host to device)
 

@@ -131,7 +131,16 @@ const SIGNED_IN_JOINED: ThreadAuthorship = {
 	accountId: SELF,
 	host: {
 		kind: "joined",
-		members: [{ userId: "account-lea", name: "Lea", role: "host" }],
+		members: [
+			{
+				userId: "account-lea",
+				name: "Lea",
+				role: "host",
+				deviceId: "device-of-lea",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
+		],
 	},
 }
 

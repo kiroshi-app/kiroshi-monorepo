@@ -601,8 +601,22 @@ describe("useMembers on a joined space", () => {
 
 	it("reads the roster of the joined space, never the hosted members", async () => {
 		rosterAnswered([
-			{ userId: "tom", name: "Tom", role: "guest" },
-			{ userId: "lea", name: "Lea", role: "host" },
+			{
+				userId: "tom",
+				name: "Tom",
+				role: "guest",
+				deviceId: "device-of-tom",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
+			{
+				userId: "lea",
+				name: "Lea",
+				role: "host",
+				deviceId: "device-of-lea",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
 		])
 
 		const { panel, transport } = watchStudio()
@@ -618,7 +632,16 @@ describe("useMembers on a joined space", () => {
 	})
 
 	it("names a host with no name by the unnamed copy", async () => {
-		rosterAnswered([{ userId: "lea", name: "", role: "host" }])
+		rosterAnswered([
+			{
+				userId: "lea",
+				name: "",
+				role: "host",
+				deviceId: "device-of-lea",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
+		])
 
 		const { panel } = watchStudio()
 
@@ -628,11 +651,29 @@ describe("useMembers on a joined space", () => {
 	})
 
 	it("relabels the host once the joined roster changes", async () => {
-		rosterAnswered([{ userId: "lea", name: "Lea", role: "host" }])
+		rosterAnswered([
+			{
+				userId: "lea",
+				name: "Lea",
+				role: "host",
+				deviceId: "device-of-lea",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
+		])
 		const { panel } = watchStudio()
 		await waitFor(() => expect(panel().members[0]?.name).toBe("Lea"))
 
-		rosterAnswered([{ userId: "lea", name: "Léa Martin", role: "host" }])
+		rosterAnswered([
+			{
+				userId: "lea",
+				name: "Léa Martin",
+				role: "host",
+				deviceId: "device-of-lea",
+				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
+				isPresent: true,
+			},
+		])
 		membersChangeAnnounced()
 
 		await waitFor(() => expect(panel().members[0]?.name).toBe("Léa Martin"))

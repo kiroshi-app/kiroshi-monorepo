@@ -48,6 +48,22 @@ pub fn answer_mac(secret: &[u8], answer: &[u8]) -> [u8; MAC_LENGTH] {
 	keyed(secret, &[ANSWER_DOMAIN, answer].concat()).finalize().into_bytes().into()
 }
 
+pub fn opened_answer(
+	secret: &[u8],
+	device: &StaticSecret,
+	joined: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
+	let opened = Zeroizing::new(sealed_box::open(device, joined)?);
+	if opened.len() < MAC_LENGTH {
+		return Err(CryptoError::Truncated);
+	}
+	let (mac, answer) = opened.split_at(MAC_LENGTH);
+	keyed(secret, &[ANSWER_DOMAIN, answer].concat())
+		.verify_slice(mac)
+		.map_err(|_| CryptoError::Unauthentic)?;
+	Ok(Zeroizing::new(answer.to_vec()))
+}
+
 fn payload(secret: &[u8], keys: &DeviceKeys) -> Vec<u8> {
 	let public_keys =
 		[keys.signing_public().as_bytes().as_slice(), keys.agreement_public().as_bytes()].concat();
@@ -90,6 +106,27 @@ mod tests {
 		assert_ne!(
 			answer_mac(b"invitation", answer),
 			keyed(b"invitation", answer).finalize().into_bytes().as_slice()
+		);
+	}
+
+	#[test]
+	fn a_joined_answer_opens_only_under_the_secret_that_keyed_its_mac() {
+		let device = DeviceKeys::generate().expect("randomness");
+		let answer = br#"{"key_id":1}"#;
+		let boxed = [answer_mac(b"invitation", answer).as_slice(), answer].concat();
+		let joined = sealed_box::seal(&device.agreement_public(), &boxed).expect("the box seals");
+
+		let opened = opened_answer(b"invitation", device.agreement(), &joined);
+
+		assert_eq!(opened.expect("the answer opens").as_slice(), answer);
+		assert_eq!(
+			opened_answer(b"guessed", device.agreement(), &joined),
+			Err(CryptoError::Unauthentic)
+		);
+		let short = sealed_box::seal(&device.agreement_public(), &[1; 8]).expect("the box seals");
+		assert_eq!(
+			opened_answer(b"invitation", device.agreement(), &short),
+			Err(CryptoError::Truncated)
 		);
 	}
 

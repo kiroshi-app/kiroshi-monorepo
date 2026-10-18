@@ -154,6 +154,8 @@ export const commands = {
 	joinedSpacesList: () => typedError<JoinedSpace[], JoinedSpaceError>(__TAURI_INVOKE("joined_spaces_list")),
 	joinedSpaceConnect: (id: string) => typedError<JoinedSpaceConnection, JoinedSpaceError>(__TAURI_INVOKE("joined_space_connect", { id })),
 	joinedSpaceRemove: (id: string) => typedError<null, JoinedSpaceError>(__TAURI_INVOKE("joined_space_remove", { id })),
+	joinByLink: (link: string) => typedError<JoinedSpace, JoinedSpaceError>(__TAURI_INVOKE("join_by_link", { link })),
+	joinLinkListen: () => __TAURI_INVOKE<void>("join_link_listen"),
 	joinedSpaceMembers: (id: string) => typedError<JoinedSpaceMember[], JoinedSpaceError>(__TAURI_INVOKE("joined_space_members", { id })),
 	mcpOauthConnect: (owner: EnvOwner, name: string, url: string) => typedError<null, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_connect", { owner, name, url })),
 	mcpOauthCancel: () => typedError<null, OauthError_Serialize>(__TAURI_INVOKE("mcp_oauth_cancel")),
@@ -250,6 +252,8 @@ export const JOINED_SPACE_MEMBERS_CHANGED_EVENT = "joined-space://members-change
 export const JOINED_SPACE_RECONNECTED_EVENT = "joined-space://reconnected" as const;
 
 export const JOINED_SPACE_REMOVED_EVENT = "joined-space://removed" as const;
+
+export const JOIN_LINK_OPENED_EVENT = "join-link://opened" as const;
 
 export const MAXIMIZE_BUTTON_EVENT = "window-maximize-button" as const;
 
@@ -856,6 +860,10 @@ export type InvitationsChanged = {
 	invitations: Invitation[],
 };
 
+export type JoinLinkOpened = {
+	link: string,
+};
+
 export type JoinedSpace = {
 	id: string,
 	hostUrl: string,
@@ -871,12 +879,15 @@ export type JoinedSpaceConnection = {
 	name: string,
 };
 
-export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string };
+export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string } | { kind: "malformedLink" } | { kind: "linkUsed" } | { kind: "noInvitation"; inviterEmail: string | null } | { kind: "notInRoster" } | { kind: "badSignature" } | { kind: "removedByRotation" } | { kind: "needsJoinLink" } | { kind: "keyStore"; detail: string };
 
 export type JoinedSpaceMember = {
 	userId: string,
 	name: string | null,
 	role: JoinedSpaceRole,
+	deviceId: string,
+	fingerprint: string[],
+	isPresent: boolean,
 };
 
 export type JoinedSpaceMembersChanged = {

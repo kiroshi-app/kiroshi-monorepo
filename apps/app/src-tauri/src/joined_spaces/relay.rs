@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use serde_json::{json, Value};
@@ -13,7 +14,9 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::commands::{announce_change, announce_reconnection, announce_removal, ready};
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
+use super::held::{self, Held};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
+use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
@@ -23,7 +26,7 @@ use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Opened, Socket, PING_EVERY, SILENCE_BOUND,
+	opened, sent, until_stopped, Backoff, Opened, Sink, Socket, PING_EVERY, SILENCE_BOUND,
 };
 
 const HOST_ABSENT: u16 = 4002;
@@ -34,10 +37,14 @@ const SERVER_RESTARTING: u16 = 4005;
 
 const CALLS_IN_FLIGHT: usize = 64;
 
+const HOST_ANSWER_BOUND: Duration = Duration::from_secs(15);
+
 pub struct RelayGuests {
 	cloud: Cloud,
 	guests: Mutex<HashMap<String, Guest>>,
+	removed: Mutex<HashSet<String>>,
 	turn: tokio::sync::Mutex<()>,
+	answer_bound: Duration,
 }
 
 struct Guest {
@@ -63,6 +70,7 @@ struct Linked {
 enum Ended {
 	Stopped,
 	Evicted,
+	Removed,
 	SignedOut(&'static str),
 	Dropped(String),
 }
@@ -91,12 +99,34 @@ impl RelayGuests {
 		Self {
 			cloud: Cloud::new(api_url),
 			guests: Mutex::new(HashMap::new()),
+			removed: Mutex::new(HashSet::new()),
 			turn: tokio::sync::Mutex::new(()),
+			answer_bound: HOST_ANSWER_BOUND,
 		}
+	}
+
+	#[cfg(test)]
+	pub(crate) fn answering_within(self, answer_bound: Duration) -> Self {
+		Self { answer_bound, ..self }
 	}
 
 	pub fn cloud(&self) -> &Cloud {
 		&self.cloud
+	}
+
+	pub(super) fn answer_bound(&self) -> Duration {
+		self.answer_bound
+	}
+
+	fn removed(&self) -> MutexGuard<'_, HashSet<String>> {
+		self.removed.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn ended_error(&self, id: &str) -> JoinedSpaceError {
+		if self.removed().contains(id) {
+			return JoinedSpaceError::RemovedByRotation;
+		}
+		JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() }
 	}
 
 	pub fn is_joined(&self) -> bool {
@@ -154,6 +184,10 @@ fn is_signed_in<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
 		.map_err(|error| format!("the account session store failed: {error:?}"))
 }
 
+pub(super) fn member_socket_url(cloud: &Cloud, instance_id: &str, relay_device_id: &str) -> String {
+	format!("{}?device={relay_device_id}", cloud.member_relay_url(instance_id))
+}
+
 pub async fn joined<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: String,
@@ -180,6 +214,7 @@ pub async fn joined<R: Runtime>(
 		name: name.or(held_name).unwrap_or(instance_id),
 	};
 	let joined = repository.join(candidate).await?;
+	guests.removed().remove(&joined.id);
 	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
 	Ok(JoinedSpace::presented(joined, guests.cloud()))
@@ -291,6 +326,9 @@ async fn started<R: Runtime>(
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
+	if guests.removed().contains(id) {
+		return Err(JoinedSpaceError::RemovedByRotation);
+	}
 	let state = app.state::<db::DatabaseState>();
 	let found = ready(&state)?.joined_spaces().find(id.to_owned()).await?;
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
@@ -306,6 +344,7 @@ async fn started<R: Runtime>(
 	if let Some(reached) = guests.reached(id) {
 		return Ok((found, reached));
 	}
+	let held = held::held(app, &instance_id).await?.ok_or(JoinedSpaceError::NeedsJoinLink)?;
 	let link = Arc::new(MemberLink::new());
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
@@ -317,7 +356,7 @@ async fn started<R: Runtime>(
 		.await
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
 	let linked = Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link) };
-	let linked = guest_linked(app.clone(), linked, stopped);
+	let linked = guest_linked(app.clone(), linked, held, stopped);
 	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
 	let reached = Reached {
 		origin: origin.clone(),
@@ -336,7 +375,7 @@ async fn learned<R: Runtime>(
 	let offline = || JoinedSpaceError::HostOffline { id: id.to_owned() };
 	match link.settled().await {
 		Presence::Online => {}
-		Presence::Ended => return Err(JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() }),
+		Presence::Ended => return Err(app.state::<RelayGuests>().ended_error(id)),
 		Presence::Connecting | Presence::Down => return Err(offline()),
 	}
 	let answer = timeout(LEARN_BOUND, link.called(SHARED_SPACE_COMMAND, json!({})))
@@ -397,6 +436,7 @@ async fn membership_ended<R: Runtime>(
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::MutexGuard<'_, ()>> {
 	let guests = app.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
+	guests.removed().clear();
 	let running: Vec<(String, Guest)> = guests.guests().drain().collect();
 	for (id, guest) in running {
 		finished(&id, guest).await;
@@ -428,15 +468,29 @@ async fn finished(id: &str, guest: Guest) {
 async fn guest_linked<R: Runtime>(
 	app: AppHandle<R>,
 	linked: Linked,
+	mut held: Held,
 	mut stop: watch::Receiver<bool>,
 ) {
 	let mut backoff = Backoff::first();
 	loop {
-		match attempted(&app, &linked, &mut stop, &mut backoff).await {
+		let (ended, kept) = attempted(&app, &linked, held, &mut stop, &mut backoff).await;
+		held = kept;
+		match ended {
 			Ended::Stopped => return linked.link.ended(Presence::Ended),
 			Ended::Evicted => {
+				app.state::<RelayGuests>().removed().insert(linked.id.clone());
 				linked.link.ended(Presence::Ended);
 				return evicted(&app, &linked).await;
+			}
+			Ended::Removed => {
+				let guests = app.state::<RelayGuests>();
+				guests.removed().insert(linked.id.clone());
+				linked.link.ended(Presence::Ended);
+				guests.left(&linked.id, &linked.link);
+				return eprintln!(
+					"joined space {} (instance {}) heard no hello from its present host: the device left its roster",
+					linked.id, linked.instance_id
+				);
 			}
 			Ended::SignedOut(reason) => {
 				linked.link.ended(Presence::Down);
@@ -464,32 +518,34 @@ async fn guest_linked<R: Runtime>(
 async fn attempted<R: Runtime>(
 	app: &AppHandle<R>,
 	linked: &Linked,
+	held: Held,
 	stop: &mut watch::Receiver<bool>,
 	backoff: &mut Backoff,
-) -> Ended {
+) -> (Ended, Held) {
 	let bearer = match app.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
-		Ok(None) => return Ended::SignedOut("no account is signed in"),
+		Ok(None) => return (Ended::SignedOut("no account is signed in"), held),
 		Err(error) => {
-			return Ended::Dropped(format!("the account session store failed: {error:?}"))
+			return (Ended::Dropped(format!("the account session store failed: {error:?}")), held)
 		}
 	};
-	let url = app.state::<RelayGuests>().cloud.member_relay_url(&linked.instance_id);
+	let cloud = &app.state::<RelayGuests>().cloud;
+	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
 	match until_stopped(stop, opened(url, &bearer)).await {
-		None => Ended::Stopped,
+		None => (Ended::Stopped, held),
 		Some(Opened::Socket(socket)) => {
 			backoff.reset();
-			online(app, *socket, linked, stop).await
+			online(app, *socket, linked, held, stop).await
 		}
-		Some(Opened::Unknown) => Ended::Evicted,
+		Some(Opened::Unknown) => (Ended::Evicted, held),
 		Some(Opened::Revoked) => {
 			session::revoked(app, &bearer);
-			Ended::SignedOut("the relay refused the account (401)")
+			(Ended::SignedOut("the relay refused the account (401)"), held)
 		}
 		Some(Opened::Forbidden) => {
-			Ended::Dropped("the account is not a member of this instance (403)".to_owned())
+			(Ended::Dropped("the account is not a member of this instance (403)".to_owned()), held)
 		}
-		Some(Opened::Unreachable(reason)) => Ended::Dropped(reason),
+		Some(Opened::Unreachable(reason)) => (Ended::Dropped(reason), held),
 	}
 }
 
@@ -497,22 +553,55 @@ async fn online<R: Runtime>(
 	app: &AppHandle<R>,
 	socket: Socket,
 	linked: &Linked,
+	held: Held,
+	stop: &mut watch::Receiver<bool>,
+) -> (Ended, Held) {
+	let state = app.state::<db::DatabaseState>();
+	let database = match ready(&state) {
+		Ok(database) => database,
+		Err(failure) => {
+			return (Ended::Dropped(format!("the database is unavailable: {failure:?}")), held)
+		}
+	};
+	let mut wire = MemberWire::new(database.joined_space_relay(), &linked.instance_id, held);
+	let ended = sealed_session(app, socket, linked, &mut wire, stop).await;
+	(ended, wire.into_held())
+}
+
+enum Outgoing {
+	Nothing,
+	Hello,
+	Sealed(String),
+	Ping,
+}
+
+async fn sealed_session<R: Runtime>(
+	app: &AppHandle<R>,
+	socket: Socket,
+	linked: &Linked,
+	wire: &mut MemberWire<'_>,
 	stop: &mut watch::Receiver<bool>,
 ) -> Ended {
 	let link = &linked.link;
+	let answer_bound = app.state::<RelayGuests>().answer_bound();
 	let (mut sink, mut stream) = socket.split();
 	let (calls_in, mut calls) = mpsc::channel(CALLS_IN_FLIGHT);
-	if let Some(resume) = resynced(app, linked, link.opened(calls_in)) {
-		if let Err(reason) = sent(&mut sink, resume).await {
-			return Ended::Dropped(reason);
-		}
-	}
+	let mut unopened = Some(calls_in);
+	let mut hello_deadline = Instant::now() + answer_bound;
+	let mut outgoing = Outgoing::Hello;
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
 	loop {
+		if matches!(outgoing, Outgoing::Hello) {
+			hello_deadline = Instant::now() + answer_bound;
+		}
+		if let Err(reason) = delivered(&mut sink, wire, outgoing).await {
+			return Ended::Dropped(reason);
+		}
+		let is_greeted = wire.is_greeted();
 		let resume_deadline = link.resume_deadline();
-		let outgoing = tokio::select! {
+		outgoing = tokio::select! {
 			_ = stop.changed() => {
 				let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 				if let Err(reason) = sent(&mut sink, Message::Close(Some(close))).await {
@@ -523,40 +612,102 @@ async fn online<R: Runtime>(
 			frame = stream.next() => {
 				silence.as_mut().reset(Instant::now() + SILENCE_BOUND);
 				match frame {
-					Some(Ok(Message::Text(text))) => match resynced(app, linked, link.received(text.as_str())) {
-						Some(resume) => resume,
-						None => continue,
-					},
+					Some(Ok(Message::Text(text))) => heard(app, linked, wire, text.as_str(), &mut unopened).await,
 					Some(Ok(Message::Close(frame))) => return closed_by_relay(frame),
-					Some(Ok(_)) => continue,
+					Some(Ok(_)) => Outgoing::Nothing,
 					Some(Err(error)) => return Ended::Dropped(format!("the member relay socket failed: {error}")),
 					None => return Ended::Dropped("the member relay socket ended".to_owned()),
 				}
 			}
-			Some(call) = calls.recv() => Message::text(call),
+			Some(call) = calls.recv(), if is_greeted => Outgoing::Sealed(call),
+			_ = sleep_until(hello_deadline), if !is_greeted => return Ended::Removed,
 			_ = sleep_until(resume_deadline.unwrap_or_else(Instant::now)), if resume_deadline.is_some() => {
 				eprintln!("joined space {} heard no answer to its relay resume", linked.id);
-				resynced(app, linked, link.resume_lapsed());
-				continue;
+				resynced(app, linked, link.resume_lapsed())
 			}
-			_ = pings.tick() => Message::Ping(Vec::new().into()),
+			_ = pings.tick() => Outgoing::Ping,
 			_ = &mut silence => {
 				return Ended::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
 			}
 		};
-		if let Err(reason) = sent(&mut sink, outgoing).await {
-			return Ended::Dropped(reason);
-		}
 	}
 }
 
-fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> Option<Message> {
+async fn delivered(
+	sink: &mut Sink,
+	wire: &mut MemberWire<'_>,
+	outgoing: Outgoing,
+) -> Result<(), String> {
+	let message = match outgoing {
+		Outgoing::Nothing => return Ok(()),
+		Outgoing::Hello => Message::text(wire.hello().await?),
+		Outgoing::Sealed(plaintext) => Message::text(wire.sealed(&plaintext).await?),
+		Outgoing::Ping => Message::Ping(Vec::new().into()),
+	};
+	sent(sink, message).await
+}
+
+async fn heard<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
+	wire: &mut MemberWire<'_>,
+	text: &str,
+	unopened: &mut Option<mpsc::Sender<String>>,
+) -> Outgoing {
+	let heard = match wire.opened(text).await {
+		Ok(heard) => heard,
+		Err(refusal) => {
+			eprintln!(
+				"joined space {} (instance {}) dropped a relay frame: {refusal:?}",
+				linked.id, linked.instance_id
+			);
+			return Outgoing::Nothing;
+		}
+	};
+	match heard {
+		Heard::Hello => match unopened.take() {
+			Some(calls) => resynced(app, linked, linked.link.opened(calls)),
+			None => Outgoing::Nothing,
+		},
+		Heard::Frame(plaintext) => resynced(app, linked, linked.link.received(&plaintext)),
+		Heard::Rekey(handed) => match held::kept(app, &linked.instance_id, &handed).await {
+			Ok(true) => {
+				eprintln!(
+					"joined space {} (instance {}) took space key_id {}",
+					linked.id, linked.instance_id, handed.space.key_id
+				);
+				wire.rekeyed(*handed);
+				if wire.is_greeted() {
+					Outgoing::Nothing
+				} else {
+					Outgoing::Hello
+				}
+			}
+			Ok(false) => {
+				eprintln!(
+					"joined space {} (instance {}) kept its roster: the rekey carried an older one",
+					linked.id, linked.instance_id
+				);
+				Outgoing::Nothing
+			}
+			Err(failure) => {
+				eprintln!(
+					"joined space {} (instance {}) kept its space key: the rekey was not stored: {failure:?}",
+					linked.id, linked.instance_id
+				);
+				Outgoing::Nothing
+			}
+		},
+	}
+}
+
+fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> Outgoing {
 	match resync {
-		Resync::InStep => None,
-		Resync::Resume(frame) => Some(Message::text(frame)),
+		Resync::InStep => Outgoing::Nothing,
+		Resync::Resume(frame) => Outgoing::Sealed(frame),
 		Resync::Reread => {
 			reread_announced(app, &linked.id);
-			None
+			Outgoing::Nothing
 		}
 	}
 }

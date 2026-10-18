@@ -46,6 +46,11 @@
 		]
 	},
 	"plugins": {
+		"deep-link": {
+			"desktop": {
+				"schemes": ["kiroshi"]
+			}
+		},
 		"updater": {
 			"endpoints": [
 				"https://github.com/shoto290/kiroshi-monorepo/releases/latest/download/latest.json"
