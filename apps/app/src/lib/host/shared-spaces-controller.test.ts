@@ -5,7 +5,12 @@ import {
 	type SharedSpacesTransport,
 } from "./shared-spaces-controller"
 
-import type { Member, MembersChanged, MembersError } from "../bindings"
+import type {
+	Member,
+	MembersChanged,
+	MembersError,
+	SpaceInvitation,
+} from "../bindings"
 
 vi.mock("./index", () => ({ listen: vi.fn(async () => () => undefined) }))
 
@@ -22,6 +27,19 @@ const PENDING: Member = {
 	email: "sam@example.com",
 	status: "pending",
 }
+
+const invitationTo = (
+	email: string,
+	state: SpaceInvitation["state"],
+): SpaceInvitation => ({
+	id: `invitation-${email}`,
+	email,
+	sentAt: "2026-10-01T00:00:00.000Z",
+	expiresAt: "2026-10-08T00:00:00.000Z",
+	state,
+})
+
+const SAM_INVITED = invitationTo("sam@example.com", "invited")
 
 const ok = (data: Member[]) => ({ status: "ok" as const, data })
 
@@ -92,8 +110,8 @@ describe("the shared state of own spaces", () => {
 
 		events.announce({
 			spaceId: "work",
-			members: [HOST, PENDING],
-			invitations: [],
+			members: [HOST],
+			invitations: [SAM_INVITED],
 		})
 
 		expect(controller.getState().sharedBySpaceId).toEqual({
@@ -121,6 +139,23 @@ describe("the shared state of own spaces", () => {
 		expect(logged).toHaveBeenCalledTimes(2)
 	})
 
+	it("reads a space whose invitations all expired or were withdrawn as not shared", async () => {
+		const { controller, events } = await watched({
+			home: async () => ok([HOST, PENDING]),
+		})
+
+		events.announce({
+			spaceId: "home",
+			members: [HOST],
+			invitations: [
+				invitationTo("sam@example.com", "expired"),
+				invitationTo("ana@example.com", "withdrawn"),
+			],
+		})
+
+		expect(controller.getState().sharedBySpaceId).toEqual({ home: false })
+	})
+
 	it("ignores a members change for a space it does not watch", async () => {
 		const { controller, events } = await watched({
 			home: async () => ok([HOST]),
@@ -128,8 +163,8 @@ describe("the shared state of own spaces", () => {
 
 		events.announce({
 			spaceId: "elsewhere",
-			members: [HOST, PENDING],
-			invitations: [],
+			members: [HOST],
+			invitations: [SAM_INVITED],
 		})
 
 		expect(controller.getState().sharedBySpaceId).toEqual({ home: false })

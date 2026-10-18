@@ -34,7 +34,7 @@ const answerOf = <Data>(call: Promise<Data>): Promise<MembersAnswer<Data>> =>
 		},
 	)
 
-const membersOf = ({ members, invitations }: SpaceMembers): Member[] => [
+export const membersOf = ({ members, invitations }: SpaceMembers): Member[] => [
 	...members,
 	...invitations
 		.filter((invitation) => invitation.state === "invited")
