@@ -52,6 +52,17 @@ pub(super) fn state_of<R: Runtime>(
 	})
 }
 
+pub(super) fn state_or_waiting<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	instance_id: &str,
+) -> JoinedSpaceState {
+	state_of(app, instance_id).unwrap_or_else(|failure| {
+		eprintln!("joined space {id} waits for its host: its key did not read: {failure:?}");
+		JoinedSpaceState::WaitingForHost
+	})
+}
+
 pub(super) async fn roster<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,

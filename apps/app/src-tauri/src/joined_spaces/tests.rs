@@ -38,6 +38,7 @@ use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const INSTANCE: &str = "6f1c2b8e-7d3a-4b5e-9c1d-2a3b4c5d6e7f";
 const INVITATION: &str = "inv_studio-1";
+const OTHER_INSTANCE: &str = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
 const MEMBER_BEARER: &str = "bearer-of-the-member";
 const MEMBER_RELAY_ID: &str = "3b0c7a52-1d4e-4f8a-9b6c-0e2f4a6c8d10";
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -59,6 +60,7 @@ struct Room {
 	host: HostSide,
 	joins: Vec<Value>,
 	connections: usize,
+	other_memberships: Vec<Value>,
 }
 
 #[derive(Clone)]
@@ -72,6 +74,7 @@ impl Relay {
 			host: HostSide::Absent,
 			joins: Vec::new(),
 			connections: 0,
+			other_memberships: Vec::new(),
 		})))
 	}
 
@@ -163,9 +166,12 @@ async fn device_registered() -> Response {
 }
 
 async fn instances_listed(Served(relay): Served<Relay>) -> Response {
-	let is_joined = !relay.room().accepted.is_empty();
-	let listed = if is_joined { json!([{ "id": INSTANCE, "name": "Studio" }]) } else { json!([]) };
-	answered_json(StatusCode::OK, listed)
+	let room = relay.room();
+	let mut listed = room.other_memberships.clone();
+	if !room.accepted.is_empty() {
+		listed.insert(0, json!({ "id": INSTANCE, "name": "Studio" }));
+	}
+	answered_json(StatusCode::OK, Value::Array(listed))
 }
 
 async fn roster_listed() -> Response {
@@ -297,6 +303,12 @@ impl Member {
 		let state = self.app.state::<DatabaseState>();
 		let relay = state.as_ref().expect("the database").joined_space_relay();
 		relay.roster(INSTANCE.to_owned()).await.expect("the roster reads").map(|held| held.roster)
+	}
+
+	fn key_file(&self, instance_id: &str) -> PathBuf {
+		let profile = self.app.path().app_data_dir().expect("the data folder resolves");
+		std::fs::create_dir_all(&profile).expect("the profile folder exists");
+		profile.join(format!("space-key-joined-{instance_id}"))
 	}
 
 	fn signed_out_of_the_store(&self) {
@@ -534,6 +546,33 @@ fn a_waiting_socket_held_open_after_pending_resends_its_join_and_comes_online_on
 			.all(|join| *join == json!({ "v": 2, "instance": INSTANCE, "join": {} })));
 		assert_eq!(member.relay.connections(), 2, "the accept and one waiting connection");
 		assert_eq!(member.listed().await[0].state, JoinedSpaceState::Online);
+	});
+}
+
+#[test]
+fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_once_answered() {
+	run(async {
+		let member = Member::new("join-unreadable-key").await;
+		member.relay.hosting(HostSide::Answering(member.host().pending()));
+		let unreadable = member.accepted().await.expect("the join waits");
+		std::fs::write(member.key_file(INSTANCE), b"bad").expect("the key file is spoiled");
+		let harbour = json!({ "id": OTHER_INSTANCE, "name": "Harbour" });
+		member.relay.room().other_memberships.push(harbour);
+
+		relay::reconciled(member.app.handle()).await;
+		let listed = member.listed().await;
+		let other = listed.iter().find(|joined| joined.name == "Harbour").expect("the other space");
+		let is_waiting = [member.is_waiting(&unreadable.id), member.is_waiting(&other.id)];
+		member.relay.hosting(HostSide::Answering(member.host().joined()));
+		until("the space listed online", || async {
+			let listed = member.listed().await;
+			let found = listed.into_iter().find(|joined| joined.id == unreadable.id);
+			found.filter(|joined| joined.state == JoinedSpaceState::Online)
+		})
+		.await;
+
+		assert_eq!(is_waiting, [true, true]);
+		assert_eq!(member.held_key_id(), Some(1));
 	});
 }
 

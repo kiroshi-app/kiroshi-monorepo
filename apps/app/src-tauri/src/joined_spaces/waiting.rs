@@ -53,7 +53,7 @@ pub(super) async fn joins_started<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
-		if held::state_of(app, &instance_id)? == JoinedSpaceState::Online {
+		if held::state_or_waiting(app, &joined.id, &instance_id) == JoinedSpaceState::Online {
 			continue;
 		}
 		let mut waiting = guests.waiting();

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
+use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::relay::{self, RelayGuests};
 use super::{deep_link, held};
 use crate::db;
@@ -72,13 +72,7 @@ pub async fn joined_spaces_list<R: Runtime>(
 	let cloud = app.state::<RelayGuests>().inner().cloud();
 	let listed = stored.into_iter().map(|joined| {
 		let JoinedReach::Relay { instance_id } = &joined.reach;
-		let state = held::state_of(&app, instance_id).unwrap_or_else(|failure| {
-			eprintln!(
-				"joined space {} is listed waiting for its host: its key did not read: {failure:?}",
-				joined.id
-			);
-			JoinedSpaceState::WaitingForHost
-		});
+		let state = held::state_or_waiting(&app, &joined.id, instance_id);
 		JoinedSpace::presented(joined, cloud, state)
 	});
 	Ok(listed.collect())
@@ -127,6 +121,7 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
+	use super::super::contract::JoinedSpaceState;
 	use super::*;
 	use crate::account::session::AccountSession;
 	use crate::crypto::commands::SpaceKeys;
