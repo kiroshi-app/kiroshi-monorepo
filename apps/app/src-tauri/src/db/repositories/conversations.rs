@@ -962,7 +962,7 @@ fn refuse_unknown_colour(colour: Option<&str>) -> Result<(), ConversationError> 
 }
 
 fn archived_conversation(
-	connection: &mut Connection,
+	connection: &Connection,
 	id: &str,
 ) -> Result<ArchivedConversation, ConversationError> {
 	connection
@@ -982,7 +982,7 @@ fn archived_conversation(
 		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })
 }
 
-fn unarchived_conversation(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
+fn unarchived_conversation(connection: &Connection, id: &str) -> Result<(), ConversationError> {
 	let written =
 		connection.execute("UPDATE conversations SET archived_at = NULL WHERE id = ?1", [id])?;
 	refuse_unknown_conversation(written, id)
