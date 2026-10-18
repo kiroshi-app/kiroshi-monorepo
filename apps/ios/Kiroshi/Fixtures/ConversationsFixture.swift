@@ -936,7 +936,7 @@
     final class FixtureHostSocket: RelaySocket {
         enum Inbound: Sendable {
             case frame(String, after: Duration = .zero)
-            case close(Int, after: Duration = .zero)
+            case close(Int)
         }
 
         private let script: FixtureHost.Script
@@ -950,6 +950,7 @@
         private let listed: AsyncStream<Void>.Continuation
         private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
+        private let leaving = Mutex<Task<Void, Never>?>(nil)
 
         init(script: FixtureHost.Script, companionsRefusal: FixtureOnce, pins: FixturePins) {
             self.script = script
@@ -1006,7 +1007,15 @@
                     false
                 }
             guard leaves else { return }
-            push(.close(RelayClosure.hostOffline, after: leaving))
+            leave(after: leaving)
+        }
+
+        private func leave(after delay: Duration) {
+            let departure = Task { [inboundContinuation] in
+                guard (try? await ContinuousClock().sleep(for: delay)) != nil else { return }
+                inboundContinuation.yield(.close(RelayClosure.hostOffline))
+            }
+            leaving.withLock { $0 = departure }
         }
 
         func receive() async throws -> String {
@@ -1015,8 +1024,7 @@
             case .frame(let text, let delay):
                 try await ContinuousClock().sleep(for: delay)
                 return text
-            case .close(let code, let delay):
-                try await ContinuousClock().sleep(for: delay)
+            case .close(let code):
                 throw RelayClosure(code: code)
             case nil:
                 throw CancellationError()
@@ -1027,6 +1035,7 @@
 
         func close() {
             playingGroupChanges?.cancel()
+            leaving.withLock { $0?.cancel() }
             listed.finish()
             launchPlanOpened.finish()
             push(.close(1000))
