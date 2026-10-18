@@ -11,7 +11,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use base64::prelude::{Engine as _, BASE64_STANDARD};
+use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
 use kiroshi_app::agent::commands::{agent_cancel_turn, terminate_session};
@@ -89,10 +89,18 @@ async fn registered(body: String) -> Response {
 	)
 }
 
+async fn device_challenged() -> Response {
+	let nonce = BASE64_URL_SAFE_NO_PAD.encode([7u8; 32]);
+	answered_json(
+		StatusCode::CREATED,
+		json!({ "nonce": nonce, "expiresAt": "2099-10-01T00:00:00.000Z" }),
+	)
+}
+
 async fn device_registered() -> Response {
 	answered_json(
 		StatusCode::CREATED,
-		json!({ "id": HOST_DEVICE, "createdAt": "2026-10-01T00:00:00.000Z" }),
+		json!({ "id": HOST_DEVICE, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false }),
 	)
 }
 
@@ -269,6 +277,7 @@ impl Host {
 			Router::new()
 				.route("/instances", post(registered))
 				.route("/devices", post(device_registered))
+				.route("/devices/challenge", post(device_challenged))
 				.route("/instances/{id}/relay/host", get(relay_opened))
 				.route("/instances/{id}/members", get(members))
 				.route("/me", get(me))
