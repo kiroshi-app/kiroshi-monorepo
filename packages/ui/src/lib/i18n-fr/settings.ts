@@ -71,6 +71,30 @@ const settings = {
 		copySignInLinkFailed: "Impossible de copier le lien de connexion",
 		manageAccountFailed: "Impossible d’ouvrir votre compte sur kiroshi.app",
 		signOutFailed: "Impossible de se déconnecter de Kiroshi",
+		devices: {
+			title: "Vos appareils",
+			description:
+				"Chaque appareil listé ici lit vos espaces. Retirez celui que vous n’utilisez plus.",
+			thisDevice: "Cet appareil",
+			activeNow: "Actif maintenant",
+			otherDevices: "Autres appareils",
+			remove: "Retirer",
+			empty:
+				"Aucun autre appareil ne lit vos espaces. Pour en ajouter un, connectez-vous dessus avec {{email}}, puis approuvez-le ici.",
+			confirm: {
+				title: "Retirer {{device}} ?",
+				body: "Il sera déconnecté et ne lira plus vos espaces.",
+				remove: "Retirer",
+				removing: "Retrait…",
+				cancel: "Annuler",
+				failed:
+					"Impossible de retirer {{device}}. Vérifiez votre connexion et réessayez.",
+			},
+			removed: {
+				title: "{{device}} a été déconnecté",
+				description: "Il ne lit plus vos espaces.",
+			},
+		},
 	},
 	plugin: {
 		author: {

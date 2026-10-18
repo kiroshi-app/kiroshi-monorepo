@@ -9,6 +9,10 @@ import { SkeletonBar } from "@workspace/ui/components/list-skeleton"
 import { Badge } from "@workspace/ui/components/ui/badge"
 import { Button } from "@workspace/ui/components/ui/button"
 import { Skeleton } from "@workspace/ui/components/ui/skeleton"
+import {
+	YourDevices,
+	type YourDevicesProps,
+} from "@workspace/ui/components/user-settings-dialog/your-devices"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 
 type AccountPlan = "free" | "pro"
@@ -26,6 +30,7 @@ type AccountState =
 type AccountPanelProps = {
 	account: AccountState
 	isPending?: boolean
+	devices?: YourDevicesProps
 	onSignIn: () => void
 	onCancel: () => void
 	onCopySignInLink: () => void
@@ -98,6 +103,7 @@ const AccountCardSkeleton = () => (
 const AccountPanel = ({
 	account,
 	isPending = false,
+	devices,
 	onSignIn,
 	onCancel,
 	onCopySignInLink,
@@ -118,7 +124,7 @@ const AccountPanel = ({
 
 	if (account.status === "signedIn") {
 		return (
-			<div className={PANEL_CLASS}>
+			<div className={`${PANEL_CLASS} flex-1`}>
 				<div className="flex items-center gap-3 rounded-xl border border-border p-3.5">
 					<InitialsAvatar
 						className="shrink-0"
@@ -174,6 +180,7 @@ const AccountPanel = ({
 					}
 					caption={t("account.signedIn.caption")}
 				/>
+				{devices ? <YourDevices {...devices} /> : null}
 			</div>
 		)
 	}
