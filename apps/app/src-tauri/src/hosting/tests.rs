@@ -6327,3 +6327,127 @@ fn a_pending_rotation_failing_at_socket_start_ends_the_session_unsealed_and_the_
 		assert!(!harness.is_rotation_pending().await);
 	});
 }
+
+fn device_revoked_event(relay_device_id: &str, user_id: &str) -> String {
+	json!({ "event": "device.revoked", "deviceId": relay_device_id, "userId": user_id }).to_string()
+}
+
+#[test]
+fn a_device_revoked_event_drops_the_row_and_rekeys_the_remaining_devices_with_the_next_key_id() {
+	run(async {
+		let mut harness = Harness::signed_in("revoked-event").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let mut guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+
+		relay.sent(device_revoked_event(&guest.member.relay_device_id, "guest")).await;
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+		let rostered = verified_set(&host, &handover.roster).expect("the new roster set verifies");
+		guest.ctr += 1;
+		let guest_space =
+			Space { instance_id: &relay.instance_id.clone(), key: &guest.space, host: &host };
+		relay
+			.sent(guest.member.sealed(&guest_space, guest.ctr, &a_member_call("left"), None))
+			.await;
+		joiner.space = space_key_of(&handover);
+		joiner.ctr = 0;
+		let answer = called(&mut relay, &mut joiner, &host).await;
+
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert!(!rostered.contains(&guest.member.keys.device_id()));
+		assert!(rostered.contains(&joiner.member.keys.device_id()));
+		assert_eq!(answer["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&guest.member));
+		assert!(!harness.is_rotation_pending().await);
+		assert_eq!(harness.state(), HostingState::Online);
+		let accounts: Vec<String> =
+			device_ids(&harness.devices().await).into_iter().map(|(account, _)| account).collect();
+		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
+	});
+}
+
+#[test]
+fn a_device_revoked_event_naming_no_row_another_account_the_host_or_sent_by_a_member_changes_nothing(
+) {
+	run(async {
+		let mut harness = Harness::signed_in("revoked-event-ignored").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let link = harness.link_for("guest").await;
+		let mut guest = harness.joined(&mut relay, &link, "guest").await;
+		let host_relay_device = held_relay_device(&harness).await.expect("a registered device");
+		let before = harness.devices().await;
+
+		relay.sent(device_revoked_event(&"0".repeat(32), "guest")).await;
+		relay.sent(device_revoked_event(&guest.member.relay_device_id, "owner")).await;
+		relay.sent(device_revoked_event(&host_relay_device, "owner")).await;
+		let mut forged: Value =
+			serde_json::from_str(&device_revoked_event(&guest.member.relay_device_id, "guest"))
+				.expect("json");
+		forged["from"] = json!(guest.member.relay_device_id);
+		relay.sent(forged.to_string()).await;
+		let answer = called(&mut relay, &mut guest, &host).await;
+
+		assert_eq!(answer["status"], 200);
+		assert_eq!(harness.devices().await, before);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+		assert!(!harness.is_rotation_pending().await);
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_device_revoked_event_whose_rotation_fails_ends_the_session_and_the_reconnect_rotates() {
+	run(async {
+		let mut harness = Harness::signed_in("revoked-event-unrotated").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+
+		harness.profile_locked(true);
+		relay.sent(device_revoked_event(&guest.member.relay_device_id, "guest")).await;
+		let frames = relay.frames_until_closed().await;
+		let left_pending = harness.is_rotation_pending().await;
+		let roster = relay_database(&harness).space_relay().roster(PERSONAL.to_owned()).await;
+		let mut accounts: Vec<String> =
+			roster.expect("the roster reads").rows.into_iter().map(|row| row.account_id).collect();
+		accounts.sort();
+		harness.profile_locked(false);
+		let mut retried = harness.relay_side().await;
+		let stale =
+			Space { instance_id: &retried.instance_id.clone(), key: &joiner.space, host: &host };
+		retried.sent(joiner.member.sealed(&stale, 50, HELLO, None)).await;
+		let rekey = retried.addressed(&joiner.member, "rekey").await;
+
+		assert!(frames.iter().all(|frame| frame.get("rekey").is_none()), "{frames:?}");
+		assert!(left_pending);
+		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
+		let handover = joiner.member.rekey_opened(&rekey, &retried.instance_id, &host);
+		assert_eq!(handover.expect("the rekey opens").key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}

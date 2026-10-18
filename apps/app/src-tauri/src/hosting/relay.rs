@@ -5,6 +5,8 @@ use std::time::Duration;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::StatusCode;
+use serde::Deserialize;
+use serde_json::Value;
 use tauri::http::{header, HeaderValue};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpStream;
@@ -20,6 +22,7 @@ use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use super::admission::{HostedSpace, Join};
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
+use super::devices::Revocation;
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
@@ -429,6 +432,12 @@ async fn online<R: Runtime>(
 					}
 					continue;
 				}
+				if let Some(event) = relay_event_of(text.as_str()) {
+					if let Err(ended) = revocation_handled(app, ids.space_id, event).await {
+						return ended;
+					}
+					continue;
+				}
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
@@ -618,6 +627,39 @@ async fn join_answered(
 			eprintln!("{}", wire::dropped_line(hosted.space_id, &refusal));
 			Ok(())
 		}
+	}
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "event")]
+enum RelayEvent {
+	#[serde(rename = "device.revoked", rename_all = "camelCase")]
+	DeviceRevoked { device_id: String, user_id: String },
+}
+
+fn relay_event_of(text: &str) -> Option<RelayEvent> {
+	let envelope: Value = serde_json::from_str(text).ok()?;
+	if envelope.get("from").is_some() {
+		return None;
+	}
+	serde_json::from_value(envelope).ok()
+}
+
+async fn revocation_handled<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	event: RelayEvent,
+) -> Result<(), Ended> {
+	let RelayEvent::DeviceRevoked { device_id, user_id } = event;
+	match devices::device_left(app, space_id, &device_id, &user_id).await {
+		Ok(Revocation::Applied) => Ok(()),
+		Ok(Revocation::Ignored(reason)) => {
+			eprintln!("device.revoked changed nothing in space {space_id}: {reason}");
+			Ok(())
+		}
+		Err(failure) => Err(Ended::Dropped(format!(
+			"device.revoked in space {space_id} was not settled: {failure:?}"
+		))),
 	}
 }
 
