@@ -136,7 +136,9 @@ pub(crate) async fn joined_answer_held<R: Runtime>(
 ) -> Result<Option<(u32, u64)>, JoinedSpaceError> {
 	let link = parsed(link).ok_or(JoinedSpaceError::MalformedLink)?;
 	let handed = handed(&link, &device_keys(app)?, joined)?;
-	kept(app, &link.instance_id, &handed).await?;
+	if !kept(app, &link.instance_id, &handed).await? {
+		return Ok(None);
+	}
 	let held = held(app, &link.instance_id).await?;
 	Ok(held.map(|held| (held.space.key_id, held.roster.set.version)))
 }
