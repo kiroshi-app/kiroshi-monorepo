@@ -68,6 +68,30 @@ const settings = {
 		copySignInLinkFailed: "Couldn’t copy the sign-in link",
 		manageAccountFailed: "Couldn’t open your account on kiroshi.app",
 		signOutFailed: "Couldn’t sign out of Kiroshi",
+		devices: {
+			title: "Your devices",
+			description:
+				"Every device here reads your spaces. Remove one you don’t use anymore.",
+			thisDevice: "This device",
+			activeNow: "Active now",
+			otherDevices: "Other devices",
+			remove: "Remove",
+			empty:
+				"No other device reads your spaces. To add one, sign in on it with {{email}}, then approve it here.",
+			confirm: {
+				title: "Remove {{device}}?",
+				body: "It will be signed out and won’t read your spaces.",
+				remove: "Remove",
+				removing: "Removing…",
+				cancel: "Cancel",
+				failed:
+					"Couldn’t remove {{device}}. Check your connection and try again.",
+			},
+			removed: {
+				title: "{{device}} was signed out",
+				description: "It doesn’t read your spaces anymore.",
+			},
+		},
 	},
 	plugin: {
 		author: {

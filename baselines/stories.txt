@@ -599,6 +599,10 @@ feedback-missiondetailskeleton--dark
 feedback-missiondetailskeleton--light
 feedback-missionsfeedskeleton--dark
 feedback-missionsfeedskeleton--light
+feedback-newdevicescreen--code
+feedback-newdevicescreen--expired
+feedback-newdevicescreen--rejected
+feedback-newdevicescreen--waiting
 feedback-notice--default
 feedback-notice--dismissible
 feedback-notice--long-content
@@ -617,6 +621,9 @@ feedback-releasenotes--repeated-lines
 feedback-sidebarlistskeleton--dark
 feedback-sidebarlistskeleton--light
 feedback-skeleton--loading
+feedback-spaceaccessbanner--deleted
+feedback-spaceaccessbanner--offline
+feedback-spaceaccessbanner--removed
 feedback-threadtranscriptskeleton--dark
 feedback-threadtranscriptskeleton--light
 feedback-updatebadge--default
@@ -637,6 +644,7 @@ forms-copyfield--empty
 forms-input--default
 forms-input--filled
 forms-input--focused
+forms-inputotp--default
 forms-profilepicturefield--default
 forms-profilepicturefield--drawn
 forms-profilepicturefield--empty
@@ -1114,6 +1122,9 @@ overlays-contextmenu--with-checkbox-and-radio-items
 overlays-contextmenu--with-submenu
 overlays-contextmenupresstrigger--closed
 overlays-contextmenupresstrigger--open
+overlays-deviceapprovaldialog--approving
+overlays-deviceapprovaldialog--default
+overlays-deviceapprovaldialog--error
 overlays-dialog--default
 overlays-dialog--long-content
 overlays-dialog--states
@@ -1140,6 +1151,9 @@ overlays-missionmenu--working
 overlays-missionmenu--working-without-a-pull-request
 overlays-noticesurface--dark-theme
 overlays-noticesurface--default
+overlays-noticesurface--device-approved
+overlays-noticesurface--device-rejected
+overlays-noticesurface--device-removed
 overlays-noticesurface--dismissing
 overlays-noticesurface--error
 overlays-noticesurface--failures-of-two-causes
@@ -1229,6 +1243,9 @@ primitives-button--sizes
 primitives-button--states
 primitives-button--variants
 primitives-button--with-icons
+primitives-devicecard--default
+primitives-devicecard--long-content
+primitives-devicecard--with-meta
 primitives-disclosure--closed
 primitives-disclosure--open
 primitives-disclosure--toggle
@@ -1615,3 +1632,10 @@ settings-user-usersettingsdialog--with-a-long-email
 settings-user-usersettingsdialog--with-a-long-name
 settings-user-usersettingsdialog--with-a-long-skill
 settings-user-usersettingsdialog--without-applications
+settings-user-yourdevices--confirming
+settings-user-yourdevices--default
+settings-user-yourdevices--empty
+settings-user-yourdevices--error
+settings-user-yourdevices--focus-after-removal
+settings-user-yourdevices--loading
+settings-user-yourdevices--removing

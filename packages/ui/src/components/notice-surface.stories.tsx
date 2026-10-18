@@ -1417,3 +1417,123 @@ export const RemovedWithSpaceMark = meta.story({
 		).toBe("rgb(163, 163, 163)")
 	},
 })
+
+const DEVICES_ARTBOARD =
+	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only."
+
+const ASKING_DEVICE = "Noa’s iPhone 17"
+
+type HeldDeviceNoticeProps = {
+	title: string
+	description: string
+}
+
+const HeldDeviceNotice = ({ title, description }: HeldDeviceNoticeProps) => {
+	useEffect(() => {
+		const id = raiseTransientNotice({ title, description })
+		return () => endNotice(id)
+	}, [description, title])
+
+	return <NoticeSurface transientDelay={0} />
+}
+
+const ApprovedNotice = () => {
+	const { t } = useTranslation("common")
+
+	return (
+		<HeldDeviceNotice
+			description={t("devices.approval.approved.description")}
+			title={t("devices.approval.approved.title", { device: ASKING_DEVICE })}
+		/>
+	)
+}
+
+const RejectedNotice = () => {
+	const { t } = useTranslation("common")
+
+	return (
+		<HeldDeviceNotice
+			description={t("devices.approval.rejected.description")}
+			title={t("devices.approval.rejected.title", { device: ASKING_DEVICE })}
+		/>
+	)
+}
+
+const RemovedNotice = () => {
+	const { t } = useTranslation("settings")
+
+	return (
+		<HeldDeviceNotice
+			description={t("account.devices.removed.description")}
+			title={t("account.devices.removed.title", { device: ASKING_DEVICE })}
+		/>
+	)
+}
+
+const expectDeviceNotice = async (title: string, description: string) => {
+	const heading = await within(viewport()).findByText(title)
+	const notice = heading.closest<HTMLElement>("[data-slot=toast]")
+	if (!notice) throw new window.Error("The notice is not on the surface")
+	await opaque(notice)
+	await atTopCentre(notice)
+	await expect(notice).toHaveAttribute("data-type", "success")
+	await expect(notice).toHaveAccessibleDescription(description)
+	await expect(actionControl()).toBe(null)
+}
+
+export const DeviceApproved = meta.story({
+	name: "6.2 Device approved",
+	globals: { theme: "dark" },
+	render: () => <ApprovedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story: `${DEVICES_ARTBOARD} Artboard 6.2: the reader approved another device and the dialog closed. Check the success notice lands at top centre naming the device, says where to remove it, and carries no action. Pick \`DeviceRejected\` for the device the reader turned down.`,
+			},
+		},
+	},
+	play: async () => {
+		await expectDeviceNotice(
+			"Noa’s iPhone 17 is approved",
+			"It reads your spaces now. Remove it any time in Your devices.",
+		)
+	},
+})
+
+export const DeviceRejected = meta.story({
+	name: "6.3 Device signed out",
+	globals: { theme: "dark" },
+	render: () => <RejectedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story: `${DEVICES_ARTBOARD} Artboard 6.3: the reader answered Not me. Check the notice says the device was signed out and never read the spaces. Pick \`DeviceRemoved\` for a device removed after it had access.`,
+			},
+		},
+	},
+	play: async () => {
+		await expectDeviceNotice(
+			"Noa’s iPhone 17 was signed out",
+			"It never read your spaces.",
+		)
+	},
+})
+
+export const DeviceRemoved = meta.story({
+	name: "7.3 Device removed",
+	globals: { theme: "dark" },
+	render: () => <RemovedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story: `${DEVICES_ARTBOARD} Artboard 7.3: the reader removed a device from Your devices. Check the notice says it was signed out and no longer reads the spaces. Pick \`DeviceRejected\` for a device that never had access.`,
+			},
+		},
+	},
+	play: async () => {
+		await expectDeviceNotice(
+			"Noa’s iPhone 17 was signed out",
+			"It doesn’t read your spaces anymore.",
+		)
+	},
+})

@@ -52,6 +52,56 @@ const common = {
 		copyFailed:
 			"Impossible de copier le rapport. Appuyez à nouveau sur Copier.",
 	},
+	devices: {
+		approval: {
+			title: "{{device}} veut utiliser votre compte",
+			body: "Si c’est le vôtre, approuvez-le et il lira vos espaces. Sinon, choisissez Pas moi et il sera déconnecté.",
+			hint: "N’approuvez que si {{device}} affiche ces six mêmes mots.",
+			notMe: "Pas moi",
+			approve: "Approuver",
+			approving: "Approbation…",
+			retry: "Réessayer",
+			failed:
+				"Impossible d’approuver {{device}}. Vérifiez votre connexion et réessayez.",
+			approved: {
+				title: "{{device}} est approuvé",
+				description:
+					"Il lit vos espaces maintenant. Retirez-le quand vous voulez dans Vos appareils.",
+			},
+			rejected: {
+				title: "{{device}} a été déconnecté",
+				description: "Il n’a jamais lu vos espaces.",
+			},
+		},
+		newDevice: {
+			thisDevice: "Cet appareil",
+			noOtherDevice: "Je n’ai pas d’autre appareil",
+			signOut: "Se déconnecter",
+			waiting: {
+				title:
+					"Approuvez cet appareil depuis un appareil que vous utilisez déjà",
+				body: "Ouvrez Kiroshi sur un appareil qui utilise {{email}} et approuvez celui-ci.",
+				status: "En attente d’approbation…",
+			},
+			code: {
+				title: "Consultez vos e-mails",
+				body: "Nous avons envoyé un code à 6 chiffres à {{email}}. Saisissez-le pour approuver cet ordinateur. Il ne sert qu’une fois, pendant 5 minutes.",
+				label: "Code à 6 chiffres",
+				approve: "Approuver cet ordinateur",
+				resend: "Envoyer un nouveau code",
+			},
+			expired: {
+				title: "La demande a expiré",
+				body: "Personne n’a approuvé cet appareil à temps. Redemandez, puis approuvez-le sur un appareil que vous utilisez déjà.",
+				askAgain: "Redemander",
+			},
+			rejected: {
+				title: "Cet appareil n’a pas été approuvé",
+				body: "Une personne utilisant {{email}} a indiqué qu’il n’était pas à elle, il a donc été déconnecté.",
+				backToSignIn: "Retour à la connexion",
+			},
+		},
+	},
 	notification: {
 		question: "Vous a posé une question",
 		approval: "Demande votre autorisation",
