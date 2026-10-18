@@ -73,10 +73,16 @@ type Front = {
 	stop: () => void
 }
 
+type MissionThreadRead = (conversationId: string) => Promise<Conversation>
+
+const noMissionThread: MissionThreadRead = (conversationId) =>
+	Promise.reject({ kind: "unknownConversation", id: conversationId })
+
 const startFront = async (
 	store: TranscriptStore,
 	driver: ScriptedDriver,
 	onThisComputer: TranscriptStore = store,
+	missionThread: MissionThreadRead = noMissionThread,
 ): Promise<Front> => {
 	const runtimes = createConversationRuntimes(driver, store)
 	const roster = mountRoster(store, { reportFailure: () => undefined })
@@ -110,6 +116,7 @@ const startFront = async (
 		thisComputer: {
 			conversation: (conversationId) =>
 				readConversationInEverySpace(onThisComputer, conversationId),
+			missionThread,
 			writes: () => onThisComputer,
 		},
 		reportFailure: (notice, reported) => {
@@ -723,6 +730,67 @@ const infoLines = () => {
 	const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
 	return () => info.mock.calls.map(([line]) => String(line))
 }
+
+const outOfTheFeed = (
+	store: TranscriptStore,
+	threadId: string,
+): TranscriptStore => ({
+	...store,
+	conversations: async (spaceId) =>
+		(await store.conversations(spaceId)).filter(({ id }) => id !== threadId),
+})
+
+const aHandedOffMissionThread = async () => {
+	const base = createFakeTranscriptStore()
+	const [ada, nyx] = await seatBots(base, SPACE, ["Ada", "Nyx"])
+	const thread = await base.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Fix the crash",
+		botIds: [ada.id, nyx.id],
+	})
+	const store = outOfTheFeed(base, thread.id)
+	const driver = createScriptedDriver()
+	const front = await startFront(store, driver, store, (conversationId) =>
+		conversationId === thread.id
+			? Promise.resolve(thread)
+			: noMissionThread(conversationId),
+	)
+	await front.runtimes.runtimeFor(thread.id).open({
+		...thread,
+		participants: thread.participants.filter(({ botId }) => botId === ada.id),
+	})
+	await settled()
+	return { ...front, driver, store, thread, ada: ada.id, nyx: nyx.id }
+}
+
+describe("a handoff summons heard in a mission thread outside the feed", () => {
+	it("writes it as a word of the previous owner and starts the turn of the successor only", async () => {
+		const { driver, store, thread, ada, nyx, notices, hear } =
+			await aHandedOffMissionThread()
+
+		hear({
+			conversationId: thread.id,
+			authorBotId: ada,
+			text: "@Nyx this mission is yours now, carry it out: Fix the crash",
+		})
+		await settled()
+
+		expect(
+			(await spokenIn(store, thread.id)).map(({ authorBotId, content }) => ({
+				authorBotId,
+				content,
+			})),
+		).toEqual([
+			{
+				authorBotId: ada,
+				content: `<@${nyx}> this mission is yours now, carry it out: Fix the crash`,
+			},
+		])
+		expect(summonedBy(driver)).toEqual([nyx])
+		expect(notices).toEqual([])
+	})
+})
 
 describe("a word heard on this computer while a joined space is active", () => {
 	it("writes all five writes on this computer, never on the active space", async () => {

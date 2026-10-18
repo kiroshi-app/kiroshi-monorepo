@@ -182,6 +182,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 		]),
 	),
 	("conversation_list", Reach::Scoped(SPACE_ID)),
+	("conversation_mission_thread", Reach::HostOnly),
 	("conversation_page", Reach::Scoped(SPACE_ID)),
 	("conversation_local_ids", Reach::HostOnly),
 	(

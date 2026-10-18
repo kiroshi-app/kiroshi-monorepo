@@ -1311,6 +1311,31 @@ mod tests {
 				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b3" })),
 			]
 		);
+		let read = crate::conversations::commands::conversation_mission_thread(
+			app.handle().clone(),
+			app.state(),
+			opened.thread_conversation_id.clone(),
+		)
+		.await
+		.expect("the thread reads with its seats");
+		let topic = crate::conversations::commands::conversation_mission_thread(
+			app.handle().clone(),
+			app.state(),
+			"c1".to_owned(),
+		)
+		.await
+		.expect_err("a topic is no mission thread");
+		assert_eq!(
+			read.participants.iter().map(|seat| seat.bot_id.as_str()).collect::<Vec<_>>(),
+			vec!["b1", "b3"]
+		);
+		assert!(
+			matches!(
+				topic,
+				crate::conversations::contract::TranscriptStoreError::UnknownConversation { .. }
+			),
+			"got {topic:?}"
+		);
 		let summons = spoken.try_iter().last().expect("the new owner is summoned");
 		assert_eq!(summons["conversationId"], json!(opened.thread_conversation_id));
 		assert_eq!(summons["authorBotId"], json!("b1"));

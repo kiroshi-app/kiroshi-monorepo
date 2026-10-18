@@ -7,6 +7,7 @@ import type { SpokenWords } from "./spoken-words"
 import {
 	arrivalsTransport,
 	conversationReadsOn,
+	missionThreadReadOn,
 	reportTurnWritesOn,
 } from "./store-transport"
 
@@ -27,6 +28,7 @@ const thisComputer = {
 			conversationReadsOn(THIS_COMPUTER),
 			conversationId,
 		),
+	missionThread: missionThreadReadOn(THIS_COMPUTER),
 	writes: () => reportTurnWritesOn(THIS_COMPUTER),
 }
 

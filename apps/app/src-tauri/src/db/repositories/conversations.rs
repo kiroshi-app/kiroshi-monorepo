@@ -488,6 +488,17 @@ impl ConversationsRepository {
 		.at("add_participant", "conversation_participants")
 	}
 
+	pub async fn mission_thread(
+		&self,
+		conversation_id: String,
+	) -> Result<Conversation, ConversationError> {
+		self.call(move |connection| {
+			Ok(conversation_of_kind_at(connection, &conversation_id, MISSION_KIND))
+		})
+		.await?
+		.at("mission_thread", "conversations")
+	}
+
 	pub async fn remove_participant(
 		&self,
 		conversation_id: String,
@@ -840,9 +851,17 @@ fn seats_by_conversation(
 }
 
 fn conversation_at(connection: &Connection, id: &str) -> Result<Conversation, ConversationError> {
+	conversation_of_kind_at(connection, id, TOPIC_KIND)
+}
+
+fn conversation_of_kind_at(
+	connection: &Connection,
+	id: &str,
+	kind: &str,
+) -> Result<Conversation, ConversationError> {
 	let mut room: Conversation = connection
 		.prepare_cached(&format!("{CONVERSATION_COLUMNS} WHERE id = ?1 AND kind = ?2"))?
-		.query_row(params![id, TOPIC_KIND], conversation)
+		.query_row(params![id, kind], conversation)
 		.optional()?
 		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })?;
 	room.seats = seats_of(connection, id)?;
