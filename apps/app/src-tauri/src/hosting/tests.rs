@@ -6698,3 +6698,74 @@ fn a_join_frame_is_dropped_unanswered_and_the_socket_stays_open() {
 		assert!(harness.rostered_as(&joiner).await.is_none());
 	});
 }
+
+#[test]
+fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_admitted() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-removed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let removed = harness.joined(&mut relay, "guest").await;
+		let kept = harness.joined(&mut relay, "joiner").await;
+		let removed_id = removed.member.keys.device_id().to_string();
+		remove_device(harness.app.handle(), PERSONAL.to_owned(), removed_id)
+			.await
+			.expect("the device is removed");
+		relay.addressed(&kept.member, "rekey").await;
+		harness.device_list_settled(3).await;
+		let reads = harness.device_lists();
+		let version = harness.roster_version().await;
+
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+		let after_change =
+			(harness.rostered_as(&removed.member).await, harness.roster_version().await);
+		let signed_in_again = SealingMember::new("guest");
+		harness.approved(&signed_in_again);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&signed_in_again, "rekey").await;
+		let handover = rekeyed_handover(&relay, &signed_in_again, &rekey, &host);
+
+		assert_eq!(after_change, (None, version));
+		assert!(!relay.has_held_any_frame_to(&removed.member));
+		assert_eq!(handover.key_id, 2);
+		assert!(harness.rostered_as(&signed_in_again).await.is_some());
+		assert!(harness.rostered_as(&removed.member).await.is_none());
+	});
+}
+
+#[test]
+fn a_failed_admission_keeps_the_host_socket_open_and_the_next_devices_changed_admits() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-failed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		harness.device_list_settled(1).await;
+		let reads = harness.device_lists();
+		let attempts = harness.attempts();
+		let renamed = |from: &'static str, to: &'static str| {
+			relay_database(&harness).call_mut(move |connection| {
+				connection.execute_batch(&format!("ALTER TABLE {from} RENAME TO {to}"))?;
+				Ok(())
+			})
+		};
+		let unadmitted = SealingMember::new("guest");
+
+		renamed("space_removed_devices", "space_removed_devices_aside").await.expect("aside");
+		harness.approved(&unadmitted);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+		let after_failure = harness.rostered_as(&unadmitted).await;
+		renamed("space_removed_devices_aside", "space_removed_devices").await.expect("back");
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&unadmitted, "rekey").await;
+
+		assert!(after_failure.is_none());
+		assert_eq!(rekeyed_handover(&relay, &unadmitted, &rekey, &host).key_id, 1);
+		assert!(harness.rostered_as(&unadmitted).await.is_some());
+		assert_eq!(harness.attempts(), attempts);
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}

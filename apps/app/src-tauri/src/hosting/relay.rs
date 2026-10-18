@@ -498,7 +498,7 @@ async fn online<R: Runtime>(
 					}
 					Ok(Ok(_)) => {}
 					Ok(Err(failure)) => {
-						return Ended::Dropped(format!("the device list of space {} was not settled: {failure:?}", ids.space_id));
+						eprintln!("the device list of space {} was not settled: {failure:?}", ids.space_id);
 					}
 					Err(failure) => {
 						eprintln!("an admission of space {} ended abnormally: {failure}", ids.space_id);

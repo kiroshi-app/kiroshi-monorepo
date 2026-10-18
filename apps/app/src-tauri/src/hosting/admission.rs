@@ -101,6 +101,13 @@ async fn settled<R: Runtime>(
 	let roster = roster::verified_roster(database, space_id, &host.signing_public())
 		.await
 		.map_err(SpaceError::from)?;
+	let removed: HashSet<String> = database
+		.space_relay()
+		.removed_devices(space_id.to_owned())
+		.await
+		.map_err(SpaceError::from)?
+		.into_iter()
+		.collect();
 	let listed_ids: HashSet<&str> = listed.iter().map(|device| device.device_id.as_str()).collect();
 	let (kept, unlisted): (Vec<Rostered>, Vec<Rostered>) = roster
 		.rows
@@ -110,7 +117,7 @@ async fn settled<R: Runtime>(
 		.partition(|rostered| listed_ids.contains(rostered.relay_device_id.as_str()));
 	let mut admitted = Vec::new();
 	for device in devices.iter().filter(|device| device.device_id() != host.device_id()) {
-		if is_held(space_id, &kept, device) {
+		if is_removed(space_id, &removed, device) || is_held(space_id, &kept, device) {
 			continue;
 		}
 		enrolled(app, &host, space_id, device).await?;
@@ -147,6 +154,17 @@ fn well_formed(device: &CloudDevice) -> Option<ListedDevice> {
 		);
 	}
 	listed
+}
+
+fn is_removed(space_id: &str, removed: &HashSet<String>, device: &ListedDevice) -> bool {
+	let device_id = device.device_id().to_string();
+	let is_removed = removed.contains(&device_id);
+	if is_removed {
+		eprintln!(
+			"hosted space {space_id} skipped device {device_id}: it was removed from the space"
+		);
+	}
+	is_removed
 }
 
 fn is_held(space_id: &str, rostered: &[Rostered], device: &ListedDevice) -> bool {

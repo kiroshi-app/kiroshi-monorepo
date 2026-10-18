@@ -21,6 +21,13 @@ const GROW_ROSTER_VERSION: &str = "INSERT INTO space_roster_versions (space_id, 
 
 const DELETE_ROSTER_ROW: &str = "DELETE FROM space_roster WHERE space_id = ?1 AND device_id = ?2";
 
+const RECORD_REMOVED_DEVICE: &str =
+	"INSERT INTO space_removed_devices (space_id, device_id, removed_at)
+	VALUES (?1, ?2, ?3) ON CONFLICT (space_id, device_id) DO NOTHING";
+
+const SELECT_REMOVED_DEVICES: &str =
+	"SELECT device_id FROM space_removed_devices WHERE space_id = ?1 ORDER BY device_id";
+
 const DELETE_ROSTER_OF_ACCOUNT: &str =
 	"DELETE FROM space_roster WHERE space_id = ?1 AND account_id = ?2";
 
@@ -140,6 +147,40 @@ impl SpaceRelayRepository {
 				}
 				transaction.commit()?;
 				Ok(deleted > 0)
+			})
+			.await
+	}
+
+	pub async fn device_removed(
+		&self,
+		space_id: String,
+		device_id: String,
+		removed_at: i64,
+	) -> Result<bool, DatabaseError> {
+		self.access
+			.call_mut(move |connection| {
+				let transaction = connection.transaction()?;
+				let deleted =
+					transaction.execute(DELETE_ROSTER_ROW, params![space_id, device_id])?;
+				if deleted > 0 {
+					transaction
+						.execute(RECORD_REMOVED_DEVICE, params![space_id, device_id, removed_at])?;
+					roster_revoked(&transaction, &space_id)?;
+				}
+				transaction.commit()?;
+				Ok(deleted > 0)
+			})
+			.await
+	}
+
+	pub async fn removed_devices(&self, space_id: String) -> Result<Vec<String>, DatabaseError> {
+		self.access
+			.call(move |connection| {
+				let removed = connection
+					.prepare_cached(SELECT_REMOVED_DEVICES)?
+					.query_map(params![space_id], |row| row.get(0))?
+					.collect::<rusqlite::Result<Vec<String>>>()?;
+				Ok(removed)
 			})
 			.await
 	}
@@ -450,6 +491,29 @@ mod tests {
 			[untouched, after_nothing, after_device, settled, after_account],
 			[false, false, true, false, true]
 		);
+	}
+
+	#[tokio::test]
+	async fn a_removal_deletes_the_row_records_the_device_and_marks_a_rotation_together() {
+		let dir = temp_dir();
+		let database = crate::db::open(&dir);
+		a_space_of_its_own(&database).await;
+		let relay = database.space_relay();
+		relay.rostered(SPACE.to_owned(), a_row("d1", "r1")).await.expect("stored");
+		relay.rostered("shared".to_owned(), a_row("d2", "r2")).await.expect("stored elsewhere");
+
+		let removed =
+			relay.device_removed(SPACE.to_owned(), "d1".to_owned(), 5).await.expect("removed");
+		let unknown =
+			relay.device_removed(SPACE.to_owned(), "d9".to_owned(), 5).await.expect("removed");
+		let roster = relay.roster(SPACE.to_owned()).await.expect("read");
+
+		assert_eq!((removed, unknown), (true, false));
+		assert!(roster.rows.is_empty());
+		assert_eq!(roster.version, 2);
+		assert!(relay.is_rotation_pending(SPACE.to_owned()).await.expect("read"));
+		assert_eq!(relay.removed_devices(SPACE.to_owned()).await.expect("read"), vec!["d1"]);
+		assert!(relay.removed_devices("shared".to_owned()).await.expect("read").is_empty());
 	}
 
 	#[tokio::test]
