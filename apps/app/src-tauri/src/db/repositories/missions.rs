@@ -371,10 +371,9 @@ impl MissionsRepository {
 				let Some(held) = held(connection, &id)? else {
 					return Ok(Err(MissionError::UnknownMission { id }));
 				};
-				let (bot_name, repository) =
-					connection.prepare_cached(BOT_AND_REPOSITORY)?.query_row([&id], |row| {
-						Ok((row.get(0)?, row.get(1)?))
-					})?;
+				let (bot_name, repository) = connection
+					.prepare_cached(BOT_AND_REPOSITORY)?
+					.query_row([&id], |row| Ok((row.get(0)?, row.get(1)?)))?;
 				let mut statement = connection.prepare_cached(SELECT_EVENTS)?;
 				let rows = statement.query_map(params![id, MAX_EVENTS_PER_MISSION], event)?;
 				let events = oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?);
