@@ -2487,12 +2487,7 @@ mod tests {
 		assert_eq!(held, vec!["m-c1", "m-errand", "m-room"]);
 		assert_eq!(message_ids(&topics), vec!["m-room"]);
 		assert_eq!(message_ids(&missions), vec!["m-errand"]);
-		assert!(!conversation_ids(&plans).is_empty(), "the rooms titled Plans were not found");
-		assert!(plans["conversations"]
-			.as_array()
-			.expect("the conversations are a list")
-			.iter()
-			.all(|conversation| conversation["kind"] == json!("topic")));
+		assert_eq!(conversation_ids(&plans), vec!["room", "drifting", "unled"]);
 		assert_eq!(plans_of_missions, json!({ "conversations": [], "messages": [] }));
 	}
 
