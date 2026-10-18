@@ -77,6 +77,32 @@ const ICON =
 const COLOUR =
 	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears."
 
+const LIST =
+	"List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold."
+
+const EVERYWHERE =
+	"True to list every conversation of this space, seated or not, false to list only the ones you hold a seat in; left out, it is false."
+
+const KIND =
+	"One of main, topic or mission to list only that kind: main is a companion's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed."
+
+const LIST_LIMIT =
+	"How many conversations to answer, from 1 to 200; left out, 50."
+
+const CURSOR =
+	"The cursor the previous conversation_list answered, to list the page after it; left out, the list starts at the latest activity, and a null cursor in the answer marks the last page."
+
+const READ =
+	"Read a conversation of this space, its details and its last messages oldest to newest, each with its seq, its author, its time and its full text, before you answer about what was said there, whether you hold a seat in it or not."
+
+const READ_ROOM =
+	"The id of the conversation of this space to read, as conversation_list answers it."
+
+const READ_LIMIT = "How many messages to answer, from 1 to 100; left out, 20."
+
+const BEFORE =
+	"The cursor the previous conversation_read answered, to read the messages strictly older than the ones it answered; left out, the latest messages are read, and a null cursor in the answer marks the first message of the conversation."
+
 type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
@@ -108,6 +134,19 @@ const DESCRIBED: ToolInput = {
 	conversation: z.string().describe(DESCRIBED_ROOM),
 	icon: z.string().optional().describe(ICON),
 	colour: z.string().nullable().optional().describe(COLOUR),
+}
+
+const LISTED: ToolInput = {
+	everywhere: z.boolean().optional().describe(EVERYWHERE),
+	kind: z.string().optional().describe(KIND),
+	limit: z.number().int().optional().describe(LIST_LIMIT),
+	cursor: z.string().optional().describe(CURSOR),
+}
+
+const CONSULTED: ToolInput = {
+	conversation: z.string().describe(READ_ROOM),
+	limit: z.number().int().optional().describe(READ_LIMIT),
+	before: z.number().int().optional().describe(BEFORE),
 }
 
 const DRAFTED: ToolInput = {
@@ -182,5 +221,11 @@ export const companionTools = (
 	),
 	tool("conversation_describe", DESCRIBE, DESCRIBED, (input) =>
 		asked(session, "conversationDescribe", input),
+	),
+	tool("conversation_list", LIST, LISTED, (input) =>
+		asked(session, "conversationList", input),
+	),
+	tool("conversation_read", READ, CONSULTED, (input) =>
+		asked(session, "conversationRead", input),
 	),
 ]

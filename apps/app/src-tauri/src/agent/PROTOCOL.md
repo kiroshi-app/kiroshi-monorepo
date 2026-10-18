@@ -559,6 +559,52 @@ has no deadline of its own.
 - the answer is `{ "path", "conversationId" }`, the stored absolute path and the
   conversation it was shown in.
 
+`conversationOpen`, `conversationSay`, `conversationList` and `conversationRead`
+answer one Conversation shape, read through the same rows as the front's
+`conversation_page`, missions included:
+
+```json
+{"conversationId":"…","kind":"topic","title":"…","icon":"Rocket","colour":null,
+ "companions":[{"id":"…","name":"…"}],
+ "lastMessage":{"author":"…","text":"…","time":1700000000000},"archived":false}
+```
+
+`kind` is `main`, `topic` or `mission`; `companions` are the seats held and not
+left, by a companion still standing; `lastMessage` is the newest settled message,
+its author's name (`null` for a person the message names no one for), its text
+cut to 200 characters and its time in epoch milliseconds, or `null` when nothing
+was said; `archived` reads `conversations.archived_at`. A `main` chat whose
+companion is gone from the space is never answered.
+
+Its operation `conversationList`, from the tool `conversation_list`, takes an
+optional `everywhere`, `kind`, `limit` and `cursor`:
+
+- without `everywhere`, or with it `false`, it answers only the conversations of
+  the caller's space it holds a seat in and has not left; with `true`, every
+  conversation of that space, seated or not; never one of another space;
+- `kind` keeps only `main`, `topic` or `mission`, and any other value is refused
+  as `unknownConversationKind`, the accepted kinds listed;
+- the answer is `{ "conversations", "cursor" }`, ordered by last activity, newest
+  first, pins ignored; `limit` defaults to 50, is refused as `limitOutOfRange`
+  (`minimum` 1, `maximum` 200) past its bounds, and `cursor` is `null` on the
+  last page; a cursor that does not decode is refused as `unreadableCursor`.
+
+Its operation `conversationRead`, from the tool `conversation_read`, takes a
+`conversation` id, an optional `limit` and an optional `before`:
+
+- it answers a conversation of the caller's space whether the caller holds a
+  seat there or not; an id matching nothing and an id of another space are both
+  refused as `unknownConversation` with that id and nothing else;
+- the answer is `{ "conversation", "messages", "cursor" }`: the Conversation
+  shape, then its last messages, newest last, each
+  `{ "seq", "author": { "kind", "id", "name" }, "time", "text" }`, `kind`
+  `person` (its account id and name, either `null` when unknown) or
+  `companion` (its bot id and name), the text in full;
+- `limit` defaults to 20 and is refused as `limitOutOfRange` (`minimum` 1,
+  `maximum` 100) past its bounds; `before` answers the messages strictly older
+  than that seq, and `cursor` is the seq to pass next, `null` once the first
+  message is reached.
+
 ## Stop and shutdown
 
 - `interrupt` ends the turn with `result.subtype = "error_during_execution"` and

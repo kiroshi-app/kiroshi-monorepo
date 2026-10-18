@@ -689,5 +689,64 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "conversation_list",
+		"description": "List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"everywhere": {
+					"description": "True to list every conversation of this space, seated or not, false to list only the ones you hold a seat in; left out, it is false.",
+					"type": "boolean"
+				},
+				"kind": {
+					"description": "One of main, topic or mission to list only that kind: main is a companion's own chat with the person, topic a room, mission the thread of a mission; left out, every kind is listed.",
+					"type": "string"
+				},
+				"limit": {
+					"description": "How many conversations to answer, from 1 to 200; left out, 50.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
+				},
+				"cursor": {
+					"description": "The cursor the previous conversation_list answered, to list the page after it; left out, the list starts at the latest activity, and a null cursor in the answer marks the last page.",
+					"type": "string"
+				}
+			},
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "conversation_read",
+		"description": "Read a conversation of this space, its details and its last messages oldest to newest, each with its seq, its author, its time and its full text, before you answer about what was said there, whether you hold a seat in it or not.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"conversation": {
+					"type": "string",
+					"description": "The id of the conversation of this space to read, as conversation_list answers it."
+				},
+				"limit": {
+					"description": "How many messages to answer, from 1 to 100; left out, 20.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
+				},
+				"before": {
+					"description": "The cursor the previous conversation_read answered, to read the messages strictly older than the ones it answered; left out, the latest messages are read, and a null cursor in the answer marks the first message of the conversation.",
+					"type": "integer",
+					"minimum": -9007199254740991,
+					"maximum": 9007199254740991
+				}
+			},
+			"required": [
+				"conversation"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

@@ -4,7 +4,7 @@ use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use super::{
 	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
-	Seat, CHAT_KIND, SEAT_COLUMNS, TOPIC_KIND,
+	Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
 };
 use crate::db::repositories::keyset::{paged, Keyset, Page};
 use crate::db::repositories::messages::AccountAuthor;
@@ -38,6 +38,22 @@ pub struct ActivePage {
 	pub page: Page<ActiveConversation>,
 }
 
+pub const LISTED_KINDS: [&str; 3] = [CHAT_KIND, TOPIC_KIND, MISSION_KIND];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedConversation {
+	pub active: ActiveConversation,
+	pub kind: String,
+	pub is_archived: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct Listing {
+	pub space_id: String,
+	pub kind: Option<String>,
+	pub seated_bot_id: Option<String>,
+}
+
 impl ConversationsRepository {
 	pub async fn conversation_page(
 		&self,
@@ -55,6 +71,23 @@ impl ConversationsRepository {
 	) -> Result<Option<ActiveConversation>, ConversationError> {
 		self.call(move |connection| Ok(active_by_id(connection, &conversation_id))).await?
 	}
+
+	pub async fn listed_page(
+		&self,
+		listing: Listing,
+		after: Option<Keyset>,
+		size: u32,
+	) -> Result<Page<ListedConversation>, ConversationError> {
+		self.call(move |connection| Ok(listed_of_space(connection, &listing, after.as_ref(), size)))
+			.await?
+	}
+
+	pub async fn listed_conversation(
+		&self,
+		conversation_id: String,
+	) -> Result<Option<ListedConversation>, ConversationError> {
+		self.call(move |connection| Ok(listed_by_id(connection, &conversation_id))).await?
+	}
 }
 
 const PIN_POSITION: &str =
@@ -68,6 +101,7 @@ fn active_rows() -> String {
 			conversations.icon AS icon, conversations.color AS color,
 			conversations.created_at AS created_at, conversations.updated_at AS updated_at,
 			conversations.last_activity_at AS last_activity_at, solo.bot_id AS solo_bot_id,
+			conversations.kind AS kind, conversations.archived_at AS archived_at,
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id,
 			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
@@ -104,6 +138,36 @@ fn in_the_feed() -> String {
 		"conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
 			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL)"
 	)
+}
+
+fn listed() -> String {
+	format!(
+		"conversations.kind IN ('{CHAT_KIND}', '{TOPIC_KIND}', '{MISSION_KIND}')
+			AND (conversations.kind <> '{CHAT_KIND}' OR solo.bot_id IS NOT NULL)"
+	)
+}
+
+fn listed_page_statement(after: Option<&Keyset>) -> String {
+	let past_the_cursor = match after {
+		Some(_) => "AND (conversations.last_activity_at, conversations.id) < (?4, ?5)",
+		None => "",
+	};
+	format!(
+		"{}
+		WHERE conversations.space_id = ?1 AND {}
+			AND (?2 IS NULL OR conversations.kind = ?2)
+			AND (?3 IS NULL OR EXISTS (SELECT 1 FROM conversation_participants AS mine
+				WHERE mine.conversation_id = conversations.id AND mine.bot_id = ?3
+					AND mine.left_at IS NULL))
+			{past_the_cursor}
+		ORDER BY conversations.last_activity_at DESC, conversations.id DESC LIMIT ?6",
+		active_rows(),
+		listed()
+	)
+}
+
+fn listed_by_id_statement() -> String {
+	format!("{} WHERE conversations.id = ?1 AND {}", active_rows(), listed())
 }
 
 fn active_statement(filter: &str, order: &str) -> String {
@@ -171,6 +235,50 @@ fn active_by_id(
 	Ok(Some(row))
 }
 
+fn listed_of_space(
+	connection: &Connection,
+	listing: &Listing,
+	after: Option<&Keyset>,
+	size: u32,
+) -> Result<Page<ListedConversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&listed_page_statement(after))?;
+	let rows = statement.query_map(
+		params![
+			listing.space_id,
+			listing.kind,
+			listing.seated_bot_id,
+			after.map(|keyset| keyset.sort_key),
+			after.map(|keyset| keyset.id.as_str()),
+			size + 1
+		],
+		listed_row,
+	)?;
+	let mut read = paged(rows.collect::<rusqlite::Result<Vec<_>>>()?, size, |row| Keyset {
+		sort_key: row.active.last_activity_at,
+		id: row.active.conversation.id.clone(),
+	});
+	let ids: Vec<&str> = read.rows.iter().map(|row| row.active.conversation.id.as_str()).collect();
+	let mut seats = seats_of_page(connection, &ids)?;
+	for row in &mut read.rows {
+		row.active.conversation.seats =
+			seats.remove(&row.active.conversation.id).unwrap_or_default();
+	}
+	Ok(read)
+}
+
+fn listed_by_id(
+	connection: &Connection,
+	conversation_id: &str,
+) -> Result<Option<ListedConversation>, ConversationError> {
+	let mut statement = connection.prepare_cached(&listed_by_id_statement())?;
+	let Some(mut row) = statement.query_row([conversation_id], listed_row).optional()? else {
+		return Ok(None);
+	};
+	let mut seats = seats_of_page(connection, &[conversation_id])?;
+	row.active.conversation.seats = seats.remove(conversation_id).unwrap_or_default();
+	Ok(Some(row))
+}
+
 fn pinned_of_space(
 	connection: &Connection,
 	space_id: &str,
@@ -231,6 +339,14 @@ fn active(row: &Row<'_>) -> rusqlite::Result<ActiveConversation> {
 			.get::<_, Option<i64>>("open_turn_started_at")?
 			.map(|started_at| active_turn(row, started_at))
 			.transpose()?,
+	})
+}
+
+fn listed_row(row: &Row<'_>) -> rusqlite::Result<ListedConversation> {
+	Ok(ListedConversation {
+		active: active(row)?,
+		kind: row.get("kind")?,
+		is_archived: row.get::<_, Option<i64>>("archived_at")?.is_some(),
 	})
 }
 
