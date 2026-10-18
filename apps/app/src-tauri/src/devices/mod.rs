@@ -285,14 +285,10 @@ fn approval_of(current: CurrentDevice) -> DeviceApproval {
 }
 
 fn pending_or_expired(expires_at: &str) -> DeviceApproval {
-	match is_live(expires_at, Utc::now()) {
+	match instant_of(expires_at).is_some_and(|expiry| expiry > Utc::now()) {
 		true => DeviceApproval::Pending { expires_at: expires_at.to_owned() },
 		false => DeviceApproval::Expired,
 	}
-}
-
-fn is_live(expires_at: &str, now: DateTime<Utc>) -> bool {
-	instant_of(expires_at).is_some_and(|expiry| expiry > now)
 }
 
 fn instant_of(stamp: &str) -> Option<DateTime<Utc>> {
@@ -321,14 +317,9 @@ async fn requests_followed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
 	let Ok(bearer) = bearer_of(app) else {
 		return;
 	};
-	let listed = match devices.cloud.devices(&bearer).await {
+	let listed = match answered(app, &bearer, devices.cloud.devices(&bearer).await) {
 		Ok(listed) => listed,
-		Err(failure) => {
-			if failure == DeviceCallError::Revoked {
-				signed_out_on_401(app, &bearer);
-			}
-			return eprintln!("the devices of the account were not read: {failure}");
-		}
+		Err(failure) => return eprintln!("the devices of the account were not read: {failure:?}"),
 	};
 	let (requested, settled) = announcements(&mut devices.announced(), &listed, Utc::now());
 	for request in requested {
@@ -444,8 +435,9 @@ fn answered<R: Runtime, T>(
 
 pub async fn retried<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceApproval, DeviceError> {
 	let devices = app.state::<Devices>();
-	if devices.current() != DeviceApproval::Expired {
-		return Ok(devices.current());
+	let current = devices.current();
+	if current != DeviceApproval::Expired {
+		return Ok(current);
 	}
 	let approval = registration(app, &devices).await?;
 	entered(app, &devices, approval);
