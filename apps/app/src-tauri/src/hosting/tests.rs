@@ -5341,7 +5341,7 @@ fn a_signature_the_relay_cannot_verify_fails_naming_403_and_keeps_the_account_si
 		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::FORBIDDEN]);
 		assert_eq!(harness.attempts(), 0);
 		let account = harness.app.state::<AccountSession>().current();
-		assert!(matches!(account, AccountState::SignedIn(_)), "{account:?}");
+		assert!(matches!(account, AccountState::SignedIn(_)), "the account was signed out");
 		assert_eq!(bearer_held(&harness).as_deref(), Some(BEARER));
 		assert_eq!(held_relay_device(&harness).await, None);
 	});
