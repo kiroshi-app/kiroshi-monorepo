@@ -219,8 +219,7 @@ pub struct MissionEvent {
 	pub created_at: i64,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissionUpdate {
 	pub objective: Option<String>,
 	pub ticket: Option<Ticket>,
