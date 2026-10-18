@@ -47,6 +47,8 @@ pub async fn remove_device<R: Runtime>(
 	listed_devices(app, &space_id).await
 }
 
+const NO_ROSTER_ROW: &str = "no roster row has that device";
+
 pub(super) enum Revocation {
 	Applied,
 	Ignored(&'static str),
@@ -66,7 +68,7 @@ pub(super) async fn device_left<R: Runtime>(
 		.await
 		.map_err(SpaceError::from)?;
 	let Some(row) = row else {
-		return Ok(Revocation::Ignored("no roster row has that device"));
+		return Ok(Revocation::Ignored(NO_ROSTER_ROW));
 	};
 	if row.device_id == host.device_id().to_string() {
 		return Ok(Revocation::Ignored("it names the host device"));
@@ -79,7 +81,7 @@ pub(super) async fn device_left<R: Runtime>(
 		.await
 		.map_err(SpaceError::from)?;
 	if !is_deleted {
-		return Ok(Revocation::Ignored("no roster row has that device"));
+		return Ok(Revocation::Ignored(NO_ROSTER_ROW));
 	}
 	rotated(app, space_id).await?;
 	Ok(Revocation::Applied)
