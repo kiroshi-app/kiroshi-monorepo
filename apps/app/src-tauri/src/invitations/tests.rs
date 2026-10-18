@@ -23,6 +23,8 @@ use crate::account::contract::{
 	AccountState, SignedOutReason, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT,
 };
 use crate::account::session::{restore, sign_out, AccountSession};
+use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
+use crate::crypto::device_keys::DeviceKeys;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::{self, DatabaseError, DatabaseState};
@@ -33,6 +35,8 @@ use crate::joined_spaces::commands::{
 };
 use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError};
 use crate::joined_spaces::relay::{reconciled, RelayGuests};
+use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
+use crate::logging::contract::InstallKind;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -185,6 +189,7 @@ async fn a_closed_port() -> String {
 struct Harness {
 	app: AppOfItsOwn,
 	cloud: Cloud,
+	host: Option<Arc<SealingHost>>,
 	members: mpsc::UnboundedReceiver<WebSocket>,
 	heard: Arc<Mutex<Vec<(String, String)>>>,
 	root: RemovedOnDrop,
@@ -254,7 +259,16 @@ impl Harness {
 		let app = an_app_of_its_own("invitations", mock_builder());
 		let database_dir = temp_dir();
 		let database = database.map(|()| db::open(&database_dir));
+		let is_database_open = database.is_ok();
 		app.manage::<DatabaseState>(database);
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let profile = app.path().app_data_dir().expect("the data folder resolves");
+		let identifier = app.config().identifier.clone();
+		app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
+		let host = match is_database_open {
+			true => Some(Arc::new(SealingHost::planted(app.handle(), INSTANCE).await)),
+			false => None,
+		};
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		app.manage(Invitations::new(&api_url).polling_every(every));
 		app.manage(RelayGuests::new(&api_url));
@@ -272,7 +286,7 @@ impl Harness {
 		app.listen(ACCOUNT_CHANGED_EVENT, move |_| {
 			noticing.send_replace(());
 		});
-		Self { app, cloud, members, heard, root, _database: database_dir }
+		Self { app, cloud, host, members, heard, root, _database: database_dir }
 	}
 
 	fn heard(&self, event: &str) -> Vec<Value> {
@@ -351,11 +365,16 @@ impl Harness {
 		}
 	}
 
-	async fn member(&mut self) -> WebSocket {
-		tokio::time::timeout(PATIENCE, self.members.recv())
+	async fn member(&mut self) -> Member {
+		let socket = tokio::time::timeout(PATIENCE, self.members.recv())
 			.await
 			.expect("the guest opened the member relay in time")
-			.expect("the relay is up")
+			.expect("the relay is up");
+		Member::greeted(socket, self.sealing_host()).await
+	}
+
+	fn sealing_host(&self) -> Arc<SealingHost> {
+		Arc::clone(self.host.as_ref().expect("a host is planted"))
 	}
 
 	async fn accepted(&self) -> String {
@@ -378,29 +397,50 @@ fn run(test: impl std::future::Future<Output = ()>) {
 	tauri::async_runtime::block_on(test);
 }
 
-async fn call(member: &mut WebSocket) -> Value {
+struct Member {
+	socket: WebSocket,
+	host: Arc<SealingHost>,
+}
+
+impl Member {
+	async fn greeted(mut socket: WebSocket, host: Arc<SealingHost>) -> Self {
+		let hello = host.opened(&next_text(&mut socket).await);
+		assert_eq!((hello.plaintext, hello.challenge), (json!({ "hello": {} }), None));
+		socket.send(Message::Text(host.hello().into())).await.expect("the hello leaves");
+		Self { socket, host }
+	}
+}
+
+async fn next_text(socket: &mut WebSocket) -> String {
 	loop {
-		let frame = tokio::time::timeout(PATIENCE, member.recv())
+		let frame = tokio::time::timeout(PATIENCE, socket.recv())
 			.await
 			.expect("a frame in time")
 			.expect("the socket is open")
 			.expect("a readable frame");
 		if let Message::Text(text) = frame {
-			return serde_json::from_str(text.as_str()).expect("a json frame");
+			return text.as_str().to_owned();
 		}
 	}
 }
 
-async fn send(member: &mut WebSocket, frame: Value) {
-	member.send(Message::Text(frame.to_string().into())).await.expect("the frame leaves");
+async fn call(member: &mut Member) -> Value {
+	let frame = member.host.opened(&next_text(&mut member.socket).await);
+	assert_eq!(frame.challenge, Some(CHALLENGE), "a member frame carries the host challenge");
+	frame.plaintext
 }
 
-async fn closed_with(member: &mut WebSocket, code: u16) {
+async fn send(member: &mut Member, frame: Value) {
+	let sealed = member.host.sealed(&frame.to_string());
+	member.socket.send(Message::Text(sealed.into())).await.expect("the frame leaves");
+}
+
+async fn closed_with(member: &mut Member, code: u16) {
 	let close = CloseFrame { code, reason: "".into() };
-	member.send(Message::Close(Some(close))).await.expect("the close leaves");
+	member.socket.send(Message::Close(Some(close))).await.expect("the close leaves");
 }
 
-async fn shared_space_answered(member: &mut WebSocket) {
+async fn shared_space_answered(member: &mut Member) {
 	let asked = call(member).await;
 	assert_eq!(asked["command"], "relay_shared_space");
 	send(member, json!({ "id": asked["id"], "status": 200, "body": { "spaceId": SHARED_SPACE } }))
@@ -417,14 +457,16 @@ async fn proxied(connection: &JoinedSpaceConnection, command: &str) -> reqwest::
 		.expect("the proxy answers")
 }
 
-async fn connected(harness: &mut Harness, id: &str) -> (JoinedSpaceConnection, WebSocket) {
+async fn connected(harness: &mut Harness, id: &str) -> (JoinedSpaceConnection, Member) {
+	let host = harness.sealing_host();
 	let Harness { app, members, .. } = harness;
 	let connecting = connect(app, id);
 	let mut member = None;
 	let answering = async {
-		let mut socket = members.recv().await.expect("the guest opened the relay");
-		shared_space_answered(&mut socket).await;
-		member = Some(socket);
+		let socket = members.recv().await.expect("the guest opened the relay");
+		let mut greeted = Member::greeted(socket, host).await;
+		shared_space_answered(&mut greeted).await;
+		member = Some(greeted);
 	};
 	let (connection, ()) = tokio::join!(connecting, answering);
 	(connection.expect("the connection"), member.expect("the member socket"))
@@ -668,10 +710,12 @@ fn a_host_offline_before_the_shared_space_is_known_answers_host_offline_and_keep
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
 
+		let host = harness.sealing_host();
 		let Harness { app, members, .. } = &mut harness;
 		let connecting = connect(app, &id);
 		let closing = async {
-			let mut member = members.recv().await.expect("the guest opened the relay");
+			let socket = members.recv().await.expect("the guest opened the relay");
+			let mut member = Member::greeted(socket, host).await;
 			let asked = call(&mut member).await;
 			assert_eq!(asked["command"], "relay_shared_space");
 			closed_with(&mut member, 4002).await;
@@ -727,7 +771,7 @@ fn a_relay_restarting_4005_drops_the_link_reopens_and_keeps_the_entry() {
 async fn closed_offline(
 	harness: &Harness,
 	id: &str,
-	member: &mut WebSocket,
+	member: &mut Member,
 	connection: &JoinedSpaceConnection,
 ) {
 	let dropped = harness.app.state::<RelayGuests>().link_dropped(id);
@@ -916,7 +960,7 @@ fn a_membership_ended_4003_removes_the_entry_and_announces_its_removal() {
 }
 
 #[test]
-fn an_instance_the_relay_answers_404_on_open_removes_the_entry_with_the_removed_event() {
+fn an_instance_the_relay_answers_404_on_open_is_removed_by_rotation_with_the_removed_event() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
@@ -924,7 +968,7 @@ fn an_instance_the_relay_answers_404_on_open_removes_the_entry_with_the_removed_
 
 		let refused = harness.connect(&id).await;
 
-		assert_eq!(refused, Err(JoinedSpaceError::UnknownJoinedSpace { id: id.clone() }));
+		assert_eq!(refused, Err(JoinedSpaceError::RemovedByRotation));
 		assert!(harness.stored_until(<[JoinedSpace]>::is_empty).await.is_empty());
 		assert_eq!(
 			harness.heard_until(REMOVED_EVENT, 1).await,

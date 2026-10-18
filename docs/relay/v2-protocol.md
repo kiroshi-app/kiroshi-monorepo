@@ -144,7 +144,9 @@ ids of every device with its public keys.
 
 - A sender never writes `from`. The relay splices `"from":"<relay device id>"` in
   front of the frame, after its opening brace.
-- The host opens its relay socket with `?device=<its relay device id>`.
+- The host opens its relay socket with `?device=<its relay device id>`, and so does a
+  member: the desktop reads its own relay device id from its row of the roster set it
+  holds, or from `POST /devices` before its join.
 - A host frame for one member carries `to` set to that member's relay device id,
   and the AAD `to` set to that member's `device_id`. An answer to a call or a
   `relay_resume`, the frames that `relay_resume` replays, and a hello answer go

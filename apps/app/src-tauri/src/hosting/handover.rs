@@ -13,10 +13,10 @@ use crate::db::Database;
 const REKEY_DOMAIN: &[u8] = b"kiroshi/v2/rekey";
 
 #[derive(Serialize, Deserialize)]
-pub(super) struct KeyHandover {
-	pub(super) key_id: u32,
-	pub(super) space_key: String,
-	pub(super) roster: RosterSet,
+pub(crate) struct KeyHandover {
+	pub(crate) key_id: u32,
+	pub(crate) space_key: String,
+	pub(crate) roster: RosterSet,
 }
 
 pub(super) struct Handover {
@@ -81,7 +81,7 @@ impl Handover {
 	}
 }
 
-pub(super) fn rekey_bytes(instance_id: &str, to: &DeviceId, sealed: &[u8]) -> Vec<u8> {
+pub(crate) fn rekey_bytes(instance_id: &str, to: &DeviceId, sealed: &[u8]) -> Vec<u8> {
 	let mut bytes = REKEY_DOMAIN.to_vec();
 	bytes.extend_from_slice(&(instance_id.len() as u64).to_be_bytes());
 	bytes.extend_from_slice(instance_id.as_bytes());

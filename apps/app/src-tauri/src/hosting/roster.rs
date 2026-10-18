@@ -14,12 +14,12 @@ const ROSTER_DOMAIN: &[u8] = b"kiroshi/v2/roster";
 const ROSTER_SET_DOMAIN: &[u8] = b"kiroshi/v2/roster-set";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Rostered {
-	pub(super) device_id: DeviceId,
-	pub(super) relay_device_id: String,
-	pub(super) account_id: String,
-	pub(super) signing: VerifyingKey,
-	pub(super) agreement: PublicKey,
+pub(crate) struct Rostered {
+	pub(crate) device_id: DeviceId,
+	pub(crate) relay_device_id: String,
+	pub(crate) account_id: String,
+	pub(crate) signing: VerifyingKey,
+	pub(crate) agreement: PublicKey,
 }
 
 pub(super) struct VerifiedRow {
@@ -33,15 +33,15 @@ pub(super) struct VerifiedRoster {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct SignedRow {
-	pub(super) device_id: String,
-	pub(super) relay_device_id: String,
-	pub(super) account_id: String,
-	pub(super) signing_public_key: String,
-	pub(super) agreement_public_key: String,
-	pub(super) fingerprint: String,
-	pub(super) added_at: i64,
-	pub(super) signature: String,
+pub(crate) struct SignedRow {
+	pub(crate) device_id: String,
+	pub(crate) relay_device_id: String,
+	pub(crate) account_id: String,
+	pub(crate) signing_public_key: String,
+	pub(crate) agreement_public_key: String,
+	pub(crate) fingerprint: String,
+	pub(crate) added_at: i64,
+	pub(crate) signature: String,
 }
 
 impl From<&RosterRow> for SignedRow {
@@ -60,13 +60,13 @@ impl From<&RosterRow> for SignedRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct RosterSet {
-	pub(super) space_id: String,
-	pub(super) host: String,
-	pub(super) key_id: u32,
-	pub(super) version: u64,
-	pub(super) rows: Vec<SignedRow>,
-	pub(super) sig: String,
+pub(crate) struct RosterSet {
+	pub(crate) space_id: String,
+	pub(crate) host: String,
+	pub(crate) key_id: u32,
+	pub(crate) version: u64,
+	pub(crate) rows: Vec<SignedRow>,
+	pub(crate) sig: String,
 }
 
 pub struct Enrolled<'a> {
@@ -92,7 +92,7 @@ pub fn signed_row(host: &DeviceKeys, space_id: &str, enrolled: &Enrolled<'_>) ->
 	row
 }
 
-pub(super) fn verified(
+pub(crate) fn verified(
 	host: &VerifyingKey,
 	space_id: &str,
 	row: &RosterRow,
@@ -157,7 +157,7 @@ pub(super) fn signed_set(
 	}
 }
 
-pub(super) fn set_bytes(
+pub(crate) fn set_bytes(
 	space_id: &str,
 	version: u64,
 	key_id: u32,

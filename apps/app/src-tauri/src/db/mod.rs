@@ -13,10 +13,11 @@ pub use connection::DatabaseError;
 use connection::Located as _;
 use repositories::{
 	messages, ApplicationInstallsRepository, CatalogueRepository, ConversationsRepository,
-	JoinedSpaceMembersRepository, JoinedSpacesRepository, MessagesRepository, MissionsRepository,
-	RelayDevicesRepository, RoutinesRepository, RuntimeContextRepository, SearchRepository,
-	SectionsRepository, SpaceChildrenRepository, SpaceHostingRepository, SpaceRelayRepository,
-	SpaceRowsRepository, SpaceSettingsRepository, SpacesRepository, UserRepository,
+	JoinedSpaceMembersRepository, JoinedSpaceRelayRepository, JoinedSpacesRepository,
+	MessagesRepository, MissionsRepository, RelayDevicesRepository, RoutinesRepository,
+	RuntimeContextRepository, SearchRepository, SectionsRepository, SpaceChildrenRepository,
+	SpaceHostingRepository, SpaceRelayRepository, SpaceRowsRepository, SpaceSettingsRepository,
+	SpacesRepository, UserRepository,
 };
 
 #[derive(Clone)]
@@ -72,6 +73,7 @@ pub struct Database {
 	catalogue: CatalogueRepository,
 	conversations: ConversationsRepository,
 	joined_space_members: JoinedSpaceMembersRepository,
+	joined_space_relay: JoinedSpaceRelayRepository,
 	joined_spaces: JoinedSpacesRepository,
 	messages: MessagesRepository,
 	missions: MissionsRepository,
@@ -100,6 +102,7 @@ impl Database {
 			catalogue: CatalogueRepository::new(access.clone()),
 			conversations: ConversationsRepository::new(access.clone()),
 			joined_space_members: JoinedSpaceMembersRepository::new(access.clone()),
+			joined_space_relay: JoinedSpaceRelayRepository::new(access.clone()),
 			joined_spaces: JoinedSpacesRepository::new(access.clone()),
 			messages: MessagesRepository::new(access.clone()),
 			missions: MissionsRepository::new(access.clone()),
@@ -149,6 +152,10 @@ impl Database {
 
 	pub fn joined_space_members(&self) -> &JoinedSpaceMembersRepository {
 		&self.joined_space_members
+	}
+
+	pub fn joined_space_relay(&self) -> &JoinedSpaceRelayRepository {
+		&self.joined_space_relay
 	}
 
 	pub fn joined_spaces(&self) -> &JoinedSpacesRepository {

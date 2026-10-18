@@ -23,6 +23,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("INVITATION_CHANGED_EVENT", invitations::contract::CHANGED_EVENT)
 		.constant("JOINED_SPACE_REMOVED_EVENT", joined_spaces::commands::REMOVED_EVENT)
 		.constant("JOINED_SPACE_RECONNECTED_EVENT", joined_spaces::commands::RECONNECTED_EVENT)
+		.constant("JOIN_LINK_OPENED_EVENT", joined_spaces::deep_link::OPENED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
 		.typ::<hosting::contract::HostingChanged>()
@@ -31,6 +32,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.typ::<joined_spaces::commands::JoinedSpaceRemoved>()
 		.typ::<joined_spaces::commands::JoinedSpaceReconnected>()
 		.typ::<joined_spaces::members::JoinedSpaceMembersChanged>()
+		.typ::<joined_spaces::deep_link::JoinLinkOpened>()
 		.typ::<agent::contract::EventTurn>()
 		.typ::<applications::contract::ApplicationInstalled>()
 		.typ::<missions::commands::MissionChanged>()
@@ -141,6 +143,8 @@ fn commands<R: Runtime>() -> Commands<R> {
 		joined_spaces::commands::joined_spaces_list,
 		joined_spaces::commands::joined_space_connect::<tauri::Wry>,
 		joined_spaces::commands::joined_space_remove::<tauri::Wry>,
+		joined_spaces::commands::join_by_link::<tauri::Wry>,
+		joined_spaces::commands::join_link_listen::<tauri::Wry>,
 		joined_spaces::members::joined_space_members,
 		mcp_oauth::commands::mcp_oauth_connect::<tauri::Wry>,
 		mcp_oauth::commands::mcp_oauth_cancel::<tauri::Wry>,

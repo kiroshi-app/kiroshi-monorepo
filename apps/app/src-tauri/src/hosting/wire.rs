@@ -16,11 +16,11 @@ use crate::crypto::subkey::Subkey;
 use crate::db::{Database, DatabaseError, DatabaseState};
 use crate::spaces::commands::ready;
 
-pub(super) const HELLO: &str = r#"{"hello":{}}"#;
+pub(crate) const HELLO: &str = r#"{"hello":{}}"#;
 
-const CTR_BLOCK: u64 = 1024;
+pub(crate) const CTR_BLOCK: u64 = 1024;
 
-const MAX_CTR: u64 = (1 << 53) - 1;
+pub(crate) const MAX_CTR: u64 = (1 << 53) - 1;
 
 const SIGNATURE_LENGTH: usize = 64;
 
@@ -83,7 +83,7 @@ pub(super) async fn space_key_stored<R: Runtime>(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Dropped {
+pub(crate) enum Dropped {
 	NotV2,
 	Malformed(&'static str),
 	UnknownKey(u32),
@@ -118,12 +118,12 @@ impl Opened {
 	}
 }
 
-struct Fields {
-	key_id: u32,
-	ctr: u64,
-	challenge: Option<[u8; CHALLENGE_LENGTH]>,
-	ciphertext: Vec<u8>,
-	sig: Signature,
+pub(crate) struct Fields {
+	pub(crate) key_id: u32,
+	pub(crate) ctr: u64,
+	pub(crate) challenge: Option<[u8; CHALLENGE_LENGTH]>,
+	pub(crate) ciphertext: Vec<u8>,
+	pub(crate) sig: Signature,
 }
 
 struct Sealing {
@@ -296,11 +296,11 @@ impl<'a> Wire<'a> {
 	}
 }
 
-pub(super) fn unstored(failure: DatabaseError) -> Dropped {
+pub(crate) fn unstored(failure: DatabaseError) -> Dropped {
 	Dropped::Unstored(format!("{failure:?}"))
 }
 
-fn fields_of(envelope: &Value) -> Result<Fields, Dropped> {
+pub(crate) fn fields_of(envelope: &Value) -> Result<Fields, Dropped> {
 	let key_id = envelope
 		.get("key_id")
 		.and_then(Value::as_u64)
@@ -332,7 +332,7 @@ fn sized<const N: usize>(field: &Value) -> Option<[u8; N]> {
 	decoded(field)?.try_into().ok()
 }
 
-fn envelope_of(frame: &Frame, to: Option<&str>) -> String {
+pub(crate) fn envelope_of(frame: &Frame, to: Option<&str>) -> String {
 	let header = &frame.header;
 	let mut envelope = json!({
 		"v": VERSION,

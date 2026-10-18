@@ -4,7 +4,7 @@ pub mod bridge;
 pub mod commands;
 pub mod contract;
 mod devices;
-mod handover;
+pub(crate) mod handover;
 mod links;
 #[cfg(test)]
 mod member_socket;
@@ -15,7 +15,7 @@ pub(crate) mod replay;
 pub mod roster;
 #[cfg(test)]
 mod sealing_member;
-mod wire;
+pub(crate) mod wire;
 
 pub(crate) use members::MEMBERS_EVERY;
 

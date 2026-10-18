@@ -98,6 +98,8 @@ declared! {
 		joined_spaces::commands::RECONNECTED_EVENT,
 	JOINED_SPACE_MEMBERS_CHANGED: joined_spaces::members::JoinedSpaceMembersChanged =
 		joined_spaces::members::MEMBERS_CHANGED_EVENT,
+	JOIN_LINK_OPENED: joined_spaces::deep_link::JoinLinkOpened =
+		joined_spaces::deep_link::OPENED_EVENT,
 	MISSION_CHANGED: missions::commands::MissionChanged = missions::commands::CHANGED_EVENT,
 	NOTIFICATION_ACTIVATED: notifications::commands::NotificationTarget =
 		notifications::commands::ACTIVATED_EVENT,

@@ -7,13 +7,16 @@ use tokio::time::{interval, MissedTickBehavior};
 
 use super::commands::ready;
 use super::contract::JoinedSpaceError;
+use super::held;
 use super::relay::RelayGuests;
-use crate::account::cloud::{CloudRosterMember, MemberCallError, MemberRole};
+use crate::account::cloud::{CloudRosterMember, MemberCallError};
 use crate::account::session::{self, AccountSession};
+use crate::crypto::fingerprint::fingerprint;
 use crate::db;
 use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpaceRole};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::events::{self, JOINED_SPACE_MEMBERS_CHANGED};
+use crate::hosting::roster::Rostered;
 use crate::hosting::MEMBERS_EVERY;
 
 pub const MEMBERS_CHANGED_EVENT: &str = "joined-space://members-changed";
@@ -96,9 +99,11 @@ async fn roster_of<R: Runtime>(
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
 	};
 	let JoinedReach::Relay { instance_id } = &joined.reach;
-	let roster = app.state::<RelayGuests>().cloud().roster(&bearer, instance_id).await;
-	let mut members: Vec<JoinedSpaceMember> = match roster {
-		Ok(roster) => roster.into_iter().map(JoinedSpaceMember::from).collect(),
+	let Some(roster) = held::roster(app, instance_id).await? else {
+		return Ok(Vec::new());
+	};
+	let listed = match app.state::<RelayGuests>().cloud().roster(&bearer, instance_id).await {
+		Ok(listed) => listed,
 		Err(MemberCallError::Revoked) => {
 			session::revoked(app, &bearer);
 			return Err(JoinedSpaceError::SessionRevoked);
@@ -110,17 +115,26 @@ async fn roster_of<R: Runtime>(
 			return Err(JoinedSpaceError::RelayRefused { detail: format!("{refusal:?}") })
 		}
 	};
+	let mut members: Vec<JoinedSpaceMember> =
+		roster.rows.iter().map(|row| member_of(row, &roster.host, &listed)).collect();
 	members.sort_by_key(|member| member.role);
 	Ok(members)
 }
 
-impl From<CloudRosterMember> for JoinedSpaceMember {
-	fn from(member: CloudRosterMember) -> Self {
-		let role = match member.role {
-			MemberRole::Owner => JoinedSpaceRole::Host,
-			MemberRole::Member => JoinedSpaceRole::Guest,
-		};
-		Self { user_id: member.user_id, name: member.name, role }
+fn member_of(row: &Rostered, host: &Rostered, listed: &[CloudRosterMember]) -> JoinedSpaceMember {
+	let present = listed.iter().find(|member| member.user_id == row.account_id);
+	let role = if row.device_id == host.device_id {
+		JoinedSpaceRole::Host
+	} else {
+		JoinedSpaceRole::Guest
+	};
+	JoinedSpaceMember {
+		user_id: row.account_id.clone(),
+		name: present.and_then(|member| member.name.clone()),
+		role,
+		device_id: row.device_id.to_string(),
+		fingerprint: fingerprint(&row.signing).map(str::to_owned).to_vec(),
+		is_present: present.is_some(),
 	}
 }
 
@@ -143,12 +157,19 @@ mod tests {
 	use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 	use tokio::time::timeout;
 
+	use super::super::held::{device_keys, kept};
+	use super::super::roster_set::fixtures::{signed_set, Device};
+	use super::super::roster_set::{verified_set, Handed};
 	use super::*;
+	use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
+	use crate::crypto::device_keys::DeviceKeys;
+	use crate::crypto::space_key::HeldSpaceKey;
 	use crate::db::connection::temp_dir;
 	use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 	use crate::environment::store;
 	use crate::joined_spaces::commands::joined_space_connect;
 	use crate::joined_spaces::relay;
+	use crate::logging::contract::InstallKind;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const INSTANCE: &str = "instance-1";
@@ -158,6 +179,8 @@ mod tests {
 	const HEARD_WITHIN: Duration = Duration::from_secs(5);
 
 	const SILENT_FOR: Duration = Duration::from_millis(200);
+
+	const DEVICE_SECRET: [u8; 64] = [7; 64];
 
 	struct Relay {
 		answer: Mutex<(StatusCode, Value)>,
@@ -193,6 +216,8 @@ mod tests {
 		app.manage::<db::DatabaseState>(Ok(db::open(dir)));
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(dir.join("account")), api_url));
 		app.manage(RelayGuests::new(api_url));
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&DEVICE_SECRET))));
+		app.manage(SpaceKeys::new(InstallKind::Dev, "members".to_owned(), Some(dir.join("keys"))));
 		app
 	}
 
@@ -225,7 +250,27 @@ mod tests {
 		joined_space_members(app.state(), id.to_owned()).await
 	}
 
+	async fn signed_roster_planted(app: &App<MockRuntime>) {
+		let own = device_keys(app.handle()).expect("the device keys");
+		let host = DeviceKeys::generate().expect("randomness");
+		let eve = DeviceKeys::generate().expect("randomness");
+		let set = signed_set(
+			&host,
+			1,
+			1,
+			&[
+				Device { keys: &host, relay_device_id: "r-host", account_id: "owner" },
+				Device { keys: &own, relay_device_id: "r-bob", account_id: "bob" },
+				Device { keys: &eve, relay_device_id: "r-eve", account_id: "eve" },
+			],
+		);
+		let roster = verified_set(set, None, &own.device_id()).expect("the roster verifies");
+		let handed = Handed { space: HeldSpaceKey::first().expect("randomness"), roster };
+		assert!(kept(app.handle(), INSTANCE, &handed).await.expect("the roster is kept"));
+	}
+
 	async fn joined_space(app: &App<MockRuntime>) -> JoinedSpace {
+		signed_roster_planted(app).await;
 		relay::joined(app.handle(), INSTANCE.to_owned(), Some("Studio".to_owned()))
 			.await
 			.expect("the join");
@@ -234,21 +279,44 @@ mod tests {
 		held.expect("the list").into_iter().next().expect("the joined space is held")
 	}
 
-	fn owner_and(guests: &[(&str, &str)]) -> Value {
-		let mut roster: Vec<Value> = guests
-			.iter()
-			.map(|(id, name)| json!({ "userId": id, "name": name, "role": "member" }))
-			.collect();
-		roster.push(json!({ "userId": "owner", "name": null, "role": "owner" }));
+	fn listed(members: &[(&str, &str)]) -> Value {
+		let mut roster = vec![json!({ "userId": "owner", "name": "Ann", "role": "owner" })];
+		roster.extend(
+			members
+				.iter()
+				.map(|(id, name)| json!({ "userId": id, "name": name, "role": "member" })),
+		);
 		Value::Array(roster)
 	}
 
-	fn host_and(guests: &[(&str, &str)]) -> Value {
-		let mut members = vec![json!({ "userId": "owner", "name": null, "role": "host" })];
-		members.extend(
-			guests.iter().map(|(id, name)| json!({ "userId": id, "name": name, "role": "guest" })),
-		);
-		Value::Array(members)
+	type Seen = (String, Option<String>, String, bool);
+
+	fn seen(members: &Value) -> Vec<Seen> {
+		let rows = members.as_array().expect("a member list");
+		rows.iter()
+			.map(|row| {
+				assert_eq!(row["fingerprint"].as_array().map(Vec::len), Some(6), "{row}");
+				assert_eq!(row["deviceId"].as_str().map(str::len), Some(32), "{row}");
+				let user_id = row["userId"].as_str().expect("a user id").to_owned();
+				let role = row["role"].as_str().expect("a role").to_owned();
+				let name = row["name"].as_str().map(str::to_owned);
+				(user_id, name, role, row["isPresent"] == true)
+			})
+			.collect()
+	}
+
+	fn rows(expected: &[(&str, Option<&str>, &str, bool)]) -> Vec<Seen> {
+		expected
+			.iter()
+			.map(|(id, name, role, is_present)| {
+				((*id).to_owned(), name.map(str::to_owned), (*role).to_owned(), *is_present)
+			})
+			.collect()
+	}
+
+	fn sorted_guests(mut seen: Vec<Seen>) -> Vec<Seen> {
+		seen[1..].sort();
+		seen
 	}
 
 	async fn stored_json(app: &App<MockRuntime>, id: &str) -> Value {
@@ -256,9 +324,9 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn another_guest_is_named_after_join_with_the_host_first() {
+	async fn every_device_of_the_signed_roster_is_listed_host_first_and_named_by_the_relay() {
 		let dir = temp_dir();
-		let (api_url, _relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let mut hearing = heard(&app);
@@ -266,65 +334,44 @@ mod tests {
 		let joined = joined_space(&app).await;
 
 		let changed = next(&mut hearing).await;
-		assert_eq!(changed, json!({ "id": joined.id, "members": host_and(&[("bob", "Bob")]) }));
-		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
+		let expected = rows(&[
+			("owner", Some("Ann"), "host", true),
+			("bob", Some("Bob"), "guest", true),
+			("eve", None, "guest", false),
+		]);
+		assert_eq!(changed["id"], joined.id.as_str());
+		assert_eq!(sorted_guests(seen(&changed["members"])), expected);
+		assert_eq!(sorted_guests(seen(&stored_json(&app, &joined.id).await)), expected);
 	}
 
 	#[tokio::test]
-	async fn a_renamed_guest_and_a_removed_one_reach_the_front_on_the_next_read() {
+	async fn a_renamed_member_and_one_the_relay_no_longer_lists_reach_the_front_on_the_next_read() {
 		let dir = temp_dir();
-		let (api_url, relay) = relay_answering(owner_and(&[("bob", "Bob"), ("eve", "Eve")])).await;
+		let (api_url, relay) = relay_answering(listed(&[("bob", "Bob"), ("eve", "Eve")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let mut hearing = heard(&app);
 		let joined = joined_space(&app).await;
 		next(&mut hearing).await;
 
-		relay.answers(StatusCode::OK, owner_and(&[("bob", "Robert"), ("eve", "Eve")]));
+		relay.answers(StatusCode::OK, listed(&[("bob", "Robert")]));
 		read(app.handle(), &joined).await;
-		let renamed = next(&mut hearing).await;
+		let changed = next(&mut hearing).await;
 
-		relay.answers(StatusCode::OK, owner_and(&[("bob", "Robert")]));
-		read(app.handle(), &joined).await;
-		let removed = next(&mut hearing).await;
-
-		assert_eq!(renamed["members"], host_and(&[("bob", "Robert"), ("eve", "Eve")]));
-		assert_eq!(removed["members"], host_and(&[("bob", "Robert")]));
-		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Robert")]));
-	}
-
-	#[tokio::test]
-	async fn the_host_name_is_held_after_join_and_its_rename_reaches_the_front_on_the_next_read() {
-		let hosted_by = |name: Value| json!([{ "userId": "owner", "name": name, "role": "owner" }]);
-		let host_named = |name: Value| json!([{ "userId": "owner", "name": name, "role": "host" }]);
-		let dir = temp_dir();
-		let (api_url, relay) = relay_answering(hosted_by(json!("Ann"))).await;
-		signed_in(&dir);
-		let app = app_reaching(&dir, &api_url);
-		let mut hearing = heard(&app);
-		let joined = joined_space(&app).await;
-		let named = next(&mut hearing).await;
-		let held_after_join = stored_json(&app, &joined.id).await;
-
-		relay.answers(StatusCode::OK, hosted_by(json!("Annie")));
-		read(app.handle(), &joined).await;
-		let renamed = next(&mut hearing).await;
-
-		relay.answers(StatusCode::OK, hosted_by(Value::Null));
-		read(app.handle(), &joined).await;
-		let unnamed = next(&mut hearing).await;
-
-		assert_eq!(named["members"], host_named(json!("Ann")));
-		assert_eq!(held_after_join, host_named(json!("Ann")));
-		assert_eq!(renamed["members"], host_named(json!("Annie")));
-		assert_eq!(unnamed["members"], host_named(Value::Null));
-		assert_eq!(stored_json(&app, &joined.id).await, host_named(Value::Null));
+		assert_eq!(
+			sorted_guests(seen(&changed["members"])),
+			rows(&[
+				("owner", Some("Ann"), "host", true),
+				("bob", Some("Robert"), "guest", true),
+				("eve", None, "guest", false),
+			])
+		);
 	}
 
 	#[tokio::test]
 	async fn an_identical_read_emits_nothing() {
 		let dir = temp_dir();
-		let (api_url, _relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let mut hearing = heard(&app);
@@ -339,12 +386,13 @@ mod tests {
 	#[tokio::test]
 	async fn a_failing_read_keeps_the_stored_roster_and_emits_nothing() {
 		let dir = temp_dir();
-		let (api_url, relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let mut hearing = heard(&app);
 		let joined = joined_space(&app).await;
 		next(&mut hearing).await;
+		let before = stored_json(&app, &joined.id).await;
 
 		for status in
 			[StatusCode::FORBIDDEN, StatusCode::NOT_FOUND, StatusCode::INTERNAL_SERVER_ERROR]
@@ -354,20 +402,21 @@ mod tests {
 			assert!(is_silent(&mut hearing).await, "{status}");
 		}
 
-		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
+		assert_eq!(stored_json(&app, &joined.id).await, before);
 	}
 
 	#[tokio::test]
 	async fn an_unreachable_relay_keeps_the_stored_roster() {
 		let dir = temp_dir();
-		let (api_url, _relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
-		let joined = {
+		let (joined, before) = {
 			let app = app_reaching(&dir, &api_url);
 			let mut hearing = heard(&app);
 			let joined = joined_space(&app).await;
 			next(&mut hearing).await;
-			joined
+			let before = stored_json(&app, &joined.id).await;
+			(joined, before)
 		};
 		let listener =
 			tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
@@ -379,26 +428,27 @@ mod tests {
 		read(app.handle(), &joined).await;
 
 		assert!(is_silent(&mut hearing).await);
-		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
+		assert_eq!(stored_json(&app, &joined.id).await, before);
 	}
 
 	#[tokio::test]
 	async fn a_reopened_database_answers_the_stored_roster_before_any_read() {
 		let dir = temp_dir();
-		let (api_url, relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
-		let joined = {
+		let (joined, before) = {
 			let app = app_reaching(&dir, &api_url);
 			let mut hearing = heard(&app);
 			let joined = joined_space(&app).await;
 			next(&mut hearing).await;
-			joined
+			let before = stored_json(&app, &joined.id).await;
+			(joined, before)
 		};
 		relay.answers(StatusCode::INTERNAL_SERVER_ERROR, json!({}));
 
 		let app = app_reaching(&dir, &api_url);
 
-		assert_eq!(stored_json(&app, &joined.id).await, host_and(&[("bob", "Bob")]));
+		assert_eq!(stored_json(&app, &joined.id).await, before);
 	}
 
 	#[tokio::test]
@@ -421,7 +471,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_revoked_bearer_signs_the_account_out() {
 		let dir = temp_dir();
-		let (api_url, relay) = relay_answering(owner_and(&[])).await;
+		let (api_url, relay) = relay_answering(listed(&[])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let mut hearing = heard(&app);
@@ -441,9 +491,25 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn the_relay_link_reads_the_roster_when_it_starts_and_a_left_space_forgets_it() {
+	async fn a_joined_space_without_a_signed_roster_lists_nobody_the_relay_lists() {
 		let dir = temp_dir();
-		let (api_url, _relay) = relay_answering(owner_and(&[("bob", "Bob")])).await;
+		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
+		signed_in(&dir);
+		let app = app_reaching(&dir, &api_url);
+		relay::joined(app.handle(), INSTANCE.to_owned(), None).await.expect("the join");
+		let state = app.state::<db::DatabaseState>();
+		let held = ready(&state).expect("the database").joined_spaces().list().await;
+		let joined = held.expect("the list").into_iter().next().expect("the joined space");
+
+		read(app.handle(), &joined).await;
+
+		assert_eq!(stored(&app, &joined.id).await, Ok(Vec::new()));
+	}
+
+	#[tokio::test]
+	async fn a_joined_space_without_a_space_key_needs_a_join_link_on_every_connect() {
+		let dir = temp_dir();
+		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
 		let app = app_reaching(&dir, &api_url);
 		let candidate = JoinedSpace {
@@ -455,21 +521,16 @@ mod tests {
 		let state = app.state::<db::DatabaseState>();
 		let joined = ready(&state).expect("the database").joined_spaces().join(candidate).await;
 		let joined = joined.expect("the join");
-		let mut hearing = heard(&app);
 
-		let connection = joined_space_connect(app.handle().clone(), joined.id.clone()).await;
-		let changed = next(&mut hearing).await;
+		let connections = [
+			joined_space_connect(app.handle().clone(), joined.id.clone()).await,
+			joined_space_connect(app.handle().clone(), joined.id.clone()).await,
+		];
 
-		assert_eq!(
-			connection.map(|found| found.id),
-			Err(JoinedSpaceError::HostOffline { id: joined.id.clone() })
-		);
-		assert_eq!(changed["members"], host_and(&[("bob", "Bob")]));
-		relay::left(app.handle(), &joined.id).await.expect("the removal");
+		for connection in connections {
+			assert_eq!(connection.map(|found| found.id), Err(JoinedSpaceError::NeedsJoinLink));
+		}
 		let guests = app.state::<RelayGuests>();
 		assert!(!guests.is_running(&joined.id));
-		let roster =
-			ready(&state).expect("the database").joined_space_members().members(joined.id).await;
-		assert_eq!(roster.expect("the read"), Vec::new());
 	}
 }

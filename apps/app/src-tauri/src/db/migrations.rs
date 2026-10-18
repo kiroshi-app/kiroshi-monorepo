@@ -63,6 +63,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 54, statements: RELAY_V2 },
 	Migration { version: 55, statements: SPACE_JOIN },
 	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
+	Migration { version: 57, statements: JOINED_SPACE_RELAY_V2 },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1201,6 +1202,25 @@ CREATE TABLE space_key_rotations (
 );
 ";
 
+const JOINED_SPACE_RELAY_V2: &str = "
+CREATE TABLE joined_space_rosters (
+	instance_id TEXT PRIMARY KEY,
+	key_id INTEGER NOT NULL,
+	version INTEGER NOT NULL,
+	roster TEXT NOT NULL
+);
+
+CREATE TABLE joined_space_counters (
+	instance_id TEXT NOT NULL,
+	key_id INTEGER NOT NULL,
+	reserved INTEGER NOT NULL DEFAULT 0,
+	accepted INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (instance_id, key_id)
+);
+
+DELETE FROM app_settings WHERE key LIKE 'app.joined_space_members.%';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1310,6 +1330,7 @@ mod tests {
 	const RELAY_V2_STEP: u32 = 54;
 	const SPACE_JOIN_STEP: u32 = 55;
 	const SPACE_KEY_ROTATIONS_STEP: u32 = 56;
+	const JOINED_SPACE_RELAY_V2_STEP: u32 = 57;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -4039,6 +4060,40 @@ mod tests {
 
 		assert_eq!(version(&connection).expect("version"), latest_version());
 		assert_eq!(left, 0);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_kept_file_drops_its_relay_listed_members_and_keeps_every_other_setting() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(JOINED_SPACE_RELAY_V2_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), SPACE_KEY_ROTATIONS_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO app_settings (key, value) VALUES
+					('app.joined_space_members.j1', '[]'),
+					('app.joined_spaces', '[]');",
+			)
+			.expect("the settings this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		let kept: Vec<String> = connection
+			.prepare("SELECT key FROM app_settings ORDER BY key")
+			.expect("the read prepares")
+			.query_map([], |row| row.get(0))
+			.expect("the read")
+			.collect::<Result<_, _>>()
+			.expect("the keys");
+		let rosters: i64 = connection
+			.query_row("SELECT COUNT(*) FROM joined_space_rosters", [], |row| row.get(0))
+			.expect("the rows count");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(kept, vec!["app.joined_spaces".to_owned()]);
+		assert_eq!(rosters, 0);
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

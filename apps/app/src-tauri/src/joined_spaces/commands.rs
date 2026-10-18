@@ -3,6 +3,7 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::relay::{self, RelayGuests};
+use super::{deep_link, join};
 use crate::db;
 use crate::events::{self, JOINED_SPACE_CHANGED, JOINED_SPACE_RECONNECTED, JOINED_SPACE_REMOVED};
 
@@ -77,6 +78,21 @@ pub async fn joined_space_connect<R: Runtime>(
 	id: String,
 ) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
 	relay::connected(&app, id).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn join_by_link<R: Runtime>(
+	app: AppHandle<R>,
+	link: String,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	join::joined_by_link(&app, &link).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn join_link_listen<R: Runtime>(app: AppHandle<R>) {
+	deep_link::listened(&app);
 }
 
 #[tauri::command]
