@@ -416,12 +416,10 @@ async fn online<R: Runtime>(
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
 	let mut avatars = JoinSet::new();
+	let admission =
+		|| admission::admitted(app.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned());
 	let mut admissions = JoinSet::new();
-	admissions.spawn(admission::admitted(
-		app.clone(),
-		ids.space_id.to_owned(),
-		ids.instance_id.to_owned(),
-	));
+	admissions.spawn(admission());
 	let avatar_turn = Arc::new(Mutex::new(()));
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
@@ -440,7 +438,7 @@ async fn online<R: Runtime>(
 				};
 				match relay_event_of(text.as_str()) {
 					Some(RelayEvent::DevicesChanged) => {
-						admissions.spawn(admission::admitted(app.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned()));
+						admissions.spawn(admission());
 						continue;
 					}
 					Some(RelayEvent::DeviceRevoked { device_id, user_id }) => {
