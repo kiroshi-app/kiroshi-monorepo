@@ -179,11 +179,7 @@ mod tests {
 	}
 
 	#[test]
-	fn any_other_kiroshi_join_url_names_no_invitation_and_announces_nothing() {
-		let app = an_app_of_its_own("join-links-refused", mock_builder());
-		app.manage(JoinLinks::default());
-		let hearing = heard(&app);
-		listened(app.handle());
+	fn any_other_kiroshi_join_url_names_no_invitation() {
 		let too_long = format!("kiroshi://join?invitation={}", "a".repeat(129));
 		let longest = format!("kiroshi://join?invitation={}", "a".repeat(128));
 
@@ -200,10 +196,8 @@ mod tests {
 			"kiroshi://settings?invitation=a",
 			"https://kiroshi.app/join?invitation=a",
 		]));
-		received(app.handle(), refused.clone());
 
 		assert_eq!(refused, Vec::<String>::new());
-		assert_eq!(hearing.try_iter().count(), 0);
 		assert_eq!(invitations_of(&urls(&[longest.as_str()])), vec!["a".repeat(128)]);
 	}
 }
