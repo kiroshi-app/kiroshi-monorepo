@@ -7,11 +7,12 @@ use super::commands::{
 	mission_watch,
 };
 use super::contract::{
-	Mission, MissionClosing, MissionDraft, MissionEntry, MissionError, MissionEventKind,
-	MissionNote, MissionOutcome, MissionState, MissionStatus, MissionWatch, Ticket,
+	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError,
+	MissionEvent, MissionEventKind, MissionFilter, MissionNote, MissionOutcome, MissionRecord,
+	MissionScope, MissionState, MissionStatus, MissionWatch, Ticket,
 };
 use crate::agent::host::{Host, Refusal};
-use crate::conversations::commands::ready;
+use crate::conversations::commands::{ready, space_of_the_conversation};
 use crate::db;
 
 const BOT: &str = "bot";
@@ -43,6 +44,56 @@ impl<R: Runtime> MissionHost<R> {
 	fn runs_in(&self, held: &Mission) -> bool {
 		held.origin_conversation_id == self.conversation_id
 			|| held.thread_conversation_id == self.conversation_id
+	}
+
+	async fn space(&self, database: &db::Database) -> Result<String, MissionError> {
+		Ok(space_of_the_conversation(database, &self.conversation_id, &self.bot_id).await?)
+	}
+
+	async fn filter(
+		&self,
+		database: &db::Database,
+		asked: Sought,
+	) -> Result<MissionFilter, MissionError> {
+		let scope = match (asked.space, asked.conversation) {
+			(true, _) => MissionScope::Space(self.space(database).await?),
+			(false, Some(id)) if id != self.conversation_id => {
+				self.refuse_a_conversation_of_another_space(database, &id).await?;
+				MissionScope::Conversation(id)
+			}
+			(false, _) => MissionScope::Conversation(self.conversation_id.clone()),
+		};
+		Ok(MissionFilter { scope, state: asked.state, bot_id: asked.bot })
+	}
+
+	async fn refuse_a_conversation_of_another_space(
+		&self,
+		database: &db::Database,
+		id: &str,
+	) -> Result<(), MissionError> {
+		if database.conversations().kind(id.to_owned()).await?.is_none() {
+			return Err(MissionError::UnknownConversation { id: id.to_owned() });
+		}
+		let space_id = self.space(database).await?;
+		if database.conversations().space(id.to_owned()).await? != Some(space_id.clone()) {
+			return Err(MissionError::ConversationOfAnotherSpace { id: id.to_owned(), space_id });
+		}
+		Ok(())
+	}
+
+	async fn refuse_a_mission_of_another_space(
+		&self,
+		database: &db::Database,
+		held: &Mission,
+	) -> Result<(), MissionError> {
+		if self.runs_in(held) {
+			return Ok(());
+		}
+		let space_id = self.space(database).await?;
+		if held.space_id.as_ref() != Some(&space_id) {
+			return Err(MissionError::MissionOfAnotherSpace { id: held.id.clone(), space_id });
+		}
+		Ok(())
 	}
 
 	async fn refuse_a_mission_it_does_not_own(
@@ -130,12 +181,16 @@ impl<R: Runtime> Host for MissionHost<R> {
 				Self::answered(mission_watch(self.app.clone(), state, asked.id, watch).await?)
 			}
 			Operation::List => {
-				let _: Bare = Self::read(payload)?;
-				let carried = database
-					.missions()
-					.still_open_for_bot(self.conversation_id.clone(), self.bot_id.clone())
-					.await?;
-				Self::answered(carried.into_iter().map(listed).collect::<Vec<_>>())
+				let asked: Sought = Self::read(payload)?;
+				let filter = self.filter(database, asked).await?;
+				let records = database.missions().listed(filter).await?;
+				Self::answered(records.into_iter().map(listed).collect::<Vec<_>>())
+			}
+			Operation::Read => {
+				let asked: Named = Self::read(payload)?;
+				let dossier = database.missions().dossier(asked.id).await?;
+				self.refuse_a_mission_of_another_space(database, &dossier.record.mission).await?;
+				Self::answered(read_mission(dossier))
 			}
 		}
 	}
@@ -161,6 +216,7 @@ pub enum Operation {
 	Close,
 	Watch,
 	List,
+	Read,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,8 +268,23 @@ struct Armed {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Bare {}
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Sought {
+	#[serde(default)]
+	conversation: Option<String>,
+	#[serde(default)]
+	space: bool,
+	#[serde(default)]
+	state: Option<MissionState>,
+	#[serde(default)]
+	bot: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Named {
+	id: String,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -221,17 +292,70 @@ struct Listed {
 	id: String,
 	ticket: Ticket,
 	state: MissionState,
+	bot_id: String,
+	bot_name: String,
+	origin_conversation_id: String,
+	thread_conversation_id: String,
 	opened_at: i64,
+	closed_at: Option<i64>,
 	status: Option<MissionStatus>,
 }
 
-fn listed(mission: Mission) -> Listed {
+fn listed(record: MissionRecord) -> Listed {
+	let MissionRecord { mission, bot_name } = record;
 	Listed {
 		id: mission.id,
 		ticket: mission.ticket,
 		state: mission.state,
+		bot_id: mission.bot_id,
+		bot_name,
+		origin_conversation_id: mission.origin_conversation_id,
+		thread_conversation_id: mission.thread_conversation_id,
 		opened_at: mission.opened_at,
+		closed_at: mission.closed_at,
 		status: mission.status,
+	}
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadMission {
+	id: String,
+	objective: String,
+	ticket: Ticket,
+	state: MissionState,
+	bot_id: String,
+	bot_name: String,
+	origin_conversation_id: String,
+	thread_conversation_id: String,
+	branch: Option<String>,
+	repository: Option<String>,
+	pull_request_url: Option<String>,
+	opened_at: i64,
+	closed_at: Option<i64>,
+	status: Option<MissionStatus>,
+	events: Vec<MissionEvent>,
+}
+
+fn read_mission(dossier: MissionDossier) -> ReadMission {
+	let MissionDossier { record: MissionRecord { mission, bot_name }, repository, events } =
+		dossier;
+	ReadMission {
+		id: mission.id,
+		objective: mission.objective,
+		ticket: mission.ticket,
+		state: mission.state,
+		bot_id: mission.bot_id,
+		bot_name,
+		origin_conversation_id: mission.origin_conversation_id,
+		thread_conversation_id: mission.thread_conversation_id,
+		branch: mission.branch,
+		repository,
+		pull_request_url: mission.pull_request_url,
+		opened_at: mission.opened_at,
+		closed_at: mission.closed_at,
+		status: mission.status,
+		events,
 	}
 }
 
@@ -263,6 +387,14 @@ mod tests {
 		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
 			VALUES ('c1', 'b1', 'assistant', 1, 0), ('c1', 'b2', 'assistant', 1, 1),
 				('c2', 'b1', 'assistant', 1, 0);
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('work', 'Work', 'blue', 1, 1);
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b3', 'Third', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b3', 'work', 1);
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('c3', 'topic', 'work', 'Third', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c3', 'b3', 'assistant', 1, 0);
 	";
 
 	async fn a_host(name: &str) -> AppOfItsOwn {
@@ -277,7 +409,30 @@ mod tests {
 	}
 
 	fn serving(app: &App<MockRuntime>, conversation_id: &str) -> MissionHost<MockRuntime> {
-		MissionHost::new(app.handle().clone(), conversation_id.to_owned(), "b1".to_owned())
+		serving_as(app, conversation_id, "b1")
+	}
+
+	fn serving_as(
+		app: &App<MockRuntime>,
+		conversation_id: &str,
+		bot_id: &str,
+	) -> MissionHost<MockRuntime> {
+		MissionHost::new(app.handle().clone(), conversation_id.to_owned(), bot_id.to_owned())
+	}
+
+	async fn closed_by_its_bot(app: &App<MockRuntime>, held: &Mission) {
+		serving_as(app, &held.origin_conversation_id, &held.bot_id)
+			.answer(asking(
+				"close",
+				json!({ "id": held.id, "outcome": "done", "summary": "Already served" }),
+			))
+			.await
+			.expect("the mission is closed");
+	}
+
+	fn sorted(mut ids: Vec<String>) -> Vec<String> {
+		ids.sort();
+		ids
 	}
 
 	fn asking(operation: &str, payload: Value) -> Value {
@@ -524,28 +679,167 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn list_answers_the_open_missions_of_the_bot_of_the_session() {
+	async fn list_answers_every_mission_of_the_room_of_every_bot_open_and_closed() {
 		let app = a_host("listed").await;
-		let mine = a_mission_of(&app, "c1", "b1").await;
-		let closed = a_mission_of(&app, "c1", "b1").await;
-		a_mission_of(&app, "c1", "b2").await;
+		let open = a_mission_of(&app, "c1", "b2").await;
+		let closed = a_mission_of(&app, "c1", "b2").await;
+		a_mission_of(&app, "c2", "b1").await;
+		closed_by_its_bot(&app, &closed).await;
+
+		let answered = serving(&app, "c1")
+			.answer(asking("list", json!({})))
+			.await
+			.expect("the missions are listed");
+
+		assert_eq!(sorted(ids(&answered)), sorted(vec![open.id.clone(), closed.id.clone()]));
+		for row in answered.as_array().expect("a list") {
+			assert_eq!(row["botId"], json!("b2"), "got {row}");
+			assert_eq!(row["botName"], json!("Second"), "got {row}");
+			assert_eq!(row["originConversationId"], json!("c1"), "got {row}");
+			assert_eq!(row["ticket"]["externalId"], json!("OPE-1"), "got {row}");
+			assert!(row["threadConversationId"].is_string(), "got {row}");
+			assert!(row["openedAt"].is_number(), "got {row}");
+			let expected = if row["id"] == json!(closed.id) { "done" } else { "working" };
+			assert_eq!(row["state"], json!(expected), "got {row}");
+			assert_eq!(row["closedAt"].is_number(), expected == "done", "got {row}");
+		}
+	}
+
+	#[tokio::test]
+	async fn list_narrows_on_a_conversation_a_state_and_a_bot() {
+		let app = a_host("narrowed").await;
+		let of_b1 = a_mission_of(&app, "c1", "b1").await;
+		let of_b2 = a_mission_of(&app, "c1", "b2").await;
+		let elsewhere = a_mission_of(&app, "c2", "b1").await;
+		closed_by_its_bot(&app, &of_b2).await;
+		let host = serving(&app, &of_b1.thread_conversation_id);
+
+		let of_the_bot = host
+			.answer(asking("list", json!({ "conversation": "c1", "bot": "b2" })))
+			.await
+			.expect("the missions are listed");
+		let still_working = host
+			.answer(asking("list", json!({ "conversation": "c1", "state": "working" })))
+			.await
+			.expect("the missions are listed");
+		let of_c2 = host
+			.answer(asking("list", json!({ "conversation": "c2" })))
+			.await
+			.expect("the missions are listed");
+
+		assert_eq!(ids(&of_the_bot), vec![of_b2.id]);
+		assert_eq!(ids(&still_working), vec![of_b1.id]);
+		assert_eq!(ids(&of_c2), vec![elsewhere.id]);
+	}
+
+	#[tokio::test]
+	async fn list_on_the_space_answers_its_closed_missions_and_none_of_another_space() {
+		let app = a_host("space").await;
+		let closed_here = a_mission_of(&app, "c1", "b2").await;
+		let closed_there = a_mission_of(&app, "c2", "b1").await;
+		a_mission_of(&app, "c1", "b1").await;
+		let closed_in_work = a_mission_of(&app, "c3", "b3").await;
+		for held in [&closed_here, &closed_there, &closed_in_work] {
+			closed_by_its_bot(&app, held).await;
+		}
+
+		let answered = serving(&app, "c1")
+			.answer(asking("list", json!({ "space": true, "conversation": "c3", "state": "done" })))
+			.await
+			.expect("the missions of the space are listed");
+
+		assert_eq!(sorted(ids(&answered)), sorted(vec![closed_here.id, closed_there.id]));
+	}
+
+	#[tokio::test]
+	async fn list_refuses_a_conversation_of_another_space_and_an_unknown_one() {
+		let app = a_host("foreign-space").await;
+		a_mission_of(&app, "c3", "b3").await;
 		let host = serving(&app, "c1");
-		host.answer(asking(
-			"close",
-			json!({ "id": closed.id, "outcome": "done", "summary": "Already served" }),
-		))
-		.await
-		.expect("the mission is closed");
 
-		let answered =
-			host.answer(asking("list", json!({}))).await.expect("the missions are listed");
+		let foreign = host
+			.answer(asking("list", json!({ "conversation": "c3" })))
+			.await
+			.expect_err("another space is refused");
+		let unknown = host
+			.answer(asking("list", json!({ "conversation": "nowhere" })))
+			.await
+			.expect_err("an unknown conversation is refused");
 
-		assert_eq!(ids(&answered), vec![mine.id], "got {answered}");
-		let row = &answered.as_array().expect("a list")[0];
-		assert_eq!(row["ticket"]["externalId"], json!("OPE-1"));
-		assert_eq!(row["state"], json!("working"));
-		assert!(row["openedAt"].is_number(), "got {row}");
-		assert_eq!(row["status"], Value::Null, "got {row}");
+		assert_eq!(foreign["kind"], json!("conversationOfAnotherSpace"), "got {foreign}");
+		assert_eq!(foreign["id"], json!("c3"));
+		assert_eq!(unknown["kind"], json!("unknownConversation"), "got {unknown}");
+		assert_eq!(unknown["id"], json!("nowhere"));
+	}
+
+	#[tokio::test]
+	async fn read_answers_the_whole_of_a_mission_of_another_bot() {
+		let app = a_host("read").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let held = a_mission_of(&app, "c1", "b2").await;
+		let its_bot = serving_as(&app, "c1", "b2");
+		its_bot
+			.answer(asking("note", json!({ "id": held.id, "line": "Half way" })))
+			.await
+			.expect("the note lands");
+		its_bot
+			.answer(asking("status", json!({ "id": held.id, "text": "Paused on the copy" })))
+			.await
+			.expect("the status lands");
+		its_bot.answer(an_arming(&held.id)).await.expect("the mission is armed");
+
+		let read = serving(&app, "c2")
+			.answer(asking("read", json!({ "id": held.id })))
+			.await
+			.expect("the mission reads");
+
+		assert_eq!(read["id"], json!(held.id));
+		assert_eq!(read["objective"], json!("Held"));
+		assert_eq!(read["ticket"]["externalId"], json!("OPE-1"));
+		assert_eq!(read["state"], json!("working"));
+		assert_eq!(read["botId"], json!("b2"));
+		assert_eq!(read["botName"], json!("Second"));
+		assert_eq!(read["originConversationId"], json!("c1"));
+		assert_eq!(read["threadConversationId"], json!(held.thread_conversation_id));
+		assert_eq!(read["branch"], json!("feature/ope-37"));
+		assert_eq!(read["repository"], json!("shoto290/kiroshi-monorepo"));
+		assert_eq!(read["pullRequestUrl"], Value::Null);
+		assert_eq!(read["closedAt"], Value::Null);
+		assert_eq!(read["status"]["text"], json!("Paused on the copy"));
+		let kinds = read["events"]
+			.as_array()
+			.expect("the events")
+			.iter()
+			.map(|event| event["kind"].clone())
+			.collect::<Vec<_>>();
+		assert_eq!(kinds, vec![json!("opened"), json!("note"), json!("status")]);
+		assert_eq!(read["events"][1]["payload"]["line"], json!("Half way"));
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+	}
+
+	#[tokio::test]
+	async fn read_refuses_a_mission_of_another_space_and_an_unknown_one() {
+		let app = a_host("read-foreign").await;
+		let foreign = a_mission_of(&app, "c3", "b3").await;
+		let host = serving(&app, "c1");
+
+		let refused = host
+			.answer(asking("read", json!({ "id": foreign.id })))
+			.await
+			.expect_err("another space is refused");
+		let unknown = host
+			.answer(asking("read", json!({ "id": "nowhere" })))
+			.await
+			.expect_err("an unknown mission is refused");
+
+		assert_eq!(refused["kind"], json!("missionOfAnotherSpace"), "got {refused}");
+		assert_eq!(refused["id"], json!(foreign.id));
+		assert!(refused.get("objective").is_none(), "got {refused}");
+		assert_eq!(unknown["kind"], json!("unknownMission"), "got {unknown}");
+		assert_eq!(unknown["id"], json!("nowhere"));
 	}
 
 	#[tokio::test]

@@ -64,6 +64,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 55, statements: SPACE_JOIN },
 	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
 	Migration { version: 57, statements: JOINED_SPACE_RELAY_V2 },
+	Migration { version: 58, statements: CONVERSATIONS_IN_SPACE },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1219,6 +1220,10 @@ CREATE TABLE joined_space_counters (
 );
 
 DELETE FROM app_settings WHERE key LIKE 'app.joined_space_members.%';
+";
+
+const CONVERSATIONS_IN_SPACE: &str = "
+CREATE INDEX conversations_in_space ON conversations (space_id);
 ";
 
 pub fn latest_version() -> u32 {
