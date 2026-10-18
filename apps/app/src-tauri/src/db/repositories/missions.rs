@@ -127,8 +127,9 @@ const WORKSPACE_OF_MISSION: &str =
 
 const OF_CONVERSATION: &str = "(origin_conversation_id = ?1 OR thread_conversation_id = ?1)";
 
-const OF_SPACE: &str =
-	"origin_conversation_id IN (SELECT id FROM conversations WHERE space_id = ?1)";
+const OF_SPACE: &str = "origin_conversation_id IN (
+	SELECT id FROM conversations WHERE space_id = ?1 AND kind IN ('topic', 'main')
+	UNION ALL SELECT id FROM conversations WHERE space_id = ?1 AND kind = 'mission')";
 
 const BOT_AND_REPOSITORY: &str = "SELECT bots.name, NULLIF(missions.watch_repository, '')
 	FROM missions JOIN bots ON bots.id = missions.bot_id WHERE missions.id = ?1";
@@ -1853,10 +1854,15 @@ mod tests {
 		let rows = format!(
 			"{}{}{}UPDATE missions SET closed_at = 9 WHERE id = 'm-2';
 			INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
-				VALUES ('e-2', 'm-2', 1, 'closed', 'bot', '{{}}', 9);",
+				VALUES ('e-2', 'm-2', 1, 'closed', 'bot', '{{}}', 9);
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('thread-m-1', 'b1', 'lead', 1, 0);
+			{}",
 			missions_opened_at("c1", "b1", &["m-1"], 1),
 			missions_opened_at("c1", "b1", &["m-2"], 2),
 			missions_opened_at("c2", "b2", &["m-3"], 3),
+			missions_opened_at("thread-m-1", "b1", &["m-4"], 4),
 		);
 		database
 			.call_mut(move |connection| Ok(connection.execute_batch(&rows)?))
@@ -1883,6 +1889,10 @@ mod tests {
 		assert_eq!(
 			listed(MissionScope::Conversation("thread-m-3".to_owned()), None, None).await,
 			vec!["m-3"]
+		);
+		assert_eq!(
+			listed(MissionScope::Space("personal".to_owned()), None, None).await,
+			vec!["m-4", "m-2", "m-1"]
 		);
 		assert_eq!(
 			listed(MissionScope::Space("personal".to_owned()), Some(MissionState::Done), None)
