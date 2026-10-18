@@ -70,11 +70,11 @@ describe("kiroshiServer", () => {
 			"companion_suggestions",
 			"companion_create",
 			"companion_first_run_done",
-			"companion_invite",
+			"companion_list",
 			"conversation_open",
 			"conversation_say",
 			"conversation_attach",
-			"conversation_describe",
+			"conversation_update",
 			"conversation_list",
 			"conversation_read",
 		])
