@@ -378,6 +378,7 @@ describe("a companion speaking in a room the front never opened", () => {
 			},
 			thisComputer: {
 				conversation: () => Promise.resolve(null),
+				missionThread: noMissionThread,
 				writes: () => store,
 			},
 			reportFailure: (notice) => {
