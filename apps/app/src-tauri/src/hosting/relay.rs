@@ -45,6 +45,8 @@ const HOST_REPLACED: u16 = 4001;
 
 const SERVER_RESTARTING: u16 = 4005;
 
+const DEVICE_REVOKED: u16 = 4006;
+
 pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub(crate) type Sink = SplitSink<Socket, Message>;
@@ -72,6 +74,7 @@ pub(crate) enum Opened {
 enum Ended {
 	Stopped,
 	Replaced,
+	DeviceRevoked,
 	Dropped(String),
 	Failed(String),
 }
@@ -206,6 +209,10 @@ async fn attempted<R: Runtime>(
 				Ended::Replaced => Next::Settled(HostingState::Failed {
 					reason: "another host took this instance over (relay close 4001)".to_owned(),
 				}),
+				Ended::DeviceRevoked => {
+					session::device_revoked(app, &bearer);
+					Next::Settled(HostingState::NeedsSignIn)
+				}
 				Ended::Dropped(reason) => Next::Retry(reason),
 				Ended::Failed(reason) => failed(reason),
 			}
@@ -274,29 +281,27 @@ async fn held_or_registered<R: Runtime>(
 	if let Some(relay_device_id) = held {
 		return Ok(relay_device_id);
 	}
-	let signing = keys.device.signing_public();
-	let agreement = keys.device.agreement_public();
 	let cloud = &app.state::<Hosting>().cloud;
-	let relay_device_id =
-		match cloud.register_device(bearer, signing.as_bytes(), agreement.as_bytes()).await {
-			Ok(relay_device_id) => relay_device_id,
-			Err(DeviceRegisterError::Revoked) => {
-				session::revoked(app, bearer);
-				return Err(Next::Settled(HostingState::NeedsSignIn));
-			}
-			Err(DeviceRegisterError::KeyTaken) => {
-				return Err(failed(
-					"the device key belongs to another account (POST /devices answered 409 DEVICE_KEY_TAKEN)"
-						.to_owned(),
-				))
-			}
-			Err(DeviceRegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
-		};
+	let registered = match cloud.register_device(bearer, account_id, &keys.device).await {
+		Ok(registered) => registered,
+		Err(DeviceRegisterError::Revoked) => {
+			session::revoked(app, bearer);
+			return Err(Next::Settled(HostingState::NeedsSignIn));
+		}
+		Err(DeviceRegisterError::Refused(refusal)) => {
+			return Err(failed(format!("the relay refused this device: {refusal}")))
+		}
+		Err(DeviceRegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
+	};
+	eprintln!(
+		"the device registered with the relay as {} (transferred {})",
+		registered.id, registered.transferred
+	);
 	devices
-		.registered(account_id.to_owned(), device_id, relay_device_id.clone())
+		.registered(account_id.to_owned(), device_id, registered.id.clone())
 		.await
 		.map_err(|failure| failed(format!("the relay device id was not stored: {failure:?}")))?;
-	Ok(relay_device_id)
+	Ok(registered.id)
 }
 
 async fn registered<R: Runtime>(
@@ -547,6 +552,7 @@ fn closed_by_relay(frame: Option<CloseFrame>, ids: Ids<'_>) -> Ended {
 	);
 	match code {
 		Some(HOST_REPLACED) => Ended::Replaced,
+		Some(DEVICE_REVOKED) => Ended::DeviceRevoked,
 		Some(SERVER_RESTARTING) => {
 			Ended::Dropped(format!("the relay is restarting (code {SERVER_RESTARTING})"))
 		}

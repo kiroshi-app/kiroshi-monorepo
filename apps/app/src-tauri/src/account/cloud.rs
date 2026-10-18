@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
@@ -7,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use super::contract::{AccountPlan, KiroshiAccount};
+use crate::crypto::device_keys::DeviceKeys;
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
@@ -27,7 +29,13 @@ const INVITATIONS_PATH: &str = "/invitations";
 
 const DEVICES_PATH: &str = "/devices";
 
-const DEVICE_KEY_TAKEN: &str = "DEVICE_KEY_TAKEN";
+const DEVICE_CHALLENGE_PATH: &str = "/devices/challenge";
+
+const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
+
+const DEVICE_CHALLENGE_INVALID: &str = "DEVICE_CHALLENGE_INVALID";
+
+const NONCE_LENGTH: usize = 32;
 
 const REQUEST_BOUND: Duration = Duration::from_secs(20);
 
@@ -86,8 +94,37 @@ pub enum RegisterError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceRegisterError {
 	Revoked,
-	KeyTaken,
+	Refused(DeviceRefusal),
 	Unreachable(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceRefusal {
+	pub path: &'static str,
+	pub status: StatusCode,
+	pub code: Option<String>,
+}
+
+impl DeviceRefusal {
+	fn is_challenge_invalid(&self) -> bool {
+		self.status == StatusCode::BAD_REQUEST
+			&& self.code.as_deref() == Some(DEVICE_CHALLENGE_INVALID)
+	}
+}
+
+impl fmt::Display for DeviceRefusal {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(formatter, "POST {} answered {}", self.path, self.status.as_u16())?;
+		match &self.code {
+			Some(code) => write!(formatter, " {code}"),
+			None => write!(formatter, " with no readable code"),
+		}
+	}
+}
+
+pub struct RegisteredDevice {
+	pub id: String,
+	pub transferred: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,6 +226,17 @@ pub struct CloudInstance {
 #[derive(Deserialize)]
 struct Registered {
 	id: String,
+}
+
+#[derive(Deserialize)]
+struct DeviceRegistered {
+	id: String,
+	transferred: bool,
+}
+
+#[derive(Deserialize)]
+struct DeviceChallenge {
+	nonce: String,
 }
 
 #[derive(Deserialize)]
@@ -392,33 +440,82 @@ impl Cloud {
 	pub async fn register_device(
 		&self,
 		bearer: &str,
-		signing_public_key: &[u8],
-		agreement_public_key: &[u8],
-	) -> Result<String, DeviceRegisterError> {
+		account_id: &str,
+		keys: &DeviceKeys,
+	) -> Result<RegisteredDevice, DeviceRegisterError> {
+		match self.proven_device(bearer, account_id, keys).await {
+			Err(DeviceRegisterError::Refused(refusal)) if refusal.is_challenge_invalid() => {
+				self.proven_device(bearer, account_id, keys).await
+			}
+			registered => registered,
+		}
+	}
+
+	async fn proven_device(
+		&self,
+		bearer: &str,
+		account_id: &str,
+		keys: &DeviceKeys,
+	) -> Result<RegisteredDevice, DeviceRegisterError> {
+		let nonce = self.device_challenge(bearer).await?;
+		let decoded = BASE64_URL_SAFE_NO_PAD
+			.decode(&nonce)
+			.ok()
+			.filter(|decoded| decoded.len() == NONCE_LENGTH)
+			.ok_or_else(|| {
+				DeviceRegisterError::Unreachable(
+					"the device challenge nonce is not 32 base64url bytes".to_owned(),
+				)
+			})?;
+		let signing = keys.signing_public();
+		let proven =
+			[DEVICE_REGISTER_CONTEXT, account_id.as_bytes(), signing.as_bytes(), &decoded].concat();
 		let body = json!({
-			"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(signing_public_key),
-			"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(agreement_public_key),
+			"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(signing.as_bytes()),
+			"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(keys.agreement_public().as_bytes()),
+			"nonce": nonce,
+			"signature": BASE64_URL_SAFE_NO_PAD.encode(keys.sign(&proven).to_bytes()),
 		});
 		let answered = self
 			.answered(|client| client.post(self.at(DEVICES_PATH)).bearer_auth(bearer).json(&body))
 			.await
 			.map_err(DeviceRegisterError::Unreachable)?;
-		match answered.status() {
-			StatusCode::UNAUTHORIZED => return Err(DeviceRegisterError::Revoked),
-			StatusCode::CONFLICT => return Err(device_conflicted(answered).await),
-			_ => {}
-		}
-		let answered = successful(answered).map_err(DeviceRegisterError::Unreachable)?;
-		let registered = answered.json::<Registered>().await.map_err(|error| {
+		let answered = device_call_answered(DEVICES_PATH, answered).await?;
+		let registered = answered.json::<DeviceRegistered>().await.map_err(|error| {
 			DeviceRegisterError::Unreachable(format!(
-				"the registered device carried no readable id: {error}"
+				"the registered device carried no readable id and transferred: {error}"
 			))
 		})?;
-		uuid::Uuid::parse_str(&registered.id).map(|id| id.to_string()).map_err(|error| {
+		let id = uuid::Uuid::parse_str(&registered.id).map_err(|error| {
 			DeviceRegisterError::Unreachable(format!(
 				"the registered device id is not a uuid: {error}"
 			))
-		})
+		})?;
+		Ok(RegisteredDevice { id: id.to_string(), transferred: registered.transferred })
+	}
+
+	async fn device_challenge(&self, bearer: &str) -> Result<String, DeviceRegisterError> {
+		let answered = self
+			.answered(|client| client.post(self.at(DEVICE_CHALLENGE_PATH)).bearer_auth(bearer))
+			.await
+			.map_err(DeviceRegisterError::Unreachable)?;
+		let answered = device_call_answered(DEVICE_CHALLENGE_PATH, answered).await?;
+		let challenge = answered.json::<DeviceChallenge>().await.map_err(|error| {
+			DeviceRegisterError::Unreachable(format!(
+				"the device challenge carried no readable nonce: {error}"
+			))
+		})?;
+		Ok(challenge.nonce)
+	}
+
+	pub async fn delete_device(&self, bearer: &str, relay_device_id: &str) -> Result<(), String> {
+		let mut device = Url::parse(&self.at(DEVICES_PATH))
+			.map_err(|error| format!("the device url is unusable: {error}"))?;
+		device
+			.path_segments_mut()
+			.map_err(|()| "the cloud url has no path".to_owned())?
+			.push(relay_device_id);
+		self.sent(|client| client.delete(device).bearer_auth(bearer)).await.map(drop)
 	}
 
 	pub async fn members(
@@ -679,17 +776,21 @@ async fn leave_conflicted(answered: reqwest::Response) -> LeaveCallError {
 	}
 }
 
-async fn device_conflicted(answered: reqwest::Response) -> DeviceRegisterError {
-	match answered.json::<Refusal>().await {
-		Ok(refusal) if refusal.error.code == DEVICE_KEY_TAKEN => DeviceRegisterError::KeyTaken,
-		Ok(refusal) => DeviceRegisterError::Unreachable(format!(
-			"the cloud answered a conflict coded {}",
-			refusal.error.code
-		)),
-		Err(error) => DeviceRegisterError::Unreachable(format!(
-			"the cloud answered a conflict with an unreadable body: {error}"
-		)),
+async fn device_call_answered(
+	path: &'static str,
+	answered: reqwest::Response,
+) -> Result<reqwest::Response, DeviceRegisterError> {
+	let status = answered.status();
+	if status == StatusCode::UNAUTHORIZED {
+		return Err(DeviceRegisterError::Revoked);
 	}
+	let is_transient =
+		matches!(status, StatusCode::REQUEST_TIMEOUT | StatusCode::TOO_MANY_REQUESTS);
+	if is_transient || !status.is_client_error() {
+		return successful(answered).map_err(DeviceRegisterError::Unreachable);
+	}
+	let code = answered.json::<Refusal>().await.ok().map(|refusal| refusal.error.code);
+	Err(DeviceRegisterError::Refused(DeviceRefusal { path, status, code }))
 }
 
 async fn member_call_answered(

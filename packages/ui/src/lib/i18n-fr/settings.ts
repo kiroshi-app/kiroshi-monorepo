@@ -49,6 +49,11 @@ const settings = {
 			description:
 				"Cet ordinateur a été déconnecté depuis Appareils. Reconnectez-vous pour utiliser vos espaces au-delà de votre réseau.",
 		},
+		deviceRevoked: {
+			title:
+				"Cet ordinateur est maintenant connecté à un autre compte Kiroshi.",
+			description: "Reconnectez-vous pour l’utiliser ici.",
+		},
 		unreachable: {
 			title: "Impossible de joindre Kiroshi",
 			description: "Vérifiez votre connexion et reconnectez-vous.",

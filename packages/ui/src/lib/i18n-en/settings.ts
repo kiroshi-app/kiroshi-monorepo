@@ -48,6 +48,10 @@ const settings = {
 			description:
 				"This computer was signed out from Devices. Sign in again to use your spaces beyond your network.",
 		},
+		deviceRevoked: {
+			title: "This computer is now signed in to another Kiroshi account.",
+			description: "Sign in again to use it here.",
+		},
 		unreachable: {
 			title: "Couldn’t reach Kiroshi",
 			description: "Check your connection and sign in again.",
