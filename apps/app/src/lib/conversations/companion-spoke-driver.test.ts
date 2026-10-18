@@ -797,8 +797,8 @@ describe("a handoff summons heard in a mission thread outside the feed", () => {
 	})
 })
 
-const A_HANDOFF_SUMMONS = (nyxName: string) =>
-	`@${nyxName} this mission is yours now, carry it out: Fix the crash`
+const A_HANDOFF_SUMMONS =
+	"@Nyx this mission is yours now, carry it out: Fix the crash"
 
 const wordsOf = async (
 	store: TranscriptStore,
@@ -818,7 +818,7 @@ const summonedWhileTheOwnerSpeaks = async () => {
 	handed.hear({
 		conversationId: handed.thread.id,
 		authorBotId: handed.ada,
-		text: A_HANDOFF_SUMMONS("Nyx"),
+		text: A_HANDOFF_SUMMONS,
 	})
 	await settled()
 	return handed
