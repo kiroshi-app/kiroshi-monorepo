@@ -75,7 +75,7 @@ impl<R: Runtime> MissionHost<R> {
 			return Err(MissionError::UnknownConversation { id: id.to_owned() });
 		}
 		let space_id = self.space(database).await?;
-		if database.conversations().space(id.to_owned()).await? != Some(space_id.clone()) {
+		if database.conversations().space(id.to_owned()).await?.as_ref() != Some(&space_id) {
 			return Err(MissionError::ConversationOfAnotherSpace { id: id.to_owned(), space_id });
 		}
 		Ok(())
@@ -320,42 +320,24 @@ fn listed(record: MissionRecord) -> Listed {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ReadMission {
-	id: String,
+	#[serde(flatten)]
+	listed: Listed,
 	objective: String,
-	ticket: Ticket,
-	state: MissionState,
-	bot_id: String,
-	bot_name: String,
-	origin_conversation_id: String,
-	thread_conversation_id: String,
 	branch: Option<String>,
 	repository: Option<String>,
 	pull_request_url: Option<String>,
-	opened_at: i64,
-	closed_at: Option<i64>,
-	status: Option<MissionStatus>,
 	events: Vec<MissionEvent>,
 }
 
 fn read_mission(dossier: MissionDossier) -> ReadMission {
-	let MissionDossier { record: MissionRecord { mission, bot_name }, repository, events } =
-		dossier;
+	let MissionDossier { record, repository, events } = dossier;
 	ReadMission {
-		id: mission.id,
-		objective: mission.objective,
-		ticket: mission.ticket,
-		state: mission.state,
-		bot_id: mission.bot_id,
-		bot_name,
-		origin_conversation_id: mission.origin_conversation_id,
-		thread_conversation_id: mission.thread_conversation_id,
-		branch: mission.branch,
+		objective: record.mission.objective.clone(),
+		branch: record.mission.branch.clone(),
+		pull_request_url: record.mission.pull_request_url.clone(),
 		repository,
-		pull_request_url: mission.pull_request_url,
-		opened_at: mission.opened_at,
-		closed_at: mission.closed_at,
-		status: mission.status,
 		events,
+		listed: listed(record),
 	}
 }
 
