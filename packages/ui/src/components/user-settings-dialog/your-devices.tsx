@@ -18,9 +18,11 @@ type OtherDevice = Device & {
 	id: string
 }
 
+type DeviceRemovalStatus = "removing" | "failed"
+
 type DeviceRemoval = {
 	deviceId: string
-	status: "removing" | "failed"
+	status: DeviceRemovalStatus
 }
 
 type YourDevicesProps = {
@@ -118,7 +120,7 @@ const DeviceRow = ({ device, takesFocus, onRemovePress }: DeviceRowProps) => {
 type RemovalConfirmProps = {
 	device: OtherDevice
 	takesFocus: boolean
-	removal?: DeviceRemoval | null
+	status: DeviceRemovalStatus | null
 	onRemove: () => void
 	onCancel: () => void
 }
@@ -126,13 +128,12 @@ type RemovalConfirmProps = {
 const RemovalConfirm = ({
 	device,
 	takesFocus,
-	removal,
+	status,
 	onRemove,
 	onCancel,
 }: RemovalConfirmProps) => {
 	const { t } = useTranslation("settings")
 	const titleId = useId()
-	const status = removal?.deviceId === device.id ? removal.status : null
 	const isRemoving = status === "removing"
 
 	return (
@@ -256,7 +257,9 @@ const YourDevices = ({
 											key={device.id}
 											onCancel={() => cancel(device.id)}
 											onRemove={() => onRemove(device.id)}
-											removal={removal}
+											status={
+												removal?.deviceId === device.id ? removal.status : null
+											}
 											takesFocus={focusedId === device.id}
 										/>
 									) : (
