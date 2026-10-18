@@ -47,6 +47,46 @@ pub async fn remove_device<R: Runtime>(
 	listed_devices(app, &space_id).await
 }
 
+const NO_ROSTER_ROW: &str = "no roster row has that device";
+
+pub(super) enum Revocation {
+	Applied,
+	Ignored(&'static str),
+}
+
+pub(super) async fn device_left<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	relay_device_id: &str,
+	account_id: &str,
+) -> Result<Revocation, MembersError> {
+	let host = host_device(app)?;
+	let _turn = settled_turn(app, space_id).await?;
+	let space_relay = database_of(app)?.space_relay();
+	let row = space_relay
+		.roster_row_of_relay_device(space_id.to_owned(), relay_device_id.to_owned())
+		.await
+		.map_err(SpaceError::from)?;
+	let Some(row) = row else {
+		return Ok(Revocation::Ignored(NO_ROSTER_ROW));
+	};
+	if row.device_id == host.device_id().to_string() {
+		return Ok(Revocation::Ignored("it names the host device"));
+	}
+	if row.account_id != account_id {
+		return Ok(Revocation::Ignored("the roster row belongs to another account"));
+	}
+	let is_deleted = space_relay
+		.device_revoked(space_id.to_owned(), row.device_id)
+		.await
+		.map_err(SpaceError::from)?;
+	if !is_deleted {
+		return Ok(Revocation::Ignored(NO_ROSTER_ROW));
+	}
+	rotated(app, space_id).await?;
+	Ok(Revocation::Applied)
+}
+
 pub(super) async fn settled_turn<'a, R: Runtime>(
 	app: &'a AppHandle<R>,
 	space_id: &str,
