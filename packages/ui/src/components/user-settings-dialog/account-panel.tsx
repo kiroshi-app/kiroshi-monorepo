@@ -14,6 +14,7 @@ import {
 	type YourDevicesProps,
 } from "@workspace/ui/components/user-settings-dialog/your-devices"
 import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
+import { cn } from "@workspace/ui/lib/utils"
 
 type AccountPlan = "free" | "pro"
 
@@ -124,7 +125,9 @@ const AccountPanel = ({
 
 	if (account.status === "signedIn") {
 		return (
-			<div className={`${PANEL_CLASS} flex-1`}>
+			<div
+				className={cn(PANEL_CLASS, "flex-1", devices?.isPending && "min-h-0")}
+			>
 				<div className="flex items-center gap-3 rounded-xl border border-border p-3.5">
 					<InitialsAvatar
 						className="shrink-0"

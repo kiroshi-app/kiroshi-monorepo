@@ -1,4 +1,12 @@
-import { expect, fn, screen, waitFor, within } from "storybook/test"
+import { useState } from "react"
+import {
+	expect,
+	fn,
+	screen,
+	type UserEventObject,
+	waitFor,
+	within,
+} from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
@@ -10,6 +18,7 @@ import {
 import {
 	ACCOUNT_EMAIL,
 	LISTED_PHONE,
+	MAC_MINI,
 	OTHER_DEVICES,
 	THIS_MACBOOK_PRO,
 } from "@workspace/ui/components/device-card.fixtures"
@@ -19,6 +28,7 @@ import {
 } from "@workspace/ui/components/plugin-settings/history.fixtures"
 import { UserSettingsDialog } from "@workspace/ui/components/user-settings-dialog"
 import {
+	type OtherDevice,
 	YourDevices,
 	type YourDevicesProps,
 } from "@workspace/ui/components/user-settings-dialog/your-devices"
@@ -289,10 +299,90 @@ export const Loading = meta.story({
 		await expect(
 			getComputedStyle(skeleton.lastElementChild as Element).flexGrow,
 		).toBe("1")
+		const account = panel.firstElementChild as HTMLElement
+		await waitFor(() => {
+			expect(
+				Math.abs(
+					skeleton.getBoundingClientRect().bottom - contentBottomOf(account),
+				),
+			).toBeLessThan(1)
+			expect(
+				Math.abs(
+					account.getBoundingClientRect().bottom - contentBottomOf(panel),
+				),
+			).toBeLessThan(1)
+			expect(panel.scrollHeight).toBeLessThanOrEqual(panel.clientHeight)
+		})
+	},
+})
+
+const STUDIO_LAPTOP: OtherDevice = {
+	id: "studio-laptop",
+	kind: "laptop",
+	name: "Studio MacBook Air",
+	activity: "Active last week",
+	fingerprint: "lantern copper meadow sketch harbor violet",
+}
+
+const RemovingHost = (devices: YourDevicesProps) => {
+	const [listed, setListed] = useState([MAC_MINI, LISTED_PHONE, STUDIO_LAPTOP])
+
+	return (
+		<DevicesInSettings
+			{...devices}
+			onRemove={(deviceId) =>
+				setListed((current) =>
+					current.filter((device) => device.id !== deviceId),
+				)
+			}
+			otherDevices={listed}
+		/>
+	)
+}
+
+const confirmRemovalOf = async (
+	section: HTMLElement,
+	device: string,
+	userEvent: UserEventObject,
+) => {
+	await userEvent.click(removeOf(section, device))
+	await userEvent.click(
+		within(confirmIn(section)).getByRole("button", { name: "Remove" }),
+	)
+}
+
+export const FocusAfterRemoval = meta.story({
+	tags: ["test-only"],
+	render: (args) => <RemovingHost {...args} />,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Three other devices, each removed once the host drops it from the list. Check focus moves to the Remove of the row that took the removed one's place, to the previous row's Remove when the last row leaves, and to the empty box once no other device is left, never to the page body. Pick `Confirming` for the confirm itself.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const section = await devicesSection()
+
+		await confirmRemovalOf(section, LISTED_PHONE.name, userEvent)
 		await waitFor(() =>
-			expect(skeleton.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(
-				contentBottomOf(panel) - 9,
+			expect(document.activeElement).toBe(
+				removeOf(section, STUDIO_LAPTOP.name),
 			),
 		)
+
+		await confirmRemovalOf(section, STUDIO_LAPTOP.name, userEvent)
+		await waitFor(() =>
+			expect(document.activeElement).toBe(removeOf(section, MAC_MINI.name)),
+		)
+
+		await confirmRemovalOf(section, MAC_MINI.name, userEvent)
+		await waitFor(() =>
+			expect(document.activeElement).toBe(
+				within(section).getByText(/No other device reads your spaces/),
+			),
+		)
+		await expect(document.activeElement).not.toBe(document.body)
 	},
 })

@@ -1631,5 +1631,6 @@ settings-user-yourdevices--confirming
 settings-user-yourdevices--default
 settings-user-yourdevices--empty
 settings-user-yourdevices--error
+settings-user-yourdevices--focus-after-removal
 settings-user-yourdevices--loading
 settings-user-yourdevices--removing

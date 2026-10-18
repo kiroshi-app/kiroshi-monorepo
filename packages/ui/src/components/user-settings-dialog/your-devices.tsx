@@ -53,8 +53,30 @@ type BoneProps = {
 	className: string
 }
 
-const focusOnMount = (node: HTMLElement | null) => {
-	node?.focus()
+type FocusTaker = (node: HTMLElement | null) => void
+
+type FocusRequest = {
+	deviceId: string | null
+	take: FocusTaker
+}
+
+const focusRequestFor = (deviceId: string | null): FocusRequest => ({
+	deviceId,
+	take: (node) => {
+		node?.focus()
+	},
+})
+
+const survivorOf = (
+	listed: OtherDevice[],
+	remaining: OtherDevice[],
+	deviceId: string,
+) => {
+	const at = listed.findIndex((device) => device.id === deviceId)
+	const stays = (device: OtherDevice) =>
+		remaining.some((kept) => kept.id === device.id)
+
+	return listed.slice(at + 1).find(stays) ?? listed.slice(0, at).findLast(stays)
 }
 
 const Bone = ({ className }: BoneProps) => (
@@ -74,7 +96,7 @@ const DevicesSkeleton = () => (
 				<Bone className="h-2 w-50 bg-muted/40" />
 			</div>
 		</div>
-		<div className={cn(LIST_CLASS, "flex-1 divide-y-0")}>
+		<div className={cn(LIST_CLASS, "min-h-0 flex-1 divide-y-0")}>
 			{SKELETON_ROWS.map((row) => (
 				<div className="flex items-start gap-3 p-3.5" key={row.id}>
 					<Skeleton className="size-5 shrink-0 animate-none rounded-[6px]" />
@@ -91,11 +113,11 @@ const DevicesSkeleton = () => (
 
 type DeviceRowProps = {
 	device: OtherDevice
-	takesFocus: boolean
+	focusTaker?: FocusTaker
 	onRemovePress: () => void
 }
 
-const DeviceRow = ({ device, takesFocus, onRemovePress }: DeviceRowProps) => {
+const DeviceRow = ({ device, focusTaker, onRemovePress }: DeviceRowProps) => {
 	const { t } = useTranslation("settings")
 	const nameId = useId()
 
@@ -107,7 +129,7 @@ const DeviceRow = ({ device, takesFocus, onRemovePress }: DeviceRowProps) => {
 					aria-describedby={nameId}
 					className="relative rounded-xs text-compact text-muted-foreground leading-4 outline-offset-2 transition-colors duration-150 after:absolute after:-inset-1 hover:text-foreground motion-reduce:transition-none"
 					onClick={onRemovePress}
-					ref={takesFocus ? focusOnMount : undefined}
+					ref={focusTaker}
 					type="button"
 				>
 					{t("account.devices.remove")}
@@ -119,7 +141,7 @@ const DeviceRow = ({ device, takesFocus, onRemovePress }: DeviceRowProps) => {
 
 type RemovalConfirmProps = {
 	device: OtherDevice
-	takesFocus: boolean
+	focusTaker?: FocusTaker
 	status: DeviceRemovalStatus | null
 	onRemove: () => void
 	onCancel: () => void
@@ -127,7 +149,7 @@ type RemovalConfirmProps = {
 
 const RemovalConfirm = ({
 	device,
-	takesFocus,
+	focusTaker,
 	status,
 	onRemove,
 	onCancel,
@@ -178,7 +200,7 @@ const RemovalConfirm = ({
 					disabled={isRemoving}
 					focusableWhenDisabled
 					onClick={onCancel}
-					ref={takesFocus ? focusOnMount : undefined}
+					ref={focusTaker}
 					variant="secondary"
 				>
 					{t("account.devices.confirm.cancel")}
@@ -203,18 +225,38 @@ const YourDevices = ({
 	const [confirmingId, setConfirmingId] = useState<string | null>(
 		removal?.deviceId ?? null,
 	)
-	const [focusedId, setFocusedId] = useState<string | null>(null)
+	const [focus, setFocus] = useState<FocusRequest | null>(null)
+	const [listed, setListed] = useState(otherDevices)
+
+	if (listed !== otherDevices) {
+		setListed(otherDevices)
+		const hasLeft =
+			confirmingId !== null &&
+			listed.some((device) => device.id === confirmingId) &&
+			!otherDevices.some((device) => device.id === confirmingId)
+		if (hasLeft) {
+			setConfirmingId(null)
+			setFocus(
+				focusRequestFor(
+					survivorOf(listed, otherDevices, confirmingId)?.id ?? null,
+				),
+			)
+		}
+	}
 
 	const confirm = (deviceId: string) => {
 		setConfirmingId(deviceId)
-		setFocusedId(deviceId)
+		setFocus(focusRequestFor(deviceId))
 	}
 
 	const cancel = (deviceId: string) => {
 		setConfirmingId(null)
-		setFocusedId(deviceId)
+		setFocus(focusRequestFor(deviceId))
 		onCancelRemoval()
 	}
+
+	const focusTakerOf = (deviceId: string | null) =>
+		focus && focus.deviceId === deviceId ? focus.take : undefined
 
 	const isWaiting = phase === "delay" || phase === "skeleton"
 
@@ -260,20 +302,24 @@ const YourDevices = ({
 											status={
 												removal?.deviceId === device.id ? removal.status : null
 											}
-											takesFocus={focusedId === device.id}
+											focusTaker={focusTakerOf(device.id)}
 										/>
 									) : (
 										<DeviceRow
 											device={device}
 											key={device.id}
+											focusTaker={focusTakerOf(device.id)}
 											onRemovePress={() => confirm(device.id)}
-											takesFocus={focusedId === device.id}
 										/>
 									),
 								)}
 							</ul>
 						) : (
-							<p className="rounded-xl border border-input border-dashed p-4 text-compact text-muted-foreground leading-4.5">
+							<p
+								className="rounded-xl border border-input border-dashed p-4 text-compact text-muted-foreground leading-4.5"
+								ref={focusTakerOf(null)}
+								tabIndex={-1}
+							>
 								{t("account.devices.empty", { email })}
 							</p>
 						)}
