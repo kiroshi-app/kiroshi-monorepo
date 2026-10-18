@@ -1819,7 +1819,10 @@ mod tests {
 		let app = a_room("close-mission").await;
 		planted(&app, TWO_ERRANDS).await;
 
-		let running = close_refused(&app, "running").await;
+		let deleting = heard(&app, crate::conversations::contract::DELETED_EVENT);
+
+		let running = refusal(serving(&app, "c1").answer(a_close("running")).await);
+		let running_announced = deleting.try_recv().is_ok();
 		let shipped =
 			serving(&app, "c1").answer(a_close("shipped")).await.expect("the thread closes");
 
@@ -1831,6 +1834,9 @@ mod tests {
 			shipped,
 			json!({ "conversationId": "shipped", "title": "Shipped", "archived": true })
 		);
+		assert!(!running_announced, "a refused close announced");
+		assert_eq!(archived_at(&app, "running").await, None, "a refused close archived");
+		assert_eq!(announced(&deleting)["conversationId"], json!("shipped"));
 		assert!(archived_at(&app, "shipped").await.is_some(), "the closed thread stayed open");
 	}
 
