@@ -54,11 +54,11 @@ mod tests {
 			fragment,
 		];
 
-		for link in links {
-			let parsed = parsed(&link).expect("the link parses");
-			assert_eq!(parsed.instance_id, "instance-1", "{link}");
-			assert_eq!(parsed.host.as_bytes(), &[7; KEY_LENGTH], "{link}");
-			assert_eq!(*parsed.secret, [9; SECRET_LENGTH], "{link}");
+		for (case, link) in links.iter().enumerate() {
+			let parsed = parsed(link).unwrap_or_else(|| panic!("case {case} does not parse"));
+			assert_eq!(parsed.instance_id, "instance-1", "case {case}");
+			assert_eq!(parsed.host.as_bytes(), &[7; KEY_LENGTH], "case {case}");
+			assert_eq!(*parsed.secret, [9; SECRET_LENGTH], "case {case}");
 		}
 	}
 
@@ -77,8 +77,8 @@ mod tests {
 			format!("../x.{host}.{}", BASE64_URL_SAFE_NO_PAD.encode([9; SECRET_LENGTH])),
 		];
 
-		for link in refused {
-			assert!(parsed(&link).is_none(), "{link}");
+		for (case, link) in refused.iter().enumerate() {
+			assert!(parsed(link).is_none(), "case {case} parses");
 		}
 	}
 }
