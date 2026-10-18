@@ -1,190 +1,200 @@
-use base64::prelude::{Engine as _, BASE64_STANDARD};
-use serde_json::{json, Value};
-use zeroize::Zeroizing;
+use std::collections::HashSet;
 
-use super::handover;
-use super::roster::{self, signed_row, Enrolled};
-use super::wire::{unstored, Dropped, HostKeys, Refusal};
-use crate::crypto::device_keys::DeviceId;
-use crate::crypto::frame::VERSION;
-use crate::crypto::join::{self, JoinRequest, PAYLOAD_LENGTH};
-use crate::crypto::sealed_box;
-use crate::db::repositories::space_relay::JoinSecret;
-use crate::db::Database;
+use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+use ed25519_dalek::VerifyingKey;
+use serde_json::json;
+use tauri::{AppHandle, Manager, Runtime};
 
-#[derive(Debug)]
-pub(super) struct Join {
-	from: String,
-	sealed: Option<Vec<u8>>,
+use super::contract::MembersError;
+use super::devices::{self, database_of, host_device, settled_turn, Revocation};
+use super::members::{self, bearer_of, signed_out_if_revoked};
+use super::roster::{self, signed_row, Enrolled, Rostered};
+use super::Hosting;
+use crate::account::cloud::CloudDevice;
+use crate::crypto::device_keys::{DeviceId, DeviceKeys};
+use crate::spaces::contract::SpaceError;
+
+struct ListedDevice {
+	relay_device_id: String,
+	account_id: String,
+	signing: VerifyingKey,
+	agreement: [u8; 32],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum JoinRefused {
-	Used,
-	Unknown,
-	Malformed,
-}
+impl ListedDevice {
+	fn of(device: &CloudDevice) -> Option<Self> {
+		let signing = key_of(&device.ed25519_public_key)?;
+		Some(Self {
+			relay_device_id: device.device_id.clone(),
+			account_id: device.user_id.clone(),
+			signing: VerifyingKey::from_bytes(&signing).ok()?,
+			agreement: key_of(&device.x25519_public_key)?,
+		})
+	}
 
-impl JoinRefused {
-	fn as_wire(self) -> &'static str {
-		match self {
-			JoinRefused::Used => "used",
-			JoinRefused::Unknown => "unknown",
-			JoinRefused::Malformed => "malformed",
-		}
+	fn device_id(&self) -> DeviceId {
+		DeviceId::of(&self.signing)
+	}
+
+	fn is_rostered_as(&self, rostered: &Rostered) -> bool {
+		rostered.relay_device_id == self.relay_device_id
+			&& rostered.account_id == self.account_id
+			&& rostered.signing == self.signing
+			&& *rostered.agreement.as_bytes() == self.agreement
 	}
 }
 
-pub(super) struct HostedSpace<'a> {
-	pub(super) database: &'a Database,
-	pub(super) keys: &'a HostKeys,
-	pub(super) space_id: &'a str,
-	pub(super) instance_id: &'a str,
+struct Settled {
+	admitted: Vec<String>,
+	unlisted: Vec<Rostered>,
 }
 
-pub(super) fn join_of(text: &str) -> Option<Result<Join, Refusal>> {
-	let envelope: Value = serde_json::from_str(text).ok()?;
-	let join = envelope.get("join")?;
-	let from = envelope.get("from").and_then(Value::as_str).map(str::to_owned);
-	if envelope.get("v").and_then(Value::as_u64) != Some(u64::from(VERSION)) {
-		return Some(Err(Refusal { from, cause: Dropped::NotV2 }));
-	}
-	let Some(from) = from else {
-		return Some(Err(Refusal { from: None, cause: Dropped::Malformed("from") }));
+pub(super) async fn admitted<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	instance_id: String,
+) -> Result<Vec<String>, MembersError> {
+	let Some(settled) = settled(&app, &space_id, &instance_id).await? else {
+		return Ok(Vec::new());
 	};
-	let sealed = join.as_str().and_then(|sealed| BASE64_STANDARD.decode(sealed).ok());
-	Some(Ok(Join { from, sealed }))
+	for unlisted in &settled.unlisted {
+		let revocation =
+			devices::device_left(&app, &space_id, &unlisted.relay_device_id, &unlisted.account_id)
+				.await?;
+		if let Revocation::Ignored(reason) = revocation {
+			eprintln!(
+				"hosted space {space_id} kept unlisted device {}: {reason}",
+				unlisted.device_id
+			);
+		}
+	}
+	if !settled.admitted.is_empty() || !settled.unlisted.is_empty() {
+		if let Err(failure) = members::read_back(&app, &space_id, &instance_id).await {
+			eprintln!("hosted space {space_id} announced no member list: {failure:?}");
+		}
+	}
+	Ok(settled.admitted)
 }
 
-impl HostedSpace<'_> {
-	pub(super) async fn answered(&self, join: Join) -> Result<String, Refusal> {
-		let from = join.from.clone();
-		self.decided(join).await.map_err(|cause| Refusal { from: Some(from), cause })
-	}
-
-	async fn decided(&self, join: Join) -> Result<String, Dropped> {
-		let Some(sealed) = join.sealed.as_deref().filter(|sealed| self.opens(sealed)) else {
-			return Ok(self.refused(&join.from, JoinRefused::Malformed));
-		};
-		let secrets = self
-			.database
-			.space_relay()
-			.join_secrets(self.space_id.to_owned())
-			.await
-			.map_err(unstored)?;
-		let matched = secrets.into_iter().find_map(|secret| {
-			let request = join::open(&secret.secret, self.keys.device.agreement(), sealed).ok()?;
-			Some((secret, request))
-		});
-		let Some((secret, request)) = matched else {
-			return Ok(self.refused(&join.from, JoinRefused::Unknown));
-		};
-		if self.is_rostered(&request).await? {
-			eprintln!(
-				"hosted space {} answered again the join of rostered device {} at relay device {}",
-				self.space_id,
-				DeviceId::of(&request.signing),
-				json!(join.from)
-			);
-			return self.joined(&join.from, &secret, &request).await;
+async fn settled<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	instance_id: &str,
+) -> Result<Option<Settled>, MembersError> {
+	let host = host_device(app)?;
+	let _turn = settled_turn(app, space_id).await?;
+	let listed = match device_list(app, instance_id).await {
+		Ok(listed) => listed,
+		Err(failure) => {
+			eprintln!("hosted space {space_id} changed no roster row: the device list did not read: {failure:?}");
+			return Ok(None);
 		}
-		if secret.is_used {
-			return Ok(self.refused(&join.from, JoinRefused::Used));
-		}
-		self.admitted(&join.from, &secret, &request).await
-	}
-
-	async fn is_rostered(&self, request: &JoinRequest) -> Result<bool, Dropped> {
-		let device_id = DeviceId::of(&request.signing).to_string();
-		let row = self
-			.database
-			.space_relay()
-			.roster_row(self.space_id.to_owned(), device_id)
-			.await
-			.map_err(unstored)?;
-		let host = self.keys.device.signing_public();
-		let rostered = row.and_then(|row| roster::verified(&host, self.space_id, &row).ok());
-		Ok(rostered.is_some_and(|rostered| {
-			rostered.signing == request.signing && rostered.agreement == request.agreement
-		}))
-	}
-
-	fn opens(&self, sealed: &[u8]) -> bool {
-		sealed_box::open(self.keys.device.agreement(), sealed)
-			.is_ok_and(|payload| payload.len() == PAYLOAD_LENGTH)
-	}
-
-	async fn admitted(
-		&self,
-		from: &str,
-		secret: &JoinSecret,
-		request: &JoinRequest,
-	) -> Result<String, Dropped> {
-		let now = chrono::Utc::now().timestamp_millis();
-		let enrolled = Enrolled {
-			relay_device_id: from,
-			account_id: &secret.account_id,
-			signing: &request.signing,
-			agreement: request.agreement.as_bytes(),
-			added_at: now,
-		};
-		let row = signed_row(&self.keys.device, self.space_id, &enrolled);
-		let device_id = row.device_id.clone();
-		let is_admitted = self
-			.database
-			.space_relay()
-			.admitted(self.space_id.to_owned(), secret.id, now, row)
-			.await
-			.map_err(unstored)?;
-		if !is_admitted {
-			return Ok(self.refused(from, JoinRefused::Used));
-		}
+	};
+	let devices: Vec<ListedDevice> = listed.iter().filter_map(well_formed).collect();
+	if !devices.iter().any(|device| device.device_id() == host.device_id()) {
 		eprintln!(
-			"hosted space {} admitted device {device_id} of account {} at relay device {}",
-			self.space_id,
-			json!(secret.account_id),
-			json!(from)
+			"hosted space {space_id} changed no roster row: the device list omits the host device"
 		);
-		self.joined(from, secret, request).await
+		return Ok(None);
 	}
-
-	pub(super) async fn joined(
-		&self,
-		from: &str,
-		secret: &JoinSecret,
-		request: &JoinRequest,
-	) -> Result<String, Dropped> {
-		let handover = handover::current(self.database, self.keys, self.space_id)
-			.await
-			.map_err(Dropped::Unstored)?;
-		if !handover.holds(&DeviceId::of(&request.signing)) {
-			return Ok(self.refused(from, JoinRefused::Used));
+	let database = database_of(app)?;
+	let roster = roster::verified_roster(database, space_id, &host.signing_public())
+		.await
+		.map_err(SpaceError::from)?;
+	let listed_ids: HashSet<&str> = listed.iter().map(|device| device.device_id.as_str()).collect();
+	let (kept, unlisted): (Vec<Rostered>, Vec<Rostered>) = roster
+		.rows
+		.into_iter()
+		.map(|row| row.rostered)
+		.filter(|rostered| rostered.device_id != host.device_id())
+		.partition(|rostered| listed_ids.contains(rostered.relay_device_id.as_str()));
+	let mut admitted = Vec::new();
+	for device in devices.iter().filter(|device| device.device_id() != host.device_id()) {
+		if is_held(space_id, &kept, device) {
+			continue;
 		}
-		let mac = join::answer_mac(&secret.secret, &handover.plaintext);
-		let answer = Zeroizing::new([mac.as_slice(), &handover.plaintext].concat());
-		let joined = sealed_box::seal(&request.agreement, &answer).map_err(Dropped::Refused)?;
-		Ok(json!({
-			"v": VERSION,
-			"instance": self.instance_id,
-			"to": from,
-			"joined": BASE64_STANDARD.encode(joined),
-		})
-		.to_string())
+		enrolled(app, &host, space_id, device).await?;
+		admitted.push(device);
 	}
+	let unlisted = unlisted
+		.into_iter()
+		.filter(|rostered| admitted.iter().all(|device| device.device_id() != rostered.device_id))
+		.collect();
+	let admitted = admitted.into_iter().map(|device| device.relay_device_id.clone()).collect();
+	Ok(Some(Settled { admitted, unlisted }))
+}
 
-	fn refused(&self, from: &str, refusal: JoinRefused) -> String {
+async fn device_list<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
+) -> Result<Vec<CloudDevice>, MembersError> {
+	let bearer = bearer_of(app)?;
+	let listed = app
+		.state::<Hosting>()
+		.cloud
+		.devices(&bearer, instance_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
+	Ok(listed)
+}
+
+fn well_formed(device: &CloudDevice) -> Option<ListedDevice> {
+	let listed = ListedDevice::of(device);
+	if listed.is_none() {
 		eprintln!(
-			"hosted space {} refused a join from {}: {}",
-			self.space_id,
-			json!(from),
-			refusal.as_wire()
+			"the device list carried unreadable keys for relay device {}",
+			json!(device.device_id)
 		);
-		json!({
-			"v": VERSION,
-			"instance": self.instance_id,
-			"to": from,
-			"join_refused": refusal.as_wire(),
-		})
-		.to_string()
 	}
+	listed
+}
+
+fn is_held(space_id: &str, rostered: &[Rostered], device: &ListedDevice) -> bool {
+	let device_id = device.device_id();
+	let held = rostered.iter().find(|rostered| {
+		rostered.relay_device_id == device.relay_device_id || rostered.device_id == device_id
+	});
+	let Some(held) = held else {
+		return false;
+	};
+	if !device.is_rostered_as(held) {
+		eprintln!(
+			"hosted space {space_id} kept the roster row of device {} unchanged: the device list names relay device {} with other keys",
+			held.device_id,
+			json!(device.relay_device_id)
+		);
+	}
+	true
+}
+
+async fn enrolled<R: Runtime>(
+	app: &AppHandle<R>,
+	host: &DeviceKeys,
+	space_id: &str,
+	device: &ListedDevice,
+) -> Result<(), MembersError> {
+	let enrolled = Enrolled {
+		relay_device_id: &device.relay_device_id,
+		account_id: &device.account_id,
+		signing: &device.signing,
+		agreement: &device.agreement,
+		added_at: chrono::Utc::now().timestamp_millis(),
+	};
+	let row = signed_row(host, space_id, &enrolled);
+	let device_id = row.device_id.clone();
+	database_of(app)?
+		.space_relay()
+		.rostered(space_id.to_owned(), row)
+		.await
+		.map_err(SpaceError::from)?;
+	eprintln!(
+		"hosted space {space_id} admitted device {device_id} of account {} at relay device {}",
+		json!(device.account_id),
+		json!(device.relay_device_id)
+	);
+	Ok(())
+}
+
+fn key_of(encoded: &str) -> Option<[u8; 32]> {
+	BASE64_URL_SAFE_NO_PAD.decode(encoded).ok()?.try_into().ok()
 }

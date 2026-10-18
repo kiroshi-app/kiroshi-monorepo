@@ -112,17 +112,6 @@ pub(super) async fn member_removed<R: Runtime>(
 	rotated(app, space_id).await
 }
 
-pub(super) async fn invitation_withdrawn<R: Runtime>(
-	app: &AppHandle<R>,
-	space_id: &str,
-	account_id: &str,
-) -> Result<(), MembersError> {
-	if account_revoked(app, space_id, account_id).await? > 0 {
-		rotated(app, space_id).await?;
-	}
-	Ok(())
-}
-
 async fn account_revoked<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,

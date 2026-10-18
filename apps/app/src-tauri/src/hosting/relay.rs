@@ -19,7 +19,6 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
-use super::admission::{HostedSpace, Join};
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
 use super::devices::Revocation;
@@ -369,6 +368,13 @@ pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
 	}
 }
 
+struct HostedSpace<'a> {
+	database: &'a Database,
+	keys: &'a HostKeys,
+	space_id: &'a str,
+	instance_id: &'a str,
+}
+
 #[derive(Clone, Copy)]
 struct Ids<'a> {
 	space_id: &'a str,
@@ -410,6 +416,12 @@ async fn online<R: Runtime>(
 	let mut pings = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
 	let mut invokes = JoinSet::new();
 	let mut avatars = JoinSet::new();
+	let mut admissions = JoinSet::new();
+	admissions.spawn(admission::admitted(
+		app.clone(),
+		ids.space_id.to_owned(),
+		ids.instance_id.to_owned(),
+	));
 	let avatar_turn = Arc::new(Mutex::new(()));
 	let silence = sleep(SILENCE_BOUND);
 	tokio::pin!(silence);
@@ -426,17 +438,18 @@ async fn online<R: Runtime>(
 						None => continue,
 					},
 				};
-				if let Some(join) = admission::join_of(text.as_str()) {
-					if let Err(ended) = join_answered(&mut sink, &hosted, join).await {
-						return ended;
+				match relay_event_of(text.as_str()) {
+					Some(RelayEvent::DevicesChanged) => {
+						admissions.spawn(admission::admitted(app.clone(), ids.space_id.to_owned(), ids.instance_id.to_owned()));
+						continue;
 					}
-					continue;
-				}
-				if let Some(event) = relay_event_of(text.as_str()) {
-					if let Err(ended) = revocation_handled(app, ids.space_id, event).await {
-						return ended;
+					Some(RelayEvent::DeviceRevoked { device_id, user_id }) => {
+						if let Err(ended) = revocation_handled(app, ids.space_id, &device_id, &user_id).await {
+							return ended;
+						}
+						continue;
 					}
-					continue;
+					None => {}
 				}
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
@@ -478,6 +491,23 @@ async fn online<R: Runtime>(
 					continue;
 				}
 			},
+			Some(admitted) = admissions.join_next(), if !admissions.is_empty() => {
+				match admitted {
+					Ok(Ok(admitted)) if !admitted.is_empty() => {
+						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |member| admitted.contains(&member.relay_device_id)).await {
+							return ended;
+						}
+					}
+					Ok(Ok(_)) => {}
+					Ok(Err(failure)) => {
+						return Ended::Dropped(format!("the device list of space {} was not settled: {failure:?}", ids.space_id));
+					}
+					Err(failure) => {
+						eprintln!("an admission of space {} ended abnormally: {failure}", ids.space_id);
+					}
+				}
+				continue;
+			}
 			Some(answer) = avatars.join_next(), if !avatars.is_empty() => match answer {
 				Ok((sender, answer)) => {
 					held_turn = Some(answer.turn);
@@ -504,7 +534,7 @@ async fn online<R: Runtime>(
 			}
 			Ok(()) = rotations.changed() => {
 				rotations.borrow_and_update();
-				if let Err(ended) = rekeys_sent(&mut sink, &hosted, None).await {
+				if let Err(ended) = rekeys_sent(&mut sink, &hosted, |_| true).await {
 					return ended;
 				}
 				continue;
@@ -612,29 +642,13 @@ async fn closed(sink: &mut Sink, ids: Ids<'_>) -> Ended {
 	Ended::Stopped
 }
 
-async fn join_answered(
-	sink: &mut Sink,
-	hosted: &HostedSpace<'_>,
-	join: Result<Join, Refusal>,
-) -> Result<(), Ended> {
-	let answered = match join {
-		Ok(join) => hosted.answered(join).await,
-		Err(refusal) => Err(refusal),
-	};
-	match answered {
-		Ok(answer) => sent(sink, Message::text(answer)).await.map_err(Ended::Dropped),
-		Err(refusal) => {
-			eprintln!("{}", wire::dropped_line(hosted.space_id, &refusal));
-			Ok(())
-		}
-	}
-}
-
 #[derive(Deserialize)]
 #[serde(tag = "event")]
 enum RelayEvent {
 	#[serde(rename = "device.revoked", rename_all = "camelCase")]
 	DeviceRevoked { device_id: String, user_id: String },
+	#[serde(rename = "devices.changed")]
+	DevicesChanged,
 }
 
 fn relay_event_of(text: &str) -> Option<RelayEvent> {
@@ -648,10 +662,10 @@ fn relay_event_of(text: &str) -> Option<RelayEvent> {
 async fn revocation_handled<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
-	event: RelayEvent,
+	device_id: &str,
+	user_id: &str,
 ) -> Result<(), Ended> {
-	let RelayEvent::DeviceRevoked { device_id, user_id } = event;
-	match devices::device_left(app, space_id, &device_id, &user_id).await {
+	match devices::device_left(app, space_id, device_id, user_id).await {
 		Ok(Revocation::Applied) => Ok(()),
 		Ok(Revocation::Ignored(reason)) => {
 			eprintln!("device.revoked changed nothing in space {space_id}: {reason}");
@@ -669,7 +683,9 @@ async fn stale_rekeyed(
 	refusal: &Refusal,
 ) -> Result<(), Ended> {
 	match (&refusal.cause, refusal.from.as_deref()) {
-		(Dropped::StaleKey(_), Some(from)) => rekeys_sent(sink, hosted, Some(from)).await,
+		(Dropped::StaleKey(_), Some(from)) => {
+			rekeys_sent(sink, hosted, |member| member.relay_device_id == from).await
+		}
 		_ => Ok(()),
 	}
 }
@@ -677,7 +693,7 @@ async fn stale_rekeyed(
 async fn rekeys_sent(
 	sink: &mut Sink,
 	hosted: &HostedSpace<'_>,
-	only: Option<&str>,
+	is_recipient: impl Fn(&Rostered) -> bool,
 ) -> Result<(), Ended> {
 	let space_id = hosted.space_id;
 	let handover = match handover::current(hosted.database, hosted.keys, space_id).await {
@@ -687,9 +703,7 @@ async fn rekeys_sent(
 			return Ok(());
 		}
 	};
-	let recipients = handover.members(hosted.keys).filter(|member| {
-		only.is_none_or(|relay_device_id| member.relay_device_id == relay_device_id)
-	});
+	let recipients = handover.members(hosted.keys).filter(|member| is_recipient(member));
 	for member in recipients {
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => sent(sink, Message::text(frame)).await.map_err(Ended::Dropped)?,

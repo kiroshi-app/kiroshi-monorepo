@@ -127,13 +127,13 @@ async fn member_author<R: Runtime>(app: &AppHandle<R>, member: RelayedMember) ->
 fn known_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<String> {
 	let hosting = app.state::<Hosting>();
 	let hosts = hosting.hosts();
-	let known = hosts.get(&member.space_id)?.members.as_deref()?;
-	name_among(known, &member.user_id)
+	let known = hosts.get(&member.space_id)?.members.as_ref()?;
+	name_among(&known.members, &member.user_id)
 }
 
 async fn listed_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<String> {
 	match members::list(app, member.space_id.clone()).await {
-		Ok(listed) => name_among(&listed, &member.user_id),
+		Ok(listed) => name_among(&listed.members, &member.user_id),
 		Err(failure) => {
 			eprintln!(
 				"a member name of hosted space {} was not read: {failure:?}",
