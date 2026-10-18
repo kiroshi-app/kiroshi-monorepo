@@ -820,7 +820,10 @@ fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
 	T::deserialize(deserializer).map(Some)
 }
 
-fn picked<'a>(roster: &'a [StoredBot], companion: &str) -> Result<&'a StoredBot, CompanionError> {
+pub(crate) fn picked<'a>(
+	roster: &'a [StoredBot],
+	companion: &str,
+) -> Result<&'a StoredBot, CompanionError> {
 	let wanted = companion.trim();
 	if let Some(held) = roster.iter().find(|bot| bot.id == wanted) {
 		return Ok(held);

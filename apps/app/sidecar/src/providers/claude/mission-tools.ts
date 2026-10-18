@@ -81,6 +81,19 @@ const LISTED_BOT =
 	"The id of a companion, to keep only the missions it carries."
 
 const READ_ID = "The id of the mission to read."
+
+const REOPEN =
+	"Reopen a mission of yours that closed, done or failed, so its work carries on in the same thread and whatever watched it watches it again. A mission whose work was merged stays closed."
+
+const UPDATE =
+	"Rewrite the objective, the ticket or the tools of a mission of yours when the person corrects them. Give only what changes, the rest stays as it is. A new objective also becomes the title of the thread of the mission."
+
+const HANDOFF =
+	"Hand a mission of yours over to another companion of this space, who owns it from then on. That companion is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards."
+
+const COMPANION =
+	"The name or the id of the companion of this space who takes the mission over."
+
 const TICKET = z.object({
 	platform: z.string().describe(TICKET_PLATFORM),
 	externalId: z.string().describe(TICKET_EXTERNAL_ID),
@@ -143,6 +156,18 @@ const SOUGHT: ToolInput = {
 
 const READ_NAMED: ToolInput = { id: z.string().describe(READ_ID) }
 
+const UPDATED: ToolInput = {
+	...NAMED,
+	objective: z.string().describe(OBJECTIVE).optional(),
+	ticket: TICKET.optional(),
+	tools: z.array(z.string()).describe(TOOLS).optional(),
+}
+
+const HANDED: ToolInput = {
+	...NAMED,
+	companion: z.string().describe(COMPANION),
+}
+
 const asked = carriedTo(SUBTYPE)
 
 type MissionTool = SdkMcpToolDefinition<ToolInput>
@@ -165,5 +190,14 @@ export const missionTools = (session: string | undefined): MissionTool[] => [
 	tool("mission_list", LIST, SOUGHT, (input) => asked(session, "list", input)),
 	tool("mission_read", READ, READ_NAMED, (input) =>
 		asked(session, "read", input),
+	),
+	tool("mission_reopen", REOPEN, NAMED, (input) =>
+		asked(session, "reopen", input),
+	),
+	tool("mission_update", UPDATE, UPDATED, (input) =>
+		asked(session, "update", input),
+	),
+	tool("mission_handoff", HANDOFF, HANDED, (input) =>
+		asked(session, "handoff", input),
 	),
 ]

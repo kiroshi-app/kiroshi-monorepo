@@ -712,6 +712,34 @@ pub(in crate::db) fn open_thread_under(
 	Ok(id)
 }
 
+pub(in crate::db) fn seat_in_thread(
+	transaction: &Transaction<'_>,
+	thread_id: &str,
+	bot_id: &str,
+) -> Result<(), ConversationError> {
+	let space_id: Option<String> = transaction
+		.query_row(
+			"SELECT space_id FROM conversations WHERE id = ?1 AND kind = ?2",
+			params![thread_id, MISSION_KIND],
+			|row| row.get(0),
+		)
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownConversation { id: thread_id.to_owned() })?;
+	seat(transaction, thread_id, bot_id, space_id.as_deref(), PARTICIPANT_ROLE)
+}
+
+pub(in crate::db) fn retitle_thread(
+	transaction: &Transaction<'_>,
+	thread_id: &str,
+	title: &str,
+) -> Result<(), ConversationError> {
+	transaction.execute(
+		"UPDATE conversations SET title = ?2 WHERE id = ?1 AND kind = ?3",
+		params![thread_id, title, MISSION_KIND],
+	)?;
+	Ok(())
+}
+
 fn created_conversation(
 	connection: &mut Connection,
 	draft: &ConversationDraft,

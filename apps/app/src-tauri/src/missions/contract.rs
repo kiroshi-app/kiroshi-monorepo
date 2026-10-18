@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::companions::contract::CompanionError;
 use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
 use crate::db::repositories::conversations::ConversationError;
 use crate::db::DatabaseError;
@@ -22,10 +23,12 @@ pub enum MissionEventKind {
 	Status,
 	Reopened,
 	Dismissed,
+	Updated,
+	HandedOff,
 }
 
 impl MissionEventKind {
-	pub const ALL: [MissionEventKind; 14] = [
+	pub const ALL: [MissionEventKind; 16] = [
 		MissionEventKind::Opened,
 		MissionEventKind::Note,
 		MissionEventKind::AgentAsked,
@@ -40,6 +43,8 @@ impl MissionEventKind {
 		MissionEventKind::Status,
 		MissionEventKind::Reopened,
 		MissionEventKind::Dismissed,
+		MissionEventKind::Updated,
+		MissionEventKind::HandedOff,
 	];
 
 	pub fn state(self) -> Option<MissionState> {
@@ -58,7 +63,9 @@ impl MissionEventKind {
 			MissionEventKind::Note
 			| MissionEventKind::AgentStarted
 			| MissionEventKind::AgentStopped
-			| MissionEventKind::Status => None,
+			| MissionEventKind::Status
+			| MissionEventKind::Updated
+			| MissionEventKind::HandedOff => None,
 		}
 	}
 
@@ -212,6 +219,34 @@ pub struct MissionEvent {
 	pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissionUpdate {
+	pub objective: Option<String>,
+	pub ticket: Option<Ticket>,
+	pub tools: Option<Vec<String>>,
+}
+
+impl MissionUpdate {
+	pub fn fields(&self) -> Vec<&'static str> {
+		[
+			("objective", self.objective.is_some()),
+			("ticket", self.ticket.is_some()),
+			("tools", self.tools.is_some()),
+		]
+		.into_iter()
+		.filter_map(|(field, is_given)| is_given.then_some(field))
+		.collect()
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissionHandoff {
+	pub from_bot_id: String,
+	pub to_bot_id: String,
+	pub source: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionWatch {
@@ -347,6 +382,16 @@ pub enum MissionError {
 	#[serde(rename_all = "camelCase")]
 	MissionAlreadyReported { id: String },
 	#[serde(rename_all = "camelCase")]
+	PullRequestMerged { id: String, pull_request: u64, url: Option<String> },
+	#[serde(rename_all = "camelCase")]
+	NothingToUpdate { id: String },
+	#[serde(rename_all = "camelCase")]
+	UnknownCompanion { companion: String },
+	#[serde(rename_all = "camelCase")]
+	AmbiguousCompanion { companion: String, ids: Vec<String> },
+	#[serde(rename_all = "camelCase")]
+	AlreadyTheOwner { id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
 	UnknownTurn { id: String },
 	#[serde(rename_all = "camelCase")]
 	TurnOfAnotherConversation { turn_id: String, conversation_id: String },
@@ -396,6 +441,20 @@ impl From<ConversationError> for MissionError {
 			}
 			ConversationError::UnknownParticipant { conversation_id, bot_id } => {
 				MissionError::UnknownParticipant { conversation_id, bot_id }
+			}
+			other => MissionError::Unexpected { detail: format!("{other:?}") },
+		}
+	}
+}
+
+impl From<CompanionError> for MissionError {
+	fn from(error: CompanionError) -> Self {
+		match error {
+			CompanionError::UnknownCompanion { companion } => {
+				MissionError::UnknownCompanion { companion }
+			}
+			CompanionError::AmbiguousCompanion { companion, ids } => {
+				MissionError::AmbiguousCompanion { companion, ids }
 			}
 			other => MissionError::Unexpected { detail: format!("{other:?}") },
 		}

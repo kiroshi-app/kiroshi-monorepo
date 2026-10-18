@@ -263,6 +263,12 @@ impl Fingerprint {
 	}
 }
 
+pub(crate) fn merged_pull_request(stored: &str) -> Result<Option<u64>, MissionError> {
+	let held = Fingerprint::held(stored)
+		.map_err(|failure| MissionError::Unexpected { detail: failure.to_string() })?;
+	Ok(held.filter(|held| held.merged).map(|held| held.number))
+}
+
 pub(crate) async fn pass<R: Runtime>(
 	app: &AppHandle<R>,
 	reach: &Reach,
