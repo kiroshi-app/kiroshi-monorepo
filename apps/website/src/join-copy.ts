@@ -1,8 +1,6 @@
 // TODO: point at the Kiroshi for iPhone listing once the App Store gives it an id
 export const APP_STORE_URL = "https://apps.apple.com/search?term=Kiroshi"
 
-export const UNIVERSAL_JOIN_URL = "https://kiroshi.app/join"
-
 export const JOIN_COPY = {
 	openingTitle: "Opening Kiroshi",
 	openingLead:

@@ -1,8 +1,8 @@
 import { getRouteApi } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
-import { APP_STORE_URL, JOIN_COPY, UNIVERSAL_JOIN_URL } from "./join-copy"
-import { kiroshiLinkOf } from "./join-state"
+import { APP_STORE_URL, JOIN_COPY } from "./join-copy"
+import { kiroshiLinkOf, universalLinkOf } from "./join-state"
 import {
 	ActionGroup,
 	CardHeading,
@@ -87,9 +87,6 @@ const ComputerJoin = ({ invitation }: InvitationProps) => {
 		<OpeningCard />
 	)
 }
-
-const universalLinkOf = (invitation: string) =>
-	`${UNIVERSAL_JOIN_URL}?${new URLSearchParams({ invitation })}`
 
 const IPhoneJoin = ({ invitation }: InvitationProps) => (
 	<>

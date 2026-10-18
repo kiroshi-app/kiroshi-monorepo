@@ -39,7 +39,12 @@ const loadJoinState = async (invitation?: string): Promise<JoinState> => {
 	return { kind: isIPhoneVisitor() ? "iphone" : "computer", invitation }
 }
 
+const UNIVERSAL_JOIN_URL = "https://kiroshi.app/join"
+
 const kiroshiLinkOf = (invitation: string) =>
 	`kiroshi://join?${new URLSearchParams({ invitation })}`
 
-export { kiroshiLinkOf, loadJoinState, validateJoinSearch }
+const universalLinkOf = (invitation: string) =>
+	`${UNIVERSAL_JOIN_URL}?${new URLSearchParams({ invitation })}`
+
+export { kiroshiLinkOf, loadJoinState, universalLinkOf, validateJoinSearch }
