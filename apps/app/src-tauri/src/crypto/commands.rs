@@ -1,8 +1,11 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use tauri::{AppHandle, Manager, Runtime, State};
+use tokio::sync::watch;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::contract::{DeviceIdentity, DeviceKeysError};
 use super::device_keys::DeviceKeys;
@@ -42,15 +45,18 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> DeviceKeysState {
 	DeviceKeysState(keys)
 }
 
+pub type CurrentSpaceKey = watch::Receiver<Arc<HeldSpaceKey>>;
+
 pub struct SpaceKeys {
 	kind: InstallKind,
 	service: String,
 	directory: Option<PathBuf>,
+	current: Mutex<HashMap<String, watch::Sender<Arc<HeldSpaceKey>>>>,
 }
 
 impl SpaceKeys {
 	pub fn new(kind: InstallKind, service: String, directory: Option<PathBuf>) -> Self {
-		Self { kind, service, directory }
+		Self { kind, service, directory, current: Mutex::new(HashMap::new()) }
 	}
 
 	pub fn held(&self, space_id: &str) -> Result<Option<HeldSpaceKey>, DeviceKeysError> {
@@ -58,8 +64,35 @@ impl SpaceKeys {
 		held.map(|item| HeldSpaceKey::of_item(&item)).transpose()
 	}
 
-	pub fn stored(&self, space_id: &str, key: &HeldSpaceKey) -> Result<(), DeviceKeysError> {
-		self.store(space_id)?.write(&key.item())
+	pub fn watched(&self, space_id: &str) -> Result<Option<CurrentSpaceKey>, DeviceKeysError> {
+		let mut current = self.current();
+		if let Some(sender) = current.get(space_id) {
+			return Ok(Some(sender.subscribe()));
+		}
+		let Some(held) = self.held(space_id)? else {
+			return Ok(None);
+		};
+		let (sender, receiver) = watch::channel(Arc::new(held));
+		current.insert(space_id.to_owned(), sender);
+		Ok(Some(receiver))
+	}
+
+	pub fn stored(&self, space_id: &str, key: HeldSpaceKey) -> Result<(), DeviceKeysError> {
+		let mut current = self.current();
+		self.store(space_id)?.write(&key.item())?;
+		match current.get(space_id) {
+			Some(sender) => {
+				sender.send_replace(Arc::new(key));
+			}
+			None => {
+				current.insert(space_id.to_owned(), watch::channel(Arc::new(key)).0);
+			}
+		}
+		Ok(())
+	}
+
+	fn current(&self) -> MutexGuard<'_, HashMap<String, watch::Sender<Arc<HeldSpaceKey>>>> {
+		self.current.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
 	fn store(&self, space_id: &str) -> Result<Box<dyn KeyStore>, DeviceKeysError> {
@@ -117,6 +150,7 @@ pub fn identity_of(keys: &DeviceKeys) -> DeviceIdentity {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::crypto::space_key::FIRST_KEY_ID;
 
 	#[test]
 	fn the_dev_profile_never_reaches_a_system_store() {
@@ -151,15 +185,42 @@ mod tests {
 		);
 		assert!(keys.held("s-1").expect("the store reads").is_none());
 		let first = HeldSpaceKey::first().expect("randomness");
-		keys.stored("s-1", &first).expect("the key is stored");
+		let first_key = *first.key;
+		keys.stored("s-1", first).expect("the key is stored");
 
 		let held = keys.held("s-1").expect("the store reads").expect("a key");
 		let mode = std::fs::metadata(profile.join("space-key-s-1"))
 			.expect("the file")
 			.permissions()
 			.mode();
-		assert_eq!((held.key_id, *held.key), (first.key_id, *first.key));
+		assert_eq!((held.key_id, *held.key), (FIRST_KEY_ID, first_key));
 		assert_eq!(mode & 0o777, 0o600);
+	}
+
+	#[test]
+	fn a_watched_space_key_follows_every_key_stored_after_it() {
+		let profile = crate::removed_on_drop::RemovedOnDrop(
+			std::env::temp_dir().join(format!("kiroshi-space-keys-{}", uuid::Uuid::new_v4())),
+		);
+		let keys = SpaceKeys::new(
+			InstallKind::Dev,
+			"com.kiroshi.app.dev".to_owned(),
+			Some(profile.to_path_buf()),
+		);
+		assert!(keys.watched("s-1").expect("the store reads").is_none());
+		keys.stored("s-1", HeldSpaceKey::first().expect("randomness")).expect("stored");
+		let mut watched = keys.watched("s-1").expect("the store reads").expect("a key");
+		assert_eq!(watched.borrow_and_update().key_id, FIRST_KEY_ID);
+
+		let next = HeldSpaceKey::under(FIRST_KEY_ID + 1).expect("randomness");
+		let next_key = *next.key;
+		keys.stored("s-1", next).expect("stored");
+
+		assert!(watched.has_changed().expect("the sender lives"));
+		let current = watched.borrow_and_update().clone();
+		assert_eq!((current.key_id, *current.key), (FIRST_KEY_ID + 1, next_key));
+		let reread = keys.held("s-1").expect("the store reads").expect("a key");
+		assert_eq!(reread.key_id, FIRST_KEY_ID + 1);
 	}
 
 	#[test]

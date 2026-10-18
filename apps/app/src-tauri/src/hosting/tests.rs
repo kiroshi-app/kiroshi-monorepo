@@ -11,7 +11,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::Router;
-use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
+use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
@@ -19,16 +19,24 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
+use super::admission::HostedSpace;
 use super::authorship::Caller;
 use super::bridge::{belongs_to_the_host, LocalApi};
+use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
 	HostingState, Member, MemberStatus, MembersError, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
 };
+use super::devices::{devices, remove_device};
+use super::links::{device_link, join_link};
 use super::members::{invite, list, remove, withdraw};
 use super::reach;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
-use super::sealing_member::{HostFrame, SealingMember, Space};
-use super::wire::HELLO;
+use super::roster::SignedRow;
+use super::sealing_member::{
+	host_frame_opened, join_link_of, space_key_of, verified_set, HostFrame, JoinLink,
+	SealingMember, Space,
+};
+use super::wire::{HostKeys, HELLO};
 use super::{renamed, resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::contract::SignedOutReason;
@@ -59,7 +67,9 @@ use crate::conversations::contract::{
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{verify, DeviceKeys};
+use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
+use crate::crypto::join::JoinRequest;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -5663,5 +5673,657 @@ fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
 		assert!(reason.contains("reserved ctr bound"), "{reason}");
 		let sent = tokio::time::timeout(PATIENCE, member.recv()).await.expect("the socket ends");
 		assert!(!matches!(sent, Some(Ok(Message::Text(_)))), "{sent:?}");
+	});
+}
+
+struct RelaySide {
+	socket: WebSocket,
+	instance_id: String,
+	unread: VecDeque<Value>,
+}
+
+impl RelaySide {
+	async fn sent(&mut self, text: String) {
+		self.socket.send(Message::Text(text.into())).await.expect("the frame reaches the host");
+	}
+
+	async fn taken(&mut self, wanted: impl Fn(&Value) -> bool) -> Value {
+		if let Some(at) = self.unread.iter().position(&wanted) {
+			return self.unread.remove(at).expect("a held frame");
+		}
+		loop {
+			let frame = tokio::time::timeout(PATIENCE, self.socket.recv())
+				.await
+				.expect("a frame in time")
+				.expect("the socket is open")
+				.expect("a readable frame");
+			let Message::Text(text) = frame else {
+				continue;
+			};
+			let envelope: Value = serde_json::from_str(text.as_str()).expect("a json frame");
+			if wanted(&envelope) {
+				return envelope;
+			}
+			self.unread.push_back(envelope);
+		}
+	}
+
+	async fn addressed(&mut self, device: &SealingMember, key: &str) -> Value {
+		let to = device.relay_device_id.clone();
+		self.taken(|envelope| envelope["to"] == to.as_str() && envelope.get(key).is_some()).await
+	}
+
+	async fn frames_until_closed(&mut self) -> Vec<Value> {
+		let mut frames: Vec<Value> = self.unread.drain(..).collect();
+		loop {
+			let frame = tokio::time::timeout(PATIENCE, self.socket.recv())
+				.await
+				.expect("the session ends in time");
+			match frame {
+				Some(Ok(Message::Text(text))) => {
+					frames.push(serde_json::from_str(text.as_str()).expect("a json frame"));
+				}
+				Some(Ok(Message::Close(_)) | Err(_)) | None => return frames,
+				Some(Ok(_)) => {}
+			}
+		}
+	}
+
+	fn has_held_any_frame_to(&self, device: &SealingMember) -> bool {
+		self.unread.iter().any(|envelope| envelope["to"] == device.relay_device_id.as_str())
+	}
+}
+
+struct Joined {
+	member: SealingMember,
+	space: HeldSpaceKey,
+	ctr: u64,
+	rows: Vec<SignedRow>,
+}
+
+impl Harness {
+	async fn relay_side(&mut self) -> RelaySide {
+		let (socket, instance_id) = tokio::time::timeout(PATIENCE, self.sockets.recv())
+			.await
+			.expect("the host connected in time")
+			.expect("the relay is up");
+		RelaySide { socket, instance_id, unread: VecDeque::new() }
+	}
+
+	async fn link_for(&self, user_id: &str) -> JoinLink {
+		let link = join_link(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await;
+		join_link_of(&link.expect("a join link"))
+	}
+
+	async fn joined(&self, relay: &mut RelaySide, link: &JoinLink, account_id: &str) -> Joined {
+		let member = SealingMember::new(account_id);
+		relay.sent(member.join_frame(link, &link.secret)).await;
+		let answer = relay.addressed(&member, "joined").await;
+		let handover = member.joined_answer(&answer, &link.secret);
+		let rostered = verified_set(&self.host_keys().signing_public(), &handover.roster);
+		assert!(rostered.expect("the roster set verifies").contains(&member.keys.device_id()));
+		Joined { space: space_key_of(&handover), rows: handover.roster.rows, member, ctr: 0 }
+	}
+
+	async fn devices(&self) -> Vec<AccountDevices> {
+		devices(self.app.handle(), PERSONAL.to_owned()).await.expect("the roster reads")
+	}
+
+	async fn join_secret_count(&self) -> usize {
+		let state = self.app.state::<DatabaseState>();
+		let relay = state.as_ref().expect("the database").space_relay();
+		relay.join_secrets(PERSONAL.to_owned()).await.expect("the secrets read").len()
+	}
+
+	#[cfg(unix)]
+	async fn removed_while_no_key_is_stored(
+		&self,
+		device: &SealingMember,
+	) -> Result<Vec<AccountDevices>, MembersError> {
+		self.profile_locked(true);
+		let device_id = device.keys.device_id().to_string();
+		let removed = remove_device(self.app.handle(), PERSONAL.to_owned(), device_id).await;
+		self.profile_locked(false);
+		removed
+	}
+
+	#[cfg(unix)]
+	fn profile_locked(&self, is_locked: bool) {
+		use std::os::unix::fs::PermissionsExt;
+
+		let profile = self.app.path().app_data_dir().expect("the data folder resolves");
+		let mode = if is_locked { 0o500 } else { 0o700 };
+		std::fs::set_permissions(&profile, std::fs::Permissions::from_mode(mode))
+			.expect("the profile permissions change");
+	}
+
+	async fn is_rotation_pending(&self) -> bool {
+		let state = self.app.state::<DatabaseState>();
+		let relay = state.as_ref().expect("the database").space_relay();
+		relay.is_rotation_pending(PERSONAL.to_owned()).await.expect("the marker reads")
+	}
+
+	fn flagged_joined(&self, user_id: &str) {
+		for member in self.relay.members.lock().expect("the relay").iter_mut() {
+			if member["userId"] == user_id {
+				member["state"] = json!("joined");
+			}
+		}
+	}
+}
+
+fn a_member_call(id: &str) -> String {
+	json!({ "id": id, "command": "agent_models" }).to_string()
+}
+
+async fn called(
+	relay: &mut RelaySide,
+	device: &mut Joined,
+	host: &ed25519_dalek::VerifyingKey,
+) -> Value {
+	let space = Space { instance_id: &relay.instance_id.clone(), key: &device.space, host };
+	let device_id = device.member.keys.device_id();
+	device.ctr += 1;
+	relay.sent(device.member.sealed(&space, device.ctr, HELLO, None)).await;
+	let greeting = relay.addressed(&device.member, "ct").await;
+	let greeting = host_frame_opened(&space, &greeting, Some(device_id)).expect("the hello opens");
+	assert_eq!(greeting.plaintext, json!({ "hello": {} }));
+	device.ctr += 1;
+	let call = a_member_call(&format!("call-{}", device.ctr));
+	relay.sent(device.member.sealed(&space, device.ctr, &call, greeting.challenge)).await;
+	let answer = relay.addressed(&device.member, "ct").await;
+	host_frame_opened(&space, &answer, Some(device_id)).expect("the answer opens").plaintext
+}
+
+fn device_ids(devices: &[AccountDevices]) -> Vec<(String, Vec<String>)> {
+	devices
+		.iter()
+		.map(|account| {
+			let ids = account.devices.iter().map(|device| device.device_id.clone()).collect();
+			(account.account_id.clone(), ids)
+		})
+		.collect()
+}
+
+#[test]
+fn a_join_link_used_twice_is_refused_as_used_and_a_payload_that_does_not_open_as_malformed() {
+	run(async {
+		let mut harness = Harness::signed_in("join-twice").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let link = harness.link_for("guest").await;
+
+		let first = harness.joined(&mut relay, &link, "guest").await;
+		let second = SealingMember::new("guest");
+		relay.sent(second.join_frame(&link, &link.secret)).await;
+		let refused = relay.addressed(&second, "join_refused").await;
+		let mut garbled: Value =
+			serde_json::from_str(&second.join_frame(&link, &link.secret)).expect("json");
+		garbled["join"] = json!("bm90IGEgc2VhbGVkIGJveA==");
+		relay.sent(garbled.to_string()).await;
+		let malformed = relay.addressed(&second, "join_refused").await;
+
+		assert_eq!(
+			refused,
+			json!({ "v": 2, "instance": relay.instance_id, "to": second.relay_device_id, "join_refused": "used" })
+		);
+		assert_eq!(malformed["join_refused"], "malformed");
+		let host = harness.host_keys().device_id().to_string();
+		assert_eq!(
+			device_ids(&harness.devices().await),
+			vec![
+				("guest".to_owned(), vec![first.member.keys.device_id().to_string()]),
+				("owner".to_owned(), vec![host]),
+			]
+		);
+	});
+}
+
+#[test]
+fn a_fresh_link_after_withdraw_admits_and_the_old_secret_is_refused_as_unknown() {
+	run(async {
+		let mut harness = Harness::signed_in("join-withdrawn").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let withdrawn_link = harness.link_for("guest").await;
+
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the invitation is withdrawn");
+		let invited =
+			invite(harness.app.handle(), PERSONAL.to_owned(), "guest@example.com".to_owned())
+				.await
+				.expect("the guest is invited again");
+		let fresh_link = harness.link_for(&invited.user_id).await;
+		let stale = SealingMember::new("guest");
+		relay.sent(stale.join_frame(&withdrawn_link, &withdrawn_link.secret)).await;
+		let refused = relay.addressed(&stale, "join_refused").await;
+		let admitted = harness.joined(&mut relay, &fresh_link, &invited.user_id).await;
+
+		assert_eq!(refused["join_refused"], "unknown");
+		let accounts = harness.devices().await;
+		let guest = accounts.iter().find(|account| account.account_id == invited.user_id);
+		assert_eq!(
+			guest.map(|account| account.devices[0].device_id.clone()),
+			Some(admitted.member.keys.device_id().to_string())
+		);
+	});
+}
+
+#[test]
+fn a_second_link_replaces_the_unused_first_and_a_member_that_is_not_pending_gets_none() {
+	run(async {
+		let mut harness = Harness::signed_in("join-replaced").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "joined"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let replaced = harness.link_for("guest").await;
+		let current = harness.link_for("guest").await;
+		let held = harness.join_secret_count().await;
+
+		let not_pending = [
+			join_link(harness.app.handle(), PERSONAL.to_owned(), "joiner".to_owned()).await,
+			join_link(harness.app.handle(), PERSONAL.to_owned(), "owner".to_owned()).await,
+		];
+		let stale = SealingMember::new("guest");
+		relay.sent(stale.join_frame(&replaced, &replaced.secret)).await;
+		let refused = relay.addressed(&stale, "join_refused").await;
+
+		assert_eq!(not_pending, [Err(MembersError::NotPending), Err(MembersError::NotPending)]);
+		assert_eq!((held, harness.join_secret_count().await), (1, 1));
+		assert_eq!(refused["join_refused"], "unknown");
+		assert_eq!(replaced.instance_id, relay.instance_id);
+		assert_eq!(current.host, harness.host_keys().agreement_public());
+		harness.joined(&mut relay, &current, "guest").await;
+	});
+}
+
+#[test]
+fn a_joined_member_client_verifies_its_answer_and_exchanges_a_sealed_call() {
+	run(async {
+		let mut harness = Harness::signed_in("join-call").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let link = harness.link_for("guest").await;
+
+		let mut guest = harness.joined(&mut relay, &link, "guest").await;
+		let answer = called(&mut relay, &mut guest, &host).await;
+
+		assert_eq!(guest.space.key_id, 1);
+		assert_eq!(*guest.space.key, *harness.space_key(PERSONAL).key);
+		assert_eq!(guest.rows.len(), 2);
+		assert_eq!((answer["id"].clone(), answer["status"].clone()), (json!("call-2"), json!(200)));
+	});
+}
+
+#[test]
+fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_dropped_and_locked_out() {
+	run(async {
+		let mut harness = Harness::signed_in("join-rekey").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let mut guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		called(&mut relay, &mut guest, &host).await;
+		harness.flagged_joined("guest");
+
+		remove(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the guest is removed");
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+		let rostered = verified_set(&host, &handover.roster).expect("the new roster set verifies");
+		let mut forged = handover.roster.clone();
+		let guest_row = guest.rows.iter().find(|row| row.account_id == "guest").expect("a row");
+		forged.rows.push(guest_row.clone());
+		let old_space = std::mem::replace(&mut joiner.space, space_key_of(&handover));
+		joiner.ctr = 0;
+		let answer = called(&mut relay, &mut joiner, &host).await;
+		guest.ctr += 1;
+		let guest_space =
+			Space { instance_id: &relay.instance_id.clone(), key: &guest.space, host: &host };
+		relay
+			.sent(guest.member.sealed(&guest_space, guest.ctr, &a_member_call("removed"), None))
+			.await;
+		let after = called(&mut relay, &mut joiner, &host).await;
+		let event =
+			relay.taken(|envelope| envelope.get("to").is_none() && envelope["key_id"] == 2).await;
+		let joiner_space =
+			Space { instance_id: &relay.instance_id.clone(), key: &joiner.space, host: &host };
+		let stale = Space { instance_id: &relay.instance_id.clone(), key: &old_space, host: &host };
+		relay.sent(joiner.member.sealed(&stale, 99, HELLO, None)).await;
+		let rekeyed_again = relay.addressed(&joiner.member, "rekey").await;
+
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(*joiner.space.key, *harness.space_key(PERSONAL).key);
+		assert!(!rostered.contains(&guest.member.keys.device_id()));
+		assert!(rostered.contains(&joiner.member.keys.device_id()));
+		assert_eq!(verified_set(&host, &forged), Err(CryptoError::ForgedSignature));
+		assert_eq!(answer["status"], 200);
+		assert_eq!(after["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&guest.member));
+		assert!(host_frame_opened(&joiner_space, &event, None).is_ok());
+		assert_eq!(host_frame_opened(&guest_space, &event, None), Err(CryptoError::Unauthentic));
+		assert_eq!(rekeyed_again["to"], joiner.member.relay_device_id.as_str());
+		assert!(joiner.member.rekey_opened(&rekeyed_again, &relay.instance_id, &host).is_ok());
+		assert_eq!(
+			device_ids(&harness.devices().await)
+				.into_iter()
+				.map(|(account, _)| account)
+				.collect::<Vec<_>>(),
+			vec!["joiner".to_owned(), "owner".to_owned()]
+		);
+	});
+}
+
+#[test]
+fn an_own_device_joins_through_the_device_link_and_removing_it_rotates_the_key() {
+	run(async {
+		let mut harness = Harness::signed_in("join-own-device").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys();
+		let link = device_link(harness.app.handle(), PERSONAL.to_owned()).await.expect("a link");
+
+		let own = harness.joined(&mut relay, &join_link_of(&link), "owner").await;
+		let listed = harness.devices().await;
+		let removed = remove_device(
+			harness.app.handle(),
+			PERSONAL.to_owned(),
+			own.member.keys.device_id().to_string(),
+		)
+		.await
+		.expect("the device is removed");
+
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].account_id, "owner");
+		let flags: Vec<(String, bool)> = listed[0]
+			.devices
+			.iter()
+			.map(|device| (device.device_id.clone(), device.is_host))
+			.collect();
+		assert!(flags.contains(&(host.device_id().to_string(), true)));
+		assert!(flags.contains(&(own.member.keys.device_id().to_string(), false)));
+		assert_eq!(listed[0].devices[0].fingerprint.len(), 6);
+		assert_eq!(
+			removed,
+			vec![AccountDevices {
+				account_id: "owner".to_owned(),
+				devices: vec![listed_host(&listed)],
+			}]
+		);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+	});
+}
+
+fn listed_host(listed: &[AccountDevices]) -> RosterDevice {
+	listed
+		.iter()
+		.flat_map(|account| account.devices.iter())
+		.find(|device| device.is_host)
+		.cloned()
+		.expect("the host device is listed")
+}
+
+#[test]
+fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing() {
+	run(async {
+		let mut harness = Harness::signed_in("join-remove-refused").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let link = harness.link_for("guest").await;
+		harness.joined(&mut relay, &link, "guest").await;
+		let before = harness.devices().await;
+		let removed =
+			|device_id: String| remove_device(harness.app.handle(), PERSONAL.to_owned(), device_id);
+
+		let host = removed(harness.host_keys().device_id().to_string()).await;
+		let unknown = removed("0".repeat(32)).await;
+
+		assert_eq!(host, Err(MembersError::HostDeviceNotRemovable));
+		assert_eq!(unknown, Err(MembersError::UnknownDevice));
+		assert_eq!(harness.devices().await, before);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_rotates() {
+	run(async {
+		let mut harness = Harness::signed_in("join-unrotated").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &link, "guest").await;
+
+		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
+		let left_pending =
+			(harness.is_rotation_pending().await, harness.space_key(PERSONAL).key_id);
+		let listed = harness.devices().await;
+
+		let Err(MembersError::KeyNotRotated { reason }) = refused else {
+			panic!("the rotation failure is not named: {refused:?}");
+		};
+		assert!(reason.contains("key_id 2"), "{reason}");
+		assert!(!reason.contains(&BASE64_STANDARD.encode(guest.space.key.as_slice())), "{reason}");
+		assert_eq!(left_pending, (true, 1));
+		assert_eq!(device_ids(&listed).len(), 1);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+#[test]
+fn withdrawing_an_invitation_whose_device_joined_revokes_it_and_rekeys_the_others_only() {
+	run(async {
+		let mut harness = Harness::signed_in("join-withdraw-admitted").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the invitation is withdrawn");
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+		joiner.space = space_key_of(&handover);
+		joiner.ctr = 0;
+		let answer = called(&mut relay, &mut joiner, &host).await;
+
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert_eq!(answer["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&guest.member));
+		assert_eq!(harness.join_secret_count().await, 1);
+		assert!(!harness.is_rotation_pending().await);
+		let accounts: Vec<String> =
+			device_ids(&harness.devices().await).into_iter().map(|(account, _)| account).collect();
+		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
+	});
+}
+
+#[test]
+fn withdrawing_an_invitation_with_no_admitted_device_keeps_the_key_id() {
+	run(async {
+		let mut harness = Harness::signed_in("join-withdraw-unused").await;
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.started().await;
+		let _relay = harness.relay_side().await;
+		harness.link_for("guest").await;
+
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+			.await
+			.expect("the invitation is withdrawn");
+
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+		assert_eq!(harness.join_secret_count().await, 0);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
+	run(async {
+		let mut harness = Harness::signed_in("join-pending-online").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
+		let left_pending = harness.is_rotation_pending().await;
+
+		harness.stopped().await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let stale =
+			Space { instance_id: &relay.instance_id.clone(), key: &joiner.space, host: &host };
+		relay.sent(joiner.member.sealed(&stale, 50, HELLO, None)).await;
+		let rekey = relay.addressed(&joiner.member, "rekey").await;
+		let handover = joiner
+			.member
+			.rekey_opened(&rekey, &relay.instance_id, &host)
+			.expect("the rekey verifies and opens");
+
+		assert!(matches!(refused, Err(MembersError::KeyNotRotated { .. })), "{refused:?}");
+		assert!(left_pending);
+		assert_eq!(handover.key_id, 2);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+#[test]
+fn a_join_whose_device_is_removed_and_rekeyed_before_its_handover_gets_no_joined_frame() {
+	run(async {
+		let mut harness = Harness::signed_in("join-race").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let joiner_link = harness.link_for("joiner").await;
+		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		harness.link_for("guest").await;
+		let state = harness.app.state::<DatabaseState>();
+		let database = state.as_ref().expect("the database");
+		let secrets = database.space_relay().join_secrets(PERSONAL.to_owned()).await;
+		let secret = secrets
+			.expect("the secrets read")
+			.into_iter()
+			.find(|secret| secret.account_id == "guest")
+			.expect("the guest secret");
+		let guest = SealingMember::new("guest");
+		let host = harness.host_keys();
+		let row = guest.row(&host, PERSONAL);
+		let admitted =
+			database.space_relay().admitted(PERSONAL.to_owned(), secret.id, 1, row).await;
+		assert!(admitted.expect("the admission lands"));
+
+		remove_device(
+			harness.app.handle(),
+			PERSONAL.to_owned(),
+			guest.keys.device_id().to_string(),
+		)
+		.await
+		.expect("the device is removed and the key rotated");
+		let space = harness.app.state::<SpaceKeys>().watched(PERSONAL).expect("the key reads");
+		let keys = HostKeys { device: host, space: space.expect("a key") };
+		let hosted = HostedSpace {
+			database,
+			keys: &keys,
+			space_id: PERSONAL,
+			instance_id: &relay.instance_id,
+		};
+		let request = JoinRequest {
+			signing: guest.keys.signing_public(),
+			agreement: guest.keys.agreement_public(),
+		};
+		let answer = hosted.joined(&guest.relay_device_id, &secret, &request).await;
+		let answer: Value = serde_json::from_str(&answer.expect("an answer")).expect("json");
+		relay.addressed(&joiner.member, "rekey").await;
+
+		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
+		assert_eq!(answer["join_refused"], "used");
+		assert!(answer.get("joined").is_none());
+		assert!(!relay.has_held_any_frame_to(&guest));
+	});
+}
+
+#[cfg(unix)]
+#[test]
+fn a_pending_rotation_failing_at_socket_start_ends_the_session_unsealed_and_the_reconnect_retries_it(
+) {
+	run(async {
+		let mut harness = Harness::signed_in("join-start-unrotated").await;
+		harness.seed(&[
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+			cloud_member("joiner", "joiner@example.com", "member", "pending"),
+		]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest_link = harness.link_for("guest").await;
+		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
+		let joiner_link = harness.link_for("joiner").await;
+		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
+		harness.stopped().await;
+		harness.profile_locked(true);
+
+		harness.started().await;
+		let mut refused_session = harness.relay_side().await;
+		let frames = refused_session.frames_until_closed().await;
+		harness.profile_locked(false);
+		let mut retried = harness.relay_side().await;
+		let stale =
+			Space { instance_id: &retried.instance_id.clone(), key: &joiner.space, host: &host };
+		retried.sent(joiner.member.sealed(&stale, 50, HELLO, None)).await;
+		let rekey = retried.addressed(&joiner.member, "rekey").await;
+
+		assert!(matches!(refused, Err(MembersError::KeyNotRotated { .. })), "{refused:?}");
+		assert!(frames.iter().all(|frame| frame.get("ct").is_none()), "{frames:?}");
+		let handover = joiner.member.rekey_opened(&rekey, &retried.instance_id, &host);
+		assert_eq!(handover.expect("the rekey opens").key_id, 2);
+		assert!(!harness.is_rotation_pending().await);
 	});
 }

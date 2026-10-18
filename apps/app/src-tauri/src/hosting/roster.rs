@@ -1,4 +1,7 @@
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::{Signature, VerifyingKey};
+use serde::{Deserialize, Serialize};
+use x25519_dalek::PublicKey;
 
 use crate::crypto::device_keys::{verify, DeviceId, DeviceKeys};
 use crate::crypto::error::CryptoError;
@@ -8,12 +11,62 @@ use crate::db::{Database, DatabaseError};
 
 const ROSTER_DOMAIN: &[u8] = b"kiroshi/v2/roster";
 
+const ROSTER_SET_DOMAIN: &[u8] = b"kiroshi/v2/roster-set";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Rostered {
 	pub(super) device_id: DeviceId,
 	pub(super) relay_device_id: String,
 	pub(super) account_id: String,
 	pub(super) signing: VerifyingKey,
+	pub(super) agreement: PublicKey,
+}
+
+pub(super) struct VerifiedRow {
+	pub(super) row: RosterRow,
+	pub(super) rostered: Rostered,
+}
+
+pub(super) struct VerifiedRoster {
+	pub(super) version: u64,
+	pub(super) rows: Vec<VerifiedRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct SignedRow {
+	pub(super) device_id: String,
+	pub(super) relay_device_id: String,
+	pub(super) account_id: String,
+	pub(super) signing_public_key: String,
+	pub(super) agreement_public_key: String,
+	pub(super) fingerprint: String,
+	pub(super) added_at: i64,
+	pub(super) signature: String,
+}
+
+impl From<&RosterRow> for SignedRow {
+	fn from(row: &RosterRow) -> Self {
+		Self {
+			device_id: row.device_id.clone(),
+			relay_device_id: row.relay_device_id.clone(),
+			account_id: row.account_id.clone(),
+			signing_public_key: BASE64_STANDARD.encode(&row.signing_public_key),
+			agreement_public_key: BASE64_STANDARD.encode(&row.agreement_public_key),
+			fingerprint: row.fingerprint.clone(),
+			added_at: row.added_at,
+			signature: BASE64_STANDARD.encode(&row.signature),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct RosterSet {
+	pub(super) space_id: String,
+	pub(super) host: String,
+	pub(super) key_id: u32,
+	pub(super) version: u64,
+	pub(super) rows: Vec<SignedRow>,
+	pub(super) sig: String,
 }
 
 pub struct Enrolled<'a> {
@@ -51,6 +104,9 @@ pub(super) fn verified(
 		.ok()
 		.and_then(|bytes| VerifyingKey::from_bytes(&bytes).ok())
 		.ok_or(CryptoError::MalformedKey)?;
+	let agreement = <[u8; 32]>::try_from(row.agreement_public_key.as_slice())
+		.map(PublicKey::from)
+		.map_err(|_| CryptoError::MalformedKey)?;
 	let device_id = DeviceId::from_hex(&row.device_id)
 		.filter(|device_id| *device_id == DeviceId::of(&signing))
 		.ok_or(CryptoError::ForeignSender)?;
@@ -59,7 +115,66 @@ pub(super) fn verified(
 		relay_device_id: row.relay_device_id.clone(),
 		account_id: row.account_id.clone(),
 		signing,
+		agreement,
 	})
+}
+
+pub(super) async fn verified_roster(
+	database: &Database,
+	space_id: &str,
+	host: &VerifyingKey,
+) -> Result<VerifiedRoster, DatabaseError> {
+	let roster = database.space_relay().roster(space_id.to_owned()).await?;
+	let mut rows = Vec::with_capacity(roster.rows.len());
+	let mut ignored = Vec::new();
+	for row in roster.rows {
+		match verified(host, space_id, &row) {
+			Ok(rostered) => rows.push(VerifiedRow { row, rostered }),
+			Err(failure) => ignored.push(format!("{} ({failure:?})", row.device_id)),
+		}
+	}
+	if !ignored.is_empty() {
+		eprintln!("hosted space {space_id} ignored the roster rows of {}", ignored.join(", "));
+	}
+	Ok(VerifiedRoster { version: roster.version, rows })
+}
+
+pub(super) fn signed_set(
+	host: &DeviceKeys,
+	space_id: &str,
+	key_id: u32,
+	roster: &VerifiedRoster,
+) -> RosterSet {
+	let device_ids: Vec<DeviceId> = roster.rows.iter().map(|row| row.rostered.device_id).collect();
+	let sig = host.sign(&set_bytes(space_id, roster.version, key_id, &device_ids));
+	RosterSet {
+		space_id: space_id.to_owned(),
+		host: host.device_id().to_string(),
+		key_id,
+		version: roster.version,
+		rows: roster.rows.iter().map(|row| SignedRow::from(&row.row)).collect(),
+		sig: BASE64_STANDARD.encode(sig.to_bytes()),
+	}
+}
+
+pub(super) fn set_bytes(
+	space_id: &str,
+	version: u64,
+	key_id: u32,
+	device_ids: &[DeviceId],
+) -> Vec<u8> {
+	let mut sorted: Vec<&[u8; 16]> = device_ids.iter().map(DeviceId::as_bytes).collect();
+	sorted.sort_unstable();
+	let mut bytes = ROSTER_SET_DOMAIN.to_vec();
+	bytes.extend_from_slice(&(space_id.len() as u64).to_be_bytes());
+	bytes.extend_from_slice(space_id.as_bytes());
+	bytes.extend_from_slice(&version.to_be_bytes());
+	bytes.extend_from_slice(&key_id.to_be_bytes());
+	bytes.extend_from_slice(&(sorted.len() as u64).to_be_bytes());
+	for device_id in sorted {
+		bytes.extend_from_slice(device_id);
+	}
+	bytes
 }
 
 fn canonical_bytes(space_id: &str, row: &RosterRow) -> Vec<u8> {
@@ -104,6 +219,20 @@ pub(super) async fn host_rostered(
 		added_at: chrono::Utc::now().timestamp_millis(),
 	};
 	roster.rostered(space_id.to_owned(), signed_row(host, space_id, &enrolled)).await
+}
+
+pub(super) async fn host_account(
+	database: &Database,
+	space_id: &str,
+	host: &DeviceKeys,
+) -> Result<Option<String>, DatabaseError> {
+	let held = database
+		.space_relay()
+		.roster_row(space_id.to_owned(), host.device_id().to_string())
+		.await?;
+	Ok(held
+		.and_then(|row| verified(&host.signing_public(), space_id, &row).ok())
+		.map(|row| row.account_id))
 }
 
 pub(super) async fn sender_of(
@@ -162,6 +291,7 @@ mod tests {
 				relay_device_id: "r-1".to_owned(),
 				account_id: "a-1".to_owned(),
 				signing: member.signing_public(),
+				agreement: member.agreement_public(),
 			})
 		);
 	}

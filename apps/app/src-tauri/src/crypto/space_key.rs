@@ -15,8 +15,12 @@ pub struct HeldSpaceKey {
 
 impl HeldSpaceKey {
 	pub fn first() -> Result<Self, DeviceKeysError> {
+		Self::under(FIRST_KEY_ID)
+	}
+
+	pub fn under(key_id: u32) -> Result<Self, DeviceKeysError> {
 		let key = random_bytes::<KEY_LENGTH>().map_err(|_| DeviceKeysError::NoRandomness)?;
-		Ok(Self { key_id: FIRST_KEY_ID, key })
+		Ok(Self { key_id, key })
 	}
 
 	pub(super) fn item(&self) -> Zeroizing<Vec<u8>> {

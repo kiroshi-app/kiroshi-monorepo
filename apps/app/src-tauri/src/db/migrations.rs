@@ -61,6 +61,8 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 52, statements: TURN_RUNS },
 	Migration { version: 53, statements: CONVERSATION_LOOK },
 	Migration { version: 54, statements: RELAY_V2 },
+	Migration { version: 55, statements: SPACE_JOIN },
+	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1173,6 +1175,32 @@ CREATE TABLE relay_reserved_counters (
 );
 ";
 
+const SPACE_JOIN: &str = "
+CREATE TABLE space_join_secrets (
+	id INTEGER PRIMARY KEY,
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	account_id TEXT NOT NULL,
+	secret BLOB NOT NULL UNIQUE,
+	used_at INTEGER
+);
+
+CREATE INDEX space_join_secrets_of_account ON space_join_secrets (space_id, account_id);
+
+CREATE UNIQUE INDEX space_join_secrets_one_unused_per_account
+	ON space_join_secrets (space_id, account_id) WHERE used_at IS NULL;
+
+CREATE TABLE space_roster_versions (
+	space_id TEXT PRIMARY KEY REFERENCES spaces (id) ON DELETE CASCADE,
+	version INTEGER NOT NULL
+);
+";
+
+const SPACE_KEY_ROTATIONS: &str = "
+CREATE TABLE space_key_rotations (
+	space_id TEXT PRIMARY KEY REFERENCES spaces (id) ON DELETE CASCADE
+);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1280,6 +1308,8 @@ mod tests {
 	const TURN_RUNS_STEP: u32 = 52;
 	const CONVERSATION_LOOK_STEP: u32 = 53;
 	const RELAY_V2_STEP: u32 = 54;
+	const SPACE_JOIN_STEP: u32 = 55;
+	const SPACE_KEY_ROTATIONS_STEP: u32 = 56;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -3940,6 +3970,75 @@ mod tests {
 			],
 			[0, 0, 1, 1]
 		);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_join_tables_install_on_a_kept_file_hold_one_unused_secret_per_account_and_go_with_their_space(
+	) {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SPACE_JOIN_STEP)).expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), RELAY_V2_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, position, created_at) VALUES ('s1', 'Shared', 1, 1);",
+			)
+			.expect("a space this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		connection
+			.execute_batch(
+				"INSERT INTO space_join_secrets (space_id, account_id, secret, used_at)
+					VALUES ('s1', 'a1', x'01', 5), ('s1', 'a1', x'02', NULL), ('s1', 'a2', x'03', NULL);
+				INSERT INTO space_roster_versions (space_id, version) VALUES ('s1', 3);",
+			)
+			.expect("one used and one unused secret per account");
+		let second_unused = connection.execute(
+			"INSERT INTO space_join_secrets (space_id, account_id, secret) VALUES ('s1', 'a1', x'04')",
+			[],
+		);
+		connection.execute_batch("DELETE FROM spaces WHERE id = 's1';").expect("the space goes");
+		let count = |table: &str| -> i64 {
+			connection
+				.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+				.expect("the rows count")
+		};
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert!(second_unused.is_err(), "a second unused secret of one account was kept");
+		assert_eq!([count("space_join_secrets"), count("space_roster_versions")], [0, 0]);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_rotation_markers_install_on_a_kept_file_and_go_with_their_space() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SPACE_KEY_ROTATIONS_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), SPACE_JOIN_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, position, created_at) VALUES ('s1', 'Shared', 1, 1);",
+			)
+			.expect("a space this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		connection
+			.execute_batch(
+				"INSERT INTO space_key_rotations (space_id) VALUES ('s1');
+				DELETE FROM spaces WHERE id = 's1';",
+			)
+			.expect("a marker is written, then its space goes");
+		let left: i64 = connection
+			.query_row("SELECT COUNT(*) FROM space_key_rotations", [], |row| row.get(0))
+			.expect("the rows count");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(left, 0);
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");
 	}

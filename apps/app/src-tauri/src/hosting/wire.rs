@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::Signature;
@@ -6,7 +7,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::roster::{self, Rostered};
-use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
+use crate::crypto::commands::{CurrentSpaceKey, DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{DeviceId, DeviceKeys};
 use crate::crypto::error::CryptoError;
 use crate::crypto::frame::{self, fresh_challenge, Frame, Header, CHALLENGE_LENGTH, VERSION};
@@ -25,7 +26,13 @@ const SIGNATURE_LENGTH: usize = 64;
 
 pub(super) struct HostKeys {
 	pub(super) device: DeviceKeys,
-	pub(super) space: HeldSpaceKey,
+	pub(super) space: CurrentSpaceKey,
+}
+
+impl HostKeys {
+	pub(super) fn current_space_key(&self) -> Arc<HeldSpaceKey> {
+		self.space.borrow().clone()
+	}
 }
 
 pub(super) async fn host_keys<R: Runtime>(
@@ -41,35 +48,38 @@ pub(super) async fn host_keys<R: Runtime>(
 	let space_keys = app
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| "the space key store is not loaded".to_owned())?;
-	let held = space_keys
-		.held(space_id)
-		.map_err(|failure| format!("the space key did not read: {failure:?}"))?;
-	let space = match held {
-		Some(space) => space,
-		None => first_space_key(app, &space_keys, space_id).await?,
+	let watched = |space_keys: &SpaceKeys| {
+		space_keys
+			.watched(space_id)
+			.map_err(|failure| format!("the space key did not read: {failure:?}"))
 	};
+	if let Some(space) = watched(&space_keys)? {
+		return Ok(HostKeys { device, space });
+	}
+	let first = HeldSpaceKey::first()
+		.map_err(|failure| format!("no space key was generated: {failure:?}"))?;
+	space_key_stored(app, &space_keys, space_id, first).await?;
+	let space =
+		watched(&space_keys)?.ok_or_else(|| "the new space key did not read back".to_owned())?;
 	Ok(HostKeys { device, space })
 }
 
-async fn first_space_key<R: Runtime>(
+pub(super) async fn space_key_stored<R: Runtime>(
 	app: &AppHandle<R>,
 	space_keys: &SpaceKeys,
 	space_id: &str,
-) -> Result<HeldSpaceKey, String> {
-	let space = HeldSpaceKey::first()
-		.map_err(|failure| format!("no space key was generated: {failure:?}"))?;
+	space: HeldSpaceKey,
+) -> Result<(), String> {
+	let key_id = space.key_id;
 	let state = app.state::<DatabaseState>();
 	let database =
 		ready(&state).map_err(|failure| format!("the database is unavailable: {failure:?}"))?;
-	database
-		.space_relay()
-		.counter_started(space_id.to_owned(), space.key_id)
-		.await
-		.map_err(|failure| format!("the ctr of the new space key was not started: {failure:?}"))?;
+	database.space_relay().counter_started(space_id.to_owned(), key_id).await.map_err(
+		|failure| format!("the ctr of space key_id {key_id} was not started: {failure:?}"),
+	)?;
 	space_keys
-		.stored(space_id, &space)
-		.map_err(|failure| format!("the new space key was not stored: {failure:?}"))?;
-	Ok(space)
+		.stored(space_id, space)
+		.map_err(|failure| format!("space key_id {key_id} was not stored: {failure:?}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +87,7 @@ pub(super) enum Dropped {
 	NotV2,
 	Malformed(&'static str),
 	UnknownKey(u32),
+	StaleKey(u32),
 	UnknownSender,
 	Refused(CryptoError),
 	Unstored(String),
@@ -115,14 +126,26 @@ struct Fields {
 	sig: Signature,
 }
 
+struct Sealing {
+	space: Arc<HeldSpaceKey>,
+	subkey: Subkey,
+	next_ctr: u64,
+	reserved: u64,
+}
+
+impl Sealing {
+	fn under(space: Arc<HeldSpaceKey>, host: &DeviceId) -> Self {
+		let subkey = Subkey::derive(&space.key, space.key_id, host);
+		Self { space, subkey, next_ctr: 1, reserved: 0 }
+	}
+}
+
 pub(super) struct Wire<'a> {
 	database: &'a Database,
 	keys: &'a HostKeys,
 	space_id: &'a str,
 	instance_id: &'a str,
-	subkey: Subkey,
-	next_ctr: u64,
-	reserved: u64,
+	sealing: Sealing,
 	challenges: HashMap<DeviceId, [u8; CHALLENGE_LENGTH]>,
 }
 
@@ -133,17 +156,8 @@ impl<'a> Wire<'a> {
 		space_id: &'a str,
 		instance_id: &'a str,
 	) -> Self {
-		let subkey = Subkey::derive(&keys.space.key, keys.space.key_id, &keys.device.device_id());
-		Self {
-			database,
-			keys,
-			space_id,
-			instance_id,
-			subkey,
-			next_ctr: 1,
-			reserved: 0,
-			challenges: HashMap::new(),
-		}
+		let sealing = Sealing::under(keys.current_space_key(), &keys.device.device_id());
+		Self { database, keys, space_id, instance_id, sealing, challenges: HashMap::new() }
 	}
 
 	pub(super) async fn opened(&self, text: &str) -> Result<Opened, Refusal> {
@@ -161,13 +175,17 @@ impl<'a> Wire<'a> {
 
 	async fn opened_from(&self, wire_from: &str, fields: Fields) -> Result<Opened, Dropped> {
 		let key_id = fields.key_id;
-		if key_id != self.keys.space.key_id {
+		let space = self.keys.current_space_key();
+		if key_id > space.key_id {
 			return Err(Dropped::UnknownKey(key_id));
 		}
 		let sender = roster::sender_of(self.database, self.space_id, &self.keys.device, wire_from)
 			.await
 			.map_err(unstored)?
 			.ok_or(Dropped::UnknownSender)?;
+		if key_id < space.key_id {
+			return Err(Dropped::StaleKey(key_id));
+		}
 		let counters = self.database.space_relay();
 		let device_id = sender.device_id.to_string();
 		let last = counters
@@ -186,7 +204,7 @@ impl<'a> Wire<'a> {
 			challenge: fields.challenge,
 		};
 		let frame = Frame { header, ciphertext: fields.ciphertext, sig: fields.sig };
-		let subkey = Subkey::derive(&self.keys.space.key, key_id, &sender.device_id);
+		let subkey = Subkey::derive(&space.key, key_id, &sender.device_id);
 		let plaintext = frame::open(&frame, &subkey, &sender.signing).map_err(Dropped::Refused)?;
 		let is_advanced = counters
 			.accepted(self.space_id.to_owned(), device_id, key_id, fields.ctr)
@@ -233,22 +251,28 @@ impl<'a> Wire<'a> {
 		to: Option<&Rostered>,
 		challenge: Option<[u8; CHALLENGE_LENGTH]>,
 	) -> Result<String, String> {
+		let current = self.keys.current_space_key();
+		if current.key_id != self.sealing.space.key_id {
+			self.sealing = Sealing::under(current, &self.keys.device.device_id());
+		}
 		let header = Header {
 			instance: self.instance_id.to_owned(),
 			from: self.keys.device.device_id(),
 			to: to.map(|to| to.device_id),
-			key_id: self.keys.space.key_id,
+			key_id: self.sealing.space.key_id,
 			ctr: self.next_ctr().await?,
 			challenge,
 		};
-		let frame = frame::seal(header, plaintext.as_bytes(), &self.subkey, &self.keys.device)
-			.map_err(|failure| format!("a relay frame was not sealed: {failure:?}"))?;
+		let frame =
+			frame::seal(header, plaintext.as_bytes(), &self.sealing.subkey, &self.keys.device)
+				.map_err(|failure| format!("a relay frame was not sealed: {failure:?}"))?;
 		Ok(envelope_of(&frame, to.map(|to| to.relay_device_id.as_str())))
 	}
 
 	async fn next_ctr(&mut self) -> Result<u64, String> {
-		if self.next_ctr > self.reserved {
-			let key_id = self.keys.space.key_id;
+		let sealing = &mut self.sealing;
+		if sealing.next_ctr > sealing.reserved {
+			let key_id = sealing.space.key_id;
 			let reserved = self
 				.database
 				.space_relay()
@@ -263,16 +287,16 @@ impl<'a> Wire<'a> {
 			if reserved > MAX_CTR {
 				return Err(format!("the ctr of key_id {key_id} reached its bound"));
 			}
-			self.next_ctr = self.next_ctr.max(reserved.saturating_sub(CTR_BLOCK) + 1);
-			self.reserved = reserved;
+			sealing.next_ctr = sealing.next_ctr.max(reserved.saturating_sub(CTR_BLOCK) + 1);
+			sealing.reserved = reserved;
 		}
-		let ctr = self.next_ctr;
-		self.next_ctr += 1;
+		let ctr = sealing.next_ctr;
+		sealing.next_ctr += 1;
 		Ok(ctr)
 	}
 }
 
-fn unstored(failure: DatabaseError) -> Dropped {
+pub(super) fn unstored(failure: DatabaseError) -> Dropped {
 	Dropped::Unstored(format!("{failure:?}"))
 }
 
@@ -343,12 +367,15 @@ mod tests {
 	fn host_keys() -> HostKeys {
 		HostKeys {
 			device: DeviceKeys::generate().expect("randomness"),
-			space: HeldSpaceKey::first().expect("randomness"),
+			space: tokio::sync::watch::channel(Arc::new(
+				HeldSpaceKey::first().expect("randomness"),
+			))
+			.1,
 		}
 	}
 
-	fn space_of<'a>(keys: &'a HostKeys, host: &'a VerifyingKey) -> Space<'a> {
-		Space { instance_id: INSTANCE, key: &keys.space, host }
+	fn space_of<'a>(held: &'a HeldSpaceKey, host: &'a VerifyingKey) -> Space<'a> {
+		Space { instance_id: INSTANCE, key: held, host }
 	}
 
 	async fn rostered(database: &Database, keys: &HostKeys, member: &SealingMember) -> Rostered {
@@ -367,7 +394,8 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let keys = host_keys();
 		let host = keys.device.signing_public();
-		let space = space_of(&keys, &host);
+		let held = keys.current_space_key();
+		let space = space_of(&held, &host);
 		let member = SealingMember::new("a1");
 		rostered(&database, &keys, &member).await;
 		let impostor = SealingMember {
@@ -398,13 +426,14 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let keys = host_keys();
 		let host = keys.device.signing_public();
+		let held = keys.current_space_key();
 		let member = SealingMember::new("a1");
 		let mut row = member.row(&keys.device, SPACE);
 		row.account_id = "another-account".to_owned();
 		database.space_relay().rostered(SPACE.to_owned(), row).await.expect("rostered");
 		let wire = Wire::new(&database, &keys, SPACE, INSTANCE);
 
-		let sealed = member.sealed(&space_of(&keys, &host), 1, CALL, None);
+		let sealed = member.sealed(&space_of(&held, &host), 1, CALL, None);
 
 		assert_eq!(dropped(&wire, &sealed).await, Some(Dropped::UnknownSender));
 	}
@@ -415,6 +444,7 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let keys = host_keys();
 		let host = keys.device.signing_public();
+		let held = keys.current_space_key();
 		roster::host_rostered(&database, SPACE, &keys.device, "r-host", "owner")
 			.await
 			.expect("the host row is kept");
@@ -425,7 +455,7 @@ mod tests {
 		};
 		let wire = Wire::new(&database, &keys, SPACE, INSTANCE);
 
-		let sealed = reflected.sealed(&space_of(&keys, &host), 1, CALL, None);
+		let sealed = reflected.sealed(&space_of(&held, &host), 1, CALL, None);
 
 		assert_eq!(dropped(&wire, &sealed).await, Some(Dropped::UnknownSender));
 	}
@@ -454,7 +484,8 @@ mod tests {
 		let dir = temp_dir();
 		let keys = host_keys();
 		let host = keys.device.signing_public();
-		let space = space_of(&keys, &host);
+		let held = keys.current_space_key();
+		let space = space_of(&held, &host);
 		let member = SealingMember::new("a1");
 		let fifth = member.sealed(&space, 5, CALL, None);
 		{
@@ -480,10 +511,11 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let keys = host_keys();
 		let host = keys.device.signing_public();
-		let space = space_of(&keys, &host);
+		let held = keys.current_space_key();
+		let space = space_of(&held, &host);
 		database
 			.space_relay()
-			.counter_started(SPACE.to_owned(), keys.space.key_id)
+			.counter_started(SPACE.to_owned(), held.key_id)
 			.await
 			.expect("started");
 		let device_a = SealingMember::new("a");
@@ -508,9 +540,10 @@ mod tests {
 		let database = crate::db::open(&dir);
 		let keys = host_keys();
 		let host = keys.device.signing_public();
-		let space = space_of(&keys, &host);
+		let held = keys.current_space_key();
+		let space = space_of(&held, &host);
 		let relay = database.space_relay();
-		relay.counter_started(SPACE.to_owned(), keys.space.key_id).await.expect("started");
+		relay.counter_started(SPACE.to_owned(), held.key_id).await.expect("started");
 		let ctr_of = |sealed: Result<String, String>| {
 			let envelope: Value = serde_json::from_str(&sealed.expect("sealed")).expect("json");
 			host_frame_opened(&space, &envelope, None).expect("the event opens").ctr
@@ -521,7 +554,7 @@ mod tests {
 			[ctr_of(first.sealed("{}", None).await), ctr_of(first.sealed("{}", None).await)];
 		let mut restarted = Wire::new(&database, &keys, SPACE, INSTANCE);
 		let after = ctr_of(restarted.sealed("{}", None).await);
-		let reserved = relay.reserved(SPACE.to_owned(), keys.space.key_id, 0).await.expect("read");
+		let reserved = relay.reserved(SPACE.to_owned(), held.key_id, 0).await.expect("read");
 
 		assert_eq!(before, [1, 2]);
 		assert_eq!(after, CTR_BLOCK + 1);

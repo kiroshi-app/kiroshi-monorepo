@@ -17,12 +17,13 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
+use super::admission::{HostedSpace, Join};
 use super::bridge::{self, LocalApi};
 use super::contract::HostingState;
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
-use super::wire::{self, HostKeys, Opened as OpenedFrame, Refusal, Wire};
-use super::{entered, members, Hosting};
+use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
+use super::{admission, devices, entered, handover, members, Hosting};
 use crate::account::cloud::{DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
 use crate::db::{self, Database};
@@ -385,6 +386,17 @@ async fn online<R: Runtime>(
 		Err(failure) => return Ended::Failed(format!("the database is unavailable: {failure:?}")),
 	};
 	let mut wire = Wire::new(database, serving.keys, ids.space_id, ids.instance_id);
+	let hosted = HostedSpace {
+		database,
+		keys: serving.keys,
+		space_id: ids.space_id,
+		instance_id: ids.instance_id,
+	};
+	let mut rotations = serving.keys.space.clone();
+	rotations.borrow_and_update();
+	if let Err(failure) = devices::settled_turn(app, ids.space_id).await {
+		return Ended::Dropped(format!("the pending space key rotation failed: {failure:?}"));
+	}
 	let (mut sink, mut stream) = socket.split();
 	let last_sent = &mut relaying.last_sent;
 	let mut recorded = relaying.ring.subscribe();
@@ -411,10 +423,19 @@ async fn online<R: Runtime>(
 						None => continue,
 					},
 				};
+				if let Some(join) = admission::join_of(text.as_str()) {
+					if let Err(ended) = join_answered(&mut sink, &hosted, join).await {
+						return ended;
+					}
+					continue;
+				}
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
 						eprintln!("{}", wire::dropped_line(ids.space_id, &refusal));
+						if let Err(ended) = stale_rekeyed(&mut sink, &hosted, &refusal).await {
+							return ended;
+						}
 						continue;
 					}
 				};
@@ -468,6 +489,13 @@ async fn online<R: Runtime>(
 					Err(missed) => return fell_behind(&mut sink, missed).await,
 				};
 				if let Err(ended) = all_recorded_sent(&mut sink, &mut wire, unsent, last_sent).await {
+					return ended;
+				}
+				continue;
+			}
+			Ok(()) = rotations.changed() => {
+				rotations.borrow_and_update();
+				if let Err(ended) = rekeys_sent(&mut sink, &hosted, None).await {
 					return ended;
 				}
 				continue;
@@ -573,6 +601,60 @@ async fn closed(sink: &mut Sink, ids: Ids<'_>) -> Ended {
 		),
 	}
 	Ended::Stopped
+}
+
+async fn join_answered(
+	sink: &mut Sink,
+	hosted: &HostedSpace<'_>,
+	join: Result<Join, Refusal>,
+) -> Result<(), Ended> {
+	let answered = match join {
+		Ok(join) => hosted.answered(join).await,
+		Err(refusal) => Err(refusal),
+	};
+	match answered {
+		Ok(answer) => sent(sink, Message::text(answer)).await.map_err(Ended::Dropped),
+		Err(refusal) => {
+			eprintln!("{}", wire::dropped_line(hosted.space_id, &refusal));
+			Ok(())
+		}
+	}
+}
+
+async fn stale_rekeyed(
+	sink: &mut Sink,
+	hosted: &HostedSpace<'_>,
+	refusal: &Refusal,
+) -> Result<(), Ended> {
+	match (&refusal.cause, refusal.from.as_deref()) {
+		(Dropped::StaleKey(_), Some(from)) => rekeys_sent(sink, hosted, Some(from)).await,
+		_ => Ok(()),
+	}
+}
+
+async fn rekeys_sent(
+	sink: &mut Sink,
+	hosted: &HostedSpace<'_>,
+	only: Option<&str>,
+) -> Result<(), Ended> {
+	let space_id = hosted.space_id;
+	let handover = match handover::current(hosted.database, hosted.keys, space_id).await {
+		Ok(handover) => handover,
+		Err(reason) => {
+			eprintln!("hosted space {space_id} sent no rekey: {reason}");
+			return Ok(());
+		}
+	};
+	let recipients = handover.members(hosted.keys).filter(|member| {
+		only.is_none_or(|relay_device_id| member.relay_device_id == relay_device_id)
+	});
+	for member in recipients {
+		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
+			Ok(frame) => sent(sink, Message::text(frame)).await.map_err(Ended::Dropped)?,
+			Err(reason) => eprintln!("hosted space {space_id} sent no rekey: {reason}"),
+		}
+	}
+	Ok(())
 }
 
 async fn fell_behind(sink: &mut Sink, missed: u64) -> Ended {

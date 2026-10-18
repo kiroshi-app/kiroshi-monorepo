@@ -1,5 +1,23 @@
 {
   "$defs": {
+    "AccountDevices": {
+      "properties": {
+        "accountId": {
+          "type": "string"
+        },
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/RosterDevice"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "accountId",
+        "devices"
+      ],
+      "type": "object"
+    },
     "ActiveTurn": {
       "properties": {
         "botIds": {
@@ -2332,6 +2350,73 @@
         "user"
       ]
     },
+    "DeviceKeysError": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "noProfileDirectory"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unreadable"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unwritable"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "malformed"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "noRandomness"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Disconnected_Serialize": {
       "properties": {
         "detail": {
@@ -3404,6 +3489,69 @@
           },
           "required": [
             "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unknownDevice"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "hostDeviceNotRemovable"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "noRandomness"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "keyNotRotated"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/DeviceKeysError"
+            },
+            "kind": {
+              "const": "deviceKeys"
+            }
+          },
+          "required": [
+            "kind",
+            "error"
           ],
           "type": "object"
         },
@@ -5041,6 +5189,32 @@
         "id",
         "command",
         "args"
+      ],
+      "type": "object"
+    },
+    "RosterDevice": {
+      "properties": {
+        "addedAt": {
+          "type": "integer"
+        },
+        "deviceId": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "isHost": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deviceId",
+        "fingerprint",
+        "addedAt",
+        "isHost"
       ],
       "type": "object"
     },
@@ -9496,6 +9670,47 @@
         "type": "null"
       }
     },
+    "hosting_device_link": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "type": "string"
+      }
+    },
+    "hosting_devices": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/AccountDevices"
+        },
+        "type": "array"
+      }
+    },
     "hosting_invite_member": {
       "args": {
         "properties": {
@@ -9519,6 +9734,29 @@
         "$ref": "#/$defs/Member"
       }
     },
+    "hosting_join_link": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "type": "string"
+      }
+    },
     "hosting_members": {
       "args": {
         "properties": {
@@ -9537,6 +9775,32 @@
       "ok": {
         "items": {
           "$ref": "#/$defs/Member"
+        },
+        "type": "array"
+      }
+    },
+    "hosting_remove_device": {
+      "args": {
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "deviceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/AccountDevices"
         },
         "type": "array"
       }

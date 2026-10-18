@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::account::cloud::{CloudMember, MemberCallError, MemberRole, MembershipState};
+use crate::crypto::contract::DeviceKeysError;
 use crate::spaces::contract::SpaceError;
 
 pub const CHANGED_EVENT: &str = "hosting://changed";
@@ -70,6 +71,22 @@ pub struct MembersChanged {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RosterDevice {
+	pub device_id: String,
+	pub fingerprint: Vec<String>,
+	pub added_at: i64,
+	pub is_host: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountDevices {
+	pub account_id: String,
+	pub devices: Vec<RosterDevice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum MembersError {
 	NotHosting,
@@ -83,6 +100,17 @@ pub enum MembersError {
 	HostNotRemovable,
 	NotOwner,
 	NeedsSignIn,
+	UnknownDevice,
+	HostDeviceNotRemovable,
+	NoRandomness,
+	#[serde(rename_all = "camelCase")]
+	KeyNotRotated {
+		reason: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	DeviceKeys {
+		error: DeviceKeysError,
+	},
 	#[serde(rename_all = "camelCase")]
 	Unreachable {
 		reason: String,
