@@ -90,7 +90,11 @@ describe("the shared state of own spaces", () => {
 			work: async () => ok([HOST]),
 		})
 
-		events.announce({ spaceId: "work", members: [HOST, PENDING] })
+		events.announce({
+			spaceId: "work",
+			members: [HOST, PENDING],
+			invitations: [],
+		})
 
 		expect(controller.getState().sharedBySpaceId).toEqual({
 			home: false,
@@ -122,7 +126,11 @@ describe("the shared state of own spaces", () => {
 			home: async () => ok([HOST]),
 		})
 
-		events.announce({ spaceId: "elsewhere", members: [HOST, PENDING] })
+		events.announce({
+			spaceId: "elsewhere",
+			members: [HOST, PENDING],
+			invitations: [],
+		})
 
 		expect(controller.getState().sharedBySpaceId).toEqual({ home: false })
 	})
