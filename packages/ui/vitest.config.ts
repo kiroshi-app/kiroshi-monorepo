@@ -11,7 +11,16 @@ const NO_PAGE_OR_POINTER_SHARED_BETWEEN_STORY_FILES = {
 	fileParallelism: false,
 }
 
-const LOCAL_MAX_WORKERS = process.env.CI ? undefined : 4
+const DEFAULT_LOCAL_WORKERS = 2
+
+const workerBudget = (requested: string | undefined) =>
+	requested && /^[1-9]\d*$/.test(requested)
+		? Number(requested)
+		: DEFAULT_LOCAL_WORKERS
+
+const LOCAL_MAX_WORKERS = process.env.CI
+	? undefined
+	: workerBudget(process.env.KIROSHI_TEST_WORKERS)
 
 export default defineConfig({
 	test: {
