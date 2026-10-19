@@ -7,7 +7,9 @@ use super::commands::{
 	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch,
 };
 use super::contract::{
-	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError, MissionEvent, MissionEventKind, MissionFilter, MissionNote, MissionOutcome, MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
+	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError,
+	MissionEvent, MissionEventKind, MissionFilter, MissionNote, MissionOutcome, MissionRecord,
+	MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::{ready, space_of_the_conversation};
@@ -1122,7 +1124,7 @@ mod tests {
 		received
 	}
 
-	async fn closed_by_its_bot(host: &MissionHost<MockRuntime>, id: &str) {
+	async fn closed_through(host: &MissionHost<MockRuntime>, id: &str) {
 		host.answer(asking("close", json!({ "id": id, "outcome": "done", "summary": "Shipped" })))
 			.await
 			.expect("the mission is closed");
@@ -1136,7 +1138,7 @@ mod tests {
 		let failed = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
 		host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
-		closed_by_its_bot(&host, &opened.id).await;
+		closed_through(&host, &opened.id).await;
 		serving(&app, "c1")
 			.answer(asking(
 				"close",
@@ -1178,7 +1180,7 @@ mod tests {
 		let merged = a_mission_of(&app, "c1", "b1").await;
 		let open = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, "c1");
-		closed_by_its_bot(&host, &merged.id).await;
+		closed_through(&host, &merged.id).await;
 		let id = merged.id.clone();
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -1276,30 +1278,30 @@ mod tests {
 		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
 	}
 
-	const A_THIRD_COMPANION: &str = "
-		INSERT INTO bots (id, name, model, created_at) VALUES ('b3', 'Third', 'sonnet', 1);
-		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b3', 'personal', 1);
+	const A_FOURTH_COMPANION: &str = "
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b4', 'Fourth', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b4', 'personal', 1);
 	";
 
 	#[tokio::test]
 	async fn a_handoff_seats_the_new_owner_records_both_owners_and_summons_it_in_the_thread() {
 		let app = a_host("handoff").await;
-		planted(&app, A_THIRD_COMPANION).await;
+		planted(&app, A_FOURTH_COMPANION).await;
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, &opened.thread_conversation_id);
 		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
 
 		let handed = host
-			.answer(asking("handoff", json!({ "id": opened.id, "companion": "third" })))
+			.answer(asking("handoff", json!({ "id": opened.id, "companion": "fourth" })))
 			.await
 			.expect("the mission is handed off");
 
-		assert_eq!(handed["botId"], json!("b3"));
+		assert_eq!(handed["botId"], json!("b4"));
 		assert_eq!(handed["stateSeq"], json!(opened.state_seq));
 		let thread = seated_in(&app, &opened.thread_conversation_id).await;
 		let origin = seated_in(&app, "c1").await;
-		assert!(thread.contains(&"b1".to_owned()) && thread.contains(&"b3".to_owned()));
-		assert!(origin.contains(&"b1".to_owned()) && origin.contains(&"b3".to_owned()));
+		assert!(thread.contains(&"b1".to_owned()) && thread.contains(&"b4".to_owned()));
+		assert!(origin.contains(&"b1".to_owned()) && origin.contains(&"b4".to_owned()));
 		assert_eq!(
 			events(&app, &opened.id)
 				.await
@@ -1308,7 +1310,7 @@ mod tests {
 				.collect::<Vec<_>>(),
 			vec![
 				(MissionEventKind::Opened, "human".to_owned(), json!({})),
-				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b3" })),
+				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b4" })),
 			]
 		);
 		let read = crate::conversations::commands::conversation_mission_thread(
@@ -1327,7 +1329,7 @@ mod tests {
 		.expect_err("a topic is no mission thread");
 		assert_eq!(
 			read.participants.iter().map(|seat| seat.bot_id.as_str()).collect::<Vec<_>>(),
-			vec!["b1", "b3"]
+			vec!["b1", "b4"]
 		);
 		assert!(
 			matches!(
@@ -1340,7 +1342,7 @@ mod tests {
 		assert_eq!(summons["conversationId"], json!(opened.thread_conversation_id));
 		assert_eq!(summons["authorBotId"], json!("b1"));
 		let text = summons["text"].as_str().expect("the summons carries a text");
-		assert!(text.starts_with("@Third "), "got {text}");
+		assert!(text.starts_with("@Fourth "), "got {text}");
 		assert!(text.ends_with("Held"), "got {text}");
 	}
 
@@ -1349,7 +1351,7 @@ mod tests {
 		let app = a_host("handoff-closed").await;
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let host = serving(&app, "c1");
-		closed_by_its_bot(&host, &opened.id).await;
+		closed_through(&host, &opened.id).await;
 		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
 
 		let handed = host
@@ -1407,11 +1409,11 @@ mod tests {
 	#[tokio::test]
 	async fn the_previous_owner_of_a_handed_off_mission_is_refused_every_write() {
 		let app = a_host("handoff-guard").await;
-		planted(&app, A_THIRD_COMPANION).await;
+		planted(&app, A_FOURTH_COMPANION).await;
 		let opened = a_mission_of(&app, "c1", "b1").await;
 		let previous = serving(&app, &opened.thread_conversation_id);
 		previous
-			.answer(asking("handoff", json!({ "id": opened.id, "companion": "Third" })))
+			.answer(asking("handoff", json!({ "id": opened.id, "companion": "Fourth" })))
 			.await
 			.expect("the mission is handed off");
 
@@ -1433,7 +1435,7 @@ mod tests {
 		let successor = MissionHost::new(
 			app.handle().clone(),
 			opened.thread_conversation_id.clone(),
-			"b3".to_owned(),
+			"b4".to_owned(),
 		);
 		successor
 			.answer(asking("note", json!({ "id": opened.id, "line": "Taken over" })))
