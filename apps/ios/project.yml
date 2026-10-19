@@ -78,6 +78,7 @@ targets:
         - path: Kiroshi.xctestplan
           defaultPlan: true
         - path: KiroshiUnit.xctestplan
+        - path: StoreScreenshots.xctestplan
   KiroshiTests:
     type: bundle.unit-test
     platform: iOS
