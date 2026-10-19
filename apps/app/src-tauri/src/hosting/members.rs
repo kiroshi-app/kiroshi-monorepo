@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::time::Duration;
 
@@ -22,7 +23,7 @@ pub async fn list<R: Runtime>(
 ) -> Result<SpaceMembers, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
 	let _turn = devices::settled_turn(app, &space_id).await?;
-	let listed = listed(app, &instance_id).await?;
+	let listed = listed(app, &space_id, &instance_id).await?;
 	announced_if_changed(app, &space_id, listed.clone());
 	Ok(listed)
 }
@@ -96,7 +97,7 @@ pub async fn remove<R: Runtime>(
 	match status {
 		MemberStatus::Host => return Err(MembersError::HostNotRemovable),
 		MemberStatus::Pending => return Err(MembersError::NotJoined),
-		MemberStatus::Joined => {}
+		MemberStatus::Joined | MemberStatus::NeedsInvitation => {}
 	}
 	app.state::<Hosting>()
 		.cloud
@@ -104,6 +105,37 @@ pub async fn remove<R: Runtime>(
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	devices::member_removed(app, &space_id, &user_id).await?;
+	read_back(app, &space_id, &instance_id).await
+}
+
+pub async fn invite_again<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: String,
+	user_id: String,
+) -> Result<SpaceMembers, MembersError> {
+	let instance_id = instance_of(app, &space_id).await?;
+	let bearer = bearer_of(app)?;
+	let _turn = devices::settled_turn(app, &space_id).await?;
+	let members = rostered_members(app, &bearer, &space_id, &instance_id).await?;
+	let member = members
+		.into_iter()
+		.find(|member| member.user_id == user_id)
+		.ok_or(MembersError::UnknownMember)?;
+	if member.status != MemberStatus::NeedsInvitation {
+		return Err(MembersError::NotNeedingInvitation);
+	}
+	let cloud = &app.state::<Hosting>().cloud;
+	cloud
+		.remove_member(&bearer, &instance_id, &user_id)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
+	cloud
+		.invite_member(&bearer, &instance_id, &member.email)
+		.await
+		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))
+		.map_err(|failure| MembersError::RemovedButNotInvited {
+			cause: Box::new(failure.into()),
+		})?;
 	read_back(app, &space_id, &instance_id).await
 }
 
@@ -118,7 +150,7 @@ pub(super) async fn polled<R: Runtime>(
 	loop {
 		polls.tick().await;
 		let _turn = hosting.members_turn.lock().await;
-		match listed(app, instance_id).await {
+		match listed(app, space_id, instance_id).await {
 			Ok(listed) => announced_if_changed(app, space_id, listed),
 			Err(failure) => {
 				eprintln!("the members of hosted space {space_id} were not polled: {failure:?}");
@@ -178,10 +210,11 @@ fn normalized_email(raw: &str) -> Option<String> {
 
 pub(super) async fn listed<R: Runtime>(
 	app: &AppHandle<R>,
+	space_id: &str,
 	instance_id: &str,
 ) -> Result<SpaceMembers, MembersError> {
 	let bearer = bearer_of(app)?;
-	let members = cloud_members(app, &bearer, instance_id).await?;
+	let members = rostered_members(app, &bearer, space_id, instance_id).await?;
 	let invitations = app
 		.state::<Hosting>()
 		.cloud
@@ -190,6 +223,24 @@ pub(super) async fn listed<R: Runtime>(
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	let members = members.into_iter().filter(|member| member.status != MemberStatus::Pending);
 	Ok(SpaceMembers { members: members.collect(), invitations })
+}
+
+async fn rostered_members<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	space_id: &str,
+	instance_id: &str,
+) -> Result<Vec<Member>, MembersError> {
+	let members = cloud_members(app, bearer, instance_id).await?;
+	let rostered = devices::rostered_accounts(app, space_id).await?;
+	Ok(members.into_iter().map(|member| needing_invitation(member, &rostered)).collect())
+}
+
+fn needing_invitation(member: Member, rostered: &HashSet<String>) -> Member {
+	if member.status != MemberStatus::Joined || rostered.contains(&member.user_id) {
+		return member;
+	}
+	Member { status: MemberStatus::NeedsInvitation, ..member }
 }
 
 async fn cloud_members<R: Runtime>(
@@ -211,7 +262,7 @@ pub(super) async fn read_back<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<SpaceMembers, MembersError> {
-	let listed = listed(app, instance_id).await.map_err(|failure| match failure {
+	let listed = listed(app, space_id, instance_id).await.map_err(|failure| match failure {
 		MembersError::Unreachable { reason } => MembersError::Unreachable {
 			reason: format!("the change landed but the member list did not read back: {reason}"),
 		},

@@ -79,6 +79,16 @@ pub async fn hosting_remove_member<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn hosting_invite_member_again<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	user_id: String,
+) -> Result<SpaceMembers, MembersError> {
+	members::invite_again(&app, space_id, user_id).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn hosting_devices<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,

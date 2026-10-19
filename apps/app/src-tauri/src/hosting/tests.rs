@@ -27,7 +27,7 @@ use super::contract::{
 	SpaceMembers, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
 };
 use super::devices::{devices, remove_device};
-use super::members::{invite, list, remove, resend, withdraw};
+use super::members::{invite, invite_again, list, remove, resend, withdraw};
 use super::reach;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
@@ -176,6 +176,7 @@ struct Relay {
 	invitations: Arc<Mutex<Vec<Value>>>,
 	member_calls: Arc<Mutex<Vec<String>>>,
 	member_answer: Arc<Mutex<Option<(StatusCode, Value)>>>,
+	refused_call: Arc<Mutex<Option<(String, StatusCode, Value)>>>,
 	listed_devices: Arc<Mutex<Option<Vec<Value>>>>,
 	device_lists: Arc<AtomicUsize>,
 	noticed: Arc<watch::Sender<()>>,
@@ -186,9 +187,12 @@ fn cloud_member(user_id: &str, email: &str, role: &str, state: &str) -> Value {
 }
 
 fn member_call(relay: &Relay, call: String) -> Option<Response> {
+	let refused = relay.refused_call.lock().expect("the relay").clone();
+	let refused = refused.filter(|(refused, _, _)| *refused == call);
 	relay.member_calls.lock().expect("the relay").push(call);
 	relay.noticed.send_replace(());
 	let forced = relay.member_answer.lock().expect("the relay").clone();
+	let forced = forced.or(refused.map(|(_, status, body)| (status, body)));
 	forced.map(|(status, body)| answered_json(status, body))
 }
 
@@ -721,6 +725,7 @@ impl Harness {
 			invitations: Arc::default(),
 			member_calls: Arc::default(),
 			member_answer: Arc::default(),
+			refused_call: Arc::default(),
 			listed_devices: Arc::default(),
 			device_lists: Arc::default(),
 			noticed: Arc::new(watch::channel(()).0),
@@ -1998,6 +2003,18 @@ impl Harness {
 		remove(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
+	async fn invited_again(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
+		invite_again(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await
+	}
+
+	async fn rostered_account(&self, account_id: &str) {
+		self.rostered(PERSONAL, &SealingMember::new(account_id)).await;
+	}
+
+	fn cloud_refuses(&self, call: &str, status: StatusCode, body: Value) {
+		*self.relay.refused_call.lock().expect("the relay") = Some((call.to_owned(), status, body));
+	}
+
 	async fn listed_with_a_guest_and_a_joiner(&self) {
 		self.seed(&[
 			cloud_member("guest", "guest@example.com", "member", "pending"),
@@ -2035,6 +2052,7 @@ fn calls_then_read_back(calls: &[&str]) -> Vec<String> {
 fn the_host_the_joined_members_and_every_unused_invitation_are_listed_in_the_cloud_order() {
 	run(async {
 		let harness = Harness::hosted("members-list").await;
+		harness.rostered_account("joiner").await;
 		harness.seed(&[
 			json!({ "userId": "joiner", "email": "joiner@example.com", "name": "Joiner", "role": "member", "state": "joined" }),
 			cloud_member("guest", "guest@example.com", "member", "pending"),
@@ -2077,6 +2095,98 @@ fn the_host_the_joined_members_and_every_unused_invitation_are_listed_in_the_clo
 			]
 		);
 		assert_eq!(harness.member_calls(), LIST_READ);
+	});
+}
+
+#[test]
+fn a_joined_member_without_a_signed_roster_row_is_listed_as_needing_a_new_invitation() {
+	run(async {
+		let harness = Harness::hosted("members-pre-v2").await;
+		harness.rostered_account("joiner").await;
+		harness.seed(&[
+			cloud_member("joiner", "joiner@example.com", "member", "joined"),
+			cloud_member("early", "early@example.com", "member", "joined"),
+			cloud_member("guest", "guest@example.com", "member", "pending"),
+		]);
+
+		let listed = harness.listed().await.expect("the members list");
+
+		assert_eq!(
+			listed.members,
+			vec![
+				member("owner", OWNER_EMAIL, MemberStatus::Host),
+				member("joiner", "joiner@example.com", MemberStatus::Joined),
+				member("early", "early@example.com", MemberStatus::NeedsInvitation),
+			]
+		);
+		let heard = harness.heard_member_lists();
+		assert_eq!(heard[0][2]["status"], "needsInvitation");
+	});
+}
+
+#[test]
+fn inviting_a_pre_v2_member_again_removes_the_membership_and_reads_its_address_back_invited() {
+	run(async {
+		let harness = Harness::hosted("members-invite-again").await;
+		harness.seed(&[cloud_member("early", "early@example.com", "member", "joined")]);
+
+		let listed = harness.invited_again("early").await.expect("the member is invited again");
+
+		assert_eq!(user_ids(&listed), vec!["owner"]);
+		assert_eq!(
+			invitation_states(&listed),
+			vec![("early@example.com", InvitationState::Invited)]
+		);
+		assert_eq!(
+			harness.member_calls(),
+			calls_then_read_back(&["GET", "DELETE early", "POST invitations early@example.com"])
+		);
+		assert_eq!(harness.heard_invitation_lists().len(), 1);
+	});
+}
+
+#[test]
+fn an_invitation_refused_after_the_removal_landed_is_named_as_both() {
+	run(async {
+		let harness = Harness::hosted("members-invite-again-refused").await;
+		harness.seed(&[cloud_member("early", "early@example.com", "member", "joined")]);
+		harness.cloud_refuses(
+			"POST invitations early@example.com",
+			StatusCode::CONFLICT,
+			json!({ "error": { "code": "MEMBER_LIMIT_REACHED" } }),
+		);
+
+		let refused = harness.invited_again("early").await;
+
+		assert_eq!(
+			refused,
+			Err(MembersError::RemovedButNotInvited { cause: Box::new(MembersError::LimitReached) })
+		);
+		assert_eq!(
+			harness.member_calls(),
+			vec!["GET", "DELETE early", "POST invitations early@example.com"]
+		);
+		assert_eq!(user_ids(&harness.listed().await.expect("the members list")), vec!["owner"]);
+	});
+}
+
+#[test]
+fn a_member_not_needing_a_new_invitation_is_refused_invite_again_before_any_change() {
+	run(async {
+		let harness = Harness::hosted("members-invite-again-mismatch").await;
+		harness.listed_with_a_guest_and_a_joiner().await;
+		harness.rostered_account("joiner").await;
+
+		for user_id in ["joiner", "guest", "owner"] {
+			assert_eq!(
+				harness.invited_again(user_id).await,
+				Err(MembersError::NotNeedingInvitation),
+				"{user_id}"
+			);
+		}
+		assert_eq!(harness.invited_again("stranger").await, Err(MembersError::UnknownMember));
+		assert_eq!(harness.member_calls(), vec!["GET"; 4]);
+		assert_eq!(harness.heard_member_lists().len(), 1);
 	});
 }
 
@@ -2578,6 +2688,14 @@ fn a_member_invites_again_into_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"hosting_resend_invitation",
 		|space_id| json!({ "spaceId": space_id, "invitationId": "i1" }),
+	));
+}
+
+#[test]
+fn a_member_invites_a_member_again_into_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_invite_member_again",
+		|space_id| json!({ "spaceId": space_id, "userId": "joined" }),
 	));
 }
 

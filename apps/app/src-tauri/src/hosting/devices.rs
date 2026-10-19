@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::MutexGuard;
@@ -133,6 +133,15 @@ async fn listed_devices<R: Runtime>(
 	let host = host_device(app)?;
 	let roster = roster_of(app, space_id, &host).await?;
 	Ok(grouped(&roster, &host))
+}
+
+pub(super) async fn rostered_accounts<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+) -> Result<HashSet<String>, MembersError> {
+	let host = host_device(app)?;
+	let roster = roster_of(app, space_id, &host).await?;
+	Ok(roster.rows.into_iter().map(|row| row.rostered.account_id).collect())
 }
 
 pub(super) fn host_device<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, MembersError> {
