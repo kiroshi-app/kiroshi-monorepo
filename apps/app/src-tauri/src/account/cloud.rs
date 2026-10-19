@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::devices::contract::{DeviceKind, DeviceStatus};
-use crate::hosting::contract::SpaceInvitation;
+use crate::hosting::contract::{InvitationState, SpaceInvitation};
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
@@ -282,6 +282,43 @@ pub enum MemberRole {
 pub enum MembershipState {
 	Joined,
 	Pending,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SentInvitation {
+	id: String,
+	email: String,
+	sent_at: String,
+	expires_at: String,
+	state: SentInvitationState,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum SentInvitationState {
+	Valid,
+	Used,
+	Expired,
+	Withdrawn,
+}
+
+impl SentInvitation {
+	fn into_shown(self) -> Option<SpaceInvitation> {
+		let state = match self.state {
+			SentInvitationState::Valid => InvitationState::Invited,
+			SentInvitationState::Expired => InvitationState::Expired,
+			SentInvitationState::Withdrawn => InvitationState::Withdrawn,
+			SentInvitationState::Used => return None,
+		};
+		Some(SpaceInvitation {
+			id: self.id,
+			email: self.email,
+			sent_at: self.sent_at,
+			expires_at: self.expires_at,
+			state,
+		})
+	}
 }
 
 #[derive(Deserialize)]
@@ -739,11 +776,12 @@ impl Cloud {
 			.await
 			.map_err(MemberCallError::Unreachable)?;
 		let answered = member_call_answered(answered).await?;
-		answered.json::<Vec<SpaceInvitation>>().await.map_err(|error| {
+		let sent = answered.json::<Vec<SentInvitation>>().await.map_err(|error| {
 			MemberCallError::Unreachable(format!(
 				"the invitation list answered by the cloud did not parse: {error}"
 			))
-		})
+		})?;
+		Ok(sent.into_iter().filter_map(SentInvitation::into_shown).collect())
 	}
 
 	pub async fn withdraw_invitation(
