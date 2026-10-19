@@ -1474,7 +1474,7 @@ export const RemovedWithSpaceMark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.8, dark only. A host removed the reader from a joined space, so the notice carries that space's colour as a 10px square outline, 1.5px on a 3px radius, in place of the info glyph, over who removed them and where the conversations stay. Check the mark is decorative and drawn in the space's tint, and that the body sits in the muted foreground. Pick `M8RemovedFromSpace` for the title-only notice with the info glyph.",
+					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.8, dark only. A host removed the reader from a joined space, so the notice carries that space's colour as a 10px square outline, 1.5px on a 3px radius, in place of the info glyph, over who removed them and where the conversations stay. Check the mark is decorative and drawn in the space's tint, and that the body sits in the muted foreground. Pick `M8RemovedFromSpace` for the notice that keeps the info glyph beside its title and body.",
 			},
 		},
 	},
