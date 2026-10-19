@@ -74,6 +74,7 @@ struct Room {
 	connections: usize,
 	other_memberships: Vec<Value>,
 	roster_reads: usize,
+	member_refusal: Option<(StatusCode, Value)>,
 }
 
 #[derive(Clone)]
@@ -89,6 +90,7 @@ impl Relay {
 			connections: 0,
 			other_memberships: Vec::new(),
 			roster_reads: 0,
+			member_refusal: None,
 		})))
 	}
 
@@ -258,6 +260,10 @@ async fn member_socket(
 ) -> Response {
 	if !is_member(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
+	}
+	let refusal = relay.room().member_refusal.clone();
+	if let Some((status, body)) = refusal {
+		return answered_json(status, body);
 	}
 	relay.room().connections += 1;
 	upgrade.on_upgrade(move |socket| membered(relay, socket))
@@ -721,6 +727,27 @@ fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_
 
 		assert_eq!(is_waiting, [true, true]);
 		assert_eq!(member.held_key_id(), Some(1));
+	});
+}
+
+#[test]
+fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
+	run(async {
+		let member = Member::new("join-gone").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		let gone =
+			json!({ "error": { "code": "MEMBER_REMOVED", "message": "gone", "status": 410 } });
+		member.relay.room().member_refusal = Some((StatusCode::GONE, gone));
+
+		relay::reconciled(member.app.handle()).await;
+		let was_waiting = member.is_waiting(&joined.id);
+		until("the waiting join to end", || async {
+			(!member.is_waiting(&joined.id)).then_some(())
+		})
+		.await;
+
+		assert!(was_waiting);
 	});
 }
 

@@ -25,6 +25,16 @@ pub struct JoinedSpaceChanged {
 pub struct JoinedSpaceRemoved {
 	pub id: String,
 	pub name: String,
+	pub reason: JoinedSpaceRemovalReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum JoinedSpaceRemovalReason {
+	Deleted,
+	Removed,
+	Left,
+	Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -47,10 +57,9 @@ pub(super) fn announce_change<R: Runtime>(
 
 pub(super) fn announce_removal<R: Runtime>(
 	app: &AppHandle<R>,
-	id: String,
-	name: String,
+	removed: JoinedSpaceRemoved,
 ) -> Result<(), JoinedSpaceError> {
-	events::emit(app, JOINED_SPACE_REMOVED, JoinedSpaceRemoved { id, name })
+	events::emit(app, JOINED_SPACE_REMOVED, removed)
 		.map_err(|error| JoinedSpaceError::Undeliverable { detail: error.to_string() })
 }
 

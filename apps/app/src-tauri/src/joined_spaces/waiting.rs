@@ -137,7 +137,10 @@ async fn attempted<R: Runtime>(
 			revoked(app, &bearer);
 			Attempt::Ended("the relay refused the account (401)".to_owned())
 		}
-		Opened::Forbidden => {
+		Opened::Gone(Some(departure)) => {
+			Attempt::Ended(format!("the relay answered 410 {departure:?}"))
+		}
+		Opened::Forbidden | Opened::Gone(None) => {
 			Attempt::Dropped("the account is not a member of this instance (403)".to_owned())
 		}
 		Opened::Unknown => Attempt::Dropped("the relay knows no such instance (404)".to_owned()),
