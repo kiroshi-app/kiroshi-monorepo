@@ -23,11 +23,18 @@
             201,
             #"{"nonce":"\#(nonce.unpaddedBase64URL)","expiresAt":"2026-10-17T09:01:00.000Z"}"#)
         static let registered = registered(201, transferred: false)
+        static let registeredPending = registered(201, transferred: false, status: "pending")
+        static let approvalCodePath = "/devices/approval-code"
+        static let approvalCodeVerifyPath = "/devices/approval-code/verify"
 
-        static func registered(_ status: Int, transferred: Bool) -> ScriptedTransport.Answer {
+        static func registered(
+            _ status: Int, transferred: Bool, status deviceStatus: String = "approved"
+        )
+            -> ScriptedTransport.Answer
+        {
             .status(
                 status,
-                #"{"id":"\#(memberRelayId)","createdAt":"2026-10-17T09:00:00.000Z","transferred":\#(transferred)}"#
+                #"{"id":"\#(memberRelayId)","createdAt":"2026-10-17T09:00:00.000Z","transferred":\#(transferred),"status":"\#(deviceStatus)"}"#
             )
         }
     }

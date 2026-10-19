@@ -34,6 +34,25 @@ struct ShellView: View {
             guard isInForeground else { return }
             await store.refreshSpaces()
         }
+        .task(id: isInForeground) {
+            guard isInForeground, let requests = account.requests else { return }
+            await requests.watch()
+        }
+        .sheet(item: askingDevice) { request in
+            if let requests = account.requests {
+                DeviceRequestSheet(requests: requests, request: request)
+            }
+        }
+    }
+
+    private var askingDevice: Binding<DeviceRequest?> {
+        Binding {
+            account.requests?.asking
+        } set: { request in
+            if request == nil {
+                account.requests?.dismiss()
+            }
+        }
     }
 
     private var isInForeground: Bool {

@@ -26,6 +26,10 @@ struct SignInRootView: View {
             SpacesUnreachableView(model: model)
         case .deviceRefused(let problem):
             DeviceRefusedView(model: model, problem: problem)
+        case .awaitingApproval:
+            if let approval = model.approval {
+                DeviceApprovalView(approval: approval, loadSpaces: model.loadSpaces)
+            }
         }
     }
 }
