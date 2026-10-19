@@ -424,11 +424,54 @@
 	},
 	{
 		"name": "mission_list",
-		"description": "Read the missions of yours this conversation still carries, each with its id, its ticket and where it stands. Read this when you no longer hold the id of a mission.",
+		"description": "Read the missions of this conversation, of every companion, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
-			"properties": {},
+			"properties": {
+				"conversation": {
+					"type": "string",
+					"description": "The id of a conversation of this space to read the missions of. Left out, this conversation."
+				},
+				"space": {
+					"type": "boolean",
+					"description": "true to read every mission of the space, whatever the conversation."
+				},
+				"state": {
+					"type": "string",
+					"enum": [
+						"working",
+						"waiting_bot",
+						"waiting_human",
+						"ready_to_merge",
+						"failed",
+						"done"
+					],
+					"description": "Keep only the missions standing there."
+				},
+				"bot": {
+					"type": "string",
+					"description": "The id of a companion, to keep only the missions it carries."
+				}
+			},
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "mission_read",
+		"description": "Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "The id of the mission to read."
+				}
+			},
+			"required": [
+				"id"
+			],
 			"additionalProperties": false
 		}
 	},

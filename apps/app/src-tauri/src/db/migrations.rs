@@ -65,6 +65,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
 	Migration { version: 57, statements: JOINED_SPACE_RELAY_V2 },
 	Migration { version: 58, statements: SPACE_REMOVED_DEVICES },
+	Migration { version: 59, statements: MISSION_THREADS_OF_SPACE },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1229,6 +1230,10 @@ CREATE TABLE space_removed_devices (
 	removed_at INTEGER NOT NULL,
 	PRIMARY KEY (space_id, device_id)
 );
+";
+
+const MISSION_THREADS_OF_SPACE: &str = "
+CREATE INDEX mission_threads_of_space ON conversations (space_id) WHERE kind = 'mission';
 ";
 
 pub fn latest_version() -> u32 {

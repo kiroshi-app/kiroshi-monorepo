@@ -265,6 +265,32 @@ pub struct MissionDetail {
 	pub events: Vec<MissionEvent>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MissionScope {
+	Conversation(String),
+	Space(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissionFilter {
+	pub scope: MissionScope,
+	pub state: Option<MissionState>,
+	pub bot_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MissionRecord {
+	pub mission: Mission,
+	pub bot_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MissionDossier {
+	pub record: MissionRecord,
+	pub repository: Option<String>,
+	pub events: Vec<MissionEvent>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionInThread {
@@ -334,6 +360,10 @@ pub enum MissionError {
 	MissionOfAnotherConversation { id: String, conversation_id: String },
 	#[serde(rename_all = "camelCase")]
 	MissionOfAnotherBot { id: String, bot_id: String },
+	#[serde(rename_all = "camelCase")]
+	ConversationOfAnotherSpace { id: String, space_id: String },
+	#[serde(rename_all = "camelCase")]
+	MissionOfAnotherSpace { id: String, space_id: String },
 	#[serde(rename_all = "camelCase")]
 	UnreadableRequest { detail: String },
 	#[serde(rename_all = "camelCase")]
