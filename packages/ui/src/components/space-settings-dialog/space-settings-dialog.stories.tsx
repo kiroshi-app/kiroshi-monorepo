@@ -1106,6 +1106,31 @@ export const MembersNeedsInvitation = meta.story({
 	},
 })
 
+export const MembersInvitingAgain = meta.story({
+	args: membersArgs({
+		members: [STEVE, ADA_NEEDS_INVITATION],
+		invitingAgainId: ADA_NEEDS_INVITATION.id,
+	}),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Ada's Invite again is on its way to Kiroshi: her Invite again button is disabled until the host answers, so a second click sends nothing twice. Remove stays available.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		const ada = rowOf(panel, "Ada Lovelace")
+		await expect(
+			within(ada).getByRole("button", { name: "Invite ada@example.com again" }),
+		).toBeDisabled()
+		await expect(
+			within(ada).getByRole("button", { name: "Remove Ada Lovelace" }),
+		).toBeEnabled()
+	},
+})
+
 export const MembersWithdrawPending = meta.story({
 	tags: ["test-only"],
 	args: membersArgs({ members: [STEVE, SAM_PENDING] }),

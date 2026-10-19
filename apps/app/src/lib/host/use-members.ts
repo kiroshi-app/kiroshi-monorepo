@@ -66,6 +66,7 @@ export type MembersProps = Pick<
 	| "onRemove"
 	| "onWithdraw"
 	| "onInviteAgain"
+	| "invitingAgainId"
 	| "onRemoveConfirm"
 	| "onRemoveCancel"
 >
@@ -259,6 +260,9 @@ export const useMembers = (
 				inviteAgain.mutate({ spaceId: watchedId, member: invited })
 			}
 		},
+		invitingAgainId: inviteAgain.isPending
+			? inviteAgain.variables?.member.userId
+			: undefined,
 		onRemoveCancel: () => setRemoving(null),
 	}
 }

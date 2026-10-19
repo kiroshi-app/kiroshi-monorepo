@@ -1062,6 +1062,29 @@ describe("useMembers on the invitations of a hosted space", () => {
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
+	it("names the member being invited again until the host answers", async () => {
+		let answer: (answered: ReturnType<typeof ok<HostedMember[]>>) => void =
+			() => undefined
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(
+				() =>
+					new Promise<ReturnType<typeof ok<HostedMember[]>>>((resolve) => {
+						answer = resolve
+					}),
+			),
+		})
+
+		expect(panel().invitingAgainId).toBeUndefined()
+		act(() => panel().onInviteAgain(toSpaceMember(ADA_NEEDS_INVITATION)))
+		await settle()
+		expect(panel().invitingAgainId).toBe("ada")
+
+		act(() => answer(ok([STEVE, invitedAt("ada@example.com", NOW)])))
+		await settle()
+		expect(panel().invitingAgainId).toBeUndefined()
+	})
+
 	it("raises a notice naming the removal and the unsent invitation when the invitation is refused after the removal", async () => {
 		const { panel, reportSuccess } = await watchHome({
 			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),

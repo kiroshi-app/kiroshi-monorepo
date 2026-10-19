@@ -1569,6 +1569,7 @@ settings-space-spacesettingsdialog--members-i-8
 settings-space-spacesettingsdialog--members-i-9
 settings-space-spacesettingsdialog--members-invite-failed
 settings-space-spacesettingsdialog--members-invite-failed-resend
+settings-space-spacesettingsdialog--members-inviting-again
 settings-space-spacesettingsdialog--members-joined-and-pending
 settings-space-spacesettingsdialog--members-loading
 settings-space-spacesettingsdialog--members-long-identity

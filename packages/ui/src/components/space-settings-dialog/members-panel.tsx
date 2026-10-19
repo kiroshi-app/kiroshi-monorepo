@@ -82,6 +82,7 @@ type MembersPanelProps = {
 	onRemove: (member: SpaceMember) => void
 	onWithdraw: (member: SpaceMember) => void
 	onInviteAgain: (member: SpaceMember) => void
+	invitingAgainId?: string
 	onRemoveConfirm: () => void
 	onRemoveCancel: () => void
 }
@@ -275,6 +276,7 @@ type MemberRowProps = Pick<
 	failureText: string
 	isViewer: boolean
 	isDisabled: boolean
+	isInvitingAgain: boolean
 }
 
 const MemberRow = ({
@@ -282,6 +284,7 @@ const MemberRow = ({
 	failureText,
 	isViewer,
 	isDisabled,
+	isInvitingAgain,
 	onInvite,
 	onRemove,
 	onWithdraw,
@@ -370,7 +373,7 @@ const MemberRow = ({
 				<Button
 					aria-label={t("space.members.inviteAgainLabel", { email })}
 					className="rounded-control"
-					disabled={isDisabled}
+					disabled={isDisabled || isInvitingAgain}
 					onClick={() => onInviteAgain(member)}
 					size="sm"
 					variant="outline"
@@ -456,6 +459,7 @@ const MembersPanel = ({
 	onRemove,
 	onWithdraw,
 	onInviteAgain,
+	invitingAgainId,
 	onRemoveConfirm,
 	onRemoveCancel,
 }: MembersPanelProps) => {
@@ -493,6 +497,7 @@ const MembersPanel = ({
 			<MemberRow
 				failureText={rowFailure?.member.id === member.id ? rowFailureText : ""}
 				isDisabled={blockedBy === "hostOffline"}
+				isInvitingAgain={member.id === invitingAgainId}
 				isViewer={member.id === viewerId}
 				key={member.id}
 				member={member}
