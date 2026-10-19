@@ -9,8 +9,8 @@ use tauri::{AppHandle, Runtime};
 
 use super::contract::{
 	AuthorKind, CompanionCreated, CompanionError, Conversation, ConversationAttached,
-	ConversationRead, ConversationsListed, LastMessage, MessageAuthor, ReadMessage,
-	RosterCompanion, SeatedCompanion,
+	ConversationClosed, ConversationRead, ConversationsListed, LastMessage, MessageAuthor,
+	ReadMessage, RosterCompanion, SeatedCompanion,
 };
 use super::launch;
 use crate::agent::host::{Host, Refusal};
@@ -23,18 +23,18 @@ use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
 };
 use crate::conversations::contract::{
-	BotDraft, CompanionArrival, CompanionSpoke, TranscriptStoreError,
+	BotDraft, CompanionArrival, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::conversations::{
 	Bot as StoredBot, ConversationAmendment, ConversationDraft, ListedConversation, Listing, Seat,
-	LISTED_KINDS, TOPIC_KIND,
+	LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
 use crate::events::{
-	self, Event, COMPANION_ARRIVED, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_UPDATED,
-	FIRST_RUN_DONE,
+	self, Event, COMPANION_ARRIVED, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED,
+	CONVERSATION_UPDATED, FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
 
@@ -167,10 +167,18 @@ impl<R: Runtime> CompanionHost<R> {
 			return Err(CompanionError::EmptyTitleField);
 		}
 		let moves_seats = !asked.add.is_empty() || !asked.remove.is_empty();
-		if title.is_none() && asked.icon.is_none() && asked.colour.is_none() && !moves_seats {
+		if title.is_none()
+			&& asked.icon.is_none()
+			&& asked.colour.is_none()
+			&& asked.archived.is_none()
+			&& !moves_seats
+		{
 			return Err(CompanionError::EmptyUpdate);
 		}
 		let conversation_id = asked.conversation.unwrap_or_else(|| self.conversation_id.clone());
+		if asked.archived == Some(true) {
+			return Err(CompanionError::ArchiveThroughConversationClose { conversation_id });
+		}
 		self.holds_seat(database, &conversation_id).await?;
 		let roster = match moves_seats {
 			true => roster_of_room(database, &conversation_id).await?,
@@ -182,6 +190,7 @@ impl<R: Runtime> CompanionHost<R> {
 			color: asked.colour,
 			seated: ids_of(&roster, &asked.add)?,
 			unseated: ids_of(&roster, &asked.remove)?,
+			reopened: asked.archived == Some(false),
 			amended_by: self.bot_id.clone(),
 		};
 		let amended = database
@@ -195,6 +204,67 @@ impl<R: Runtime> CompanionHost<R> {
 		let conversation_id = &amended.conversation.active.conversation.id;
 		announce_conversation(&self.app, database, CONVERSATION_UPDATED, conversation_id).await;
 		Ok(conversation_of(amended.conversation))
+	}
+
+	async fn close(
+		&self,
+		database: &db::Database,
+		asked: Closed,
+	) -> Result<ConversationClosed, CompanionError> {
+		let conversation_id = asked.conversation;
+		match database.conversations().kind(conversation_id.clone()).await? {
+			Some(kind) if kind == TOPIC_KIND => self.leads(database, &conversation_id).await?,
+			Some(kind) if kind == MISSION_KIND => {
+				refuse_open_mission(database, &conversation_id).await?;
+				self.holds_seat(database, &conversation_id).await?;
+			}
+			Some(kind) => {
+				return Err(CompanionError::UnclosableConversation {
+					conversation_id,
+					conversation_kind: kind,
+				})
+			}
+			None => return Err(CompanionError::UnknownConversation { conversation_id }),
+		}
+		let archived = database
+			.conversations()
+			.archive_conversation(conversation_id)
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		launch::announce(
+			&self.app,
+			CONVERSATION_DELETED,
+			ConversationDeleted {
+				space_id: archived.space_id,
+				conversation_id: archived.id.clone(),
+			},
+		);
+		Ok(ConversationClosed {
+			conversation_id: archived.id,
+			title: archived.title,
+			archived: true,
+		})
+	}
+
+	async fn leads(
+		&self,
+		database: &db::Database,
+		conversation_id: &str,
+	) -> Result<(), CompanionError> {
+		let seats = database
+			.conversations()
+			.seats(conversation_id.to_owned())
+			.await
+			.map_err(TranscriptStoreError::from)?;
+		match seats
+			.iter()
+			.any(|seat| seat.bot_id == self.bot_id && seat.left_at.is_none() && seat.is_lead())
+		{
+			true => Ok(()),
+			false => {
+				Err(CompanionError::CallerNotLead { conversation_id: conversation_id.to_owned() })
+			}
+		}
 	}
 
 	async fn attach(
@@ -396,6 +466,21 @@ async fn carries_seats(
 	}
 }
 
+async fn refuse_open_mission(
+	database: &db::Database,
+	conversation_id: &str,
+) -> Result<(), CompanionError> {
+	match database.missions().in_thread(conversation_id.to_owned(), 0).await? {
+		Some(threaded) if threaded.mission.closed_at.is_none() => {
+			Err(CompanionError::MissionStillOpen {
+				conversation_id: conversation_id.to_owned(),
+				mission_id: threaded.mission.id,
+			})
+		}
+		_ => Ok(()),
+	}
+}
+
 async fn roster_of_room(
 	database: &db::Database,
 	conversation_id: &str,
@@ -576,6 +661,10 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Consulted = Self::read(payload)?;
 				Self::answered(self.consult(database, asked).await?)
 			}
+			Operation::ConversationClose => {
+				let asked: Closed = Self::read(payload)?;
+				Self::answered(self.close(database, asked).await?)
+			}
 		}
 	}
 }
@@ -603,6 +692,7 @@ pub enum Operation {
 	ConversationUpdate,
 	ConversationList,
 	ConversationRead,
+	ConversationClose,
 }
 
 #[derive(Debug, Deserialize)]
@@ -646,6 +736,7 @@ struct Updated {
 	add: Vec<String>,
 	#[serde(default)]
 	remove: Vec<String>,
+	archived: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -664,6 +755,12 @@ struct Consulted {
 	conversation: String,
 	limit: Option<i64>,
 	before: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Closed {
+	conversation: String,
 }
 
 fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
@@ -1351,6 +1448,118 @@ mod tests {
 
 		assert_eq!(said, a_plans_room());
 		assert_eq!(announced(&arriving)["conversationId"], json!("room"));
+	}
+
+	const TWO_ERRANDS: &str = "
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at) VALUES
+			('running', 'mission', 'personal', 'Ship it', 1, 1),
+			('shipped', 'mission', 'personal', 'Shipped', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('running', 'b1', 'assistant', 1, 0), ('shipped', 'b1', 'assistant', 1, 0);
+		INSERT INTO missions (id, origin_conversation_id, bot_id, thread_conversation_id,
+			objective, ticket_platform, ticket_external_id, ticket_url, ticket_title, opened_at,
+			closed_at) VALUES
+			('m1', 'c1', 'b1', 'running', 'Ship it', 'github', '1', 'https://kiroshi.test/1',
+				'Ship', 1, NULL),
+			('m2', 'c1', 'b1', 'shipped', 'Shipped', 'github', '2', 'https://kiroshi.test/2',
+				'Shipped', 1, 2);
+	";
+
+	fn a_close(conversation_id: &str) -> Value {
+		json!({
+			"subtype": "companion",
+			"operation": "conversationClose",
+			"payload": { "conversation": conversation_id },
+		})
+	}
+
+	async fn archived_at(app: &App<MockRuntime>, conversation_id: &'static str) -> Option<i64> {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT archived_at FROM conversations WHERE id = ?1",
+					[conversation_id],
+					|row| row.get(0),
+				)?)
+			})
+			.await
+			.expect("the archive reads")
+	}
+
+	async fn close_refused(app: &App<MockRuntime>, conversation_id: &'static str) -> Value {
+		let deleting = heard(app, crate::conversations::contract::DELETED_EVENT);
+		let refused = refusal(serving(app, "c1").answer(a_close(conversation_id)).await);
+		assert_eq!(archived_at(app, conversation_id).await, None, "a refused close archived");
+		assert!(deleting.try_recv().is_err(), "a refused close announced");
+		refused
+	}
+
+	#[tokio::test]
+	async fn the_lead_closes_a_room_once_and_it_leaves_the_roster_on_the_spot() {
+		let app = a_room("close-led").await;
+		let deleting = heard(&app, crate::conversations::contract::DELETED_EVENT);
+
+		let closed = serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let announced_room = announced(&deleting);
+		let first_archived_at = archived_at(&app, "room").await;
+		let closed_again =
+			serving(&app, "c1").answer(a_close("room")).await.expect("the room closes again");
+
+		let answer = json!({ "conversationId": "room", "title": "Plans", "archived": true });
+		assert_eq!(closed, answer);
+		assert_eq!(closed_again, answer);
+		assert_eq!(announced_room, json!({ "spaceId": "personal", "conversationId": "room" }));
+		assert!(first_archived_at.is_some(), "the close wrote no archived_at");
+		assert_eq!(archived_at(&app, "room").await, first_archived_at, "a second close moved it");
+		assert_eq!(roles_in(&app, "room").await.len(), 2, "a seat went with the close");
+	}
+
+	#[tokio::test]
+	async fn a_close_of_a_main_chat_an_unled_room_or_an_unknown_id_is_refused_and_archives_nothing()
+	{
+		let app = a_room("close-refused").await;
+
+		let main = close_refused(&app, "c1").await;
+		let unled = close_refused(&app, "unled").await;
+		let unknown = refusal(serving(&app, "c1").answer(a_close("absent")).await);
+
+		assert_eq!(
+			main,
+			json!({
+				"kind": "unclosableConversation",
+				"conversationId": "c1",
+				"conversationKind": "main",
+			})
+		);
+		assert_eq!(unled, json!({ "kind": "callerNotLead", "conversationId": "unled" }));
+		assert_eq!(unknown, json!({ "kind": "unknownConversation", "conversationId": "absent" }));
+	}
+
+	#[tokio::test]
+	async fn a_mission_thread_closes_once_its_mission_has_closed_and_never_before() {
+		let app = a_room("close-mission").await;
+		planted(&app, TWO_ERRANDS).await;
+
+		let deleting = heard(&app, crate::conversations::contract::DELETED_EVENT);
+
+		let running = refusal(serving(&app, "c1").answer(a_close("running")).await);
+		let running_announced = deleting.try_recv().is_ok();
+		let shipped =
+			serving(&app, "c1").answer(a_close("shipped")).await.expect("the thread closes");
+
+		assert_eq!(
+			running,
+			json!({ "kind": "missionStillOpen", "conversationId": "running", "missionId": "m1" })
+		);
+		assert_eq!(
+			shipped,
+			json!({ "conversationId": "shipped", "title": "Shipped", "archived": true })
+		);
+		assert!(!running_announced, "a refused close announced");
+		assert_eq!(archived_at(&app, "running").await, None, "a refused close archived");
+		assert_eq!(announced(&deleting)["conversationId"], json!("shipped"));
+		assert!(archived_at(&app, "shipped").await.is_some(), "the closed thread stayed open");
 	}
 
 	#[tokio::test]
@@ -2286,6 +2495,76 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn an_archived_room_reopens_through_an_update_and_is_announced_back() {
+		let app = a_room("update-reopen").await;
+		serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
+
+		let reopened = serving(&app, "c1")
+			.answer(an_update(json!({ "conversation": "room", "archived": false })))
+			.await
+			.expect("the room reopens");
+
+		assert_eq!(reopened["archived"], json!(false));
+		assert_eq!(archived_at(&app, "room").await, None, "the reopen left archived_at");
+		assert_eq!(announced(&updating)["conversation"]["title"], json!("Plans"));
+		assert!(updating.try_recv().is_err(), "the reopen was announced twice");
+	}
+
+	#[tokio::test]
+	async fn a_reopen_of_a_room_never_archived_answers_it_unchanged() {
+		let app = a_room("update-reopen-open").await;
+		let host = serving(&app, "c1");
+		let read = host.answer(a_read(json!({ "conversation": "room" }))).await.expect("it reads");
+
+		let reopened = host
+			.answer(an_update(json!({ "conversation": "room", "archived": false })))
+			.await
+			.expect("the room is answered");
+
+		assert_eq!(reopened, read["conversation"]);
+		assert_eq!(archived_at(&app, "room").await, None);
+	}
+
+	#[tokio::test]
+	async fn an_update_archiving_a_room_is_refused_toward_conversation_close_and_writes_nothing() {
+		let app = a_room("update-archive").await;
+
+		let refused = update_refused(
+			&app,
+			&serving(&app, "c1"),
+			"room",
+			json!({ "conversation": "room", "title": "Trip", "archived": true }),
+		)
+		.await;
+
+		assert_eq!(
+			refused,
+			json!({ "kind": "archiveThroughConversationClose", "conversationId": "room" })
+		);
+		assert_eq!(archived_at(&app, "room").await, None, "a refused archive archived");
+	}
+
+	#[tokio::test]
+	async fn a_reopen_beside_a_refused_field_leaves_the_room_archived_and_unchanged() {
+		let app = a_room("update-reopen-refused").await;
+		serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let closed_at = archived_at(&app, "room").await;
+
+		let refused = update_refused(
+			&app,
+			&serving(&app, "c1"),
+			"room",
+			json!({ "conversation": "room", "title": "Trip", "icon": "Message", "archived": false }),
+		)
+		.await;
+
+		assert_eq!(refused["kind"], json!("unlistedIcon"));
+		assert!(closed_at.is_some(), "the close wrote no archived_at");
+		assert_eq!(archived_at(&app, "room").await, closed_at, "a refused reopen reopened");
+	}
+
+	#[tokio::test]
 	async fn an_update_carrying_a_field_it_does_not_declare_is_refused_naming_it() {
 		let app = a_room("update-undeclared").await;
 
@@ -2293,13 +2572,13 @@ mod tests {
 			&app,
 			&serving(&app, "room"),
 			"room",
-			json!({ "title": "Trip", "archived": true }),
+			json!({ "title": "Trip", "instructions": "Keep it short." }),
 		)
 		.await;
 
 		assert_eq!(refused["kind"], json!("unreadableRequest"));
 		assert!(
-			refused["detail"].as_str().is_some_and(|detail| detail.contains("archived")),
+			refused["detail"].as_str().is_some_and(|detail| detail.contains("instructions")),
 			"got {refused}"
 		);
 	}
