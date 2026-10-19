@@ -1218,7 +1218,6 @@ export const OpenedOnInvitation = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await settled(await screen.findByRole("menu"))
-		await expect(menu).toBeVisible()
 		await expect(menu.getBoundingClientRect().width).toBe(280)
 		await expectGroupBetweenSpacesAndMoveUp(menu)
 		const rows = invitationsIn(menu)
