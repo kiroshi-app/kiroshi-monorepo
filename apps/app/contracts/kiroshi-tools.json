@@ -598,24 +598,12 @@
 		}
 	},
 	{
-		"name": "companion_invite",
-		"description": "Bring a companion of this space into this conversation before you mention it.",
+		"name": "companion_list",
+		"description": "List every companion of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
-			"properties": {
-				"companion": {
-					"type": "string",
-					"description": "The id or the name of the companion to bring in."
-				},
-				"conversation": {
-					"description": "The id of a room you sit in to bring the companion into, left out for this conversation.",
-					"type": "string"
-				}
-			},
-			"required": [
-				"companion"
-			],
+			"properties": {},
 			"additionalProperties": false
 		}
 	},
@@ -705,31 +693,46 @@
 		}
 	},
 	{
-		"name": "conversation_describe",
-		"description": "Give a room you hold a seat in an icon or a colour, once the person asks for one or once its topic calls for one.",
+		"name": "conversation_update",
+		"description": "Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
 			"properties": {
 				"conversation": {
-					"type": "string",
-					"description": "The id of the room you hold a seat in to describe."
+					"description": "The id of the conversation to change, one you hold a seat in, left out for this conversation.",
+					"type": "string"
+				},
+				"title": {
+					"description": "The new title of the conversation, the subject in a few words, left out to keep the one it wears; a title blank once trimmed is refused.",
+					"type": "string"
 				},
 				"icon": {
-					"description": "The name of a Keyline icon drawn beside the title of the room, such as Rocket, spelled as listed in packages/shared/conversation-icons.json, left out to keep the one it wears. A name off that list is refused with the accepted names.",
+					"description": "The name of the Keyline icon drawn beside the title of the conversation, chosen for the subject the title names, left out to keep the one it wears. It is one of MessageSquare, Bug, Rocket, ShieldKey, Pen, FileText, Download, Laptop, Smartphone, BookOpen, CreditCard, Megaphone, PanelLeft, Code, Terminal, Server, Globe, Palette, Lightbulb, ChartLine, Calendar, Users, Flag, Sparkles, spelled exactly so; any other name is refused with the accepted names.",
 					"type": "string"
 				},
 				"colour": {
-					"description": "One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears.",
+					"description": "One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the conversation back its default colour, left out to keep the one it wears.",
 					"type": [
 						"string",
 						"null"
 					]
+				},
+				"add": {
+					"description": "The id or the name of each companion of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two companions share is refused with their ids.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"remove": {
+					"description": "The id or the name of each companion of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out.",
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
 				}
 			},
-			"required": [
-				"conversation"
-			],
 			"additionalProperties": false
 		}
 	},

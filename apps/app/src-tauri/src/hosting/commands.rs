@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Runtime, State};
 
-use super::contract::{AccountDevices, HostingState, Member, MembersError};
-use super::{devices, links, members, Hosting};
+use super::contract::{AccountDevices, HostingState, MembersError, SpaceMembers};
+use super::{devices, members, Hosting};
 use crate::spaces::contract::SpaceError;
 
 #[tauri::command]
@@ -33,7 +33,7 @@ pub fn hosting_state(hosting: State<'_, Hosting>, space_id: String) -> HostingSt
 pub async fn hosting_members<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
-) -> Result<Vec<Member>, MembersError> {
+) -> Result<SpaceMembers, MembersError> {
 	members::list(&app, space_id).await
 }
 
@@ -43,7 +43,7 @@ pub async fn hosting_invite_member<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 	email: String,
-) -> Result<Member, MembersError> {
+) -> Result<SpaceMembers, MembersError> {
 	members::invite(&app, space_id, email).await
 }
 
@@ -52,9 +52,19 @@ pub async fn hosting_invite_member<R: Runtime>(
 pub async fn hosting_withdraw_invitation<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
-	user_id: String,
-) -> Result<Vec<Member>, MembersError> {
-	members::withdraw(&app, space_id, user_id).await
+	invitation_id: String,
+) -> Result<SpaceMembers, MembersError> {
+	members::withdraw(&app, space_id, invitation_id).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn hosting_resend_invitation<R: Runtime>(
+	app: AppHandle<R>,
+	space_id: String,
+	invitation_id: String,
+) -> Result<SpaceMembers, MembersError> {
+	members::resend(&app, space_id, invitation_id).await
 }
 
 #[tauri::command]
@@ -63,27 +73,8 @@ pub async fn hosting_remove_member<R: Runtime>(
 	app: AppHandle<R>,
 	space_id: String,
 	user_id: String,
-) -> Result<Vec<Member>, MembersError> {
+) -> Result<SpaceMembers, MembersError> {
 	members::remove(&app, space_id, user_id).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn hosting_join_link<R: Runtime>(
-	app: AppHandle<R>,
-	space_id: String,
-	user_id: String,
-) -> Result<String, MembersError> {
-	links::join_link(&app, space_id, user_id).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn hosting_device_link<R: Runtime>(
-	app: AppHandle<R>,
-	space_id: String,
-) -> Result<String, MembersError> {
-	links::device_link(&app, space_id).await
 }
 
 #[tauri::command]

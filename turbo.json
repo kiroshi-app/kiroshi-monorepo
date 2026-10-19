@@ -29,11 +29,13 @@
 			"dependsOn": ["^types"]
 		},
 		"test": {
-			"cache": false
+			"cache": false,
+			"passThroughEnv": ["KIROSHI_TEST_WORKERS"]
 		},
 		"app#test": {
 			"dependsOn": ["sidecar#build"],
-			"cache": false
+			"cache": false,
+			"passThroughEnv": ["KIROSHI_TEST_WORKERS"]
 		},
 		"lint": {},
 		"lint:fix": {
