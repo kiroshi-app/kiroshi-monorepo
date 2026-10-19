@@ -169,14 +169,11 @@ const failingVerifySteps = (github: GitHubContext, results: JobResults) =>
 const A_PUSH_TO_MAIN: GitHubContext = {
 	event_name: "push",
 	ref: "refs/heads/main",
-	run_id: "1",
 }
 
 const A_PULL_REQUEST: GitHubContext = {
 	event_name: "pull_request",
 	ref: "refs/pull/7/merge",
-	run_id: "2",
-	event: { pull_request: { base: { sha: "pull-request-base" } } },
 }
 
 const queueCommit = (pullRequest: number): GitHubContext => ({
@@ -404,18 +401,16 @@ describe("the jobs of ci.yml", () => {
 	})
 
 	it("keeps every job but rust-check on a push to main", () => {
-		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(
-			[
-				"changes",
-				"ios",
-				"lint",
-				"rust",
-				"storybook",
-				"verify",
-				"vitest",
-				"website",
-			].sort(),
-		)
+		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual([
+			"changes",
+			"ios",
+			"lint",
+			"rust",
+			"storybook",
+			"verify",
+			"vitest",
+			"website",
+		])
 	})
 
 	it("has verify pass on a merge_group when every job succeeded or was skipped by rule", () => {
