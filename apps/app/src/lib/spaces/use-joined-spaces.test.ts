@@ -24,16 +24,18 @@ vi.mock("../host", async (importOriginal) => ({
 afterEach(cleanup)
 
 const STUDIO: Invitation = {
+	id: "invitation-studio",
 	instanceId: "instance-studio",
 	instanceName: "Studio Nord",
 	inviterEmail: "lea@example.com",
 	invitedAt: "2026-10-08T09:00:00Z",
+	expiresAt: "2026-10-15T09:00:00Z",
 }
 
 const transport = {
 	list: vi.fn(async () => [STUDIO]),
 	accept: vi.fn(async () => {
-		throw { kind: "withdrawn" }
+		throw { kind: "invitationWithdrawn" }
 	}),
 	decline: vi.fn(async () => undefined),
 } satisfies InvitationsTransport
@@ -89,6 +91,7 @@ const STUDIO_SPACE: JoinedSpace = {
 	hostUrl: "wss://cloud.kiroshi.test/instances/studio/relay/member",
 	remoteSpaceId: "studio",
 	name: "Studio Nord",
+	state: "online",
 }
 
 const openStudio = async () => {

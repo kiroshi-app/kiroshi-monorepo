@@ -23,7 +23,6 @@ use super::*;
 use crate::account::contract::{AccountState, SignedOutReason};
 use crate::account::session::{restore, sign_in, sign_out, AccountSession};
 use crate::crypto::device_keys::DeviceKeys;
-use crate::crypto::join::SECRET_LENGTH;
 use crate::db;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
@@ -31,8 +30,9 @@ use crate::environment::store;
 use crate::events::{ACCOUNT_CHANGED, HOSTING_CHANGED};
 use crate::hosting::contract::HostingState;
 use crate::hosting::Hosting;
-use crate::joined_spaces::commands::{join_by_link, joined_space_connect};
+use crate::joined_spaces::commands::joined_space_connect;
 use crate::joined_spaces::contract::JoinedSpaceError;
+use crate::joined_spaces::join;
 use crate::joined_spaces::relay::RelayGuests;
 use crate::removed_on_drop::RemovedOnDrop;
 use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -637,18 +637,12 @@ fn while_pending_no_member_socket_opens() {
 			.expect("the joined space is stored");
 
 		let connected = joined_space_connect(harness.handle(), joined.id.clone()).await;
-		let host = DeviceKeys::generate().expect("randomness");
-		let link = format!(
-			"kiroshi://join#i1.{}.{}",
-			BASE64_URL_SAFE_NO_PAD.encode(host.agreement_public().as_bytes()),
-			BASE64_URL_SAFE_NO_PAD.encode([7u8; SECRET_LENGTH])
-		);
-		let joined_by_link = join_by_link(harness.handle(), link).await;
+		let accepted_join = join::joined(&harness.handle(), "i1".to_owned(), joined.name).await;
 
 		assert_eq!(connected.err(), Some(JoinedSpaceError::HostOffline { id: joined.id }));
 		assert!(
-			matches!(joined_by_link, Err(JoinedSpaceError::RelayRefused { .. })),
-			"{joined_by_link:?}"
+			matches!(accepted_join, Err(JoinedSpaceError::RelayRefused { .. })),
+			"{accepted_join:?}"
 		);
 	});
 }

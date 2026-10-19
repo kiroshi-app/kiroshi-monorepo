@@ -44,6 +44,7 @@ const GARAGE: JoinedSpace = {
 	hostUrl: "http://192.168.1.20:45367",
 	remoteSpaceId: HOME,
 	name: "Garage",
+	state: "online",
 }
 
 const GARAGE_ROW = "joined:garage-host"

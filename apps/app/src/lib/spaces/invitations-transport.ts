@@ -7,8 +7,10 @@ import {
 	type Invitation,
 	type InvitationError,
 	type JoinedSpace,
+	type JoinedSpaceError,
 } from "../bindings"
 import { describeFailure } from "../failure-report"
+import { isJoinedSpaceError } from "../host/join-refusal"
 
 export type InvitationsTransport = {
 	list: () => Promise<Invitation[]>
@@ -23,11 +25,11 @@ export type AcceptOutcome =
 
 export type DeclineOutcome = { kind: "declined" } | { kind: "withdrawn" }
 
-type CommandResult<T> =
+type CommandResult<T, E> =
 	| { status: "ok"; data: T }
-	| { status: "error"; error: InvitationError }
+	| { status: "error"; error: E }
 
-const dataOf = <T>(result: CommandResult<T>): T => {
+const dataOf = <T, E>(result: CommandResult<T, E>): T => {
 	if (result.status === "error") {
 		throw result.error
 	}
@@ -73,17 +75,20 @@ const isSignedOut = (reason: unknown) =>
 const isWithdrawn = (reason: unknown) =>
 	isInvitationError(reason) && reason.kind === "withdrawn"
 
+const isAcceptWithdrawn = (reason: unknown) =>
+	isJoinedSpaceError(reason) && reason.kind === "invitationWithdrawn"
+
 const ACCEPT_FAILURES: Partial<
-	Record<InvitationError["kind"], SpaceInvitationFailure>
+	Record<JoinedSpaceError["kind"], SpaceInvitationFailure>
 > = {
-	serversUnreachable: "servers",
-	offline: "offline",
+	couldNotAccept: "servers",
+	relayUnreachable: "offline",
 }
 
 const acceptFailureOf = (
 	reason: unknown,
 ): SpaceInvitationFailure | undefined =>
-	isInvitationError(reason) ? ACCEPT_FAILURES[reason.kind] : undefined
+	isJoinedSpaceError(reason) ? ACCEPT_FAILURES[reason.kind] : undefined
 
 const NO_INVITATIONS: Invitation[] = []
 
@@ -100,7 +105,7 @@ export const acceptOutcomeOf = async (
 	try {
 		return { kind: "joined", joined: await transport.accept(id) }
 	} catch (reason) {
-		if (isWithdrawn(reason)) return { kind: "withdrawn" }
+		if (isAcceptWithdrawn(reason)) return { kind: "withdrawn" }
 		const failure = acceptFailureOf(reason)
 		if (failure) return { kind: "failed", failure }
 		throw reason

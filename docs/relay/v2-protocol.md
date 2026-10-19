@@ -254,6 +254,85 @@ A sealed box is 32 + 12 + plaintext length + 16 bytes. The recipient computes
 `X25519(recipient_private, ephemeral_public)`, refuses it when not contributory,
 then derives the same key.
 
+## Invitation accept
+
+A member joins a Space by accepting its invitation on the relay. No link, no
+secret and no key leaves the device for it: the host reads the member device keys
+from the relay device list, and trusts the roster it signs.
+
+```
+POST /invitations/{invitationId}/accept        bearer of the invited account
+```
+
+`GET /invitations` lists the pending invitations of the account, each carrying
+`id`, `instanceId`, `instanceName`, `inviterEmail`, `invitedAt` and `expiresAt`.
+
+| Answer | Meaning | Desktop answer |
+| --- | --- | --- |
+| 200 `{ instanceId, name }` | The account is now a member of the instance | the join below |
+| 409 `ALREADY_JOINED` | The account already accepted it | the join below, on the listed `instanceId` |
+| 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` | `invitationExpired` |
+| 410 `INVITATION_WITHDRAWN` | The host took it back | `invitationWithdrawn` |
+| 410 `INVITATION_USED` | It was already accepted | `invitationUsed` |
+| 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account | `invitationOtherEmail` |
+| 404 | No such invitation | `noInvitation` |
+| unreachable, any other status | | `couldNotAccept` |
+
+The Tauri command is `invitation_accept(invitationId)`. On every refusal of the
+accept the desktop stores no joined Space.
+
+A link `kiroshi://join?invitation=<invitationId>`, the id matching
+`[A-Za-z0-9_-]{1,128}`, opens the app and hands that invitation id to the front,
+which accepts it the same way. Any other `kiroshi://join` URL is ignored.
+
+## Joining by the first rekey
+
+The host answers no frame of a device outside its roster. It admits a device from
+the [device list](#device-list-admission) and hands it the key in a
+[rekey](#rekey-host-to-device) frame, so a member joins on its first verified
+rekey.
+
+After the accept, the device opens the member socket of the instance with its
+relay device id and sends one sealed hello under `key_id` 0:
+
+```json
+{ "v": 2, "instance": "…", "key_id": 0, "ctr": 1, "ct": "…", "sig": "…" }
+```
+
+No Space key has `key_id` 0, so this frame reads on the host as a frame under a
+key lower than the current one: a rostered device that missed its rekey. The host
+drops it and sends that device its rekey again; while the device is not rostered
+yet, the host drops it with nothing sent, and the rekey of the admission arrives
+on the same socket once the device list gains the device. The subkey of that
+hello derives from a random key the device discards, and the host never opens it.
+
+The device takes the first rekey that verifies, in this order:
+
+1. The box opens under the device agreement key and holds a key handover whose
+   roster set verifies under the signing key of its own host row.
+2. `sig` verifies under that same host signing key, over the `rekey_sig` bytes of
+   the instance and the device's own `device_id`.
+3. The roster lists the device itself, or the join answers `notInRoster` and
+   stores no key.
+
+Trust is on first use: the first verified rekey pins its host row, and no short
+code is compared. A rekey that fails step 1 or 2 is dropped, and the Space keeps
+waiting with nothing pinned. When a roster is already held for the instance, a
+host row that differs from the pinned one is refused as `badSignature` and the
+pinned roster is kept.
+
+### Waiting for the host
+
+When the host is offline, sends no verified rekey within the answer bound, or the
+socket drops, the desktop stores the joined Space anyway and answers it with
+`state: "waitingForHost"`. Every joined Space the device holds no key for is
+listed that way, and `joined_space_connect` answers `waitingForHost`. While the
+account is signed in, the desktop keeps one member socket per such Space, sends
+the hello under `key_id` 0 on every connection and every `PING_EVERY`, and
+reconnects with the relay backoff. The first verified rekey stores the key and the
+roster, closes that socket, and announces the Space changed; it is then listed
+`state: "online"`.
+
 ## Device list admission
 
 The relay lists the approved devices of a hosted Space instance:

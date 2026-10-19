@@ -33,7 +33,7 @@ use crate::environment::store;
 use crate::joined_spaces::commands::{
 	joined_space_connect, CHANGED_EVENT as JOINED_CHANGED, RECONNECTED_EVENT, REMOVED_EVENT,
 };
-use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError};
+use crate::joined_spaces::contract::{JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceState};
 use crate::joined_spaces::relay::{reconciled, RelayGuests};
 use crate::joined_spaces::test_host::{SealingHost, CHALLENGE};
 use crate::logging::contract::InstallKind;
@@ -42,6 +42,8 @@ use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 const BEARER: &str = "bearer-that-never-leaves";
 const INSTANCE: &str = "instance-1";
+const INVITATION: &str = "instance-1-invitation";
+const MEMBER_RELAY_ID: &str = "r-member";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
 const PATIENCE: Duration = Duration::from_secs(10);
 const POLL_EVERY: Duration = Duration::from_millis(100);
@@ -62,8 +64,15 @@ struct Cloud {
 	is_sign_out_open: Arc<watch::Sender<bool>>,
 	sign_outs_asked: Arc<AtomicUsize>,
 	is_refusing_members: Arc<AtomicBool>,
-	members: mpsc::UnboundedSender<WebSocket>,
+	members: mpsc::UnboundedSender<Peeked>,
+	admission: Arc<Mutex<Option<String>>>,
+	joins: Arc<Mutex<Vec<Value>>>,
 	noticed: Arc<watch::Sender<()>>,
+}
+
+struct Peeked {
+	socket: WebSocket,
+	first: String,
 }
 
 async fn opened(gate: &watch::Sender<bool>) {
@@ -72,10 +81,12 @@ async fn opened(gate: &watch::Sender<bool>) {
 
 fn an_invitation(instance_id: &str, name: &str) -> Value {
 	json!({
+		"id": format!("{instance_id}-invitation"),
 		"instanceId": instance_id,
 		"instanceName": name,
 		"inviterEmail": "owner@example.com",
-		"invitedAt": "2026-10-01T00:00:00.000Z"
+		"invitedAt": "2026-10-01T00:00:00.000Z",
+		"expiresAt": "2026-10-08T00:00:00.000Z"
 	})
 }
 
@@ -158,9 +169,35 @@ async fn member_relay(
 	cloud.member_relays_asked.fetch_add(1, Ordering::SeqCst);
 	cloud.noticed.send_replace(());
 	opened(&cloud.is_member_relay_open).await;
-	upgrade.on_upgrade(move |socket| async move {
-		cloud.members.send(socket).expect("the test holds the member sockets");
-	})
+	upgrade.on_upgrade(move |socket| member_opened(cloud, socket))
+}
+
+async fn member_opened(cloud: Cloud, mut socket: WebSocket) {
+	let Some(first) = first_text(&mut socket).await else {
+		return;
+	};
+	let frame: Value = serde_json::from_str(&first).expect("a json member frame");
+	if frame["key_id"] != 0 {
+		cloud.members.send(Peeked { socket, first }).expect("the test holds the member sockets");
+		return;
+	}
+	cloud.joins.lock().expect("the cloud").push(frame);
+	let admission = cloud.admission.lock().expect("the cloud").clone();
+	if let Some(admission) = admission {
+		if socket.send(Message::Text(admission.into())).await.is_err() {
+			eprintln!("the fake relay lost a join socket before its answer");
+		}
+	}
+	while first_text(&mut socket).await.is_some() {}
+}
+
+async fn first_text(socket: &mut WebSocket) -> Option<String> {
+	while let Some(Ok(frame)) = socket.recv().await {
+		if let Message::Text(text) = frame {
+			return Some(text.as_str().to_owned());
+		}
+	}
+	None
 }
 
 async fn signed_out_of_the_cloud(Served(cloud): Served<Cloud>) -> StatusCode {
@@ -190,7 +227,7 @@ struct Harness {
 	app: AppOfItsOwn,
 	cloud: Cloud,
 	host: Option<Arc<SealingHost>>,
-	members: mpsc::UnboundedReceiver<WebSocket>,
+	members: mpsc::UnboundedReceiver<Peeked>,
 	heard: Arc<Mutex<Vec<(String, String)>>>,
 	root: RemovedOnDrop,
 	_database: RemovedOnDrop,
@@ -224,7 +261,7 @@ impl Harness {
 			invitations_read: Arc::default(),
 			call_answer: Arc::new(Mutex::new((
 				StatusCode::OK,
-				json!({ "id": INSTANCE, "name": "Studio", "role": "member", "createdAt": "2026-10-01T00:00:00.000Z" }),
+				json!({ "instanceId": INSTANCE, "name": "Studio" }),
 			))),
 			called: Arc::default(),
 			unknown_instances: Arc::default(),
@@ -235,6 +272,8 @@ impl Harness {
 			sign_outs_asked: Arc::default(),
 			is_refusing_members: Arc::default(),
 			members: members_in,
+			admission: Arc::default(),
+			joins: Arc::default(),
 			noticed: Arc::new(watch::channel(()).0),
 		};
 		let served_url = served(
@@ -269,6 +308,10 @@ impl Harness {
 			true => Some(Arc::new(SealingHost::planted(app.handle(), INSTANCE).await)),
 			false => None,
 		};
+		if let Some(host) = &host {
+			*cloud.admission.lock().expect("the cloud") = Some(host.admitted());
+			registered_as_the_member(&app).await;
+		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		app.manage(Invitations::new(&api_url).polling_every(every));
 		app.manage(RelayGuests::new(&api_url));
@@ -366,11 +409,15 @@ impl Harness {
 	}
 
 	async fn member(&mut self) -> Member {
-		let socket = tokio::time::timeout(PATIENCE, self.members.recv())
+		let peeked = tokio::time::timeout(PATIENCE, self.members.recv())
 			.await
 			.expect("the guest opened the member relay in time")
 			.expect("the relay is up");
-		Member::greeted(socket, self.sealing_host()).await
+		Member::greeted(peeked, self.sealing_host()).await
+	}
+
+	fn joins(&self) -> Vec<Value> {
+		self.cloud.joins.lock().expect("the cloud").clone()
 	}
 
 	fn sealing_host(&self) -> Arc<SealingHost> {
@@ -378,7 +425,7 @@ impl Harness {
 	}
 
 	async fn accepted(&self) -> String {
-		accept(self.app.handle(), INSTANCE.to_owned()).await.expect("the accept").id
+		accept(self.app.handle(), INVITATION.to_owned()).await.expect("the accept").id
 	}
 
 	async fn connect(&self, id: &str) -> Result<JoinedSpaceConnection, JoinedSpaceError> {
@@ -402,9 +449,19 @@ struct Member {
 	host: Arc<SealingHost>,
 }
 
+async fn registered_as_the_member(app: &App<MockRuntime>) {
+	let state = app.state::<DeviceKeysState>();
+	let device = DeviceKeys::from_secret(&state.keys().expect("the device keys").secret());
+	let database = app.state::<DatabaseState>();
+	let devices = database.as_ref().expect("the database").relay_devices();
+	let (account, device_id) = ("u1".to_owned(), device.device_id().to_string());
+	devices.registered(account, device_id, MEMBER_RELAY_ID.to_owned()).await.expect("registered");
+}
+
 impl Member {
-	async fn greeted(mut socket: WebSocket, host: Arc<SealingHost>) -> Self {
-		let hello = host.opened(&next_text(&mut socket).await);
+	async fn greeted(peeked: Peeked, host: Arc<SealingHost>) -> Self {
+		let Peeked { mut socket, first } = peeked;
+		let hello = host.opened(&first);
 		assert_eq!((hello.plaintext, hello.challenge), (json!({ "hello": {} }), None));
 		socket.send(Message::Text(host.hello().into())).await.expect("the hello leaves");
 		Self { socket, host }
@@ -463,8 +520,8 @@ async fn connected(harness: &mut Harness, id: &str) -> (JoinedSpaceConnection, M
 	let connecting = connect(app, id);
 	let mut member = None;
 	let answering = async {
-		let socket = members.recv().await.expect("the guest opened the relay");
-		let mut greeted = Member::greeted(socket, host).await;
+		let peeked = members.recv().await.expect("the guest opened the relay");
+		let mut greeted = Member::greeted(peeked, host).await;
 		shared_space_answered(&mut greeted).await;
 		member = Some(greeted);
 	};
@@ -495,8 +552,8 @@ fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 		let unsigned = Harness::new(None).await;
 		assert_eq!(read(unsigned.app.handle()).await, Err(InvitationError::NotSignedIn));
 		assert_eq!(
-			accept(unsigned.app.handle(), INSTANCE.to_owned()).await.map(|joined| joined.id),
-			Err(InvitationError::NotSignedIn)
+			accept(unsigned.app.handle(), INVITATION.to_owned()).await.map(|joined| joined.id),
+			Err(JoinedSpaceError::NeedsSignIn)
 		);
 
 		let revoked = Harness::new(Some("a-bearer-the-cloud-forgot")).await;
@@ -521,21 +578,39 @@ fn every_refusal_of_the_cloud_is_answered_by_its_kind() {
 
 		harness.answering(StatusCode::BAD_GATEWAY, json!({}));
 		assert!(matches!(
-			decline(harness.app.handle(), INSTANCE.to_owned()).await,
+			decline(harness.app.handle(), INVITATION.to_owned()).await,
 			Err(InvitationError::ServersUnreachable { .. })
 		));
-		for (answer, expected) in [
-			(refusal(StatusCode::GONE, "INVITATION_WITHDRAWN"), InvitationError::Withdrawn),
-			(refusal(StatusCode::NOT_FOUND, "NOT_FOUND"), InvitationError::UnknownInvitation),
-			(refusal(StatusCode::UNAUTHORIZED, "UNAUTHORIZED"), InvitationError::NotSignedIn),
+		for (answer, accepted, declined) in [
+			(
+				refusal(StatusCode::GONE, "INVITATION_WITHDRAWN"),
+				JoinedSpaceError::InvitationWithdrawn,
+				InvitationError::Withdrawn,
+			),
+			(
+				refusal(StatusCode::GONE, "INVITATION_EXPIRED"),
+				JoinedSpaceError::InvitationExpired,
+				InvitationError::Withdrawn,
+			),
+			(
+				refusal(StatusCode::NOT_FOUND, "NOT_FOUND"),
+				JoinedSpaceError::NoInvitation { inviter_email: None },
+				InvitationError::UnknownInvitation,
+			),
+			(
+				refusal(StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+				JoinedSpaceError::SessionRevoked,
+				InvitationError::NotSignedIn,
+			),
 		] {
 			harness.answering(answer.0, answer.1);
 			assert_eq!(
-				accept(harness.app.handle(), INSTANCE.to_owned()).await.map(|joined| joined.id),
-				Err(expected.clone())
+				accept(harness.app.handle(), INVITATION.to_owned()).await.map(|joined| joined.id),
+				Err(accepted)
 			);
-			assert_eq!(decline(harness.app.handle(), INSTANCE.to_owned()).await, Err(expected));
+			assert_eq!(decline(harness.app.handle(), INVITATION.to_owned()).await, Err(declined));
 		}
+		assert!(harness.joins().is_empty());
 		assert!(harness.stored().await.is_empty());
 		assert!(harness.heard(JOINED_CHANGED).is_empty());
 	});
@@ -546,9 +621,9 @@ fn an_accept_the_store_cannot_keep_is_answered_storage() {
 	run(async {
 		let harness = Harness::over(Some(BEARER), None, Err(DatabaseError::AppDataDir)).await;
 
-		let refused = accept(harness.app.handle(), INSTANCE.to_owned()).await;
+		let refused = accept(harness.app.handle(), INVITATION.to_owned()).await;
 
-		assert!(matches!(refused, Err(InvitationError::Storage { .. })), "{refused:?}");
+		assert!(matches!(refused, Err(JoinedSpaceError::Unavailable { .. })), "{refused:?}");
 	});
 }
 
@@ -557,9 +632,12 @@ fn an_accept_writes_one_relay_entry_named_by_the_instance_and_announces_it() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 
-		let joined = accept(harness.app.handle(), INSTANCE.to_owned()).await.expect("the accept");
+		let joined = accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the accept");
 
 		assert_eq!(joined.name, "Studio");
+		assert_eq!(joined.state, JoinedSpaceState::Online);
+		let asked: Vec<Value> = harness.joins().iter().map(|join| join["key_id"].clone()).collect();
+		assert_eq!(asked, vec![json!(0)]);
 		assert_eq!(
 			harness.stored().await,
 			vec![JoinedSpace {
@@ -572,7 +650,7 @@ fn an_accept_writes_one_relay_entry_named_by_the_instance_and_announces_it() {
 		assert_eq!(harness.heard(JOINED_CHANGED), vec![json!({ "id": joined.id })]);
 		assert_eq!(
 			harness.cloud.called.lock().expect("the cloud").clone(),
-			vec!["accept instance-1"]
+			vec!["accept instance-1-invitation"]
 		);
 	});
 }
@@ -584,8 +662,8 @@ fn an_accept_answered_already_joined_writes_the_entry_once_under_the_same_id() {
 		read(harness.app.handle()).await.expect("the invitations are read");
 		harness.answering(StatusCode::CONFLICT, refusal(StatusCode::CONFLICT, "ALREADY_JOINED").1);
 
-		let first = accept(harness.app.handle(), INSTANCE.to_owned()).await.expect("the accept");
-		let second = accept(harness.app.handle(), INSTANCE.to_owned()).await.expect("the replay");
+		let first = accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the accept");
+		let second = accept(harness.app.handle(), INVITATION.to_owned()).await.expect("the replay");
 
 		assert_eq!(first, second);
 		assert_eq!(first.name, "Studio");
@@ -600,13 +678,13 @@ fn a_decline_leaves_the_joined_spaces_unchanged() {
 		let harness = Harness::new(Some(BEARER)).await;
 		harness.answering(StatusCode::NO_CONTENT, Value::Null);
 
-		decline(harness.app.handle(), INSTANCE.to_owned()).await.expect("the decline");
+		decline(harness.app.handle(), INVITATION.to_owned()).await.expect("the decline");
 
 		assert!(harness.stored().await.is_empty());
 		assert!(harness.heard(JOINED_CHANGED).is_empty());
 		assert_eq!(
 			harness.cloud.called.lock().expect("the cloud").clone(),
-			vec!["decline instance-1"]
+			vec!["decline instance-1-invitation"]
 		);
 	});
 }
@@ -714,8 +792,8 @@ fn a_host_offline_before_the_shared_space_is_known_answers_host_offline_and_keep
 		let Harness { app, members, .. } = &mut harness;
 		let connecting = connect(app, &id);
 		let closing = async {
-			let socket = members.recv().await.expect("the guest opened the relay");
-			let mut member = Member::greeted(socket, host).await;
+			let peeked = members.recv().await.expect("the guest opened the relay");
+			let mut member = Member::greeted(peeked, host).await;
 			let asked = call(&mut member).await;
 			assert_eq!(asked["command"], "relay_shared_space");
 			closed_with(&mut member, 4002).await;
@@ -919,8 +997,9 @@ fn every_invoke_sent_right_after_connecting_a_learned_entry_gets_the_host_answer
 		let invoking = futures_util::future::join_all(
 			(0..3).map(|_| proxied(&connection, "conversation_list")),
 		);
+		let asked_before = harness.member_relays_asked();
 		let answering = async {
-			let is_asked = || (harness.member_relays_asked() > 0).then_some(());
+			let is_asked = || (harness.member_relays_asked() > asked_before).then_some(());
 			harness.noticed_until("the member relay open", is_asked).await;
 			harness.cloud.is_member_relay_open.send_replace(true);
 			let mut member = harness.member().await;
@@ -1047,7 +1126,7 @@ fn an_accept_in_flight_during_sign_out_answers_not_signed_in_and_leaves_no_relay
 		let harness = Harness::new(Some(BEARER)).await;
 		harness.cloud.is_call_open.send_replace(false);
 
-		let accepting = accept(harness.app.handle(), INSTANCE.to_owned());
+		let accepting = accept(harness.app.handle(), INVITATION.to_owned());
 		let signing_out = async {
 			let is_called =
 				|| (!harness.cloud.called.lock().expect("the cloud").is_empty()).then_some(());
@@ -1057,7 +1136,7 @@ fn an_accept_in_flight_during_sign_out_answers_not_signed_in_and_leaves_no_relay
 		};
 		let (accepted, ()) = tokio::join!(accepting, signing_out);
 
-		assert_eq!(accepted.map(|joined| joined.id), Err(InvitationError::NotSignedIn));
+		assert_eq!(accepted.map(|joined| joined.id), Err(JoinedSpaceError::NeedsSignIn));
 		assert!(harness.stored().await.is_empty());
 		assert!(harness.heard(JOINED_CHANGED).is_empty());
 	});

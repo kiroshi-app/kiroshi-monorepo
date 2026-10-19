@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::commands::ready;
-use super::contract::JoinedSpaceError;
+use super::contract::{JoinedSpaceError, JoinedSpaceState};
 use super::roster_set::{verified_set, Handed, HeldRoster};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::contract::DeviceKeysError;
@@ -39,6 +39,28 @@ pub(super) async fn held<R: Runtime>(
 	};
 	let roster = roster_verified(app, instance_id, &device).await?;
 	Ok(roster.map(|roster| Held { device, space, roster }))
+}
+
+pub(super) fn state_of<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
+) -> Result<JoinedSpaceState, JoinedSpaceError> {
+	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
+	Ok(match space {
+		Some(_) => JoinedSpaceState::Online,
+		None => JoinedSpaceState::WaitingForHost,
+	})
+}
+
+pub(super) fn state_or_waiting<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	instance_id: &str,
+) -> JoinedSpaceState {
+	state_of(app, instance_id).unwrap_or_else(|failure| {
+		eprintln!("joined space {id} waits for its host: its key did not read: {failure:?}");
+		JoinedSpaceState::WaitingForHost
+	})
 }
 
 pub(super) async fn roster<R: Runtime>(

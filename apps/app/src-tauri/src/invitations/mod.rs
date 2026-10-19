@@ -8,12 +8,11 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
-use crate::account::cloud::{Cloud, InvitationCallError};
+use crate::account::cloud::{Cloud, InvitationCallError, JoinedInstance};
 use crate::account::session::{self, AccountSession};
 use crate::events::{self, INVITATION_CHANGED};
 use crate::joined_spaces;
-use crate::joined_spaces::contract::JoinedSpace;
-use crate::joined_spaces::relay::RelayJoinError;
+use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 use contract::{Invitation, InvitationError, InvitationsChanged};
 
 const INVITATIONS_EVERY: Duration = Duration::from_secs(30);
@@ -50,12 +49,13 @@ impl Invitations {
 		self.poll.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
-	fn invited_name(&self, instance_id: &str) -> Option<String> {
-		self.last()
-			.iter()
-			.flatten()
-			.find(|invitation| invitation.instance_id == instance_id)
-			.map(|invitation| invitation.instance_name.clone())
+	fn invited(&self, invitation_id: &str) -> Option<JoinedInstance> {
+		self.last().iter().flatten().find(|invitation| invitation.id == invitation_id).map(
+			|invitation| JoinedInstance {
+				instance_id: invitation.instance_id.clone(),
+				name: invitation.instance_name.clone(),
+			},
+		)
 	}
 }
 
@@ -76,40 +76,64 @@ pub async fn read<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Invitation>, Inv
 
 pub async fn accept<R: Runtime>(
 	app: &AppHandle<R>,
-	instance_id: String,
-) -> Result<JoinedSpace, InvitationError> {
-	let invitations = app.state::<Invitations>();
-	let bearer = bearer_of(app)?;
-	let name = match invitations.cloud.accept_invitation(&bearer, &instance_id).await {
-		Ok(joined) => Some(joined.name),
-		Err(InvitationCallError::AlreadyJoined) => invitations.invited_name(&instance_id),
-		Err(error) => {
-			signed_out_if_revoked(app, &bearer, &error);
-			return Err(error.into());
-		}
-	};
-	let joined =
-		joined_spaces::relay::joined(app, instance_id, name).await.map_err(
-			|error| match error {
-				RelayJoinError::SignedOut => InvitationError::NotSignedIn,
-				RelayJoinError::Account(detail) => InvitationError::Storage { detail },
-				RelayJoinError::Joined(error) => {
-					InvitationError::Storage { detail: format!("{error:?}") }
-				}
-			},
-		)?;
+	invitation_id: String,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	let accepted = accepted(app, &invitation_id).await?;
+	let joined = joined_spaces::join::joined(app, accepted.instance_id, accepted.name).await;
 	reread(app).await;
-	Ok(joined)
+	joined
+}
+
+async fn accepted<R: Runtime>(
+	app: &AppHandle<R>,
+	invitation_id: &str,
+) -> Result<JoinedInstance, JoinedSpaceError> {
+	let invitations = app.state::<Invitations>();
+	let bearer = bearer_of(app).map_err(|failure| match failure {
+		InvitationError::NotSignedIn => JoinedSpaceError::NeedsSignIn,
+		failure => JoinedSpaceError::SessionStore { detail: format!("{failure:?}") },
+	})?;
+	match invitations.cloud.accept_invitation(&bearer, invitation_id).await {
+		Ok(accepted) => Ok(accepted),
+		Err(InvitationCallError::AlreadyJoined) => {
+			invitations.invited(invitation_id).ok_or_else(|| JoinedSpaceError::CouldNotAccept {
+				detail: format!(
+					"invitation {invitation_id} was already accepted and is not listed"
+				),
+			})
+		}
+		Err(failure) => {
+			signed_out_if_revoked(app, &bearer, &failure);
+			Err(acceptance_refused(failure))
+		}
+	}
+}
+
+fn acceptance_refused(failure: InvitationCallError) -> JoinedSpaceError {
+	match failure {
+		InvitationCallError::Revoked => JoinedSpaceError::SessionRevoked,
+		InvitationCallError::Expired => JoinedSpaceError::InvitationExpired,
+		InvitationCallError::Withdrawn => JoinedSpaceError::InvitationWithdrawn,
+		InvitationCallError::Used => JoinedSpaceError::InvitationUsed,
+		InvitationCallError::OtherEmail => JoinedSpaceError::InvitationOtherEmail,
+		InvitationCallError::Unknown => JoinedSpaceError::NoInvitation { inviter_email: None },
+		InvitationCallError::Offline(detail) | InvitationCallError::Unreachable(detail) => {
+			JoinedSpaceError::CouldNotAccept { detail }
+		}
+		InvitationCallError::AlreadyJoined => JoinedSpaceError::CouldNotAccept {
+			detail: "the cloud answered already joined".to_owned(),
+		},
+	}
 }
 
 pub async fn decline<R: Runtime>(
 	app: &AppHandle<R>,
-	instance_id: String,
+	invitation_id: String,
 ) -> Result<(), InvitationError> {
 	let bearer = bearer_of(app)?;
 	app.state::<Invitations>()
 		.cloud
-		.decline_invitation(&bearer, &instance_id)
+		.decline_invitation(&bearer, &invitation_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
 	reread(app).await;

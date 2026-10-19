@@ -7,10 +7,12 @@ pub const CHANGED_EVENT: &str = "invitation://changed";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Invitation {
+	pub id: String,
 	pub instance_id: String,
 	pub instance_name: String,
 	pub inviter_email: String,
 	pub invited_at: String,
+	pub expires_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -47,10 +49,12 @@ impl From<InvitationCallError> for InvitationError {
 			InvitationCallError::Unreachable(reason) => {
 				InvitationError::ServersUnreachable { reason }
 			}
-			InvitationCallError::Withdrawn => InvitationError::Withdrawn,
-			InvitationCallError::Unknown | InvitationCallError::AlreadyJoined => {
-				InvitationError::UnknownInvitation
-			}
+			InvitationCallError::Expired
+			| InvitationCallError::Withdrawn
+			| InvitationCallError::Used => InvitationError::Withdrawn,
+			InvitationCallError::OtherEmail
+			| InvitationCallError::Unknown
+			| InvitationCallError::AlreadyJoined => InvitationError::UnknownInvitation,
 		}
 	}
 }

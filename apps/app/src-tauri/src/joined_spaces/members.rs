@@ -507,7 +507,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_joined_space_without_a_space_key_needs_a_join_link_on_every_connect() {
+	async fn a_joined_space_without_a_space_key_waits_for_its_host_on_every_connect() {
 		let dir = temp_dir();
 		let (api_url, _relay) = relay_answering(listed(&[("bob", "Bob")])).await;
 		signed_in(&dir);
@@ -528,7 +528,8 @@ mod tests {
 		];
 
 		for connection in connections {
-			assert_eq!(connection.map(|found| found.id), Err(JoinedSpaceError::NeedsJoinLink));
+			let waiting = JoinedSpaceError::WaitingForHost { id: joined.id.clone() };
+			assert_eq!(connection.map(|found| found.id), Err(waiting));
 		}
 		let guests = app.state::<RelayGuests>();
 		assert!(!guests.is_running(&joined.id));

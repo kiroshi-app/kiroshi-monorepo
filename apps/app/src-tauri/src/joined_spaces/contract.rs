@@ -14,13 +14,31 @@ pub struct JoinedSpace {
 	pub host_url: String,
 	pub remote_space_id: Option<String>,
 	pub name: String,
+	pub state: JoinedSpaceState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum JoinedSpaceState {
+	Online,
+	WaitingForHost,
 }
 
 impl JoinedSpace {
-	pub fn presented(joined: joined_spaces::JoinedSpace, cloud: &Cloud) -> Self {
+	pub fn presented(
+		joined: joined_spaces::JoinedSpace,
+		cloud: &Cloud,
+		state: JoinedSpaceState,
+	) -> Self {
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		let host_url = cloud.member_relay_url(&instance_id);
-		Self { id: joined.id, host_url, remote_space_id: joined.remote_space_id, name: joined.name }
+		Self {
+			id: joined.id,
+			host_url,
+			remote_space_id: joined.remote_space_id,
+			name: joined.name,
+			state,
+		}
 	}
 }
 
@@ -101,8 +119,14 @@ pub enum JoinedSpaceError {
 	RelayRefused {
 		detail: String,
 	},
-	MalformedLink,
-	LinkUsed,
+	InvitationExpired,
+	InvitationWithdrawn,
+	InvitationUsed,
+	InvitationOtherEmail,
+	#[serde(rename_all = "camelCase")]
+	CouldNotAccept {
+		detail: String,
+	},
 	#[serde(rename_all = "camelCase")]
 	NoInvitation {
 		inviter_email: Option<String>,
@@ -110,7 +134,10 @@ pub enum JoinedSpaceError {
 	NotInRoster,
 	BadSignature,
 	RemovedByRotation,
-	NeedsJoinLink,
+	#[serde(rename_all = "camelCase")]
+	WaitingForHost {
+		id: String,
+	},
 	#[serde(rename_all = "camelCase")]
 	KeyStore {
 		detail: String,

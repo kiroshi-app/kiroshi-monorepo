@@ -257,7 +257,6 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("joined_space_connect", Reach::HostOnly),
 	("joined_space_members", Reach::HostOnly),
 	("joined_space_remove", Reach::HostOnly),
-	("join_by_link", Reach::HostOnly),
 	("join_link_listen", Reach::HostOnly),
 	("mcp_oauth_connect", Reach::HostOnly),
 	("mcp_oauth_cancel", Reach::HostOnly),

@@ -1,7 +1,7 @@
 use tauri::{AppHandle, Runtime};
 
 use super::contract::{Invitation, InvitationError};
-use crate::joined_spaces::contract::JoinedSpace;
+use crate::joined_spaces::contract::{JoinedSpace, JoinedSpaceError};
 
 #[tauri::command]
 #[specta::specta]
@@ -15,16 +15,16 @@ pub async fn invitations_list<R: Runtime>(
 #[specta::specta]
 pub async fn invitation_accept<R: Runtime>(
 	app: AppHandle<R>,
-	instance_id: String,
-) -> Result<JoinedSpace, InvitationError> {
-	super::accept(&app, instance_id).await
+	invitation_id: String,
+) -> Result<JoinedSpace, JoinedSpaceError> {
+	super::accept(&app, invitation_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn invitation_decline<R: Runtime>(
 	app: AppHandle<R>,
-	instance_id: String,
+	invitation_id: String,
 ) -> Result<(), InvitationError> {
-	super::decline(&app, instance_id).await
+	super::decline(&app, invitation_id).await
 }

@@ -94,6 +94,7 @@ const HOST_PERSONAL: JoinedSpace = {
 	hostUrl: HOST_URL,
 	remoteSpaceId: "personal",
 	name: "Personal",
+	state: "online",
 }
 
 const HOST_PERSONAL_ROW = "joined:joined-personal"

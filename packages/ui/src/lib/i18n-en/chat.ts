@@ -330,15 +330,29 @@ const chat = {
 					description:
 						"Kiroshi’s cloud didn’t confirm you left. Try again in a moment.",
 				},
-				malformedLink: {
-					title: "Couldn’t read this join link",
-					description:
-						"The link is incomplete or damaged. Ask the host for a new link.",
+				invitationExpired: {
+					title: "This invitation expired",
+					description: "Ask the host to invite you again.",
 				},
-				linkUsed: {
-					title: "This join link was already used",
+				invitationWithdrawn: {
+					title: "This invitation was withdrawn",
 					description:
-						"A link admits one computer only. Ask the host for a new link.",
+						"The host took it back. Ask the host to invite you again.",
+				},
+				invitationUsed: {
+					title: "This invitation was already used",
+					description:
+						"An invitation is accepted once. Ask the host to invite you again.",
+				},
+				invitationOtherEmail: {
+					title: "This invitation is for another email",
+					description:
+						"Sign in with the email the host invited, then accept it again.",
+				},
+				couldNotAccept: {
+					title: "Couldn’t accept this invitation",
+					description:
+						"Kiroshi’s cloud didn’t take it. Check your connection, then try again.",
 				},
 				noInvitation: {
 					title: "You’re not invited to this space",
@@ -360,10 +374,10 @@ const chat = {
 					description:
 						"Its host no longer lets it in. Ask the host for a new link to join again.",
 				},
-				needsJoinLink: {
-					title: "This space needs a join link",
+				waitingForHost: {
+					title: "Waiting for the host",
 					description:
-						"This computer holds no key for it yet. Ask the host for a join link, then open it here.",
+						"This space opens once its host is online and lets this computer in.",
 				},
 				keyStore: {
 					title: "Couldn’t read this computer’s keys",

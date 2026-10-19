@@ -13,6 +13,7 @@ import {
 	type Invitation,
 	type InvitationError,
 	type JoinedSpace,
+	type JoinedSpaceError,
 } from "../bindings"
 import { listen } from "../host"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
@@ -32,10 +33,12 @@ afterEach(() => {
 })
 
 const STUDIO: Invitation = {
+	id: "invitation-studio",
 	instanceId: "instance-studio",
 	instanceName: "Studio Nord",
 	inviterEmail: "lea@example.com",
 	invitedAt: "2026-10-08T09:00:00Z",
+	expiresAt: "2026-10-15T09:00:00Z",
 }
 
 const JOINED_STUDIO: JoinedSpace = {
@@ -43,6 +46,7 @@ const JOINED_STUDIO: JoinedSpace = {
 	hostUrl: "wss://cloud.kiroshi.test/instances/instance-studio/relay/member",
 	remoteSpaceId: null,
 	name: "Studio Nord",
+	state: "online",
 }
 
 const WAITING_ROW = {
@@ -54,9 +58,14 @@ const WAITING_ROW = {
 
 const OFFLINE: InvitationError = { kind: "offline", reason: "no route" }
 
-const SERVERS: InvitationError = {
-	kind: "serversUnreachable",
-	reason: "timed out",
+const ACCEPT_OFFLINE: JoinedSpaceError = {
+	kind: "relayUnreachable",
+	detail: "no route",
+}
+
+const ACCEPT_SERVERS: JoinedSpaceError = {
+	kind: "couldNotAccept",
+	detail: "timed out",
 }
 
 const STORAGE: InvitationError = { kind: "storage", detail: "disk full" }
@@ -204,7 +213,7 @@ describe("accepting an invitation", () => {
 
 		await gear.accept(STUDIO.instanceId)
 
-		expect(gear.transport.accept).toHaveBeenCalledWith(STUDIO.instanceId)
+		expect(gear.transport.accept).toHaveBeenCalledWith(STUDIO.id)
 		expect(gear.rows()).toEqual([])
 		expect(gear.admit).toHaveBeenCalledWith(JOINED_STUDIO)
 	})
@@ -230,8 +239,8 @@ describe("accepting an invitation", () => {
 	})
 
 	it.each([
-		[SERVERS, "servers"],
-		[OFFLINE, "offline"],
+		[ACCEPT_SERVERS, "servers"],
+		[ACCEPT_OFFLINE, "offline"],
 	])(
 		"keeps the row failed on %o and accepts again on Try again",
 		async (error, failure) => {
@@ -254,7 +263,9 @@ describe("accepting an invitation", () => {
 
 	it("shows a withdrawn invitation as withdrawn until the list drops it", async () => {
 		const gear = await gearFor()
-		gear.transport.accept.mockRejectedValueOnce({ kind: "withdrawn" })
+		gear.transport.accept.mockRejectedValueOnce({
+			kind: "invitationWithdrawn",
+		})
 
 		await gear.accept(STUDIO.instanceId)
 
@@ -268,13 +279,13 @@ describe("accepting an invitation", () => {
 
 	it("raises any other failure and keeps the row waiting", async () => {
 		const gear = await gearFor()
-		gear.transport.accept.mockRejectedValueOnce(STORAGE)
+		gear.transport.accept.mockRejectedValueOnce({ kind: "invitationExpired" })
 
 		await gear.accept(STUDIO.instanceId)
 
 		expect(gear.rows()).toEqual([WAITING_ROW])
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
-			expect.objectContaining({ description: "disk full" }),
+			expect.objectContaining({ title: "This invitation expired" }),
 		)
 	})
 })
@@ -285,7 +296,7 @@ describe("declining an invitation", () => {
 
 		await gear.decline(STUDIO.instanceId)
 
-		expect(gear.transport.decline).toHaveBeenCalledWith(STUDIO.instanceId)
+		expect(gear.transport.decline).toHaveBeenCalledWith(STUDIO.id)
 		expect(gear.rows()).toEqual([])
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
@@ -305,10 +316,12 @@ describe("declining an invitation", () => {
 
 describe("sweeping withdrawn invitations when the switcher closes", () => {
 	const HARBOUR: Invitation = {
+		id: "invitation-harbour",
 		instanceId: "instance-harbour",
 		instanceName: "Harbour",
 		inviterEmail: "sam@example.com",
 		invitedAt: "2026-10-08T10:00:00Z",
+		expiresAt: "2026-10-15T09:00:00Z",
 	}
 
 	const HARBOUR_ROW = {
@@ -320,7 +333,9 @@ describe("sweeping withdrawn invitations when the switcher closes", () => {
 
 	const withdrawnGear = async (listed: Invitation[] = [STUDIO]) => {
 		const gear = await gearFor(listed)
-		gear.transport.accept.mockRejectedValueOnce({ kind: "withdrawn" })
+		gear.transport.accept.mockRejectedValueOnce({
+			kind: "invitationWithdrawn",
+		})
 		await gear.accept(STUDIO.instanceId)
 		return gear
 	}
@@ -345,7 +360,7 @@ describe("sweeping withdrawn invitations when the switcher closes", () => {
 		[
 			"failed",
 			async (gear) => {
-				gear.transport.accept.mockRejectedValueOnce(OFFLINE)
+				gear.transport.accept.mockRejectedValueOnce(ACCEPT_OFFLINE)
 				await gear.accept(HARBOUR.instanceId)
 			},
 		],

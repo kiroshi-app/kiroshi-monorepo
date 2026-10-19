@@ -13,10 +13,14 @@ const SCHEME: &str = "kiroshi";
 
 const JOIN_HOST: &str = "join";
 
+const INVITATION_QUERY: &str = "invitation=";
+
+const INVITATION_REF_LENGTH: usize = 128;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinLinkOpened {
-	pub link: String,
+	pub invitation_id: String,
 }
 
 #[derive(Default)]
@@ -42,43 +46,59 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
 		eprintln!("the kiroshi scheme was not registered with the system: {failure}");
 	}
 	match deep_link.get_current() {
-		Ok(Some(launched)) => received(app, join_links_of(&launched)),
+		Ok(Some(launched)) => received(app, invitations_of(&launched)),
 		Ok(None) => {}
 		Err(failure) => eprintln!("the link that launched the app did not read: {failure}"),
 	}
 	let handle = app.clone();
 	deep_link.on_open_url(move |event| {
-		let links = join_links_of(&event.urls());
-		if links.is_empty() {
+		let invitations = invitations_of(&event.urls());
+		if invitations.is_empty() {
 			return;
 		}
 		window_controls::raise_main(&handle);
-		received(&handle, links);
+		received(&handle, invitations);
 	});
 }
 
-fn join_links_of(urls: &[Url]) -> Vec<String> {
+fn invitations_of(urls: &[Url]) -> Vec<String> {
 	urls.iter()
 		.filter(|url| url.scheme() == SCHEME && url.host_str() == Some(JOIN_HOST))
-		.map(|url| url.as_str().to_owned())
+		.filter_map(|url| {
+			let invitation = invitation_of(url);
+			if invitation.is_none() {
+				eprintln!("a kiroshi://join link that names no invitation was ignored");
+			}
+			invitation
+		})
 		.collect()
 }
 
-fn received<R: Runtime>(app: &AppHandle<R>, links: Vec<String>) {
+fn invitation_of(url: &Url) -> Option<String> {
+	if !url.path().is_empty() || url.fragment().is_some() {
+		return None;
+	}
+	let reference = url.query()?.strip_prefix(INVITATION_QUERY)?;
+	let is_reference = (1..=INVITATION_REF_LENGTH).contains(&reference.len())
+		&& reference.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+	is_reference.then(|| reference.to_owned())
+}
+
+fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
 	let Some(join_links) = app.try_state::<JoinLinks>() else {
 		return eprintln!("a join link arrived before its inbox was installed");
 	};
 	let mut inbox = join_links.inbox();
 	if !inbox.is_listened {
-		for link in links {
-			if !inbox.held.contains(&link) {
-				inbox.held.push(link);
+		for invitation in invitations {
+			if !inbox.held.contains(&invitation) {
+				inbox.held.push(invitation);
 			}
 		}
 		return;
 	}
 	drop(inbox);
-	links.into_iter().for_each(|link| announced(app, link));
+	invitations.into_iter().for_each(|invitation| announced(app, invitation));
 }
 
 pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
@@ -90,11 +110,11 @@ pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
 		inbox.is_listened = true;
 		std::mem::take(&mut inbox.held)
 	};
-	held.into_iter().for_each(|link| announced(app, link));
+	held.into_iter().for_each(|invitation| announced(app, invitation));
 }
 
-fn announced<R: Runtime>(app: &AppHandle<R>, link: String) {
-	if let Err(failure) = events::emit(app, JOIN_LINK_OPENED, JoinLinkOpened { link }) {
+fn announced<R: Runtime>(app: &AppHandle<R>, invitation_id: String) {
+	if let Err(failure) = events::emit(app, JOIN_LINK_OPENED, JoinLinkOpened { invitation_id }) {
 		eprintln!("a join link did not reach the front: {failure}");
 	}
 }
@@ -109,14 +129,15 @@ mod tests {
 	use super::*;
 	use crate::test_app::an_app_of_its_own;
 
-	const LINK: &str = "kiroshi://join#instance-1.aGVsbG8.c2VjcmV0";
+	const LINK: &str = "kiroshi://join?invitation=inv_3f9A-b2";
 
-	fn heard(app: &App<MockRuntime>) -> Receiver<String> {
+	const INVITATION: &str = "inv_3f9A-b2";
+
+	fn heard(app: &App<MockRuntime>) -> Receiver<serde_json::Value> {
 		let (told, hearing) = channel();
 		app.listen_any(OPENED_EVENT, move |event| {
-			let opened: serde_json::Value =
-				serde_json::from_str(event.payload()).expect("a json payload");
-			told.send(opened["link"].as_str().expect("a link").to_owned()).expect("the test hears");
+			let opened = serde_json::from_str(event.payload()).expect("a json payload");
+			told.send(opened).expect("the test hears");
 		});
 		hearing
 	}
@@ -126,39 +147,57 @@ mod tests {
 	}
 
 	#[test]
-	fn a_link_that_arrives_before_the_front_listens_is_announced_once_it_listens() {
+	fn an_invitation_link_opened_before_the_front_listens_is_announced_once_it_listens() {
 		let app = an_app_of_its_own("join-links-held", mock_builder());
 		app.manage(JoinLinks::default());
 		let hearing = heard(&app);
 
-		received(app.handle(), join_links_of(&urls(&[LINK, LINK])));
+		received(app.handle(), invitations_of(&urls(&[LINK, LINK])));
 		let before = hearing.try_recv().ok();
 		listened(app.handle());
 
 		assert_eq!(before, None);
-		assert_eq!(hearing.try_iter().collect::<Vec<_>>(), vec![LINK.to_owned()]);
+		assert_eq!(
+			hearing.try_iter().collect::<Vec<_>>(),
+			vec![serde_json::json!({ "invitationId": INVITATION })]
+		);
 	}
 
 	#[test]
-	fn a_link_opened_while_the_front_listens_is_announced_with_its_fragment_intact() {
+	fn an_invitation_link_opened_while_the_front_listens_is_announced_with_its_invitation() {
 		let app = an_app_of_its_own("join-links-live", mock_builder());
 		app.manage(JoinLinks::default());
 		let hearing = heard(&app);
 		listened(app.handle());
 
-		received(app.handle(), join_links_of(&urls(&[LINK])));
+		received(app.handle(), invitations_of(&urls(&[LINK])));
 
-		assert_eq!(hearing.try_iter().collect::<Vec<_>>(), vec![LINK.to_owned()]);
+		assert_eq!(
+			hearing.try_iter().collect::<Vec<_>>(),
+			vec![serde_json::json!({ "invitationId": INVITATION })]
+		);
 	}
 
 	#[test]
-	fn only_a_kiroshi_join_url_is_a_join_link() {
-		let links = join_links_of(&urls(&[
-			"kiroshi://settings#x",
-			"https://kiroshi.app/join#x",
-			"kiroshi://join#x.y.z",
+	fn any_other_kiroshi_join_url_names_no_invitation() {
+		let too_long = format!("kiroshi://join?invitation={}", "a".repeat(129));
+		let longest = format!("kiroshi://join?invitation={}", "a".repeat(128));
+
+		let refused = invitations_of(&urls(&[
+			"kiroshi://join#instance-1.aGVsbG8.c2VjcmV0",
+			"kiroshi://join?invitation=",
+			"kiroshi://join?invitation=a.b",
+			"kiroshi://join?invitation=%41",
+			"kiroshi://join?invitation=a&invitation=b",
+			"kiroshi://join?other=a",
+			"kiroshi://join/path?invitation=a",
+			"kiroshi://join?invitation=a#x",
+			too_long.as_str(),
+			"kiroshi://settings?invitation=a",
+			"https://kiroshi.app/join?invitation=a",
 		]));
 
-		assert_eq!(links, vec!["kiroshi://join#x.y.z".to_owned()]);
+		assert_eq!(refused, Vec::<String>::new());
+		assert_eq!(invitations_of(&urls(&[longest.as_str()])), vec!["a".repeat(128)]);
 	}
 }
