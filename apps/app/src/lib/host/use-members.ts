@@ -12,6 +12,7 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import type { MembersPanelProps } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { i18n } from "@workspace/ui/lib/i18n"
+import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 import { hostQueryKeys } from "./host-query-keys"
 import type { HostedSpace } from "./hosting-transport"
@@ -37,6 +38,7 @@ import {
 	HOSTING_MEMBERS_CHANGED_EVENT,
 	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	type Member,
+	type SpaceInvitation,
 } from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 import { isFirstReadPending } from "../query/last-read"
@@ -80,6 +82,22 @@ const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
 	description: i18n.t("settings:space.members.withdrawnDescription"),
 })
+
+const SENT_UNTIL: Intl.DateTimeFormatOptions = { month: "long", day: "numeric" }
+
+const sentNotice = ({ email, expiresAt }: SpaceInvitation): NoticeMessage => ({
+	title: i18n.t("settings:space.members.sent", { email }),
+	description: i18n.t("settings:space.members.sentDescription", {
+		date: formatDateTime(Date.parse(expiresAt), SENT_UNTIL),
+	}),
+})
+
+const sentInvitationIn = (answered: HostedMember[], email: string) =>
+	answered.find(
+		(member) =>
+			member.invitation?.state === "invited" &&
+			isSameEmail(member.email, email),
+	)?.invitation
 
 const inviteBlockerOf = (
 	isSignedOut: boolean,
@@ -136,9 +154,17 @@ export const useMembers = (
 			membersAfter(transport, run, heldMembers(run.spaceId)),
 		onSuccess: (answered, run) => {
 			queryClient.setQueryData(hostQueryKeys.membersOf(run.spaceId), answered)
-			if (run.action === "invite") setEmail("")
+			const reportSentTo = (email: string) => {
+				const sent = sentInvitationIn(answered, email)
+				if (sent) reportSuccess(sentNotice(sent))
+			}
+			if (run.action === "invite") {
+				setEmail("")
+				reportSentTo(run.email)
+			}
 			if (run.action === "resend") {
 				setEmail((held) => (isSameEmail(held, run.member.email) ? "" : held))
+				reportSentTo(run.member.email)
 			}
 			if (run.action === "withdraw") reportSuccess(withdrawnNotice(run.member))
 		},
