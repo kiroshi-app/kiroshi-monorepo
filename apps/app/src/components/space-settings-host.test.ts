@@ -879,6 +879,42 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		expect(within(dialog).getByText("Steve Puget")).toBeTruthy()
 	})
 
+	it("sends no members call with the local joined id until the shared space id is learned, then removes through it", async () => {
+		garageHostAnswers({
+			hosting_remove_member: () => ({
+				members: [HOST_ROW, SAM_JOINED],
+				invitations: [],
+			}),
+		})
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING, TOM_GUEST])
+		const gear = await gearWithGarage({ ...GARAGE, remoteSpaceId: null })
+		const carriesTheLocalId = () =>
+			membersCalls().some(([, args]) => args?.spaceId === GARAGE.id)
+
+		await act(async () => {
+			gear.joined.selectSpace(GARAGE_ROW)
+			await settle()
+		})
+
+		expect(gear.joined.getState().openId).toBeNull()
+		expect(carriesTheLocalId()).toBe(false)
+
+		gear.transport.list = async () => [GARAGE]
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+		fireEvent.click(await removeTomOf(dialog))
+		await confirmRemoval()
+
+		expect(invoke).toHaveBeenCalledWith("hosting_remove_member", {
+			spaceId: "garage",
+			userId: "tom",
+		})
+		await waitFor(() =>
+			expect(within(dialog).queryByText("Tom Reed")).toBeNull(),
+		)
+		expect(carriesTheLocalId()).toBe(false)
+	})
+
 	it("shows the removal the host of a joined space fails in the panel", async () => {
 		garageHostAnswers({
 			hosting_remove_member: () => {
