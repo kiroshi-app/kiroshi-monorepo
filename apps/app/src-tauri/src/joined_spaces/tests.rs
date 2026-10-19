@@ -784,9 +784,9 @@ impl AdmittingRelay {
 		self.0.lock().expect("the relay")
 	}
 
-	fn device_approved(&self, device_id: &str, account: &str) {
+	fn member_device_approved(&self, device_id: &str) {
 		let approved =
-			json!({ "event": "device.approved", "deviceId": device_id, "userId": account });
+			json!({ "event": "device.approved", "deviceId": device_id, "userId": "member" });
 		if let Some(host) = &self.admission().host {
 			if host.send(Message::Text(approved.to_string().into())).is_err() {
 				eprintln!("the fake relay lost its host socket");
@@ -853,7 +853,7 @@ async fn admitting_device_registered(
 		account == "member" && admission.is_accepted
 	};
 	if is_listed_now {
-		relay.device_approved(&id, account);
+		relay.member_device_approved(&id);
 	}
 	answered_json(
 		StatusCode::CREATED,
@@ -898,7 +898,7 @@ async fn admitting_accepted(Served(relay): Served<AdmittingRelay>, headers: Head
 			.collect()
 	};
 	for device_id in &member_devices {
-		relay.device_approved(device_id, "member");
+		relay.member_device_approved(device_id);
 	}
 	answered_json(StatusCode::OK, json!({ "instanceId": INSTANCE, "name": "Studio" }))
 }
