@@ -267,7 +267,10 @@ const settings = {
 				description:
 					"{{name}} loses access right away. You can invite {{name}} again.",
 			},
+			sent: "Invitation sent to {{email}}",
+			sentDescription: "It works once, until {{date}}.",
 			withdrawn: "Invitation to {{email}} withdrawn",
+			withdrawnDescription: "The link in their email stops working.",
 			failure: {
 				invite: {
 					notHosting:

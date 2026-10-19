@@ -278,7 +278,10 @@ const settings = {
 				description:
 					"{{name}} perd l’accès immédiatement. Vous pourrez inviter {{name}} de nouveau.",
 			},
+			sent: "Invitation envoyée à {{email}}",
+			sentDescription: "Elle sert une fois, jusqu’au {{date}}.",
 			withdrawn: "Invitation à {{email}} retirée",
+			withdrawnDescription: "Le lien de leur e-mail ne fonctionne plus.",
 			failure: {
 				invite: {
 					notHosting:

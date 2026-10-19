@@ -78,6 +78,7 @@ const NOT_REFUSED: MemberActionRefusal = {}
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
+	description: i18n.t("settings:space.members.withdrawnDescription"),
 })
 
 const inviteBlockerOf = (

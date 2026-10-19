@@ -949,7 +949,7 @@ const EXPIRES_AT = new Date(2026, 9, 25).getTime()
 const INVITED: Omit<SpaceInvitation, "state"> = {
 	id: "studio",
 	name: "Studio",
-	colour: "orange",
+	colour: "blue",
 	hostEmail: "noa@example.com",
 	hostName: "Noa",
 	expiresAt: EXPIRES_AT,
@@ -962,9 +962,16 @@ const SECOND_INVITED: Omit<SpaceInvitation, "state"> = {
 	hostEmail: "marc@example.com",
 }
 
+const PERSONAL: Space = { id: "personal", name: "Personal", colour: "green" }
+
+const PERSONAL_OPEN = {
+	spaces: [PERSONAL],
+	selectedSpaceId: PERSONAL.id,
+}
+
 const JOINED_SPACES: Space[] = [
-	...SPACES.slice(0, 3),
-	{ id: "studio", name: "Studio", colour: "orange" },
+	PERSONAL,
+	{ id: "studio", name: "Studio", colour: "blue" },
 ]
 
 const INVITED_ARTBOARD =
@@ -999,7 +1006,7 @@ const expectInvitationDot = async (trigger: HTMLElement) => {
 	await expect(frame.right - box.right).toBe(2)
 }
 
-const expectGroupBetweenSpacesAndMoveUp = async (menu: HTMLElement) => {
+const expectGroupBetweenSpacesAnd = async (menu: HTMLElement, next: string) => {
 	const group = slotsIn(menu, "space-invitations")[0]
 	await expect(group.previousElementSibling).toHaveAttribute(
 		"role",
@@ -1011,7 +1018,7 @@ const expectGroupBetweenSpacesAndMoveUp = async (menu: HTMLElement) => {
 	await expect(group.nextElementSibling).toHaveAttribute("role", "separator")
 	await expect(
 		group.nextElementSibling?.nextElementSibling,
-	).toHaveAccessibleName("Move up")
+	).toHaveAccessibleName(next)
 	await expect(within(group).getByText("Invitations")).toBeVisible()
 }
 
@@ -1044,6 +1051,7 @@ const expectFailedRow = async (
 	const retry = within(row).getByRole("menuitem", { name: "Try again" })
 	await expect(retry).toHaveAccessibleDescription(cause)
 	await expect(within(retry).getByRole("status")).toHaveTextContent("Try again")
+	await expect(expiryLineOf(row)).toBeNull()
 	await expect(retry.tagName).toBe("BUTTON")
 	await expect(
 		within(row).getByRole("menuitem", { name: "Decline" }),
@@ -1053,9 +1061,32 @@ const expectFailedRow = async (
 	await expect(screen.getByRole("menu")).toBeVisible()
 }
 
+export const InvitationAtRest = meta.story({
+	globals: DARK,
+	name: "3 Invitation waiting, menu closed",
+	args: { ...PERSONAL_OPEN, invitations: [{ ...INVITED, state: "waiting" }] },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 3 of the Mockup page: Tom has one Space, Personal, and the Studio invitation waits. At rest the menu is closed and the trigger shows Personal with the invitation dot on its top end corner, and names the invitation. Pick `M2InvitationWaiting` for the open menu.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		await expectInvitationDot(
+			within(canvasElement).getByRole("button", {
+				name: "Change space, Personal open, 1 invitation",
+			}),
+		)
+		await expect(screen.queryByRole("menu")).toBeNull()
+	},
+})
+
 export const M1NoInvitation = meta.story({
 	globals: DARK,
 	name: "M1 No invitation",
+	args: PERSONAL_OPEN,
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -1066,36 +1097,36 @@ export const M1NoInvitation = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const trigger = within(canvasElement).getByRole("button", {
-			name: "Change space, Vocca open",
+			name: "Change space, Personal open",
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
 		const menu = await openSwitcher(canvasElement)
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
-		await expect(within(menu).getAllByRole("separator")).toHaveLength(2)
+		await expect(within(menu).getAllByRole("separator")).toHaveLength(1)
 	},
 })
 
 export const M2InvitationWaiting = meta.story({
 	globals: DARK,
 	name: "M2 Invitation waiting",
-	args: { invitations: [{ ...INVITED, state: "waiting" }] },
+	args: { ...PERSONAL_OPEN, invitations: [{ ...INVITED, state: "waiting" }] },
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between the Spaces and Move up, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
+				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between Personal and Create a space, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
 			},
 		},
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const trigger = within(canvasElement).getByRole("button", {
-			name: "Change space, Vocca open, 1 invitation",
+			name: "Change space, Personal open, 1 invitation",
 		})
 		await expectInvitationDot(trigger)
 
 		const menu = await openSwitcher(canvasElement)
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAndMoveUp(menu)
+		await expectGroupBetweenSpacesAnd(menu, "Create a space")
 		const row = invitationNamed(menu, INVITED.name)
 		await expect(hostLineOf(row)).toHaveTextContent(
 			`Invited by ${INVITED.hostEmail}`,
@@ -1148,6 +1179,7 @@ export const M3TwoInvitationsWaiting = meta.story({
 	globals: DARK,
 	name: "M3 Two invitations waiting",
 	args: {
+		...PERSONAL_OPEN,
 		invitations: [
 			{ ...INVITED, state: "waiting" },
 			{ ...SECOND_INVITED, state: "waiting" },
@@ -1163,7 +1195,7 @@ export const M3TwoInvitationsWaiting = meta.story({
 	},
 	play: async ({ args, canvasElement, userEvent }) => {
 		const trigger = within(canvasElement).getByRole("button", {
-			name: "Change space, Vocca open, 2 invitations",
+			name: "Change space, Personal open, 2 invitations",
 		})
 		await expectInvitationDot(trigger)
 		const menu = await openSwitcher(canvasElement)
@@ -1219,7 +1251,7 @@ export const OpenedOnInvitation = meta.story({
 	play: async ({ args, canvasElement, userEvent }) => {
 		const menu = await settled(await screen.findByRole("menu"))
 		await expect(menu.getBoundingClientRect().width).toBe(280)
-		await expectGroupBetweenSpacesAndMoveUp(menu)
+		await expectGroupBetweenSpacesAnd(menu, "Move up")
 		const rows = invitationsIn(menu)
 		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
 		await expect(
@@ -1261,7 +1293,7 @@ export const OpenedOnInvitation = meta.story({
 export const M4Accepting = meta.story({
 	globals: DARK,
 	name: "M4 Accepting",
-	args: { invitations: [{ ...INVITED, state: "accepting" }] },
+	args: { ...PERSONAL_OPEN, invitations: [{ ...INVITED, state: "accepting" }] },
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -1301,24 +1333,28 @@ export const M5Joined = meta.story({
 	name: "M5 Joined",
 	args: {
 		spaces: JOINED_SPACES,
+		selectedSpaceId: "studio",
 		hostBySpaceId: { studio: "up" },
 	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M5: the invitation is accepted, so its Space joins the list as a row whose square carries the online dot of its reachable host, and the Invitations group and the trigger dot are gone.`,
+				story: `${INVITED_ARTBOARD} M5, artboard 3.7 of the Mockup page: the invitation is accepted and Studio is open. At rest the menu is closed and the trigger shows Studio, its square carrying the online dot of its reachable host and no invitation dot. Check that, then that the menu lists Studio under Personal with the same dot on its row's square and no Invitations group, and that Escape leaves the menu closed again.`,
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvasElement, userEvent }) => {
 		const trigger = within(canvasElement).getByRole("button", {
-			name: "Change space, Vocca open",
+			name: "Change space, Studio open, Online",
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
+		await expectDotOnSquareCorner(trigger, "up")
 		const menu = await openSwitcher(canvasElement)
 		await expectDotOnSquareCorner(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
+		await userEvent.keyboard("{Escape}")
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 	},
 })
 
@@ -1327,6 +1363,7 @@ export const M6Unreachable = meta.story({
 	name: "M6 Unreachable",
 	args: {
 		spaces: JOINED_SPACES,
+		selectedSpaceId: PERSONAL.id,
 		hostBySpaceId: { studio: "down" },
 	},
 	parameters: {
@@ -1347,6 +1384,7 @@ export const M9FailedServers = meta.story({
 	globals: DARK,
 	name: "M9 Failed, servers",
 	args: {
+		...PERSONAL_OPEN,
 		invitations: [{ ...INVITED, state: "failed", failure: "servers" }],
 	},
 	parameters: {
@@ -1375,6 +1413,7 @@ export const M10FailedOffline = meta.story({
 	globals: DARK,
 	name: "M10 Failed, offline",
 	args: {
+		...PERSONAL_OPEN,
 		invitations: [{ ...INVITED, state: "failed", failure: "offline" }],
 	},
 	parameters: {
@@ -1402,7 +1441,7 @@ export const M10FailedOffline = meta.story({
 export const M11Withdrawn = meta.story({
 	globals: DARK,
 	name: "M11 Withdrawn",
-	args: { invitations: [{ ...INVITED, state: "withdrawn" }] },
+	args: { ...PERSONAL_OPEN, invitations: [{ ...INVITED, state: "withdrawn" }] },
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -1452,7 +1491,10 @@ export const M11Withdrawn = meta.story({
 export const InvitationHostOffline = meta.story({
 	globals: DARK,
 	name: "3.3 Waiting for host",
-	args: { invitations: [{ ...INVITED, state: "hostOffline" }] },
+	args: {
+		...PERSONAL_OPEN,
+		invitations: [{ ...INVITED, state: "hostOffline" }],
+	},
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
@@ -1505,6 +1547,7 @@ export const InvitationExpired = meta.story({
 	globals: DARK,
 	name: "Invitation expired",
 	args: {
+		...PERSONAL_OPEN,
 		invitations: [{ ...INVITED, state: "expired", expiresAt: EXPIRES_AT }],
 	},
 	parameters: {
@@ -1512,7 +1555,7 @@ export const InvitationExpired = meta.story({
 		docs: {
 			description: {
 				story:
-					"The invitation expired before it was accepted. Like the withdrawn row: the ring and name mute, the cause line says when it expired and whom to ask, and no button is offered; the row is an inert menu item described by the cause.",
+					"Artboard 3.6 of the Mockup page. The invitation expired before it was accepted. Like the withdrawn row: the ring and name mute, the cause line says when it expired and whom to ask, and no button is offered; the row is an inert menu item described by the cause.",
 			},
 		},
 	},

@@ -148,7 +148,7 @@ const SpaceInvitationRow = ({
 					<span className={HOST}>
 						{t("spaces.invitations.invitedBy", { email: hostEmail })}
 					</span>
-					{expiry === undefined || isMuted ? null : (
+					{expiry === undefined || isMuted || isFailed ? null : (
 						<span className={HOST}>
 							{t("spaces.invitations.expires", { date: expiry })}
 						</span>

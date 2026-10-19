@@ -12,7 +12,6 @@ import {
 } from "@workspace/ui/components/list-skeleton"
 import {
 	FIELD_CONTROL_CLASS,
-	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 	SETTINGS_TAG_CLASS,
 } from "@workspace/ui/components/settings-styles"
@@ -205,10 +204,6 @@ const InviteField = ({
 					className={cn(
 						FIELD_CONTROL_CLASS,
 						"min-w-0 flex-1 disabled:opacity-50",
-						message && [
-							FIELD_CONTROL_INVALID_CLASS,
-							"ring-3 ring-destructive/20",
-						],
 					)}
 					id={id}
 					inputMode="email"
