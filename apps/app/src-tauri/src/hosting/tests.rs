@@ -5998,9 +5998,9 @@ fn a_sealed_frame_whose_v_is_absent_or_one_is_dropped_without_dispatching_its_ca
 		harness.reached(HostingState::Online).await;
 		member.greeted().await;
 
+		let call = r#"{"id": "relabelled", "command": "agent_models"}"#;
 		for (ctr, v) in [(100, None), (101, Some(1))] {
-			let call = format!(r#"{{"id": "v{v:?}", "command": "agent_models"}}"#);
-			let sealed = member.device.sealed(&member.space(), ctr, &call, member.challenge);
+			let sealed = member.device.sealed(&member.space(), ctr, call, member.challenge);
 			let relabelled = versioned(&sealed, v);
 			member.send(Message::Text(relabelled.into())).await.expect("the frame leaves");
 		}
