@@ -10,6 +10,8 @@ struct SpaceKeys: Sendable {
 
 protocol SpaceKeyStore: Sendable {
     func keys(for instanceId: Space.ID, openedWith device: DeviceKeys) async -> SpaceKeys?
+    func save(_ handed: HandedSpaceKey, for instanceId: Space.ID, sealedTo device: DeviceKeys)
+        async throws
 }
 
 struct WrappedSpaceKey: Codable, Sendable {
@@ -17,6 +19,7 @@ struct WrappedSpaceKey: Codable, Sendable {
     let hostSigningKey: Data
     let hostRelayIds: [String]
     let sealedSpaceKey: Data
+    var roster: RosterSet?
 }
 
 struct KeychainSpaceKeyStore: SpaceKeyStore {
@@ -37,5 +40,18 @@ struct KeychainSpaceKeyStore: SpaceKeyStore {
         return SpaceKeys(
             spaceKey: SymmetricKey(data: spaceKey), keyId: wrapped.keyId,
             hostSigningKey: hostSigningKey, hostRelayIds: Set(wrapped.hostRelayIds))
+    }
+
+    func save(_ handed: HandedSpaceKey, for instanceId: Space.ID, sealedTo device: DeviceKeys)
+        async throws
+    {
+        let wrapped = WrappedSpaceKey(
+            keyId: handed.keyId, hostSigningKey: handed.hostSigningKey.rawRepresentation,
+            hostRelayIds: [handed.hostRelayId],
+            sealedSpaceKey: try RelayCrypto.sealBox(
+                handed.spaceKey.withUnsafeBytes { Data($0) }, to: device.agreement.publicKey),
+            roster: handed.roster)
+        try await keychain.write(
+            try JSONEncoder().encode(wrapped), as: Self.account(for: instanceId))
     }
 }

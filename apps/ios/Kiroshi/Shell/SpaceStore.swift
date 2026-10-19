@@ -134,7 +134,7 @@ final class SpaceStore {
             spaceIdsToJoin.remove(spaceId)
             setHost(of: spaceId, online: true)
         case .hostOffline: setHost(of: spaceId, online: false)
-        case .needsJoin: spaceIdsToJoin.insert(spaceId)
+        case .joining: spaceIdsToJoin.insert(spaceId)
         case .signedOut: exit(.signedOut)
         case .deviceMoved: exit(.deviceMoved)
         case .membershipEnded: forget(spaceId)

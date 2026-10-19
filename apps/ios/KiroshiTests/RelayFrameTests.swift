@@ -227,14 +227,88 @@ struct RelayFrameTests {
         await second.stop()
     }
 
-    @Test func aSpaceWithoutKeyAsksToJoinWithoutOpeningASocket() async {
-        let connection = makeConnection(spaceKeys: nil)
-        let updates = await connection.updates()
+    func joiningConnection(saving store: RecordingSpaceKeys) -> RelayConnection {
+        RelayConnection(
+            baseURL: KiroshiCloud.productionURL, instanceId: "instance-1",
+            bearer: "fixture-bearer", device: FixtureKeys.device, spaceKeys: nil,
+            environment: RelayEnvironment(
+                transport: transport, clock: clock, keychain: keychain, spaceKeys: store),
+            backoff: Backoff(jitter: { $0 }))
+    }
 
+    func isKeyRequest(_ frame: RelayWireFrame) throws -> Bool {
+        let header = try #require(
+            FrameHeader(
+                instance: frame.instance, from: FixtureKeys.member.deviceId, keyId: frame.keyId,
+                ctr: frame.ctr))
+        let ciphertext = try #require(Data(base64Encoded: frame.ct))
+        let signature = try #require(Data(base64Encoded: frame.sig))
+        return frame.keyId == RelayConnection.noKeyId && frame.ctr == 1 && frame.challenge == nil
+            && RelayCrypto.isStrictlyValid(
+                signature, for: RelayCrypto.aad(header) + ciphertext,
+                by: FixtureKeys.member.signing.publicKey)
+    }
+
+    @Test func aSpaceWithoutKeyJoinsOnItsFirstVerifiedRekeyThenSaysHelloUnderIt() async throws {
+        let store = RecordingSpaceKeys()
+        let connection = joiningConnection(saving: store)
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket()
+        await transport.nextOpening().accept(socket)
+        await waitFor(.joining, in: updates)
+
+        #expect(try isKeyRequest(try await nextFrame(socket)))
+        socket.push(.frame(try FixtureRekey.frame(instance: "instance-2")))
+        socket.push(.frame(try FixtureRekey.frame(instance: "instance-1")))
+
+        let hello = try await nextFrame(socket)
+        #expect(hello.keyId == FixtureKeys.spaceKeys.keyId)
+        #expect(try plaintext(of: hello) == RelayConnection.hello)
+        #expect(await store.saved["instance-1"]?.hostRelayId == FixtureKeys.hostRelayId)
+        await connection.stop()
+    }
+
+    @Test func aJoinAsksForItsKeyAgainEveryPing() async throws {
+        let connection = joiningConnection(saving: RecordingSpaceKeys())
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket()
+        await transport.nextOpening().accept(socket)
+        await waitFor(.joining, in: updates)
+        #expect(try isKeyRequest(try await nextFrame(socket)))
+
+        await clock.wakeNextSleep(of: RelayConnection.pingInterval)
+        await clock.wakeNextSleep(of: RelayConnection.pingInterval)
+
+        #expect(try isKeyRequest(try await nextFrame(socket)))
+        await connection.stop()
+    }
+
+    @Test func aJoinWhoseHostIsOfflineSaysSoAndKeepsTrying() async {
+        let connection = joiningConnection(saving: RecordingSpaceKeys())
+        let updates = await connection.updates()
         await connection.start()
 
-        await waitFor(.needsJoin, in: updates)
-        #expect(await connection.isRunning == false)
+        await transport.nextOpening().close(RelayClosure.hostOffline)
+
+        await waitFor(.hostOffline, in: updates)
+        #expect(await connection.isRunning)
+        await connection.stop()
+    }
+}
+
+actor RecordingSpaceKeys: SpaceKeyStore {
+    private(set) var saved: [Space.ID: HandedSpaceKey] = [:]
+
+    func keys(for instanceId: Space.ID, openedWith device: DeviceKeys) async -> SpaceKeys? {
+        saved[instanceId]?.spaceKeys
+    }
+
+    func save(_ handed: HandedSpaceKey, for instanceId: Space.ID, sealedTo device: DeviceKeys)
+        async throws
+    {
+        saved[instanceId] = handed
     }
 }
 

@@ -45,15 +45,20 @@
         func keys(for instanceId: Space.ID, openedWith device: DeviceKeys) async -> SpaceKeys? {
             missing.contains(instanceId) ? nil : FixtureKeys.spaceKeys
         }
+
+        func save(_ handed: HandedSpaceKey, for instanceId: Space.ID, sealedTo device: DeviceKeys)
+            async throws
+        {}
     }
 
     extension RelayEnvironment {
         init(
             transport: any RelayTransport, clock: any RelayClock,
-            spaceKeys: any SpaceKeyStore = FixtureSpaceKeys()
+            spaceKeys: any SpaceKeyStore = FixtureSpaceKeys(), handsKeys: Bool = false
         ) {
             self.init(
-                transport: HostSealingTransport(sealing: transport), clock: clock,
+                transport: HostSealingTransport(sealing: transport, handsKeys: handsKeys),
+                clock: clock,
                 keychain: InMemoryKeychain(FixtureKeys.memberKeychainItems), spaceKeys: spaceKeys)
         }
     }
@@ -72,31 +77,36 @@
 
     struct HostSealingTransport: RelayTransport {
         let sealing: any RelayTransport
+        var handsKeys = false
 
         func open(_ request: URLRequest) async throws -> any RelaySocket {
             let instanceId = request.url?.pathComponents.dropLast(2).last ?? ""
             return HostSealingSocket(
-                instanceId: instanceId, plain: try await sealing.open(request))
+                instanceId: instanceId, plain: try await sealing.open(request),
+                handsKeys: handsKeys)
         }
     }
 
     struct HostSealingSocket: RelaySocket {
         private enum Inbound: Sendable {
             case hello
+            case rekey
             case plain(String)
             case failure(any Error)
         }
 
         let instanceId: Space.ID
         let plain: any RelaySocket
+        let handsKeys: Bool
         private let challenge = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
         private let inbound: AsyncStream<Inbound>
         private let inboundContinuation: AsyncStream<Inbound>.Continuation
         private let pump: Task<Void, Never>
 
-        init(instanceId: Space.ID, plain: any RelaySocket) {
+        init(instanceId: Space.ID, plain: any RelaySocket, handsKeys: Bool = false) {
             self.instanceId = instanceId
             self.plain = plain
+            self.handsKeys = handsKeys
             let (inbound, inboundContinuation) = AsyncStream.makeStream(
                 of: Inbound.self, bufferingPolicy: .unbounded)
             self.inbound = inbound
@@ -118,6 +128,12 @@
             guard let frame = try? JSONDecoder().decode(RelayWireFrame.self, from: Data(text.utf8)),
                 frame.from == nil
             else { return }
+            guard frame.keyId != RelayConnection.noKeyId else {
+                if handsKeys {
+                    inboundContinuation.yield(.rekey)
+                }
+                return
+            }
             let keys = FixtureKeys.spaceKeys
             let challenge = frame.challenge.flatMap { Data(base64Encoded: $0) }
             guard
@@ -142,6 +158,7 @@
             var iterator = inbound.makeAsyncIterator()
             switch await iterator.next() {
             case .hello: return try await sealed(RelayConnection.hello, challenge: challenge)
+            case .rekey: return try FixtureRekey.frame(instance: instanceId)
             case .plain(let text): return try await sealed(Data(text.utf8), challenge: nil)
             case .failure(let error): throw error
             case nil: throw CancellationError()

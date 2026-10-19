@@ -10,11 +10,11 @@ final class DeviceKeysAccessibilityTests: XCTestCase {
         let app = launch(
             "join-space", "-UIPreferredContentSizeCategoryName",
             "UICTContentSizeCategoryAccessibilityXXXL")
-        let joinThisSpace = app.staticTexts["Join this Space"]
+        let joinThisSpace = app.staticTexts["Waiting for the key to Studio"]
         XCTAssertTrue(joinThisSpace.waitForExistence(timeout: 10))
         XCTAssertTrue(
             app.staticTexts[
-                "This iPhone doesn’t have the key to Studio yet. Open an invitation to Studio on this iPhone to join."
+                "The computer where Studio runs sends this iPhone its key once Kiroshi is open there."
             ].exists)
         XCTAssertFalse(app.staticTexts["Loading companions"].exists)
         let navigationBar = app.navigationBars.firstMatch.frame
