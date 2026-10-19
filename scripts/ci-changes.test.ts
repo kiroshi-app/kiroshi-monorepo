@@ -25,6 +25,13 @@ const SHARED_ONLY_PATHS = [
 const onPullRequest = (...paths: string[]) =>
 	decideJobs({ event: "pull_request", paths })
 
+const runChangeDetector = (...args: string[]) =>
+	Bun.spawnSync([
+		process.execPath,
+		new URL("./ci-changes.ts", import.meta.url).pathname,
+		...args,
+	])
+
 describe("ci changes", () => {
 	it("runs every job on a push, whatever the paths", () => {
 		expect(decideJobs({ event: "push", paths: [] })).toEqual(every)
@@ -32,6 +39,32 @@ describe("ci changes", () => {
 			decideJobs({ event: "push", paths: ["apps/ios/Kiroshi/App.swift"] }),
 		).toEqual(every)
 	})
+
+	it.each([
+		[],
+		["bun.lock"],
+		["packages/ui/src/components/button.tsx"],
+		["apps/app/src-tauri/src/lib.rs"],
+		["apps/ios/Kiroshi/App.swift"],
+		SHARED_ONLY_PATHS,
+	])(
+		"decides the jobs of a merge_group with the pull_request rules on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "merge_group", paths })).toEqual(
+				onPullRequest(...paths),
+			)
+		},
+	)
+
+	it.each(["pull_request", "merge_group"])(
+		"refuses a %s without a BASE to diff against",
+		(event) => {
+			const detection = runChangeDetector(event)
+
+			expect(detection.exitCode).toBe(1)
+			expect(detection.stderr.toString()).toContain("BASE is required")
+		},
+	)
 
 	it("runs every job when a shared root path changed", () => {
 		expect(onPullRequest("bun.lock")).toEqual(every)

@@ -1,4 +1,4 @@
-type CiEvent = "push" | "pull_request"
+type CiEvent = "push" | "pull_request" | "merge_group"
 
 type FilteredJobs = {
 	rust: boolean
@@ -73,12 +73,14 @@ export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 }
 
 const readEvent = (name: string | undefined): CiEvent => {
-	if (name === "push" || name === "pull_request") return name
+	if (name === "push" || name === "pull_request" || name === "merge_group")
+		return name
 	throw new Error(`unsupported event "${name}"`)
 }
 
 const changedPaths = (base: string | undefined) => {
-	if (!base) throw new Error("BASE is required on a pull_request")
+	if (!base)
+		throw new Error("BASE is required on a pull_request or a merge_group")
 	const diff = Bun.spawnSync(["git", "diff", "--name-only", base, "HEAD"])
 	if (!diff.success)
 		throw new Error(`git diff against ${base} failed: ${diff.stderr}`)
