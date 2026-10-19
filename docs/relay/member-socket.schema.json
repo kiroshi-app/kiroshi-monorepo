@@ -4316,6 +4316,44 @@
         },
         {
           "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "conversationOfAnotherSpace"
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "spaceId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "missionOfAnotherSpace"
+            },
+            "spaceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "spaceId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "detail": {
               "type": "string"
             },

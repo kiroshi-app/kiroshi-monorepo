@@ -5,6 +5,7 @@ use crate::attachments::Rejection;
 use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
 use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::DatabaseError;
+use crate::missions::contract::MissionError;
 use crate::search::contract::{CatalogueError, ConversationKind, MessageSearchError};
 
 pub const CREATED_EVENT: &str = "companion://created";
@@ -117,6 +118,14 @@ pub struct ConversationRead {
 	pub conversation: Conversation,
 	pub messages: Vec<ReadMessage>,
 	pub cursor: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationClosed {
+	pub conversation_id: String,
+	pub title: String,
+	pub archived: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -239,6 +248,24 @@ pub enum CompanionError {
 		cursor: String,
 	},
 	#[serde(rename_all = "camelCase")]
+	CallerNotLead {
+		conversation_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	UnclosableConversation {
+		conversation_id: String,
+		conversation_kind: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	ArchiveThroughConversationClose {
+		conversation_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
+	MissionStillOpen {
+		conversation_id: String,
+		mission_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
 	UnreadableFile {
 		path: String,
 		detail: String,
@@ -311,6 +338,16 @@ impl From<CatalogueError> for CompanionError {
 			CatalogueError::UnknownBot { id } => {
 				CompanionError::Unexpected { detail: format!("the catalogue names no bot {id}") }
 			}
+		}
+	}
+}
+
+impl From<MissionError> for CompanionError {
+	fn from(error: MissionError) -> Self {
+		match error {
+			MissionError::Unavailable { failure } => CompanionError::Unavailable { failure },
+			MissionError::Storage { failure } => CompanionError::Storage { failure },
+			other => CompanionError::Unexpected { detail: format!("{other:?}") },
 		}
 	}
 }

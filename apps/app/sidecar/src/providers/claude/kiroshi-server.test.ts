@@ -64,6 +64,7 @@ describe("kiroshiServer", () => {
 			"mission_close",
 			"mission_watch",
 			"mission_list",
+			"mission_read",
 			"application_search",
 			"application_install",
 			"application_status",
@@ -78,6 +79,7 @@ describe("kiroshiServer", () => {
 			"conversation_list",
 			"conversation_read",
 			"conversation_search",
+			"conversation_close",
 		])
 	})
 })

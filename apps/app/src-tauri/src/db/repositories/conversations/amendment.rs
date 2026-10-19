@@ -15,6 +15,7 @@ pub struct ConversationAmendment {
 	pub color: Option<Option<String>>,
 	pub seated: Vec<String>,
 	pub unseated: Vec<String>,
+	pub reopened: bool,
 	pub amended_by: String,
 }
 
@@ -47,7 +48,8 @@ fn amended_conversation(
 	let transaction = write_transaction(connection)?;
 	let written = transaction.execute(
 		"UPDATE conversations SET title = COALESCE(?2, title), icon = COALESCE(?3, icon),
-			color = CASE WHEN ?4 THEN ?5 ELSE color END, updated_at = ?6
+			color = CASE WHEN ?4 THEN ?5 ELSE color END, updated_at = ?6,
+			archived_at = CASE WHEN ?7 THEN NULL ELSE archived_at END
 			WHERE id = ?1",
 		params![
 			id,
@@ -55,7 +57,8 @@ fn amended_conversation(
 			amendment.icon,
 			amendment.color.is_some(),
 			amendment.color.clone().flatten(),
-			now()
+			now(),
+			amendment.reopened
 		],
 	)?;
 	refuse_unknown_conversation(written, id)?;
@@ -115,6 +118,7 @@ mod tests {
 			color: None,
 			seated: Vec::new(),
 			unseated: Vec::new(),
+			reopened: false,
 			amended_by: "b1".to_owned(),
 		}
 	}
@@ -261,5 +265,61 @@ mod tests {
 			"{missing:?}"
 		);
 		assert_eq!(listed(&database).await, before);
+	}
+	async fn archived(database: &Database) -> ListedConversation {
+		database
+			.conversations()
+			.archive_conversation("room".to_owned())
+			.await
+			.expect("it archives");
+		listed(database).await
+	}
+
+	#[tokio::test]
+	async fn a_reopen_clears_the_archive_with_the_other_fields_or_not_at_all() {
+		let (database, _dir) = planted().await;
+		let closed = archived(&database).await;
+		let reopening = || ConversationAmendment {
+			title: Some("Trip".to_owned()),
+			reopened: true,
+			..an_amendment()
+		};
+
+		let foreign = database
+			.conversations()
+			.amend_conversation(
+				"room".to_owned(),
+				ConversationAmendment { seated: vec!["b3".to_owned()], ..reopening() },
+			)
+			.await;
+		let still_closed = listed(&database).await;
+		let reopened = database
+			.conversations()
+			.amend_conversation("room".to_owned(), reopening())
+			.await
+			.expect("the room reopens");
+
+		assert!(closed.is_archived);
+		assert!(matches!(foreign, Err(ConversationError::ForeignBot { .. })), "{foreign:?}");
+		assert_eq!(still_closed, closed);
+		assert!(!reopened.conversation.is_archived);
+		assert_eq!(reopened.conversation.active.conversation.title, "Trip");
+		assert_eq!(reopened.conversation, listed(&database).await);
+	}
+
+	#[tokio::test]
+	async fn a_reopen_of_a_room_never_archived_leaves_it_open() {
+		let (database, _dir) = planted().await;
+
+		let reopened = database
+			.conversations()
+			.amend_conversation(
+				"room".to_owned(),
+				ConversationAmendment { reopened: true, ..an_amendment() },
+			)
+			.await
+			.expect("the room is amended");
+
+		assert!(!reopened.conversation.is_archived);
 	}
 }

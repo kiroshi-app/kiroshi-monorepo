@@ -17,6 +17,13 @@ import {
 	requireAuthorizeBearer,
 	validateAuthorizeSearch,
 } from "./authorize-state"
+import { JoinPage } from "./join-page"
+import {
+	parseSiteSearch,
+	stringifySiteSearch,
+	validateJoinSearch,
+} from "./join-search"
+import { loadJoinState } from "./join-state"
 import { LoginLoadFailure, LoginPage } from "./login-page"
 import {
 	type LoginSearch,
@@ -153,6 +160,16 @@ const accountRoute = createRoute({
 	errorComponent: LoginLoadFailure,
 })
 
+const joinRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: "/join",
+	validateSearch: validateJoinSearch,
+	loaderDeps: ({ search }) => ({ invitations: search.invitation }),
+	loader: ({ deps }) => loadJoinState(deps.invitations),
+	component: JoinPage,
+	errorComponent: LoginLoadFailure,
+})
+
 const privacyRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/privacy",
@@ -183,6 +200,7 @@ const routeTree = rootRoute.addChildren([
 	authorizeRoute,
 	authorizeDoneRoute,
 	accountRoute,
+	joinRoute,
 	privacyRoute,
 	termsRoute,
 	supportRoute,
@@ -190,7 +208,12 @@ const routeTree = rootRoute.addChildren([
 ])
 
 export const createSiteRouter = (history?: RouterHistory) =>
-	createRouter({ routeTree, history })
+	createRouter({
+		routeTree,
+		history,
+		parseSearch: parseSiteSearch,
+		stringifySearch: stringifySiteSearch,
+	})
 
 declare module "@tanstack/react-router" {
 	interface Register {

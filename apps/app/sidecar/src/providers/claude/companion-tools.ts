@@ -61,7 +61,7 @@ const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
 
 const UPDATE =
-	"Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived."
+	"Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived."
 
 const UPDATED_CONVERSATION =
 	"The id of the conversation to change, one you hold a seat in, left out for this conversation."
@@ -82,6 +82,9 @@ const ADD =
 
 const REMOVE =
 	"The id or the name of each companion of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out."
+
+const REOPEN =
+	"False to reopen an archived conversation, back in the list of rooms of the space with every message it held; true is refused, since only conversation_close archives a room; left out, the conversation stays archived or not as it is."
 
 const LIST =
 	"List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold."
@@ -118,6 +121,11 @@ const QUERY =
 const SEARCH_KIND =
 	"One of main (a companion's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind."
 
+const CLOSE =
+	"Archive a room you lead once its subject is settled, keeping every message in it."
+
+const CLOSED_ROOM = "The id of the room you lead to archive."
+
 type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
@@ -147,6 +155,7 @@ const UPDATED: ToolInput = {
 	colour: z.string().nullable().optional().describe(COLOUR),
 	add: z.array(z.string()).optional().describe(ADD),
 	remove: z.array(z.string()).optional().describe(REMOVE),
+	archived: z.boolean().optional().describe(REOPEN),
 }
 
 const LISTED: ToolInput = {
@@ -165,6 +174,10 @@ const CONSULTED: ToolInput = {
 const SEARCHED: ToolInput = {
 	query: z.string().describe(QUERY),
 	kind: z.enum(["main", "topic", "mission"]).optional().describe(SEARCH_KIND),
+}
+
+const CLOSED: ToolInput = {
+	conversation: z.string().describe(CLOSED_ROOM),
 }
 
 const DRAFTED: ToolInput = {
@@ -246,5 +259,8 @@ export const companionTools = (
 	),
 	tool("conversation_search", SEARCH, SEARCHED, (input) =>
 		asked(session, "conversationSearch", input),
+	),
+	tool("conversation_close", CLOSE, CLOSED, (input) =>
+		asked(session, "conversationClose", input),
 	),
 ]
