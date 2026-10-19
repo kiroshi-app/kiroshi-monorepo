@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react"
 
 import {
 	createJoinedSpacesController,
+	type DepartedSpace,
 	hostMarksOf,
 	type JoinedSpacesController,
 	type JoinedSpacesState,
@@ -20,6 +21,7 @@ import type { Invitations } from "./use-invitations"
 
 import { isDesktopHost, joinedHosts } from "../host"
 import { useController, useControllerState } from "../use-controller"
+import type { RosterController } from "../bots/roster-controller"
 import type { JoinedHostsState } from "../host/joined-hosts"
 import { sharedMarksOf } from "../host/shared-spaces-controller"
 import { useSharedSpaces } from "../host/use-shared-spaces"
@@ -30,10 +32,17 @@ export type JoinedSpaces = {
 	hosts: JoinedHostsState
 }
 
-export const useJoinedSpaces = (spaces: SpacesController): JoinedSpaces => {
+export const useJoinedSpaces = (
+	spaces: SpacesController,
+	roster: RosterController,
+): JoinedSpaces => {
 	const queryClient = useQueryClient()
 	const { state, controller } = useController(() =>
-		createJoinedSpacesController({ queryClient, spaces }),
+		createJoinedSpacesController({
+			queryClient,
+			spaces,
+			shownThreads: roster,
+		}),
 	)
 	const hosts = useControllerState(joinedHosts)
 	useQuery({ ...controller.listQuery, enabled: isDesktopHost() })
@@ -51,13 +60,16 @@ export const useSwitcherSpaces = (
 	{ state, hosts }: JoinedSpaces,
 	invitations: Invitations,
 ) => {
-	const { joinedSpaces, openId } = state
+	const { joinedSpaces, openId, departed } = state
 	const { connections } = hosts
 	const sharedBySpaceId = useSharedSpaces(spaces)
 	return useMemo(
 		() => ({
 			spaces: switcherSpacesOf(spaces, joinedSpaces),
-			selectedSpaceId: openRowIdOf({ joinedSpaces, openId }, selectedSpaceId),
+			selectedSpaceId: openRowIdOf(
+				{ joinedSpaces, openId, departed },
+				selectedSpaceId,
+			),
 			hostBySpaceId: {
 				...sharedMarksOf(sharedBySpaceId),
 				...hostMarksOf(joinedSpaces, connections),
@@ -75,6 +87,7 @@ export const useSwitcherSpaces = (
 			selectedSpaceId,
 			joinedSpaces,
 			openId,
+			departed,
 			connections,
 			sharedBySpaceId,
 			invitations,
@@ -82,13 +95,24 @@ export const useSwitcherSpaces = (
 	)
 }
 
+const departedHostOf = (departed: DepartedSpace): OpenJoinedHost => ({
+	spaceName: departed.space,
+	hostName: departed.host,
+	isOnline: false,
+	isDown: false,
+	departure: departed.reason,
+})
+
 export const useOpenJoinedHost = (
 	selectedSpaceId: string | null,
 	{ state, hosts, controller }: JoinedSpaces,
 ): OpenJoinedHost | null => {
-	const { joinedSpaces, openId } = state
+	const { joinedSpaces, openId, departed } = state
 	const { connections } = hosts
 	return useMemo(() => {
+		if (departed?.spaceId === selectedSpaceId) {
+			return departedHostOf(departed)
+		}
 		const open = openJoinedSpaceOf(joinedSpaces, openId, selectedSpaceId)
 		return open
 			? {
@@ -98,5 +122,5 @@ export const useOpenJoinedHost = (
 					isDown: isHostDown(connections[open.id]),
 				}
 			: null
-	}, [joinedSpaces, openId, selectedSpaceId, connections, controller])
+	}, [joinedSpaces, openId, departed, selectedSpaceId, connections, controller])
 }

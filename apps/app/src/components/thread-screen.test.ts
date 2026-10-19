@@ -150,6 +150,11 @@ import {
 } from "@/lib/search/message-landing-controller"
 import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
+import type { DepartureReason } from "@/lib/spaces/joined-spaces-controller"
+import {
+	type OpenJoinedHost,
+	OpenJoinedHostContext,
+} from "@/lib/spaces/open-joined-host"
 
 let queries = createQueryTestWrapper()
 
@@ -2747,6 +2752,65 @@ describe("ThreadScreen", () => {
 
 		expect(landings.getState()).toBeNull()
 		expect(screen.getAllByText(UNREACHABLE_TITLE).length).toBeGreaterThan(0)
+	})
+	describe("on a joined Space that went away", () => {
+		const departedHostOf = (
+			departure: DepartureReason | undefined,
+		): OpenJoinedHost => ({
+			spaceName: "Studio Nord",
+			hostName: "Lea",
+			isOnline: false,
+			isDown: false,
+			departure,
+		})
+
+		const renderDeparted = async (departure?: DepartureReason) => {
+			render(createElement(NoticeSurface), {
+				wrapper: createQueryTestWrapper().wrapper,
+			})
+			render(
+				createElement(
+					OpenJoinedHostContext.Provider,
+					{ value: departedHostOf(departure) },
+					screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })),
+				),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
+		}
+
+		const accessBanner = () =>
+			document.querySelector<HTMLElement>('[data-slot="space-access-banner"]')
+
+		it.each(["removed", "deleted", "unknown"] as const)(
+			"keeps the transcript and shows the %s banner where the composer was",
+			async (reason) => {
+				await renderDeparted(reason)
+
+				expect(screen.getByText("held")).toBeTruthy()
+				expect(accessBanner()?.dataset.reason).toBe(reason)
+				expect(screen.queryByRole("textbox")).toBeNull()
+				expect(document.querySelector('[data-slot="toast"]')).toBeNull()
+			},
+		)
+
+		it("names the Space and its host in the banner", async () => {
+			await renderDeparted("deleted")
+
+			expect(
+				within(accessBanner() as HTMLElement).getByText(
+					"Lea deleted Studio Nord",
+				),
+			).toBeTruthy()
+		})
+
+		it("keeps the composer and shows no banner once the Space is not departed", async () => {
+			await renderDeparted()
+
+			expect(accessBanner()).toBeNull()
+			expect(screen.getByRole("textbox")).toBeTruthy()
+			expect(document.querySelector('[data-slot="toast"]')).toBeNull()
+		})
 	})
 })
 

@@ -23,7 +23,7 @@ import {
 import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
 import { createStore } from "../store"
-import type { RosterSpace } from "../bots/roster-controller"
+import type { RosterSpace, RosterState } from "../bots/roster-controller"
 import type { Space } from "../conversations/store-contract"
 import { joinRejectionNoticeOf } from "../host/join-refusal"
 import {
@@ -34,12 +34,24 @@ import {
 import { hostAmong, memberNameOf } from "../host/member-names"
 import { memoizedOn, subscribeWithQueries } from "../query/cache-view"
 
+export type DepartureReason = Exclude<JoinedSpaceRemovalReason, "left">
+
+export type DepartedSpace = {
+	rowId: string
+	spaceId: string
+	reason: DepartureReason
+	space: string
+	host: string
+	threadId: string | null
+}
+
 export type JoinedSpacesState = {
 	joinedSpaces: JoinedSpace[]
 	hasFailedToLoad: boolean
 	isLeaveOpen: boolean
 	leavingId: string | null
 	openId: string | null
+	departed: DepartedSpace | null
 }
 
 export type JoinedSpacesController = {
@@ -65,6 +77,13 @@ export type JoinedSpacesTransport = {
 	) => Promise<() => void>
 }
 
+type ShownThread = Pick<RosterState, "selectedBotId" | "selectedConversationId">
+
+type ShownThreads = {
+	getState: () => ShownThread
+	subscribe: (listener: () => void) => () => void
+}
+
 type JoinedSpacesHosts = Pick<
 	JoinedHosts,
 	"getState" | "connect" | "activate" | "forget"
@@ -76,7 +95,7 @@ type JoinedSpacesControllerOptions = {
 	hosts?: JoinedSpacesHosts
 	transport?: JoinedSpacesTransport
 	reportFailure?: (notice: NoticeMessage) => void
-	reportRemoval?: (notice: NoticeMessage) => void
+	shownThreads?: ShownThreads
 	reportHostOffline?: (notice: NoticeMessage) => void
 }
 
@@ -106,33 +125,12 @@ const joinedSpacesTransport: JoinedSpacesTransport = {
 const raiseInfoNotice = (notice: NoticeMessage) =>
 	raiseTransientNotice({ ...notice, type: "info" })
 
-const removalNoticeOf = (
+const isDeparture = (
 	reason: JoinedSpaceRemovalReason,
-	name: string,
-	host: string,
-): NoticeMessage | null => {
-	switch (reason) {
-		case "removed":
-			return {
-				title: i18n.t("bots:spaces.removed.memberNotice", { name }),
-				description: i18n.t("bots:spaces.removed.memberNoticeDescription", {
-					host,
-				}),
-			}
-		case "deleted":
-			return {
-				title: i18n.t("bots:spaces.removed.deletedNotice", { host, name }),
-				description: i18n.t("bots:spaces.removed.deletedNoticeDescription"),
-			}
-		case "unknown":
-			return {
-				title: i18n.t("bots:spaces.removed.notice", { host, name }),
-				description: i18n.t("bots:spaces.removed.noticeDescription", { host }),
-			}
-		case "left":
-			return null
-	}
-}
+): reason is DepartureReason => reason !== "left"
+
+const threadIdOf = ({ selectedConversationId, selectedBotId }: ShownThread) =>
+	selectedConversationId ?? selectedBotId
 
 const JOINED_ROW_PREFIX = "joined:"
 
@@ -184,9 +182,12 @@ export const openJoinedSpaceOf = (
 	joinedSpaces.find(isOpenIn(openId, selectedSpaceId))
 
 export const openRowIdOf = (
-	state: Pick<JoinedSpacesState, "joinedSpaces" | "openId">,
+	state: Pick<JoinedSpacesState, "joinedSpaces" | "openId" | "departed">,
 	selectedSpaceId: string | null,
 ): string | null => {
+	if (state.departed?.spaceId === selectedSpaceId) {
+		return state.departed.rowId
+	}
 	const open = openJoinedSpaceOf(
 		state.joinedSpaces,
 		state.openId,
@@ -234,13 +235,14 @@ export const rosterSpacesOf = (
 
 type JoinedSpacesChoice = Pick<
 	JoinedSpacesState,
-	"isLeaveOpen" | "leavingId" | "openId"
+	"isLeaveOpen" | "leavingId" | "openId" | "departed"
 >
 
 const initialJoinedSpacesChoice: JoinedSpacesChoice = {
 	isLeaveOpen: false,
 	leavingId: null,
 	openId: null,
+	departed: null,
 }
 
 const NO_JOINED_SPACES: JoinedSpace[] = []
@@ -279,7 +281,7 @@ export const createJoinedSpacesController = ({
 	hosts = joinedHosts,
 	transport = joinedSpacesTransport,
 	reportFailure = failureReporterIn("joined-spaces-controller"),
-	reportRemoval = raiseInfoNotice,
+	shownThreads,
 	reportHostOffline = raiseInfoNotice,
 }: JoinedSpacesControllerOptions): JoinedSpacesController => {
 	const choiceStore = createStore(initialJoinedSpacesChoice)
@@ -384,9 +386,13 @@ export const createJoinedSpacesController = ({
 				reportRefusal(reason)
 				return undefined
 			})
+		const stopFollowingThreads = shownThreads?.subscribe(
+			leaveDepartedOnceElsewhere,
+		)
 		return () => {
 			void detachChanges.then((unlisten) => unlisten?.())
 			void detachRemovals.then((unlisten) => unlisten?.())
+			stopFollowingThreads?.()
 		}
 	}
 
@@ -425,14 +431,41 @@ export const createJoinedSpacesController = ({
 			i18n.t("chat:working.name"),
 		)
 
+	const shownThreadId = () =>
+		shownThreads ? threadIdOf(shownThreads.getState()) : null
+
+	const leaveDepartedOnceElsewhere = () => {
+		const { departed } = current()
+		const shown = shownThreadId()
+		if (!departed || shown === null || shown === departed.threadId) {
+			return
+		}
+		set({ departed: null })
+		const back = backSpaceId()
+		if (back) selectSpace(back)
+	}
+
 	const noteRemoval = ({ id, name, reason }: JoinedSpaceRemoved) => {
+		const removed = current().joinedSpaces.find((joined) => joined.id === id)
 		const hostName = hostNameOf(id)
 		const wasOpen = isOpen(id)
 		const back = backSpaceId()
 		hosts.forget(id)
 		hold(heldWithout(id))
-		const notice = removalNoticeOf(reason, name, hostName)
-		if (notice) reportRemoval(notice)
+		if (removed && isOpenJoined(removed) && isDeparture(reason)) {
+			set({
+				openId: null,
+				departed: {
+					rowId: rowIdOf(removed),
+					spaceId: hostSpaceIdOf(removed),
+					reason,
+					space: name,
+					host: hostName,
+					threadId: shownThreadId(),
+				},
+			})
+			return
+		}
 		if (wasOpen && back) selectSpace(back)
 	}
 
@@ -463,7 +496,7 @@ export const createJoinedSpacesController = ({
 		}
 		notePreviousLocal()
 		pendingRowId = null
-		set({ openId: joined?.id ?? null })
+		set({ openId: joined?.id ?? null, departed: null })
 		spaces.select(joined ? hostSpaceIdOf(joined) : id)
 		void (joined
 			? hosts.activate(joined.id, hostSpaceIdOf(joined))
