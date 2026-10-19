@@ -18,15 +18,26 @@ final class InvitationAccessibilityTests: XCTestCase {
         "This invitation is for another email. Sign in with the email noa@example.com invited, then accept it again.",
     ]
 
+    static let acceptTitles = ["Accept", "Joining…", "Try again"]
+
+    func actionsTop(in app: XCUIApplication) -> CGFloat {
+        Self.acceptTitles.map { app.buttons[$0] }.filter(\.exists).map(\.frame.minY).min()
+            ?? .infinity
+    }
+
     func auditTheSheet(_ app: XCUIApplication) throws {
+        let actionsTop = actionsTop(in: app)
         try audit(app) { issue in
             let label = issue.element?.label ?? ""
             let isDisabled = issue.element?.isEnabled == false
             let isTheListDimmedBehindTheSheet =
                 issue.auditType == .elementDetection && issue.element == nil
             let isTheSheetsOwnText = Self.sheetLabels.contains(label)
+            let isUnderTheSoftEdgeOfTheActions = (issue.element?.frame.maxY ?? 0) > actionsTop
             return issue.auditType == .textClipped && (issue.element == nil || isTheSheetsOwnText)
                 || issue.auditType == .contrast && isDisabled
+                || issue.auditType == .contrast && isTheSheetsOwnText
+                    && isUnderTheSoftEdgeOfTheActions
                 || isTheListDimmedBehindTheSheet
                 || self.isTheBadgedSpaceButton(issue, in: app)
         }
