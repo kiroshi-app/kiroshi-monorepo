@@ -8,9 +8,9 @@ use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
 use super::contract::{
-	AuthorKind, CompanionCreated, CompanionError, CompanionInvited, Conversation,
-	ConversationAttached, ConversationClosed, ConversationDescribed, ConversationRead,
-	ConversationsListed, LastMessage, MessageAuthor, ReadMessage, SeatedCompanion,
+	AuthorKind, CompanionCreated, CompanionError, Conversation, ConversationAttached,
+	ConversationClosed, ConversationRead, ConversationsListed, LastMessage, MessageAuthor,
+	ReadMessage, RosterCompanion, SeatedCompanion,
 };
 use super::launch;
 use crate::agent::host::{Host, Refusal};
@@ -21,21 +21,20 @@ use crate::attachments::{
 };
 use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
-	seat_participant,
 };
 use crate::conversations::contract::{
-	BotDraft, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
+	BotDraft, CompanionArrival, CompanionSpoke, ConversationDeleted, TranscriptStoreError,
 };
 use crate::db;
 use crate::db::repositories::conversations::{
-	Bot as StoredBot, ConversationDescription, ConversationDraft, ListedConversation, Listing,
-	Seat, LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
+	Bot as StoredBot, ConversationAmendment, ConversationDraft, ListedConversation, Listing, Seat,
+	LISTED_KINDS, MISSION_KIND, TOPIC_KIND,
 };
 use crate::db::repositories::keyset;
 use crate::db::repositories::messages::{AccountAuthor, MessagePageQuery, StoredMessage};
 use crate::events::{
-	self, Event, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED, CONVERSATION_UPDATED,
-	FIRST_RUN_DONE,
+	self, Event, COMPANION_ARRIVED, COMPANION_CREATED, COMPANION_SPOKE, CONVERSATION_DELETED,
+	CONVERSATION_UPDATED, FIRST_RUN_DONE,
 };
 use crate::file_store::FileStore;
 
@@ -63,35 +62,13 @@ impl<R: Runtime> CompanionHost<R> {
 		Self { app, conversation_id, bot_id, attachments }
 	}
 
-	async fn invite(
+	async fn roster(
 		&self,
 		database: &db::Database,
-		asked: Invited,
-	) -> Result<CompanionInvited, CompanionError> {
-		if asked.companion.trim().is_empty() {
-			return Err(CompanionError::EmptyCompanionField);
-		}
-		let conversation_id = asked.conversation.unwrap_or_else(|| self.conversation_id.clone());
-		carries_seats(database, &conversation_id).await?;
-		if conversation_id != self.conversation_id {
-			self.holds_seat(database, &conversation_id).await?;
-		}
-		let space_id = space_of(database, &conversation_id).await?;
+	) -> Result<Vec<RosterCompanion>, CompanionError> {
+		let space_id = self.space(database).await?;
 		let roster = database.conversations().bots(Some(space_id)).await?;
-		let invitee = picked(&roster, &asked.companion)?;
-		let joined = seat_participant(
-			&self.app,
-			database,
-			conversation_id,
-			invitee.id.clone(),
-			Some(self.bot_id.clone()),
-		)
-		.await?;
-		Ok(CompanionInvited {
-			id: invitee.id.clone(),
-			name: invitee.name.clone(),
-			already_seated: joined.arrival.is_none(),
-		})
+		Ok(roster.into_iter().map(RosterCompanion::from).collect())
 	}
 
 	async fn holds_seat(
@@ -180,28 +157,44 @@ impl<R: Runtime> CompanionHost<R> {
 		Ok(said)
 	}
 
-	async fn describe(
+	async fn update(
 		&self,
 		database: &db::Database,
-		asked: Described,
-	) -> Result<ConversationDescribed, CompanionError> {
-		if asked.icon.is_none() && asked.colour.is_none() {
-			return Err(CompanionError::EmptyDescription);
+		asked: Updated,
+	) -> Result<Conversation, CompanionError> {
+		let title = asked.title.as_deref().map(str::trim);
+		if title.is_some_and(str::is_empty) {
+			return Err(CompanionError::EmptyTitleField);
 		}
-		self.holds_seat(database, &asked.conversation).await?;
-		let description = ConversationDescription { icon: asked.icon, color: asked.colour };
-		let room = database
+		let moves_seats = !asked.add.is_empty() || !asked.remove.is_empty();
+		if title.is_none() && asked.icon.is_none() && asked.colour.is_none() && !moves_seats {
+			return Err(CompanionError::EmptyUpdate);
+		}
+		let conversation_id = asked.conversation.unwrap_or_else(|| self.conversation_id.clone());
+		self.holds_seat(database, &conversation_id).await?;
+		let roster = match moves_seats {
+			true => roster_of_room(database, &conversation_id).await?,
+			false => Vec::new(),
+		};
+		let amendment = ConversationAmendment {
+			title: title.map(str::to_owned),
+			icon: asked.icon,
+			color: asked.colour,
+			seated: ids_of(&roster, &asked.add)?,
+			unseated: ids_of(&roster, &asked.remove)?,
+			amended_by: self.bot_id.clone(),
+		};
+		let amended = database
 			.conversations()
-			.describe_conversation(asked.conversation, description)
+			.amend_conversation(conversation_id, amendment)
 			.await
 			.map_err(TranscriptStoreError::from)?;
-		announce_conversation(&self.app, database, CONVERSATION_UPDATED, &room.id).await;
-		Ok(ConversationDescribed {
-			conversation_id: room.id,
-			title: room.title,
-			icon: room.icon,
-			colour: room.color.map(|colour| colour.named().to_owned()),
-		})
+		for arrival in amended.arrivals {
+			launch::announce(&self.app, COMPANION_ARRIVED, CompanionArrival::from(arrival));
+		}
+		let conversation_id = &amended.conversation.active.conversation.id;
+		announce_conversation(&self.app, database, CONVERSATION_UPDATED, conversation_id).await;
+		Ok(conversation_of(amended.conversation))
 	}
 
 	async fn close(
@@ -479,6 +472,19 @@ async fn refuse_open_mission(
 	}
 }
 
+async fn roster_of_room(
+	database: &db::Database,
+	conversation_id: &str,
+) -> Result<Vec<StoredBot>, CompanionError> {
+	carries_seats(database, conversation_id).await?;
+	let space_id = space_of(database, conversation_id).await?;
+	Ok(database.conversations().bots(Some(space_id)).await?)
+}
+
+fn ids_of(roster: &[StoredBot], companions: &[String]) -> Result<Vec<String>, CompanionError> {
+	companions.iter().map(|companion| picked(roster, companion).map(|bot| bot.id.clone())).collect()
+}
+
 async fn conversation_answer(
 	database: &db::Database,
 	conversation_id: String,
@@ -618,9 +624,9 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				self.announce(FIRST_RUN_DONE, ())?;
 				Ok(Value::Null)
 			}
-			Operation::Invite => {
-				let asked: Invited = Self::read(payload)?;
-				Self::answered(self.invite(database, asked).await?)
+			Operation::List => {
+				let _: Bare = Self::read(payload)?;
+				Self::answered(self.roster(database).await?)
 			}
 			Operation::ConversationOpen => {
 				let asked: Opened = Self::read(payload)?;
@@ -634,9 +640,9 @@ impl<R: Runtime> Host for CompanionHost<R> {
 				let asked: Attached = Self::read(payload)?;
 				Self::answered(self.attach(database, asked).await?)
 			}
-			Operation::ConversationDescribe => {
-				let asked: Described = Self::read(payload)?;
-				Self::answered(self.describe(database, asked).await?)
+			Operation::ConversationUpdate => {
+				let asked: Updated = Self::read(payload)?;
+				Self::answered(self.update(database, asked).await?)
 			}
 			Operation::ConversationList => {
 				let asked: Listed = Self::read(payload)?;
@@ -670,11 +676,11 @@ pub enum Operation {
 	Suggestions,
 	Create,
 	FirstRunDone,
-	Invite,
+	List,
 	ConversationOpen,
 	ConversationSay,
 	ConversationAttach,
-	ConversationDescribe,
+	ConversationUpdate,
 	ConversationList,
 	ConversationRead,
 	ConversationClose,
@@ -683,13 +689,6 @@ pub enum Operation {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Bare {}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Invited {
-	companion: String,
-	conversation: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -718,11 +717,16 @@ struct Attached {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct Described {
-	conversation: String,
+struct Updated {
+	conversation: Option<String>,
+	title: Option<String>,
 	icon: Option<String>,
 	#[serde(default, deserialize_with = "present")]
 	colour: Option<Option<String>>,
+	#[serde(default)]
+	add: Vec<String>,
+	#[serde(default)]
+	remove: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -956,10 +960,6 @@ mod tests {
 			.collect()
 	}
 
-	fn an_invite(payload: Value) -> Value {
-		json!({ "subtype": "companion", "operation": "invite", "payload": payload })
-	}
-
 	async fn standing(app: &App<MockRuntime>) -> Standing {
 		ready(&app.state::<db::DatabaseState>())
 			.expect("the database opens")
@@ -991,17 +991,6 @@ mod tests {
 			.find(|seat| seat.0 == conversation_id && seat.1 == bot_id)
 			.map(|seat| seat.2)
 			.expect("the companion holds a seat")
-	}
-
-	async fn refused_and_untouched(
-		app: &App<MockRuntime>,
-		conversation_id: &str,
-		payload: Value,
-	) -> Value {
-		let before = standing(app).await;
-		let refused = refusal(serving(app, conversation_id).answer(an_invite(payload)).await);
-		assert_eq!(standing(app).await, before, "a refused invitation moved a seat or an arrival");
-		refused
 	}
 
 	fn asking(operation: &str) -> Value {
@@ -1183,151 +1172,6 @@ mod tests {
 
 		assert_eq!(again, Value::Null);
 		assert!(is_first_run_done(&app).await);
-	}
-
-	#[tokio::test]
-	async fn a_companion_invited_by_id_is_seated_with_the_caller_recorded_and_announced_as_inviter()
-	{
-		let app = a_room("invite-by-id").await;
-		let arriving = heard(&app, COMPANION_ARRIVED_EVENT);
-
-		let invited = serving(&app, "room")
-			.answer(an_invite(json!({ "companion": "b3" })))
-			.await
-			.expect("it is invited");
-
-		assert_eq!(invited, json!({ "id": "b3", "name": "Rex", "alreadySeated": false }));
-		assert_eq!(role_of(&app, "room", "b3").await, "assistant");
-		let arrival = announced(&arriving);
-		assert_eq!(arrival["botId"], json!("b3"));
-		assert_eq!(arrival["conversationId"], json!("room"));
-		assert_eq!(arrival["invitedByBotId"], json!("b1"));
-		assert_eq!(standing(&app).await.1, 1);
-	}
-
-	#[tokio::test]
-	async fn a_name_trimmed_and_compared_without_case_seats_the_one_companion_wearing_it() {
-		let app = a_room("invite-by-name").await;
-
-		let ada = serving(&app, "unled")
-			.answer(an_invite(json!({ "companion": "  aDA " })))
-			.await
-			.expect("it is invited");
-
-		assert_eq!(ada, json!({ "id": "b2", "name": "Ada", "alreadySeated": false }));
-	}
-
-	#[tokio::test]
-	async fn a_companion_seated_where_no_seat_holds_the_lead_takes_it() {
-		let app = a_room("invite-lead").await;
-
-		serving(&app, "unled")
-			.answer(an_invite(json!({ "companion": "b2" })))
-			.await
-			.expect("it is invited");
-
-		assert_eq!(role_of(&app, "unled", "b2").await, "lead");
-		assert_eq!(role_of(&app, "unled", "b1").await, "assistant");
-	}
-
-	#[tokio::test]
-	async fn a_companion_already_seated_is_served_and_no_seat_or_arrival_moves() {
-		let app = a_room("invite-seated").await;
-		let before = standing(&app).await;
-
-		let lead = serving(&app, "room")
-			.answer(an_invite(json!({ "companion": "shoto" })))
-			.await
-			.expect("it is served");
-		let mate = serving(&app, "room")
-			.answer(an_invite(json!({ "companion": "b2" })))
-			.await
-			.expect("it is served");
-
-		assert_eq!(lead, json!({ "id": "b1", "name": "Shoto", "alreadySeated": true }));
-		assert_eq!(mate, json!({ "id": "b2", "name": "Ada", "alreadySeated": true }));
-		assert_eq!(standing(&app).await, before);
-	}
-
-	#[tokio::test]
-	async fn an_empty_field_is_refused_as_empty() {
-		let app = a_room("invite-empty").await;
-
-		let refused = refused_and_untouched(&app, "room", json!({ "companion": "   " })).await;
-
-		assert_eq!(refused, json!({ "kind": "emptyCompanionField" }));
-	}
-
-	#[tokio::test]
-	async fn a_name_worn_by_several_companions_is_refused_with_every_id_it_matched() {
-		let app = a_room("invite-ambiguous").await;
-
-		let refused = refused_and_untouched(&app, "room", json!({ "companion": "REX" })).await;
-
-		assert_eq!(refused["kind"], json!("ambiguousCompanion"));
-		assert_eq!(refused["companion"], json!("REX"));
-		let mut ids: Vec<String> =
-			serde_json::from_value(refused["ids"].clone()).expect("the ids are listed");
-		ids.sort();
-		assert_eq!(ids, vec!["b3".to_owned(), "b4".to_owned()]);
-	}
-
-	#[tokio::test]
-	async fn a_companion_outside_the_space_is_refused_by_id_and_by_name() {
-		let app = a_room("invite-unknown").await;
-
-		for companion in ["b5", "Kai", "Nobody"] {
-			let refused =
-				refused_and_untouched(&app, "room", json!({ "companion": companion })).await;
-
-			assert_eq!(refused, json!({ "kind": "unknownCompanion", "companion": companion }));
-		}
-	}
-
-	#[tokio::test]
-	async fn a_conversation_that_carries_no_seats_is_refused_with_its_kind() {
-		let app = a_room("invite-main").await;
-
-		let refused = refused_and_untouched(&app, "c1", json!({ "companion": "b2" })).await;
-
-		assert_eq!(
-			refused,
-			json!({
-				"kind": "conversationWithoutSeats",
-				"conversationId": "c1",
-				"conversationKind": "main"
-			})
-		);
-	}
-
-	#[tokio::test]
-	async fn an_invitation_into_a_conversation_belonging_to_no_space_is_refused() {
-		let app = a_room("invite-spaceless").await;
-
-		let refused = refused_and_untouched(&app, "drifting", json!({ "companion": "b2" })).await;
-
-		assert_eq!(
-			refused,
-			json!({ "kind": "conversationWithoutSpace", "conversationId": "drifting" })
-		);
-	}
-
-	#[tokio::test]
-	async fn an_invitation_carrying_a_field_it_does_not_declare_is_refused_naming_it() {
-		let app = a_room("invite-undeclared").await;
-
-		let refused = refused_and_untouched(
-			&app,
-			"room",
-			json!({ "companion": "b3", "conversationId": "unled" }),
-		)
-		.await;
-
-		assert_eq!(refused["kind"], json!("unreadableRequest"));
-		assert!(
-			refused["detail"].as_str().is_some_and(|detail| detail.contains("conversationId")),
-			"got {refused}"
-		);
 	}
 
 	#[tokio::test]
@@ -1563,55 +1407,6 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn an_invitation_naming_a_room_seats_there_from_the_roster_of_its_space() {
-		let app = a_room("invite-elsewhere").await;
-		planted(&app, ANOTHER_ROOM).await;
-
-		let invited = serving(&app, "c1")
-			.answer(an_invite(json!({ "companion": "kai", "conversation": "studio" })))
-			.await
-			.expect("it is invited");
-		let outsider = refused_and_untouched(
-			&app,
-			"c1",
-			json!({ "companion": "Ada", "conversation": "studio" }),
-		)
-		.await;
-
-		assert_eq!(invited, json!({ "id": "b5", "name": "Kai", "alreadySeated": false }));
-		assert_eq!(role_of(&app, "studio", "b5").await, "assistant");
-		assert_eq!(outsider, json!({ "kind": "unknownCompanion", "companion": "Ada" }));
-	}
-
-	#[tokio::test]
-	async fn an_invitation_naming_a_room_the_caller_holds_no_live_seat_in_is_refused() {
-		let app = a_room("invite-unseated").await;
-		planted(&app, ANOTHER_ROOM).await;
-
-		let left = refused_and_untouched(
-			&app,
-			"c1",
-			json!({ "companion": "b3", "conversation": "unled" }),
-		)
-		.await;
-		let before = standing(&app).await;
-		let never = refusal(
-			CompanionHost::new(
-				app.handle().clone(),
-				"c1".to_owned(),
-				"b2".to_owned(),
-				Arc::default(),
-			)
-			.answer(an_invite(json!({ "companion": "b3", "conversation": "studio" })))
-			.await,
-		);
-
-		assert_eq!(left, json!({ "kind": "callerNotSeated", "conversationId": "unled" }));
-		assert_eq!(never, json!({ "kind": "callerNotSeated", "conversationId": "studio" }));
-		assert_eq!(standing(&app).await, before);
-	}
-
-	#[tokio::test]
 	async fn a_word_spoken_in_a_room_the_caller_sits_in_is_announced_once_and_writes_nothing() {
 		let app = a_room("say").await;
 		let arriving = heard(&app, COMPANION_SPOKE_EVENT);
@@ -1643,86 +1438,6 @@ mod tests {
 
 		assert_eq!(said, a_plans_room());
 		assert_eq!(announced(&arriving)["conversationId"], json!("room"));
-	}
-
-	fn a_describe(payload: Value) -> Value {
-		json!({ "subtype": "companion", "operation": "conversationDescribe", "payload": payload })
-	}
-
-	type Look = (Option<String>, Option<String>, i64);
-
-	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> Look {
-		ready(&app.state::<db::DatabaseState>())
-			.expect("the database opens")
-			.call(move |connection| {
-				Ok(connection.query_row(
-					"SELECT icon, color, updated_at FROM conversations WHERE id = ?1",
-					[conversation_id],
-					|row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-				)?)
-			})
-			.await
-			.expect("the look reads")
-	}
-
-	async fn describe_refused(
-		app: &App<MockRuntime>,
-		conversation_id: &'static str,
-		payload: Value,
-	) -> Value {
-		let updating = heard(app, crate::conversations::contract::UPDATED_EVENT);
-		let before = look_of(app, conversation_id).await;
-		let refused = refusal(serving(app, "c1").answer(a_describe(payload)).await);
-		assert_eq!(look_of(app, conversation_id).await, before, "a refused description wrote");
-		assert!(updating.try_recv().is_err(), "a refused description announced");
-		refused
-	}
-
-	#[tokio::test]
-	async fn a_seated_companion_describes_a_room_field_by_field_and_the_room_is_announced() {
-		let app = a_room("describe-seated").await;
-		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
-
-		let iconed = serving(&app, "c1")
-			.answer(a_describe(json!({ "conversation": "room", "icon": "Rocket" })))
-			.await
-			.expect("the icon is set");
-		let announced_room = announced(&updating);
-		let stored_icon = look_of(&app, "room").await.0;
-		let coloured = serving(&app, "c1")
-			.answer(a_describe(json!({ "conversation": "room", "colour": "cyan" })))
-			.await
-			.expect("the colour is set");
-		let uncoloured = serving(&app, "c1")
-			.answer(a_describe(json!({ "conversation": "room", "colour": null })))
-			.await
-			.expect("the colour is cleared");
-		let main = serving(&app, "c1")
-			.answer(a_describe(
-				json!({ "conversation": "c1", "icon": "Sparkles", "colour": "red" }),
-			))
-			.await
-			.expect("the main chat is described");
-
-		assert_eq!(
-			iconed,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": null })
-		);
-		assert_eq!(stored_icon.as_deref(), Some("Rocket"));
-		assert_eq!(announced_room["conversation"]["id"], json!("room"));
-		assert_eq!(announced_room["conversation"]["icon"], json!("Rocket"));
-		assert_eq!(
-			coloured,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": "cyan" })
-		);
-		assert_eq!(
-			uncoloured,
-			json!({ "conversationId": "room", "title": "Plans", "icon": "Rocket", "colour": null })
-		);
-		assert_eq!(
-			main,
-			json!({ "conversationId": "c1", "title": "Chat", "icon": "Sparkles", "colour": "red" })
-		);
 	}
 
 	const TWO_ERRANDS: &str = "
@@ -1838,50 +1553,6 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_description_from_a_companion_without_a_live_seat_is_refused_naming_the_room() {
-		let app = a_room("describe-unseated").await;
-		planted(&app, ANOTHER_ROOM).await;
-
-		let refused =
-			describe_refused(&app, "unled", json!({ "conversation": "unled", "icon": "Rocket" }))
-				.await;
-
-		assert_eq!(refused, json!({ "kind": "callerNotSeated", "conversationId": "unled" }));
-	}
-
-	#[tokio::test]
-	async fn a_description_naming_nothing_or_off_the_lists_is_refused() {
-		let app = a_room("describe-refused").await;
-
-		let nothing = describe_refused(&app, "room", json!({ "conversation": "room" })).await;
-		let blank =
-			describe_refused(&app, "room", json!({ "conversation": "room", "icon": "  " })).await;
-		let unlisted =
-			describe_refused(&app, "room", json!({ "conversation": "room", "icon": "Message" }))
-				.await;
-		let teal = describe_refused(
-			&app,
-			"room",
-			json!({ "conversation": "room", "icon": "Rocket", "colour": "teal" }),
-		)
-		.await;
-
-		assert_eq!(nothing, json!({ "kind": "emptyDescription" }));
-		assert_eq!(blank, json!({ "kind": "emptyIconField" }));
-		assert_eq!(unlisted["kind"], json!("unlistedIcon"));
-		assert_eq!(unlisted["icon"], json!("Message"));
-		assert_eq!(unlisted["accepted"], json!(conversation_icons()));
-		assert_eq!(
-			teal,
-			json!({
-				"kind": "unknownColour",
-				"colour": "teal",
-				"accepted": ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"]
-			})
-		);
-	}
-
-	#[tokio::test]
 	async fn a_seat_the_caller_has_left_carries_no_word_even_where_its_session_runs() {
 		let app = a_room("say-left").await;
 		planted(&app, ANOTHER_ROOM).await;
@@ -1982,24 +1653,6 @@ mod tests {
 		assert!(
 			refused["detail"].as_str().is_some_and(|detail| detail.contains("conversationId")),
 			"got {refused}"
-		);
-	}
-
-	#[tokio::test]
-	async fn an_invitation_naming_a_conversation_that_carries_no_seats_is_refused() {
-		let app = a_room("invite-elsewhere-main").await;
-
-		let refused =
-			refused_and_untouched(&app, "room", json!({ "companion": "b2", "conversation": "c1" }))
-				.await;
-
-		assert_eq!(
-			refused,
-			json!({
-				"kind": "conversationWithoutSeats",
-				"conversationId": "c1",
-				"conversationKind": "main"
-			})
 		);
 	}
 
@@ -2493,5 +2146,411 @@ mod tests {
 				json!({ "kind": "unknownConversation", "conversationId": conversation })
 			);
 		}
+	}
+
+	fn an_update(payload: Value) -> Value {
+		json!({ "subtype": "companion", "operation": "conversationUpdate", "payload": payload })
+	}
+
+	type Look = (String, String, Option<String>, Option<String>, Option<String>, i64);
+
+	async fn look_of(app: &App<MockRuntime>, conversation_id: &'static str) -> Look {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT title, instructions, section_id, icon, color, updated_at
+						FROM conversations WHERE id = ?1",
+					[conversation_id],
+					|row| {
+						Ok((
+							row.get(0)?,
+							row.get(1)?,
+							row.get(2)?,
+							row.get(3)?,
+							row.get(4)?,
+							row.get(5)?,
+						))
+					},
+				)?)
+			})
+			.await
+			.expect("the look reads")
+	}
+
+	async fn update_refused(
+		app: &App<MockRuntime>,
+		host: &CompanionHost<MockRuntime>,
+		conversation_id: &'static str,
+		payload: Value,
+	) -> Value {
+		let updating = heard(app, crate::conversations::contract::UPDATED_EVENT);
+		let arriving = heard(app, COMPANION_ARRIVED_EVENT);
+		let before = (look_of(app, conversation_id).await, standing(app).await);
+		let refused = refusal(host.answer(an_update(payload)).await);
+		assert_eq!(
+			(look_of(app, conversation_id).await, standing(app).await),
+			before,
+			"a refused update wrote"
+		);
+		assert!(updating.try_recv().is_err(), "a refused update announced the conversation");
+		assert!(arriving.try_recv().is_err(), "a refused update announced an arrival");
+		refused
+	}
+
+	const A_DRESSED_ROOM: &str = "
+		INSERT INTO sections (id, space_id, name, position, created_at)
+			VALUES ('s1', 'personal', 'Work', 0, 1);
+		UPDATE conversations SET instructions = 'Keep it short.', section_id = 's1'
+			WHERE id = 'room';
+	";
+
+	#[tokio::test]
+	async fn every_given_field_lands_in_one_call_and_the_conversation_is_answered_as_it_stands() {
+		let app = a_room("update-all").await;
+		planted(&app, A_DRESSED_ROOM).await;
+		let arriving = heard(&app, COMPANION_ARRIVED_EVENT);
+		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
+
+		let updated = serving(&app, "c1")
+			.answer(an_update(json!({
+				"conversation": "room",
+				"title": " Trip ",
+				"icon": "Globe",
+				"colour": "cyan",
+				"add": ["b3"],
+				"remove": ["ada"]
+			})))
+			.await
+			.expect("the conversation is updated");
+
+		assert_eq!(
+			updated,
+			json!({
+				"conversationId": "room",
+				"kind": "topic",
+				"title": "Trip",
+				"icon": "Globe",
+				"colour": "cyan",
+				"companions": [{ "id": "b1", "name": "Shoto" }, { "id": "b3", "name": "Rex" }],
+				"lastMessage": null,
+				"archived": false
+			})
+		);
+		let (title, instructions, section_id, icon, colour, _) = look_of(&app, "room").await;
+		assert_eq!(
+			(title.as_str(), instructions.as_str(), section_id.as_deref()),
+			("Trip", "Keep it short.", Some("s1"))
+		);
+		assert_eq!((icon.as_deref(), colour.as_deref()), (Some("Globe"), Some("cyan")));
+		let arrival = announced(&arriving);
+		assert_eq!(arrival["botId"], json!("b3"));
+		assert_eq!(arrival["conversationId"], json!("room"));
+		assert_eq!(arrival["invitedByBotId"], json!("b1"));
+		assert!(arriving.try_recv().is_err(), "an arrival was announced twice");
+		assert_eq!(announced(&updating)["conversation"]["title"], json!("Trip"));
+		assert!(updating.try_recv().is_err(), "the conversation was announced twice");
+	}
+
+	#[tokio::test]
+	async fn a_field_left_out_keeps_what_the_conversation_wears_and_null_gives_back_the_default_colour(
+	) {
+		let app = a_room("update-field-by-field").await;
+		planted(&app, A_DRESSED_ROOM).await;
+		let host = serving(&app, "room");
+
+		host.answer(an_update(json!({ "icon": "Rocket", "colour": "red" })))
+			.await
+			.expect("the look is set");
+		let retitled =
+			host.answer(an_update(json!({ "title": "Trip" }))).await.expect("the title is set");
+		let uncoloured =
+			host.answer(an_update(json!({ "colour": null }))).await.expect("the colour is cleared");
+
+		assert_eq!(
+			(&retitled["title"], &retitled["icon"], &retitled["colour"]),
+			(&json!("Trip"), &json!("Rocket"), &json!("red"))
+		);
+		assert_eq!(
+			(&uncoloured["title"], &uncoloured["icon"], &uncoloured["colour"]),
+			(&json!("Trip"), &json!("Rocket"), &Value::Null)
+		);
+		let (_, instructions, section_id, ..) = look_of(&app, "room").await;
+		assert_eq!((instructions.as_str(), section_id.as_deref()), ("Keep it short.", Some("s1")));
+	}
+
+	#[tokio::test]
+	async fn the_main_chat_takes_a_title_an_icon_and_a_colour_from_a_companion_seated_in_it() {
+		let app = a_room("update-main").await;
+
+		let updated = serving(&app, "room")
+			.answer(an_update(
+				json!({ "conversation": "c1", "title": "Desk", "icon": "Sparkles", "colour": "red" }),
+			))
+			.await
+			.expect("the main chat is updated");
+
+		assert_eq!(
+			(&updated["kind"], &updated["title"], &updated["icon"], &updated["colour"]),
+			(&json!("main"), &json!("Desk"), &json!("Sparkles"), &json!("red"))
+		);
+	}
+
+	#[tokio::test]
+	async fn a_caller_naming_itself_in_remove_leaves_the_room_and_the_lead_passes_on() {
+		let app = a_room("update-leave").await;
+
+		let left = serving(&app, "c1")
+			.answer(an_update(json!({ "conversation": "room", "remove": ["Shoto"] })))
+			.await
+			.expect("the caller leaves");
+
+		assert_eq!(left["companions"], json!([{ "id": "b2", "name": "Ada" }]));
+		assert_eq!(role_of(&app, "room", "b2").await, "lead");
+		let (seats, _) = standing(&app).await;
+		assert!(
+			seats.iter().any(|seat| seat.0 == "room" && seat.1 == "b1" && seat.4.is_some()),
+			"the caller still holds its seat"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_companion_already_seated_or_not_seated_moves_no_seat_and_announces_no_arrival() {
+		let app = a_room("update-settled").await;
+		let arriving = heard(&app, COMPANION_ARRIVED_EVENT);
+		let before = standing(&app).await;
+
+		let updated = serving(&app, "room")
+			.answer(an_update(json!({ "add": ["shoto", "b2", "Ada"], "remove": ["b3"] })))
+			.await
+			.expect("it is served");
+
+		assert_eq!(
+			updated["companions"],
+			json!([{ "id": "b1", "name": "Shoto" }, { "id": "b2", "name": "Ada" }])
+		);
+		assert_eq!(standing(&app).await, before);
+		assert!(arriving.try_recv().is_err(), "an arrival was announced");
+	}
+
+	#[tokio::test]
+	async fn the_answer_carries_the_last_message_and_whether_the_conversation_is_archived() {
+		let app = a_room("update-glance").await;
+		planted(
+			&app,
+			"
+			UPDATE conversations SET archived_at = 9 WHERE id = 'room';
+			INSERT INTO turns (id, conversation_id, seq, started_at) VALUES ('t1', 'room', 1, 5);
+			INSERT INTO messages
+				(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
+				VALUES ('m1', 'room', 't1', 1, 'user', 'Where to?', 'complete', 5);
+			",
+		)
+		.await;
+
+		let updated = serving(&app, "room")
+			.answer(an_update(json!({ "title": "Trip" })))
+			.await
+			.expect("the conversation is updated");
+
+		assert_eq!(updated["lastMessage"]["text"], json!("Where to?"));
+		assert_eq!(updated["lastMessage"]["time"], json!(5));
+		assert_eq!(updated["archived"], json!(true));
+	}
+
+	#[tokio::test]
+	async fn an_update_naming_nothing_to_change_or_a_blank_title_is_refused() {
+		let app = a_room("update-empty").await;
+		let host = serving(&app, "room");
+
+		let nothing = update_refused(&app, &host, "room", json!({ "conversation": "room" })).await;
+		let empty_lists =
+			update_refused(&app, &host, "room", json!({ "add": [], "remove": [] })).await;
+		let blank =
+			update_refused(&app, &host, "room", json!({ "title": " \n ", "icon": "Rocket" })).await;
+
+		assert_eq!(nothing, json!({ "kind": "emptyUpdate" }));
+		assert_eq!(empty_lists, json!({ "kind": "emptyUpdate" }));
+		assert_eq!(blank, json!({ "kind": "emptyTitleField" }));
+	}
+
+	#[tokio::test]
+	async fn a_field_off_the_lists_refuses_the_whole_call_with_the_kind_conversation_open_uses() {
+		let app = a_room("update-off-the-lists").await;
+		let host = serving(&app, "room");
+		let with = |extra: Value| {
+			let mut payload = json!({ "title": "Trip", "colour": "pink", "add": ["b3"] });
+			if let (Some(payload), Some(extra)) = (payload.as_object_mut(), extra.as_object()) {
+				payload.extend(extra.clone());
+			}
+			payload
+		};
+
+		let unlisted =
+			update_refused(&app, &host, "room", with(json!({ "icon": "Message" }))).await;
+		let blank = update_refused(&app, &host, "room", with(json!({ "icon": "  " }))).await;
+		let teal = update_refused(&app, &host, "room", with(json!({ "colour": "teal" }))).await;
+
+		assert_eq!(unlisted["kind"], json!("unlistedIcon"));
+		assert_eq!(unlisted["icon"], json!("Message"));
+		assert_eq!(unlisted["accepted"], json!(conversation_icons()));
+		assert_eq!(blank, json!({ "kind": "emptyIconField" }));
+		assert_eq!(
+			teal,
+			json!({
+				"kind": "unknownColour",
+				"colour": "teal",
+				"accepted": ["red", "yellow", "green", "cyan", "blue", "purple", "pink", "orange"]
+			})
+		);
+	}
+
+	#[tokio::test]
+	async fn a_companion_matching_none_or_two_of_the_space_refuses_the_whole_call() {
+		let app = a_room("update-companions").await;
+		let host = serving(&app, "room");
+
+		let outside =
+			update_refused(&app, &host, "room", json!({ "title": "Trip", "add": ["b3", "Kai"] }))
+				.await;
+		let nobody =
+			update_refused(&app, &host, "room", json!({ "title": "Trip", "remove": ["Nobody"] }))
+				.await;
+		let twice =
+			update_refused(&app, &host, "room", json!({ "title": "Trip", "remove": ["REX"] }))
+				.await;
+
+		assert_eq!(outside, json!({ "kind": "unknownCompanion", "companion": "Kai" }));
+		assert_eq!(nobody, json!({ "kind": "unknownCompanion", "companion": "Nobody" }));
+		assert_eq!(twice["kind"], json!("ambiguousCompanion"));
+		let mut ids: Vec<String> =
+			serde_json::from_value(twice["ids"].clone()).expect("the ids are listed");
+		ids.sort();
+		assert_eq!(ids, vec!["b3".to_owned(), "b4".to_owned()]);
+	}
+
+	#[tokio::test]
+	async fn a_caller_holding_no_live_seat_in_the_conversation_is_refused() {
+		let app = a_room("update-unseated").await;
+		planted(&app, ANOTHER_ROOM).await;
+		let stranger = CompanionHost::new(
+			app.handle().clone(),
+			"c1".to_owned(),
+			"b2".to_owned(),
+			Arc::default(),
+		);
+
+		let left = update_refused(
+			&app,
+			&serving(&app, "c1"),
+			"unled",
+			json!({ "conversation": "unled", "title": "Trip" }),
+		)
+		.await;
+		let never = update_refused(
+			&app,
+			&stranger,
+			"studio",
+			json!({ "conversation": "studio", "title": "Trip" }),
+		)
+		.await;
+
+		assert_eq!(left, json!({ "kind": "callerNotSeated", "conversationId": "unled" }));
+		assert_eq!(never, json!({ "kind": "callerNotSeated", "conversationId": "studio" }));
+	}
+
+	#[tokio::test]
+	async fn seats_moved_in_a_conversation_that_carries_no_seats_are_refused_with_its_kind() {
+		let app = a_room("update-seatless").await;
+		planted(&app, A_MISSION).await;
+
+		for (conversation, kind, moved) in [
+			("c1", "main", json!({ "add": ["b2"] })),
+			("errand", "mission", json!({ "remove": ["b1"] })),
+		] {
+			let mut payload = moved;
+			payload["conversation"] = json!(conversation);
+			payload["title"] = json!("Trip");
+			let refused = update_refused(&app, &serving(&app, "room"), "c1", payload).await;
+
+			assert_eq!(
+				refused,
+				json!({
+					"kind": "conversationWithoutSeats",
+					"conversationId": conversation,
+					"conversationKind": kind
+				})
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn an_update_carrying_a_field_it_does_not_declare_is_refused_naming_it() {
+		let app = a_room("update-undeclared").await;
+
+		let refused = update_refused(
+			&app,
+			&serving(&app, "room"),
+			"room",
+			json!({ "title": "Trip", "archived": true }),
+		)
+		.await;
+
+		assert_eq!(refused["kind"], json!("unreadableRequest"));
+		assert!(
+			refused["detail"].as_str().is_some_and(|detail| detail.contains("archived")),
+			"got {refused}"
+		);
+	}
+
+	#[tokio::test]
+	async fn the_list_answers_every_companion_of_the_space_of_the_caller_with_its_job() {
+		let app = a_room("list").await;
+		planted(&app, ANOTHER_ROOM).await;
+		planted(&app, "UPDATE bots SET title = 'a researcher' WHERE id = 'b2';").await;
+
+		let personal =
+			serving(&app, "room").answer(asking("list")).await.expect("the roster is listed");
+		let work =
+			serving(&app, "studio").answer(asking("list")).await.expect("the roster is listed");
+
+		let expected: Vec<Value> = worn(&app)
+			.await
+			.into_iter()
+			.map(|bot| json!({ "id": bot.id, "name": bot.name, "job": bot.title }))
+			.collect();
+		assert_eq!(personal, json!(expected));
+		assert_eq!(expected.len(), 4);
+		assert!(expected.contains(&json!({ "id": "b2", "name": "Ada", "job": "a researcher" })));
+		let mut work_ids: Vec<String> = work
+			.as_array()
+			.expect("the roster is a list")
+			.iter()
+			.map(|companion| companion["id"].as_str().expect("an id").to_owned())
+			.collect();
+		work_ids.sort();
+		assert_eq!(work_ids, roster_of(&app, "work").await);
+	}
+
+	#[tokio::test]
+	async fn the_list_from_a_conversation_belonging_to_no_space_or_carrying_a_field_is_refused() {
+		let app = a_room("list-refused").await;
+
+		let spaceless = refusal(serving(&app, "nowhere").answer(asking("list")).await);
+		let undeclared = refusal(
+			serving(&app, "room")
+				.answer(json!({
+					"subtype": "companion",
+					"operation": "list",
+					"payload": { "space": "work" }
+				}))
+				.await,
+		);
+
+		assert_eq!(
+			spaceless,
+			json!({ "kind": "conversationWithoutSpace", "conversationId": "nowhere" })
+		);
+		assert_eq!(undeclared["kind"], json!("unreadableRequest"));
 	}
 }

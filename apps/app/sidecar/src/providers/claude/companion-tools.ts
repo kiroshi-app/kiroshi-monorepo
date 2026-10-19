@@ -4,6 +4,8 @@ import { resolve } from "node:path"
 import { type SdkMcpToolDefinition, tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 
+import conversationIcons from "@workspace/shared/conversation-icons.json"
+
 import { carriedTo, refused } from "./host-calls"
 import { deniesRead, type FloorScope } from "./security-floor"
 
@@ -27,13 +29,8 @@ const CREATE =
 const FIRST_RUN_DONE =
 	"Record the first run of the app as finished, once the person has answered the hand-off question, so the app stops opening on it."
 
-const INVITE =
-	"Bring a companion of this space into this conversation before you mention it."
-
-const INVITEE = "The id or the name of the companion to bring in."
-
-const TARGET =
-	"The id of a room you sit in to bring the companion into, left out for this conversation."
+const ROSTER =
+	"List every companion of the space of this conversation, each with its id, its name and its job, before you seat one, take one out or mention one by name."
 
 const OPEN =
 	"Open a new room in the space of this conversation, led by you, once the person asks for a topic of its own."
@@ -63,19 +60,28 @@ const CAPTION = "A line read right above the image."
 const ATTACH_ROOM =
 	"The id of a room you hold a seat in to show it there, left out for this conversation."
 
-const DESCRIBE =
-	"Give a room you hold a seat in an icon or a colour, once the person asks for one or once its topic calls for one."
+const UPDATE =
+	"Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived."
 
-const DESCRIBED_ROOM = "The id of the room you hold a seat in to describe."
+const UPDATED_CONVERSATION =
+	"The id of the conversation to change, one you hold a seat in, left out for this conversation."
+
+const UPDATED_TITLE =
+	"The new title of the conversation, the subject in a few words, left out to keep the one it wears; a title blank once trimmed is refused."
 
 const OPENED_ICON =
 	"The name of a Keyline icon drawn beside the title of the room, chosen with the title for the subject it names, such as Rocket, spelled as listed in packages/shared/conversation-icons.json. A name off that list is refused with the accepted names."
 
-const ICON =
-	"The name of a Keyline icon drawn beside the title of the room, such as Rocket, spelled as listed in packages/shared/conversation-icons.json, left out to keep the one it wears. A name off that list is refused with the accepted names."
+const UPDATED_ICON = `The name of the Keyline icon drawn beside the title of the conversation, chosen for the subject the title names, left out to keep the one it wears. It is one of ${conversationIcons.join(", ")}, spelled exactly so; any other name is refused with the accepted names.`
 
 const COLOUR =
-	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the room back its default colour, left out to keep the one it wears."
+	"One of red, yellow, green, cyan, blue, purple, pink or orange, null to give the conversation back its default colour, left out to keep the one it wears."
+
+const ADD =
+	"The id or the name of each companion of the space of the conversation to seat in it, recorded as invited by you; one already seated stays as it is, and a name two companions share is refused with their ids."
+
+const REMOVE =
+	"The id or the name of each companion of the space of the conversation to take out of it, your own to leave it yourself; one not seated stays out."
 
 const LIST =
 	"List the conversations of this space, the latest activity first, each with its id, its kind, its title, its icon, its colour, its companions, its last message and whether it is archived, before you read, join or mention one whose id you do not hold."
@@ -112,11 +118,6 @@ type ToolInput = Record<string, z.ZodType>
 
 const NOTHING: ToolInput = {}
 
-const NAMED: ToolInput = {
-	companion: z.string().describe(INVITEE),
-	conversation: z.string().optional().describe(TARGET),
-}
-
 const OPENED: ToolInput = {
 	title: z.string().describe(TITLE),
 	icon: z.string().describe(OPENED_ICON),
@@ -135,10 +136,13 @@ const ATTACHED: ToolInput = {
 	conversation: z.string().optional().describe(ATTACH_ROOM),
 }
 
-const DESCRIBED: ToolInput = {
-	conversation: z.string().describe(DESCRIBED_ROOM),
-	icon: z.string().optional().describe(ICON),
+const UPDATED: ToolInput = {
+	conversation: z.string().optional().describe(UPDATED_CONVERSATION),
+	title: z.string().optional().describe(UPDATED_TITLE),
+	icon: z.string().optional().describe(UPDATED_ICON),
 	colour: z.string().nullable().optional().describe(COLOUR),
+	add: z.array(z.string()).optional().describe(ADD),
+	remove: z.array(z.string()).optional().describe(REMOVE),
 }
 
 const LISTED: ToolInput = {
@@ -216,9 +220,7 @@ export const companionTools = (
 	tool("companion_first_run_done", FIRST_RUN_DONE, NOTHING, () =>
 		asked(session, "firstRunDone", {}),
 	),
-	tool("companion_invite", INVITE, NAMED, (input) =>
-		asked(session, "invite", input),
-	),
+	tool("companion_list", ROSTER, NOTHING, () => asked(session, "list", {})),
 	tool("conversation_open", OPEN, OPENED, (input) =>
 		asked(session, "conversationOpen", input),
 	),
@@ -228,8 +230,8 @@ export const companionTools = (
 	tool("conversation_attach", ATTACH, ATTACHED, (input) =>
 		attached(session, scope, input as AttachInput),
 	),
-	tool("conversation_describe", DESCRIBE, DESCRIBED, (input) =>
-		asked(session, "conversationDescribe", input),
+	tool("conversation_update", UPDATE, UPDATED, (input) =>
+		asked(session, "conversationUpdate", input),
 	),
 	tool("conversation_list", LIST, LISTED, (input) =>
 		asked(session, "conversationList", input),

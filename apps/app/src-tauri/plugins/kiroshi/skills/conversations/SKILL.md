@@ -14,22 +14,23 @@ companion the subject belongs to. You hold six tools for them, on the `kiroshi` 
   the companions seated in it. It takes the title and the icon of the room in the same call.
 - `conversation_say`, one message in a room you already hold a seat in, answering the id of
   that room and its title.
-- `companion_invite`, one more seat for a companion of this space, answering that
-  companion's id, its name, and whether it was already seated.
+- `companion_list`, every companion of this space, answering for each one its id, its
+  name and its job.
 - `conversation_attach`, one image file shown to the person, here or in a room you hold a
   seat in, answering the path it was stored under and the id of that conversation.
-- `conversation_describe`, the icon or the colour of a room you hold a seat in, answering
-  the id of that room, its title, its icon and its colour. The icon is the name of a Keyline
-  icon, such as Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The
-  colour is one of red, yellow, green, cyan, blue, purple, pink or orange, or null to give
-  the room back its default colour. A field left out keeps what the room wears.
+- `conversation_update`, the title, the icon, the colour and the seats of a conversation
+  you hold a seat in, every field given landing in one call or none of them, answering that
+  conversation as it stands after the call. The icon is the name of a Keyline icon, such as
+  Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The colour is one
+  of red, yellow, green, cyan, blue, purple, pink or orange, or null to give the room back
+  its default colour. A field left out keeps what the room wears.
 - `conversation_close`, the archive of a room you lead once its subject is settled,
   answering the id of that room, its title and whether it is archived. Every message of
   the room is kept. A main conversation and the thread of a mission still open are never
   closed.
 
-`companion_invite` seats a companion in this conversation, and in another room of the
-caller when a room id is passed.
+`conversation_update` seats companions with `add` and takes them out with `remove`, in this
+conversation, and in another room of the caller when a room id is passed.
 
 ## When a room is worth opening
 
@@ -63,7 +64,7 @@ A companion is seated by `with`, and it is summoned by an at sign followed by it
 name inside the message. The two are separate: a seat lets a companion read and answer, a
 summons is what makes it read now.
 
-A companion passed to `with` and to `companion_invite` is named by its name or by its id. A
+A companion passed to `with`, `add` and `remove` is named by its name or by its id. A
 name two companions of this space share is refused, and the refusal answers their ids: pass
 the id of the one you want in place of that name.
 
@@ -77,7 +78,7 @@ are the ones you were given: this conversation, and every room you opened yourse
 
 The room id answered by `conversation_open` is the only way back into that room, and
 nothing lists it later. Carry it with you for every `conversation_say` and every
-`companion_invite` you send there.
+`conversation_update` you send there.
 
 ## What the person reads
 

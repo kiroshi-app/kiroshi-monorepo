@@ -64,6 +64,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 55, statements: SPACE_JOIN },
 	Migration { version: 56, statements: SPACE_KEY_ROTATIONS },
 	Migration { version: 57, statements: JOINED_SPACE_RELAY_V2 },
+	Migration { version: 58, statements: SPACE_REMOVED_DEVICES },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1221,6 +1222,15 @@ CREATE TABLE joined_space_counters (
 DELETE FROM app_settings WHERE key LIKE 'app.joined_space_members.%';
 ";
 
+const SPACE_REMOVED_DEVICES: &str = "
+CREATE TABLE space_removed_devices (
+	space_id TEXT NOT NULL REFERENCES spaces (id) ON DELETE CASCADE,
+	device_id TEXT NOT NULL,
+	removed_at INTEGER NOT NULL,
+	PRIMARY KEY (space_id, device_id)
+);
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1331,6 +1341,7 @@ mod tests {
 	const SPACE_JOIN_STEP: u32 = 55;
 	const SPACE_KEY_ROTATIONS_STEP: u32 = 56;
 	const JOINED_SPACE_RELAY_V2_STEP: u32 = 57;
+	const SPACE_REMOVED_DEVICES_STEP: u32 = 58;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -4059,6 +4070,42 @@ mod tests {
 			.expect("the rows count");
 
 		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert_eq!(left, 0);
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn the_removed_devices_install_on_a_kept_file_and_go_with_their_space() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(SPACE_REMOVED_DEVICES_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), JOINED_SPACE_RELAY_V2_STEP);
+		connection
+			.execute_batch(
+				"INSERT INTO spaces (id, name, position, created_at) VALUES ('s1', 'Shared', 1, 1);",
+			)
+			.expect("a space this build upgrades from");
+
+		apply(&mut connection).expect("the file comes up to this build");
+		connection
+			.execute_batch(
+				"INSERT INTO space_removed_devices (space_id, device_id, removed_at)
+					VALUES ('s1', 'd1', 1);",
+			)
+			.expect("a removed device is recorded");
+		let twice = connection.execute_batch(
+			"INSERT INTO space_removed_devices (space_id, device_id, removed_at)
+				VALUES ('s1', 'd1', 2);",
+		);
+		connection.execute_batch("DELETE FROM spaces WHERE id = 's1';").expect("the space goes");
+		let left: i64 = connection
+			.query_row("SELECT COUNT(*) FROM space_removed_devices", [], |row| row.get(0))
+			.expect("the rows count");
+
+		assert_eq!(version(&connection).expect("version"), latest_version());
+		assert!(twice.is_err());
 		assert_eq!(left, 0);
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

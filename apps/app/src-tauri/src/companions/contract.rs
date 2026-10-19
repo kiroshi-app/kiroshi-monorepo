@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::attachments::contract::AttachmentStoreError;
 use crate::attachments::Rejection;
 use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
+use crate::db::repositories::conversations::Bot as StoredBot;
 use crate::db::DatabaseError;
 use crate::missions::contract::MissionError;
 
@@ -39,10 +40,16 @@ pub struct CompanionDeleted {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CompanionInvited {
+pub struct RosterCompanion {
 	pub id: String,
 	pub name: String,
-	pub already_seated: bool,
+	pub job: String,
+}
+
+impl From<StoredBot> for RosterCompanion {
+	fn from(bot: StoredBot) -> Self {
+		Self { id: bot.id, name: bot.name, job: bot.title }
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,15 +121,6 @@ pub struct ConversationRead {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConversationDescribed {
-	pub conversation_id: String,
-	pub title: String,
-	pub icon: Option<String>,
-	pub colour: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ConversationClosed {
 	pub conversation_id: String,
 	pub title: String,
@@ -161,11 +159,10 @@ pub enum CompanionError {
 		failure: StorageFailure,
 	},
 	NamelessCompanion,
-	EmptyCompanionField,
 	EmptyTitleField,
 	EmptyMessageField,
 	EmptyIconField,
-	EmptyDescription,
+	EmptyUpdate,
 	#[serde(rename_all = "camelCase")]
 	UnlistedIcon {
 		icon: String,

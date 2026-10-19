@@ -266,7 +266,7 @@ fn listed_of_space(
 	Ok(read)
 }
 
-fn listed_by_id(
+pub(super) fn listed_by_id(
 	connection: &Connection,
 	conversation_id: &str,
 ) -> Result<Option<ListedConversation>, ConversationError> {

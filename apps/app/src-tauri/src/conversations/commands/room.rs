@@ -139,7 +139,7 @@ pub async fn conversation_add_participant<R: Runtime>(
 	Ok(drawn(&app, joined.conversation))
 }
 
-pub(crate) async fn seat_participant<R: Runtime>(
+async fn seat_participant<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
 	conversation_id: String,
