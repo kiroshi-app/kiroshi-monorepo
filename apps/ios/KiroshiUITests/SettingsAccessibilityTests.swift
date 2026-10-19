@@ -7,6 +7,12 @@ final class SettingsAccessibilityTests: XCTestCase {
         "Studio, Home lab and Side project leave this iPhone until you sign in again."
     static let consentFooter =
         "Messages you send here go to your computer through Kiroshi’s relay. Your computer passes them to the agent, which sends them to the model provider your computer uses. Turn this off and nothing leaves this iPhone until you agree again."
+    static let fingerprintFooter =
+        "When this iPhone asks to join your account, the device that approves it shows these words."
+
+    static func isThisIPhoneCard(_ label: String) -> Bool {
+        ["iPhone", "This device"].contains(label) || label.split(separator: ", ").count == 6
+    }
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -47,7 +53,8 @@ final class SettingsAccessibilityTests: XCTestCase {
 
         try audit(app) { issue in
             issue.auditType == .dynamicType
-                && [Self.footer, Self.consentFooter].contains(issue.element?.label)
+                && ([Self.footer, Self.consentFooter, Self.fingerprintFooter].contains(
+                    issue.element?.label) || Self.isThisIPhoneCard(issue.element?.label ?? ""))
         }
 
         app.buttons["Close"].tap()
