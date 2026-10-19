@@ -18,7 +18,7 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { answerOf, DeviceNotRemoved } from "./device-actions"
-import { activityOf, toDevice } from "./device-mapping"
+import { activityOf, deviceNameOf, toDevice } from "./device-mapping"
 import { deviceQueryKeys } from "./device-query-keys"
 
 import {
@@ -35,8 +35,6 @@ const RAISED_IN = "use-your-devices"
 
 const UNREAD_DEVICE: Device = { kind: "laptop", name: "", fingerprint: "" }
 
-const nameOf = (device: AccountDevice) => device.name ?? ""
-
 const readDevices = () => answerOf(commands.devicesList())
 
 const removeDevice = async (device: AccountDevice) => {
@@ -47,7 +45,7 @@ const removeDevice = async (device: AccountDevice) => {
 
 const removedNotice = (device: AccountDevice): NoticeMessage => ({
 	title: i18n.t("settings:account.devices.removed.title", {
-		device: nameOf(device),
+		device: deviceNameOf(device),
 	}),
 	description: i18n.t("settings:account.devices.removed.description"),
 })
@@ -62,7 +60,7 @@ const notRemovedNotice = (
 	const { device } = failure
 	return {
 		title: i18n.t("settings:account.devices.confirm.failed", {
-			device: nameOf(device),
+			device: deviceNameOf(device),
 		}),
 		action: {
 			label: i18n.t("common:devices.approval.retry"),

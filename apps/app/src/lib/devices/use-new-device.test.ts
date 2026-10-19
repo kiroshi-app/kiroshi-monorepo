@@ -75,14 +75,6 @@ const refused = (error: DeviceError) => ({ status: "error", error }) as const
 
 const handlers = new Map<string, () => void>()
 
-const deferred = <Value>() => {
-	let resolve: (value: Value) => void = () => undefined
-	const promise = new Promise<Value>((settle) => {
-		resolve = settle
-	})
-	return { promise, resolve }
-}
-
 const watching = (state: AccountState): WatchedAccount => ({
 	state,
 	isPending: false,
@@ -234,7 +226,7 @@ describe("useNewDevice", () => {
 	)
 
 	it("keeps step code through a re-render and survives an unmount mid-submission", async () => {
-		const submission = deferred<ReturnType<typeof refused>>()
+		const submission = Promise.withResolvers<ReturnType<typeof refused>>()
 		vi.mocked(commands.deviceApprovalCodeSubmit).mockReturnValue(
 			submission.promise,
 		)

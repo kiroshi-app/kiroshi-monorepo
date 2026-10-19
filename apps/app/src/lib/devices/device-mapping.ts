@@ -29,6 +29,9 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 
 const SECOND_UNIT = RELATIVE_UNITS[RELATIVE_UNITS.length - 1]
 
+export const deviceNameOf = ({ name }: Pick<DescribedDevice, "name">) =>
+	name ?? ""
+
 export const fingerprintOf = (words: string[] | null) => words?.join(" ") ?? ""
 
 export const activityOf = (stamp: string, now: number): string | undefined => {
@@ -43,12 +46,8 @@ export const activityOf = (stamp: string, now: number): string | undefined => {
 	}).format(Math.round(elapsed / seconds), unit)
 }
 
-export const toDevice = ({
-	name,
-	kind,
-	fingerprint,
-}: DescribedDevice): Device => ({
-	kind: SHOWN_KINDS[kind],
-	name: name ?? "",
-	fingerprint: fingerprintOf(fingerprint),
+export const toDevice = (device: DescribedDevice): Device => ({
+	kind: SHOWN_KINDS[device.kind],
+	name: deviceNameOf(device),
+	fingerprint: fingerprintOf(device.fingerprint),
 })

@@ -12,7 +12,7 @@ import {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { answerOf, deviceFailureNotice } from "./device-actions"
-import { toDevice } from "./device-mapping"
+import { deviceNameOf, toDevice } from "./device-mapping"
 
 import {
 	commands,
@@ -36,18 +36,16 @@ const reportUnheardEvent = (reason: unknown) => {
 	return () => undefined
 }
 
-const nameOf = (request: Request) => request.name ?? ""
-
 const approvedNotice = (request: Request): NoticeMessage => ({
 	title: i18n.t("common:devices.approval.approved.title", {
-		device: nameOf(request),
+		device: deviceNameOf(request),
 	}),
 	description: i18n.t("common:devices.approval.approved.description"),
 })
 
 const rejectedNotice = (request: Request): NoticeMessage => ({
 	title: i18n.t("common:devices.approval.rejected.title", {
-		device: nameOf(request),
+		device: deviceNameOf(request),
 	}),
 	description: i18n.t("common:devices.approval.rejected.description"),
 })
@@ -59,6 +57,22 @@ const queuedOnce = (queue: Request[], request: Request) =>
 
 const withoutDevice = (queue: Request[], deviceId: string) =>
 	queue.filter((queued) => queued.deviceId !== deviceId)
+
+type ApprovalRun = {
+	variables: Request | undefined
+	isPending: boolean
+	isError: boolean
+}
+
+const approvalStatusOf = (
+	{ variables, isPending, isError }: ApprovalRun,
+	asked: Request,
+): DeviceApprovalStatus => {
+	if (variables?.deviceId !== asked.deviceId) return "asking"
+	if (isPending) return "approving"
+	if (isError) return "failed"
+	return "asking"
+}
 
 const useApprovalQueue = () => {
 	const [queue, setQueue] = useState<Request[]>([])
@@ -112,17 +126,10 @@ export const useDeviceApprovals = ({
 	})
 
 	if (!asked) return null
-	const isAskedRun = approval.variables?.deviceId === asked.deviceId
-	const statusOf = (): DeviceApprovalStatus => {
-		if (isAskedRun && approval.isPending) return "approving"
-		if (isAskedRun && approval.isError) return "failed"
-		return "asking"
-	}
-
 	return {
 		open: true,
 		device: toDevice(asked),
-		status: statusOf(),
+		status: approvalStatusOf(approval, asked),
 		onApprove: () => approval.mutate(asked),
 		onReject: () => refusal.mutate(asked),
 	}

@@ -89,14 +89,6 @@ const mountDevices = (
 		{ initialProps, wrapper: createQueryTestWrapper().wrapper },
 	)
 
-const deferred = <Value>() => {
-	let resolve: (value: Value) => void = () => undefined
-	const promise = new Promise<Value>((settle) => {
-		resolve = settle
-	})
-	return { promise, resolve }
-}
-
 const listed = (devices: AccountDevice[]) =>
 	({ status: "ok", data: devices }) as const
 
@@ -193,7 +185,7 @@ describe("useYourDevices", () => {
 	})
 
 	it("shows removing, drops the row and raises the removed notice", async () => {
-		const removal = deferred<typeof OK>()
+		const removal = Promise.withResolvers<typeof OK>()
 		vi.mocked(commands.deviceRemove).mockReturnValue(removal.promise)
 		const { result, rerender } = mountDevices()
 		await waitFor(() => expect(result.current?.isPending).toBe(false))
@@ -257,7 +249,7 @@ describe("useYourDevices", () => {
 	})
 
 	it("still raises the removed notice when unmounted mid-removal", async () => {
-		const removal = deferred<typeof OK>()
+		const removal = Promise.withResolvers<typeof OK>()
 		vi.mocked(commands.deviceRemove).mockReturnValue(removal.promise)
 		const { result, unmount } = mountDevices()
 		await waitFor(() => expect(result.current?.isPending).toBe(false))

@@ -59,14 +59,6 @@ const handlers = new Map<string, (payload: unknown) => void>()
 
 const reportSuccess = vi.fn()
 
-const deferred = <Value>() => {
-	let resolve: (value: Value) => void = () => undefined
-	const promise = new Promise<Value>((settle) => {
-		resolve = settle
-	})
-	return { promise, resolve }
-}
-
 const mountApprovals = async () => {
 	const mounted = renderHook(() => useDeviceApprovals({ reportSuccess }), {
 		wrapper: createQueryTestWrapper().wrapper,
@@ -135,7 +127,7 @@ describe("useDeviceApprovals", () => {
 	})
 
 	it("shows approving, then closes and raises the approved notice", async () => {
-		const approval = deferred<typeof OK>()
+		const approval = Promise.withResolvers<typeof OK>()
 		vi.mocked(commands.deviceApprove).mockReturnValue(approval.promise)
 		const { result, rerender } = await mountApprovals()
 		ask(PHONE)
@@ -214,7 +206,7 @@ describe("useDeviceApprovals", () => {
 	})
 
 	it("stops listening and still raises the notice when unmounted mid-approval", async () => {
-		const approval = deferred<typeof OK>()
+		const approval = Promise.withResolvers<typeof OK>()
 		vi.mocked(commands.deviceApprove).mockReturnValue(approval.promise)
 		const { result, unmount } = await mountApprovals()
 		ask(PHONE)
