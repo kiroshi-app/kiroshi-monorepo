@@ -91,21 +91,30 @@ pub(super) async fn kept<R: Runtime>(
 	handed: &Handed,
 ) -> Result<bool, JoinedSpaceError> {
 	let space_keys = space_keys(app)?;
-	let set = &handed.roster.set;
+	if !roster_kept(app, instance_id, &handed.roster).await? {
+		return Ok(false);
+	}
+	let space = &handed.space;
+	let state = app.state::<db::DatabaseState>();
+	let relay = ready(&state)?.joined_space_relay();
+	relay.counter_started(instance_id.to_owned(), space.key_id).await?;
+	let copy = HeldSpaceKey { key_id: space.key_id, key: space.key.clone() };
+	space_keys.stored(&key_item(instance_id), copy).map_err(key_store)?;
+	Ok(true)
+}
+
+pub(super) async fn roster_kept<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
+	roster: &HeldRoster,
+) -> Result<bool, JoinedSpaceError> {
+	let set = &roster.set;
 	let roster = serde_json::to_string(set).map_err(|failure| JoinedSpaceError::KeyStore {
 		detail: format!("the roster set did not serialise: {failure}"),
 	})?;
 	let held = joined_space_relay::HeldRoster { key_id: set.key_id, version: set.version, roster };
 	let state = app.state::<db::DatabaseState>();
-	let relay = ready(&state)?.joined_space_relay();
-	if !relay.roster_kept(instance_id.to_owned(), held).await? {
-		return Ok(false);
-	}
-	let space = &handed.space;
-	relay.counter_started(instance_id.to_owned(), space.key_id).await?;
-	let copy = HeldSpaceKey { key_id: space.key_id, key: space.key.clone() };
-	space_keys.stored(&key_item(instance_id), copy).map_err(key_store)?;
-	Ok(true)
+	Ok(ready(&state)?.joined_space_relay().roster_kept(instance_id.to_owned(), held).await?)
 }
 
 fn space_keys<R: Runtime>(

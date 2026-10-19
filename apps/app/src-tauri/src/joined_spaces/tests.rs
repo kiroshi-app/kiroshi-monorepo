@@ -22,7 +22,7 @@ use super::commands::{
 	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT,
 };
 use super::contract::{JoinedSpace, JoinedSpaceError, JoinedSpaceState};
-use super::members::joined_space_members;
+use super::members::{joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
 use crate::account::session::AccountSession;
@@ -56,12 +56,14 @@ const POLL_EVERY: Duration = Duration::from_millis(50);
 const HOST_ANSWER_BOUND: Duration = Duration::from_secs(2);
 const RESEND_EVERY: Duration = Duration::from_millis(200);
 const HOST_ABSENT: u16 = 4002;
+const BEFORE_THE_NEXT_MEMBERS_READ: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 enum HostSide {
 	Absent,
 	Silent,
 	Answering(String),
+	GreetingAfterRead { frames: Vec<String>, reads: usize },
 }
 
 struct Room {
@@ -71,6 +73,7 @@ struct Room {
 	joins: Vec<Value>,
 	connections: usize,
 	other_memberships: Vec<Value>,
+	roster_reads: usize,
 }
 
 #[derive(Clone)]
@@ -85,6 +88,7 @@ impl Relay {
 			joins: Vec::new(),
 			connections: 0,
 			other_memberships: Vec::new(),
+			roster_reads: 0,
 		})))
 	}
 
@@ -98,6 +102,28 @@ impl Relay {
 
 	fn accepting(&self, status: StatusCode, body: Value) {
 		self.room().accept = (status, body);
+	}
+
+	fn greets_after_the_next_members_read(&self, frames: Vec<String>) {
+		let mut room = self.room();
+		room.host = HostSide::GreetingAfterRead { frames, reads: room.roster_reads };
+	}
+
+	async fn greeting(&self) -> Vec<String> {
+		let (frames, reads) = {
+			let mut room = self.room();
+			let HostSide::GreetingAfterRead { frames, reads } = &room.host else {
+				return Vec::new();
+			};
+			let greeting = (frames.clone(), *reads);
+			room.host = HostSide::Silent;
+			greeting
+		};
+		until("a members read of the session", || async {
+			(self.room().roster_reads > reads).then_some(())
+		})
+		.await;
+		frames
 	}
 
 	fn joins(&self) -> Vec<Value> {
@@ -114,7 +140,7 @@ impl Relay {
 			.route("/devices/challenge", post(device_challenged))
 			.route("/devices", post(device_registered))
 			.route("/instances", get(instances_listed))
-			.route("/instances/{id}/roster", get(roster_listed))
+			.route("/instances/{id}/roster", get(roster_read))
 			.route("/invitations", get(invitations_listed))
 			.route("/invitations/{id}/accept", post(invitation_accepted))
 			.route("/instances/{id}/relay/member", get(member_socket))
@@ -184,6 +210,11 @@ async fn instances_listed(Served(relay): Served<Relay>) -> Response {
 	answered_json(StatusCode::OK, Value::Array(listed))
 }
 
+async fn roster_read(Served(relay): Served<Relay>) -> Response {
+	relay.room().roster_reads += 1;
+	roster_listed().await
+}
+
 async fn roster_listed() -> Response {
 	let roster = json!([
 		{ "userId": "owner", "name": "Ann", "role": "owner" },
@@ -243,6 +274,11 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 		};
 		let frame: Value = serde_json::from_str(text.as_str()).expect("a json member frame");
 		if !is_missed_rekey(&frame) {
+			for greeting in relay.greeting().await {
+				if socket.send(Message::Text(greeting.into())).await.is_err() {
+					return;
+				}
+			}
 			continue;
 		}
 		let host = {
@@ -255,7 +291,7 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				let close = CloseFrame { code: HOST_ABSENT, reason: "".into() };
 				Message::Close(Some(close))
 			}
-			HostSide::Silent => continue,
+			HostSide::Silent | HostSide::GreetingAfterRead { .. } => continue,
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
 		if socket.send(answer).await.is_err() {
@@ -353,7 +389,15 @@ async fn until<T, F: std::future::Future<Output = Option<T>>>(
 	awaited: &str,
 	found: impl Fn() -> F,
 ) -> T {
-	tokio::time::timeout(PATIENCE, async {
+	within(PATIENCE, awaited, found).await
+}
+
+async fn within<T, F: std::future::Future<Output = Option<T>>>(
+	patience: Duration,
+	awaited: &str,
+	found: impl Fn() -> F,
+) -> T {
+	tokio::time::timeout(patience, async {
 		loop {
 			if let Some(found) = found().await {
 				return found;
@@ -362,13 +406,17 @@ async fn until<T, F: std::future::Future<Output = Option<T>>>(
 		}
 	})
 	.await
-	.unwrap_or_else(|_| panic!("{awaited} did not come within {PATIENCE:?}"))
+	.unwrap_or_else(|_| panic!("{awaited} did not come within {patience:?}"))
 }
 
 fn changes_heard(app: &App<MockRuntime>) -> Arc<Mutex<Vec<Value>>> {
+	heard_on(app, CHANGED_EVENT)
+}
+
+fn heard_on(app: &App<MockRuntime>, event: &'static str) -> Arc<Mutex<Vec<Value>>> {
 	let heard = Arc::new(Mutex::new(Vec::new()));
 	let hearing = Arc::clone(&heard);
-	app.listen_any(CHANGED_EVENT, move |event| {
+	app.listen_any(event, move |event| {
 		let payload = serde_json::from_str(event.payload()).expect("a json payload");
 		hearing.lock().expect("the events").push(payload);
 	});
@@ -411,6 +459,87 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 				(JoinedSpaceRole::Guest, words_of(&member.device())),
 			]
 		);
+	});
+}
+
+async fn online_with_two_members(member: &Member, host: &SealingHost) -> JoinedSpace {
+	member.relay.hosting(HostSide::Answering(host.admitted()));
+	let joined = member.accepted().await.expect("the join");
+	until("the roster of two devices", || async {
+		let members = joined_space_members(member.app.state(), joined.id.clone()).await;
+		(members.expect("the members read").len() == 2).then_some(())
+	})
+	.await;
+	let state = member.app.state::<DatabaseState>();
+	let spaces = state.as_ref().expect("the database").joined_spaces();
+	spaces.learned(joined.id.clone(), SPACE.to_owned()).await.expect("the space id is learned");
+	joined
+}
+
+async fn members_listed_within(heard: &Arc<Mutex<Vec<Value>>>, id: &str, count: usize) -> Value {
+	within(BEFORE_THE_NEXT_MEMBERS_READ, "the members changed event", || async {
+		let heard = heard.lock().expect("the events");
+		heard
+			.iter()
+			.find(|payload| {
+				payload["id"] == id && payload["members"].as_array().map(Vec::len) == Some(count)
+			})
+			.cloned()
+	})
+	.await
+}
+
+fn is_listed(changed: &Value, device: &DeviceKeys) -> bool {
+	let words = json!(words_of(device));
+	let members = changed["members"].as_array().expect("a member list");
+	members.iter().any(|member| member["fingerprint"] == words)
+}
+
+#[test]
+fn a_session_takes_the_roster_sent_before_the_hello_keeps_its_key_and_lists_the_newcomer() {
+	run(async {
+		let member = Member::new("roster-on-hello").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let roster_before = member.held_roster().await;
+		let heard = heard_on(&member.app, MEMBERS_CHANGED_EVENT);
+		let newcomer = DeviceKeys::generate().expect("randomness");
+		let greeting = vec![host.roster_admitting(&newcomer, 2), host.hello()];
+		member.relay.greets_after_the_next_members_read(greeting);
+
+		let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone()).await;
+		let changed = members_listed_within(&heard, &joined.id, 3).await;
+
+		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
+		assert!(is_listed(&changed, &newcomer), "{changed}");
+		assert_eq!(member.held_key_id(), Some(1));
+		let state = member.app.state::<DatabaseState>();
+		let relay = state.as_ref().expect("the database").joined_space_relay();
+		let roster = relay.roster(INSTANCE.to_owned()).await.expect("the roster reads");
+		let roster = roster.expect("a roster is held");
+		assert_eq!((roster.key_id, roster.version), (1, 2));
+		assert_ne!(Some(roster.roster), roster_before);
+	});
+}
+
+#[test]
+fn a_session_taking_a_rekey_under_a_greater_key_id_lists_its_roster() {
+	run(async {
+		let member = Member::new("rekey-members").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let heard = heard_on(&member.app, MEMBERS_CHANGED_EVENT);
+		let newcomer = DeviceKeys::generate().expect("randomness");
+		member
+			.relay
+			.greets_after_the_next_members_read(vec![host.rekey_admitting(&newcomer, 2, 2)]);
+
+		let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone()).await;
+		let changed = members_listed_within(&heard, &joined.id, 3).await;
+
+		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
+		assert!(is_listed(&changed, &newcomer), "{changed}");
+		assert_eq!(member.held_key_id(), Some(2));
 	});
 }
 

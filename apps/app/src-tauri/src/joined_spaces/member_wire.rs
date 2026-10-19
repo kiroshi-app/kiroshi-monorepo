@@ -1,10 +1,12 @@
+use std::cmp::Ordering;
+
 use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::Signature;
 use serde_json::Value;
 
 use super::contract::JoinedSpaceError;
 use super::held::Held;
-use super::roster_set::{verified_handover, Handed};
+use super::roster_set::{verified_handover, Handed, HeldRoster};
 use crate::crypto::device_keys::verify;
 use crate::crypto::error::CryptoError;
 use crate::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH, VERSION};
@@ -30,6 +32,7 @@ pub(super) enum Heard {
 	Hello,
 	Frame(String),
 	Rekey(Box<Handed>),
+	Roster(Box<HeldRoster>),
 }
 
 pub(super) struct MemberWire<'a> {
@@ -71,6 +74,10 @@ impl<'a> MemberWire<'a> {
 		self.held.roster = handed.roster;
 		self.next_ctr = 1;
 		self.reserved = 0;
+	}
+
+	pub(super) fn roster_taken(&mut self, roster: HeldRoster) {
+		self.held.roster = roster;
 	}
 
 	async fn sealed_with(
@@ -134,7 +141,7 @@ impl<'a> MemberWire<'a> {
 			Some(_) => return Err(Dropped::Malformed("to").into()),
 		};
 		if envelope.get("rekey").is_some() {
-			return self.rekey_opened(&envelope).map(|handed| Heard::Rekey(Box::new(handed)));
+			return self.rekey_opened(&envelope);
 		}
 		let fields = fields_of(&envelope)?;
 		let key_id = self.held.space.key_id;
@@ -172,7 +179,7 @@ impl<'a> MemberWire<'a> {
 		Ok(Heard::Frame(plaintext))
 	}
 
-	fn rekey_opened(&self, envelope: &Value) -> Result<Handed, Refusal> {
+	fn rekey_opened(&self, envelope: &Value) -> Result<Heard, Refusal> {
 		let decoded = |key: &'static str| {
 			let field = envelope.get(key).and_then(Value::as_str).ok_or(Dropped::Malformed(key))?;
 			BASE64_STANDARD.decode(field).map_err(|_| Dropped::Malformed(key))
@@ -188,12 +195,16 @@ impl<'a> MemberWire<'a> {
 			serde_json::from_slice(&opened).map_err(|_| Dropped::Malformed("rekey"))?;
 		let handed = verified_handover(handover, Some(&roster.host.signing), &roster.own.device_id)
 			.map_err(Refusal::Roster)?;
-		let is_newer = handed.roster.set.version >= roster.set.version
-			&& handed.space.key_id > self.held.space.key_id;
-		if !is_newer {
-			return Err(Dropped::StaleKey(handed.space.key_id).into());
+		let version = handed.roster.set.version;
+		match handed.space.key_id.cmp(&self.held.space.key_id) {
+			Ordering::Greater if version >= roster.set.version => {
+				Ok(Heard::Rekey(Box::new(handed)))
+			}
+			Ordering::Equal if version > roster.set.version => {
+				Ok(Heard::Roster(Box::new(handed.roster)))
+			}
+			_ => Err(Dropped::StaleKey(handed.space.key_id).into()),
 		}
-		Ok(handed)
 	}
 }
 
@@ -321,7 +332,7 @@ mod tests {
 		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
 		let stranger = DeviceKeys::generate().expect("randomness");
 
-		let same_key = dropped(&mut wire, &member.host.rekey(1, 2)).await;
+		let same_key = dropped(&mut wire, &member.host.rekey(1, 1)).await;
 		let older_roster = dropped(&mut wire, &member.host.rekey(2, 0)).await;
 		let forged = dropped(&mut wire, &member.host.rekey_signed_by(&stranger, 2, 2)).await;
 		let taken = wire.opened(&member.host.rekey(2, 1)).await;
@@ -340,5 +351,42 @@ mod tests {
 		let sealed = wire.sealed(CALL).await.expect("the call seals under the new key");
 		let envelope: Value = serde_json::from_str(&sealed).expect("json");
 		assert_eq!(envelope["key_id"], 2);
+		let lower_key = dropped(&mut wire, &member.host.rekey(1, 5)).await;
+		assert_eq!(lower_key, Some(Refusal::Frame(Dropped::StaleKey(1))));
+	}
+
+	#[tokio::test]
+	async fn a_newer_roster_under_the_held_key_id_is_taken_and_keeps_the_key_and_both_counters() {
+		let member = a_member().await;
+		let held_key = *held_of(&member.app).await.space.key;
+		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
+		let newcomer = DeviceKeys::generate().expect("randomness");
+		let before = wire.sealed(CALL).await.expect("the call seals");
+		let heard_before = member.host.sealed("{}");
+		assert!(matches!(wire.opened(&heard_before).await, Ok(Heard::Frame(_))));
+
+		let taken = wire.opened(&member.host.roster_admitting(&newcomer, 2)).await;
+		let Ok(Heard::Roster(roster)) = taken else {
+			panic!("the newer roster under the held key_id is taken");
+		};
+		assert!(held::roster_kept(member.app.handle(), INSTANCE, &roster)
+			.await
+			.expect("the roster is stored"));
+		wire.roster_taken(*roster);
+		let equal = dropped(&mut wire, &member.host.roster_admitting(&newcomer, 2)).await;
+		let older = dropped(&mut wire, &member.host.roster_admitting(&newcomer, 1)).await;
+		let after = wire.sealed(CALL).await.expect("the call seals under the held key");
+		let replayed = dropped(&mut wire, &heard_before).await;
+		let heard_after = wire.opened(&member.host.sealed("{}")).await;
+
+		assert_eq!(ctr_of(&after), ctr_of(&before) + 1);
+		assert_eq!(member.host.opened(&after).plaintext["command"], "conversation_list");
+		assert_eq!(equal, Some(Refusal::Frame(Dropped::StaleKey(1))));
+		assert_eq!(older, Some(Refusal::Frame(Dropped::StaleKey(1))));
+		assert_eq!(replayed, Some(Refusal::Frame(Dropped::Refused(CryptoError::Replay))));
+		assert!(matches!(heard_after, Ok(Heard::Frame(_))));
+		let stored = held_of(&member.app).await;
+		assert_eq!((stored.space.key_id, *stored.space.key), (1, held_key));
+		assert_eq!((stored.roster.set.version, stored.roster.rows.len()), (2, 3));
 	}
 }

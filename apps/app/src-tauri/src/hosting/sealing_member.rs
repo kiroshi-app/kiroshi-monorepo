@@ -108,6 +108,9 @@ impl SealingMember {
 			Some(to) if *to == self.relay_device_id.as_str() => Some(self.keys.device_id()),
 			Some(_) => return None,
 		};
+		if envelope.get("rekey").is_some() {
+			return None;
+		}
 		Some(host_frame_opened(space, &envelope, to).expect("the host frame opens"))
 	}
 }

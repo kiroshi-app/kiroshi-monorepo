@@ -5699,7 +5699,12 @@ fn a_seeded_member_says_hello_calls_gets_its_answer_and_hears_an_event_over_seal
 			let envelope: Value = serde_json::from_str(text).expect("a json frame");
 			assert_eq!(envelope["v"], json!(2), "{text}");
 			assert!(envelope.get("from").is_none(), "{text}");
-			for field in ["instance", "key_id", "ctr", "ct", "sig"] {
+			let fields: &[&str] = if envelope.get("rekey").is_some() {
+				&["instance", "to", "rekey", "sig"]
+			} else {
+				&["instance", "key_id", "ctr", "ct", "sig"]
+			};
+			for field in fields {
 				assert!(envelope.get(field).is_some(), "{field} is missing from {text}");
 			}
 			for plaintext in ["agent_models", "command", "hello", CHANGED_EVENT] {
@@ -6074,7 +6079,9 @@ fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_droppe
 		let host = harness.host_keys().signing_public();
 		let mut guest = harness.joined(&mut relay, "guest").await;
 		let mut joiner = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&guest.member, "rekey").await;
 		called(&mut relay, &mut guest, &host).await;
+		relay.addressed(&guest.member, "rekey").await;
 		harness.flagged_joined("guest");
 
 		remove(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
@@ -6344,6 +6351,7 @@ fn a_device_revoked_event_drops_the_row_and_rekeys_the_remaining_devices_with_th
 		let host = harness.host_keys().signing_public();
 		let mut guest = harness.joined(&mut relay, "guest").await;
 		let mut joiner = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&guest.member, "rekey").await;
 
 		relay.sent(device_revoked_event(&guest.member.relay_device_id, "guest")).await;
 		let rekey = relay.addressed(&joiner.member, "rekey").await;
@@ -6421,6 +6429,7 @@ fn a_device_revoked_event_whose_rotation_fails_ends_the_session_and_the_reconnec
 		let host = harness.host_keys().signing_public();
 		let guest = harness.joined(&mut relay, "guest").await;
 		let joiner = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&guest.member, "rekey").await;
 
 		harness.profile_locked(true);
 		harness.unlisted(&guest.member);
@@ -6576,6 +6585,57 @@ fn a_device_approved_event_admits_and_rekeys_the_device_on_the_open_host_socket(
 }
 
 #[test]
+fn an_admission_sends_the_new_signed_roster_to_every_rostered_member_under_the_unchanged_key() {
+	run(async {
+		let mut harness = Harness::signed_in("admission-roster").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let guest = harness.joined(&mut relay, "guest").await;
+
+		let joiner = harness.joined(&mut relay, "joiner").await;
+		let rekey = relay.addressed(&guest.member, "rekey").await;
+		let handover = rekeyed_handover(&relay, &guest.member, &rekey, &host);
+		let rostered = verified_set(&host, &handover.roster).expect("the roster set verifies");
+
+		assert_eq!(handover.key_id, guest.space.key_id);
+		assert_eq!(*space_key_of(&handover).key, *guest.space.key);
+		assert!(rostered.contains(&guest.member.keys.device_id()));
+		assert!(rostered.contains(&joiner.member.keys.device_id()));
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+	});
+}
+
+#[test]
+fn a_member_that_missed_an_admission_gets_the_current_roster_before_its_hello_is_answered() {
+	run(async {
+		let mut harness = Harness::signed_in("admission-missed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut guest = harness.joined(&mut relay, "guest").await;
+		let joiner = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&guest.member, "rekey").await;
+
+		let space =
+			Space { instance_id: &relay.instance_id.clone(), key: &guest.space, host: &host };
+		guest.ctr += 1;
+		relay.sent(guest.member.sealed(&space, guest.ctr, HELLO, None)).await;
+		let to = guest.member.relay_device_id.clone();
+		let first = relay.taken(|envelope| envelope["to"] == to.as_str()).await;
+		let greeting = relay.addressed(&guest.member, "ct").await;
+
+		let handover = rekeyed_handover(&relay, &guest.member, &first, &host);
+		let rostered = verified_set(&host, &handover.roster).expect("the roster set verifies");
+		assert_eq!(handover.key_id, guest.space.key_id);
+		assert!(rostered.contains(&joiner.member.keys.device_id()));
+		let greeting = host_frame_opened(&space, &greeting, Some(guest.member.keys.device_id()))
+			.expect("the hello opens");
+		assert_eq!(greeting.plaintext, json!({ "hello": {} }));
+	});
+}
+
+#[test]
 fn a_device_approved_event_missing_its_device_or_user_id_still_admits() {
 	run(async {
 		let mut harness = Harness::signed_in("device-approved-partial").await;
@@ -6663,6 +6723,7 @@ fn a_rostered_device_missing_from_a_list_that_names_the_host_is_removed_and_the_
 		let host = harness.host_keys().signing_public();
 		let gone = harness.joined(&mut relay, "guest").await;
 		let mut kept = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&gone.member, "rekey").await;
 
 		harness.unlisted(&gone.member);
 		relay.sent(device_approved_event(&kept.member.relay_device_id, "joiner")).await;
@@ -6796,6 +6857,7 @@ fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_a
 		let host = harness.host_keys().signing_public();
 		let removed = harness.joined(&mut relay, "guest").await;
 		let kept = harness.joined(&mut relay, "joiner").await;
+		relay.addressed(&removed.member, "rekey").await;
 		let removed_id = removed.member.keys.device_id().to_string();
 		remove_device(harness.app.handle(), PERSONAL.to_owned(), removed_id)
 			.await
