@@ -102,24 +102,32 @@ const firstNameOf = (member: SpaceMember) => nameOf(member).split(/\s+/)[0]
 const isInvitation = (member: SpaceMember) =>
 	member.status === "pending" || member.status === "expired"
 
-const failureKeyOf = (failure: MembersFailure) => {
+const failureKeyOf = (failure: MembersFailure, viewerId?: string) => {
 	switch (failure.action) {
 		case "invite":
 			return `space.members.failure.invite.${failure.reason}` as const
 		case "withdraw":
 			return `space.members.failure.withdraw.${failure.reason}` as const
 		case "remove":
-			return `space.members.failure.remove.${failure.reason}` as const
+			return failure.reason === "host" &&
+				viewerId !== undefined &&
+				viewerId !== failure.member.id
+				? "space.members.failure.remove.hostedBy"
+				: (`space.members.failure.remove.${failure.reason}` as const)
 	}
 }
 
-const useFailureText = (failure: MembersFailure | undefined, space: string) => {
+const useFailureText = (
+	failure: MembersFailure | undefined,
+	space: string,
+	viewerId?: string,
+) => {
 	const { t } = useTranslation("settings")
 	if (!failure) {
 		return ""
 	}
 	const isInvite = failure.action === "invite"
-	return t(failureKeyOf(failure), {
+	return t(failureKeyOf(failure, viewerId), {
 		space,
 		email: isInvite ? failure.email : failure.member.email,
 		name: isInvite ? "" : nameOf(failure.member),
@@ -457,7 +465,7 @@ const MembersPanel = ({
 
 	const name = asked ? firstNameOf(asked) : ""
 	const rowFailure = failure?.action === "invite" ? undefined : failure
-	const rowFailureText = useFailureText(rowFailure, space)
+	const rowFailureText = useFailureText(rowFailure, space, viewerId)
 	const host = members.find((member) => member.status === "host")
 	const invitations = members.filter(isInvitation)
 	const people = members.filter((member) => !isInvitation(member))

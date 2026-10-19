@@ -302,6 +302,8 @@ const settings = {
 					pending:
 						"{{name}} hasn’t joined yet. Select Remove again to withdraw the invitation.",
 					host: "You host {{space}}, so you can’t be removed. Turn off hosting instead.",
+					hostedBy:
+						"{{name}} hosts {{space}} and can’t be removed. There’s nothing to do.",
 					notHosting:
 						"{{space}} isn’t hosted anymore. Turn on hosting to remove {{name}}.",
 					notOwner:

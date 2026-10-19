@@ -1573,6 +1573,7 @@ settings-space-spacesettingsdialog--members-member-view
 settings-space-spacesettingsdialog--members-not-shared
 settings-space-spacesettingsdialog--members-remove-confirm
 settings-space-spacesettingsdialog--members-remove-failed
+settings-space-spacesettingsdialog--members-remove-host-refused
 settings-space-spacesettingsdialog--members-share-failed
 settings-space-spacesettingsdialog--members-shared
 settings-space-spacesettingsdialog--members-sharing
