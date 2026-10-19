@@ -1574,6 +1574,7 @@ settings-space-spacesettingsdialog--members-loading
 settings-space-spacesettingsdialog--members-long-identity
 settings-space-spacesettingsdialog--members-member-view-remove-confirm
 settings-space-spacesettingsdialog--members-member-view-with-invitation
+settings-space-spacesettingsdialog--members-needs-invitation
 settings-space-spacesettingsdialog--members-not-shared
 settings-space-spacesettingsdialog--members-remove-confirm
 settings-space-spacesettingsdialog--members-remove-failed

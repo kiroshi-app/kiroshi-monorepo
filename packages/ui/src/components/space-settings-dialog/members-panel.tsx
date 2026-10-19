@@ -21,7 +21,12 @@ import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SpaceMemberStatus = "host" | "joined" | "pending" | "expired"
+type SpaceMemberStatus =
+	| "host"
+	| "joined"
+	| "needsInvitation"
+	| "pending"
+	| "expired"
 
 type SpaceMember = {
 	id: string
@@ -76,6 +81,7 @@ type MembersPanelProps = {
 	removing?: SpaceMember | null
 	onRemove: (member: SpaceMember) => void
 	onWithdraw: (member: SpaceMember) => void
+	onInviteAgain: (member: SpaceMember) => void
 	onRemoveConfirm: () => void
 	onRemoveCancel: () => void
 }
@@ -263,7 +269,7 @@ type MemberAction = {
 
 type MemberRowProps = Pick<
 	MembersPanelProps,
-	"onInvite" | "onRemove" | "onWithdraw"
+	"onInvite" | "onRemove" | "onWithdraw" | "onInviteAgain"
 > & {
 	member: SpaceMember
 	failureText: string
@@ -279,6 +285,7 @@ const MemberRow = ({
 	onInvite,
 	onRemove,
 	onWithdraw,
+	onInviteAgain,
 }: MemberRowProps) => {
 	const { t } = useTranslation("settings")
 	const name = nameOf(member)
@@ -306,6 +313,7 @@ const MemberRow = ({
 	const sublineOf: Record<SpaceMemberStatus, string | undefined> = {
 		host: email,
 		joined: email,
+		needsInvitation: t("space.members.needsInvitation"),
 		pending:
 			expiresInDays === undefined
 				? undefined
@@ -356,7 +364,17 @@ const MemberRow = ({
 					{t(`space.members.status.${status}`)}
 				</span>
 			) : null}
-			{action ? (
+			{status === "needsInvitation" && !isViewer ? (
+				<Button
+					className="rounded-control"
+					disabled={isDisabled}
+					onClick={() => onInviteAgain(member)}
+					size="sm"
+					variant="outline"
+				>
+					{t("space.members.inviteMemberAgain")}
+				</Button>
+			) : action ? (
 				<Button
 					aria-label={action.label}
 					className="rounded-control text-muted-foreground"
@@ -433,6 +451,7 @@ const MembersPanel = ({
 	removing,
 	onRemove,
 	onWithdraw,
+	onInviteAgain,
 	onRemoveConfirm,
 	onRemoveCancel,
 }: MembersPanelProps) => {
@@ -474,6 +493,7 @@ const MembersPanel = ({
 				key={member.id}
 				member={member}
 				onInvite={onInvite}
+				onInviteAgain={onInviteAgain}
 				onRemove={onRemove}
 				onWithdraw={onWithdraw}
 			/>

@@ -273,6 +273,20 @@ const settings = {
 			removeLabel: "Retirer {{name}}",
 			withdrawLabel: "Retirer l’invitation à {{email}}",
 			inviteAgainLabel: "Inviter {{email}} de nouveau",
+			needsInvitation: "Doit être invité de nouveau",
+			inviteMemberAgain: "Inviter de nouveau",
+			invitedAgainFailure: {
+				removed: {
+					title:
+						"{{name}} a été retiré, l’invitation à {{email}} n’est pas partie",
+					description:
+						"Saisissez cette adresse sous Inviter des personnes et sélectionnez Inviter.",
+				},
+				generic: {
+					title: "Impossible d’inviter {{name}} de nouveau",
+					description: "Rien n’a changé, réessayez.",
+				},
+			},
 			confirm: {
 				title: "Retirer {{name}} de {{space}} ?",
 				description:

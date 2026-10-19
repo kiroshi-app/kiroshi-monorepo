@@ -485,6 +485,7 @@ const MEMBERS_PANEL = {
 	isHosted: true,
 	onRemove: fn(),
 	onWithdraw: fn(),
+	onInviteAgain: fn(),
 	onRemoveConfirm: fn(),
 	onRemoveCancel: fn(),
 } satisfies MembersPanelProps
@@ -1055,6 +1056,40 @@ export const MembersI4 = meta.story({
 		await expect(
 			(host.lastElementChild as HTMLElement).getBoundingClientRect().right,
 		).toBe(remove.getBoundingClientRect().right)
+	},
+})
+
+const ADA_NEEDS_INVITATION: SpaceMember = {
+	id: "ada",
+	name: "Ada Lovelace",
+	email: "ada@example.com",
+	status: "needsInvitation",
+}
+
+export const MembersNeedsInvitation = meta.story({
+	args: membersArgs({ members: [STEVE, ADA_NEEDS_INVITATION] }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Ada joined before end-to-end encryption and holds no key to this space: her row reads Needs a new invitation under her name and offers Invite again, which removes her old membership and emails her a fresh invitation.",
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		const panel = await membersPanelIn()
+		await expect(memberRowsIn(panel)).toEqual([
+			STEVE_ROW,
+			["A", "Ada Lovelace", "Needs a new invitation", "Invite again"],
+		])
+		await userEvent.click(
+			within(panel).getByRole("button", { name: "Invite again" }),
+		)
+		await expect(MEMBERS_PANEL.onInviteAgain).toHaveBeenCalledOnce()
+		await expect(MEMBERS_PANEL.onInviteAgain).toHaveBeenCalledWith(
+			ADA_NEEDS_INVITATION,
+		)
+		await expect(MEMBERS_PANEL.onRemove).not.toHaveBeenCalled()
 	},
 })
 

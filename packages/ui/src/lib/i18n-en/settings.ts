@@ -262,6 +262,20 @@ const settings = {
 			removeLabel: "Remove {{name}}",
 			withdrawLabel: "Withdraw the invitation to {{email}}",
 			inviteAgainLabel: "Invite {{email}} again",
+			needsInvitation: "Needs a new invitation",
+			inviteMemberAgain: "Invite again",
+			invitedAgainFailure: {
+				removed: {
+					title:
+						"{{name}} was removed, the invitation to {{email}} wasn’t sent",
+					description:
+						"Type that address under Invite people and select Invite.",
+				},
+				generic: {
+					title: "Couldn’t invite {{name}} again",
+					description: "Nothing changed, try again.",
+				},
+			},
 			confirm: {
 				title: "Remove {{name}} from {{space}}?",
 				description:
