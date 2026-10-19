@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import os
@@ -12,6 +13,7 @@ enum AccountStage: Equatable {
     case spaces([Space])
     case spacesUnreachable
     case deviceRefused(DeviceProblem)
+    case awaitingApproval
 }
 
 enum DeviceProblem: Equatable {
@@ -70,8 +72,12 @@ final class SignInModel {
     @ObservationIgnored var onSignOut: () -> Void = {}
     @ObservationIgnored private(set) var revocation: Task<Void, Never>?
     @ObservationIgnored private(set) var deletion: Task<Void, Never>?
+    @ObservationIgnored private(set) var askingAgain: Task<Void, Never>?
     private(set) var shell: SpaceStore?
     private(set) var consent: MessageConsent?
+    private(set) var approval: DeviceApproval?
+    private(set) var requests: DeviceRequests?
+    private(set) var fingerprint: [String] = []
 
     @ObservationIgnored private let cloud: KiroshiCloud
     @ObservationIgnored private let sessions: any SessionStore
@@ -79,6 +85,7 @@ final class SignInModel {
     @ObservationIgnored private let agreements: any AgreementStore
     @ObservationIgnored private let relay: RelayEnvironment
     @ObservationIgnored private let google: any GoogleAuthorizing
+    @ObservationIgnored private let deviceStates: any DeviceStates
     @ObservationIgnored private var appleNonce: String?
     @ObservationIgnored private var session: Session?
     @ObservationIgnored private var needsRegistration = false
@@ -90,7 +97,8 @@ final class SignInModel {
         lastSpace: any LastSpaceStore,
         agreements: any AgreementStore,
         relay: RelayEnvironment,
-        google: any GoogleAuthorizing = GoogleSignInAuthorizer()
+        google: any GoogleAuthorizing = GoogleSignInAuthorizer(),
+        deviceStates: (any DeviceStates)? = nil
     ) {
         self.cloud = cloud
         self.sessions = sessions
@@ -98,14 +106,20 @@ final class SignInModel {
         self.agreements = agreements
         self.relay = relay
         self.google = google
+        self.deviceStates = deviceStates ?? cloud.deviceStates
         let session = sessions.load()
         self.session = session
+        needsRegistration = session != nil
         stage = session == nil ? .signedOut : .loadingSpaces
         signedInEmail = session?.email ?? ""
     }
 
     var needsNewCode: Bool {
         codeProblem?.needsNewCode ?? false
+    }
+
+    var deviceName: String {
+        session?.deviceName ?? cloud.deviceName
     }
 
     var isBusy: Bool {
@@ -231,6 +245,7 @@ final class SignInModel {
             return
         }
         guard self.session == session else { return }
+        approval = nil
         switch answer {
         case .spaces(let spaces):
             shell =
@@ -351,6 +366,10 @@ final class SignInModel {
             return nil
         }
         guard self.session == session else { return nil }
+        if fingerprint.isEmpty {
+            fingerprint = await Self.fingerprint(of: keys.signing.publicKey)
+            guard self.session == session else { return nil }
+        }
         if !needsRegistration,
             let relayId = await relay.relayDevices.relayId(for: session.accountId)
         {
@@ -369,13 +388,17 @@ final class SignInModel {
         }
         guard self.session == session else { return nil }
         switch answer {
-        case .registered(let relayId, let transferred):
+        case .registered(let relayId, let transferred, let isPending):
             if transferred {
                 deviceLog.info("This iPhone moved to the account signing in")
             }
             try? await relay.relayDevices.save(relayId, for: session.accountId)
             guard self.session == session else { return nil }
             needsRegistration = false
+            if isPending {
+                awaitApproval(of: session)
+                return nil
+            }
             return RelayDevice(keys: keys, relayId: relayId)
         case .challengeRefused, .proofRefused, .keyRefused, .refused:
             stage = .deviceRefused(.notAdded)
@@ -383,6 +406,50 @@ final class SignInModel {
         case .unreachable: stage = .spacesUnreachable
         }
         return nil
+    }
+
+    private func awaitApproval(of session: Session) {
+        approval = DeviceApproval(
+            deviceName: session.deviceName ?? cloud.deviceName, email: session.email,
+            fingerprint: fingerprint, bearer: session.bearer, cloud: cloud, states: deviceStates,
+            clock: relay.clock
+        ) { [weak self] outcome in
+            self?.finishApproval(outcome)
+        }
+        stage = .awaitingApproval
+        #if DEBUG
+            if SignInFixture.opened == .approvalCode {
+                approval?.noOtherDeviceTapped()
+            }
+        #endif
+    }
+
+    private func finishApproval(_ outcome: ApprovalOutcome) {
+        switch outcome {
+        case .approved: break
+        case .refused:
+            work?.cancel()
+            sessions.clear()
+            session = nil
+        case .askAgain:
+            guard let session else { return }
+            needsRegistration = true
+            askingAgain = Task { [weak self] in await self?.askAgain(for: session) }
+        case .signedOut: signOut()
+        }
+    }
+
+    private func askAgain(for session: Session) async {
+        guard await registeredDevice(for: session) != nil, self.session == session else { return }
+        approval = nil
+        stage = .loadingSpaces
+    }
+
+    @concurrent private static func fingerprint(of key: Curve25519.Signing.PublicKey) async
+        -> [String]
+    {
+        guard let words = Fingerprint.bundledWords() else { return [] }
+        return Fingerprint.of(key, words: words)
     }
 
     private func userId(of session: Session) async -> String? {
@@ -419,6 +486,8 @@ final class SignInModel {
         }
         onSignOut = { [weak shell] in shell?.leave() }
         consent = MessageConsent(account: session.accountId, agreements: agreements)
+        requests = DeviceRequests(
+            bearer: session.bearer, cloud: cloud, states: deviceStates, clock: relay.clock)
         return shell
     }
 
@@ -440,10 +509,14 @@ final class SignInModel {
     private func endSession() {
         onSignOut()
         work?.cancel()
+        askingAgain?.cancel()
         sessions.clear()
         session = nil
         shell = nil
         consent = nil
+        approval = nil
+        requests = nil
+        fingerprint = []
         signedInEmail = ""
         code = ""
         codeProblem = nil

@@ -134,6 +134,12 @@
         case deleteAccount = "delete-account"
         case deleteAccountFailed = "delete-account-failed"
         case deletingAccount = "deleting-account"
+        case approvalWaiting = "approval-6"
+        case approvalApproved = "approval-6.2"
+        case approvalRefused = "approval-6.3"
+        case approvalExpired = "approval-6.4"
+        case approvalCode = "approval-6.5"
+        case deviceRequest = "device-request"
 
         @MainActor static var opened: SignInFixture?
 
@@ -220,6 +226,36 @@
                 .agreement:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
+            case .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
+                .approvalApproved:
+                [
+                    CloudFixture.spacesPath: self == .approvalApproved
+                        ? .pending : CloudFixture.threeSpaces,
+                    CloudFixture.signOutPath: CloudFixture.signedOut,
+                    FixtureKeys.devicesPath: FixtureKeys.registeredPending,
+                    FixtureKeys.approvalCodePath: .status(204, ""),
+                    FixtureKeys.approvalCodeVerifyPath: CloudFixture.error(
+                        400, code: "DEVICE_CODE_INVALID",
+                        message: "The code is wrong, used, superseded or expired"),
+                ]
+            case .deviceRequest:
+                [
+                    CloudFixture.spacesPath: CloudFixture.threeSpaces,
+                    "/devices/\(FixtureDeviceStates.approvingDevice.id)/approve": .status(204, ""),
+                    "/devices/\(FixtureDeviceStates.approvingDevice.id)/reject": .status(204, ""),
+                ]
+            }
+        }
+
+        fileprivate var deviceStates: FixtureDeviceStates {
+            switch self {
+            case .approvalWaiting, .approvalCode: return FixtureDeviceStates(own: [.pending])
+            case .approvalApproved: return FixtureDeviceStates(own: [.approved])
+            case .approvalRefused: return FixtureDeviceStates(own: [.refused])
+            case .approvalExpired: return FixtureDeviceStates(own: [.expired])
+            case .deviceRequest:
+                return FixtureDeviceStates(devices: .devices([FixtureDeviceStates.approvingDevice]))
+            default: return FixtureDeviceStates()
             }
         }
 
@@ -231,7 +267,9 @@
                 .missionThread,
                 .missionWorking,
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert,
-                .deleteAccount, .deleteAccountFailed, .deletingAccount:
+                .deleteAccount, .deleteAccountFailed, .deletingAccount, .approvalWaiting,
+                .approvalRefused, .approvalExpired, .approvalCode,
+                .approvalApproved, .deviceRequest:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
                 .threadHostOffline,
@@ -258,6 +296,11 @@
                 let keychain = KeychainSessionStore()
                 try? keychain.save(CloudFixture.session)
                 return keychain
+            case .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
+                .approvalApproved:
+                var session = CloudFixture.session
+                session.deviceName = "Sam’s iPhone"
+                return InMemorySessionStore(session)
             default:
                 return InMemorySessionStore(isSignedIn ? CloudFixture.session : nil)
             }
@@ -288,7 +331,8 @@
         var isOnHome: Bool {
             rawValue.hasPrefix("2.")
                 || [
-                    .missionsButton, .conversationMissions, .conversationNoMissions, .pinned,
+                    .deviceRequest, .missionsButton, .conversationMissions, .conversationNoMissions,
+                    .pinned,
                     .pinnedIcons, .pinRefused,
                 ].contains(self)
         }
@@ -319,7 +363,7 @@
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
                 .missionsButton,
                 .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused,
-                .agreement:
+                .agreement, .deviceRequest:
                 return ConversationsFixture.relay(ConversationsFixture.script(self))
             case .missions, .missionThread:
                 return RelayEnvironment(
@@ -400,7 +444,8 @@
                 lastSpace: InMemoryLastSpaceStore(fixture.lastSpaceId),
                 agreements: fixture.agreements,
                 relay: fixture.relay,
-                google: FixtureGoogleAuthorizer())
+                google: FixtureGoogleAuthorizer(),
+                deviceStates: fixture.deviceStates)
             ConversationsFixture.opening = ConversationsFixture.opening(fixture)
             ConversationsFixture.opensMissions = fixture.opensConversationMissions
             if ![.opening, .keychain, .seededKeychain].contains(fixture) {
@@ -445,7 +490,8 @@
                 .pinnedIcons, .pinRefused,
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
-                .settings:
+                .settings, .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
+                .approvalApproved, .deviceRequest:
                 break
             }
             return model

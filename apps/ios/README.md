@@ -67,7 +67,7 @@ The whole plan runs once, before the push, on the same simulator: `IOS_SIMULATOR
 The iPhone speaks protocol v2 of `docs/relay/v2-protocol.md`: every call leaves sealed and signed with its own device keys, and every answer or event is opened only once the host's signature verifies. The relay carries bytes it can neither read nor forge.
 
 - `DeviceKeyStore` creates an Ed25519 signing key and an X25519 agreement key once, in the session's Keychain service, as one 64-byte item (`device-keys`, the signing key then the agreement key, added once, never overwritten, after first unlock, this device only, never synchronised): two first reads at once end with the same identity. Sign out clears the session only; the keys stay. A Keychain failure other than "no item" leaves the identity unavailable, never replaced.
-- Every sign-in, of any account, proves the device key (`docs/relay-v2.md` of kiroshi-cloud): `POST /devices/challenge`, then `POST /devices` with both public keys, the nonce and the Ed25519 signature over `kiroshi-device-register-v1` ‖ user id ‖ signing key ‖ nonce (`DeviceProof`), the user id read from `GET /me` for a session saved without it. A key another account held moves to the account signing in (`transferred`). A nonce refused as expired or used is retried once with a fresh challenge. The answered id is kept per account (`relay-device.<account>`), reused by a restored session, and opens every socket with `?device=`. Any refusal other than 401 keeps the person signed in on `Couldn’t add this iPhone to your account` with Check again (`device-not-added`); unreadable keys land on `Couldn’t read this iPhone’s keys`.
+- Every sign-in, and every launch of a signed-in app, proves the device key (`docs/relay-v2.md` of kiroshi-cloud): `POST /devices/challenge`, then `POST /devices` with both public keys, the nonce and the Ed25519 signature over `kiroshi-device-register-v1` ‖ user id ‖ signing key ‖ nonce (`DeviceProof`), the user id read from `GET /me` for a session saved without it. A key another account held moves to the account signing in (`transferred`). A nonce refused as expired or used is retried once with a fresh challenge. The answered id is kept per account (`relay-device.<account>`) and opens every socket with `?device=`; a restored session registers again once per launch, so an iPhone signed in before device approval existed is known to the relay's device states, and Check again reuses the id. Any refusal other than 401 keeps the person signed in on `Couldn’t add this iPhone to your account` with Check again (`device-not-added`); unreadable keys land on `Couldn’t read this iPhone’s keys`.
 - Sign out sends `DELETE /devices/<id>` then revokes the bearer, best-effort in `SignInModel.revocation`, which the sign-out never awaits; the next registration waits for it. The keys stay. A relay socket closed with 4006 ends the session without reconnecting and opens Sign in with `This iPhone now belongs to another Kiroshi account, so you’ve been signed out.` (`device-moved`).
 - `RelayCrypto` is the codec, checked against a byte for byte copy of `v2-crypto.json` in `KiroshiTests/Vectors` (`RelayCryptoVectorTests`), beside a Swift-made signature vector. `bip39-english.txt` ships in the app for the fingerprint, its SHA-256 checked when read.
 - `RelayConnection` persists its last sent `ctr` per Space and `key_id` before a frame leaves, and the last accepted per sender (`FrameCounters`, in the Keychain): it never sends again under a `key_id` whose counter can't be read back. A member frame carries no `from`; the relay adds it.
@@ -79,6 +79,25 @@ In Debug, `RelayEnvironment(transport:clock:)` plays the host's side of v2 aroun
 ```bash
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture join-space
 ```
+
+## Device approval
+
+A new iPhone of an account (`POST /devices` answers `pending`) reads no Space until another device of the account approves it, or the emailed code does. Page "Mockup" of the Paper file "Kiroshi, E2E Spaces v2", row 6 (iPhone side), draws each state; `DeviceApproval` (`SignIn/`) holds them:
+
+- Waiting (6): this iPhone's name and six-word fingerprint, `Waiting for approval…`. It reads `GET /devices/current` every five seconds, never `POST /devices`, which would push the deadline back.
+- Approved (6.2): `This device is approved` while the spaces load, without registering again.
+- Not me (6.3): another device refused this one, which deleted its session (`GET /devices/current` answers 401). The Keychain session goes at once; `Back to sign in` opens Welcome.
+- Request expired (6.4): `Ask again` registers once more, which gives a new 30 minutes.
+- No other device (6.5): `POST /devices/approval-code` emails a 6-digit code, valid 5 minutes, one use; `POST /devices/approval-code/verify` approves. Three wrong codes ask for a new one.
+
+An approved iPhone reads `GET /devices` every 15 seconds while it's in the foreground (`DeviceRequests`, `Shell/`): another device of the account still pending opens the sheet row 10 draws, its fingerprint computed from the listed `ed25519PublicKey`, with Approve (`POST /devices/<id>/approve`) and Not me (`POST /devices/<id>/reject`). Settings shows this iPhone's own fingerprint. Both reads sit behind `DeviceStates` (`Core/DeviceStates.swift`, the shapes of OPE-1046), which the fixtures replace with `FixtureDeviceStates`:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture approval-6     # also approval-6.2, approval-6.3, approval-6.4, approval-6.5
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture device-request  # Sam's MacBook Pro asks, over 2.1
+```
+
+`DeviceApprovalAccessibilityTests` audits each state, the waiting screen and the sheet at the largest text size, goes back to sign in from 6.3 and approves from the sheet.
 
 ## Xcode Cloud to TestFlight
 

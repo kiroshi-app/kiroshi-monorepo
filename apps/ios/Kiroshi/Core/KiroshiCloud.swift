@@ -28,7 +28,7 @@ enum AccountDeletionAnswer: Equatable, Sendable {
 }
 
 enum DeviceRegistrationAnswer: Equatable, Sendable {
-    case registered(relayId: String, transferred: Bool)
+    case registered(relayId: String, transferred: Bool, isPending: Bool = false)
     case challengeRefused
     case proofRefused
     case keyRefused
@@ -46,6 +46,34 @@ enum AccountAnswer: Equatable, Sendable {
 enum DeviceDeletionAnswer: Equatable, Sendable {
     case deleted
     case notFound
+    case unauthenticated
+    case unreachable
+}
+
+enum DeviceDecisionAnswer: Equatable, Sendable {
+    case decided
+    case alreadyApproved
+    case expired
+    case notFound
+    case unauthenticated
+    case unreachable
+}
+
+enum ApprovalCodeRequestAnswer: Equatable, Sendable {
+    case sent
+    case alreadyApproved
+    case expired
+    case tooManyRequests
+    case unauthenticated
+    case unreachable
+}
+
+enum ApprovalCodeAnswer: Equatable, Sendable {
+    case approved
+    case wrongCode
+    case alreadyApproved
+    case expired
+    case tooManyRequests
     case unauthenticated
     case unreachable
 }
@@ -163,6 +191,48 @@ struct KiroshiCloud: Sendable {
         }
     }
 
+    var deviceStates: any DeviceStates {
+        CloudDeviceStates(baseURL: baseURL, transport: transport)
+    }
+
+    func approveDevice(_ relayId: String, bearer: String) async throws -> DeviceDecisionAnswer {
+        try await decide(relayId, "approve", bearer: bearer)
+    }
+
+    func refuseDevice(_ relayId: String, bearer: String) async throws -> DeviceDecisionAnswer {
+        try await decide(relayId, "reject", bearer: bearer)
+    }
+
+    func requestApprovalCode(bearer: String) async throws -> ApprovalCodeRequestAnswer {
+        var request = URLRequest(url: baseURL.appending(path: "devices/approval-code"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, _) = try await send(request) else { return .unreachable }
+        switch status {
+        case 204: return .sent
+        case 401: return .unauthenticated
+        case 409: return .alreadyApproved
+        case 410: return .expired
+        case 429: return .tooManyRequests
+        default: return .unreachable
+        }
+    }
+
+    func verifyApprovalCode(_ code: String, bearer: String) async throws -> ApprovalCodeAnswer {
+        var request = post("devices/approval-code/verify", body: ApprovalCode(code: code))
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, _) = try await send(request) else { return .unreachable }
+        switch status {
+        case 204: return .approved
+        case 400: return .wrongCode
+        case 401: return .unauthenticated
+        case 409: return .alreadyApproved
+        case 410: return .expired
+        case 429: return .tooManyRequests
+        default: return .unreachable
+        }
+    }
+
     func signOut(bearer: String) async {
         var request = URLRequest(url: baseURL.appending(path: "api/auth/sign-out"))
         request.httpMethod = "POST"
@@ -178,6 +248,23 @@ struct KiroshiCloud: Sendable {
         switch status {
         case 204: return .deleted
         case 401: return .unauthenticated
+        default: return .unreachable
+        }
+    }
+
+    private func decide(_ relayId: String, _ decision: String, bearer: String) async throws
+        -> DeviceDecisionAnswer
+    {
+        var request = URLRequest(url: baseURL.appending(path: "devices/\(relayId)/\(decision)"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        guard let (status, _) = try await send(request) else { return .unreachable }
+        switch status {
+        case 204: return .decided
+        case 401: return .unauthenticated
+        case 404: return .notFound
+        case 409: return .alreadyApproved
+        case 410: return .expired
         default: return .unreachable
         }
     }
@@ -216,7 +303,9 @@ struct KiroshiCloud: Sendable {
             guard let device = try? JSONDecoder().decode(RegisteredDevice.self, from: data) else {
                 return .unreachable
             }
-            return .registered(relayId: device.id, transferred: device.transferred)
+            return .registered(
+                relayId: device.id, transferred: device.transferred,
+                isPending: device.status == "pending")
         case 400
         where (try? JSONDecoder().decode(ErrorCode.self, from: data).error.code)
             == "DEVICE_CHALLENGE_INVALID":
@@ -311,6 +400,11 @@ private struct IssuedChallenge: Decodable {
 private struct RegisteredDevice: Decodable {
     let id: String
     let transferred: Bool
+    let status: String?
+}
+
+private struct ApprovalCode: Encodable {
+    let code: String
 }
 
 private struct ErrorCode: Decodable {

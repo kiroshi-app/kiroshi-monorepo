@@ -34,6 +34,17 @@ struct SettingsView: View {
                     )
                 }
             }
+            if !model.fingerprint.isEmpty {
+                Section {
+                    DeviceCard(
+                        name: model.deviceName, systemImage: "iphone",
+                        fingerprint: model.fingerprint, isThisDevice: true)
+                } footer: {
+                    Text(
+                        "When this iPhone asks to join your account, the device that approves it shows these words."
+                    )
+                }
+            }
             Section {
             } footer: {
                 BrandFooter()
