@@ -87,7 +87,7 @@ export const SITE_PAGES_COPY = {
 						"the public keys of your devices, to your other devices and to the computer that hosts each Space you joined;",
 						"invitations, to the email address invited.",
 					],
-					"Because the relay hands out the keys, when you add a device to your account, the new device and the device that approves it both show its fingerprint, for you to compare. When they match, no key was swapped on the way.",
+					"Because the relay hands out the keys, adding a device to your account shows its fingerprint on the new device and on the one that approves it, for you to compare. When they match, no key was swapped on the way.",
 					"The relay can't read the content of anything that travels end-to-end encrypted between devices:",
 					[
 						"conversations;",

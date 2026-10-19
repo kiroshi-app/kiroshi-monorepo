@@ -131,7 +131,7 @@ describe("the privacy page", () => {
 		expect(within(distributes).getAllByRole("listitem")).toHaveLength(2)
 		expect(distributes.textContent).toContain("invitations")
 		expect(relay.textContent).toContain(
-			"when you add a device to your account, the new device and the device that approves it both show its fingerprint",
+			"adding a device to your account shows its fingerprint on the new device and on the one that approves it",
 		)
 		expect(within(unreadable).getAllByRole("listitem")).toHaveLength(5)
 		expect(relay.textContent).toContain(
