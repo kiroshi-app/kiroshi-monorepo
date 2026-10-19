@@ -1,3 +1,22 @@
+# Local Rust builds, shared by every worktree of this repository on one machine.
+#
+# build.jobs caps the rustc processes one build runs at once, so parallel worktrees
+# do not oversubscribe the cores and the memory they share.
+#
+# build.rustc-wrapper runs .cargo/rustc-wrapper.sh. Outside CI, when sccache is on the
+# PATH, it compiles through sccache, and it makes a dependency's output independent of
+# the worktree path so that the cache key of every crate built on top of it matches
+# across worktrees:
+#   -C rpath, on proc-macro crates     the dylib records @rpath/<file>, not its absolute
+#                                      path, as its install name;
+#   --remap-path-prefix=$OUT_DIR=...   an rlib that includes build script output records
+#                                      OUT_DIR instead of the target directory path.
+# Without sccache, or with CI set, it runs rustc unchanged. CI also sets
+# CARGO_BUILD_JOBS=default, so it builds at the runner's core count.
+#
+# One build without the cap and the wrapper:
+#   CARGO_BUILD_JOBS=default RUSTC_WRAPPER= cargo build
 [build]
-jobs = 4
+# 6: two cold worktrees built at once in 95 s, against 102 s at default, 105 s at 4, 123 s at 2.
+jobs = 6
 rustc-wrapper = ".cargo/rustc-wrapper.sh"
