@@ -28,6 +28,9 @@ impl ConversationKind {
 pub struct MessageSearchQuery {
 	pub text: String,
 	pub space_id: String,
+	#[serde(default)]
+	#[specta(optional)]
+	pub kind: Option<ConversationKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -122,6 +125,7 @@ pub struct Catalogue {
 pub struct CatalogueScope {
 	pub query: String,
 	pub space_id: String,
+	pub kind: Option<ConversationKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

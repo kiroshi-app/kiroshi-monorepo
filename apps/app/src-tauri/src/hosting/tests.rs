@@ -594,7 +594,8 @@ async fn host_effect_applied(
 	let text = |key: &str| args[key].as_str().expect("a text argument").to_owned();
 	match command.as_str() {
 		"search_catalogue" => {
-			let scope = CatalogueScope { query: text("query"), space_id: text("spaceId") };
+			let scope =
+				CatalogueScope { query: text("query"), space_id: text("spaceId"), kind: None };
 			let found = database.catalogue().search(scope).await.expect("the host searches");
 			return answered_json(StatusCode::OK, json!(found));
 		}

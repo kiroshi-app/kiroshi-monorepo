@@ -113,6 +113,15 @@ const READ_LIMIT = "How many messages to answer, from 1 to 100; left out, 20."
 const BEFORE =
 	"The cursor the previous conversation_read answered, to read the messages strictly older than the ones it answered; left out, the latest messages are read, and a null cursor in the answer marks the first message of the conversation."
 
+const SEARCH =
+	"Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or companion names match, each with its id, its kind (main, topic or mission), its title (the companion's name for a main conversation) and the names of the companions seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the companion who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched."
+
+const QUERY =
+	"The words to look for, matched against the start of words in messages and inside room titles and companion names, at most 200 characters."
+
+const SEARCH_KIND =
+	"One of main (a companion's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind."
+
 const CLOSE =
 	"Archive a room you lead once its subject is settled, keeping every message in it."
 
@@ -161,6 +170,11 @@ const CONSULTED: ToolInput = {
 	conversation: z.string().describe(READ_ROOM),
 	limit: z.number().int().optional().describe(READ_LIMIT),
 	before: z.number().int().optional().describe(BEFORE),
+}
+
+const SEARCHED: ToolInput = {
+	query: z.string().describe(QUERY),
+	kind: z.enum(["main", "topic", "mission"]).optional().describe(SEARCH_KIND),
 }
 
 const CLOSED: ToolInput = {
@@ -243,6 +257,9 @@ export const companionTools = (
 	),
 	tool("conversation_read", READ, CONSULTED, (input) =>
 		asked(session, "conversationRead", input),
+	),
+	tool("conversation_search", SEARCH, SEARCHED, (input) =>
+		asked(session, "conversationSearch", input),
 	),
 	tool("conversation_close", CLOSE, CLOSED, (input) =>
 		asked(session, "conversationClose", input),

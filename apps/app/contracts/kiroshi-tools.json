@@ -800,6 +800,33 @@
 		}
 	},
 	{
+		"name": "conversation_search",
+		"description": "Find where something was discussed in the space of this conversation, before you answer from memory or ask the person where it was said: it answers conversations, the rooms whose title or companion names match, each with its id, its kind (main, topic or mission), its title (the companion's name for a main conversation) and the names of the companions seated in it, and messages, the messages whose text matches, best match first, each with the conversationId and conversationTitle of its room, its messageId, its author (the id of the companion who wrote it, or null when the person did), its createdAt in milliseconds since the epoch and a snippet of plain text around the match; two empty lists mean nothing in this space matched, and no other space is ever searched.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "The words to look for, matched against the start of words in messages and inside room titles and companion names, at most 200 characters."
+				},
+				"kind": {
+					"description": "One of main (a companion's own conversation with the person), topic (a room) or mission, to keep only the conversations and the messages of that kind, left out for every kind.",
+					"type": "string",
+					"enum": [
+						"main",
+						"topic",
+						"mission"
+					]
+				}
+			},
+			"required": [
+				"query"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
 		"name": "conversation_close",
 		"description": "Archive a room you lead once its subject is settled, keeping every message in it.",
 		"inputSchema": {

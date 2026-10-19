@@ -1059,6 +1059,7 @@ export type MessageSearchError = { kind: "unavailable"; failure: StorageFailure 
 export type MessageSearchQuery = {
 	text: string,
 	spaceId: string,
+	kind?: ConversationKind | null,
 };
 
 export type Mission = {

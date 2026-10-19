@@ -17,6 +17,8 @@ const PRESENT_SEAT: &str = "conversation_participants.left_at IS NULL AND bots.d
 
 const CHAT_ORDER: &str = "ORDER BY spoken_at DESC, id";
 
+const CHATS_OF_KIND: &str = "WHERE ?1 IS NULL OR kind = ?1";
+
 const RECENT_CHATS_OF_SCOPE: &str = "WHERE kind <> 'mission' AND space_id = ?1";
 
 fn chats() -> String {
@@ -136,8 +138,9 @@ fn matching_chats(
 	needle: &str,
 	seated: &Seated,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
-	let mut statement = connection.prepare_cached(&format!("{} {CHAT_ORDER}", chats()))?;
-	let rows = statement.query_map([], chat_row)?;
+	let mut statement =
+		connection.prepare_cached(&format!("{} {CHATS_OF_KIND} {CHAT_ORDER}", chats()))?;
+	let rows = statement.query_map(params![scope.kind], chat_row)?;
 	Ok(rows
 		.collect::<rusqlite::Result<Vec<_>>>()?
 		.into_iter()
@@ -469,7 +472,7 @@ mod tests {
 	}
 
 	fn scope(query: &str, space_id: &str) -> CatalogueScope {
-		CatalogueScope { query: query.to_owned(), space_id: space_id.to_owned() }
+		CatalogueScope { query: query.to_owned(), space_id: space_id.to_owned(), kind: None }
 	}
 
 	fn objectives(missions: &[CatalogueMission]) -> Vec<&str> {

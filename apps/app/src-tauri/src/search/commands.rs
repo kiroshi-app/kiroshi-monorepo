@@ -34,7 +34,7 @@ pub async fn search_catalogue(
 	ready(&state)
 		.map_err(|failure| CatalogueError::Unavailable { failure })?
 		.catalogue()
-		.search(CatalogueScope { query, space_id })
+		.search(CatalogueScope { query, space_id, kind: None })
 		.await
 }
 
@@ -126,7 +126,7 @@ mod tests {
 	}
 
 	fn in_space(text: &str, space_id: &str) -> MessageSearchQuery {
-		MessageSearchQuery { text: text.to_owned(), space_id: space_id.to_owned() }
+		MessageSearchQuery { text: text.to_owned(), space_id: space_id.to_owned(), kind: None }
 	}
 
 	async fn found(app: &App<MockRuntime>, query: MessageSearchQuery) -> Vec<MessageHit> {
