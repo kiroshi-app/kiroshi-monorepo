@@ -48,6 +48,7 @@ targets:
       path: Kiroshi/Kiroshi.entitlements
       properties:
         com.apple.developer.applesignin: [Default]
+        com.apple.developer.associated-domains: ["applinks:kiroshi.app"]
     configFiles:
       Debug: BuildNumber.xcconfig
       Release: BuildNumber.xcconfig

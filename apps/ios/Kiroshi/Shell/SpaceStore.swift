@@ -76,6 +76,13 @@ final class SpaceStore {
         lastSpace.save(id)
     }
 
+    func add(_ space: Space) {
+        if !spaces.contains(where: { $0.id == space.id }) {
+            spaces.append(space)
+        }
+        select(space.id)
+    }
+
     func follow() async {
         guard !hasLeft else { return }
         let spaceId = currentSpaceId

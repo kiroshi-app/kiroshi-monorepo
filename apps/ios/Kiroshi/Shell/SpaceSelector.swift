@@ -3,6 +3,7 @@ import UIKit
 
 struct SpaceSelector: View {
     let store: SpaceStore
+    let invitations: Invitations?
 
     var body: some View {
         Menu {
@@ -21,6 +22,22 @@ struct SpaceSelector: View {
                 }
             }
             .pickerStyle(.inline)
+            if let invitations, !invitations.pending.isEmpty {
+                Section("Invitations") {
+                    ForEach(invitations.pending) { invitation in
+                        Button {
+                            invitations.open(invitation)
+                        } label: {
+                            Label {
+                                Text(invitation.instanceName)
+                                Text("Invited by \(invitation.inviterEmail)")
+                            } icon: {
+                                Image(systemName: "envelope")
+                            }
+                        }
+                    }
+                }
+            }
         } label: {
             HStack(spacing: 4) {
                 Text(store.currentSpace?.name ?? "")
@@ -31,11 +48,19 @@ struct SpaceSelector: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .badge(invitations?.pending.count ?? 0)
         .accessibilityShowsLargeContentViewer {
             Label(store.currentSpace?.name ?? "", systemImage: "chevron.down")
         }
         .accessibilityLabel("Space")
-        .accessibilityValue(store.currentSpace.map { Text($0.accessibilityName) } ?? Text(""))
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityValue: Text {
+        let space = Text(store.currentSpace?.accessibilityName ?? "")
+        guard let count = invitations?.pending.count, count > 0 else { return space }
+        return count == 1
+            ? Text("\(space), 1 invitation") : Text("\(space), \(count) invitations")
     }
 }
 

@@ -26,7 +26,7 @@ struct SpaceChrome: ViewModifier {
                 }
                 ToolbarSpacer(.fixed, placement: .topBarLeading)
                 ToolbarItem(placement: .topBarLeading) {
-                    SpaceSelector(store: store)
+                    SpaceSelector(store: store, invitations: account.invitations)
                 }
             }
             .toolbar(removing: .title)

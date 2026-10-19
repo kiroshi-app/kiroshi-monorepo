@@ -26,6 +26,8 @@ struct NoSpaceView: View {
             .defaultScrollAnchor(.center, for: .alignment)
             .scrollBounceBehavior(.basedOnSize)
             .signInGround()
+            .task { await model.invitations?.refresh() }
+            .invitationSheet(model.invitations)
             .safeAreaBar(edge: .bottom) {
                 VStack(spacing: 4) {
                     Button("Check again", action: model.checkAgain)
@@ -55,6 +57,10 @@ struct NoSpaceView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(.top, 6)
+            if let invitations = model.invitations, !invitations.pending.isEmpty {
+                InvitationList(invitations: invitations)
+                    .padding(.top, 10)
+            }
         }
         .multilineTextAlignment(.center)
         .padding(.horizontal, 40)

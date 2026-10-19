@@ -72,7 +72,7 @@ The iPhone speaks protocol v2 of `docs/relay/v2-protocol.md`: every call leaves 
 - `RelayCrypto` is the codec, checked against a byte for byte copy of `v2-crypto.json` in `KiroshiTests/Vectors` (`RelayCryptoVectorTests`), beside a Swift-made signature vector. `bip39-english.txt` ships in the app for the fingerprint, its SHA-256 checked when read.
 - `RelayConnection` persists its last sent `ctr` per Space and `key_id` before a frame leaves, and the last accepted per sender (`FrameCounters`, in the Keychain): it never sends again under a `key_id` whose counter can't be read back. A member frame carries no `from`; the relay adds it.
 - Every socket opens with a sealed `{"hello":{}}` without challenge. A call leaves only once the host's hello to this iPhone has given the 32-byte challenge, which it then carries; one still waiting fails on the call timeout. The challenge lives as long as the socket. The host never names a frame it refused, it answers a hello: one with another challenge replaces it, and each call sent under an older one goes again once, under a new `ctr`; refused again, it fails with `challengeRefused`. `HostSealingTransport` answers the hello and drops a frame without its challenge, as the host does; `RelayChallengeTests` plays the host's rules on the keys of `v2-crypto.json`.
-- A Space whose key this iPhone doesn't hold shows `Join this Space` on both tabs, never as unreachable (`join-space`). Nothing writes a Space key yet: the join comes with OPE-1010, so `KeychainSpaceKeyStore` answers none today.
+- A Space whose key this iPhone doesn't hold is joined by its first verified rekey (`docs/relay/v2-protocol.md`, Joining by the first rekey): `RelayConnection` opens the member socket, sends a hello under `key_id` 0 sealed with a key it throws away, again on every ping, and takes the first `rekey` frame addressed to this device whose box opens under its agreement key, whose roster set verifies under its own host row and lists this device, and whose signature verifies under that host key (`SpaceHandover`). `KeychainSpaceKeyStore` then stores the Space key sealed to this device's agreement key, the host key, its relay id and the signed roster, after first unlock, this device only, and the same socket says its hello under the key. Until then both tabs show `Waiting for the key to Studio` (`join-space`), never unreachable.
 
 In Debug, `RelayEnvironment(transport:clock:)` plays the host's side of v2 around any scripted socket (`HostSealingTransport` in `Fixtures/FixtureKeys.swift`): the scripted host keeps reading and writing plaintext, and the app goes through the real sealing, signatures and counters.
 
@@ -98,6 +98,19 @@ xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixt
 ```
 
 `DeviceApprovalAccessibilityTests` audits each state, the waiting screen and the sheet at the largest text size, goes back to sign in from 6.3 and approves from the sheet.
+
+## Invitations
+
+Row 4 of page "Mockup" of the Paper file "Kiroshi, E2E Spaces v2" draws them. `Invitations` (`Invitations/`) reads `GET /invitations` when the app comes to the foreground: a badge on the Space button counts them, and the menu of Spaces lists each under Invitations (the Space, `Invited by` its inviter). A row opens the sheet, which reads `GET /invitations/{id}/state` for the expiry. Accept calls `POST /invitations/{instanceId}/accept`, then joins by the first rekey on a member socket of its own (`Joining…`) and lands on the Space once it answers; a host offline keeps the sheet waiting (`Host · Offline`), Decline then leaves the Space (`DELETE /instances/{id}/membership`). Before an accept, Decline calls `POST /invitations/{instanceId}/decline`. A withdrawn, expired or used invitation, or one sent to another email, says so with the gesture to fix it.
+
+The email's Join button, `https://kiroshi.app/join?invitation=<id>`, is a universal link (`applinks:kiroshi.app`, the AASA served by `apps/website`): it opens the sheet on that invitation, read from the list, or from its state when the list doesn't hold it (another email). A link opened before sign-in waits for it.
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 4.2   # also 4, 4.1, 4.3 to 4.7, invitation-expired, invitation-other-email
+xcrun simctl openurl booted "https://kiroshi.app/join?invitation=4c1d0000-0000-4000-8000-000000000001"  # over -fixture 4
+```
+
+`4` and `4.1` open Home on Personal with an invitation to Studio from noa@example.com (tap the Space button for `4.1`), `4.2` opens the sheet through the link, `4.3` holds the accept, `4.4` accepts while Studio's host is offline, `4.5` gets no answer, `4.6` and `invitation-expired` read a withdrawn and an expired state, `invitation-other-email` opens a link the account isn't invited by, and `4.7` accepts, receives the scripted host's rekey (`FixtureRekey`) and lands on Studio. `InvitationAccessibilityTests` audits the badge, the menu and each state of the sheet, the sheet at the largest text size, and lands on Studio from `4.7`.
 
 ## Xcode Cloud to TestFlight
 

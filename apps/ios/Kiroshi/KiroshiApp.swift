@@ -18,7 +18,9 @@ struct KiroshiApp: App {
         WindowGroup {
             SignInRootView(model: model)
                 .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
+                    if !model.openInvitation(from: url) {
+                        GIDSignIn.sharedInstance.handle(url)
+                    }
                 }
         }
     }

@@ -77,6 +77,7 @@ final class SignInModel {
     private(set) var consent: MessageConsent?
     private(set) var approval: DeviceApproval?
     private(set) var requests: DeviceRequests?
+    private(set) var invitations: Invitations?
     private(set) var fingerprint: [String] = []
 
     @ObservationIgnored private let cloud: KiroshiCloud
@@ -90,6 +91,7 @@ final class SignInModel {
     @ObservationIgnored private var session: Session?
     @ObservationIgnored private var needsRegistration = false
     @ObservationIgnored private var work: Task<Void, Never>?
+    @ObservationIgnored private var invitationLink: String?
 
     init(
         cloud: KiroshiCloud,
@@ -250,10 +252,23 @@ final class SignInModel {
         case .spaces(let spaces):
             shell =
                 spaces.isEmpty ? nil : makeShell(spaces: spaces, session: session, device: device)
+            if invitations == nil {
+                invitations = makeInvitations(session: session, device: device)
+            }
             stage = .spaces(spaces)
         case .unauthenticated: endSession()
         case .unreachable: stage = .spacesUnreachable
         }
+    }
+
+    func openInvitation(from url: URL) -> Bool {
+        guard let invitationId = InvitationLink.invitationId(in: url) else { return false }
+        if let invitations {
+            invitations.openLink(invitationId)
+        } else {
+            invitationLink = invitationId
+        }
+        return true
     }
 
     func signOutTapped() {
@@ -491,6 +506,32 @@ final class SignInModel {
         return shell
     }
 
+    private func makeInvitations(session: Session, device: RelayDevice) -> Invitations {
+        let invitations = Invitations(
+            bearer: session.bearer, device: device, cloud: cloud, relay: relay,
+            joined: { [weak self] space in self?.joined(space) },
+            signedOut: { [weak self] in self?.endSession() })
+        if let invitationLink {
+            self.invitationLink = nil
+            invitations.openLink(invitationLink)
+        }
+        #if DEBUG
+            if let fixture = SignInFixture.opened {
+                InvitationsFixture.play(fixture, on: invitations)
+            }
+        #endif
+        return invitations
+    }
+
+    private func joined(_ space: Space) {
+        lastSpace.save(space.id)
+        if let shell {
+            shell.add(space)
+        } else {
+            checkAgain()
+        }
+    }
+
     private func leaveShell(_ exit: ShellExit) {
         switch exit {
         case .signedOut: endSession()
@@ -516,6 +557,8 @@ final class SignInModel {
         consent = nil
         approval = nil
         requests = nil
+        invitations?.stop()
+        invitations = nil
         fingerprint = []
         signedInEmail = ""
         code = ""
