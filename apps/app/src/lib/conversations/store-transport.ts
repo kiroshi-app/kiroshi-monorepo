@@ -117,6 +117,12 @@ const refusalsNamed =
 export const conversationReadsOn = (side: ConversationSource) =>
 	conversationReadsThrough(invokeOn(side))
 
+export const missionThreadReadOn =
+	(side: ConversationSource) => (conversationId: string) =>
+		invokeOn(side)<Conversation>("conversation_mission_thread", {
+			conversationId,
+		})
+
 export const reportTurnWritesOn = (
 	side: ConversationSource,
 ): ReportTurnWrites => {

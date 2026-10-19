@@ -38,6 +38,7 @@ export const LOCAL_COMMANDS: ReadonlySet<string> = new Set([
 	"hosting_start",
 	"hosting_stop",
 	"mcp_oauth_cancel",
+	"conversation_mission_thread",
 	"mission_board",
 	"mission_unreported",
 	"notification_show",

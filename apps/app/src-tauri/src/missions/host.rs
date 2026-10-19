@@ -3,13 +3,13 @@ use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
 use super::commands::{
-	mission_conclude, mission_escalate, mission_note, mission_open, mission_row, mission_status,
-	mission_watch,
+	mission_conclude, mission_escalate, mission_handoff, mission_note, mission_open,
+	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch,
 };
 use super::contract::{
 	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError,
 	MissionEvent, MissionEventKind, MissionFilter, MissionNote, MissionOutcome, MissionRecord,
-	MissionScope, MissionState, MissionStatus, MissionWatch, Ticket,
+	MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::{ready, space_of_the_conversation};
@@ -180,6 +180,41 @@ impl<R: Runtime> Host for MissionHost<R> {
 				let watch = MissionWatch { branch: asked.branch, repository: asked.repository };
 				Self::answered(mission_watch(self.app.clone(), state, asked.id, watch).await?)
 			}
+			Operation::Reopen => {
+				let asked: Named = Self::read(payload)?;
+				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
+				Self::answered(
+					mission_reopen_unmerged(self.app.clone(), state, asked.id, BOT.to_owned())
+						.await?,
+				)
+			}
+			Operation::Update => {
+				let asked: Updated = Self::read(payload)?;
+				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
+				let update = MissionUpdate {
+					objective: asked.objective,
+					ticket: asked.ticket,
+					tools: asked.tools,
+				};
+				Self::answered(
+					mission_update(self.app.clone(), state, asked.id, update, BOT.to_owned())
+						.await?,
+				)
+			}
+			Operation::Handoff => {
+				let asked: HandedOff = Self::read(payload)?;
+				self.refuse_a_mission_it_does_not_own(database, &asked.id).await?;
+				Self::answered(
+					mission_handoff(
+						self.app.clone(),
+						state,
+						asked.id,
+						self.bot_id.clone(),
+						asked.companion,
+					)
+					.await?,
+				)
+			}
 			Operation::List => {
 				let asked: Sought = Self::read(payload)?;
 				let filter = self.filter(database, asked).await?;
@@ -217,6 +252,9 @@ pub enum Operation {
 	Watch,
 	List,
 	Read,
+	Reopen,
+	Update,
+	Handoff,
 }
 
 #[derive(Debug, Deserialize)]
@@ -284,6 +322,25 @@ struct Sought {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Named {
 	id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Updated {
+	id: String,
+	#[serde(default)]
+	objective: Option<String>,
+	#[serde(default)]
+	ticket: Option<Ticket>,
+	#[serde(default)]
+	tools: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HandedOff {
+	id: String,
+	companion: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1012,6 +1069,381 @@ mod tests {
 		assert_eq!(
 			events(&app, &opened.id).await.into_iter().map(|event| event.kind).collect::<Vec<_>>(),
 			vec![MissionEventKind::Opened, MissionEventKind::Closed]
+		);
+	}
+
+	const A_MERGED_PULL_REQUEST: &str =
+		r#"{"number":7,"state":"closed","headSha":"abc","checks":"passed","merged":true}"#;
+
+	async fn planted(app: &App<MockRuntime>, statements: &'static str) {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(move |connection| Ok(connection.execute_batch(statements)?))
+			.await
+			.expect("the rows are planted");
+	}
+
+	async fn title_of(app: &App<MockRuntime>, conversation_id: &str) -> String {
+		let id = conversation_id.to_owned();
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call(move |connection| {
+				Ok(connection.query_row(
+					"SELECT title FROM conversations WHERE id = ?1",
+					[id],
+					|row| row.get::<_, String>(0),
+				)?)
+			})
+			.await
+			.expect("the title reads")
+	}
+
+	async fn seated_in(app: &App<MockRuntime>, conversation_id: &str) -> Vec<String> {
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.conversations()
+			.seats(conversation_id.to_owned())
+			.await
+			.expect("the seats read")
+			.into_iter()
+			.filter(|seat| seat.left_at.is_none())
+			.map(|seat| seat.bot_id)
+			.collect()
+	}
+
+	fn kinds(events: Vec<MissionEvent>) -> Vec<MissionEventKind> {
+		events.into_iter().map(|event| event.kind).collect()
+	}
+
+	fn listening(app: &App<MockRuntime>, event: &str) -> std::sync::mpsc::Receiver<Value> {
+		let (sender, received) = channel();
+		app.handle().listen(event, move |heard| {
+			let payload = serde_json::from_str(heard.payload()).expect("the payload is JSON");
+			let _ = sender.send(payload);
+		});
+		received
+	}
+
+	async fn closed_through(host: &MissionHost<MockRuntime>, id: &str) {
+		host.answer(asking("close", json!({ "id": id, "outcome": "done", "summary": "Shipped" })))
+			.await
+			.expect("the mission is closed");
+	}
+
+	#[tokio::test]
+	async fn a_closed_mission_is_reopened_by_its_bot_and_its_watch_is_read_again() {
+		let app = a_host("reopen").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let failed = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, &opened.thread_conversation_id);
+		host.answer(an_arming(&opened.id)).await.expect("the mission is armed");
+		closed_through(&host, &opened.id).await;
+		serving(&app, "c1")
+			.answer(asking(
+				"close",
+				json!({ "id": failed.id, "outcome": "failed", "summary": "Out of reach" }),
+			))
+			.await
+			.expect("the mission fails");
+		assert!(armed_missions(&app).await.is_empty(), "a closed mission is still watched");
+		let changed = listening(&app, super::super::commands::CHANGED_EVENT);
+
+		let reopened = host
+			.answer(asking("reopen", json!({ "id": opened.id })))
+			.await
+			.expect("the done mission reopens");
+		let revived = serving(&app, "c1")
+			.answer(asking("reopen", json!({ "id": failed.id })))
+			.await
+			.expect("the failed mission reopens");
+
+		assert_eq!(reopened["state"], json!("working"));
+		assert_eq!(reopened["closedAt"], Value::Null);
+		assert_eq!(reopened["branch"], json!("feature/ope-37"));
+		assert_eq!(revived["state"], json!("working"));
+		assert_eq!(armed_missions(&app).await, vec![opened.id.clone()]);
+		assert!(changed.try_recv().is_ok(), "the reopening was not announced");
+		assert_eq!(
+			events(&app, &opened.id).await.last().map(|event| (event.kind, event.source.clone())),
+			Some((MissionEventKind::Reopened, BOT.to_owned()))
+		);
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+	}
+
+	#[tokio::test]
+	async fn a_mission_whose_pull_request_was_merged_or_still_open_is_not_reopened() {
+		let app = a_host("reopen-refused").await;
+		let merged = a_mission_of(&app, "c1", "b1").await;
+		let open = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, "c1");
+		closed_through(&host, &merged.id).await;
+		let id = merged.id.clone();
+		ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.call_mut(move |connection| {
+				Ok(connection.execute(
+					"UPDATE missions SET github_fingerprint = ?2,
+						pull_request_url = 'https://github.test/pull/7' WHERE id = ?1",
+					[id.as_str(), A_MERGED_PULL_REQUEST],
+				)?)
+			})
+			.await
+			.expect("the merge is seen");
+
+		let refused_merged = host
+			.answer(asking("reopen", json!({ "id": merged.id })))
+			.await
+			.expect_err("the merged mission stays closed");
+		let refused_open = host
+			.answer(asking("reopen", json!({ "id": open.id })))
+			.await
+			.expect_err("the open mission is not reopened");
+
+		assert_eq!(refused_merged["kind"], json!("pullRequestMerged"));
+		assert_eq!(refused_merged["pullRequest"], json!(7));
+		assert_eq!(refused_merged["url"], json!("https://github.test/pull/7"));
+		assert_eq!(refused_open["kind"], json!("missionStillOpen"));
+		assert_eq!(
+			kinds(events(&app, &merged.id).await),
+			vec![MissionEventKind::Opened, MissionEventKind::Closed]
+		);
+		assert_eq!(kinds(events(&app, &open.id).await), vec![MissionEventKind::Opened]);
+	}
+
+	#[tokio::test]
+	async fn an_update_rewrites_only_the_fields_given_and_retitles_the_thread_on_a_new_objective() {
+		let app = a_host("update").await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, &opened.thread_conversation_id);
+		let changed = listening(&app, super::super::commands::CHANGED_EVENT);
+
+		let tooled = host
+			.answer(asking("update", json!({ "id": opened.id, "tools": ["gh", "linear"] })))
+			.await
+			.expect("the tools are rewritten");
+		let retitled = host
+			.answer(asking("update", json!({ "id": opened.id, "objective": "Ship it twice" })))
+			.await
+			.expect("the objective is rewritten");
+
+		assert_eq!(tooled["tools"], json!(["gh", "linear"]));
+		assert_eq!(tooled["objective"], json!("Held"));
+		assert_eq!(tooled["ticket"]["externalId"], json!("OPE-1"));
+		assert_eq!(retitled["objective"], json!("Ship it twice"));
+		assert_eq!(retitled["tools"], json!(["gh", "linear"]));
+		assert_eq!(retitled["state"], json!(opened.state));
+		assert_eq!(retitled["stateSeq"], json!(opened.state_seq));
+		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Ship it twice");
+		assert_eq!(title_of(&app, "c1").await, "First");
+		assert_eq!(changed.try_iter().count(), 2, "an update was not announced");
+		assert_eq!(
+			events(&app, &opened.id)
+				.await
+				.into_iter()
+				.map(|held| (held.kind, held.payload))
+				.collect::<Vec<_>>(),
+			vec![
+				(MissionEventKind::Opened, json!({})),
+				(MissionEventKind::Updated, json!({ "fields": ["tools"] })),
+				(MissionEventKind::Updated, json!({ "fields": ["objective"] })),
+			]
+		);
+	}
+
+	#[tokio::test]
+	async fn an_update_carrying_no_field_or_a_blank_objective_is_refused_and_writes_nothing() {
+		let app = a_host("update-refused").await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, "c1");
+
+		let empty = host
+			.answer(asking("update", json!({ "id": opened.id })))
+			.await
+			.expect_err("an empty update is refused");
+		let blank = host
+			.answer(asking("update", json!({ "id": opened.id, "objective": "  ", "tools": [] })))
+			.await
+			.expect_err("a blank objective is refused");
+
+		assert_eq!(empty["kind"], json!("nothingToUpdate"));
+		assert_eq!(blank["kind"], json!("blankField"));
+		assert_eq!(blank["field"], json!("objective"));
+		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		assert_eq!(held.mission, opened);
+		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
+		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
+	}
+
+	const A_FOURTH_COMPANION: &str = "
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b4', 'Fourth', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b4', 'personal', 1);
+	";
+
+	#[tokio::test]
+	async fn a_handoff_seats_the_new_owner_records_both_owners_and_summons_it_in_the_thread() {
+		let app = a_host("handoff").await;
+		planted(&app, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, &opened.thread_conversation_id);
+		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
+
+		let handed = host
+			.answer(asking("handoff", json!({ "id": opened.id, "companion": "fourth" })))
+			.await
+			.expect("the mission is handed off");
+
+		assert_eq!(handed["botId"], json!("b4"));
+		assert_eq!(handed["stateSeq"], json!(opened.state_seq));
+		let thread = seated_in(&app, &opened.thread_conversation_id).await;
+		let origin = seated_in(&app, "c1").await;
+		assert!(thread.contains(&"b1".to_owned()) && thread.contains(&"b4".to_owned()));
+		assert!(origin.contains(&"b1".to_owned()) && origin.contains(&"b4".to_owned()));
+		assert_eq!(
+			events(&app, &opened.id)
+				.await
+				.into_iter()
+				.map(|held| (held.kind, held.source, held.payload))
+				.collect::<Vec<_>>(),
+			vec![
+				(MissionEventKind::Opened, "human".to_owned(), json!({})),
+				(MissionEventKind::HandedOff, BOT.to_owned(), json!({ "from": "b1", "to": "b4" })),
+			]
+		);
+		let read = crate::conversations::commands::conversation_mission_thread(
+			app.handle().clone(),
+			app.state(),
+			opened.thread_conversation_id.clone(),
+		)
+		.await
+		.expect("the thread reads with its seats");
+		let topic = crate::conversations::commands::conversation_mission_thread(
+			app.handle().clone(),
+			app.state(),
+			"c1".to_owned(),
+		)
+		.await
+		.expect_err("a topic is no mission thread");
+		assert_eq!(
+			read.participants.iter().map(|seat| seat.bot_id.as_str()).collect::<Vec<_>>(),
+			vec!["b1", "b4"]
+		);
+		assert!(
+			matches!(
+				topic,
+				crate::conversations::contract::TranscriptStoreError::UnknownConversation { .. }
+			),
+			"got {topic:?}"
+		);
+		let summons = spoken.try_iter().last().expect("the new owner is summoned");
+		assert_eq!(summons["conversationId"], json!(opened.thread_conversation_id));
+		assert_eq!(summons["authorBotId"], json!("b1"));
+		let text = summons["text"].as_str().expect("the summons carries a text");
+		assert!(text.starts_with("@Fourth "), "got {text}");
+		assert!(text.ends_with("Held"), "got {text}");
+	}
+
+	#[tokio::test]
+	async fn a_handoff_of_a_closed_mission_summons_nobody() {
+		let app = a_host("handoff-closed").await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, "c1");
+		closed_through(&host, &opened.id).await;
+		let spoken = listening(&app, crate::conversations::contract::COMPANION_SPOKE_EVENT);
+
+		let handed = host
+			.answer(asking("handoff", json!({ "id": opened.id, "companion": "b2" })))
+			.await
+			.expect("the closed mission is handed off");
+
+		assert_eq!(handed["botId"], json!("b2"));
+		assert!(spoken.try_recv().is_err(), "a closed mission summoned its new owner");
+	}
+
+	#[tokio::test]
+	async fn a_handoff_to_an_unknown_an_ambiguous_companion_or_the_owner_is_refused() {
+		let app = a_host("handoff-refused").await;
+		planted(
+			&app,
+			"INSERT INTO bots (id, name, model, created_at)
+				VALUES ('t1', 'Twin', 'sonnet', 1), ('t2', 'Twin', 'sonnet', 1),
+					('away', 'Away', 'sonnet', 1);
+			INSERT INTO bot_spaces (bot_id, space_id, joined_at)
+				VALUES ('t1', 'personal', 1), ('t2', 'personal', 1);",
+		)
+		.await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let host = serving(&app, "c1");
+		let thread_seats = seated_in(&app, &opened.thread_conversation_id).await;
+		let origin_seats = seated_in(&app, "c1").await;
+
+		let mut refused = Vec::new();
+		for companion in ["Nobody", "Away", "Twin", "First", "b1"] {
+			let answered = host
+				.answer(asking("handoff", json!({ "id": opened.id, "companion": companion })))
+				.await
+				.expect_err("the handoff is refused");
+			refused.push(answered["kind"].clone());
+		}
+
+		assert_eq!(
+			refused,
+			vec![
+				json!("unknownCompanion"),
+				json!("unknownCompanion"),
+				json!("ambiguousCompanion"),
+				json!("alreadyTheOwner"),
+				json!("alreadyTheOwner"),
+			]
+		);
+		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		assert_eq!(held.mission.bot_id, "b1");
+		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
+		assert_eq!(seated_in(&app, &opened.thread_conversation_id).await, thread_seats);
+		assert_eq!(seated_in(&app, "c1").await, origin_seats);
+	}
+
+	#[tokio::test]
+	async fn the_previous_owner_of_a_handed_off_mission_is_refused_every_write() {
+		let app = a_host("handoff-guard").await;
+		planted(&app, A_FOURTH_COMPANION).await;
+		let opened = a_mission_of(&app, "c1", "b1").await;
+		let previous = serving(&app, &opened.thread_conversation_id);
+		previous
+			.answer(asking("handoff", json!({ "id": opened.id, "companion": "Fourth" })))
+			.await
+			.expect("the mission is handed off");
+
+		for asked in [
+			asking("note", json!({ "id": opened.id, "line": "Still mine" })),
+			asking("status", json!({ "id": opened.id, "text": "Still mine" })),
+			asking("escalate", json!({ "id": opened.id, "question": "?", "reason": "?" })),
+			asking("close", json!({ "id": opened.id, "outcome": "done", "summary": "?" })),
+			an_arming(&opened.id),
+			asking("update", json!({ "id": opened.id, "objective": "Still mine" })),
+			asking("handoff", json!({ "id": opened.id, "companion": "Second" })),
+			asking("reopen", json!({ "id": opened.id })),
+		] {
+			let refused = previous.answer(asked).await.expect_err("the call is refused");
+
+			assert_eq!(refused["kind"], json!("missionOfAnotherBot"));
+			assert_eq!(refused["id"], json!(opened.id));
+		}
+		let successor = MissionHost::new(
+			app.handle().clone(),
+			opened.thread_conversation_id.clone(),
+			"b4".to_owned(),
+		);
+		successor
+			.answer(asking("note", json!({ "id": opened.id, "line": "Taken over" })))
+			.await
+			.expect("the new owner writes on it");
+		assert_eq!(
+			kinds(events(&app, &opened.id).await),
+			vec![MissionEventKind::Opened, MissionEventKind::HandedOff, MissionEventKind::Note]
 		);
 	}
 }

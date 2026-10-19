@@ -78,6 +78,9 @@ const calls: [string, Record<string, unknown>, string][] = [
 		"list",
 	],
 	["mission_read", { id: "m1" }, "read"],
+	["mission_reopen", { id: "m1" }, "reopen"],
+	["mission_update", { id: "m1", objective: "Ship the tools twice" }, "update"],
+	["mission_handoff", { id: "m1", companion: "Second" }, "handoff"],
 ]
 
 const answers: Record<string, unknown> = {
@@ -128,6 +131,9 @@ const answers: Record<string, unknown> = {
 		status: null,
 		events: [],
 	},
+	reopen: A_MISSION,
+	update: { ...A_MISSION, objective: "Ship the tools twice" },
+	handoff: { ...A_MISSION, botId: "b2" },
 }
 
 const aHost = (served: (asked: Asked) => Served) => {
@@ -170,7 +176,7 @@ afterEach(() => {
 })
 
 describe("missionTools", () => {
-	it("serves the eight mission tools under their own names", () => {
+	it("serves the eleven mission tools under their own names", () => {
 		expect(missionTools(SESSION).map((held) => held.name)).toEqual([
 			"mission_open",
 			"mission_note",
@@ -180,7 +186,30 @@ describe("missionTools", () => {
 			"mission_watch",
 			"mission_list",
 			"mission_read",
+			"mission_reopen",
+			"mission_update",
+			"mission_handoff",
 		])
+	})
+
+	it("takes every field of mission_update but its id as optional", () => {
+		const updated = z.toJSONSchema(
+			z.object(toolNamed(SESSION, "mission_update").inputSchema),
+		)
+
+		expect(updated.required).toEqual(["id"])
+		expect(Object.keys(updated.properties ?? {})).toEqual([
+			"id",
+			"objective",
+			"ticket",
+			"tools",
+		])
+	})
+
+	it("names the companion a mission is handed to, never a bot id", () => {
+		expect(
+			Object.keys(toolNamed(SESSION, "mission_handoff").inputSchema),
+		).toEqual(["id", "companion"])
 	})
 
 	it("tells the agent only a git checkout is taken as the workspace a mission opens on", () => {

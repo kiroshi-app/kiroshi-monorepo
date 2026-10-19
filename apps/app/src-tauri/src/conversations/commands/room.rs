@@ -61,6 +61,17 @@ pub async fn conversation_list<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn conversation_mission_thread<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	conversation_id: String,
+) -> Result<Conversation, TranscriptStoreError> {
+	let thread = ready(&state)?.conversations().mission_thread(conversation_id).await?;
+	Ok(drawn(&app, thread))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn conversation_page<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
@@ -139,7 +150,7 @@ pub async fn conversation_add_participant<R: Runtime>(
 	Ok(drawn(&app, joined.conversation))
 }
 
-async fn seat_participant<R: Runtime>(
+pub(crate) async fn seat_participant<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
 	conversation_id: String,

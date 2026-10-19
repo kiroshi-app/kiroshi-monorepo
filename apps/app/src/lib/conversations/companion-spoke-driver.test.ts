@@ -11,7 +11,11 @@ import {
 import { createFakeTranscriptStore } from "./fake-transcript-store"
 import { readConversationInEverySpace } from "./read-conversation"
 import { RefusedWrite } from "./refused-write"
-import { createScriptedDriver, type ScriptedDriver } from "./scripted-driver"
+import {
+	createScriptedDriver,
+	type ScriptedDriver,
+	spoke,
+} from "./scripted-driver"
 import { createSpokenWords, type SpokenWord } from "./spoken-words"
 import type { Conversation, Space } from "./store-contract"
 import type { TranscriptStore } from "./store-port"
@@ -73,10 +77,16 @@ type Front = {
 	stop: () => void
 }
 
+type MissionThreadRead = (conversationId: string) => Promise<Conversation>
+
+const noMissionThread: MissionThreadRead = (conversationId) =>
+	Promise.reject({ kind: "unknownConversation", id: conversationId })
+
 const startFront = async (
 	store: TranscriptStore,
 	driver: ScriptedDriver,
 	onThisComputer: TranscriptStore = store,
+	missionThread: MissionThreadRead = noMissionThread,
 ): Promise<Front> => {
 	const runtimes = createConversationRuntimes(driver, store)
 	const roster = mountRoster(store, { reportFailure: () => undefined })
@@ -110,6 +120,7 @@ const startFront = async (
 		thisComputer: {
 			conversation: (conversationId) =>
 				readConversationInEverySpace(onThisComputer, conversationId),
+			missionThread,
 			writes: () => onThisComputer,
 		},
 		reportFailure: (notice, reported) => {
@@ -371,6 +382,7 @@ describe("a companion speaking in a room the front never opened", () => {
 			},
 			thisComputer: {
 				conversation: () => Promise.resolve(null),
+				missionThread: noMissionThread,
 				writes: () => store,
 			},
 			reportFailure: (notice) => {
@@ -723,6 +735,135 @@ const infoLines = () => {
 	const info = vi.spyOn(console, "info").mockImplementation(() => undefined)
 	return () => info.mock.calls.map(([line]) => String(line))
 }
+
+const outOfTheFeed = (
+	store: TranscriptStore,
+	threadId: string,
+): TranscriptStore => ({
+	...store,
+	conversations: async (spaceId) =>
+		(await store.conversations(spaceId)).filter(({ id }) => id !== threadId),
+})
+
+const aHandedOffMissionThread = async () => {
+	const base = createFakeTranscriptStore()
+	const [ada, nyx] = await seatBots(base, SPACE, ["Ada", "Nyx"])
+	const thread = await base.createConversation({
+		spaceId: SPACE,
+		sectionId: null,
+		title: "Fix the crash",
+		botIds: [ada.id, nyx.id],
+	})
+	const store = outOfTheFeed(base, thread.id)
+	const driver = createScriptedDriver()
+	const front = await startFront(store, driver, store, (conversationId) =>
+		conversationId === thread.id
+			? Promise.resolve(thread)
+			: noMissionThread(conversationId),
+	)
+	await front.runtimes.runtimeFor(thread.id).open({
+		...thread,
+		participants: thread.participants.filter(({ botId }) => botId === ada.id),
+	})
+	await settled()
+	return { ...front, driver, store, thread, ada: ada.id, nyx: nyx.id }
+}
+
+describe("a handoff summons heard in a mission thread outside the feed", () => {
+	it("writes it as a word of the previous owner and starts the turn of the successor only", async () => {
+		const { driver, store, thread, ada, nyx, notices, hear } =
+			await aHandedOffMissionThread()
+
+		hear({
+			conversationId: thread.id,
+			authorBotId: ada,
+			text: "@Nyx this mission is yours now, carry it out: Fix the crash",
+		})
+		await settled()
+
+		expect(
+			(await spokenIn(store, thread.id)).map(({ authorBotId, content }) => ({
+				authorBotId,
+				content,
+			})),
+		).toEqual([
+			{
+				authorBotId: ada,
+				content: `<@${nyx}> this mission is yours now, carry it out: Fix the crash`,
+			},
+		])
+		expect(summonedBy(driver)).toEqual([nyx])
+		expect(notices).toEqual([])
+	})
+})
+
+const A_HANDOFF_SUMMONS =
+	"@Nyx this mission is yours now, carry it out: Fix the crash"
+
+const wordsOf = async (
+	store: TranscriptStore,
+	conversationId: string,
+	botId: string,
+) =>
+	(await spokenIn(store, conversationId))
+		.filter(({ authorBotId }) => authorBotId === botId)
+		.map(({ content }) => content)
+
+const summonedWhileTheOwnerSpeaks = async () => {
+	const handed = await aHandedOffMissionThread()
+	await handed.runtimes
+		.runtimeFor(handed.thread.id)
+		.send("Carry out this mission.")
+	await settled()
+	handed.hear({
+		conversationId: handed.thread.id,
+		authorBotId: handed.ada,
+		text: A_HANDOFF_SUMMONS,
+	})
+	await settled()
+	return handed
+}
+
+describe("a handoff summons heard while the previous owner's turn runs in the thread", () => {
+	it("writes the summons once as a word of the previous owner before that turn ends", async () => {
+		const { driver, store, thread, ada, nyx, notices } =
+			await summonedWhileTheOwnerSpeaks()
+
+		expect(await wordsOf(store, thread.id, ada)).toEqual([
+			`<@${nyx}> this mission is yours now, carry it out: Fix the crash`,
+		])
+		expect(summonedBy(driver)).toEqual([ada])
+		expect(notices).toEqual([])
+	})
+
+	it("starts one turn for the successor once that turn completes, and none for its owner", async () => {
+		const { driver, store, thread, ada, nyx, notices } =
+			await summonedWhileTheOwnerSpeaks()
+
+		driver.pushTo(ada, spoke(ada, "Handed over."))
+		await settled()
+
+		expect(summonedBy(driver)).toEqual([ada, nyx])
+		expect(
+			(await wordsOf(store, thread.id, ada)).filter((word) =>
+				word.includes("this mission is yours now"),
+			),
+		).toHaveLength(1)
+		expect(notices).toEqual([])
+	})
+
+	it("still starts the successor turn once that turn ends in failure", async () => {
+		const { driver, ada, nyx, notices } = await summonedWhileTheOwnerSpeaks()
+
+		driver.pushTo(ada, [
+			{ type: "turnEnded", ended: { sessionId: null, outcome: "failed" } },
+		])
+		await settled()
+
+		expect(summonedBy(driver)).toEqual([ada, nyx])
+		expect(notices).toEqual([])
+	})
+})
 
 describe("a word heard on this computer while a joined space is active", () => {
 	it("writes all five writes on this computer, never on the active space", async () => {

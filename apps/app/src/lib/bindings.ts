@@ -96,6 +96,7 @@ export const commands = {
 	conversationMainChat: (botId: string, spaceId: string | null) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_main_chat", { botId, spaceId })),
 	conversationCreate: (spaceId: string, sectionId: string | null, title: string, botIds: string[]) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_create", { spaceId, sectionId, title, botIds })),
 	conversationList: (spaceId: string) => typedError<Conversation[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
+	conversationMissionThread: (conversationId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_mission_thread", { conversationId })),
 	conversationPage: (spaceId: string, cursor: string | null, limit: number | null) => typedError<ConversationPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_page", { spaceId, cursor, limit })),
 	conversationLocalIds: () => typedError<string[], TranscriptStoreError>(__TAURI_INVOKE("conversation_local_ids")),
 	conversationUpdate: (conversationId: string, title: string, instructions: string, sectionId: string | null, icon: string | null, color: string | null) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_update", { conversationId, title, instructions, sectionId, icon, color })),
@@ -1127,7 +1128,7 @@ export type MissionEntry = {
 	payload: Json,
 };
 
-export type MissionError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownMission"; id: string } | { kind: "unknownConversation"; id: string } | { kind: "missionAlreadyClosed"; id: string } | { kind: "missionStillOpen"; id: string } | { kind: "missionAlreadyReported"; id: string } | { kind: "unknownTurn"; id: string } | { kind: "turnOfAnotherConversation"; turnId: string; conversationId: string } | { kind: "unknownBot"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankField"; field: string } | { kind: "missionOfAnotherConversation"; id: string; conversationId: string } | { kind: "missionOfAnotherBot"; id: string; botId: string } | { kind: "conversationOfAnotherSpace"; id: string; spaceId: string } | { kind: "missionOfAnotherSpace"; id: string; spaceId: string } | { kind: "unreadableRequest"; detail: string } | { kind: "undeliverable"; detail: string } | { kind: "unexpected"; detail: string } | { kind: "unreadableCursor"; cursor: string };
+export type MissionError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownMission"; id: string } | { kind: "unknownConversation"; id: string } | { kind: "missionAlreadyClosed"; id: string } | { kind: "missionStillOpen"; id: string } | { kind: "missionAlreadyReported"; id: string } | { kind: "pullRequestMerged"; id: string; pullRequest: number; url: string | null } | { kind: "nothingToUpdate"; id: string } | { kind: "unknownCompanion"; companion: string } | { kind: "ambiguousCompanion"; companion: string; ids: string[] } | { kind: "alreadyTheOwner"; id: string; botId: string } | { kind: "unknownTurn"; id: string } | { kind: "turnOfAnotherConversation"; turnId: string; conversationId: string } | { kind: "unknownBot"; id: string } | { kind: "unknownParticipant"; conversationId: string; botId: string } | { kind: "blankField"; field: string } | { kind: "missionOfAnotherConversation"; id: string; conversationId: string } | { kind: "missionOfAnotherBot"; id: string; botId: string } | { kind: "conversationOfAnotherSpace"; id: string; spaceId: string } | { kind: "missionOfAnotherSpace"; id: string; spaceId: string } | { kind: "unreadableRequest"; detail: string } | { kind: "undeliverable"; detail: string } | { kind: "unexpected"; detail: string } | { kind: "unreadableCursor"; cursor: string };
 
 export type MissionEvent = {
 	id: string,
@@ -1138,7 +1139,7 @@ export type MissionEvent = {
 	createdAt: number,
 };
 
-export type MissionEventKind = "opened" | "note" | "agent_asked" | "agent_started" | "agent_stopped" | "answered" | "escalated" | "ready" | "checks_failed" | "failed" | "closed" | "status" | "reopened" | "dismissed";
+export type MissionEventKind = "opened" | "note" | "agent_asked" | "agent_started" | "agent_stopped" | "answered" | "escalated" | "ready" | "checks_failed" | "failed" | "closed" | "status" | "reopened" | "dismissed" | "updated" | "handed_off";
 
 export type MissionInSpace = {
 	mission: Mission,

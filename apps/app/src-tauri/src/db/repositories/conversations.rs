@@ -488,6 +488,17 @@ impl ConversationsRepository {
 		.at("add_participant", "conversation_participants")
 	}
 
+	pub async fn mission_thread(
+		&self,
+		conversation_id: String,
+	) -> Result<Conversation, ConversationError> {
+		self.call(move |connection| {
+			Ok(conversation_of_kind_at(connection, &conversation_id, MISSION_KIND))
+		})
+		.await?
+		.at("mission_thread", "conversations")
+	}
+
 	pub async fn remove_participant(
 		&self,
 		conversation_id: String,
@@ -712,6 +723,34 @@ pub(in crate::db) fn open_thread_under(
 	Ok(id)
 }
 
+pub(in crate::db) fn seat_in_thread(
+	transaction: &Transaction<'_>,
+	thread_id: &str,
+	bot_id: &str,
+) -> Result<(), ConversationError> {
+	let space_id: Option<String> = transaction
+		.query_row(
+			"SELECT space_id FROM conversations WHERE id = ?1 AND kind = ?2",
+			params![thread_id, MISSION_KIND],
+			|row| row.get(0),
+		)
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownConversation { id: thread_id.to_owned() })?;
+	seat(transaction, thread_id, bot_id, space_id.as_deref(), PARTICIPANT_ROLE)
+}
+
+pub(in crate::db) fn retitle_thread(
+	transaction: &Transaction<'_>,
+	thread_id: &str,
+	title: &str,
+) -> Result<(), ConversationError> {
+	transaction.execute(
+		"UPDATE conversations SET title = ?2 WHERE id = ?1 AND kind = ?3",
+		params![thread_id, title, MISSION_KIND],
+	)?;
+	Ok(())
+}
+
 fn created_conversation(
 	connection: &mut Connection,
 	draft: &ConversationDraft,
@@ -812,9 +851,17 @@ fn seats_by_conversation(
 }
 
 fn conversation_at(connection: &Connection, id: &str) -> Result<Conversation, ConversationError> {
+	conversation_of_kind_at(connection, id, TOPIC_KIND)
+}
+
+fn conversation_of_kind_at(
+	connection: &Connection,
+	id: &str,
+	kind: &str,
+) -> Result<Conversation, ConversationError> {
 	let mut room: Conversation = connection
 		.prepare_cached(&format!("{CONVERSATION_COLUMNS} WHERE id = ?1 AND kind = ?2"))?
-		.query_row(params![id, TOPIC_KIND], conversation)
+		.query_row(params![id, kind], conversation)
 		.optional()?
 		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })?;
 	room.seats = seats_of(connection, id)?;

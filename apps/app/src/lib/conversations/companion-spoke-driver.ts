@@ -35,6 +35,7 @@ type SpokenRosterPort = {
 
 type ThisComputerPort = {
 	conversation: (conversationId: string) => Promise<Conversation | null>
+	missionThread: (conversationId: string) => Promise<Conversation>
 	writes: () => ReportTurnWrites
 }
 
@@ -53,8 +54,6 @@ export type CompanionSpokeDriverOptions = {
 type WriteSpoken = (spoken: CompanionSpoke, key: string) => Promise<boolean>
 
 const SEPARATOR = "\u0000"
-
-const GONE_FROM_THIS_COMPUTER = "this computer no longer holds the conversation"
 
 const keyOf = ({ conversationId, authorBotId, text }: CompanionSpoke) =>
 	[conversationId, authorBotId, text].join(SEPARATOR)
@@ -125,11 +124,20 @@ export const startCompanionSpokeDriver = ({
 		)
 	}
 
+	const relayInMissionThread = async (spoken: CompanionSpoke) => {
+		const thread = await thisComputer.missionThread(spoken.conversationId)
+		const runtime = runtimes.runtimeFor(spoken.conversationId)
+		await runtime.open(thread)
+		return runtime.relaySpoken(spoken, {
+			conversation: thread,
+			writes: thisComputer.writes(),
+		})
+	}
+
 	const relayOnThisComputer = async (spoken: CompanionSpoke) => {
 		const conversation = await thisComputer.conversation(spoken.conversationId)
 		if (!conversation) {
-			logSkipped(spoken, GONE_FROM_THIS_COMPUTER)
-			return false
+			return relayInMissionThread(spoken)
 		}
 		return runtimes
 			.runtimeFor(spoken.conversationId)

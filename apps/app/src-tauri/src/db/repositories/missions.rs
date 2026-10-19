@@ -5,15 +5,16 @@ use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, Transact
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::conversations::open_thread_under;
+use super::conversations::{open_thread_under, retitle_thread, seat_in_thread};
 use super::keyset::{paged, Keyset, Page};
 use super::messages::conversation_of_turn;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
 	CheckoutCounts, ConversationMissions, HookedMission, Mission, MissionActivity, MissionAnswer,
 	MissionClosing, MissionDetail, MissionDossier, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionFilter, MissionInSpace, MissionInThread, MissionRecord,
-	MissionScope, MissionState, MissionStatus, MissionWatch, Ticket, WatchedMission,
+	MissionEvent, MissionEventKind, MissionFilter, MissionHandoff, MissionInSpace, MissionInThread,
+	MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
+	WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -48,11 +49,13 @@ pub(in crate::db) const MISSION_COLUMNS: &str =
 	opened_at, closed_at, reported_at, reported_turn_id,
 	COALESCE((SELECT kind FROM mission_events
 		WHERE mission_events.mission_id = missions.id
-			AND mission_events.kind NOT IN ('note', 'agent_started', 'agent_stopped', 'status')
+			AND mission_events.kind NOT IN ('note', 'agent_started', 'agent_stopped', 'status',
+				'updated', 'handed_off')
 		ORDER BY mission_events.seq DESC LIMIT 1), 'opened') AS state_kind,
 	COALESCE((SELECT seq FROM mission_events
 		WHERE mission_events.mission_id = missions.id
-			AND mission_events.kind NOT IN ('note', 'agent_started', 'agent_stopped', 'status')
+			AND mission_events.kind NOT IN ('note', 'agent_started', 'agent_stopped', 'status',
+				'updated', 'handed_off')
 		ORDER BY mission_events.seq DESC LIMIT 1), 0) AS state_seq,
 	(SELECT CASE mission_events.kind WHEN 'agent_started' THEN created_at END
 		FROM mission_events
@@ -113,6 +116,17 @@ const CLOSE_MISSION: &str = "UPDATE missions SET closed_at = ?2 WHERE id = ?1";
 
 const REOPEN_MISSION: &str = "UPDATE missions
 	SET closed_at = NULL, reported_at = NULL, reported_turn_id = NULL WHERE id = ?1";
+
+const UPDATE_MISSION: &str = "UPDATE missions SET objective = COALESCE(?2, objective),
+	ticket_platform = COALESCE(?3, ticket_platform),
+	ticket_external_id = COALESCE(?4, ticket_external_id),
+	ticket_url = COALESCE(?5, ticket_url), ticket_title = COALESCE(?6, ticket_title),
+	tools = COALESCE(?7, tools)
+	WHERE id = ?1";
+
+const HAND_OFF_MISSION: &str = "UPDATE missions SET bot_id = ?3 WHERE id = ?1 AND bot_id = ?2";
+
+const FINGERPRINT_OF_MISSION: &str = "SELECT github_fingerprint FROM missions WHERE id = ?1";
 
 const REPORT_MISSION: &str =
 	"UPDATE missions SET reported_at = ?2, reported_turn_id = ?3 WHERE id = ?1";
@@ -205,6 +219,38 @@ impl MissionsRepository {
 		self.access
 			.call_mut(move |connection| Ok(reopened(connection, &mission_id, &source)))
 			.await?
+	}
+
+	pub async fn update(
+		&self,
+		mission_id: String,
+		update: MissionUpdate,
+		source: String,
+	) -> Result<Mission, MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(updated(connection, &mission_id, &update, &source)))
+			.await?
+	}
+
+	pub async fn hand_off(
+		&self,
+		mission_id: String,
+		handoff: MissionHandoff,
+	) -> Result<Mission, MissionError> {
+		self.access
+			.call_mut(move |connection| Ok(handed_off(connection, &mission_id, &handoff)))
+			.await?
+	}
+
+	pub async fn fingerprint(&self, mission_id: String) -> Result<Option<String>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				Ok(connection
+					.query_row(FINGERPRINT_OF_MISSION, [&mission_id], |row| row.get(0))
+					.optional()?)
+			})
+			.await?)
 	}
 
 	pub async fn arm(
@@ -700,6 +746,73 @@ fn reopened(
 	};
 	record(&transaction, mission_id, &entry, "", now())?;
 	transaction.execute(REOPEN_MISSION, [mission_id])?;
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn updated(
+	connection: &mut Connection,
+	mission_id: &str,
+	update: &MissionUpdate,
+	source: &str,
+) -> Result<Mission, MissionError> {
+	let transaction = write_transaction(connection)?;
+	refuse_a_shut_mission(&transaction, mission_id)?;
+	let ticket = update.ticket.as_ref();
+	let tools = update.tools.as_ref().map(as_text).transpose()?;
+	transaction.execute(
+		UPDATE_MISSION,
+		params![
+			mission_id,
+			update.objective,
+			ticket.map(|held| &held.platform),
+			ticket.map(|held| &held.external_id),
+			ticket.map(|held| &held.url),
+			ticket.map(|held| &held.title),
+			tools,
+		],
+	)?;
+	let standing = read(&transaction, mission_id)?;
+	if let Some(objective) = &update.objective {
+		retitle_thread(&transaction, &standing.thread_conversation_id, objective)?;
+	}
+	let entry = MissionEntry {
+		kind: MissionEventKind::Updated,
+		source: source.to_owned(),
+		payload: serde_json::json!({ "fields": update.fields() }),
+	};
+	record(&transaction, mission_id, &entry, "", now())?;
+	let stored = read(&transaction, mission_id)?;
+	transaction.commit()?;
+	Ok(stored)
+}
+
+fn handed_off(
+	connection: &mut Connection,
+	mission_id: &str,
+	handoff: &MissionHandoff,
+) -> Result<Mission, MissionError> {
+	let transaction = write_transaction(connection)?;
+	let standing = read(&transaction, mission_id)?;
+	seat_in_thread(&transaction, &standing.thread_conversation_id, &handoff.to_bot_id)?;
+	let moved = transaction
+		.execute(HAND_OFF_MISSION, params![mission_id, handoff.from_bot_id, handoff.to_bot_id])
+		.map_err(|error| {
+			unknown_participant(error, &standing.origin_conversation_id, &handoff.to_bot_id)
+		})?;
+	if moved == 0 {
+		return Err(MissionError::MissionOfAnotherBot {
+			id: mission_id.to_owned(),
+			bot_id: handoff.from_bot_id.clone(),
+		});
+	}
+	let entry = MissionEntry {
+		kind: MissionEventKind::HandedOff,
+		source: handoff.source.clone(),
+		payload: serde_json::json!({ "from": handoff.from_bot_id, "to": handoff.to_bot_id }),
+	};
+	record(&transaction, mission_id, &entry, "", now())?;
 	let stored = read(&transaction, mission_id)?;
 	transaction.commit()?;
 	Ok(stored)
@@ -1246,6 +1359,8 @@ mod tests {
 				(MissionEventKind::Failed, MissionState::Failed),
 				(MissionEventKind::Status, MissionState::Failed),
 				(MissionEventKind::Reopened, MissionState::Working),
+				(MissionEventKind::Updated, MissionState::Working),
+				(MissionEventKind::HandedOff, MissionState::Working),
 				(MissionEventKind::Closed, MissionState::Done),
 			],
 			"a kind moved the mission somewhere the contract does not name"

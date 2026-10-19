@@ -7,17 +7,19 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use super::checkout;
 use super::contract::{
 	ConversationMissions, HookedMission, Mission, MissionAnswer, MissionClosing, MissionDetail,
-	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionInSpace, MissionNote,
-	MissionOnBoard, MissionOpened, MissionSpacePage, MissionState, MissionWatch, MissionWatching,
+	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionHandoff, MissionInSpace,
+	MissionNote, MissionOnBoard, MissionOpened, MissionSpacePage, MissionState, MissionUpdate,
+	MissionWatch, MissionWatching,
 };
-use super::hook;
+use super::{github, hook};
 use crate::avatars;
 use crate::bundles;
-use crate::conversations::commands::{bot_row, ready};
-use crate::conversations::contract::Bot;
+use crate::companions::host::picked;
+use crate::conversations::commands::{bot_row, ready, seat_participant};
+use crate::conversations::contract::{Bot, CompanionSpoke};
 use crate::db;
 use crate::db::repositories::keyset;
-use crate::events::{self, MISSION_CHANGED};
+use crate::events::{self, COMPANION_SPOKE, MISSION_CHANGED};
 use crate::file_store::FileStore;
 use crate::routines::webhook::{Webhook, HEADER};
 
@@ -36,6 +38,8 @@ const CARRIES_ON: &str = "the work of this mission carries on in the thread this
 
 const ACKNOWLEDGE: &str = "end the turn you are answering in with a single line saying the \
 	mission is open, and nothing more";
+
+const HANDED_OVER: &str = "this mission is yours now, carry it out:";
 
 const UNHEARD: &str = "no agent reaches this mission, it moves only on the lines, the escalations \
 	and the closing its bot writes";
@@ -252,6 +256,133 @@ pub async fn mission_reopen<R: Runtime>(
 	let written = ready(&state)?.missions().reopen(mission_id, PERSON.to_owned()).await?;
 	announce_change(&app, &written)?;
 	Ok(written)
+}
+
+pub async fn mission_reopen_unmerged<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	mission_id: String,
+	source: String,
+) -> Result<Mission, MissionError> {
+	let database = ready(&state)?;
+	refuse_a_merged_mission(database, &mission_id).await?;
+	let written = database.missions().reopen(mission_id, source).await?;
+	announce_change(&app, &written)?;
+	Ok(written)
+}
+
+async fn refuse_a_merged_mission(
+	database: &db::Database,
+	mission_id: &str,
+) -> Result<(), MissionError> {
+	let held = mission_row(database, mission_id).await?;
+	let stored = database
+		.missions()
+		.fingerprint(held.id.clone())
+		.await?
+		.ok_or_else(|| MissionError::UnknownMission { id: held.id.clone() })?;
+	match github::merged_pull_request(&stored)? {
+		Some(pull_request) => Err(MissionError::PullRequestMerged {
+			id: held.id,
+			pull_request,
+			url: held.pull_request_url,
+		}),
+		None => Ok(()),
+	}
+}
+
+pub async fn mission_update<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	mission_id: String,
+	update: MissionUpdate,
+	source: String,
+) -> Result<Mission, MissionError> {
+	refused_update(&mission_id, &update)?;
+	let written = ready(&state)?.missions().update(mission_id, update, source).await?;
+	announce_change(&app, &written)?;
+	Ok(written)
+}
+
+fn refused_update(mission_id: &str, update: &MissionUpdate) -> Result<(), MissionError> {
+	if update.fields().is_empty() {
+		return Err(MissionError::NothingToUpdate { id: mission_id.to_owned() });
+	}
+	if let Some(objective) = &update.objective {
+		refuse_blank("objective", objective)?;
+	}
+	if let Some(ticket) = &update.ticket {
+		refuse_blank("ticket.platform", &ticket.platform)?;
+		refuse_blank("ticket.externalId", &ticket.external_id)?;
+	}
+	Ok(())
+}
+
+struct Successor {
+	id: String,
+	name: String,
+}
+
+pub async fn mission_handoff<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	mission_id: String,
+	from_bot_id: String,
+	companion: String,
+) -> Result<Mission, MissionError> {
+	let database = ready(&state)?;
+	let held = mission_row(database, &mission_id).await?;
+	let successor = successor_of(database, &held, &companion).await?;
+	seat_participant(
+		&app,
+		database,
+		held.origin_conversation_id.clone(),
+		successor.id.clone(),
+		Some(from_bot_id.clone()),
+	)
+	.await?;
+	let handoff = MissionHandoff {
+		from_bot_id: from_bot_id.clone(),
+		to_bot_id: successor.id.clone(),
+		source: BOT.to_owned(),
+	};
+	let written = database.missions().hand_off(mission_id, handoff).await?;
+	announce_change(&app, &written)?;
+	if written.closed_at.is_none() {
+		summon(&app, &written, from_bot_id, &successor.name)?;
+	}
+	Ok(written)
+}
+
+async fn successor_of(
+	database: &db::Database,
+	held: &Mission,
+	companion: &str,
+) -> Result<Successor, MissionError> {
+	let roster = database.conversations().bots(held.space_id.clone()).await?;
+	let picked = picked(&roster, companion)?;
+	if picked.id == held.bot_id {
+		return Err(MissionError::AlreadyTheOwner {
+			id: held.id.clone(),
+			bot_id: picked.id.clone(),
+		});
+	}
+	Ok(Successor { id: picked.id.clone(), name: picked.name.clone() })
+}
+
+fn summon<R: Runtime>(
+	app: &AppHandle<R>,
+	mission: &Mission,
+	from_bot_id: String,
+	successor: &str,
+) -> Result<(), MissionError> {
+	let spoken = CompanionSpoke {
+		conversation_id: mission.thread_conversation_id.clone(),
+		author_bot_id: from_bot_id,
+		text: format!("@{successor} {HANDED_OVER} {}", mission.objective),
+	};
+	events::emit(app, COMPANION_SPOKE, spoken)
+		.map_err(|error| MissionError::Undeliverable { detail: error.to_string() })
 }
 
 async fn appended<R: Runtime>(

@@ -4199,6 +4199,108 @@
               "type": "string"
             },
             "kind": {
+              "const": "pullRequestMerged"
+            },
+            "pullRequest": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "pullRequest",
+            "url"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "nothingToUpdate"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "companion": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unknownCompanion"
+            }
+          },
+          "required": [
+            "kind",
+            "companion"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "companion": {
+              "type": "string"
+            },
+            "ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "ambiguousCompanion"
+            }
+          },
+          "required": [
+            "kind",
+            "companion",
+            "ids"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "botId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "alreadyTheOwner"
+            }
+          },
+          "required": [
+            "kind",
+            "id",
+            "botId"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
               "const": "unknownTurn"
             }
           },
@@ -4460,7 +4562,9 @@
         "closed",
         "status",
         "reopened",
-        "dismissed"
+        "dismissed",
+        "updated",
+        "handed_off"
       ]
     },
     "MissionInSpace": {

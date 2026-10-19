@@ -476,6 +476,104 @@
 		}
 	},
 	{
+		"name": "mission_reopen",
+		"description": "Reopen a mission of yours that closed, done or failed, so its work carries on in the same thread and whatever watched it watches it again. A mission whose work was merged stays closed.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "The id of the mission this lands on."
+				}
+			},
+			"required": [
+				"id"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "mission_update",
+		"description": "Rewrite the objective, the ticket or the tools of a mission of yours when the person corrects them. Give only what changes, the rest stays as it is. A new objective also becomes the title of the thread of the mission.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "The id of the mission this lands on."
+				},
+				"objective": {
+					"type": "string",
+					"description": "What this mission delivers, in one sentence, written as an order to yourself."
+				},
+				"ticket": {
+					"type": "object",
+					"properties": {
+						"platform": {
+							"type": "string",
+							"description": "Where the ticket holding this objective lives."
+						},
+						"externalId": {
+							"type": "string",
+							"description": "The id the ticket carries on its own platform."
+						},
+						"url": {
+							"type": "string",
+							"description": "The address the person opens to read the ticket."
+						},
+						"title": {
+							"type": "string",
+							"description": "The title the ticket carries on its own platform."
+						}
+					},
+					"required": [
+						"platform",
+						"externalId",
+						"url",
+						"title"
+					],
+					"additionalProperties": false
+				},
+				"tools": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"description": "What this mission is allowed to reach for to meet its objective."
+				}
+			},
+			"required": [
+				"id"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
+		"name": "mission_handoff",
+		"description": "Hand a mission of yours over to another companion of this space, who owns it from then on. That companion is seated in the thread of the mission and in the conversation it came from, and is called in the thread while the mission is still open. You write nothing more on that mission afterwards.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "The id of the mission this lands on."
+				},
+				"companion": {
+					"type": "string",
+					"description": "The name or the id of the companion of this space who takes the mission over."
+				}
+			},
+			"required": [
+				"id",
+				"companion"
+			],
+			"additionalProperties": false
+		}
+	},
+	{
 		"name": "application_search",
 		"description": "Find the applications matching what the person asked for, the curated ones first, before you install any of them.",
 		"inputSchema": {
