@@ -10,6 +10,7 @@ pub mod conversations;
 pub mod crypto;
 pub mod db;
 mod descriptors;
+pub mod devices;
 pub mod environment;
 pub mod events;
 pub mod file_store;
@@ -99,6 +100,7 @@ pub fn run() {
 				hosting::local_api(app.handle()),
 			));
 			app.manage(invitations::Invitations::new(&account::cloud::api_url()));
+			app.manage(devices::Devices::new(&account::cloud::api_url()));
 			app.manage(joined_spaces::relay::RelayGuests::new(&account::cloud::api_url()));
 			tauri::async_runtime::spawn(account::session::restore(app.handle().clone()));
 			let handle = app.handle().clone();

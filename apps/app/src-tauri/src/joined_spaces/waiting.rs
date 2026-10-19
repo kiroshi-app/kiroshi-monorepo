@@ -18,6 +18,7 @@ use super::relay::RelayGuests;
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
+use crate::devices;
 use crate::hosting::relay::{opened, sent, until_stopped, Backoff, Opened, Socket, SILENCE_BOUND};
 
 pub(super) struct WaitingJoin {
@@ -111,6 +112,11 @@ async fn attempted<R: Runtime>(
 		}
 		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
 	};
+	if devices::is_awaiting_approval(app) {
+		return Attempt::Dropped(
+			"this device awaits its approval by another device of the account".to_owned(),
+		);
+	}
 	let device = match device_keys(app) {
 		Ok(device) => device,
 		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),

@@ -2,9 +2,9 @@ use tauri::{ipc::Invoke, Runtime};
 use tauri_specta::{collect_commands, Builder, Commands};
 
 use crate::{
-	account, agent, applications, attachments, companions, conversations, crypto, environment,
-	hosting, invitations, joined_spaces, logging, mcp_oauth, missions, notifications, plugins,
-	routines, search, sections, spaces, updates, user, window_controls,
+	account, agent, applications, attachments, companions, conversations, crypto, devices,
+	environment, hosting, invitations, joined_spaces, logging, mcp_oauth, missions, notifications,
+	plugins, routines, search, sections, spaces, updates, user, window_controls,
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -14,6 +14,9 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("ARCHIVE_FILTER_NAME", spaces::archive::ARCHIVE_FILTER_NAME)
 		.constant("MAXIMIZE_BUTTON_EVENT", window_controls::MAXIMIZE_BUTTON_EVENT)
 		.constant("ACCOUNT_CHANGED_EVENT", account::contract::CHANGED_EVENT)
+		.constant("DEVICE_APPROVAL_CHANGED_EVENT", devices::contract::APPROVAL_CHANGED_EVENT)
+		.constant("DEVICE_APPROVAL_REQUESTED_EVENT", devices::contract::APPROVAL_REQUESTED_EVENT)
+		.constant("DEVICE_APPROVAL_SETTLED_EVENT", devices::contract::APPROVAL_SETTLED_EVENT)
 		.constant("HOSTING_CHANGED_EVENT", hosting::contract::CHANGED_EVENT)
 		.constant("HOSTING_MEMBERS_CHANGED_EVENT", hosting::contract::MEMBERS_CHANGED_EVENT)
 		.constant(
@@ -26,6 +29,9 @@ pub fn builder() -> Builder<tauri::Wry> {
 		.constant("JOIN_LINK_OPENED_EVENT", joined_spaces::deep_link::OPENED_EVENT)
 		.constant("UPDATE_CHANGED_EVENT", updates::contract::CHANGED_EVENT)
 		.typ::<window_controls::MaximizeButtonPointer>()
+		.typ::<devices::contract::DeviceApproval>()
+		.typ::<devices::contract::DeviceApprovalRequested>()
+		.typ::<devices::contract::DeviceApprovalSettled>()
 		.typ::<hosting::contract::HostingChanged>()
 		.typ::<hosting::contract::MembersChanged>()
 		.typ::<invitations::contract::InvitationsChanged>()
@@ -84,6 +90,14 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_suggested_bots,
 		companions::launch::companion_launch_outcome,
 		crypto::commands::get_device_identity,
+		devices::commands::device_approval,
+		devices::commands::device_approval_retry::<tauri::Wry>,
+		devices::commands::device_approval_code_request::<tauri::Wry>,
+		devices::commands::device_approval_code_submit::<tauri::Wry>,
+		devices::commands::device_approve::<tauri::Wry>,
+		devices::commands::device_refuse::<tauri::Wry>,
+		devices::commands::devices_list::<tauri::Wry>,
+		devices::commands::device_remove::<tauri::Wry>,
 		window_controls::window_declare_maximize_button::<tauri::Wry>,
 		conversations::commands::conversation_duplicate_bot::<tauri::Wry>,
 		conversations::commands::conversation_update_bot::<tauri::Wry>,

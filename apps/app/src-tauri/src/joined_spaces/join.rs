@@ -22,6 +22,7 @@ use crate::crypto::sealed_box;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::crypto::subkey::Subkey;
 use crate::db;
+use crate::devices;
 use crate::hosting::handover::{rekey_bytes, KeyHandover};
 use crate::hosting::relay::{opened, Opened, Socket};
 use crate::hosting::wire::{envelope_of, HELLO};
@@ -37,6 +38,11 @@ pub async fn joined<R: Runtime>(
 ) -> Result<JoinedSpace, JoinedSpaceError> {
 	let device = device_keys(app)?;
 	let bearer = bearer_of(app)?;
+	if devices::is_awaiting_approval(app) {
+		return Err(JoinedSpaceError::RelayRefused {
+			detail: "this device awaits its approval by another device of the account".to_owned(),
+		});
+	}
 	let url = member_socket_of(app, &bearer, &device, &instance_id).await?;
 	if let Some(handed) = answered(app, url, &bearer, &instance_id, &device).await? {
 		kept_answer(app, &instance_id, &handed).await?;

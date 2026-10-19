@@ -171,7 +171,7 @@ async fn device_challenged() -> Response {
 async fn device_registered() -> Response {
 	answered_json(
 		StatusCode::CREATED,
-		json!({ "id": MEMBER_RELAY_ID, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false }),
+		json!({ "id": MEMBER_RELAY_ID, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false, "status": "approved" }),
 	)
 }
 
@@ -727,7 +727,7 @@ async fn admitting_device_registered(
 	}
 	answered_json(
 		StatusCode::CREATED,
-		json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false }),
+		json!({ "id": id, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false, "status": "approved" }),
 	)
 }
 

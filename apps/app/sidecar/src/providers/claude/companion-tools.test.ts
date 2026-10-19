@@ -107,6 +107,8 @@ const calls: [string, Record<string, unknown>, string][] = [
 		"conversationRead",
 	],
 	["conversation_update", { title: "Trip" }, "conversationUpdate"],
+	["conversation_update", { archived: false }, "conversationUpdate"],
+	["conversation_close", { conversation: "c3" }, "conversationClose"],
 ]
 
 const A_CONVERSATION = {
@@ -147,6 +149,7 @@ const answers: Record<string, unknown> = {
 		],
 		cursor: null,
 	},
+	conversationClose: { conversationId: "c3", title: "Trip", archived: true },
 }
 
 const NAMES_A_DEFAULT = /left out/
@@ -269,6 +272,7 @@ describe("companionTools", () => {
 			"colour",
 			"add",
 			"remove",
+			"archived",
 		])
 		for (const field of Object.values(update.inputSchema)) {
 			expect(field.safeParse(undefined).success).toBe(true)
@@ -297,6 +301,12 @@ describe("companionTools", () => {
 		expect(colour?.description).toContain("null to give")
 	})
 
+	it("takes the room it closes and nothing else", () => {
+		const close = toolNamed(SESSION, "conversation_close")
+
+		expect(Object.keys(close.inputSchema)).toEqual(["conversation"])
+	})
+
 	it("describes the icon naming every icon of the shared list", () => {
 		const { icon } = toolNamed(SESSION, "conversation_update").inputSchema
 
@@ -315,6 +325,14 @@ describe("companionTools", () => {
 		expect(update.inputSchema.remove?.description).toContain(
 			"your own to leave it yourself",
 		)
+	})
+
+	it("takes archived false to reopen and names conversation_close as the way to archive", () => {
+		const { archived } = toolNamed(SESSION, "conversation_update").inputSchema
+
+		expect(archived?.safeParse(false).success).toBe(true)
+		expect(archived?.description).toContain("reopen")
+		expect(archived?.description).toContain("conversation_close")
 	})
 
 	it("lists with every parameter optional, each naming what it does when left out", () => {

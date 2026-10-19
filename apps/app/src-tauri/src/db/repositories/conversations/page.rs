@@ -135,7 +135,7 @@ fn active_rows() -> String {
 
 fn in_the_feed() -> String {
 	format!(
-		"conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}')
+		"conversations.kind IN ('{TOPIC_KIND}', '{CHAT_KIND}') AND conversations.archived_at IS NULL
 			AND (conversations.kind = '{TOPIC_KIND}' OR solo.bot_id IS NOT NULL)"
 	)
 }

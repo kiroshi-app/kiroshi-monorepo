@@ -319,6 +319,21 @@ describe("the local command list", () => {
 		)
 	})
 
+	it("keeps the device commands of the account on the local host", () => {
+		expect([...LOCAL_COMMANDS]).toEqual(
+			expect.arrayContaining([
+				"device_approval",
+				"device_approval_retry",
+				"device_approval_code_request",
+				"device_approval_code_submit",
+				"device_approve",
+				"device_refuse",
+				"devices_list",
+				"device_remove",
+			]),
+		)
+	})
+
 	it("sends no local command and no plugin call to the joined host", async () => {
 		const { hosts, local, fetch } = joinedHostsOf()
 		await hosts.activate("garage")

@@ -8,7 +8,7 @@ metadata:
 ---
 
 A room is a conversation of this space with a subject of its own and a seat for each
-companion the subject belongs to. You hold five tools for them, on the `kiroshi` server.
+companion the subject belongs to. You hold six tools for them, on the `kiroshi` server.
 
 - `conversation_open`, a new room led by you, answering the id of that room, its title and
   the companions seated in it. It takes the title and the icon of the room in the same call.
@@ -24,6 +24,11 @@ companion the subject belongs to. You hold five tools for them, on the `kiroshi`
   Rocket, spelled as listed in `packages/shared/conversation-icons.json`. The colour is one
   of red, yellow, green, cyan, blue, purple, pink or orange, or null to give the room back
   its default colour. A field left out keeps what the room wears.
+- `conversation_close`, the archive of a room you lead once its subject is settled,
+  answering the id of that room, its title and whether it is archived. Every message of
+  the room is kept. A main conversation and the thread of a mission still open are never
+  closed. An archived room comes back with `archived` false on `conversation_update`, and
+  `archived` true there is refused: only `conversation_close` archives.
 
 `conversation_update` seats companions with `add` and takes them out with `remove`, in this
 conversation, and in another room of the caller when a room id is passed.
