@@ -1180,6 +1180,65 @@ export const M3TwoInvitationsWaiting = meta.story({
 	},
 })
 
+const SwitcherOpenedFromOutside = ({
+	onOpenChange,
+	...props
+}: SpaceSwitcherProps) => {
+	const [isOpen, setIsOpen] = useState(true)
+	return (
+		<SwitcherLine
+			{...props}
+			onOpenChange={(next) => {
+				onOpenChange?.(next)
+				setIsOpen(next)
+			}}
+			open={isOpen}
+		/>
+	)
+}
+
+export const OpenedOnInvitation = meta.story({
+	globals: DARK,
+	name: "Opened on the second invitation",
+	args: {
+		invitations: [
+			{ ...INVITED, state: "waiting" },
+			{ ...SECOND_INVITED, state: "waiting" },
+		],
+		focusedInvitationId: SECOND_INVITED.id,
+	},
+	render: (args) => <SwitcherOpenedFromOutside {...args} />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story: `${INVITED_ARTBOARD} Row 3, opened from outside: the host passes \`open\` and \`focusedInvitationId\`, as a join link does, and the menu opens with no press, anchored under the trigger exactly where a press opens it, keyboard focus on the named invitation's Accept. Check it opens on its own, that focus sits on the second Accept, that Escape reports \`onOpenChange(false)\`, and that a press reopens it at the same place.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await settled(await screen.findByRole("menu"))
+		await expect(menu).toBeVisible()
+		await expect(menu.getBoundingClientRect().width).toBe(280)
+		await expectGroupBetweenSpacesAndMoveUp(menu)
+		const rows = invitationsIn(menu)
+		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
+		await expect(
+			within(rows[1]).getByRole("menuitem", { name: "Accept" }),
+		).toHaveFocus()
+
+		const openedAt = menu.getBoundingClientRect()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		const pressed = await openSwitcher(canvasElement)
+		const pressedAt = pressed.getBoundingClientRect()
+		await expect(pressedAt.left).toBe(openedAt.left)
+		await expect(pressedAt.top).toBe(openedAt.top)
+	},
+})
+
 export const M4Accepting = meta.story({
 	globals: DARK,
 	name: "M4 Accepting",

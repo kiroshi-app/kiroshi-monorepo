@@ -1079,6 +1079,7 @@ navigation-spaceswitcher--m-6-unreachable
 navigation-spaceswitcher--m-9-failed-servers
 navigation-spaceswitcher--move-space
 navigation-spaceswitcher--open
+navigation-spaceswitcher--opened-on-invitation
 navigation-spaceswitcher--single-space
 navigation-spaceswitcher--themes-joined-space-menu
 navigation-spaceswitcher--themes-local-space-menu

@@ -4,19 +4,20 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import {
 	cloneElement,
 	type HTMLAttributes,
-	type MouseEvent,
 	type ReactElement,
+	type Ref,
 } from "react"
 
 import { ContextMenuTrigger } from "@workspace/ui/components/ui/context-menu"
 
 interface ContextMenuPressTriggerProps {
 	render: ReactElement<HTMLAttributes<HTMLElement>>
+	ref?: Ref<HTMLDivElement>
 }
 
-const openBelow = (event: MouseEvent<HTMLElement>) => {
-	const { left, bottom } = event.currentTarget.getBoundingClientRect()
-	event.currentTarget.dispatchEvent(
+export const openBelow = (trigger: HTMLElement) => {
+	const { left, bottom } = trigger.getBoundingClientRect()
+	trigger.dispatchEvent(
 		new MouseEvent("contextmenu", {
 			bubbles: true,
 			clientX: left,
@@ -27,10 +28,12 @@ const openBelow = (event: MouseEvent<HTMLElement>) => {
 
 export const ContextMenuPressTrigger = ({
 	render,
+	ref,
 }: ContextMenuPressTriggerProps) => (
 	<ContextMenuTrigger
 		aria-haspopup="menu"
-		onClick={openBelow}
+		ref={ref}
+		onClick={(event) => openBelow(event.currentTarget)}
 		render={(props, state) =>
 			cloneElement(
 				render,
