@@ -5948,7 +5948,7 @@ impl Harness {
 	async fn joined(&self, relay: &mut RelaySide, account_id: &str) -> Joined {
 		let member = SealingMember::new(account_id);
 		self.approved(&member);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&member.relay_device_id, account_id)).await;
 		let rekey = relay.addressed(&member, "rekey").await;
 		let host = self.host_keys().signing_public();
 		let handover =
@@ -5998,8 +5998,6 @@ impl Harness {
 		}
 	}
 }
-
-const DEVICES_CHANGED: &str = r#"{"event":"devices.changed"}"#;
 
 fn listed_device(relay_device_id: &str, account_id: &str, keys: &DeviceKeys) -> Value {
 	json!({
@@ -6327,6 +6325,11 @@ fn device_revoked_event(relay_device_id: &str, user_id: &str) -> String {
 	json!({ "event": "device.revoked", "deviceId": relay_device_id, "userId": user_id }).to_string()
 }
 
+fn device_approved_event(relay_device_id: &str, user_id: &str) -> String {
+	json!({ "event": "device.approved", "deviceId": relay_device_id, "userId": user_id })
+		.to_string()
+}
+
 #[test]
 fn a_device_revoked_event_drops_the_row_and_rekeys_the_remaining_devices_with_the_next_key_id() {
 	run(async {
@@ -6494,7 +6497,7 @@ fn an_accepted_invitation_admits_every_approved_device_of_the_member_and_announc
 		let phone = SealingMember::new("guest");
 
 		harness.accepted("guest", "guest@example.com", &[&laptop, &phone]);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&laptop.relay_device_id, "guest")).await;
 		let laptop_rekey = relay.addressed(&laptop, "rekey").await;
 		let phone_rekey = relay.addressed(&phone, "rekey").await;
 		let handover = rekeyed_handover(&relay, &phone, &phone_rekey, &host);
@@ -6521,7 +6524,7 @@ fn an_accepted_invitation_admits_every_approved_device_of_the_member_and_announc
 }
 
 #[test]
-fn a_pending_device_gets_no_rekey_until_devices_changed_lists_it() {
+fn a_pending_device_gets_no_rekey_until_the_device_list_returns_it_approved() {
 	run(async {
 		let mut harness = Harness::signed_in("devices-pending").await;
 		harness.started().await;
@@ -6531,12 +6534,12 @@ fn a_pending_device_gets_no_rekey_until_devices_changed_lists_it() {
 		let pending = SealingMember::new("guest");
 
 		harness.approved(&approved);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&pending.relay_device_id, "guest")).await;
 		relay.addressed(&approved, "rekey").await;
 		let before_approval = harness.rostered_as(&pending).await;
 		let held_before = relay.has_held_any_frame_to(&pending);
 		harness.approved(&pending);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&pending.relay_device_id, "guest")).await;
 		let rekey = relay.addressed(&pending, "rekey").await;
 		let handover = rekeyed_handover(&relay, &pending, &rekey, &host);
 
@@ -6546,6 +6549,86 @@ fn a_pending_device_gets_no_rekey_until_devices_changed_lists_it() {
 			.expect("the roster set verifies")
 			.contains(&pending.keys.device_id()));
 		assert!(harness.rostered_as(&pending).await.is_some());
+	});
+}
+
+#[test]
+fn a_device_approved_event_admits_and_rekeys_the_device_on_the_open_host_socket() {
+	run(async {
+		let mut harness = Harness::signed_in("device-approved-open").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		harness.device_list_settled(1).await;
+		let opens = harness.attempts();
+		let device = SealingMember::new("guest");
+
+		harness.approved(&device);
+		relay.sent(device_approved_event(&device.relay_device_id, "guest")).await;
+		let rekey = relay.addressed(&device, "rekey").await;
+
+		assert_eq!(rekeyed_handover(&relay, &device, &rekey, &host).key_id, 1);
+		assert!(harness.rostered_as(&device).await.is_some());
+		assert_eq!(harness.attempts(), opens);
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
+#[test]
+fn a_device_approved_event_missing_its_device_or_user_id_still_admits() {
+	run(async {
+		let mut harness = Harness::signed_in("device-approved-partial").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		harness.device_list_settled(1).await;
+		let laptop = SealingMember::new("guest");
+		let phone = SealingMember::new("guest");
+
+		harness.approved(&laptop);
+		let without_user =
+			json!({ "event": "device.approved", "deviceId": laptop.relay_device_id });
+		relay.sent(without_user.to_string()).await;
+		relay.addressed(&laptop, "rekey").await;
+		harness.approved(&phone);
+		relay.sent(json!({ "event": "device.approved", "userId": "guest" }).to_string()).await;
+		relay.addressed(&phone, "rekey").await;
+
+		assert!(harness.rostered_as(&laptop).await.is_some());
+		assert!(harness.rostered_as(&phone).await.is_some());
+	});
+}
+
+#[test]
+fn a_device_approved_frame_sent_by_a_member_or_the_retired_device_list_event_admits_nothing() {
+	run(async {
+		let mut harness = Harness::signed_in("device-approved-ignored").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut guest = harness.joined(&mut relay, "guest").await;
+		harness.device_list_settled(2).await;
+		let reads = harness.device_lists();
+		let newcomer = SealingMember::new("joiner");
+		let mut forged: Value =
+			serde_json::from_str(&device_approved_event(&newcomer.relay_device_id, "joiner"))
+				.expect("json");
+		forged["from"] = json!(guest.member.relay_device_id);
+		let retired_event = ["devices", "changed"].join(".");
+		let retired = json!({ "event": retired_event });
+
+		harness.approved(&newcomer);
+		relay.sent(forged.to_string()).await;
+		relay.sent(retired.to_string()).await;
+		let answer = called(&mut relay, &mut guest, &host).await;
+		let held_before = relay.has_held_any_frame_to(&newcomer);
+		relay.sent(device_approved_event(&newcomer.relay_device_id, "joiner")).await;
+		relay.addressed(&newcomer, "rekey").await;
+		harness.device_list_settled(reads + 1).await;
+
+		assert_eq!(answer["status"], 200);
+		assert!(!held_before);
+		assert_eq!(harness.device_lists(), reads + 1);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }
 
@@ -6581,7 +6664,7 @@ fn a_rostered_device_missing_from_a_list_that_names_the_host_is_removed_and_the_
 		let mut kept = harness.joined(&mut relay, "joiner").await;
 
 		harness.unlisted(&gone.member);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&kept.member.relay_device_id, "joiner")).await;
 		let rekey = relay.addressed(&kept.member, "rekey").await;
 		let handover = rekeyed_handover(&relay, &kept.member, &rekey, &host);
 		kept.space = space_key_of(&handover);
@@ -6612,10 +6695,10 @@ fn a_device_list_that_omits_the_host_device_or_fails_to_read_changes_no_roster_r
 
 		*harness.relay.listed_devices.lock().expect("the relay") =
 			Some(vec![listed_device(&newcomer.relay_device_id, "joiner", &newcomer.keys)]);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&newcomer.relay_device_id, "joiner")).await;
 		harness.device_list_settled(reads + 1).await;
 		*harness.relay.listed_devices.lock().expect("the relay") = None;
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&newcomer.relay_device_id, "joiner")).await;
 		harness.device_list_settled(reads + 2).await;
 
 		assert_eq!((harness.devices().await, harness.roster_version().await), before);
@@ -6644,7 +6727,7 @@ fn a_listed_device_rostered_under_other_keys_keeps_its_row_unchanged() {
 
 		harness.unlisted(&rostered.member);
 		harness.approved(&impostor);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&impostor.relay_device_id, "guest")).await;
 		harness.device_list_settled(reads + 1).await;
 
 		assert_eq!((harness.devices().await, harness.roster_version().await), before);
@@ -6666,8 +6749,8 @@ fn two_overlapping_device_list_reads_admit_a_device_once() {
 		let before = harness.roster_version().await;
 
 		harness.approved(&device);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&device.relay_device_id, "guest")).await;
+		relay.sent(device_approved_event(&device.relay_device_id, "guest")).await;
 		relay.addressed(&device, "rekey").await;
 		harness.device_list_settled(reads + 2).await;
 
@@ -6721,13 +6804,13 @@ fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_a
 		let reads = harness.device_lists();
 		let version = harness.roster_version().await;
 
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&removed.member.relay_device_id, "guest")).await;
 		harness.device_list_settled(reads + 1).await;
 		let after_change =
 			(harness.rostered_as(&removed.member).await, harness.roster_version().await);
 		let signed_in_again = SealingMember::new("guest");
 		harness.approved(&signed_in_again);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&signed_in_again.relay_device_id, "guest")).await;
 		let rekey = relay.addressed(&signed_in_again, "rekey").await;
 		let handover = rekeyed_handover(&relay, &signed_in_again, &rekey, &host);
 
@@ -6740,7 +6823,7 @@ fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_a
 }
 
 #[test]
-fn a_failed_admission_keeps_the_host_socket_open_and_the_next_devices_changed_admits() {
+fn a_failed_admission_keeps_the_host_socket_open_and_the_next_device_approved_admits() {
 	run(async {
 		let mut harness = Harness::signed_in("devices-failed").await;
 		harness.started().await;
@@ -6759,11 +6842,11 @@ fn a_failed_admission_keeps_the_host_socket_open_and_the_next_devices_changed_ad
 
 		renamed("space_removed_devices", "space_removed_devices_aside").await.expect("aside");
 		harness.approved(&unadmitted);
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&unadmitted.relay_device_id, "guest")).await;
 		harness.device_list_settled(reads + 1).await;
 		let after_failure = harness.rostered_as(&unadmitted).await;
 		renamed("space_removed_devices_aside", "space_removed_devices").await.expect("back");
-		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(device_approved_event(&unadmitted.relay_device_id, "guest")).await;
 		let rekey = relay.addressed(&unadmitted, "rekey").await;
 
 		assert!(after_failure.is_none());

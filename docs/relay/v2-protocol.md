@@ -271,7 +271,7 @@ member. A pending device is never listed. Both keys are 32 bytes, unpadded
 base64url.
 
 The host reads the list when its socket for the Space opens and on every
-`devices.changed`, under the one members turn that every members and devices
+`device.approved`, under the one members turn that every members and devices
 command of that Space takes, so two reads never overlap and a device is admitted
 once. On each read:
 
@@ -301,18 +301,25 @@ once. On each read:
 When a read admits or removes a device, the host reads its members and
 invitations back and emits them to the front. A read that fails on the host
 (database, key rotation) is logged with the Space and keeps the socket open; the
-next `devices.changed` or socket open reads the list again, after taking any
+next `device.approved` or socket open reads the list again, after taking any
 rotation the failure left owed.
 
-### devices.changed (relay to host)
+### device.approved (relay to host)
 
 ```json
-{ "event": "devices.changed" }
+{ "event": "device.approved", "deviceId": "…relay device id…", "userId": "…account id…" }
 ```
 
-The relay sends it on the host socket when the device list gains a device: an
-invitation accepted, or a device approved. It carries no `from`; a frame that
-does is a member frame, not an event.
+The relay sends it when a device is approved, either through
+`POST /devices/{deviceId}/approve` or by the code approval of that device, on
+the host socket of every instance the account owns or has joined. It carries no
+`from`; a frame that does is a member frame, not an event, and admits nothing.
+
+The host reacts by reading the device list again on its open socket, as above:
+every approved device the list returns that the roster lacks is admitted and
+sent its rekey. `deviceId` and `userId` only name the trigger: the list is the
+authority, so a device it does not return as approved gets no rekey, and a frame
+missing either field still reads the list.
 
 ## Invitations
 
