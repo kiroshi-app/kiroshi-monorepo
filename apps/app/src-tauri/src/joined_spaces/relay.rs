@@ -83,7 +83,7 @@ struct Linked {
 enum Ended {
 	Stopped,
 	Evicted(JoinedSpaceRemovalReason),
-	MembershipEnded,
+	Departed,
 	Removed,
 	SignedOut(&'static str),
 	Dropped(String),
@@ -565,7 +565,7 @@ async fn guest_linked<R: Runtime>(
 		match ended {
 			Ended::Stopped => return linked.link.ended(Presence::Ended),
 			Ended::Evicted(reason) => return evicted(&app, &linked, reason).await,
-			Ended::MembershipEnded => {
+			Ended::Departed => {
 				let Some(reason) = departure_asked(&app, &linked, &held, &mut stop).await else {
 					return linked.link.ended(Presence::Ended);
 				};
@@ -862,7 +862,7 @@ fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
 fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 	match frame.map(|frame| u16::from(frame.code)) {
 		Some(SPACE_DELETED) => Ended::Evicted(JoinedSpaceRemovalReason::Deleted),
-		Some(MEMBERSHIP_ENDED) => Ended::MembershipEnded,
+		Some(MEMBERSHIP_ENDED) => Ended::Departed,
 		Some(HOST_ABSENT) => {
 			Ended::Dropped(format!("the relay room has no host (code {HOST_ABSENT})"))
 		}
