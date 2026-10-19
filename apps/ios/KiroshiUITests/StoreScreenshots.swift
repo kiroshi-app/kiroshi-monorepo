@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class StoreScreenshots: XCTestCase {
-    static let welcome = "Your companions, away from your Mac."
+    static let emailField = "Email"
     static let noSession = "No session on this simulator"
 
     override func setUp() async throws {
@@ -25,17 +25,17 @@ final class StoreScreenshots: XCTestCase {
     func testSignIn() {
         let app = launch()
 
-        XCTAssertTrue(app.staticTexts[Self.welcome].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.textFields[Self.emailField].waitForExistence(timeout: 30))
         capture("01-sign-in")
     }
 
     func testSignedInScreens() {
         let app = launch()
         let firstScreen = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label IN %@", ["Conversations", Self.welcome])
+            NSPredicate(format: "label IN %@", ["Conversations", Self.emailField])
         ).firstMatch
         XCTAssertTrue(firstScreen.waitForExistence(timeout: 30))
-        XCTAssertFalse(app.staticTexts[Self.welcome].exists, Self.noSession)
+        XCTAssertFalse(app.textFields[Self.emailField].exists, Self.noSession)
         if let space = setting("STORE_SPACE") {
             pick(space, in: app)
         }
