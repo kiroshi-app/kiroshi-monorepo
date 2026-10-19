@@ -313,7 +313,6 @@ export const createJoinedSpacesController = ({
 		for (const joined of wentOffline) {
 			reportHostOffline(hostOfflineNoticeOf(joined))
 		}
-		leaveIfOpen(wentOffline)
 	}
 
 	const selectAdmittedOnceOnline = () => {
@@ -425,9 +424,12 @@ export const createJoinedSpacesController = ({
 		}
 	}
 
+	const isAwaitingAdmission = (joined: JoinedSpace) =>
+		rowIdOf(joined) === admittedRowId && isWaitingForHost(joined)
+
 	const selectSpace = (id: string) => {
 		const joined = joinedOfRow(id)
-		if (joined && isWaitingForHost(joined)) {
+		if (joined && isAwaitingAdmission(joined)) {
 			return
 		}
 		awaitedRowId = null
