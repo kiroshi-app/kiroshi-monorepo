@@ -224,6 +224,10 @@ pub enum CompanionError {
 		conversation_kind: String,
 	},
 	#[serde(rename_all = "camelCase")]
+	ArchiveThroughConversationClose {
+		conversation_id: String,
+	},
+	#[serde(rename_all = "camelCase")]
 	MissionStillOpen {
 		conversation_id: String,
 		mission_id: String,

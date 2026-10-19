@@ -27,7 +27,8 @@ companion the subject belongs to. You hold six tools for them, on the `kiroshi` 
 - `conversation_close`, the archive of a room you lead once its subject is settled,
   answering the id of that room, its title and whether it is archived. Every message of
   the room is kept. A main conversation and the thread of a mission still open are never
-  closed.
+  closed. An archived room comes back with `archived` false on `conversation_update`, and
+  `archived` true there is refused: only `conversation_close` archives.
 
 `conversation_update` seats companions with `add` and takes them out with `remove`, in this
 conversation, and in another room of the caller when a room id is passed.

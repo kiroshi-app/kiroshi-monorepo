@@ -167,10 +167,18 @@ impl<R: Runtime> CompanionHost<R> {
 			return Err(CompanionError::EmptyTitleField);
 		}
 		let moves_seats = !asked.add.is_empty() || !asked.remove.is_empty();
-		if title.is_none() && asked.icon.is_none() && asked.colour.is_none() && !moves_seats {
+		if title.is_none()
+			&& asked.icon.is_none()
+			&& asked.colour.is_none()
+			&& asked.archived.is_none()
+			&& !moves_seats
+		{
 			return Err(CompanionError::EmptyUpdate);
 		}
 		let conversation_id = asked.conversation.unwrap_or_else(|| self.conversation_id.clone());
+		if asked.archived == Some(true) {
+			return Err(CompanionError::ArchiveThroughConversationClose { conversation_id });
+		}
 		self.holds_seat(database, &conversation_id).await?;
 		let roster = match moves_seats {
 			true => roster_of_room(database, &conversation_id).await?,
@@ -182,6 +190,7 @@ impl<R: Runtime> CompanionHost<R> {
 			color: asked.colour,
 			seated: ids_of(&roster, &asked.add)?,
 			unseated: ids_of(&roster, &asked.remove)?,
+			reopened: asked.archived == Some(false),
 			amended_by: self.bot_id.clone(),
 		};
 		let amended = database
@@ -727,6 +736,7 @@ struct Updated {
 	add: Vec<String>,
 	#[serde(default)]
 	remove: Vec<String>,
+	archived: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2485,6 +2495,76 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn an_archived_room_reopens_through_an_update_and_is_announced_back() {
+		let app = a_room("update-reopen").await;
+		serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let updating = heard(&app, crate::conversations::contract::UPDATED_EVENT);
+
+		let reopened = serving(&app, "c1")
+			.answer(an_update(json!({ "conversation": "room", "archived": false })))
+			.await
+			.expect("the room reopens");
+
+		assert_eq!(reopened["archived"], json!(false));
+		assert_eq!(archived_at(&app, "room").await, None, "the reopen left archived_at");
+		assert_eq!(announced(&updating)["conversation"]["title"], json!("Plans"));
+		assert!(updating.try_recv().is_err(), "the reopen was announced twice");
+	}
+
+	#[tokio::test]
+	async fn a_reopen_of_a_room_never_archived_answers_it_unchanged() {
+		let app = a_room("update-reopen-open").await;
+		let host = serving(&app, "c1");
+		let read = host.answer(a_read(json!({ "conversation": "room" }))).await.expect("it reads");
+
+		let reopened = host
+			.answer(an_update(json!({ "conversation": "room", "archived": false })))
+			.await
+			.expect("the room is answered");
+
+		assert_eq!(reopened, read["conversation"]);
+		assert_eq!(archived_at(&app, "room").await, None);
+	}
+
+	#[tokio::test]
+	async fn an_update_archiving_a_room_is_refused_toward_conversation_close_and_writes_nothing() {
+		let app = a_room("update-archive").await;
+
+		let refused = update_refused(
+			&app,
+			&serving(&app, "c1"),
+			"room",
+			json!({ "conversation": "room", "title": "Trip", "archived": true }),
+		)
+		.await;
+
+		assert_eq!(
+			refused,
+			json!({ "kind": "archiveThroughConversationClose", "conversationId": "room" })
+		);
+		assert_eq!(archived_at(&app, "room").await, None, "a refused archive archived");
+	}
+
+	#[tokio::test]
+	async fn a_reopen_beside_a_refused_field_leaves_the_room_archived_and_unchanged() {
+		let app = a_room("update-reopen-refused").await;
+		serving(&app, "c1").answer(a_close("room")).await.expect("the room closes");
+		let closed_at = archived_at(&app, "room").await;
+
+		let refused = update_refused(
+			&app,
+			&serving(&app, "c1"),
+			"room",
+			json!({ "conversation": "room", "title": "Trip", "icon": "Message", "archived": false }),
+		)
+		.await;
+
+		assert_eq!(refused["kind"], json!("unlistedIcon"));
+		assert!(closed_at.is_some(), "the close wrote no archived_at");
+		assert_eq!(archived_at(&app, "room").await, closed_at, "a refused reopen reopened");
+	}
+
+	#[tokio::test]
 	async fn an_update_carrying_a_field_it_does_not_declare_is_refused_naming_it() {
 		let app = a_room("update-undeclared").await;
 
@@ -2492,13 +2572,13 @@ mod tests {
 			&app,
 			&serving(&app, "room"),
 			"room",
-			json!({ "title": "Trip", "archived": true }),
+			json!({ "title": "Trip", "instructions": "Keep it short." }),
 		)
 		.await;
 
 		assert_eq!(refused["kind"], json!("unreadableRequest"));
 		assert!(
-			refused["detail"].as_str().is_some_and(|detail| detail.contains("archived")),
+			refused["detail"].as_str().is_some_and(|detail| detail.contains("instructions")),
 			"got {refused}"
 		);
 	}

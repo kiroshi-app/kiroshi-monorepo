@@ -107,6 +107,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 		"conversationRead",
 	],
 	["conversation_update", { title: "Trip" }, "conversationUpdate"],
+	["conversation_update", { archived: false }, "conversationUpdate"],
 	["conversation_close", { conversation: "c3" }, "conversationClose"],
 ]
 
@@ -271,6 +272,7 @@ describe("companionTools", () => {
 			"colour",
 			"add",
 			"remove",
+			"archived",
 		])
 		for (const field of Object.values(update.inputSchema)) {
 			expect(field.safeParse(undefined).success).toBe(true)
@@ -323,6 +325,14 @@ describe("companionTools", () => {
 		expect(update.inputSchema.remove?.description).toContain(
 			"your own to leave it yourself",
 		)
+	})
+
+	it("takes archived false to reopen and names conversation_close as the way to archive", () => {
+		const { archived } = toolNamed(SESSION, "conversation_update").inputSchema
+
+		expect(archived?.safeParse(false).success).toBe(true)
+		expect(archived?.description).toContain("reopen")
+		expect(archived?.description).toContain("conversation_close")
 	})
 
 	it("lists with every parameter optional, each naming what it does when left out", () => {

@@ -651,7 +651,7 @@
 	},
 	{
 		"name": "conversation_update",
-		"description": "Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived.",
+		"description": "Change a conversation you hold a seat in, its title, its icon, its colour and who is seated in it, or reopen it once archived, every field given landing together in one call and none of them if one is refused, once the person asks for it or once its subject calls for it; the answer is the conversation as it stands after the call, with its id, kind, title, icon, colour, seated companions, last message and whether it is archived.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
@@ -688,6 +688,10 @@
 					"items": {
 						"type": "string"
 					}
+				},
+				"archived": {
+					"description": "False to reopen an archived conversation, back in the list of rooms of the space with every message it held; true is refused, since only conversation_close archives a room; left out, the conversation stays archived or not as it is.",
+					"type": "boolean"
 				}
 			},
 			"additionalProperties": false

@@ -258,6 +258,7 @@ mod tests {
 			"The colour is one of red, yellow, green, cyan, blue, purple, pink or orange, or null to give the room back its default colour.",
 			"`conversation_close`, the archive of a room you lead once its subject is settled, answering the id of that room, its title and whether it is archived.",
 			"A main conversation and the thread of a mission still open are never closed.",
+			"An archived room comes back with `archived` false on `conversation_update`, and `archived` true there is refused: only `conversation_close` archives.",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
