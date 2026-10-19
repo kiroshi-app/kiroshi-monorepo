@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
+use crate::devices::contract::{DeviceKind, DeviceStatus};
 use crate::hosting::contract::SpaceInvitation;
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
@@ -31,6 +32,12 @@ const INVITATIONS_PATH: &str = "/invitations";
 const DEVICES_PATH: &str = "/devices";
 
 const DEVICE_CHALLENGE_PATH: &str = "/devices/challenge";
+
+const CURRENT_DEVICE_PATH: &str = "/devices/current";
+
+const APPROVAL_CODE_PATH: &str = "/devices/approval-code";
+
+const APPROVAL_CODE_VERIFY_PATH: &str = "/devices/approval-code/verify";
 
 const DEVICE_REGISTER_CONTEXT: &[u8] = b"kiroshi-device-register-v1";
 
@@ -126,6 +133,50 @@ impl fmt::Display for DeviceRefusal {
 pub struct RegisteredDevice {
 	pub id: String,
 	pub transferred: bool,
+	pub status: DeviceStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceCallError {
+	Revoked,
+	Refused { status: StatusCode, code: Option<String> },
+	Unreachable(String),
+}
+
+impl fmt::Display for DeviceCallError {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			DeviceCallError::Revoked => write!(formatter, "the relay refused the session (401)"),
+			DeviceCallError::Refused { status, code } => {
+				write!(formatter, "the relay answered {}", status.as_u16())?;
+				match code {
+					Some(code) => write!(formatter, " {code}"),
+					None => write!(formatter, " with no readable code"),
+				}
+			}
+			DeviceCallError::Unreachable(reason) => write!(formatter, "{reason}"),
+		}
+	}
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentDevice {
+	pub status: DeviceStatus,
+	pub approval_expires_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudAccountDevice {
+	pub id: String,
+	pub name: Option<String>,
+	pub kind: DeviceKind,
+	pub status: DeviceStatus,
+	pub approval_expires_at: Option<String>,
+	pub last_active_at: String,
+	pub current: bool,
+	pub ed25519_public_key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,6 +294,7 @@ struct Registered {
 struct DeviceRegistered {
 	id: String,
 	transferred: bool,
+	status: DeviceStatus,
 }
 
 #[derive(Deserialize)]
@@ -494,7 +546,7 @@ impl Cloud {
 		let answered = device_call_answered(DEVICES_PATH, answered).await?;
 		let registered = answered.json::<DeviceRegistered>().await.map_err(|error| {
 			DeviceRegisterError::Unreachable(format!(
-				"the registered device carried no readable id and transferred: {error}"
+				"the registered device carried no readable id, transferred and status: {error}"
 			))
 		})?;
 		let id = uuid::Uuid::parse_str(&registered.id).map_err(|error| {
@@ -502,7 +554,11 @@ impl Cloud {
 				"the registered device id is not a uuid: {error}"
 			))
 		})?;
-		Ok(RegisteredDevice { id: id.to_string(), transferred: registered.transferred })
+		Ok(RegisteredDevice {
+			id: id.to_string(),
+			transferred: registered.transferred,
+			status: registered.status,
+		})
 	}
 
 	async fn device_challenge(&self, bearer: &str) -> Result<String, DeviceRegisterError> {
@@ -519,14 +575,98 @@ impl Cloud {
 		Ok(challenge.nonce)
 	}
 
-	pub async fn delete_device(&self, bearer: &str, relay_device_id: &str) -> Result<(), String> {
-		let mut device = Url::parse(&self.at(DEVICES_PATH))
-			.map_err(|error| format!("the device url is unusable: {error}"))?;
+	pub async fn delete_device(
+		&self,
+		bearer: &str,
+		relay_device_id: &str,
+	) -> Result<(), DeviceCallError> {
+		let device = self.device_url(&[relay_device_id])?;
+		self.device_called(|client| client.delete(device).bearer_auth(bearer)).await.map(drop)
+	}
+
+	pub async fn current_device(&self, bearer: &str) -> Result<CurrentDevice, DeviceCallError> {
+		let current = self.at(CURRENT_DEVICE_PATH);
+		let answered = self.device_called(|client| client.get(current).bearer_auth(bearer)).await?;
+		answered.json::<CurrentDevice>().await.map_err(|error| {
+			DeviceCallError::Unreachable(format!(
+				"the current device answered by the relay did not parse: {error}"
+			))
+		})
+	}
+
+	pub async fn account_devices(
+		&self,
+		bearer: &str,
+	) -> Result<Vec<CloudAccountDevice>, DeviceCallError> {
+		let devices = self.at(DEVICES_PATH);
+		let answered = self.device_called(|client| client.get(devices).bearer_auth(bearer)).await?;
+		answered.json::<Vec<CloudAccountDevice>>().await.map_err(|error| {
+			DeviceCallError::Unreachable(format!(
+				"the device list answered by the relay did not parse: {error}"
+			))
+		})
+	}
+
+	pub async fn request_approval_code(&self, bearer: &str) -> Result<(), DeviceCallError> {
+		let requested = self.at(APPROVAL_CODE_PATH);
+		self.device_called(|client| client.post(requested).bearer_auth(bearer)).await.map(drop)
+	}
+
+	pub async fn verify_approval_code(
+		&self,
+		bearer: &str,
+		code: &str,
+	) -> Result<(), DeviceCallError> {
+		let verified = self.at(APPROVAL_CODE_VERIFY_PATH);
+		let body = json!({ "code": code });
+		self.device_called(|client| client.post(verified).bearer_auth(bearer).json(&body))
+			.await
+			.map(drop)
+	}
+
+	pub async fn approve_device(
+		&self,
+		bearer: &str,
+		relay_device_id: &str,
+	) -> Result<(), DeviceCallError> {
+		let approved = self.device_url(&[relay_device_id, "approve"])?;
+		self.device_called(|client| client.post(approved).bearer_auth(bearer)).await.map(drop)
+	}
+
+	pub async fn reject_device(
+		&self,
+		bearer: &str,
+		relay_device_id: &str,
+	) -> Result<(), DeviceCallError> {
+		let rejected = self.device_url(&[relay_device_id, "reject"])?;
+		self.device_called(|client| client.post(rejected).bearer_auth(bearer)).await.map(drop)
+	}
+
+	fn device_url(&self, segments: &[&str]) -> Result<Url, DeviceCallError> {
+		let mut device = Url::parse(&self.at(DEVICES_PATH)).map_err(|error| {
+			DeviceCallError::Unreachable(format!("the device url is unusable: {error}"))
+		})?;
 		device
 			.path_segments_mut()
-			.map_err(|()| "the cloud url has no path".to_owned())?
-			.push(relay_device_id);
-		self.sent(|client| client.delete(device).bearer_auth(bearer)).await.map(drop)
+			.map_err(|()| DeviceCallError::Unreachable("the cloud url has no path".to_owned()))?
+			.extend(segments);
+		Ok(device)
+	}
+
+	async fn device_called(
+		&self,
+		request: impl FnOnce(&Client) -> RequestBuilder,
+	) -> Result<reqwest::Response, DeviceCallError> {
+		let answered = self.answered(request).await.map_err(DeviceCallError::Unreachable)?;
+		let status = answered.status();
+		if status.is_success() {
+			return Ok(answered);
+		}
+		if status == StatusCode::UNAUTHORIZED {
+			return Err(DeviceCallError::Revoked);
+		}
+		let code = answered.json::<Refusal>().await.ok().map(|refusal| refusal.error.code);
+		Err(DeviceCallError::Refused { status, code })
 	}
 
 	pub async fn members(

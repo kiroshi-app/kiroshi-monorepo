@@ -72,6 +72,14 @@ export const commands = {
 	conversationSuggestedBots: () => __TAURI_INVOKE<SuggestedBot[]>("conversation_suggested_bots"),
 	companionLaunchOutcome: () => __TAURI_INVOKE<LaunchOutcome>("companion_launch_outcome"),
 	getDeviceIdentity: () => typedError<DeviceIdentity, DeviceKeysError>(__TAURI_INVOKE("get_device_identity")),
+	deviceApproval: () => __TAURI_INVOKE<DeviceApproval>("device_approval"),
+	deviceApprovalRetry: () => typedError<DeviceApproval, DeviceError>(__TAURI_INVOKE("device_approval_retry")),
+	deviceApprovalCodeRequest: () => typedError<null, DeviceError>(__TAURI_INVOKE("device_approval_code_request")),
+	deviceApprovalCodeSubmit: (code: string) => typedError<null, DeviceError>(__TAURI_INVOKE("device_approval_code_submit", { code })),
+	deviceApprove: (deviceId: string) => typedError<null, DeviceError>(__TAURI_INVOKE("device_approve", { deviceId })),
+	deviceRefuse: (deviceId: string) => typedError<null, DeviceError>(__TAURI_INVOKE("device_refuse", { deviceId })),
+	devicesList: () => typedError<AccountDevice[], DeviceError>(__TAURI_INVOKE("devices_list")),
+	deviceRemove: (deviceId: string) => typedError<null, DeviceError>(__TAURI_INVOKE("device_remove", { deviceId })),
 	windowDeclareMaximizeButton: (bounds: {
 	x: number,
 	y: number,
@@ -240,6 +248,12 @@ export const ARCHIVE_EXTENSION = "kiroshi" as const;
 
 export const ARCHIVE_FILTER_NAME = "Kiroshi space" as const;
 
+export const DEVICE_APPROVAL_CHANGED_EVENT = "device://approval-changed" as const;
+
+export const DEVICE_APPROVAL_REQUESTED_EVENT = "device://approval-requested" as const;
+
+export const DEVICE_APPROVAL_SETTLED_EVENT = "device://approval-settled" as const;
+
 export const HOSTING_CHANGED_EVENT = "hosting://changed" as const;
 
 export const HOSTING_MEMBERS_CHANGED_EVENT = "hosting://members-changed" as const;
@@ -262,6 +276,17 @@ export const UPDATE_CHANGED_EVENT = "update://changed" as const;
 export type Account = {
 	email: string | null,
 	plan: string | null,
+};
+
+export type AccountDevice = {
+	id: string,
+	name: string | null,
+	kind: DeviceKind,
+	status: DeviceStatus,
+	approvalExpiresAt: string | null,
+	lastActiveAt: string,
+	current: boolean,
+	fingerprint: string[] | null,
 };
 
 export type AccountDevices = {
@@ -712,6 +737,23 @@ export type ConversationPage = {
 
 export type Destination = "companion" | "space" | "user";
 
+export type DeviceApproval = { kind: "none" } | { kind: "approved" } | { kind: "pending"; expiresAt: string } | { kind: "expired" };
+
+export type DeviceApprovalRequested = {
+	deviceId: string,
+	name: string | null,
+	kind: DeviceKind,
+	askedAt: string,
+	expiresAt: string,
+	fingerprint: string[] | null,
+};
+
+export type DeviceApprovalSettled = {
+	deviceId: string,
+};
+
+export type DeviceError = { kind: "notApproved" } | { kind: "alreadyApproved" } | { kind: "isCurrent" } | { kind: "approvalExpired" } | { kind: "codeInvalid" } | { kind: "tooManyRequests" } | { kind: "notFound" } | { kind: "emailUnavailable" } | { kind: "signedOut" } | { kind: "unreachable"; detail: string };
+
 export type DeviceIdentity = {
 	deviceId: string,
 	signingPublicKey: string,
@@ -720,6 +762,10 @@ export type DeviceIdentity = {
 };
 
 export type DeviceKeysError = { kind: "noProfileDirectory" } | { kind: "unreadable"; detail: string } | { kind: "unwritable"; detail: string } | { kind: "malformed" } | { kind: "noRandomness" };
+
+export type DeviceKind = "phone" | "computer";
+
+export type DeviceStatus = "pending" | "approved";
 
 export type Diagnostics = {
 	appVersion: string,
@@ -1448,7 +1494,7 @@ export type SidebarTab = "conversations" | "missions" | "companions" | "applicat
 
 export type SignInError = { kind: "alreadyRunning" } | { kind: "notRunning" } | { kind: "cancelled" } | { kind: "timedOut" } | { kind: "refusedUrl"; url: string } | { kind: "flowTimedOut"; timeoutMs: number } | { kind: "failed"; detail: string } | { kind: "transport"; error: TransportError };
 
-export type SignedOutReason = "signedOutOnSite" | "deviceRevoked";
+export type SignedOutReason = "signedOutOnSite" | "deviceRevoked" | "deviceRefused";
 
 export type Skill = {
 	id: string,

@@ -21,6 +21,7 @@ use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::frame::VERSION;
 use crate::crypto::join;
 use crate::db;
+use crate::devices;
 use crate::hosting::handover::KeyHandover;
 use crate::hosting::relay::{opened, Opened, Socket};
 use crate::invitations::{self, contract::InvitationError};
@@ -41,6 +42,11 @@ pub(super) async fn joined_by_link<R: Runtime>(
 	let sealed = join::seal(link.secret.as_slice(), &device, &link.host)
 		.map_err(|_| JoinedSpaceError::MalformedLink)?;
 	let bearer = bearer_of(app)?;
+	if devices::is_awaiting_approval(app) {
+		return Err(JoinedSpaceError::RelayRefused {
+			detail: "this device awaits its approval by another device of the account".to_owned(),
+		});
+	}
 	let guests = app.state::<RelayGuests>();
 	let cloud = guests.cloud();
 	let name = admitted(app, cloud, &bearer, &link.instance_id).await?;
