@@ -437,7 +437,7 @@ async fn online<R: Runtime>(
 					},
 				};
 				match relay_event_of(text.as_str()) {
-					Some(RelayEvent::DevicesChanged) => {
+					Some(RelayEvent::DeviceApproved) => {
 						admissions.spawn(admission());
 						continue;
 					}
@@ -645,8 +645,8 @@ async fn closed(sink: &mut Sink, ids: Ids<'_>) -> Ended {
 enum RelayEvent {
 	#[serde(rename = "device.revoked", rename_all = "camelCase")]
 	DeviceRevoked { device_id: String, user_id: String },
-	#[serde(rename = "devices.changed")]
-	DevicesChanged,
+	#[serde(rename = "device.approved")]
+	DeviceApproved,
 }
 
 fn relay_event_of(text: &str) -> Option<RelayEvent> {
