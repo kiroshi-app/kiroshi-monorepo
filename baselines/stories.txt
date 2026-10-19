@@ -1061,6 +1061,7 @@ navigation-spaceswitcher--default
 navigation-spaceswitcher--drag-dot-nowhere
 navigation-spaceswitcher--drag-dot-to-place
 navigation-spaceswitcher--hosted-long-names
+navigation-spaceswitcher--invitation-at-rest
 navigation-spaceswitcher--invitation-expired
 navigation-spaceswitcher--invitation-host-offline
 navigation-spaceswitcher--invitation-long-content
@@ -1571,6 +1572,8 @@ settings-space-spacesettingsdialog--members-joined-and-pending
 settings-space-spacesettingsdialog--members-loading
 settings-space-spacesettingsdialog--members-long-identity
 settings-space-spacesettingsdialog--members-member-view
+settings-space-spacesettingsdialog--members-member-view-remove-confirm
+settings-space-spacesettingsdialog--members-member-view-with-invitation
 settings-space-spacesettingsdialog--members-not-shared
 settings-space-spacesettingsdialog--members-remove-confirm
 settings-space-spacesettingsdialog--members-remove-failed

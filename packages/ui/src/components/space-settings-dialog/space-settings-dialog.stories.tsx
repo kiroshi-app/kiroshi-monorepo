@@ -42,6 +42,7 @@ import {
 	type MembersPanelProps,
 	type SpaceMember,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 const FILLED_SPACE: SpaceSettingsValue = {
 	name: "Release desk",
@@ -751,21 +752,34 @@ const SAM_PENDING_ROW = ["sam@example.com", "Invited · expires in 6 days"]
 
 const STEVE_ROW = ["S", "Steve", "steve@example.com", "Host"]
 
+const NOA_FINGERPRINT = "orbit velvet canal fossil ripple mango"
+
 const NOA: SpaceMember = {
 	id: "noa",
-	name: "Noa",
+	name: "Noa Lambert",
 	email: "noa@example.com",
 	status: "host",
+	fingerprint: NOA_FINGERPRINT,
 }
 
-const MAYA_FINGERPRINT = "orbit velvet canal fossil ripple mango"
+const MAYA_FINGERPRINT = "maple cotton harbor lemon pilot window"
 
 const MAYA: SpaceMember = {
 	id: "maya",
-	name: "Maya",
+	name: "Maya Chen",
 	email: "maya@example.com",
 	status: "joined",
 	fingerprint: MAYA_FINGERPRINT,
+}
+
+const TOM_FINGERPRINT = "copper silent garden oyster rocket meadow"
+
+const TOM: SpaceMember = {
+	id: "tom",
+	name: "Tom Okafor",
+	email: "tom@example.com",
+	status: "joined",
+	fingerprint: TOM_FINGERPRINT,
 }
 
 const TOM_PENDING: SpaceMember = {
@@ -775,26 +789,26 @@ const TOM_PENDING: SpaceMember = {
 	expiresInDays: 6,
 }
 
-const SAM_EXPIRED: SpaceMember = {
-	id: "sam-expired",
+const SAM_INVITED: SpaceMember = {
+	id: "sam",
 	email: "sam@example.com",
-	status: "expired",
-	sentAt: new Date(2026, 9, 9).getTime(),
+	status: "pending",
+	expiresInDays: 7,
 }
 
-const NOA_ROW = ["N", "Noa", "noa@example.com", "Host"]
+const NOA_ROW = ["N", "Noa Lambert", "noa@example.com", NOA_FINGERPRINT, "Host"]
 
-const MAYA_ROW = ["M", "Maya", "maya@example.com", MAYA_FINGERPRINT]
+const MAYA_ROW = ["M", "Maya Chen", "maya@example.com", MAYA_FINGERPRINT]
 
 const TOM_ROW = ["tom@example.com", "Invited · expires in 6 days"]
 
-const SAM_EXPIRED_ROW = [
-	"sam@example.com",
-	"Sent October 9, not used",
-	"Expired",
-]
+const SAM_INVITED_ROW = ["sam@example.com", "Invited · expires in 7 days"]
 
 const STUDIO = "Studio"
+
+const STUDIO_MEMBERS = [NOA, MAYA, TOM_PENDING, SAM_INVITED]
+
+const SAM_INVITATION_EXPIRES_AT = new Date(2026, 9, 25).getTime()
 
 const LEA: SpaceMember = {
 	id: "lea",
@@ -852,11 +866,14 @@ const expectRefusal = async (panel: HTMLElement, message: string) => {
 		message,
 	)
 	await expect(getComputedStyle(field).borderTopColor).toBe(
-		probedStyleOf("border-destructive", "borderTopColor", panel),
+		probedStyleOf("border-input", "borderTopColor", panel),
 	)
-	await expect(getComputedStyle(field).boxShadow).toContain(
-		probedStyleOf("text-destructive/20", "color", panel),
+	await expect(getComputedStyle(field).color).toBe(
+		probedStyleOf("text-foreground", "color", panel),
 	)
+	await expect(
+		getComputedStyle(filledRegionIn(slotIn(panel, "members-panel"))).color,
+	).toBe(probedStyleOf("text-destructive", "color", panel))
 	await expect(panel).not.toHaveTextContent(INVITE_HINT)
 }
 
@@ -883,7 +900,7 @@ export const MembersI1 = meta.story({
 })
 
 export const MembersLoading = meta.story({
-	args: membersArgs({ members: [], isPending: true }),
+	args: membersArgs({ space: STUDIO, members: [], isPending: true }),
 	parameters: {
 		docs: {
 			description: {
@@ -946,24 +963,70 @@ export const MembersI2 = meta.story({
 	},
 })
 
+const SentNotice = () => {
+	const { t } = useTranslation("settings")
+
+	useEffect(() => {
+		const notice = raiseTransientNotice({
+			title: t("space.members.sent", { email: SAM_INVITED.email }),
+			description: t("space.members.sentDescription", {
+				date: formatDateTime(SAM_INVITATION_EXPIRES_AT, {
+					month: "long",
+					day: "numeric",
+				}),
+			}),
+		})
+		return () => endNotice(notice)
+	}, [t])
+
+	return null
+}
+
+const expectToast = async (title: string, description: string) => {
+	await expect(
+		await waitFor(() => slotIn(document.body, "toast-title")),
+	).toHaveTextContent(title)
+	await expect(slotIn(document.body, "toast-description")).toHaveTextContent(
+		description,
+	)
+}
+
 export const MembersI3 = meta.story({
-	args: membersArgs({ members: [STEVE, SAM_PENDING] }),
+	args: membersArgs({ space: STUDIO, members: STUDIO_MEMBERS }),
+	decorators: [
+		(Story) => (
+			<>
+				<Story />
+				<NoticeSurface transientDelay={0} />
+				<SentNotice />
+			</>
+		),
+	],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard I3. Sam was invited: the field is empty again and Sam's invitation opens the Invitations section above Members, a dashed avatar with the mail glyph, the address on the name line and when it expires under it.",
+					"Artboard 1.2 of the Mockup page. Sam was invited: the field is empty again and Sam's invitation joins Tom's in the Invitations section above Members, a dashed avatar with the mail glyph, the address on the name line and when it expires under it. A success notice names the address and the date the link stops working; the app raises it with `raiseTransientNotice` and the catalogue's `space.members.sent` and `space.members.sentDescription` copy, the date formatted from the expiry; the story holds it open.",
 			},
 		},
 	},
 	play: async () => {
 		const panel = await membersPanelIn()
-		await expect(memberRowsIn(panel)).toEqual([SAM_PENDING_ROW, STEVE_ROW])
-		const [pending] = slotsIn(panel, "space-member")
-		await expect(glyphIn(pending, Icons.Mail)).not.toBe(null)
+		await expect(memberRowsIn(panel)).toEqual([
+			TOM_ROW,
+			SAM_INVITED_ROW,
+			NOA_ROW,
+			MAYA_ROW,
+		])
+		const sam = rowOf(panel, "sam@example.com")
+		await expect(glyphIn(sam, Icons.Mail)).not.toBe(null)
 		await expect(
 			within(listNamed(panel, "Invitations")).getAllByRole("listitem"),
-		).toEqual([pending])
+		).toEqual([rowOf(panel, "tom@example.com"), sam])
+		await expectToast(
+			"Invitation sent to sam@example.com",
+			"It works once, until October 25.",
+		)
 	},
 })
 
@@ -1016,7 +1079,8 @@ const WithdrawnNotice = () => {
 
 	useEffect(() => {
 		const notice = raiseTransientNotice({
-			title: t("space.members.withdrawn", { email: SAM_PENDING.email }),
+			title: t("space.members.withdrawn", { email: TOM_PENDING.email }),
+			description: t("space.members.withdrawnDescription"),
 		})
 		return () => endNotice(notice)
 	}, [t])
@@ -1025,7 +1089,7 @@ const WithdrawnNotice = () => {
 }
 
 export const MembersI5 = meta.story({
-	args: membersArgs(),
+	args: membersArgs({ space: STUDIO, members: [NOA, MAYA, SAM_INVITED] }),
 	decorators: [
 		(Story) => (
 			<>
@@ -1039,16 +1103,20 @@ export const MembersI5 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I5. Sam's invitation is withdrawn: the list is back to I1 and a success notice names the address. The app raises it with `raiseTransientNotice` and the catalogue's `space.members.withdrawn` copy; the story holds it open.",
+					"Artboard 1.5 of the Mockup page. Tom's invitation is withdrawn: only Sam's stays under Invitations, and a success notice names the address and says the link stops working. The app raises it with `raiseTransientNotice` and the catalogue's `space.members.withdrawn` and `space.members.withdrawnDescription` copy; the story holds it open.",
 			},
 		},
 	},
 	play: async () => {
 		const panel = await membersPanelIn()
-		await expect(memberRowsIn(panel)).toHaveLength(1)
-		const title = await waitFor(() => slotIn(document.body, "toast-title"))
-		await expect(title).toHaveTextContent(
-			"Invitation to sam@example.com withdrawn",
+		await expect(memberRowsIn(panel)).toEqual([
+			SAM_INVITED_ROW,
+			NOA_ROW,
+			MAYA_ROW,
+		])
+		await expectToast(
+			"Invitation to tom@example.com withdrawn",
+			"The link in their email stops working.",
 		)
 	},
 })
@@ -1102,7 +1170,7 @@ export const MembersI7 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I7. The address is already invited: the field turns destructive, border and ring, and the helper becomes the refusal, read as the field's description and announced through its status region. It is a state of the field, not a row.",
+					"Artboard I7. The address is already invited: the field keeps its rest border and text, turns `aria-invalid`, and the helper becomes the refusal in the destructive colour, read as the field's description and announced through its status region. It is a state of the field, not a row.",
 			},
 		},
 	},
@@ -1124,7 +1192,7 @@ export const MembersI8 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I8. The reader typed their own address: same destructive field, the refusal says it is their own account.",
+					"Artboard I8. The reader typed their own address: same refusal look, the line says it is their own account.",
 			},
 		},
 	},
@@ -1143,7 +1211,7 @@ export const MembersI9 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard I9. The text is not an address: same destructive field, the refusal shows the expected shape.",
+					"Artboard I9. The text is not an address: same refusal look, the line shows the expected shape.",
 			},
 		},
 	},
@@ -1202,10 +1270,12 @@ const EditableMembersPanel = (props: MembersPanelProps) => {
 
 export const MembersInviteFailed = meta.story({
 	args: {
-		...membersArgs(),
+		...membersArgs({ space: STUDIO }),
 		members: (
 			<EditableMembersPanel
 				{...MEMBERS_PANEL}
+				space={STUDIO}
+				members={[NOA, MAYA, TOM_PENDING]}
 				email="sam@example.com"
 				failure={{
 					action: "invite",
@@ -1219,7 +1289,7 @@ export const MembersInviteFailed = meta.story({
 		docs: {
 			description: {
 				story:
-					"Kiroshi could not invite the address. The field turns invalid like a refusal, border and ring, and the line takes the helper's place under it, announced once. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason.",
+					"Artboard 1.9 of the Mockup page. Kiroshi could not invite the address. The field keeps its rest border and text and stays `aria-invalid`, described by the line that takes the helper's place under it, the only part painted destructive, announced once. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason.",
 			},
 		},
 	},
@@ -1234,7 +1304,7 @@ export const MembersInviteFailed = meta.story({
 			field.getBoundingClientRect().bottom,
 		)
 		await expect(line.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-			within(panel).getByRole("list").getBoundingClientRect().top,
+			within(panel).getAllByRole("list")[0].getBoundingClientRect().top,
 		)
 
 		await userEvent.type(field, ".org")
@@ -1552,8 +1622,6 @@ export const MembersLongIdentity = meta.story({
 	},
 })
 
-const STUDIO_MEMBERS = [TOM_PENDING, SAM_EXPIRED, NOA, MAYA]
-
 const rowOf = (panel: HTMLElement, text: string) => {
 	const row = within(panel).getByText(text).closest<HTMLElement>("li")
 	if (!row) throw new Error(`No member row holds ${text}`)
@@ -1588,7 +1656,7 @@ export const MembersWithInvitations = meta.story({
 		docs: {
 			description: {
 				story:
-					"Row 1, host view. Studio holds a pending and an expired invitation, so an Invitations section sits above the Members section, 24px apart, each a 12/16 medium label 6px over a bordered list with a 14px radius. Rows pad 8px block, 12px start, 8px end, 10px apart. Tom's pending invitation says when it expires and offers an X to withdraw it; Sam's expired one says when it was sent, wears the Expired tag and offers invite again in place of withdraw. Maya's row carries her fingerprint in the monospace face and a trash to remove her. Every action is icon-only, 28px square, named after the action and the person, with the focus ring under the keyboard.",
+					"Row 1 of the Mockup page, host view. Studio holds Tom's and Sam's pending invitations, so an Invitations section sits above the Members section, 24px apart, each a 12/16 medium label 6px over a bordered list with a 14px radius. Rows pad 8px block, 12px start, 8px end, 10px apart. Each invitation says when it expires and offers an X to withdraw it. Noa's and Maya's rows carry their fingerprint in the monospace face; Noa wears the Host tag, Maya offers a trash to remove her. Every action is icon-only, 28px square, named after the action and the person, with the focus ring under the keyboard.",
 			},
 		},
 	},
@@ -1620,11 +1688,11 @@ export const MembersWithInvitations = meta.story({
 
 		await expect(memberRowsIn(panel)).toEqual([
 			TOM_ROW,
-			SAM_EXPIRED_ROW,
+			SAM_INVITED_ROW,
 			NOA_ROW,
 			MAYA_ROW,
 		])
-		const row = rowOf(panel, "Maya")
+		const row = rowOf(panel, "Maya Chen")
 		const rowStyle = getComputedStyle(row)
 		await expect([
 			rowStyle.paddingTop,
@@ -1644,43 +1712,36 @@ export const MembersWithInvitations = meta.story({
 		await expect(getComputedStyle(fingerprint).fontSize).toBe("12px")
 		await expect(getComputedStyle(fingerprint).lineHeight).toBe("18px")
 
-		const withdraw = within(rowOf(panel, "tom@example.com")).getByRole(
+		const withdrawTom = within(rowOf(panel, "tom@example.com")).getByRole(
 			"button",
 			{ name: "Withdraw the invitation to tom@example.com" },
 		)
-		const expired = rowOf(panel, "Sent October 9, not used")
-		const inviteAgain = within(expired).getByRole("button", {
-			name: "Invite sam@example.com again",
-		})
-		const remove = within(row).getByRole("button", { name: "Remove Maya" })
-		await expect(glyphIn(withdraw, Icons.Close)).not.toBe(null)
-		await expect(glyphIn(inviteAgain, Icons.Retry)).not.toBe(null)
+		const withdrawSam = within(rowOf(panel, "sam@example.com")).getByRole(
+			"button",
+			{ name: "Withdraw the invitation to sam@example.com" },
+		)
+		const remove = within(row).getByRole("button", { name: "Remove Maya Chen" })
+		await expect(glyphIn(withdrawTom, Icons.Close)).not.toBe(null)
+		await expect(glyphIn(withdrawSam, Icons.Close)).not.toBe(null)
 		await expect(glyphIn(remove, Icons.Delete)).not.toBe(null)
-		for (const action of [withdraw, inviteAgain, remove]) {
+		for (const action of [withdrawTom, withdrawSam, remove]) {
 			await expectRowAction(action)
 		}
-		await expect(within(expired).getAllByRole("button")).toEqual([inviteAgain])
-		const tag = within(expired).getByText("Expired")
-		await expect(tag.getBoundingClientRect().right).toBeLessThanOrEqual(
-			inviteAgain.getBoundingClientRect().left,
+		const host = rowOf(panel, "Noa Lambert")
+		await expect(within(host).queryByRole("button")).toBeNull()
+		await expect(slotIn(host, "member-fingerprint")).toHaveTextContent(
+			NOA_FINGERPRINT,
 		)
-		await expect(getComputedStyle(tag).color).toBe(
-			probedStyleOf("text-muted-foreground", "color", panel),
-		)
-		await expect(getComputedStyle(tag).backgroundColor).toBe(
-			probedStyleOf("bg-muted", "backgroundColor", panel),
-		)
-		await expect(within(rowOf(panel, "Noa")).queryByRole("button")).toBeNull()
 
-		await userEvent.click(withdraw)
+		await userEvent.click(withdrawTom)
 		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledWith(TOM_PENDING)
-		await userEvent.click(inviteAgain)
-		await expect(MEMBERS_PANEL.onInvite).toHaveBeenCalledWith("sam@example.com")
+		await userEvent.click(withdrawSam)
+		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledWith(SAM_INVITED)
 		await userEvent.click(remove)
 		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledWith(MAYA)
 
 		inviteFieldIn(panel).focus()
-		for (const action of [withdraw, inviteAgain, remove]) {
+		for (const action of [withdrawTom, withdrawSam, remove]) {
 			await expectFocusRingOnTab(action, () => userEvent.tab())
 		}
 	},
@@ -1693,13 +1754,15 @@ const memberViewArgs = (panel: Partial<MembersPanelProps> = {}) => ({
 	members: (
 		<MembersPanel
 			{...MEMBERS_PANEL}
-			members={[NOA, MAYA]}
+			members={[NOA, MAYA, TOM, SAM_INVITED]}
 			space={STUDIO}
-			viewerId={MAYA.id}
+			viewerId={TOM.id}
 			{...panel}
 		/>
 	),
 })
+
+const TOM_VIEWER = "Tom Okafor (you)"
 
 export const MembersMemberView = meta.story({
 	args: memberViewArgs(),
@@ -1707,7 +1770,7 @@ export const MembersMemberView = meta.story({
 		docs: {
 			description: {
 				story:
-					"Row 9, member view. Maya opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, then the Members list. Noa's row wears the Host tag over an empty action slot; Maya's own row reads `(you)` and offers no action. Leave lives in the Danger zone tab, see `JoinedDanger`.",
+					"Row 9, member view. Tom opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, then the Members list. Noa's row wears the Host tag over an empty action slot; Tom's own row reads `(you)` and offers no action. Leave lives in the Danger zone tab, see `JoinedDanger`. Pick `MembersMemberViewWithInvitation` for the artboard's rows and actions.",
 			},
 		},
 	},
@@ -1716,16 +1779,66 @@ export const MembersMemberView = meta.story({
 		await expect(slotsIn(panel, "share-card")).toHaveLength(0)
 		await expect(inviteFieldIn(panel)).toBeEnabled()
 		await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(INVITE_HINT)
-		await expect(memberRowsIn(panel)).toEqual([
-			NOA_ROW,
-			["M", "Maya (you)", "maya@example.com", MAYA_FINGERPRINT],
-		])
 		await expect(
-			within(listNamed(panel, "Members")).queryByRole("button"),
+			within(rowOf(panel, "Noa Lambert")).queryByRole("button"),
 		).toBeNull()
-		const own = rowOf(panel, "Maya (you)")
+		const own = rowOf(panel, TOM_VIEWER)
+		await expect(within(own).queryByRole("button")).toBeNull()
 		await expect(own.lastElementChild).toHaveAttribute("aria-hidden", "true")
 		await expect(own.lastElementChild?.getBoundingClientRect().width).toBe(28)
+	},
+})
+
+export const MembersMemberViewWithInvitation = meta.story({
+	args: memberViewArgs(),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 9 of the Mockup page. Tom's member view of Studio: Sam's pending invitation under Invitations, then Noa, the Host, Maya with a trash to remove her, and Tom's own row with his fingerprint and no action.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expect(memberRowsIn(panel)).toEqual([
+			SAM_INVITED_ROW,
+			NOA_ROW,
+			MAYA_ROW,
+			["T", TOM_VIEWER, "tom@example.com", TOM_FINGERPRINT],
+		])
+		await expect(
+			within(listNamed(panel, "Members"))
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label")),
+		).toEqual(["Remove Maya Chen"])
+	},
+})
+
+export const MembersMemberViewRemoveConfirm = meta.story({
+	args: memberViewArgs({ removing: MAYA }),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Artboard 9.2 of the Mockup page. Tom pressed Remove on Maya's row: the question names Maya and Studio over the member view, with Remove in the destructive style.",
+			},
+		},
+	},
+	play: async () => {
+		const popup = await questionIn("Remove Maya from Studio?")
+		await expect(popup).toHaveTextContent(
+			"Maya loses access right away. You can invite Maya again.",
+		)
+		await expect(
+			within(popup)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Cancel", "Remove"])
+		await expect(
+			getComputedStyle(within(popup).getByRole("button", { name: "Remove" }))
+				.color,
+		).toBe(probedStyleOf("text-destructive", "color", popup))
 	},
 })
 
@@ -1737,7 +1850,7 @@ export const MembersRemoveHostRefused = meta.story({
 		docs: {
 			description: {
 				story:
-					"Member view of the remove-host refusal. Maya tried to remove Noa, who hosts Studio: the line names the host and the Space in Noa's row, and offers no hosting gesture since Maya has none.",
+					"Member view of the remove-host refusal. Tom tried to remove Noa, who hosts Studio: the line names the host and the Space in Noa's row, and offers no hosting gesture since Tom has none.",
 			},
 		},
 	},
@@ -1745,9 +1858,9 @@ export const MembersRemoveHostRefused = meta.story({
 		const panel = await membersPanelIn()
 		const line = filledRegionIn(panel)
 		await expect(line).toHaveTextContent(
-			/^Noa hosts Studio and can’t be removed\. There’s nothing to do\.$/,
+			/^Noa Lambert hosts Studio and can’t be removed\. There’s nothing to do\.$/,
 		)
-		await expect(rowOf(panel, "Noa")).toContainElement(line)
+		await expect(rowOf(panel, "Noa Lambert")).toContainElement(line)
 		await expect(within(panel).queryByText(/Turn off hosting/)).toBeNull()
 	},
 })
@@ -1756,15 +1869,12 @@ const HOST_OFFLINE_HINT =
 	"Studio is offline. You can invite people once Noa’s computer is back."
 
 export const MembersHostOffline = meta.story({
-	args: memberViewArgs({
-		members: [TOM_PENDING, NOA, MAYA],
-		blockedBy: "hostOffline",
-	}),
+	args: memberViewArgs({ blockedBy: "hostOffline" }),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 9.3. Noa's computer is offline, so Maya can't invite anyone: the label, the field, Invite and every row action drop to 50% and are disabled, while the helper stays at full strength and names the host whose computer has to come back.",
+					"Artboard 9.3. Noa's computer is offline, so Tom can't invite anyone: the label, the field, Invite and every row action drop to 50% and are disabled, while the helper stays at full strength and names the host whose computer has to come back.",
 			},
 		},
 	},
@@ -1772,7 +1882,7 @@ export const MembersHostOffline = meta.story({
 		const panel = await membersPanelIn()
 		await expectInviteBlocked(panel, HOST_OFFLINE_HINT)
 		const withdraw = within(panel).getByRole("button", {
-			name: "Withdraw the invitation to tom@example.com",
+			name: "Withdraw the invitation to sam@example.com",
 		})
 		await expect(withdraw).toBeDisabled()
 		await expect(getComputedStyle(withdraw).opacity).toBe("0.5")
