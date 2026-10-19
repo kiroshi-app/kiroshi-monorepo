@@ -1091,7 +1091,8 @@ export const MembersNeedsInvitation = meta.story({
 		await userEvent.click(
 			within(ada).getByRole("button", { name: "Remove Ada Lovelace" }),
 		)
-		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledExactlyOnceWith(
+		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledOnce()
+		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledWith(
 			ADA_NEEDS_INVITATION,
 		)
 		const inviteAgain = within(ada).getByRole("button", {
