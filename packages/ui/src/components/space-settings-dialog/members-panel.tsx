@@ -102,12 +102,6 @@ const firstNameOf = (member: SpaceMember) => nameOf(member).split(/\s+/)[0]
 const isInvitation = (member: SpaceMember) =>
 	member.status === "pending" || member.status === "expired"
 
-const isRefusedAsMember = (failure: MembersFailure, viewerId?: string) =>
-	failure.action === "remove" &&
-	failure.reason === "host" &&
-	viewerId !== undefined &&
-	viewerId !== failure.member.id
-
 const failureKeyOf = (failure: MembersFailure, viewerId?: string) => {
 	switch (failure.action) {
 		case "invite":
@@ -115,7 +109,9 @@ const failureKeyOf = (failure: MembersFailure, viewerId?: string) => {
 		case "withdraw":
 			return `space.members.failure.withdraw.${failure.reason}` as const
 		case "remove":
-			return isRefusedAsMember(failure, viewerId)
+			return failure.reason === "host" &&
+				viewerId !== undefined &&
+				viewerId !== failure.member.id
 				? "space.members.failure.remove.hostedBy"
 				: (`space.members.failure.remove.${failure.reason}` as const)
 	}
