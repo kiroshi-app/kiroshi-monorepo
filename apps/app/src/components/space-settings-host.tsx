@@ -1,8 +1,12 @@
 import type { EnvironmentWrite } from "@workspace/ui/components/environment-panel"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import { SpaceSettingsDialog } from "@workspace/ui/components/space-settings-dialog"
-import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import {
+	MembersPanel,
+	type MembersPanelProps,
+} from "@workspace/ui/components/space-settings-dialog/members-panel"
 
+import { signedInAccountIdOf } from "@/lib/account/use-account"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
@@ -13,6 +17,16 @@ import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
 const SPACE_TAB = "space"
+
+type MemberView = Pick<MembersPanelProps, "viewerId" | "blockedBy">
+
+const memberViewOf = (
+	isHostOffline: boolean,
+	viewerId: string | null,
+): MemberView => ({
+	viewerId: viewerId ?? undefined,
+	blockedBy: isHostOffline ? "hostOffline" : undefined,
+})
 
 type SpaceSettingsHostProps = {
 	core: WorkspaceCore
@@ -25,7 +39,8 @@ export const SpaceSettingsHost = ({
 	panels,
 	scopes,
 }: SpaceSettingsHostProps) => {
-	const { joinedSpaces, spaceEnvironment, spaceMcpServers, spaces } = core
+	const { account, joinedSpaces, spaceEnvironment, spaceMcpServers, spaces } =
+		core
 	const {
 		applicationToOpenOn,
 		closeSettingsTab,
@@ -58,8 +73,10 @@ export const SpaceSettingsHost = ({
 			: null
 	const hosting = useHosting(editedSpace)
 	const isHosted = hosting?.hosting === "online" || editedJoinedSpace !== null
+	const isHostOffline = joinedSpace?.state === "waitingForHost"
 	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted, {
 		joinedId: editedJoinedSpace ? joinedSpace?.id : undefined,
+		isHostOffline,
 	})
 
 	if (!selectedSpaceId) {
@@ -87,11 +104,16 @@ export const SpaceSettingsHost = ({
 
 	const hostingProps = hosting ? { ...hosting, onSignIn: signIn } : {}
 
-	const membersPropsOf = (spaceName: string) =>
+	const membersPropsOf = (spaceName: string, memberView?: MemberView) =>
 		members
 			? {
 					members: (
-						<MembersPanel {...members} isHosted={isHosted} space={spaceName} />
+						<MembersPanel
+							{...members}
+							{...memberView}
+							isHosted={isHosted}
+							space={spaceName}
+						/>
 					),
 				}
 			: {}
@@ -156,7 +178,10 @@ export const SpaceSettingsHost = ({
 	return joinedSpace ? (
 		<SpaceSettingsDialog
 			{...sharedProps}
-			{...membersPropsOf(joinedSpace.name)}
+			{...membersPropsOf(
+				joinedSpace.name,
+				memberViewOf(isHostOffline, signedInAccountIdOf(account.state)),
+			)}
 			host={joinedSpace.hostUrl}
 			onLeave={() => joinedSpaces.controller.leave(joinedSpace.id).then(close)}
 			value={{ name: joinedSpace.name }}
