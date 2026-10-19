@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thanks for the report. **Do not use this form for a security
-        vulnerability** — follow [SECURITY.md](https://github.com/shoto290/kiroshi-monorepo/blob/main/.github/SECURITY.md)
+        vulnerability** — follow [SECURITY.md](https://github.com/kiroshi-app/kiroshi-monorepo/blob/main/.github/SECURITY.md)
         and report it privately instead.
   - type: textarea
     id: what-happened

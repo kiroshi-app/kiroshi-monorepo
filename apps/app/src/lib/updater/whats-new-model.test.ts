@@ -19,7 +19,7 @@ describe("toWhatsNewContent", () => {
 			subline: "",
 			notes: GIT_CLIFF_BODY_0_24_2.trim(),
 			releaseNotesUrl:
-				"https://github.com/shoto290/kiroshi-monorepo/releases/tag/v0.24.2",
+				"https://github.com/kiroshi-app/kiroshi-monorepo/releases/tag/v0.24.2",
 		})
 	})
 

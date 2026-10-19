@@ -4,7 +4,7 @@ version = "0.24.2"
 description = "Kiroshi desktop app"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/shoto290/kiroshi-monorepo"
+repository = "https://github.com/kiroshi-app/kiroshi-monorepo"
 default-run = "Kiroshi"
 
 [lib]

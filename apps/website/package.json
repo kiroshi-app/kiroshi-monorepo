@@ -5,7 +5,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/shoto290/kiroshi-monorepo.git"
+		"url": "git+https://github.com/kiroshi-app/kiroshi-monorepo.git"
 	},
 	"type": "module",
 	"scripts": {

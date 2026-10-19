@@ -111,7 +111,7 @@ Once, in App Store Connect and GitHub:
 
 1. The app record for `com.kiroshi.app.ios` (team `BBE5V2JL5H`, iOS). Xcode offers to create it during step 4 below if it's missing.
 2. In TestFlight, an internal group (Internal Testing, +), with every tester in it.
-3. Xcode Cloud's access to `shoto290/kiroshi-monorepo`, granted with a GitHub admin of the repo when Xcode asks.
+3. Xcode Cloud's access to `kiroshi-app/kiroshi-monorepo`, granted with a GitHub admin of the repo when Xcode asks.
 
 The workflow, from Xcode:
 

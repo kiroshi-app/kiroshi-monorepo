@@ -53,7 +53,7 @@
 		},
 		"updater": {
 			"endpoints": [
-				"https://github.com/shoto290/kiroshi-monorepo/releases/latest/download/latest.json"
+				"https://github.com/kiroshi-app/kiroshi-monorepo/releases/latest/download/latest.json"
 			],
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGMkVBNjdDQ0I1QTc2N0QKUldSOWRsckxmS1l1ajArcW54RTM3R0dWSEJ1YTBMbnhlYjdnakg3MXA4RTFUajlvUFVDT0lJdzMK"
 		}

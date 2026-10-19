@@ -19,4 +19,4 @@
 - [ ] No visual code landed in `apps/app`; new or changed components in
       `packages/ui` have a Storybook story.
 - [ ] No new dependency, or it was agreed in an issue first.
-- [ ] I read [AGENTS.md](https://github.com/shoto290/kiroshi-monorepo/blob/main/AGENTS.md) and this change follows it.
+- [ ] I read [AGENTS.md](https://github.com/kiroshi-app/kiroshi-monorepo/blob/main/AGENTS.md) and this change follows it.

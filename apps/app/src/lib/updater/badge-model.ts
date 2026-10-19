@@ -35,7 +35,7 @@ const statusOf = ({ host }: UpdaterState): UpdateBadgeProps["status"] => {
 }
 
 const RELEASE_TAG_URL =
-	"https://github.com/shoto290/kiroshi-monorepo/releases/tag"
+	"https://github.com/kiroshi-app/kiroshi-monorepo/releases/tag"
 
 export const releaseNotesUrlOf = (version: string): string =>
 	`${RELEASE_TAG_URL}/v${version}`
