@@ -1265,15 +1265,26 @@ export const ReducedMotion = meta.story({
 const INVITED_ARTBOARD =
 	"Measured against the Paper page `Join an invited Space`, dark only."
 
+const SPACES_ARTBOARD =
+	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only."
+
+const BANNER_GAP =
+	"The artboard draws an inline banner in place of the composer, where the app raises this toast on the notice surface."
+
+const REMOVING_HOST = "Noa"
+
+const REMOVED_SPACE = "Studio"
+
 type HeldInfoNoticeProps = {
 	title: string
+	description?: string
 }
 
-const HeldInfoNotice = ({ title }: HeldInfoNoticeProps) => {
+const HeldInfoNotice = ({ title, description }: HeldInfoNoticeProps) => {
 	useEffect(() => {
-		const id = raiseTransientNotice({ type: "info", title })
+		const id = raiseTransientNotice({ type: "info", title, description })
 		return () => endNotice(id)
-	}, [title])
+	}, [description, title])
 
 	return <NoticeSurface transientDelay={0} />
 }
@@ -1283,9 +1294,39 @@ const RemovedFromSpaceNotice = () => {
 
 	return (
 		<HeldInfoNotice
+			description={t("spaces.removed.memberNoticeDescription", {
+				host: REMOVING_HOST,
+			})}
+			title={t("spaces.removed.memberNotice", { name: REMOVED_SPACE })}
+		/>
+	)
+}
+
+const SpaceDeletedNotice = () => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<HeldInfoNotice
+			description={t("spaces.removed.deletedNoticeDescription")}
+			title={t("spaces.removed.deletedNotice", {
+				host: REMOVING_HOST,
+				name: REMOVED_SPACE,
+			})}
+		/>
+	)
+}
+
+const RemovedForAnUnknownReasonNotice = () => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<HeldInfoNotice
+			description={t("spaces.removed.noticeDescription", {
+				host: REMOVING_HOST,
+			})}
 			title={t("spaces.removed.notice", {
-				host: "Lea",
-				name: "Studio Nord",
+				host: REMOVING_HOST,
+				name: REMOVED_SPACE,
 			})}
 		/>
 	)
@@ -1304,6 +1345,7 @@ const SignedOutNotice = () => {
 const expectInfoNoticeClosing = async (
 	title: string,
 	userEvent: UserEventObject,
+	description?: string,
 ) => {
 	const notice = await within(viewport()).findByText(title)
 	const toast = notice.closest<HTMLElement>("[data-slot=toast]")
@@ -1311,26 +1353,70 @@ const expectInfoNoticeClosing = async (
 	await opaque(toast)
 	await expect(notice).toBeVisible()
 	await expect(toast).toHaveAttribute("data-type", "info")
+	if (description) {
+		await expect(toast).toHaveAccessibleDescription(description)
+	}
 	await expect(actionControl()).toBe(null)
 	await userEvent.click(closeControl())
 	await waitFor(() => expect(within(viewport()).queryByText(title)).toBe(null))
 }
 
 export const M8RemovedFromSpace = meta.story({
-	name: "M8 Removed from Space",
+	name: "8 Removed from Space",
 	globals: { theme: "dark" },
 	render: () => <RemovedFromSpaceNotice />,
 	parameters: {
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M8: the info notice raised when a host removes the reader from a joined Space, drawn on this surface with its close control and no action.`,
+				story: `${SPACES_ARTBOARD} Row 8: the host removed the reader from a joined Space. ${BANNER_GAP} Check the info notice names the Space, says the conversations left this device, points to the host for a new invitation, and carries a close control and no action. Pick \`SpaceDeleted\` for a Space its host deleted.`,
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
 		await expectInfoNoticeClosing(
-			"Lea removed you from Studio Nord.",
+			"You’re no longer a member of Studio",
 			userEvent,
+			"Its conversations aren’t on this device anymore. Ask Noa for a new invitation.",
+		)
+	},
+})
+
+export const SpaceDeleted = meta.story({
+	name: "8.1 Space deleted",
+	globals: { theme: "dark" },
+	render: () => <SpaceDeletedNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story: `${SPACES_ARTBOARD} Row 8.1: the host deleted a Space the reader had joined. ${BANNER_GAP} Check the info notice names the host and the Space, says the conversations left this device, and carries a close control and no action. Pick \`M8RemovedFromSpace\` for a Space that still exists.`,
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		await expectInfoNoticeClosing(
+			"Noa deleted Studio",
+			userEvent,
+			"Its conversations aren’t on this device anymore.",
+		)
+	},
+})
+
+export const RemovedReasonUnknown = meta.story({
+	name: "Removed, reason unknown",
+	globals: { theme: "dark" },
+	render: () => <RemovedForAnUnknownReasonNotice />,
+	parameters: {
+		docs: {
+			description: {
+				story: `No artboard draws this reason; it reuses the data of rows 8 and 8.1 on the Paper page \`Mockup\` of \`Kiroshi, E2E Spaces v2\`, dark only. ${BANNER_GAP} The joined Space left this computer for a reason the host did not name. Check the info notice names the host and the Space, says the conversations stay with the host, and carries a close control and no action. Pick \`M8RemovedFromSpace\` or \`SpaceDeleted\` for a named reason.`,
+			},
+		},
+	},
+	play: async ({ userEvent }) => {
+		await expectInfoNoticeClosing(
+			"Noa removed you from Studio.",
+			userEvent,
+			"It’s gone from your spaces. Its conversations stay on Noa’s Kiroshi.",
 		)
 	},
 })
@@ -1388,7 +1474,7 @@ export const RemovedWithSpaceMark = meta.story({
 		docs: {
 			description: {
 				story:
-					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.8, dark only. A host removed the reader from a joined space, so the notice carries that space's colour as a 10px square outline, 1.5px on a 3px radius, in place of the info glyph, over who removed them and where the conversations stay. Check the mark is decorative and drawn in the space's tint, and that the body sits in the muted foreground. Pick `M8RemovedFromSpace` for the title-only notice with the info glyph.",
+					"Measured against the Paper page `Iteration 5` of `Kiroshi, Invitations`, artboard 5.8, dark only. A host removed the reader from a joined space, so the notice carries that space's colour as a 10px square outline, 1.5px on a 3px radius, in place of the info glyph, over who removed them and where the conversations stay. Check the mark is decorative and drawn in the space's tint, and that the body sits in the muted foreground. Pick `M8RemovedFromSpace` for the notice that keeps the info glyph beside its title and body.",
 			},
 		},
 	},
@@ -1417,9 +1503,6 @@ export const RemovedWithSpaceMark = meta.story({
 		).toBe("rgb(163, 163, 163)")
 	},
 })
-
-const DEVICES_ARTBOARD =
-	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only."
 
 const ASKING_DEVICE = "Noa’s iPhone 17"
 
@@ -1488,7 +1571,7 @@ export const DeviceApproved = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${DEVICES_ARTBOARD} Artboard 6.2: the reader approved another device and the dialog closed. Check the success notice lands at top centre naming the device, says where to remove it, and carries no action. Pick \`DeviceRejected\` for the device the reader turned down.`,
+				story: `${SPACES_ARTBOARD} Artboard 6.2: the reader approved another device and the dialog closed. Check the success notice lands at top centre naming the device, says where to remove it, and carries no action. Pick \`DeviceRejected\` for the device the reader turned down.`,
 			},
 		},
 	},
@@ -1507,7 +1590,7 @@ export const DeviceRejected = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${DEVICES_ARTBOARD} Artboard 6.3: the reader answered Not me. Check the notice says the device was signed out and never read the spaces. Pick \`DeviceRemoved\` for a device removed after it had access.`,
+				story: `${SPACES_ARTBOARD} Artboard 6.3: the reader answered Not me. Check the notice says the device was signed out and never read the spaces. Pick \`DeviceRemoved\` for a device removed after it had access.`,
 			},
 		},
 	},
@@ -1526,7 +1609,7 @@ export const DeviceRemoved = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${DEVICES_ARTBOARD} Artboard 7.3: the reader removed a device from Your devices. Check the notice says it was signed out and no longer reads the spaces. Pick \`DeviceRejected\` for a device that never had access.`,
+				story: `${SPACES_ARTBOARD} Artboard 7.3: the reader removed a device from Your devices. Check the notice says it was signed out and no longer reads the spaces. Pick \`DeviceRejected\` for a device that never had access.`,
 			},
 		},
 	},
