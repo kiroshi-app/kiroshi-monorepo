@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 enum RelayCallError: Error, Equatable {
     case notConnected
@@ -15,12 +16,14 @@ actor RelayConnection {
     static let sharedSpaceDeadline = Duration.seconds(30)
     static let callDeadline = Duration.seconds(300)
     static let hello = Data(#"{"hello":{}}"#.utf8)
+    static let noKeyId: UInt32 = 0
 
     let instanceId: Space.ID
     private(set) var state: RelayState = .paused
     private let request: URLRequest
     private let device: RelayDevice
-    private let spaceKeys: SpaceKeys?
+    private var spaceKeys: SpaceKeys?
+    private let spaceKeyStore: any SpaceKeyStore
     private let transport: any RelayTransport
     private let clock: any RelayClock
     private let counters: FrameCounters
@@ -50,6 +53,7 @@ actor RelayConnection {
             baseURL: baseURL, instanceId: instanceId, bearer: bearer, device: device.relayId)
         self.device = device
         self.spaceKeys = spaceKeys
+        spaceKeyStore = environment.spaceKeys
         transport = environment.transport
         clock = environment.clock
         counters = environment.counters
@@ -78,10 +82,6 @@ actor RelayConnection {
 
     func start() {
         guard run == nil else { return }
-        guard spaceKeys != nil else {
-            publish(.needsJoin)
-            return
-        }
         backoff.reset()
         run = Task { await self.connectUntilStopped() }
     }
@@ -161,9 +161,22 @@ actor RelayConnection {
         } catch {
             return RelayEnding(.unreachable, retries: true)
         }
-        guard !Task.isCancelled, let spaceKeys else {
+        guard !Task.isCancelled else {
             opened.close()
             return RelayEnding(.paused, retries: false)
+        }
+        let spaceKeys: SpaceKeys
+        if let held = self.spaceKeys {
+            spaceKeys = held
+        } else {
+            switch await awaitKey(on: opened) {
+            case .keyed(let handed): spaceKeys = handed
+            case .ended(let ending): return ending
+            }
+            guard !Task.isCancelled else {
+                opened.close()
+                return RelayEnding(.paused, retries: false)
+            }
         }
         let (outgoing, outbox) = AsyncStream.makeStream(
             of: RelayOutgoing.self, bufferingPolicy: .unbounded)
@@ -197,6 +210,99 @@ actor RelayConnection {
             failPendingCalls()
         }
         return ending
+    }
+
+    private func awaitKey(on socket: any RelaySocket) async -> KeyWait {
+        publish(.joining)
+        silentPings = 0
+        return await withTaskGroup(of: KeyWait?.self) { group in
+            group.addTask { await self.receiveKey(on: socket) }
+            group.addTask { await self.askForKey(on: socket) }
+            group.addTask { await self.keepAlive(socket).map(KeyWait.ended) }
+            var outcome = KeyWait.ended(RelayEnding(.unreachable, retries: true))
+            for await finished in group {
+                if let finished {
+                    outcome = finished
+                    break
+                }
+            }
+            if case .ended = outcome {
+                socket.close()
+            }
+            group.cancelAll()
+            return outcome
+        }
+    }
+
+    private func receiveKey(on socket: any RelaySocket) async -> KeyWait? {
+        do {
+            while true {
+                let text = try await socket.receive()
+                silentPings = 0
+                if let keys = await keys(handedIn: text) {
+                    return .keyed(keys)
+                }
+            }
+        } catch let closure as RelayClosure {
+            return .ended(RelayEnding(closeCode: closure.code))
+        } catch {
+            return .ended(RelayEnding(.unreachable, retries: true))
+        }
+    }
+
+    private func keys(handedIn text: String) async -> SpaceKeys? {
+        guard let handed = try? await Self.verifying(text, instance: instanceId, device: device)
+        else { return nil }
+        do {
+            try await spaceKeyStore.save(handed, for: instanceId, sealedTo: device.keys)
+        } catch {
+            relayLog.error(
+                "The key of a joined Space wasn't stored: \(String(describing: error), privacy: .public)"
+            )
+        }
+        if let held = spaceKeys {
+            return held
+        }
+        spaceKeys = handed.spaceKeys
+        return handed.spaceKeys
+    }
+
+    private func askForKey(on socket: any RelaySocket) async -> KeyWait? {
+        while true {
+            do {
+                try await socket.send(try await Self.keyRequest(in: instanceId, from: device))
+            } catch {
+                return .ended(RelayEnding(.unreachable, retries: true))
+            }
+            do {
+                try await clock.sleep(for: Self.pingInterval)
+            } catch {
+                return nil
+            }
+        }
+    }
+
+    @concurrent private static func verifying(
+        _ text: String, instance: Space.ID, device: RelayDevice
+    ) async throws(RekeyRefusal) -> HandedSpaceKey {
+        try SpaceHandover.firstRekey(text, instance: instance, device: device)
+    }
+
+    @concurrent private static func keyRequest(in instance: Space.ID, from device: RelayDevice)
+        async throws -> String
+    {
+        guard
+            let header = FrameHeader(
+                instance: instance, from: device.keys.deviceId, keyId: noKeyId, ctr: 1)
+        else { throw RelayCallError.connectionClosed }
+        let sealed = try RelayCrypto.seal(
+            hello, header: header, spaceKey: SymmetricKey(size: .bits256),
+            signer: device.keys.signing)
+        let frame = RelayWireFrame(
+            v: 2, instance: instance, from: nil, to: nil, keyId: noKeyId, ctr: 1, challenge: nil,
+            ct: sealed.ciphertext.base64EncodedString(),
+            sig: sealed.signature.base64EncodedString())
+        return String(decoding: try JSONEncoder().encode(frame), as: UTF8.self)
     }
 
     private func receiveUntilClosed(_ socket: any RelaySocket) async -> RelayEnding {
@@ -486,6 +592,13 @@ private struct RelayEnding: Sendable {
         }
     }
 }
+
+private enum KeyWait: Sendable {
+    case keyed(SpaceKeys)
+    case ended(RelayEnding)
+}
+
+private let relayLog = Logger(subsystem: "com.kiroshi.app.ios", category: "relay")
 
 private struct RelayNoArgs: Encodable {}
 

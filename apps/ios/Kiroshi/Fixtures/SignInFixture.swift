@@ -140,6 +140,16 @@
         case approvalExpired = "approval-6.4"
         case approvalCode = "approval-6.5"
         case deviceRequest = "device-request"
+        case invitationBadge = "4"
+        case invitationMenu = "4.1"
+        case invitationSheet = "4.2"
+        case invitationJoining = "4.3"
+        case invitationHostOffline = "4.4"
+        case invitationCouldNotAccept = "4.5"
+        case invitationWithdrawn = "4.6"
+        case invitationJoined = "4.7"
+        case invitationExpired = "invitation-expired"
+        case invitationOtherEmail = "invitation-other-email"
 
         @MainActor static var opened: SignInFixture?
 
@@ -226,6 +236,10 @@
                 .agreement:
                 [CloudFixture.spacesPath: CloudFixture.threeSpaces]
             case .opening, .email, .code: [:]
+            case .invitationBadge, .invitationMenu, .invitationSheet, .invitationJoining,
+                .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
+                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                InvitationsFixture.answers(self)
             case .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
                 .approvalApproved:
                 [
@@ -269,7 +283,10 @@
                 .slowMission, .noMissions, .missionsHostOffline, .settings, .signOutAlert,
                 .deleteAccount, .deleteAccountFailed, .deletingAccount, .approvalWaiting,
                 .approvalRefused, .approvalExpired, .approvalCode,
-                .approvalApproved, .deviceRequest:
+                .approvalApproved, .deviceRequest, .invitationBadge, .invitationMenu,
+                .invitationSheet, .invitationJoining,
+                .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
+                .invitationJoined, .invitationExpired, .invitationOtherEmail:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
                 .threadHostOffline,
@@ -328,8 +345,12 @@
                 .contains(self)
         }
 
+        var isInvitation: Bool {
+            rawValue.hasPrefix("4") || rawValue.hasPrefix("invitation-")
+        }
+
         var isOnHome: Bool {
-            rawValue.hasPrefix("2.")
+            rawValue.hasPrefix("2.") || isInvitation
                 || [
                     .deviceRequest, .missionsButton, .conversationMissions, .conversationNoMissions,
                     .pinned,
@@ -400,6 +421,10 @@
             case .deviceMoved:
                 return RelayEnvironment(
                     transport: DeviceMovedRelayTransport(), clock: ContinuousRelayClock())
+            case .invitationBadge, .invitationMenu, .invitationSheet, .invitationJoining,
+                .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
+                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                return InvitationsFixture.relay(self)
             case .joinSpace:
                 return RelayEnvironment(
                     transport: FixtureRelayTransport(onlineSpaceIds: online),
@@ -491,7 +516,10 @@
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
                 .settings, .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
-                .approvalApproved, .deviceRequest:
+                .approvalApproved, .deviceRequest, .invitationBadge, .invitationMenu,
+                .invitationSheet, .invitationJoining,
+                .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
+                .invitationJoined, .invitationExpired, .invitationOtherEmail:
                 break
             }
             return model

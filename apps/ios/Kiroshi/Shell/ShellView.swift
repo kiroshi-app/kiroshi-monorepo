@@ -38,6 +38,11 @@ struct ShellView: View {
             guard isInForeground, let requests = account.requests else { return }
             await requests.watch()
         }
+        .task(id: isInForeground) {
+            guard isInForeground else { return }
+            await account.invitations?.refresh()
+        }
+        .invitationSheet(account.invitations)
         .sheet(item: askingDevice) { request in
             if let requests = account.requests {
                 DeviceRequestSheet(requests: requests, request: request)

@@ -4,7 +4,7 @@ enum RelayState: Equatable, Sendable {
     case online(sharedSpaceId: String)
     case hostOffline
     case invitationPending
-    case needsJoin
+    case joining
     case unreachable
     case signedOut
     case membershipEnded

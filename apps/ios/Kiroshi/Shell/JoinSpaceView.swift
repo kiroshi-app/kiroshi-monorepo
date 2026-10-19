@@ -6,10 +6,10 @@ struct JoinSpaceView: View {
     var body: some View {
         ScrollView {
             ContentUnavailableView {
-                Label("Join this Space", systemImage: "person.badge.key")
+                Label("Waiting for the key to \(name)", systemImage: "person.badge.key")
             } description: {
                 Text(
-                    "This iPhone doesn’t have the key to \(name) yet. Open an invitation to \(name) on this iPhone to join."
+                    "The computer where \(name) runs sends this iPhone its key once Kiroshi is open there."
                 )
             }
         }
@@ -19,7 +19,7 @@ struct JoinSpaceView: View {
 }
 
 #if DEBUG
-    #Preview("Join this Space") {
+    #Preview("Waiting for the key") {
         SignInRootView(model: .fixture(.joinSpace))
     }
 #endif
