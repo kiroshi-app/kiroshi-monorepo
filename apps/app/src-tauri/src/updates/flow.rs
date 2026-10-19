@@ -10,9 +10,9 @@ use super::contract::{UpdateChannel, UpdateState};
 use crate::events;
 
 const STABLE_MANIFEST: &str =
-	"https://github.com/shoto290/kiroshi-monorepo/releases/latest/download/latest.json";
+	"https://github.com/kiroshi-app/kiroshi-monorepo/releases/latest/download/latest.json";
 const BETA_MANIFEST: &str =
-	"https://github.com/shoto290/kiroshi-monorepo/releases/download/beta/latest.json";
+	"https://github.com/kiroshi-app/kiroshi-monorepo/releases/download/beta/latest.json";
 const CHECK_BOUND: Duration = Duration::from_secs(30);
 const DOWNLOAD_BOUND: Duration = Duration::from_secs(15 * 60);
 
@@ -272,7 +272,7 @@ mod tests {
 	fn beta_checks_the_beta_release_manifest() {
 		assert_eq!(
 			manifest_url(UpdateChannel::Beta),
-			"https://github.com/shoto290/kiroshi-monorepo/releases/download/beta/latest.json"
+			"https://github.com/kiroshi-app/kiroshi-monorepo/releases/download/beta/latest.json"
 		);
 	}
 

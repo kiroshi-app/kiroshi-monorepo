@@ -205,7 +205,7 @@ describe("aboutFieldsOf", () => {
 		fieldsOf()?.onReleaseNotes()
 
 		expect(openReleaseNotes).toHaveBeenCalledWith(
-			"https://github.com/shoto290/kiroshi-monorepo/releases/tag/v0.25.0",
+			"https://github.com/kiroshi-app/kiroshi-monorepo/releases/tag/v0.25.0",
 		)
 	})
 })

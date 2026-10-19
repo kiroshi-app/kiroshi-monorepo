@@ -103,7 +103,7 @@ describe("toUpdateBadgeProps", () => {
 		)
 
 		expect(props.releaseNotesUrl).toBe(
-			"https://github.com/shoto290/kiroshi-monorepo/releases/tag/v1.4.0",
+			"https://github.com/kiroshi-app/kiroshi-monorepo/releases/tag/v1.4.0",
 		)
 	})
 

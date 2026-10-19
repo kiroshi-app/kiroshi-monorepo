@@ -14,7 +14,7 @@ use crate::private_files;
 
 pub const DIR_NAME: &str = "release-notes";
 const RELEASES_BY_TAG: &str =
-	"https://api.github.com/repos/shoto290/kiroshi-monorepo/releases/tags";
+	"https://api.github.com/repos/kiroshi-app/kiroshi-monorepo/releases/tags";
 const VISUAL_ASSET: &str = "whats-new.png";
 const TIMEOUT: Duration = Duration::from_secs(15);
 

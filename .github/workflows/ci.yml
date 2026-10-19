@@ -6,6 +6,8 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -17,7 +19,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# pull_request: changes, lint, rust-check, vitest, website, verify.
+# pull_request and merge_group: changes, lint, rust-check, vitest, website, verify.
 # push to main: changes, lint, vitest, website, rust, storybook, ios, verify.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify. ios runs on a push to main only.
 jobs:
@@ -57,7 +59,7 @@ jobs:
 
   rust-check:
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true'
+    if: (github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -192,7 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      BASE: ${{ github.event.pull_request.base.sha }}
+      BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
       vitest: ${{ steps.filter.outputs.vitest }}
@@ -206,8 +208,8 @@ jobs:
         with:
           bun-version-file: package.json
 
-      - name: Fetch the pull request base
-        if: github.event_name == 'pull_request'
+      - name: Fetch the base to diff against
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         run: git fetch --depth=1 origin "$BASE"
 
       - name: Decide the jobs to run
@@ -251,8 +253,8 @@ jobs:
         if: needs.changes.result != 'success' || needs.lint.result != 'success'
         run: exit 1
 
-      - name: Require rust-check to succeed when it ran on a pull_request, and to be skipped otherwise
-        if: needs.rust-check.result != (github.event_name == 'pull_request' && needs.changes.outputs.rust == 'true' && 'success' || 'skipped')
+      - name: Require rust-check to succeed when it ran on a pull_request or a merge_group, and to be skipped otherwise
+        if: needs.rust-check.result != ((github.event_name == 'pull_request' || github.event_name == 'merge_group') && needs.changes.outputs.rust == 'true' && 'success' || 'skipped')
         run: exit 1
 
       - name: Require vitest to succeed when it ran for a change, and to be skipped otherwise

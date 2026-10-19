@@ -25,10 +25,13 @@ type WorkflowStep = {
 }
 
 type Workflow = {
+	on: Record<string, unknown>
+	concurrency: { group: string; "cancel-in-progress": string }
 	jobs: Record<
 		string,
 		{
 			if?: string
+			env?: Record<string, string>
 			needs?: string | string[]
 			"timeout-minutes"?: number
 			steps?: WorkflowStep[]
@@ -63,7 +66,8 @@ const ON_PUSH_ONLY = "github.event_name == 'push' && "
 
 const ON_MAIN_ONLY = "github.ref == 'refs/heads/main' && "
 
-const ON_PULL_REQUEST_ONLY = "github.event_name == 'pull_request' && "
+const ON_PULL_REQUEST_OR_MERGE_GROUP =
+	"(github.event_name == 'pull_request' || github.event_name == 'merge_group') && "
 
 const POST_MERGE_JOBS: Group[] = ["rust", "storybook", "ios"]
 
@@ -95,6 +99,100 @@ const verifyCondition = (job: string) =>
 	(workflow.jobs.verify?.steps ?? []).find((step) =>
 		step.if?.startsWith(`needs.${job}.result`),
 	)?.if
+
+type ExpressionScope = Record<string, unknown>
+
+type GitHubContext = ExpressionScope & { event_name: string; ref: string }
+
+type JobResults = Record<string, string>
+
+const lookUp = (scope: ExpressionScope, path: string) =>
+	path
+		.split(".")
+		.reduce<unknown>(
+			(value, key) => (value as ExpressionScope | undefined)?.[key],
+			scope,
+		)
+
+const evaluate = (expression: string, scope: ExpressionScope): unknown =>
+	new Function(
+		`return (${expression
+			.replace(/\b(?:github|needs)(?:\.[\w-]+)+/g, (path) =>
+				JSON.stringify(lookUp(scope, path) ?? null),
+			)
+			.replace("always()", "true")
+			.replace(/'([^']*)'/g, '"$1"')
+			.replace(/([!=])=/g, "$1==")})`,
+	)()
+
+const interpolate = (template: string, scope: ExpressionScope) =>
+	template.replace(/\$\{\{(.*?)\}\}/g, (_, expression: string) =>
+		String(evaluate(expression, scope)),
+	)
+
+const EVERY_OUTPUT_TRUE = Object.fromEntries(
+	Object.keys(EVERY_PATH_TOUCHED).map((job) => [job, "true"]),
+)
+
+const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
+	github,
+	needs: {
+		...Object.fromEntries(
+			Object.entries(results).map(([job, result]) => [job, { result }]),
+		),
+		changes: { result: results.changes, outputs: EVERY_OUTPUT_TRUE },
+	},
+})
+
+const jobsRunningOn = (github: GitHubContext) =>
+	Object.keys(workflow.jobs)
+		.filter((job) =>
+			evaluate(workflow.jobs[job]?.if ?? "true", scopeOf(github)),
+		)
+		.sort()
+
+const resultsByRule = (github: GitHubContext): JobResults => {
+	const running = jobsRunningOn(github)
+	return Object.fromEntries(
+		Object.keys(workflow.jobs).map((job) => [
+			job,
+			running.includes(job) ? "success" : "skipped",
+		]),
+	)
+}
+
+const failingVerifySteps = (github: GitHubContext, results: JobResults) =>
+	(workflow.jobs.verify?.steps ?? []).filter((step) =>
+		evaluate(step.if ?? "true", scopeOf(github, results)),
+	)
+
+const A_PUSH_TO_MAIN: GitHubContext = {
+	event_name: "push",
+	ref: "refs/heads/main",
+}
+
+const A_PULL_REQUEST: GitHubContext = {
+	event_name: "pull_request",
+	ref: "refs/pull/7/merge",
+}
+
+const queueCommit = (pullRequest: number): GitHubContext => ({
+	event_name: "merge_group",
+	ref: `refs/heads/gh-readonly-queue/main/pr-${pullRequest}-0123abc`,
+	run_id: `30${pullRequest}`,
+	event: { merge_group: { base_sha: "queue-base" } },
+})
+
+const A_QUEUE_COMMIT = queueCommit(7)
+
+const PULL_REQUEST_JOB_SET = [
+	"changes",
+	"lint",
+	"rust-check",
+	"verify",
+	"vitest",
+	"website",
+]
 
 describe("the gate", () => {
 	it("runs the pull_request groups, then the post-merge groups", () => {
@@ -269,14 +367,14 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("runs rust-check on a pull_request only and has verify expect it skipped on a push", () => {
+	it("runs rust-check on a pull_request or a merge_group only and has verify expect it skipped on a push", () => {
 		const filter = "needs.changes.outputs.rust == 'true'"
 
 		expect(workflow.jobs["rust-check"]?.if).toBe(
-			`${ON_PULL_REQUEST_ONLY}${filter}`,
+			`${ON_PULL_REQUEST_OR_MERGE_GROUP}${filter}`,
 		)
 		expect(verifyCondition("rust-check")).toBe(
-			`needs.rust-check.result != (${ON_PULL_REQUEST_ONLY}${filter} && 'success' || 'skipped')`,
+			`needs.rust-check.result != (${ON_PULL_REQUEST_OR_MERGE_GROUP}${filter} && 'success' || 'skipped')`,
 		)
 	})
 
@@ -288,6 +386,77 @@ describe("the jobs of ci.yml", () => {
 			)
 		},
 	)
+
+	it("triggers on a push, a pull_request and a merge_group asking for checks", () => {
+		expect(workflow.on).toEqual({
+			push: { branches: ["main"], tags: ["v*"] },
+			pull_request: { branches: ["main"] },
+			merge_group: { types: ["checks_requested"] },
+		})
+	})
+
+	it("runs the pull_request jobs on a merge_group, and skips rust, storybook and ios", () => {
+		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
+		expect(jobsRunningOn(A_QUEUE_COMMIT)).toEqual(PULL_REQUEST_JOB_SET)
+	})
+
+	it("keeps every job but rust-check on a push to main", () => {
+		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual([
+			"changes",
+			"ios",
+			"lint",
+			"rust",
+			"storybook",
+			"verify",
+			"vitest",
+			"website",
+		])
+	})
+
+	it("has verify pass on a merge_group when every job succeeded or was skipped by rule", () => {
+		expect(
+			failingVerifySteps(A_QUEUE_COMMIT, resultsByRule(A_QUEUE_COMMIT)),
+		).toEqual([])
+	})
+
+	it.each(
+		PULL_REQUEST_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
+			[job, "failure"],
+			[job, "skipped"],
+		]),
+	)("has verify fail on a merge_group when %s ended %s", (job, result) => {
+		const results = { ...resultsByRule(A_QUEUE_COMMIT), [job]: result }
+
+		expect(failingVerifySteps(A_QUEUE_COMMIT, results)).not.toEqual([])
+	})
+
+	it("diffs a merge_group against its base_sha, fetched before the diff", () => {
+		const changes = workflow.jobs.changes
+		const steps = changes?.steps ?? []
+		const fetchIndex = steps.findIndex(
+			(step) => step.name === "Fetch the base to diff against",
+		)
+		const decideIndex = steps.findIndex((step) => step.id === "filter")
+		const scope = scopeOf(A_QUEUE_COMMIT)
+
+		expect(interpolate(changes?.env?.BASE ?? "", scope)).toBe("queue-base")
+		expect(evaluate(steps[fetchIndex]?.if ?? "false", scope)).toBe(true)
+		expect(steps[fetchIndex]?.run).toBe('git fetch --depth=1 origin "$BASE"')
+		expect(fetchIndex).toBeLessThan(decideIndex)
+	})
+
+	it("never cancels the run of another queue commit", () => {
+		const groupOf = (github: GitHubContext) =>
+			interpolate(workflow.concurrency.group, scopeOf(github))
+
+		expect(groupOf(queueCommit(7))).not.toBe(groupOf(queueCommit(8)))
+		expect(
+			interpolate(
+				workflow.concurrency["cancel-in-progress"],
+				scopeOf(A_QUEUE_COMMIT),
+			),
+		).toBe("false")
+	})
 
 	it("has verify wait on every job", () => {
 		expect(workflow.jobs.verify?.needs).toEqual([

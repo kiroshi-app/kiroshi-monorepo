@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Kiroshi follows the SIMPLE principles in
-        [AGENTS.md](https://github.com/shoto290/kiroshi-monorepo/blob/main/AGENTS.md):
+        [AGENTS.md](https://github.com/kiroshi-app/kiroshi-monorepo/blob/main/AGENTS.md):
         the simplest thing that solves a real problem wins, and speculative
         features are declined. Describe the problem before the solution.
   - type: textarea

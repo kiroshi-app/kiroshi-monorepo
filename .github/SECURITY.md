@@ -27,7 +27,7 @@ into logs, transcripts, or the UI.
 
 Report privately through GitHub, never in a public issue or pull request:
 
-1. Open <https://github.com/shoto290/kiroshi-monorepo/security/advisories/new>, or go to
+1. Open <https://github.com/kiroshi-app/kiroshi-monorepo/security/advisories/new>, or go to
    the repository's **Security** tab and choose **Report a vulnerability**.
 2. Describe what you found, the version or commit, your OS, and the steps to
    reproduce it. A minimal reproduction and the impact you believe it has help

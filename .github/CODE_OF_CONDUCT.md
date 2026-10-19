@@ -61,7 +61,7 @@ representative at an online or offline event.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement through a private
 report on GitHub: open a private security advisory at
-<https://github.com/shoto290/kiroshi-monorepo/security/advisories/new> — it is the
+<https://github.com/kiroshi-app/kiroshi-monorepo/security/advisories/new> — it is the
 project's private channel to the maintainers and reaches no one else — or use
 GitHub's own reporting tools at <https://github.com/contact/report-abuse>.
 All complaints will be reviewed and investigated promptly and fairly.

@@ -136,7 +136,7 @@ export const WEBSITE_COPY = {
 
 const AUTHOR_SLUG = "shoto290"
 
-const REPOSITORY_SLUG = `${AUTHOR_SLUG}/kiroshi-monorepo`
+const REPOSITORY_SLUG = "kiroshi-app/kiroshi-monorepo"
 
 export const AUTHOR_URL = `https://github.com/${AUTHOR_SLUG}`
 
