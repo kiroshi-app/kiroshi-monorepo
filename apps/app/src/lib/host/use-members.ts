@@ -25,7 +25,13 @@ import {
 	refusalOf,
 	toSpaceMember,
 } from "./member-actions"
-import { type MembersTransport, membersTransport } from "./members-transport"
+import {
+	type HostedMember,
+	isExpired,
+	isSameEmail,
+	type MembersTransport,
+	membersTransport,
+} from "./members-transport"
 
 import {
 	HOSTING_MEMBERS_CHANGED_EVENT,
@@ -48,6 +54,7 @@ export type MembersProps = Pick<
 	| "email"
 	| "onEmailChange"
 	| "onInvite"
+	| "blockedBy"
 	| "refusal"
 	| "failure"
 	| "removing"
@@ -62,15 +69,22 @@ type MembersOptions = {
 	reportSuccess?: (message: NoticeMessage) => void
 	joinedId?: string
 	isHostOffline?: boolean
+	isSignedOut?: boolean
 }
 
-const NO_MEMBERS: Member[] = []
+const NO_MEMBERS: HostedMember[] = []
 
 const NOT_REFUSED: MemberActionRefusal = {}
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
 })
+
+const inviteBlockerOf = (
+	isSignedOut: boolean,
+	joinedId: string | undefined,
+): MembersProps["blockedBy"] =>
+	isSignedOut && !joinedId ? "signedOut" : undefined
 
 export const useMembers = (
 	openSpace: HostedSpace | null,
@@ -80,6 +94,7 @@ export const useMembers = (
 		reportSuccess = raiseTransientNotice,
 		joinedId,
 		isHostOffline = false,
+		isSignedOut = false,
 	}: MembersOptions = {},
 ): MembersProps | undefined => {
 	const queryClient = useQueryClient()
@@ -111,8 +126,9 @@ export const useMembers = (
 	])
 
 	const heldMembers = (spaceId: string) =>
-		queryClient.getQueryData<Member[]>(hostQueryKeys.membersOf(spaceId)) ??
-		NO_MEMBERS
+		queryClient.getQueryData<HostedMember[]>(
+			hostQueryKeys.membersOf(spaceId),
+		) ?? NO_MEMBERS
 
 	const memberAction = useMutation({
 		mutationFn: (run: MemberAction) =>
@@ -120,6 +136,9 @@ export const useMembers = (
 		onSuccess: (answered, run) => {
 			queryClient.setQueryData(hostQueryKeys.membersOf(run.spaceId), answered)
 			if (run.action === "invite") setEmail("")
+			if (run.action === "resend") {
+				setEmail((held) => (isSameEmail(held, run.member.email) ? "" : held))
+			}
 			if (run.action === "withdraw") reportSuccess(withdrawnNotice(run.member))
 		},
 		meta: { rendersErrorInline: true },
@@ -137,6 +156,17 @@ export const useMembers = (
 	const memberOf = (userId: string) =>
 		members.find((member) => member.userId === userId)
 
+	const inviteOf =
+		(invited: string) =>
+		(spaceId: string): MemberAction => {
+			const expired = members.find(
+				(member) => isExpired(member) && isSameEmail(member.email, invited),
+			)
+			return expired
+				? { action: "resend", spaceId, member: expired }
+				: { action: "invite", spaceId, email: invited }
+		}
+
 	const runOnWatched = (run: (spaceId: string) => MemberAction) => {
 		if (watchedId) memberAction.mutate(run(watchedId))
 	}
@@ -150,12 +180,8 @@ export const useMembers = (
 			setEmail(typed)
 			if (refusal) memberAction.reset()
 		},
-		onInvite: (invited) =>
-			runOnWatched((spaceId) => ({
-				action: "invite",
-				spaceId,
-				email: invited,
-			})),
+		onInvite: (invited) => runOnWatched(inviteOf(invited)),
+		blockedBy: inviteBlockerOf(isSignedOut, joinedId),
 		refusal,
 		failure,
 		removing: removing ? toSpaceMember(removing) : null,

@@ -77,6 +77,9 @@ export const SpaceSettingsHost = ({
 	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted, {
 		joinedId: editedJoinedSpace ? joinedSpace?.id : undefined,
 		isHostOffline,
+		isSignedOut:
+			account.state !== undefined &&
+			signedInAccountIdOf(account.state) === null,
 	})
 
 	if (!selectedSpaceId) {
