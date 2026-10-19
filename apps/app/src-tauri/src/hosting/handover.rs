@@ -47,10 +47,6 @@ pub(super) async fn current(
 }
 
 impl Handover {
-	pub(super) fn holds(&self, device_id: &DeviceId) -> bool {
-		self.roster.rows.iter().any(|row| row.rostered.device_id == *device_id)
-	}
-
 	pub(super) fn members<'a>(&'a self, keys: &HostKeys) -> impl Iterator<Item = &'a Rostered> {
 		let host = keys.device.device_id();
 		self.roster

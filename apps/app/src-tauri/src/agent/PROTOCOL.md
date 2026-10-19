@@ -559,7 +559,7 @@ has no deadline of its own.
 - the answer is `{ "path", "conversationId" }`, the stored absolute path and the
   conversation it was shown in.
 
-`conversationOpen`, `conversationSay`, `conversationList` and `conversationRead`
+`conversationOpen`, `conversationSay`, `conversationUpdate`, `conversationList` and `conversationRead`
 answer one Conversation shape, read through the same rows as the front's
 `conversation_page`, missions included:
 

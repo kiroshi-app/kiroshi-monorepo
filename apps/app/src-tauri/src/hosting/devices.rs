@@ -38,9 +38,10 @@ pub async fn remove_device<R: Runtime>(
 	if target.rostered.device_id == host.device_id() {
 		return Err(MembersError::HostDeviceNotRemovable);
 	}
+	let removed_at = chrono::Utc::now().timestamp_millis();
 	database_of(app)?
 		.space_relay()
-		.device_revoked(space_id.clone(), device_id)
+		.device_removed(space_id.clone(), device_id, removed_at)
 		.await
 		.map_err(SpaceError::from)?;
 	rotated(app, &space_id).await?;
@@ -110,17 +111,6 @@ pub(super) async fn member_removed<R: Runtime>(
 ) -> Result<(), MembersError> {
 	account_revoked(app, space_id, account_id).await?;
 	rotated(app, space_id).await
-}
-
-pub(super) async fn invitation_withdrawn<R: Runtime>(
-	app: &AppHandle<R>,
-	space_id: &str,
-	account_id: &str,
-) -> Result<(), MembersError> {
-	if account_revoked(app, space_id, account_id).await? > 0 {
-		rotated(app, space_id).await?;
-	}
-	Ok(())
 }
 
 async fn account_revoked<R: Runtime>(
