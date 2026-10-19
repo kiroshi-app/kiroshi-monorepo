@@ -89,10 +89,16 @@ type SpaceInvitationCallbacks = {
 
 type SpaceInvitationRowProps = SpaceInvitationCallbacks & {
 	invitation: SpaceInvitation
+	isFocusedOnOpen: boolean
+}
+
+const focusOnceMounted = (element: HTMLElement | null) => {
+	if (element) queueMicrotask(() => element.focus())
 }
 
 const SpaceInvitationRow = ({
 	invitation,
+	isFocusedOnOpen,
 	onAcceptInvitation,
 	onDeclineInvitation,
 	onRetryInvitation,
@@ -218,6 +224,7 @@ const SpaceInvitationRow = ({
 					onClick={() =>
 						isFailed ? onRetryInvitation?.(id) : onAcceptInvitation?.(id)
 					}
+					ref={isFocusedOnOpen ? focusOnceMounted : undefined}
 					render={<button type="button" />}
 				>
 					<span role="status">
@@ -250,10 +257,12 @@ const SpaceInvitationRow = ({
 
 type SpaceInvitationsProps = SpaceInvitationCallbacks & {
 	invitations: SpaceInvitation[]
+	focusedInvitationId?: string
 }
 
 const SpaceInvitations = ({
 	invitations,
+	focusedInvitationId,
 	...callbacks
 }: SpaceInvitationsProps) => {
 	const { t } = useTranslation("bots")
@@ -270,6 +279,7 @@ const SpaceInvitations = ({
 				{invitations.map((invitation) => (
 					<SpaceInvitationRow
 						invitation={invitation}
+						isFocusedOnOpen={invitation.id === focusedInvitationId}
 						key={invitation.id}
 						{...callbacks}
 					/>

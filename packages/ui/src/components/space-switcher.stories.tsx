@@ -1180,6 +1180,84 @@ export const M3TwoInvitationsWaiting = meta.story({
 	},
 })
 
+const SwitcherOpenedFromOutside = ({
+	onOpenChange,
+	...props
+}: SpaceSwitcherProps) => {
+	const [isOpen, setIsOpen] = useState(true)
+	return (
+		<SwitcherLine
+			{...props}
+			onOpenChange={(next) => {
+				onOpenChange?.(next)
+				setIsOpen(next)
+			}}
+			open={isOpen}
+		/>
+	)
+}
+
+export const OpenedOnInvitation = meta.story({
+	globals: DARK,
+	name: "Opened on the second invitation",
+	args: {
+		invitations: [
+			{ ...INVITED, state: "waiting" },
+			{ ...SECOND_INVITED, state: "waiting" },
+		],
+		focusedInvitationId: SECOND_INVITED.id,
+	},
+	render: (args) => <SwitcherOpenedFromOutside {...args} />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story: `${INVITED_ARTBOARD} Row 3, opened from outside: the host passes \`open\` and \`focusedInvitationId\`, as a join link does, and the menu opens with no press, anchored under the trigger exactly where a press opens it, keyboard focus on the named invitation's Accept. \`focusedInvitationId\` applies to every opening while it is set, so the host clears it once the menu closes. Check it opens on its own, that focus sits on the second Accept and the arrow keys walk on from it, that Escape reports \`onOpenChange(false)\`, and that a press reopens it at the same place with a single anchoring event.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await settled(await screen.findByRole("menu"))
+		await expect(menu.getBoundingClientRect().width).toBe(280)
+		await expectGroupBetweenSpacesAndMoveUp(menu)
+		const rows = invitationsIn(menu)
+		await expect(rows[1]).toHaveAccessibleName(SECOND_INVITED.name)
+		await expect(
+			within(rows[1]).getByRole("menuitem", { name: "Accept" }),
+		).toHaveFocus()
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(
+			within(rows[1]).getByRole("menuitem", { name: "Decline" }),
+		).toHaveFocus()
+
+		const openedAt = menu.getBoundingClientRect()
+		await userEvent.keyboard("{Escape}")
+		await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+
+		const trigger = within(canvasElement).getByRole("button", {
+			name: /^Change space/,
+		})
+		const anchoring = fn()
+		trigger.addEventListener("contextmenu", anchoring)
+		const pressed = await openSwitcher(canvasElement)
+		trigger.removeEventListener("contextmenu", anchoring)
+		await expect(anchoring).toHaveBeenCalledOnce()
+		const pressedAt = pressed.getBoundingClientRect()
+		await expect(pressedAt.left).toBe(openedAt.left)
+		await expect(pressedAt.top).toBe(openedAt.top)
+
+		const reopened = invitationsIn(pressed)
+		await expect(
+			within(reopened[1]).getByRole("menuitem", { name: "Accept" }),
+		).toHaveFocus()
+		await userEvent.keyboard("{ArrowUp}")
+		await expect(
+			within(reopened[0]).getByRole("menuitem", { name: "Decline" }),
+		).toHaveFocus()
+	},
+})
+
 export const M4Accepting = meta.story({
 	globals: DARK,
 	name: "M4 Accepting",

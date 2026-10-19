@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { type ReactNode, useLayoutEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -12,7 +12,10 @@ import {
 	type BotAvatarBlot,
 	blotTint,
 } from "@workspace/ui/components/companion-colour"
-import { ContextMenuPressTrigger } from "@workspace/ui/components/context-menu-press-trigger"
+import {
+	ContextMenuPressTrigger,
+	openBelow,
+} from "@workspace/ui/components/context-menu-press-trigger"
 import {
 	HostDot,
 	HostPill,
@@ -168,6 +171,8 @@ type SpaceSwitcherProps = SpaceSelection &
 	SpaceInvitationCallbacks & {
 		hostBySpaceId?: Record<string, SpaceHost>
 		invitations?: SpaceInvitation[]
+		open?: boolean
+		focusedInvitationId?: string
 		onShare?: () => void
 		onCreateSpace?: () => void
 		onOpenSpaceSettings?: () => void
@@ -181,6 +186,8 @@ const SpaceSwitcher = ({
 	badgesBySpaceId,
 	hostBySpaceId,
 	invitations = [],
+	open,
+	focusedInvitationId,
 	onSelectSpace,
 	onReorderSpaces,
 	onShare,
@@ -193,8 +200,16 @@ const SpaceSwitcher = ({
 	onOpenChange,
 }: SpaceSwitcherProps) => {
 	const { t } = useTranslation("bots")
+	const triggerRef = useRef<HTMLElement>(null)
+	const isAnchoredRef = useRef(false)
 	const selected =
 		spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
+
+	useLayoutEffect(() => {
+		if (!open) isAnchoredRef.current = false
+		else if (!isAnchoredRef.current && triggerRef.current)
+			openBelow(triggerRef.current)
+	}, [open])
 
 	if (!selected) return null
 
@@ -224,8 +239,15 @@ const SpaceSwitcher = ({
 
 	return (
 		<>
-			<ContextMenu onOpenChange={(isOpen) => onOpenChange?.(isOpen)}>
+			<ContextMenu
+				onOpenChange={(isOpen) => {
+					isAnchoredRef.current = isOpen
+					onOpenChange?.(isOpen)
+				}}
+				open={open}
+			>
 				<ContextMenuPressTrigger
+					ref={triggerRef}
 					render={
 						<Button
 							aria-label={t(switchLabel, {
@@ -311,6 +333,7 @@ const SpaceSwitcher = ({
 						})}
 					</ContextMenuRadioGroup>
 					<SpaceInvitations
+						focusedInvitationId={focusedInvitationId}
 						invitations={invitations}
 						onAcceptInvitation={onAcceptInvitation}
 						onDeclineInvitation={onDeclineInvitation}
