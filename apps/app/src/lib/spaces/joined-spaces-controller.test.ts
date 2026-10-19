@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
+import {
+	raiseFailureNotice,
+	raiseTransientNotice,
+} from "@workspace/ui/components/notice-surface"
 
 import {
 	createJoinedSpacesController,
@@ -28,6 +31,7 @@ import { createQueryTestWrapper } from "../query/query-test-wrapper"
 vi.mock("@workspace/ui/components/notice-surface", async (importOriginal) => ({
 	...(await importOriginal()),
 	raiseFailureNotice: vi.fn(() => "notice-1"),
+	raiseTransientNotice: vi.fn(() => "notice-2"),
 }))
 
 const GARAGE: JoinedSpace = {
@@ -120,16 +124,19 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 	await spaces.load(home.id)
 	const wire = transportFake(listed)
 	const reportFailure = vi.fn()
-	const reportRemoval = vi.fn()
 	const reportHostOffline = vi.fn()
+	const shownThreads = createStore({
+		selectedBotId: null as string | null,
+		selectedConversationId: "conversation-on-screen" as string | null,
+	})
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
 		hosts,
 		transport: wire.transport,
 		reportFailure,
-		reportRemoval,
 		reportHostOffline,
+		shownThreads,
 	})
 	return {
 		home,
@@ -138,8 +145,8 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		hosts,
 		wire,
 		reportFailure,
-		reportRemoval,
 		reportHostOffline,
+		shownThreads,
 		joined,
 		holdMembers: (joinedId: string, members: JoinedSpaceMember[]) =>
 			queryClient.setQueryData(
@@ -152,6 +159,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 afterEach(() => {
 	vi.useRealTimers()
 	vi.mocked(raiseFailureNotice).mockClear()
+	vi.mocked(raiseTransientNotice).mockClear()
 })
 
 describe("the switcher rows", () => {
@@ -529,23 +537,6 @@ const hostNamed = (name: string | null): JoinedSpaceMember => ({
 	isPresent: true,
 })
 
-const REMOVED_NOTICE = {
-	title: "You’re no longer a member of Studio Nord",
-	description:
-		"Its conversations aren’t on this device anymore. Ask Lea for a new invitation.",
-}
-
-const DELETED_NOTICE = {
-	title: "Lea deleted Studio Nord",
-	description: "Its conversations aren’t on this device anymore.",
-}
-
-const UNKNOWN_REMOVAL_NOTICE = {
-	title: "Lea removed you from Studio Nord.",
-	description:
-		"It’s gone from your spaces. Its conversations stay on Lea’s Kiroshi.",
-}
-
 const WAITING_STUDIO: JoinedSpace = { ...STUDIO, state: "waitingForHost" }
 
 const HOST_OFFLINE_NOTICE = {
@@ -741,22 +732,56 @@ describe("the host name of a joined space", () => {
 	})
 })
 
-describe("a host removing the reader", () => {
-	it("drops the open space, raises the notice and opens the previous local space", async () => {
-		const gear = await withStudio()
-		await gear.joined.admit(STUDIO)
+const openStudioThenEvict = async (reason: JoinedSpaceRemovalReason) => {
+	const gear = await withStudio()
+	await gear.joined.admit(STUDIO)
+	vi.mocked(gear.hosts.activate).mockClear()
+	vi.mocked(gear.hosts.connect).mockClear()
+	gear.wire.evict(STUDIO, reason)
+	await settle()
+	return gear
+}
 
-		gear.wire.evict(STUDIO)
-		await settle()
+const openRowOf = (gear: Awaited<ReturnType<typeof gearFor>>) =>
+	openRowIdOf(gear.joined.getState(), gear.spaces.getState().selectedSpaceId)
 
+describe("a host removing the reader from the open space", () => {
+	it.each(["removed", "deleted", "unknown"] as const)(
+		"keeps the space shown frozen when the reason is %s",
+		async (reason) => {
+			const gear = await openStudioThenEvict(reason)
+
+			expect(gear.joined.getState().departed).toEqual({
+				rowId: STUDIO_ROW,
+				spaceId: "studio",
+				reason,
+				space: STUDIO.name,
+				host: "Lea",
+				threadId: "conversation-on-screen",
+			})
+			expect(gear.spaces.getState().selectedSpaceId).toBe("studio")
+			expect(openRowOf(gear)).toBe(STUDIO_ROW)
+			expect(gear.joined.getState().joinedSpaces).toEqual([])
+			expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
+			expect(gear.hosts.activate).not.toHaveBeenCalled()
+			expect(gear.hosts.connect).not.toHaveBeenCalled()
+			expect(gear.reportFailure).not.toHaveBeenCalled()
+			expect(raiseTransientNotice).not.toHaveBeenCalled()
+		},
+	)
+
+	it("switches to the previous local space when the reader left", async () => {
+		const gear = await openStudioThenEvict("left")
+
+		expect(gear.joined.getState().departed).toBeNull()
 		expect(gear.joined.getState().joinedSpaces).toEqual([])
 		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
 		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
-		expect(gear.reportRemoval).toHaveBeenCalledExactlyOnceWith(REMOVED_NOTICE)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 
-	it("lands on the first local space when no previous one was recorded", async () => {
+	it("lands a reader who left on the first local space when no previous one was recorded", async () => {
 		const gear = await gearFor([STUDIO])
 		gear.spaces.select("studio")
 		gear.joined.restore(STUDIO_ROW)
@@ -766,7 +791,7 @@ describe("a host removing the reader", () => {
 
 		const [firstLocal] = gear.spaces.getState().spaces
 
-		gear.wire.evict(STUDIO)
+		gear.wire.evict(STUDIO, "left")
 		await settle()
 
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
@@ -775,64 +800,72 @@ describe("a host removing the reader", () => {
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
 	})
 
-	it("drops a space that is not open and raises the notice", async () => {
-		const gear = await withStudio()
-		await gear.joined.admit(STUDIO)
+	it("drops the frozen space for good once the reader selects another space", async () => {
+		const gear = await openStudioThenEvict("removed")
+
 		gear.joined.selectSpace(gear.home.id)
+		gear.shownThreads.setState({
+			selectedBotId: null,
+			selectedConversationId: "conversation-on-screen",
+		})
 
-		gear.wire.evict(STUDIO)
-		await settle()
-
+		expect(gear.joined.getState().departed).toBeNull()
 		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
-		expect(gear.joined.getState().joinedSpaces).toEqual([])
-		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
-		expect(gear.reportRemoval).toHaveBeenCalledWith(REMOVED_NOTICE)
+		expect(openRowOf(gear)).toBe(gear.home.id)
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 
-	it("words the notice of a deleted space from its host", async () => {
-		const gear = await withStudio()
-		await gear.joined.admit(STUDIO)
+	it("drops the frozen space for good once the reader selects another conversation", async () => {
+		const gear = await openStudioThenEvict("deleted")
 
-		gear.wire.evict(STUDIO, "deleted")
-		await settle()
+		gear.shownThreads.setState({
+			selectedBotId: null,
+			selectedConversationId: "another-conversation",
+		})
 
-		expect(gear.joined.getState().joinedSpaces).toEqual([])
-		expect(gear.reportRemoval).toHaveBeenCalledExactlyOnceWith(DELETED_NOTICE)
-	})
-
-	it("keeps the generic notice when the reason is unknown", async () => {
-		const gear = await withStudio()
-		await gear.joined.admit(STUDIO)
-
-		gear.wire.evict(STUDIO, "unknown")
-		await settle()
-
-		expect(gear.joined.getState().joinedSpaces).toEqual([])
-		expect(gear.reportRemoval).toHaveBeenCalledExactlyOnceWith(
-			UNKNOWN_REMOVAL_NOTICE,
-		)
-	})
-
-	it("drops a space the reader left without raising a notice", async () => {
-		const gear = await withStudio()
-		await gear.joined.admit(STUDIO)
-
-		gear.wire.evict(STUDIO, "left")
-		await settle()
-
-		expect(gear.joined.getState().joinedSpaces).toEqual([])
+		expect(gear.joined.getState().departed).toBeNull()
 		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
-		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
-		expect(gear.reportRemoval).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 	})
 
+	it("keeps the frozen space while the shown conversation stays", async () => {
+		const gear = await openStudioThenEvict("unknown")
+
+		gear.shownThreads.setState({ ...gear.shownThreads.getState() })
+
+		expect(gear.joined.getState().departed?.reason).toBe("unknown")
+		expect(gear.spaces.getState().selectedSpaceId).toBe("studio")
+	})
+})
+
+describe("a host removing the reader from a space not open", () => {
+	it.each(["removed", "deleted", "unknown", "left"] as const)(
+		"drops the row and shows nothing when the reason is %s",
+		async (reason) => {
+			const gear = await withStudio()
+			await gear.joined.admit(STUDIO)
+			gear.joined.selectSpace(gear.home.id)
+
+			gear.wire.evict(STUDIO, reason)
+			await settle()
+
+			expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+			expect(gear.joined.getState().joinedSpaces).toEqual([])
+			expect(gear.joined.getState().departed).toBeNull()
+			expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
+			expect(raiseTransientNotice).not.toHaveBeenCalled()
+		},
+	)
+})
+
+describe("an unreachable host", () => {
 	it("keeps an unreachable host as an unreachable row, never as removed", async () => {
 		const gear = await withStudio()
 		gear.joined.selectSpace(STUDIO_ROW)
 
 		gear.hosts.record(STUDIO.id, { status: "down" })
 
-		expect(gear.reportRemoval).not.toHaveBeenCalled()
+		expect(raiseTransientNotice).not.toHaveBeenCalled()
 		expect(gear.joined.getState().joinedSpaces).toEqual([STUDIO])
 		expect(
 			hostMarksOf(

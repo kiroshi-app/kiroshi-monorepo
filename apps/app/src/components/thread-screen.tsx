@@ -38,6 +38,7 @@ import {
 } from "@workspace/ui/components/pinned-messages"
 import { type RosterBot, RosterProvider } from "@workspace/ui/components/roster"
 import { RoutinesPanelTrigger } from "@workspace/ui/components/routines-panel"
+import { SpaceAccessBanner } from "@workspace/ui/components/space-access-banner"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { ThreadTranscriptSkeleton } from "@workspace/ui/components/thread-transcript-skeleton"
 import type {
@@ -221,6 +222,7 @@ import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
+import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
 
 const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
 
@@ -1663,6 +1665,8 @@ const useThreadView = (props: ThreadViewProps) => {
 function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
 	const view = useThreadView(props)
+	const joinedHost = useContext(OpenJoinedHostContext)
+	const departure = joinedHost?.departure
 	useInvokePhaseEnd(
 		"thread open",
 		view.facts.isFirstLoadPending ? null : shownConversationIdOf(thread),
@@ -1677,19 +1681,21 @@ function ThreadView(props: ThreadViewProps) {
 			anchorOnSend={view.isSoloThread}
 			busy={view.facts.isBusy}
 			composer={
-				<ThreadComposerSlot
-					bots={known}
-					canAttach={view.canAttach}
-					composerRef={view.composerRef}
-					isDisabled={view.isMissionClosed}
-					onPromptChange={view.rememberDraft}
-					onSubmitPrompt={view.submitPrompt}
-					placeholder={view.composerPlaceholder}
-					promptRef={view.promptRef}
-					readDraft={view.readDraft}
-					staged={view.staged}
-					thread={thread}
-				/>
+				departure ? undefined : (
+					<ThreadComposerSlot
+						bots={known}
+						canAttach={view.canAttach}
+						composerRef={view.composerRef}
+						isDisabled={view.isMissionClosed}
+						onPromptChange={view.rememberDraft}
+						onSubmitPrompt={view.submitPrompt}
+						placeholder={view.composerPlaceholder}
+						promptRef={view.promptRef}
+						readDraft={view.readDraft}
+						staged={view.staged}
+						thread={thread}
+					/>
+				)
 			}
 			header={
 				<ThreadHeader
@@ -1714,11 +1720,19 @@ function ThreadView(props: ThreadViewProps) {
 					: view.t("screen.label")
 			}
 			notice={
-				<ThreadNotices
-					facts={view.facts}
-					pins={view.pins}
-					staged={view.staged}
-				/>
+				joinedHost && departure ? (
+					<SpaceAccessBanner
+						host={joinedHost.hostName}
+						reason={departure}
+						space={joinedHost.spaceName}
+					/>
+				) : (
+					<ThreadNotices
+						facts={view.facts}
+						pins={view.pins}
+						staged={view.staged}
+					/>
+				)
 			}
 			countsNewMessages={!view.isSoloThread}
 			marksNewMessages={!view.isSoloThread}
@@ -1739,12 +1753,14 @@ function ThreadView(props: ThreadViewProps) {
 			}
 			onFollowChange={view.controller.follow}
 			pending={
-				<ThreadPending
-					authors={view.authors}
-					permission={view.facts.permission}
-					questionRecall={view.recall}
-					responder={view.promptResponder}
-				/>
+				departure ? undefined : (
+					<ThreadPending
+						authors={view.authors}
+						permission={view.facts.permission}
+						questionRecall={view.recall}
+						responder={view.promptResponder}
+					/>
+				)
 			}
 			reply={
 				view.replyTarget

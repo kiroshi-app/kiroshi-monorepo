@@ -97,7 +97,7 @@ export const useWorkspaceCore = () => {
 	const catalogue = useModelCatalogue()
 	const user = useUser()
 	const spaces = useSpaces(store)
-	const joinedSpaces = useJoinedSpaces(spaces.controller)
+	const joinedSpaces = useJoinedSpaces(spaces.controller, roster.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
 	const companionSettingsOwner = companionSettingsOwnerOf(
 		roster.state,

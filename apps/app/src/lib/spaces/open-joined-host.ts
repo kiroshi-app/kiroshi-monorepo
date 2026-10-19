@@ -2,6 +2,8 @@ import { createContext } from "react"
 
 import type { PromptInputOffline } from "@workspace/ui/components/prompt-input"
 
+import type { DepartureReason } from "./joined-spaces-controller"
+
 import type { JoinedHostState } from "../host/joined-hosts"
 
 export type OpenJoinedHost = {
@@ -9,6 +11,7 @@ export type OpenJoinedHost = {
 	hostName: string
 	isOnline: boolean
 	isDown: boolean
+	departure?: DepartureReason
 }
 
 export const isHostOnline = (connection: JoinedHostState | undefined) =>
