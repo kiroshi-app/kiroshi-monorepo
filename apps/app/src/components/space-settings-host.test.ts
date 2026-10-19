@@ -25,6 +25,7 @@ import {
 	type JoinedSpaceMember,
 	type JoinedSpaceMembersChanged,
 	type Member,
+	type SpaceInvitation,
 } from "@/lib/bindings"
 import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-store"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
@@ -699,13 +700,13 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		isPresent: true,
 	}
 
-	const ANA_INVITED = {
+	const ANA_INVITED: SpaceInvitation = {
 		id: "invitation-of-ana",
 		email: "ana@example.com",
 		sentAt: "2026-10-18T09:00:00Z",
 		expiresAt: "2026-10-25T09:00:00Z",
 		state: "invited",
-	} as const
+	}
 
 	const garageHostAnswers = (
 		answers: Record<string, (() => unknown) | undefined> = {},
