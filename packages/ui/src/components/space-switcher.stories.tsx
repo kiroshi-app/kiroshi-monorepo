@@ -1362,8 +1362,8 @@ export const M6Unreachable = meta.story({
 	globals: DARK,
 	name: "M6 Unreachable",
 	args: {
-		...PERSONAL_OPEN,
 		spaces: JOINED_SPACES,
+		selectedSpaceId: PERSONAL.id,
 		hostBySpaceId: { studio: "down" },
 	},
 	parameters: {
