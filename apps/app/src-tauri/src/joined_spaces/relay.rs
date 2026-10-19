@@ -19,6 +19,7 @@ use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
+use super::roster_set::HeldRoster;
 use super::waiting::{self, WaitingJoin};
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
@@ -69,6 +70,7 @@ struct Linked {
 	id: String,
 	instance_id: String,
 	link: Arc<MemberLink>,
+	joined: joined_spaces::JoinedSpace,
 }
 
 enum Ended {
@@ -392,7 +394,8 @@ async fn started<R: Runtime>(
 	let origin = proxy::served(Arc::clone(&link), Arc::clone(&token), reread, stopped.clone())
 		.await
 		.map_err(|error| JoinedSpaceError::ProxyUnavailable { detail: error.to_string() })?;
-	let linked = Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link) };
+	let linked =
+		Linked { id: id.to_owned(), instance_id, link: Arc::clone(&link), joined: found.clone() };
 	let linked = guest_linked(app.clone(), linked, held, stopped);
 	let run = tauri::async_runtime::spawn(members::alongside(app.clone(), &found, linked));
 	let reached = Reached {
@@ -712,6 +715,8 @@ async fn heard<R: Runtime>(
 			None => Outgoing::Nothing,
 		},
 		Heard::Frame(plaintext) => resynced(app, linked, linked.link.received(&plaintext)),
+		Heard::Roster(roster) => roster_taken(app, linked, wire, *roster).await,
+		Heard::Current => Outgoing::Nothing,
 		Heard::Rekey(handed) => match held::kept(app, &linked.instance_id, &handed).await {
 			Ok(true) => {
 				eprintln!(
@@ -719,6 +724,7 @@ async fn heard<R: Runtime>(
 					linked.id, linked.instance_id, handed.space.key_id
 				);
 				wire.rekeyed(*handed);
+				members::read_soon(app, &linked.joined);
 				if wire.is_greeted() {
 					Outgoing::Nothing
 				} else {
@@ -741,6 +747,30 @@ async fn heard<R: Runtime>(
 			}
 		},
 	}
+}
+
+async fn roster_taken<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
+	wire: &mut MemberWire<'_>,
+	roster: HeldRoster,
+) -> Outgoing {
+	let version = roster.set.version;
+	match held::roster_kept(app, &linked.instance_id, &roster).await {
+		Ok(true) => {
+			wire.roster_taken(roster);
+			members::read_soon(app, &linked.joined);
+		}
+		Ok(false) => eprintln!(
+			"joined space {} (instance {}) kept its roster: roster version {version} is not newer than the stored one",
+			linked.id, linked.instance_id
+		),
+		Err(failure) => eprintln!(
+			"joined space {} (instance {}) kept its roster: roster version {version} was not stored: {failure:?}",
+			linked.id, linked.instance_id
+		),
+	}
+	Outgoing::Nothing
 }
 
 fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> Outgoing {

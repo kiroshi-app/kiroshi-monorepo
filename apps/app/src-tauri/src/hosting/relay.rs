@@ -471,7 +471,12 @@ async fn online<R: Runtime>(
 						continue;
 					}
 					Received::Answer(sender, answer) => Outgoing::Answer(sender, answer),
-					Received::Hello(sender) => Outgoing::Hello(sender),
+					Received::Hello(sender) => {
+						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |member| member.relay_device_id == sender.relay_device_id).await {
+							return ended;
+						}
+						Outgoing::Hello(sender)
+					}
 					Received::Stale(sender) => Outgoing::Rechallenge(sender),
 					Received::Resume(sender, call) => {
 						let resumed = recorded.borrow().resumed(&call, last_sent.seq);
@@ -492,7 +497,7 @@ async fn online<R: Runtime>(
 			Some(admitted) = admissions.join_next(), if !admissions.is_empty() => {
 				match admitted {
 					Ok(Ok(admitted)) if !admitted.is_empty() => {
-						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |member| admitted.contains(&member.relay_device_id)).await {
+						if let Err(ended) = rekeys_sent(&mut sink, &hosted, |_| true).await {
 							return ended;
 						}
 					}

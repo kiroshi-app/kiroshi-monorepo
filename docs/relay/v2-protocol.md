@@ -368,10 +368,12 @@ once. On each read:
    changes nothing. When its keys or account differ from that row, the row stays
    as it is and the host logs one line naming the device.
 6. Every other entry is admitted: the host stores a roster row it signs, under the
-   entry's `deviceId`, `userId` and both public keys, then sends that device a
-   [rekey](#rekey-host-to-device) frame carrying the current key handover. The
-   other devices of the host account are admitted the same way, with no
-   invitation.
+   entry's `deviceId`, `userId` and both public keys. The other devices of the
+   host account are admitted the same way, with no invitation. Once a read admits
+   one or more devices, the host sends a [rekey](#rekey-host-to-device) frame
+   carrying the current key handover to every device of the roster other than its
+   own, the admitted ones included. A join rotates no key: the handover keeps the
+   current `key_id` and carries the new signed roster.
 7. Then each roster row other than the host's whose relay device id names no
    entry leaves the roster as on `device.revoked`: the row is deleted and the key
    rotates. A row whose `device_id` was just admitted under a new relay device id
@@ -511,7 +513,11 @@ and each new session tries the rotation again.
 ### rekey (host to device)
 
 On a rotation the host sends one rekey frame to every remaining device of the
-roster other than its own, and an admitted device gets one when it is admitted:
+roster other than its own, and on an admission to every device of the roster
+other than its own, the admitted ones included. When a rostered device says its
+hello, the host sends that device a rekey frame with the current key handover
+before the hello answer, so a device that was offline during an admission holds
+the current roster before its first call:
 
 ```json
 { "v": 2, "instance": "…", "to": "…relay device id…", "rekey": "base64", "sig": "base64" }
@@ -540,8 +546,18 @@ after its key.
 
 `to` in the signed bytes is the recipient's `device_id`, not its relay device id.
 A device verifies `sig` under the host signing key it holds before it opens the
-box, then accepts the handover only when its roster set verifies with a `version`
-at least the one it holds and a `key_id` above the one it holds.
+box, then checks the roster set verifies and applies one rule:
+
+| Handover `key_id` | Roster `version` | The device |
+| --- | --- | --- |
+| above the held one | at least the held one | takes the key and the roster, and starts the counters of the new `key_id` |
+| equal to the held one | above the held one | takes the roster only: the held key, its send counter and its receive counter stay as they are |
+| equal to the held one | equal to the held one | holds it already: keeps everything, logs nothing and sends nothing, as on every hello with nothing changed |
+| any other | any | drops the frame as a stale key and keeps what it holds |
+
+Each roster it takes, under either rule, makes the device read its members again,
+and `joined-space://members-changed` is emitted for that Space when the list
+changes.
 
 A rostered device that sends a frame under a `key_id` lower than the current one
 missed a rekey: the host drops the frame and sends that device its rekey frame

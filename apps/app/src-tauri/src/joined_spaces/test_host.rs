@@ -21,6 +21,8 @@ const HOST_RELAY_ID: &str = "r-host";
 
 const MEMBER_RELAY_ID: &str = "r-member";
 
+const NEWCOMER_RELAY_ID: &str = "r-newcomer";
+
 pub(crate) struct SealingHost {
 	instance_id: String,
 	host: DeviceKeys,
@@ -64,6 +66,27 @@ impl SealingHost {
 			Device { keys: &self.host, relay_device_id: HOST_RELAY_ID, account_id: "owner" },
 			Device { keys: &self.member, relay_device_id: MEMBER_RELAY_ID, account_id: "member" },
 		]
+	}
+
+	fn devices_admitting<'a>(&'a self, newcomer: &'a DeviceKeys) -> [Device<'a>; 3] {
+		let [host, member] = self.devices();
+		let newcomer =
+			Device { keys: newcomer, relay_device_id: NEWCOMER_RELAY_ID, account_id: "joiner" };
+		[host, member, newcomer]
+	}
+
+	pub(crate) fn roster_admitting(&self, newcomer: &DeviceKeys, version: u64) -> String {
+		self.rekey_of(&self.host, &self.space, version, &self.devices_admitting(newcomer))
+	}
+
+	pub(crate) fn rekey_admitting(
+		&self,
+		newcomer: &DeviceKeys,
+		key_id: u32,
+		version: u64,
+	) -> String {
+		let space = HeldSpaceKey::under(key_id).expect("randomness");
+		self.rekey_of(&self.host, &space, version, &self.devices_admitting(newcomer))
 	}
 
 	pub(crate) fn admitted(&self) -> String {
