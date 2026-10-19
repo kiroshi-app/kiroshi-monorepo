@@ -29,7 +29,7 @@ export const SITE_PAGES_COPY = {
 					[
 						"Your conversations, files, skills and memory live on your computer. Kiroshi's servers don't store them.",
 						"What the agent works on goes to the model provider you configured, under your own account with it.",
-						"In the online mode, the relay stores your account, your sessions and your Spaces. It passes messages along without storing them, protected by TLS but not end-to-end encrypted.",
+						"In the online mode, the relay stores your account, your sessions and your Spaces. It passes messages along without storing them, end-to-end encrypted, so it can't read them.",
 						"Kiroshi runs no analytics, no crash reporting and no tracking of its own. The agent, which the desktop app runs, sends its own usage data to the model provider you configured.",
 						"You can delete your account in the iPhone app only, and some data stays behind. Both are explained below.",
 					],
@@ -64,10 +64,38 @@ export const SITE_PAGES_COPY = {
 				body: [
 					"On your computer, the app keeps your Spaces, companions, conversations, messages, missions, routines and their runs in a database in the app's data folder, com.kiroshi.app, with no time limit. Attachments, up to 10 MB each and 20 per message, are kept beside it until you delete the conversation.",
 					"Skills, memory and plugins are kept in git repositories on your computer. Removing a line from a skill or from memory leaves that line in the git history.",
-					"In a Space shared online, messages between members and the computer that hosts the Space go through the relay: their text, tool output, profile pictures and photos sent from the iPhone. The relay adds the sender's account id, name and picture, forwards each message to the computer that hosts the Space and to every member of the Space, and writes none of it anywhere.",
-					"Messages are protected by TLS on their way to and from api.kiroshi.app, but they aren't end-to-end encrypted: the relay reads the content of every message a member sends while it forwards it.",
+					"In a Space shared online, messages between members and the computer that hosts the Space go through the relay: their text, tool output, profile pictures and photos sent from the iPhone. The relay adds the id of the sending device, forwards each message between the computer that hosts the Space and the devices of its members, and writes none of it anywhere.",
+					"Messages are end-to-end encrypted between devices, and protected by TLS on their way to and from api.kiroshi.app. The relay can't read them.",
 					"A message you send in someone else's Space runs on the computer that hosts the Space and with the model provider its host configured. Its content reaches that provider under the host's account, and the computer that hosts the Space keeps your name and your messages with no time limit.",
 					"The iPhone app stores no messages. Photos you pick go through the relay to the computer that hosts the Space.",
+				],
+			},
+			{
+				heading: "What the relay can and cannot read",
+				body: [
+					"The relay stores:",
+					[
+						"your account;",
+						"the id and name of each Space shared online;",
+						"the email address of each member of a Space;",
+						"your plan;",
+						"the public keys of your devices.",
+					],
+					"The relay distributes:",
+					[
+						"the public keys of your devices, to your other devices and to the computer that hosts each Space you joined;",
+						"invitations, to the email address invited.",
+					],
+					"Because the relay hands out the keys, every device shows a fingerprint you can compare with the one shown on the other device. When they match, no key was swapped on the way.",
+					"The relay can't read what travels end-to-end encrypted between devices:",
+					[
+						"the content of any conversation;",
+						"the content of any mission;",
+						"the content of any approval;",
+						"the content of any avatar;",
+						"the content of any roster, the list of devices in a Space.",
+					],
+					"The host of a Space is always a computer a person controls, never a Kiroshi server: your computer for a Space you share, its owner's computer for a Space you joined.",
 				],
 			},
 			{
@@ -178,7 +206,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Changes to this policy",
 				body: [
 					"When this policy changes, the new version replaces this page and the date below changes with it.",
-					"Last updated: 15 October 2026.",
+					"Last updated: 19 October 2026.",
 				],
 			},
 			{
