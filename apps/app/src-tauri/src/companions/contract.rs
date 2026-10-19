@@ -238,11 +238,6 @@ pub enum CompanionError {
 		detail: String,
 	},
 	#[serde(rename_all = "camelCase")]
-	NotAnImage {
-		path: String,
-		accepted: Vec<String>,
-	},
-	#[serde(rename_all = "camelCase")]
 	AttachmentRefused {
 		refusal: AttachmentStoreError,
 	},

@@ -534,19 +534,19 @@ every request that channel still awaits as `undeliverable`, since a host answer
 has no deadline of its own.
 
 `companion` is served by `companions::host::CompanionHost`. Its operation
-`conversationAttach` shows one image file to the person, from the tool
-`conversation_attach`, with `path`, an optional `caption` and an optional
-`conversation`:
+`conversationAttach` shows one file of any extension to the person, from the
+tool `conversation_attach`, with `path`, an optional `caption` and an optional
+`conversation`; an image is shown inline, every other file is listed as an
+attachment the person can open:
 
 - the sidecar resolves `path` against the working directory, symlinks
   included, and refuses it as `deniedPath` without asking the host when the
   security floor denies that bot to read it, or as `unreadableFile` when it
   does not resolve; the host is sent the resolved path;
 - the host refuses a file that is missing, unreadable or a directory
-  (`unreadableFile`), an extension outside the image set of
-  `message-attachments.ts` (`notAnImage`, the accepted extensions listed), and a
-  file or a block past the limits of `attachments` (`attachmentRefused`, the
-  size and the limit named); a refusal stores nothing and changes no message;
+  (`unreadableFile`), and a file or a block past the limits of `attachments`
+  (`attachmentRefused`, the size and the limit named: 10 MB per file); a
+  refusal stores nothing and changes no message;
 - without `conversation`, the file is copied to
   `attachments/<conversation id>/<uuid>.<ext>` and held for the turn: when the
   turn ends, completed, cancelled or failed, the last reply of the turn ends

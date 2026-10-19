@@ -21,9 +21,6 @@ const MAX_TOTAL_BYTES: u64 = 30 * 1024 * 1024;
 
 const MAX_EXTENSION_LENGTH: usize = 16;
 
-pub const IMAGE_EXTENSIONS: [&str; 9] =
-	["avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp"];
-
 pub struct SizedFile<'a> {
 	pub name: &'a str,
 	pub bytes: u64,
@@ -359,23 +356,6 @@ mod tests {
 			Rejection::TooLargeTogether { bytes: each * count, limit: MAX_TOTAL_BYTES }
 		);
 		assert!(!root.exists(), "a refused call made the place its files would have gone");
-	}
-
-	#[test]
-	fn the_image_extensions_are_the_ones_the_frontend_previews() {
-		let source = include_str!("../../../src/lib/chat/message-attachments.ts");
-		let listed = source
-			.split("const IMAGE_EXTENSIONS = new Set([")
-			.nth(1)
-			.and_then(|rest| rest.split("])").next())
-			.expect("the frontend lists its image extensions");
-		let frontend: Vec<&str> = listed
-			.split(',')
-			.map(|entry| entry.trim().trim_matches('"'))
-			.filter(|entry| !entry.is_empty())
-			.collect();
-
-		assert_eq!(frontend, IMAGE_EXTENSIONS);
 	}
 
 	#[test]

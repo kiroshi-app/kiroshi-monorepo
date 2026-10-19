@@ -24,7 +24,9 @@ const SEPARATORS: [char; 2] = ['/', '\\'];
 
 const SVG: &str = "image/svg+xml";
 
-const CONTENT_TYPES: [(&str, &str); 8] = [
+const TEXT: &str = "text/plain; charset=utf-8";
+
+const CONTENT_TYPES: [(&str, &str); 12] = [
 	("png", "image/png"),
 	("jpg", "image/jpeg"),
 	("jpeg", "image/jpeg"),
@@ -32,7 +34,11 @@ const CONTENT_TYPES: [(&str, &str); 8] = [
 	("webp", "image/webp"),
 	("svg", SVG),
 	("pdf", "application/pdf"),
-	("txt", "text/plain; charset=utf-8"),
+	("txt", TEXT),
+	("log", TEXT),
+	("json", TEXT),
+	("md", TEXT),
+	("csv", TEXT),
 ];
 
 pub(crate) const INERT: &str = "default-src 'none'; sandbox";
@@ -111,7 +117,7 @@ fn answered(path: &Path, bytes: Vec<u8>) -> Response {
 	let mut response =
 		([(header::CONTENT_TYPE, content_type), (header::X_CONTENT_TYPE_OPTIONS, NO_SNIFF)], bytes)
 			.into_response();
-	if content_type == SVG {
+	if matches!(content_type, SVG | TEXT) {
 		response
 			.headers_mut()
 			.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(INERT));
@@ -148,5 +154,16 @@ mod tests {
 		assert_eq!(content_type(Path::new("a.JPG")), "image/jpeg");
 		assert_eq!(content_type(Path::new("a.bin")), BYTES);
 		assert_eq!(content_type(Path::new("a")), BYTES);
+	}
+
+	#[test]
+	fn a_stored_text_file_is_answered_as_inert_plain_text() {
+		for name in ["a.log", "a.json", "a.md", "a.csv", "a.txt", "a.JSON"] {
+			let response = answered(Path::new(name), b"{}".to_vec());
+			let headers = response.headers();
+			assert_eq!(headers[header::CONTENT_TYPE], TEXT, "{name}");
+			assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], NO_SNIFF, "{name}");
+			assert_eq!(headers[header::CONTENT_SECURITY_POLICY], INERT, "{name}");
+		}
 	}
 }
