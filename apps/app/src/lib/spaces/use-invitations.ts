@@ -121,15 +121,17 @@ const expiryOf = (invitation: Invitation) => Date.parse(invitation.expiresAt)
 const hasExpired = (invitation: Invitation, now: number) =>
 	expiryOf(invitation) <= now
 
-const waitingIdsOf = (joinedSpaces: JoinedSpace[]) =>
-	joinedSpaces
-		.filter((joined) => joined.state === "waitingForHost")
-		.map((joined) => joined.id)
+const isWaitingSpace = (joinedId: string) => (joined: JoinedSpace) =>
+	joined.id === joinedId && joined.state === "waitingForHost"
 
 const isAdmittedOnline =
-	(statuses: Statuses, waitingIds: string[]) => (invitation: Invitation) => {
+	(statuses: Statuses, joinedSpaces: JoinedSpace[]) =>
+	(invitation: Invitation) => {
 		const status = statuses[identityOf(invitation)]
-		return status?.state === "admitted" && !waitingIds.includes(status.joinedId)
+		return (
+			status?.state === "admitted" &&
+			!joinedSpaces.some(isWaitingSpace(status.joinedId))
+		)
 	}
 
 const rowOf =
@@ -240,7 +242,7 @@ export const useInvitations = (
 	const decline = declineRun.mutate
 
 	return useMemo(() => {
-		const isGone = isAdmittedOnline(statuses, waitingIdsOf(joined))
+		const isGone = isAdmittedOnline(statuses, joined)
 		const shown = shownInvitationsOf(listed, statuses, swept).filter(
 			(invitation) => !isGone(invitation),
 		)
