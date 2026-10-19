@@ -271,4 +271,35 @@ describe("useNewDevice", () => {
 
 		await waitFor(() => expect(commands.accountSignOut).toHaveBeenCalledOnce())
 	})
+
+	it("stays on step code after Send a new code even when the expiry moves", async () => {
+		const { result, rerender } = await mountNewDevice()
+		await waitFor(() => expect(result.current?.step).toBe("waiting"))
+		act(() => result.current?.onUseCode())
+
+		act(() => result.current?.onResendCode())
+		await approvalTurns(ASKED_AGAIN)
+		rerender({ watched: watching(SIGNED_IN) })
+
+		await waitFor(() =>
+			expect(commands.deviceApprovalCodeRequest).toHaveBeenCalledTimes(2),
+		)
+		expect(result.current?.step).toBe("code")
+	})
+
+	it.each([EXPIRED, APPROVED, { kind: "none" }] as const)(
+		"drops the code step once the approval turns %o, so the next pending opens on waiting",
+		async (left) => {
+			const { result, rerender } = await mountNewDevice()
+			await waitFor(() => expect(result.current?.step).toBe("waiting"))
+			act(() => result.current?.onUseCode())
+
+			await approvalTurns(left)
+			await waitFor(() => expect(result.current?.step).not.toBe("code"))
+			rerender({ watched: watching(SIGNED_IN) })
+			await approvalTurns(PENDING)
+
+			await waitFor(() => expect(result.current?.step).toBe("waiting"))
+		},
+	)
 })

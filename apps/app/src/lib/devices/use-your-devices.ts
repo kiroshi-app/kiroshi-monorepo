@@ -1,9 +1,4 @@
-import {
-	skipToken,
-	useMutation,
-	useQuery,
-	useQueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type { Device } from "@workspace/ui/components/device-card"
 import {
@@ -17,8 +12,9 @@ import type {
 } from "@workspace/ui/components/user-settings-dialog/your-devices"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { answerOf, DeviceNotRemoved } from "./device-actions"
+import { DeviceNotRemoved } from "./device-actions"
 import { activityOf, deviceNameOf, toDevice } from "./device-mapping"
+import { devicesListQuery } from "./device-queries"
 import { deviceQueryKeys } from "./device-query-keys"
 
 import {
@@ -34,8 +30,6 @@ import { isFirstReadPending } from "../query/last-read"
 const RAISED_IN = "use-your-devices"
 
 const UNREAD_DEVICE: Device = { kind: "laptop", name: "", fingerprint: "" }
-
-const readDevices = () => answerOf(commands.devicesList())
 
 const removeDevice = async (device: AccountDevice) => {
 	const answer = await commands.deviceRemove(device.id)
@@ -108,14 +102,7 @@ export const useYourDevices = (
 	const email = state?.kind === "signedIn" ? state.email : null
 	const isRead = isShown && email !== null
 
-	const read = useQuery({
-		queryKey: deviceQueryKeys.list(),
-		queryFn: isRead ? readDevices : skipToken,
-		meta: {
-			failureNotice: () => ({ title: i18n.t("settings:account.readFailed") }),
-			raisedIn: RAISED_IN,
-		},
-	})
+	const read = useQuery(devicesListQuery(isRead))
 	useInvalidateOnHostEvent(DEVICE_APPROVAL_REQUESTED_EVENT, [
 		deviceQueryKeys.list(),
 	])

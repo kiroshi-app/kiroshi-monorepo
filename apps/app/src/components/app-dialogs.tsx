@@ -41,7 +41,7 @@ export const AppDialogs = ({
 }: AppDialogsProps) => {
 	const runningVersion = useRunningVersion()
 	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
-	const deviceApproval = useDeviceApprovals()
+	const deviceApproval = useDeviceApprovals(core.account.state)
 	const about = aboutFieldsOf({
 		updater,
 		user: core.user,

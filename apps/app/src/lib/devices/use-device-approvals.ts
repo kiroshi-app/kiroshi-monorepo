@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { useEffect, useReducer, useState } from "react"
 
 import type {
 	DeviceApprovalDialogProps,
@@ -11,10 +11,19 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
+import {
+	type AskingDevice,
+	askingDevicesOf,
+	changedApprovalQueue,
+	EMPTY_APPROVAL_QUEUE,
+} from "./approval-queue"
 import { answerOf, deviceFailureNotice } from "./device-actions"
 import { deviceNameOf, toDevice } from "./device-mapping"
+import { deviceApprovalQuery, devicesListQuery } from "./device-queries"
 
 import {
+	type AccountDevice,
+	type AccountState,
 	commands,
 	DEVICE_APPROVAL_REQUESTED_EVENT,
 	DEVICE_APPROVAL_SETTLED_EVENT,
@@ -25,7 +34,7 @@ import { listen } from "../host"
 
 const RAISED_IN = "use-device-approvals"
 
-type Request = DeviceApprovalRequested
+type Request = AskingDevice
 
 type ApprovalsOptions = {
 	reportSuccess?: (message: NoticeMessage) => void
@@ -50,14 +59,6 @@ const rejectedNotice = (request: Request): NoticeMessage => ({
 	description: i18n.t("common:devices.approval.rejected.description"),
 })
 
-const queuedOnce = (queue: Request[], request: Request) =>
-	queue.some((queued) => queued.deviceId === request.deviceId)
-		? queue
-		: [...queue, request]
-
-const withoutDevice = (queue: Request[], deviceId: string) =>
-	queue.filter((queued) => queued.deviceId !== deviceId)
-
 type ApprovalRun = {
 	variables: Request | undefined
 	isPending: boolean
@@ -74,18 +75,26 @@ const approvalStatusOf = (
 	return "asking"
 }
 
-const useApprovalQueue = () => {
-	const [queue, setQueue] = useState<Request[]>([])
+const useApprovalQueue = (listed: AccountDevice[] | undefined) => {
+	const [queue, change] = useReducer(changedApprovalQueue, EMPTY_APPROVAL_QUEUE)
+	const [mergedList, setMergedList] = useState(listed)
+	if (listed !== mergedList) {
+		setMergedList(listed)
+		if (listed) {
+			change({ kind: "asked", devices: askingDevicesOf(listed, Date.now()) })
+		}
+	}
 
 	useEffect(() => {
 		const listenings = [
-			listen<Request>(DEVICE_APPROVAL_REQUESTED_EVENT, ({ payload }) =>
-				setQueue((held) => queuedOnce(held, payload)),
+			listen<DeviceApprovalRequested>(
+				DEVICE_APPROVAL_REQUESTED_EVENT,
+				({ payload }) => change({ kind: "asked", devices: [payload] }),
 			),
 			listen<DeviceApprovalSettled>(
 				DEVICE_APPROVAL_SETTLED_EVENT,
 				({ payload }) =>
-					setQueue((held) => withoutDevice(held, payload.deviceId)),
+					change({ kind: "settled", deviceId: payload.deviceId }),
 			),
 		].map((listening) => listening.catch(reportUnheardEvent))
 		return () => {
@@ -96,15 +105,20 @@ const useApprovalQueue = () => {
 	}, [])
 
 	const settle = (request: Request) =>
-		setQueue((held) => withoutDevice(held, request.deviceId))
+		change({ kind: "settled", deviceId: request.deviceId })
 
-	return { asked: queue.at(0), settle }
+	return { asked: queue.asking.at(0), settle }
 }
 
-export const useDeviceApprovals = ({
-	reportSuccess = raiseTransientNotice,
-}: ApprovalsOptions = {}): DeviceApprovalDialogProps | null => {
-	const { asked, settle } = useApprovalQueue()
+export const useDeviceApprovals = (
+	state: AccountState | undefined,
+	{ reportSuccess = raiseTransientNotice }: ApprovalsOptions = {},
+): DeviceApprovalDialogProps | null => {
+	const { data: thisApproval } = useQuery(deviceApprovalQuery)
+	const isListed =
+		state?.kind === "signedIn" && thisApproval?.kind === "approved"
+	const { data: listed } = useQuery(devicesListQuery(isListed))
+	const { asked, settle } = useApprovalQueue(isListed ? listed : undefined)
 
 	const approval = useMutation({
 		mutationFn: (request: Request) =>
