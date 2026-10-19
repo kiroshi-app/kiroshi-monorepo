@@ -5860,6 +5860,41 @@ fn a_plaintext_frame_or_one_signed_outside_the_roster_gets_nothing_back() {
 	});
 }
 
+fn versioned(sealed: &str, v: Option<u64>) -> String {
+	let mut envelope: Value = serde_json::from_str(sealed).expect("a json frame");
+	match v {
+		Some(v) => envelope["v"] = json!(v),
+		None => {
+			envelope.as_object_mut().expect("an envelope").remove("v");
+		}
+	}
+	envelope.to_string()
+}
+
+#[test]
+fn a_sealed_frame_whose_v_is_absent_or_one_is_dropped_without_dispatching_its_call() {
+	run(async {
+		let (mut harness, effects) = Harness::applying_host_effects("v1-frames").await;
+		harness.started().await;
+		let mut member = harness.member().await;
+		harness.reached(HostingState::Online).await;
+		member.greeted().await;
+
+		for (ctr, v) in [(100, None), (101, Some(1))] {
+			let call = format!(r#"{{"id": "v{v:?}", "command": "agent_models"}}"#);
+			let sealed = member.device.sealed(&member.space(), ctr, &call, member.challenge);
+			let relabelled = versioned(&sealed, v);
+			member.send(Message::Text(relabelled.into())).await.expect("the frame leaves");
+		}
+		send(&mut member, r#"{"id": "genuine", "command": "agent_models"}"#).await;
+		let answered = answer(&mut member).await;
+
+		assert_eq!(answered["id"], json!("genuine"));
+		assert_eq!(effects.reached(), ["agent_models"]);
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
 #[test]
 fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
 	run(async {

@@ -527,6 +527,45 @@ fn a_session_takes_the_roster_sent_before_the_hello_keeps_its_key_and_lists_the_
 	});
 }
 
+fn versioned(sealed: &str, v: Option<u64>) -> String {
+	let mut envelope: Value = serde_json::from_str(sealed).expect("a json frame");
+	match v {
+		Some(v) => envelope["v"] = json!(v),
+		None => {
+			envelope.as_object_mut().expect("an envelope").remove("v");
+		}
+	}
+	envelope.to_string()
+}
+
+#[test]
+fn a_host_frame_whose_v_is_absent_or_one_is_dropped_without_taking_its_roster() {
+	run(async {
+		let member = Member::new("v1-host-frames").await;
+		let host = member.host();
+		let joined = online_with_two_members(&member, &host).await;
+		let heard = heard_on(&member.app, MEMBERS_CHANGED_EVENT);
+		let unversioned = DeviceKeys::generate().expect("randomness");
+		let first = DeviceKeys::generate().expect("randomness");
+		let newcomer = DeviceKeys::generate().expect("randomness");
+		let greeting = vec![
+			versioned(&host.roster_admitting(&unversioned, 2), None),
+			versioned(&host.roster_admitting(&first, 2), Some(1)),
+			host.roster_admitting(&newcomer, 2),
+			host.hello(),
+		];
+		member.relay.greets_after_the_next_members_read(greeting);
+
+		let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone()).await;
+		let changed = members_listed_within(&heard, &joined.id, 3).await;
+
+		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
+		assert!(is_listed(&changed, &newcomer), "{changed}");
+		assert!(!is_listed(&changed, &unversioned), "{changed}");
+		assert!(!is_listed(&changed, &first), "{changed}");
+	});
+}
+
 #[test]
 fn a_session_taking_a_rekey_under_a_greater_key_id_lists_its_roster() {
 	run(async {
