@@ -132,6 +132,21 @@ describe("membersTransport", () => {
 		expect(withdrawn).toEqual({ status: "ok", data: [HOST] })
 	})
 
+	it("invites a member again by user id through the routed invoke and answers the list read back", async () => {
+		vi.mocked(invoke).mockResolvedValue({
+			members: [HOST],
+			invitations: [ANA_INVITED],
+		})
+
+		const invited = await membersTransport.inviteAgain("garage", "ana")
+
+		expect(invoke).toHaveBeenCalledWith("hosting_invite_member_again", {
+			spaceId: "garage",
+			userId: "ana",
+		})
+		expect(invited).toEqual({ status: "ok", data: [HOST, ANA_PENDING] })
+	})
+
 	it("answers an invite with the pending row of the email it read back", async () => {
 		vi.mocked(invoke).mockResolvedValue(LISTED)
 

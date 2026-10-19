@@ -19,9 +19,12 @@ import type { HostedSpace } from "./hosting-transport"
 import { isDesktopHost } from "./index"
 import { fingerprintIn, hostFirst, joinedMembersOf } from "./joined-members"
 import {
+	type InviteAgainRefusal,
+	inviteAgainFailureOf,
 	type MemberAction,
 	type MemberActionRefusal,
 	membersAfter,
+	membersAfterInviteAgain,
 	readMembers,
 	refusalOf,
 	toSpaceMember,
@@ -62,6 +65,7 @@ export type MembersProps = Pick<
 	| "removing"
 	| "onRemove"
 	| "onWithdraw"
+	| "onInviteAgain"
 	| "onRemoveConfirm"
 	| "onRemoveCancel"
 >
@@ -77,6 +81,8 @@ type MembersOptions = {
 const NO_MEMBERS: HostedMember[] = []
 
 const NOT_REFUSED: MemberActionRefusal = {}
+
+type InviteAgainRun = { spaceId: string; member: HostedMember }
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
@@ -171,6 +177,21 @@ export const useMembers = (
 		meta: { rendersErrorInline: true },
 	})
 
+	const inviteAgain = useMutation({
+		mutationFn: ({ spaceId, member }: InviteAgainRun) =>
+			membersAfterInviteAgain(transport, spaceId, member),
+		onSuccess: (answered, { spaceId, member }) => {
+			queryClient.setQueryData(hostQueryKeys.membersOf(spaceId), answered)
+			const sent = sentInvitationIn(answered, member.email)
+			if (sent) reportSuccess(sentNotice(sent))
+		},
+		meta: {
+			failureNotice: (refusal) =>
+				inviteAgainFailureOf(refusal as InviteAgainRefusal),
+			raisedIn: "use-members",
+		},
+	})
+
 	const ownRun =
 		memberAction.variables?.spaceId === watchedId
 			? memberAction.variables
@@ -231,6 +252,12 @@ export const useMembers = (
 				spaceId,
 				member: removing,
 			}))
+		},
+		onInviteAgain: (member) => {
+			const invited = memberOf(member.id)
+			if (invited && watchedId) {
+				inviteAgain.mutate({ spaceId: watchedId, member: invited })
+			}
 		},
 		onRemoveCancel: () => setRemoving(null),
 	}

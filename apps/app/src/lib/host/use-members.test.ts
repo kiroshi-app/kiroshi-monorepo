@@ -99,6 +99,7 @@ const createFakeTransport = (
 	resend: vi.fn(async () => ok([STEVE, SAM_PENDING, ALEX_JOINED])),
 	withdraw: vi.fn(async () => ok([STEVE, ALEX_JOINED])),
 	remove: vi.fn(async () => ok([STEVE, SAM_PENDING])),
+	inviteAgain: vi.fn(async () => ok([STEVE])),
 	onChanged: vi.fn(async () => () => undefined),
 	...overrides,
 })
@@ -934,6 +935,13 @@ const BOB_PENDING_ROW: SpaceMember = {
 	expiresInDays: 7,
 }
 
+const ADA_NEEDS_INVITATION: Member = {
+	userId: "ada",
+	name: "Ada Lovelace",
+	email: "ada@example.com",
+	status: "needsInvitation",
+}
+
 type SignInState = { isSignedOut: boolean }
 
 describe("useMembers on the invitations of a hosted space", () => {
@@ -1022,6 +1030,78 @@ describe("useMembers on the invitations of a hosted space", () => {
 			title: "Invitation sent to bob@example.com",
 			description: "It works once, until October 26.",
 		})
+	})
+
+	it("invites a member needing a new invitation again by their id, shows the invitation and raises the sent notice", async () => {
+		const { panel, transport, reportSuccess } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(async () =>
+				ok([STEVE, invitedAt("ada@example.com", NOW)]),
+			),
+		})
+		const [, ada] = panel().members
+
+		expect(ada).toEqual({
+			id: "ada",
+			name: "Ada Lovelace",
+			email: "ada@example.com",
+			status: "needsInvitation",
+		})
+		act(() => panel().onInviteAgain(ada))
+		await settle()
+
+		expect(transport.inviteAgain).toHaveBeenCalledExactlyOnceWith("home", "ada")
+		expect(panel().members.map((member) => member.status)).toEqual([
+			"host",
+			"pending",
+		])
+		expect(reportSuccess).toHaveBeenCalledExactlyOnceWith({
+			title: "Invitation sent to ada@example.com",
+			description: "It works once, until October 26.",
+		})
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises a notice naming the removal and the unsent invitation when the invitation is refused after the removal", async () => {
+		const { panel, reportSuccess } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(async () =>
+				refused({
+					kind: "removedButNotInvited",
+					cause: { kind: "limitReached" },
+				}),
+			),
+		})
+
+		act(() => panel().onInviteAgain(toSpaceMember(ADA_NEEDS_INVITATION)))
+		await settle()
+
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
+			title:
+				"Ada Lovelace was removed, the invitation to ada@example.com wasn’t sent",
+			description: "Type that address under Invite people and select Invite.",
+			report: expect.objectContaining({
+				context: expect.objectContaining({ raisedIn: "use-members" }),
+			}),
+		})
+		expect(reportSuccess).not.toHaveBeenCalled()
+	})
+
+	it("raises a notice saying nothing changed when invite again is refused before the removal", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(async () => refused({ kind: "notNeedingInvitation" })),
+		})
+
+		act(() => panel().onInviteAgain(toSpaceMember(ADA_NEEDS_INVITATION)))
+		await settle()
+
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				title: "Couldn’t invite Ada Lovelace again",
+				description: "Nothing changed, try again.",
+			}),
+		)
 	})
 
 	it("raises no sent notice once a withdraw or a removal is answered", async () => {
