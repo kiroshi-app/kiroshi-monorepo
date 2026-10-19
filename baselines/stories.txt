@@ -624,6 +624,7 @@ feedback-skeleton--loading
 feedback-spaceaccessbanner--deleted
 feedback-spaceaccessbanner--offline
 feedback-spaceaccessbanner--removed
+feedback-spaceaccessbanner--unknown
 feedback-threadtranscriptskeleton--dark
 feedback-threadtranscriptskeleton--light
 feedback-updatebadge--default
@@ -1162,17 +1163,14 @@ overlays-noticesurface--failures-of-two-causes
 overlays-noticesurface--loading
 overlays-noticesurface--long-content
 overlays-noticesurface--m-13-signed-out
-overlays-noticesurface--m-8-removed-from-space
 overlays-noticesurface--marks
 overlays-noticesurface--reduced-motion
-overlays-noticesurface--removed-reason-unknown
 overlays-noticesurface--removed-with-space-mark
 overlays-noticesurface--repeated-failure
 overlays-noticesurface--report-copied
 overlays-noticesurface--report-copy-rejected
 overlays-noticesurface--report-from-local-side
 overlays-noticesurface--report-without-companion-name
-overlays-noticesurface--space-deleted
 overlays-noticesurface--stacked
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog

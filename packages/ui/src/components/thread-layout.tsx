@@ -108,7 +108,12 @@ function ThreadLayout({
 			)}
 
 			{notice || pending || composer ? (
-				<div className="flex w-full shrink-0 flex-col gap-3 px-(--shell-inset) pb-(--shell-inset)">
+				<div
+					className={cn(
+						"flex w-full shrink-0 flex-col gap-3",
+						composer ? "px-(--shell-inset) pb-(--shell-inset)" : "px-12 pb-6",
+					)}
+				>
 					{notice}
 					{pending}
 					{composer ? (
