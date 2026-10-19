@@ -1729,6 +1729,29 @@ export const MembersMemberView = meta.story({
 	},
 })
 
+export const MembersRemoveHostRefused = meta.story({
+	args: memberViewArgs({
+		failure: { action: "remove", reason: "host", member: NOA },
+	}),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Member view of the remove-host refusal. Maya tried to remove Noa, who hosts Studio: the line names the host and the Space in Noa's row, and offers no hosting gesture since Maya has none.",
+			},
+		},
+	},
+	play: async () => {
+		const panel = await membersPanelIn()
+		const line = filledRegionIn(panel)
+		await expect(line).toHaveTextContent(
+			/^Noa hosts Studio and can’t be removed\. There’s nothing to do\.$/,
+		)
+		await expect(rowOf(panel, "Noa")).toContainElement(line)
+		await expect(within(panel).queryByText(/Turn off hosting/)).toBeNull()
+	},
+})
+
 const HOST_OFFLINE_HINT =
 	"Studio is offline. You can invite people once Noa’s computer is back."
 

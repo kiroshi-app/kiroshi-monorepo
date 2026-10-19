@@ -314,6 +314,8 @@ const settings = {
 					pending:
 						"{{name}} n’a pas encore rejoint l’espace. Sélectionnez Retirer de nouveau pour retirer l’invitation.",
 					host: "Vous hébergez {{space}}, vous ne pouvez donc pas être retiré. Désactivez plutôt l’hébergement.",
+					hostedBy:
+						"{{name}} héberge {{space}} et ne peut pas être retiré. Il n’y a rien à faire.",
 					notHosting:
 						"{{space}} n’est plus hébergé. Activez l’hébergement pour retirer {{name}}.",
 					notOwner:
