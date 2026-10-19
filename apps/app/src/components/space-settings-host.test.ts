@@ -578,11 +578,15 @@ const shownMembersPanel = () => {
 	return props
 }
 
-const confirmRemovalOfTheHost = async () => {
+const askRemovalOfTheHost = () => {
 	const panel = shownMembersPanel()
 	const host = panel.members.find((member) => member.status === "host")
 	if (!host) throw new Error("the members panel lists no host")
 	act(() => panel.onRemove(host))
+}
+
+const confirmRemovalOfTheHost = async () => {
+	askRemovalOfTheHost()
 	const confirm = await screen.findByRole("alertdialog")
 	await act(async () => {
 		fireEvent.click(
@@ -853,7 +857,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		expect(within(invitations).getByText("ana@example.com")).toBeTruthy()
 	})
 
-	it("sends a confirmed removal to the host of a joined space", async () => {
+	it("removes a member of a joined space through its host and drops the row", async () => {
 		garageHostAnswers({
 			hosting_remove_member: () => ({
 				members: [HOST_ROW, SAM_JOINED],
@@ -869,6 +873,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 			spaceId: "garage",
 			userId: "tom",
 		})
+		await waitFor(() =>
+			expect(within(dialog).queryByText("Tom Reed")).toBeNull(),
+		)
+		expect(within(dialog).getByText("Steve Puget")).toBeTruthy()
 	})
 
 	it("shows the removal the host of a joined space fails in the panel", async () => {
@@ -892,7 +900,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		expect(within(dialog).getByText("Tom Reed")).toBeTruthy()
 	})
 
-	it("names the roster host and the space when the host refuses its own removal, with no Turn off hosting", async () => {
+	it("names the roster host and the space when a member asks to remove the host row, with no dialog, no removal sent and no Turn off hosting", async () => {
 		hostRefusesRemoval({
 			hosting_members: {
 				members: [{ ...HOST_ROW, name: "Steve P." }, SAM_JOINED, TOM_JOINED],
@@ -901,7 +909,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		})
 		const dialog = await openGarageMembers()
 
-		await confirmRemovalOfTheHost()
+		askRemovalOfTheHost()
 
 		expect(
 			await within(dialog).findByText(
@@ -916,6 +924,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 			failure: { reason: "host", member: { name: STEVE_HOSTING.name } },
 		})
 		expect(dialog.textContent).not.toMatch(/Turn off hosting/)
+		expect(screen.queryByRole("alertdialog")).toBeNull()
+		expect(
+			membersCalls().filter(([command]) => command === "hosting_remove_member"),
+		).toEqual([])
 	})
 
 	it("disables the invite field, Invite and every row action while the host is offline, reading nothing from it", async () => {
