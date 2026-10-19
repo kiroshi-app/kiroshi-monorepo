@@ -1046,8 +1046,8 @@ fn a_membership_ended_4003_removes_the_entry_and_announces_its_removal() {
 }
 
 struct RemovedAfterClosing {
+	id: String,
 	stored: Vec<JoinedSpace>,
-	removed: Value,
 	relays_asked_since: usize,
 }
 
@@ -1063,16 +1063,8 @@ async fn removed_after_closing(
 	closed_with(&mut member, code).await;
 	let stored = harness.stored_until(<[JoinedSpace]>::is_empty).await;
 	harness.heard_until(REMOVED_EVENT, 1).await;
-	RemovedAfterClosing {
-		stored,
-		removed: json!({ "id": id, "name": "Studio" }),
-		relays_asked_since: harness.member_relays_asked() - asked_before,
-	}
-}
-
-fn with_reason(mut removed: Value, reason: &str) -> Value {
-	removed["reason"] = json!(reason);
-	removed
+	let relays_asked_since = harness.member_relays_asked() - asked_before;
+	RemovedAfterClosing { id, stored, relays_asked_since }
 }
 
 #[test]
@@ -1085,7 +1077,10 @@ fn a_space_deleted_4007_removes_the_entry_as_deleted_without_asking_the_relay_ag
 				.await;
 
 		assert!(closing.stored.is_empty());
-		assert_eq!(harness.heard(REMOVED_EVENT), vec![with_reason(closing.removed, "deleted")]);
+		assert_eq!(
+			harness.heard(REMOVED_EVENT),
+			vec![json!({ "id": closing.id, "name": "Studio", "reason": "deleted" })]
+		);
 		assert_eq!(closing.relays_asked_since, 0);
 	});
 }
@@ -1100,7 +1095,10 @@ fn a_4003_then_a_410_member_removed_removes_the_entry_as_removed() {
 				.await;
 
 		assert!(closing.stored.is_empty());
-		assert_eq!(harness.heard(REMOVED_EVENT), vec![with_reason(closing.removed, "removed")]);
+		assert_eq!(
+			harness.heard(REMOVED_EVENT),
+			vec![json!({ "id": closing.id, "name": "Studio", "reason": "removed" })]
+		);
 		assert_eq!(closing.relays_asked_since, 1);
 	});
 }
@@ -1115,7 +1113,10 @@ fn a_4003_then_a_410_member_left_removes_the_entry_as_left() {
 				.await;
 
 		assert!(closing.stored.is_empty());
-		assert_eq!(harness.heard(REMOVED_EVENT), vec![with_reason(closing.removed, "left")]);
+		assert_eq!(
+			harness.heard(REMOVED_EVENT),
+			vec![json!({ "id": closing.id, "name": "Studio", "reason": "left" })]
+		);
 		assert_eq!(closing.relays_asked_since, 1);
 	});
 }
@@ -1130,7 +1131,10 @@ fn a_4003_then_a_403_removes_the_entry_as_removed() {
 				.await;
 
 		assert!(closing.stored.is_empty());
-		assert_eq!(harness.heard(REMOVED_EVENT), vec![with_reason(closing.removed, "removed")]);
+		assert_eq!(
+			harness.heard(REMOVED_EVENT),
+			vec![json!({ "id": closing.id, "name": "Studio", "reason": "removed" })]
+		);
 		assert_eq!(closing.relays_asked_since, 1);
 	});
 }
@@ -1145,7 +1149,10 @@ fn a_410_space_deleted_on_reconnect_removes_the_entry_as_deleted() {
 				.await;
 
 		assert!(closing.stored.is_empty());
-		assert_eq!(harness.heard(REMOVED_EVENT), vec![with_reason(closing.removed, "deleted")]);
+		assert_eq!(
+			harness.heard(REMOVED_EVENT),
+			vec![json!({ "id": closing.id, "name": "Studio", "reason": "deleted" })]
+		);
 		assert_eq!(closing.relays_asked_since, 1);
 	});
 }
@@ -1214,7 +1221,7 @@ fn sign_out_drops_every_relay_entry_and_closes_the_proxy_of_the_connected_one() 
 	});
 }
 
-async fn unlisted_removal(harness: &Harness, refused: (StatusCode, Value)) -> Vec<Value> {
+async fn unlisted_removal(harness: &Harness, refused: (StatusCode, Value)) -> (String, Vec<Value>) {
 	let id = harness.accepted().await;
 	harness.listing(json!([]));
 	harness.refusing_members(refused);
@@ -1222,9 +1229,7 @@ async fn unlisted_removal(harness: &Harness, refused: (StatusCode, Value)) -> Ve
 	reconciled(harness.app.handle()).await;
 
 	assert!(harness.stored().await.is_empty());
-	let removed = harness.heard(REMOVED_EVENT);
-	assert_eq!(removed.first().map(|removed| removed["id"].clone()), Some(json!(id)));
-	removed
+	(id, harness.heard(REMOVED_EVENT))
 }
 
 #[test]
@@ -1232,9 +1237,9 @@ fn an_unlisted_entry_the_relay_answers_410_on_is_removed_under_the_410_reason() 
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 
-		let removed = unlisted_removal(&harness, refusal(StatusCode::GONE, "MEMBER_LEFT")).await;
+		let (id, removed) =
+			unlisted_removal(&harness, refusal(StatusCode::GONE, "MEMBER_LEFT")).await;
 
-		let id = &removed[0]["id"];
 		assert_eq!(removed, vec![json!({ "id": id, "name": "Studio", "reason": "left" })]);
 	});
 }
@@ -1244,9 +1249,9 @@ fn an_unlisted_entry_the_relay_answers_404_on_is_removed_as_unknown() {
 	run(async {
 		let harness = Harness::new(Some(BEARER)).await;
 
-		let removed = unlisted_removal(&harness, refusal(StatusCode::NOT_FOUND, "NOT_FOUND")).await;
+		let (id, removed) =
+			unlisted_removal(&harness, refusal(StatusCode::NOT_FOUND, "NOT_FOUND")).await;
 
-		let id = &removed[0]["id"];
 		assert_eq!(removed, vec![json!({ "id": id, "name": "Studio", "reason": "unknown" })]);
 	});
 }
