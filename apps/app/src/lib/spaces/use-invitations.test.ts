@@ -16,6 +16,7 @@ import {
 	type JoinedSpaceError,
 } from "../bindings"
 import { listen } from "../host"
+import { createStore } from "../store"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({
@@ -103,15 +104,28 @@ const changeAnnounced = () => {
 	announce?.({ event: INVITATION_CHANGED_EVENT, id: 1, payload: null }, null)
 }
 
+const joinedSpacesFake = () => {
+	const store = createStore<{ joinedSpaces: JoinedSpace[] }>({
+		joinedSpaces: [],
+	})
+	const hold = (joinedSpaces: JoinedSpace[]) => store.setState({ joinedSpaces })
+	return {
+		getState: store.getState,
+		subscribe: store.subscribe,
+		admit: vi.fn(async (joined: JoinedSpace) => hold([joined])),
+		hold,
+	}
+}
+
 const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	const transport = transportFake(listed)
-	const admit = vi.fn(async (_joined: JoinedSpace) => {})
+	const joinedSpaces = joinedSpacesFake()
+	const { admit } = joinedSpaces
 	const { result, rerender } = renderHook(
 		() =>
-			useInvitations(
-				{ admit },
-				{ transport: transport satisfies InvitationsTransport },
-			),
+			useInvitations(joinedSpaces, {
+				transport: transport satisfies InvitationsTransport,
+			}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await settle()
@@ -132,6 +146,7 @@ const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	return {
 		transport,
 		admit,
+		joinedSpaces,
 		announce,
 		accept,
 		decline,
@@ -152,11 +167,11 @@ describe("listing invitations", () => {
 
 	it("reads the list once for two readers mounted together", async () => {
 		const transport = transportFake([STUDIO])
-		const admit = vi.fn()
+		const joinedSpaces = joinedSpacesFake()
 		const { result } = renderHook(
 			() => [
-				useInvitations({ admit }, { transport }),
-				useInvitations({ admit }, { transport }),
+				useInvitations(joinedSpaces, { transport }),
+				useInvitations(joinedSpaces, { transport }),
 			],
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
@@ -182,7 +197,7 @@ describe("listing invitations", () => {
 		const transport = transportFake([])
 		transport.list.mockRejectedValueOnce({ kind: "notSignedIn" })
 		const { result } = renderHook(
-			() => useInvitations({ admit: vi.fn() }, { transport }),
+			() => useInvitations(joinedSpacesFake(), { transport }),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
@@ -208,7 +223,7 @@ describe("listing invitations", () => {
 	it("raises a list it could not read, naming the reason", async () => {
 		const transport = transportFake([])
 		transport.list.mockRejectedValueOnce(STORAGE)
-		renderHook(() => useInvitations({ admit: vi.fn() }, { transport }), {
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 		await settle()
@@ -232,6 +247,20 @@ describe("accepting an invitation", () => {
 		await gear.accept(STUDIO.instanceId)
 
 		expect(gear.rows()).toEqual([{ ...WAITING_ROW, state: "accepting" }])
+	})
+
+	it("shows the row with its host offline while the joined space waits, then drops it once online", async () => {
+		const gear = await gearFor()
+		const waiting: JoinedSpace = { ...JOINED_STUDIO, state: "waitingForHost" }
+		gear.transport.accept.mockResolvedValueOnce(waiting)
+
+		await gear.accept(STUDIO.instanceId)
+
+		expect(gear.rows()).toEqual([{ ...WAITING_ROW, state: "hostOffline" }])
+
+		act(() => gear.joinedSpaces.hold([JOINED_STUDIO]))
+
+		expect(gear.rows()).toEqual([])
 	})
 
 	it("drops the row and hands the joined space over with its inviter", async () => {
@@ -477,7 +506,7 @@ describe("opening a join link", () => {
 				attach = resolve
 			}),
 		)
-		renderHook(() => useInvitations({ admit: vi.fn() }, { transport }), {
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 		await settle()
@@ -492,7 +521,7 @@ describe("opening a join link", () => {
 
 	it("asks for join links once under strict mode", async () => {
 		const transport = transportFake([STUDIO])
-		renderHook(() => useInvitations({ admit: vi.fn() }, { transport }), {
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
 			wrapper: createQueryTestWrapper().wrapper,
 			reactStrictMode: true,
 		})
