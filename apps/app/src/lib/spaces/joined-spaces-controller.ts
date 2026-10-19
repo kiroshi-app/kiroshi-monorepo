@@ -317,9 +317,8 @@ export const createJoinedSpacesController = ({
 	}
 
 	const selectAdmittedOnceOnline = () => {
-		const rowId = admittedRowId
-		const admitted = joinedOfRow(rowId)
-		if (rowId && admitted && !isWaitingForHost(admitted)) selectSpace(rowId)
+		const admitted = joinedOfRow(admittedRowId)
+		if (admitted && !isWaitingForHost(admitted)) selectSpace(rowIdOf(admitted))
 	}
 
 	const hasListed = () =>
