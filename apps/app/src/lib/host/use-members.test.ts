@@ -563,14 +563,83 @@ describe("useMembers", () => {
 describe("useMembers on a joined space", () => {
 	const STUDIO = { id: "studio", name: "Studio Nord" }
 
+	const LEA_FINGERPRINT = [
+		"orbit",
+		"velvet",
+		"canal",
+		"fossil",
+		"ripple",
+		"mango",
+	]
+
+	const TOM_FINGERPRINT = [
+		"abandon",
+		"ability",
+		"able",
+		"about",
+		"above",
+		"absent",
+	]
+
+	const LEA: JoinedSpaceMember = {
+		userId: "lea",
+		name: "Lea",
+		role: "host",
+		deviceId: "device-of-lea",
+		fingerprint: LEA_FINGERPRINT,
+		isPresent: true,
+	}
+
+	const TOM: JoinedSpaceMember = {
+		userId: "tom",
+		name: "Tom",
+		role: "guest",
+		deviceId: "device-of-tom",
+		fingerprint: TOM_FINGERPRINT,
+		isPresent: true,
+	}
+
+	const LEA_ANSWERED: Member = {
+		userId: "lea",
+		name: "Lea",
+		email: "lea@example.com",
+		status: "host",
+	}
+
+	const TOM_ANSWERED: Member = {
+		userId: "tom",
+		name: "Tom",
+		email: "tom@example.com",
+		status: "joined",
+	}
+
+	const LEA_ROW: SpaceMember = {
+		id: "lea",
+		name: "Lea",
+		email: "lea@example.com",
+		status: "host",
+		fingerprint: "orbit velvet canal fossil ripple mango",
+	}
+
+	const TOM_ROW: SpaceMember = {
+		id: "tom",
+		name: "Tom",
+		email: "tom@example.com",
+		status: "joined",
+		fingerprint: "abandon ability able about above absent",
+	}
+
 	const rosterAnswered = (roster: JoinedSpaceMember[]) =>
 		vi.mocked(commands.joinedSpaceMembers).mockResolvedValue({
 			status: "ok",
 			data: roster,
 		})
 
-	const watchStudio = () => {
-		const transport = createFakeTransport()
+	const watchStudio = (overrides: Partial<MembersTransport> = {}) => {
+		const transport = createFakeTransport({
+			list: vi.fn(async () => ok([LEA_ANSWERED, TOM_ANSWERED])),
+			...overrides,
+		})
 		const hook = renderHook(
 			() => useMembers(STUDIO, true, { transport, joinedId: "joined-studio" }),
 			{ wrapper: createQueryTestWrapper().wrapper },
@@ -599,49 +668,113 @@ describe("useMembers on a joined space", () => {
 
 	afterEach(() => vi.mocked(commands.joinedSpaceMembers).mockReset())
 
-	it("reads the roster of the joined space, never the hosted members", async () => {
-		rosterAnswered([
-			{
-				userId: "tom",
-				name: "Tom",
-				role: "guest",
-				deviceId: "device-of-tom",
-				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
-				isPresent: true,
-			},
-			{
-				userId: "lea",
-				name: "Lea",
-				role: "host",
-				deviceId: "device-of-lea",
-				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
-				isPresent: true,
-			},
-		])
+	it("lists the people of the signed roster, the host first, with the roster fingerprints", async () => {
+		rosterAnswered([TOM, LEA])
 
 		const { panel, transport } = watchStudio()
 
-		await waitFor(() =>
-			expect(panel().members).toEqual([
-				{ id: "lea", name: "Lea", email: "", status: "host" },
-				{ id: "tom", name: "Tom", email: "", status: "joined" },
-			]),
-		)
+		await waitFor(() => expect(panel().members).toEqual([LEA_ROW, TOM_ROW]))
 		expect(commands.joinedSpaceMembers).toHaveBeenCalledWith("joined-studio")
-		expect(transport.list).not.toHaveBeenCalled()
+		expect(transport.list).toHaveBeenCalledWith("studio")
+	})
+
+	it("lists no one the host answers who is not in the signed roster", async () => {
+		rosterAnswered([LEA])
+
+		const { panel } = watchStudio()
+
+		await waitFor(() => expect(panel().members).toEqual([LEA_ROW]))
+	})
+
+	it("lists a person once when the roster signs two of their devices", async () => {
+		rosterAnswered([
+			LEA,
+			TOM,
+			{ ...TOM, deviceId: "phone-of-tom", fingerprint: LEA_FINGERPRINT },
+		])
+
+		const { panel } = watchStudio()
+
+		await waitFor(() => expect(panel().members).toEqual([LEA_ROW, TOM_ROW]))
+	})
+
+	it("lists the invitations the host answers for the space", async () => {
+		rosterAnswered([LEA, TOM])
+
+		const { panel } = watchStudio({
+			list: vi.fn(async () => ok([LEA_ANSWERED, SAM_PENDING, TOM_ANSWERED])),
+		})
+
+		await waitFor(() =>
+			expect(panel().members).toEqual([LEA_ROW, TOM_ROW, SAM_PENDING_ROW]),
+		)
+	})
+
+	it("sends an invite to the host and shows the invitation once answered", async () => {
+		rosterAnswered([LEA, TOM])
+		const { panel, transport } = watchStudio()
+		await waitFor(() => expect(panel().members).toHaveLength(2))
+
+		act(() => panel().onInvite("sam@example.com"))
+
+		await waitFor(() =>
+			expect(panel().members).toEqual([LEA_ROW, TOM_ROW, SAM_PENDING_ROW]),
+		)
+		expect(transport.invite).toHaveBeenCalledWith("studio", "sam@example.com")
+	})
+
+	it("sends a confirmed removal to the host and drops the row once the roster is signed again", async () => {
+		rosterAnswered([LEA, TOM])
+		const { panel, transport } = watchStudio({
+			remove: vi.fn(async () => ok([LEA_ANSWERED])),
+		})
+		await waitFor(() => expect(panel().members).toHaveLength(2))
+
+		act(() => panel().onRemove(TOM_ROW))
+		act(() => panel().onRemoveConfirm())
+		await settle()
+
+		expect(transport.remove).toHaveBeenCalledWith("studio", "tom")
+		expect(panel().members).toEqual([LEA_ROW, { ...TOM_ROW, email: "" }])
+
+		rosterAnswered([LEA])
+		membersChangeAnnounced()
+
+		await waitFor(() => expect(panel().members).toEqual([LEA_ROW]))
+	})
+
+	it("holds the removal the host refuses in the failure slot", async () => {
+		rosterAnswered([LEA, TOM])
+		const { panel } = watchStudio({
+			remove: vi.fn(async () => refused({ kind: "hostNotRemovable" })),
+		})
+		await waitFor(() => expect(panel().members).toHaveLength(2))
+
+		act(() => panel().onRemove(TOM_ROW))
+		act(() => panel().onRemoveConfirm())
+		await settle()
+
+		expect(panel().failure).toEqual({
+			action: "remove",
+			reason: "host",
+			member: { ...TOM_ROW, fingerprint: undefined },
+		})
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("waits on the roster, not on the host, for its first read", async () => {
+		rosterAnswered([LEA])
+
+		const { panel } = watchStudio({
+			list: vi.fn(() => new Promise<never>(() => undefined)),
+		})
+
+		await waitFor(() => expect(panel().isPending).toBe(false))
+		expect(panel().members).toEqual([{ ...LEA_ROW, email: "" }])
 	})
 
 	it("names a host with no name by the unnamed copy", async () => {
-		rosterAnswered([
-			{
-				userId: "lea",
-				name: "",
-				role: "host",
-				deviceId: "device-of-lea",
-				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
-				isPresent: true,
-			},
-		])
+		rosterAnswered([{ ...LEA, name: "" }])
 
 		const { panel } = watchStudio()
 
@@ -651,29 +784,11 @@ describe("useMembers on a joined space", () => {
 	})
 
 	it("relabels the host once the joined roster changes", async () => {
-		rosterAnswered([
-			{
-				userId: "lea",
-				name: "Lea",
-				role: "host",
-				deviceId: "device-of-lea",
-				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
-				isPresent: true,
-			},
-		])
+		rosterAnswered([LEA])
 		const { panel } = watchStudio()
 		await waitFor(() => expect(panel().members[0]?.name).toBe("Lea"))
 
-		rosterAnswered([
-			{
-				userId: "lea",
-				name: "Léa Martin",
-				role: "host",
-				deviceId: "device-of-lea",
-				fingerprint: ["abandon", "ability", "able", "about", "above", "absent"],
-				isPresent: true,
-			},
-		])
+		rosterAnswered([{ ...LEA, name: "Léa Martin" }])
 		membersChangeAnnounced()
 
 		await waitFor(() => expect(panel().members[0]?.name).toBe("Léa Martin"))

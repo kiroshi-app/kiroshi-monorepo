@@ -18,6 +18,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { APPLICATIONS_TAB } from "@/lib/applications/connection-settings"
 import {
+	type AccountState,
 	commands,
 	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	type JoinedSpace,
@@ -82,9 +83,17 @@ type Gear = {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-const garageTransport = () =>
+const SAM_SIGNED_IN: AccountState = {
+	kind: "signedIn",
+	id: "sam",
+	email: "sam@example.com",
+	createdAt: "2026-01-01T00:00:00Z",
+	plan: null,
+}
+
+const garageTransport = (garage: JoinedSpace) =>
 	({
-		list: async () => [GARAGE],
+		list: async () => [garage],
 		remove: vi.fn(async (_id: string) => undefined),
 		onChanged: async () => () => undefined,
 		onRemoved: async () => () => undefined,
@@ -98,13 +107,13 @@ const hostsFake = () => ({
 	forget: () => undefined,
 })
 
-const gearWithGarage = async () => {
+const gearWithGarage = async (garage = GARAGE) => {
 	const store = createFakeTranscriptStore()
 	const home = await store.createSpace("Home")
 	const { queryClient } = createQueryTestWrapper()
 	const spaces = createSpacesController(store, { queryClient })
 	await spaces.load(home.id)
-	const transport = garageTransport()
+	const transport = garageTransport(garage)
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -132,6 +141,7 @@ const SpaceSettingsHarness = ({
 	const joinedState = useControllerState(joined)
 	const { selectedSpaceId } = spacesState
 	const core = {
+		account: { state: SAM_SIGNED_IN },
 		joinedSpaces: { state: joinedState, controller: joined },
 		spaces: { state: spacesState, controller: spaces },
 		spaceEnvironment: {
@@ -673,22 +683,92 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		expect(membersCalls()).toEqual([])
 	})
 
-	it("lists the host first, then the members read from the host, on a joined space", async () => {
-		vi.mocked(isDesktopHost).mockReturnValue(true)
-		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING])
-		const gear = await gearWithGarage()
+	const TOM_JOINED: Member = {
+		userId: "tom",
+		name: "Tom Reed",
+		email: "tom@example.com",
+		status: "joined",
+	}
 
-		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+	const TOM_GUEST: JoinedSpaceMember = {
+		userId: "tom",
+		name: "Tom Reed",
+		role: "guest",
+		deviceId: "device-of-tom",
+		fingerprint: ["orbit", "velvet", "canal", "fossil", "ripple", "mango"],
+		isPresent: true,
+	}
 
-		await within(dialog).findByText("Sam Carter")
-		expect(commands.joinedSpaceMembers).toHaveBeenCalledWith(GARAGE.id)
-		expect(invoke).not.toHaveBeenCalledWith("hosting_members", {
-			spaceId: "garage",
+	const ANA_INVITED = {
+		id: "invitation-of-ana",
+		email: "ana@example.com",
+		sentAt: "2026-10-18T09:00:00Z",
+		expiresAt: "2026-10-25T09:00:00Z",
+		state: "invited",
+	} as const
+
+	const garageHostAnswers = (
+		answers: Record<string, (() => unknown) | undefined> = {},
+	) =>
+		vi.mocked(invoke).mockImplementation(async (command: string) => {
+			const answer = answers[command]
+			if (answer) return answer() as never
+			return {
+				members: [HOST_ROW, SAM_JOINED, TOM_JOINED],
+				invitations: [ANA_INVITED],
+			} as never
 		})
-		const names = within(dialog)
-			.getAllByText(/Steve Puget|Sam Carter/)
-			.map((node) => node.textContent)
-		expect(names).toEqual(["Steve Puget", "Sam Carter"])
+
+	const listNamed = (dialog: HTMLElement, name: string) =>
+		within(dialog).getByRole("list", { name })
+
+	const removeTomOf = (dialog: HTMLElement) =>
+		within(dialog).findByRole("button", {
+			name: i18n.t("settings:space.members.removeLabel", { name: "Tom Reed" }),
+		})
+
+	const confirmRemoval = async () => {
+		const confirm = await screen.findByRole("alertdialog")
+		await act(async () => {
+			fireEvent.click(
+				within(confirm).getByRole("button", {
+					name: i18n.t("settings:space.members.remove"),
+				}),
+			)
+		})
+	}
+
+	const openGarageMembers = async (garage = GARAGE) => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING, TOM_GUEST])
+		const gear = await gearWithGarage(garage)
+		const { dialog } = await openShareOf(gear, GARAGE_ROW)
+		await within(dialog).findByText("Tom Reed")
+		return dialog
+	}
+
+	it("lists the signed roster of a joined space, the host first, the viewer marked as you", async () => {
+		garageHostAnswers()
+
+		const dialog = await openGarageMembers()
+
+		expect(commands.joinedSpaceMembers).toHaveBeenCalledWith(GARAGE.id)
+		const members = listNamed(dialog, i18n.t("settings:space.members.list"))
+		expect(
+			within(members)
+				.getAllByText(/Steve Puget|Sam Carter|Tom Reed/)
+				.map((node) => node.textContent),
+		).toEqual(["Steve Puget", "Sam Carter (you)", "Tom Reed"])
+		expect(
+			within(members).getByText("orbit velvet canal fossil ripple mango"),
+		).toBeTruthy()
+		expect(
+			within(members)
+				.getAllByRole("button")
+				.map((button) => button.getAttribute("aria-label")),
+		).toEqual([
+			i18n.t("settings:space.members.removeLabel", { name: "Tom Reed" }),
+		])
 		expect(
 			within(dialog)
 				.getByRole("textbox", {
@@ -696,6 +776,90 @@ describe("SpaceSettingsHost members on the desktop", () => {
 				})
 				.hasAttribute("disabled"),
 		).toBe(false)
+	})
+
+	it("lists the invitations the host of a joined space answers", async () => {
+		garageHostAnswers()
+
+		const dialog = await openGarageMembers()
+
+		expect(invoke).toHaveBeenCalledWith("hosting_members", {
+			spaceId: "garage",
+		})
+		const invitations = await waitFor(() =>
+			listNamed(dialog, i18n.t("settings:space.members.invitations")),
+		)
+		expect(within(invitations).getByText("ana@example.com")).toBeTruthy()
+	})
+
+	it("sends a confirmed removal to the host of a joined space", async () => {
+		garageHostAnswers({
+			hosting_remove_member: () => ({
+				members: [HOST_ROW, SAM_JOINED],
+				invitations: [],
+			}),
+		})
+		const dialog = await openGarageMembers()
+
+		fireEvent.click(await removeTomOf(dialog))
+		await confirmRemoval()
+
+		expect(invoke).toHaveBeenCalledWith("hosting_remove_member", {
+			spaceId: "garage",
+			userId: "tom",
+		})
+	})
+
+	it("shows the removal the host of a joined space fails in the panel", async () => {
+		garageHostAnswers({
+			hosting_remove_member: () => {
+				throw { kind: "unreachable", reason: "relay down" }
+			},
+		})
+		const dialog = await openGarageMembers()
+
+		fireEvent.click(await removeTomOf(dialog))
+		await confirmRemoval()
+
+		expect(
+			await within(dialog).findByText(
+				i18n.t("settings:space.members.failure.remove.unreachable", {
+					name: "Tom Reed",
+				}),
+			),
+		).toBeTruthy()
+		expect(within(dialog).getByText("Tom Reed")).toBeTruthy()
+	})
+
+	it("disables the invite field, Invite and every row action while the host is offline", async () => {
+		garageHostAnswers()
+
+		const dialog = await openGarageMembers({
+			...GARAGE,
+			state: "waitingForHost",
+		})
+
+		expect(
+			within(dialog)
+				.getByRole("textbox", {
+					name: i18n.t("settings:space.members.invite.label"),
+				})
+				.hasAttribute("disabled"),
+		).toBe(true)
+		const buttons = [
+			within(dialog).getByRole("button", {
+				name: i18n.t("settings:space.members.invite.action"),
+			}),
+			await removeTomOf(dialog),
+			within(dialog).getByRole("button", {
+				name: i18n.t("settings:space.members.withdrawLabel", {
+					email: "ana@example.com",
+				}),
+			}),
+		]
+		for (const button of buttons) {
+			expect(button.hasAttribute("disabled")).toBe(true)
+		}
 	})
 
 	it("invites on the host of a joined space", async () => {
@@ -762,7 +926,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 
 	it("refreshes the members of a joined space when its host announces a change", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
-		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING])
+		answerJoinedMembers([TOM_GUEST, STEVE_HOSTING])
 		let announce: (changed: JoinedSpaceMembersChanged) => void = () => undefined
 		vi.mocked(listen).mockImplementation(async (event, handler) => {
 			if (event === JOINED_SPACE_MEMBERS_CHANGED_EVENT) {
@@ -773,13 +937,13 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		})
 		const gear = await gearWithGarage()
 		const { dialog } = await openShareOf(gear, GARAGE_ROW)
-		await within(dialog).findByText("Sam Carter")
+		await within(dialog).findByText("Tom Reed")
 		answerJoinedMembers([STEVE_HOSTING])
 
 		act(() => announce({ id: GARAGE.id, members: [STEVE_HOSTING] }))
 
 		await waitFor(() =>
-			expect(within(dialog).queryByText("Sam Carter")).toBeNull(),
+			expect(within(dialog).queryByText("Tom Reed")).toBeNull(),
 		)
 		expect(within(dialog).getByText("Steve Puget")).toBeTruthy()
 	})

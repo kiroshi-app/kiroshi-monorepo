@@ -16,6 +16,7 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { hostQueryKeys } from "./host-query-keys"
 import type { HostedSpace } from "./hosting-transport"
 import { isDesktopHost } from "./index"
+import { fingerprintIn, hostFirst, joinedMembersOf } from "./joined-members"
 import {
 	type MemberAction,
 	type MemberActionRefusal,
@@ -29,7 +30,6 @@ import { type MembersTransport, membersTransport } from "./members-transport"
 import {
 	HOSTING_MEMBERS_CHANGED_EVENT,
 	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
-	type JoinedSpaceMember,
 	type Member,
 } from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
@@ -37,6 +37,7 @@ import { isFirstReadPending } from "../query/last-read"
 import {
 	joinedSpaceMembersQueryOf,
 	membersReadFailure,
+	NO_JOINED_MEMBERS,
 } from "../spaces/joined-space-members"
 import { spaceQueryKeys } from "../spaces/space-query-keys"
 
@@ -70,20 +71,6 @@ const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
 })
 
-const asMember = ({ userId, name, role }: JoinedSpaceMember): Member => ({
-	userId,
-	name,
-	email: "",
-	status: role === "host" ? "host" : "joined",
-})
-
-const asMembers = (joined: JoinedSpaceMember[]) => joined.map(asMember)
-
-const hostFirst = (members: Member[]) => [
-	...members.filter((member) => member.status === "host"),
-	...members.filter((member) => member.status !== "host"),
-]
-
 export const useMembers = (
 	openSpace: HostedSpace | null,
 	isHosted: boolean,
@@ -99,18 +86,21 @@ export const useMembers = (
 	const shownSpace = isDesktopHost() ? openSpace : null
 	const watchedId = isHosted ? shownSpace?.id : undefined
 
-	const hostedId = joinedId ? undefined : watchedId
-	const hostedRead = useQuery({
-		queryKey: hostQueryKeys.membersOf(hostedId),
-		queryFn: hostedId ? () => readMembers(transport, hostedId) : skipToken,
+	const hostRead = useQuery({
+		queryKey: hostQueryKeys.membersOf(watchedId),
+		queryFn: watchedId ? () => readMembers(transport, watchedId) : skipToken,
 		meta: { failureNotice: membersReadFailure, raisedIn: "use-members" },
 	})
-	const joinedRead = useQuery({
-		...joinedSpaceMembersQueryOf(watchedId && joinedId),
-		select: asMembers,
+	const rosterRead = useQuery(joinedSpaceMembersQueryOf(watchedId && joinedId))
+	const { data: answered = NO_MEMBERS } = hostRead
+	const { data: roster = NO_JOINED_MEMBERS } = rosterRead
+	const members = joinedId
+		? joinedMembersOf(roster, answered)
+		: hostFirst(answered)
+	const rowOf = (member: Member) => ({
+		...toSpaceMember(member),
+		fingerprint: fingerprintIn(roster, member.userId),
 	})
-	const membersRead = joinedId ? joinedRead : hostedRead
-	const { data: members = NO_MEMBERS } = membersRead
 	useInvalidateOnHostEvent(HOSTING_MEMBERS_CHANGED_EVENT, [
 		hostQueryKeys.members(),
 	])
@@ -151,8 +141,8 @@ export const useMembers = (
 
 	if (!shownSpace) return undefined
 	return {
-		members: isHosted ? hostFirst(members).map(toSpaceMember) : [],
-		isPending: isFirstReadPending(membersRead),
+		members: isHosted ? members.map(rowOf) : [],
+		isPending: isFirstReadPending(joinedId ? rosterRead : hostRead),
 		email,
 		onEmailChange: (typed) => {
 			setEmail(typed)
