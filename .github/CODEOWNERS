@@ -1,0 +1,34 @@
+/.github/ @shoto290
+
+/apps/app/src-tauri/src/account/ @shoto290
+/apps/app/src-tauri/src/crypto/ @shoto290
+/apps/app/src-tauri/src/devices/ @shoto290
+/apps/app/src-tauri/src/environment/ @shoto290
+/apps/app/src-tauri/src/host_api/ @shoto290
+/apps/app/src-tauri/src/host_api.rs @shoto290
+/apps/app/src-tauri/src/hosting/ @shoto290
+/apps/app/src-tauri/src/invitations/ @shoto290
+/apps/app/src-tauri/src/joined_spaces/ @shoto290
+/apps/app/src-tauri/src/mcp_oauth/ @shoto290
+/apps/app/src-tauri/src/updates/ @shoto290
+
+**/migrations.rs @shoto290
+
+/apps/app/src-tauri/tauri.conf.json @shoto290
+/apps/app/src-tauri/capabilities/ @shoto290
+/apps/app/src-tauri/entitlements.plist @shoto290
+/apps/app/src-tauri/kiroshi-cloud.conf @shoto290
+/apps/app/src-tauri/build.rs @shoto290
+
+/apps/app/sidecar/src/mcp-oauth.ts @shoto290
+/apps/app/sidecar/src/providers/claude/server-connect.ts @shoto290
+/apps/app/sidecar/src/providers/claude/server-env.ts @shoto290
+/apps/app/sidecar/src/providers/claude/session-env.ts @shoto290
+
+/apps/ios/Kiroshi/Core/DeviceKeyStore.swift @shoto290
+/apps/ios/Kiroshi/Core/DeviceProof.swift @shoto290
+/apps/ios/Kiroshi/Core/KeychainItems.swift @shoto290
+/apps/ios/Kiroshi/Core/KiroshiCloud.swift @shoto290
+/apps/ios/Kiroshi/Core/ProviderSignIn.swift @shoto290
+/apps/ios/Kiroshi/Core/RelayCrypto.swift @shoto290
+/apps/ios/Kiroshi/Core/RelayEnvironment.swift @shoto290
