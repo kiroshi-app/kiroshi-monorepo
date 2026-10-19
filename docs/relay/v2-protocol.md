@@ -552,6 +552,7 @@ box, then checks the roster set verifies and applies one rule:
 | --- | --- | --- |
 | above the held one | at least the held one | takes the key and the roster, and starts the counters of the new `key_id` |
 | equal to the held one | above the held one | takes the roster only: the held key, its send counter and its receive counter stay as they are |
+| equal to the held one | equal to the held one | holds it already: keeps everything, logs nothing and sends nothing, as on every hello with nothing changed |
 | any other | any | drops the frame as a stale key and keeps what it holds |
 
 Each roster it takes, under either rule, makes the device read its members again,

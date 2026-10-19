@@ -716,6 +716,7 @@ async fn heard<R: Runtime>(
 		},
 		Heard::Frame(plaintext) => resynced(app, linked, linked.link.received(&plaintext)),
 		Heard::Roster(roster) => roster_taken(app, linked, wire, *roster).await,
+		Heard::Current => Outgoing::Nothing,
 		Heard::Rekey(handed) => match held::kept(app, &linked.instance_id, &handed).await {
 			Ok(true) => {
 				eprintln!(

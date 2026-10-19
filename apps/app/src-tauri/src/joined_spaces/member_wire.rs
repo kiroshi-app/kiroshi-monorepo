@@ -33,6 +33,7 @@ pub(super) enum Heard {
 	Frame(String),
 	Rekey(Box<Handed>),
 	Roster(Box<HeldRoster>),
+	Current,
 }
 
 pub(super) struct MemberWire<'a> {
@@ -203,6 +204,7 @@ impl<'a> MemberWire<'a> {
 			Ordering::Equal if version > roster.set.version => {
 				Ok(Heard::Roster(Box::new(handed.roster)))
 			}
+			Ordering::Equal if version == roster.set.version => Ok(Heard::Current),
 			_ => Err(Dropped::StaleKey(handed.space.key_id).into()),
 		}
 	}
@@ -332,7 +334,7 @@ mod tests {
 		let mut wire = MemberWire::new(relay_of(&member.app), INSTANCE, held_of(&member.app).await);
 		let stranger = DeviceKeys::generate().expect("randomness");
 
-		let same_key = dropped(&mut wire, &member.host.rekey(1, 1)).await;
+		let same_key = dropped(&mut wire, &member.host.rekey(1, 0)).await;
 		let older_roster = dropped(&mut wire, &member.host.rekey(2, 0)).await;
 		let forged = dropped(&mut wire, &member.host.rekey_signed_by(&stranger, 2, 2)).await;
 		let taken = wire.opened(&member.host.rekey(2, 1)).await;
@@ -373,7 +375,7 @@ mod tests {
 			.await
 			.expect("the roster is stored"));
 		wire.roster_taken(*roster);
-		let equal = dropped(&mut wire, &member.host.roster_admitting(&newcomer, 2)).await;
+		let current = wire.opened(&member.host.roster_admitting(&newcomer, 2)).await;
 		let older = dropped(&mut wire, &member.host.roster_admitting(&newcomer, 1)).await;
 		let after = wire.sealed(CALL).await.expect("the call seals under the held key");
 		let replayed = dropped(&mut wire, &heard_before).await;
@@ -381,7 +383,7 @@ mod tests {
 
 		assert_eq!(ctr_of(&after), ctr_of(&before) + 1);
 		assert_eq!(member.host.opened(&after).plaintext["command"], "conversation_list");
-		assert_eq!(equal, Some(Refusal::Frame(Dropped::StaleKey(1))));
+		assert!(matches!(current, Ok(Heard::Current)));
 		assert_eq!(older, Some(Refusal::Frame(Dropped::StaleKey(1))));
 		assert_eq!(replayed, Some(Refusal::Frame(Dropped::Refused(CryptoError::Replay))));
 		assert!(matches!(heard_after, Ok(Heard::Frame(_))));
