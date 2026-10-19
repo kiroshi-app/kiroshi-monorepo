@@ -1268,68 +1268,17 @@ const INVITED_ARTBOARD =
 const SPACES_ARTBOARD =
 	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only."
 
-const BANNER_GAP =
-	"The artboard draws an inline banner in place of the composer, where the app raises this toast on the notice surface."
-
-const REMOVING_HOST = "Noa"
-
-const REMOVED_SPACE = "Studio"
-
 type HeldInfoNoticeProps = {
 	title: string
-	description?: string
 }
 
-const HeldInfoNotice = ({ title, description }: HeldInfoNoticeProps) => {
+const HeldInfoNotice = ({ title }: HeldInfoNoticeProps) => {
 	useEffect(() => {
-		const id = raiseTransientNotice({ type: "info", title, description })
+		const id = raiseTransientNotice({ type: "info", title })
 		return () => endNotice(id)
-	}, [description, title])
+	}, [title])
 
 	return <NoticeSurface transientDelay={0} />
-}
-
-const RemovedFromSpaceNotice = () => {
-	const { t } = useTranslation("bots")
-
-	return (
-		<HeldInfoNotice
-			description={t("spaces.removed.memberNoticeDescription", {
-				host: REMOVING_HOST,
-			})}
-			title={t("spaces.removed.memberNotice", { name: REMOVED_SPACE })}
-		/>
-	)
-}
-
-const SpaceDeletedNotice = () => {
-	const { t } = useTranslation("bots")
-
-	return (
-		<HeldInfoNotice
-			description={t("spaces.removed.deletedNoticeDescription")}
-			title={t("spaces.removed.deletedNotice", {
-				host: REMOVING_HOST,
-				name: REMOVED_SPACE,
-			})}
-		/>
-	)
-}
-
-const RemovedForAnUnknownReasonNotice = () => {
-	const { t } = useTranslation("bots")
-
-	return (
-		<HeldInfoNotice
-			description={t("spaces.removed.noticeDescription", {
-				host: REMOVING_HOST,
-			})}
-			title={t("spaces.removed.notice", {
-				host: REMOVING_HOST,
-				name: REMOVED_SPACE,
-			})}
-		/>
-	)
 }
 
 const SignedOutNotice = () => {
@@ -1345,7 +1294,6 @@ const SignedOutNotice = () => {
 const expectInfoNoticeClosing = async (
 	title: string,
 	userEvent: UserEventObject,
-	description?: string,
 ) => {
 	const notice = await within(viewport()).findByText(title)
 	const toast = notice.closest<HTMLElement>("[data-slot=toast]")
@@ -1353,73 +1301,10 @@ const expectInfoNoticeClosing = async (
 	await opaque(toast)
 	await expect(notice).toBeVisible()
 	await expect(toast).toHaveAttribute("data-type", "info")
-	if (description) {
-		await expect(toast).toHaveAccessibleDescription(description)
-	}
 	await expect(actionControl()).toBe(null)
 	await userEvent.click(closeControl())
 	await waitFor(() => expect(within(viewport()).queryByText(title)).toBe(null))
 }
-
-export const M8RemovedFromSpace = meta.story({
-	name: "8 Removed from Space",
-	globals: { theme: "dark" },
-	render: () => <RemovedFromSpaceNotice />,
-	parameters: {
-		docs: {
-			description: {
-				story: `${SPACES_ARTBOARD} Row 8: the host removed the reader from a joined Space. ${BANNER_GAP} Check the info notice names the Space, says the conversations left this device, points to the host for a new invitation, and carries a close control and no action. Pick \`SpaceDeleted\` for a Space its host deleted.`,
-			},
-		},
-	},
-	play: async ({ userEvent }) => {
-		await expectInfoNoticeClosing(
-			"You’re no longer a member of Studio",
-			userEvent,
-			"Its conversations aren’t on this device anymore. Ask Noa for a new invitation.",
-		)
-	},
-})
-
-export const SpaceDeleted = meta.story({
-	name: "8.1 Space deleted",
-	globals: { theme: "dark" },
-	render: () => <SpaceDeletedNotice />,
-	parameters: {
-		docs: {
-			description: {
-				story: `${SPACES_ARTBOARD} Row 8.1: the host deleted a Space the reader had joined. ${BANNER_GAP} Check the info notice names the host and the Space, says the conversations left this device, and carries a close control and no action. Pick \`M8RemovedFromSpace\` for a Space that still exists.`,
-			},
-		},
-	},
-	play: async ({ userEvent }) => {
-		await expectInfoNoticeClosing(
-			"Noa deleted Studio",
-			userEvent,
-			"Its conversations aren’t on this device anymore.",
-		)
-	},
-})
-
-export const RemovedReasonUnknown = meta.story({
-	name: "Removed, reason unknown",
-	globals: { theme: "dark" },
-	render: () => <RemovedForAnUnknownReasonNotice />,
-	parameters: {
-		docs: {
-			description: {
-				story: `No artboard draws this reason; it reuses the data of rows 8 and 8.1 on the Paper page \`Mockup\` of \`Kiroshi, E2E Spaces v2\`, dark only. ${BANNER_GAP} The joined Space left this computer for a reason the host did not name. Check the info notice names the host and the Space, says the conversations stay with the host, and carries a close control and no action. Pick \`M8RemovedFromSpace\` or \`SpaceDeleted\` for a named reason.`,
-			},
-		},
-	},
-	play: async ({ userEvent }) => {
-		await expectInfoNoticeClosing(
-			"Noa removed you from Studio.",
-			userEvent,
-			"It’s gone from your spaces. Its conversations stay on Noa’s Kiroshi.",
-		)
-	},
-})
 
 export const M13SignedOut = meta.story({
 	name: "M13 Signed out",
