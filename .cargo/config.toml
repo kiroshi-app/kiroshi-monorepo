@@ -7,8 +7,8 @@
 # PATH, it compiles through sccache, and it makes a dependency's output independent of
 # the worktree path so that the cache key of every crate built on top of it matches
 # across worktrees:
-#   -C rpath                           a proc-macro dylib records @rpath/<file>, not its
-#                                      absolute path, as its install name;
+#   -C rpath, on proc-macro crates     the dylib records @rpath/<file>, not its absolute
+#                                      path, as its install name;
 #   --remap-path-prefix=$OUT_DIR=...   an rlib that includes build script output records
 #                                      OUT_DIR instead of the target directory path.
 # Without sccache, or with CI set, it runs rustc unchanged. CI also sets
