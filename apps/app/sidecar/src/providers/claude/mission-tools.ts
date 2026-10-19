@@ -64,8 +64,23 @@ const WATCH =
 	"Arm a mission of yours on the branch it lands its work in, so what happens on that branch reaches its thread. It answers the address a call reaches the mission at, the key that call carries and the name of the header that key goes in. Call this once the branch exists."
 
 const LIST =
-	"Read the missions of yours this conversation still carries, each with its id, its ticket and where it stands. Read this when you no longer hold the id of a mission."
+	"Read the missions of this conversation, of every companion, open and closed, newest opened first, at most 200. Each comes with its id, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, when it opened and closed, and its last status. Given a conversation, read that one instead. Given the space, read every mission of the space. Read this when you no longer hold the id of a mission, or to see what the others carry."
 
+const READ =
+	"Read one mission of this space, whoever carries it: its objective, its ticket, where it stands, the companion carrying it, the conversation it came from, its own thread, the branch and the repository it watches, its pull request, when it opened and closed, its last status, and every line written on it in order."
+
+const LISTED_CONVERSATION =
+	"The id of a conversation of this space to read the missions of. Left out, this conversation."
+
+const LISTED_SPACE =
+	"true to read every mission of the space, whatever the conversation."
+
+const LISTED_STATE = "Keep only the missions standing there."
+
+const LISTED_BOT =
+	"The id of a companion, to keep only the missions it carries."
+
+const READ_ID = "The id of the mission to read."
 const TICKET = z.object({
 	platform: z.string().describe(TICKET_PLATFORM),
 	externalId: z.string().describe(TICKET_EXTERNAL_ID),
@@ -74,8 +89,6 @@ const TICKET = z.object({
 })
 
 type ToolInput = Record<string, z.ZodType>
-
-const NOTHING: ToolInput = {}
 
 const NAMED: ToolInput = { id: z.string().describe(MISSION_ID) }
 
@@ -111,6 +124,25 @@ const ARMED: ToolInput = {
 	repository: z.string().describe(REPOSITORY),
 }
 
+const SOUGHT: ToolInput = {
+	conversation: z.string().describe(LISTED_CONVERSATION).optional(),
+	space: z.boolean().describe(LISTED_SPACE).optional(),
+	state: z
+		.enum([
+			"working",
+			"waiting_bot",
+			"waiting_human",
+			"ready_to_merge",
+			"failed",
+			"done",
+		])
+		.describe(LISTED_STATE)
+		.optional(),
+	bot: z.string().describe(LISTED_BOT).optional(),
+}
+
+const READ_NAMED: ToolInput = { id: z.string().describe(READ_ID) }
+
 const asked = carriedTo(SUBTYPE)
 
 type MissionTool = SdkMcpToolDefinition<ToolInput>
@@ -130,5 +162,8 @@ export const missionTools = (session: string | undefined): MissionTool[] => [
 	tool("mission_watch", WATCH, ARMED, (input) =>
 		asked(session, "watch", input),
 	),
-	tool("mission_list", LIST, NOTHING, () => asked(session, "list", {})),
+	tool("mission_list", LIST, SOUGHT, (input) => asked(session, "list", input)),
+	tool("mission_read", READ, READ_NAMED, (input) =>
+		asked(session, "read", input),
+	),
 ]

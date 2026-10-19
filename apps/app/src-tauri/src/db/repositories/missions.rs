@@ -11,9 +11,9 @@ use super::messages::conversation_of_turn;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
 	CheckoutCounts, ConversationMissions, HookedMission, Mission, MissionActivity, MissionAnswer,
-	MissionClosing, MissionDetail, MissionDraft, MissionEntry, MissionError, MissionEvent,
-	MissionEventKind, MissionInSpace, MissionInThread, MissionState, MissionStatus, MissionWatch,
-	Ticket, WatchedMission,
+	MissionClosing, MissionDetail, MissionDossier, MissionDraft, MissionEntry, MissionError,
+	MissionEvent, MissionEventKind, MissionFilter, MissionInSpace, MissionInThread, MissionRecord,
+	MissionScope, MissionState, MissionStatus, MissionWatch, Ticket, WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -124,6 +124,15 @@ const SELECT_EVENTS: &str = "SELECT id, mission_id, kind, source, payload, creat
 
 const WORKSPACE_OF_MISSION: &str =
 	"SELECT NULLIF(watch_workspace_path, '') FROM missions WHERE id = ?1";
+
+const OF_CONVERSATION: &str = "(origin_conversation_id = ?1 OR thread_conversation_id = ?1)";
+
+const OF_SPACE: &str = "origin_conversation_id IN (
+	SELECT id FROM conversations WHERE space_id = ?1 AND kind IN ('topic', 'main')
+	UNION ALL SELECT id FROM conversations WHERE space_id = ?1 AND kind = 'mission')";
+
+const BOT_AND_REPOSITORY: &str = "SELECT bots.name, NULLIF(missions.watch_repository, '')
+	FROM missions JOIN bots ON bots.id = missions.bot_id WHERE missions.id = ?1";
 
 const COUNT_EVENTS: &str = "SELECT count(*) FROM mission_events WHERE mission_id = ?1
 	AND kind NOT IN ('agent_started', 'agent_stopped')";
@@ -333,24 +342,48 @@ impl MissionsRepository {
 			.await?)
 	}
 
-	pub async fn still_open_for_bot(
-		&self,
-		conversation_id: String,
-		bot_id: String,
-	) -> Result<Vec<Mission>, MissionError> {
+	pub async fn listed(&self, filter: MissionFilter) -> Result<Vec<MissionRecord>, MissionError> {
 		Ok(self
 			.access
 			.call(move |connection| {
-				let mut statement = connection.prepare_cached(&format!(
-					"{MISSION_COLUMNS} WHERE closed_at IS NULL AND bot_id = ?2
-					AND (origin_conversation_id = ?1 OR thread_conversation_id = ?1)
-					ORDER BY opened_at DESC, id DESC LIMIT ?3"
-				))?;
-				let rows = statement
-					.query_map(params![conversation_id, bot_id, MAX_MISSIONS_PER_READ], mission)?;
-				Ok(oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?))
+				let (scope, scoped_on) = match &filter.scope {
+					MissionScope::Conversation(id) => (OF_CONVERSATION, id),
+					MissionScope::Space(id) => (OF_SPACE, id),
+				};
+				let mut statement = connection.prepare_cached(&listed_statement(scope))?;
+				let rows = statement.query_map(
+					params![
+						scoped_on,
+						filter.bot_id,
+						filter.state.map(state_kinds).transpose()?,
+						MAX_MISSIONS_PER_READ
+					],
+					mission_record,
+				)?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 			})
 			.await?)
+	}
+
+	pub async fn dossier(&self, id: String) -> Result<MissionDossier, MissionError> {
+		self.access
+			.call(move |connection| {
+				let Some(held) = held(connection, &id)? else {
+					return Ok(Err(MissionError::UnknownMission { id }));
+				};
+				let (bot_name, repository) = connection
+					.prepare_cached(BOT_AND_REPOSITORY)?
+					.query_row([&id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+				let mut statement = connection.prepare_cached(SELECT_EVENTS)?;
+				let rows = statement.query_map(params![id, MAX_EVENTS_PER_MISSION], event)?;
+				let events = oldest_first(rows.collect::<rusqlite::Result<Vec<_>>>()?);
+				Ok(Ok(MissionDossier {
+					record: MissionRecord { mission: held, bot_name },
+					repository,
+					events,
+				}))
+			})
+			.await?
 	}
 
 	pub async fn in_thread(
@@ -849,6 +882,25 @@ fn read(transaction: &Transaction<'_>, id: &str) -> Result<Mission, MissionError
 	held(transaction, id)?.ok_or_else(|| MissionError::UnknownMission { id: id.to_owned() })
 }
 
+fn listed_statement(scope: &str) -> String {
+	format!(
+		"SELECT feed.*, (SELECT name FROM bots WHERE bots.id = feed.bot_id) AS bot_name
+		FROM ({MISSION_COLUMNS} WHERE {scope} AND (?2 IS NULL OR bot_id = ?2)) AS feed
+		WHERE ?3 IS NULL OR feed.state_kind IN (SELECT value FROM json_each(?3))
+		ORDER BY feed.opened_at DESC, feed.id DESC LIMIT ?4"
+	)
+}
+
+fn state_kinds(state: MissionState) -> rusqlite::Result<String> {
+	let kinds = MissionEventKind::ALL
+		.into_iter()
+		.filter(|kind| kind.state() == Some(state))
+		.map(named)
+		.collect::<rusqlite::Result<Vec<_>>>()?;
+	serde_json::to_string(&kinds)
+		.map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))
+}
+
 fn space_page_statement(after: Option<&Keyset>) -> String {
 	let past_the_cursor = match after {
 		Some(_) => "AND (opened_at, id) < (?3, ?4)",
@@ -926,6 +978,10 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		branch: row.get(25)?,
 		workspace_path: row.get(26)?,
 	})
+}
+
+fn mission_record(row: &Row<'_>) -> rusqlite::Result<MissionRecord> {
+	Ok(MissionRecord { mission: mission(row)?, bot_name: row.get("bot_name")? })
 }
 
 fn in_space(row: &Row<'_>) -> rusqlite::Result<MissionInSpace> {
@@ -1768,6 +1824,95 @@ mod tests {
 				"the page sorts its missions apart from the index: {plan:?}"
 			);
 		}
+	}
+
+	#[tokio::test]
+	async fn the_listed_reads_of_a_conversation_and_of_a_space_scan_no_mission() {
+		let (database, _dir) = planted().await;
+
+		for scope in [OF_CONVERSATION, OF_SPACE] {
+			let plan = database
+				.call(move |connection| {
+					let mut statement = connection
+						.prepare(&format!("EXPLAIN QUERY PLAN {}", listed_statement(scope)))?;
+					let steps = statement
+						.query_map(params!["personal", "b1", "[\"opened\"]", 200], |row| {
+							row.get::<_, String>(3)
+						})?
+						.collect::<rusqlite::Result<Vec<_>>>()?;
+					Ok(steps)
+				})
+				.await
+				.expect("the query plan");
+
+			assert!(
+				plan.iter().any(|step| step.starts_with("SEARCH missions USING INDEX")),
+				"the read does not reach the missions through an index: {plan:?}"
+			);
+			assert!(
+				!plan.iter().any(|step| step.starts_with("SCAN missions")
+					|| step.starts_with("SCAN conversations")),
+				"the read scans a whole table: {plan:?}"
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn the_listed_reads_answer_newest_first_on_state_and_bot() {
+		let (database, _dir) = planted().await;
+		let rows = format!(
+			"{}{}{}UPDATE missions SET closed_at = 9 WHERE id = 'm-2';
+			INSERT INTO mission_events (id, mission_id, seq, kind, source, payload, created_at)
+				VALUES ('e-2', 'm-2', 1, 'closed', 'bot', '{{}}', 9);
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('thread-m-1', 'b1', 'lead', 1, 0);
+			{}",
+			missions_opened_at("c1", "b1", &["m-1"], 1),
+			missions_opened_at("c1", "b1", &["m-2"], 2),
+			missions_opened_at("c2", "b2", &["m-3"], 3),
+			missions_opened_at("thread-m-1", "b1", &["m-4"], 4),
+		);
+		database
+			.call_mut(move |connection| Ok(connection.execute_batch(&rows)?))
+			.await
+			.expect("the missions are planted");
+		let listed = |scope: MissionScope, state: Option<MissionState>, bot_id: Option<&str>| {
+			let filter = MissionFilter { scope, state, bot_id: bot_id.map(str::to_owned) };
+			let missions = database.missions();
+			async move {
+				missions
+					.listed(filter)
+					.await
+					.expect("the missions are listed")
+					.into_iter()
+					.map(|record| record.mission.id)
+					.collect::<Vec<_>>()
+			}
+		};
+
+		assert_eq!(
+			listed(MissionScope::Conversation("c1".to_owned()), None, None).await,
+			vec!["m-2", "m-1"]
+		);
+		assert_eq!(
+			listed(MissionScope::Conversation("thread-m-3".to_owned()), None, None).await,
+			vec!["m-3"]
+		);
+		assert_eq!(
+			listed(MissionScope::Space("personal".to_owned()), None, None).await,
+			vec!["m-4", "m-2", "m-1"]
+		);
+		assert_eq!(
+			listed(MissionScope::Space("personal".to_owned()), Some(MissionState::Done), None)
+				.await,
+			vec!["m-2"]
+		);
+		assert_eq!(
+			listed(MissionScope::Space("work".to_owned()), None, Some("b2")).await,
+			vec!["m-3"]
+		);
+		assert!(listed(MissionScope::Space("work".to_owned()), None, Some("b1")).await.is_empty());
 	}
 
 	const MISSIONS_PAST_THE_CAP: &str = "

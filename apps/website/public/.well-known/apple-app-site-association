@@ -1,0 +1,10 @@
+{
+	"applinks": {
+		"details": [
+			{
+				"appIDs": ["BBE5V2JL5H.com.kiroshi.app.ios"],
+				"components": [{ "/": "/join*" }]
+			}
+		]
+	}
+}

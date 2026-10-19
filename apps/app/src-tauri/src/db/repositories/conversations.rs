@@ -155,6 +155,14 @@ pub struct ConversationEdit {
 	pub color: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchivedConversation {
+	pub id: String,
+	pub space_id: Option<String>,
+	pub title: String,
+	pub archived_at: i64,
+}
+
 pub struct ConversationsRepository {
 	access: Access,
 }
@@ -439,6 +447,21 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(updated_conversation(connection, &id, &edit)))
 			.await?
 			.at("update_conversation", "conversations")
+	}
+
+	pub async fn archive_conversation(
+		&self,
+		id: String,
+	) -> Result<ArchivedConversation, ConversationError> {
+		self.call_mut(move |connection| Ok(archived_conversation(connection, &id)))
+			.await?
+			.at("archive_conversation", "conversations")
+	}
+
+	pub async fn unarchive_conversation(&self, id: String) -> Result<(), ConversationError> {
+		self.call_mut(move |connection| Ok(unarchived_conversation(connection, &id)))
+			.await?
+			.at("unarchive_conversation", "conversations")
 	}
 
 	pub async fn delete_conversation(&self, id: String) -> Result<(), ConversationError> {
@@ -897,6 +920,33 @@ fn refuse_unknown_colour(colour: Option<&str>) -> Result<(), ConversationError> 
 	}
 }
 
+fn archived_conversation(
+	connection: &Connection,
+	id: &str,
+) -> Result<ArchivedConversation, ConversationError> {
+	connection
+		.prepare_cached(
+			"UPDATE conversations SET archived_at = COALESCE(archived_at, ?2) WHERE id = ?1
+				RETURNING id, space_id, title, archived_at",
+		)?
+		.query_row(params![id, now()], |row| {
+			Ok(ArchivedConversation {
+				id: row.get(0)?,
+				space_id: row.get(1)?,
+				title: row.get(2)?,
+				archived_at: row.get(3)?,
+			})
+		})
+		.optional()?
+		.ok_or_else(|| ConversationError::UnknownConversation { id: id.to_owned() })
+}
+
+fn unarchived_conversation(connection: &Connection, id: &str) -> Result<(), ConversationError> {
+	let written =
+		connection.execute("UPDATE conversations SET archived_at = NULL WHERE id = ?1", [id])?;
+	refuse_unknown_conversation(written, id)
+}
+
 fn deleted_conversation(connection: &mut Connection, id: &str) -> Result<(), ConversationError> {
 	let transaction = write_transaction(connection)?;
 	let dropped = transaction.execute(
@@ -1103,6 +1153,7 @@ mod tests {
 		MessagePage, MessagePageQuery, MessagesAroundQuery, NewAssistantMessage, NewTurn,
 	};
 	use crate::db::{count_of, open, Database};
+	use crate::search::contract::CatalogueScope;
 
 	pub(super) fn an_identity(name: &str) -> BotIdentity {
 		BotIdentity {
@@ -2022,6 +2073,90 @@ mod tests {
 			.await
 			.expect("the room is opened");
 		(room, bots)
+	}
+
+	async fn rostered_ids(database: &Database, space_id: &str) -> Vec<String> {
+		let roster = database
+			.conversations()
+			.conversation_page(space_id.to_owned(), None, 10)
+			.await
+			.expect("the roster is read");
+		roster
+			.pinned
+			.iter()
+			.chain(&roster.page.rows)
+			.map(|row| row.conversation.id.clone())
+			.collect()
+	}
+
+	async fn catalogued_ids(database: &Database, space_id: &str) -> Vec<String> {
+		database
+			.catalogue()
+			.search(CatalogueScope { query: String::new(), space_id: space_id.to_owned() })
+			.await
+			.expect("the catalogue is read")
+			.chats
+			.into_iter()
+			.map(|chat| chat.conversation_id)
+			.collect()
+	}
+
+	#[tokio::test]
+	async fn an_archived_room_leaves_the_roster_and_the_catalogue_and_comes_back_whole() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+		let (room, bots) = a_room_of(&database, &["Nyx", "Ada"]).await;
+		arrived(repository, &room, &bots[1]).await;
+		spoke_in(&database, &room.id, &bots[0].id).await;
+		spoke_in(&database, &room.id, &bots[1].id).await;
+		let space_id = room.space_id.clone().expect("the room has a space");
+		let seats_before = repository.seats(room.id.clone()).await.expect("the seats");
+		let messages_before = page_of(&database, &room.id, None, 10).await.messages;
+
+		let archived = repository.archive_conversation(room.id.clone()).await.expect("archived");
+		let archived_again =
+			repository.archive_conversation(room.id.clone()).await.expect("archived again");
+		let rostered_while_archived = rostered_ids(&database, &space_id).await;
+		let catalogued_while_archived = catalogued_ids(&database, &space_id).await;
+		let seats_while_archived = repository.seats(room.id.clone()).await.expect("the seats");
+		let messages_while_archived = page_of(&database, &room.id, None, 10).await.messages;
+		repository.unarchive_conversation(room.id.clone()).await.expect("unarchived");
+
+		assert_eq!((archived.id.as_str(), archived.title.as_str()), (room.id.as_str(), "Launch"));
+		assert_eq!(archived_again.archived_at, archived.archived_at, "a second close moved it");
+		assert!(!rostered_while_archived.contains(&room.id), "the roster kept the archived room");
+		assert!(!catalogued_while_archived.contains(&room.id), "the catalogue kept it");
+		assert_eq!(seats_while_archived, seats_before, "a seat went with the close");
+		assert_eq!(messages_while_archived, messages_before, "a message went with the close");
+		assert!(rostered_ids(&database, &space_id).await.contains(&room.id), "it stayed out");
+		assert!(catalogued_ids(&database, &space_id).await.contains(&room.id), "it stayed out");
+		assert_eq!(page_of(&database, &room.id, None, 10).await.messages, messages_before);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_unknown_room_is_refused_an_archive_and_an_unarchive() {
+		let dir = temp_dir();
+		let database = open(&dir);
+		let repository = database.conversations();
+
+		let archived = repository.archive_conversation("absent".to_owned()).await;
+		let unarchived = repository.unarchive_conversation("absent".to_owned()).await;
+
+		assert!(
+			matches!(&archived, Err(ConversationError::UnknownConversation { id }) if id == "absent"),
+			"{archived:?}"
+		);
+		assert!(
+			matches!(&unarchived, Err(ConversationError::UnknownConversation { id }) if id == "absent"),
+			"{unarchived:?}"
+		);
+
+		drop(database);
+		fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
 	#[tokio::test]

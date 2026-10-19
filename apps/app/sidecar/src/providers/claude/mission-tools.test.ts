@@ -72,6 +72,12 @@ const calls: [string, Record<string, unknown>, string][] = [
 		"watch",
 	],
 	["mission_list", {}, "list"],
+	[
+		"mission_list",
+		{ conversation: "c2", space: true, state: "done", bot: "b2" },
+		"list",
+	],
+	["mission_read", { id: "m1" }, "read"],
 ]
 
 const answers: Record<string, unknown> = {
@@ -100,9 +106,28 @@ const answers: Record<string, unknown> = {
 			id: "m1",
 			ticket: A_TICKET,
 			state: "working",
+			botId: "b1",
+			botName: "First",
+			originConversationId: "c1",
+			threadConversationId: "t1",
 			openedAt: 1,
+			closedAt: null,
+			status: null,
 		},
 	],
+	read: {
+		...A_MISSION,
+		objective: "Ship the tools",
+		ticket: A_TICKET,
+		botName: "First",
+		branch: "feature/ope-37",
+		repository: "shoto290/kiroshi-monorepo",
+		pullRequestUrl: null,
+		openedAt: 1,
+		closedAt: null,
+		status: null,
+		events: [],
+	},
 }
 
 const aHost = (served: (asked: Asked) => Served) => {
@@ -145,7 +170,7 @@ afterEach(() => {
 })
 
 describe("missionTools", () => {
-	it("serves the seven mission tools under their own names", () => {
+	it("serves the eight mission tools under their own names", () => {
 		expect(missionTools(SESSION).map((held) => held.name)).toEqual([
 			"mission_open",
 			"mission_note",
@@ -154,6 +179,7 @@ describe("missionTools", () => {
 			"mission_close",
 			"mission_watch",
 			"mission_list",
+			"mission_read",
 		])
 	})
 
@@ -235,6 +261,28 @@ describe("missionTools", () => {
 
 		expect(said).toContain("branch")
 		expect(said).toContain("repository")
+	})
+
+	it("lets mission_list narrow on a conversation, the space, a state and a companion, each optional", () => {
+		const listed = z.toJSONSchema(
+			z.object(toolNamed(SESSION, "mission_list").inputSchema),
+		)
+
+		expect(Object.keys(listed.properties ?? {})).toEqual([
+			"conversation",
+			"space",
+			"state",
+			"bot",
+		])
+		expect(listed.required ?? []).toEqual([])
+		expect(JSON.stringify(listed.properties?.state)).toContain("ready_to_merge")
+	})
+
+	it("tells the agent mission_read answers the whole of one mission, its lines included", () => {
+		const said = toolNamed(SESSION, "mission_read").description
+
+		expect(said).toContain("whoever carries it")
+		expect(said).toContain("every line written on it")
 	})
 
 	it("tells the agent a failed outcome gives the objective up", () => {
