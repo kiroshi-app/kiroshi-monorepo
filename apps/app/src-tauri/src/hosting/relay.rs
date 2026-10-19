@@ -71,7 +71,26 @@ pub(crate) enum Opened {
 	Revoked,
 	Forbidden,
 	Unknown,
+	Gone(Option<Departure>),
 	Unreachable(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum Departure {
+	SpaceDeleted,
+	MemberRemoved,
+	MemberLeft,
+}
+
+#[derive(Deserialize)]
+struct GoneBody {
+	error: GoneCode,
+}
+
+#[derive(Deserialize)]
+struct GoneCode {
+	code: Departure,
 }
 
 enum Ended {
@@ -227,12 +246,16 @@ async fn attempted<R: Runtime>(
 		Some(Opened::Forbidden) => Next::Settled(HostingState::Failed {
 			reason: "the account does not own this instance (relay answered 403)".to_owned(),
 		}),
-		Some(Opened::Unknown) if replaced.is_none() => {
+		Some(Opened::Unknown | Opened::Gone(_)) if replaced.is_none() => {
 			*replaced = hosted.instance_id.take();
 			Next::Reregister
 		}
 		Some(Opened::Unknown) => Next::Settled(HostingState::Failed {
 			reason: "kiroshi-cloud knows no instance under the id it just registered (relay answered 404)"
+				.to_owned(),
+		}),
+		Some(Opened::Gone(_)) => Next::Settled(HostingState::Failed {
+			reason: "kiroshi-cloud answered the instance it just registered as gone (relay answered 410)"
 				.to_owned(),
 		}),
 		Some(Opened::Unreachable(reason)) => Next::Retry(reason),
@@ -362,10 +385,23 @@ pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
 			StatusCode::UNAUTHORIZED => Opened::Revoked,
 			StatusCode::FORBIDDEN => Opened::Forbidden,
 			StatusCode::NOT_FOUND => Opened::Unknown,
+			StatusCode::GONE => Opened::Gone(departure(response.body().as_deref())),
 			status => Opened::Unreachable(format!("the relay answered {status}")),
 		},
 		Ok(Err(error)) => Opened::Unreachable(format!("the relay could not be reached: {error}")),
 	}
+}
+
+fn departure(body: Option<&[u8]>) -> Option<Departure> {
+	let read = body.and_then(|body| serde_json::from_slice::<GoneBody>(body).ok());
+	if read.is_none() {
+		eprintln!(
+			"the relay answered {} with a body naming no known departure: {:?}",
+			StatusCode::GONE,
+			body.map(String::from_utf8_lossy)
+		);
+	}
+	read.map(|gone| gone.error.code)
 }
 
 struct HostedSpace<'a> {

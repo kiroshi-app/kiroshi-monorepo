@@ -1165,6 +1165,21 @@ fn an_instance_owned_by_another_account_fails_naming_403_and_is_not_retried() {
 }
 
 #[test]
+fn an_instance_the_relay_answers_410_on_registers_again_once_then_fails_naming_410() {
+	run(async {
+		let harness = Harness::new("gone", Some(StatusCode::GONE), Some(BEARER)).await;
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let reason = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert!(reason.contains("410"), "{reason}");
+		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
 fn a_host_replaced_by_another_fails_naming_4001_and_does_not_reconnect() {
 	run(async {
 		let mut harness = Harness::signed_in("replaced").await;

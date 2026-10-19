@@ -949,9 +949,12 @@ export type JoinedSpaceReconnected = {
 	id: string,
 };
 
+export type JoinedSpaceRemovalReason = "deleted" | "removed" | "left" | "unknown";
+
 export type JoinedSpaceRemoved = {
 	id: string,
 	name: string,
+	reason: JoinedSpaceRemovalReason,
 };
 
 export type JoinedSpaceRole = "host" | "guest";

@@ -149,7 +149,7 @@ async fn answered<R: Runtime>(
 	let mut socket = match opened(url, bearer).await {
 		Opened::Socket(socket) => socket,
 		Opened::Revoked => return Err(revoked(app, bearer)),
-		Opened::Forbidden | Opened::Unknown => {
+		Opened::Forbidden | Opened::Unknown | Opened::Gone(_) => {
 			return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 		}
 		Opened::Unreachable(reason) => return Ok(waiting(instance_id, &reason)),

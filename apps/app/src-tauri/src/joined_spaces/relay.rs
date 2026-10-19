@@ -12,7 +12,10 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::commands::{announce_change, announce_reconnection, announce_removal, ready};
+use super::commands::{
+	announce_change, announce_reconnection, announce_removal, ready, JoinedSpaceRemovalReason,
+	JoinedSpaceRemoved,
+};
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
 use super::held::{self, Held};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
@@ -29,7 +32,8 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Opened, Sink, Socket, PING_EVERY, SILENCE_BOUND,
+	opened, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
+	SILENCE_BOUND,
 };
 
 const HOST_ABSENT: u16 = 4002;
@@ -37,6 +41,8 @@ const HOST_ABSENT: u16 = 4002;
 const MEMBERSHIP_ENDED: u16 = 4003;
 
 const SERVER_RESTARTING: u16 = 4005;
+
+const SPACE_DELETED: u16 = 4007;
 
 const CALLS_IN_FLIGHT: usize = 64;
 
@@ -75,7 +81,8 @@ struct Linked {
 
 enum Ended {
 	Stopped,
-	Evicted,
+	Evicted(JoinedSpaceRemovalReason),
+	Departed,
 	Removed,
 	SignedOut(&'static str),
 	Dropped(String),
@@ -296,7 +303,7 @@ async fn memberships_followed<R: Runtime>(
 	}
 	for (id, instance_id) in held.iter().map(relay_instance) {
 		if !listed.iter().any(|instance| instance.id == instance_id) {
-			unlisted_dropped(app, guests, id).await?;
+			unlisted_dropped(app, guests, &bearer, id, instance_id).await?;
 		}
 	}
 	Ok(())
@@ -333,14 +340,47 @@ async fn listed_followed<R: Runtime>(
 async fn unlisted_dropped<R: Runtime>(
 	app: &AppHandle<R>,
 	guests: &RelayGuests,
+	bearer: &str,
 	id: &str,
+	instance_id: &str,
 ) -> Result<(), String> {
 	let guest = guests.guests().remove(id);
 	if let Some(guest) = guest {
 		finished(id, guest).await;
 	}
 	guests.waiting_stopped(id).await;
-	entry_evicted(app, id).await.map_err(described)
+	let reason = unlisted_reason(app, guests.cloud(), bearer, id, instance_id).await;
+	entry_evicted(app, id, reason).await.map_err(described)
+}
+
+async fn unlisted_reason<R: Runtime>(
+	app: &AppHandle<R>,
+	cloud: &Cloud,
+	bearer: &str,
+	id: &str,
+	instance_id: &str,
+) -> JoinedSpaceRemovalReason {
+	let roster = match held::roster(app, instance_id).await {
+		Ok(Some(roster)) => roster,
+		Ok(None) => return JoinedSpaceRemovalReason::Unknown,
+		Err(failure) => {
+			eprintln!("joined space {id} could not ask the relay why it is unlisted: {failure:?}");
+			return JoinedSpaceRemovalReason::Unknown;
+		}
+	};
+	let url = member_socket_url(cloud, instance_id, &roster.own.relay_device_id);
+	match opened(url, bearer).await {
+		Opened::Gone(Some(departure)) => reason_of(departure),
+		_ => JoinedSpaceRemovalReason::Unknown,
+	}
+}
+
+pub(super) fn reason_of(departure: Departure) -> JoinedSpaceRemovalReason {
+	match departure {
+		Departure::SpaceDeleted => JoinedSpaceRemovalReason::Deleted,
+		Departure::MemberRemoved => JoinedSpaceRemovalReason::Removed,
+		Departure::MemberLeft => JoinedSpaceRemovalReason::Left,
+	}
 }
 
 fn described(failure: impl std::fmt::Debug) -> String {
@@ -522,10 +562,12 @@ async fn guest_linked<R: Runtime>(
 		held = kept;
 		match ended {
 			Ended::Stopped => return linked.link.ended(Presence::Ended),
-			Ended::Evicted => {
-				app.state::<RelayGuests>().removed().insert(linked.id.clone());
-				linked.link.ended(Presence::Ended);
-				return evicted(&app, &linked).await;
+			Ended::Evicted(reason) => return evicted(&app, &linked, reason).await,
+			Ended::Departed => {
+				let Some(reason) = departure_asked(&app, &linked, &held, &mut stop).await else {
+					return linked.link.ended(Presence::Ended);
+				};
+				return evicted(&app, &linked, reason).await;
 			}
 			Ended::Removed => {
 				let guests = app.state::<RelayGuests>();
@@ -582,15 +624,40 @@ async fn attempted<R: Runtime>(
 			backoff.reset();
 			online(app, *socket, linked, held, stop).await
 		}
-		Some(Opened::Unknown) => (Ended::Evicted, held),
+		Some(Opened::Unknown) => (Ended::Evicted(JoinedSpaceRemovalReason::Unknown), held),
+		Some(Opened::Gone(Some(departure))) => (Ended::Evicted(reason_of(departure)), held),
 		Some(Opened::Revoked) => {
 			session::revoked(app, &bearer);
 			(Ended::SignedOut("the relay refused the account (401)"), held)
 		}
-		Some(Opened::Forbidden) => {
+		Some(Opened::Forbidden | Opened::Gone(None)) => {
 			(Ended::Dropped("the account is not a member of this instance (403)".to_owned()), held)
 		}
 		Some(Opened::Unreachable(reason)) => (Ended::Dropped(reason), held),
+	}
+}
+
+async fn departure_asked<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
+	held: &Held,
+	stop: &mut watch::Receiver<bool>,
+) -> Option<JoinedSpaceRemovalReason> {
+	let bearer = match app.state::<AccountSession>().bearer() {
+		Ok(Some(bearer)) => bearer,
+		unasked => {
+			eprintln!(
+				"joined space {} could not ask the relay why its membership ended: {unasked:?}",
+				linked.id
+			);
+			return Some(JoinedSpaceRemovalReason::Removed);
+		}
+	};
+	let cloud = &app.state::<RelayGuests>().cloud;
+	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
+	match until_stopped(stop, opened(url, &bearer)).await? {
+		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
+		_ => Some(JoinedSpaceRemovalReason::Removed),
 	}
 }
 
@@ -792,7 +859,8 @@ fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
 
 fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 	match frame.map(|frame| u16::from(frame.code)) {
-		Some(MEMBERSHIP_ENDED) => Ended::Evicted,
+		Some(SPACE_DELETED) => Ended::Evicted(JoinedSpaceRemovalReason::Deleted),
+		Some(MEMBERSHIP_ENDED) => Ended::Departed,
 		Some(HOST_ABSENT) => {
 			Ended::Dropped(format!("the relay room has no host (code {HOST_ABSENT})"))
 		}
@@ -803,15 +871,26 @@ fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 	}
 }
 
-async fn evicted<R: Runtime>(app: &AppHandle<R>, linked: &Linked) {
+async fn evicted<R: Runtime>(
+	app: &AppHandle<R>,
+	linked: &Linked,
+	reason: JoinedSpaceRemovalReason,
+) {
 	let id = &linked.id;
-	app.state::<RelayGuests>().left(id, &linked.link);
-	if let Err(failure) = entry_evicted(app, id).await {
+	let guests = app.state::<RelayGuests>();
+	guests.removed().insert(id.clone());
+	linked.link.ended(Presence::Ended);
+	guests.left(id, &linked.link);
+	if let Err(failure) = entry_evicted(app, id, reason).await {
 		eprintln!("joined space {id} whose membership ended was not evicted: {failure:?}");
 	}
 }
 
-async fn entry_evicted<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), JoinedSpaceError> {
+pub(super) async fn entry_evicted<R: Runtime>(
+	app: &AppHandle<R>,
+	id: &str,
+	reason: JoinedSpaceRemovalReason,
+) -> Result<(), JoinedSpaceError> {
 	let state = app.state::<db::DatabaseState>();
 	let repository = ready(&state)?.joined_spaces();
 	let Some(found) = repository.find(id.to_owned()).await? else {
@@ -820,7 +899,7 @@ async fn entry_evicted<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), J
 	if !repository.remove(id.to_owned()).await? {
 		return Ok(());
 	}
-	eprintln!("joined space {id} was removed: its membership ended");
+	eprintln!("joined space {id} was removed: its membership ended ({reason:?})");
 	announce_change(app, id.to_owned())?;
-	announce_removal(app, id.to_owned(), found.name)
+	announce_removal(app, JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason })
 }
