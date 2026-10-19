@@ -67,6 +67,7 @@ const Summary = ({ layout, space }: SummaryProps) => (
 	<InvitationSummary
 		layout={layout}
 		learnMore={JOIN_COPY.learnMore}
+		unnamedSpaceHeading={JOIN_COPY.unnamedSpaceHeading}
 		privacy={
 			space ? JOIN_COPY.privacyIn(space.name) : JOIN_COPY.privacyInThisSpace
 		}
@@ -103,13 +104,10 @@ const useKiroshiHandoff = (invitation: string) => {
 	return isAppMissing
 }
 
-const restingFootnoteOf = (
-	platform: DownloadPlatform,
-	space: InvitationSpace | null,
-) => {
+const restingFootnoteOf = (platform: DownloadPlatform) => {
 	if (platform === "windows") return JOIN_COPY.alsoOnBesideWindows
 	if (platform === "linux") return JOIN_COPY.alsoOnBesideLinux
-	return space ? JOIN_COPY.signInFor(space.name) : JOIN_COPY.signInForThisSpace
+	return JOIN_COPY.signInWithInvitedEmail
 }
 
 const ComputerJoin = ({ invitation, space }: OpenInvitationProps) => {
@@ -139,7 +137,7 @@ const ComputerJoin = ({ invitation, space }: OpenInvitationProps) => {
 			</JoinDesktopActions>
 			<JoinFootnote layout="desktop">
 				{isAppMissing
-					? restingFootnoteOf(download.platform, space)
+					? restingFootnoteOf(download.platform)
 					: JOIN_COPY.didntOpen}
 			</JoinFootnote>
 		</JoinDesktopFrame>

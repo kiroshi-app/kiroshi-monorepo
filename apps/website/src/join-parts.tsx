@@ -28,6 +28,7 @@ type InvitationSummaryProps = {
 	space: SpaceLines | null
 	privacy: string
 	learnMore: string
+	unnamedSpaceHeading: string
 }
 
 type SpaceHeadingProps = {
@@ -144,9 +145,14 @@ export const InvitationSummary = ({
 	space,
 	privacy,
 	learnMore,
+	unnamedSpaceHeading,
 }: InvitationSummaryProps) => (
 	<>
-		{space && <SpaceHeading layout={layout} space={space} />}
+		{space ? (
+			<SpaceHeading layout={layout} space={space} />
+		) : (
+			<h1 className="sr-only">{unnamedSpaceHeading}</h1>
+		)}
 		<div className="flex flex-col items-start gap-1.5">
 			<p className={cn("text-base leading-6 text-pretty", SECONDARY_TEXT)}>
 				{privacy}

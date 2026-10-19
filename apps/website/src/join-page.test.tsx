@@ -72,15 +72,25 @@ const waitOutTheApp = () =>
 		vi.advanceTimersByTime(APP_TAKEOVER_WAIT_MS)
 	})
 
+const SIGN_IN_LINE = "Sign in with the email this invitation was sent to"
+
+const headingsOfLevelOne = () =>
+	screen
+		.getAllByRole("heading", { level: 1 })
+		.map((heading) => heading.textContent)
+
 const expectSpaceLines = () => {
-	expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Studio")
+	expect(headingsOfLevelOne()).toEqual(["Studio"])
 	expect(screen.getByText("Noa invited you to join")).toBeTruthy()
 	expect(screen.getByText("Works once, until October 25")).toBeTruthy()
 	expect(screen.getByText(JOIN_COPY.privacyIn("Studio"))).toBeTruthy()
 }
 
 const expectNoSpaceLines = () => {
-	expect(screen.queryByRole("heading")).toBeNull()
+	expect(headingsOfLevelOne()).toEqual([JOIN_COPY.unnamedSpaceHeading])
+	expect(
+		screen.getByRole("heading", { level: 1 }).classList.contains("sr-only"),
+	).toBe(true)
 	expect(pageText()).not.toMatch(/invited you|Works once/)
 	expect(screen.getByText(JOIN_COPY.privacyInThisSpace)).toBeTruthy()
 }
@@ -132,7 +142,7 @@ describe("a valid invitation on a computer", () => {
 
 		waitOutTheApp()
 
-		await findText(JOIN_COPY.signInFor("Studio"))
+		await findText(SIGN_IN_LINE)
 		expectSpaceLines()
 		expect(linkNamed(JOIN_COPY.openInKiroshi).href).toBe(
 			kiroshiLinkOf(INVITATION),
@@ -150,6 +160,7 @@ describe("a valid invitation on a computer", () => {
 		waitOutTheApp()
 
 		await findText(JOIN_COPY.alsoOnBesideWindows)
+		expect(screen.queryByText(SIGN_IN_LINE)).toBeNull()
 		expect(linkNamed(WEBSITE_COPY.downloadActionWindows).href).toBe(
 			RELEASES_URL,
 		)
@@ -244,7 +255,7 @@ describe("a valid invitation without its Space lines", () => {
 
 		waitOutTheApp()
 
-		await findText(JOIN_COPY.signInForThisSpace)
+		await findText(SIGN_IN_LINE)
 		expect(pageText()).not.toMatch(/Studio|undefined|null/)
 	})
 })
@@ -268,7 +279,7 @@ describe("the invitation reference", () => {
 		await openJoin(joinPathOf(INVITATION))
 		await findText(JOIN_COPY.didntOpen)
 		waitOutTheApp()
-		await findText(JOIN_COPY.signInFor("Studio"))
+		await findText(JOIN_COPY.signInWithInvitedEmail)
 		localStorage.clear()
 
 		const carriers = fetched.filter((url) => url.href.includes(INVITATION))
