@@ -68,6 +68,30 @@ const settings = {
 		copySignInLinkFailed: "Couldn’t copy the sign-in link",
 		manageAccountFailed: "Couldn’t open your account on kiroshi.app",
 		signOutFailed: "Couldn’t sign out of Kiroshi",
+		devices: {
+			title: "Your devices",
+			description:
+				"Every device here reads your spaces. Remove one you don’t use anymore.",
+			thisDevice: "This device",
+			activeNow: "Active now",
+			otherDevices: "Other devices",
+			remove: "Remove",
+			empty:
+				"No other device reads your spaces. To add one, sign in on it with {{email}}, then approve it here.",
+			confirm: {
+				title: "Remove {{device}}?",
+				body: "It will be signed out and won’t read your spaces.",
+				remove: "Remove",
+				removing: "Removing…",
+				cancel: "Cancel",
+				failed:
+					"Couldn’t remove {{device}}. Check your connection and try again.",
+			},
+			removed: {
+				title: "{{device}} was signed out",
+				description: "It doesn’t read your spaces anymore.",
+			},
+		},
 	},
 	plugin: {
 		author: {
@@ -213,21 +237,31 @@ const settings = {
 				label: "Invite people",
 				placeholder: "Email",
 				action: "Invite",
-				hint: "They join by signing in to Kiroshi with this email.",
+				hint: "Kiroshi emails them an invitation. It works once, for 7 days.",
 				refusal: {
 					invited: "{{email}} is already invited.",
 					self: "That’s your own account.",
 					malformed: "Enter an email address, like sam@example.com.",
 				},
 				notShared: "Turn on Share {{name}} to invite someone.",
+				signedOut: "Sign in to Kiroshi to invite someone.",
+				hostOffline:
+					"{{name}} is offline. You can invite people once {{host}}’s computer is back.",
 			},
+			invitations: "Invitations",
+			list: "Members",
 			status: {
 				host: "Host",
-				joined: "Joined",
-				pending: "Pending",
+				expired: "Expired",
 			},
+			pending_one: "Invited · expires in 1 day",
+			pending_other: "Invited · expires in {{count}} days",
+			expired: "Sent {{date}}, not used",
+			you: "{{name}} (you)",
 			remove: "Remove",
 			removeLabel: "Remove {{name}}",
+			withdrawLabel: "Withdraw the invitation to {{email}}",
+			inviteAgainLabel: "Invite {{email}} again",
 			confirm: {
 				title: "Remove {{name}} from {{space}}?",
 				description:

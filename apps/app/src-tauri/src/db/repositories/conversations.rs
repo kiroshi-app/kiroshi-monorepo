@@ -12,16 +12,20 @@ use crate::bundles::BotPermissions;
 use crate::db::connection::Located;
 use crate::db::{Access, DatabaseError};
 
+mod amendment;
 mod avatar;
 mod bots;
 mod effort;
 mod icon;
 mod page;
 
+pub use amendment::{Amended, ConversationAmendment};
 pub use avatar::AvatarBlot;
 pub use bots::{Bot, BotIdentity};
 pub use icon::conversation_icons;
-pub use page::{ActiveConversation, ActivePage, ActiveTurn, LastWord};
+pub use page::{
+	ActiveConversation, ActivePage, ActiveTurn, LastWord, ListedConversation, Listing, LISTED_KINDS,
+};
 
 use bots::{
 	bot, bot_at, bot_in, bots_of, counted_bots, created_bot, deleted_bot, ensured_default_bot,
@@ -149,12 +153,6 @@ pub struct ConversationEdit {
 	pub section_id: Option<String>,
 	pub icon: Option<String>,
 	pub color: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ConversationDescription {
-	pub icon: Option<String>,
-	pub color: Option<Option<String>>,
 }
 
 pub struct ConversationsRepository {
@@ -441,16 +439,6 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(updated_conversation(connection, &id, &edit)))
 			.await?
 			.at("update_conversation", "conversations")
-	}
-
-	pub async fn describe_conversation(
-		&self,
-		id: String,
-		description: ConversationDescription,
-	) -> Result<Conversation, ConversationError> {
-		self.call_mut(move |connection| Ok(described_conversation(connection, &id, &description)))
-			.await?
-			.at("describe_conversation", "conversations")
 	}
 
 	pub async fn delete_conversation(&self, id: String) -> Result<(), ConversationError> {
@@ -884,33 +872,6 @@ fn updated_conversation(
 	Ok(updated)
 }
 
-fn described_conversation(
-	connection: &mut Connection,
-	id: &str,
-	description: &ConversationDescription,
-) -> Result<Conversation, ConversationError> {
-	refuse_blank_icon(description.icon.as_deref())?;
-	refuse_unlisted_icon(description.icon.as_deref(), None)?;
-	refuse_unknown_colour(description.color.as_ref().and_then(Option::as_deref))?;
-	let transaction = write_transaction(connection)?;
-	let written = transaction.execute(
-		"UPDATE conversations SET icon = COALESCE(?2, icon),
-			color = CASE WHEN ?3 THEN ?4 ELSE color END, updated_at = ?5
-			WHERE id = ?1",
-		params![
-			id,
-			description.icon,
-			description.color.is_some(),
-			description.color.clone().flatten(),
-			now()
-		],
-	)?;
-	refuse_unknown_conversation(written, id)?;
-	let described = conversation_of_any_kind_at(&transaction, id)?;
-	transaction.commit()?;
-	Ok(described)
-}
-
 fn refuse_blank_icon(icon: Option<&str>) -> Result<(), ConversationError> {
 	match icon {
 		Some(icon) if icon.trim().is_empty() => Err(ConversationError::BlankIcon),
@@ -954,7 +915,19 @@ fn added_participant(
 	invited_by_bot_id: Option<&str>,
 ) -> Result<Joined, ConversationError> {
 	let transaction = write_transaction(connection)?;
-	let room = conversation_at(&transaction, conversation_id)?;
+	let arrival = joined(&transaction, conversation_id, bot_id, invited_by_bot_id)?;
+	let conversation = conversation_at(&transaction, conversation_id)?;
+	transaction.commit()?;
+	Ok(Joined { conversation, arrival })
+}
+
+fn joined(
+	transaction: &Transaction<'_>,
+	conversation_id: &str,
+	bot_id: &str,
+	invited_by_bot_id: Option<&str>,
+) -> Result<Option<Arrival>, ConversationError> {
+	let room = conversation_at(transaction, conversation_id)?;
 	if let Some(inviter) = invited_by_bot_id.filter(|inviter| !is_present(&room, inviter)) {
 		return Err(ConversationError::UnknownParticipant {
 			conversation_id: conversation_id.to_owned(),
@@ -962,17 +935,14 @@ fn added_participant(
 		});
 	}
 	if is_present(&room, bot_id) {
-		return Ok(Joined { conversation: room, arrival: None });
+		return Ok(None);
 	}
 	let role = match room.seats.iter().any(|seat| seat.role == LEAD_ROLE) {
 		true => PARTICIPANT_ROLE,
 		false => LEAD_ROLE,
 	};
-	seat(&transaction, conversation_id, bot_id, room.space_id.as_deref(), role)?;
-	let arrival = arrivals::record(&transaction, conversation_id, bot_id, invited_by_bot_id)?;
-	let conversation = conversation_at(&transaction, conversation_id)?;
-	transaction.commit()?;
-	Ok(Joined { conversation, arrival: Some(arrival) })
+	seat(transaction, conversation_id, bot_id, room.space_id.as_deref(), role)?;
+	Ok(Some(arrivals::record(transaction, conversation_id, bot_id, invited_by_bot_id)?))
 }
 
 fn is_present(room: &Conversation, bot_id: &str) -> bool {
@@ -997,12 +967,23 @@ fn removed_participant(
 	bot_id: &str,
 ) -> Result<Conversation, ConversationError> {
 	let transaction = write_transaction(connection)?;
+	let departed = unseated(&transaction, conversation_id, bot_id)?;
+	refuse_unknown_participant(departed, conversation_id, bot_id)?;
+	let left = conversation_at(&transaction, conversation_id)?;
+	transaction.commit()?;
+	Ok(left)
+}
+
+fn unseated(
+	transaction: &Transaction<'_>,
+	conversation_id: &str,
+	bot_id: &str,
+) -> Result<usize, ConversationError> {
 	let departed = transaction.execute(
 		"UPDATE conversation_participants SET left_at = ?3, role = ?4
 			WHERE conversation_id = ?1 AND bot_id = ?2 AND left_at IS NULL",
 		params![conversation_id, bot_id, now(), PARTICIPANT_ROLE],
 	)?;
-	refuse_unknown_participant(departed, conversation_id, bot_id)?;
 	transaction.execute(
 		"UPDATE conversation_participants SET role = ?2
 			WHERE conversation_id = ?1 AND left_at IS NULL
@@ -1012,9 +993,7 @@ fn removed_participant(
 					WHERE present.conversation_id = ?1 AND present.left_at IS NULL)",
 		params![conversation_id, LEAD_ROLE],
 	)?;
-	let left = conversation_at(&transaction, conversation_id)?;
-	transaction.commit()?;
-	Ok(left)
+	Ok(departed)
 }
 
 fn led_by(
@@ -1715,24 +1694,6 @@ mod tests {
 			repository.update_conversation(room.id.clone(), a_look(Some(" \t"), None)).await;
 		let unlisted =
 			repository.update_conversation(room.id.clone(), a_look(Some("Message"), None)).await;
-		let blank_description = repository
-			.describe_conversation(
-				room.id.clone(),
-				ConversationDescription { icon: Some(String::new()), color: None },
-			)
-			.await;
-		let unlisted_description = repository
-			.describe_conversation(
-				room.id.clone(),
-				ConversationDescription { icon: Some("Message".to_owned()), color: None },
-			)
-			.await;
-		let teal_description = repository
-			.describe_conversation(
-				room.id.clone(),
-				ConversationDescription { icon: None, color: Some(Some("teal".to_owned())) },
-			)
-			.await;
 		let kept = repository.conversations(home_of(repository, &bot).await).await.expect("list");
 
 		assert!(
@@ -1744,62 +1705,7 @@ mod tests {
 			matches!(&unlisted, Err(ConversationError::UnlistedIcon { icon }) if icon == "Message"),
 			"{unlisted:?}"
 		);
-		assert!(
-			matches!(blank_description, Err(ConversationError::BlankIcon)),
-			"{blank_description:?}"
-		);
-		assert!(
-			matches!(unlisted_description, Err(ConversationError::UnlistedIcon { .. })),
-			"{unlisted_description:?}"
-		);
-		assert!(
-			matches!(teal_description, Err(ConversationError::UnknownColour { .. })),
-			"{teal_description:?}"
-		);
 		assert_eq!(look_of(&kept[0]), (Some("MessageSquare".to_owned()), Some(AvatarBlot::Red)));
-
-		drop(database);
-		fs::remove_dir_all(&dir).expect("cleanup");
-	}
-
-	#[tokio::test]
-	async fn a_description_sets_what_it_names_and_leaves_the_rest_as_it_was() {
-		let dir = temp_dir();
-		let database = open(&dir);
-		let repository = database.conversations();
-		let bot = repository.create_bot(an_identity("Nyx"), None, None).await.expect("the bot");
-		let room = repository
-			.create_conversation(a_draft(&home_of(repository, &bot).await, &[&bot]))
-			.await
-			.expect("the room is opened");
-		let described = |icon: Option<&str>, color: Option<Option<&str>>| {
-			repository.describe_conversation(
-				room.id.clone(),
-				ConversationDescription {
-					icon: icon.map(str::to_owned),
-					color: color.map(|color| color.map(str::to_owned)),
-				},
-			)
-		};
-
-		let iconed = described(Some("MessageSquare"), None).await.expect("the icon is set");
-		let coloured = described(None, Some(Some("pink"))).await.expect("the colour is set");
-		let uncoloured = described(None, Some(None)).await.expect("the colour is cleared");
-		let missing = repository
-			.describe_conversation(
-				"missing".to_owned(),
-				ConversationDescription { icon: Some("MessageSquare".to_owned()), color: None },
-			)
-			.await;
-
-		assert_eq!(look_of(&iconed), (Some("MessageSquare".to_owned()), None));
-		assert_eq!(look_of(&coloured), (Some("MessageSquare".to_owned()), Some(AvatarBlot::Pink)));
-		assert_eq!(look_of(&uncoloured), (Some("MessageSquare".to_owned()), None));
-		assert_eq!(uncoloured.title, room.title, "a description moved the title");
-		assert!(
-			matches!(missing, Err(ConversationError::UnknownConversation { .. })),
-			"{missing:?}"
-		);
 
 		drop(database);
 		fs::remove_dir_all(&dir).expect("cleanup");

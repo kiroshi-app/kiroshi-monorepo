@@ -148,6 +148,20 @@ const chat = {
 		retry: "Retry",
 		dismiss: "Dismiss notice",
 	},
+	spaceAccessBanner: {
+		removed: {
+			title: "You're no longer a member of {{space}}",
+			body: "Its conversations aren’t on this device anymore. Ask {{host}} for a new invitation.",
+		},
+		deleted: {
+			title: "{{host}} deleted {{space}}",
+			body: "Its conversations aren't on this device anymore.",
+		},
+		offline: {
+			title: "{{space}} is offline",
+			body: "You can read what’s here. You can send again once Kiroshi is open on {{host}}’s computer.",
+		},
+	},
 	attachments: {
 		label: "Attachments",
 		open: "Open {{name}}",

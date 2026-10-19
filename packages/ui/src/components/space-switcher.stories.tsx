@@ -6,6 +6,7 @@ import {
 	A11Y_FLOATING_FOCUS_GUARDS,
 	A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 	mergeA11y,
+	probedStyleOf,
 	settled,
 	slotsIn,
 } from "@workspace/storybook/story-utils"
@@ -943,11 +944,15 @@ export const HostedLongNames = meta.story({
 	},
 })
 
+const EXPIRES_AT = new Date(2026, 9, 25).getTime()
+
 const INVITED: Omit<SpaceInvitation, "state"> = {
 	id: "studio",
-	name: "Studio Nord",
+	name: "Studio",
 	colour: "orange",
-	hostEmail: "lea@example.com",
+	hostEmail: "noa@example.com",
+	hostName: "Noa",
+	expiresAt: EXPIRES_AT,
 }
 
 const SECOND_INVITED: Omit<SpaceInvitation, "state"> = {
@@ -959,7 +964,7 @@ const SECOND_INVITED: Omit<SpaceInvitation, "state"> = {
 
 const JOINED_SPACES: Space[] = [
 	...SPACES.slice(0, 3),
-	{ id: "studio", name: "Studio Nord", colour: "orange" },
+	{ id: "studio", name: "Studio", colour: "orange" },
 ]
 
 const INVITED_ARTBOARD =
@@ -978,6 +983,8 @@ const invitationNamed = (menu: HTMLElement, name: string) =>
 const causeOf = (row: HTMLElement) => slotsIn(row, "space-invitation-cause")[0]
 
 const hostLineOf = (row: HTMLElement) => within(row).getByText(/^Invited by /)
+
+const expiryLineOf = (row: HTMLElement) => within(row).queryByText(/^Expires /)
 
 const invitationDotOn = (root: HTMLElement) =>
 	slotsIn(root, "space-switcher-invitation")[0]
@@ -1076,7 +1083,7 @@ export const M2InvitationWaiting = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} M2: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between the Spaces and Move up, that the row reads the Space name over who invited, and that Accept and Decline are real buttons the arrow keys reach, each reporting the invitation id.`,
+				story: `${INVITED_ARTBOARD} M2, artboard 3.1 of the Mockup page: one invitation waits. Check the 7px primary dot sits on the trigger's top end corner and the trigger names it, that the 280px menu places a rule then an Invitations group between the Spaces and Move up, that the row reads the Space name (14/20) over who invited and when it expires (12/16), and that Accept and Decline, 28px tall with a 12px radius in 13px medium and indented 18px under the ring, are real buttons the arrow keys reach, each reporting the invitation id.`,
 			},
 		},
 	},
@@ -1093,9 +1100,35 @@ export const M2InvitationWaiting = meta.story({
 		await expect(hostLineOf(row)).toHaveTextContent(
 			`Invited by ${INVITED.hostEmail}`,
 		)
+		const expiry = expiryLineOf(row)
+		await expect(expiry).toHaveTextContent("Expires October 25")
+		await expect(expiry?.previousElementSibling).toBe(hostLineOf(row))
+		for (const line of [hostLineOf(row), expiry]) {
+			if (!line) throw new Error("The invitation row lost a line")
+			await expect(getComputedStyle(line).fontSize).toBe("12px")
+			await expect(getComputedStyle(line).lineHeight).toBe("16px")
+		}
+		const name = within(row).getByText(INVITED.name)
+		await expect(getComputedStyle(name).fontSize).toBe("14px")
+		await expect(getComputedStyle(name).lineHeight).toBe("20px")
 
 		const accept = within(row).getByRole("menuitem", { name: "Accept" })
 		await expect(accept.tagName).toBe("BUTTON")
+		const ring = slotsIn(row, "space-invitation-ring")[0]
+		for (const action of [
+			accept,
+			within(row).getByRole("menuitem", { name: "Decline" }),
+		]) {
+			const style = getComputedStyle(action)
+			await expect(action.getBoundingClientRect().height).toBe(28)
+			await expect(style.borderRadius).toBe("12px")
+			await expect(style.fontSize).toBe("13px")
+			await expect(style.fontWeight).toBe("500")
+		}
+		await expect(
+			accept.getBoundingClientRect().left - ring.getBoundingClientRect().left,
+		).toBe(18)
+
 		await focusByArrows(accept, userEvent.keyboard)
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onAcceptInvitation).toHaveBeenCalledWith(INVITED.id)
@@ -1206,7 +1239,7 @@ export const M5Joined = meta.story({
 		})
 		await expect(invitationDotOn(trigger)).toBeUndefined()
 		const menu = await openSwitcher(canvasElement)
-		await expectDotOnSquareCorner(rowNamed(menu, "Studio Nord"), "up")
+		await expectDotOnSquareCorner(rowNamed(menu, "Studio"), "up")
 		await expect(slotsIn(menu, "space-invitations")).toHaveLength(0)
 	},
 })
@@ -1228,7 +1261,7 @@ export const M6Unreachable = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const menu = await openSwitcher(canvasElement)
-		await expectDotOnSquareCorner(rowNamed(menu, "Studio Nord"), "down")
+		await expectDotOnSquareCorner(rowNamed(menu, "Studio"), "down")
 	},
 })
 
@@ -1335,6 +1368,89 @@ export const M11Withdrawn = meta.story({
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 		await expect(args.onOpenChange).toHaveBeenCalledTimes(2)
 		await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+	},
+})
+
+export const InvitationHostOffline = meta.story({
+	globals: DARK,
+	name: "3.3 Waiting for host",
+	args: { invitations: [{ ...INVITED, state: "hostOffline" }] },
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"Artboard 3.3 of the Mockup page: the inviting host's computer is offline, so the invitation waits inside its own row. Check the ring and the name mute, the expiry line goes, a 7px grey dot sits in a 14x16 slot before the offline note, which describes the row and Accept, Accept is inert at 50%, and Decline stays active.",
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const menu = await openSwitcher(canvasElement)
+		const row = invitationNamed(menu, INVITED.name)
+		const note = slotsIn(row, "space-invitation-note")[0]
+		const message = "Noa’s computer is offline. You can accept once it’s back."
+		await expect(note).toHaveTextContent(message)
+		await expect(row).toHaveAccessibleDescription(message)
+		await expect(expiryLineOf(row)).toBeNull()
+
+		const slot = note.firstElementChild as HTMLElement
+		await expect(slot).toHaveAttribute("aria-hidden", "true")
+		const slotBox = slot.getBoundingClientRect()
+		await expect([slotBox.width, slotBox.height]).toEqual([14, 16])
+		const dot = slot.firstElementChild as HTMLElement
+		await expect(dot.getBoundingClientRect().width).toBe(7)
+		await expect(getComputedStyle(dot).backgroundColor).toBe(
+			probedStyleOf("bg-presence-offline", "backgroundColor", menu),
+		)
+
+		await expect(slotsIn(row, "space-invitation-ring")[0].style.color).toBe("")
+		await expect(
+			getComputedStyle(within(row).getByText(INVITED.name)).color,
+		).toBe(getComputedStyle(hostLineOf(row)).color)
+
+		const accept = within(row).getByRole("menuitem", { name: "Accept" })
+		await expect(accept).toHaveAttribute("aria-disabled", "true")
+		await expect(accept).toHaveAccessibleDescription(message)
+		await expect(getComputedStyle(accept).opacity).toBe("0.5")
+		await userEvent.click(accept)
+		await expect(args.onAcceptInvitation).not.toHaveBeenCalled()
+
+		const decline = within(row).getByRole("menuitem", { name: "Decline" })
+		await expect(decline).not.toHaveAttribute("aria-disabled", "true")
+		await expect(getComputedStyle(decline).opacity).toBe("1")
+		await userEvent.click(decline)
+		await expect(args.onDeclineInvitation).toHaveBeenCalledWith(INVITED.id)
+	},
+})
+
+export const InvitationExpired = meta.story({
+	globals: DARK,
+	name: "Invitation expired",
+	args: {
+		invitations: [{ ...INVITED, state: "expired", expiresAt: EXPIRES_AT }],
+	},
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"The invitation expired before it was accepted. Like the withdrawn row: the ring and name mute, the cause line says when it expired and whom to ask, and no button is offered; the row is an inert menu item described by the cause.",
+			},
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const menu = await openSwitcher(canvasElement)
+		const row = within(menu).getByRole("menuitem", { name: INVITED.name })
+		const cause =
+			"This invitation expired on October 25. Ask noa@example.com to invite you again."
+		await expect(causeOf(row)).toHaveTextContent(cause)
+		await expect(row).toHaveAccessibleDescription(cause)
+		await expect(row).toHaveAttribute("aria-disabled", "true")
+		await expect(row.querySelectorAll("button, [role=menuitem]")).toHaveLength(
+			0,
+		)
+		await expect(expiryLineOf(row)).toBeNull()
+		await expect(slotsIn(row, "space-invitation-ring")[0].style.color).toBe("")
 	},
 })
 

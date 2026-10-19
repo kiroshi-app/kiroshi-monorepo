@@ -3157,6 +3157,13 @@
       ],
       "type": "object"
     },
+    "InvitationState": {
+      "enum": [
+        "invited",
+        "expired",
+        "withdrawn"
+      ]
+    },
     "Json": {
       "anyOf": [
         {
@@ -3353,6 +3360,12 @@
     },
     "MembersChanged": {
       "properties": {
+        "invitations": {
+          "items": {
+            "$ref": "#/$defs/SpaceInvitation"
+          },
+          "type": "array"
+        },
         "members": {
           "items": {
             "$ref": "#/$defs/Member"
@@ -3365,7 +3378,8 @@
       },
       "required": [
         "spaceId",
-        "members"
+        "members",
+        "invitations"
       ],
       "type": "object"
     },
@@ -3430,6 +3444,17 @@
           "properties": {
             "kind": {
               "const": "unknownMember"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unknownInvitation"
             }
           },
           "required": [
@@ -3507,17 +3532,6 @@
           "properties": {
             "kind": {
               "const": "hostDeviceNotRemovable"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "properties": {
-            "kind": {
-              "const": "noRandomness"
             }
           },
           "required": [
@@ -6692,6 +6706,54 @@
         }
       ]
     },
+    "SpaceInvitation": {
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "sentAt": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/InvitationState"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "sentAt",
+        "expiresAt",
+        "state"
+      ],
+      "type": "object"
+    },
+    "SpaceMembers": {
+      "properties": {
+        "invitations": {
+          "items": {
+            "$ref": "#/$defs/SpaceInvitation"
+          },
+          "type": "array"
+        },
+        "members": {
+          "items": {
+            "$ref": "#/$defs/Member"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "members",
+        "invitations"
+      ],
+      "type": "object"
+    },
     "SpacePreferences": {
       "properties": {
         "collapsedSectionIds": {
@@ -9670,25 +9732,6 @@
         "type": "null"
       }
     },
-    "hosting_device_link": {
-      "args": {
-        "properties": {
-          "spaceId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "spaceId"
-        ],
-        "type": "object"
-      },
-      "error": {
-        "$ref": "#/$defs/MembersError"
-      },
-      "ok": {
-        "type": "string"
-      }
-    },
     "hosting_devices": {
       "args": {
         "properties": {
@@ -9731,30 +9774,7 @@
         "$ref": "#/$defs/MembersError"
       },
       "ok": {
-        "$ref": "#/$defs/Member"
-      }
-    },
-    "hosting_join_link": {
-      "args": {
-        "properties": {
-          "spaceId": {
-            "type": "string"
-          },
-          "userId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "spaceId",
-          "userId"
-        ],
-        "type": "object"
-      },
-      "error": {
-        "$ref": "#/$defs/MembersError"
-      },
-      "ok": {
-        "type": "string"
+        "$ref": "#/$defs/SpaceMembers"
       }
     },
     "hosting_members": {
@@ -9773,10 +9793,7 @@
         "$ref": "#/$defs/MembersError"
       },
       "ok": {
-        "items": {
-          "$ref": "#/$defs/Member"
-        },
-        "type": "array"
+        "$ref": "#/$defs/SpaceMembers"
       }
     },
     "hosting_remove_device": {
@@ -9825,10 +9842,30 @@
         "$ref": "#/$defs/MembersError"
       },
       "ok": {
-        "items": {
-          "$ref": "#/$defs/Member"
+        "$ref": "#/$defs/SpaceMembers"
+      }
+    },
+    "hosting_resend_invitation": {
+      "args": {
+        "properties": {
+          "invitationId": {
+            "type": "string"
+          },
+          "spaceId": {
+            "type": "string"
+          }
         },
-        "type": "array"
+        "required": [
+          "spaceId",
+          "invitationId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "$ref": "#/$defs/SpaceMembers"
       }
     },
     "hosting_state": {
@@ -9850,16 +9887,16 @@
     "hosting_withdraw_invitation": {
       "args": {
         "properties": {
-          "spaceId": {
+          "invitationId": {
             "type": "string"
           },
-          "userId": {
+          "spaceId": {
             "type": "string"
           }
         },
         "required": [
           "spaceId",
-          "userId"
+          "invitationId"
         ],
         "type": "object"
       },
@@ -9867,10 +9904,7 @@
         "$ref": "#/$defs/MembersError"
       },
       "ok": {
-        "items": {
-          "$ref": "#/$defs/Member"
-        },
-        "type": "array"
+        "$ref": "#/$defs/SpaceMembers"
       }
     },
     "mcp_application_status": {

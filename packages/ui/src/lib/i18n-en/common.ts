@@ -10,7 +10,7 @@ const common = {
 		leave: {
 			title: "Leave {{name}}?",
 			description:
-				"Nothing is deleted on the host. You can join again with its link.",
+				"Nothing is deleted on the host. You can join again with a new invitation.",
 			action: "Leave space",
 		},
 	},
@@ -50,6 +50,55 @@ const common = {
 		copy: "Copy",
 		copied: "Copied",
 		copyFailed: "Couldn’t copy the report. Press Copy again.",
+	},
+	devices: {
+		approval: {
+			title: "{{device}} wants to use your account",
+			body: "If it’s yours, approve it and it’ll read your spaces. If it isn’t, choose Not me and it’ll be signed out.",
+			hint: "Approve only if {{device}} shows these same six words.",
+			notMe: "Not me",
+			approve: "Approve",
+			approving: "Approving…",
+			retry: "Try again",
+			failed:
+				"Couldn’t approve {{device}}. Check your connection and try again.",
+			approved: {
+				title: "{{device}} is approved",
+				description:
+					"It reads your spaces now. Remove it any time in Your devices.",
+			},
+			rejected: {
+				title: "{{device}} was signed out",
+				description: "It never read your spaces.",
+			},
+		},
+		newDevice: {
+			thisDevice: "This device",
+			noOtherDevice: "I don't have another device",
+			signOut: "Sign out",
+			waiting: {
+				title: "Approve this device from one you already use",
+				body: "Open Kiroshi on a device that uses {{email}} and approve this one.",
+				status: "Waiting for approval…",
+			},
+			code: {
+				title: "Check your email",
+				body: "We sent a 6-digit code to {{email}}. Enter it to approve this computer. It works once, for 5 minutes.",
+				label: "6-digit code",
+				approve: "Approve this computer",
+				resend: "Send a new code",
+			},
+			expired: {
+				title: "The request expired",
+				body: "Nobody approved this device in time. Ask again, then approve it on a device you already use.",
+				askAgain: "Ask again",
+			},
+			rejected: {
+				title: "This device wasn't approved",
+				body: "Someone using {{email}} said it isn't theirs, so it was signed out.",
+				backToSignIn: "Back to sign in",
+			},
+		},
 	},
 	notification: {
 		question: "Asked you a question",
