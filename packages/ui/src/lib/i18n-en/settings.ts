@@ -265,6 +265,11 @@ const settings = {
 			needsInvitation: "Needs a new invitation",
 			inviteMemberAgain: "Invite again",
 			invitedAgainFailure: {
+				listed: {
+					title: "Invitation sent to {{email}}",
+					description:
+						"The member list didn’t refresh. It shows the invitation within a few seconds.",
+				},
 				removed: {
 					title:
 						"{{name}} was removed, the invitation to {{email}} wasn’t sent",

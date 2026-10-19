@@ -155,15 +155,19 @@ const inviteFailureOf = (
 	},
 })
 
+const INVITE_AGAIN_OUTCOMES: Partial<
+	Record<MembersError["kind"], "removed" | "listed">
+> = {
+	removedButNotInvited: "removed",
+	invitedButNotListed: "listed",
+}
+
 export const inviteAgainFailureOf = ({
 	member,
 	cause,
 }: InviteAgainRefusal): NoticeMessage => {
 	const shown = toSpaceMember(member)
-	const outcome =
-		membersErrorOf(cause)?.kind === "removedButNotInvited"
-			? "removed"
-			: "generic"
+	const outcome = reasonOf(INVITE_AGAIN_OUTCOMES, membersErrorOf(cause))
 	const copy = { name: shown.name ?? shown.email, email: shown.email }
 	return {
 		title: i18n.t(

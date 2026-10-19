@@ -2171,6 +2171,40 @@ fn an_invitation_refused_after_the_removal_landed_is_named_as_both() {
 }
 
 #[test]
+fn an_invitation_sent_again_whose_list_does_not_read_back_is_named_as_sent() {
+	run(async {
+		let harness = Harness::hosted("members-invite-again-unlisted").await;
+		harness.seed(&[cloud_member("early", "early@example.com", "member", "joined")]);
+		harness.cloud_refuses(
+			"GET invitations",
+			StatusCode::SERVICE_UNAVAILABLE,
+			json!({ "error": { "code": "UNAVAILABLE" } }),
+		);
+
+		let refused = harness.invited_again("early").await;
+
+		assert!(
+			matches!(
+				&refused,
+				Err(MembersError::InvitedButNotListed { cause })
+					if matches!(**cause, MembersError::Unreachable { .. })
+			),
+			"{refused:?}"
+		);
+		assert_eq!(
+			harness.member_calls(),
+			calls_then_read_back(&["GET", "DELETE early", "POST invitations early@example.com"])
+		);
+		let sent = harness.relay.invitations.lock().expect("the relay").clone();
+		assert_eq!(sent.len(), 1);
+		assert_eq!(
+			(&sent[0]["email"], &sent[0]["state"]),
+			(&json!("early@example.com"), &json!("valid"))
+		);
+	});
+}
+
+#[test]
 fn a_member_not_needing_a_new_invitation_is_refused_invite_again_before_any_change() {
 	run(async {
 		let harness = Harness::hosted("members-invite-again-mismatch").await;

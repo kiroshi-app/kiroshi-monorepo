@@ -136,7 +136,9 @@ pub async fn invite_again<R: Runtime>(
 		.map_err(|failure| MembersError::RemovedButNotInvited {
 			cause: Box::new(failure.into()),
 		})?;
-	read_back(app, &space_id, &instance_id).await
+	read_back(app, &space_id, &instance_id)
+		.await
+		.map_err(|failure| MembersError::InvitedButNotListed { cause: Box::new(failure) })
 }
 
 pub(super) async fn polled<R: Runtime>(

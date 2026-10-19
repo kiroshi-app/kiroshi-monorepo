@@ -155,6 +155,10 @@ pub enum MembersError {
 	RemovedButNotInvited {
 		cause: Box<MembersError>,
 	},
+	#[serde(rename_all = "camelCase")]
+	InvitedButNotListed {
+		cause: Box<MembersError>,
+	},
 }
 
 impl From<SpaceError> for MembersError {

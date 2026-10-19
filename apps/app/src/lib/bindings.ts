@@ -1033,7 +1033,7 @@ export type MembersChanged = {
 	invitations: SpaceInvitation[],
 };
 
-export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "notNeedingInvitation" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError } | { kind: "removedButNotInvited"; cause: MembersError };
+export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "notNeedingInvitation" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError } | { kind: "removedButNotInvited"; cause: MembersError } | { kind: "invitedButNotListed"; cause: MembersError };
 
 export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
 

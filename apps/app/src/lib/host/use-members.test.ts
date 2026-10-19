@@ -1087,6 +1087,48 @@ describe("useMembers on the invitations of a hosted space", () => {
 		expect(reportSuccess).not.toHaveBeenCalled()
 	})
 
+	it("raises a notice saying the invitation was sent when only the list read back failed", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(async () =>
+				refused({
+					kind: "invitedButNotListed",
+					cause: { kind: "unreachable", reason: "down" },
+				}),
+			),
+		})
+
+		act(() => panel().onInviteAgain(toSpaceMember(ADA_NEEDS_INVITATION)))
+		await settle()
+
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				title: "Invitation sent to ada@example.com",
+				description:
+					"The member list didn’t refresh. It shows the invitation within a few seconds.",
+			}),
+		)
+	})
+
+	it("raises a notice saying nothing changed when the removal itself is unreachable", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
+			inviteAgain: vi.fn(async () =>
+				refused({ kind: "unreachable", reason: "down" }),
+			),
+		})
+
+		act(() => panel().onInviteAgain(toSpaceMember(ADA_NEEDS_INVITATION)))
+		await settle()
+
+		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith(
+			expect.objectContaining({
+				title: "Couldn’t invite Ada Lovelace again",
+				description: "Nothing changed, try again.",
+			}),
+		)
+	})
+
 	it("raises a notice saying nothing changed when invite again is refused before the removal", async () => {
 		const { panel } = await watchHome({
 			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),

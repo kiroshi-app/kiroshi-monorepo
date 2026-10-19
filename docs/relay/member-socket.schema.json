@@ -3640,6 +3640,21 @@
             "cause"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/MembersError"
+            },
+            "kind": {
+              "const": "invitedButNotListed"
+            }
+          },
+          "required": [
+            "kind",
+            "cause"
+          ],
+          "type": "object"
         }
       ]
     },

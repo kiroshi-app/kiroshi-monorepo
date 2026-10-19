@@ -276,6 +276,11 @@ const settings = {
 			needsInvitation: "Doit être invité de nouveau",
 			inviteMemberAgain: "Inviter de nouveau",
 			invitedAgainFailure: {
+				listed: {
+					title: "Invitation envoyée à {{email}}",
+					description:
+						"La liste des membres ne s’est pas actualisée. Elle affiche l’invitation d’ici quelques secondes.",
+				},
 				removed: {
 					title:
 						"{{name}} a été retiré, l’invitation à {{email}} n’est pas partie",
