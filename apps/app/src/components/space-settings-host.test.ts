@@ -578,15 +578,11 @@ const shownMembersPanel = () => {
 	return props
 }
 
-const askRemovalOfTheHost = () => {
+const confirmRemovalOfTheHost = async () => {
 	const panel = shownMembersPanel()
 	const host = panel.members.find((member) => member.status === "host")
 	if (!host) throw new Error("the members panel lists no host")
 	act(() => panel.onRemove(host))
-}
-
-const confirmRemovalOfTheHost = async () => {
-	askRemovalOfTheHost()
 	const confirm = await screen.findByRole("alertdialog")
 	await act(async () => {
 		fireEvent.click(
