@@ -17,6 +17,7 @@ import {
 	JOINED_SPACE_REMOVED_EVENT,
 	type JoinedSpace,
 	type JoinedSpaceError,
+	type JoinedSpaceRemovalReason,
 	type JoinedSpaceRemoved,
 } from "../bindings"
 import { failureReporterIn } from "../failure-report"
@@ -104,6 +105,34 @@ const joinedSpacesTransport: JoinedSpacesTransport = {
 
 const raiseInfoNotice = (notice: NoticeMessage) =>
 	raiseTransientNotice({ ...notice, type: "info" })
+
+const removalNoticeOf = (
+	reason: JoinedSpaceRemovalReason,
+	name: string,
+	host: string,
+): NoticeMessage | null => {
+	switch (reason) {
+		case "removed":
+			return {
+				title: i18n.t("bots:spaces.removed.memberNotice", { name }),
+				description: i18n.t("bots:spaces.removed.memberNoticeDescription", {
+					host,
+				}),
+			}
+		case "deleted":
+			return {
+				title: i18n.t("bots:spaces.removed.deletedNotice", { host, name }),
+				description: i18n.t("bots:spaces.removed.deletedNoticeDescription"),
+			}
+		case "unknown":
+			return {
+				title: i18n.t("bots:spaces.removed.notice", { host, name }),
+				description: i18n.t("bots:spaces.removed.noticeDescription", { host }),
+			}
+		case "left":
+			return null
+	}
+}
 
 const JOINED_ROW_PREFIX = "joined:"
 
@@ -396,20 +425,14 @@ export const createJoinedSpacesController = ({
 			i18n.t("chat:working.name"),
 		)
 
-	const removalNoticeOf = (name: string, hostName: string) => ({
-		title: i18n.t("bots:spaces.removed.notice", { host: hostName, name }),
-		description: i18n.t("bots:spaces.removed.noticeDescription", {
-			host: hostName,
-		}),
-	})
-
-	const noteRemoval = ({ id, name }: JoinedSpaceRemoved) => {
+	const noteRemoval = ({ id, name, reason }: JoinedSpaceRemoved) => {
 		const hostName = hostNameOf(id)
 		const wasOpen = isOpen(id)
 		const back = backSpaceId()
 		hosts.forget(id)
 		hold(heldWithout(id))
-		reportRemoval(removalNoticeOf(name, hostName))
+		const notice = removalNoticeOf(reason, name, hostName)
+		if (notice) reportRemoval(notice)
 		if (wasOpen && back) selectSpace(back)
 	}
 
