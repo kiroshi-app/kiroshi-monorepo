@@ -18,17 +18,6 @@ struct SettingsView: View {
                 }
             }
             .tint(.primary)
-            if !model.fingerprint.isEmpty {
-                Section {
-                    DeviceCard(
-                        name: model.deviceName, systemImage: "iphone",
-                        fingerprint: model.fingerprint, isThisDevice: true)
-                } footer: {
-                    Text(
-                        "When this iPhone asks to join your account, the device that approves it shows these words."
-                    )
-                }
-            }
             Section {
                 Button("Sign out", role: .destructive, action: model.signOutTapped)
             } footer: {
@@ -42,6 +31,17 @@ struct SettingsView: View {
                     ProblemLabel(
                         message:
                             "Couldn’t delete your account. Check your connection and try again."
+                    )
+                }
+            }
+            if !model.fingerprint.isEmpty {
+                Section {
+                    DeviceCard(
+                        name: model.deviceName, systemImage: "iphone",
+                        fingerprint: model.fingerprint, isThisDevice: true)
+                } footer: {
+                    Text(
+                        "When this iPhone asks to join your account, the device that approves it shows these words."
                     )
                 }
             }
