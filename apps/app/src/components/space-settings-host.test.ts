@@ -13,6 +13,7 @@ import { createElement, Fragment, useState } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
+import { MembersPanel } from "@workspace/ui/components/space-settings-dialog/members-panel"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { SpaceSettingsHost } from "@/components/space-settings-host"
@@ -52,6 +53,17 @@ vi.mock("@/lib/host/index", async (importOriginal) => ({
 	invoke: vi.fn(async () => []),
 	listen: vi.fn(async () => () => undefined),
 }))
+
+vi.mock(
+	"@workspace/ui/components/space-settings-dialog/members-panel",
+	async (importOriginal) => {
+		const panel =
+			await importOriginal<
+				typeof import("@workspace/ui/components/space-settings-dialog/members-panel")
+			>()
+		return { ...panel, MembersPanel: vi.fn(panel.MembersPanel) }
+	},
+)
 
 vi.mock("@/lib/bindings", async (importOriginal) => {
 	const bindings = await importOriginal<typeof import("@/lib/bindings")>()
@@ -560,6 +572,33 @@ const membersCalls = () =>
 		.mocked(invoke)
 		.mock.calls.filter(([command]) => command.startsWith("hosting_"))
 
+const shownMembersPanel = () => {
+	const props = vi.mocked(MembersPanel).mock.lastCall?.[0]
+	if (!props) throw new Error("no members panel is shown")
+	return props
+}
+
+const confirmRemovalOfTheHost = async () => {
+	const panel = shownMembersPanel()
+	const host = panel.members.find((member) => member.status === "host")
+	if (!host) throw new Error("the members panel lists no host")
+	act(() => panel.onRemove(host))
+	const confirm = await screen.findByRole("alertdialog")
+	await act(async () => {
+		fireEvent.click(
+			within(confirm).getByRole("button", {
+				name: i18n.t("settings:space.members.remove"),
+			}),
+		)
+	})
+}
+
+const hostRefusesRemoval = (answers: Record<string, unknown>) =>
+	vi.mocked(invoke).mockImplementation(async (command: string) => {
+		if (command === "hosting_remove_member") throw { kind: "hostNotRemovable" }
+		return answers[command] as never
+	})
+
 describe("SpaceSettingsHost members on the desktop", () => {
 	const hostOnline = () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
@@ -640,6 +679,27 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		await waitFor(() =>
 			expect(within(dialog).queryByText("Sam Carter")).toBeNull(),
 		)
+	})
+
+	it("tells the host desktop to turn off hosting when it removes its own row", async () => {
+		vi.mocked(isDesktopHost).mockReturnValue(true)
+		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "online" })
+		hostRefusesRemoval({
+			hosting_members: { members: [SAM_JOINED, HOST_ROW], invitations: [] },
+		})
+		const gear = await gearWithGarage()
+		const dialog = await openMembersOf(gear)
+		await within(dialog).findByText("Sam Carter")
+
+		await confirmRemovalOfTheHost()
+
+		expect(
+			await within(dialog).findByText(
+				i18n.t("settings:space.members.failure.remove.host", {
+					space: "Home",
+				}),
+			),
+		).toBeTruthy()
 	})
 
 	it("closes the removal without a call on cancel", async () => {
@@ -830,6 +890,32 @@ describe("SpaceSettingsHost members on the desktop", () => {
 			),
 		).toBeTruthy()
 		expect(within(dialog).getByText("Tom Reed")).toBeTruthy()
+	})
+
+	it("names the roster host and the space when the host refuses its own removal, with no Turn off hosting", async () => {
+		hostRefusesRemoval({
+			hosting_members: {
+				members: [{ ...HOST_ROW, name: "Steve P." }, SAM_JOINED, TOM_JOINED],
+				invitations: [],
+			},
+		})
+		const dialog = await openGarageMembers()
+
+		await confirmRemovalOfTheHost()
+
+		expect(
+			await within(dialog).findByText(
+				i18n.t("settings:space.members.failure.remove.hostedBy", {
+					name: "Steve Puget",
+					space: "Garage",
+				}),
+			),
+		).toBeTruthy()
+		expect(shownMembersPanel()).toMatchObject({
+			viewerId: SAM_SIGNED_IN.id,
+			failure: { reason: "host", member: { name: STEVE_HOSTING.name } },
+		})
+		expect(dialog.textContent).not.toMatch(/Turn off hosting/)
 	})
 
 	it("disables the invite field, Invite and every row action while the host is offline, reading nothing from it", async () => {

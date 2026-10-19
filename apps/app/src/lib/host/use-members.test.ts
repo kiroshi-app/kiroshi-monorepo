@@ -817,6 +817,33 @@ describe("useMembers on a joined space", () => {
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
+	it.each([
+		[{ kind: "hostNotRemovable" }, "host"],
+		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+	] as const)(
+		"names the roster host in the failure to remove it when the host answers %o",
+		async (error, reason) => {
+			rosterAnswered([LEA, TOM])
+			const { panel } = watchStudio({
+				list: vi.fn(async () =>
+					ok([{ ...LEA_ANSWERED, name: "Lea Martin" }, TOM_ANSWERED]),
+				),
+				remove: vi.fn(async () => refused(error)),
+			})
+			await waitFor(() => expect(panel().members).toHaveLength(2))
+
+			act(() => panel().onRemove(LEA_ROW))
+			act(() => panel().onRemoveConfirm())
+			await settle()
+
+			expect(panel().failure).toEqual({
+				action: "remove",
+				reason,
+				member: { ...LEA_ROW, name: "Lea", fingerprint: undefined },
+			})
+		},
+	)
+
 	it("waits on the roster, not on the host, for its first read", async () => {
 		rosterAnswered([LEA])
 
