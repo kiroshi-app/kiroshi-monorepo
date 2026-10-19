@@ -34,8 +34,6 @@ import { listen } from "../host"
 
 const RAISED_IN = "use-device-approvals"
 
-type Request = AskingDevice
-
 type ApprovalsOptions = {
 	reportSuccess?: (message: NoticeMessage) => void
 }
@@ -45,14 +43,14 @@ const reportUnheardEvent = (reason: unknown) => {
 	return () => undefined
 }
 
-const approvedNotice = (request: Request): NoticeMessage => ({
+const approvedNotice = (request: AskingDevice): NoticeMessage => ({
 	title: i18n.t("common:devices.approval.approved.title", {
 		device: deviceNameOf(request),
 	}),
 	description: i18n.t("common:devices.approval.approved.description"),
 })
 
-const rejectedNotice = (request: Request): NoticeMessage => ({
+const rejectedNotice = (request: AskingDevice): NoticeMessage => ({
 	title: i18n.t("common:devices.approval.rejected.title", {
 		device: deviceNameOf(request),
 	}),
@@ -60,14 +58,14 @@ const rejectedNotice = (request: Request): NoticeMessage => ({
 })
 
 type ApprovalRun = {
-	variables: Request | undefined
+	variables: AskingDevice | undefined
 	isPending: boolean
 	isError: boolean
 }
 
 const approvalStatusOf = (
 	{ variables, isPending, isError }: ApprovalRun,
-	asked: Request,
+	asked: AskingDevice,
 ): DeviceApprovalStatus => {
 	if (variables?.deviceId !== asked.deviceId) return "asking"
 	if (isPending) return "approving"
@@ -104,7 +102,7 @@ const useApprovalQueue = (listed: AccountDevice[] | undefined) => {
 		}
 	}, [])
 
-	const settle = (request: Request) =>
+	const settle = (request: AskingDevice) =>
 		change({ kind: "settled", deviceId: request.deviceId })
 
 	return { asked: queue.asking.at(0), settle }
@@ -121,7 +119,7 @@ export const useDeviceApprovals = (
 	const { asked, settle } = useApprovalQueue(isListed ? listed : undefined)
 
 	const approval = useMutation({
-		mutationFn: (request: Request) =>
+		mutationFn: (request: AskingDevice) =>
 			answerOf(commands.deviceApprove(request.deviceId)),
 		onSuccess: (_answer, request) => {
 			settle(request)
@@ -130,7 +128,7 @@ export const useDeviceApprovals = (
 		meta: { rendersErrorInline: true },
 	})
 	const refusal = useMutation({
-		mutationFn: (request: Request) =>
+		mutationFn: (request: AskingDevice) =>
 			answerOf(commands.deviceRefuse(request.deviceId)),
 		onSuccess: (_answer, request) => {
 			settle(request)
