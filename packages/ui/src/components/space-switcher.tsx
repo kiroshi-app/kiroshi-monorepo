@@ -200,12 +200,15 @@ const SpaceSwitcher = ({
 	onOpenChange,
 }: SpaceSwitcherProps) => {
 	const { t } = useTranslation("bots")
-	const triggerRef = useRef<HTMLDivElement>(null)
+	const triggerRef = useRef<HTMLElement>(null)
+	const isAnchoredRef = useRef(false)
 	const selected =
 		spaces.find((space) => space.id === selectedSpaceId) ?? spaces[0]
 
 	useLayoutEffect(() => {
-		if (open && triggerRef.current) openBelow(triggerRef.current)
+		if (!open) isAnchoredRef.current = false
+		else if (!isAnchoredRef.current && triggerRef.current)
+			openBelow(triggerRef.current)
 	}, [open])
 
 	if (!selected) return null
@@ -237,7 +240,10 @@ const SpaceSwitcher = ({
 	return (
 		<>
 			<ContextMenu
-				onOpenChange={(isOpen) => onOpenChange?.(isOpen)}
+				onOpenChange={(isOpen) => {
+					isAnchoredRef.current = isOpen
+					onOpenChange?.(isOpen)
+				}}
 				open={open}
 			>
 				<ContextMenuPressTrigger

@@ -1212,7 +1212,7 @@ export const OpenedOnInvitation = meta.story({
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,
 		docs: {
 			description: {
-				story: `${INVITED_ARTBOARD} Row 3, opened from outside: the host passes \`open\` and \`focusedInvitationId\`, as a join link does, and the menu opens with no press, anchored under the trigger exactly where a press opens it, keyboard focus on the named invitation's Accept. Check it opens on its own, that focus sits on the second Accept, that Escape reports \`onOpenChange(false)\`, and that a press reopens it at the same place.`,
+				story: `${INVITED_ARTBOARD} Row 3, opened from outside: the host passes \`open\` and \`focusedInvitationId\`, as a join link does, and the menu opens with no press, anchored under the trigger exactly where a press opens it, keyboard focus on the named invitation's Accept. \`focusedInvitationId\` applies to every opening while it is set, so the host clears it once the menu closes. Check it opens on its own, that focus sits on the second Accept and the arrow keys walk on from it, that Escape reports \`onOpenChange(false)\`, and that a press reopens it at the same place with a single anchoring event.`,
 			},
 		},
 	},
@@ -1225,16 +1225,39 @@ export const OpenedOnInvitation = meta.story({
 		await expect(
 			within(rows[1]).getByRole("menuitem", { name: "Accept" }),
 		).toHaveFocus()
+		await userEvent.keyboard("{ArrowDown}")
+		await expect(
+			within(rows[1]).getByRole("menuitem", { name: "Decline" }),
+		).toHaveFocus()
 
 		const openedAt = menu.getBoundingClientRect()
 		await userEvent.keyboard("{Escape}")
 		await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
 		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
 
+		const trigger = within(canvasElement).getByRole("button", {
+			name: /^Change space/,
+		})
+		let anchorings = 0
+		const countAnchoring = () => {
+			anchorings += 1
+		}
+		trigger.addEventListener("contextmenu", countAnchoring)
 		const pressed = await openSwitcher(canvasElement)
+		trigger.removeEventListener("contextmenu", countAnchoring)
+		await expect(anchorings).toBe(1)
 		const pressedAt = pressed.getBoundingClientRect()
 		await expect(pressedAt.left).toBe(openedAt.left)
 		await expect(pressedAt.top).toBe(openedAt.top)
+
+		const reopened = invitationsIn(pressed)
+		await expect(
+			within(reopened[1]).getByRole("menuitem", { name: "Accept" }),
+		).toHaveFocus()
+		await userEvent.keyboard("{ArrowUp}")
+		await expect(
+			within(reopened[0]).getByRole("menuitem", { name: "Decline" }),
+		).toHaveFocus()
 	},
 })
 

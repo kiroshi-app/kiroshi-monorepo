@@ -12,7 +12,7 @@ import { ContextMenuTrigger } from "@workspace/ui/components/ui/context-menu"
 
 interface ContextMenuPressTriggerProps {
 	render: ReactElement<HTMLAttributes<HTMLElement>>
-	ref?: Ref<HTMLDivElement>
+	ref?: Ref<HTMLElement>
 }
 
 export const openBelow = (trigger: HTMLElement) => {
@@ -32,7 +32,7 @@ export const ContextMenuPressTrigger = ({
 }: ContextMenuPressTriggerProps) => (
 	<ContextMenuTrigger
 		aria-haspopup="menu"
-		ref={ref}
+		ref={ref as Ref<HTMLDivElement>}
 		onClick={(event) => openBelow(event.currentTarget)}
 		render={(props, state) =>
 			cloneElement(

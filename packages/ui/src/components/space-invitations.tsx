@@ -92,7 +92,9 @@ type SpaceInvitationRowProps = SpaceInvitationCallbacks & {
 	isFocusedOnOpen: boolean
 }
 
-const focusOnMount = (element: HTMLElement | null) => element?.focus()
+const focusOnceMounted = (element: HTMLElement | null) => {
+	if (element) queueMicrotask(() => element.focus())
+}
 
 const SpaceInvitationRow = ({
 	invitation,
@@ -222,7 +224,7 @@ const SpaceInvitationRow = ({
 					onClick={() =>
 						isFailed ? onRetryInvitation?.(id) : onAcceptInvitation?.(id)
 					}
-					ref={isFocusedOnOpen ? focusOnMount : undefined}
+					ref={isFocusedOnOpen ? focusOnceMounted : undefined}
 					render={<button type="button" />}
 				>
 					<span role="status">
