@@ -76,6 +76,7 @@ type JoinedSpacesControllerOptions = {
 	transport?: JoinedSpacesTransport
 	reportFailure?: (notice: NoticeMessage) => void
 	reportRemoval?: (notice: NoticeMessage) => void
+	reportHostOffline?: (notice: NoticeMessage) => void
 }
 
 type CommandResult<T> =
@@ -101,7 +102,7 @@ const joinedSpacesTransport: JoinedSpacesTransport = {
 		),
 }
 
-const raiseRemovalNotice = (notice: NoticeMessage) =>
+const raiseInfoNotice = (notice: NoticeMessage) =>
 	raiseTransientNotice({ ...notice, type: "info" })
 
 const JOINED_ROW_PREFIX = "joined:"
@@ -113,6 +114,9 @@ const rowIdOf = (joined: JoinedSpace): string => joinedRowIdOf(joined.id)
 
 export const isJoinedRowId = (rowId: string): boolean =>
 	rowId.startsWith(JOINED_ROW_PREFIX)
+
+const isWaitingForHost = (joined: JoinedSpace) =>
+	joined.state === "waitingForHost"
 
 const isSharedSpaceKnown = (joined: JoinedSpace) =>
 	joined.remoteSpaceId !== null
@@ -177,7 +181,9 @@ export const hostMarksOf = (
 	Object.fromEntries(
 		joinedSpaces.map((joined) => [
 			rowIdOf(joined),
-			HOST_OF_STATUS[connections[joined.id]?.status ?? "connecting"],
+			isWaitingForHost(joined)
+				? "down"
+				: HOST_OF_STATUS[connections[joined.id]?.status ?? "connecting"],
 		]),
 	)
 
@@ -231,13 +237,21 @@ const joinedSpacesStateOf = (
 const vanishedFrom = (held: JoinedSpace[], listed: JoinedSpace[]) =>
 	held.filter((joined) => !listed.some((entry) => entry.id === joined.id))
 
+const wentOfflineIn = (held: JoinedSpace[], listed: JoinedSpace[]) =>
+	listed.filter(
+		(joined) =>
+			isWaitingForHost(joined) &&
+			held.some((entry) => entry.id === joined.id && entry.state === "online"),
+	)
+
 export const createJoinedSpacesController = ({
 	queryClient,
 	spaces,
 	hosts = joinedHosts,
 	transport = joinedSpacesTransport,
 	reportFailure = failureReporterIn("joined-spaces-controller"),
-	reportRemoval = raiseRemovalNotice,
+	reportRemoval = raiseInfoNotice,
+	reportHostOffline = raiseInfoNotice,
 }: JoinedSpacesControllerOptions): JoinedSpacesController => {
 	const choiceStore = createStore(initialJoinedSpacesChoice)
 	const listQuery = joinedSpaceListQueryOf(() => transport.list())
@@ -246,6 +260,7 @@ export const createJoinedSpacesController = ({
 	let hasRead = false
 	let pendingRowId: string | null = null
 	let awaitedRowId: string | null = null
+	let admittedRowId: string | null = null
 
 	const current = memoizedOn(
 		() => [
@@ -271,15 +286,39 @@ export const createJoinedSpacesController = ({
 		}
 	}
 
-	const leaveVanished = (gone: JoinedSpace[]) => {
-		for (const joined of gone) {
-			hosts.forget(joined.id)
-		}
-		if (!gone.some(isOpenJoined)) {
+	const leaveIfOpen = (joinedSpaces: JoinedSpace[]) => {
+		if (!joinedSpaces.some(isOpenJoined)) {
 			return
 		}
 		const back = backSpaceId()
 		if (back) selectSpace(back)
+	}
+
+	const leaveVanished = (gone: JoinedSpace[]) => {
+		for (const joined of gone) {
+			hosts.forget(joined.id)
+		}
+		leaveIfOpen(gone)
+	}
+
+	const hostOfflineNoticeOf = (joined: JoinedSpace) => {
+		const naming = { space: joined.name, host: hostNameOf(joined.id) }
+		return {
+			title: i18n.t("chat:spaceAccessBanner.offline.title", naming),
+			description: i18n.t("chat:spaceAccessBanner.offline.body", naming),
+		}
+	}
+
+	const noteWentOffline = (wentOffline: JoinedSpace[]) => {
+		for (const joined of wentOffline) {
+			reportHostOffline(hostOfflineNoticeOf(joined))
+		}
+		leaveIfOpen(wentOffline)
+	}
+
+	const selectAdmittedOnceOnline = () => {
+		const admitted = joinedOfRow(admittedRowId)
+		if (admitted && !isWaitingForHost(admitted)) selectSpace(rowIdOf(admitted))
 	}
 
 	const hasListed = () =>
@@ -296,6 +335,8 @@ export const createJoinedSpacesController = ({
 		hasRead = true
 		connectEach(joinedSpaces)
 		leaveVanished(vanishedFrom(held, joinedSpaces))
+		noteWentOffline(wentOfflineIn(held, joinedSpaces))
+		selectAdmittedOnceOnline()
 		reopenPending()
 	}
 
@@ -385,8 +426,12 @@ export const createJoinedSpacesController = ({
 	}
 
 	const selectSpace = (id: string) => {
-		awaitedRowId = null
 		const joined = joinedOfRow(id)
+		if (joined && isWaitingForHost(joined)) {
+			return
+		}
+		awaitedRowId = null
+		admittedRowId = null
 		if (joined && !isSharedSpaceKnown(joined)) {
 			void selectOnceSharedSpaceKnown(joined).catch(reportRefusal)
 			return
@@ -418,8 +463,13 @@ export const createJoinedSpacesController = ({
 		hold([...heldWithout(joined.id), joined])
 		await hosts.connect(joined.id)
 		await read()
-		const learned = current().joinedSpaces.find((held) => held.id === joined.id)
-		selectSpace(rowIdOf(learned ?? joined))
+		const learned =
+			current().joinedSpaces.find((held) => held.id === joined.id) ?? joined
+		if (isWaitingForHost(learned)) {
+			admittedRowId = rowIdOf(learned)
+			return
+		}
+		selectSpace(rowIdOf(learned))
 	}
 
 	const leave = async (id: string) => {

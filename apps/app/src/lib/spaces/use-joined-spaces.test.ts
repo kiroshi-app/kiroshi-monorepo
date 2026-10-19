@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import type { InvitationsTransport } from "./invitations-transport"
 import { createJoinedSpacesController } from "./joined-spaces-controller"
@@ -21,7 +21,17 @@ vi.mock("../host", async (importOriginal) => ({
 	listen: vi.fn(async () => () => undefined),
 }))
 
-afterEach(cleanup)
+beforeEach(() => {
+	vi.useFakeTimers({
+		toFake: ["Date"],
+		now: Date.parse("2026-10-10T09:00:00Z"),
+	})
+})
+
+afterEach(() => {
+	cleanup()
+	vi.useRealTimers()
+})
 
 const STUDIO: Invitation = {
 	id: "invitation-studio",
@@ -38,6 +48,8 @@ const transport = {
 		throw { kind: "invitationWithdrawn" }
 	}),
 	decline: vi.fn(async () => undefined),
+	onJoinLinkOpened: vi.fn(async () => () => undefined),
+	askForJoinLinks: vi.fn(async () => undefined),
 } satisfies InvitationsTransport
 
 const renderSwitcher = async () => {
@@ -215,4 +227,73 @@ it("reads no joined host while a local space is open", async () => {
 	)
 
 	expect(result.current).toBeNull()
+})
+
+it("shows a Join waiting for its host as a host offline row, then opens the Space once online", async () => {
+	const store = createFakeTranscriptStore()
+	const home = await store.createSpace("Home")
+	const { queryClient, wrapper } = createQueryTestWrapper()
+	const spaces = createSpacesController(store, { queryClient })
+	await spaces.load(home.id)
+	queryClient.setQueryData(spaceQueryKeys.joinedMembersOf(STUDIO_SPACE.id), [
+		{ userId: "u-lea", name: "Lea", role: "host" },
+	])
+	const waiting: JoinedSpace = { ...STUDIO_SPACE, state: "waitingForHost" }
+	let listed: JoinedSpace[] = []
+	let announceChange = () => {}
+	const joined = createJoinedSpacesController({
+		queryClient,
+		spaces,
+		hosts: {
+			getState: () => ({ active: null, connections: {} }),
+			connect: async () => undefined,
+			activate: async () => undefined,
+			forget: () => undefined,
+		},
+		transport: {
+			list: async () => listed,
+			remove: async () => undefined,
+			onChanged: async (listener) => {
+				announceChange = listener
+				return () => undefined
+			},
+			onRemoved: async () => () => undefined,
+		},
+	})
+	joined.watch()
+	const { result } = renderHook(
+		() =>
+			useInvitations(joined, {
+				transport: {
+					...transport,
+					accept: vi.fn(async () => {
+						listed = [waiting]
+						return waiting
+					}),
+				},
+			}),
+		{ wrapper },
+	)
+	await waitFor(() => expect(result.current.rows).toHaveLength(1))
+
+	act(() => result.current.accept(STUDIO.instanceId))
+
+	await waitFor(() =>
+		expect(result.current.rows).toEqual([
+			{
+				id: STUDIO.instanceId,
+				name: STUDIO.instanceName,
+				hostEmail: STUDIO.inviterEmail,
+				hostName: "Lea",
+				state: "hostOffline",
+			},
+		]),
+	)
+	expect(spaces.getState().selectedSpaceId).toBe(home.id)
+
+	listed = [STUDIO_SPACE]
+	act(() => announceChange())
+
+	await waitFor(() => expect(result.current.rows).toEqual([]))
+	await waitFor(() => expect(spaces.getState().selectedSpaceId).toBe("studio"))
 })

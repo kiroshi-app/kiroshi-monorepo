@@ -117,6 +117,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 	const wire = transportFake(listed)
 	const reportFailure = vi.fn()
 	const reportRemoval = vi.fn()
+	const reportHostOffline = vi.fn()
 	const joined = createJoinedSpacesController({
 		queryClient,
 		spaces,
@@ -124,6 +125,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		transport: wire.transport,
 		reportFailure,
 		reportRemoval,
+		reportHostOffline,
 	})
 	return {
 		home,
@@ -133,6 +135,7 @@ const gearFor = async (listed: JoinedSpace[] = []) => {
 		wire,
 		reportFailure,
 		reportRemoval,
+		reportHostOffline,
 		joined,
 		holdMembers: (joinedId: string, members: JoinedSpaceMember[]) =>
 			queryClient.setQueryData(
@@ -172,6 +175,14 @@ describe("the switcher rows", () => {
 			"joined:joined-attic": "down",
 			"joined:j3": "down",
 		})
+	})
+
+	it("marks a joined space waiting for its host down whatever its connection", () => {
+		expect(
+			hostMarksOf([{ ...GARAGE, state: "waitingForHost" }], {
+				[GARAGE.id]: { status: "up" },
+			}),
+		).toEqual({ [GARAGE_ROW]: "down" })
 	})
 
 	it("marks a joined space connecting while its host is still connecting", () => {
@@ -520,6 +531,14 @@ const REMOVED_NOTICE = {
 		"It’s gone from your spaces. Its conversations stay on Lea’s Kiroshi.",
 }
 
+const WAITING_STUDIO: JoinedSpace = { ...STUDIO, state: "waitingForHost" }
+
+const HOST_OFFLINE_NOTICE = {
+	title: "Studio Nord is offline",
+	description:
+		"You can read what’s here. You can send again once Kiroshi is open on Lea’s computer.",
+}
+
 const withStudio = async () => {
 	const gear = await gearFor([STUDIO])
 	gear.holdMembers(STUDIO.id, [hostNamed("Lea")])
@@ -544,6 +563,105 @@ describe("accepting an invited space", () => {
 			STUDIO.id,
 			STUDIO.remoteSpaceId,
 		)
+	})
+})
+
+describe("accepting an invited space its host has not let in yet", () => {
+	const admittedWaiting = async () => {
+		const gear = await gearFor()
+		gear.joined.watch()
+		await settle()
+		gear.wire.hold([WAITING_STUDIO])
+		await gear.joined.admit(WAITING_STUDIO)
+		return gear
+	}
+
+	it("lists it and keeps the open space until its host lets it in", async () => {
+		const gear = await admittedWaiting()
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([WAITING_STUDIO])
+		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+		expect(gear.hosts.activate).not.toHaveBeenCalledWith(
+			STUDIO.id,
+			expect.anything(),
+		)
+	})
+
+	it("opens it once it turns online", async () => {
+		const gear = await admittedWaiting()
+
+		gear.wire.hold([STUDIO])
+		gear.wire.announce()
+		await settle()
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe("studio")
+		expect(gear.hosts.activate).toHaveBeenLastCalledWith(
+			STUDIO.id,
+			STUDIO.remoteSpaceId,
+		)
+	})
+
+	it("stays on the space the reader picked meanwhile", async () => {
+		const gear = await admittedWaiting()
+		gear.joined.selectSpace(gear.home.id)
+
+		gear.wire.hold([STUDIO])
+		gear.wire.announce()
+		await settle()
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+	})
+
+	it("opens nothing when the reader picks it while it waits", async () => {
+		const gear = await admittedWaiting()
+
+		gear.joined.selectSpace(STUDIO_ROW)
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+		expect(gear.hosts.activate).not.toHaveBeenCalledWith(
+			STUDIO.id,
+			expect.anything(),
+		)
+	})
+})
+
+describe("a joined space turning to wait for its host", () => {
+	const turnWaiting = async (gear: Awaited<ReturnType<typeof gearFor>>) => {
+		gear.wire.hold([WAITING_STUDIO])
+		gear.wire.announce()
+		await settle()
+	}
+
+	it("raises the host offline notice once for the turn", async () => {
+		const gear = await withStudio()
+
+		await turnWaiting(gear)
+		gear.wire.announce()
+		await settle()
+
+		expect(gear.reportHostOffline).toHaveBeenCalledExactlyOnceWith(
+			HOST_OFFLINE_NOTICE,
+		)
+	})
+
+	it("raises nothing for a space already waiting", async () => {
+		const gear = await gearFor([WAITING_STUDIO])
+		gear.joined.watch()
+		await settle()
+
+		await turnWaiting(gear)
+
+		expect(gear.reportHostOffline).not.toHaveBeenCalled()
+	})
+
+	it("moves the reader from the open space to the previous local one", async () => {
+		const gear = await withStudio()
+		await gear.joined.admit(STUDIO)
+
+		await turnWaiting(gear)
+
+		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
 	})
 })
 

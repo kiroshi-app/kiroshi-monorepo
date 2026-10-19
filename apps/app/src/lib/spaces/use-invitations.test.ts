@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { raiseFailureNotice } from "@workspace/ui/components/notice-surface"
 
@@ -16,6 +16,7 @@ import {
 	type JoinedSpaceError,
 } from "../bindings"
 import { listen } from "../host"
+import { createStore } from "../store"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("../host", () => ({
@@ -26,8 +27,16 @@ vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
 }))
 
+beforeEach(() => {
+	vi.useFakeTimers({
+		toFake: ["Date"],
+		now: Date.parse("2026-10-10T09:00:00Z"),
+	})
+})
+
 afterEach(() => {
 	cleanup()
+	vi.useRealTimers()
 	vi.mocked(raiseFailureNotice).mockClear()
 	vi.mocked(listen).mockClear()
 })
@@ -81,6 +90,10 @@ const transportFake = (listed: Invitation[]) => ({
 	list: vi.fn(async () => listed),
 	accept: vi.fn(async (_id: string) => JOINED_STUDIO),
 	decline: vi.fn(async (_id: string) => undefined),
+	onJoinLinkOpened: vi.fn(
+		async (_listener: (invitationId: string) => void) => () => undefined,
+	),
+	askForJoinLinks: vi.fn(async () => undefined),
 })
 
 const changeAnnounced = () => {
@@ -91,15 +104,28 @@ const changeAnnounced = () => {
 	announce?.({ event: INVITATION_CHANGED_EVENT, id: 1, payload: null }, null)
 }
 
+const joinedSpacesFake = () => {
+	const store = createStore<{ joinedSpaces: JoinedSpace[] }>({
+		joinedSpaces: [],
+	})
+	const hold = (joinedSpaces: JoinedSpace[]) => store.setState({ joinedSpaces })
+	return {
+		getState: store.getState,
+		subscribe: store.subscribe,
+		admit: vi.fn(async (joined: JoinedSpace) => hold([joined])),
+		hold,
+	}
+}
+
 const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	const transport = transportFake(listed)
-	const admit = vi.fn(async (_joined: JoinedSpace) => {})
+	const joinedSpaces = joinedSpacesFake()
+	const { admit } = joinedSpaces
 	const { result, rerender } = renderHook(
 		() =>
-			useInvitations(
-				{ admit },
-				{ transport: transport satisfies InvitationsTransport },
-			),
+			useInvitations(joinedSpaces, {
+				transport: transport satisfies InvitationsTransport,
+			}),
 		{ wrapper: createQueryTestWrapper().wrapper },
 	)
 	await settle()
@@ -120,6 +146,7 @@ const gearFor = async (listed: Invitation[] = [STUDIO]) => {
 	return {
 		transport,
 		admit,
+		joinedSpaces,
 		announce,
 		accept,
 		decline,
@@ -140,11 +167,11 @@ describe("listing invitations", () => {
 
 	it("reads the list once for two readers mounted together", async () => {
 		const transport = transportFake([STUDIO])
-		const admit = vi.fn()
+		const joinedSpaces = joinedSpacesFake()
 		const { result } = renderHook(
 			() => [
-				useInvitations({ admit }, { transport }),
-				useInvitations({ admit }, { transport }),
+				useInvitations(joinedSpaces, { transport }),
+				useInvitations(joinedSpaces, { transport }),
 			],
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
@@ -170,7 +197,7 @@ describe("listing invitations", () => {
 		const transport = transportFake([])
 		transport.list.mockRejectedValueOnce({ kind: "notSignedIn" })
 		const { result } = renderHook(
-			() => useInvitations({ admit: vi.fn() }, { transport }),
+			() => useInvitations(joinedSpacesFake(), { transport }),
 			{ wrapper: createQueryTestWrapper().wrapper },
 		)
 		await settle()
@@ -179,10 +206,24 @@ describe("listing invitations", () => {
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
+	it("shows an invitation past its expiry as expired with its date", async () => {
+		const lapsed = { ...STUDIO, expiresAt: "2026-10-09T09:00:00Z" }
+
+		const gear = await gearFor([lapsed])
+
+		expect(gear.rows()).toEqual([
+			{
+				...WAITING_ROW,
+				state: "expired",
+				expiresAt: Date.parse(lapsed.expiresAt),
+			},
+		])
+	})
+
 	it("raises a list it could not read, naming the reason", async () => {
 		const transport = transportFake([])
 		transport.list.mockRejectedValueOnce(STORAGE)
-		renderHook(() => useInvitations({ admit: vi.fn() }, { transport }), {
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
 			wrapper: createQueryTestWrapper().wrapper,
 		})
 		await settle()
@@ -206,6 +247,20 @@ describe("accepting an invitation", () => {
 		await gear.accept(STUDIO.instanceId)
 
 		expect(gear.rows()).toEqual([{ ...WAITING_ROW, state: "accepting" }])
+	})
+
+	it("shows the row with its host offline while the joined space waits, then drops it once online", async () => {
+		const gear = await gearFor()
+		const waiting: JoinedSpace = { ...JOINED_STUDIO, state: "waitingForHost" }
+		gear.transport.accept.mockResolvedValueOnce(waiting)
+
+		await gear.accept(STUDIO.instanceId)
+
+		expect(gear.rows()).toEqual([{ ...WAITING_ROW, state: "hostOffline" }])
+
+		act(() => gear.joinedSpaces.hold([JOINED_STUDIO]))
+
+		expect(gear.rows()).toEqual([])
 	})
 
 	it("drops the row and hands the joined space over with its inviter", async () => {
@@ -277,15 +332,49 @@ describe("accepting an invitation", () => {
 		expect(gear.rows()).toEqual([])
 	})
 
-	it("raises any other failure and keeps the row waiting", async () => {
+	it.each(["invitationWithdrawn", "invitationUsed"])(
+		"shows the row withdrawn when the accept answers %s",
+		async (kind) => {
+			const gear = await gearFor()
+			gear.transport.accept.mockRejectedValueOnce({ kind })
+
+			await gear.accept(STUDIO.instanceId)
+
+			expect(gear.rows()).toEqual([{ ...WAITING_ROW, state: "withdrawn" }])
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		},
+	)
+
+	it("shows the row expired with its date when the accept answers it expired", async () => {
 		const gear = await gearFor()
 		gear.transport.accept.mockRejectedValueOnce({ kind: "invitationExpired" })
 
 		await gear.accept(STUDIO.instanceId)
 
+		expect(gear.rows()).toEqual([
+			{
+				...WAITING_ROW,
+				state: "expired",
+				expiresAt: Date.parse(STUDIO.expiresAt),
+			},
+		])
+		expect(gear.admit).not.toHaveBeenCalled()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("raises an invitation for another email and keeps the row on Accept", async () => {
+		const gear = await gearFor()
+		gear.transport.accept.mockRejectedValueOnce({
+			kind: "invitationOtherEmail",
+		})
+
+		await gear.accept(STUDIO.instanceId)
+
 		expect(gear.rows()).toEqual([WAITING_ROW])
 		expect(raiseFailureNotice).toHaveBeenCalledWith(
-			expect.objectContaining({ title: "This invitation expired" }),
+			expect.objectContaining({
+				title: "This invitation is for another email",
+			}),
 		)
 	})
 })
@@ -399,5 +488,76 @@ describe("sweeping withdrawn invitations when the switcher closes", () => {
 		await gear.announce([{ ...STUDIO, invitedAt: "2026-10-09T09:00:00Z" }])
 
 		expect(gear.rows()).toEqual([WAITING_ROW])
+	})
+})
+
+describe("opening a join link", () => {
+	const linkOpened = async (gear: Gear, invitationId: string) => {
+		const [listener] = gear.transport.onJoinLinkOpened.mock.calls[0] ?? []
+		act(() => listener?.(invitationId))
+		await settle()
+	}
+
+	it("asks for join links once its listener is attached", async () => {
+		const transport = transportFake([STUDIO])
+		let attach = (_unlisten: () => undefined) => {}
+		transport.onJoinLinkOpened.mockReturnValueOnce(
+			new Promise<() => undefined>((resolve) => {
+				attach = resolve
+			}),
+		)
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await settle()
+
+		expect(transport.askForJoinLinks).not.toHaveBeenCalled()
+
+		attach(() => undefined)
+		await settle()
+
+		expect(transport.askForJoinLinks).toHaveBeenCalledOnce()
+	})
+
+	it("asks for join links once under strict mode", async () => {
+		const transport = transportFake([STUDIO])
+		renderHook(() => useInvitations(joinedSpacesFake(), { transport }), {
+			wrapper: createQueryTestWrapper().wrapper,
+			reactStrictMode: true,
+		})
+		await settle()
+
+		expect(transport.askForJoinLinks).toHaveBeenCalledOnce()
+	})
+
+	it("raises nothing for a listed invitation", async () => {
+		const gear = await gearFor()
+
+		await linkOpened(gear, STUDIO.id)
+
+		expect(gear.transport.list).toHaveBeenCalledOnce()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("reads the list again and raises nothing when the invitation appears", async () => {
+		const gear = await gearFor([])
+		gear.transport.list.mockResolvedValue([STUDIO])
+
+		await linkOpened(gear, STUDIO.id)
+
+		expect(gear.transport.list).toHaveBeenCalledTimes(2)
+		expect(gear.rows()).toEqual([WAITING_ROW])
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+	})
+
+	it("reads the list once more, then raises an invitation still missing", async () => {
+		const gear = await gearFor()
+
+		await linkOpened(gear, "invitation-elsewhere")
+
+		expect(gear.transport.list).toHaveBeenCalledTimes(2)
+		expect(raiseFailureNotice).toHaveBeenCalledWith(
+			expect.objectContaining({ title: "You’re not invited to this space" }),
+		)
 	})
 })
