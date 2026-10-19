@@ -11,7 +11,20 @@ const NO_PAGE_OR_POINTER_SHARED_BETWEEN_STORY_FILES = {
 	fileParallelism: false,
 }
 
-const LOCAL_MAX_WORKERS = process.env.CI ? undefined : 4
+const LOCAL_TEST_WORKERS = 2
+
+const readTestWorkers = () => {
+	const requested = process.env.KIROSHI_TEST_WORKERS
+	if (requested === undefined) {
+		return process.env.CI ? undefined : LOCAL_TEST_WORKERS
+	}
+	if (!/^[1-9]\d*$/.test(requested)) {
+		throw new Error(
+			`KIROSHI_TEST_WORKERS must be a positive integer, received "${requested}"`,
+		)
+	}
+	return Number(requested)
+}
 
 export default defineConfig({
 	test: {
@@ -26,7 +39,7 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					environment: "node",
-					maxWorkers: LOCAL_MAX_WORKERS,
+					maxWorkers: readTestWorkers(),
 					include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
 				},
 			},
