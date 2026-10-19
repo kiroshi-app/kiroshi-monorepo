@@ -62,7 +62,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kiroshi.app.ios
         # The iOS OAuth client of Google Cloud, without its .apps.googleusercontent.com suffix.
         GOOGLE_IOS_CLIENT_ID: 831614415289-59cv7mehlnle13diuuelb5ngboftdv3l
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: BBE5V2JL5H
         TARGETED_DEVICE_FAMILY: "1"
