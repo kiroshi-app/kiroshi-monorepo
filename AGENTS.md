@@ -180,7 +180,7 @@ bun run storybook    # Storybook on :6006 — the place to build UI
 bun run build        # Build all
 bun run tauri:build  # Package the desktop app
 bun run test         # Vitest + cargo test
-KIROSHI_TEST_WORKERS=4 bunx vitest run  # Raise the vitest worker budget for one run, 2 by default outside CI
+KIROSHI_TEST_WORKERS=4 bun run test  # Raise the vitest worker budget for one run, 2 by default outside CI
 bun run lint         # Check
 bun run lint:fix     # Fix
 bun run types        # Type check (tsc -b)
