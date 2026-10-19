@@ -28,12 +28,15 @@ const isFirstOfItsPerson = (member: Member, index: number, members: Member[]) =>
 export const joinedMembersOf = (
 	roster: JoinedSpaceMember[],
 	answered: Member[] | undefined,
-): Member[] => [
-	...hostFirst(roster.map((rostered) => asMember(rostered, answered ?? [])))
-		.filter(isFirstOfItsPerson)
-		.filter(isListedIn(answered)),
-	...(answered ?? []).filter((member) => member.status === "pending"),
-]
+): Member[] => {
+	const held = answered ?? []
+	return [
+		...hostFirst(roster.map((rostered) => asMember(rostered, held)))
+			.filter(isFirstOfItsPerson)
+			.filter(isListedIn(answered)),
+		...held.filter((member) => member.status === "pending"),
+	]
+}
 
 export const fingerprintIn = (
 	roster: JoinedSpaceMember[],
