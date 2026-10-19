@@ -131,7 +131,7 @@ describe("the privacy page", () => {
 		expect(within(distributes).getAllByRole("listitem")).toHaveLength(2)
 		expect(distributes.textContent).toContain("invitations")
 		expect(relay.textContent).toContain(
-			"every device shows a fingerprint you can compare",
+			"when you add a device to your account, the new device and the device that approves it both show its fingerprint",
 		)
 		expect(within(unreadable).getAllByRole("listitem")).toHaveLength(5)
 		expect(relay.textContent).toContain(
@@ -143,6 +143,21 @@ describe("the privacy page", () => {
 		await openPage("/privacy", privacy.title)
 		expect(mainText()).not.toMatch(
 			/relay reads|not end-to-end encrypted|aren't end-to-end encrypted/,
+		)
+	})
+
+	it("names the public keys of your devices among what your account stores, and when they go", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(
+			within(sectionNamed("Your account")).getByText(
+				/for each of your devices, its public keys/,
+			),
+		).toBeDefined()
+		expect(sectionNamed("Deleting your account").textContent).toContain(
+			"your devices with their public keys",
+		)
+		expect(sectionNamed("How long we keep things").textContent).toContain(
+			"The public keys of your devices: until you remove the device",
 		)
 	})
 

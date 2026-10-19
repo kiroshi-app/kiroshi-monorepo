@@ -44,7 +44,8 @@ export const SITE_PAGES_COPY = {
 						"if you sign in with Google or Apple, your account id there and the access, refresh and ID tokens they issue, stored without extra encryption. The ID token also carries your email address and your name;",
 						"for each session, a session token, your IP address, your browser's or app's user agent, a device name, the platform, and when the session started and was last used, to the minute;",
 						"for a sign-in by email, the code, stored hashed, or the link, filed under your email address;",
-						"for each request to sign the desktop app in, your computer's name, the platform, a local callback address, a hashed secret, and who approved it.",
+						"for each request to sign the desktop app in, your computer's name, the platform, a local callback address, a hashed secret, and who approved it;",
+						"for each of your devices, its public keys, whether you approved it, and when it was added and last active.",
 					],
 					"The desktop app sends your computer's name as its device name, and that name often includes your first name. The iPhone app sends \"iPhone\". You see the list of your devices, and whoever approves a desktop sign-in on kiroshi.app/authorize sees that computer's name.",
 					"On the iPhone, the app keeps your session token in the Keychain. It keeps your last Space, and the list of accounts that accepted message routing, in its settings on the device.",
@@ -86,7 +87,7 @@ export const SITE_PAGES_COPY = {
 						"the public keys of your devices, to your other devices and to the computer that hosts each Space you joined;",
 						"invitations, to the email address invited.",
 					],
-					"Because the relay hands out the keys, every device shows a fingerprint you can compare with the one shown on the other device. When they match, no key was swapped on the way.",
+					"Because the relay hands out the keys, when you add a device to your account, the new device and the device that approves it both show its fingerprint, for you to compare. When they match, no key was swapped on the way.",
 					"The relay can't read the content of anything that travels end-to-end encrypted between devices:",
 					[
 						"conversations;",
@@ -163,6 +164,7 @@ export const SITE_PAGES_COPY = {
 						"Your account and your Google or Apple tokens: until you delete your account.",
 						"Sessions: a session lasts 7 days and renews while you use it. Expired sessions aren't cleared, so a session, with its IP address, user agent and device name, stays until you sign it out or delete your account.",
 						"Sign-in codes and links: valid for 5 minutes and deleted once used. Unused ones are never cleared.",
+						"The public keys of your devices: until you remove the device, refuse its request or delete your account. Signing out doesn't remove them, and a request no one approves stays after it expires.",
 						"Desktop sign-in requests: valid for 10 minutes and never cleared. Approved ones go with your account. Pending, cancelled or expired ones stay, with the computer's name, even after your account is deleted.",
 						"Spaces: until the owner deletes the Space or their account.",
 						"Memberships: until the member is removed, the Space is deleted or the account is deleted. An account created by an invitation stays after the Space.",
@@ -180,7 +182,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Deleting your account",
 				body: [
 					"You can delete your account from Settings in the iPhone app. The desktop app and kiroshi.app can't delete an account: they can only sign sessions out.",
-					"Deleting your account removes your account, your Google or Apple tokens, your sessions, your approved desktop sign-in requests, the Spaces you own and your memberships. It leaves behind:",
+					"Deleting your account removes your account, your Google or Apple tokens, your sessions, your approved desktop sign-in requests, your devices with their public keys, the Spaces you own and your memberships. It leaves behind:",
 					[
 						"your Google grant, which Kiroshi never revokes;",
 						"your Apple grant, if Kiroshi's request to revoke it fails;",
