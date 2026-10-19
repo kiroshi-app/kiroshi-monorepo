@@ -279,7 +279,7 @@ describe("the invitation reference", () => {
 		await openJoin(joinPathOf(INVITATION))
 		await findText(JOIN_COPY.didntOpen)
 		waitOutTheApp()
-		await findText(JOIN_COPY.signInWithInvitedEmail)
+		await findText(SIGN_IN_LINE)
 		localStorage.clear()
 
 		const carriers = fetched.filter((url) => url.href.includes(INVITATION))
