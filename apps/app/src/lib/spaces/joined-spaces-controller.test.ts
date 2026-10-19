@@ -97,7 +97,7 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 		evict: (joined: JoinedSpace) => {
 			held = held.filter((entry) => entry.id !== joined.id)
 			announce()
-			announceRemoval({ id: joined.id, name: joined.name })
+			announceRemoval({ id: joined.id, name: joined.name, reason: "removed" })
 		},
 		hold: (next: JoinedSpace[]) => {
 			held = next
