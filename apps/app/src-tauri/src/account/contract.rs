@@ -33,6 +33,7 @@ pub enum AccountFailure {
 pub enum SignedOutReason {
 	SignedOutOnSite,
 	DeviceRevoked,
+	DeviceRefused,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -153,6 +154,11 @@ mod tests {
 			to_value(AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRevoked) })
 				.expect("the state serializes"),
 			json!({ "kind": "signedOut", "reason": "deviceRevoked" })
+		);
+		assert_eq!(
+			to_value(AccountState::SignedOut { reason: Some(SignedOutReason::DeviceRefused) })
+				.expect("the state serializes"),
+			json!({ "kind": "signedOut", "reason": "deviceRefused" })
 		);
 	}
 }

@@ -17,9 +17,7 @@ use super::launch;
 use crate::agent::host::{Host, Refusal};
 use crate::agent::reply_writer::{shown_with_attachments, HeldAttachment, TurnAttachments};
 use crate::attachments::contract::SubmittedAttachment;
-use crate::attachments::{
-	refuse_block, refuse_file, store, Attachments, Rejection, SizedFile, IMAGE_EXTENSIONS,
-};
+use crate::attachments::{refuse_block, refuse_file, store, Attachments, Rejection, SizedFile};
 use crate::conversations::commands::{
 	announce_conversation, conversation_create_bot_from_draft, conversation_suggested_bots, ready,
 };
@@ -323,7 +321,7 @@ impl<R: Runtime> CompanionHost<R> {
 		caption: Option<String>,
 	) -> Result<ConversationAttached, CompanionError> {
 		let stored = self.attachments.hold_with(|held| {
-			let bytes = image_bytes(path)?;
+			let bytes = file_bytes(path)?;
 			let held_names: Vec<String> =
 				held.iter().map(|file| file.path.to_string_lossy().into_owned()).collect();
 			let mut block: Vec<SizedFile<'_>> = held
@@ -353,7 +351,7 @@ impl<R: Runtime> CompanionHost<R> {
 	) -> Result<ConversationAttached, CompanionError> {
 		carries_seats(database, &room).await?;
 		self.holds_seat(database, &room).await?;
-		let bytes = image_bytes(path)?;
+		let bytes = file_bytes(path)?;
 		let size = bytes.len() as u64;
 		refuse_block(&[SizedFile { name: path, bytes: size }])?;
 		let stored = stored_copy(root, &room, path, bytes)?;
@@ -462,17 +460,7 @@ fn found_message(hit: MessageHit) -> FoundMessage {
 	}
 }
 
-fn image_bytes(path: &str) -> Result<Vec<u8>, CompanionError> {
-	let is_image = Path::new(path)
-		.extension()
-		.and_then(|extension| extension.to_str())
-		.is_some_and(|extension| IMAGE_EXTENSIONS.contains(&extension.to_lowercase().as_str()));
-	if !is_image {
-		return Err(CompanionError::NotAnImage {
-			path: path.to_owned(),
-			accepted: IMAGE_EXTENSIONS.iter().map(|extension| (*extension).to_owned()).collect(),
-		});
-	}
+fn file_bytes(path: &str) -> Result<Vec<u8>, CompanionError> {
 	let unreadable =
 		|detail: String| CompanionError::UnreadableFile { path: path.to_owned(), detail };
 	let metadata = fs::metadata(path).map_err(|error| unreadable(error.to_string()))?;
@@ -1935,7 +1923,37 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_missing_file_a_directory_or_a_file_that_is_no_image_is_refused_naming_it() {
+	async fn a_file_of_any_extension_is_attached_here_or_in_a_room_with_its_extension_kept() {
+		let app = a_room("attach-any").await;
+		let arriving = heard(&app, COMPANION_SPOKE_EVENT);
+		let host = serving(&app, "c1");
+		let log = an_image(&app, "run.LOG", 3);
+		let bare = an_image(&app, "Makefile", 2);
+
+		host.answer(an_attach(json!({ "path": log }))).await.expect("the log is attached here");
+		let in_room = host
+			.answer(an_attach(json!({ "path": bare, "conversation": "room" })))
+			.await
+			.expect("the bare file is attached in the room");
+
+		let root = Attachments::dir(app.handle()).expect("the attachments root");
+		let held = host.attachments.take();
+		assert_eq!(held.len(), 1);
+		assert_eq!(held[0].path.parent(), Some(root.join("c1").as_path()));
+		assert_eq!(held[0].path.extension().and_then(|it| it.to_str()), Some("log"));
+		assert_eq!(fs::read(&held[0].path).expect("the copy reads"), vec![7u8; 3]);
+		let path = in_room["path"].as_str().expect("the stored path").to_owned();
+		let stored = PathBuf::from(&path);
+		assert_eq!(stored.parent(), Some(root.join("room").as_path()));
+		assert_eq!(stored.extension(), None);
+		assert_eq!(fs::read(&stored).expect("the copy reads"), vec![7u8; 2]);
+		let spoken = announced(&arriving);
+		let text = spoken["text"].as_str().expect("the text");
+		assert_eq!(text.lines().last(), Some(format!("1/1 {path}").as_str()), "{text}");
+	}
+
+	#[tokio::test]
+	async fn a_missing_file_or_a_directory_is_refused_naming_it() {
 		let app = a_room("attach-unreadable").await;
 		let host = serving(&app, "c1");
 		let text = an_image(&app, "notes.txt", 3);
@@ -1944,13 +1962,6 @@ mod tests {
 		fs::create_dir(&folder).expect("the folder lands");
 		let missing = format!("{text}.png");
 
-		let not_image = attach_refused(&app, &host, json!({ "path": text })).await;
-		assert_eq!(not_image["kind"], json!("notAnImage"));
-		assert_eq!(not_image["path"], json!(text));
-		assert_eq!(
-			not_image["accepted"],
-			json!(["avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp"])
-		);
 		for path in [missing, folder] {
 			let refused = attach_refused(&app, &host, json!({ "path": path })).await;
 			assert_eq!(refused["kind"], json!("unreadableFile"));

@@ -700,9 +700,9 @@ pub(in crate::db) fn open_thread_under(
 	let id = Uuid::new_v4().to_string();
 	let at = now();
 	transaction.execute(
-		"INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
-			VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-		params![id, MISSION_KIND, space_id, title, at],
+		"INSERT INTO conversations (id, kind, space_id, title, icon, created_at, updated_at)
+			VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+		params![id, MISSION_KIND, space_id, title, icon::MISSION_ICON, at],
 	)?;
 	transaction.execute(
 		"INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)

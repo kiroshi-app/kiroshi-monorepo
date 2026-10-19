@@ -23,6 +23,7 @@ use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError
 use crate::account::session::{self, AccountSession};
 use crate::db;
 use crate::db::repositories::joined_spaces::{self, JoinedReach};
+use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
@@ -338,7 +339,7 @@ async fn started<R: Runtime>(
 		eprintln!("joined space {id} was not connected: {reason}");
 		false
 	});
-	if !is_signed_in {
+	if !is_signed_in || devices::is_awaiting_approval(app) {
 		return Err(JoinedSpaceError::HostOffline { id: id.to_owned() });
 	}
 	if let Some(reached) = guests.reached(id) {
