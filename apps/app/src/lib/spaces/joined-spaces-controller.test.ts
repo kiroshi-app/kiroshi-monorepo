@@ -17,6 +17,7 @@ import { createSpacesController } from "./spaces-controller"
 import type {
 	JoinedSpace,
 	JoinedSpaceMember,
+	JoinedSpaceRemovalReason,
 	JoinedSpaceRemoved,
 } from "../bindings"
 import { createStore } from "../store"
@@ -94,10 +95,13 @@ const transportFake = (listed: JoinedSpace[] = []) => {
 	return {
 		transport,
 		announce: () => announce(),
-		evict: (joined: JoinedSpace) => {
+		evict: (
+			joined: JoinedSpace,
+			reason: JoinedSpaceRemovalReason = "removed",
+		) => {
 			held = held.filter((entry) => entry.id !== joined.id)
 			announce()
-			announceRemoval({ id: joined.id, name: joined.name, reason: "removed" })
+			announceRemoval({ id: joined.id, name: joined.name, reason })
 		},
 		hold: (next: JoinedSpace[]) => {
 			held = next
@@ -526,6 +530,17 @@ const hostNamed = (name: string | null): JoinedSpaceMember => ({
 })
 
 const REMOVED_NOTICE = {
+	title: "You’re no longer a member of Studio Nord",
+	description:
+		"Its conversations aren’t on this device anymore. Ask Lea for a new invitation.",
+}
+
+const DELETED_NOTICE = {
+	title: "Lea deleted Studio Nord",
+	description: "Its conversations aren’t on this device anymore.",
+}
+
+const UNKNOWN_REMOVAL_NOTICE = {
 	title: "Lea removed you from Studio Nord.",
 	description:
 		"It’s gone from your spaces. Its conversations stay on Lea’s Kiroshi.",
@@ -772,6 +787,43 @@ describe("a host removing the reader", () => {
 		expect(gear.joined.getState().joinedSpaces).toEqual([])
 		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
 		expect(gear.reportRemoval).toHaveBeenCalledWith(REMOVED_NOTICE)
+	})
+
+	it("words the notice of a deleted space from its host", async () => {
+		const gear = await withStudio()
+		await gear.joined.admit(STUDIO)
+
+		gear.wire.evict(STUDIO, "deleted")
+		await settle()
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([])
+		expect(gear.reportRemoval).toHaveBeenCalledExactlyOnceWith(DELETED_NOTICE)
+	})
+
+	it("keeps the generic notice when the reason is unknown", async () => {
+		const gear = await withStudio()
+		await gear.joined.admit(STUDIO)
+
+		gear.wire.evict(STUDIO, "unknown")
+		await settle()
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([])
+		expect(gear.reportRemoval).toHaveBeenCalledExactlyOnceWith(
+			UNKNOWN_REMOVAL_NOTICE,
+		)
+	})
+
+	it("drops a space the reader left without raising a notice", async () => {
+		const gear = await withStudio()
+		await gear.joined.admit(STUDIO)
+
+		gear.wire.evict(STUDIO, "left")
+		await settle()
+
+		expect(gear.joined.getState().joinedSpaces).toEqual([])
+		expect(gear.spaces.getState().selectedSpaceId).toBe(gear.home.id)
+		expect(gear.hosts.forget).toHaveBeenCalledWith(STUDIO.id)
+		expect(gear.reportRemoval).not.toHaveBeenCalled()
 	})
 
 	it("keeps an unreachable host as an unreachable row, never as removed", async () => {

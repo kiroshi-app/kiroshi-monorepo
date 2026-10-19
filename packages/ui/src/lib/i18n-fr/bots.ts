@@ -142,6 +142,12 @@ const bots = {
 			notice: "{{host}} vous a retiré de {{name}}.",
 			noticeDescription:
 				"Il n’apparaît plus dans vos espaces. Ses conversations restent sur le Kiroshi de {{host}}.",
+			memberNotice: "Vous n’êtes plus membre de {{name}}",
+			memberNoticeDescription:
+				"Ses conversations ne sont plus sur cet appareil. Demandez une nouvelle invitation à {{host}}.",
+			deletedNotice: "{{host}} a supprimé {{name}}",
+			deletedNoticeDescription:
+				"Ses conversations ne sont plus sur cet appareil.",
 		},
 		signOut: {
 			title: "Se déconnecter de Kiroshi ?",

@@ -144,6 +144,12 @@ const bots = {
 			notice: "{{host}} removed you from {{name}}.",
 			noticeDescription:
 				"It’s gone from your spaces. Its conversations stay on {{host}}’s Kiroshi.",
+			memberNotice: "You’re no longer a member of {{name}}",
+			memberNoticeDescription:
+				"Its conversations aren’t on this device anymore. Ask {{host}} for a new invitation.",
+			deletedNotice: "{{host}} deleted {{name}}",
+			deletedNoticeDescription:
+				"Its conversations aren’t on this device anymore.",
 		},
 		signOut: {
 			title: "Sign out of Kiroshi?",
