@@ -1238,14 +1238,11 @@ export const OpenedOnInvitation = meta.story({
 		const trigger = within(canvasElement).getByRole("button", {
 			name: /^Change space/,
 		})
-		let anchorings = 0
-		const countAnchoring = () => {
-			anchorings += 1
-		}
-		trigger.addEventListener("contextmenu", countAnchoring)
+		const anchoring = fn()
+		trigger.addEventListener("contextmenu", anchoring)
 		const pressed = await openSwitcher(canvasElement)
-		trigger.removeEventListener("contextmenu", countAnchoring)
-		await expect(anchorings).toBe(1)
+		trigger.removeEventListener("contextmenu", anchoring)
+		await expect(anchoring).toHaveBeenCalledOnce()
 		const pressedAt = pressed.getBoundingClientRect()
 		await expect(pressedAt.left).toBe(openedAt.left)
 		await expect(pressedAt.top).toBe(openedAt.top)
