@@ -832,7 +832,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		expect(within(dialog).getByText("Tom Reed")).toBeTruthy()
 	})
 
-	it("disables the invite field, Invite and every row action while the host is offline", async () => {
+	it("disables the invite field, Invite and every row action while the host is offline, reading nothing from it", async () => {
 		garageHostAnswers()
 
 		const dialog = await openGarageMembers({
@@ -847,20 +847,19 @@ describe("SpaceSettingsHost members on the desktop", () => {
 				})
 				.hasAttribute("disabled"),
 		).toBe(true)
-		const buttons = [
+		for (const button of [
 			within(dialog).getByRole("button", {
 				name: i18n.t("settings:space.members.invite.action"),
 			}),
 			await removeTomOf(dialog),
-			within(dialog).getByRole("button", {
-				name: i18n.t("settings:space.members.withdrawLabel", {
-					email: "ana@example.com",
-				}),
-			}),
-		]
-		for (const button of buttons) {
+		]) {
 			expect(button.hasAttribute("disabled")).toBe(true)
 		}
+		expect(membersCalls()).toEqual([])
+		await act(async () => settle())
+		expect(
+			screen.queryByText(i18n.t("settings:space.transfer.reason.generic")),
+		).toBeNull()
 	})
 
 	it("invites on the host of a joined space", async () => {

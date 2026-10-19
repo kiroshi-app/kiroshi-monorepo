@@ -635,16 +635,30 @@ describe("useMembers on a joined space", () => {
 			data: roster,
 		})
 
-	const watchStudio = (overrides: Partial<MembersTransport> = {}) => {
+	type StudioState = { isHostOffline: boolean }
+
+	const watchStudio = (
+		overrides: Partial<MembersTransport> = {},
+		initialProps: StudioState = { isHostOffline: false },
+	) => {
 		const transport = createFakeTransport({
 			list: vi.fn(async () => ok([LEA_ANSWERED, TOM_ANSWERED])),
 			...overrides,
 		})
 		const hook = renderHook(
-			() => useMembers(STUDIO, true, { transport, joinedId: "joined-studio" }),
-			{ wrapper: createQueryTestWrapper().wrapper },
+			({ isHostOffline }: StudioState) =>
+				useMembers(STUDIO, true, {
+					transport,
+					joinedId: "joined-studio",
+					isHostOffline,
+				}),
+			{ wrapper: createQueryTestWrapper().wrapper, initialProps },
 		)
-		return { transport, panel: () => shown(hook.result.current) }
+		return {
+			transport,
+			rerender: hook.rerender,
+			panel: () => shown(hook.result.current),
+		}
 	}
 
 	const membersChangeAnnounced = () => {
@@ -723,7 +737,7 @@ describe("useMembers on a joined space", () => {
 		expect(transport.invite).toHaveBeenCalledWith("studio", "sam@example.com")
 	})
 
-	it("sends a confirmed removal to the host and drops the row once the roster is signed again", async () => {
+	it("drops a removed person at once, without waiting for the roster to be signed again", async () => {
 		rosterAnswered([LEA, TOM])
 		const { panel, transport } = watchStudio({
 			remove: vi.fn(async () => ok([LEA_ANSWERED])),
@@ -735,12 +749,50 @@ describe("useMembers on a joined space", () => {
 		await settle()
 
 		expect(transport.remove).toHaveBeenCalledWith("studio", "tom")
-		expect(panel().members).toEqual([LEA_ROW, { ...TOM_ROW, email: "" }])
+		expect(panel().members).toEqual([LEA_ROW])
+		expect(commands.joinedSpaceMembers).toHaveBeenCalledOnce()
+	})
 
-		rosterAnswered([LEA])
-		membersChangeAnnounced()
+	it("reads nothing from the host and raises no notice while the host is offline", async () => {
+		rosterAnswered([LEA, TOM])
 
-		await waitFor(() => expect(panel().members).toEqual([LEA_ROW]))
+		const { panel, transport } = watchStudio(
+			{
+				list: vi.fn(async () =>
+					refused({ kind: "unreachable", reason: "down" }),
+				),
+			},
+			{ isHostOffline: true },
+		)
+
+		await waitFor(() => expect(panel().isPending).toBe(false))
+		await settle()
+		expect(transport.list).not.toHaveBeenCalled()
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
+		expect(panel().members).toEqual([
+			{ ...LEA_ROW, email: "" },
+			{ ...TOM_ROW, email: "" },
+		])
+	})
+
+	it("reads the host once it comes back and shows its invitations", async () => {
+		rosterAnswered([LEA, TOM])
+		const { panel, transport, rerender } = watchStudio(
+			{
+				list: vi.fn(async () => ok([LEA_ANSWERED, TOM_ANSWERED, SAM_PENDING])),
+			},
+			{ isHostOffline: true },
+		)
+		await waitFor(() => expect(panel().members).toHaveLength(2))
+
+		rerender({ isHostOffline: false })
+
+		await waitFor(() =>
+			expect(panel().members).toEqual([LEA_ROW, TOM_ROW, SAM_PENDING_ROW]),
+		)
+		await settle()
+		expect(transport.list).toHaveBeenCalledOnce()
+		expect(transport.list).toHaveBeenCalledWith("studio")
 	})
 
 	it("holds the removal the host refuses in the failure slot", async () => {

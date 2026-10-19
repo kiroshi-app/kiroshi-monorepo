@@ -61,6 +61,7 @@ type MembersOptions = {
 	transport?: MembersTransport
 	reportSuccess?: (message: NoticeMessage) => void
 	joinedId?: string
+	isHostOffline?: boolean
 }
 
 const NO_MEMBERS: Member[] = []
@@ -78,6 +79,7 @@ export const useMembers = (
 		transport = membersTransport,
 		reportSuccess = raiseTransientNotice,
 		joinedId,
+		isHostOffline = false,
 	}: MembersOptions = {},
 ): MembersProps | undefined => {
 	const queryClient = useQueryClient()
@@ -86,17 +88,17 @@ export const useMembers = (
 	const shownSpace = isDesktopHost() ? openSpace : null
 	const watchedId = isHosted ? shownSpace?.id : undefined
 
+	const readId = isHostOffline ? undefined : watchedId
 	const hostRead = useQuery({
 		queryKey: hostQueryKeys.membersOf(watchedId),
-		queryFn: watchedId ? () => readMembers(transport, watchedId) : skipToken,
+		queryFn: readId ? () => readMembers(transport, readId) : skipToken,
 		meta: { failureNotice: membersReadFailure, raisedIn: "use-members" },
 	})
 	const rosterRead = useQuery(joinedSpaceMembersQueryOf(watchedId && joinedId))
-	const { data: answered = NO_MEMBERS } = hostRead
 	const { data: roster = NO_JOINED_MEMBERS } = rosterRead
 	const members = joinedId
-		? joinedMembersOf(roster, answered)
-		: hostFirst(answered)
+		? joinedMembersOf(roster, hostRead.data)
+		: hostFirst(hostRead.data ?? NO_MEMBERS)
 	const rowOf = (member: Member) => ({
 		...toSpaceMember(member),
 		fingerprint: fingerprintIn(roster, member.userId),

@@ -18,17 +18,21 @@ const asMember = (
 	status: role === "host" ? "host" : "joined",
 })
 
+const isListedIn = (answered: Member[] | undefined) => (member: Member) =>
+	answered === undefined ||
+	answered.some((held) => held.userId === member.userId)
+
 const isFirstOfItsPerson = (member: Member, index: number, members: Member[]) =>
 	members.findIndex((held) => held.userId === member.userId) === index
 
 export const joinedMembersOf = (
 	roster: JoinedSpaceMember[],
-	answered: Member[],
+	answered: Member[] | undefined,
 ): Member[] => [
-	...hostFirst(roster.map((rostered) => asMember(rostered, answered))).filter(
-		isFirstOfItsPerson,
-	),
-	...answered.filter((member) => member.status === "pending"),
+	...hostFirst(roster.map((rostered) => asMember(rostered, answered ?? [])))
+		.filter(isFirstOfItsPerson)
+		.filter(isListedIn(answered)),
+	...(answered ?? []).filter((member) => member.status === "pending"),
 ]
 
 export const fingerprintIn = (

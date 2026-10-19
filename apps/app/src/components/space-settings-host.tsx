@@ -7,7 +7,6 @@ import {
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
-import type { JoinedSpace } from "@/lib/bindings"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
@@ -22,11 +21,11 @@ const SPACE_TAB = "space"
 type MemberView = Pick<MembersPanelProps, "viewerId" | "blockedBy">
 
 const memberViewOf = (
-	joinedSpace: JoinedSpace,
+	isHostOffline: boolean,
 	viewerId: string | null,
 ): MemberView => ({
 	viewerId: viewerId ?? undefined,
-	blockedBy: joinedSpace.state === "waitingForHost" ? "hostOffline" : undefined,
+	blockedBy: isHostOffline ? "hostOffline" : undefined,
 })
 
 type SpaceSettingsHostProps = {
@@ -74,8 +73,10 @@ export const SpaceSettingsHost = ({
 			: null
 	const hosting = useHosting(editedSpace)
 	const isHosted = hosting?.hosting === "online" || editedJoinedSpace !== null
+	const isHostOffline = joinedSpace?.state === "waitingForHost"
 	const members = useMembers(editedSpace ?? editedJoinedSpace, isHosted, {
 		joinedId: editedJoinedSpace ? joinedSpace?.id : undefined,
+		isHostOffline,
 	})
 
 	if (!selectedSpaceId) {
@@ -179,7 +180,7 @@ export const SpaceSettingsHost = ({
 			{...sharedProps}
 			{...membersPropsOf(
 				joinedSpace.name,
-				memberViewOf(joinedSpace, signedInAccountIdOf(account.state)),
+				memberViewOf(isHostOffline, signedInAccountIdOf(account.state)),
 			)}
 			host={joinedSpace.hostUrl}
 			onLeave={() => joinedSpaces.controller.leave(joinedSpace.id).then(close)}
