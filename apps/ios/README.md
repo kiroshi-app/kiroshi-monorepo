@@ -138,6 +138,12 @@ The workflow, from Xcode:
 
 Xcode Cloud numbers builds from 1. If TestFlight already holds a `0.1.0` build uploaded by hand, set App Store Connect, Xcode Cloud, Settings, Build Number, Next Build Number above it.
 
+### Each release
+
+In App Store Connect, answer the build's export compliance question: yes, the app uses encryption, and the algorithm type is the encryption within Apple's operating system only (CryptoKit and the Security framework, no third-party crypto library), not standard algorithms instead of or in addition to Apple's.
+
+`project.yml` declares `ITSAppUsesNonExemptEncryption` as `YES` with no `ITSEncryptionExportComplianceCode`, so each build waits in TestFlight as Missing Compliance until that answer is given.
+
 ## States without the network
 
 A Debug build opens straight on one state, fed by fixtures instead of the cloud and the relay, when launched with `-fixture` and the artboard number. Page 1 "Sign in" of the Paper file "Kiroshi, iOS 2" (`1.1` to `1.10`, `1.7b`, plus `spaces` and `spaces-unreachable`), whose Welcome, email and code states (`1.1`, `1.1b`, `1.1c`, `1.1d`, `1.2`, `1.3`) now follow page "Sign in" of the Paper file "Kiroshi, iOS Sign-in"; set the simulator to dark with `xcrun simctl ui booted appearance dark` for the `· dark` artboards:
