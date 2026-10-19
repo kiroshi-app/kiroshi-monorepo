@@ -14,12 +14,14 @@ use super::join::{
 	bearer_of, kept_answer, member_socket_of, missed_rekey_frame, rekey_handed, revoked,
 };
 use super::members;
-use super::relay::RelayGuests;
+use super::relay::{self, RelayGuests};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::devices;
-use crate::hosting::relay::{opened, sent, until_stopped, Backoff, Opened, Socket, SILENCE_BOUND};
+use crate::hosting::relay::{
+	opened, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
+};
 
 pub(super) struct WaitingJoin {
 	stop: watch::Sender<bool>,
@@ -37,6 +39,7 @@ impl WaitingJoin {
 
 enum Attempt {
 	Joined,
+	Departed(Departure),
 	Ended(String),
 	Dropped(String),
 }
@@ -85,6 +88,16 @@ async fn waited<R: Runtime>(
 			Some(Attempt::Joined) => {
 				left(&app, &id, &stop);
 				return joined_announced(&app, &id).await;
+			}
+			Some(Attempt::Departed(departure)) => {
+				left(&app, &id, &stop);
+				let reason = relay::reason_of(departure);
+				if let Err(failure) = relay::entry_evicted(&app, &id, reason).await {
+					eprintln!(
+						"joined space {id} whose membership ended was not evicted: {failure:?}"
+					);
+				}
+				return;
 			}
 			Some(Attempt::Ended(reason)) => {
 				left(&app, &id, &stop);
@@ -137,9 +150,7 @@ async fn attempted<R: Runtime>(
 			revoked(app, &bearer);
 			Attempt::Ended("the relay refused the account (401)".to_owned())
 		}
-		Opened::Gone(Some(departure)) => {
-			Attempt::Ended(format!("the relay answered 410 {departure:?}"))
-		}
+		Opened::Gone(Some(departure)) => Attempt::Departed(departure),
 		Opened::Forbidden | Opened::Gone(None) => {
 			Attempt::Dropped("the account is not a member of this instance (403)".to_owned())
 		}

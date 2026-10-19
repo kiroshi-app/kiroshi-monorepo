@@ -19,7 +19,7 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use super::commands::{
-	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT,
+	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT, REMOVED_EVENT,
 };
 use super::contract::{JoinedSpace, JoinedSpaceError, JoinedSpaceState};
 use super::members::{joined_space_members, MEMBERS_CHANGED_EVENT};
@@ -734,6 +734,7 @@ fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_
 fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
 	run(async {
 		let member = Member::new("join-gone").await;
+		let removed = heard_on(&member.app, REMOVED_EVENT);
 		member.relay.hosting(HostSide::Silent);
 		let joined = member.accepted().await.expect("the join waits");
 		let gone =
@@ -742,12 +743,19 @@ fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
 
 		relay::reconciled(member.app.handle()).await;
 		let was_waiting = member.is_waiting(&joined.id);
-		until("the waiting join to end", || async {
-			(!member.is_waiting(&joined.id)).then_some(())
+		until("the entry removed", || async { member.listed().await.is_empty().then_some(()) })
+			.await;
+		until("the removed event", || async {
+			(!removed.lock().expect("the events").is_empty()).then_some(())
 		})
 		.await;
 
 		assert!(was_waiting);
+		assert!(!member.is_waiting(&joined.id));
+		assert_eq!(
+			*removed.lock().expect("the events"),
+			vec![json!({ "id": joined.id, "name": "Studio", "reason": "removed" })]
+		);
 	});
 }
 

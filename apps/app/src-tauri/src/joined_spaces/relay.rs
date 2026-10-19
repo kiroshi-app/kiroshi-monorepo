@@ -17,8 +17,7 @@ use super::commands::{
 	JoinedSpaceRemoved,
 };
 use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
-use super::held::{self, device_keys, Held};
-use super::join::member_socket_of;
+use super::held::{self, Held};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
@@ -350,34 +349,33 @@ async fn unlisted_dropped<R: Runtime>(
 		finished(id, guest).await;
 	}
 	guests.waiting_stopped(id).await;
-	let reason = unlisted_reason(app, bearer, id, instance_id).await;
+	let reason = unlisted_reason(app, guests.cloud(), bearer, id, instance_id).await;
 	entry_evicted(app, id, reason).await.map_err(described)
 }
 
 async fn unlisted_reason<R: Runtime>(
 	app: &AppHandle<R>,
+	cloud: &Cloud,
 	bearer: &str,
 	id: &str,
 	instance_id: &str,
 ) -> JoinedSpaceRemovalReason {
-	let url = match device_keys(app) {
-		Ok(device) => member_socket_of(app, bearer, &device, instance_id).await,
-		Err(failure) => Err(failure),
-	};
-	let url = match url {
-		Ok(url) => url,
+	let roster = match held::roster(app, instance_id).await {
+		Ok(Some(roster)) => roster,
+		Ok(None) => return JoinedSpaceRemovalReason::Unknown,
 		Err(failure) => {
 			eprintln!("joined space {id} could not ask the relay why it is unlisted: {failure:?}");
 			return JoinedSpaceRemovalReason::Unknown;
 		}
 	};
+	let url = member_socket_url(cloud, instance_id, &roster.own.relay_device_id);
 	match opened(url, bearer).await {
 		Opened::Gone(Some(departure)) => reason_of(departure),
 		_ => JoinedSpaceRemovalReason::Unknown,
 	}
 }
 
-fn reason_of(departure: Departure) -> JoinedSpaceRemovalReason {
+pub(super) fn reason_of(departure: Departure) -> JoinedSpaceRemovalReason {
 	match departure {
 		Departure::SpaceDeleted => JoinedSpaceRemovalReason::Deleted,
 		Departure::MemberRemoved => JoinedSpaceRemovalReason::Removed,
@@ -888,7 +886,7 @@ async fn evicted<R: Runtime>(
 	}
 }
 
-async fn entry_evicted<R: Runtime>(
+pub(super) async fn entry_evicted<R: Runtime>(
 	app: &AppHandle<R>,
 	id: &str,
 	reason: JoinedSpaceRemovalReason,

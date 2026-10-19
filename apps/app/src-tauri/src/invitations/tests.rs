@@ -62,6 +62,8 @@ struct Cloud {
 	is_call_open: Arc<watch::Sender<bool>>,
 	is_member_relay_open: Arc<watch::Sender<bool>>,
 	member_relays_asked: Arc<AtomicUsize>,
+	account_reads: Arc<AtomicUsize>,
+	device_registrations: Arc<AtomicUsize>,
 	is_sign_out_open: Arc<watch::Sender<bool>>,
 	sign_outs_asked: Arc<AtomicUsize>,
 	is_refusing_members: Arc<AtomicBool>,
@@ -129,7 +131,8 @@ async fn instances_listed(Served(cloud): Served<Cloud>, headers: HeaderMap) -> R
 	answered_json(status, &instances)
 }
 
-async fn me(headers: HeaderMap) -> Response {
+async fn me(Served(cloud): Served<Cloud>, headers: HeaderMap) -> Response {
+	cloud.account_reads.fetch_add(1, Ordering::SeqCst);
 	if !is_bearer(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
@@ -202,6 +205,11 @@ async fn first_text(socket: &mut WebSocket) -> Option<String> {
 	None
 }
 
+async fn device_registration_asked(Served(cloud): Served<Cloud>) -> StatusCode {
+	cloud.device_registrations.fetch_add(1, Ordering::SeqCst);
+	StatusCode::SERVICE_UNAVAILABLE
+}
+
 async fn signed_out_of_the_cloud(Served(cloud): Served<Cloud>) -> StatusCode {
 	cloud.sign_outs_asked.fetch_add(1, Ordering::SeqCst);
 	cloud.noticed.send_replace(());
@@ -270,6 +278,8 @@ impl Harness {
 			is_call_open: Arc::new(watch::channel(true).0),
 			is_member_relay_open: Arc::new(watch::channel(true).0),
 			member_relays_asked: Arc::default(),
+			account_reads: Arc::default(),
+			device_registrations: Arc::default(),
 			is_sign_out_open: Arc::new(watch::channel(true).0),
 			sign_outs_asked: Arc::default(),
 			is_refusing_members: Arc::default(),
@@ -284,6 +294,8 @@ impl Harness {
 				.route("/invitations/{id}/{verb}", post(invitation_called))
 				.route("/instances", get(instances_listed))
 				.route("/me", get(me))
+				.route("/devices", post(device_registration_asked))
+				.route("/devices/challenge", post(device_registration_asked))
 				.route("/instances/{id}/relay/member", get(member_relay))
 				.route("/api/auth/sign-out", post(signed_out_of_the_cloud))
 				.with_state(cloud.clone()),
@@ -385,6 +397,14 @@ impl Harness {
 	fn refusing_members(&self, (status, body): (StatusCode, Value)) {
 		let mut refusals = self.cloud.member_refusals.lock().expect("the cloud");
 		refusals.insert(INSTANCE.to_owned(), (status, body));
+	}
+
+	fn account_calls(&self) -> (usize, usize) {
+		let cloud = &self.cloud;
+		(
+			cloud.account_reads.load(Ordering::SeqCst),
+			cloud.device_registrations.load(Ordering::SeqCst),
+		)
 	}
 
 	fn answering(&self, status: StatusCode, body: Value) {
@@ -1225,10 +1245,12 @@ async fn unlisted_removal(harness: &Harness, refused: (StatusCode, Value)) -> (S
 	let id = harness.accepted().await;
 	harness.listing(json!([]));
 	harness.refusing_members(refused);
+	let account_calls_before = harness.account_calls();
 
 	reconciled(harness.app.handle()).await;
 
 	assert!(harness.stored().await.is_empty());
+	assert_eq!(harness.account_calls(), account_calls_before, "account reads, registrations");
 	(id, harness.heard(REMOVED_EVENT))
 }
 

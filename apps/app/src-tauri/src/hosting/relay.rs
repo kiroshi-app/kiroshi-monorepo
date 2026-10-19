@@ -250,8 +250,12 @@ async fn attempted<R: Runtime>(
 			*replaced = hosted.instance_id.take();
 			Next::Reregister
 		}
-		Some(Opened::Unknown | Opened::Gone(_)) => Next::Settled(HostingState::Failed {
+		Some(Opened::Unknown) => Next::Settled(HostingState::Failed {
 			reason: "kiroshi-cloud knows no instance under the id it just registered (relay answered 404)"
+				.to_owned(),
+		}),
+		Some(Opened::Gone(_)) => Next::Settled(HostingState::Failed {
+			reason: "kiroshi-cloud answered the instance it just registered as gone (relay answered 410)"
 				.to_owned(),
 		}),
 		Some(Opened::Unreachable(reason)) => Next::Retry(reason),
