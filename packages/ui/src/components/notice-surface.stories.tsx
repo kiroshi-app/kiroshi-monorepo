@@ -1353,7 +1353,7 @@ const expectInfoNoticeClosing = async (
 	await opaque(toast)
 	await expect(notice).toBeVisible()
 	await expect(toast).toHaveAttribute("data-type", "info")
-	if (description !== undefined) {
+	if (description) {
 		await expect(toast).toHaveAccessibleDescription(description)
 	}
 	await expect(actionControl()).toBe(null)
