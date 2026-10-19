@@ -1,3 +1,4 @@
+import { DeviceApprovalDialog } from "@workspace/ui/components/device-approval-dialog"
 import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { SearchPalette } from "@workspace/ui/components/search-palette"
 import { WhatsNewDialog } from "@workspace/ui/components/whats-new-dialog"
@@ -7,6 +8,7 @@ import { ConversationSettingsHost } from "@/components/conversation-settings-hos
 import { JoinedSpaceDialogs } from "@/components/joined-space-dialogs"
 import { SpaceSettingsHost } from "@/components/space-settings-host"
 import { UserSettingsHost } from "@/components/user-settings-host"
+import { useDeviceApprovals } from "@/lib/devices/use-device-approvals"
 import { aboutFieldsOf } from "@/lib/updater/about-fields"
 import { useRunningVersion } from "@/lib/updater/use-running-version"
 import type { Updater } from "@/lib/updater/use-updater"
@@ -39,6 +41,7 @@ export const AppDialogs = ({
 }: AppDialogsProps) => {
 	const runningVersion = useRunningVersion()
 	const whatsNew = useWhatsNew({ user: core.user, runningVersion })
+	const deviceApproval = useDeviceApprovals(core.account.state)
 	const about = aboutFieldsOf({
 		updater,
 		user: core.user,
@@ -71,6 +74,7 @@ export const AppDialogs = ({
 			/>
 			{whatsNew.dialog ? <WhatsNewDialog {...whatsNew.dialog} /> : null}
 			<SearchPalette {...overlay.search.palette} />
+			{deviceApproval ? <DeviceApprovalDialog {...deviceApproval} /> : null}
 			<NoticeSurface />
 		</>
 	)

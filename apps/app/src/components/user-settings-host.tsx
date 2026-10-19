@@ -4,6 +4,7 @@ import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-di
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
 import { openedServerScope } from "@/lib/applications/application-settings"
+import { useYourDevices } from "@/lib/devices/use-your-devices"
 import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
 import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
@@ -53,11 +54,15 @@ export const UserSettingsHost = ({
 		),
 	)
 
+	const devices = useYourDevices(watchedAccount.state, {
+		isShown: user.state.isSettingsOpen,
+	})
+
 	return (
 		<>
 			<UserSettingsDialog
 				about={about}
-				account={accountPanel}
+				account={{ ...accountPanel, devices }}
 				applications={{
 					servers: userApplications.mcpServers,
 					haveFailedToLoad: userMcpServers.hasFailedToLoad,

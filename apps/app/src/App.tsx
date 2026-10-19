@@ -1,5 +1,7 @@
 import { CompanionMenuProvider } from "@workspace/ui/components/companion-menu"
 import { CompanionSelectProvider } from "@workspace/ui/components/companion-select"
+import { NewDeviceScreen } from "@workspace/ui/components/new-device-screen"
+import { NoticeSurface } from "@workspace/ui/components/notice-surface"
 import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
@@ -11,6 +13,7 @@ import { ConversationApplicationsContext } from "@/lib/applications/use-conversa
 import { SessionApplicationsContext } from "@/lib/applications/use-session-application"
 import { ThreadAuthorshipContext } from "@/lib/chat/thread-authorship"
 import { ConversationSeatingContext } from "@/lib/conversations/use-conversation-seating"
+import { useNewDevice } from "@/lib/devices/use-new-device"
 import { isSidebarResizable } from "@/lib/host"
 import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
@@ -81,6 +84,8 @@ export function App() {
 		core.joinedSpaces,
 	)
 
+	const newDevice = useNewDevice(core.account)
+
 	const { preferences, roster, spaces } = core
 	const isOpenSpaceRostered =
 		rosterView.rosteredSpaceId === scopes.openRowId &&
@@ -91,6 +96,15 @@ export function App() {
 		"space switch",
 		isOpenSpaceRostered ? scopes.openRowId : null,
 	)
+
+	if (newDevice) {
+		return (
+			<>
+				<NewDeviceScreen {...newDevice} />
+				<NoticeSurface />
+			</>
+		)
+	}
 
 	if (!rosterView.hasLoaded) {
 		return (
