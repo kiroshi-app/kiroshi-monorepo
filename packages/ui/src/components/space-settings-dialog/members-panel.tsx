@@ -291,6 +291,11 @@ const MemberRow = ({
 	const name = nameOf(member)
 	const { status, email, fingerprint, expiresInDays, sentAt } = member
 
+	const removal: MemberAction = {
+		icon: <Icons.Delete />,
+		label: t("space.members.removeLabel", { name }),
+		run: () => onRemove(member),
+	}
 	const actionOf: Partial<Record<SpaceMemberStatus, MemberAction>> = {
 		pending: {
 			icon: <Icons.Close />,
@@ -302,11 +307,8 @@ const MemberRow = ({
 			label: t("space.members.inviteAgainLabel", { email }),
 			run: () => onInvite(email),
 		},
-		joined: {
-			icon: <Icons.Delete />,
-			label: t("space.members.removeLabel", { name }),
-			run: () => onRemove(member),
-		},
+		joined: removal,
+		needsInvitation: removal,
 	}
 	const action = isViewer ? undefined : actionOf[status]
 
@@ -374,7 +376,8 @@ const MemberRow = ({
 				>
 					{t("space.members.inviteMemberAgain")}
 				</Button>
-			) : action ? (
+			) : null}
+			{action ? (
 				<Button
 					aria-label={action.label}
 					className="rounded-control text-muted-foreground"

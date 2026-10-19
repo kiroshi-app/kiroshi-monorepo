@@ -1072,7 +1072,7 @@ export const MembersNeedsInvitation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Ada joined before end-to-end encryption and holds no key to this space: her row reads Needs a new invitation under her name and offers Invite again, which removes her old membership and emails her a fresh invitation.",
+					"Ada joined before end-to-end encryption and holds no key to this space: her row reads Needs a new invitation under her name and offers Invite again, which removes her old membership and emails her a fresh invitation, with Remove beside it to take her out of the space instead.",
 			},
 		},
 	},
@@ -1082,6 +1082,18 @@ export const MembersNeedsInvitation = meta.story({
 			STEVE_ROW,
 			["A", "Ada Lovelace", "Needs a new invitation", "Invite again"],
 		])
+		const ada = rowOf(panel, "Ada Lovelace")
+		await expect(
+			within(ada)
+				.getAllByRole("button")
+				.map((button) => button.textContent),
+		).toEqual(["Invite again", ""])
+		await userEvent.click(
+			within(ada).getByRole("button", { name: "Remove Ada Lovelace" }),
+		)
+		await expect(MEMBERS_PANEL.onRemove).toHaveBeenCalledExactlyOnceWith(
+			ADA_NEEDS_INVITATION,
+		)
 		await userEvent.click(
 			within(panel).getByRole("button", { name: "Invite again" }),
 		)
@@ -1089,7 +1101,6 @@ export const MembersNeedsInvitation = meta.story({
 		await expect(MEMBERS_PANEL.onInviteAgain).toHaveBeenCalledWith(
 			ADA_NEEDS_INVITATION,
 		)
-		await expect(MEMBERS_PANEL.onRemove).not.toHaveBeenCalled()
 	},
 })
 
