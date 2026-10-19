@@ -49,7 +49,6 @@ const MEMBER_BEARER: &str = "bearer-of-the-member";
 const OWNER_BEARER: &str = "bearer-of-the-owner";
 const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const SPACE: &str = "personal";
-const DEVICES_CHANGED: &str = r#"{"event":"devices.changed"}"#;
 const MEMBER_RELAY_ID: &str = "3b0c7a52-1d4e-4f8a-9b6c-0e2f4a6c8d10";
 const PATIENCE: Duration = Duration::from_secs(20);
 const POLL_EVERY: Duration = Duration::from_millis(50);
@@ -785,9 +784,11 @@ impl AdmittingRelay {
 		self.0.lock().expect("the relay")
 	}
 
-	fn devices_changed(&self) {
+	fn device_approved(&self, device_id: &str, account: &str) {
+		let approved =
+			json!({ "event": "device.approved", "deviceId": device_id, "userId": account });
 		if let Some(host) = &self.admission().host {
-			if host.send(Message::Text(DEVICES_CHANGED.into())).is_err() {
+			if host.send(Message::Text(approved.to_string().into())).is_err() {
 				eprintln!("the fake relay lost its host socket");
 			}
 		}
@@ -852,7 +853,7 @@ async fn admitting_device_registered(
 		account == "member" && admission.is_accepted
 	};
 	if is_listed_now {
-		relay.devices_changed();
+		relay.device_approved(&id, account);
 	}
 	answered_json(
 		StatusCode::CREATED,
@@ -886,8 +887,19 @@ async fn admitting_accepted(Served(relay): Served<AdmittingRelay>, headers: Head
 	if admitted_account(&headers) != Some("member") {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
-	relay.admission().is_accepted = true;
-	relay.devices_changed();
+	let member_devices: Vec<String> = {
+		let mut admission = relay.admission();
+		admission.is_accepted = true;
+		admission
+			.devices
+			.iter()
+			.filter(|(_, account, _)| *account == "member")
+			.map(|(id, _, _)| id.clone())
+			.collect()
+	};
+	for device_id in &member_devices {
+		relay.device_approved(device_id, "member");
+	}
 	answered_json(StatusCode::OK, json!({ "instanceId": INSTANCE, "name": "Studio" }))
 }
 
