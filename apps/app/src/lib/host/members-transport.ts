@@ -50,21 +50,20 @@ const answerOf = <Data>(call: Promise<Data>): Promise<MembersAnswer<Data>> =>
 export const isExpired = (member: HostedMember) =>
 	member.invitation?.state === "expired"
 
-const isShown = (invitation: SpaceInvitation) =>
-	invitation.state !== "withdrawn"
-
 export const membersOf = ({
 	members,
 	invitations,
 }: SpaceMembers): HostedMember[] => [
 	...members,
-	...invitations.filter(isShown).map((invitation) => ({
-		userId: invitation.id,
-		name: null,
-		email: invitation.email,
-		status: "pending" as const,
-		invitation,
-	})),
+	...invitations
+		.filter((invitation) => invitation.state !== "withdrawn")
+		.map((invitation) => ({
+			userId: invitation.id,
+			name: null,
+			email: invitation.email,
+			status: "pending" as const,
+			invitation,
+		})),
 ]
 
 const invitedOf = (email: string, listed: SpaceMembers): HostedMember => {
