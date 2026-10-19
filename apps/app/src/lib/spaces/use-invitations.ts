@@ -21,8 +21,13 @@ import {
 } from "./invitations-transport"
 import type { JoinedSpacesController } from "./joined-spaces-controller"
 import { spaceQueryKeys } from "./space-query-keys"
+import { useJoinLinks } from "./use-join-links"
 
-import { INVITATION_CHANGED_EVENT, type Invitation } from "../bindings"
+import {
+	INVITATION_CHANGED_EVENT,
+	type Invitation,
+	type JoinedSpaceError,
+} from "../bindings"
 import { isDesktopHost } from "../host"
 import { joinRejectionNoticeOf } from "../host/join-refusal"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
@@ -30,6 +35,7 @@ import { useInvalidateOnHostEvent } from "../query/host-invalidations"
 type InvitationStatus =
 	| { state: "accepting"; invitation: Invitation }
 	| { state: "withdrawn" }
+	| { state: "expired" }
 	| { state: "failed"; failure: SpaceInvitationFailure }
 
 export type Invitations = {
@@ -53,6 +59,16 @@ const ACCEPT_NOTICED = {
 	failureNotice: joinRejectionNoticeOf,
 	raisedIn: RAISED_IN,
 }
+
+const NO_INVITATION: JoinedSpaceError = {
+	kind: "noInvitation",
+	inviterEmail: null,
+}
+
+const isListedIn = (
+	invitations: Invitation[] | undefined,
+	invitationId: string,
+) => invitations?.some((invitation) => invitation.id === invitationId) ?? false
 
 const identityOf = ({ instanceId, invitedAt }: Invitation) =>
 	`${instanceId}@${invitedAt}`
@@ -88,8 +104,13 @@ const shownInvitationsOf = (
 	return [...kept, ...stillAccepting]
 }
 
+const expiryOf = (invitation: Invitation) => Date.parse(invitation.expiresAt)
+
+const hasExpired = (invitation: Invitation, now: number) =>
+	expiryOf(invitation) <= now
+
 const rowOf =
-	(statuses: Statuses) =>
+	(statuses: Statuses, now: number) =>
 	(invitation: Invitation): SpaceInvitation => {
 		const status = statuses[identityOf(invitation)]
 		const base = {
@@ -99,6 +120,9 @@ const rowOf =
 		}
 		if (status?.state === "failed") {
 			return { ...base, state: "failed", failure: status.failure }
+		}
+		if (status?.state === "expired" || hasExpired(invitation, now)) {
+			return { ...base, state: "expired", expiresAt: expiryOf(invitation) }
 		}
 		return { ...base, state: status?.state ?? "waiting" }
 	}
@@ -112,7 +136,7 @@ export const useInvitations = (
 	const [statuses, setStatuses] = useState<Statuses>({})
 	const [swept, setSwept] = useState<string[]>([])
 
-	const { data: listed = NO_INVITATIONS } = useQuery({
+	const { data: listed = NO_INVITATIONS, refetch } = useQuery({
 		queryKey,
 		queryFn: isDesktopHost() ? () => readInvitations(transport) : skipToken,
 		meta: NOTICED,
@@ -135,8 +159,8 @@ export const useInvitations = (
 		onMutate: (invitation) =>
 			mark(invitation, { state: "accepting", invitation }),
 		onSuccess: async (outcome, invitation) => {
-			if (outcome.kind === "withdrawn") {
-				mark(invitation, { state: "withdrawn" })
+			if (outcome.kind === "withdrawn" || outcome.kind === "expired") {
+				mark(invitation, { state: outcome.kind })
 				return
 			}
 			if (outcome.kind === "failed") {
@@ -161,6 +185,17 @@ export const useInvitations = (
 		meta: NOTICED,
 	})
 
+	const linkRun = useMutation({
+		mutationFn: async (invitationId: string) => {
+			if (isListedIn(queryClient.getQueryData(queryKey), invitationId)) return
+			const refreshed = await refetch()
+			if (refreshed.isError || isListedIn(refreshed.data, invitationId)) return
+			throw NO_INVITATION
+		},
+		meta: ACCEPT_NOTICED,
+	})
+	useJoinLinks(transport, linkRun.mutate)
+
 	const accept = acceptRun.mutate
 	const decline = declineRun.mutate
 
@@ -174,7 +209,7 @@ export const useInvitations = (
 			stateOf(invitation) === "withdrawn"
 
 		return {
-			rows: shown.map(rowOf(statuses)),
+			rows: shown.map(rowOf(statuses, Date.now())),
 			accept: (id) => {
 				const invitation = shownWithId(id)
 				if (invitation && stateOf(invitation) !== "accepting") {

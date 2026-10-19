@@ -6,21 +6,29 @@ import {
 	commands,
 	type Invitation,
 	type InvitationError,
+	JOIN_LINK_OPENED_EVENT,
 	type JoinedSpace,
 	type JoinedSpaceError,
+	type JoinLinkOpened,
 } from "../bindings"
 import { describeFailure } from "../failure-report"
+import { listenOnThisComputer } from "../host"
 import { isJoinedSpaceError } from "../host/join-refusal"
 
 export type InvitationsTransport = {
 	list: () => Promise<Invitation[]>
 	accept: (id: string) => Promise<JoinedSpace>
 	decline: (id: string) => Promise<void>
+	onJoinLinkOpened: (
+		listener: (invitationId: string) => void,
+	) => Promise<() => void>
+	askForJoinLinks: () => Promise<void>
 }
 
 export type AcceptOutcome =
 	| { kind: "joined"; joined: JoinedSpace }
 	| { kind: "withdrawn" }
+	| { kind: "expired" }
 	| { kind: "failed"; failure: SpaceInvitationFailure }
 
 export type DeclineOutcome = { kind: "declined" } | { kind: "withdrawn" }
@@ -42,6 +50,12 @@ export const invitationsTransport: InvitationsTransport = {
 	decline: async (id) => {
 		dataOf(await commands.invitationDecline(id))
 	},
+	onJoinLinkOpened: (listener) =>
+		listenOnThisComputer<JoinLinkOpened>(
+			JOIN_LINK_OPENED_EVENT,
+			({ payload }) => listener(payload.invitationId),
+		),
+	askForJoinLinks: () => commands.joinLinkListen(),
 }
 
 const isInvitationError = (reason: unknown): reason is InvitationError =>
@@ -75,8 +89,16 @@ const isSignedOut = (reason: unknown) =>
 const isWithdrawn = (reason: unknown) =>
 	isInvitationError(reason) && reason.kind === "withdrawn"
 
-const isAcceptWithdrawn = (reason: unknown) =>
-	isJoinedSpaceError(reason) && reason.kind === "invitationWithdrawn"
+const CLOSED_OUTCOMES: Partial<
+	Record<JoinedSpaceError["kind"], AcceptOutcome>
+> = {
+	invitationWithdrawn: { kind: "withdrawn" },
+	invitationUsed: { kind: "withdrawn" },
+	invitationExpired: { kind: "expired" },
+}
+
+const closedOutcomeOf = (reason: unknown): AcceptOutcome | undefined =>
+	isJoinedSpaceError(reason) ? CLOSED_OUTCOMES[reason.kind] : undefined
 
 const ACCEPT_FAILURES: Partial<
 	Record<JoinedSpaceError["kind"], SpaceInvitationFailure>
@@ -105,7 +127,8 @@ export const acceptOutcomeOf = async (
 	try {
 		return { kind: "joined", joined: await transport.accept(id) }
 	} catch (reason) {
-		if (isAcceptWithdrawn(reason)) return { kind: "withdrawn" }
+		const closed = closedOutcomeOf(reason)
+		if (closed) return closed
 		const failure = acceptFailureOf(reason)
 		if (failure) return { kind: "failed", failure }
 		throw reason

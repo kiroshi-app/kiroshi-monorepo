@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import type { InvitationsTransport } from "./invitations-transport"
 import { createJoinedSpacesController } from "./joined-spaces-controller"
@@ -21,7 +21,17 @@ vi.mock("../host", async (importOriginal) => ({
 	listen: vi.fn(async () => () => undefined),
 }))
 
-afterEach(cleanup)
+beforeEach(() => {
+	vi.useFakeTimers({
+		toFake: ["Date"],
+		now: Date.parse("2026-10-10T09:00:00Z"),
+	})
+})
+
+afterEach(() => {
+	cleanup()
+	vi.useRealTimers()
+})
 
 const STUDIO: Invitation = {
 	id: "invitation-studio",
@@ -38,6 +48,8 @@ const transport = {
 		throw { kind: "invitationWithdrawn" }
 	}),
 	decline: vi.fn(async () => undefined),
+	onJoinLinkOpened: vi.fn(async () => () => undefined),
+	askForJoinLinks: vi.fn(async () => undefined),
 } satisfies InvitationsTransport
 
 const renderSwitcher = async () => {
