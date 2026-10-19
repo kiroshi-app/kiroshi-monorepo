@@ -383,6 +383,7 @@ describe("useMembers", () => {
 		expect(panel().members).toEqual([STEVE_ROW, ALEX_JOINED_ROW])
 		expect(reportSuccess).toHaveBeenCalledWith({
 			title: "Invitation to sam@example.com withdrawn",
+			description: "The link in their email stops working.",
 		})
 	})
 

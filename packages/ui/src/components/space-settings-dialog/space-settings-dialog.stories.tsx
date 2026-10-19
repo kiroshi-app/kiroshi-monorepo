@@ -1006,7 +1006,7 @@ export const MembersI3 = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1.2 of the Mockup page. Sam was invited: the field is empty again and Sam's invitation joins Tom's in the Invitations section above Members, a dashed avatar with the mail glyph, the address on the name line and when it expires under it. A success notice names the address and the date the link stops working; the app raises it with `raiseTransientNotice` and the catalogue's `space.members.sent` and `space.members.sentDescription` copy, the date formatted from the expiry; the story holds it open.",
+					"Artboard 1.2 of the Mockup page. Sam was invited: the field is empty again and Sam's invitation joins Tom's in the Invitations section above Members, a dashed avatar with the mail glyph, the address on the name line and when it expires under it. The story holds the artboard 1.2 success notice open, naming the address and the date the link stops working, from the catalogue's `space.members.sent` and `space.members.sentDescription` copy with the date formatted from the expiry. The app doesn't raise this notice yet: a member carries no expiry date to format.",
 			},
 		},
 	},
@@ -1268,48 +1268,61 @@ const EditableMembersPanel = (props: MembersPanelProps) => {
 	return <MembersPanel {...props} email={email} onEmailChange={setEmail} />
 }
 
+const INVITE_FAILED_ARGS = {
+	...membersArgs({ space: STUDIO }),
+	members: (
+		<EditableMembersPanel
+			{...MEMBERS_PANEL}
+			space={STUDIO}
+			members={[NOA, MAYA, TOM_PENDING]}
+			email="sam@example.com"
+			failure={{
+				action: "invite",
+				reason: "generic",
+				email: "sam@example.com",
+			}}
+		/>
+	),
+}
+
+const INVITE_FAILED_MESSAGE =
+	"Couldn’t invite sam@example.com. Nothing changed, try again."
+
 export const MembersInviteFailed = meta.story({
-	args: {
-		...membersArgs({ space: STUDIO }),
-		members: (
-			<EditableMembersPanel
-				{...MEMBERS_PANEL}
-				space={STUDIO}
-				members={[NOA, MAYA, TOM_PENDING]}
-				email="sam@example.com"
-				failure={{
-					action: "invite",
-					reason: "generic",
-					email: "sam@example.com",
-				}}
-			/>
-		),
-	},
+	args: INVITE_FAILED_ARGS,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard 1.9 of the Mockup page. Kiroshi could not invite the address. The field keeps its rest border and text and stays `aria-invalid`, described by the line that takes the helper's place under it, the only part painted destructive, announced once. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason.",
+					"Artboard 1.9 of the Mockup page. Kiroshi could not invite the address. The field keeps its rest border and text and stays `aria-invalid`, described by the line that takes the helper's place under it, the only part painted destructive, announced once. The app passes `failure` with the action and a reason; `MembersFailureCopy` lists every reason, `MembersInviteFailedResend` clears the line on a resend.",
 			},
 		},
 	},
-	play: async ({ userEvent }) => {
+	play: async () => {
 		const panel = await membersPanelIn()
-		const message =
-			"Couldn’t invite sam@example.com. Nothing changed, try again."
-		const line = await failureLineIn(panel, message)
+		const line = await failureLineIn(panel, INVITE_FAILED_MESSAGE)
 		const field = inviteFieldIn(panel)
-		await expectRefusal(panel, message)
+		await expectRefusal(panel, INVITE_FAILED_MESSAGE)
 		await expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(
 			field.getBoundingClientRect().bottom,
 		)
 		await expect(line.getBoundingClientRect().bottom).toBeLessThanOrEqual(
 			within(panel).getAllByRole("list")[0].getBoundingClientRect().top,
 		)
+	},
+})
+
+export const MembersInviteFailedResend = meta.story({
+	tags: ["test-only"],
+	args: INVITE_FAILED_ARGS,
+	play: async ({ userEvent }) => {
+		const panel = await membersPanelIn()
+		const line = await failureLineIn(panel, INVITE_FAILED_MESSAGE)
+		const field = inviteFieldIn(panel)
 
 		await userEvent.type(field, ".org")
 		await expect(field).toHaveValue("sam@example.com.org")
-		await expect(line.textContent).toBe(message)
+		await expect(line.textContent).toBe(INVITE_FAILED_MESSAGE)
 
 		await userEvent.click(within(panel).getByRole("button", { name: "Invite" }))
 		await expect(line).toBeEmptyDOMElement()
@@ -1764,13 +1777,13 @@ const memberViewArgs = (panel: Partial<MembersPanelProps> = {}) => ({
 
 const TOM_VIEWER = "Tom Okafor (you)"
 
-export const MembersMemberView = meta.story({
+export const MembersMemberViewWithInvitation = meta.story({
 	args: memberViewArgs(),
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Row 9, member view. Tom opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, then the Members list. Noa's row wears the Host tag over an empty action slot; Tom's own row reads `(you)` and offers no action. Leave lives in the Danger zone tab, see `JoinedDanger`. Pick `MembersMemberViewWithInvitation` for the artboard's rows and actions.",
+					"Artboard 9 of the Mockup page, member view. Tom opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, Sam's pending invitation under Invitations, then the Members list. Noa's row wears the Host tag over an empty action slot, Maya's offers a trash to remove her, and Tom's own row reads `(you)` with his fingerprint and no action. Leave lives in the Danger zone tab, see `JoinedDanger`.",
 			},
 		},
 	},
@@ -1779,28 +1792,6 @@ export const MembersMemberView = meta.story({
 		await expect(slotsIn(panel, "share-card")).toHaveLength(0)
 		await expect(inviteFieldIn(panel)).toBeEnabled()
 		await expect(inviteFieldIn(panel)).toHaveAccessibleDescription(INVITE_HINT)
-		await expect(
-			within(rowOf(panel, "Noa Lambert")).queryByRole("button"),
-		).toBeNull()
-		const own = rowOf(panel, TOM_VIEWER)
-		await expect(within(own).queryByRole("button")).toBeNull()
-		await expect(own.lastElementChild).toHaveAttribute("aria-hidden", "true")
-		await expect(own.lastElementChild?.getBoundingClientRect().width).toBe(28)
-	},
-})
-
-export const MembersMemberViewWithInvitation = meta.story({
-	args: memberViewArgs(),
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Artboard 9 of the Mockup page. Tom's member view of Studio: Sam's pending invitation under Invitations, then Noa, the Host, Maya with a trash to remove her, and Tom's own row with his fingerprint and no action.",
-			},
-		},
-	},
-	play: async () => {
-		const panel = await membersPanelIn()
 		await expect(memberRowsIn(panel)).toEqual([
 			SAM_INVITED_ROW,
 			NOA_ROW,
@@ -1812,6 +1803,10 @@ export const MembersMemberViewWithInvitation = meta.story({
 				.getAllByRole("button")
 				.map((button) => button.getAttribute("aria-label")),
 		).toEqual(["Remove Maya Chen"])
+		const own = rowOf(panel, TOM_VIEWER)
+		await expect(within(own).queryByRole("button")).toBeNull()
+		await expect(own.lastElementChild).toHaveAttribute("aria-hidden", "true")
+		await expect(own.lastElementChild?.getBoundingClientRect().width).toBe(28)
 	},
 })
 
