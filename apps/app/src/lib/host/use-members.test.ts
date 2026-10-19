@@ -963,6 +963,62 @@ describe("useMembers on the invitations of a hosted space", () => {
 		expect(panel().email).toBe("")
 	})
 
+	it("raises the sent notice until the expiry of the answered invitation once an invite is answered", async () => {
+		const { panel, reportSuccess } = await watchHome({
+			list: vi.fn(async () => ok([STEVE])),
+			invite: vi.fn(async () => ok(invitedAt("sam@example.com", NOW))),
+		})
+
+		act(() => panel().onInvite(" Sam@Example.com "))
+		await settle()
+
+		expect(reportSuccess).toHaveBeenCalledOnce()
+		expect(reportSuccess).toHaveBeenCalledWith({
+			title: "Invitation sent to sam@example.com",
+			description: "It works once, until October 26.",
+		})
+	})
+
+	it("raises the sent notice from the re-sent invitation once a resend is answered", async () => {
+		const { panel, reportSuccess } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () =>
+				ok([STEVE, invitedAt("ana@example.com", NOW - DAY_MS), BOB_RESENT]),
+			),
+		})
+
+		act(() => panel().onInvite("bob@example.com"))
+		await settle()
+
+		expect(reportSuccess).toHaveBeenCalledOnce()
+		expect(reportSuccess).toHaveBeenCalledWith({
+			title: "Invitation sent to bob@example.com",
+			description: "It works once, until October 26.",
+		})
+	})
+
+	it("raises no sent notice once a withdraw or a removal is answered", async () => {
+		const samInvited = invitedAt("sam@example.com", NOW)
+		const { panel, transport, reportSuccess } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED, ALEX_JOINED])),
+			withdraw: vi.fn(async () => ok([STEVE, ALEX_JOINED, samInvited])),
+			remove: vi.fn(async () => ok([STEVE, samInvited])),
+		})
+
+		act(() => panel().onWithdraw(BOB_EXPIRED_ROW))
+		await settle()
+		act(() => panel().onRemove(ALEX_JOINED_ROW))
+		act(() => panel().onRemoveConfirm())
+		await settle()
+
+		expect(transport.remove).toHaveBeenCalledWith("home", "alex")
+		expect(reportSuccess).toHaveBeenCalledOnce()
+		expect(reportSuccess).toHaveBeenCalledWith({
+			title: "Invitation to bob@example.com withdrawn",
+			description: "The link in their email stops working.",
+		})
+	})
+
 	it("resends an expired invitation by its id, never inviting again, and shows it pending", async () => {
 		const { panel, transport } = await watchHome({
 			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
@@ -988,7 +1044,7 @@ describe("useMembers on the invitations of a hosted space", () => {
 	] as const)(
 		"holds the invite failure of the expired email for a resend answered %o, as %s",
 		async (error, reason) => {
-			const { panel } = await watchHome({
+			const { panel, reportSuccess } = await watchHome({
 				list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
 				resend: vi.fn(async () => refused(error)),
 			})
@@ -1004,6 +1060,7 @@ describe("useMembers on the invitations of a hosted space", () => {
 			expect(panel().refusal).toBeUndefined()
 			expect(panel().members).toEqual([STEVE_ROW, BOB_EXPIRED_ROW])
 			expect(raiseFailureNotice).not.toHaveBeenCalled()
+			expect(reportSuccess).not.toHaveBeenCalled()
 		},
 	)
 
