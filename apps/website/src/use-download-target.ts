@@ -30,6 +30,8 @@ const detectPlatform = (): DownloadPlatform => {
 
 const VISITOR_PLATFORM = detectPlatform()
 
+export const isIPhoneVisitor = () => /iPhone|iPod/.test(navigator.userAgent)
+
 const fetchLatestAssets = async () => {
 	const response = await fetch(LATEST_RELEASE_URL, {
 		headers: { Accept: "application/vnd.github+json" },
