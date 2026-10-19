@@ -15,6 +15,7 @@
 **/migrations.rs @shoto290
 
 /apps/app/src-tauri/tauri.conf.json @shoto290
+/apps/app/src-tauri/capabilities/ @shoto290
 /apps/app/src-tauri/entitlements.plist @shoto290
 /apps/app/src-tauri/kiroshi-cloud.conf @shoto290
 /apps/app/src-tauri/build.rs @shoto290
