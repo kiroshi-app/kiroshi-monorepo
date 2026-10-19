@@ -6,13 +6,21 @@ import type {
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { memberNameOf } from "./member-names"
-import type { MembersAnswer, MembersTransport } from "./members-transport"
+import type {
+	HostedMember,
+	MembersAnswer,
+	MembersTransport,
+} from "./members-transport"
 
 import type { Member, MembersError } from "../bindings"
 
 export type MemberAction =
 	| { action: "invite"; spaceId: string; email: string }
-	| { action: "withdraw" | "remove"; spaceId: string; member: Member }
+	| {
+			action: "resend" | "withdraw" | "remove"
+			spaceId: string
+			member: HostedMember
+	  }
 
 export type MemberActionRefusal = {
 	refusal?: InviteRefusal
@@ -67,14 +75,28 @@ const shownNameOf = (member: Member): string | undefined =>
 		? member.name || undefined
 		: memberNameOf(member, i18n.t("chat:working.name"))
 
-export const toSpaceMember = (member: Member): SpaceMember => ({
+const DAY_MS = 24 * 60 * 60 * 1000
+
+const daysUntil = (moment: string) =>
+	Math.ceil((Date.parse(moment) - Date.now()) / DAY_MS)
+
+type ShownStatus = Pick<SpaceMember, "status" | "expiresInDays" | "sentAt">
+
+const shownStatusOf = ({ status, invitation }: HostedMember): ShownStatus => {
+	if (!invitation) return { status }
+	return invitation.state === "expired"
+		? { status: "expired", sentAt: Date.parse(invitation.sentAt) }
+		: { status: "pending", expiresInDays: daysUntil(invitation.expiresAt) }
+}
+
+export const toSpaceMember = (member: HostedMember): SpaceMember => ({
 	id: member.userId,
 	name: shownNameOf(member),
 	email: member.email,
-	status: member.status,
+	...shownStatusOf(member),
 })
 
-const withMember = (members: Member[], member: Member) => [
+const withMember = (members: HostedMember[], member: HostedMember) => [
 	...members.filter((held) => held.userId !== member.userId),
 	member,
 ]
@@ -87,25 +109,36 @@ const dataOf = <Data>(answer: MembersAnswer<Data>): Data => {
 export const readMembers = async (
 	transport: MembersTransport,
 	spaceId: string,
-): Promise<Member[]> => dataOf(await transport.list(spaceId))
+): Promise<HostedMember[]> => dataOf(await transport.list(spaceId))
 
 export const membersAfter = async (
 	transport: MembersTransport,
 	run: MemberAction,
-	held: Member[],
-): Promise<Member[]> => {
+	held: HostedMember[],
+): Promise<HostedMember[]> => {
 	if (run.action === "invite") {
 		return withMember(
 			held,
 			dataOf(await transport.invite(run.spaceId, run.email)),
 		)
 	}
-	const send = run.action === "withdraw" ? transport.withdraw : transport.remove
+	const send = transport[run.action]
 	return dataOf(await send(run.spaceId, run.member.userId))
 }
 
 const membersErrorOf = (reason: unknown): MembersError | undefined =>
 	reason instanceof Error ? undefined : (reason as MembersError)
+
+const inviteFailureOf = (
+	email: string,
+	error: MembersError | undefined,
+): MemberActionRefusal => ({
+	failure: {
+		action: "invite",
+		reason: reasonOf(INVITE_REASONS, error),
+		email,
+	},
+})
 
 export const refusalOf = (
 	run: MemberAction,
@@ -114,16 +147,9 @@ export const refusalOf = (
 	const error = membersErrorOf(reason)
 	if (run.action === "invite") {
 		const refusal = error && INVITE_REFUSALS[error.kind]
-		return refusal
-			? { refusal }
-			: {
-					failure: {
-						action: "invite",
-						reason: reasonOf(INVITE_REASONS, error),
-						email: run.email,
-					},
-				}
+		return refusal ? { refusal } : inviteFailureOf(run.email, error)
 	}
+	if (run.action === "resend") return inviteFailureOf(run.member.email, error)
 	const member = toSpaceMember(run.member)
 	return run.action === "withdraw"
 		? {

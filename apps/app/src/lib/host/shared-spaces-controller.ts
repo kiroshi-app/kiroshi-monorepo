@@ -1,12 +1,14 @@
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 
 import {
+	type HostedMember,
+	isExpired,
 	type MembersTransport,
 	membersOf,
 	membersTransport,
 } from "./members-transport"
 
-import type { Member, MembersChanged } from "../bindings"
+import type { MembersChanged } from "../bindings"
 import { createStore } from "../store"
 
 export type SharedSpacesTransport = Pick<MembersTransport, "list" | "onChanged">
@@ -23,8 +25,8 @@ type SharedSpacesController = {
 
 const EMPTY_STATE: SharedSpacesState = { sharedBySpaceId: {} }
 
-const isShared = (members: Member[]) =>
-	members.some((member) => member.status !== "host")
+const isShared = (members: HostedMember[]) =>
+	members.some((member) => member.status !== "host" && !isExpired(member))
 
 export const createSharedSpacesController = (
 	transport: SharedSpacesTransport = membersTransport,

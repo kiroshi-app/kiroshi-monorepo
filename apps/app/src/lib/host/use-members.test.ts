@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
 	type NoticeMessage,
@@ -11,7 +11,7 @@ import type { SpaceMember } from "@workspace/ui/components/space-settings-dialog
 import "@workspace/ui/lib/i18n"
 
 import { listen } from "./index"
-import type { MembersTransport } from "./members-transport"
+import type { HostedMember, MembersTransport } from "./members-transport"
 import { type MembersProps, useMembers } from "./use-members"
 
 import {
@@ -95,6 +95,7 @@ const createFakeTransport = (
 ): MembersTransport => ({
 	list: vi.fn(async () => ok([STEVE, SAM_PENDING, ALEX_JOINED])),
 	invite: vi.fn(async () => ok(SAM_PENDING)),
+	resend: vi.fn(async () => ok([STEVE, SAM_PENDING, ALEX_JOINED])),
 	withdraw: vi.fn(async () => ok([STEVE, ALEX_JOINED])),
 	remove: vi.fn(async () => ok([STEVE, SAM_PENDING])),
 	onChanged: vi.fn(async () => () => undefined),
@@ -844,5 +845,199 @@ describe("useMembers on a joined space", () => {
 		membersChangeAnnounced()
 
 		await waitFor(() => expect(panel().members[0]?.name).toBe("Léa Martin"))
+	})
+})
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+const NOW = Date.parse("2026-10-19T12:00:00.000Z")
+
+const isoAt = (moment: number) => new Date(moment).toISOString()
+
+const BOB_SENT_AT = NOW - 9 * DAY_MS
+
+const BOB_EXPIRED: HostedMember = {
+	userId: "bob-invitation",
+	name: null,
+	email: "bob@example.com",
+	status: "pending",
+	invitation: {
+		id: "bob-invitation",
+		email: "bob@example.com",
+		sentAt: isoAt(BOB_SENT_AT),
+		expiresAt: isoAt(BOB_SENT_AT + 7 * DAY_MS),
+		state: "expired",
+	},
+}
+
+const invitedAt = (email: string, sentAt: number): HostedMember => ({
+	userId: `${email}-invitation`,
+	name: null,
+	email,
+	status: "pending",
+	invitation: {
+		id: `${email}-invitation`,
+		email,
+		sentAt: isoAt(sentAt),
+		expiresAt: isoAt(sentAt + 7 * DAY_MS),
+		state: "invited",
+	},
+})
+
+const BOB_RESENT: HostedMember = {
+	...invitedAt("bob@example.com", NOW),
+	userId: "bob-invitation",
+}
+
+const BOB_EXPIRED_ROW: SpaceMember = {
+	id: "bob-invitation",
+	name: undefined,
+	email: "bob@example.com",
+	status: "expired",
+	sentAt: BOB_SENT_AT,
+}
+
+const BOB_PENDING_ROW: SpaceMember = {
+	id: "bob-invitation",
+	name: undefined,
+	email: "bob@example.com",
+	status: "pending",
+	expiresInDays: 7,
+}
+
+type SignInState = { isSignedOut: boolean }
+
+describe("useMembers on the invitations of a hosted space", () => {
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"] })
+		vi.setSystemTime(NOW)
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it("shows an invited row with its days left rounded up and an expired row with its send date", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () =>
+				ok([
+					STEVE,
+					invitedAt("ana@example.com", NOW - 2 * DAY_MS - 3_600_000),
+					BOB_EXPIRED,
+				]),
+			),
+		})
+
+		expect(panel().members).toEqual([
+			STEVE_ROW,
+			{
+				id: "ana@example.com-invitation",
+				name: undefined,
+				email: "ana@example.com",
+				status: "pending",
+				expiresInDays: 5,
+			},
+			BOB_EXPIRED_ROW,
+		])
+	})
+
+	it("shows a new invitation with 7 days left and clears the email", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE])),
+			invite: vi.fn(async () => ok(invitedAt("sam@example.com", NOW))),
+		})
+		act(() => panel().onEmailChange("sam@example.com"))
+
+		act(() => panel().onInvite("sam@example.com"))
+		await settle()
+
+		expect(panel().members).toContainEqual(
+			expect.objectContaining({
+				email: "sam@example.com",
+				status: "pending",
+				expiresInDays: 7,
+			}),
+		)
+		expect(panel().email).toBe("")
+	})
+
+	it("resends an expired invitation by its id, never inviting again, and shows it pending", async () => {
+		const { panel, transport } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () => ok([STEVE, BOB_RESENT])),
+		})
+
+		act(() => panel().onInvite("bob@example.com"))
+		await settle()
+
+		expect(transport.resend).toHaveBeenCalledWith("home", "bob-invitation")
+		expect(transport.invite).not.toHaveBeenCalled()
+		expect(panel().members).toEqual([STEVE_ROW, BOB_PENDING_ROW])
+	})
+
+	it.each([
+		[{ kind: "notHosting" }, "notHosting"],
+		[{ kind: "notOwner" }, "notOwner"],
+		[{ kind: "needsSignIn" }, "needsSignIn"],
+		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+		[{ kind: "limitReached" }, "limitReached"],
+		[{ kind: "unknownInvitation" }, "generic"],
+		[{ kind: "alreadyInvited" }, "generic"],
+	] as const)(
+		"holds the invite failure of the expired email for a resend answered %o, as %s",
+		async (error, reason) => {
+			const { panel } = await watchHome({
+				list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+				resend: vi.fn(async () => refused(error)),
+			})
+
+			act(() => panel().onInvite("bob@example.com"))
+			await settle()
+
+			expect(panel().failure).toEqual({
+				action: "invite",
+				reason,
+				email: "bob@example.com",
+			})
+			expect(panel().refusal).toBeUndefined()
+			expect(panel().members).toEqual([STEVE_ROW, BOB_EXPIRED_ROW])
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		},
+	)
+
+	it("holds a generic invite failure of the expired email when the resend is rejected", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () => {
+				throw new Error("ipc closed")
+			}),
+		})
+
+		act(() => panel().onInvite("bob@example.com"))
+		await settle()
+
+		expect(panel().failure).toEqual({
+			action: "invite",
+			reason: "generic",
+			email: "bob@example.com",
+		})
+	})
+
+	it("blocks the invite on signedOut while no account is signed in", async () => {
+		const transport = createFakeTransport()
+		const { result, rerender } = renderHook(
+			({ isSignedOut }: SignInState) =>
+				useMembers(HOME, true, { transport, isSignedOut }),
+			{
+				wrapper: createQueryTestWrapper().wrapper,
+				initialProps: { isSignedOut: true },
+			},
+		)
+		await settle()
+
+		expect(shown(result.current).blockedBy).toBe("signedOut")
+
+		rerender({ isSignedOut: false })
+		expect(shown(result.current).blockedBy).toBeUndefined()
 	})
 })
