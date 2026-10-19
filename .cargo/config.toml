@@ -17,6 +17,6 @@
 # One build without the cap and the wrapper:
 #   CARGO_BUILD_JOBS=default RUSTC_WRAPPER= cargo build
 [build]
-# TODO: set from the jobs sweep of OPE-1049, blocked when the disk filled up.
-jobs = 4
+# 6: two cold worktrees built at once in 95 s, against 102 s at default, 105 s at 4, 123 s at 2.
+jobs = 6
 rustc-wrapper = ".cargo/rustc-wrapper.sh"
