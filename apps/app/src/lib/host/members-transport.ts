@@ -47,6 +47,11 @@ const answerOf = <Data>(call: Promise<Data>): Promise<MembersAnswer<Data>> =>
 		},
 	)
 
+const normalisedEmailOf = (email: string) => email.trim().toLowerCase()
+
+export const isSameEmail = (one: string, other: string) =>
+	normalisedEmailOf(one) === normalisedEmailOf(other)
+
 export const isExpired = (member: HostedMember) =>
 	member.invitation?.state === "expired"
 
@@ -83,7 +88,7 @@ export const membersTransport: MembersTransport = {
 	invite: (spaceId, email) =>
 		answerOf(
 			invoke<SpaceMembers>("hosting_invite_member", { spaceId, email }).then(
-				(listed) => invitedOf(email.trim().toLowerCase(), listed),
+				(listed) => invitedOf(normalisedEmailOf(email), listed),
 			),
 		),
 	resend: (spaceId, invitationId) =>

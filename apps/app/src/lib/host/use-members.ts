@@ -28,6 +28,7 @@ import {
 import {
 	type HostedMember,
 	isExpired,
+	isSameEmail,
 	type MembersTransport,
 	membersTransport,
 } from "./members-transport"
@@ -135,6 +136,9 @@ export const useMembers = (
 		onSuccess: (answered, run) => {
 			queryClient.setQueryData(hostQueryKeys.membersOf(run.spaceId), answered)
 			if (run.action === "invite") setEmail("")
+			if (run.action === "resend") {
+				setEmail((held) => (isSameEmail(held, run.member.email) ? "" : held))
+			}
 			if (run.action === "withdraw") reportSuccess(withdrawnNotice(run.member))
 		},
 		meta: { rendersErrorInline: true },
@@ -153,7 +157,9 @@ export const useMembers = (
 		members.find((member) => member.userId === userId)
 
 	const expiredOf = (email: string) =>
-		members.find((member) => isExpired(member) && member.email === email)
+		members.find(
+			(member) => isExpired(member) && isSameEmail(member.email, email),
+		)
 
 	const inviteOf =
 		(invited: string) =>

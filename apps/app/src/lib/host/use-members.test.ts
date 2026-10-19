@@ -11,6 +11,7 @@ import type { SpaceMember } from "@workspace/ui/components/space-settings-dialog
 import "@workspace/ui/lib/i18n"
 
 import { listen } from "./index"
+import { toSpaceMember } from "./member-actions"
 import type { HostedMember, MembersTransport } from "./members-transport"
 import { type MembersProps, useMembers } from "./use-members"
 
@@ -1020,6 +1021,74 @@ describe("useMembers on the invitations of a hosted space", () => {
 			action: "invite",
 			reason: "generic",
 			email: "bob@example.com",
+		})
+	})
+
+	it("resends the expired invitation of a typed email after trimming and lowercasing it", async () => {
+		const { panel, transport } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () => ok([STEVE, BOB_RESENT])),
+		})
+
+		act(() => panel().onInvite(" Bob@Example.com "))
+		await settle()
+
+		expect(transport.resend).toHaveBeenCalledWith("home", "bob-invitation")
+		expect(transport.invite).not.toHaveBeenCalled()
+	})
+
+	it("clears the email once a resend succeeds for the email it holds", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () => ok([STEVE, BOB_RESENT])),
+		})
+		act(() => panel().onEmailChange(" BOB@example.com "))
+
+		act(() => panel().onInvite(" BOB@example.com "))
+		await settle()
+
+		expect(panel().email).toBe("")
+	})
+
+	it("leaves the email untouched once a resend succeeds for another email", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () => ok([STEVE, BOB_RESENT])),
+		})
+		act(() => panel().onEmailChange("ana@exa"))
+
+		act(() => panel().onInvite("bob@example.com"))
+		await settle()
+
+		expect(panel().members).toEqual([STEVE_ROW, BOB_PENDING_ROW])
+		expect(panel().email).toBe("ana@exa")
+	})
+
+	it("shows 1 day left for an invited row whose expiry has passed", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () =>
+				ok([STEVE, invitedAt("ana@example.com", NOW - 8 * DAY_MS)]),
+			),
+		})
+
+		expect(panel().members).toContainEqual(
+			expect.objectContaining({
+				email: "ana@example.com",
+				status: "pending",
+				expiresInDays: 1,
+			}),
+		)
+	})
+
+	it("maps an invited invitation past its expiry to a pending member with 1 day left", () => {
+		expect(
+			toSpaceMember(invitedAt("ana@example.com", NOW - 7 * DAY_MS - 1)),
+		).toEqual({
+			id: "ana@example.com-invitation",
+			name: undefined,
+			email: "ana@example.com",
+			status: "pending",
+			expiresInDays: 1,
 		})
 	})
 

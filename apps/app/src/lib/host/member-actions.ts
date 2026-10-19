@@ -77,8 +77,8 @@ const shownNameOf = (member: Member): string | undefined =>
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const daysUntil = (moment: string) =>
-	Math.ceil((Date.parse(moment) - Date.now()) / DAY_MS)
+const daysLeftUntil = (moment: string) =>
+	Math.max(1, Math.ceil((Date.parse(moment) - Date.now()) / DAY_MS))
 
 type ShownStatus = Pick<SpaceMember, "status" | "expiresInDays" | "sentAt">
 
@@ -86,7 +86,7 @@ const shownStatusOf = ({ status, invitation }: HostedMember): ShownStatus => {
 	if (!invitation) return { status }
 	return invitation.state === "expired"
 		? { status: "expired", sentAt: Date.parse(invitation.sentAt) }
-		: { status: "pending", expiresInDays: daysUntil(invitation.expiresAt) }
+		: { status: "pending", expiresInDays: daysLeftUntil(invitation.expiresAt) }
 }
 
 export const toSpaceMember = (member: HostedMember): SpaceMember => ({
