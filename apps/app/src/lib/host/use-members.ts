@@ -156,15 +156,12 @@ export const useMembers = (
 	const memberOf = (userId: string) =>
 		members.find((member) => member.userId === userId)
 
-	const expiredOf = (email: string) =>
-		members.find(
-			(member) => isExpired(member) && isSameEmail(member.email, email),
-		)
-
 	const inviteOf =
 		(invited: string) =>
 		(spaceId: string): MemberAction => {
-			const expired = expiredOf(invited)
+			const expired = members.find(
+				(member) => isExpired(member) && isSameEmail(member.email, invited),
+			)
 			return expired
 				? { action: "resend", spaceId, member: expired }
 				: { action: "invite", spaceId, email: invited }
