@@ -140,12 +140,11 @@ export const commands = {
 	hostingStart: (spaceId: string) => typedError<HostingState, SpaceError>(__TAURI_INVOKE("hosting_start", { spaceId })),
 	hostingStop: (spaceId: string) => typedError<HostingState, SpaceError>(__TAURI_INVOKE("hosting_stop", { spaceId })),
 	hostingState: (spaceId: string) => __TAURI_INVOKE<HostingState>("hosting_state", { spaceId }),
-	hostingMembers: (spaceId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_members", { spaceId })),
-	hostingInviteMember: (spaceId: string, email: string) => typedError<Member, MembersError>(__TAURI_INVOKE("hosting_invite_member", { spaceId, email })),
-	hostingWithdrawInvitation: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_withdraw_invitation", { spaceId, userId })),
-	hostingRemoveMember: (spaceId: string, userId: string) => typedError<Member[], MembersError>(__TAURI_INVOKE("hosting_remove_member", { spaceId, userId })),
-	hostingJoinLink: (spaceId: string, userId: string) => typedError<string, MembersError>(__TAURI_INVOKE("hosting_join_link", { spaceId, userId })),
-	hostingDeviceLink: (spaceId: string) => typedError<string, MembersError>(__TAURI_INVOKE("hosting_device_link", { spaceId })),
+	hostingMembers: (spaceId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_members", { spaceId })),
+	hostingInviteMember: (spaceId: string, email: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_invite_member", { spaceId, email })),
+	hostingWithdrawInvitation: (spaceId: string, invitationId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_withdraw_invitation", { spaceId, invitationId })),
+	hostingResendInvitation: (spaceId: string, invitationId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_resend_invitation", { spaceId, invitationId })),
+	hostingRemoveMember: (spaceId: string, userId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_remove_member", { spaceId, userId })),
 	hostingDevices: (spaceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_devices", { spaceId })),
 	hostingRemoveDevice: (spaceId: string, deviceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_remove_device", { spaceId, deviceId })),
 	invitationsList: () => typedError<Invitation[], InvitationError>(__TAURI_INVOKE("invitations_list")),
@@ -857,6 +856,8 @@ export type Invitation = {
 
 export type InvitationError = { kind: "notSignedIn" } | { kind: "offline"; reason: string } | { kind: "serversUnreachable"; reason: string } | { kind: "withdrawn" } | { kind: "unknownInvitation" } | { kind: "storage"; detail: string };
 
+export type InvitationState = "invited" | "expired" | "withdrawn";
+
 export type InvitationsChanged = {
 	invitations: Invitation[],
 };
@@ -978,9 +979,10 @@ export type MemberStatus = "host" | "pending" | "joined";
 export type MembersChanged = {
 	spaceId: string,
 	members: Member[],
+	invitations: SpaceInvitation[],
 };
 
-export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "noRandomness" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
+export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
 
 export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
 
@@ -1505,6 +1507,19 @@ export type Space = {
 };
 
 export type SpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownSpace"; id: string } | { kind: "unknownBot"; id: string } | { kind: "unwritableBundle"; detail: string } | { kind: "incompleteOrder" } | { kind: "lastSpace" } | { kind: "lastSpaceOfBot"; id: string } | { kind: "foreignSection"; id: string } | { kind: "unsupportedArchive"; found: number | null; supported: number } | { kind: "unreadableArchive"; detail: string } | { kind: "unwritableArchive"; detail: string };
+
+export type SpaceInvitation = {
+	id: string,
+	email: string,
+	sentAt: string,
+	expiresAt: string,
+	state: InvitationState,
+};
+
+export type SpaceMembers = {
+	members: Member[],
+	invitations: SpaceInvitation[],
+};
 
 export type SpacePreferences = {
 	collapsedSectionIds?: string[],

@@ -207,7 +207,7 @@ export const LeaveSpace = meta.story({
 		docs: {
 			description: {
 				story:
-					"The question before a person leaves a joined space, from the switcher. The title names the space, the description says the host keeps everything and the link brings it back, so leaving reads as reversible. Check that Cancel comes first and Leave space wears the destructive colour.",
+					"The question before a person leaves a joined space, from the switcher. The title names the space, the description says the host keeps everything and a new invitation brings it back, so leaving reads as reversible. Check that Cancel comes first and Leave space wears the destructive colour.",
 			},
 		},
 	},
@@ -218,7 +218,7 @@ export const LeaveSpace = meta.story({
 			within(popup).getByRole("heading", { name: "Leave Northwind?" }),
 		).toBeVisible()
 		await expect(popup).toHaveTextContent(
-			"Nothing is deleted on the host. You can join again with its link.",
+			"Nothing is deleted on the host. You can join again with a new invitation.",
 		)
 		await expect(
 			within(popup).getByRole("button", { name: "Leave space" }),

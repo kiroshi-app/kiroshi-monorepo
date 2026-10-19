@@ -1,7 +1,6 @@
-use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde_json::{json, Value};
-use x25519_dalek::PublicKey;
 use zeroize::Zeroizing;
 
 use super::handover::{rekey_bytes, KeyHandover};
@@ -9,7 +8,6 @@ use super::roster::{self, set_bytes, signed_row, Enrolled, RosterSet};
 use crate::crypto::device_keys::{verify, DeviceId, DeviceKeys};
 use crate::crypto::error::CryptoError;
 use crate::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
-use crate::crypto::join;
 use crate::crypto::sealed_box;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::crypto::subkey::Subkey;
@@ -88,26 +86,6 @@ impl SealingMember {
 		envelope.to_string()
 	}
 
-	pub(super) fn join_frame(&self, link: &JoinLink, secret: &[u8]) -> String {
-		let sealed = join::seal(secret, &self.keys, &link.host).expect("the join seals");
-		json!({
-			"from": self.relay_device_id,
-			"v": 2,
-			"instance": link.instance_id,
-			"join": BASE64_STANDARD.encode(sealed),
-		})
-		.to_string()
-	}
-
-	pub(super) fn joined_answer(&self, envelope: &Value, secret: &[u8]) -> KeyHandover {
-		assert_eq!(envelope["to"], self.relay_device_id.as_str(), "{envelope}");
-		let opened = sealed_box::open(self.keys.agreement(), &decoded(envelope, "joined"))
-			.expect("the joined answer opens");
-		let (mac, answer) = opened.split_at(32);
-		assert_eq!(mac, join::answer_mac(secret, answer), "the joined mac does not verify");
-		serde_json::from_slice(answer).expect("a key handover")
-	}
-
 	pub(super) fn rekey_opened(
 		&self,
 		envelope: &Value,
@@ -158,25 +136,6 @@ pub(super) fn host_frame_opened(
 	let plaintext = frame::open(&sealed, &subkey, space.host)?;
 	let plaintext = serde_json::from_slice(&plaintext).expect("a json plaintext");
 	Ok(HostFrame { plaintext, challenge, ctr })
-}
-
-pub(super) struct JoinLink {
-	pub(super) instance_id: String,
-	pub(super) host: PublicKey,
-	pub(super) secret: Vec<u8>,
-}
-
-pub(super) fn join_link_of(link: &str) -> JoinLink {
-	let fragment = link.strip_prefix("https://kiroshi.app/join#").expect("a kiroshi join link");
-	let parts: Vec<&str> = fragment.split('.').collect();
-	let [instance_id, host, secret] = parts.as_slice() else {
-		panic!("a join link carries three dotted parts: {link}");
-	};
-	let unpadded = |part: &str| BASE64_URL_SAFE_NO_PAD.decode(part).expect("unpadded base64url");
-	let host: [u8; 32] = unpadded(host).try_into().expect("a 32-byte agreement key");
-	let secret = unpadded(secret);
-	assert_eq!(secret.len(), 32, "the secret is 32 bytes");
-	JoinLink { instance_id: (*instance_id).to_owned(), host: PublicKey::from(host), secret }
 }
 
 pub(super) fn space_key_of(handover: &KeyHandover) -> HeldSpaceKey {

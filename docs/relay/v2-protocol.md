@@ -146,7 +146,7 @@ ids of every device with its public keys.
   front of the frame, after its opening brace.
 - The host opens its relay socket with `?device=<its relay device id>`, and so does a
   member: the desktop reads its own relay device id from its row of the roster set it
-  holds, or from `POST /devices` before its join.
+  holds, or from `POST /devices` before the host admits it.
 - A host frame for one member carries `to` set to that member's relay device id,
   and the AAD `to` set to that member's `device_id`. An answer to a call or a
   `relay_resume`, the frames that `relay_resume` replays, and a hello answer go
@@ -356,6 +356,85 @@ the `join` frame on every connection, and reconnects with the relay backoff. The
 first verified `joined` stores the key and the roster, closes that socket, and
 announces the Space changed; it is then listed `state: "online"`.
 
+## Device list admission
+
+The relay lists the approved devices of a hosted Space instance:
+
+```
+GET /instances/{instance}/devices                      owner bearer
+```
+
+```json
+[{ "deviceId": "…relay device id…", "userId": "…account id…", "ed25519PublicKey": "base64url", "x25519PublicKey": "base64url" }]
+```
+
+The list holds the approved devices of the owner account and of every joined
+member. A pending device is never listed. Both keys are 32 bytes, unpadded
+base64url.
+
+The host reads the list when its socket for the Space opens and on every
+`devices.changed`, under the one members turn that every members and devices
+command of that Space takes, so two reads never overlap and a device is admitted
+once. On each read:
+
+1. When the read fails, or no entry carries the host signing key, no roster row
+   changes and the host logs one line naming the Space and the cause.
+2. An entry with unreadable keys is skipped and logged. Its relay device id still
+   counts as listed.
+3. The entry of the host device is skipped: the host stores its own row when its
+   socket opens.
+4. An entry whose `device_id` is recorded as removed from that Space (see
+   [Key rotation](#key-rotation)) is skipped, and the host logs one line naming the
+   Space and the `device_id`. The same machine signed in again with new keys has
+   another `device_id` and is admitted.
+5. An entry whose relay device id or `device_id` already names a roster row
+   changes nothing. When its keys or account differ from that row, the row stays
+   as it is and the host logs one line naming the device.
+6. Every other entry is admitted: the host stores a roster row it signs, under the
+   entry's `deviceId`, `userId` and both public keys, then sends that device a
+   [rekey](#rekey-host-to-device) frame carrying the current key handover. The
+   other devices of the host account are admitted the same way, with no
+   invitation.
+7. Then each roster row other than the host's whose relay device id names no
+   entry leaves the roster as on `device.revoked`: the row is deleted and the key
+   rotates. A row whose `device_id` was just admitted under a new relay device id
+   is not removed.
+
+When a read admits or removes a device, the host reads its members and
+invitations back and emits them to the front. A read that fails on the host
+(database, key rotation) is logged with the Space and keeps the socket open; the
+next `devices.changed` or socket open reads the list again, after taking any
+rotation the failure left owed.
+
+### devices.changed (relay to host)
+
+```json
+{ "event": "devices.changed" }
+```
+
+The relay sends it on the host socket when the device list gains a device: an
+invitation accepted, or a device approved. It carries no `from`; a frame that
+does is a member frame, not an event.
+
+## Invitations
+
+Every route takes the owner bearer:
+
+| Route | Effect |
+| --- | --- |
+| `GET /instances/{instance}/invitations` | `[{ "id", "email", "sentAt", "expiresAt", "state" }]`, `state` one of `invited`, `expired`, `withdrawn`. An accepted invitation is absent. |
+| `POST /instances/{instance}/invitations` `{ "email" }` | Invites that email. |
+| `DELETE /instances/{instance}/invitations/{invitationId}` | Withdraws that invitation. |
+| `POST /instances/{instance}/invitations/{invitationId}/resend` | Answers a fresh invitation to the same email. |
+
+The host commands `hosting_invite_member(spaceId, email)`,
+`hosting_withdraw_invitation(spaceId, invitationId)`,
+`hosting_resend_invitation(spaceId, invitationId)` and
+`hosting_remove_member(spaceId, userId)` each answer, like `hosting_members`, the
+list read back: `{ members, invitations }`, the host and the joined members, then
+every invitation with its state. An invited account holds no listed device until
+it accepts, so withdrawing an invitation changes no roster row.
+
 ## Signed roster set
 
 ```json
@@ -418,28 +497,26 @@ with a row added, removed or swapped fails `sig`.
 
 ## Key rotation
 
-Removing a member (`hosting_remove_member`, once the relay answered) or one device
-(`hosting_remove_device`) deletes the matching roster rows, then the host stores a
-fresh random `space_key` under `key_id + 1`, starts its `ctr` and seals every
-later frame under it. A removed device keeps the old `space_key` and gets nothing
-sealed under the new one; its frames resolve to no roster row and are dropped.
-The host device cannot be removed.
+Removing a member (`hosting_remove_member`, once the relay answered), one device
+(`hosting_remove_device`), a `device.revoked` event or a device missing from the
+[device list](#device-list-admission) deletes the matching roster rows, then the
+host stores a fresh random `space_key` under `key_id + 1`, starts its `ctr` and
+seals every later frame under it. A removed device keeps the old `space_key` and
+gets nothing sealed under the new one; its frames resolve to no roster row and are
+dropped. The host device cannot be removed.
 
-Withdrawing a pending invitation (`hosting_withdraw_invitation`, once the relay
-answered) is a removal too: a device admitted through that invitation's link is
-rostered under the invited account while the invitation is still pending. The host
-deletes every join secret and every roster row of that account, then rotates the
-key as above when at least one roster row was deleted. A withdrawal that deletes
-no roster row leaves `key_id` unchanged.
+The relay keeps listing a device the host removed with `hosting_remove_device`, so
+the transaction that deletes its row also records its `device_id` as removed from
+that Space, and the device list admission skips it from then on.
 
 The transaction that deletes roster rows also marks the Space as owing a
 rotation, and storing the new key clears the mark. When the new key cannot be
 stored, the rows stay deleted, the mark stays, and the command answers
 `keyNotRotated`. While the mark stays, the host rotates before it answers any
 members or devices command on that Space (`hosting_members`,
-`hosting_invite_member`, `hosting_withdraw_invitation`, `hosting_remove_member`,
-`hosting_join_link`, `hosting_device_link`, `hosting_devices`,
-`hosting_remove_device`) and when its socket for that Space comes online, so a
+`hosting_invite_member`, `hosting_withdraw_invitation`, `hosting_resend_invitation`,
+`hosting_remove_member`, `hosting_devices`, `hosting_remove_device`), before each
+device list read, and when its socket for that Space comes online, so a
 failed rotation is never left behind by a retry that finds nothing to remove.
 
 When that rotation fails as the socket comes online, the host ends the socket
@@ -450,7 +527,7 @@ and each new session tries the rotation again.
 ### rekey (host to device)
 
 On a rotation the host sends one rekey frame to every remaining device of the
-roster other than its own:
+roster other than its own, and an admitted device gets one when it is admitted:
 
 ```json
 { "v": 2, "instance": "…", "to": "…relay device id…", "rekey": "base64", "sig": "base64" }
@@ -464,6 +541,18 @@ rekey_sig = ascii("kiroshi/v2/rekey")
          || u64be(len(rekey))     || rekey
 sig       = Ed25519_sign(host_signing_private, rekey_sig)
 ```
+
+The key handover:
+
+```json
+{ "key_id": 1, "space_key": "base64, 32 bytes", "roster": { "…": "signed roster set" } }
+```
+
+The host builds every key handover by reading the current `key_id` and
+`space_key` first, then the roster. A device removed after the roster read is
+followed by a rotation to a key later than the one read; a device removed before
+it is not in the roster. So a rekey goes only to the devices of the roster read
+after its key.
 
 `to` in the signed bytes is the recipient's `device_id`, not its relay device id.
 A device verifies `sig` under the host signing key it holds before it opens the
@@ -508,7 +597,7 @@ lowercase hex; `ctr` is a decimal string.
 | `subkeys` | `subkey` from `space_key`, `key_id`, `device_id`. |
 | `frames` | `aad` from `header`; `subkey`; opening `ciphertext` returns `plaintext`; `sig` verifies against `signing_public`. A client with deterministic Ed25519 also reproduces `ciphertext` and `sig`. |
 | `sealed_boxes` | Opening `sealed` with `recipient_secret` returns `plaintext`; sealing with `ephemeral_secret` and `nonce` reproduces `sealed`. |
-| `join_payloads` | Opening `sealed` with `host_secret` and `secret` returns the two public keys; `payload` is their layout. |
+| `join_payloads` | Opening `sealed` with `host_secret` and `secret` returns the two public keys. Kept for the member-side link join of `joined_spaces`, which no host answers since the device list admission. |
 | `non_contributory_points` | Every point is refused as an X25519 public key. |
 
 The Swift-made signature vector is added by the iPhone client.

@@ -221,20 +221,6 @@ pub(super) async fn host_rostered(
 	roster.rostered(space_id.to_owned(), signed_row(host, space_id, &enrolled)).await
 }
 
-pub(super) async fn host_account(
-	database: &Database,
-	space_id: &str,
-	host: &DeviceKeys,
-) -> Result<Option<String>, DatabaseError> {
-	let held = database
-		.space_relay()
-		.roster_row(space_id.to_owned(), host.device_id().to_string())
-		.await?;
-	Ok(held
-		.and_then(|row| verified(&host.signing_public(), space_id, &row).ok())
-		.map(|row| row.account_id))
-}
-
 pub(super) async fn sender_of(
 	database: &Database,
 	space_id: &str,

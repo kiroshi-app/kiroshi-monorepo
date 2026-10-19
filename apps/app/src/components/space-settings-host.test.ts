@@ -539,9 +539,10 @@ const answerJoinedMembers = (members: JoinedSpaceMember[]) =>
 		.mockResolvedValue({ status: "ok", data: members })
 
 const answerMembers = (answers: Record<string, Member[]>) =>
-	vi
-		.mocked(invoke)
-		.mockImplementation(async (command: string) => answers[command] as never)
+	vi.mocked(invoke).mockImplementation(async (command: string) => {
+		const members = answers[command]
+		return (members && { members, invitations: [] }) as never
+	})
 
 const membersCalls = () =>
 	vi
