@@ -59,6 +59,17 @@ type AuthorizationRequest = {
 	status: string
 }
 
+type InvitationSpace = {
+	name: string
+	inviter: string
+	expiresAt: number
+}
+
+type InvitationState = {
+	state: string
+	space: InvitationSpace | null
+}
+
 type RelayRequest = {
 	path: string
 	method?: "GET" | "POST" | "PATCH" | "DELETE"
@@ -294,11 +305,30 @@ const cancelAuthorizationRequest = async (request: string) => {
 	await send({ path: `${authorizationPath(request)}/cancel`, method: "POST" })
 }
 
-const readInvitationStatus = async (invitation: string) => {
+const filledTextOf = (body: unknown, field: string) => {
+	const value = fieldOf(body, field)
+	return typeof value === "string" && value !== "" ? value : null
+}
+
+const invitationSpaceOf = (answer: unknown): InvitationSpace | null => {
+	const name = filledTextOf(answer, "spaceName")
+	const inviter = filledTextOf(answer, "inviter")
+	const expiresAt = Date.parse(filledTextOf(answer, "expiresAt") ?? "")
+	if (!name || !inviter || Number.isNaN(expiresAt)) return null
+	return { name, inviter, expiresAt }
+}
+
+const readInvitationState = async (
+	invitation: string,
+): Promise<InvitationState> => {
 	const answer = await send({
-		path: `/invitations/${encodeURIComponent(invitation)}`,
+		path: `/invitations/${encodeURIComponent(invitation)}/state`,
+		sendsBearer: false,
 	})
-	return stringField(answer, "status")
+	return {
+		state: stringField(answer, "state"),
+		space: invitationSpaceOf(answer),
+	}
 }
 
 export {
@@ -308,13 +338,14 @@ export {
 	type CodeFailure,
 	cancelAuthorizationRequest,
 	clearBearer,
+	type InvitationSpace,
 	isRelayFailure,
 	RelayError,
 	type RelayFailure,
 	readAccount,
 	readAuthorizationRequest,
 	readBearer,
-	readInvitationStatus,
+	readInvitationState,
 	readSessionBearer,
 	readSessions,
 	requestSocialSignIn,

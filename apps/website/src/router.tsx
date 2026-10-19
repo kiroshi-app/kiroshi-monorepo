@@ -3,10 +3,8 @@ import {
 	createRoute,
 	createRouter,
 	type ParsedLocation,
-	parseSearchWith,
 	type RouterHistory,
 	redirect,
-	stringifySearchWith,
 } from "@tanstack/react-router"
 
 import { AccountPage } from "./account-page"
@@ -20,7 +18,12 @@ import {
 	validateAuthorizeSearch,
 } from "./authorize-state"
 import { JoinPage } from "./join-page"
-import { loadJoinState, validateJoinSearch } from "./join-state"
+import {
+	parseSiteSearch,
+	stringifySiteSearch,
+	validateJoinSearch,
+} from "./join-search"
+import { loadJoinState } from "./join-state"
 import { LoginLoadFailure, LoginPage } from "./login-page"
 import {
 	type LoginSearch,
@@ -161,8 +164,8 @@ const joinRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: "/join",
 	validateSearch: validateJoinSearch,
-	loaderDeps: ({ search }) => ({ invitation: search.invitation }),
-	loader: ({ deps }) => loadJoinState(deps.invitation),
+	loaderDeps: ({ search }) => ({ invitations: search.invitation }),
+	loader: ({ deps }) => loadJoinState(deps.invitations),
 	component: JoinPage,
 	errorComponent: LoginLoadFailure,
 })
@@ -204,14 +207,12 @@ const routeTree = rootRoute.addChildren([
 	contactRoute,
 ])
 
-const keepAsString = (value: string) => value
-
 export const createSiteRouter = (history?: RouterHistory) =>
 	createRouter({
 		routeTree,
 		history,
-		parseSearch: parseSearchWith(keepAsString),
-		stringifySearch: stringifySearchWith(JSON.stringify),
+		parseSearch: parseSiteSearch,
+		stringifySearch: stringifySiteSearch,
 	})
 
 declare module "@tanstack/react-router" {

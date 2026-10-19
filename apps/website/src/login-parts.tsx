@@ -1,4 +1,4 @@
-import { type FormEvent, type MouseEvent, type ReactNode, useId } from "react"
+import { type FormEvent, type ReactNode, useId } from "react"
 
 import { cn } from "@workspace/ui/lib/utils"
 
@@ -231,33 +231,6 @@ export const PrimaryButton = ({ label, isBusy }: PrimaryButtonProps) => (
 	>
 		{label}
 	</button>
-)
-
-type LinkActionProps = {
-	label: string
-	href: string
-	onClick?: (event: MouseEvent<HTMLAnchorElement>) => void
-}
-
-const LINK_ACTION = `${ACTION} flex items-center justify-center`
-
-export const PrimaryLink = ({ label, href, onClick }: LinkActionProps) => (
-	<a
-		className={`${LINK_ACTION} bg-primary text-primary-foreground hover:bg-primary/90`}
-		href={href}
-		onClick={onClick}
-	>
-		{label}
-	</a>
-)
-
-export const SecondaryLink = ({ label, href }: LinkActionProps) => (
-	<a
-		className={`${LINK_ACTION} bg-card shadow-field hover:bg-accent`}
-		href={href}
-	>
-		{label}
-	</a>
 )
 
 type GhostButtonProps = {
