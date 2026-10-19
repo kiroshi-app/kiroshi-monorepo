@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::devices::contract::{DeviceKind, DeviceStatus};
+use crate::hosting::contract::SpaceInvitation;
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
@@ -167,7 +168,7 @@ pub struct CurrentDevice {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CloudDevice {
+pub struct CloudAccountDevice {
 	pub id: String,
 	pub name: Option<String>,
 	pub kind: DeviceKind,
@@ -186,6 +187,7 @@ pub enum MemberCallError {
 	AlreadyMember,
 	LimitReached,
 	UnknownMember,
+	UnknownInvitation,
 	OwnerNotRemovable,
 	Unreachable(String),
 }
@@ -252,6 +254,15 @@ pub struct CloudRosterMember {
 	pub user_id: String,
 	pub name: Option<String>,
 	pub role: MemberRole,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudDevice {
+	pub device_id: String,
+	pub user_id: String,
+	pub ed25519_public_key: String,
+	pub x25519_public_key: String,
 }
 
 #[derive(Deserialize)]
@@ -583,10 +594,13 @@ impl Cloud {
 		})
 	}
 
-	pub async fn devices(&self, bearer: &str) -> Result<Vec<CloudDevice>, DeviceCallError> {
+	pub async fn account_devices(
+		&self,
+		bearer: &str,
+	) -> Result<Vec<CloudAccountDevice>, DeviceCallError> {
 		let devices = self.at(DEVICES_PATH);
 		let answered = self.device_called(|client| client.get(devices).bearer_auth(bearer)).await?;
-		answered.json::<Vec<CloudDevice>>().await.map_err(|error| {
+		answered.json::<Vec<CloudAccountDevice>>().await.map_err(|error| {
 			DeviceCallError::Unreachable(format!(
 				"the device list answered by the relay did not parse: {error}"
 			))
@@ -697,16 +711,80 @@ impl Cloud {
 		instance_id: &str,
 		email: &str,
 	) -> Result<(), MemberCallError> {
-		let members = self.members_url(instance_id);
+		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
 		let body = json!({ "email": email });
 		let answered = self
-			.answered(|client| client.post(members).bearer_auth(bearer).json(&body))
+			.answered(|client| client.post(invitations).bearer_auth(bearer).json(&body))
 			.await
 			.map_err(MemberCallError::Unreachable)?;
 		if answered.status() == StatusCode::BAD_REQUEST {
 			return Err(MemberCallError::InvalidEmail);
 		}
 		member_call_answered(answered).await.map(drop)
+	}
+
+	pub async fn sent_invitations(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+	) -> Result<Vec<SpaceInvitation>, MemberCallError> {
+		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
+		let answered = self
+			.answered(|client| client.get(invitations).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		let answered = member_call_answered(answered).await?;
+		answered.json::<Vec<SpaceInvitation>>().await.map_err(|error| {
+			MemberCallError::Unreachable(format!(
+				"the invitation list answered by the cloud did not parse: {error}"
+			))
+		})
+	}
+
+	pub async fn withdraw_invitation(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+		invitation_id: &str,
+	) -> Result<(), MemberCallError> {
+		let invitation = self.sent_invitation_url(instance_id, &[invitation_id])?;
+		let answered = self
+			.answered(|client| client.delete(invitation).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		invitation_answered(answered).await
+	}
+
+	pub async fn resend_invitation(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+		invitation_id: &str,
+	) -> Result<(), MemberCallError> {
+		let resend = self.sent_invitation_url(instance_id, &[invitation_id, "resend"])?;
+		let answered = self
+			.answered(|client| client.post(resend).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		invitation_answered(answered).await
+	}
+
+	pub async fn devices(
+		&self,
+		bearer: &str,
+		instance_id: &str,
+	) -> Result<Vec<CloudDevice>, MemberCallError> {
+		let devices = self.at(&format!("{INSTANCES_PATH}/{instance_id}{DEVICES_PATH}"));
+		let answered = self
+			.answered(|client| client.get(devices).bearer_auth(bearer))
+			.await
+			.map_err(MemberCallError::Unreachable)?;
+		let answered = member_call_answered(answered).await?;
+		answered.json::<Vec<CloudDevice>>().await.map_err(|error| {
+			MemberCallError::Unreachable(format!(
+				"the device list answered by the relay did not parse: {error}"
+			))
+		})
 	}
 
 	pub async fn remove_member(
@@ -812,6 +890,22 @@ impl Cloud {
 			.map_err(|()| InvitationCallError::Unreachable("the cloud url has no path".to_owned()))?
 			.push(instance_id)
 			.push(verb);
+		Ok(invitation)
+	}
+
+	fn sent_invitation_url(
+		&self,
+		instance_id: &str,
+		segments: &[&str],
+	) -> Result<Url, MemberCallError> {
+		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
+		let mut invitation = Url::parse(&invitations).map_err(|error| {
+			MemberCallError::Unreachable(format!("the invitation url is unusable: {error}"))
+		})?;
+		invitation
+			.path_segments_mut()
+			.map_err(|()| MemberCallError::Unreachable("the cloud url has no path".to_owned()))?
+			.extend(segments);
 		Ok(invitation)
 	}
 
@@ -939,6 +1033,13 @@ async fn member_call_answered(
 		StatusCode::CONFLICT => Err(conflicted(answered).await),
 		_ => successful(answered).map_err(MemberCallError::Unreachable),
 	}
+}
+
+async fn invitation_answered(answered: reqwest::Response) -> Result<(), MemberCallError> {
+	if answered.status() == StatusCode::NOT_FOUND {
+		return Err(MemberCallError::UnknownInvitation);
+	}
+	member_call_answered(answered).await.map(drop)
 }
 
 async fn conflicted(answered: reqwest::Response) -> MemberCallError {

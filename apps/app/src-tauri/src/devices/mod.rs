@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use tokio::time::sleep;
 
 use crate::account::cloud::{
-	Cloud, CloudDevice, CurrentDevice, DeviceCallError, DeviceRegisterError,
+	Cloud, CloudAccountDevice, CurrentDevice, DeviceCallError, DeviceRegisterError,
 };
 use crate::account::contract::AccountState;
 use crate::account::session::{self, AccountSession};
@@ -322,7 +322,7 @@ async fn requests_followed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
 	let Ok(bearer) = bearer_of(app) else {
 		return;
 	};
-	let listed = match answered(app, &bearer, devices.cloud.devices(&bearer).await) {
+	let listed = match answered(app, &bearer, devices.cloud.account_devices(&bearer).await) {
 		Ok(listed) => listed,
 		Err(failure) => return eprintln!("the devices of the account were not read: {failure:?}"),
 	};
@@ -342,7 +342,7 @@ async fn requests_followed<R: Runtime>(app: &AppHandle<R>, devices: &Devices) {
 
 fn announcements(
 	announced: &mut HashMap<String, String>,
-	listed: &[CloudDevice],
+	listed: &[CloudAccountDevice],
 	now: DateTime<Utc>,
 ) -> (Vec<DeviceApprovalRequested>, Vec<String>) {
 	let is_pending = |device_id: &str| {
@@ -363,7 +363,7 @@ fn announcements(
 	(requested, settled)
 }
 
-fn request_of(device: &CloudDevice, now: DateTime<Utc>) -> Option<DeviceApprovalRequested> {
+fn request_of(device: &CloudAccountDevice, now: DateTime<Utc>) -> Option<DeviceApprovalRequested> {
 	if device.status != DeviceStatus::Pending {
 		return None;
 	}
@@ -380,7 +380,7 @@ fn request_of(device: &CloudDevice, now: DateTime<Utc>) -> Option<DeviceApproval
 	})
 }
 
-fn presented(device: CloudDevice) -> AccountDevice {
+fn presented(device: CloudAccountDevice) -> AccountDevice {
 	let fingerprint = fingerprint_of(&device);
 	AccountDevice {
 		id: device.id,
@@ -394,7 +394,7 @@ fn presented(device: CloudDevice) -> AccountDevice {
 	}
 }
 
-fn fingerprint_of(device: &CloudDevice) -> Option<Vec<String>> {
+fn fingerprint_of(device: &CloudAccountDevice) -> Option<Vec<String>> {
 	let encoded = device.ed25519_public_key.as_deref()?;
 	let signing = BASE64_URL_SAFE_NO_PAD
 		.decode(encoded)
@@ -478,7 +478,7 @@ pub async fn refused<R: Runtime>(app: &AppHandle<R>, device_id: &str) -> Result<
 
 pub async fn listed<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<AccountDevice>, DeviceError> {
 	let bearer = bearer_of(app)?;
-	let answer = app.state::<Devices>().cloud.devices(&bearer).await;
+	let answer = app.state::<Devices>().cloud.account_devices(&bearer).await;
 	Ok(answered(app, &bearer, answer)?.into_iter().map(presented).collect())
 }
 

@@ -155,6 +155,20 @@ const chat = {
 		retry: "Réessayer",
 		dismiss: "Ignorer l’avis",
 	},
+	spaceAccessBanner: {
+		removed: {
+			title: "Vous n’êtes plus membre de {{space}}",
+			body: "Ses conversations ne sont plus sur cet appareil. Demandez une nouvelle invitation à {{host}}.",
+		},
+		deleted: {
+			title: "{{host}} a supprimé {{space}}",
+			body: "Ses conversations ne sont plus sur cet appareil.",
+		},
+		offline: {
+			title: "{{space}} est hors ligne",
+			body: "Vous pouvez lire ce qui est ici. Vous pourrez de nouveau envoyer quand Kiroshi sera ouvert sur l’ordinateur de {{host}}.",
+		},
+	},
 	attachments: {
 		label: "Pièces jointes",
 		open: "Ouvrir {{name}}",

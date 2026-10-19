@@ -5,7 +5,6 @@ pub mod commands;
 pub mod contract;
 mod devices;
 pub(crate) mod handover;
-mod links;
 #[cfg(test)]
 mod member_socket;
 mod members;
@@ -38,7 +37,7 @@ use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
 use authorship::RelayedMembers;
 use bridge::LocalApi;
-use contract::{HostingChanged, HostingState, Member};
+use contract::{HostingChanged, HostingState, SpaceMembers};
 use relay::Hosted;
 
 pub struct Hosting {
@@ -56,7 +55,7 @@ struct Host {
 	state: HostingState,
 	instance_id: Option<String>,
 	run: Option<Run>,
-	members: Option<Vec<Member>>,
+	members: Option<SpaceMembers>,
 }
 
 struct Run {

@@ -19,24 +19,22 @@ use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
-use super::admission::HostedSpace;
 use super::authorship::Caller;
 use super::bridge::{belongs_to_the_host, LocalApi};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
-	HostingState, Member, MemberStatus, MembersError, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
+	HostingState, InvitationState, Member, MemberStatus, MembersError, SpaceInvitation,
+	SpaceMembers, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
 };
 use super::devices::{devices, remove_device};
-use super::links::{device_link, join_link};
-use super::members::{invite, list, remove, withdraw};
+use super::members::{invite, list, remove, resend, withdraw};
 use super::reach;
 use super::replay::{RESUME_COMMAND, RING_FRAMES};
 use super::roster::SignedRow;
 use super::sealing_member::{
-	host_frame_opened, join_link_of, space_key_of, verified_set, HostFrame, JoinLink,
-	SealingMember, Space,
+	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
-use super::wire::{HostKeys, HELLO};
+use super::wire::HELLO;
 use super::{renamed, resumed, signed_out, start, stop, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::contract::SignedOutReason;
@@ -69,7 +67,6 @@ use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{verify, DeviceKeys};
 use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
-use crate::crypto::join::JoinRequest;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
@@ -82,7 +79,6 @@ use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
 use crate::joined_spaces::relay::RelayGuests;
-use crate::joined_spaces::test_host::joined_answer_held;
 use crate::logging::contract::InstallKind;
 use crate::mcp_oauth::asking::AuthorizationAnswers;
 use crate::mcp_oauth::commands::{mcp_application_status, McpOauthState};
@@ -177,8 +173,11 @@ struct Relay {
 	sockets: mpsc::UnboundedSender<(WebSocket, String)>,
 	device: DeviceRelay,
 	members: Arc<Mutex<Vec<Value>>>,
+	invitations: Arc<Mutex<Vec<Value>>>,
 	member_calls: Arc<Mutex<Vec<String>>>,
 	member_answer: Arc<Mutex<Option<(StatusCode, Value)>>>,
+	listed_devices: Arc<Mutex<Option<Vec<Value>>>>,
+	device_lists: Arc<AtomicUsize>,
 	noticed: Arc<watch::Sender<()>>,
 }
 
@@ -233,6 +232,90 @@ async fn member_removed(
 		return StatusCode::NOT_FOUND.into_response();
 	}
 	StatusCode::NO_CONTENT.into_response()
+}
+
+fn cloud_invitation(id: &str, email: &str, state: &str) -> Value {
+	json!({
+		"id": id,
+		"email": email,
+		"sentAt": "2026-10-01T00:00:00.000Z",
+		"expiresAt": "2026-10-08T00:00:00.000Z",
+		"state": state,
+	})
+}
+
+async fn invitations_listed(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	if let Some(forced) = member_call(&relay, "GET invitations".to_owned()) {
+		return forced;
+	}
+	let invitations = relay.invitations.lock().expect("the relay").clone();
+	answered_json(StatusCode::OK, Value::Array(invitations))
+}
+
+async fn invitation_sent(
+	Served(relay): Served<Relay>,
+	headers: HeaderMap,
+	body: String,
+) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	let body: Value = serde_json::from_str(&body).expect("a json body");
+	let email = body["email"].as_str().expect("an email").to_owned();
+	if let Some(forced) = member_call(&relay, format!("POST invitations {email}")) {
+		return forced;
+	}
+	let sent = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "invited");
+	relay.invitations.lock().expect("the relay").push(sent.clone());
+	answered_json(StatusCode::CREATED, sent)
+}
+
+async fn invitation_withdrawn(
+	Served(relay): Served<Relay>,
+	Path((_, invitation_id)): Path<(String, String)>,
+	headers: HeaderMap,
+) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	if let Some(forced) = member_call(&relay, format!("DELETE invitations {invitation_id}")) {
+		return forced;
+	}
+	let mut invitations = relay.invitations.lock().expect("the relay");
+	let Some(invitation) = invitations.iter_mut().find(|sent| sent["id"] == invitation_id.as_str())
+	else {
+		return StatusCode::NOT_FOUND.into_response();
+	};
+	invitation["state"] = json!("withdrawn");
+	StatusCode::NO_CONTENT.into_response()
+}
+
+async fn invitation_resent(
+	Served(relay): Served<Relay>,
+	Path((_, invitation_id)): Path<(String, String)>,
+	headers: HeaderMap,
+) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	let call = format!("POST invitations {invitation_id}/resend");
+	if let Some(forced) = member_call(&relay, call) {
+		return forced;
+	}
+	let mut invitations = relay.invitations.lock().expect("the relay");
+	let Some(invitation) = invitations.iter_mut().find(|sent| sent["id"] == invitation_id.as_str())
+	else {
+		return StatusCode::NOT_FOUND.into_response();
+	};
+	let email = invitation["email"].as_str().expect("an email").to_owned();
+	*invitation = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "invited");
+	answered_json(StatusCode::CREATED, invitation.clone())
+}
+
+async fn devices_listed(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
+	assert_eq!(bearer_of(&headers), BEARER);
+	let listed = relay.listed_devices.lock().expect("the relay").clone();
+	relay.device_lists.fetch_add(1, Ordering::SeqCst);
+	relay.noticed.send_replace(());
+	match listed {
+		Some(listed) => answered_json(StatusCode::OK, Value::Array(listed)),
+		None => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+	}
 }
 
 async fn me(headers: HeaderMap) -> Response {
@@ -634,8 +717,11 @@ impl Harness {
 				"owner",
 				"joined",
 			)])),
+			invitations: Arc::default(),
 			member_calls: Arc::default(),
 			member_answer: Arc::default(),
+			listed_devices: Arc::default(),
+			device_lists: Arc::default(),
 			noticed: Arc::new(watch::channel(()).0),
 		};
 		let cloud = served(
@@ -648,6 +734,13 @@ impl Harness {
 				.route("/instances/{id}/relay/host", get(host))
 				.route("/instances/{id}/members", get(members_listed).post(member_invited))
 				.route("/instances/{id}/members/{user_id}", delete(member_removed))
+				.route("/instances/{id}/invitations", get(invitations_listed).post(invitation_sent))
+				.route("/instances/{id}/invitations/{invitation_id}", delete(invitation_withdrawn))
+				.route(
+					"/instances/{id}/invitations/{invitation_id}/resend",
+					post(invitation_resent),
+				)
+				.route("/instances/{id}/devices", get(devices_listed))
 				.route("/me", get(me))
 				.with_state(relay.clone()),
 		)
@@ -1447,7 +1540,9 @@ fn the_first_member_announcement_of_an_online_space_crosses_the_relay() {
 
 		let announced = harness.heard_member_lists();
 		assert_eq!(announced.len(), 1);
-		let payload = json!({ "spaceId": PERSONAL, "members": announced[0] });
+		let invitations = harness.heard_invitation_lists();
+		let payload =
+			json!({ "spaceId": PERSONAL, "members": announced[0], "invitations": invitations[0] });
 		assert_eq!(first, as_forwarded((MEMBERS_CHANGED_EVENT, payload)));
 	});
 }
@@ -1863,19 +1958,27 @@ impl Harness {
 			.collect()
 	}
 
-	async fn listed(&self) -> Result<Vec<Member>, MembersError> {
+	fn seed_invitations(&self, invitations: &[Value]) {
+		self.relay.invitations.lock().expect("the relay").extend_from_slice(invitations);
+	}
+
+	async fn listed(&self) -> Result<SpaceMembers, MembersError> {
 		list(self.app.handle(), PERSONAL.to_owned()).await
 	}
 
-	async fn invited(&self, email: &str) -> Result<Member, MembersError> {
+	async fn invited(&self, email: &str) -> Result<SpaceMembers, MembersError> {
 		invite(self.app.handle(), PERSONAL.to_owned(), email.to_owned()).await
 	}
 
-	async fn withdrawn(&self, user_id: &str) -> Result<Vec<Member>, MembersError> {
-		withdraw(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await
+	async fn withdrawn(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
+		withdraw(self.app.handle(), PERSONAL.to_owned(), invitation_id.to_owned()).await
 	}
 
-	async fn removed(&self, user_id: &str) -> Result<Vec<Member>, MembersError> {
+	async fn resent(&self, invitation_id: &str) -> Result<SpaceMembers, MembersError> {
+		resend(self.app.handle(), PERSONAL.to_owned(), invitation_id.to_owned()).await
+	}
+
+	async fn removed(&self, user_id: &str) -> Result<SpaceMembers, MembersError> {
 		remove(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await
 	}
 
@@ -1887,78 +1990,153 @@ impl Harness {
 		self.listed().await.expect("the members list");
 		self.forget_member_calls();
 	}
+
+	fn heard_invitation_lists(&self) -> Vec<Value> {
+		let heard = self.heard_members.lock().expect("the events");
+		heard.iter().map(|change| change["invitations"].clone()).collect()
+	}
 }
 
 fn member(user_id: &str, email: &str, status: MemberStatus) -> Member {
 	Member { user_id: user_id.to_owned(), name: None, email: email.to_owned(), status }
 }
 
-fn user_ids(members: &[Member]) -> Vec<&str> {
-	members.iter().map(|member| member.user_id.as_str()).collect()
+fn user_ids(listed: &SpaceMembers) -> Vec<&str> {
+	listed.members.iter().map(|member| member.user_id.as_str()).collect()
+}
+
+fn invitation_states(listed: &SpaceMembers) -> Vec<(&str, InvitationState)> {
+	listed.invitations.iter().map(|sent| (sent.email.as_str(), sent.state)).collect()
+}
+
+const LIST_READ: [&str; 2] = ["GET", "GET invitations"];
+
+fn calls_then_read_back(calls: &[&str]) -> Vec<String> {
+	calls.iter().chain(LIST_READ.iter()).map(|call| (*call).to_owned()).collect()
 }
 
 #[test]
-fn the_members_are_listed_in_the_cloud_order_with_a_status_each() {
+fn the_host_the_joined_members_and_every_invitation_with_its_state_are_listed_in_the_cloud_order() {
 	run(async {
 		let harness = Harness::hosted("members-list").await;
 		harness.seed(&[
 			json!({ "userId": "joiner", "email": "joiner@example.com", "name": "Joiner", "role": "member", "state": "joined" }),
 			cloud_member("guest", "guest@example.com", "member", "pending"),
 		]);
+		harness.seed_invitations(&[
+			cloud_invitation("i1", "bob@example.com", "invited"),
+			cloud_invitation("i2", "eve@example.com", "expired"),
+			cloud_invitation("i3", "joe@example.com", "withdrawn"),
+		]);
 
-		let members = harness.listed().await.expect("the members list");
+		let listed = harness.listed().await.expect("the members list");
 
 		assert_eq!(
-			members,
+			listed.members,
 			vec![
 				member("owner", OWNER_EMAIL, MemberStatus::Host),
 				Member {
 					name: Some("Joiner".to_owned()),
 					..member("joiner", "joiner@example.com", MemberStatus::Joined)
 				},
-				member("guest", "guest@example.com", MemberStatus::Pending),
 			]
 		);
-		assert_eq!(harness.member_calls(), vec!["GET"]);
+		assert_eq!(
+			listed.invitations[0],
+			SpaceInvitation {
+				id: "i1".to_owned(),
+				email: "bob@example.com".to_owned(),
+				sent_at: "2026-10-01T00:00:00.000Z".to_owned(),
+				expires_at: "2026-10-08T00:00:00.000Z".to_owned(),
+				state: InvitationState::Invited,
+			}
+		);
+		assert_eq!(
+			invitation_states(&listed),
+			vec![
+				("bob@example.com", InvitationState::Invited),
+				("eve@example.com", InvitationState::Expired),
+				("joe@example.com", InvitationState::Withdrawn),
+			]
+		);
+		assert_eq!(harness.member_calls(), LIST_READ);
 	});
 }
 
 #[test]
-fn an_invite_is_trimmed_lowercased_posted_and_answered_pending_with_the_list_read_back() {
+fn an_invite_is_trimmed_lowercased_posted_and_read_back_as_an_invited_invitation() {
 	run(async {
 		let harness = Harness::hosted("members-invite").await;
 
-		let invited = harness.invited("  Ada@Example.COM ").await.expect("the invite lands");
+		let listed = harness.invited("  Ada@Example.COM ").await.expect("the invite lands");
 
-		assert_eq!(invited.email, "ada@example.com");
-		assert_eq!(invited.status, MemberStatus::Pending);
-		assert_eq!(harness.member_calls(), vec!["POST ada@example.com", "GET"]);
-		let heard = harness.heard_member_lists();
+		assert_eq!(invitation_states(&listed), vec![("ada@example.com", InvitationState::Invited)]);
+		assert_eq!(
+			harness.member_calls(),
+			calls_then_read_back(&["POST invitations ada@example.com"])
+		);
+		let heard = harness.heard_invitation_lists();
 		assert_eq!(heard.len(), 1);
-		assert_eq!(heard[0][1]["email"], "ada@example.com");
-		assert_eq!(heard[0][1]["status"], "pending");
+		assert_eq!(heard[0][0]["email"], "ada@example.com");
+		assert_eq!(heard[0][0]["state"], "invited");
 	});
 }
 
 #[test]
-fn a_pending_member_is_withdrawn_and_a_joined_one_removed_each_read_back() {
+fn an_invitation_is_withdrawn_then_invited_again_each_read_back_and_announced() {
 	run(async {
-		let harness = Harness::hosted("members-end").await;
-		harness.listed_with_a_guest_and_a_joiner().await;
+		let harness = Harness::hosted("members-withdraw").await;
+		harness.seed_invitations(&[cloud_invitation("i1", "bob@example.com", "invited")]);
 
-		let withdrawn = harness.withdrawn("guest").await.expect("the invitation is withdrawn");
-		let removed = harness.removed("joiner").await.expect("the member is removed");
+		let withdrawn = harness.withdrawn("i1").await.expect("the invitation is withdrawn");
+		let resent = harness.resent("i1").await.expect("the invitation is sent again");
 
-		assert_eq!(user_ids(&withdrawn), vec!["owner", "joiner"]);
-		assert_eq!(user_ids(&removed), vec!["owner"]);
+		assert_eq!(
+			invitation_states(&withdrawn),
+			vec![("bob@example.com", InvitationState::Withdrawn)]
+		);
+		assert_eq!(invitation_states(&resent), vec![("bob@example.com", InvitationState::Invited)]);
+		assert_ne!(resent.invitations[0].id, "i1");
+		assert_eq!(user_ids(&resent), vec!["owner"]);
+		let mut calls = calls_then_read_back(&["DELETE invitations i1"]);
+		calls.extend(calls_then_read_back(&["POST invitations i1/resend"]));
+		assert_eq!(harness.member_calls(), calls);
+		let heard = harness.heard_invitation_lists();
+		assert_eq!(heard.len(), 2);
+		assert_eq!(heard[0][0]["state"], "withdrawn");
+		assert_eq!(heard[1][0]["state"], "invited");
+	});
+}
+
+#[test]
+fn an_unknown_invitation_is_refused_typed_and_announces_nothing() {
+	run(async {
+		let harness = Harness::hosted("members-unknown-invitation").await;
+
+		assert_eq!(harness.withdrawn("nope").await, Err(MembersError::UnknownInvitation));
+		assert_eq!(harness.resent("nope").await, Err(MembersError::UnknownInvitation));
 		assert_eq!(
 			harness.member_calls(),
-			vec!["GET", "DELETE guest", "GET", "GET", "DELETE joiner", "GET"]
+			vec!["DELETE invitations nope", "POST invitations nope/resend"]
 		);
+		assert!(harness.heard_member_lists().is_empty());
+	});
+}
+
+#[test]
+fn a_joined_member_is_removed_with_the_list_read_back_on_a_space_never_listed_in_this_process() {
+	run(async {
+		let harness = Harness::hosted("members-end").await;
+		harness.seed(&[cloud_member("joiner", "joiner@example.com", "member", "joined")]);
+
+		let removed = harness.removed("joiner").await.expect("the member is removed");
+
+		assert_eq!(user_ids(&removed), vec!["owner"]);
+		assert_eq!(harness.member_calls(), calls_then_read_back(&["GET", "DELETE joiner"]));
 		let heard = harness.heard_member_lists();
-		assert_eq!(heard.len(), 3);
+		assert_eq!(heard.len(), 1);
 		assert_eq!(
-			heard[2],
+			heard[0],
 			json!([{ "userId": "owner", "name": null, "email": OWNER_EMAIL, "status": "host" }])
 		);
 	});
@@ -1977,7 +2155,7 @@ fn what_is_not_an_email_is_refused_before_the_cloud_and_a_cloud_400_alike() {
 			json!({ "error": { "code": "INVALID_EMAIL" } }),
 		);
 		assert_eq!(harness.invited("ada@example.com").await, Err(MembersError::NotAnEmail));
-		assert_eq!(harness.member_calls(), vec!["POST ada@example.com"]);
+		assert_eq!(harness.member_calls(), vec!["POST invitations ada@example.com"]);
 	});
 }
 
@@ -2009,39 +2187,15 @@ fn the_cloud_conflicts_are_typed_refusals() {
 }
 
 #[test]
-fn a_status_mismatch_the_host_or_an_unknown_member_is_refused_from_a_fresh_read_without_delete() {
+fn a_pending_member_the_host_or_an_unknown_member_is_refused_removal_from_a_fresh_read() {
 	run(async {
 		let harness = Harness::hosted("members-mismatch").await;
 		harness.listed_with_a_guest_and_a_joiner().await;
 
-		assert_eq!(harness.withdrawn("joiner").await, Err(MembersError::NotPending));
 		assert_eq!(harness.removed("guest").await, Err(MembersError::NotJoined));
-		assert_eq!(harness.withdrawn("owner").await, Err(MembersError::HostNotRemovable));
 		assert_eq!(harness.removed("owner").await, Err(MembersError::HostNotRemovable));
 		assert_eq!(harness.removed("stranger").await, Err(MembersError::UnknownMember));
-		assert_eq!(harness.withdrawn("stranger").await, Err(MembersError::UnknownMember));
-		assert_eq!(harness.member_calls(), vec!["GET"; 6]);
-	});
-}
-
-#[test]
-fn withdraw_and_remove_succeed_on_a_space_never_listed_in_this_process() {
-	run(async {
-		let harness = Harness::hosted("members-never-listed").await;
-		harness.seed(&[
-			cloud_member("guest", "guest@example.com", "member", "pending"),
-			cloud_member("joiner", "joiner@example.com", "member", "joined"),
-		]);
-
-		let withdrawn = harness.withdrawn("guest").await.expect("the invitation is withdrawn");
-		let removed = harness.removed("joiner").await.expect("the member is removed");
-
-		assert_eq!(user_ids(&withdrawn), vec!["owner", "joiner"]);
-		assert_eq!(user_ids(&removed), vec!["owner"]);
-		assert_eq!(
-			harness.member_calls(),
-			vec!["GET", "DELETE guest", "GET", "GET", "DELETE joiner", "GET"]
-		);
+		assert_eq!(harness.member_calls(), vec!["GET"; 3]);
 	});
 }
 
@@ -2056,11 +2210,10 @@ fn the_status_is_decided_on_the_cloud_list_not_on_a_stale_one() {
 			}
 		}
 
-		assert_eq!(harness.withdrawn("guest").await, Err(MembersError::NotPending));
 		let removed = harness.removed("guest").await.expect("the now joined guest is removed");
 
 		assert_eq!(user_ids(&removed), vec!["owner", "joiner"]);
-		assert_eq!(harness.member_calls(), vec!["GET", "GET", "DELETE guest", "GET"]);
+		assert_eq!(harness.member_calls(), calls_then_read_back(&["GET", "DELETE guest"]));
 	});
 }
 
@@ -2088,7 +2241,8 @@ fn a_space_without_an_instance_refuses_every_member_command_before_the_cloud() {
 
 		assert_eq!(harness.listed().await, Err(MembersError::NotHosting));
 		assert_eq!(harness.invited("ada@example.com").await, Err(MembersError::NotHosting));
-		assert_eq!(harness.withdrawn("guest").await, Err(MembersError::NotHosting));
+		assert_eq!(harness.withdrawn("i1").await, Err(MembersError::NotHosting));
+		assert_eq!(harness.resent("i1").await, Err(MembersError::NotHosting));
 		assert_eq!(harness.removed("joiner").await, Err(MembersError::NotHosting));
 		assert!(harness.member_calls().is_empty());
 	});
@@ -2103,7 +2257,8 @@ fn a_cloud_401_needs_a_sign_in() {
 
 		assert_eq!(harness.listed().await, Err(MembersError::NeedsSignIn));
 		assert_eq!(harness.invited("ada@example.com").await, Err(MembersError::NeedsSignIn));
-		assert_eq!(harness.withdrawn("guest").await, Err(MembersError::NeedsSignIn));
+		assert_eq!(harness.withdrawn("i1").await, Err(MembersError::NeedsSignIn));
+		assert_eq!(harness.resent("i1").await, Err(MembersError::NeedsSignIn));
 		assert_eq!(harness.removed("joiner").await, Err(MembersError::NeedsSignIn));
 	});
 }
@@ -2165,11 +2320,11 @@ fn an_online_space_polls_its_members_and_announces_only_a_changed_list() {
 		let _member = harness.member().await;
 		harness.reached(HostingState::Online).await;
 
-		let polled_a_few_times = || (harness.member_calls().len() >= 4).then_some(());
+		let polled_a_few_times = || (harness.member_calls().len() >= 8).then_some(());
 		harness.noticed_until("four member polls", polled_a_few_times).await;
 		assert_eq!(harness.heard_member_lists().len(), 1);
 
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "joined")]);
 		let changed_twice = || Some(harness.heard_member_lists()).filter(|heard| heard.len() == 2);
 		let heard = harness.noticed_until("a second member list", changed_twice).await;
 		assert_eq!(heard.len(), 2);
@@ -2189,7 +2344,7 @@ fn an_online_space_polls_its_members_at_once_before_the_fifteen_seconds() {
 		harness.noticed_until("a member list", is_listed).await;
 
 		assert_eq!(harness.heard_member_lists().len(), 1);
-		assert_eq!(harness.member_calls(), vec!["GET"]);
+		assert_eq!(harness.member_calls(), LIST_READ);
 	});
 }
 
@@ -2380,7 +2535,15 @@ fn a_member_invites_into_the_shared_space_only() {
 fn a_member_withdraws_an_invitation_of_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"hosting_withdraw_invitation",
-		|space_id| json!({ "spaceId": space_id, "userId": "pending" }),
+		|space_id| json!({ "spaceId": space_id, "invitationId": "i1" }),
+	));
+}
+
+#[test]
+fn a_member_invites_again_into_the_shared_space_only() {
+	run(kept_in_the_space_named(
+		"hosting_resend_invitation",
+		|space_id| json!({ "spaceId": space_id, "invitationId": "i1" }),
 	));
 }
 
@@ -3644,12 +3807,15 @@ impl Authoring {
 		let local = super::local_api(app.handle()).expect("the local host api listens");
 		app.manage(Hosting::new(&cloud, Some(local.clone())));
 		app.state::<Hosting>().hosts().entry(PERSONAL.to_owned()).or_default().members =
-			Some(vec![Member {
-				user_id: GUEST.to_owned(),
-				name: None,
-				email: GUEST_EMAIL.to_owned(),
-				status: MemberStatus::Joined,
-			}]);
+			Some(SpaceMembers {
+				members: vec![Member {
+					user_id: GUEST.to_owned(),
+					name: None,
+					email: GUEST_EMAIL.to_owned(),
+					status: MemberStatus::Joined,
+				}],
+				invitations: Vec::new(),
+			});
 		let window = WebviewWindowBuilder::new(app.handle(), "main", Default::default())
 			.build()
 			.expect("the window builds");
@@ -5755,29 +5921,45 @@ impl Harness {
 		RelaySide { socket, instance_id, unread: VecDeque::new() }
 	}
 
-	async fn link_for(&self, user_id: &str) -> JoinLink {
-		let link = join_link(self.app.handle(), PERSONAL.to_owned(), user_id.to_owned()).await;
-		join_link_of(&link.expect("a join link"))
+	fn host_listed(&self) -> Value {
+		let host = self.host_keys();
+		let ed25519 = BASE64_URL_SAFE_NO_PAD.encode(host.signing_public().as_bytes());
+		let registered = self.relay.device.device_of(&ed25519).expect("the host device registered");
+		listed_device(&registered.id, OWNER_ACCOUNT, &host)
 	}
 
-	async fn joined(&self, relay: &mut RelaySide, link: &JoinLink, account_id: &str) -> Joined {
+	fn approved(&self, device: &SealingMember) {
+		let host = self.host_listed();
+		let mut listed = self.relay.listed_devices.lock().expect("the relay");
+		let listed = listed.get_or_insert_with(|| vec![host]);
+		listed.push(listed_device(&device.relay_device_id, &device.account_id, &device.keys));
+	}
+
+	fn unlisted(&self, device: &SealingMember) {
+		let mut listed = self.relay.listed_devices.lock().expect("the relay");
+		let listed = listed.as_mut().expect("a device list");
+		listed.retain(|listed| listed["deviceId"] != device.relay_device_id.as_str());
+	}
+
+	fn device_lists(&self) -> usize {
+		self.relay.device_lists.load(Ordering::SeqCst)
+	}
+
+	async fn joined(&self, relay: &mut RelaySide, account_id: &str) -> Joined {
 		let member = SealingMember::new(account_id);
-		relay.sent(member.join_frame(link, &link.secret)).await;
-		let answer = relay.addressed(&member, "joined").await;
-		let handover = member.joined_answer(&answer, &link.secret);
-		let rostered = verified_set(&self.host_keys().signing_public(), &handover.roster);
+		self.approved(&member);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&member, "rekey").await;
+		let host = self.host_keys().signing_public();
+		let handover =
+			member.rekey_opened(&rekey, &relay.instance_id, &host).expect("the rekey opens");
+		let rostered = verified_set(&host, &handover.roster);
 		assert!(rostered.expect("the roster set verifies").contains(&member.keys.device_id()));
 		Joined { space: space_key_of(&handover), rows: handover.roster.rows, member, ctr: 0 }
 	}
 
 	async fn devices(&self) -> Vec<AccountDevices> {
 		devices(self.app.handle(), PERSONAL.to_owned()).await.expect("the roster reads")
-	}
-
-	async fn join_secret_count(&self) -> usize {
-		let state = self.app.state::<DatabaseState>();
-		let relay = state.as_ref().expect("the database").space_relay();
-		relay.join_secrets(PERSONAL.to_owned()).await.expect("the secrets read").len()
 	}
 
 	#[cfg(unix)]
@@ -5817,6 +5999,17 @@ impl Harness {
 	}
 }
 
+const DEVICES_CHANGED: &str = r#"{"event":"devices.changed"}"#;
+
+fn listed_device(relay_device_id: &str, account_id: &str, keys: &DeviceKeys) -> Value {
+	json!({
+		"deviceId": relay_device_id,
+		"userId": account_id,
+		"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(keys.signing_public().as_bytes()),
+		"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(keys.agreement_public().as_bytes()),
+	})
+}
+
 fn a_member_call(id: &str) -> String {
 	json!({ "id": id, "command": "agent_models" }).to_string()
 }
@@ -5851,180 +6044,6 @@ fn device_ids(devices: &[AccountDevices]) -> Vec<(String, Vec<String>)> {
 }
 
 #[test]
-fn a_join_link_used_twice_is_refused_as_used_and_a_payload_that_does_not_open_as_malformed() {
-	run(async {
-		let mut harness = Harness::signed_in("join-twice").await;
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let link = harness.link_for("guest").await;
-
-		let first = harness.joined(&mut relay, &link, "guest").await;
-		let second = SealingMember::new("guest");
-		relay.sent(second.join_frame(&link, &link.secret)).await;
-		let refused = relay.addressed(&second, "join_refused").await;
-		let mut garbled: Value =
-			serde_json::from_str(&second.join_frame(&link, &link.secret)).expect("json");
-		garbled["join"] = json!("bm90IGEgc2VhbGVkIGJveA==");
-		relay.sent(garbled.to_string()).await;
-		let malformed = relay.addressed(&second, "join_refused").await;
-
-		assert_eq!(
-			refused,
-			json!({ "v": 2, "instance": relay.instance_id, "to": second.relay_device_id, "join_refused": "used" })
-		);
-		assert_eq!(malformed["join_refused"], "malformed");
-		let host = harness.host_keys().device_id().to_string();
-		assert_eq!(
-			device_ids(&harness.devices().await),
-			vec![
-				("guest".to_owned(), vec![first.member.keys.device_id().to_string()]),
-				("owner".to_owned(), vec![host]),
-			]
-		);
-	});
-}
-
-fn member_desktop(member: &SealingMember) -> (AppOfItsOwn, RemovedOnDrop) {
-	let database = temp_dir();
-	let app = an_app_of_its_own("hosting-member-desktop", mock_builder());
-	app.manage::<DatabaseState>(Ok(db::open(&database)));
-	app.manage(DeviceKeysState::new(Ok(DeviceKeys::from_secret(&member.keys.secret()))));
-	let profile = app.path().app_data_dir().expect("the data folder resolves");
-	let identifier = app.config().identifier.clone();
-	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
-	(app, database)
-}
-
-fn joined_bytes(answer: &Value) -> Vec<u8> {
-	let joined = answer["joined"].as_str().expect("a joined answer");
-	BASE64_STANDARD.decode(joined).expect("a base64 answer")
-}
-
-#[test]
-fn a_join_whose_answer_was_lost_is_answered_again_and_the_member_desktop_holds_its_key() {
-	run(async {
-		let mut harness = Harness::signed_in("join-lost-answer").await;
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let raw_link = join_link(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
-			.await
-			.expect("a join link");
-		let link = join_link_of(&raw_link);
-		let member = SealingMember::new("guest");
-
-		relay.sent(member.join_frame(&link, &link.secret)).await;
-		relay.addressed(&member, "joined").await;
-		let admitted = device_ids(&harness.devices().await);
-		relay.sent(member.join_frame(&link, &link.secret)).await;
-		let again = relay.addressed(&member, "joined").await;
-		let handover = member.joined_answer(&again, &link.secret);
-		let (desktop, _database) = member_desktop(&member);
-		let held = joined_answer_held(desktop.handle(), &raw_link, &joined_bytes(&again)).await;
-
-		assert_eq!(device_ids(&harness.devices().await), admitted);
-		assert_eq!(handover.key_id, harness.space_key(PERSONAL).key_id);
-		assert_eq!(held, Ok(Some((handover.key_id, handover.roster.version))));
-	});
-}
-
-#[test]
-fn a_rostered_device_joining_under_a_fresh_link_is_answered_and_leaves_that_link_unused() {
-	run(async {
-		let mut harness = Harness::signed_in("join-rostered-fresh").await;
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let first = harness.link_for("guest").await;
-		let admitted = harness.joined(&mut relay, &first, "guest").await;
-		let fresh = harness.link_for("guest").await;
-
-		relay.sent(admitted.member.join_frame(&fresh, &fresh.secret)).await;
-		let answer = relay.addressed(&admitted.member, "joined").await;
-		let handover = admitted.member.joined_answer(&answer, &fresh.secret);
-		let state = harness.app.state::<DatabaseState>();
-		let relay_store = state.as_ref().expect("the database").space_relay();
-		let secrets = relay_store.join_secrets(PERSONAL.to_owned()).await.expect("the secrets");
-		let unused = secrets.iter().filter(|secret| !secret.is_used).count();
-
-		assert_eq!(unused, 1);
-		assert_eq!(handover.roster.rows.len(), admitted.rows.len());
-		let device_id = admitted.member.keys.device_id().to_string();
-		assert_eq!(
-			device_ids(&harness.devices().await),
-			vec![
-				("guest".to_owned(), vec![device_id]),
-				("owner".to_owned(), vec![harness.host_keys().device_id().to_string()]),
-			]
-		);
-	});
-}
-
-#[test]
-fn a_fresh_link_after_withdraw_admits_and_the_old_secret_is_refused_as_unknown() {
-	run(async {
-		let mut harness = Harness::signed_in("join-withdrawn").await;
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let withdrawn_link = harness.link_for("guest").await;
-
-		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
-			.await
-			.expect("the invitation is withdrawn");
-		let invited =
-			invite(harness.app.handle(), PERSONAL.to_owned(), "guest@example.com".to_owned())
-				.await
-				.expect("the guest is invited again");
-		let fresh_link = harness.link_for(&invited.user_id).await;
-		let stale = SealingMember::new("guest");
-		relay.sent(stale.join_frame(&withdrawn_link, &withdrawn_link.secret)).await;
-		let refused = relay.addressed(&stale, "join_refused").await;
-		let admitted = harness.joined(&mut relay, &fresh_link, &invited.user_id).await;
-
-		assert_eq!(refused["join_refused"], "unknown");
-		let accounts = harness.devices().await;
-		let guest = accounts.iter().find(|account| account.account_id == invited.user_id);
-		assert_eq!(
-			guest.map(|account| account.devices[0].device_id.clone()),
-			Some(admitted.member.keys.device_id().to_string())
-		);
-	});
-}
-
-#[test]
-fn a_second_link_replaces_the_unused_first_and_a_member_that_is_not_pending_gets_none() {
-	run(async {
-		let mut harness = Harness::signed_in("join-replaced").await;
-		harness.seed(&[
-			cloud_member("guest", "guest@example.com", "member", "pending"),
-			cloud_member("joiner", "joiner@example.com", "member", "joined"),
-		]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let replaced = harness.link_for("guest").await;
-		let current = harness.link_for("guest").await;
-		let held = harness.join_secret_count().await;
-
-		let not_pending = [
-			join_link(harness.app.handle(), PERSONAL.to_owned(), "joiner".to_owned()).await,
-			join_link(harness.app.handle(), PERSONAL.to_owned(), "owner".to_owned()).await,
-		];
-		let stale = SealingMember::new("guest");
-		relay.sent(stale.join_frame(&replaced, &replaced.secret)).await;
-		let refused = relay.addressed(&stale, "join_refused").await;
-
-		assert_eq!(not_pending, [Err(MembersError::NotPending), Err(MembersError::NotPending)]);
-		assert_eq!((held, harness.join_secret_count().await), (1, 1));
-		assert_eq!(refused["join_refused"], "unknown");
-		assert_eq!(replaced.instance_id, relay.instance_id);
-		assert_eq!(current.host, harness.host_keys().agreement_public());
-		harness.joined(&mut relay, &current, "guest").await;
-	});
-}
-
-#[test]
 fn a_joined_member_client_verifies_its_answer_and_exchanges_a_sealed_call() {
 	run(async {
 		let mut harness = Harness::signed_in("join-call").await;
@@ -6032,9 +6051,8 @@ fn a_joined_member_client_verifies_its_answer_and_exchanges_a_sealed_call() {
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let link = harness.link_for("guest").await;
 
-		let mut guest = harness.joined(&mut relay, &link, "guest").await;
+		let mut guest = harness.joined(&mut relay, "guest").await;
 		let answer = called(&mut relay, &mut guest, &host).await;
 
 		assert_eq!(guest.space.key_id, 1);
@@ -6055,10 +6073,8 @@ fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_droppe
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let mut guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let mut guest = harness.joined(&mut relay, "guest").await;
+		let mut joiner = harness.joined(&mut relay, "joiner").await;
 		called(&mut relay, &mut guest, &host).await;
 		harness.flagged_joined("guest");
 
@@ -6115,15 +6131,14 @@ fn removing_a_member_rekeys_the_remaining_device_while_the_removed_one_is_droppe
 }
 
 #[test]
-fn an_own_device_joins_through_the_device_link_and_removing_it_rotates_the_key() {
+fn a_second_device_of_the_host_account_is_admitted_without_invitation_and_removing_it_rotates() {
 	run(async {
 		let mut harness = Harness::signed_in("join-own-device").await;
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys();
-		let link = device_link(harness.app.handle(), PERSONAL.to_owned()).await.expect("a link");
 
-		let own = harness.joined(&mut relay, &join_link_of(&link), "owner").await;
+		let own = harness.joined(&mut relay, OWNER_ACCOUNT).await;
 		let listed = harness.devices().await;
 		let removed = remove_device(
 			harness.app.handle(),
@@ -6170,8 +6185,7 @@ fn removing_the_host_device_or_an_unknown_device_is_refused_and_changes_nothing(
 		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
-		let link = harness.link_for("guest").await;
-		harness.joined(&mut relay, &link, "guest").await;
+		harness.joined(&mut relay, "guest").await;
 		let before = harness.devices().await;
 		let removed =
 			|device_id: String| remove_device(harness.app.handle(), PERSONAL.to_owned(), device_id);
@@ -6194,8 +6208,7 @@ fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_
 		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
-		let link = harness.link_for("guest").await;
-		let guest = harness.joined(&mut relay, &link, "guest").await;
+		let guest = harness.joined(&mut relay, "guest").await;
 
 		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
 		let left_pending =
@@ -6215,60 +6228,21 @@ fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_
 }
 
 #[test]
-fn withdrawing_an_invitation_whose_device_joined_revokes_it_and_rekeys_the_others_only() {
-	run(async {
-		let mut harness = Harness::signed_in("join-withdraw-admitted").await;
-		harness.seed(&[
-			cloud_member("guest", "guest@example.com", "member", "pending"),
-			cloud_member("joiner", "joiner@example.com", "member", "pending"),
-		]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
-
-		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
-			.await
-			.expect("the invitation is withdrawn");
-		let rekey = relay.addressed(&joiner.member, "rekey").await;
-		let handover = joiner
-			.member
-			.rekey_opened(&rekey, &relay.instance_id, &host)
-			.expect("the rekey verifies and opens");
-		joiner.space = space_key_of(&handover);
-		joiner.ctr = 0;
-		let answer = called(&mut relay, &mut joiner, &host).await;
-
-		assert_eq!(handover.key_id, 2);
-		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
-		assert_eq!(answer["status"], 200);
-		assert!(!relay.has_held_any_frame_to(&guest.member));
-		assert_eq!(harness.join_secret_count().await, 1);
-		assert!(!harness.is_rotation_pending().await);
-		let accounts: Vec<String> =
-			device_ids(&harness.devices().await).into_iter().map(|(account, _)| account).collect();
-		assert_eq!(accounts, vec!["joiner".to_owned(), "owner".to_owned()]);
-	});
-}
-
-#[test]
-fn withdrawing_an_invitation_with_no_admitted_device_keeps_the_key_id() {
+fn withdrawing_an_invitation_keeps_the_key_id_and_the_roster() {
 	run(async {
 		let mut harness = Harness::signed_in("join-withdraw-unused").await;
-		harness.seed(&[cloud_member("guest", "guest@example.com", "member", "pending")]);
+		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "invited")]);
 		harness.started().await;
-		let _relay = harness.relay_side().await;
-		harness.link_for("guest").await;
+		let mut relay = harness.relay_side().await;
+		harness.joined(&mut relay, "joiner").await;
+		let before = harness.devices().await;
 
-		withdraw(harness.app.handle(), PERSONAL.to_owned(), "guest".to_owned())
+		withdraw(harness.app.handle(), PERSONAL.to_owned(), "i1".to_owned())
 			.await
 			.expect("the invitation is withdrawn");
 
 		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
-		assert_eq!(harness.join_secret_count().await, 0);
+		assert_eq!(harness.devices().await, before);
 		assert!(!harness.is_rotation_pending().await);
 	});
 }
@@ -6285,11 +6259,10 @@ fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let guest = harness.joined(&mut relay, "guest").await;
+		let joiner = harness.joined(&mut relay, "joiner").await;
 		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
+		harness.unlisted(&guest.member);
 		let left_pending = harness.is_rotation_pending().await;
 
 		harness.stopped().await;
@@ -6312,64 +6285,6 @@ fn a_rotation_left_pending_rotates_when_the_host_socket_comes_back_online() {
 	});
 }
 
-#[test]
-fn a_join_whose_device_is_removed_and_rekeyed_before_its_handover_gets_no_joined_frame() {
-	run(async {
-		let mut harness = Harness::signed_in("join-race").await;
-		harness.seed(&[
-			cloud_member("guest", "guest@example.com", "member", "pending"),
-			cloud_member("joiner", "joiner@example.com", "member", "pending"),
-		]);
-		harness.started().await;
-		let mut relay = harness.relay_side().await;
-		let joiner_link = harness.link_for("joiner").await;
-		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
-		harness.link_for("guest").await;
-		let state = harness.app.state::<DatabaseState>();
-		let database = state.as_ref().expect("the database");
-		let secrets = database.space_relay().join_secrets(PERSONAL.to_owned()).await;
-		let secret = secrets
-			.expect("the secrets read")
-			.into_iter()
-			.find(|secret| secret.account_id == "guest")
-			.expect("the guest secret");
-		let guest = SealingMember::new("guest");
-		let host = harness.host_keys();
-		let row = guest.row(&host, PERSONAL);
-		let admitted =
-			database.space_relay().admitted(PERSONAL.to_owned(), secret.id, 1, row).await;
-		assert!(admitted.expect("the admission lands"));
-
-		remove_device(
-			harness.app.handle(),
-			PERSONAL.to_owned(),
-			guest.keys.device_id().to_string(),
-		)
-		.await
-		.expect("the device is removed and the key rotated");
-		let space = harness.app.state::<SpaceKeys>().watched(PERSONAL).expect("the key reads");
-		let keys = HostKeys { device: host, space: space.expect("a key") };
-		let hosted = HostedSpace {
-			database,
-			keys: &keys,
-			space_id: PERSONAL,
-			instance_id: &relay.instance_id,
-		};
-		let request = JoinRequest {
-			signing: guest.keys.signing_public(),
-			agreement: guest.keys.agreement_public(),
-		};
-		let answer = hosted.joined(&guest.relay_device_id, &secret, &request).await;
-		let answer: Value = serde_json::from_str(&answer.expect("an answer")).expect("json");
-		relay.addressed(&joiner.member, "rekey").await;
-
-		assert_eq!(harness.space_key(PERSONAL).key_id, 2);
-		assert_eq!(answer["join_refused"], "used");
-		assert!(answer.get("joined").is_none());
-		assert!(!relay.has_held_any_frame_to(&guest));
-	});
-}
-
 #[cfg(unix)]
 #[test]
 fn a_pending_rotation_failing_at_socket_start_ends_the_session_unsealed_and_the_reconnect_retries_it(
@@ -6383,11 +6298,10 @@ fn a_pending_rotation_failing_at_socket_start_ends_the_session_unsealed_and_the_
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let guest = harness.joined(&mut relay, "guest").await;
+		let joiner = harness.joined(&mut relay, "joiner").await;
 		let refused = harness.removed_while_no_key_is_stored(&guest.member).await;
+		harness.unlisted(&guest.member);
 		harness.stopped().await;
 		harness.profile_locked(true);
 
@@ -6424,10 +6338,8 @@ fn a_device_revoked_event_drops_the_row_and_rekeys_the_remaining_devices_with_th
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let mut guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let mut joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let mut guest = harness.joined(&mut relay, "guest").await;
+		let mut joiner = harness.joined(&mut relay, "joiner").await;
 
 		relay.sent(device_revoked_event(&guest.member.relay_device_id, "guest")).await;
 		let rekey = relay.addressed(&joiner.member, "rekey").await;
@@ -6469,8 +6381,7 @@ fn a_device_revoked_event_naming_no_row_another_account_the_host_or_sent_by_a_me
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let link = harness.link_for("guest").await;
-		let mut guest = harness.joined(&mut relay, &link, "guest").await;
+		let mut guest = harness.joined(&mut relay, "guest").await;
 		let host_relay_device = held_relay_device(&harness).await.expect("a registered device");
 		let before = harness.devices().await;
 
@@ -6504,12 +6415,11 @@ fn a_device_revoked_event_whose_rotation_fails_ends_the_session_and_the_reconnec
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
-		let guest_link = harness.link_for("guest").await;
-		let guest = harness.joined(&mut relay, &guest_link, "guest").await;
-		let joiner_link = harness.link_for("joiner").await;
-		let joiner = harness.joined(&mut relay, &joiner_link, "joiner").await;
+		let guest = harness.joined(&mut relay, "guest").await;
+		let joiner = harness.joined(&mut relay, "joiner").await;
 
 		harness.profile_locked(true);
+		harness.unlisted(&guest.member);
 		relay.sent(device_revoked_event(&guest.member.relay_device_id, "guest")).await;
 		let frames = relay.frames_until_closed().await;
 		let left_pending = harness.is_rotation_pending().await;
@@ -6530,5 +6440,336 @@ fn a_device_revoked_event_whose_rotation_fails_ends_the_session_and_the_reconnec
 		let handover = joiner.member.rekey_opened(&rekey, &retried.instance_id, &host);
 		assert_eq!(handover.expect("the rekey opens").key_id, 2);
 		assert!(!harness.is_rotation_pending().await);
+	});
+}
+
+impl Harness {
+	async fn device_list_settled(&self, reads: usize) {
+		let is_read = || (self.device_lists() >= reads).then_some(());
+		self.noticed_until("the device list read", is_read).await;
+		self.devices().await;
+	}
+
+	async fn roster_version(&self) -> u64 {
+		let roster = relay_database(self).space_relay().roster(PERSONAL.to_owned()).await;
+		roster.expect("the roster reads").version
+	}
+
+	async fn rostered_as(&self, device: &SealingMember) -> Option<super::roster::Rostered> {
+		let relay = relay_database(self).space_relay();
+		let row =
+			relay.roster_row_of_relay_device(PERSONAL.to_owned(), device.relay_device_id.clone());
+		let row = row.await.expect("the roster row reads")?;
+		let host = self.host_keys().signing_public();
+		Some(super::roster::verified(&host, PERSONAL, &row).expect("the host signed the row"))
+	}
+
+	fn accepted(&self, user_id: &str, email: &str, devices: &[&SealingMember]) {
+		self.relay.invitations.lock().expect("the relay").retain(|sent| sent["email"] != email);
+		self.seed(&[cloud_member(user_id, email, "member", "joined")]);
+		for device in devices {
+			self.approved(device);
+		}
+	}
+}
+
+fn rekeyed_handover(
+	relay: &RelaySide,
+	device: &SealingMember,
+	rekey: &Value,
+	host: &ed25519_dalek::VerifyingKey,
+) -> super::handover::KeyHandover {
+	device.rekey_opened(rekey, &relay.instance_id, host).expect("the rekey verifies and opens")
+}
+
+#[test]
+fn an_accepted_invitation_admits_every_approved_device_of_the_member_and_announces_the_list() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-accepted").await;
+		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "invited")]);
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let laptop = SealingMember::new("guest");
+		let phone = SealingMember::new("guest");
+
+		harness.accepted("guest", "guest@example.com", &[&laptop, &phone]);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let laptop_rekey = relay.addressed(&laptop, "rekey").await;
+		let phone_rekey = relay.addressed(&phone, "rekey").await;
+		let handover = rekeyed_handover(&relay, &phone, &phone_rekey, &host);
+		let rostered = verified_set(&host, &handover.roster).expect("the roster set verifies");
+		let heard = || {
+			let members = harness.heard_member_lists();
+			members.last().filter(|last| last.as_array().is_some_and(|all| all.len() == 2)).cloned()
+		};
+		let members = harness.noticed_until("the joined member list", heard).await;
+
+		assert_eq!(rekeyed_handover(&relay, &laptop, &laptop_rekey, &host).key_id, 1);
+		assert_eq!(*space_key_of(&handover).key, *harness.space_key(PERSONAL).key);
+		assert!(rostered.contains(&laptop.keys.device_id()));
+		assert!(rostered.contains(&phone.keys.device_id()));
+		let row = harness.rostered_as(&laptop).await.expect("the laptop is rostered");
+		assert_eq!(row.relay_device_id, laptop.relay_device_id);
+		assert_eq!(row.account_id, "guest");
+		assert_eq!(row.signing, laptop.keys.signing_public());
+		assert_eq!(row.agreement, laptop.keys.agreement_public());
+		assert_eq!(members[1]["userId"], "guest");
+		assert_eq!(members[1]["status"], "joined");
+		assert_eq!(harness.heard_invitation_lists().last(), Some(&json!([])));
+	});
+}
+
+#[test]
+fn a_pending_device_gets_no_rekey_until_devices_changed_lists_it() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-pending").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let approved = SealingMember::new("guest");
+		let pending = SealingMember::new("guest");
+
+		harness.approved(&approved);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.addressed(&approved, "rekey").await;
+		let before_approval = harness.rostered_as(&pending).await;
+		let held_before = relay.has_held_any_frame_to(&pending);
+		harness.approved(&pending);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&pending, "rekey").await;
+		let handover = rekeyed_handover(&relay, &pending, &rekey, &host);
+
+		assert!(before_approval.is_none());
+		assert!(!held_before);
+		assert!(verified_set(&host, &handover.roster)
+			.expect("the roster set verifies")
+			.contains(&pending.keys.device_id()));
+		assert!(harness.rostered_as(&pending).await.is_some());
+	});
+}
+
+#[test]
+fn a_device_listed_while_the_host_socket_was_closed_is_admitted_at_the_next_socket_open() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-caught-up").await;
+		harness.started().await;
+		let _first = harness.relay_side().await;
+		harness.stopped().await;
+		let device = SealingMember::new("guest");
+		harness.approved(&device);
+
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let rekey = relay.addressed(&device, "rekey").await;
+		let host = harness.host_keys().signing_public();
+		let handover = rekeyed_handover(&relay, &device, &rekey, &host);
+
+		assert_eq!(handover.key_id, harness.space_key(PERSONAL).key_id);
+		assert!(harness.rostered_as(&device).await.is_some());
+	});
+}
+
+#[test]
+fn a_rostered_device_missing_from_a_list_that_names_the_host_is_removed_and_the_key_rotated() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-unlisted").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let gone = harness.joined(&mut relay, "guest").await;
+		let mut kept = harness.joined(&mut relay, "joiner").await;
+
+		harness.unlisted(&gone.member);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&kept.member, "rekey").await;
+		let handover = rekeyed_handover(&relay, &kept.member, &rekey, &host);
+		kept.space = space_key_of(&handover);
+		kept.ctr = 0;
+		let answer = called(&mut relay, &mut kept, &host).await;
+
+		assert_eq!(handover.key_id, 2);
+		assert!(!verified_set(&host, &handover.roster)
+			.expect("the roster set verifies")
+			.contains(&gone.member.keys.device_id()));
+		assert!(harness.rostered_as(&gone.member).await.is_none());
+		assert_eq!(answer["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&gone.member));
+	});
+}
+
+#[test]
+fn a_device_list_that_omits_the_host_device_or_fails_to_read_changes_no_roster_row() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-unread").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let rostered = harness.joined(&mut relay, "guest").await;
+		let newcomer = SealingMember::new("joiner");
+		harness.device_list_settled(2).await;
+		let before = (harness.devices().await, harness.roster_version().await);
+		let reads = harness.device_lists();
+
+		*harness.relay.listed_devices.lock().expect("the relay") =
+			Some(vec![listed_device(&newcomer.relay_device_id, "joiner", &newcomer.keys)]);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+		*harness.relay.listed_devices.lock().expect("the relay") = None;
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 2).await;
+
+		assert_eq!((harness.devices().await, harness.roster_version().await), before);
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+		assert!(harness.rostered_as(&rostered.member).await.is_some());
+		assert!(harness.rostered_as(&newcomer).await.is_none());
+		assert!(!relay.has_held_any_frame_to(&newcomer));
+		assert_eq!(harness.state(), HostingState::Online);
+	});
+}
+
+#[test]
+fn a_listed_device_rostered_under_other_keys_keeps_its_row_unchanged() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-other-keys").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let rostered = harness.joined(&mut relay, "guest").await;
+		let impostor = SealingMember {
+			relay_device_id: rostered.member.relay_device_id.clone(),
+			..SealingMember::new("guest")
+		};
+		harness.device_list_settled(2).await;
+		let before = (harness.devices().await, harness.roster_version().await);
+		let reads = harness.device_lists();
+
+		harness.unlisted(&rostered.member);
+		harness.approved(&impostor);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+
+		assert_eq!((harness.devices().await, harness.roster_version().await), before);
+		let row = harness.rostered_as(&rostered.member).await.expect("the row is kept");
+		assert_eq!(row.signing, rostered.member.keys.signing_public());
+		assert_eq!(harness.space_key(PERSONAL).key_id, 1);
+	});
+}
+
+#[test]
+fn two_overlapping_device_list_reads_admit_a_device_once() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-overlap").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let device = SealingMember::new("guest");
+		harness.device_list_settled(1).await;
+		let reads = harness.device_lists();
+		let before = harness.roster_version().await;
+
+		harness.approved(&device);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		relay.addressed(&device, "rekey").await;
+		harness.device_list_settled(reads + 2).await;
+
+		assert_eq!(harness.roster_version().await, before + 1);
+		let roster = relay_database(&harness).space_relay().roster(PERSONAL.to_owned()).await;
+		let rows = roster.expect("the roster reads").rows;
+		let device_rows = rows.iter().filter(|row| row.relay_device_id == device.relay_device_id);
+		assert_eq!(device_rows.count(), 1);
+	});
+}
+
+#[test]
+fn a_join_frame_is_dropped_unanswered_and_the_socket_stays_open() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-no-join").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let mut member = harness.joined(&mut relay, "guest").await;
+		let joiner = SealingMember::new("joiner");
+
+		relay
+			.sent(
+				json!({ "v": 2, "instance": relay.instance_id, "from": joiner.relay_device_id, "join": "bm90IGEgc2VhbGVkIGJveA==" })
+					.to_string(),
+			)
+			.await;
+		let answer = called(&mut relay, &mut member, &host).await;
+
+		assert_eq!(answer["status"], 200);
+		assert!(!relay.has_held_any_frame_to(&joiner));
+		assert!(harness.rostered_as(&joiner).await.is_none());
+	});
+}
+
+#[test]
+fn a_device_removed_from_the_space_stays_out_while_listed_and_its_new_keys_are_admitted() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-removed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		let removed = harness.joined(&mut relay, "guest").await;
+		let kept = harness.joined(&mut relay, "joiner").await;
+		let removed_id = removed.member.keys.device_id().to_string();
+		remove_device(harness.app.handle(), PERSONAL.to_owned(), removed_id)
+			.await
+			.expect("the device is removed");
+		relay.addressed(&kept.member, "rekey").await;
+		harness.device_list_settled(3).await;
+		let reads = harness.device_lists();
+		let version = harness.roster_version().await;
+
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+		let after_change =
+			(harness.rostered_as(&removed.member).await, harness.roster_version().await);
+		let signed_in_again = SealingMember::new("guest");
+		harness.approved(&signed_in_again);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&signed_in_again, "rekey").await;
+		let handover = rekeyed_handover(&relay, &signed_in_again, &rekey, &host);
+
+		assert_eq!(after_change, (None, version));
+		assert!(!relay.has_held_any_frame_to(&removed.member));
+		assert_eq!(handover.key_id, 2);
+		assert!(harness.rostered_as(&signed_in_again).await.is_some());
+		assert!(harness.rostered_as(&removed.member).await.is_none());
+	});
+}
+
+#[test]
+fn a_failed_admission_keeps_the_host_socket_open_and_the_next_devices_changed_admits() {
+	run(async {
+		let mut harness = Harness::signed_in("devices-failed").await;
+		harness.started().await;
+		let mut relay = harness.relay_side().await;
+		let host = harness.host_keys().signing_public();
+		harness.device_list_settled(1).await;
+		let reads = harness.device_lists();
+		let attempts = harness.attempts();
+		let renamed = |from: &'static str, to: &'static str| {
+			relay_database(&harness).call_mut(move |connection| {
+				connection.execute_batch(&format!("ALTER TABLE {from} RENAME TO {to}"))?;
+				Ok(())
+			})
+		};
+		let unadmitted = SealingMember::new("guest");
+
+		renamed("space_removed_devices", "space_removed_devices_aside").await.expect("aside");
+		harness.approved(&unadmitted);
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		harness.device_list_settled(reads + 1).await;
+		let after_failure = harness.rostered_as(&unadmitted).await;
+		renamed("space_removed_devices_aside", "space_removed_devices").await.expect("back");
+		relay.sent(DEVICES_CHANGED.to_owned()).await;
+		let rekey = relay.addressed(&unadmitted, "rekey").await;
+
+		assert!(after_failure.is_none());
+		assert_eq!(rekeyed_handover(&relay, &unadmitted, &rekey, &host).key_id, 1);
+		assert!(harness.rostered_as(&unadmitted).await.is_some());
+		assert_eq!(harness.attempts(), attempts);
+		assert_eq!(harness.state(), HostingState::Online);
 	});
 }

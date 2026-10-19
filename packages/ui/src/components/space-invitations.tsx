@@ -15,6 +15,7 @@ import {
 	ContextMenuLabel,
 	ContextMenuSeparator,
 } from "@workspace/ui/components/ui/context-menu"
+import { formatDateTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 const GROUP_LABEL = "pt-1.5 pb-0.5"
@@ -44,18 +45,31 @@ const CAUSE = "flex items-start gap-1.5 break-words text-destructive text-xs"
 
 const CAUSE_ICON = "size-3.5 shrink-0"
 
+const NOTE =
+	"flex items-start gap-1.5 break-words text-muted-foreground text-xs"
+
+const NOTE_DOT_SLOT = "grid h-4 w-3.5 shrink-0 place-items-center"
+
+const NOTE_DOT = "size-1.75 rounded-full bg-presence-offline"
+
 const ACTIONS = "flex gap-2"
 
 const ACTION = "h-7 rounded-control px-3 text-compact"
 
 const PRIMARY_BUSY = "data-disabled:opacity-70"
 
-const SECONDARY_BUSY = "data-disabled:opacity-50"
+const HALF_WHEN_DISABLED = "data-disabled:opacity-50"
+
+const MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
+	month: "long",
+	day: "numeric",
+}
 
 type SpaceInvitationFailure = "servers" | "offline"
 
 type SpaceInvitationState =
-	| { state: "waiting" | "accepting" | "withdrawn" }
+	| { state: "waiting" | "accepting" | "withdrawn" | "hostOffline" }
+	| { state: "expired"; expiresAt: number }
 	| { state: "failed"; failure: SpaceInvitationFailure }
 
 type SpaceInvitation = SpaceInvitationState & {
@@ -63,6 +77,8 @@ type SpaceInvitation = SpaceInvitationState & {
 	name: string
 	colour?: BotAvatarBlot | null
 	hostEmail: string
+	hostName?: string
+	expiresAt?: number
 }
 
 type SpaceInvitationCallbacks = {
@@ -84,18 +100,31 @@ const SpaceInvitationRow = ({
 	const { t } = useTranslation("bots")
 	const nameId = useId()
 	const causeId = useId()
-	const { id, name, colour, hostEmail } = invitation
-	const isWithdrawn = invitation.state === "withdrawn"
+	const { id, name, colour, hostEmail, hostName, expiresAt } = invitation
+	const isClosed =
+		invitation.state === "withdrawn" || invitation.state === "expired"
 	const isAccepting = invitation.state === "accepting"
 	const isFailed = invitation.state === "failed"
-	const tint = !isWithdrawn && colour ? blotTint(colour) : undefined
+	const isHostOffline = invitation.state === "hostOffline"
+	const isMuted = isClosed || isHostOffline
+	const tint = !isMuted && colour ? blotTint(colour) : undefined
+	const expiry =
+		expiresAt === undefined
+			? undefined
+			: formatDateTime(expiresAt, MONTH_AND_DAY)
 
 	const cause =
 		invitation.state === "failed"
 			? t(`spaces.invitations.failed.${invitation.failure}`)
-			: isWithdrawn
+			: invitation.state === "withdrawn"
 				? t("spaces.invitations.withdrawn", { email: hostEmail })
-				: null
+				: invitation.state === "expired"
+					? t("spaces.invitations.expired", {
+							date: formatDateTime(invitation.expiresAt, MONTH_AND_DAY),
+							email: hostEmail,
+						})
+					: null
+	const isDescribed = isFailed || isHostOffline
 
 	const details = (
 		<>
@@ -107,14 +136,33 @@ const SpaceInvitationRow = ({
 					style={tint ? { color: tint } : undefined}
 				/>
 				<div className={TEXT}>
-					<span className={cn(NAME, isWithdrawn && NAME_WITHDRAWN)} id={nameId}>
+					<span className={cn(NAME, isMuted && NAME_WITHDRAWN)} id={nameId}>
 						{name}
 					</span>
 					<span className={HOST}>
 						{t("spaces.invitations.invitedBy", { email: hostEmail })}
 					</span>
+					{expiry === undefined || isMuted ? null : (
+						<span className={HOST}>
+							{t("spaces.invitations.expires", { date: expiry })}
+						</span>
+					)}
 				</div>
 			</div>
+			{isHostOffline ? (
+				<p
+					className={cn(NOTE, INDENTED)}
+					data-slot="space-invitation-note"
+					id={causeId}
+				>
+					<span aria-hidden="true" className={NOTE_DOT_SLOT}>
+						<span className={NOTE_DOT} />
+					</span>
+					{t("spaces.invitations.hostOffline", {
+						host: hostName ?? hostEmail,
+					})}
+				</p>
+			) : null}
 			{cause ? (
 				<p
 					className={cn(CAUSE, INDENTED)}
@@ -128,7 +176,7 @@ const SpaceInvitationRow = ({
 		</>
 	)
 
-	if (isWithdrawn) {
+	if (isClosed) {
 		return (
 			<ContextMenuPrimitive.Item
 				aria-describedby={causeId}
@@ -148,7 +196,7 @@ const SpaceInvitationRow = ({
 	return (
 		<div
 			aria-busy={isAccepting}
-			aria-describedby={isFailed ? causeId : undefined}
+			aria-describedby={isDescribed ? causeId : undefined}
 			aria-labelledby={nameId}
 			className={INVITATION}
 			data-slot="space-invitation"
@@ -158,10 +206,14 @@ const SpaceInvitationRow = ({
 			{details}
 			<div className={cn(ACTIONS, INDENTED)}>
 				<ContextMenuPrimitive.Item
-					aria-describedby={isFailed ? causeId : undefined}
-					className={cn(buttonVariants({ size: "sm" }), ACTION, PRIMARY_BUSY)}
+					aria-describedby={isDescribed ? causeId : undefined}
+					className={cn(
+						buttonVariants({ size: "sm" }),
+						ACTION,
+						isHostOffline ? HALF_WHEN_DISABLED : PRIMARY_BUSY,
+					)}
 					closeOnClick={false}
-					disabled={isAccepting}
+					disabled={isAccepting || isHostOffline}
 					nativeButton
 					onClick={() =>
 						isFailed ? onRetryInvitation?.(id) : onAcceptInvitation?.(id)
@@ -182,7 +234,7 @@ const SpaceInvitationRow = ({
 					className={cn(
 						buttonVariants({ size: "sm", variant: "outline" }),
 						ACTION,
-						SECONDARY_BUSY,
+						HALF_WHEN_DISABLED,
 					)}
 					disabled={isAccepting}
 					nativeButton

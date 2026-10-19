@@ -1,6 +1,10 @@
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
 
-import { type MembersTransport, membersTransport } from "./members-transport"
+import {
+	type MembersTransport,
+	membersOf,
+	membersTransport,
+} from "./members-transport"
 
 import type { Member, MembersChanged } from "../bindings"
 import { createStore } from "../store"
@@ -56,8 +60,8 @@ export const createSharedSpacesController = (
 			(failure: unknown) => recordFailure(spaceId, failure),
 		)
 
-	const onChanged = ({ spaceId, members }: MembersChanged) =>
-		record(spaceId, isShared(members))
+	const onChanged = ({ spaceId, members, invitations }: MembersChanged) =>
+		record(spaceId, isShared(membersOf({ members, invitations })))
 
 	const watch = (spaceIds: string[]) => {
 		const session = new Set(spaceIds)

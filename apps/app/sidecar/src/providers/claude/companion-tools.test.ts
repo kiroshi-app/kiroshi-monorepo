@@ -71,8 +71,7 @@ const calls: [string, Record<string, unknown>, string][] = [
 	["companion_suggestions", {}, "suggestions"],
 	["companion_create", A_DRAFT, "create"],
 	["companion_first_run_done", {}, "firstRunDone"],
-	["companion_invite", { companion: "Quill" }, "invite"],
-	["companion_invite", { companion: "Quill", conversation: "c2" }, "invite"],
+	["companion_list", {}, "list"],
 	[
 		"conversation_open",
 		{ title: "Trip", icon: "Rocket", with: ["Quill"], message: "Where to?" },
@@ -84,33 +83,73 @@ const calls: [string, Record<string, unknown>, string][] = [
 		"conversationSay",
 	],
 	[
-		"conversation_describe",
-		{ conversation: "c3", icon: "Rocket", colour: null },
-		"conversationDescribe",
+		"conversation_update",
+		{
+			conversation: "c3",
+			title: "Trip",
+			icon: "Rocket",
+			colour: null,
+			add: ["Quill"],
+			remove: ["b1"],
+		},
+		"conversationUpdate",
 	],
+	["conversation_list", {}, "conversationList"],
+	[
+		"conversation_list",
+		{ everywhere: true, kind: "topic", limit: 10, cursor: "MTo" },
+		"conversationList",
+	],
+	["conversation_read", { conversation: "c3" }, "conversationRead"],
+	[
+		"conversation_read",
+		{ conversation: "c3", limit: 5, before: 12 },
+		"conversationRead",
+	],
+	["conversation_update", { title: "Trip" }, "conversationUpdate"],
 ]
+
+const A_CONVERSATION = {
+	conversationId: "c3",
+	kind: "topic",
+	title: "Trip",
+	icon: "Rocket",
+	colour: null,
+	companions: [
+		{ id: "b1", name: "Shoto" },
+		{ id: "b2", name: "Quill" },
+	],
+	lastMessage: { author: "Quill", text: "Lisbon?", time: 1700000000000 },
+	archived: false,
+}
 
 const answers: Record<string, unknown> = {
 	suggestions: [A_SUGGESTION],
 	create: { id: "b2", name: "Quill" },
 	firstRunDone: null,
-	invite: { id: "b2", name: "Quill", alreadySeated: false },
-	conversationOpen: {
-		conversationId: "c3",
-		title: "Trip",
-		companions: [
-			{ id: "b1", name: "Shoto" },
-			{ id: "b2", name: "Quill" },
+	list: [
+		{ id: "b1", name: "Shoto", job: "a coding partner" },
+		{ id: "b2", name: "Quill", job: "a writing partner" },
+	],
+	conversationOpen: A_CONVERSATION,
+	conversationSay: A_CONVERSATION,
+	conversationUpdate: A_CONVERSATION,
+	conversationList: { conversations: [A_CONVERSATION], cursor: null },
+	conversationRead: {
+		conversation: A_CONVERSATION,
+		messages: [
+			{
+				seq: 12,
+				author: { kind: "companion", id: "b2", name: "Quill" },
+				time: 1700000000000,
+				text: "Lisbon?",
+			},
 		],
-	},
-	conversationSay: { conversationId: "c3", title: "Trip" },
-	conversationDescribe: {
-		conversationId: "c3",
-		title: "Trip",
-		icon: "Rocket",
-		colour: null,
+		cursor: null,
 	},
 }
+
+const NAMES_A_DEFAULT = /left out/
 
 const NAMES_A_SEQUENCE = /\b(then|after|first|next|once|until)\b/i
 
@@ -174,15 +213,15 @@ describe("companionTools", () => {
 		}
 	})
 
-	it("takes the companion to invite and an optional room and names no sequence of work", () => {
-		const invite = toolNamed(SESSION, "companion_invite")
+	it("lists the companions of the space taking no input and naming no sequence of work", () => {
+		const list = toolNamed(SESSION, "companion_list")
 
-		expect(Object.keys(invite.inputSchema)).toEqual([
-			"companion",
-			"conversation",
-		])
-		expect(invite.description).toMatch(/\bbefore\b/)
-		expect(invite.description).not.toMatch(NAMES_A_SEQUENCE)
+		expect(Object.keys(list.inputSchema)).toEqual([])
+		expect(list.description).toMatch(/\bbefore\b/)
+		expect(list.description).not.toMatch(NAMES_A_SEQUENCE)
+		for (const field of ["id", "name", "job"]) {
+			expect(list.description).toContain(field)
+		}
 	})
 
 	it("takes the title, the icon, the companions and the message of the room it opens", () => {
@@ -220,18 +259,29 @@ describe("companionTools", () => {
 		}
 	})
 
-	it("takes the room it describes, an optional icon and an optional colour naming the eight", () => {
-		const describe = toolNamed(SESSION, "conversation_describe")
-		const { icon, colour } = describe.inputSchema
+	it("takes an optional conversation and every field it changes, each optional", () => {
+		const update = toolNamed(SESSION, "conversation_update")
 
-		expect(Object.keys(describe.inputSchema)).toEqual([
+		expect(Object.keys(update.inputSchema)).toEqual([
 			"conversation",
+			"title",
 			"icon",
 			"colour",
+			"add",
+			"remove",
 		])
-		expect(icon?.safeParse(undefined).success).toBe(true)
-		expect(colour?.safeParse(null).success).toBe(true)
-		expect(colour?.safeParse(undefined).success).toBe(true)
+		for (const field of Object.values(update.inputSchema)) {
+			expect(field.safeParse(undefined).success).toBe(true)
+		}
+		expect(update.inputSchema.colour?.safeParse(null).success).toBe(true)
+		expect(update.inputSchema.add?.safeParse(["Quill", "b2"]).success).toBe(
+			true,
+		)
+	})
+
+	it("describes the colour naming the eight and what null does", () => {
+		const { colour } = toolNamed(SESSION, "conversation_update").inputSchema
+
 		for (const name of [
 			"red",
 			"yellow",
@@ -244,16 +294,65 @@ describe("companionTools", () => {
 		]) {
 			expect(colour?.description).toContain(name)
 		}
+		expect(colour?.description).toContain("null to give")
 	})
 
-	it("describes the icon with a listed example and the file the list is read from", () => {
-		const { icon } = toolNamed(SESSION, "conversation_describe").inputSchema
-		const example = icon?.description?.match(/such as (\w+)/)?.[1] ?? ""
+	it("describes the icon naming every icon of the shared list", () => {
+		const { icon } = toolNamed(SESSION, "conversation_update").inputSchema
 
-		expect(conversationIcons).toContain(example)
-		expect(icon?.description).toContain(
-			"packages/shared/conversation-icons.json",
+		for (const name of conversationIcons) {
+			expect(icon?.description).toContain(name)
+		}
+	})
+
+	it("describes every field of the update and says the call lands whole or not at all", () => {
+		const update = toolNamed(SESSION, "conversation_update")
+
+		for (const field of Object.values(update.inputSchema)) {
+			expect(field.description?.length).toBeGreaterThan(40)
+		}
+		expect(update.description).toContain("none of them if one is refused")
+		expect(update.inputSchema.remove?.description).toContain(
+			"your own to leave it yourself",
 		)
+	})
+
+	it("lists with every parameter optional, each naming what it does when left out", () => {
+		const list = toolNamed(SESSION, "conversation_list")
+
+		expect(Object.keys(list.inputSchema)).toEqual([
+			"everywhere",
+			"kind",
+			"limit",
+			"cursor",
+		])
+		for (const held of Object.values(list.inputSchema)) {
+			expect(held.safeParse(undefined).success).toBe(true)
+			expect(held.description).toMatch(NAMES_A_DEFAULT)
+		}
+		for (const kind of ["main", "topic", "mission"]) {
+			expect(list.inputSchema.kind?.description).toContain(kind)
+		}
+		expect(list.inputSchema.limit?.description).toContain("50")
+		expect(list.inputSchema.limit?.description).toContain("200")
+	})
+
+	it("reads the conversation it names, its limit and its cursor optional, each naming what it does when left out", () => {
+		const read = toolNamed(SESSION, "conversation_read")
+		const { conversation, limit, before } = read.inputSchema
+
+		expect(Object.keys(read.inputSchema)).toEqual([
+			"conversation",
+			"limit",
+			"before",
+		])
+		expect(conversation?.safeParse(undefined).success).toBe(false)
+		for (const held of [limit, before]) {
+			expect(held?.safeParse(undefined).success).toBe(true)
+			expect(held?.description).toMatch(NAMES_A_DEFAULT)
+		}
+		expect(limit?.description).toContain("20")
+		expect(limit?.description).toContain("100")
 	})
 
 	it("hands each call to the host of its session and speaks the answer back", async () => {
