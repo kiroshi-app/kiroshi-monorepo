@@ -368,6 +368,7 @@ const MemberRow = ({
 			) : null}
 			{status === "needsInvitation" && !isViewer ? (
 				<Button
+					aria-label={t("space.members.inviteAgainLabel", { email })}
 					className="rounded-control"
 					disabled={isDisabled}
 					onClick={() => onInviteAgain(member)}
