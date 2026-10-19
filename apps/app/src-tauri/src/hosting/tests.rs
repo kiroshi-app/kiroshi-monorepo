@@ -264,7 +264,7 @@ async fn invitation_sent(
 	if let Some(forced) = member_call(&relay, format!("POST invitations {email}")) {
 		return forced;
 	}
-	let sent = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "invited");
+	let sent = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "valid");
 	relay.invitations.lock().expect("the relay").push(sent.clone());
 	answered_json(StatusCode::CREATED, sent)
 }
@@ -303,7 +303,7 @@ async fn invitation_resent(
 		return StatusCode::NOT_FOUND.into_response();
 	};
 	let email = invitation["email"].as_str().expect("an email").to_owned();
-	*invitation = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "invited");
+	*invitation = cloud_invitation(&uuid::Uuid::new_v4().to_string(), &email, "valid");
 	answered_json(StatusCode::CREATED, invitation.clone())
 }
 
@@ -2032,7 +2032,7 @@ fn calls_then_read_back(calls: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn the_host_the_joined_members_and_every_invitation_with_its_state_are_listed_in_the_cloud_order() {
+fn the_host_the_joined_members_and_every_unused_invitation_are_listed_in_the_cloud_order() {
 	run(async {
 		let harness = Harness::hosted("members-list").await;
 		harness.seed(&[
@@ -2040,9 +2040,10 @@ fn the_host_the_joined_members_and_every_invitation_with_its_state_are_listed_in
 			cloud_member("guest", "guest@example.com", "member", "pending"),
 		]);
 		harness.seed_invitations(&[
-			cloud_invitation("i1", "bob@example.com", "invited"),
+			cloud_invitation("i1", "bob@example.com", "valid"),
 			cloud_invitation("i2", "eve@example.com", "expired"),
 			cloud_invitation("i3", "joe@example.com", "withdrawn"),
+			cloud_invitation("i4", "sam@example.com", "used"),
 		]);
 
 		let listed = harness.listed().await.expect("the members list");
@@ -2087,6 +2088,7 @@ fn an_invite_is_trimmed_lowercased_posted_and_read_back_as_an_invited_invitation
 		let listed = harness.invited("  Ada@Example.COM ").await.expect("the invite lands");
 
 		assert_eq!(invitation_states(&listed), vec![("ada@example.com", InvitationState::Invited)]);
+		assert_eq!(listed.invitations[0].expires_at, "2026-10-08T00:00:00.000Z");
 		assert_eq!(
 			harness.member_calls(),
 			calls_then_read_back(&["POST invitations ada@example.com"])
@@ -2102,7 +2104,7 @@ fn an_invite_is_trimmed_lowercased_posted_and_read_back_as_an_invited_invitation
 fn an_invitation_is_withdrawn_then_invited_again_each_read_back_and_announced() {
 	run(async {
 		let harness = Harness::hosted("members-withdraw").await;
-		harness.seed_invitations(&[cloud_invitation("i1", "bob@example.com", "invited")]);
+		harness.seed_invitations(&[cloud_invitation("i1", "bob@example.com", "valid")]);
 
 		let withdrawn = harness.withdrawn("i1").await.expect("the invitation is withdrawn");
 		let resent = harness.resent("i1").await.expect("the invitation is sent again");
@@ -2295,6 +2297,22 @@ fn a_5xx_or_an_unreadable_list_is_unreachable_with_its_cause() {
 			panic!("an unreadable list is unreachable");
 		};
 		assert!(reason.contains("did not parse"), "{reason}");
+	});
+}
+
+#[test]
+fn one_invitation_in_a_state_the_relay_never_sends_makes_the_list_unreachable() {
+	run(async {
+		let harness = Harness::hosted("members-unknown-invitation-state").await;
+		harness.seed_invitations(&[
+			cloud_invitation("i1", "bob@example.com", "valid"),
+			cloud_invitation("i2", "eve@example.com", "invited"),
+		]);
+
+		let Err(MembersError::Unreachable { reason }) = harness.listed().await else {
+			panic!("an unknown invitation state is unreachable");
+		};
+		assert!(reason.contains("invitation list answered by the cloud did not parse"), "{reason}");
 	});
 }
 
@@ -6252,7 +6270,7 @@ fn a_rotation_whose_key_is_not_stored_stays_pending_until_the_next_devices_call_
 fn withdrawing_an_invitation_keeps_the_key_id_and_the_roster() {
 	run(async {
 		let mut harness = Harness::signed_in("join-withdraw-unused").await;
-		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "invited")]);
+		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "valid")]);
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		harness.joined(&mut relay, "joiner").await;
@@ -6514,7 +6532,7 @@ fn rekeyed_handover(
 fn an_accepted_invitation_admits_every_approved_device_of_the_member_and_announces_the_list() {
 	run(async {
 		let mut harness = Harness::signed_in("devices-accepted").await;
-		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "invited")]);
+		harness.seed_invitations(&[cloud_invitation("i1", "guest@example.com", "valid")]);
 		harness.started().await;
 		let mut relay = harness.relay_side().await;
 		let host = harness.host_keys().signing_public();
