@@ -889,8 +889,10 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		answerJoinedMembers([SAM_GUEST, STEVE_HOSTING, TOM_GUEST])
 		const gear = await gearWithGarage({ ...GARAGE, remoteSpaceId: null })
-		const carriesTheLocalId = () =>
-			membersCalls().some(([, args]) => args?.spaceId === GARAGE.id)
+		const callOfTheLocalId = [
+			expect.any(String),
+			expect.objectContaining({ spaceId: GARAGE.id }),
+		]
 
 		await act(async () => {
 			gear.joined.selectSpace(GARAGE_ROW)
@@ -898,7 +900,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		})
 
 		expect(gear.joined.getState().openId).toBeNull()
-		expect(carriesTheLocalId()).toBe(false)
+		expect(membersCalls()).not.toContainEqual(callOfTheLocalId)
 
 		gear.transport.list = async () => [GARAGE]
 		const { dialog } = await openShareOf(gear, GARAGE_ROW)
@@ -912,7 +914,7 @@ describe("SpaceSettingsHost members on the desktop", () => {
 		await waitFor(() =>
 			expect(within(dialog).queryByText("Tom Reed")).toBeNull(),
 		)
-		expect(carriesTheLocalId()).toBe(false)
+		expect(membersCalls()).not.toContainEqual(callOfTheLocalId)
 	})
 
 	it("shows the removal the host of a joined space fails in the panel", async () => {
