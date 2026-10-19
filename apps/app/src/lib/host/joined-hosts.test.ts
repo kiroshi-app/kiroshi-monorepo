@@ -2010,7 +2010,7 @@ describe("Space Settings of a joined Space", () => {
 		["mcp_application_status", { owner: JOINED_SPACE }],
 		["hosting_members", { spaceId: "garage" }],
 		["hosting_invite_member", { spaceId: "garage", email: "a@example.com" }],
-		["hosting_withdraw_invitation", { spaceId: "garage", userId: "ana" }],
+		["hosting_withdraw_invitation", { spaceId: "garage", invitationId: "i1" }],
 		["hosting_remove_member", { spaceId: "garage", userId: "ana" }],
 		["search_messages", { query: { text: "walls", spaceId: "garage" } }],
 		["agent_shutdown", { scope: { conversationId: "c1", botId: "b1" } }],

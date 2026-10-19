@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::account::cloud::{CloudMember, MemberCallError, MemberRole, MembershipState};
 use crate::crypto::contract::DeviceKeysError;
@@ -63,11 +63,37 @@ impl From<CloudMember> for Member {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum InvitationState {
+	Invited,
+	Expired,
+	Withdrawn,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceInvitation {
+	pub id: String,
+	pub email: String,
+	pub sent_at: String,
+	pub expires_at: String,
+	pub state: InvitationState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceMembers {
+	pub members: Vec<Member>,
+	pub invitations: Vec<SpaceInvitation>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MembersChanged {
 	pub space_id: String,
 	pub members: Vec<Member>,
+	pub invitations: Vec<SpaceInvitation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -95,6 +121,7 @@ pub enum MembersError {
 	AlreadyInvited,
 	LimitReached,
 	UnknownMember,
+	UnknownInvitation,
 	NotPending,
 	NotJoined,
 	HostNotRemovable,
@@ -102,7 +129,6 @@ pub enum MembersError {
 	NeedsSignIn,
 	UnknownDevice,
 	HostDeviceNotRemovable,
-	NoRandomness,
 	#[serde(rename_all = "camelCase")]
 	KeyNotRotated {
 		reason: String,
@@ -140,6 +166,7 @@ impl From<MemberCallError> for MembersError {
 			MemberCallError::AlreadyMember => MembersError::AlreadyInvited,
 			MemberCallError::LimitReached => MembersError::LimitReached,
 			MemberCallError::UnknownMember => MembersError::UnknownMember,
+			MemberCallError::UnknownInvitation => MembersError::UnknownInvitation,
 			MemberCallError::OwnerNotRemovable => MembersError::HostNotRemovable,
 			MemberCallError::Unreachable(reason) => MembersError::Unreachable { reason },
 		}
@@ -170,7 +197,7 @@ mod tests {
 	}
 
 	#[test]
-	fn a_members_change_crosses_with_each_status_as_a_plain_name() {
+	fn a_members_change_crosses_with_each_status_and_invitation_state_as_a_plain_name() {
 		let changed = MembersChanged {
 			space_id: "personal".to_owned(),
 			members: vec![Member {
@@ -179,13 +206,27 @@ mod tests {
 				email: "ada@example.com".to_owned(),
 				status: MemberStatus::Pending,
 			}],
+			invitations: vec![SpaceInvitation {
+				id: "i1".to_owned(),
+				email: "bob@example.com".to_owned(),
+				sent_at: "2026-10-01T00:00:00.000Z".to_owned(),
+				expires_at: "2026-10-08T00:00:00.000Z".to_owned(),
+				state: InvitationState::Expired,
+			}],
 		};
 
 		assert_eq!(
 			to_value(changed).expect("the change serializes"),
 			json!({
 				"spaceId": "personal",
-				"members": [{ "userId": "u1", "name": null, "email": "ada@example.com", "status": "pending" }]
+				"members": [{ "userId": "u1", "name": null, "email": "ada@example.com", "status": "pending" }],
+				"invitations": [{
+					"id": "i1",
+					"email": "bob@example.com",
+					"sentAt": "2026-10-01T00:00:00.000Z",
+					"expiresAt": "2026-10-08T00:00:00.000Z",
+					"state": "expired"
+				}]
 			})
 		);
 	}
