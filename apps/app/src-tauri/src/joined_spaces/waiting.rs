@@ -1,5 +1,4 @@
 use futures_util::StreamExt;
-use serde_json::json;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::watch;
@@ -12,7 +11,7 @@ use super::commands::{announce_change, ready};
 use super::contract::{JoinedSpaceError, JoinedSpaceState};
 use super::held::{self, device_keys};
 use super::join::{
-	answer_of, bearer_of, is_pending, join_frame, kept_answer, member_socket_of, revoked, Answer,
+	bearer_of, kept_answer, member_socket_of, missed_rekey_frame, rekey_handed, revoked,
 };
 use super::members;
 use super::relay::RelayGuests;
@@ -146,8 +145,12 @@ async fn listened<R: Runtime>(
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Attempt {
+	let asked = match missed_rekey_frame(device, instance_id) {
+		Ok(asked) => asked,
+		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
+	};
 	let (mut sink, mut stream) = socket.split();
-	if let Err(reason) = sent(&mut sink, Message::text(join_frame(instance_id))).await {
+	if let Err(reason) = sent(&mut sink, Message::text(asked.clone())).await {
 		return Attempt::Dropped(reason);
 	}
 	let every = app.state::<RelayGuests>().resend_every();
@@ -177,7 +180,7 @@ async fn listened<R: Runtime>(
 				}
 			}
 			_ = beats.tick() => {
-				for beat in [Message::text(join_frame(instance_id)), Message::Ping(Vec::new().into())] {
+				for beat in [Message::text(asked.clone()), Message::Ping(Vec::new().into())] {
 					if let Err(reason) = sent(&mut sink, beat).await {
 						return Attempt::Dropped(reason);
 					}
@@ -196,25 +199,18 @@ async fn is_kept<R: Runtime>(
 	device: &DeviceKeys,
 	text: &str,
 ) -> bool {
-	let joined = match answer_of(text) {
+	let handed = match rekey_handed(device, instance_id, text) {
 		None => return false,
-		Some(Ok(Answer::Joined(joined))) => joined,
-		Some(Ok(Answer::Refused(refusal))) if is_pending(&refusal) => return false,
-		Some(Ok(Answer::Refused(refusal))) => {
-			eprintln!("the host of instance {instance_id} refused the join: {}", json!(refusal));
-			return false;
-		}
+		Some(Ok(handed)) => handed,
 		Some(Err(failure)) => {
-			eprintln!(
-				"the host of instance {instance_id} answered an unreadable join: {failure:?}"
-			);
+			eprintln!("joined space of instance {instance_id} dropped a rekey: {failure:?}");
 			return false;
 		}
 	};
-	match kept_answer(app, instance_id, device, &joined).await {
+	match kept_answer(app, instance_id, &handed).await {
 		Ok(()) => true,
 		Err(failure) => {
-			eprintln!("the join answer of instance {instance_id} was not kept: {failure:?}");
+			eprintln!("the rekey of instance {instance_id} was not kept: {failure:?}");
 			false
 		}
 	}

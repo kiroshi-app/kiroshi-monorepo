@@ -66,34 +66,16 @@ impl SealingHost {
 		]
 	}
 
-	pub(crate) fn joined(&self) -> String {
-		self.joined_rostering(&self.devices())
+	pub(crate) fn admitted(&self) -> String {
+		self.rekey_of(&self.host, &self.space, 1, &self.devices())
 	}
 
-	pub(crate) fn joined_without_the_member(&self) -> String {
-		self.joined_rostering(&self.devices()[..1])
+	pub(crate) fn admitted_without_the_member(&self) -> String {
+		self.rekey_of(&self.host, &self.space, 1, &self.devices()[..1])
 	}
 
-	fn joined_rostering(&self, devices: &[Device<'_>]) -> String {
-		let set = signed_set(&self.host, self.space.key_id, 1, devices);
-		let handover = serde_json::to_vec(&handover_of(&self.space, set)).expect("a json handover");
-		let sealed = sealed_box::seal(&self.member.agreement_public(), &handover).expect("sealed");
-		self.addressed("joined", json!(BASE64_STANDARD.encode(sealed)))
-	}
-
-	pub(crate) fn pending(&self) -> String {
-		self.addressed("join_refused", json!("pending"))
-	}
-
-	fn addressed(&self, answer: &str, value: Value) -> String {
-		let mut frame = json!({
-			"from": HOST_RELAY_ID,
-			"v": 2,
-			"instance": self.instance_id,
-			"to": MEMBER_RELAY_ID,
-		});
-		frame[answer] = value;
-		frame.to_string()
+	pub(crate) fn admitted_signed_by(&self, signer: &DeviceKeys) -> String {
+		self.rekey_of(signer, &self.space, 1, &self.devices())
 	}
 
 	pub(crate) fn rekey(&self, key_id: u32, version: u64) -> String {
@@ -102,8 +84,18 @@ impl SealingHost {
 
 	pub(crate) fn rekey_signed_by(&self, signer: &DeviceKeys, key_id: u32, version: u64) -> String {
 		let space = HeldSpaceKey::under(key_id).expect("randomness");
-		let set = signed_set(&self.host, key_id, version, &self.devices());
-		let handover = serde_json::to_vec(&handover_of(&space, set)).expect("a json handover");
+		self.rekey_of(signer, &space, version, &self.devices())
+	}
+
+	fn rekey_of(
+		&self,
+		signer: &DeviceKeys,
+		space: &HeldSpaceKey,
+		version: u64,
+		devices: &[Device<'_>],
+	) -> String {
+		let set = signed_set(&self.host, space.key_id, version, devices);
+		let handover = serde_json::to_vec(&handover_of(space, set)).expect("a json handover");
 		let sealed = sealed_box::seal(&self.member.agreement_public(), &handover).expect("sealed");
 		let sig = signer.sign(&rekey_bytes(&self.instance_id, &self.member.device_id(), &sealed));
 		json!({

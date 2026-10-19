@@ -65,7 +65,7 @@ struct Cloud {
 	sign_outs_asked: Arc<AtomicUsize>,
 	is_refusing_members: Arc<AtomicBool>,
 	members: mpsc::UnboundedSender<Peeked>,
-	joined: Arc<Mutex<Option<String>>>,
+	admission: Arc<Mutex<Option<String>>>,
 	joins: Arc<Mutex<Vec<Value>>>,
 	noticed: Arc<watch::Sender<()>>,
 }
@@ -177,14 +177,14 @@ async fn member_opened(cloud: Cloud, mut socket: WebSocket) {
 		return;
 	};
 	let frame: Value = serde_json::from_str(&first).expect("a json member frame");
-	if frame.get("join").is_none() {
+	if frame["key_id"] != 0 {
 		cloud.members.send(Peeked { socket, first }).expect("the test holds the member sockets");
 		return;
 	}
 	cloud.joins.lock().expect("the cloud").push(frame);
-	let joined = cloud.joined.lock().expect("the cloud").clone();
-	if let Some(joined) = joined {
-		if socket.send(Message::Text(joined.into())).await.is_err() {
+	let admission = cloud.admission.lock().expect("the cloud").clone();
+	if let Some(admission) = admission {
+		if socket.send(Message::Text(admission.into())).await.is_err() {
 			eprintln!("the fake relay lost a join socket before its answer");
 		}
 	}
@@ -272,7 +272,7 @@ impl Harness {
 			sign_outs_asked: Arc::default(),
 			is_refusing_members: Arc::default(),
 			members: members_in,
-			joined: Arc::default(),
+			admission: Arc::default(),
 			joins: Arc::default(),
 			noticed: Arc::new(watch::channel(()).0),
 		};
@@ -309,7 +309,7 @@ impl Harness {
 			false => None,
 		};
 		if let Some(host) = &host {
-			*cloud.joined.lock().expect("the cloud") = Some(host.joined());
+			*cloud.admission.lock().expect("the cloud") = Some(host.admitted());
 			registered_as_the_member(&app).await;
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
@@ -636,7 +636,8 @@ fn an_accept_writes_one_relay_entry_named_by_the_instance_and_announces_it() {
 
 		assert_eq!(joined.name, "Studio");
 		assert_eq!(joined.state, JoinedSpaceState::Online);
-		assert_eq!(harness.joins(), vec![json!({ "v": 2, "instance": INSTANCE, "join": {} })]);
+		let asked: Vec<Value> = harness.joins().iter().map(|join| join["key_id"].clone()).collect();
+		assert_eq!(asked, vec![json!(0)]);
 		assert_eq!(
 			harness.stored().await,
 			vec![JoinedSpace {

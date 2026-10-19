@@ -285,76 +285,53 @@ A link `kiroshi://join?invitation=<invitationId>`, the id matching
 `[A-Za-z0-9_-]{1,128}`, opens the app and hands that invitation id to the front,
 which accepts it the same way. Any other `kiroshi://join` URL is ignored.
 
-## Join frames
+## Joining by the first rekey
 
-A device outside the roster holds no subkey: its join frame is not a sealed v2
-frame and carries no `key_id`, `ctr`, `ct` or `sig`.
+The host answers no frame of a device outside its roster. It admits a device from
+the [device list](#device-list-admission) and hands it the key in a
+[rekey](#rekey-host-to-device) frame, so a member joins on its first verified
+rekey.
 
-### join (device to host)
-
-```json
-{ "v": 2, "instance": "…", "from": "…relay device id…", "join": {} }
-```
-
-`join` is an empty object: the device proves nothing in it. As on every frame,
-the relay splices `from`. The device sends it on the member socket of the instance
-right after the accept, and again on every connection of that socket while it
-holds no key for the Space.
-
-### joined (host to device)
+After the accept, the device opens the member socket of the instance with its
+relay device id and sends one sealed hello under `key_id` 0:
 
 ```json
-{ "v": 2, "instance": "…", "to": "…relay device id…", "joined": "base64" }
+{ "v": 2, "instance": "…", "key_id": 0, "ctr": 1, "ct": "…", "sig": "…" }
 ```
 
-```
-answer = UTF-8 JSON key handover (below)
-joined = sealed_box(device_agreement_public, answer)
-```
+No Space key has `key_id` 0, so this frame reads on the host as a frame under a
+key lower than the current one: a rostered device that missed its rekey. The host
+drops it and sends that device its rekey again; while the device is not rostered
+yet, the host drops it with nothing sent, and the rekey of the admission arrives
+on the same socket once the device list gains the device. The subkey of that
+hello derives from a random key the device discards, and the host never opens it.
 
-`device_agreement_public` is the one the relay device list carries for `to`. No
-mac guards it. The device opens the box, then verifies the roster set signature
-with the `signing_public_key` of the host row of that set:
+The device takes the first rekey that verifies, in this order:
 
-- On a first join the device trusts that host row. The 6-word
-  [Fingerprint](#fingerprint) of the host stays the manual check.
-- When the device already holds a roster for the instance, a host row that differs
-  from the held one is refused as `badSignature`, and the held roster is kept.
-- A roster that does not list the device itself is refused as `notInRoster`, and
-  no key is stored.
+1. The box opens under the device agreement key and holds a key handover whose
+   roster set verifies under the signing key of its own host row.
+2. `sig` verifies under that same host signing key, over the `rekey_sig` bytes of
+   the instance and the device's own `device_id`.
+3. The roster lists the device itself, or the join answers `notInRoster` and
+   stores no key.
 
-The host builds every key handover by reading the current `key_id` and
-`space_key` first, then the roster. A device removed after the roster read is
-followed by a rotation to a key later than the one read; a device removed before
-it is not in the roster. A rekey goes only to the devices of the roster read after
-its key.
-
-The key handover, the same JSON in `joined` and `rekey`:
-
-```json
-{ "key_id": 1, "space_key": "base64, 32 bytes", "roster": { "…": "signed roster set" } }
-```
-
-### join_refused (host to device)
-
-```json
-{ "v": 2, "instance": "…", "to": "…relay device id…", "join_refused": "pending" }
-```
-
-`"pending"`: the host has not admitted the device yet. Nothing in it is
-authenticated: the relay may forge or drop it, and the worst it achieves is a
-device that keeps waiting.
+Trust is on first use: the first verified rekey pins its host row, and no short
+code is compared. A rekey that fails step 1 or 2 is dropped, and the Space keeps
+waiting with nothing pinned. When a roster is already held for the instance, a
+host row that differs from the pinned one is refused as `badSignature` and the
+pinned roster is kept.
 
 ### Waiting for the host
 
-When the host is offline, answers `"pending"`, or sends no `joined` within the
-answer bound, the desktop stores the joined Space anyway and answers it with
+When the host is offline, sends no verified rekey within the answer bound, or the
+socket drops, the desktop stores the joined Space anyway and answers it with
 `state: "waitingForHost"`. Every joined Space the device holds no key for is
 listed that way, and `joined_space_connect` answers `waitingForHost`. While the
-account is signed in, the desktop keeps one member socket per such Space, resends
-the `join` frame on every connection, and reconnects with the relay backoff. The
-first verified `joined` stores the key and the roster, closes that socket, and
-announces the Space changed; it is then listed `state: "online"`.
+account is signed in, the desktop keeps one member socket per such Space, sends
+the hello under `key_id` 0 on every connection and every `PING_EVERY`, and
+reconnects with the relay backoff. The first verified rekey stores the key and the
+roster, closes that socket, and announces the Space changed; it is then listed
+`state: "online"`.
 
 ## Device list admission
 
