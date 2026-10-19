@@ -21,8 +21,9 @@ use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::crypto::commands::{DeviceKeysState, SpaceKeys};
-use kiroshi_app::crypto::device_keys::{DeviceId, DeviceKeys};
+use kiroshi_app::crypto::device_keys::{self, DeviceId, DeviceKeys};
 use kiroshi_app::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
+use kiroshi_app::crypto::sealed_box;
 use kiroshi_app::crypto::space_key::HeldSpaceKey;
 use kiroshi_app::crypto::subkey::Subkey;
 use kiroshi_app::db;
@@ -236,9 +237,11 @@ impl GuestDevice {
 			Some(to) if to == GUEST_DEVICE => Some(self.keys.device_id()),
 			Some(_) => return None,
 		};
-		let decoded = |key: &str| {
-			BASE64_STANDARD.decode(envelope[key].as_str().expect("base64")).expect("base64")
-		};
+		if envelope.get("rekey").is_some() {
+			self.rekeyed(&envelope);
+			return None;
+		}
+		let decoded = |key: &str| decoded(&envelope, key);
 		let challenge: Option<[u8; CHALLENGE_LENGTH]> =
 			envelope.get("challenge").map(|_| decoded("challenge").try_into().expect("32 bytes"));
 		let host = DeviceId::of(&self.host);
@@ -261,6 +264,25 @@ impl GuestDevice {
 		}
 		Some(plaintext)
 	}
+
+	fn rekeyed(&self, envelope: &Value) {
+		let sealed = decoded(envelope, "rekey");
+		let mut signed = b"kiroshi/v2/rekey".to_vec();
+		signed.extend_from_slice(&(INSTANCE.len() as u64).to_be_bytes());
+		signed.extend_from_slice(INSTANCE.as_bytes());
+		signed.extend_from_slice(self.keys.device_id().as_bytes());
+		signed.extend_from_slice(&(sealed.len() as u64).to_be_bytes());
+		signed.extend_from_slice(&sealed);
+		let sig = Signature::from_bytes(&decoded(envelope, "sig").try_into().expect("64 bytes"));
+		device_keys::verify(&self.host, &signed, &sig).expect("the host signed the rekey");
+		let handover = sealed_box::open(self.keys.agreement(), &sealed).expect("the rekey opens");
+		let handover: Value = serde_json::from_slice(&handover).expect("a json handover");
+		assert_eq!(handover["key_id"], self.space.key_id, "a hello rekey hands over the held key");
+	}
+}
+
+fn decoded(envelope: &Value, key: &str) -> Vec<u8> {
+	BASE64_STANDARD.decode(envelope[key].as_str().expect("base64")).expect("base64")
 }
 
 struct Host {
