@@ -27,7 +27,7 @@ const joinRoute = getRouteApi("/join")
 
 const APP_TAKEOVER_WAIT_MS = 2000
 
-const EXPIRY_DATE = new Intl.DateTimeFormat("en-US", {
+const EXPIRY_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
 	month: "long",
 	day: "numeric",
 })
@@ -49,7 +49,7 @@ type SummaryProps = {
 	space: InvitationSpace | null
 }
 
-const initialsOf = (spaceName: string) => {
+const spaceInitialsOf = (spaceName: string) => {
 	const [first = "", second = ""] = Array.from(spaceName).filter((character) =>
 		/[\p{L}\p{N}]/u.test(character),
 	)
@@ -57,10 +57,10 @@ const initialsOf = (spaceName: string) => {
 }
 
 const spaceLinesOf = (space: InvitationSpace): SpaceLines => ({
-	initials: initialsOf(space.name),
+	initials: spaceInitialsOf(space.name),
 	invitedBy: JOIN_COPY.invitedBy(space.inviter),
 	name: space.name,
-	expiry: JOIN_COPY.worksUntil(EXPIRY_DATE.format(space.expiresAt)),
+	expiry: JOIN_COPY.worksUntil(EXPIRY_DATE_FORMAT.format(space.expiresAt)),
 })
 
 const Summary = ({ layout, space }: SummaryProps) => (
