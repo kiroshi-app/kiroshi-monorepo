@@ -447,7 +447,13 @@ Every route takes the owner bearer:
 | `GET /instances/{instance}/invitations` | `[{ "id", "email", "sentAt", "expiresAt", "state" }]`, `state` one of `valid`, `used`, `expired`, `withdrawn`. An accepted or declined invitation is listed as `used`. |
 | `POST /instances/{instance}/invitations` `{ "email" }` | Invites that email. |
 | `DELETE /instances/{instance}/invitations/{invitationId}` | Withdraws that invitation. |
-| `POST /instances/{instance}/invitations/{invitationId}/resend` | Answers a fresh invitation to the same email. |
+| `POST /instances/{instance}/invitations/{invitationId}/resend` | Answers a fresh invitation to the same email, with a new `id` and `expiresAt` 7 days after the resend. |
+
+| Status | Code | When |
+| --- | --- | --- |
+| 200 | | The fresh invitation, with the body of the `POST /instances/{id}/members` 201: `id`, `email`, `sentAt`, `expiresAt` and `invitationEmail`, `failed` when Resend refused the email, the fresh invitation kept |
+| 404 | `NOT_FOUND` | `invitationId` is malformed, names no invitation, or names an invitation of another instance. No row changes |
+| 409 | `ALREADY_MEMBER` | The invitation email holds a membership of the instance. No email is sent and no row changes |
 
 The host commands `hosting_invite_member(spaceId, email)`,
 `hosting_withdraw_invitation(spaceId, invitationId)`,
