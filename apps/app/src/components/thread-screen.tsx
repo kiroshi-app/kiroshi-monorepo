@@ -1669,6 +1669,7 @@ function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
 	const view = useThreadView(props)
 	const joinedHost = useContext(OpenJoinedHostContext)
+	const departure = joinedHost?.departure
 	const access = spaceAccessOf(joinedHost)
 	useInvokePhaseEnd(
 		"thread open",
@@ -1684,7 +1685,7 @@ function ThreadView(props: ThreadViewProps) {
 			anchorOnSend={view.isSoloThread}
 			busy={view.facts.isBusy}
 			composer={
-				access ? undefined : (
+				departure ? undefined : (
 					<ThreadComposerSlot
 						bots={known}
 						canAttach={view.canAttach}
@@ -1757,7 +1758,7 @@ function ThreadView(props: ThreadViewProps) {
 			}
 			onFollowChange={view.controller.follow}
 			pending={
-				access ? undefined : (
+				departure ? undefined : (
 					<ThreadPending
 						authors={view.authors}
 						permission={view.facts.permission}
