@@ -49,9 +49,27 @@ const DROPPED: HostingState = {
 	detail: "relay closed",
 }
 
-const COULDNT_HOST_HOME: NoticeMessage = {
+const NOT_OWNER: HostingState = {
+	kind: "failed",
+	failure: "notOwner",
+	detail: "relay answered 403",
+}
+
+const UNKNOWN_FAILURE_OF_HOME: NoticeMessage = {
 	title: "Couldn’t host Home",
 	description: "Check your connection and turn it on again.",
+}
+
+const TAKEN_OVER_HOME: NoticeMessage = {
+	title: "Couldn’t host Home",
+	description:
+		"Another computer hosts this space now. Turn it on again to host it from this one.",
+}
+
+const NOT_OWNER_OF_HOME: NoticeMessage = {
+	title: "Couldn’t host Home",
+	description:
+		"Another account hosts this space. Sign in with that account, or turn it on again to host it from this one.",
 }
 
 const unlisten = vi.fn()
@@ -256,10 +274,18 @@ describe("useHosting notices", () => {
 		await hostsAgain(DROPPED)
 		await hostsAgain(DROPPED)
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(COULDNT_HOST_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
 	})
 
-	it("returns the switch to off with the H6 notice when the start rejects", async () => {
+	it("describes a notOwner failure with its reason", async () => {
+		const { reportFailure, hostsAgain } = await watchHome()
+
+		await hostsAgain(NOT_OWNER)
+
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(NOT_OWNER_OF_HOME)
+	})
+
+	it("returns the switch to off with the unknown reason when the start rejects", async () => {
 		const { result, reportFailure } = await watchHome({
 			start: vi.fn(async () => {
 				throw new Error("relay refused the token")
@@ -272,7 +298,7 @@ describe("useHosting notices", () => {
 		expect(result.current?.hosting).toBe("off")
 		expect(reportFailure).not.toHaveBeenCalled()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
-			...COULDNT_HOST_HOME,
+			...UNKNOWN_FAILURE_OF_HOME,
 			report: expect.objectContaining({
 				context: expect.objectContaining({ raisedIn: "use-hosting" }),
 			}),
@@ -300,7 +326,7 @@ describe("useHosting notices", () => {
 		})
 	})
 
-	it("raises a notice when the read rejects", async () => {
+	it("raises the unknown reason when the read rejects", async () => {
 		const { result } = await watchHome({
 			read: vi.fn(async () => {
 				throw new Error("unreachable")
@@ -309,7 +335,7 @@ describe("useHosting notices", () => {
 
 		expect(result.current).toBeUndefined()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
-			...COULDNT_HOST_HOME,
+			...UNKNOWN_FAILURE_OF_HOME,
 			report: expect.objectContaining({
 				context: expect.objectContaining({ raisedIn: "use-hosting" }),
 			}),
@@ -346,7 +372,7 @@ describe("useHosting notices", () => {
 		answer(DROPPED)
 		await settle()
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(COULDNT_HOST_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
 	})
 
 	it("raises one notice when the failed answer lands before the event of the same start", async () => {
@@ -358,7 +384,7 @@ describe("useHosting notices", () => {
 		await settle()
 		await hostsAgain(DROPPED)
 
-		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(COULDNT_HOST_HOME)
+		expect(reportFailure).toHaveBeenCalledExactlyOnceWith(TAKEN_OVER_HOME)
 	})
 
 	it("keeps a state an event settled before the initial read resolves", async () => {
