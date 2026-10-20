@@ -306,15 +306,16 @@ The request has no body. The invitation id, its malformed-id 404 and its
 deprecated instance-id fallback are those of the [accept](#invitation-accept).
 A declined invitation is used: it can no longer be accepted nor declined.
 
-| Answer | Meaning |
-| --- | --- |
-| 204, empty body | The invitation is declined |
-| 401 `UNAUTHENTICATED` | No bearer, an unknown token or an expired session |
-| 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account |
-| 404 `NOT_FOUND` | A malformed id, or no such invitation |
-| 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` |
-| 410 `INVITATION_WITHDRAWN` | The host took it back |
-| 410 `INVITATION_USED` | It was already accepted or declined |
+| Answer | Meaning | Desktop answer |
+| --- | --- | --- |
+| 204, empty body | The invitation is declined | the pending invitations read again |
+| 401 `UNAUTHENTICATED` | No bearer, an unknown token or an expired session | `notSignedIn`, the session signed out |
+| 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account | `unknownInvitation` |
+| 404 `NOT_FOUND` | A malformed id, or no such invitation | `unknownInvitation` |
+| 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` | `withdrawn` |
+| 410 `INVITATION_WITHDRAWN` | The host took it back | `withdrawn` |
+| 410 `INVITATION_USED` | It was already accepted or declined | `withdrawn` |
+| unreachable, any other status | | `offline` when the device is offline, `serversUnreachable` otherwise |
 
 The Tauri command is `invitation_decline(invitationId)`.
 
@@ -441,7 +442,7 @@ Every route takes the owner bearer:
 
 | Route | Effect |
 | --- | --- |
-| `GET /instances/{instance}/invitations` | `[{ "id", "email", "sentAt", "expiresAt", "state" }]`, `state` one of `invited`, `expired`, `withdrawn`. An accepted invitation is absent. |
+| `GET /instances/{instance}/invitations` | `[{ "id", "email", "sentAt", "expiresAt", "state" }]`, `state` one of `valid`, `used`, `expired`, `withdrawn`. An accepted or declined invitation is listed as `used`. |
 | `POST /instances/{instance}/invitations` `{ "email" }` | Invites that email. |
 | `DELETE /instances/{instance}/invitations/{invitationId}` | Withdraws that invitation. |
 | `POST /instances/{instance}/invitations/{invitationId}/resend` | Answers a fresh invitation to the same email. |
@@ -451,7 +452,8 @@ The host commands `hosting_invite_member(spaceId, email)`,
 `hosting_resend_invitation(spaceId, invitationId)` and
 `hosting_remove_member(spaceId, userId)` each answer, like `hosting_members`, the
 list read back: `{ members, invitations }`, the host and the joined members, then
-every invitation with its state. An invited account holds no listed device until
+every invitation with its state: `invited` for a `valid` one, `expired` or
+`withdrawn`. A `used` invitation is absent from them. An invited account holds no listed device until
 it accepts, so withdrawing an invitation changes no roster row.
 
 ## Signed roster set
