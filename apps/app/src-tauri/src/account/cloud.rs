@@ -1111,7 +1111,7 @@ async fn conflicted(answered: reqwest::Response) -> MemberCallError {
 		}
 	};
 	match refusal.error.code.as_str() {
-		"ALREADY_MEMBER" => MemberCallError::AlreadyMember,
+		"ALREADY_MEMBER" | "ALREADY_INVITED" => MemberCallError::AlreadyMember,
 		"MEMBER_LIMIT_REACHED" => MemberCallError::LimitReached,
 		"OWNER_NOT_REMOVABLE" => MemberCallError::OwnerNotRemovable,
 		_ => MemberCallError::Unreachable {
@@ -1122,10 +1122,7 @@ async fn conflicted(answered: reqwest::Response) -> MemberCallError {
 }
 
 fn unreadable_conflict(detail: String) -> MemberCallError {
-	MemberCallError::Unreachable {
-		reason: UnreachableReason::RelayConflict { code: String::new() },
-		detail,
-	}
+	MemberCallError::Unreachable { reason: UnreachableReason::UnreadableConflict, detail }
 }
 
 async fn refusal_detail(answered: reqwest::Response) -> String {
@@ -1160,6 +1157,7 @@ mod tests {
 	use tokio::net::TcpListener;
 
 	use super::*;
+	use crate::hosting::contract::MembersError;
 
 	const INSTANCE: &str = "i1";
 
@@ -1232,26 +1230,33 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn an_email_already_holding_a_valid_invitation_is_already_invited() {
+		let refused = invited(409, r#"{"error":{"code":"ALREADY_INVITED"}}"#).await;
+
+		assert_eq!(refused.map_err(MembersError::from), Err(MembersError::AlreadyInvited));
+	}
+
+	#[tokio::test]
 	async fn a_conflict_with_another_code_is_a_relay_conflict_carrying_it() {
-		let body = r#"{"error":{"code":"ALREADY_INVITED","message":"held"}}"#;
+		let body = r#"{"error":{"code":"INSTANCE_FROZEN","message":"held"}}"#;
 
 		assert_eq!(
 			invited(409, body).await,
 			Err(MemberCallError::Unreachable {
-				reason: UnreachableReason::RelayConflict { code: "ALREADY_INVITED".to_owned() },
+				reason: UnreachableReason::RelayConflict { code: "INSTANCE_FROZEN".to_owned() },
 				detail: body.to_owned(),
 			})
 		);
 	}
 
 	#[tokio::test]
-	async fn a_conflict_with_an_unreadable_body_is_a_relay_conflict_with_no_code() {
+	async fn a_conflict_with_an_unreadable_body_is_an_unreadable_conflict() {
 		let Err(MemberCallError::Unreachable { reason, detail }) = invited(409, "busy").await
 		else {
 			panic!("an unreadable conflict is unreachable");
 		};
 
-		assert_eq!(reason, UnreachableReason::RelayConflict { code: String::new() });
+		assert_eq!(reason, UnreachableReason::UnreadableConflict);
 		assert!(detail.contains("did not parse"), "{detail}");
 	}
 

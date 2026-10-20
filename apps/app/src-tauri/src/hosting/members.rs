@@ -37,7 +37,7 @@ pub async fn invite<R: Runtime>(
 	space_id: String,
 	email: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_logged(app, "invite", &space_id).await?;
 	let domain = email_domain(&email);
 	log::info!("inviting an address of domain {domain} into instance {instance_id}");
 	invited(app, &space_id, &instance_id, &email)
@@ -70,7 +70,7 @@ pub async fn withdraw<R: Runtime>(
 	space_id: String,
 	invitation_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_logged(app, "withdraw", &space_id).await?;
 	withdrawn(app, &space_id, &instance_id, &invitation_id)
 		.await
 		.inspect_err(|failure| failure_logged("withdraw", &instance_id, NO_EMAIL_DOMAIN, failure))
@@ -113,7 +113,7 @@ pub async fn remove<R: Runtime>(
 	space_id: String,
 	user_id: String,
 ) -> Result<SpaceMembers, MembersError> {
-	let instance_id = instance_of(app, &space_id).await?;
+	let instance_id = instance_logged(app, "remove", &space_id).await?;
 	removed(app, &space_id, &instance_id, &user_id)
 		.await
 		.inspect_err(|failure| failure_logged("remove", &instance_id, NO_EMAIL_DOMAIN, failure))
@@ -229,6 +229,18 @@ pub(super) fn signed_out_if_revoked<R: Runtime>(
 	if matches!(failure, MemberCallError::Revoked) {
 		session::revoked(app, bearer);
 	}
+}
+
+async fn instance_logged<R: Runtime>(
+	app: &AppHandle<R>,
+	action: &str,
+	space_id: &str,
+) -> Result<String, MembersError> {
+	instance_of(app, space_id).await.inspect_err(|failure| {
+		log::error!(
+			"the member {action} in space {space_id} failed before its instance was known: {failure:?}"
+		);
+	})
 }
 
 fn email_domain(raw: &str) -> &str {

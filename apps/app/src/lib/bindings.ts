@@ -1705,7 +1705,7 @@ export type TurnOutcome = "completed" | "cancelled" | "failed";
 
 export type TurnState = "idle" | "submitting" | "running" | "stopping" | "failed";
 
-export type UnreachableReason = { kind: "transport"; failure: TransportFailure } | { kind: "relayStatus"; status: number } | { kind: "relayConflict"; code: string } | { kind: "unreadableList" } | { kind: "listNotReadBack"; cause: UnreachableReason };
+export type UnreachableReason = { kind: "transport"; failure: TransportFailure } | { kind: "relayStatus"; status: number } | { kind: "relayConflict"; code: string } | { kind: "unreadableConflict" } | { kind: "unreadableList" } | { kind: "listNotReadBack"; cause: UnreachableReason };
 
 export type UpdateChannel = "stable" | "beta";
 

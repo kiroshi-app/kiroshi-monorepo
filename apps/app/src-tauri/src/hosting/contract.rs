@@ -196,6 +196,7 @@ pub enum UnreachableReason {
 	RelayConflict {
 		code: String,
 	},
+	UnreadableConflict,
 	UnreadableList,
 	#[serde(rename_all = "camelCase")]
 	ListNotReadBack {
@@ -320,6 +321,7 @@ mod tests {
 				UnreachableReason::RelayConflict { code: "ALREADY_INVITED".to_owned() },
 				json!({ "kind": "relayConflict", "code": "ALREADY_INVITED" }),
 			),
+			(UnreachableReason::UnreadableConflict, json!({ "kind": "unreadableConflict" })),
 			(UnreachableReason::UnreadableList, json!({ "kind": "unreadableList" })),
 			(
 				UnreachableReason::ListNotReadBack { cause: Box::new(relay_status) },
