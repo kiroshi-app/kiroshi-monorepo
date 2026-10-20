@@ -1,6 +1,6 @@
-type CiEvent = "pull_request" | "merge_group" | "push" | "tag"
+const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
 
-const CI_EVENTS: CiEvent[] = ["pull_request", "merge_group", "push", "tag"]
+type CiEvent = (typeof CI_EVENTS)[number]
 
 type FilteredJobs = {
 	rust: boolean
