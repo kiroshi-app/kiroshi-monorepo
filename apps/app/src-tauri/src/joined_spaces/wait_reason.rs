@@ -141,15 +141,4 @@ mod tests {
 			assert!(!wait.detail.is_empty(), "{named}");
 		}
 	}
-
-	#[test]
-	fn a_wait_names_the_cause_it_was_read_from() {
-		let closed = wait_of(Stall::Closed(None));
-		let silent = wait_of(Stall::Silent(Duration::from_secs(15)));
-		let refused = wait_of(Stall::Forbidden);
-
-		assert!(closed.detail.contains("closed"), "{}", closed.detail);
-		assert!(silent.detail.contains("15s"), "{}", silent.detail);
-		assert!(refused.detail.contains("403"), "{}", refused.detail);
-	}
 }

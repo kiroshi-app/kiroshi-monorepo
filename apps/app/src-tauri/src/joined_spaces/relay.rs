@@ -167,15 +167,16 @@ impl RelayGuests {
 		self.waiting.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
+	fn waits(&self) -> MutexGuard<'_, HashMap<String, JoinedSpaceWait>> {
+		self.waits.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
 	pub(super) fn waited(&self, instance_id: &str, wait: JoinedSpaceWait) {
-		self.waits
-			.lock()
-			.unwrap_or_else(PoisonError::into_inner)
-			.insert(instance_id.to_owned(), wait);
+		self.waits().insert(instance_id.to_owned(), wait);
 	}
 
 	pub(super) fn last_wait(&self, instance_id: &str) -> Option<JoinedSpaceWait> {
-		self.waits.lock().unwrap_or_else(PoisonError::into_inner).get(instance_id).cloned()
+		self.waits().get(instance_id).cloned()
 	}
 
 	async fn waiting_stopped(&self, id: &str) {
