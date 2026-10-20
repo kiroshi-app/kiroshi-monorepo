@@ -2,7 +2,7 @@ import { Agentation } from "agentation"
 
 import { useAnnotationMode } from "@/lib/annotation/use-annotation-mode"
 
-const IDENTIFYING_ATTRIBUTES = ["data-slot", "data-testid"]
+const IDENTIFYING_ATTRIBUTES = ["data-slot"]
 
 export const AnnotationToolbar = () => {
 	const isAnnotating = useAnnotationMode()
