@@ -2,6 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::bundles::EffortLevel;
+use crate::conversations::contract::TranscriptStoreError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +294,34 @@ impl std::fmt::Display for TransportError {
 }
 
 impl std::error::Error for TransportError {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CancelOutcome {
+	Cancelled,
+	NothingToCancel,
+	Failed { failures: Vec<CancelFailure> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelFailure {
+	pub bot_id: String,
+	pub reason: CancelFailureReason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "source", content = "error", rename_all = "camelCase")]
+pub enum CancelFailureReason {
+	Session(TransportError),
+	Store(TranscriptStoreError),
+}
+
+impl CancelOutcome {
+	pub fn failed(bot_id: &str, reason: CancelFailureReason) -> Self {
+		Self::Failed { failures: vec![CancelFailure { bot_id: bot_id.to_owned(), reason }] }
+	}
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

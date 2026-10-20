@@ -58,6 +58,7 @@ fn permission_detail(name: &str, input: &Value) -> Option<String> {
 pub const ASK_USER_QUESTION: &str = "AskUserQuestion";
 
 const SERVER_LEFT_OUT: &str = "a server was left out: a variable is defined by no scope";
+const INTERRUPT_UNEXPLAINED: &str = "the sidecar refused the interrupt without a reason";
 
 fn read_list<T>(value: &Value, key: &str, read: impl Fn(&Value) -> Option<T>) -> Vec<T> {
 	value
@@ -159,6 +160,7 @@ impl Translator {
 			Frame::Commands(frame) => Self::on_commands(frame),
 			Frame::SettingsRejected(frame) => Self::on_settings_rejected(frame),
 			Frame::ServerEnvRejected(frame) => Self::on_server_env_rejected(frame),
+			Frame::InterruptFailed(frame) => self.on_interrupt_failed(frame),
 			Frame::ControlRequest(request) => {
 				self.on_control_request(request.request_id, request.request)
 			}
@@ -316,6 +318,20 @@ impl Translator {
 
 	pub fn abandon_turn(&mut self) -> Vec<AgentEvent> {
 		self.end_turn(TurnOutcome::Failed, ResultFrame::default())
+	}
+
+	fn on_interrupt_failed(&mut self, frame: RejectionFrame) -> Vec<AgentEvent> {
+		let detail = frame
+			.detail
+			.filter(|detail| !detail.trim().is_empty())
+			.unwrap_or_else(|| INTERRUPT_UNEXPLAINED.to_owned());
+		let failed = AgentEvent::Failed { error: TransportError::WriteFailed { detail } };
+		if !self.cancelling {
+			return vec![failed];
+		}
+		let mut events = vec![failed];
+		events.extend(self.abandon_turn());
+		events
 	}
 
 	fn end_turn(&mut self, outcome: TurnOutcome, frame: ResultFrame) -> Vec<AgentEvent> {
@@ -632,6 +648,26 @@ mod tests {
 				vec![("", expected)]
 			);
 		}
+	}
+
+	#[test]
+	fn a_refused_interrupt_fails_the_turn_it_was_stopping_and_only_warns_otherwise() {
+		let refused =
+			json!({ "type": "interrupt_failed", "detail": "the query is already closed" });
+		let failed = AgentEvent::Failed {
+			error: TransportError::WriteFailed { detail: "the query is already closed".to_owned() },
+		};
+		let mut stopping = Translator::new(false);
+		ingest(&mut stopping, tool_round(1));
+		stopping.mark_cancelling();
+		let mut idle = Translator::new(false);
+
+		let while_stopping = ingest(&mut stopping, vec![refused.clone()]);
+		let while_idle = ingest(&mut idle, vec![refused]);
+
+		assert_eq!(while_stopping.first(), Some(&failed));
+		assert_eq!(outcome(&while_stopping), Some(TurnOutcome::Failed));
+		assert_eq!(while_idle, vec![failed]);
 	}
 
 	#[test]

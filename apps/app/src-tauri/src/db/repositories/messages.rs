@@ -195,6 +195,10 @@ const RELEASE_RUN: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id =
 const CANCEL_OPEN_MESSAGES_OF_RUN: &str = "UPDATE messages SET completion_state = 'cancelled'
 	WHERE turn_id = ?1 AND author_bot_id = ?2 AND completion_state IN ('pending', 'streaming')";
 const RELEASE_EVERY_RUN: &str = "DELETE FROM turn_runs";
+const OPEN_RUNS_OF_BOT: &str = "SELECT DISTINCT turn_runs.turn_id FROM turn_runs
+	JOIN turns ON turns.id = turn_runs.turn_id
+	WHERE turns.conversation_id = ?1 AND turn_runs.bot_id = ?2";
+const RELEASE_RUNS_OF_BOT: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2";
 const AWAITED: &str = "awaited";
 const RUNNING: &str = "running";
 const OPEN_TURNS_WITHOUT_REPLY: &str = "SELECT id FROM turns
@@ -377,6 +381,19 @@ impl MessagesRepository {
 		})
 		.await?
 		.at("cancel_run", "turn_runs")
+	}
+
+	pub async fn cancel_open_runs(
+		&self,
+		conversation_id: String,
+		bot_id: String,
+		cancelled_at: i64,
+	) -> Result<usize, TranscriptError> {
+		self.call_mut(move |connection| {
+			Ok(cancelled_open_runs(connection, &conversation_id, &bot_id, cancelled_at))
+		})
+		.await?
+		.at("cancel_open_runs", "turn_runs")
 	}
 
 	pub async fn expire_awaited_run(
@@ -948,6 +965,26 @@ fn cancelled_run(
 	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, cancelled_at])?;
 	transaction.commit()?;
 	Ok(())
+}
+
+fn cancelled_open_runs(
+	connection: &mut Connection,
+	conversation_id: &str,
+	bot_id: &str,
+	cancelled_at: i64,
+) -> Result<usize, TranscriptError> {
+	let transaction = write_transaction(connection)?;
+	let turn_ids = transaction
+		.prepare_cached(OPEN_RUNS_OF_BOT)?
+		.query_map(params![conversation_id, bot_id], |row| row.get(0))?
+		.collect::<Result<Vec<String>, _>>()?;
+	for turn_id in &turn_ids {
+		transaction.execute(CANCEL_OPEN_MESSAGES_OF_RUN, params![turn_id, bot_id])?;
+		transaction.execute(RELEASE_RUNS_OF_BOT, params![turn_id, bot_id])?;
+		transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, cancelled_at])?;
+	}
+	transaction.commit()?;
+	Ok(turn_ids.len())
 }
 
 fn expired_awaited_run(
@@ -2144,6 +2181,40 @@ mod tests {
 			states(&stored),
 			vec![MessageState::Cancelled, MessageState::Complete, MessageState::Streaming]
 		);
+	}
+
+	#[tokio::test]
+	async fn cancelling_the_open_runs_of_a_bot_closes_its_running_and_awaited_runs_and_no_other() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		let turn = NewTurn { id: "t1".into(), conversation_id: "c1".into(), started_at: 1 };
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.start_run(turn, "b1".into()).await.expect("the run starts");
+		messages.await_runs("t1".into(), vec!["b2".into()]).await.expect("b2 is awaited");
+		messages.open_assistant_message(a_reply("m1", None)).await.expect("the reply opens");
+		let turn_completed_at = || {
+			database.call(|connection| {
+				Ok(connection.query_row(
+					"SELECT completed_at FROM turns WHERE id = 't1'",
+					[],
+					|row| row.get::<_, Option<i64>>(0),
+				)?)
+			})
+		};
+
+		let running = messages.cancel_open_runs("c1".into(), "b1".into(), 3).await;
+		let left_open = turn_completed_at().await.expect("the turn reads");
+		let awaited = messages.cancel_open_runs("c1".into(), "b2".into(), 4).await;
+		let none_left = messages.cancel_open_runs("c1".into(), "b2".into(), 5).await;
+
+		assert_eq!(running.expect("the running run closes"), 1);
+		assert_eq!(left_open, None, "the turn closed while b2 was still awaited");
+		assert_eq!(awaited.expect("the awaited run closes"), 1);
+		assert_eq!(none_left.expect("nothing is left to close"), 0);
+		assert_eq!(rows_in(&database, "turn_runs").await, 0);
+		assert_eq!(turn_completed_at().await.expect("the turn reads"), Some(4));
+		assert_eq!(states(&whole_transcript(&database, PAGE).await), vec![MessageState::Cancelled]);
 	}
 
 	#[tokio::test]

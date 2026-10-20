@@ -257,7 +257,10 @@ fn two_runs_of_one_bot_answer_at_once_and_a_scope_naming_another_epoch_reaches_n
 	);
 	assert_eq!(
 		harness.call("agent_cancel_turn", json!({ "scope": drifted })),
-		stale("r1"),
+		Ok(json!({ "kind": "failed", "failures": [{
+			"botId": drifted["botId"],
+			"reason": { "source": "session", "error": stale("r1").expect_err("a refusal") },
+		}] })),
 		"a scope naming another epoch was answered about the live run's turn"
 	);
 	assert_eq!(

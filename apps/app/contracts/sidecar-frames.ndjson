@@ -28,5 +28,6 @@
 {"session":"k1","frame":{"type":"result","subtype":"success","session_id":"sdk-0001","is_error":false,"structured_output":{"summary":"the release note is drafted"},"total_cost_usd":0.0412,"modelUsage":{"claude-sonnet-4-5":{"inputTokens":1200,"outputTokens":340}}}}
 {"session":"k1","frame":{"type":"settings_rejected","detail":"bypassPermissions is refused, this session opens under auto."}}
 {"session":"k1","frame":{"type":"server_env_rejected","detail":"clock was left out for want of CLOCK_URL"}}
+{"session":"k1","frame":{"type":"interrupt_failed","detail":"the query refused the interrupt"}}
 {"session":"k1","frame":{"type":"closed","detail":"the query ended"}}
 {"session":"k1","frame":{"type":"unknown_to_the_host"}}

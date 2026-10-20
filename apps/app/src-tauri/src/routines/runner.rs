@@ -18,8 +18,8 @@ use crate::agent::commands::{
 	EVENT_CHANNEL,
 };
 use crate::agent::contract::{
-	AgentEvent, ChatMessage, EventTurn, MessageCompletion, MessageRole, RuntimeScope, ScopedEvent,
-	TransportError, TurnEnded, TurnOutcome,
+	AgentEvent, CancelOutcome, ChatMessage, EventTurn, MessageCompletion, MessageRole,
+	RuntimeScope, ScopedEvent, TransportError, TurnEnded, TurnOutcome,
 };
 use crate::agent::reply_writer::settled_mentions;
 use crate::agent::AgentState;
@@ -309,9 +309,10 @@ async fn refused<R: Runtime>(
 }
 
 async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
-	cancel_session_turn(app, &*managed::<R, AgentState>(app, NO_AGENT)?, scope)
-		.await
-		.map_err(|error| detail_of(&error))
+	match cancel_session_turn(app, &*managed::<R, AgentState>(app, NO_AGENT)?, scope).await {
+		CancelOutcome::Failed { failures } => Err(detail_of(&failures)),
+		CancelOutcome::Cancelled | CancelOutcome::NothingToCancel => Ok(()),
+	}
 }
 
 async fn shut_down<R: Runtime>(app: &AppHandle<R>, run_id: &str, scope: RuntimeScope) {

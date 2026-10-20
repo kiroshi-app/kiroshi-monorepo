@@ -15,7 +15,7 @@ use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
 use kiroshi_app::agent::commands::{agent_cancel_turn, shutdown_session, terminate_session};
-use kiroshi_app::agent::contract::RuntimeScope;
+use kiroshi_app::agent::contract::{CancelOutcome, RuntimeScope};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
@@ -741,9 +741,14 @@ fn a_stop_after_a_handover_cancels_the_companion_handed_the_work_and_closes_the_
 		let heard_before_stop = host.frames.len();
 		let handed_over: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), handed_over)
-			.await
-			.expect("the stop is taken");
+		let outcome = agent_cancel_turn(
+			host.app.handle().clone(),
+			host.app.state::<AgentState>(),
+			handed_over,
+		)
+		.await;
+
+		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
 
 		host.stopped_after_a_handover(heard_before_stop).await;
 		host.quit().await;

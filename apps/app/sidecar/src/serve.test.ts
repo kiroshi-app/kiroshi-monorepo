@@ -3,13 +3,14 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { sessionRequest } from "./serve"
+import { createRouter, sessionRequest } from "./serve"
 
 import { claudeSourceExecutable } from "./providers/claude/build"
 import { EXECUTABLE_OVERRIDE_ENV } from "./providers/claude/executable"
 import { resolvedServers } from "./providers/claude/server-env"
 import { buildOptions } from "./providers/claude/session"
 import { spaceLine } from "./providers/claude/system-layer"
+import type { AgentProvider, AgentSession } from "./providers/provider"
 import { DEFAULT_PROVIDER_ID } from "./providers/registry"
 
 const entrypoint = new URL("./index.ts", import.meta.url).pathname
@@ -84,6 +85,51 @@ const served = async (commands: string[]) => {
 			.filter((line) => line.trim().length > 0)
 			.map((line) => JSON.parse(line)),
 	}
+}
+
+const unused = (name: string) => () => {
+	throw new Error(`the interrupt test never calls ${name}`)
+}
+
+const providerOpening = (session: AgentSession): AgentProvider => ({
+	id: "interrupts",
+	version: "0.0.0",
+	sdkVersion: "0.0.0",
+	capabilities: [],
+	assertReady: unused("assertReady"),
+	authenticate: unused("authenticate"),
+	signIn: unused("signIn"),
+	enterSignInCode: unused("enterSignInCode"),
+	cancelSignIn: unused("cancelSignIn"),
+	models: unused("models"),
+	tools: unused("tools"),
+	title: unused("title"),
+	open: async () => session,
+})
+
+const refusingInterrupt: AgentSession = {
+	prompt: unused("prompt"),
+	interrupt: async () => {
+		throw new Error("the query is already closed")
+	},
+	decide: unused("decide"),
+	close: async () => undefined,
+}
+
+const interrupted = async (session: string, opens: boolean) => {
+	const written: unknown[] = []
+	const { route } = createRouter(
+		providerOpening(refusingInterrupt),
+		(payload) => {
+			written.push(payload)
+		},
+	)
+	if (opens) {
+		route(openCommand({ session }))?.(openCommand({ session }), session)
+	}
+	const interrupt = { type: "interrupt", session }
+	await route(interrupt)?.(interrupt, session)
+	return written
 }
 
 describe("serve", () => {
@@ -205,6 +251,32 @@ describe("serve", () => {
 		})
 		expect(options.systemPrompt).toMatchObject({
 			append: expect.stringContaining(spaceLine(spacePath)),
+		})
+	})
+
+	it("answers an interrupt for a session it does not hold with a frame naming it", async () => {
+		const written = await interrupted("never-opened", false)
+
+		expect(written).toEqual([
+			{
+				session: "never-opened",
+				frame: {
+					type: "interrupt_failed",
+					detail: "the sidecar holds no open session never-opened",
+				},
+			},
+		])
+	})
+
+	it("answers an interrupt the query rejects with a frame naming the session and the error", async () => {
+		const written = await interrupted("k1", true)
+
+		expect(written.at(-1)).toEqual({
+			session: "k1",
+			frame: {
+				type: "interrupt_failed",
+				detail: "the query is already closed",
+			},
 		})
 	})
 

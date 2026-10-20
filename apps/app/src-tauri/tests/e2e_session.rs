@@ -327,7 +327,10 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 	first.forget_events();
 	first.prompt("compte jusqu'a mille").expect("prompt accepted");
 	first.wait_for("the slow turn to start streaming", message_started);
-	assert_eq!(first.call("agent_cancel_turn", json!({ "scope": first.scope() })), Ok(Value::Null));
+	assert_eq!(
+		first.call("agent_cancel_turn", json!({ "scope": first.scope() })),
+		Ok(json!({ "kind": "cancelled" }))
+	);
 	assert_eq!(first.wait_for("the cancelled turn to end", turn_outcome), TurnOutcome::Cancelled);
 	first.prompt("encore").expect("a cancelled session still accepts a prompt");
 
@@ -765,7 +768,7 @@ fn cancelling_a_live_session_before_any_submit_closes_the_turn_the_host_opened()
 
 	let cancelled = stored.call("agent_cancel_turn", json!({ "scope": stored.scope() }));
 
-	assert_eq!(cancelled, Err(serde_json::to_value(TransportError::NoActiveTurn).expect("json")));
+	assert_eq!(cancelled, Ok(json!({ "kind": "nothingToCancel" })));
 	assert!(stored.completed_at("t1").is_some(), "the unsubmitted host turn was left open");
 	stored.close();
 }

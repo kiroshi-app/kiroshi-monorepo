@@ -69,7 +69,7 @@ fn commands_are_registered_and_report_typed_errors_without_a_session() {
 
 	assert_eq!(
 		call(&window, "agent_cancel_turn", json!({ "scope": a_scope() })),
-		Err(json!({ "kind": "notStarted" }))
+		Ok(json!({ "kind": "nothingToCancel" }))
 	);
 	assert_eq!(
 		call(&window, "agent_submit_prompt", json!({ "scope": a_scope(), "text": "salut" })),

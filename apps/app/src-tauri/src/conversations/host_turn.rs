@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use futures_util::future::join_all;
 use tauri::{AppHandle, Runtime, State};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use super::commands::announce_conversation;
 use super::context::{bounded_context, mentioned_bot_ids};
@@ -16,7 +16,8 @@ use crate::agent::commands::{
 	cancel_session_turn,
 };
 use crate::agent::contract::{
-	AgentEvent, RuntimeScope, ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome,
+	AgentEvent, CancelFailureReason, CancelOutcome, RuntimeScope, ScopedEvent, SubmittedTurn,
+	TransportError, TurnEnded, TurnOutcome,
 };
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
@@ -33,6 +34,7 @@ type Running = Arc<Mutex<HashMap<String, RunningTurn>>>;
 struct RunningTurn {
 	turn_id: String,
 	stop: watch::Sender<bool>,
+	answers: Vec<oneshot::Sender<CancelOutcome>>,
 }
 
 #[derive(Default)]
@@ -54,8 +56,8 @@ impl HostTurns {
 			});
 		}
 		let (stop, stopped) = watch::channel(false);
-		running
-			.insert(conversation_id.to_owned(), RunningTurn { turn_id: turn_id.to_owned(), stop });
+		let running_turn = RunningTurn { turn_id: turn_id.to_owned(), stop, answers: Vec::new() };
+		running.insert(conversation_id.to_owned(), running_turn);
 		Ok(HeldTurn {
 			running: self.running.clone(),
 			conversation_id: conversation_id.to_owned(),
@@ -63,13 +65,13 @@ impl HostTurns {
 		})
 	}
 
-	pub(crate) fn stop(&self, conversation_id: &str) -> bool {
-		let running = locked(&self.running);
-		let Some(running_turn) = running.get(conversation_id) else {
-			return false;
-		};
+	pub(crate) fn stop(&self, conversation_id: &str) -> Option<oneshot::Receiver<CancelOutcome>> {
+		let mut running = locked(&self.running);
+		let running_turn = running.get_mut(conversation_id)?;
+		let (answer, answered) = oneshot::channel();
+		running_turn.answers.push(answer);
 		running_turn.stop.send_replace(true);
-		true
+		Some(answered)
 	}
 }
 
@@ -77,6 +79,20 @@ pub(crate) struct HeldTurn {
 	running: Running,
 	conversation_id: String,
 	stopped: watch::Receiver<bool>,
+}
+
+impl HeldTurn {
+	fn answer(&self, outcome: &CancelOutcome) {
+		let answers = match locked(&self.running).get_mut(&self.conversation_id) {
+			Some(running_turn) => mem::take(&mut running_turn.answers),
+			None => return,
+		};
+		for answer in answers {
+			if answer.send(outcome.clone()).is_err() {
+				log::debug!("the caller of a stop on {} stopped waiting", self.conversation_id);
+			}
+		}
+	}
 }
 
 impl Drop for HeldTurn {
@@ -264,7 +280,7 @@ impl<R: Runtime> HostTurn<R> {
 			let heard_event = tokio::select! {
 				scoped = heard.recv() => scoped,
 				Ok(()) = stop.changed() => {
-					self.cancel(&speaking).await;
+					held.answer(&self.cancel(&speaking).await);
 					continue;
 				}
 			};
@@ -503,22 +519,31 @@ impl<R: Runtime> HostTurn<R> {
 		Ok(handed)
 	}
 
-	async fn cancel(&self, speaking: &[Speaker]) {
-		join_all(speaking.iter().map(|speaker| self.cancel_speaker(&speaker.scope))).await;
-	}
-
-	async fn cancel_speaker(&self, scope: &RuntimeScope) {
-		if let Err(error) = self.cancelled(scope).await {
-			log::warn!(
-				"{} could not cancel the turn of companion {}: {error:?}",
-				self.label(),
-				scope.bot_id
-			);
+	async fn cancel(&self, speaking: &[Speaker]) -> CancelOutcome {
+		let settled =
+			join_all(speaking.iter().map(|speaker| self.cancel_speaker(&speaker.scope))).await;
+		let failures: Vec<_> = settled
+			.into_iter()
+			.flat_map(|outcome| match outcome {
+				CancelOutcome::Failed { failures } => failures,
+				CancelOutcome::Cancelled | CancelOutcome::NothingToCancel => Vec::new(),
+			})
+			.collect();
+		if failures.is_empty() {
+			return CancelOutcome::Cancelled;
 		}
+		CancelOutcome::Failed { failures }
 	}
 
-	async fn cancelled(&self, scope: &RuntimeScope) -> Result<(), TransportError> {
-		cancel_session_turn(&self.app, &*self.agent()?, scope).await
+	async fn cancel_speaker(&self, scope: &RuntimeScope) -> CancelOutcome {
+		let outcome = match self.agent() {
+			Ok(agent) => cancel_session_turn(&self.app, &agent, scope).await,
+			Err(error) => CancelOutcome::failed(&scope.bot_id, CancelFailureReason::Session(error)),
+		};
+		if outcome == CancelOutcome::NothingToCancel {
+			announce(&self.app, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
+		}
+		outcome
 	}
 
 	fn has_stopped(&self) -> bool {
@@ -557,7 +582,7 @@ fn hand_over(waiting: &mut Vec<Summons>, from: &str, summons: Summons) {
 	waiting.push(summons);
 }
 
-fn ended_as(outcome: TurnOutcome) -> AgentEvent {
+pub(crate) fn ended_as(outcome: TurnOutcome) -> AgentEvent {
 	AgentEvent::TurnEnded {
 		ended: TurnEnded {
 			session_id: None,
@@ -584,8 +609,9 @@ mod tests {
 	use super::*;
 	use tokio::sync::broadcast;
 
-	use crate::agent::commands::EVENT_CHANNEL;
-	use crate::agent::contract::ConnectionState;
+	use crate::agent::commands::{agent_cancel_turn, EVENT_CHANNEL};
+	use crate::agent::contract::{CancelFailure, ConnectionState};
+	use crate::conversations::contract::StorageFailure;
 	use crate::conversations::contract::UPDATED_EVENT;
 	use crate::conversations::turn_run_deadline::TurnRunDeadlines;
 	use crate::db::repositories::conversations::{
@@ -914,5 +940,173 @@ mod tests {
 		assert_eq!(released, Ok(true), "the deadline left the turn working");
 		assert_eq!(heard, vec![json!({ "startedAt": 1, "botIds": [ada] })]);
 		drop(stop);
+	}
+
+	async fn open_runs(app: &AppHandle<MockRuntime>) -> i64 {
+		database(app)
+			.expect("the database opens")
+			.messages()
+			.call(|connection| {
+				Ok(connection.query_row("SELECT COUNT(*) FROM turn_runs", [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the runs are counted")
+	}
+
+	async fn stopped(app: &AppHandle<MockRuntime>, scope: RuntimeScope) -> CancelOutcome {
+		agent_cancel_turn(app.clone(), app.state::<AgentState>(), scope)
+			.await
+			.expect("the stop answers")
+	}
+
+	fn unavailable_store(bot_id: &str) -> CancelFailure {
+		CancelFailure {
+			bot_id: bot_id.to_owned(),
+			reason: CancelFailureReason::Store(TranscriptStoreError::Unavailable {
+				failure: StorageFailure::AppDataDir,
+			}),
+		}
+	}
+
+	#[tokio::test]
+	async fn a_stop_with_no_live_session_closes_the_running_run_it_finds_and_says_cancelled() {
+		let app = an_app_of_its_own("cancel-stored-run", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let ada = room.bot_ids[0].clone();
+		speaking_in(app.handle(), &room, std::slice::from_ref(&ada)).await;
+		a_streaming_reply(app.handle(), &room, &ada).await;
+		let mut announced = events::subscribed(app.handle());
+
+		let outcome = stopped(app.handle(), scope_in(&room, &ada)).await;
+
+		assert_eq!(outcome, CancelOutcome::Cancelled);
+		assert_eq!(open_runs(app.handle()).await, 0, "the running run was left open");
+		assert_eq!(reply_states(app.handle(), &room).await, vec![MessageState::Cancelled]);
+		let told = told(&mut announced);
+		let ended = ScopedEvent {
+			scope: Some(scope_in(&room, &ada)),
+			turn: None,
+			event: ended_as(TurnOutcome::Cancelled),
+		};
+		assert_eq!(agent_events(&told), vec![ended]);
+		assert_eq!(active_turns(&told), vec![Value::Null]);
+	}
+
+	#[tokio::test]
+	async fn a_stop_with_no_live_session_and_no_open_run_has_nothing_to_cancel() {
+		let app = an_app_of_its_own("cancel-nothing", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let mut announced = events::subscribed(app.handle());
+
+		let outcome = stopped(app.handle(), scope_in(&room, &room.bot_ids[0])).await;
+
+		assert_eq!(outcome, CancelOutcome::NothingToCancel);
+		assert_eq!(told(&mut announced), Vec::new());
+	}
+
+	#[tokio::test]
+	async fn a_stop_whose_stored_run_cannot_be_closed_answers_failed_with_the_store_error() {
+		let app = an_app_of_its_own("cancel-store-down", mock_builder());
+		app.manage(AgentState::default());
+		let scope = RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 1,
+		};
+
+		let outcome = stopped(app.handle(), scope).await;
+
+		assert_eq!(outcome, CancelOutcome::Failed { failures: vec![unavailable_store("b1")] });
+	}
+
+	async fn a_driven_turn(
+		app: &AppHandle<MockRuntime>,
+		room: &Room,
+	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
+		let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
+		let host_turn = a_host_turn(app, room, held.stopped.clone());
+		let speaking = room
+			.bot_ids
+			.iter()
+			.map(|bot_id| Speaker { scope: scope_in(room, bot_id), written: Vec::new() });
+		let speaking: Vec<Speaker> = speaking.collect();
+		let (events, heard) = mpsc::unbounded_channel();
+		let (mut reading, _lagging) = a_lagging_reader();
+		let driving = tauri::async_runtime::spawn(async move {
+			host_turn.drive(held, speaking, heard, &mut reading).await;
+		});
+		(driving, events)
+	}
+
+	#[tokio::test]
+	async fn a_group_stop_answers_once_every_speaking_companion_cancel_has_settled() {
+		let app = an_app_of_its_own("cancel-group-settled", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
+		speaking_in(app.handle(), &room, &room.bot_ids).await;
+		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+
+		let outcome = stopped(app.handle(), scope_in(&room, &room.bot_ids[0])).await;
+		let left_open = open_runs(app.handle()).await;
+		driving.abort();
+
+		assert_eq!(outcome, CancelOutcome::Cancelled);
+		assert_eq!(left_open, 0, "the stop answered before every speaker's run closed");
+	}
+
+	#[tokio::test]
+	async fn a_group_stop_ends_a_speaker_that_holds_nothing_left_to_cancel() {
+		let app = an_app_of_its_own("cancel-group-idle-speaker", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let ada = scope_in(&room, &room.bot_ids[0]);
+		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+		let mut announced = events::subscribed(app.handle());
+
+		let outcome = stopped(app.handle(), ada.clone()).await;
+		driving.abort();
+
+		assert_eq!(outcome, CancelOutcome::Cancelled);
+		let ended =
+			ScopedEvent { scope: Some(ada), turn: None, event: ended_as(TurnOutcome::Cancelled) };
+		assert_eq!(agent_events(&told(&mut announced)), vec![ended]);
+	}
+
+	#[tokio::test]
+	async fn a_group_stop_names_every_companion_whose_cancel_failed() {
+		let app = an_app_of_its_own("cancel-group-failed", mock_builder());
+		app.manage(AgentState::default());
+		let room =
+			Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned(), "b-grace".to_owned()] };
+		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+
+		let outcome = stopped(app.handle(), scope_in(&room, "b-ada")).await;
+		driving.abort();
+
+		assert_eq!(
+			outcome,
+			CancelOutcome::Failed {
+				failures: vec![unavailable_store("b-ada"), unavailable_store("b-grace")]
+			}
+		);
+	}
+
+	#[test]
+	fn a_stop_on_a_turn_released_before_it_answered_reads_as_cancelled() {
+		let turns = HostTurns::default();
+		let held = turns.hold("c1", "t1").expect("the turn is held");
+		let answered = turns.stop("c1").expect("a running turn takes the stop");
+
+		drop(held);
+
+		assert!(answered.blocking_recv().is_err(), "a released turn kept its stop waiting");
+		assert!(turns.stop("c1").is_none(), "a released turn still took a stop");
 	}
 }

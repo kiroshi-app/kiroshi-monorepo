@@ -7,9 +7,10 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::{broadcast, Mutex};
 
 use super::contract::{
-	AccountReport, AgentEvent, CheckReport, ConnectionState, ConversationNaming, EventTurn,
-	EvolvedBundle, LiveSession, OfferedModel, PermissionDecision, QuestionRequest, RuntimeScope,
-	ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
+	AccountReport, AgentEvent, CancelFailureReason, CancelOutcome, CheckReport, ConnectionState,
+	ConversationNaming, EventTurn, EvolvedBundle, LiveSession, OfferedModel, PermissionDecision,
+	QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
+	TurnOutcome,
 };
 use super::host::hosted;
 use super::lease::RunLease;
@@ -23,7 +24,7 @@ use crate::bundles;
 use crate::companions::host::CompanionHost;
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
-use crate::conversations::host_turn::HostTurns;
+use crate::conversations::host_turn::{ended_as, HostTurns};
 use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, MISSION_KIND};
 use crate::db::repositories::runtime_context::ParticipantKey;
@@ -1101,46 +1102,71 @@ pub async fn agent_cancel_turn<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
-) -> Result<(), TransportError> {
-	if state.host_turns().stop(&scope.conversation_id) {
-		return Ok(());
+) -> Result<CancelOutcome, TransportError> {
+	let Some(answered) = state.host_turns().stop(&scope.conversation_id) else {
+		return Ok(cancel_session_turn(&app, &state, &scope).await);
+	};
+	match answered.await {
+		Ok(outcome) => Ok(outcome),
+		Err(_released_unanswered) => Ok(CancelOutcome::Cancelled),
 	}
-	cancel_session_turn(&app, &state, &scope).await
 }
 
 pub(crate) async fn cancel_session_turn<R: Runtime>(
 	app: &AppHandle<R>,
 	state: &AgentState,
 	scope: &RuntimeScope,
-) -> Result<(), TransportError> {
-	let cancelled = match state.live.session_for(scope) {
+) -> CancelOutcome {
+	let interrupted = match state.live.session_for(scope) {
 		Ok(session) => session.cancel_turn().await,
 		Err(refused) => Err(refused),
 	};
-	if matches!(cancelled, Err(TransportError::NoActiveTurn | TransportError::NotStarted)) {
-		let conversation_id = &scope.conversation_id;
-		if let Err(error) =
-			complete_unsubmitted_turns(app, &state.host_writes, conversation_id).await
-		{
-			log::warn!(
-				"the host could not close the unsubmitted turns of conversation {conversation_id}: {error:?}"
-			);
+	match interrupted {
+		Ok(()) => CancelOutcome::Cancelled,
+		Err(TransportError::NoActiveTurn | TransportError::NotStarted) => {
+			match close_stored_runs(app, &state.host_writes, scope).await {
+				Ok(0) => CancelOutcome::NothingToCancel,
+				Ok(_) => CancelOutcome::Cancelled,
+				Err(error) => {
+					CancelOutcome::failed(&scope.bot_id, CancelFailureReason::Store(error))
+				}
+			}
 		}
+		Err(error) => CancelOutcome::failed(&scope.bot_id, CancelFailureReason::Session(error)),
 	}
-	cancelled
 }
 
-async fn complete_unsubmitted_turns<R: Runtime>(
+async fn close_stored_runs<R: Runtime>(
 	app: &AppHandle<R>,
 	owned: &HostWrites,
-	conversation_id: &str,
-) -> Result<(), TranscriptStoreError> {
+	scope: &RuntimeScope,
+) -> Result<usize, TranscriptStoreError> {
 	let Some(state) = app.try_state::<db::DatabaseState>() else {
 		return Err(TranscriptStoreError::Unavailable {
 			failure: (&db::DatabaseError::AppDataDir).into(),
 		});
 	};
 	let database = ready(state.inner())?;
+	let conversation_id = &scope.conversation_id;
+	let has_completed = complete_unsubmitted_turns(database, owned, conversation_id).await?;
+	let closed = database
+		.messages()
+		.cancel_open_runs(conversation_id.clone(), scope.bot_id.clone(), now_ms())
+		.await?;
+	if closed > 0 {
+		announce(app, Some(scope.clone()), ended_as(TurnOutcome::Cancelled));
+	}
+	if has_completed || closed > 0 {
+		announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
+	}
+	Ok(closed)
+}
+
+async fn complete_unsubmitted_turns(
+	database: &db::Database,
+	owned: &HostWrites,
+	conversation_id: &str,
+) -> Result<bool, TranscriptStoreError> {
 	let messages = database.messages();
 	let mut has_completed = false;
 	for id in messages.open_turns_without_reply(conversation_id.to_owned()).await? {
@@ -1149,10 +1175,7 @@ async fn complete_unsubmitted_turns<R: Runtime>(
 			has_completed = true;
 		}
 	}
-	if has_completed {
-		announce_conversation(app, database, CONVERSATION_UPDATED, conversation_id).await;
-	}
-	Ok(())
+	Ok(has_completed)
 }
 
 #[tauri::command]
