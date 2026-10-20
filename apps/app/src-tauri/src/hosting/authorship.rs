@@ -12,7 +12,7 @@ use super::contract::Member;
 use super::{members, Hosting};
 use crate::account::contract::AccountState;
 use crate::account::session::AccountSession;
-use crate::db::repositories::messages::AccountAuthor;
+use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 
@@ -86,6 +86,13 @@ impl FunctionArg for Caller {
 impl Caller {
 	pub fn is_relayed(&self) -> bool {
 		matches!(self, Caller::Relayed(_))
+	}
+
+	pub fn written_from(&self) -> WrittenFrom {
+		match self {
+			Caller::Host => WrittenFrom::Here,
+			Caller::Relayed(_) => WrittenFrom::Relay,
+		}
 	}
 
 	pub async fn author<R: Runtime>(

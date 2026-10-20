@@ -772,7 +772,7 @@ mod tests {
 		BotIdentity, ConversationDraft, DEFAULT_BOT_ID, DEFAULT_BOT_MODEL,
 	};
 	use crate::db::repositories::messages::{
-		MessageRole, MessageState, NewUserMessage, StoredMessage,
+		MessageRole, MessageState, NewUserMessage, StoredMessage, WrittenFrom,
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -901,6 +901,7 @@ mod tests {
 				turn_id: turn_id.to_owned(),
 				author_bot_id: None,
 				author: Default::default(),
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: None,
 				content: "hello".to_owned(),
 				created_at: 1,
@@ -1568,6 +1569,7 @@ mod tests {
 				"authorBotId": DEFAULT_BOT_ID,
 				"authorAccountId": null,
 				"authorName": null,
+				"writtenFrom": null,
 			}))
 		);
 	}
@@ -1686,6 +1688,7 @@ mod tests {
 				"authorBotId": DEFAULT_BOT_ID,
 				"authorAccountId": null,
 				"authorName": null,
+				"writtenFrom": null,
 			})
 		);
 		assert_eq!(conversation["title"], json!("Chat"));

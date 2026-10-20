@@ -143,9 +143,11 @@ pub async fn conversation_append_user_message<R: Runtime>(
 	message: NewUserMessage,
 ) -> Result<i64, TranscriptStoreError> {
 	let database = ready(&state)?;
+	let written_from = caller.written_from();
 	let author = caller.author(&app, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
-	let seq = database.messages().append_user_message(message.written_by(author)).await?;
+	let seq =
+		database.messages().append_user_message(message.written_by(author, written_from)).await?;
 	announce_stored(&app, database, conversation_id.clone(), id).await;
 	announce_conversation(&app, database, CONVERSATION_UPDATED, &conversation_id).await;
 	Ok(seq)
@@ -190,10 +192,13 @@ async fn store_sent<R: Runtime>(
 ) -> Result<i64, TranscriptStoreError> {
 	let turn_id = message.turn_id.clone();
 	let completed_at = summoned.is_empty().then_some(message.created_at);
+	let written_from = caller.written_from();
 	let author = caller.author(app, database).await?;
 	let (conversation_id, id) = (message.conversation_id.clone(), message.id.clone());
-	let seq =
-		database.messages().send_user_message(message.written_by(author), completed_at).await?;
+	let seq = database
+		.messages()
+		.send_user_message(message.written_by(author, written_from), completed_at)
+		.await?;
 	if let Some(agent) = app.try_state::<AgentState>() {
 		agent.host_writes().claim_turn(&turn_id);
 	}

@@ -67,6 +67,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 58, statements: SPACE_REMOVED_DEVICES },
 	Migration { version: 59, statements: MISSION_THREADS_OF_SPACE },
 	Migration { version: 60, statements: MISSION_HANDOFF },
+	Migration { version: 61, statements: MESSAGE_WRITTEN_FROM },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1284,6 +1285,22 @@ BEGIN
 END;
 ";
 
+const MESSAGE_WRITTEN_FROM: &str = "
+ALTER TABLE messages ADD COLUMN written_from TEXT
+	CHECK (written_from IS NULL OR (role = 'user' AND written_from IN ('here', 'relay')));
+
+UPDATE messages SET written_from = CASE
+	WHEN author_account_id NOT IN (SELECT account_id FROM relay_devices)
+		AND EXISTS (SELECT 1 FROM space_roster
+			JOIN conversations ON conversations.space_id = space_roster.space_id
+			WHERE conversations.id = messages.conversation_id
+				AND space_roster.account_id = messages.author_account_id)
+		THEN 'relay'
+	ELSE 'here'
+END
+WHERE role = 'user';
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1396,6 +1413,7 @@ mod tests {
 	const JOINED_SPACE_RELAY_V2_STEP: u32 = 57;
 	const SPACE_REMOVED_DEVICES_STEP: u32 = 58;
 	const MISSION_HANDOFF_STEP: u32 = 60;
+	const MESSAGE_WRITTEN_FROM_STEP: u32 = 61;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -2221,6 +2239,89 @@ mod tests {
 			.collect::<Result<Vec<_>, _>>()
 			.expect("the authors read back");
 		assert_eq!(authors, vec![("m1".to_owned(), None, None), ("m2".to_owned(), None, None)]);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	const A_HOSTED_HISTORY: &str = "
+		INSERT INTO spaces (id, name, colour, position, created_at)
+			VALUES ('elsewhere', 'Elsewhere', 'blue', 1, 1);
+		INSERT INTO relay_devices (account_id, device_id, relay_device_id)
+			VALUES ('host-account', 'this-computer', 'relay-1');
+		INSERT INTO space_roster (space_id, device_id, relay_device_id, account_id,
+				signing_public_key, agreement_public_key, fingerprint, added_at, signature)
+			VALUES ('personal', 'this-computer', 'relay-1', 'host-account', x'00', x'00', 'f1',
+					1, x'00'),
+				('personal', 'member-device', 'relay-2', 'member-account', x'00', x'00', 'f2',
+					1, x'00');
+		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
+			VALUES ('b1', 'personal', 1), ('b1', 'elsewhere', 1);
+		INSERT INTO conversations (id, kind, space_id, title, created_at, updated_at)
+			VALUES ('shared', 'topic', 'personal', 'Shared', 1, 1),
+				('private', 'topic', 'elsewhere', 'Private', 1, 1);
+		INSERT INTO conversation_participants
+			(conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('shared', 'b1', 'lead', 1, 0), ('private', 'b1', 'lead', 1, 0);
+		INSERT INTO turns (id, conversation_id, seq, started_at)
+			VALUES ('t1', 'shared', 1, 1), ('t2', 'private', 1, 1);
+		INSERT INTO messages (id, conversation_id, turn_id, seq, role, content, completion_state,
+				created_at, author_bot_id, author_account_id, author_name)
+			VALUES
+				('unsigned', 'shared', 't1', 1, 'user', 'hi', 'complete', 1, NULL, NULL, NULL),
+				('by-host', 'shared', 't1', 2, 'user', 'hi', 'complete', 1, NULL,
+					'host-account', 'Ada'),
+				('by-member', 'shared', 't1', 3, 'user', 'hi', 'complete', 1, NULL,
+					'member-account', 'Bea'),
+				('handed-off', 'shared', 't1', 4, 'user', 'hi', 'complete', 1, 'b1', NULL, NULL),
+				('answer', 'shared', 't1', 5, 'assistant', 'hi', 'complete', 1, 'b1', NULL, NULL),
+				('member-away', 'private', 't2', 1, 'user', 'hi', 'complete', 1, NULL,
+					'member-account', 'Bea');
+	";
+
+	#[test]
+	fn the_written_from_step_backfills_every_human_row_and_leaves_the_others_empty() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_WRITTEN_FROM_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), MISSION_HANDOFF_STEP);
+		connection.execute_batch(A_HOSTED_HISTORY).expect("the history this build upgrades from");
+		let held = count(&connection, "messages");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(count(&connection, "messages"), held);
+		let origins = connection
+			.prepare("SELECT id, written_from FROM messages ORDER BY conversation_id, seq")
+			.expect("the messages carry the written_from column")
+			.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+			.expect("query")
+			.collect::<Result<Vec<_>, _>>()
+			.expect("the origins read back");
+		let origin = |id: &str, from: Option<&str>| (id.to_owned(), from.map(str::to_owned));
+		assert_eq!(
+			origins,
+			vec![
+				origin("member-away", Some("here")),
+				origin("unsigned", Some("here")),
+				origin("by-host", Some("here")),
+				origin("by-member", Some("relay")),
+				origin("handed-off", Some("here")),
+				origin("answer", None),
+			]
+		);
+		assert!(
+			write(&connection, "UPDATE messages SET written_from = 'here' WHERE id = 'answer'")
+				.is_err(),
+			"a reply of a companion took an origin"
+		);
+		assert!(
+			write(&connection, "UPDATE messages SET written_from = 'abroad' WHERE id = 'unsigned'")
+				.is_err(),
+			"an origin outside here and relay reached the file"
+		);
 
 		drop(connection);
 		fs::remove_dir_all(&dir).expect("cleanup");

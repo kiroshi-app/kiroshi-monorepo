@@ -677,7 +677,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::open;
 	use crate::db::repositories::messages::{
-		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState,
+		MessageState, NewAssistantMessage, NewTurn, NewUserMessage, TerminalState, WrittenFrom,
 	};
 	use crate::missions::contract::{Mission, MissionDraft, MissionEntry, MissionNote};
 
@@ -687,6 +687,7 @@ mod tests {
 			turn_id: "t1".to_owned(),
 			author_bot_id: None,
 			author: Default::default(),
+			written_from: None,
 			replied_to_message_id: None,
 			seq,
 			role,
@@ -1109,6 +1110,7 @@ mod tests {
 					turn_id: TURN.to_owned(),
 					author_bot_id: None,
 					author: Default::default(),
+					written_from: WrittenFrom::Here,
 					replied_to_message_id: None,
 					content,
 					created_at: index as i64,
@@ -1151,6 +1153,7 @@ mod tests {
 				turn_id: TURN.to_owned(),
 				author_bot_id: None,
 				author: Default::default(),
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: replied_to.map(str::to_owned),
 				content: asked(id),
 				created_at: 99,
@@ -1196,6 +1199,7 @@ mod tests {
 				turn_id: TURN.to_owned(),
 				author_bot_id: None,
 				author: Default::default(),
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: None,
 				content: content.clone(),
 				created_at: 98,
@@ -1727,6 +1731,7 @@ mod tests {
 				turn_id: TURN.to_owned(),
 				author_bot_id: None,
 				author: Default::default(),
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: None,
 				content: content.to_owned(),
 				created_at,
@@ -1767,6 +1772,7 @@ mod tests {
 				turn_id: MISSION_TURN.to_owned(),
 				author_bot_id: None,
 				author: Default::default(),
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: None,
 				content: asked(id),
 				created_at: 99,
@@ -2457,6 +2463,7 @@ mod tests {
 					account_id: Some("a1".to_owned()),
 					name: Some("Steve".to_owned()),
 				},
+				written_from: WrittenFrom::Here,
 				replied_to_message_id: replied_to.map(str::to_owned),
 				content: content.to_owned(),
 				created_at: STEVE_AT,
