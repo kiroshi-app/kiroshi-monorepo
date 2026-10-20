@@ -55,7 +55,7 @@ const REQUEST_BOUND: Duration = Duration::from_secs(20);
 
 const REFUSAL_DETAIL_BOUND: usize = 512;
 
-const PAUSE_WITHOUT_RETRY_AFTER: Duration = Duration::from_secs(60);
+const PAUSE_WITHOUT_RETRY_AFTER: Duration = Duration::from_secs(5);
 
 static PAUSES: LazyLock<Mutex<HashMap<String, Instant>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -1254,12 +1254,12 @@ mod tests {
 	}
 
 	#[test]
-	fn the_retry_after_reads_its_seconds_and_falls_back_to_a_minute() {
+	fn the_retry_after_reads_its_seconds_and_falls_back_to_five() {
 		let mut headers = HeaderMap::new();
 		let absent = retry_after(&headers);
 		headers.insert(RETRY_AFTER, "7".parse().expect("a header value"));
 
-		assert_eq!(absent, Duration::from_secs(60));
+		assert_eq!(absent, Duration::from_secs(5));
 		assert_eq!(retry_after(&headers), Duration::from_secs(7));
 	}
 

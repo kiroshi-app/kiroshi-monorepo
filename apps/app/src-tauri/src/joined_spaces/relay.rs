@@ -57,7 +57,7 @@ pub struct RelayGuests {
 	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
 	known_relay_device: Mutex<Option<KnownRelayDevice>>,
-	members_reading: Mutex<HashSet<String>>,
+	members_reading: Mutex<HashMap<String, bool>>,
 	answer_bound: Duration,
 	resend_every: Duration,
 }
@@ -69,13 +69,29 @@ struct KnownRelayDevice {
 }
 
 pub(super) struct MembersReading<'a> {
-	reading: &'a Mutex<HashSet<String>>,
+	reading: &'a Mutex<HashMap<String, bool>>,
 	id: String,
+	is_done: bool,
+}
+
+impl MembersReading<'_> {
+	pub(super) fn is_asked_again(&mut self) -> bool {
+		let mut reading = self.reading.lock().unwrap_or_else(PoisonError::into_inner);
+		if let Some(asked_again) = reading.get_mut(&self.id).filter(|asked_again| **asked_again) {
+			*asked_again = false;
+			return true;
+		}
+		reading.remove(&self.id);
+		self.is_done = true;
+		false
+	}
 }
 
 impl Drop for MembersReading<'_> {
 	fn drop(&mut self) {
-		self.reading.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.id);
+		if !self.is_done {
+			self.reading.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.id);
+		}
 	}
 }
 
@@ -138,7 +154,7 @@ impl RelayGuests {
 			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
 			known_relay_device: Mutex::new(None),
-			members_reading: Mutex::new(HashSet::new()),
+			members_reading: Mutex::new(HashMap::new()),
 			answer_bound: HOST_ANSWER_BOUND,
 			resend_every: PING_EVERY,
 		}
@@ -185,9 +201,12 @@ impl RelayGuests {
 
 	pub(super) fn members_read_started(&self, id: &str) -> Option<MembersReading<'_>> {
 		let mut reading = self.members_reading.lock().unwrap_or_else(PoisonError::into_inner);
-		reading
-			.insert(id.to_owned())
-			.then(|| MembersReading { reading: &self.members_reading, id: id.to_owned() })
+		if let Some(asked_again) = reading.get_mut(id) {
+			*asked_again = true;
+			return None;
+		}
+		reading.insert(id.to_owned(), false);
+		Some(MembersReading { reading: &self.members_reading, id: id.to_owned(), is_done: false })
 	}
 
 	fn removed(&self) -> MutexGuard<'_, HashSet<String>> {

@@ -25,7 +25,7 @@ use super::commands::{
 use super::contract::{
 	JoinedSpace, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
 };
-use super::members::{joined_space_members, MEMBERS_CHANGED_EVENT};
+use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
 use super::wait_reason::{wait_of, Stall};
@@ -914,22 +914,32 @@ fn a_waiting_socket_the_relay_closes_right_after_its_opening_keeps_doubling_its_
 }
 
 #[test]
-fn a_joined_space_reads_its_members_once_at_a_time() {
+fn a_members_read_asked_during_another_runs_once_right_after_it() {
 	run(async {
 		let member = Member::new("members-once-at-a-time").await;
 		let host = member.host();
-		member.relay.room().roster_delay = Duration::from_millis(400);
 		let joined = online_with_two_members(&member, &host).await;
-		let reads = member.relay.room().roster_reads;
+		let state = member.app.state::<DatabaseState>();
+		let spaces = state.as_ref().expect("the database").joined_spaces();
+		let entry = spaces.find(joined.id.clone()).await.expect("the entry reads");
+		let reads = {
+			let mut room = member.relay.room();
+			room.roster_delay = Duration::from_millis(400);
+			room.roster_reads
+		};
 
+		members::read_soon(member.app.handle(), &entry.expect("the joined space is held"));
+		until("the members read after the join", || async {
+			(member.relay.room().rosters_in_flight > 0).then_some(())
+		})
+		.await;
 		joined_space_connect(member.app.handle().clone(), joined.id.clone())
 			.await
 			.expect("the joined space connects");
-		until("the members read of the connection", || async {
-			(member.relay.room().roster_reads > reads).then_some(())
+		until("the members read asked during the first one", || async {
+			(member.relay.room().roster_reads == reads + 2).then_some(())
 		})
 		.await;
-		tokio::time::sleep(Duration::from_millis(600)).await;
 
 		assert_eq!(member.relay.room().rosters_in_flight_at_most, 1);
 	});
