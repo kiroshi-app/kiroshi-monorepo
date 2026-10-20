@@ -10,6 +10,7 @@ import { type Icon, Icons } from "@workspace/ui/components/icons"
 import {
 	SpaceAccessBanner,
 	type SpaceAccessReason,
+	type SpaceWaitReason,
 } from "@workspace/ui/components/space-access-banner"
 import { ThreadLayout } from "@workspace/ui/components/thread-layout"
 import { AssistantTurn, UserTurn } from "@workspace/ui/components/turn"
@@ -174,4 +175,135 @@ export const Unknown = meta.story({
 			mark: Icons.Leave,
 		})
 	},
+})
+
+const waitStory = (
+	waitReason: SpaceWaitReason,
+	body: string,
+	because: string,
+) => ({
+	args: { reason: "offline" as const, waitReason },
+	parameters: {
+		docs: {
+			description: {
+				story: `No artboard draws this body; it wears the card of artboard 8.2 on the Paper page \`Mockup\` of \`Kiroshi, E2E Spaces v2\`, dark only. The host's computer is out of reach because ${because}. Check the clock mark, the unchanged title, and the body naming what failed and what to do. Pick \`Offline\` for the body without a reason.`,
+			},
+		},
+	},
+	play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+		await expectInComposerSpot(canvasElement, {
+			reason: "offline",
+			title: "Studio is offline",
+			body,
+			mark: Icons.Clock,
+		})
+	},
+})
+
+export const OfflineRelayUnreachable = meta.story({
+	name: "Host offline, Kiroshi unreachable",
+	...waitStory(
+		"relayUnreachable",
+		"You can read what’s here. Couldn’t reach Kiroshi, check your connection to send again.",
+		"this computer couldn't reach Kiroshi",
+	),
+})
+
+export const OfflineRekeySendFailed = meta.story({
+	name: "Host offline, key request not sent",
+	...waitStory(
+		"rekeySendFailed",
+		"You can read what’s here. Couldn’t ask Noa for the new key, check your connection to send again.",
+		"the request for the host's new key didn't leave this computer",
+	),
+})
+
+export const OfflineHostSilent = meta.story({
+	name: "Host offline, host silent",
+	...waitStory(
+		"hostSilent",
+		"You can read what’s here. Noa hasn’t answered yet, ask them to open Kiroshi on their computer.",
+		"the host hasn't answered with a verified key yet",
+	),
+})
+
+export const OfflineSocketClosed = meta.story({
+	name: "Host offline, connection closed",
+	...waitStory(
+		"socketClosed",
+		"You can read what’s here. The connection to Kiroshi closed, check your connection to send again.",
+		"the connection to Kiroshi closed or went quiet",
+	),
+})
+
+export const OfflineRekeyNotVerified = meta.story({
+	name: "Host offline, key not verified",
+	...waitStory(
+		"rekeyNotVerified",
+		"You can read what’s here. Couldn’t verify the key Noa sent, ask them for a new link.",
+		"a key the host sent failed verification",
+	),
+})
+
+export const OfflineNotMember = meta.story({
+	name: "Host offline, not a member",
+	...waitStory(
+		"notMember",
+		"You can read what’s here. Kiroshi says this account isn’t in Studio anymore, ask Noa for a new link.",
+		"Kiroshi answered that this account isn't a member",
+	),
+})
+
+export const OfflineUnknownInstance = meta.story({
+	name: "Host offline, space not hosted",
+	...waitStory(
+		"unknownInstance",
+		"You can read what’s here. Kiroshi doesn’t host Studio anymore, ask Noa to turn hosting on again.",
+		"Kiroshi no longer knows the hosted space",
+	),
+})
+
+export const OfflineDeviceKeysUnreadable = meta.story({
+	name: "Host offline, device keys unreadable",
+	...waitStory(
+		"deviceKeysUnreadable",
+		"You can read what’s here. Couldn’t read this computer’s device keys, quit Kiroshi and open it again.",
+		"this computer couldn't read its own device keys",
+	),
+})
+
+export const OfflineDeviceAwaitingApproval = meta.story({
+	name: "Host offline, device awaiting approval",
+	...waitStory(
+		"deviceAwaitingApproval",
+		"You can read what’s here. This computer isn’t approved yet, approve it from another computer signed in to your account.",
+		"this computer still awaits approval from another device of the account",
+	),
+})
+
+export const OfflineSocketUrlFailed = meta.story({
+	name: "Host offline, address not received",
+	...waitStory(
+		"socketUrlFailed",
+		"You can read what’s here. Couldn’t get Studio’s address from Kiroshi, quit Kiroshi and open it again.",
+		"Kiroshi didn't give the address to connect to the space",
+	),
+})
+
+export const OfflineRosterMissing = meta.story({
+	name: "Host offline, member list missing",
+	...waitStory(
+		"rosterMissing",
+		"You can read what’s here. Noa hasn’t sent the member list yet, ask them to open Kiroshi on their computer.",
+		"the space key is held but no verified member list is",
+	),
+})
+
+export const OfflineKeychainReadFailed = meta.story({
+	name: "Host offline, secure storage unreadable",
+	...waitStory(
+		"keychainReadFailed",
+		"You can read what’s here. Couldn’t read Studio’s key from this computer’s secure storage, quit Kiroshi and open it again.",
+		"the space key couldn't be read from this computer's secure storage",
+	),
 })

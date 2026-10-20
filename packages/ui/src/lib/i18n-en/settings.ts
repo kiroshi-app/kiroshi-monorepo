@@ -302,6 +302,22 @@ const settings = {
 						"Couldn’t invite {{email}}, you’re signed out. Sign in to Kiroshi and invite them again.",
 					unreachable:
 						"Couldn’t reach Kiroshi to invite {{email}}. Check your connection and try again.",
+					offline:
+						"Couldn’t invite {{email}}, this computer is offline. Connect to the internet and try again.",
+					timedOut:
+						"Kiroshi took too long to answer, {{email}} wasn’t invited. Try again in a moment.",
+					unsent:
+						"The invitation to {{email}} didn’t leave this computer. Check your connection and try again.",
+					relayStatus:
+						"Kiroshi answered with error {{status}}, {{email}} wasn’t invited. Try again in a moment.",
+					relayConflict:
+						"Kiroshi refused to invite {{email}} ({{code}}). Check the member list, then try again.",
+					unreadableConflict:
+						"Kiroshi refused to invite {{email}} without saying why. Check the member list, then try again.",
+					unreadableList:
+						"Couldn’t read the member list from Kiroshi, {{email}} wasn’t invited. Try again in a moment.",
+					listNotReadBack:
+						"The invitation to {{email}} was sent, but the member list didn’t refresh. Open this space’s settings again to see it.",
 					generic: "Couldn’t invite {{email}}. Nothing changed, try again.",
 				},
 				withdraw: {

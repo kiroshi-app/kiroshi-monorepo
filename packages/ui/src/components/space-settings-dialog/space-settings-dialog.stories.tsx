@@ -1376,7 +1376,7 @@ const EditableMembersPanel = (props: MembersPanelProps) => {
 	return <MembersPanel {...props} email={email} onEmailChange={setEmail} />
 }
 
-const INVITE_FAILED_ARGS = {
+const inviteFailedArgs = (failure: MembersFailure) => ({
 	...membersArgs({ space: STUDIO }),
 	members: (
 		<EditableMembersPanel
@@ -1384,14 +1384,37 @@ const INVITE_FAILED_ARGS = {
 			space={STUDIO}
 			members={[NOA, MAYA, TOM_PENDING]}
 			email="sam@example.com"
-			failure={{
-				action: "invite",
-				reason: "generic",
-				email: "sam@example.com",
-			}}
+			failure={failure}
 		/>
 	),
-}
+})
+
+const INVITE_FAILED_ARGS = inviteFailedArgs({
+	action: "invite",
+	reason: "generic",
+	email: "sam@example.com",
+})
+
+type InviteUnreachable = Pick<
+	Extract<MembersFailure, { action: "invite" }>,
+	"reason" | "status" | "code"
+>
+
+const inviteUnreachableStory = (
+	failure: InviteUnreachable,
+	message: string,
+	story: string,
+) => ({
+	args: inviteFailedArgs({
+		action: "invite",
+		email: "sam@example.com",
+		...failure,
+	}),
+	parameters: { docs: { description: { story } } },
+	play: async () => {
+		await failureLineIn(await membersPanelIn(), message)
+	},
+})
 
 const INVITE_FAILED_MESSAGE =
 	"Couldn’t invite sam@example.com. Nothing changed, try again."
@@ -1418,6 +1441,96 @@ export const MembersInviteFailed = meta.story({
 			within(panel).getAllByRole("list")[0].getBoundingClientRect().top,
 		)
 	},
+})
+
+export const MembersInviteFailedOffline = meta.story(
+	inviteUnreachableStory(
+		{ reason: "offline" },
+		"Couldn’t invite sam@example.com, this computer is offline. Connect to the internet and try again.",
+		"The invite never left because this computer is offline. Pick it to check the line says so and asks to connect.",
+	),
+)
+
+export const MembersInviteFailedTimedOut = meta.story(
+	inviteUnreachableStory(
+		{ reason: "timedOut" },
+		"Kiroshi took too long to answer, sam@example.com wasn’t invited. Try again in a moment.",
+		"Kiroshi did not answer the invite in time. Pick it to check the line says nobody was invited and to try again.",
+	),
+)
+
+export const MembersInviteFailedUnsent = meta.story(
+	inviteUnreachableStory(
+		{ reason: "unsent" },
+		"The invitation to sam@example.com didn’t leave this computer. Check your connection and try again.",
+		"The invite request failed before reaching Kiroshi. Pick it to check the line points to the connection.",
+	),
+)
+
+export const MembersInviteFailedRelayStatus = meta.story(
+	inviteUnreachableStory(
+		{
+			reason: "relayStatus",
+			status: 503,
+		},
+		"Kiroshi answered with error 503, sam@example.com wasn’t invited. Try again in a moment.",
+		"Kiroshi answered the invite with an error status, passed as `status`. Pick it to check the line names the status.",
+	),
+)
+
+export const MembersInviteFailedRelayConflict = meta.story(
+	inviteUnreachableStory(
+		{
+			reason: "relayConflict",
+			code: "ALREADY_INVITED",
+		},
+		"Kiroshi refused to invite sam@example.com (ALREADY_INVITED). Check the member list, then try again.",
+		"Kiroshi refused the invite with a conflict code, passed as `code`. Pick it to check the line names the code.",
+	),
+)
+
+export const MembersInviteFailedUnreadableConflict = meta.story(
+	inviteUnreachableStory(
+		{
+			reason: "unreadableConflict",
+		},
+		"Kiroshi refused to invite sam@example.com without saying why. Check the member list, then try again.",
+		"Kiroshi refused the invite with a conflict this computer could not read. Pick it to check the line says no reason came back.",
+	),
+)
+
+export const MembersInviteFailedUnreadableList = meta.story(
+	inviteUnreachableStory(
+		{ reason: "unreadableList" },
+		"Couldn’t read the member list from Kiroshi, sam@example.com wasn’t invited. Try again in a moment.",
+		"The member list Kiroshi answered with could not be read. Pick it to check the line says nobody was invited.",
+	),
+)
+
+export const MembersInviteFailedListNotReadBack = meta.story(
+	inviteUnreachableStory(
+		{ reason: "listNotReadBack" },
+		"The invitation to sam@example.com was sent, but the member list didn’t refresh. Open this space’s settings again to see it.",
+		"The invitation landed but the member list did not read back. Pick it to check the line says it was sent, never that it failed.",
+	),
+)
+
+export const MembersInviteFailedRelayStatusUnknown = meta.story({
+	tags: ["test-only"],
+	...inviteUnreachableStory(
+		{ reason: "relayStatus" },
+		"Couldn’t reach Kiroshi to invite sam@example.com. Check your connection and try again.",
+		"Kiroshi answered with an error status the app did not pass. Pick it to check the line falls back to the unreachable sentence, never an empty status.",
+	),
+})
+
+export const MembersInviteFailedRelayConflictUnknown = meta.story({
+	tags: ["test-only"],
+	...inviteUnreachableStory(
+		{ reason: "relayConflict" },
+		"Kiroshi refused to invite sam@example.com without saying why. Check the member list, then try again.",
+		"Kiroshi refused the invite with a conflict code the app did not pass. Pick it to check the line falls back to the unreadable conflict sentence, never empty parentheses.",
+	),
 })
 
 export const MembersInviteFailedResend = meta.story({

@@ -313,6 +313,22 @@ const settings = {
 						"Impossible d’inviter {{email}}, vous êtes déconnecté. Connectez-vous à Kiroshi et invitez cette personne de nouveau.",
 					unreachable:
 						"Impossible de joindre Kiroshi pour inviter {{email}}. Vérifiez votre connexion et réessayez.",
+					offline:
+						"Impossible d’inviter {{email}}, cet ordinateur est hors ligne. Connectez-vous à Internet et réessayez.",
+					timedOut:
+						"Kiroshi a mis trop de temps à répondre, {{email}} n’a pas été invité. Réessayez dans un instant.",
+					unsent:
+						"L’invitation à {{email}} n’est pas partie de cet ordinateur. Vérifiez votre connexion et réessayez.",
+					relayStatus:
+						"Kiroshi a répondu par l’erreur {{status}}, {{email}} n’a pas été invité. Réessayez dans un instant.",
+					relayConflict:
+						"Kiroshi a refusé d’inviter {{email}} ({{code}}). Vérifiez la liste des membres, puis réessayez.",
+					unreadableConflict:
+						"Kiroshi a refusé d’inviter {{email}} sans dire pourquoi. Vérifiez la liste des membres, puis réessayez.",
+					unreadableList:
+						"Impossible de lire la liste des membres envoyée par Kiroshi, {{email}} n’a pas été invité. Réessayez dans un instant.",
+					listNotReadBack:
+						"L’invitation à {{email}} a été envoyée, mais la liste des membres ne s’est pas actualisée. Rouvrez les réglages de cet espace pour la voir.",
 					generic:
 						"Impossible d’inviter {{email}}. Rien n’a changé, réessayez.",
 				},

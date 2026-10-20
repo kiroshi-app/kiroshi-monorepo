@@ -152,6 +152,32 @@ const chat = {
 		offline: {
 			title: "{{space}} is offline",
 			body: "You can read what’s here. You can send again once Kiroshi is open on {{host}}’s computer.",
+			reasons: {
+				relayUnreachable:
+					"You can read what’s here. Couldn’t reach Kiroshi, check your connection to send again.",
+				rekeySendFailed:
+					"You can read what’s here. Couldn’t ask {{host}} for the new key, check your connection to send again.",
+				hostSilent:
+					"You can read what’s here. {{host}} hasn’t answered yet, ask them to open Kiroshi on their computer.",
+				socketClosed:
+					"You can read what’s here. The connection to Kiroshi closed, check your connection to send again.",
+				rekeyNotVerified:
+					"You can read what’s here. Couldn’t verify the key {{host}} sent, ask them for a new link.",
+				notMember:
+					"You can read what’s here. Kiroshi says this account isn’t in {{space}} anymore, ask {{host}} for a new link.",
+				unknownInstance:
+					"You can read what’s here. Kiroshi doesn’t host {{space}} anymore, ask {{host}} to turn hosting on again.",
+				deviceKeysUnreadable:
+					"You can read what’s here. Couldn’t read this computer’s device keys, quit Kiroshi and open it again.",
+				deviceAwaitingApproval:
+					"You can read what’s here. This computer isn’t approved yet, approve it from another computer signed in to your account.",
+				socketUrlFailed:
+					"You can read what’s here. Couldn’t get {{space}}’s address from Kiroshi, quit Kiroshi and open it again.",
+				rosterMissing:
+					"You can read what’s here. {{host}} hasn’t sent the member list yet, ask them to open Kiroshi on their computer.",
+				keychainReadFailed:
+					"You can read what’s here. Couldn’t read {{space}}’s key from this computer’s secure storage, quit Kiroshi and open it again.",
+			},
 		},
 	},
 	attachments: {
@@ -370,6 +396,32 @@ const chat = {
 					title: "Waiting for the host",
 					description:
 						"This space opens once its host is online and lets this computer in.",
+					reasons: {
+						relayUnreachable:
+							"Couldn’t reach Kiroshi to open this space. Check your connection.",
+						rekeySendFailed:
+							"Couldn’t ask the host for this space’s key. Check your connection.",
+						hostSilent:
+							"The host hasn’t let this computer in yet. Ask them to open Kiroshi on their computer.",
+						socketClosed:
+							"The connection to Kiroshi closed before this space opened. Check your connection.",
+						rekeyNotVerified:
+							"Couldn’t verify the key the host sent for this space. Ask the host for a new link.",
+						notMember:
+							"Kiroshi says this account isn’t a member of this space. Ask the host for a new link.",
+						unknownInstance:
+							"Kiroshi doesn’t host this space anymore. Ask the host to turn hosting on again.",
+						deviceKeysUnreadable:
+							"Couldn’t read this computer’s device keys. Quit Kiroshi and open it again.",
+						deviceAwaitingApproval:
+							"This computer isn’t approved yet. Approve it from another computer signed in to your account.",
+						socketUrlFailed:
+							"Couldn’t get this space’s address from Kiroshi. Quit Kiroshi and open it again.",
+						rosterMissing:
+							"The host hasn’t sent this space’s member list yet. Ask them to open Kiroshi on their computer.",
+						keychainReadFailed:
+							"Couldn’t read this space’s key from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
+					},
 				},
 				keyStore: {
 					title: "Couldn’t read this computer’s keys",

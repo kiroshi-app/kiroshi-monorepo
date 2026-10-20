@@ -49,11 +49,23 @@ type MembersFailureReason =
 	| "unreachable"
 	| "generic"
 
+type InviteUnreachableReason =
+	| "offline"
+	| "timedOut"
+	| "unsent"
+	| "relayStatus"
+	| "relayConflict"
+	| "unreadableConflict"
+	| "unreadableList"
+	| "listNotReadBack"
+
 type MembersFailure =
 	| {
 			action: "invite"
-			reason: MembersFailureReason | "limitReached"
+			reason: MembersFailureReason | "limitReached" | InviteUnreachableReason
 			email: string
+			status?: number
+			code?: string
 	  }
 	| {
 			action: "withdraw"
@@ -123,20 +135,36 @@ const failureKeyOf = (failure: MembersFailure, viewerId?: string) => {
 	}
 }
 
+const withKnownDetail = (failure: MembersFailure): MembersFailure => {
+	if (failure.action !== "invite") {
+		return failure
+	}
+	if (failure.reason === "relayStatus" && failure.status === undefined) {
+		return { ...failure, reason: "unreachable" }
+	}
+	if (failure.reason === "relayConflict" && failure.code === undefined) {
+		return { ...failure, reason: "unreadableConflict" }
+	}
+	return failure
+}
+
 const useFailureText = (
-	failure: MembersFailure | undefined,
+	reported: MembersFailure | undefined,
 	space: string,
 	viewerId?: string,
 ) => {
 	const { t } = useTranslation("settings")
-	if (!failure) {
+	if (!reported) {
 		return ""
 	}
+	const failure = withKnownDetail(reported)
 	const isInvite = failure.action === "invite"
 	return t(failureKeyOf(failure, viewerId), {
 		space,
 		email: isInvite ? failure.email : failure.member.email,
 		name: isInvite ? "" : nameOf(failure.member),
+		status: isInvite ? String(failure.status ?? "") : "",
+		code: isInvite ? (failure.code ?? "") : "",
 	})
 }
 
@@ -572,6 +600,7 @@ const MembersPanel = ({
 
 export {
 	type InviteRefusal,
+	type InviteUnreachableReason,
 	type MembersFailure,
 	MembersPanel,
 	type MembersPanelProps,

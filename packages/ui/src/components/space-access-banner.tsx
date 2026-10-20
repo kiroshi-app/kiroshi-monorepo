@@ -4,10 +4,25 @@ import { type Icon, Icons } from "@workspace/ui/components/icons"
 
 type SpaceAccessReason = "removed" | "deleted" | "unknown" | "offline"
 
+type SpaceWaitReason =
+	| "relayUnreachable"
+	| "rekeySendFailed"
+	| "hostSilent"
+	| "socketClosed"
+	| "rekeyNotVerified"
+	| "notMember"
+	| "unknownInstance"
+	| "deviceKeysUnreadable"
+	| "deviceAwaitingApproval"
+	| "socketUrlFailed"
+	| "rosterMissing"
+	| "keychainReadFailed"
+
 type SpaceAccessBannerProps = {
 	reason: SpaceAccessReason
 	space: string
 	host: string
+	waitReason?: SpaceWaitReason
 }
 
 const REASON_MARKS = {
@@ -36,7 +51,17 @@ const REASON_COPY = {
 	},
 } as const satisfies Record<SpaceAccessReason, { title: string; body: string }>
 
-const SpaceAccessBanner = ({ reason, space, host }: SpaceAccessBannerProps) => {
+const bodyKeyOf = (reason: SpaceAccessReason, waitReason?: SpaceWaitReason) =>
+	reason === "offline" && waitReason
+		? (`chat:spaceAccessBanner.offline.reasons.${waitReason}` as const)
+		: REASON_COPY[reason].body
+
+const SpaceAccessBanner = ({
+	reason,
+	space,
+	host,
+	waitReason,
+}: SpaceAccessBannerProps) => {
 	const { t } = useTranslation(["bots", "chat"])
 	const Mark = REASON_MARKS[reason]
 	const copy = REASON_COPY[reason]
@@ -55,7 +80,7 @@ const SpaceAccessBanner = ({ reason, space, host }: SpaceAccessBannerProps) => {
 					{t(copy.title, naming)}
 				</p>
 				<p className="wrap-break-word text-compact text-muted-foreground leading-4.5">
-					{t(copy.body, naming)}
+					{t(bodyKeyOf(reason, waitReason), naming)}
 				</p>
 			</div>
 		</div>
@@ -66,4 +91,5 @@ export {
 	SpaceAccessBanner,
 	type SpaceAccessBannerProps,
 	type SpaceAccessReason,
+	type SpaceWaitReason,
 }

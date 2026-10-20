@@ -159,6 +159,32 @@ const chat = {
 		offline: {
 			title: "{{space}} est hors ligne",
 			body: "Vous pouvez lire ce qui est ici. Vous pourrez de nouveau envoyer quand Kiroshi sera ouvert sur l’ordinateur de {{host}}.",
+			reasons: {
+				relayUnreachable:
+					"Vous pouvez lire ce qui est ici. Impossible de joindre Kiroshi, vérifiez votre connexion pour envoyer de nouveau.",
+				rekeySendFailed:
+					"Vous pouvez lire ce qui est ici. Impossible de demander la nouvelle clé à {{host}}, vérifiez votre connexion pour envoyer de nouveau.",
+				hostSilent:
+					"Vous pouvez lire ce qui est ici. {{host}} n’a pas encore répondu, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+				socketClosed:
+					"Vous pouvez lire ce qui est ici. La connexion à Kiroshi s’est fermée, vérifiez votre connexion pour envoyer de nouveau.",
+				rekeyNotVerified:
+					"Vous pouvez lire ce qui est ici. Impossible de vérifier la clé envoyée par {{host}}, demandez-lui un nouveau lien.",
+				notMember:
+					"Vous pouvez lire ce qui est ici. Kiroshi indique que ce compte n’est plus dans {{space}}, demandez un nouveau lien à {{host}}.",
+				unknownInstance:
+					"Vous pouvez lire ce qui est ici. Kiroshi n’héberge plus {{space}}, demandez à {{host}} de réactiver l’hébergement.",
+				deviceKeysUnreadable:
+					"Vous pouvez lire ce qui est ici. Impossible de lire les clés de cet ordinateur, quittez Kiroshi et rouvrez-le.",
+				deviceAwaitingApproval:
+					"Vous pouvez lire ce qui est ici. Cet ordinateur n’est pas encore approuvé, approuvez-le depuis un autre ordinateur connecté à votre compte.",
+				socketUrlFailed:
+					"Vous pouvez lire ce qui est ici. Impossible d’obtenir l’adresse de {{space}} auprès de Kiroshi, quittez Kiroshi et rouvrez-le.",
+				rosterMissing:
+					"Vous pouvez lire ce qui est ici. {{host}} n’a pas encore envoyé la liste des membres, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+				keychainReadFailed:
+					"Vous pouvez lire ce qui est ici. Impossible de lire la clé de {{space}} dans le stockage sécurisé de cet ordinateur, quittez Kiroshi et rouvrez-le.",
+			},
 		},
 	},
 	attachments: {
@@ -385,6 +411,32 @@ const chat = {
 					title: "En attente de l’hôte",
 					description:
 						"Cet espace s’ouvrira dès que son hôte sera en ligne et acceptera cet ordinateur.",
+					reasons: {
+						relayUnreachable:
+							"Impossible de joindre Kiroshi pour ouvrir cet espace. Vérifiez votre connexion.",
+						rekeySendFailed:
+							"Impossible de demander la clé de cet espace à l’hôte. Vérifiez votre connexion.",
+						hostSilent:
+							"L’hôte n’a pas encore accepté cet ordinateur. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+						socketClosed:
+							"La connexion à Kiroshi s’est fermée avant l’ouverture de cet espace. Vérifiez votre connexion.",
+						rekeyNotVerified:
+							"Impossible de vérifier la clé envoyée par l’hôte pour cet espace. Demandez un nouveau lien à l’hôte.",
+						notMember:
+							"Kiroshi indique que ce compte n’est pas membre de cet espace. Demandez un nouveau lien à l’hôte.",
+						unknownInstance:
+							"Kiroshi n’héberge plus cet espace. Demandez à l’hôte de réactiver l’hébergement.",
+						deviceKeysUnreadable:
+							"Impossible de lire les clés de cet ordinateur. Quittez Kiroshi et rouvrez-le.",
+						deviceAwaitingApproval:
+							"Cet ordinateur n’est pas encore approuvé. Approuvez-le depuis un autre ordinateur connecté à votre compte.",
+						socketUrlFailed:
+							"Impossible d’obtenir l’adresse de cet espace auprès de Kiroshi. Quittez Kiroshi et rouvrez-le.",
+						rosterMissing:
+							"L’hôte n’a pas encore envoyé la liste des membres de cet espace. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
+						keychainReadFailed:
+							"Impossible de lire la clé de cet espace dans le stockage sécurisé de cet ordinateur. Quittez Kiroshi, rouvrez-le et autorisez l’accès si cet ordinateur le demande.",
+					},
 				},
 				keyStore: {
 					title: "Impossible de lire les clés de cet ordinateur",
