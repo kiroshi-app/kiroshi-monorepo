@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
-import { decideJobs } from "./ci-changes"
+import { decideJobs, touchedJobs } from "./ci-changes"
 
 const none = {
 	rust: false,
@@ -16,14 +16,24 @@ const every = {
 	storybook: true,
 	ios: true,
 }
+const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
 	"packages/shared/src/index.ts",
 ]
 
-const onPullRequest = (...paths: string[]) =>
-	decideJobs({ event: "pull_request", paths })
+const PATH_MIXES = [
+	[],
+	["bun.lock"],
+	["packages/ui/src/components/button.tsx"],
+	["apps/app/src/main.tsx"],
+	["apps/app/src-tauri/src/lib.rs"],
+	["apps/ios/Kiroshi/App.swift"],
+	SHARED_ONLY_PATHS,
+]
+
+const touching = (...paths: string[]) => touchedJobs(paths)
 
 const runChangeDetector = (...args: string[]) =>
 	Bun.spawnSync([
@@ -32,29 +42,75 @@ const runChangeDetector = (...args: string[]) =>
 		...args,
 	])
 
-describe("ci changes", () => {
-	it("runs every job on a push, whatever the paths", () => {
-		expect(decideJobs({ event: "push", paths: [] })).toEqual(every)
-		expect(
-			decideJobs({ event: "push", paths: ["apps/ios/Kiroshi/App.swift"] }),
-		).toEqual(every)
+describe("ci jobs per event", () => {
+	it.each(PATH_MIXES)(
+		"selects only vitest on a pull_request, on the paths it watches, on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "pull_request", paths })).toEqual({
+				...none,
+				vitest: touchedJobs(paths).vitest,
+			})
+		},
+	)
+
+	it("skips storybook, rust, website and ios on a pull_request touching every path", () => {
+		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
+
+		expect(jobs).toEqual({ ...none, vitest: true })
+	})
+
+	it.each(PATH_MIXES)(
+		"selects rust, vitest, website and storybook on the paths they watch on a merge_group, never ios, on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "merge_group", paths })).toEqual({
+				...touchedJobs(paths),
+				ios: false,
+			})
+		},
+	)
+
+	it("selects every desktop job on a merge_group touching a shared path", () => {
+		expect(decideJobs({ event: "merge_group", paths: ["bun.lock"] })).toEqual({
+			...every,
+			ios: false,
+		})
+	})
+
+	it.each(PATH_MIXES)(
+		"selects only ios on a push to main, the merge_group run of the commit having run the rest, on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "push", paths })).toEqual({
+				...none,
+				ios: true,
+			})
+		},
+	)
+
+	it.each(PATH_MIXES)(
+		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
+		(...paths) => {
+			expect(decideJobs({ event: "tag", paths })).toEqual({
+				...every,
+				ios: false,
+			})
+		},
+	)
+
+	it.each(CI_EVENTS)("selects rust-check on no %s", (event) => {
+		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
+			"rust-check",
+		)
 	})
 
 	it.each([
-		[],
-		["bun.lock"],
-		["packages/ui/src/components/button.tsx"],
-		["apps/app/src-tauri/src/lib.rs"],
-		["apps/ios/Kiroshi/App.swift"],
-		SHARED_ONLY_PATHS,
-	])(
-		"decides the jobs of a merge_group with the pull_request rules on %p",
-		(...paths) => {
-			expect(decideJobs({ event: "merge_group", paths })).toEqual(
-				onPullRequest(...paths),
-			)
-		},
-	)
+		["push", "ios=true"],
+		["tag", "rust=true"],
+	])("decides a %s without a BASE to diff against", (event, line) => {
+		const detection = runChangeDetector(event)
+
+		expect(detection.exitCode).toBe(0)
+		expect(detection.stdout.toString().split("\n")).toContain(line)
+	})
 
 	it.each(["pull_request", "merge_group"])(
 		"refuses a %s without a BASE to diff against",
@@ -66,30 +122,41 @@ describe("ci changes", () => {
 		},
 	)
 
+	it("refuses an event it does not know", () => {
+		const detection = runChangeDetector("schedule")
+
+		expect(detection.exitCode).toBe(1)
+		expect(detection.stderr.toString()).toContain(
+			'unsupported event "schedule"',
+		)
+	})
+})
+
+describe("the paths each job watches", () => {
 	it("runs every job when a shared root path changed", () => {
-		expect(onPullRequest("bun.lock")).toEqual(every)
-		expect(onPullRequest("patches/a.patch")).toEqual(every)
-		expect(onPullRequest(".github/workflows/release.yml")).toEqual(every)
+		expect(touching("bun.lock")).toEqual(every)
+		expect(touching("patches/a.patch")).toEqual(every)
+		expect(touching(".github/workflows/release.yml")).toEqual(every)
 	})
 
 	it("runs vitest, website and storybook on a story under packages/ui, since tsc -b checks it", () => {
 		const uiJobs = { ...none, vitest: true, website: true, storybook: true }
 
-		expect(
-			onPullRequest("packages/ui/src/components/button.stories.tsx"),
-		).toEqual(uiJobs)
-		expect(onPullRequest("packages/ui/.storybook/preview.tsx")).toEqual(uiJobs)
+		expect(touching("packages/ui/src/components/button.stories.tsx")).toEqual(
+			uiJobs,
+		)
+		expect(touching("packages/ui/.storybook/preview.tsx")).toEqual(uiJobs)
 	})
 
 	it.each(["package.json", "bun.lock", "turbo.json", "tsconfig.base.json"])(
 		"runs website when the root build input %s changed",
 		(path) => {
-			expect(onPullRequest(path).website).toBe(true)
+			expect(touching(path).website).toBe(true)
 		},
 	)
 
 	it("runs vitest, website and storybook on a component under packages/ui", () => {
-		expect(onPullRequest("packages/ui/src/components/button.tsx")).toEqual({
+		expect(touching("packages/ui/src/components/button.tsx")).toEqual({
 			...none,
 			vitest: true,
 			website: true,
@@ -100,19 +167,19 @@ describe("ci changes", () => {
 	it("runs vitest and storybook on the scripts and baselines the gate reads", () => {
 		const both = { ...none, vitest: true, storybook: true }
 
-		expect(onPullRequest("scripts/baseline.ts")).toEqual(both)
-		expect(onPullRequest("baselines/tests.txt")).toEqual(both)
+		expect(touching("scripts/baseline.ts")).toEqual(both)
+		expect(touching("baselines/tests.txt")).toEqual(both)
 	})
 
 	it("runs only rust on a Rust file under src-tauri", () => {
-		expect(onPullRequest("apps/app/src-tauri/src/lib.rs")).toEqual({
+		expect(touching("apps/app/src-tauri/src/lib.rs")).toEqual({
 			...none,
 			rust: true,
 		})
 	})
 
 	it("runs rust and vitest on a sidecar file", () => {
-		expect(onPullRequest("apps/app/sidecar/src/index.ts")).toEqual({
+		expect(touching("apps/app/sidecar/src/index.ts")).toEqual({
 			...none,
 			rust: true,
 			vitest: true,
@@ -120,36 +187,34 @@ describe("ci changes", () => {
 	})
 
 	it("runs rust on a Cargo manifest anywhere", () => {
-		expect(onPullRequest("crates/relay/Cargo.toml").rust).toBe(true)
+		expect(touching("crates/relay/Cargo.toml").rust).toBe(true)
 	})
 
 	it("runs every job but ios on paths only under packages/shared", () => {
-		expect(onPullRequest(...SHARED_ONLY_PATHS)).toEqual({
+		expect(touching(...SHARED_ONLY_PATHS)).toEqual({
 			...every,
 			ios: false,
 		})
 	})
 
 	it("runs storybook on paths only under packages/shared, since packages/ui depends on it", () => {
-		expect(onPullRequest(...SHARED_ONLY_PATHS).storybook).toBe(true)
+		expect(touching(...SHARED_ONLY_PATHS).storybook).toBe(true)
 	})
 
 	it("runs website on paths only under packages/shared, since apps/website resolves it through packages/ui", () => {
-		expect(onPullRequest(...SHARED_ONLY_PATHS).website).toBe(true)
+		expect(touching(...SHARED_ONLY_PATHS).website).toBe(true)
 	})
 
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
-		expect(onPullRequest("packages/shared/permission-modes.json").rust).toBe(
-			true,
-		)
+		expect(touching("packages/shared/permission-modes.json").rust).toBe(true)
 	})
 
 	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {
-		expect(onPullRequest("scripts/ci-changes.ts")).toEqual(every)
+		expect(touching("scripts/ci-changes.ts")).toEqual(every)
 	})
 
 	it("runs only vitest and storybook on scripts/ci-changes.test.ts alone, as any other script", () => {
-		expect(onPullRequest("scripts/ci-changes.test.ts")).toEqual({
+		expect(touching("scripts/ci-changes.test.ts")).toEqual({
 			...none,
 			vitest: true,
 			storybook: true,
@@ -157,48 +222,46 @@ describe("ci changes", () => {
 	})
 
 	it("leaves rust unselected on packages/ui", () => {
-		expect(onPullRequest("packages/ui/src/components/button.tsx").rust).toBe(
-			false,
-		)
+		expect(touching("packages/ui/src/components/button.tsx").rust).toBe(false)
 	})
 
 	it("runs only vitest on a sibling like packages/sharedfoo", () => {
-		expect(onPullRequest("packages/sharedfoo/x.ts")).toEqual({
+		expect(touching("packages/sharedfoo/x.ts")).toEqual({
 			...none,
 			vitest: true,
 		})
 	})
 
 	it("runs only vitest on an app file outside src-tauri", () => {
-		expect(onPullRequest("apps/app/src/main.tsx")).toEqual({
+		expect(touching("apps/app/src/main.tsx")).toEqual({
 			...none,
 			vitest: true,
 		})
 	})
 
 	it("runs only website on a file under apps/website", () => {
-		expect(onPullRequest("apps/website/src/main.tsx")).toEqual({
+		expect(touching("apps/website/src/main.tsx")).toEqual({
 			...none,
 			website: true,
 		})
 	})
 
 	it("runs only ios on the paths the ios filter watches", () => {
-		expect(onPullRequest("apps/ios/Kiroshi/App.swift")).toEqual({
+		expect(touching("apps/ios/Kiroshi/App.swift")).toEqual({
 			...none,
 			ios: true,
 		})
-		expect(onPullRequest(".xcode-version")).toEqual({ ...none, ios: true })
-		expect(onPullRequest(".swift-format")).toEqual({ ...none, ios: true })
+		expect(touching(".xcode-version")).toEqual({ ...none, ios: true })
+		expect(touching(".swift-format")).toEqual({ ...none, ios: true })
 	})
 
 	it("runs nothing filtered on a path no job watches", () => {
-		expect(onPullRequest("docs/relay/notes.md")).toEqual(none)
-		expect(onPullRequest()).toEqual(none)
+		expect(touching("docs/relay/notes.md")).toEqual(none)
+		expect(touching()).toEqual(none)
 	})
 
 	it("treats a nested package.json as local, not shared", () => {
-		expect(onPullRequest("apps/website/package.json")).toEqual({
+		expect(touching("apps/website/package.json")).toEqual({
 			...none,
 			website: true,
 		})

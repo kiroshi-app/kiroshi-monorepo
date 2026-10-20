@@ -68,6 +68,30 @@ describe("the red main filter", () => {
 	it("accepts a push run on main concluded failure", () => {
 		expect(skipReason(redRun)).toBeUndefined()
 	})
+
+	it("rejects a red merge_group run, its queue entry never reaching main", () => {
+		expect(
+			skipReason({
+				...redRun,
+				event: "merge_group",
+				headBranch: "gh-readonly-queue/main/pr-12-8a7919a",
+			}),
+		).toBe("run 101 is a merge_group run")
+	})
+
+	it.each([
+		["pull_request", "ope-1103-branch", false],
+		["merge_group", "gh-readonly-queue/main/pr-12-8a7919a", false],
+		["push", "v1.2.0", false],
+		["push", "main", true],
+	])(
+		"reports a red %s run on %s only when it is a push to main: %p",
+		(event, headBranch, isReported) => {
+			expect(skipReason({ ...redRun, event, headBranch }) === undefined).toBe(
+				isReported,
+			)
+		},
+	)
 })
 
 describe("the red main issue", () => {
@@ -100,6 +124,23 @@ describe("the red main issue", () => {
 		})
 
 		expect(issue.title).toBe("Red main: rust, storybook at 8a7919a")
+	})
+
+	it("titles ios, the one gated job a push to main runs", () => {
+		const issue = redMainIssue({
+			run: redRun,
+			jobs: [
+				job("changes", "success"),
+				job("lint", "skipped"),
+				job("rust", "skipped"),
+				job("storybook", "skipped"),
+				job("ios", "failure"),
+				job("verify", "failure"),
+			],
+			pullRequests: [mergedBy],
+		})
+
+		expect(issue.title).toBe("Red main: ios at 8a7919a")
 	})
 
 	it("titles verify when it is the sole failed job", () => {

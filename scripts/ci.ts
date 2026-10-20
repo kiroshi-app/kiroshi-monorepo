@@ -1,7 +1,7 @@
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { decideJobs } from "./ci-changes"
+import { touchedJobs } from "./ci-changes"
 
 export type Step = { name: string; command: string; cwd?: string }
 
@@ -132,9 +132,10 @@ export const GROUP_ORDER: Group[] = [
 	"ios",
 ]
 
-const POST_MERGE_TRIGGERS: Partial<Record<Group, string>> = {
-	rust: "on a push to main and on a v* tag",
-	storybook: "on a push to main and on a v* tag",
+const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
+	website: "on a merge_group and on a v* tag",
+	rust: "on a merge_group and on a v* tag",
+	storybook: "on a merge_group and on a v* tag",
 	ios: "on a push to main only",
 }
 
@@ -199,17 +200,17 @@ export const pathsChangedSinceMain = () => {
 		.filter(Boolean)
 }
 
-type TouchedJobs = ReturnType<typeof decideJobs>
+type TouchedJobs = ReturnType<typeof touchedJobs>
 
 type GroupDecision = { group: Group; touched: TouchedJobs }
 
 const filterOf = (group: Exclude<Group, "lint">) =>
 	group === "rust-check" ? "rust" : group
 
-export const postMergeNote = (group: Group) => {
-	const triggers = POST_MERGE_TRIGGERS[group]
+export const offPullRequestNote = (group: Group) => {
+	const triggers = OFF_PULL_REQUEST_TRIGGERS[group]
 	return triggers
-		? `${group} is a post-merge job, CI runs it ${triggers}`
+		? `${group} skips a pull_request, CI runs it ${triggers}`
 		: undefined
 }
 
@@ -268,12 +269,9 @@ const runGroup = (group: Group) => {
 }
 
 const runGate = () => {
-	const touched = decideJobs({
-		event: "pull_request",
-		paths: pathsChangedSinceMain(),
-	})
+	const touched = touchedJobs(pathsChangedSinceMain())
 	return GROUP_ORDER.every((group) => {
-		const note = postMergeNote(group)
+		const note = offPullRequestNote(group)
 		if (note !== undefined) console.log(`\nci  ${note}`)
 		const skipped = skipReason({ group, touched })
 		if (skipped === undefined) return runGroup(group)
@@ -285,9 +283,10 @@ const runGate = () => {
 const runRequested = (argument: string | undefined) => {
 	if (argument === undefined) return runGate()
 	if (argument === "fast") return runSteps("fast", fastSteps())
+	if (argument === "changed") return runSteps("changed", [CHANGED_UNIT_TESTS])
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 
