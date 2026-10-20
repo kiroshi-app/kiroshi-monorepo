@@ -21,10 +21,16 @@ const GUEST = "account-guest"
 const HOST_ROW: MessageAuthorship = {
 	authorAccountId: HOST,
 	authorName: "Steve",
+	writtenFrom: "here",
 }
 const GUEST_ROW: MessageAuthorship = {
 	authorAccountId: GUEST,
 	authorName: "Tom",
+	writtenFrom: "relay",
+}
+const SENT_NOT_READ_BACK_ROW: MessageAuthorship = {
+	authorAccountId: HOST,
+	authorName: "Steve",
 }
 const TYPED_SIGNED_OUT_ROW: MessageAuthorship = {
 	authorAccountId: null,
@@ -34,7 +40,7 @@ const HOSTED_TRANSCRIPT = [HOST_ROW, GUEST_ROW, TYPED_SIGNED_OUT_ROW]
 
 const hostedBy = (accountId: string | null): ThreadAuthorship => ({
 	accountId,
-	host: { kind: "hosted", ownAccountIds: [HOST] },
+	host: { kind: "hosted" },
 })
 
 const LEA = "account-lea"
@@ -89,6 +95,20 @@ const authorsShownWith = (
 }
 
 describe("who wrote a message in a hosted space", () => {
+	it("names a relayed message's author even when that account signed in here before", () => {
+		expect(authorsShownWith(hostedBy(GUEST), [GUEST_ROW])).toEqual(["Tom"])
+	})
+
+	it("keeps a message typed here as mine", () => {
+		expect(authorsShownWith(hostedBy(GUEST), [HOST_ROW])).toEqual(["mine"])
+	})
+
+	it("keeps a message sent here and not yet read back as mine", () => {
+		expect(authorsShownWith(hostedBy(HOST), [SENT_NOT_READ_BACK_ROW])).toEqual([
+			"mine",
+		])
+	})
+
 	it("keeps every message the host typed as mine once signed out", () => {
 		expect(authorsShownWith(hostedBy(null))).toEqual(["mine", "Tom", "mine"])
 	})

@@ -1,8 +1,6 @@
 import { raiseTransientNotice } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { storedOwnAccounts } from "./own-accounts"
-
 import { type AccountState, commands } from "../bindings"
 import { raiseReportedFailure } from "../failure-report"
 import { openInBrowser } from "../links/use-external-links"
@@ -23,11 +21,8 @@ export const performAccountCommand = async (command: AccountCommand) => {
 	}
 }
 
-export const readAccountState = async (): Promise<AccountState> => {
-	const state = await commands.accountState()
-	if (state.kind === "signedIn") storedOwnAccounts.remember(state.id)
-	return state
-}
+export const readAccountState = (): Promise<AccountState> =>
+	commands.accountState()
 
 export const copySignInLinkOf = (state: AccountState | undefined) => () => {
 	if (state?.kind !== "waiting") return

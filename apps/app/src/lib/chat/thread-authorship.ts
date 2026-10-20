@@ -7,7 +7,7 @@ import type { TranscriptMessage } from "../conversations/transcript-contract"
 import { authorAmong, memberNameOf } from "../host/member-names"
 
 export type SpaceHost =
-	| { kind: "hosted"; ownAccountIds: readonly string[] }
+	| { kind: "hosted" }
 	| { kind: "joined"; members: readonly JoinedSpaceMember[] }
 
 export type ThreadAuthorship = {
@@ -17,12 +17,14 @@ export type ThreadAuthorship = {
 
 export type MessageAuthorship = Pick<
 	TranscriptMessage,
-	"authorAccountId" | "authorName"
+	"authorAccountId" | "authorName" | "writtenFrom"
 >
+
+export const HOSTED_HERE: SpaceHost = { kind: "hosted" }
 
 export const HOSTED_SIGNED_OUT: ThreadAuthorship = {
 	accountId: null,
-	host: { kind: "hosted", ownAccountIds: [] },
+	host: HOSTED_HERE,
 }
 
 export const ThreadAuthorshipContext =
@@ -30,15 +32,12 @@ export const ThreadAuthorshipContext =
 
 const isWrittenBySelf = (
 	{ accountId, host }: ThreadAuthorship,
-	{ authorAccountId }: MessageAuthorship,
+	{ authorAccountId, writtenFrom }: MessageAuthorship,
 ): boolean => {
-	if (authorAccountId === null) {
-		return host.kind === "hosted"
+	if (host.kind === "hosted") {
+		return writtenFrom !== "relay"
 	}
-	return (
-		authorAccountId === accountId ||
-		(host.kind === "hosted" && host.ownAccountIds.includes(authorAccountId))
-	)
+	return authorAccountId !== null && authorAccountId === accountId
 }
 
 export const personNameOf = (

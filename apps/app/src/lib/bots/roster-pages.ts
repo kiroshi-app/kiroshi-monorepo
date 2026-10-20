@@ -49,11 +49,15 @@ const lastWordOf = ({
 	authorBotId,
 	authorAccountId,
 	authorName,
+	writtenFrom,
 }: StoredLastWord): LastWord => ({
 	text: text?.trim() || undefined,
 	at,
 	authorBotId: authorBotId ?? undefined,
-	person: authorBotId === null ? { authorAccountId, authorName } : undefined,
+	person:
+		authorBotId === null
+			? { authorAccountId, authorName, writtenFrom }
+			: undefined,
 })
 
 const wordsOf = (

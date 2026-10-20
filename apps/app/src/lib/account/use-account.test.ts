@@ -11,7 +11,6 @@ import {
 import { en } from "@workspace/ui/lib/i18n-en"
 
 import { accountQueryKeys } from "./account-query-keys"
-import { storedOwnAccounts } from "./own-accounts"
 import {
 	signOutLeavingOf,
 	useAccount,
@@ -158,14 +157,6 @@ afterEach(async () => {
 })
 
 describe("useAccount", () => {
-	it("remembers the signed-in account on this device", async () => {
-		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
-
-		await mountAccount()
-
-		expect(storedOwnAccounts.list()).toContain(SIGNED_IN.id)
-	})
-
 	it("renders the panel from the account state read on mount", async () => {
 		vi.mocked(commands.accountState).mockResolvedValue(SIGNED_IN)
 

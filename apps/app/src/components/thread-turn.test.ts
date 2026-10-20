@@ -124,7 +124,7 @@ const SELF = "account-self"
 
 const SIGNED_IN_HOSTING: ThreadAuthorship = {
 	accountId: SELF,
-	host: { kind: "hosted", ownAccountIds: [SELF] },
+	host: { kind: "hosted" },
 }
 
 const SIGNED_IN_JOINED: ThreadAuthorship = {
@@ -148,6 +148,11 @@ const writtenBy = (
 	authorAccountId: string | null,
 	authorName: string | null = null,
 ): MessageAuthorship => ({ authorAccountId, authorName })
+
+const relayedBy = (
+	authorAccountId: string,
+	authorName: string | null = null,
+): MessageAuthorship => ({ authorAccountId, authorName, writtenFrom: "relay" })
 
 const shownBubble = () => screen.getByRole("article")
 
@@ -174,7 +179,7 @@ describe("whose user message a bubble shows", () => {
 		cleanup()
 
 		renderTurn("user", "hello", {
-			author: writtenBy("account-tom", "Tom"),
+			author: relayedBy("account-tom", "Tom"),
 			authorship: signedOut,
 		})
 		expect(shownBubble().getAttribute("aria-label")).toBe("message from Tom")
@@ -191,12 +196,21 @@ describe("whose user message a bubble shows", () => {
 
 	it("draws another account's message as that person, by name", () => {
 		renderTurn("user", "hello", {
-			author: writtenBy("account-tom", "Tom"),
+			author: relayedBy("account-tom", "Tom"),
 			authorship: SIGNED_IN_HOSTING,
 		})
 
 		expect(shownBubble().getAttribute("aria-label")).toBe("message from Tom")
 		expect(screen.getByText("Tom")).toBeTruthy()
+	})
+
+	it("draws a relayed message as that person even from the signed-in account", () => {
+		renderTurn("user", "hello", {
+			author: relayedBy(SELF, "Tom"),
+			authorship: SIGNED_IN_HOSTING,
+		})
+
+		expect(shownBubble().getAttribute("aria-label")).toBe("message from Tom")
 	})
 
 	it("draws an unattributed message in a joined space as its host", () => {
@@ -210,7 +224,7 @@ describe("whose user message a bubble shows", () => {
 
 	it("names a person with no name like an unnamed companion", () => {
 		renderTurn("user", "hello", {
-			author: writtenBy("account-tom"),
+			author: relayedBy("account-tom"),
 			authorship: SIGNED_IN_HOSTING,
 		})
 
@@ -230,7 +244,7 @@ describe("whose user message a bubble shows", () => {
 		expect(screen.queryByRole("button", { name: "Retry" })).toBeTruthy()
 		cleanup()
 
-		renderTurn("user", "hello", failing(writtenBy("account-tom", "Tom")))
+		renderTurn("user", "hello", failing(relayedBy("account-tom", "Tom")))
 		expect(screen.queryByRole("button", { name: "Retry" })).toBeNull()
 	})
 

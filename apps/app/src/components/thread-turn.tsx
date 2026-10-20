@@ -82,6 +82,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 			authorBotId: row.authorBotId,
 			authorAccountId: row.authorAccountId,
 			authorName: row.authorName,
+			writtenFrom: row.writtenFrom,
 		})
 	}
 

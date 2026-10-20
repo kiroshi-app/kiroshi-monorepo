@@ -826,6 +826,7 @@ export const createFakeTranscriptStore = (
 					authorBotId: settled.authorBotId,
 					authorAccountId: settled.authorAccountId,
 					authorName: settled.authorName,
+					writtenFrom: settled.writtenFrom,
 				}
 			: null
 	}

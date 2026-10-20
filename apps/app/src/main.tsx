@@ -7,6 +7,7 @@ import { I18nProvider } from "@workspace/ui/components/i18n-provider"
 
 import { App } from "./App"
 
+import { forgetOwnAccountIds } from "@/lib/account/forget-own-account-ids"
 import { exposeLiveSessions } from "@/lib/agent/live-sessions-devtools"
 import { revealWindow } from "@/lib/host"
 import { forwardConsoleToLogFile } from "@/lib/host/console-log-forwarding"
@@ -33,6 +34,7 @@ try {
 exposeLiveSessions()
 exposeScrollTrace()
 
+forgetOwnAccountIds()
 applyLanguage(readMirror().language)
 
 const AnnotationToolbar = import.meta.env.DEV

@@ -17,6 +17,8 @@ import {
 } from "./roster-conversations"
 import type { Bot, Conversation, Participant } from "./store-contract"
 
+import { personNameOf } from "../chat/thread-authorship"
+
 const participant = (fields: Partial<Participant> = {}): Participant => ({
 	botId: "b-1",
 	role: "assistant",
@@ -176,6 +178,36 @@ describe("toRosterConversations", () => {
 					person: { authorAccountId: null, authorName: "lea@example.com" },
 				},
 			}),
+			NOW,
+		)
+
+		expect(row.lastSpeaker).toBe("Lea")
+	})
+
+	it("names the member whose last word came through the relay of a hosted space", () => {
+		const hostedPersonOf: ConversationRosterActivity["personOf"] = (person) =>
+			personNameOf(
+				{ accountId: SELF, host: { kind: "hosted" } },
+				person,
+				"No name",
+			)
+		const [row] = toRosterConversations(
+			[conversation()],
+			{
+				working: {},
+				previews: {
+					"c-1": {
+						text: "Menu is set.",
+						at: A_MINUTE_AGO,
+						person: {
+							authorAccountId: SELF,
+							authorName: "Lea",
+							writtenFrom: "relay",
+						},
+					},
+				},
+				personOf: hostedPersonOf,
+			},
 			NOW,
 		)
 

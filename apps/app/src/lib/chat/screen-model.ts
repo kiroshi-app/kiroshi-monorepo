@@ -84,6 +84,7 @@ function toRow(
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
+		writtenFrom: message.writtenFrom,
 		role: message.role,
 		timestamp: message.createdAt,
 		...rest,
@@ -148,6 +149,8 @@ const localDayOf = (timestamp: number) => new Date(timestamp).toDateString()
 const isSameLocalDay = (earlier: number, later: number) =>
 	localDayOf(earlier) === localDayOf(later)
 
+const isRelayed = (row: TranscriptRow) => row.writtenFrom === "relay"
+
 export function toRuns(
 	rows: TranscriptRow[],
 	causes: ReportedRunsByTurnId = NO_REPORTED_RUNS,
@@ -162,6 +165,7 @@ export function toRuns(
 			previous.role === row.role &&
 			previous.authorBotId === row.authorBotId &&
 			previous.authorAccountId === row.authorAccountId &&
+			isRelayed(previous) === isRelayed(row) &&
 			row.timestamp - previous.timestamp <= RUN_GAP_MS &&
 			isSameLocalDay(previous.timestamp, row.timestamp) &&
 			!isPartedByCause(previous, row, causes)
@@ -207,6 +211,7 @@ function replyTargetOf(message: TranscriptMessage): ReplyTarget {
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
+		writtenFrom: message.writtenFrom,
 	}
 	targetsByMessage.set(message, target)
 	return target
