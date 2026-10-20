@@ -23,8 +23,8 @@ use super::authorship::Caller;
 use super::bridge::{belongs_to_the_host, LocalApi};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
-	HostingState, InvitationState, Member, MemberStatus, MembersError, SpaceInvitation,
-	SpaceMembers, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
+	HostingFailureKind, HostingState, InvitationState, Member, MemberStatus, MembersError,
+	SpaceInvitation, SpaceMembers, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
 };
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
@@ -34,8 +34,8 @@ use super::roster::SignedRow;
 use super::sealing_member::{
 	host_frame_opened, space_key_of, verified_set, HostFrame, SealingMember, Space,
 };
-use super::wire::HELLO;
-use super::{renamed, resumed, signed_out, start, stop, Hosting};
+use super::wire::{host_keys, HELLO};
+use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
 use crate::account::contract::AccountState;
 use crate::account::contract::SignedOutReason;
 use crate::account::session::restore;
@@ -74,7 +74,7 @@ use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole,
 use crate::db::{self, DatabaseState};
 use crate::environment::commands::{env_list, writable_root};
 use crate::environment::connection;
-use crate::environment::contract::{ConnectionKind, EnvOwner, EnvScope, ACCOUNT_BEARER};
+use crate::environment::contract::{ConnectionKind, EnvError, EnvOwner, EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{self, Event, BUFFERED_FRAMES};
 use crate::joined_spaces::contract::JoinedSpaceConnection;
@@ -826,12 +826,12 @@ impl Harness {
 		self.noticed_until(&awaited, || (current() == expected).then_some(())).await;
 	}
 
-	async fn failed(&self) -> String {
-		let reason = || match self.state() {
-			HostingState::Failed { reason } => Some(reason),
+	async fn failed(&self) -> (HostingFailureKind, String) {
+		let failure = || match self.state() {
+			HostingState::Failed { failure, detail } => Some((failure, detail)),
 			_ => None,
 		};
-		self.noticed_until("a failed space", reason).await
+		self.noticed_until("a failed space", failure).await
 	}
 
 	fn running_relay(&self) -> watch::Sender<bool> {
@@ -1161,10 +1161,11 @@ fn an_instance_owned_by_another_account_fails_naming_403_and_is_not_retried() {
 
 		harness.started().await;
 		let relay = harness.running_relay();
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("403"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::NotOwner);
+		assert!(detail.contains("403"), "{detail}");
 		assert_eq!(harness.attempts(), 1);
 	});
 }
@@ -1176,11 +1177,113 @@ fn an_instance_the_relay_answers_410_on_registers_again_once_then_fails_naming_4
 
 		harness.started().await;
 		let relay = harness.running_relay();
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("410"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::InstanceGoneAfterReregistration);
+		assert!(detail.contains("410"), "{detail}");
 		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
+fn an_instance_the_relay_answers_404_on_registers_again_once_then_fails_as_unknown() {
+	run(async {
+		let harness = Harness::new("unknown", Some(StatusCode::NOT_FOUND), Some(BEARER)).await;
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let (failure, detail) = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert_eq!(failure, HostingFailureKind::InstanceUnknownAfterReregistration);
+		assert!(detail.contains("404"), "{detail}");
+		assert_eq!(harness.attempts(), 2);
+	});
+}
+
+#[test]
+fn a_relay_answering_503_is_retried_on_connecting_and_never_fails() {
+	run(async {
+		let harness =
+			Harness::new("unavailable", Some(StatusCode::SERVICE_UNAVAILABLE), Some(BEARER)).await;
+
+		harness.started().await;
+		tokio::time::timeout(PATIENCE, async {
+			while harness.attempts() < 2 {
+				tokio::time::sleep(Duration::from_millis(20)).await;
+			}
+		})
+		.await
+		.expect("the relay is attempted again");
+
+		assert_eq!(harness.state(), HostingState::Connecting);
+	});
+}
+
+#[test]
+fn a_relay_device_table_that_does_not_read_fails_as_database_unavailable() {
+	run(async {
+		let harness = Harness::signed_in("database-unavailable").await;
+		relay_database(&harness)
+			.call_mut(|connection| Ok(connection.execute_batch("DROP TABLE relay_devices")?))
+			.await
+			.expect("the table is dropped");
+
+		harness.started().await;
+		let relay = harness.running_relay();
+		let (failure, detail) = harness.failed().await;
+		ended_on_its_own(relay).await;
+
+		assert_eq!(failure, HostingFailureKind::DatabaseUnavailable);
+		assert!(detail.contains("the relay device id did not read"), "{detail}");
+		assert_eq!(harness.attempts(), 0);
+	});
+}
+
+#[test]
+fn each_unmet_precondition_of_a_start_maps_to_its_own_state() {
+	let opened =
+		|bearer: Result<Option<String>, EnvError>, approval: bool, listening: bool| match opening(
+			Opening { bearer, is_awaiting_approval: approval, is_local_api_listening: listening },
+		) {
+			HostingState::Failed { failure, .. } => Some(failure),
+			HostingState::Connecting => None,
+			state => panic!("no start settles on {state:?} with a bearer or a store failure"),
+		};
+	let signed_in = || Ok(Some(BEARER.to_owned()));
+	let unreadable = || Err(EnvError::Unreadable { detail: "locked".to_owned() });
+
+	assert_eq!(
+		opening(Opening {
+			bearer: Ok(None),
+			is_awaiting_approval: true,
+			is_local_api_listening: false
+		}),
+		HostingState::NeedsSignIn
+	);
+	assert_eq!(
+		opened(unreadable(), true, false),
+		Some(HostingFailureKind::AccountSessionStoreFailed)
+	);
+	assert_eq!(opened(signed_in(), true, false), Some(HostingFailureKind::DeviceAwaitingApproval));
+	assert_eq!(
+		opened(signed_in(), false, false),
+		Some(HostingFailureKind::LocalHostApiNotListening)
+	);
+	assert_eq!(opened(signed_in(), false, true), None);
+}
+
+#[test]
+fn host_keys_without_device_keys_or_without_a_space_key_store_fail_with_their_own_kind() {
+	run(async {
+		let app = an_app_of_its_own("hosting-keys", mock_builder());
+		let without_device = host_keys(app.handle(), PERSONAL).await.err().map(|(kind, _)| kind);
+		app.manage(DeviceKeysState::new(Ok(DeviceKeys::generate().expect("randomness"))));
+		let without_space = host_keys(app.handle(), PERSONAL).await.err().map(|(kind, _)| kind);
+
+		assert_eq!(without_device, Some(HostingFailureKind::DeviceKeysNotLoaded));
+		assert_eq!(without_space, Some(HostingFailureKind::SpaceKeyNotRead));
 	});
 }
 
@@ -1195,10 +1298,11 @@ fn a_host_replaced_by_another_fails_naming_4001_and_does_not_reconnect() {
 
 		let close = CloseFrame { code: 4001, reason: "Host replaced".into() };
 		member.send(Message::Close(Some(close))).await.expect("the close leaves");
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("4001"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::TakenOverByAnotherHost);
+		assert!(detail.contains("4001"), "{detail}");
 		assert_eq!(harness.attempts(), 1);
 	});
 }
@@ -5697,10 +5801,11 @@ fn a_signature_the_relay_cannot_verify_fails_naming_403_and_keeps_the_account_si
 
 		harness.started().await;
 		let relay = harness.running_relay();
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("403 DEVICE_PROOF_INVALID"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::DeviceRefused);
+		assert!(detail.contains("403 DEVICE_PROOF_INVALID"), "{detail}");
 		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::FORBIDDEN]);
 		assert_eq!(harness.attempts(), 0);
 		let account = harness.app.state::<AccountSession>().current();
@@ -5739,10 +5844,11 @@ fn a_second_invalid_challenge_fails_naming_400_device_challenge_invalid() {
 
 		harness.started().await;
 		let relay = harness.running_relay();
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("400 DEVICE_CHALLENGE_INVALID"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::DeviceRefused);
+		assert!(detail.contains("400 DEVICE_CHALLENGE_INVALID"), "{detail}");
 		assert_eq!(
 			harness.relay.device.statuses(),
 			vec![StatusCode::BAD_REQUEST, StatusCode::BAD_REQUEST]
@@ -5761,10 +5867,11 @@ fn a_409_from_the_device_registration_fails_naming_its_status_and_code_like_any_
 
 		harness.started().await;
 		let relay = harness.running_relay();
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 		ended_on_its_own(relay).await;
 
-		assert!(reason.contains("409 DEVICE_KEY_TAKEN"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::DeviceRefused);
+		assert!(detail.contains("409 DEVICE_KEY_TAKEN"), "{detail}");
 		assert_eq!(harness.relay.device.statuses(), vec![StatusCode::CONFLICT]);
 		assert_eq!(harness.attempts(), 0);
 	});
@@ -6061,9 +6168,10 @@ fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
 		harness.started().await;
 		let mut member = harness.member().await;
 		member.sealed_sent(HELLO, None).await;
-		let reason = harness.failed().await;
+		let (failure, detail) = harness.failed().await;
 
-		assert!(reason.contains("reserved ctr bound"), "{reason}");
+		assert_eq!(failure, HostingFailureKind::SealingFailed);
+		assert!(detail.contains("reserved ctr bound"), "{detail}");
 		let sent = tokio::time::timeout(PATIENCE, member.recv()).await.expect("the socket ends");
 		assert!(!matches!(sent, Some(Ok(Message::Text(_)))), "{sent:?}");
 	});

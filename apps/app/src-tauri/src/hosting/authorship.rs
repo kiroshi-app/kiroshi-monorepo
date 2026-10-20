@@ -135,7 +135,7 @@ async fn listed_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> 
 	match members::list(app, member.space_id.clone()).await {
 		Ok(listed) => name_among(&listed.members, &member.user_id),
 		Err(failure) => {
-			eprintln!(
+			log::warn!(
 				"a member name of hosted space {} was not read: {failure:?}",
 				member.space_id
 			);

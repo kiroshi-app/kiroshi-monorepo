@@ -20,7 +20,7 @@ use tokio_tungstenite::tungstenite::{Error as SocketError, Message};
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
 use super::bridge::{self, LocalApi};
-use super::contract::HostingState;
+use super::contract::{HostingFailureKind, HostingState};
 use super::devices::Revocation;
 use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
@@ -98,7 +98,7 @@ enum Ended {
 	Replaced,
 	DeviceRevoked,
 	Dropped(String),
-	Failed(String),
+	Failed(HostingFailureKind, String),
 }
 
 enum Next {
@@ -136,9 +136,9 @@ pub(super) async fn hosted<R: Runtime>(
 	let space_id = hosted.space_id.clone();
 	let keys = match wire::host_keys(&app, &space_id).await {
 		Ok(keys) => keys,
-		Err(reason) => {
+		Err((failure, detail)) => {
 			let instance_id = hosted.instance_id.as_deref();
-			return entered(&app, &space_id, instance_id, HostingState::Failed { reason });
+			return entered(&app, &space_id, instance_id, HostingState::Failed { failure, detail });
 		}
 	};
 	let serving = Serving { local: &local, keys: &keys };
@@ -146,8 +146,11 @@ pub(super) async fn hosted<R: Runtime>(
 		() = attempts(&app, &mut hosted, serving, &mut stop, &ring) => return,
 		() = replay::recorded(&app, &space_id, &ring) => {}
 	}
-	let reason = "the local event stream closed".to_owned();
-	entered(&app, &space_id, hosted.instance_id.as_deref(), HostingState::Failed { reason });
+	let closed = HostingState::Failed {
+		failure: HostingFailureKind::LocalEventStreamClosed,
+		detail: "the local event stream closed".to_owned(),
+	};
+	entered(&app, &space_id, hosted.instance_id.as_deref(), closed);
 }
 
 async fn attempts<R: Runtime>(
@@ -169,7 +172,7 @@ async fn attempts<R: Runtime>(
 			Next::Reregister => continue,
 			Next::Settled(state) => return entered(app, &hosted.space_id, instance_id, state),
 			Next::Retry(reason) => {
-				eprintln!(
+				log::warn!(
 					"hosting of space {} (instance {}) lost its relay: {reason}",
 					hosted.space_id,
 					instance_id.unwrap_or("none")
@@ -196,9 +199,8 @@ async fn attempted<R: Runtime>(
 		Ok(Some(bearer)) => bearer,
 		Ok(None) => return Next::Settled(HostingState::NeedsSignIn),
 		Err(error) => {
-			return Next::Settled(HostingState::Failed {
-				reason: format!("the account session store failed: {error:?}"),
-			})
+			let detail = format!("the account session store failed: {error:?}");
+			return failed(HostingFailureKind::AccountSessionStoreFailed, detail);
 		}
 	};
 	let relay_device_id = match relay_device(app, &bearer, &hosted.space_id, serving.keys).await {
@@ -228,42 +230,54 @@ async fn attempted<R: Runtime>(
 			};
 			match ended {
 				Ended::Stopped => Next::Stopped,
-				Ended::Replaced => Next::Settled(HostingState::Failed {
-					reason: "another host took this instance over (relay close 4001)".to_owned(),
-				}),
+				Ended::Replaced => failed(
+					HostingFailureKind::TakenOverByAnotherHost,
+					"another host took this instance over (relay close 4001)".to_owned(),
+				),
 				Ended::DeviceRevoked => {
 					session::device_revoked(app, &bearer);
 					Next::Settled(HostingState::NeedsSignIn)
 				}
 				Ended::Dropped(reason) => Next::Retry(reason),
-				Ended::Failed(reason) => failed(reason),
+				Ended::Failed(failure, detail) => failed(failure, detail),
 			}
 		}
 		Some(Opened::Revoked) => {
 			session::revoked(app, &bearer);
 			Next::Settled(HostingState::NeedsSignIn)
 		}
-		Some(Opened::Forbidden) => Next::Settled(HostingState::Failed {
-			reason: "the account does not own this instance (relay answered 403)".to_owned(),
-		}),
+		Some(Opened::Forbidden) => failed(
+			HostingFailureKind::NotOwner,
+			"the account does not own this instance (relay answered 403)".to_owned(),
+		),
 		Some(Opened::Unknown | Opened::Gone(_)) if replaced.is_none() => {
 			*replaced = hosted.instance_id.take();
 			Next::Reregister
 		}
-		Some(Opened::Unknown) => Next::Settled(HostingState::Failed {
-			reason: "kiroshi-cloud knows no instance under the id it just registered (relay answered 404)"
+		Some(Opened::Unknown) => failed(
+			HostingFailureKind::InstanceUnknownAfterReregistration,
+			"kiroshi-cloud knows no instance under the id it just registered (relay answered 404)"
 				.to_owned(),
-		}),
-		Some(Opened::Gone(_)) => Next::Settled(HostingState::Failed {
-			reason: "kiroshi-cloud answered the instance it just registered as gone (relay answered 410)"
+		),
+		Some(Opened::Gone(_)) => failed(
+			HostingFailureKind::InstanceGoneAfterReregistration,
+			"kiroshi-cloud answered the instance it just registered as gone (relay answered 410)"
 				.to_owned(),
-		}),
+		),
 		Some(Opened::Unreachable(reason)) => Next::Retry(reason),
 	}
 }
 
-fn failed(reason: String) -> Next {
-	Next::Settled(HostingState::Failed { reason })
+fn failed(failure: HostingFailureKind, detail: String) -> Next {
+	Next::Settled(HostingState::Failed { failure, detail })
+}
+
+fn database_failed(detail: String) -> Next {
+	failed(HostingFailureKind::DatabaseUnavailable, detail)
+}
+
+fn sealing_failed(detail: String) -> Ended {
+	Ended::Failed(HostingFailureKind::SealingFailed, detail)
 }
 
 async fn relay_device<R: Runtime>(
@@ -283,11 +297,13 @@ async fn relay_device<R: Runtime>(
 	};
 	let state = app.state::<db::DatabaseState>();
 	let database = ready(&state)
-		.map_err(|failure| failed(format!("the database is unavailable: {failure:?}")))?;
+		.map_err(|failure| database_failed(format!("the database is unavailable: {failure:?}")))?;
 	let relay_device_id = held_or_registered(app, bearer, database, &account_id, keys).await?;
 	roster::host_rostered(database, space_id, &keys.device, &relay_device_id, &account_id)
 		.await
-		.map_err(|failure| failed(format!("the host roster row was not stored: {failure:?}")))?;
+		.map_err(|failure| {
+			database_failed(format!("the host roster row was not stored: {failure:?}"))
+		})?;
 	Ok(relay_device_id)
 }
 
@@ -300,10 +316,9 @@ async fn held_or_registered<R: Runtime>(
 ) -> Result<String, Next> {
 	let devices = database.relay_devices();
 	let device_id = keys.device.device_id().to_string();
-	let held = devices
-		.relay_device_id(account_id.to_owned(), device_id.clone())
-		.await
-		.map_err(|failure| failed(format!("the relay device id did not read: {failure:?}")))?;
+	let held = devices.relay_device_id(account_id.to_owned(), device_id.clone()).await.map_err(
+		|failure| database_failed(format!("the relay device id did not read: {failure:?}")),
+	)?;
 	if let Some(relay_device_id) = held {
 		return Ok(relay_device_id);
 	}
@@ -315,18 +330,19 @@ async fn held_or_registered<R: Runtime>(
 			return Err(Next::Settled(HostingState::NeedsSignIn));
 		}
 		Err(DeviceRegisterError::Refused(refusal)) => {
-			return Err(failed(format!("the relay refused this device: {refusal}")))
+			let detail = format!("the relay refused this device: {refusal}");
+			return Err(failed(HostingFailureKind::DeviceRefused, detail));
 		}
 		Err(DeviceRegisterError::Unreachable(reason)) => return Err(Next::Retry(reason)),
 	};
-	eprintln!(
+	log::info!(
 		"the device registered with the relay as {} (transferred {})",
-		registered.id, registered.transferred
+		registered.id,
+		registered.transferred
 	);
-	devices
-		.registered(account_id.to_owned(), device_id, registered.id.clone())
-		.await
-		.map_err(|failure| failed(format!("the relay device id was not stored: {failure:?}")))?;
+	devices.registered(account_id.to_owned(), device_id, registered.id.clone()).await.map_err(
+		|failure| database_failed(format!("the relay device id was not stored: {failure:?}")),
+	)?;
 	Ok(registered.id)
 }
 
@@ -355,11 +371,10 @@ async fn registered<R: Runtime>(
 		Err(failure) => Err(failure),
 	};
 	if let Err(failure) = stored {
-		return Err(Next::Settled(HostingState::Failed {
-			reason: format!("the registered instance {instance_id} was not stored: {failure:?}"),
-		}));
+		let detail = format!("the registered instance {instance_id} was not stored: {failure:?}");
+		return Err(database_failed(detail));
 	}
-	eprintln!(
+	log::info!(
 		"space {} registered instance {instance_id} in place of instance {}",
 		hosted.space_id,
 		replaced.unwrap_or("none")
@@ -395,7 +410,7 @@ pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
 fn departure(body: Option<&[u8]>) -> Option<Departure> {
 	let read = body.and_then(|body| serde_json::from_slice::<GoneBody>(body).ok());
 	if read.is_none() {
-		eprintln!(
+		log::warn!(
 			"the relay answered {} with a body naming no known departure: {:?}",
 			StatusCode::GONE,
 			body.map(String::from_utf8_lossy)
@@ -428,7 +443,10 @@ async fn online<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	let database = match ready(&state) {
 		Ok(database) => database,
-		Err(failure) => return Ended::Failed(format!("the database is unavailable: {failure:?}")),
+		Err(failure) => {
+			let detail = format!("the database is unavailable: {failure:?}");
+			return Ended::Failed(HostingFailureKind::DatabaseUnavailable, detail);
+		}
 	};
 	let mut wire = Wire::new(database, serving.keys, ids.space_id, ids.instance_id);
 	let hosted = HostedSpace {
@@ -488,7 +506,7 @@ async fn online<R: Runtime>(
 				let opened = match wire.opened(text.as_str()).await {
 					Ok(opened) => opened,
 					Err(refusal) => {
-						eprintln!("{}", wire::dropped_line(ids.space_id, &refusal));
+						log::warn!("{}", wire::dropped_line(ids.space_id, &refusal));
 						if let Err(ended) = stale_rekeyed(&mut sink, &hosted, &refusal).await {
 							return ended;
 						}
@@ -526,7 +544,7 @@ async fn online<R: Runtime>(
 			Some(answer) = invokes.join_next(), if !invokes.is_empty() => match answer {
 				Ok((sender, answer)) => Outgoing::Answer(sender, answer),
 				Err(failure) => {
-					eprintln!("a relayed invoke of space {} ended abnormally: {failure}", ids.space_id);
+					log::error!("a relayed invoke of space {} ended abnormally: {failure}", ids.space_id);
 					continue;
 				}
 			},
@@ -539,10 +557,10 @@ async fn online<R: Runtime>(
 					}
 					Ok(Ok(_)) => {}
 					Ok(Err(failure)) => {
-						eprintln!("the device list of space {} was not settled: {failure:?}", ids.space_id);
+						log::warn!("the device list of space {} was not settled: {failure:?}", ids.space_id);
 					}
 					Err(failure) => {
-						eprintln!("an admission of space {} ended abnormally: {failure}", ids.space_id);
+						log::error!("an admission of space {} ended abnormally: {failure}", ids.space_id);
 					}
 				}
 				continue;
@@ -553,7 +571,7 @@ async fn online<R: Runtime>(
 					Outgoing::Answer(sender, answer.frame)
 				}
 				Err(failure) => {
-					eprintln!("a relayed avatar of space {} ended abnormally: {failure}", ids.space_id);
+					log::error!("a relayed avatar of space {} ended abnormally: {failure}", ids.space_id);
 					continue;
 				}
 			},
@@ -639,7 +657,7 @@ fn unread_ended(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Op
 		Some(Ok(Message::Close(frame))) => Some(closed_by_relay(frame, ids)),
 		Some(Ok(Message::Binary(_))) => {
 			let refusal = Refusal { from: None, cause: wire::Dropped::NotV2 };
-			eprintln!("{}", wire::dropped_line(ids.space_id, &refusal));
+			log::warn!("{}", wire::dropped_line(ids.space_id, &refusal));
 			None
 		}
 		Some(Ok(_)) => None,
@@ -650,7 +668,7 @@ fn unread_ended(frame: Option<Result<Message, SocketError>>, ids: Ids<'_>) -> Op
 
 fn closed_by_relay(frame: Option<CloseFrame>, ids: Ids<'_>) -> Ended {
 	let code = frame.as_ref().map(|frame| u16::from(frame.code));
-	eprintln!(
+	log::info!(
 		"the relay closed space {} (instance {}) with code {}",
 		ids.space_id,
 		ids.instance_id,
@@ -669,13 +687,15 @@ fn closed_by_relay(frame: Option<CloseFrame>, ids: Ids<'_>) -> Ended {
 async fn closed(sink: &mut Sink, ids: Ids<'_>) -> Ended {
 	let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 	match sent(sink, Message::Close(Some(close))).await {
-		Ok(()) => eprintln!(
+		Ok(()) => log::info!(
 			"space {} (instance {}) closed its relay with code 1000",
-			ids.space_id, ids.instance_id
+			ids.space_id,
+			ids.instance_id
 		),
-		Err(reason) => eprintln!(
+		Err(reason) => log::warn!(
 			"space {} (instance {}) left its relay without the 1000 close frame: {reason}",
-			ids.space_id, ids.instance_id
+			ids.space_id,
+			ids.instance_id
 		),
 	}
 	Ended::Stopped
@@ -707,7 +727,7 @@ async fn revocation_handled<R: Runtime>(
 	match devices::device_left(app, space_id, device_id, user_id).await {
 		Ok(Revocation::Applied) => Ok(()),
 		Ok(Revocation::Ignored(reason)) => {
-			eprintln!("device.revoked changed nothing in space {space_id}: {reason}");
+			log::warn!("device.revoked changed nothing in space {space_id}: {reason}");
 			Ok(())
 		}
 		Err(failure) => Err(Ended::Dropped(format!(
@@ -738,7 +758,7 @@ async fn rekeys_sent(
 	let handover = match handover::current(hosted.database, hosted.keys, space_id).await {
 		Ok(handover) => handover,
 		Err(reason) => {
-			eprintln!("hosted space {space_id} sent no rekey: {reason}");
+			log::warn!("hosted space {space_id} sent no rekey: {reason}");
 			return Ok(());
 		}
 	};
@@ -746,7 +766,7 @@ async fn rekeys_sent(
 	for member in recipients {
 		match handover.rekey_frame(hosted.keys, hosted.instance_id, member) {
 			Ok(frame) => sent(sink, Message::text(frame)).await.map_err(Ended::Dropped)?,
-			Err(reason) => eprintln!("hosted space {space_id} sent no rekey: {reason}"),
+			Err(reason) => log::warn!("hosted space {space_id} sent no rekey: {reason}"),
 		}
 	}
 	Ok(())
@@ -767,11 +787,11 @@ async fn delivered(sink: &mut Sink, wire: &mut Wire<'_>, outgoing: Outgoing) -> 
 	let message = match outgoing {
 		Outgoing::Ping => Message::Ping(Vec::new().into()),
 		Outgoing::Answer(to, answer) => {
-			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(Ended::Failed)?)
+			Message::text(wire.sealed(&answer, Some(&to)).await.map_err(sealing_failed)?)
 		}
-		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(Ended::Failed)?),
+		Outgoing::Hello(to) => Message::text(wire.hello(&to).await.map_err(sealing_failed)?),
 		Outgoing::Rechallenge(to) => {
-			Message::text(wire.rechallenged(&to).await.map_err(Ended::Failed)?)
+			Message::text(wire.rechallenged(&to).await.map_err(sealing_failed)?)
 		}
 	};
 	sent(sink, message).await.map_err(Ended::Dropped)
@@ -783,7 +803,7 @@ async fn sealed_sent(
 	plaintext: &str,
 	to: Option<&Rostered>,
 ) -> Result<(), Ended> {
-	let sealed = wire.sealed(plaintext, to).await.map_err(Ended::Failed)?;
+	let sealed = wire.sealed(plaintext, to).await.map_err(sealing_failed)?;
 	sent(sink, Message::text(sealed)).await.map_err(Ended::Dropped)
 }
 

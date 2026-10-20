@@ -28,7 +28,7 @@ use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use crate::environment::store;
 use crate::events::{ACCOUNT_CHANGED, HOSTING_CHANGED};
-use crate::hosting::contract::HostingState;
+use crate::hosting::contract::{HostingFailureKind, HostingState};
 use crate::hosting::Hosting;
 use crate::joined_spaces::commands::joined_space_connect;
 use crate::joined_spaces::contract::JoinedSpaceError;
@@ -604,15 +604,18 @@ fn while_pending_no_host_starts_and_the_approval_resumes_the_hosted_spaces() {
 		assert_eq!(
 			started,
 			HostingState::Failed {
-				reason: "this device awaits its approval by another device of the account"
-					.to_owned()
+				failure: HostingFailureKind::DeviceAwaitingApproval,
+				detail: "this device awaits its approval by another device of the account"
+					.to_owned(),
 			}
 		);
 
 		harness.relay.answers_current(current_approved());
 		harness.approved().await;
-		let not_listening =
-			HostingState::Failed { reason: "the local host api is not listening".to_owned() };
+		let not_listening = HostingState::Failed {
+			failure: HostingFailureKind::LocalHostApiNotListening,
+			detail: "the local host api is not listening".to_owned(),
+		};
 		until(PATIENCE, || (harness.hosting() == not_listening).then_some(())).await;
 	});
 }
@@ -944,8 +947,10 @@ fn a_refused_registration_resumes_the_hosted_spaces_once_and_keeps_the_approval_
 		hosting.set_hosted(PERSONAL.to_owned(), true).await.expect("the space is flagged");
 
 		restore(harness.handle()).await;
-		let not_listening =
-			HostingState::Failed { reason: "the local host api is not listening".to_owned() };
+		let not_listening = HostingState::Failed {
+			failure: HostingFailureKind::LocalHostApiNotListening,
+			detail: "the local host api is not listening".to_owned(),
+		};
 		until(PATIENCE, || (harness.hosting() == not_listening).then_some(())).await;
 		tokio::time::sleep(TICK * 4).await;
 
@@ -953,7 +958,11 @@ fn a_refused_registration_resumes_the_hosted_spaces_once_and_keeps_the_approval_
 			harness.heard(HOSTING_CHANGED.name()),
 			vec![json!({
 				"spaceId": PERSONAL,
-				"state": { "kind": "failed", "reason": "the local host api is not listening" }
+				"state": {
+					"kind": "failed",
+					"failure": "localHostApiNotListening",
+					"detail": "the local host api is not listening"
+				}
 			})]
 		);
 		assert_eq!(harness.approval(), DeviceApproval::None);

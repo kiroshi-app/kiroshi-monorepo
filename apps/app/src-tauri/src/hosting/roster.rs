@@ -134,7 +134,7 @@ pub(super) async fn verified_roster(
 		}
 	}
 	if !ignored.is_empty() {
-		eprintln!("hosted space {space_id} ignored the roster rows of {}", ignored.join(", "));
+		log::warn!("hosted space {space_id} ignored the roster rows of {}", ignored.join(", "));
 	}
 	Ok(VerifiedRoster { version: roster.version, rows })
 }
@@ -238,7 +238,7 @@ pub(super) async fn sender_of(
 		Ok(sender) if sender.device_id == host.device_id() => Ok(None),
 		Ok(sender) => Ok(Some(sender)),
 		Err(failure) => {
-			eprintln!(
+			log::warn!(
 				"hosted space {space_id} ignored the roster row of device {}: {failure:?}",
 				row.device_id
 			);

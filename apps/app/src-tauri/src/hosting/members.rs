@@ -155,7 +155,7 @@ pub(super) async fn polled<R: Runtime>(
 		match listed(app, space_id, instance_id).await {
 			Ok(listed) => announced_if_changed(app, space_id, listed),
 			Err(failure) => {
-				eprintln!("the members of hosted space {space_id} were not polled: {failure:?}");
+				log::warn!("the members of hosted space {space_id} were not polled: {failure:?}");
 			}
 		}
 	}
@@ -287,7 +287,7 @@ fn announced<R: Runtime>(app: &AppHandle<R>, space_id: &str, listed: SpaceMember
 	let SpaceMembers { members, invitations } = listed;
 	let changed = MembersChanged { space_id: space_id.to_owned(), members, invitations };
 	if let Err(error) = events::emit(app, MEMBERS_CHANGED, changed) {
-		eprintln!("the members of space {space_id} did not reach the front: {error}");
+		log::error!("the members of space {space_id} did not reach the front: {error}");
 	}
 }
 

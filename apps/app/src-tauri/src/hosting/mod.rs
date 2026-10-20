@@ -30,6 +30,7 @@ use crate::account::cloud::Cloud;
 use crate::account::session::AccountSession;
 use crate::db::repositories::space_hosting::Registration;
 use crate::db::DatabaseState;
+use crate::environment::contract::EnvError;
 use crate::events::{self, HOSTING_CHANGED};
 use crate::host_api::token;
 use crate::routines::webhook::Webhook;
@@ -37,7 +38,7 @@ use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
 use authorship::RelayedMembers;
 use bridge::LocalApi;
-use contract::{HostingChanged, HostingState, SpaceMembers};
+use contract::{HostingChanged, HostingFailureKind, HostingState, SpaceMembers};
 use relay::Hosted;
 
 pub struct Hosting {
@@ -107,18 +108,18 @@ impl Hosting {
 
 pub fn local_api<R: Runtime>(app: &AppHandle<R>) -> Option<LocalApi> {
 	let Some(origin) = app.try_state::<Webhook>().and_then(|webhook| webhook.origin()) else {
-		eprintln!("no space can be hosted: the local host api is not listening");
+		log::error!("no space can be hosted: the local host api is not listening");
 		return None;
 	};
 	let token = match token::loaded(app) {
 		Ok(token) => token,
 		Err(failure) => {
-			eprintln!("no space can be hosted: the host token was not loaded: {failure:?}");
+			log::error!("no space can be hosted: the host token was not loaded: {failure:?}");
 			return None;
 		}
 	};
 	LocalApi::new(origin, token.bearer().to_owned())
-		.inspect_err(|failure| eprintln!("no space can be hosted: {failure}"))
+		.inspect_err(|failure| log::error!("no space can be hosted: {failure}"))
 		.ok()
 }
 
@@ -141,13 +142,16 @@ fn entered<R: Runtime>(
 		host.state = state.clone();
 		host.instance_id.clone()
 	};
-	eprintln!(
-		"hosting of space {space_id} (instance {}) entered {state:?}",
-		instance_id.as_deref().unwrap_or("none")
-	);
+	let instance_id = instance_id.as_deref().unwrap_or("none");
+	match &state {
+		HostingState::Failed { failure, detail } => log::error!(
+			"hosting of space {space_id} (instance {instance_id}) failed: {failure:?}: {detail}"
+		),
+		_ => log::info!("hosting of space {space_id} (instance {instance_id}) entered {state:?}"),
+	}
 	let changed = HostingChanged { space_id: space_id.to_owned(), state };
 	if let Err(error) = events::emit(app, HOSTING_CHANGED, changed) {
-		eprintln!("the hosting state of space {space_id} did not reach the front: {error}");
+		log::error!("the hosting state of space {space_id} did not reach the front: {error}");
 	}
 }
 
@@ -176,19 +180,11 @@ async fn begun<R: Runtime>(
 ) -> HostingState {
 	finished(&space_id, hosting.taken_run(&space_id)).await;
 	let instance_id = registration.instance_id.clone();
-	let state = match (app.state::<AccountSession>().bearer(), &hosting.local) {
-		(Ok(None), _) => HostingState::NeedsSignIn,
-		(Err(error), _) => {
-			HostingState::Failed { reason: format!("the account session store failed: {error:?}") }
-		}
-		(Ok(Some(_)), _) if crate::devices::is_awaiting_approval(app) => HostingState::Failed {
-			reason: "this device awaits its approval by another device of the account".to_owned(),
-		},
-		(Ok(Some(_)), None) => {
-			HostingState::Failed { reason: "the local host api is not listening".to_owned() }
-		}
-		(Ok(Some(_)), Some(_)) => HostingState::Connecting,
-	};
+	let state = opening(Opening {
+		bearer: app.state::<AccountSession>().bearer(),
+		is_awaiting_approval: crate::devices::is_awaiting_approval(app),
+		is_local_api_listening: hosting.local.is_some(),
+	});
 	entered(app, &space_id, instance_id.as_deref(), state.clone());
 	if let (HostingState::Connecting, Some(local)) = (&state, &hosting.local) {
 		let (stop, stopped) = watch::channel(false);
@@ -200,13 +196,40 @@ async fn begun<R: Runtime>(
 	state
 }
 
+struct Opening {
+	bearer: Result<Option<String>, EnvError>,
+	is_awaiting_approval: bool,
+	is_local_api_listening: bool,
+}
+
+fn opening(preconditions: Opening) -> HostingState {
+	let failed =
+		|failure, detail: &str| HostingState::Failed { failure, detail: detail.to_owned() };
+	match preconditions {
+		Opening { bearer: Ok(None), .. } => HostingState::NeedsSignIn,
+		Opening { bearer: Err(error), .. } => failed(
+			HostingFailureKind::AccountSessionStoreFailed,
+			&format!("the account session store failed: {error:?}"),
+		),
+		Opening { is_awaiting_approval: true, .. } => failed(
+			HostingFailureKind::DeviceAwaitingApproval,
+			"this device awaits its approval by another device of the account",
+		),
+		Opening { is_local_api_listening: false, .. } => failed(
+			HostingFailureKind::LocalHostApiNotListening,
+			"the local host api is not listening",
+		),
+		Opening { .. } => HostingState::Connecting,
+	}
+}
+
 async fn finished(space_id: &str, run: Option<Run>) {
 	let Some(run) = run else {
 		return;
 	};
 	run.stop.send_replace(true);
 	if let Err(error) = run.handle.await {
-		eprintln!("the relay of space {space_id} ended abnormally: {error}");
+		log::error!("the relay of space {space_id} ended abnormally: {error}");
 	}
 }
 
@@ -270,7 +293,7 @@ pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
 	let _turn = hosting.turn.lock().await;
 	let database_state = app.state::<DatabaseState>();
 	let Ok(database) = ready(&database_state) else {
-		return eprintln!("no hosted space was resumed: the database is unavailable");
+		return log::error!("no hosted space was resumed: the database is unavailable");
 	};
 	for space_id in flagged(app).await {
 		if hosting.current(&space_id).is_running() {
@@ -280,7 +303,7 @@ pub async fn resumed<R: Runtime>(app: &AppHandle<R>) {
 			Ok(registration) => {
 				begun(app, &hosting, space_id, registration).await;
 			}
-			Err(failure) => eprintln!("hosted space {space_id} was not resumed: {failure:?}"),
+			Err(failure) => log::error!("hosted space {space_id} was not resumed: {failure:?}"),
 		}
 	}
 }
@@ -292,7 +315,7 @@ async fn flagged<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
 		Err(failure) => Err(failure),
 	};
 	listed.unwrap_or_else(|failure| {
-		eprintln!("the hosted spaces were not read: {failure:?}");
+		log::error!("the hosted spaces were not read: {failure:?}");
 		Vec::new()
 	})
 }
