@@ -874,6 +874,169 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 	});
 }
 
+const WHILE_PAUSED: Duration = Duration::from_secs(2);
+
+struct UnlistedDuringAPause {
+	joined: JoinedSpace,
+	reconciliation: tauri::async_runtime::JoinHandle<()>,
+	pause_ends: Instant,
+}
+
+async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDuringAPause {
+	let joined = online_with_two_members(member, &member.host()).await;
+	joined_space_connect(member.app.handle().clone(), joined.id.clone())
+		.await
+		.expect("the joined space connects");
+	{
+		let mut room = member.relay.room();
+		room.accepted.clear();
+		room.member_refusal = Some(refusal(StatusCode::GONE, "MEMBER_REMOVED"));
+	}
+	let guests = member.app.state::<RelayGuests>();
+	assert!(guests.is_running(&joined.id));
+	let pause_ends = Instant::now() + pause;
+	guests.cloud().rate_limited("/instances", pause);
+	let app = member.app.handle().clone();
+	let reconciliation = tauri::async_runtime::spawn(async move { relay::reconciled(&app).await });
+	until("the unlisted guest to stop", || async {
+		(!guests.is_running(&joined.id)).then_some(())
+	})
+	.await;
+	UnlistedDuringAPause { joined, reconciliation, pause_ends }
+}
+
+#[test]
+fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
+	run(async {
+		let member = Member::new("join-during-pause").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(120)).await;
+
+		let joined = tokio::time::timeout(
+			WHILE_PAUSED,
+			relay::joined(member.app.handle(), OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+		)
+		.await;
+		paused.reconciliation.abort();
+
+		assert_eq!(
+			joined.expect("the join is not held by the pause").expect("joined").name,
+			"Harbour"
+		);
+	});
+}
+
+#[test]
+fn a_leave_completes_while_a_reconciliation_waits_on_a_429_pause() {
+	run(async {
+		let member = Member::new("leave-during-pause").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(120)).await;
+
+		let left =
+			tokio::time::timeout(WHILE_PAUSED, relay::left(member.app.handle(), &paused.joined.id))
+				.await;
+		paused.reconciliation.abort();
+
+		assert_eq!(left.expect("the leave is not held by the pause"), Ok(()));
+		assert_eq!(member.listed().await, Vec::new());
+	});
+}
+
+#[test]
+fn a_sign_out_completes_while_a_reconciliation_waits_on_a_429_pause() {
+	run(async {
+		let member = Member::new("sign-out-during-pause").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(120)).await;
+
+		let signed_out =
+			tokio::time::timeout(WHILE_PAUSED, relay::signed_out(member.app.handle())).await;
+		paused.reconciliation.abort();
+
+		assert!(signed_out.expect("the sign out is not held by the pause").is_some());
+		assert_eq!(member.listed().await, Vec::new());
+	});
+}
+
+#[test]
+fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_ends() {
+	run(async {
+		let member = Member::new("evicted-after-pause").await;
+		let removed = heard_on(&member.app, REMOVED_EVENT);
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+
+		let other = tokio::time::timeout(
+			WHILE_PAUSED,
+			relay::joined(member.app.handle(), OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+		)
+		.await;
+		paused.reconciliation.await.expect("the reconciliation ends");
+		let evicted_at = Instant::now();
+
+		assert!(other.expect("the other join is not held by the pause").is_ok());
+		assert!(evicted_at >= paused.pause_ends);
+		assert_eq!(
+			*removed.lock().expect("the events"),
+			vec![json!({ "id": paused.joined.id, "name": "Studio", "reason": "removed" })]
+		);
+		let listed = member.listed().await;
+		assert_eq!(
+			listed.iter().map(|joined| joined.name.as_str()).collect::<Vec<_>>(),
+			["Harbour"]
+		);
+	});
+}
+
+#[test]
+fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
+	run(async {
+		let member = Member::new("joined-again-during-pause").await;
+		let removed = heard_on(&member.app, REMOVED_EVENT);
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+
+		let again = tokio::time::timeout(
+			WHILE_PAUSED,
+			relay::joined(member.app.handle(), INSTANCE.to_owned(), None),
+		)
+		.await;
+		paused.reconciliation.await.expect("the reconciliation ends");
+
+		assert_eq!(
+			again.expect("the join is not held by the pause").expect("joined").id,
+			paused.joined.id
+		);
+		assert!(removed.lock().expect("the events").is_empty());
+		assert_eq!(member.listed().await.len(), 1);
+		assert!(member.app.state::<RelayGuests>().is_running(&paused.joined.id));
+	});
+}
+
+#[test]
+fn an_unlisted_space_kept_on_a_sign_out_during_the_429_pause_starts_no_guest() {
+	run(async {
+		let member = Member::new("no-guest-after-sign-out-during-pause").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+
+		member.signed_out_of_the_store();
+		paused.reconciliation.await.expect("the reconciliation ends");
+
+		assert!(!member.app.state::<RelayGuests>().is_running(&paused.joined.id));
+	});
+}
+
+#[test]
+fn an_unlisted_space_is_kept_when_the_account_signs_out_during_the_429_pause() {
+	run(async {
+		let member = Member::new("signed-out-of-the-store-during-pause").await;
+		let removed = heard_on(&member.app, REMOVED_EVENT);
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+
+		member.signed_out_of_the_store();
+		paused.reconciliation.await.expect("the reconciliation ends");
+
+		assert!(removed.lock().expect("the events").is_empty());
+		assert_eq!(member.listed().await.len(), 1);
+	});
+}
+
 const SIMULATED: Duration = Duration::from_secs(600);
 const SIMULATED_TICK: Duration = Duration::from_millis(10);
 
