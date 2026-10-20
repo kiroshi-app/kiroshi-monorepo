@@ -66,8 +66,11 @@ export const useHosting = (
 		const previous = queryClient.getQueryData<HostingState>(
 			hostQueryKeys.hostingOf(space.id),
 		)
-		if (isFailureToReport(previous, next, attempt.current)) {
-			reportFailure(hostingFailureOf(space))
+		if (
+			next.kind === "failed" &&
+			isFailureToReport(previous, next, attempt.current)
+		) {
+			reportFailure(hostingFailureOf(space, next.failure))
 		}
 		return next
 	}

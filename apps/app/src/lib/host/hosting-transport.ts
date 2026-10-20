@@ -1,7 +1,11 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { commands, type HostingState } from "../bindings"
+import {
+	commands,
+	type HostingFailureKind,
+	type HostingState,
+} from "../bindings"
 
 export type HostedSpace = {
 	id: string
@@ -34,9 +38,33 @@ export const hostingTransport: HostingTransport = {
 	stop: (spaceId) => answerOf(commands.hostingStop(spaceId)),
 }
 
-export const hostingFailureOf = (space: HostedSpace): NoticeMessage => ({
+const UNKNOWN_REASON = "settings:space.hosting.failed.reasons.unknown"
+
+const REASON_OF_FAILURE = {
+	notOwner: "settings:space.hosting.failed.reasons.notOwner",
+	instanceUnknownAfterReregistration:
+		"settings:space.hosting.failed.reasons.instanceGone",
+	instanceGoneAfterReregistration:
+		"settings:space.hosting.failed.reasons.instanceGone",
+	deviceRefused: "settings:space.hosting.failed.reasons.deviceRefused",
+	deviceAwaitingApproval:
+		"settings:space.hosting.failed.reasons.deviceAwaitingApproval",
+	deviceKeysNotLoaded: "settings:space.hosting.failed.reasons.keysMissing",
+	spaceKeyNotRead: "settings:space.hosting.failed.reasons.keysMissing",
+	takenOverByAnotherHost: "settings:space.hosting.failed.reasons.takenOver",
+	localEventStreamClosed: "settings:space.hosting.failed.reasons.streamClosed",
+	localHostApiNotListening: UNKNOWN_REASON,
+	accountSessionStoreFailed: UNKNOWN_REASON,
+	sealingFailed: UNKNOWN_REASON,
+	databaseUnavailable: UNKNOWN_REASON,
+} as const satisfies Record<HostingFailureKind, string>
+
+export const hostingFailureOf = (
+	space: HostedSpace,
+	failure?: HostingFailureKind,
+): NoticeMessage => ({
 	title: i18n.t("settings:space.hosting.failed.title", { name: space.name }),
-	description: i18n.t("settings:space.hosting.failed.description"),
+	description: i18n.t(failure ? REASON_OF_FAILURE[failure] : UNKNOWN_REASON),
 })
 
 export const stopFailureOf = (space: HostedSpace): NoticeMessage => ({
