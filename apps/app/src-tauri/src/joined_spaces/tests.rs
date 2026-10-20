@@ -21,7 +21,9 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use super::commands::{
 	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT, REMOVED_EVENT,
 };
-use super::contract::{JoinedSpace, JoinedSpaceError, JoinedSpaceState};
+use super::contract::{
+	JoinedSpace, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
+};
 use super::members::{joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
@@ -680,9 +682,15 @@ fn a_joined_host_other_than_the_held_one_answers_bad_signature_and_keeps_the_hel
 }
 
 #[test]
-fn an_absent_a_silent_or_a_forged_host_leaves_the_joined_space_waiting_and_pins_nothing() {
+fn an_absent_a_silent_or_a_forged_host_leaves_the_joined_space_waiting_on_its_reason_and_pins_nothing(
+) {
 	run(async {
-		for case in 0..3 {
+		let reasons = [
+			JoinedSpaceWaitReason::SocketClosed,
+			JoinedSpaceWaitReason::HostSilent,
+			JoinedSpaceWaitReason::RekeyNotVerified,
+		];
+		for (case, reason) in reasons.into_iter().enumerate() {
 			let member = Member::new("join-waiting").await;
 			let stranger = DeviceKeys::generate().expect("randomness");
 			let forged = HostSide::Answering(member.host().admitted_signed_by(&stranger));
@@ -692,12 +700,20 @@ fn an_absent_a_silent_or_a_forged_host_leaves_the_joined_space_waiting_and_pins_
 			let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone())
 				.await
 				.map(|found| found.id);
+			let JoinedSpaceWait { reason: waited_on, detail } =
+				joined.wait.clone().expect("a wait");
 
 			assert_eq!(joined.state, JoinedSpaceState::WaitingForHost, "case {case}");
+			assert_eq!(waited_on, reason, "case {case}");
 			assert_eq!(member.listed().await, vec![joined.clone()], "case {case}");
 			assert_eq!(
 				connection,
-				Err(JoinedSpaceError::WaitingForHost { id: joined.id }),
+				Err(JoinedSpaceError::WaitingForHost {
+					id: joined.id,
+					instance_id: INSTANCE.to_owned(),
+					reason,
+					detail
+				}),
 				"case {case}"
 			);
 			assert_eq!(member.held_key_id(), None, "case {case}");
@@ -765,6 +781,30 @@ fn an_unreadable_key_still_starts_every_waiting_join_and_its_space_comes_online_
 
 		assert_eq!(is_waiting, [true, true]);
 		assert_eq!(member.held_key_id(), Some(1));
+	});
+}
+
+#[test]
+fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
+	run(async {
+		let member = Member::new("join-forbidden").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		let forbidden = refusal(StatusCode::FORBIDDEN, "NOT_A_MEMBER");
+		member.relay.room().member_refusal = Some(forbidden);
+
+		relay::reconciled(member.app.handle()).await;
+		let listed = until("the wait read as not a member", || async {
+			let listed = member.listed().await.into_iter().find(|found| found.id == joined.id);
+			listed.filter(|found| {
+				found.wait.as_ref().map(|wait| wait.reason)
+					== Some(JoinedSpaceWaitReason::NotMember)
+			})
+		})
+		.await;
+
+		assert_eq!(listed.state, JoinedSpaceState::WaitingForHost);
+		assert!(member.is_waiting(&joined.id));
 	});
 }
 
@@ -863,7 +903,7 @@ impl AdmittingRelay {
 			json!({ "event": "device.approved", "deviceId": device_id, "userId": "member" });
 		if let Some(host) = &self.admission().host {
 			if host.send(Message::Text(approved.to_string().into())).is_err() {
-				eprintln!("the fake relay lost its host socket");
+				log::warn!("the fake relay lost its host socket");
 			}
 		}
 	}
@@ -1020,7 +1060,7 @@ async fn admitting_host_socket(
 				.filter(|(id, _)| envelope.get("to").is_none_or(|to| to == id.as_str()));
 			for (_, member) in recipients {
 				if member.send(spliced(text.as_str(), &device)).is_err() {
-					eprintln!("a fake relay member socket was gone");
+					log::warn!("a fake relay member socket was gone");
 				}
 			}
 		}
@@ -1044,7 +1084,7 @@ async fn admitting_member_socket(
 			let host = relay.admission().host.clone();
 			if let Some(host) = host {
 				if host.send(spliced(text.as_str(), &device)).is_err() {
-					eprintln!("the fake relay host socket was gone");
+					log::warn!("the fake relay host socket was gone");
 				}
 			}
 		}

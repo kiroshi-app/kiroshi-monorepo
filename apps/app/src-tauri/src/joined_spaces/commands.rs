@@ -81,8 +81,8 @@ pub async fn joined_spaces_list<R: Runtime>(
 	let cloud = app.state::<RelayGuests>().inner().cloud();
 	let listed = stored.into_iter().map(|joined| {
 		let JoinedReach::Relay { instance_id } = &joined.reach;
-		let state = held::state_or_waiting(&app, &joined.id, instance_id);
-		JoinedSpace::presented(joined, cloud, state)
+		let wait = held::wait_or_unread(&app, &joined.id, instance_id);
+		JoinedSpace::presented(joined, cloud, wait)
 	});
 	Ok(listed.collect())
 }
@@ -130,7 +130,8 @@ mod tests {
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener, Manager};
 
-	use super::super::contract::JoinedSpaceState;
+	use super::super::contract::{JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason};
+	use super::super::wait_reason::{wait_of, Stall};
 	use super::*;
 	use crate::account::session::AccountSession;
 	use crate::crypto::commands::SpaceKeys;
@@ -261,13 +262,13 @@ mod tests {
 	}
 
 	async fn held(app: &App<MockRuntime>) -> JoinedSpace {
-		held_over(app, INSTANCE, JoinedSpaceState::WaitingForHost).await
+		held_over(app, INSTANCE, Some(wait_of(Stall::NoRekeyYet))).await
 	}
 
 	async fn held_over(
 		app: &App<MockRuntime>,
 		instance_id: &str,
-		state: JoinedSpaceState,
+		wait: Option<JoinedSpaceWait>,
 	) -> JoinedSpace {
 		let candidate = joined_spaces::JoinedSpace {
 			id: uuid::Uuid::new_v4().to_string(),
@@ -277,7 +278,7 @@ mod tests {
 		};
 		let database = app.state::<db::DatabaseState>();
 		let joined = ready(&database).expect("the database").joined_spaces().join(candidate).await;
-		JoinedSpace::presented(joined.expect("the join"), app.state::<RelayGuests>().cloud(), state)
+		JoinedSpace::presented(joined.expect("the join"), app.state::<RelayGuests>().cloud(), wait)
 	}
 
 	async fn list(app: &App<MockRuntime>) -> Vec<JoinedSpace> {
@@ -291,15 +292,22 @@ mod tests {
 		let keyless = held(&app).await;
 		let space = HeldSpaceKey::first().expect("randomness");
 		app.state::<SpaceKeys>().stored("joined-instance-2", space).expect("the key is kept");
-		let keyed = held_over(&app, "instance-2", JoinedSpaceState::Online).await;
-		let unreadable = held_over(&app, "instance.3", JoinedSpaceState::WaitingForHost).await;
+		let keyed = held_over(&app, "instance-2", None).await;
+		let unreadable = held_over(&app, "instance.3", None).await;
 
 		let listed = list(&app).await;
+		let unread = listed.iter().find(|joined| joined.id == unreadable.id).expect("listed");
+		let unread_reason = unread.wait.as_ref().map(|wait| wait.reason);
 
 		assert_eq!(keyless.state, JoinedSpaceState::WaitingForHost);
+		assert_eq!(
+			keyless.wait.as_ref().map(|wait| wait.reason),
+			Some(JoinedSpaceWaitReason::HostSilent)
+		);
 		assert_eq!(listed.len(), 3);
 		assert!(listed.contains(&keyless) && listed.contains(&keyed));
-		assert!(listed.contains(&unreadable));
+		assert_eq!(unread.state, JoinedSpaceState::WaitingForHost);
+		assert_eq!(unread_reason, Some(JoinedSpaceWaitReason::KeychainReadFailed));
 	}
 
 	#[tokio::test]

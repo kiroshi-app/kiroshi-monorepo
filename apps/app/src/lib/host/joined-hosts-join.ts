@@ -19,7 +19,7 @@ import type {
 	JoinedSpaceConnection,
 	JoinedSpaceError,
 } from "../bindings"
-import { describeFailure } from "../failure-report"
+import { describeFailure, type ReporterFacts } from "../failure-report"
 import type { Store } from "../store"
 
 export type JoinOutcome = Awaited<
@@ -38,6 +38,16 @@ type JoinedHostsJoinOptions = Pick<
 	attachHost: (id: string, host: HttpHost) => void
 	reportJoinRefusal: NonNullable<JoinedHostsOptions["reportJoinRefusal"]>
 }
+
+const JOIN_COMMAND = "joined_space_connect"
+
+const refusalFactsOf = (
+	id: string,
+	error: JoinedSpaceError,
+): ReporterFacts => ({
+	command: JOIN_COMMAND,
+	space: error.kind === "waitingForHost" ? error.instanceId : id,
+})
 
 const settledBefore = <T>(
 	pending: Promise<T>,
@@ -78,7 +88,7 @@ export const createJoinedHostsJoin = ({
 	const refuseJoin = (id: string, error: JoinedSpaceError): null => {
 		const notice = joinRefusalNoticeOf(error)
 		if (!isHostOffline(error)) {
-			reportJoinRefusal(notice)
+			reportJoinRefusal(notice, refusalFactsOf(id, error))
 		}
 		return refuse(id, notice.title)
 	}
@@ -87,7 +97,10 @@ export const createJoinedHostsJoin = ({
 		if (isJoinedSpaceError(reason)) {
 			return refuseJoin(id, reason)
 		}
-		reportJoinRefusal(unexpectedJoinNotice())
+		reportJoinRefusal(unexpectedJoinNotice(), {
+			command: JOIN_COMMAND,
+			space: id,
+		})
 		return refuse(id, describeFailure(reason))
 	}
 

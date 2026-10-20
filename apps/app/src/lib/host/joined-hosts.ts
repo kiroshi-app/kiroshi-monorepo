@@ -8,7 +8,11 @@ import { createJoinedHostsInvoke, type LocalHost } from "./joined-hosts-invoke"
 import { createJoinedHostsJoin, type JoinOutcome } from "./joined-hosts-join"
 import { createJoinedHostsListen } from "./joined-hosts-listen"
 
-import { describeFailure, failureReporterIn } from "../failure-report"
+import {
+	describeFailure,
+	failureReporterIn,
+	type ReporterFacts,
+} from "../failure-report"
 import { createStore } from "../store"
 
 export { LOCAL_COMMANDS } from "./joined-hosts-invoke"
@@ -33,7 +37,7 @@ export type JoinedHostsOptions = {
 	fetch: typeof fetch
 	openSocket: (url: string) => HostSocket
 	reportFailure: (refusal: HostRefusal) => void
-	reportJoinRefusal?: (notice: NoticeMessage) => void
+	reportJoinRefusal?: (notice: NoticeMessage, facts: ReporterFacts) => void
 }
 
 export const createJoinedHosts = ({

@@ -14,6 +14,7 @@ use super::contract::{JoinedSpace, JoinedSpaceError};
 use super::held::{self, device_keys};
 use super::relay::{self, RelayGuests, RelayJoinError};
 use super::roster_set::{verified_handover, Handed};
+use super::wait_reason::{waited, Stall};
 use crate::account::cloud::{Cloud, DeviceRegisterError, MeError};
 use crate::account::session::{self, AccountSession};
 use crate::crypto::device_keys::{verify, DeviceKeys};
@@ -36,6 +37,19 @@ pub async fn joined<R: Runtime>(
 	instance_id: String,
 	name: String,
 ) -> Result<JoinedSpace, JoinedSpaceError> {
+	log::info!("the join of instance {instance_id} starts");
+	let joined = attempted(app, &instance_id, name).await;
+	if let Err(failure) = &joined {
+		log::error!("the join of instance {instance_id} was refused: {failure:?}");
+	}
+	joined
+}
+
+async fn attempted<R: Runtime>(
+	app: &AppHandle<R>,
+	instance_id: &str,
+	name: String,
+) -> Result<JoinedSpace, JoinedSpaceError> {
 	let device = device_keys(app)?;
 	let bearer = bearer_of(app)?;
 	if devices::is_awaiting_approval(app) {
@@ -43,11 +57,15 @@ pub async fn joined<R: Runtime>(
 			detail: "this device awaits its approval by another device of the account".to_owned(),
 		});
 	}
-	let url = member_socket_of(app, &bearer, &device, &instance_id).await?;
-	if let Some(handed) = answered(app, url, &bearer, &instance_id, &device).await? {
-		kept_answer(app, &instance_id, &handed).await?;
+	let url = member_socket_of(app, &bearer, &device, instance_id).await?;
+	if let Some(handed) = answered(app, url, &bearer, instance_id, &device).await? {
+		kept_answer(app, instance_id, &handed).await?;
+		log::info!(
+			"the join of instance {instance_id} kept a rekey: space key_id {}",
+			handed.space.key_id
+		);
 	}
-	relay::joined(app, instance_id, Some(name)).await.map_err(|failure| match failure {
+	relay::joined(app, instance_id.to_owned(), Some(name)).await.map_err(|failure| match failure {
 		RelayJoinError::SignedOut => JoinedSpaceError::NeedsSignIn,
 		RelayJoinError::Account(detail) => JoinedSpaceError::SessionStore { detail },
 		RelayJoinError::Joined(failure) => failure,
@@ -98,7 +116,7 @@ pub(super) async fn member_socket_of<R: Runtime>(
 	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
 	let cloud = app.state::<RelayGuests>().inner().cloud();
-	let relay_device_id = relay_device_of(app, cloud, bearer, device).await?;
+	let relay_device_id = relay_device_of(app, cloud, bearer, device, instance_id).await?;
 	Ok(relay::member_socket_url(cloud, instance_id, &relay_device_id))
 }
 
@@ -107,6 +125,7 @@ async fn relay_device_of<R: Runtime>(
 	cloud: &Cloud,
 	bearer: &str,
 	device: &DeviceKeys,
+	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
 	let account_id = match cloud.me(bearer).await {
 		Ok(account) => account.id,
@@ -131,8 +150,8 @@ async fn relay_device_of<R: Runtime>(
 			return Err(JoinedSpaceError::RelayUnreachable { detail })
 		}
 	};
-	eprintln!(
-		"the device registered with the relay as {} (transferred {}) to join a space",
+	log::info!(
+		"the device registered with the relay as {} (transferred {}) to join instance {instance_id}",
 		registered.id, registered.transferred
 	);
 	devices.registered(account_id, device_id, registered.id.clone()).await?;
@@ -152,38 +171,46 @@ async fn answered<R: Runtime>(
 		Opened::Forbidden | Opened::Unknown | Opened::Gone(_) => {
 			return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 		}
-		Opened::Unreachable(reason) => return Ok(waiting(instance_id, &reason)),
+		Opened::Unreachable(reason) => {
+			return Ok(waiting(app, instance_id, Stall::Unreachable(reason)))
+		}
 	};
+	log::info!("the join of instance {instance_id} opened its member socket");
 	let bound = app.state::<RelayGuests>().answer_bound();
 	let asked = Message::text(missed_rekey_frame(device, instance_id)?);
 	let answered = match socket.send(asked).await {
-		Err(failure) => {
-			Ok(waiting(instance_id, &format!("the missed rekey frame did not leave: {failure}")))
-		}
+		Err(failure) => Ok(waiting(app, instance_id, Stall::AskNotSent(failure.to_string()))),
 		Ok(()) => {
-			timeout(bound, next_rekey(&mut socket, instance_id, device)).await.unwrap_or_else(
-				|_| Ok(waiting(instance_id, &format!("no verified rekey came within {bound:?}"))),
-			)
+			let mut dropped = None;
+			let answer =
+				timeout(bound, next_rekey(app, &mut socket, instance_id, device, &mut dropped))
+					.await;
+			answer.unwrap_or_else(|_| {
+				let stall = dropped.map_or(Stall::Silent(bound), Stall::RekeyDropped);
+				Ok(waiting(app, instance_id, stall))
+			})
 		}
 	};
 	let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 	if let Err(failure) = socket.send(Message::Close(Some(close))).await {
-		eprintln!(
+		log::warn!(
 			"the join socket of instance {instance_id} was left without its close: {failure}"
 		);
 	}
 	answered
 }
 
-fn waiting(instance_id: &str, reason: &str) -> Option<Handed> {
-	eprintln!("the join of instance {instance_id} waits for its host: {reason}");
+fn waiting<R: Runtime>(app: &AppHandle<R>, instance_id: &str, stall: Stall) -> Option<Handed> {
+	waited(app, instance_id, stall);
 	None
 }
 
-async fn next_rekey(
+async fn next_rekey<R: Runtime>(
+	app: &AppHandle<R>,
 	socket: &mut Socket,
 	instance_id: &str,
 	device: &DeviceKeys,
+	dropped: &mut Option<JoinedSpaceError>,
 ) -> Result<Option<Handed>, JoinedSpaceError> {
 	while let Some(frame) = socket.next().await {
 		match frame {
@@ -191,7 +218,8 @@ async fn next_rekey(
 				match rekey_handed(device, instance_id, text.as_str()) {
 					Some(Ok(handed)) => return Ok(Some(handed)),
 					Some(Err(JoinedSpaceError::BadSignature)) => {
-						eprintln!("the join of instance {instance_id} dropped a rekey that did not verify");
+						log::error!("the join of instance {instance_id} dropped a rekey that did not verify");
+						*dropped = Some(JoinedSpaceError::BadSignature);
 					}
 					Some(Err(failure)) => return Err(failure),
 					None => {}
@@ -201,15 +229,15 @@ async fn next_rekey(
 				return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
 			}
 			Ok(Message::Close(close)) => {
-				return Ok(waiting(instance_id, &format!("the relay closed the socket: {close:?}")))
+				return Ok(waiting(app, instance_id, Stall::Closed(close)))
 			}
 			Ok(_) => {}
 			Err(failure) => {
-				return Ok(waiting(instance_id, &format!("the join socket failed: {failure}")))
+				return Ok(waiting(app, instance_id, Stall::SocketFailed(failure.to_string())))
 			}
 		}
 	}
-	Ok(waiting(instance_id, "the join socket ended"))
+	Ok(waiting(app, instance_id, Stall::SocketEnded))
 }
 
 pub(super) fn rekey_handed(
@@ -254,11 +282,11 @@ pub(super) async fn kept_answer<R: Runtime>(
 ) -> Result<(), JoinedSpaceError> {
 	let held = held::roster(app, instance_id).await?;
 	if held.is_some_and(|held| held.host != handed.roster.host) {
-		eprintln!("the join of instance {instance_id} met a host other than the one pinned");
+		log::error!("the join of instance {instance_id} dropped a rekey: it came from a host other than the one pinned");
 		return Err(JoinedSpaceError::BadSignature);
 	}
 	if !held::kept(app, instance_id, handed).await? {
-		eprintln!("the join of instance {instance_id} met a roster older than the one held");
+		log::error!("the join of instance {instance_id} dropped a rekey: it carried a roster older than the one held");
 		return Err(JoinedSpaceError::BadSignature);
 	}
 	Ok(())

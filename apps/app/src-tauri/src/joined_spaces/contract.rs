@@ -15,6 +15,8 @@ pub struct JoinedSpace {
 	pub remote_space_id: Option<String>,
 	pub name: String,
 	pub state: JoinedSpaceState,
+	#[specta(optional)]
+	pub wait: Option<JoinedSpaceWait>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -24,20 +26,49 @@ pub enum JoinedSpaceState {
 	WaitingForHost,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum JoinedSpaceWaitReason {
+	RelayUnreachable,
+	RekeySendFailed,
+	HostSilent,
+	SocketClosed,
+	RekeyNotVerified,
+	NotMember,
+	UnknownInstance,
+	DeviceKeysUnreadable,
+	DeviceAwaitingApproval,
+	SocketUrlFailed,
+	RosterMissing,
+	KeychainReadFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinedSpaceWait {
+	pub reason: JoinedSpaceWaitReason,
+	pub detail: String,
+}
+
 impl JoinedSpace {
 	pub fn presented(
 		joined: joined_spaces::JoinedSpace,
 		cloud: &Cloud,
-		state: JoinedSpaceState,
+		wait: Option<JoinedSpaceWait>,
 	) -> Self {
 		let JoinedReach::Relay { instance_id } = joined.reach;
 		let host_url = cloud.member_relay_url(&instance_id);
+		let state = match wait {
+			None => JoinedSpaceState::Online,
+			Some(_) => JoinedSpaceState::WaitingForHost,
+		};
 		Self {
 			id: joined.id,
 			host_url,
 			remote_space_id: joined.remote_space_id,
 			name: joined.name,
 			state,
+			wait,
 		}
 	}
 }
@@ -137,6 +168,9 @@ pub enum JoinedSpaceError {
 	#[serde(rename_all = "camelCase")]
 	WaitingForHost {
 		id: String,
+		instance_id: String,
+		reason: JoinedSpaceWaitReason,
+		detail: String,
 	},
 	#[serde(rename_all = "camelCase")]
 	KeyStore {

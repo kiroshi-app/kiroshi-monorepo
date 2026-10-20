@@ -8,13 +8,14 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::commands::{announce_change, ready};
-use super::contract::{JoinedSpaceError, JoinedSpaceState};
+use super::contract::JoinedSpaceError;
 use super::held::{self, device_keys};
 use super::join::{
 	bearer_of, kept_answer, member_socket_of, missed_rekey_frame, rekey_handed, revoked,
 };
 use super::members;
 use super::relay::{self, RelayGuests};
+use super::wait_reason::{waited, Stall};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
@@ -24,6 +25,7 @@ use crate::hosting::relay::{
 };
 
 pub(super) struct WaitingJoin {
+	instance_id: String,
 	stop: watch::Sender<bool>,
 	run: JoinHandle<()>,
 }
@@ -32,7 +34,10 @@ impl WaitingJoin {
 	pub(super) async fn finished(self, id: &str) {
 		self.stop.send_replace(true);
 		if let Err(error) = self.run.await {
-			eprintln!("the waiting join of joined space {id} ended abnormally: {error}");
+			log::error!(
+				"the waiting join of joined space {id} (instance {}) ended abnormally: {error}",
+				self.instance_id
+			);
 		}
 	}
 }
@@ -41,7 +46,7 @@ enum Attempt {
 	Joined,
 	Departed(Departure),
 	Ended(String),
-	Dropped(String),
+	Dropped(Stall),
 }
 
 pub(super) async fn joins_started<R: Runtime>(
@@ -56,7 +61,7 @@ pub(super) async fn joins_started<R: Runtime>(
 	let state = app.state::<db::DatabaseState>();
 	for joined in ready(&state)?.joined_spaces().list().await? {
 		let JoinedReach::Relay { instance_id } = joined.reach;
-		if held::state_or_waiting(app, &joined.id, &instance_id) == JoinedSpaceState::Online {
+		if held::wait_or_unread(app, &joined.id, &instance_id).is_none() {
 			continue;
 		}
 		let mut waiting = guests.waiting();
@@ -64,18 +69,18 @@ pub(super) async fn joins_started<R: Runtime>(
 			continue;
 		}
 		let (stop, stopped) = watch::channel(false);
-		let run = tauri::async_runtime::spawn(waited(
+		let run = tauri::async_runtime::spawn(waited_for_host(
 			app.clone(),
 			joined.id.clone(),
-			instance_id,
+			instance_id.clone(),
 			stopped,
 		));
-		waiting.insert(joined.id, WaitingJoin { stop, run });
+		waiting.insert(joined.id, WaitingJoin { instance_id, stop, run });
 	}
 	Ok(())
 }
 
-async fn waited<R: Runtime>(
+async fn waited_for_host<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 	instance_id: String,
@@ -87,27 +92,34 @@ async fn waited<R: Runtime>(
 			None => return,
 			Some(Attempt::Joined) => {
 				left(&app, &id, &stop);
-				return joined_announced(&app, &id).await;
+				log::info!(
+					"joined space {id} (instance {instance_id}) kept its rekey and comes online"
+				);
+				return joined_announced(&app, &id, &instance_id).await;
 			}
 			Some(Attempt::Departed(departure)) => {
 				left(&app, &id, &stop);
 				let reason = relay::reason_of(departure);
 				if let Err(failure) = relay::entry_evicted(&app, &id, reason).await {
-					eprintln!(
-						"joined space {id} whose membership ended was not evicted: {failure:?}"
+					log::error!(
+						"joined space {id} (instance {instance_id}) whose membership ended was not evicted: {failure:?}"
 					);
 				}
 				return;
 			}
 			Some(Attempt::Ended(reason)) => {
 				left(&app, &id, &stop);
-				return eprintln!("joined space {id} stopped waiting for its host: {reason}");
+				return log::error!(
+					"joined space {id} (instance {instance_id}) stopped waiting for its host: {reason}"
+				);
 			}
-			Some(Attempt::Dropped(reason)) => {
-				eprintln!("joined space {id} lost the socket it waits for its host on: {reason}")
+			Some(Attempt::Dropped(stall)) => {
+				waited(&app, &instance_id, stall);
 			}
 		}
-		if until_stopped(&mut stop, sleep(backoff.step())).await.is_none() {
+		let step = backoff.step();
+		log::warn!("joined space {id} (instance {instance_id}) retries its wait in {step:?}");
+		if until_stopped(&mut stop, sleep(step)).await.is_none() {
 			return;
 		}
 	}
@@ -123,26 +135,25 @@ async fn attempted<R: Runtime>(
 		Err(JoinedSpaceError::NeedsSignIn) => {
 			return Attempt::Ended("no account is signed in".to_owned())
 		}
-		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
+		Err(failure) => return Attempt::Dropped(Stall::KeyRead(failure)),
 	};
 	if devices::is_awaiting_approval(app) {
-		return Attempt::Dropped(
-			"this device awaits its approval by another device of the account".to_owned(),
-		);
+		return Attempt::Dropped(Stall::AwaitingApproval);
 	}
 	let device = match device_keys(app) {
 		Ok(device) => device,
-		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
+		Err(failure) => return Attempt::Dropped(Stall::DeviceKeys(failure)),
 	};
 	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
 		Ok(url) => url,
 		Err(JoinedSpaceError::SessionRevoked) => {
 			return Attempt::Ended("the cloud refused the account (401)".to_owned())
 		}
-		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
+		Err(failure) => return Attempt::Dropped(Stall::SocketUrl(failure)),
 	};
 	match opened(url, &bearer).await {
 		Opened::Socket(socket) => {
+			log::info!("the waiting join of instance {instance_id} opened its member socket");
 			backoff.reset();
 			listened(app, *socket, instance_id, &device).await
 		}
@@ -151,11 +162,9 @@ async fn attempted<R: Runtime>(
 			Attempt::Ended("the relay refused the account (401)".to_owned())
 		}
 		Opened::Gone(Some(departure)) => Attempt::Departed(departure),
-		Opened::Forbidden | Opened::Gone(None) => {
-			Attempt::Dropped("the account is not a member of this instance (403)".to_owned())
-		}
-		Opened::Unknown => Attempt::Dropped("the relay knows no such instance (404)".to_owned()),
-		Opened::Unreachable(reason) => Attempt::Dropped(reason),
+		Opened::Forbidden | Opened::Gone(None) => Attempt::Dropped(Stall::Forbidden),
+		Opened::Unknown => Attempt::Dropped(Stall::Unknown),
+		Opened::Unreachable(reason) => Attempt::Dropped(Stall::Unreachable(reason)),
 	}
 }
 
@@ -167,12 +176,13 @@ async fn listened<R: Runtime>(
 ) -> Attempt {
 	let asked = match missed_rekey_frame(device, instance_id) {
 		Ok(asked) => asked,
-		Err(failure) => return Attempt::Dropped(format!("{failure:?}")),
+		Err(failure) => return Attempt::Dropped(Stall::AskNotSent(format!("{failure:?}"))),
 	};
 	let (mut sink, mut stream) = socket.split();
 	if let Err(reason) = sent(&mut sink, Message::text(asked.clone())).await {
-		return Attempt::Dropped(reason);
+		return Attempt::Dropped(Stall::AskNotSent(reason));
 	}
+	waited(app, instance_id, Stall::Asked);
 	let every = app.state::<RelayGuests>().resend_every();
 	let mut beats = interval_at(Instant::now() + every, every);
 	let silence = sleep(SILENCE_BOUND);
@@ -186,28 +196,26 @@ async fn listened<R: Runtime>(
 						if is_kept(app, instance_id, device, text.as_str()).await {
 							let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 							if let Err(reason) = sent(&mut sink, Message::Close(Some(close))).await {
-								eprintln!("a joined socket of instance {instance_id} was left without its close: {reason}");
+								log::warn!("a joined socket of instance {instance_id} was left without its close: {reason}");
 							}
 							return Attempt::Joined;
 						}
 					}
-					Some(Ok(Message::Close(frame))) => {
-						return Attempt::Dropped(format!("the relay closed the socket: {frame:?}"))
-					}
+					Some(Ok(Message::Close(frame))) => return Attempt::Dropped(Stall::Closed(frame)),
 					Some(Ok(_)) => {}
-					Some(Err(error)) => return Attempt::Dropped(format!("the socket failed: {error}")),
-					None => return Attempt::Dropped("the socket ended".to_owned()),
+					Some(Err(error)) => return Attempt::Dropped(Stall::SocketFailed(error.to_string())),
+					None => return Attempt::Dropped(Stall::SocketEnded),
 				}
 			}
 			_ = beats.tick() => {
 				for beat in [Message::text(asked.clone()), Message::Ping(Vec::new().into())] {
 					if let Err(reason) = sent(&mut sink, beat).await {
-						return Attempt::Dropped(reason);
+						return Attempt::Dropped(Stall::AskNotSent(reason));
 					}
 				}
 			}
 			_ = &mut silence => {
-				return Attempt::Dropped(format!("no frame or pong arrived for {SILENCE_BOUND:?}"));
+				return Attempt::Dropped(Stall::Silent(SILENCE_BOUND));
 			}
 		}
 	}
@@ -223,14 +231,22 @@ async fn is_kept<R: Runtime>(
 		None => return false,
 		Some(Ok(handed)) => handed,
 		Some(Err(failure)) => {
-			eprintln!("joined space of instance {instance_id} dropped a rekey: {failure:?}");
+			log::error!("the waiting join of instance {instance_id} dropped a rekey: {failure:?}");
+			waited(app, instance_id, Stall::RekeyDropped(failure));
 			return false;
 		}
 	};
 	match kept_answer(app, instance_id, &handed).await {
-		Ok(()) => true,
+		Ok(()) => {
+			log::info!(
+				"the waiting join of instance {instance_id} kept a rekey: space key_id {}",
+				handed.space.key_id
+			);
+			true
+		}
 		Err(failure) => {
-			eprintln!("the rekey of instance {instance_id} was not kept: {failure:?}");
+			log::error!("the waiting join of instance {instance_id} dropped a rekey: {failure:?}");
+			waited(app, instance_id, Stall::RekeyDropped(failure));
 			false
 		}
 	}
@@ -244,12 +260,16 @@ fn left<R: Runtime>(app: &AppHandle<R>, id: &str, stop: &watch::Receiver<bool>) 
 	}
 }
 
-async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
+async fn joined_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str) {
 	if let Err(failure) = members_read(app, id).await {
-		eprintln!("the members of joined space {id} were not read after its join: {failure:?}");
+		log::warn!(
+			"the members of joined space {id} (instance {instance_id}) were not read after its join: {failure:?}"
+		);
 	}
 	if let Err(failure) = announce_change(app, id.to_owned()) {
-		eprintln!("joined space {id} came online and the front was not told: {failure:?}");
+		log::error!(
+			"joined space {id} (instance {instance_id}) came online and the front was not told: {failure:?}"
+		);
 	}
 }
 

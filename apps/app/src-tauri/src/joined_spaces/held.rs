@@ -1,8 +1,9 @@
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::commands::ready;
-use super::contract::{JoinedSpaceError, JoinedSpaceState};
+use super::contract::{JoinedSpaceError, JoinedSpaceWait};
 use super::roster_set::{verified_set, Handed, HeldRoster};
+use super::wait_reason::{last_wait, wait_of, Stall};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::contract::DeviceKeysError;
 use crate::crypto::device_keys::DeviceKeys;
@@ -32,34 +33,38 @@ pub(super) fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, 
 pub(super) async fn held<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
-) -> Result<Option<Held>, JoinedSpaceError> {
+) -> Result<Result<Held, JoinedSpaceWait>, JoinedSpaceError> {
 	let device = device_keys(app)?;
 	let Some(space) = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)? else {
-		return Ok(None);
+		return Ok(Err(last_wait(app, instance_id)));
 	};
-	let roster = roster_verified(app, instance_id, &device).await?;
-	Ok(roster.map(|roster| Held { device, space, roster }))
+	let Some(roster) = roster_verified(app, instance_id, &device).await? else {
+		return Ok(Err(wait_of(Stall::RosterMissing)));
+	};
+	Ok(Ok(Held { device, space, roster }))
 }
 
-pub(super) fn state_of<R: Runtime>(
+pub(super) fn wait<R: Runtime>(
 	app: &AppHandle<R>,
 	instance_id: &str,
-) -> Result<JoinedSpaceState, JoinedSpaceError> {
+) -> Result<Option<JoinedSpaceWait>, JoinedSpaceError> {
 	let space = space_keys(app)?.held(&key_item(instance_id)).map_err(key_store)?;
-	Ok(match space {
-		Some(_) => JoinedSpaceState::Online,
-		None => JoinedSpaceState::WaitingForHost,
-	})
+	Ok(space.is_none().then(|| last_wait(app, instance_id)))
 }
 
-pub(super) fn state_or_waiting<R: Runtime>(
+pub(super) fn wait_or_unread<R: Runtime>(
 	app: &AppHandle<R>,
 	id: &str,
 	instance_id: &str,
-) -> JoinedSpaceState {
-	state_of(app, instance_id).unwrap_or_else(|failure| {
-		eprintln!("joined space {id} waits for its host: its key did not read: {failure:?}");
-		JoinedSpaceState::WaitingForHost
+) -> Option<JoinedSpaceWait> {
+	wait(app, instance_id).unwrap_or_else(|failure| {
+		let unread = wait_of(Stall::KeyRead(failure));
+		log::warn!(
+			"joined space {id} (instance {instance_id}) waits for its host ({:?}): {}",
+			unread.reason,
+			unread.detail
+		);
+		Some(unread)
 	})
 }
 
