@@ -300,10 +300,10 @@ export const OfflineRosterMissing = meta.story({
 })
 
 export const OfflineKeychainReadFailed = meta.story({
-	name: "Host offline, Keychain unreadable",
+	name: "Host offline, secure storage unreadable",
 	...waitStory(
 		"keychainReadFailed",
-		"You can read what’s here. Couldn’t read Studio’s key from the Keychain, quit Kiroshi and open it again.",
-		"the space key couldn't be read from the Keychain",
+		"You can read what’s here. Couldn’t read Studio’s key from this computer’s secure storage, quit Kiroshi and open it again.",
+		"the space key couldn't be read from this computer's secure storage",
 	),
 })

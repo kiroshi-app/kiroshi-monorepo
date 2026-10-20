@@ -183,7 +183,7 @@ const chat = {
 				rosterMissing:
 					"Vous pouvez lire ce qui est ici. {{host}} n’a pas encore envoyé la liste des membres, demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 				keychainReadFailed:
-					"Vous pouvez lire ce qui est ici. Impossible de lire la clé de {{space}} dans le trousseau, quittez Kiroshi et rouvrez-le.",
+					"Vous pouvez lire ce qui est ici. Impossible de lire la clé de {{space}} dans le stockage sécurisé de cet ordinateur, quittez Kiroshi et rouvrez-le.",
 			},
 		},
 	},
@@ -435,7 +435,7 @@ const chat = {
 						rosterMissing:
 							"L’hôte n’a pas encore envoyé la liste des membres de cet espace. Demandez-lui d’ouvrir Kiroshi sur son ordinateur.",
 						keychainReadFailed:
-							"Impossible de lire la clé de cet espace dans le trousseau. Quittez Kiroshi, rouvrez-le et autorisez l’accès si le trousseau le demande.",
+							"Impossible de lire la clé de cet espace dans le stockage sécurisé de cet ordinateur. Quittez Kiroshi, rouvrez-le et autorisez l’accès si cet ordinateur le demande.",
 					},
 				},
 				keyStore: {

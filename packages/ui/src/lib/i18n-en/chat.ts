@@ -176,7 +176,7 @@ const chat = {
 				rosterMissing:
 					"You can read what’s here. {{host}} hasn’t sent the member list yet, ask them to open Kiroshi on their computer.",
 				keychainReadFailed:
-					"You can read what’s here. Couldn’t read {{space}}’s key from the Keychain, quit Kiroshi and open it again.",
+					"You can read what’s here. Couldn’t read {{space}}’s key from this computer’s secure storage, quit Kiroshi and open it again.",
 			},
 		},
 	},
@@ -420,7 +420,7 @@ const chat = {
 						rosterMissing:
 							"The host hasn’t sent this space’s member list yet. Ask them to open Kiroshi on their computer.",
 						keychainReadFailed:
-							"Couldn’t read this space’s key from the Keychain. Quit Kiroshi, open it again, and allow access if the Keychain asks.",
+							"Couldn’t read this space’s key from this computer’s secure storage. Quit Kiroshi, open it again, and allow access if this computer asks.",
 					},
 				},
 				keyStore: {
