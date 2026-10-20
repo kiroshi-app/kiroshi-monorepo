@@ -321,11 +321,7 @@ describe("toRuns", () => {
 					authorAccountId: "account-lea",
 					writtenFrom: "here",
 				}),
-				prompt({
-					id: "local-1",
-					authorAccountId: "account-lea",
-					writtenFrom: undefined,
-				}),
+				prompt({ id: "local-1", authorAccountId: "account-lea" }),
 			]),
 		)
 
