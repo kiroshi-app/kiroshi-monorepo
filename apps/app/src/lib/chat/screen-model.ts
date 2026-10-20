@@ -84,6 +84,7 @@ function toRow(
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
+		writtenFrom: message.writtenFrom,
 		role: message.role,
 		timestamp: message.createdAt,
 		...rest,
@@ -207,6 +208,7 @@ function replyTargetOf(message: TranscriptMessage): ReplyTarget {
 		authorBotId: message.authorBotId,
 		authorAccountId: message.authorAccountId,
 		authorName: message.authorName,
+		writtenFrom: message.writtenFrom,
 	}
 	targetsByMessage.set(message, target)
 	return target

@@ -127,7 +127,7 @@ export const selectIsFirstLoadPending = (
 
 export type LastWordAuthor = Pick<
 	TranscriptMessage,
-	"authorAccountId" | "authorName"
+	"authorAccountId" | "authorName" | "writtenFrom"
 >
 
 export type LastWord = {

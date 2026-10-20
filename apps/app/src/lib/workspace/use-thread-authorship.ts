@@ -2,7 +2,6 @@ import { useMemo } from "react"
 
 import type { WorkspaceCore } from "./use-workspace-core"
 
-import { storedOwnAccounts } from "../account/own-accounts"
 import { signedInAccountIdOf } from "../account/use-account"
 import type { SpaceHost, ThreadAuthorship } from "../chat/thread-authorship"
 import { NO_JOINED_MEMBERS } from "../spaces/joined-space-members"
@@ -25,7 +24,7 @@ export const useThreadAuthorship = ({
 	return useMemo(() => {
 		const host: SpaceHost = open
 			? { kind: "joined", members }
-			: { kind: "hosted", ownAccountIds: storedOwnAccounts.list() }
+			: { kind: "hosted" }
 		return { accountId, host }
 	}, [accountId, open, members])
 }

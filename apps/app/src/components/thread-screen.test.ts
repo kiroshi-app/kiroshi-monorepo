@@ -1943,6 +1943,7 @@ describe("ThreadScreen", () => {
 			content: "ship it",
 			authorAccountId: "account-tom",
 			authorName: "Tom",
+			writtenFrom: "relay",
 		})
 		const thread = threadOf({
 			id: "bot-1",

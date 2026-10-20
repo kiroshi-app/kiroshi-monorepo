@@ -4,7 +4,6 @@ import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 import type { WorkspaceCore } from "./use-workspace-core"
 
-import { storedOwnAccounts } from "../account/own-accounts"
 import { signedInAccountIdOf } from "../account/use-account"
 import {
 	type PersonOf,
@@ -27,10 +26,7 @@ export const useSpacePersonOf = ({
 	const unnamed = useChatCopy()("working.name")
 
 	return useMemo(() => {
-		const hosted: SpaceHost = {
-			kind: "hosted",
-			ownAccountIds: storedOwnAccounts.list(),
-		}
+		const hosted: SpaceHost = { kind: "hosted" }
 		const hostsByRowId = new Map<string, SpaceHost>(
 			joined.map(({ id }, index) => [
 				joinedRowIdOf(id),
