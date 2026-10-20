@@ -41,6 +41,7 @@ import {
 	HOSTING_MEMBERS_CHANGED_EVENT,
 	JOINED_SPACE_MEMBERS_CHANGED_EVENT,
 	type Member,
+	type MembersError,
 	type SpaceInvitation,
 } from "../bindings"
 import { useInvalidateOnHostEvent } from "../query/host-invalidations"
@@ -84,6 +85,8 @@ const NO_MEMBERS: HostedMember[] = []
 const NOT_REFUSED: MemberActionRefusal = {}
 
 type InviteAgainRun = { spaceId: string; member: HostedMember }
+
+const HOST_NOT_REMOVABLE: MembersError = { kind: "hostNotRemovable" }
 
 const withdrawnNotice = (member: Member): NoticeMessage => ({
 	title: i18n.t("settings:space.members.withdrawn", { email: member.email }),
@@ -156,9 +159,16 @@ export const useMembers = (
 			hostQueryKeys.membersOf(spaceId),
 		) ?? NO_MEMBERS
 
+	const isJoinedHost = (member: Member | null): member is Member =>
+		joinedId !== undefined && member?.status === "host"
+
 	const memberAction = useMutation({
-		mutationFn: (run: MemberAction) =>
-			membersAfter(transport, run, heldMembers(run.spaceId)),
+		mutationFn: async (run: MemberAction) => {
+			if (run.action === "remove" && isJoinedHost(run.member)) {
+				throw HOST_NOT_REMOVABLE
+			}
+			return membersAfter(transport, run, heldMembers(run.spaceId))
+		},
 		onSuccess: (answered, run) => {
 			queryClient.setQueryData(hostQueryKeys.membersOf(run.spaceId), answered)
 			const reportSentTo = (email: string) => {
@@ -220,6 +230,10 @@ export const useMembers = (
 		if (watchedId) memberAction.mutate(run(watchedId))
 	}
 
+	const removalOf =
+		(member: Member) =>
+		(spaceId: string): MemberAction => ({ action: "remove", spaceId, member })
+
 	if (!shownSpace) return undefined
 	return {
 		members: isHosted ? members.map(rowOf) : [],
@@ -234,7 +248,14 @@ export const useMembers = (
 		refusal,
 		failure,
 		removing: removing ? toSpaceMember(removing) : null,
-		onRemove: (member) => setRemoving(memberOf(member.id) ?? null),
+		onRemove: (member) => {
+			const asked = memberOf(member.id) ?? null
+			if (isJoinedHost(asked)) {
+				runOnWatched(removalOf(asked))
+				return
+			}
+			setRemoving(asked)
+		},
 		onWithdraw: (member) => {
 			const withdrawn = memberOf(member.id)
 			if (withdrawn) {
@@ -248,11 +269,7 @@ export const useMembers = (
 		onRemoveConfirm: () => {
 			if (!removing) return
 			setRemoving(null)
-			runOnWatched((spaceId) => ({
-				action: "remove",
-				spaceId,
-				member: removing,
-			}))
+			runOnWatched(removalOf(removing))
 		},
 		onInviteAgain: (member) => {
 			const invited = memberOf(member.id)
