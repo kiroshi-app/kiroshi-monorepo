@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use reqwest::{Client, RequestBuilder, StatusCode, Url};
+use reqwest::{Client, Method, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -293,8 +293,10 @@ pub struct CloudRosterMember {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudDevice {
+	#[serde(rename = "id")]
 	pub device_id: String,
 	pub user_id: String,
+	pub status: DeviceStatus,
 	pub ed25519_public_key: String,
 	pub x25519_public_key: String,
 }
@@ -747,7 +749,7 @@ impl Cloud {
 	) -> Result<Vec<CloudMember>, MemberCallError> {
 		let members = self.members_url(instance_id);
 		let answered = self.reached(|client| client.get(members).bearer_auth(bearer)).await?;
-		let answered = member_call_answered(answered).await?;
+		let answered = member_call_answered(Method::GET, answered).await?;
 		answered.json::<Vec<CloudMember>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
@@ -758,7 +760,7 @@ impl Cloud {
 	) -> Result<Vec<CloudRosterMember>, MemberCallError> {
 		let roster = self.at(&format!("{INSTANCES_PATH}/{instance_id}/roster"));
 		let answered = self.reached(|client| client.get(roster).bearer_auth(bearer)).await?;
-		let answered = member_call_answered(answered).await?;
+		let answered = member_call_answered(Method::GET, answered).await?;
 		answered.json::<Vec<CloudRosterMember>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
@@ -768,14 +770,17 @@ impl Cloud {
 		instance_id: &str,
 		email: &str,
 	) -> Result<(), MemberCallError> {
-		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
+		let members = self.members_url(instance_id);
 		let body = json!({ "email": email });
 		let answered =
-			self.reached(|client| client.post(invitations).bearer_auth(bearer).json(&body)).await?;
-		if answered.status() == StatusCode::BAD_REQUEST {
-			return Err(MemberCallError::InvalidEmail);
+			self.reached(|client| client.post(members).bearer_auth(bearer).json(&body)).await?;
+		match member_call_answered(Method::POST, answered).await {
+			Err(MemberCallError::Unreachable {
+				reason: UnreachableReason::RelayStatus { status: 400 },
+				..
+			}) => Err(MemberCallError::InvalidEmail),
+			answered => answered.map(drop),
 		}
-		member_call_answered(answered).await.map(drop)
 	}
 
 	pub async fn sent_invitations(
@@ -785,7 +790,7 @@ impl Cloud {
 	) -> Result<Vec<SpaceInvitation>, MemberCallError> {
 		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
 		let answered = self.reached(|client| client.get(invitations).bearer_auth(bearer)).await?;
-		let answered = member_call_answered(answered).await?;
+		let answered = member_call_answered(Method::GET, answered).await?;
 		let sent = answered
 			.json::<Vec<SentInvitation>>()
 			.await
@@ -801,7 +806,7 @@ impl Cloud {
 	) -> Result<(), MemberCallError> {
 		let invitation = self.sent_invitation_url(instance_id, &[invitation_id])?;
 		let answered = self.reached(|client| client.delete(invitation).bearer_auth(bearer)).await?;
-		invitation_answered(answered).await
+		invitation_answered(Method::DELETE, answered).await
 	}
 
 	pub async fn resend_invitation(
@@ -812,7 +817,7 @@ impl Cloud {
 	) -> Result<(), MemberCallError> {
 		let resend = self.sent_invitation_url(instance_id, &[invitation_id, "resend"])?;
 		let answered = self.reached(|client| client.post(resend).bearer_auth(bearer)).await?;
-		invitation_answered(answered).await
+		invitation_answered(Method::POST, answered).await
 	}
 
 	pub async fn devices(
@@ -822,7 +827,7 @@ impl Cloud {
 	) -> Result<Vec<CloudDevice>, MemberCallError> {
 		let devices = self.at(&format!("{INSTANCES_PATH}/{instance_id}{DEVICES_PATH}"));
 		let answered = self.reached(|client| client.get(devices).bearer_auth(bearer)).await?;
-		let answered = member_call_answered(answered).await?;
+		let answered = member_call_answered(Method::GET, answered).await?;
 		answered.json::<Vec<CloudDevice>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
@@ -843,7 +848,7 @@ impl Cloud {
 		if answered.status() == StatusCode::NOT_FOUND {
 			return Err(MemberCallError::UnknownMember);
 		}
-		member_call_answered(answered).await.map(drop)
+		member_call_answered(Method::DELETE, answered).await.map(drop)
 	}
 
 	pub async fn leave_instance(
@@ -1073,35 +1078,53 @@ async fn device_call_answered(
 }
 
 async fn member_call_answered(
+	method: Method,
 	answered: reqwest::Response,
 ) -> Result<reqwest::Response, MemberCallError> {
-	match answered.status() {
-		StatusCode::UNAUTHORIZED => Err(MemberCallError::Revoked),
-		StatusCode::FORBIDDEN => Err(MemberCallError::Forbidden),
-		StatusCode::CONFLICT => Err(conflicted(answered).await),
-		status if status.is_success() => Ok(answered),
-		status => Err(MemberCallError::Unreachable {
+	let status = answered.status();
+	if status.is_success() {
+		return Ok(answered);
+	}
+	let path = answered.url().path().to_owned();
+	let body = answered.text().await.map_err(|error| error.without_url().to_string());
+	log::warn!("the relay answered {method} {path} with {status}: {}", shown(&body));
+	Err(member_refusal(status, body))
+}
+
+fn member_refusal(status: StatusCode, body: Result<String, String>) -> MemberCallError {
+	match status {
+		StatusCode::UNAUTHORIZED => MemberCallError::Revoked,
+		StatusCode::FORBIDDEN => MemberCallError::Forbidden,
+		StatusCode::CONFLICT => conflicted(body),
+		status => MemberCallError::Unreachable {
 			reason: UnreachableReason::RelayStatus { status: status.as_u16() },
-			detail: refusal_detail(answered).await,
-		}),
+			detail: shown(&body),
+		},
 	}
 }
 
-async fn invitation_answered(answered: reqwest::Response) -> Result<(), MemberCallError> {
+fn shown(body: &Result<String, String>) -> String {
+	match body {
+		Ok(body) => bounded(body),
+		Err(error) => format!("the body did not read: {error}"),
+	}
+}
+
+async fn invitation_answered(
+	method: Method,
+	answered: reqwest::Response,
+) -> Result<(), MemberCallError> {
 	if answered.status() == StatusCode::NOT_FOUND {
 		return Err(MemberCallError::UnknownInvitation);
 	}
-	member_call_answered(answered).await.map(drop)
+	member_call_answered(method, answered).await.map(drop)
 }
 
-async fn conflicted(answered: reqwest::Response) -> MemberCallError {
-	let body = match answered.text().await {
+fn conflicted(body: Result<String, String>) -> MemberCallError {
+	let body = match body {
 		Ok(body) => body,
 		Err(error) => {
-			return unreadable_conflict(format!(
-				"the conflict body did not read: {}",
-				error.without_url()
-			))
+			return unreadable_conflict(format!("the conflict body did not read: {error}"))
 		}
 	};
 	let refusal = match serde_json::from_str::<Refusal>(&body) {
@@ -1125,13 +1148,6 @@ fn unreadable_conflict(detail: String) -> MemberCallError {
 	MemberCallError::Unreachable { reason: UnreachableReason::UnreadableConflict, detail }
 }
 
-async fn refusal_detail(answered: reqwest::Response) -> String {
-	match answered.text().await {
-		Ok(body) => bounded(&body),
-		Err(error) => format!("the body did not read: {}", error.without_url()),
-	}
-}
-
 fn bounded(body: &str) -> String {
 	let mut end = body.len().min(REFUSAL_DETAIL_BOUND);
 	while !body.is_char_boundary(end) {
@@ -1151,8 +1167,9 @@ fn successful(answered: reqwest::Response) -> Result<reqwest::Response, String> 
 #[cfg(test)]
 mod tests {
 	use std::net::Ipv4Addr;
+	use std::sync::{Arc, Mutex};
 
-	use axum::http::StatusCode as Answered;
+	use axum::http::{Method as Asked, StatusCode as Answered, Uri};
 	use axum::Router;
 	use tokio::net::TcpListener;
 
@@ -1164,18 +1181,88 @@ mod tests {
 	async fn answering(status: u16, body: &str) -> Cloud {
 		let status = Answered::from_u16(status).expect("a valid status");
 		let body = body.to_owned();
-		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the fake binds");
-		let address = listener.local_addr().expect("the fake is named");
-		let router = Router::new().fallback(move || {
+		serving(Router::new().fallback(move || {
 			let body = body.clone();
 			async move { (status, body) }
-		});
+		}))
+		.await
+	}
+
+	async fn serving(router: Router) -> Cloud {
+		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the fake binds");
+		let address = listener.local_addr().expect("the fake is named");
 		tokio::spawn(async move { axum::serve(listener, router).await.expect("the fake serves") });
 		Cloud::new(&format!("http://{address}"))
 	}
 
 	async fn invited(status: u16, body: &str) -> Result<(), MemberCallError> {
 		answering(status, body).await.invite_member("bearer", INSTANCE, "ada@example.com").await
+	}
+
+	#[tokio::test]
+	async fn an_invite_posts_its_email_to_the_members_route_the_relay_serves() {
+		let received = Arc::new(Mutex::new(Vec::new()));
+		let recorded = Arc::clone(&received);
+		let cloud = serving(Router::new().fallback(move |method: Asked, uri: Uri, body: String| {
+			let recorded = Arc::clone(&recorded);
+			async move {
+				recorded.lock().expect("the record").push(format!("{method} {} {body}", uri.path()));
+				let invitation = r#"{"id":"0b6f7d2e-3c4a-4e5f-8a9b-1c2d3e4f5a6b","email":"ada@example.com","sentAt":"2026-10-20T15:55:00.000Z","expiresAt":"2026-10-27T15:55:00.000Z","invitationEmail":"sent"}"#;
+				(Answered::CREATED, invitation)
+			}
+		}))
+		.await;
+
+		let invited = cloud.invite_member("bearer", INSTANCE, "ada@example.com").await;
+
+		assert_eq!(invited, Ok(()));
+		assert_eq!(
+			*received.lock().expect("the record"),
+			vec![format!(r#"POST /instances/{INSTANCE}/members {{"email":"ada@example.com"}}"#)]
+		);
+	}
+
+	#[tokio::test]
+	async fn the_device_list_decodes_the_body_the_relay_answers() {
+		let body = r#"[
+			{"id":"7c9e6679-7425-40de-944b-e07fc1f90ae7","userId":"9b2e1c4a-5d6f-4a7b-8c9d-0e1f2a3b4c5d","status":"approved","ed25519PublicKey":"ed-of-the-host","x25519PublicKey":"x-of-the-host"},
+			{"id":"1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b","userId":"3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f","status":"pending","ed25519PublicKey":"ed-of-the-member","x25519PublicKey":"x-of-the-member"}
+		]"#;
+
+		let listed = answering(200, body).await.devices("bearer", INSTANCE).await;
+
+		let listed = listed.expect("the relay device list decodes");
+		let read: Vec<_> = listed
+			.iter()
+			.map(|device| {
+				(
+					device.device_id.as_str(),
+					device.user_id.as_str(),
+					device.status,
+					device.ed25519_public_key.as_str(),
+					device.x25519_public_key.as_str(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			read,
+			vec![
+				(
+					"7c9e6679-7425-40de-944b-e07fc1f90ae7",
+					"9b2e1c4a-5d6f-4a7b-8c9d-0e1f2a3b4c5d",
+					DeviceStatus::Approved,
+					"ed-of-the-host",
+					"x-of-the-host",
+				),
+				(
+					"1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a5b",
+					"3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+					DeviceStatus::Pending,
+					"ed-of-the-member",
+					"x-of-the-member",
+				),
+			]
+		);
 	}
 
 	#[tokio::test]

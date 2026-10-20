@@ -12,6 +12,7 @@ use super::roster::{self, signed_row, Enrolled, Rostered};
 use super::Hosting;
 use crate::account::cloud::CloudDevice;
 use crate::crypto::device_keys::{DeviceId, DeviceKeys};
+use crate::devices::contract::DeviceStatus;
 use crate::spaces::contract::SpaceError;
 
 struct ListedDevice {
@@ -142,7 +143,7 @@ async fn device_list<R: Runtime>(
 		.devices(&bearer, instance_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	Ok(listed)
+	Ok(listed.into_iter().filter(|device| device.status == DeviceStatus::Approved).collect())
 }
 
 fn well_formed(device: &CloudDevice) -> Option<ListedDevice> {

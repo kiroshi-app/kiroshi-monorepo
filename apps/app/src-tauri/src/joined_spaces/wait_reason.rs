@@ -5,6 +5,7 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 
 use super::contract::{JoinedSpaceError, JoinedSpaceWait, JoinedSpaceWaitReason};
 use super::relay::RelayGuests;
+use crate::hosting::relay::Departure;
 
 #[derive(Debug)]
 pub(super) enum Stall {
@@ -16,6 +17,7 @@ pub(super) enum Stall {
 	Silent(Duration),
 	PongMissing(Duration),
 	Closed(Option<CloseFrame>),
+	Departed(Departure),
 	SocketFailed(String),
 	SocketEnded,
 	RekeyDropped(JoinedSpaceError),
@@ -53,6 +55,14 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 		Stall::Closed(frame) => {
 			(Reason::SocketClosed, format!("the relay closed the socket: {frame:?}"))
 		}
+		Stall::Departed(Departure::SpaceDeleted) => (
+			Reason::UnknownInstance,
+			"the relay closed the socket: the space was deleted (4007)".to_owned(),
+		),
+		Stall::Departed(Departure::MemberRemoved | Departure::MemberLeft) => (
+			Reason::NotMember,
+			"the relay closed the socket: the membership ended (4003)".to_owned(),
+		),
 		Stall::SocketFailed(detail) => {
 			(Reason::SocketClosed, format!("the socket failed: {detail}"))
 		}
@@ -130,6 +140,8 @@ mod tests {
 			(Stall::Silent(Duration::from_secs(15)), Reason::HostSilent),
 			(Stall::PongMissing(Duration::from_secs(90)), Reason::SocketClosed),
 			(Stall::Closed(Some(absent)), Reason::SocketClosed),
+			(Stall::Departed(Departure::SpaceDeleted), Reason::UnknownInstance),
+			(Stall::Departed(Departure::MemberRemoved), Reason::NotMember),
 			(Stall::SocketFailed("reset".to_owned()), Reason::SocketClosed),
 			(Stall::SocketEnded, Reason::SocketClosed),
 			(Stall::RekeyDropped(JoinedSpaceError::BadSignature), Reason::RekeyNotVerified),

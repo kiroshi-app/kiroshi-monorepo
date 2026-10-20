@@ -58,11 +58,14 @@ const POLL_EVERY: Duration = Duration::from_millis(50);
 const HOST_ANSWER_BOUND: Duration = Duration::from_secs(2);
 const RESEND_EVERY: Duration = Duration::from_millis(200);
 const HOST_ABSENT: u16 = 4002;
+const MEMBERSHIP_ENDED: u16 = 4003;
+const SPACE_DELETED: u16 = 4007;
 const BEFORE_THE_NEXT_MEMBERS_READ: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 enum HostSide {
 	Absent,
+	Closing(u16),
 	Silent,
 	Answering(String),
 	GreetingAfterRead { frames: Vec<String>, reads: usize },
@@ -74,6 +77,7 @@ struct Room {
 	host: HostSide,
 	joins: Vec<Value>,
 	connections: usize,
+	socket_devices: Vec<String>,
 	other_memberships: Vec<Value>,
 	roster_reads: usize,
 	member_refusal: Option<(StatusCode, Value)>,
@@ -90,6 +94,7 @@ impl Relay {
 			host: HostSide::Absent,
 			joins: Vec::new(),
 			connections: 0,
+			socket_devices: Vec::new(),
 			other_memberships: Vec::new(),
 			roster_reads: 0,
 			member_refusal: None,
@@ -257,17 +262,25 @@ async fn invitation_accepted(
 
 async fn member_socket(
 	Served(relay): Served<Relay>,
+	RawQuery(query): RawQuery,
 	headers: HeaderMap,
 	upgrade: WebSocketUpgrade,
 ) -> Response {
 	if !is_member(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
+	let Some(device) = device_of(query.as_deref()) else {
+		return StatusCode::BAD_REQUEST.into_response();
+	};
 	let refusal = relay.room().member_refusal.clone();
 	if let Some((status, body)) = refusal {
 		return answered_json(status, body);
 	}
-	relay.room().connections += 1;
+	{
+		let mut room = relay.room();
+		room.connections += 1;
+		room.socket_devices.push(device);
+	}
 	upgrade.on_upgrade(move |socket| membered(relay, socket))
 }
 
@@ -299,6 +312,7 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				let close = CloseFrame { code: HOST_ABSENT, reason: "".into() };
 				Message::Close(Some(close))
 			}
+			HostSide::Closing(code) => Message::Close(Some(CloseFrame { code, reason: "".into() })),
 			HostSide::Silent | HostSide::GreetingAfterRead { .. } => continue,
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
@@ -850,6 +864,52 @@ fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
 }
 
 #[test]
+fn a_waiting_join_opens_its_member_socket_on_its_relay_device_and_sends_a_v2_missed_rekey_first() {
+	run(async {
+		let member = Member::new("join-handshake").await;
+		member.relay.hosting(HostSide::Silent);
+		member.accepted().await.expect("the join waits");
+		relay::reconciled(member.app.handle()).await;
+		until("the waiting socket", || async { (member.relay.connections() >= 2).then_some(()) })
+			.await;
+
+		let room = member.relay.room();
+		assert!(room.socket_devices.iter().all(|device| device == MEMBER_RELAY_ID));
+		assert!(!room.joins.is_empty());
+		assert!(room.joins.iter().all(|frame| frame["v"] == 2 && is_missed_rekey(frame)));
+	});
+}
+
+#[test]
+fn a_waiting_socket_the_relay_closes_as_deleted_or_ended_evicts_the_space_and_retries_no_more() {
+	for (code, reason) in [(SPACE_DELETED, "deleted"), (MEMBERSHIP_ENDED, "removed")] {
+		run(async {
+			let member = Member::new(&format!("join-closed-{code}")).await;
+			let removed = heard_on(&member.app, REMOVED_EVENT);
+			member.relay.hosting(HostSide::Silent);
+			let joined = member.accepted().await.expect("the join waits");
+			relay::reconciled(member.app.handle()).await;
+			let was_waiting = member.is_waiting(&joined.id);
+
+			member.relay.hosting(HostSide::Closing(code));
+			until("the entry removed", || async { member.listed().await.is_empty().then_some(()) })
+				.await;
+			let connections = member.relay.connections();
+			tokio::time::sleep(Duration::from_millis(1500)).await;
+
+			assert!(was_waiting, "{code}");
+			assert!(!member.is_waiting(&joined.id), "{code}");
+			assert_eq!(member.relay.connections(), connections, "{code}");
+			assert_eq!(
+				*removed.lock().expect("the events"),
+				vec![json!({ "id": joined.id, "name": "Studio", "reason": reason })],
+				"{code}"
+			);
+		});
+	}
+}
+
+#[test]
 fn a_waiting_join_that_ended_signed_out_starts_again_on_the_next_reconciliation() {
 	run(async {
 		let member = Member::new("join-ended").await;
@@ -998,8 +1058,9 @@ async fn admitting_devices_listed(Served(relay): Served<AdmittingRelay>) -> Resp
 		.filter(|(_, account, _)| *account == "owner" || admission.is_accepted)
 		.map(|(id, account, body)| {
 			json!({
-				"deviceId": id,
+				"id": id,
 				"userId": account,
+				"status": "approved",
 				"ed25519PublicKey": body["ed25519PublicKey"],
 				"x25519PublicKey": body["x25519PublicKey"],
 			})

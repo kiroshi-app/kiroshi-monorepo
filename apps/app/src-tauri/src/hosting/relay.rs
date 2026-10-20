@@ -392,18 +392,29 @@ pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
 		return Opened::Revoked;
 	};
 	request.headers_mut().insert(header::AUTHORIZATION, authorization);
+	let path = request.uri().path().to_owned();
 	installed_tls_provider();
 	match timeout(CONNECT_BOUND, connect_async(request)).await {
 		Err(_) => Opened::Unreachable(format!("the relay did not answer within {CONNECT_BOUND:?}")),
 		Ok(Ok((socket, _))) => Opened::Socket(Box::new(socket)),
-		Ok(Err(SocketError::Http(response))) => match response.status() {
-			StatusCode::UNAUTHORIZED => Opened::Revoked,
-			StatusCode::FORBIDDEN => Opened::Forbidden,
-			StatusCode::NOT_FOUND => Opened::Unknown,
-			StatusCode::GONE => Opened::Gone(departure(response.body().as_deref())),
-			status => Opened::Unreachable(format!("the relay answered {status}")),
-		},
+		Ok(Err(SocketError::Http(response))) => {
+			refused(&path, response.status(), response.body().as_deref())
+		}
 		Ok(Err(error)) => Opened::Unreachable(format!("the relay could not be reached: {error}")),
+	}
+}
+
+fn refused(path: &str, status: StatusCode, body: Option<&[u8]>) -> Opened {
+	log::warn!(
+		"the relay answered GET {path} with {status}: {:?}",
+		body.map(String::from_utf8_lossy)
+	);
+	match status {
+		StatusCode::UNAUTHORIZED => Opened::Revoked,
+		StatusCode::FORBIDDEN => Opened::Forbidden,
+		StatusCode::NOT_FOUND => Opened::Unknown,
+		StatusCode::GONE => Opened::Gone(departure(body)),
+		status => Opened::Unreachable(format!("the relay answered {status}")),
 	}
 }
 
