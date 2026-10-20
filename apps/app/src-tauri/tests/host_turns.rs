@@ -14,7 +14,7 @@ use axum::Router;
 use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
-use kiroshi_app::agent::commands::{agent_cancel_turn, terminate_session};
+use kiroshi_app::agent::commands::{agent_cancel_turn, shutdown_session, terminate_session};
 use kiroshi_app::agent::contract::RuntimeScope;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
@@ -783,6 +783,38 @@ fn a_stop_starts_none_of_the_companions_still_awaited_in_the_turn() {
 
 		assert_eq!(stop["status"], json!(200), "{stop}");
 		host.stopped_after_a_handover(heard_before_stop).await;
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_send() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("speaker-shut-down", "room_lead_held").await;
+
+		host.send_turn(sent("p1", "t1", "both of you, please"), &[ADA, GRACE]).await;
+		host.turn_ended_for(GRACE).await;
+		host.speaking(ADA).await;
+		let held: RuntimeScope =
+			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
+		shutdown_session(&host.app.state::<AgentState>(), &held).await;
+		host.turn_ended_for(ADA).await;
+
+		let ada_ended: Vec<Value> = host
+			.agent_events(ADA)
+			.into_iter()
+			.filter(|event| event["type"] == "turnEnded")
+			.collect();
+		assert_eq!(ada_ended.len(), 1, "heard {ada_ended:#?}");
+		assert_eq!(ada_ended[0]["ended"]["outcome"], json!("cancelled"));
+		assert!(
+			host.completed_at("t1").await.is_some(),
+			"the turn of the shut session was left open"
+		);
+		assert_eq!(host.runs_of("t1").await, 0, "a run of the shut session was kept");
+		let next = host.send_turn(sent("p2", "t2", "and now?"), &[GRACE]).await;
+		assert_eq!(next["status"], json!(200), "the shut session still holds the room: {next}");
 		host.quit().await;
 	});
 }

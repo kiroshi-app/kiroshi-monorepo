@@ -4,14 +4,15 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use chrono::{DateTime, Utc};
 use tauri::{AppHandle, Manager, Runtime};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use super::contract::{
 	AgentEvent, AskedQuestion, ChatMessage, EventTurn, MessageCompletion, MessageRole,
-	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TurnOutcome, TurnState,
+	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnOutcome,
+	TurnState,
 };
-use super::session::EventSink;
+use super::session::{Drained, EventSink};
 use super::translate::now_ms;
 use crate::attachments::attachment_block;
 use crate::conversations::commands::{announce_conversation, ready};
@@ -115,6 +116,7 @@ enum Entry {
 	Submitted(SubmittedTurn),
 	Withdrawn,
 	Event(AgentEvent),
+	Drained(oneshot::Sender<()>),
 }
 
 pub trait TurnSink: Send + Sync + 'static {
@@ -166,6 +168,18 @@ impl EventSink for ReplyWriter {
 	fn withdrawn(&self) {
 		self.queue(Entry::Withdrawn);
 	}
+
+	fn drained(&self) -> Drained {
+		let (written, drained) = oneshot::channel();
+		self.queue(Entry::Drained(written));
+		Box::pin(async move {
+			if drained.await.is_err() {
+				log::warn!(
+					"the reply writer of this run stopped before it wrote what it was handed"
+				);
+			}
+		})
+	}
 }
 
 async fn write_then_forward<R: Runtime>(
@@ -180,6 +194,11 @@ async fn write_then_forward<R: Runtime>(
 				let turn = desk.open_turn_named();
 				desk.record(&event).await;
 				desk.inner.emit(event, turn);
+			}
+			Entry::Drained(written) => {
+				if written.send(()).is_err() {
+					log::warn!("a shutdown stopped waiting for the reply writer of its run");
+				}
 			}
 		}
 	}
@@ -411,6 +430,11 @@ impl<R: Runtime> Desk<R> {
 		};
 		if let Err(error) = self.store.end_run(&turn.id, handed_to).await {
 			self.store.report(&turn.id, &error);
+			let detail = format!("the end of turn {} could not be written: {error:?}", turn.id);
+			self.inner.emit(
+				AgentEvent::Failed { error: TransportError::WriteFailed { detail } },
+				Some(self.named(&turn.id)),
+			);
 		}
 	}
 }
@@ -1320,6 +1344,40 @@ mod tests {
 		std::iter::once(Entry::Submitted(submitted("t1", "p1")))
 			.chain(events.iter().cloned().map(Entry::Event))
 			.collect()
+	}
+
+	#[tokio::test]
+	async fn a_run_whose_end_fails_to_persist_tells_the_failure_before_the_turn_ends() {
+		let written = Written::new("end-unpersisted").await;
+		written.prompt("t1", "p1").await;
+		written
+			.database()
+			.messages()
+			.call(|connection| {
+				Ok(connection.execute(
+					"CREATE TRIGGER refused BEFORE DELETE ON turn_runs BEGIN SELECT RAISE(ABORT, 'refused'); END",
+					[],
+				)?)
+			})
+			.await
+			.expect("the trigger lands");
+
+		let heard = written.forwarded_with_turns(entries_of(&[turn_ended()])).await;
+
+		let named = Some(EventTurn {
+			turn_id: "t1".to_owned(),
+			conversation_id: written.conversation_id.clone(),
+		});
+		assert_eq!(heard.len(), 2, "heard {heard:#?}");
+		assert!(
+			matches!(
+				&heard[0],
+				(AgentEvent::Failed { error: TransportError::WriteFailed { detail } }, turn)
+					if detail.contains("t1") && turn == &named
+			),
+			"heard {heard:#?}"
+		);
+		assert_eq!(heard[1], (turn_ended(), named));
 	}
 
 	#[tokio::test]
