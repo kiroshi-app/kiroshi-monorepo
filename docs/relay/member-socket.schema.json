@@ -2951,6 +2951,23 @@
       ],
       "type": "object"
     },
+    "HostingFailureKind": {
+      "enum": [
+        "notOwner",
+        "instanceUnknownAfterReregistration",
+        "instanceGoneAfterReregistration",
+        "deviceRefused",
+        "deviceAwaitingApproval",
+        "deviceKeysNotLoaded",
+        "spaceKeyNotRead",
+        "localHostApiNotListening",
+        "accountSessionStoreFailed",
+        "takenOverByAnotherHost",
+        "sealingFailed",
+        "localEventStreamClosed",
+        "databaseUnavailable"
+      ]
+    },
     "HostingState": {
       "anyOf": [
         {
@@ -2988,16 +3005,20 @@
         },
         {
           "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "failure": {
+              "$ref": "#/$defs/HostingFailureKind"
+            },
             "kind": {
               "const": "failed"
-            },
-            "reason": {
-              "type": "string"
             }
           },
           "required": [
             "kind",
-            "reason"
+            "failure",
+            "detail"
           ],
           "type": "object"
         },

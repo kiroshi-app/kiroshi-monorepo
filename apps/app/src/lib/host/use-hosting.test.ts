@@ -43,7 +43,11 @@ const OFF: HostingState = { kind: "off" }
 
 const ONLINE: HostingState = { kind: "online" }
 
-const DROPPED: HostingState = { kind: "failed", reason: "relay closed" }
+const DROPPED: HostingState = {
+	kind: "failed",
+	failure: "takenOverByAnotherHost",
+	detail: "relay closed",
+}
 
 const COULDNT_HOST_HOME: NoticeMessage = {
 	title: "Couldn’t host Home",
@@ -153,7 +157,14 @@ describe("useHosting", () => {
 		[{ kind: "connecting" }, "connecting"],
 		[{ kind: "online" }, "online"],
 		[{ kind: "needsSignIn" }, "signed-out"],
-		[{ kind: "failed", reason: "relay closed" }, "off"],
+		[
+			{
+				kind: "failed",
+				failure: "takenOverByAnotherHost",
+				detail: "relay closed",
+			},
+			"off",
+		],
 	] as const)("maps %o to %s", async (state, hosting) => {
 		const { result } = renderHosting(HOME)
 		await settle()

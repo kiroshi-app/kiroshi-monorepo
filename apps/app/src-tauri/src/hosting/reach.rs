@@ -510,7 +510,7 @@ impl GuestEvents {
 	}
 
 	fn kept_off(&self, event: &str, reason: &str) -> bool {
-		eprintln!(
+		log::warn!(
 			"the event {event} was kept off the relay of space {}: {reason}",
 			self.shared_space_id
 		);
@@ -623,7 +623,7 @@ impl<R: Runtime> Lookup<'_, R> {
 	}
 
 	fn unresolved(&self, kind: SpaceChild, failure: &DatabaseError) -> Option<bool> {
-		eprintln!(
+		log::warn!(
 			"the relayed {} was refused: the {kind:?} lookup in shared space {} failed: {failure:?}",
 			self.relayed, self.shared_space_id
 		);

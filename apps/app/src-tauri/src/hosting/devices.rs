@@ -181,7 +181,7 @@ async fn rotated<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Result<(), M
 		let next = HeldSpaceKey::under(next_id)
 			.map_err(|failure| not_rotated(format!("no space key was generated: {failure:?}")))?;
 		wire::space_key_stored(app, &space_keys, space_id, next).await.map_err(not_rotated)?;
-		eprintln!("hosted space {space_id} rotated its space key to key_id {next_id}");
+		log::info!("hosted space {space_id} rotated its space key to key_id {next_id}");
 	}
 	database_of(app)?
 		.space_relay()

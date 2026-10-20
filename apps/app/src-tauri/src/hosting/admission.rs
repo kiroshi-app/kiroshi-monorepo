@@ -62,7 +62,7 @@ pub(super) async fn admitted<R: Runtime>(
 			devices::device_left(&app, &space_id, &unlisted.relay_device_id, &unlisted.account_id)
 				.await?;
 		if let Revocation::Ignored(reason) = revocation {
-			eprintln!(
+			log::warn!(
 				"hosted space {space_id} kept unlisted device {}: {reason}",
 				unlisted.device_id
 			);
@@ -70,7 +70,7 @@ pub(super) async fn admitted<R: Runtime>(
 	}
 	if !settled.admitted.is_empty() || !settled.unlisted.is_empty() {
 		if let Err(failure) = members::read_back(&app, &space_id, &instance_id).await {
-			eprintln!("hosted space {space_id} announced no member list: {failure:?}");
+			log::warn!("hosted space {space_id} announced no member list: {failure:?}");
 		}
 	}
 	Ok(settled.admitted)
@@ -86,13 +86,13 @@ async fn settled<R: Runtime>(
 	let listed = match device_list(app, instance_id).await {
 		Ok(listed) => listed,
 		Err(failure) => {
-			eprintln!("hosted space {space_id} changed no roster row: the device list did not read: {failure:?}");
+			log::warn!("hosted space {space_id} changed no roster row: the device list did not read: {failure:?}");
 			return Ok(None);
 		}
 	};
 	let devices: Vec<ListedDevice> = listed.iter().filter_map(well_formed).collect();
 	if !devices.iter().any(|device| device.device_id() == host.device_id()) {
-		eprintln!(
+		log::warn!(
 			"hosted space {space_id} changed no roster row: the device list omits the host device"
 		);
 		return Ok(None);
@@ -148,7 +148,7 @@ async fn device_list<R: Runtime>(
 fn well_formed(device: &CloudDevice) -> Option<ListedDevice> {
 	let listed = ListedDevice::of(device);
 	if listed.is_none() {
-		eprintln!(
+		log::warn!(
 			"the device list carried unreadable keys for relay device {}",
 			json!(device.device_id)
 		);
@@ -160,7 +160,7 @@ fn is_removed(space_id: &str, removed: &HashSet<String>, device: &ListedDevice) 
 	let device_id = device.device_id().to_string();
 	let is_removed = removed.contains(&device_id);
 	if is_removed {
-		eprintln!(
+		log::info!(
 			"hosted space {space_id} skipped device {device_id}: it was removed from the space"
 		);
 	}
@@ -176,7 +176,7 @@ fn is_held(space_id: &str, rostered: &[Rostered], device: &ListedDevice) -> bool
 		return false;
 	};
 	if !device.is_rostered_as(held) {
-		eprintln!(
+		log::warn!(
 			"hosted space {space_id} kept the roster row of device {} unchanged: the device list names relay device {} with other keys",
 			held.device_id,
 			json!(device.relay_device_id)
@@ -205,7 +205,7 @@ async fn enrolled<R: Runtime>(
 		.rostered(space_id.to_owned(), row)
 		.await
 		.map_err(SpaceError::from)?;
-	eprintln!(
+	log::info!(
 		"hosted space {space_id} admitted device {device_id} of account {} at relay device {}",
 		json!(device.account_id),
 		json!(device.relay_device_id)

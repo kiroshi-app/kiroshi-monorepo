@@ -6,6 +6,7 @@ use ed25519_dalek::Signature;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, Runtime};
 
+use super::contract::HostingFailureKind;
 use super::roster::{self, Rostered};
 use crate::crypto::commands::{CurrentSpaceKey, DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{DeviceId, DeviceKeys};
@@ -38,13 +39,27 @@ impl HostKeys {
 pub(super) async fn host_keys<R: Runtime>(
 	app: &AppHandle<R>,
 	space_id: &str,
-) -> Result<HostKeys, String> {
-	let device = app
-		.try_state::<DeviceKeysState>()
+) -> Result<HostKeys, (HostingFailureKind, String)> {
+	let device =
+		device_keys(app).map_err(|detail| (HostingFailureKind::DeviceKeysNotLoaded, detail))?;
+	let space = space_key(app, space_id)
+		.await
+		.map_err(|detail| (HostingFailureKind::SpaceKeyNotRead, detail))?;
+	Ok(HostKeys { device, space })
+}
+
+fn device_keys<R: Runtime>(app: &AppHandle<R>) -> Result<DeviceKeys, String> {
+	app.try_state::<DeviceKeysState>()
 		.ok_or_else(|| "the device keys are not loaded".to_owned())?
 		.keys()
 		.map(|keys| DeviceKeys::from_secret(&keys.secret()))
-		.map_err(|failure| format!("the device keys are unavailable: {failure:?}"))?;
+		.map_err(|failure| format!("the device keys are unavailable: {failure:?}"))
+}
+
+async fn space_key<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+) -> Result<CurrentSpaceKey, String> {
 	let space_keys = app
 		.try_state::<SpaceKeys>()
 		.ok_or_else(|| "the space key store is not loaded".to_owned())?;
@@ -54,14 +69,12 @@ pub(super) async fn host_keys<R: Runtime>(
 			.map_err(|failure| format!("the space key did not read: {failure:?}"))
 	};
 	if let Some(space) = watched(&space_keys)? {
-		return Ok(HostKeys { device, space });
+		return Ok(space);
 	}
 	let first = HeldSpaceKey::first()
 		.map_err(|failure| format!("no space key was generated: {failure:?}"))?;
 	space_key_stored(app, &space_keys, space_id, first).await?;
-	let space =
-		watched(&space_keys)?.ok_or_else(|| "the new space key did not read back".to_owned())?;
-	Ok(HostKeys { device, space })
+	watched(&space_keys)?.ok_or_else(|| "the new space key did not read back".to_owned())
 }
 
 pub(super) async fn space_key_stored<R: Runtime>(

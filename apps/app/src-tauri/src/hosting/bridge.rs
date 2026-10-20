@@ -164,7 +164,7 @@ pub(super) async fn bridged<R: Runtime>(
 	if let Err(refusal) =
 		reach::stays_in_the_shared_space(&app, &shared_space_id, &call.command, &call.args).await
 	{
-		eprintln!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
+		log::warn!("{}", reach::refusal_line(&call.command, &shared_space_id, &refusal));
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
 	let hosting = app.state::<Hosting>();
@@ -212,7 +212,7 @@ pub(super) async fn avatar_bridged<R: Runtime>(
 ) -> AvatarAnswer {
 	let state = app.state::<DatabaseState>();
 	let (Ok(database), Some(dir)) = (state.as_ref(), Avatars::dir(&app)) else {
-		eprintln!("a relayed avatar was not read: the database or the data directory is missing");
+		log::error!("a relayed avatar was not read: the database or the data directory is missing");
 		let frame =
 			answer(call.id, StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": AVATAR_UNREAD }));
 		return AvatarAnswer { frame, turn: turn.lock_owned().await };
@@ -239,7 +239,7 @@ async fn relayed_avatar(
 		},
 		Ok(false) => (StatusCode::NOT_FOUND, json!(NO_AVATAR)),
 		Err(failure) => {
-			eprintln!("a relayed avatar was not read: the avatar lookup failed: {failure:?}");
+			log::warn!("a relayed avatar was not read: the avatar lookup failed: {failure:?}");
 			(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": AVATAR_UNREAD }))
 		}
 	};

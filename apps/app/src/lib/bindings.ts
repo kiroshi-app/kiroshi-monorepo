@@ -871,7 +871,9 @@ export type HostingChanged = {
 	state: HostingState,
 };
 
-export type HostingState = { kind: "off" } | { kind: "connecting" } | { kind: "online" } | { kind: "failed"; reason: string } | { kind: "needsSignIn" };
+export type HostingFailureKind = "notOwner" | "instanceUnknownAfterReregistration" | "instanceGoneAfterReregistration" | "deviceRefused" | "deviceAwaitingApproval" | "deviceKeysNotLoaded" | "spaceKeyNotRead" | "localHostApiNotListening" | "accountSessionStoreFailed" | "takenOverByAnotherHost" | "sealingFailed" | "localEventStreamClosed" | "databaseUnavailable";
+
+export type HostingState = { kind: "off" } | { kind: "connecting" } | { kind: "online" } | { kind: "failed"; failure: HostingFailureKind; detail: string } | { kind: "needsSignIn" };
 
 export type Install = ({ kind: "nothing" }) & { fields?: never } | { kind: "key"; fields: InstallField[] } | ({ kind: "oauth" }) & { fields?: never } | {
 	kind: "refused",
