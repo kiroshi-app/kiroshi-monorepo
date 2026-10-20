@@ -17,6 +17,7 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::time::Instant;
 
 use super::commands::{
 	joined_space_connect, joined_space_remove, joined_spaces_list, CHANGED_EVENT, REMOVED_EVENT,
@@ -80,7 +81,13 @@ struct Room {
 	socket_devices: Vec<String>,
 	other_memberships: Vec<Value>,
 	roster_reads: usize,
+	me_reads: usize,
+	roster_delay: Duration,
+	rosters_in_flight: usize,
+	rosters_in_flight_at_most: usize,
 	member_refusal: Option<(StatusCode, Value)>,
+	retry_after: Option<&'static str>,
+	upgrades: Vec<Instant>,
 }
 
 #[derive(Clone)]
@@ -97,7 +104,13 @@ impl Relay {
 			socket_devices: Vec::new(),
 			other_memberships: Vec::new(),
 			roster_reads: 0,
+			me_reads: 0,
+			roster_delay: Duration::ZERO,
+			rosters_in_flight: 0,
+			rosters_in_flight_at_most: 0,
 			member_refusal: None,
+			retry_after: None,
+			upgrades: Vec::new(),
 		})))
 	}
 
@@ -141,6 +154,15 @@ impl Relay {
 
 	fn connections(&self) -> usize {
 		self.room().connections
+	}
+
+	async fn gaps_between_upgrades(&self, from: usize, gaps: usize) -> Vec<Duration> {
+		within(Duration::from_secs(15), "the next member socket upgrades", || async {
+			let upgrades = self.room().upgrades.clone();
+			let ours = upgrades.get(from..).filter(|ours| ours.len() > gaps)?;
+			Some(ours.windows(2).map(|pair| pair[1] - pair[0]).collect())
+		})
+		.await
 	}
 
 	async fn served(&self) -> String {
@@ -187,7 +209,8 @@ fn refusal(status: StatusCode, code: &str) -> (StatusCode, Value) {
 	(status, json!({ "error": { "code": code, "message": code, "status": status.as_u16() } }))
 }
 
-async fn me(headers: HeaderMap) -> Response {
+async fn me(Served(relay): Served<Relay>, headers: HeaderMap) -> Response {
+	relay.room().me_reads += 1;
 	if !is_member(&headers) {
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
@@ -220,7 +243,15 @@ async fn instances_listed(Served(relay): Served<Relay>) -> Response {
 }
 
 async fn roster_read(Served(relay): Served<Relay>) -> Response {
-	relay.room().roster_reads += 1;
+	let delay = {
+		let mut room = relay.room();
+		room.roster_reads += 1;
+		room.rosters_in_flight += 1;
+		room.rosters_in_flight_at_most = room.rosters_in_flight_at_most.max(room.rosters_in_flight);
+		room.roster_delay
+	};
+	tokio::time::sleep(delay).await;
+	relay.room().rosters_in_flight -= 1;
 	roster_listed().await
 }
 
@@ -272,7 +303,15 @@ async fn member_socket(
 	let Some(device) = device_of(query.as_deref()) else {
 		return StatusCode::BAD_REQUEST.into_response();
 	};
-	let refusal = relay.room().member_refusal.clone();
+	let (refusal, retry_after) = {
+		let mut room = relay.room();
+		room.upgrades.push(Instant::now());
+		(room.member_refusal.clone(), room.retry_after)
+	};
+	if let Some(retry_after) = retry_after {
+		return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, retry_after)])
+			.into_response();
+	}
 	if let Some((status, body)) = refusal {
 		return answered_json(status, body);
 	}
@@ -830,6 +869,69 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 
 		assert_eq!(listed.state, JoinedSpaceState::WaitingForHost);
 		assert!(member.is_waiting(&joined.id));
+	});
+}
+
+#[test]
+fn a_waiting_join_the_relay_answers_429_on_waits_its_retry_after_before_the_next_upgrade() {
+	run(async {
+		let member = Member::new("join-rate-limited").await;
+		member.relay.hosting(HostSide::Silent);
+		let joined = member.accepted().await.expect("the join waits");
+		let before = {
+			let mut room = member.relay.room();
+			room.retry_after = Some("2");
+			room.upgrades.len()
+		};
+
+		relay::reconciled(member.app.handle()).await;
+		let gaps = member.relay.gaps_between_upgrades(before, 1).await;
+
+		assert!(gaps[0] >= Duration::from_millis(1900), "{gaps:?}");
+		assert_eq!(member.last_wait(), Some(JoinedSpaceWaitReason::RelayUnreachable));
+		assert!(member.is_waiting(&joined.id));
+	});
+}
+
+#[test]
+fn a_waiting_socket_the_relay_closes_right_after_its_opening_keeps_doubling_its_back_off() {
+	run(async {
+		let member = Member::new("join-short-socket").await;
+		member.relay.hosting(HostSide::Absent);
+		member.accepted().await.expect("the join waits");
+		let (before, me_reads) = {
+			let room = member.relay.room();
+			(room.upgrades.len(), room.me_reads)
+		};
+
+		relay::reconciled(member.app.handle()).await;
+		let gaps = member.relay.gaps_between_upgrades(before, 3).await;
+
+		assert!(gaps[1] >= Duration::from_millis(1000), "{gaps:?}");
+		assert!(gaps[2] >= Duration::from_millis(2000), "{gaps:?}");
+		assert_eq!(member.relay.room().me_reads, me_reads);
+	});
+}
+
+#[test]
+fn a_joined_space_reads_its_members_once_at_a_time() {
+	run(async {
+		let member = Member::new("members-once-at-a-time").await;
+		let host = member.host();
+		member.relay.room().roster_delay = Duration::from_millis(400);
+		let joined = online_with_two_members(&member, &host).await;
+		let reads = member.relay.room().roster_reads;
+
+		joined_space_connect(member.app.handle().clone(), joined.id.clone())
+			.await
+			.expect("the joined space connects");
+		until("the members read of the connection", || async {
+			(member.relay.room().roster_reads > reads).then_some(())
+		})
+		.await;
+		tokio::time::sleep(Duration::from_millis(600)).await;
+
+		assert_eq!(member.relay.room().rosters_in_flight_at_most, 1);
 	});
 }
 

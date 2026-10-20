@@ -70,6 +70,11 @@ async fn polled<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) -> Infalli
 }
 
 async fn read<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
+	let guests = app.state::<RelayGuests>();
+	let Some(_reading) = guests.members_read_started(&joined.id) else {
+		return;
+	};
+	guests.cloud().unpaused().await;
 	if let Err(failure) = refreshed(app, joined).await {
 		let JoinedReach::Relay { instance_id } = &joined.reach;
 		log::warn!(

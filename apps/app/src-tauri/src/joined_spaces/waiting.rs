@@ -144,6 +144,8 @@ async fn attempted<R: Runtime>(
 		Ok(device) => device,
 		Err(failure) => return Attempt::Dropped(Stall::DeviceKeys(failure)),
 	};
+	let cloud = app.state::<RelayGuests>().inner().cloud();
+	cloud.unpaused().await;
 	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
 		Ok(url) => url,
 		Err(JoinedSpaceError::SessionRevoked) => {
@@ -151,10 +153,11 @@ async fn attempted<R: Runtime>(
 		}
 		Err(failure) => return Attempt::Dropped(Stall::SocketUrl(failure)),
 	};
-	match opened(url, &bearer).await {
+	cloud.unpaused().await;
+	match opened(cloud, url, &bearer).await {
 		Opened::Socket(socket) => {
 			log::info!("the waiting join of instance {instance_id} opened its member socket");
-			backoff.reset();
+			backoff.socket_opened();
 			listened(app, *socket, instance_id, &device).await
 		}
 		Opened::Revoked => {
@@ -164,6 +167,7 @@ async fn attempted<R: Runtime>(
 		Opened::Gone(Some(departure)) => Attempt::Departed(departure),
 		Opened::Forbidden | Opened::Gone(None) => Attempt::Dropped(Stall::Forbidden),
 		Opened::Unknown => Attempt::Dropped(Stall::Unknown),
+		Opened::RateLimited(retry_after) => Attempt::Dropped(Stall::RateLimited(retry_after)),
 		Opened::Unreachable(reason) => Attempt::Dropped(Stall::Unreachable(reason)),
 	}
 }

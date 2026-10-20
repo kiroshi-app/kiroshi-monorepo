@@ -10,6 +10,7 @@ use crate::hosting::relay::Departure;
 #[derive(Debug)]
 pub(super) enum Stall {
 	Unreachable(String),
+	RateLimited(Duration),
 	Forbidden,
 	Unknown,
 	AskNotSent(String),
@@ -33,6 +34,10 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 	use JoinedSpaceWaitReason as Reason;
 	let (reason, detail) = match stall {
 		Stall::Unreachable(detail) => (Reason::RelayUnreachable, detail),
+		Stall::RateLimited(retry_after) => (
+			Reason::RelayUnreachable,
+			format!("the relay rate limited this device for {retry_after:?}"),
+		),
 		Stall::Forbidden => {
 			(Reason::NotMember, "the account is not a member of this instance (403)".to_owned())
 		}

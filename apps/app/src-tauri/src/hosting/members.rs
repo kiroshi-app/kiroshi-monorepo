@@ -190,6 +190,7 @@ pub(super) async fn polled<R: Runtime>(
 	polls.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		polls.tick().await;
+		hosting.cloud.unpaused().await;
 		let _turn = hosting.members_turn.lock().await;
 		match listed(app, space_id, instance_id).await {
 			Ok(listed) => announced_if_changed(app, space_id, listed),

@@ -56,8 +56,27 @@ pub struct RelayGuests {
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
+	known_relay_device: Mutex<Option<KnownRelayDevice>>,
+	members_reading: Mutex<HashSet<String>>,
 	answer_bound: Duration,
 	resend_every: Duration,
+}
+
+struct KnownRelayDevice {
+	bearer: String,
+	device_id: String,
+	relay_device_id: String,
+}
+
+pub(super) struct MembersReading<'a> {
+	reading: &'a Mutex<HashSet<String>>,
+	id: String,
+}
+
+impl Drop for MembersReading<'_> {
+	fn drop(&mut self) {
+		self.reading.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.id);
+	}
 }
 
 struct Guest {
@@ -118,6 +137,8 @@ impl RelayGuests {
 			waiting: Mutex::new(HashMap::new()),
 			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
+			known_relay_device: Mutex::new(None),
+			members_reading: Mutex::new(HashSet::new()),
 			answer_bound: HOST_ANSWER_BOUND,
 			resend_every: PING_EVERY,
 		}
@@ -143,6 +164,30 @@ impl RelayGuests {
 
 	pub(super) fn resend_every(&self) -> Duration {
 		self.resend_every
+	}
+
+	pub(super) fn known_relay_device(&self, bearer: &str, device_id: &str) -> Option<String> {
+		let known = self.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner);
+		known
+			.as_ref()
+			.filter(|known| known.bearer == bearer && known.device_id == device_id)
+			.map(|known| known.relay_device_id.clone())
+	}
+
+	pub(super) fn relay_device_known(&self, bearer: &str, device_id: &str, relay_device_id: &str) {
+		*self.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) =
+			Some(KnownRelayDevice {
+				bearer: bearer.to_owned(),
+				device_id: device_id.to_owned(),
+				relay_device_id: relay_device_id.to_owned(),
+			});
+	}
+
+	pub(super) fn members_read_started(&self, id: &str) -> Option<MembersReading<'_>> {
+		let mut reading = self.members_reading.lock().unwrap_or_else(PoisonError::into_inner);
+		reading
+			.insert(id.to_owned())
+			.then(|| MembersReading { reading: &self.members_reading, id: id.to_owned() })
 	}
 
 	fn removed(&self) -> MutexGuard<'_, HashSet<String>> {
@@ -394,7 +439,7 @@ async fn unlisted_reason<R: Runtime>(
 		}
 	};
 	let url = member_socket_url(cloud, instance_id, &roster.own.relay_device_id);
-	match opened(url, bearer).await {
+	match opened(cloud, url, bearer).await {
 		Opened::Gone(Some(departure)) => reason_of(departure),
 		_ => JoinedSpaceRemovalReason::Unknown,
 	}
@@ -564,6 +609,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	let guests = app.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
 	guests.removed().clear();
+	*guests.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) = None;
 	let running: Vec<(String, Guest)> = guests.guests().drain().collect();
 	for (id, guest) in running {
 		finished(&id, guest).await;
@@ -673,7 +719,11 @@ async fn attempted<R: Runtime>(
 	};
 	let cloud = &app.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
-	match until_stopped(stop, opened(url, &bearer)).await {
+	let opening = async {
+		cloud.unpaused().await;
+		opened(cloud, url, &bearer).await
+	};
+	match until_stopped(stop, opening).await {
 		None => (Ended::Stopped, held),
 		Some(Opened::Socket(socket)) => {
 			log::info!(
@@ -681,7 +731,7 @@ async fn attempted<R: Runtime>(
 				linked.id,
 				linked.instance_id
 			);
-			backoff.reset();
+			backoff.socket_opened();
 			online(app, *socket, linked, held, stop).await
 		}
 		Some(Opened::Unknown) => (Ended::Evicted(JoinedSpaceRemovalReason::Unknown), held),
@@ -693,6 +743,10 @@ async fn attempted<R: Runtime>(
 		Some(Opened::Forbidden | Opened::Gone(None)) => {
 			(Ended::Dropped("the account is not a member of this instance (403)".to_owned()), held)
 		}
+		Some(Opened::RateLimited(retry_after)) => (
+			Ended::Dropped(format!("the relay rate limited this device for {retry_after:?}")),
+			held,
+		),
 		Some(Opened::Unreachable(reason)) => (Ended::Dropped(reason), held),
 	}
 }
@@ -715,7 +769,11 @@ async fn departure_asked<R: Runtime>(
 	};
 	let cloud = &app.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
-	match until_stopped(stop, opened(url, &bearer)).await? {
+	let opening = async {
+		cloud.unpaused().await;
+		opened(cloud, url, &bearer).await
+	};
+	match until_stopped(stop, opening).await? {
 		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
 		_ => Some(JoinedSpaceRemovalReason::Removed),
 	}
