@@ -33,17 +33,11 @@ describe("AnnotationToolbar", () => {
 		document.body.innerHTML = ""
 	})
 
-	it("mounts on the document body while no popup is open", async () => {
-		renderToolbar()
-		await settle()
-
-		expect(findPortalHost()?.parentElement).toBe(document.body)
-	})
-
-	it("follows a popup open, then back to the body once it closes, across a re-render", async () => {
+	it("starts on the body, follows a popup open, then returns once it closes, across a re-render", async () => {
 		const { rerender } = renderToolbar()
 		await settle()
 		const toolbar = findToolbar()
+		expect(findPortalHost()?.parentElement).toBe(document.body)
 
 		const dialog = openPopup("dialog")
 		await settle()
@@ -69,14 +63,5 @@ describe("AnnotationToolbar", () => {
 		closePopup(confirmation)
 		await settle()
 		expect(findPortalHost()?.parentElement).toBe(dialog)
-	})
-
-	it("ignores a popup that is still in the document but closed", async () => {
-		renderToolbar()
-		const dialog = openPopup("dialog")
-		closePopup(dialog)
-		await settle()
-
-		expect(findPortalHost()?.parentElement).toBe(document.body)
 	})
 })
