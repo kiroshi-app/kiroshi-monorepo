@@ -1103,13 +1103,10 @@ pub async fn agent_cancel_turn<R: Runtime>(
 	state: State<'_, AgentState>,
 	scope: RuntimeScope,
 ) -> Result<CancelOutcome, TransportError> {
-	let Some(answered) = state.host_turns().stop(&scope.conversation_id) else {
-		return Ok(cancel_session_turn(&app, &state, &scope).await);
-	};
-	match answered.await {
-		Ok(outcome) => Ok(outcome),
-		Err(_released_unanswered) => Ok(CancelOutcome::Cancelled),
+	if let Some(outcome) = state.host_turns().stop(&scope).await {
+		return Ok(outcome);
 	}
+	Ok(cancel_session_turn(&app, &state, &scope).await)
 }
 
 pub(crate) async fn cancel_session_turn<R: Runtime>(

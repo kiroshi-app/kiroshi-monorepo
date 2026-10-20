@@ -108,7 +108,7 @@ async fn drive<R: Runtime>(
 	let expiry = time::sleep(timing.deadline);
 	tokio::pin!(expiry);
 	tokio::select! {
-		() = &mut expiry => return refused(app, run_id, scope, DEADLINE_REASON).await,
+		() = &mut expiry => return refused(app, scope, DEADLINE_REASON).await,
 		begun = started(app, scope, requested) => {
 			if let Err(detail) = begun {
 				return could_not_start(&detail);
@@ -118,13 +118,13 @@ async fn drive<R: Runtime>(
 	let mut lease = time::interval_at(Instant::now() + timing.lease, timing.lease);
 	loop {
 		tokio::select! {
-			() = &mut expiry => return refused(app, run_id, scope, DEADLINE_REASON).await,
+			() = &mut expiry => return refused(app, scope, DEADLINE_REASON).await,
 			_ = lease.tick() => renew(app, run_id).await,
 			arrived = arriving.recv() => {
 				let Some(scoped) = arrived else {
 					return lost(reading).await;
 				};
-				if let Some(closing) = settled_by(app, run_id, scope, scoped.event).await {
+				if let Some(closing) = settled_by(app, scope, scoped.event).await {
 					return closing;
 				}
 			}
@@ -138,7 +138,6 @@ async fn lost(reading: &mut RelayReader) -> RunClosing {
 
 async fn settled_by<R: Runtime>(
 	app: &AppHandle<R>,
-	run_id: &str,
 	scope: &RuntimeScope,
 	event: AgentEvent,
 ) -> Option<RunClosing> {
@@ -147,11 +146,9 @@ async fn settled_by<R: Runtime>(
 		AgentEvent::Failed { error } if ends_the_session(&error) => {
 			Some(failed(&transport_reason(&error)))
 		}
-		AgentEvent::QuestionRequested { .. } => {
-			Some(refused(app, run_id, scope, QUESTION_REASON).await)
-		}
+		AgentEvent::QuestionRequested { .. } => Some(refused(app, scope, QUESTION_REASON).await),
 		AgentEvent::PermissionRequested { .. } => {
-			Some(refused(app, run_id, scope, PERMISSION_REASON).await)
+			Some(refused(app, scope, PERMISSION_REASON).await)
 		}
 		_ => None,
 	}
@@ -296,16 +293,11 @@ async fn started<R: Runtime>(
 		.map_err(|error| detail_of(&error))
 }
 
-async fn refused<R: Runtime>(
-	app: &AppHandle<R>,
-	run_id: &str,
-	scope: &RuntimeScope,
-	reason: &str,
-) -> RunClosing {
-	if let Err(detail) = cancelled(app, scope).await {
-		eprintln!("routine run {run_id} could not cancel its turn: {detail}");
+async fn refused<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope, reason: &str) -> RunClosing {
+	match cancelled(app, scope).await {
+		Ok(()) => failed(reason),
+		Err(detail) => failed(&format!("{reason}; its turn could not be cancelled: {detail}")),
 	}
-	failed(reason)
 }
 
 async fn cancelled<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) -> Result<(), String> {
@@ -664,6 +656,18 @@ mod tests {
 				turn_id: "turn-1".to_owned(),
 				conversation_id: "conversation-1".to_owned(),
 			})
+		);
+	}
+
+	#[tokio::test]
+	async fn a_refused_run_whose_turn_cannot_be_cancelled_names_the_cancel_failure_in_its_reason() {
+		let app = an_app_of_its_own("routine-refused-cancel-failed", mock_builder());
+
+		let closing = refused(app.handle(), &a_scope("session-1"), DEADLINE_REASON).await;
+
+		assert_eq!(
+			reason_of(&closing),
+			format!("{DEADLINE_REASON}; its turn could not be cancelled: {NO_AGENT}")
 		);
 	}
 }
