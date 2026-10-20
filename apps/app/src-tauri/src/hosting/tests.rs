@@ -59,9 +59,9 @@ use crate::conversations::commands::{
 };
 use crate::conversations::contract::{
 	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord, NewUserMessage,
-	ParticipantRole, TranscriptStoreError, CREATED_EVENT as CONVERSATION_CREATED_EVENT,
-	DELETED_EVENT as CONVERSATION_DELETED_EVENT, MESSAGE_STORED_EVENT,
-	UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
+	ParticipantRole, TranscriptStoreError, WrittenFrom,
+	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
+	MESSAGE_STORED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
@@ -2681,9 +2681,10 @@ const TWO_SPACES: &str = "
 	INSERT INTO turns (id, conversation_id, seq, started_at, completed_at)
 		VALUES ('t-mine', 'c-mine', 1, 1, 1), ('t-theirs', 'c-theirs', 1, 1, 1);
 	INSERT INTO messages
-			(id, conversation_id, turn_id, seq, role, content, completion_state, created_at)
-		VALUES ('m-mine', 'c-mine', 't-mine', 1, 'user', 'mine', 'complete', 1),
-			('m-theirs', 'c-theirs', 't-theirs', 1, 'user', 'theirs', 'complete', 1);
+			(id, conversation_id, turn_id, seq, role, content, completion_state, created_at,
+				written_from)
+		VALUES ('m-mine', 'c-mine', 't-mine', 1, 'user', 'mine', 'complete', 1, 'here'),
+			('m-theirs', 'c-theirs', 't-theirs', 1, 'user', 'theirs', 'complete', 1, 'here');
 ";
 
 const A_JOINER: &str = "joiner-account";
@@ -4312,6 +4313,61 @@ fn a_relayed_frame_stores_its_roster_account_over_a_forged_author() {
 }
 
 #[test]
+fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		direct(&host.window, "conversation_send_user_message", host.sent("typed"));
+		host.relayed(json!({
+			"id": 1,
+			"command": "conversation_send_user_message",
+			"args": host.sent("vouched"),
+		}))
+		.await;
+		let unvouched = NewUserMessage {
+			id: "unvouched".to_owned(),
+			conversation_id: host.conversation_id.clone(),
+			turn_id: "unvouched".to_owned(),
+			author_bot_id: None,
+			replied_to_message_id: None,
+			content: "hello".to_owned(),
+			created_at: 1,
+		};
+		conversation_send_user_message(
+			host.app.handle().clone(),
+			host.app.state(),
+			Caller::Relayed(None),
+			unvouched,
+			vec![],
+		)
+		.await
+		.expect("the unvouched message is sent");
+
+		let read = direct(&host.window, "conversation_message_page", host.page());
+
+		let origins: Vec<(Value, Value, Value)> = read["messages"]
+			.as_array()
+			.expect("a page of messages")
+			.iter()
+			.map(|message| {
+				(
+					message["id"].clone(),
+					message["authorAccountId"].clone(),
+					message["writtenFrom"].clone(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			origins,
+			vec![
+				(json!("typed"), json!("owner"), json!("here")),
+				(json!("vouched"), json!(GUEST), json!("relay")),
+				(json!("unvouched"), Value::Null, json!("relay")),
+			]
+		);
+	});
+}
+
+#[test]
 fn a_message_written_on_a_signed_out_host_carries_no_account() {
 	run(async {
 		let host = Authoring::new(None).await;
@@ -5038,6 +5094,7 @@ fn a_relay_guest_hears_a_conversation_updated_whose_last_word_is_the_message_sen
 				"authorBotId": null,
 				"authorAccountId": null,
 				"authorName": HOST_NAME,
+				"writtenFrom": "here",
 			})
 		);
 		assert_eq!(conversation["lastActivityAt"], json!(2));
@@ -5066,6 +5123,7 @@ fn the_last_word_of_mine() -> LastWord {
 		author_bot_id: None,
 		author_account_id: None,
 		author_name: None,
+		written_from: Some(WrittenFrom::Here),
 	}
 }
 

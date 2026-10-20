@@ -7,7 +7,7 @@ use super::{
 	Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
 };
 use crate::db::repositories::keyset::{paged, Keyset, Page};
-use crate::db::repositories::messages::AccountAuthor;
+use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LastWord {
@@ -15,6 +15,7 @@ pub struct LastWord {
 	pub at: i64,
 	pub author_bot_id: Option<String>,
 	pub author: AccountAuthor,
+	pub written_from: Option<WrittenFrom>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +106,7 @@ fn active_rows() -> String {
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id,
 			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
+			word.written_from AS word_written_from,
 			(SELECT MIN(open_turn.started_at) FROM turns AS open_turn
 				WHERE open_turn.conversation_id = conversations.id
 					AND open_turn.completed_at IS NULL) AS open_turn_started_at,
@@ -371,6 +373,7 @@ fn last_word(row: &Row<'_>, at: i64) -> rusqlite::Result<LastWord> {
 			account_id: row.get("word_author_account_id")?,
 			name: row.get("word_author_name")?,
 		},
+		written_from: row.get("word_written_from")?,
 	})
 }
 
@@ -557,13 +560,19 @@ mod tests {
 				)
 			})
 			.collect();
-		let blank =
-			LastWord { text: None, at: 20, author_bot_id: None, author: AccountAuthor::default() };
+		let blank = LastWord {
+			text: None,
+			at: 20,
+			author_bot_id: None,
+			author: AccountAuthor::default(),
+			written_from: None,
+		};
 		let greeted = LastWord {
 			text: Some("hello".to_owned()),
 			at: 40,
 			author_bot_id: Some("b1".to_owned()),
 			author: AccountAuthor::default(),
+			written_from: None,
 		};
 		assert_eq!(
 			words,
@@ -587,14 +596,14 @@ mod tests {
 			INSERT INTO turns (id, conversation_id, seq, started_at)
 				VALUES ('t-asked', 'asked', 1, 10), ('t-answered', 'answered', 1, 10);
 			INSERT INTO messages (id, conversation_id, turn_id, author_bot_id, seq, role, content,
-					completion_state, created_at, author_account_id, author_name)
+					completion_state, created_at, author_account_id, author_name, written_from)
 				VALUES
 					('m-asked', 'asked', 't-asked', NULL, 1, 'user', 'question', 'complete', 10,
-						'acc-ada', 'Ada'),
+						'acc-ada', 'Ada', 'relay'),
 					('m-answered-ask', 'answered', 't-answered', NULL, 1, 'user', 'question',
-						'complete', 10, 'acc-ada', 'Ada'),
+						'complete', 10, 'acc-ada', 'Ada', 'relay'),
 					('m-answered', 'answered', 't-answered', 'b1', 2, 'assistant', 'answer',
-						'complete', 20, NULL, NULL);",
+						'complete', 20, NULL, NULL, NULL);",
 			a_room("asked", 1),
 			a_room("answered", 2),
 		);
@@ -616,12 +625,14 @@ mod tests {
 				account_id: Some("acc-ada".to_owned()),
 				name: Some("Ada".to_owned()),
 			},
+			written_from: Some(WrittenFrom::Relay),
 		};
 		let answered = LastWord {
 			text: Some("answer".to_owned()),
 			at: 20,
 			author_bot_id: Some("b1".to_owned()),
 			author: AccountAuthor::default(),
+			written_from: None,
 		};
 		assert_eq!(words, vec![("answered", Some(&answered)), ("asked", Some(&asked))]);
 	}

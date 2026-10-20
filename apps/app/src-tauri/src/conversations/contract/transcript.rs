@@ -20,6 +20,22 @@ impl From<messages::MessageRole> for TranscriptRole {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub enum WrittenFrom {
+	Here,
+	Relay,
+}
+
+impl From<messages::WrittenFrom> for WrittenFrom {
+	fn from(written_from: messages::WrittenFrom) -> Self {
+		match written_from {
+			messages::WrittenFrom::Here => WrittenFrom::Here,
+			messages::WrittenFrom::Relay => WrittenFrom::Relay,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub enum TranscriptCompletion {
 	Pending,
 	Streaming,
@@ -78,6 +94,8 @@ pub struct TranscriptMessage {
 	pub author_bot_id: Option<String>,
 	pub author_account_id: Option<String>,
 	pub author_name: Option<String>,
+	#[specta(optional)]
+	pub written_from: Option<WrittenFrom>,
 	pub replied_to_message_id: Option<String>,
 	pub runtime_session_id: Option<String>,
 }
@@ -93,6 +111,7 @@ impl TranscriptMessage {
 			author_bot_id: stored.author_bot_id,
 			author_account_id: stored.author.account_id,
 			author_name: stored.author.name,
+			written_from: stored.written_from.map(Into::into),
 			content: stored.content,
 			completion: stored.state.into(),
 			created_at: stored.created_at,
@@ -281,7 +300,11 @@ pub struct NewUserMessage {
 }
 
 impl NewUserMessage {
-	pub fn written_by(self, author: messages::AccountAuthor) -> messages::NewUserMessage {
+	pub fn written_by(
+		self,
+		author: messages::AccountAuthor,
+		written_from: messages::WrittenFrom,
+	) -> messages::NewUserMessage {
 		let author = match self.author_bot_id {
 			Some(_) => messages::AccountAuthor::default(),
 			None => author,
@@ -292,6 +315,7 @@ impl NewUserMessage {
 			turn_id: self.turn_id,
 			author_bot_id: self.author_bot_id,
 			author,
+			written_from,
 			replied_to_message_id: self.replied_to_message_id,
 			content: self.content,
 			created_at: self.created_at,
@@ -362,6 +386,9 @@ mod tests {
 			[(TranscriptRole::User, "user"), (TranscriptRole::Assistant, "assistant")]
 		{
 			assert_crosses_as(role, json!(wire));
+		}
+		for (written_from, wire) in [(WrittenFrom::Here, "here"), (WrittenFrom::Relay, "relay")] {
+			assert_crosses_as(written_from, json!(wire));
 		}
 		for (completion, wire) in [
 			(TranscriptCompletion::Pending, "pending"),
@@ -454,8 +481,11 @@ mod tests {
 			created_at: 1,
 		};
 
-		assert_eq!(message(Some("b1")).written_by(author.clone()).author, Default::default());
-		assert_eq!(message(None).written_by(author.clone()).author, author);
+		let written_by = |message: NewUserMessage| {
+			message.written_by(author.clone(), messages::WrittenFrom::Here).author
+		};
+		assert_eq!(written_by(message(Some("b1"))), Default::default());
+		assert_eq!(written_by(message(None)), author);
 	}
 
 	#[test]

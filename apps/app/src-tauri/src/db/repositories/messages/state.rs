@@ -24,6 +24,29 @@ impl MessageRole {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrittenFrom {
+	Here,
+	Relay,
+}
+
+impl WrittenFrom {
+	pub(super) fn as_sql(self) -> &'static str {
+		match self {
+			WrittenFrom::Here => "here",
+			WrittenFrom::Relay => "relay",
+		}
+	}
+
+	fn parse(text: &str) -> Option<Self> {
+		match text {
+			"here" => Some(WrittenFrom::Here),
+			"relay" => Some(WrittenFrom::Relay),
+			_ => None,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageState {
 	Pending,
 	Streaming,
@@ -159,6 +182,7 @@ macro_rules! stored_as_text {
 
 stored_as_text!(MessageRole);
 stored_as_text!(MessageState);
+stored_as_text!(WrittenFrom);
 stored_as_text!(ActivityStatus);
 
 pub(in crate::db) use stored_as_text;

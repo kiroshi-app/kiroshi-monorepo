@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::bot::AvatarBlot;
+use super::transcript::WrittenFrom;
 use crate::avatars;
 use crate::db::repositories::{conversations, runtime_context};
 
@@ -143,6 +144,8 @@ pub struct LastWord {
 	pub author_bot_id: Option<String>,
 	pub author_account_id: Option<String>,
 	pub author_name: Option<String>,
+	#[specta(optional)]
+	pub written_from: Option<WrittenFrom>,
 }
 
 impl From<conversations::LastWord> for LastWord {
@@ -153,6 +156,7 @@ impl From<conversations::LastWord> for LastWord {
 			author_bot_id: word.author_bot_id,
 			author_account_id: word.author.account_id,
 			author_name: word.author.name,
+			written_from: word.written_from.map(Into::into),
 		}
 	}
 }

@@ -45,6 +45,7 @@ mod tests {
 			author_bot_id: Some("default".into()),
 			author_account_id: None,
 			author_name: None,
+			written_from: None,
 			replied_to_message_id: Some("m0".into()),
 			runtime_session_id: Some("run-1".into()),
 		}
@@ -63,6 +64,7 @@ mod tests {
 			"authorBotId": "default",
 			"authorAccountId": null,
 			"authorName": null,
+			"writtenFrom": null,
 			"repliedToMessageId": "m0",
 			"runtimeSessionId": "run-1"
 		})

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::commands::invoke_handler;
 use kiroshi_app::db;
-use kiroshi_app::db::repositories::messages::{MessagePageQuery, NewUserMessage};
+use kiroshi_app::db::repositories::messages::{MessagePageQuery, NewUserMessage, WrittenFrom};
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeResponseBody};
@@ -251,6 +251,7 @@ async fn commit_samples(
 			turn_id: turn_id.clone(),
 			author_bot_id: None,
 			author: Default::default(),
+			written_from: WrittenFrom::Here,
 			replied_to_message_id: None,
 			content: BODY.to_owned(),
 			created_at: index as i64,
@@ -335,6 +336,7 @@ async fn commits_in_a_loop(handle: AppHandle<MockRuntime>, stop: Arc<AtomicBool>
 			turn_id: turn_id.clone(),
 			author_bot_id: None,
 			author: Default::default(),
+			written_from: WrittenFrom::Here,
 			replied_to_message_id: None,
 			content: BODY.to_owned(),
 			created_at: committed as i64,

@@ -3257,6 +3257,16 @@
               "type": "null"
             }
           ]
+        },
+        "writtenFrom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WrittenFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -7270,6 +7280,16 @@
         },
         "turnId": {
           "type": "string"
+        },
+        "writtenFrom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WrittenFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -8265,6 +8285,12 @@
           ],
           "type": "object"
         }
+      ]
+    },
+    "WrittenFrom": {
+      "enum": [
+        "here",
+        "relay"
       ]
     }
   },

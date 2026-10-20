@@ -987,6 +987,7 @@ export type LastWord = {
 	authorBotId: string | null,
 	authorAccountId: string | null,
 	authorName: string | null,
+	writtenFrom?: WrittenFrom | null,
 };
 
 export type LaunchOutcome = {
@@ -1630,6 +1631,7 @@ export type TranscriptMessage = {
 	authorBotId: string | null,
 	authorAccountId: string | null,
 	authorName: string | null,
+	writtenFrom?: WrittenFrom | null,
 	repliedToMessageId: string | null,
 	runtimeSessionId: string | null,
 };
@@ -1742,6 +1744,8 @@ export type UserPreferences = {
 export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection };
 
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
+
+export type WrittenFrom = "here" | "relay";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
