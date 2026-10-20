@@ -16,7 +16,7 @@ const every = {
 	storybook: true,
 	ios: true,
 }
-const noJob = { ...none, lint: false, "rust-check": false }
+const CI_EVENTS = ["pull_request", "merge_group", "push", "tag"] as const
 
 const SHARED_ONLY_PATHS = [
 	"packages/shared/permission-modes.json",
@@ -44,69 +44,63 @@ const runChangeDetector = (...args: string[]) =>
 
 describe("ci jobs per event", () => {
 	it.each(PATH_MIXES)(
-		"runs only lint and vitest on a pull_request, vitest on the paths it watches, on %p",
+		"selects only vitest on a pull_request, on the paths it watches, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "pull_request", paths })).toEqual({
-				...noJob,
-				lint: true,
+				...none,
 				vitest: touchedJobs(paths).vitest,
 			})
 		},
 	)
 
-	it("skips storybook, rust, rust-check, website and ios on a pull_request touching every path", () => {
+	it("skips storybook, rust, website and ios on a pull_request touching every path", () => {
 		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
 
-		expect(jobs).toEqual({ ...noJob, lint: true, vitest: true })
+		expect(jobs).toEqual({ ...none, vitest: true })
 	})
 
 	it.each(PATH_MIXES)(
-		"runs lint, then rust-check, rust, vitest, website and storybook on the paths they watch on a merge_group, never ios, on %p",
+		"selects rust, vitest, website and storybook on the paths they watch on a merge_group, never ios, on %p",
 		(...paths) => {
-			const touched = touchedJobs(paths)
-
 			expect(decideJobs({ event: "merge_group", paths })).toEqual({
-				lint: true,
-				"rust-check": touched.rust,
-				rust: touched.rust,
-				vitest: touched.vitest,
-				website: touched.website,
-				storybook: touched.storybook,
+				...touchedJobs(paths),
 				ios: false,
 			})
 		},
 	)
 
-	it("runs every desktop job on a merge_group touching a shared path", () => {
+	it("selects every desktop job on a merge_group touching a shared path", () => {
 		expect(decideJobs({ event: "merge_group", paths: ["bun.lock"] })).toEqual({
 			...every,
-			lint: true,
-			"rust-check": true,
 			ios: false,
 		})
 	})
 
 	it.each(PATH_MIXES)(
-		"runs only ios on a push to main, the merge_group run of the commit having run the rest, on %p",
+		"selects only ios on a push to main, the merge_group run of the commit having run the rest, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "push", paths })).toEqual({
-				...noJob,
+				...none,
 				ios: true,
 			})
 		},
 	)
 
 	it.each(PATH_MIXES)(
-		"runs lint, vitest, website, rust and storybook on a v* tag, never rust-check or ios, on %p",
+		"selects vitest, website, rust and storybook on a v* tag, never ios, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "tag", paths })).toEqual({
 				...every,
-				lint: true,
-				"rust-check": false,
 				ios: false,
 			})
 		},
 	)
+
+	it.each(CI_EVENTS)("selects rust-check on no %s", (event) => {
+		expect(decideJobs({ event, paths: ["bun.lock"] })).not.toHaveProperty(
+			"rust-check",
+		)
+	})
 
 	it.each([
 		["push", "ios=true"],

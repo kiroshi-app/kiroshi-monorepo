@@ -10,8 +10,6 @@ type FilteredJobs = {
 	ios: boolean
 }
 
-type SelectedJobs = FilteredJobs & { lint: boolean; "rust-check": boolean }
-
 type ChangeSet = { event: CiEvent; paths: string[] }
 
 const SHARED_ROOT_FILES = [
@@ -37,9 +35,7 @@ const EVERY_JOB: FilteredJobs = {
 	ios: true,
 }
 
-const NO_JOB: SelectedJobs = {
-	lint: false,
-	"rust-check": false,
+const NO_JOB: FilteredJobs = {
 	rust: false,
 	vitest: false,
 	website: false,
@@ -89,21 +85,12 @@ export const touchedJobs = (paths: string[]): FilteredJobs => {
 const isDiffed = (event: CiEvent) =>
 	event === "pull_request" || event === "merge_group"
 
-export const decideJobs = ({ event, paths }: ChangeSet): SelectedJobs => {
+export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	if (event === "push") return { ...NO_JOB, ios: true }
-	if (event === "tag")
-		return {
-			...NO_JOB,
-			lint: true,
-			rust: true,
-			vitest: true,
-			website: true,
-			storybook: true,
-		}
+	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
-	if (event === "pull_request")
-		return { ...NO_JOB, lint: true, vitest: touched.vitest }
-	return { ...touched, lint: true, "rust-check": touched.rust, ios: false }
+	if (event === "pull_request") return { ...NO_JOB, vitest: touched.vitest }
+	return { ...touched, ios: false }
 }
 
 const readEvent = (name: string | undefined): CiEvent => {

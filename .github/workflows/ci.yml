@@ -19,15 +19,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# scripts/ci-changes.ts selects each job per event, verify requires every selected job.
+# lint runs on every event but a push to main, without waiting on changes.
+# scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
 # pull_request: changes, lint, vitest on the test files the diff changed, verify.
-# merge_group: changes, lint, rust-check, vitest, website, rust, storybook, verify.
+# merge_group: changes, lint, vitest, website, rust, storybook, verify.
 # push to main: changes, ios, verify. The merge_group run of the commit already ran every desktop job.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
 jobs:
   lint:
-    needs: changes
-    if: needs.changes.outputs.lint == 'true'
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -60,47 +60,6 @@ jobs:
 
       - name: Gate
         run: bun scripts/ci.ts website
-
-  rust-check:
-    needs: changes
-    if: needs.changes.outputs.rust-check == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Drop the unused third-party apt sources
-        run: sudo rm -f /etc/apt/sources.list.d/google-chrome.*
-
-      - name: Install Tauri system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libxdo-dev \
-            libssl-dev
-
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-        with:
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: apps/app/src-tauri
-          shared-key: src-tauri
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Gate
-        run: bun scripts/ci.ts rust-check
 
   vitest:
     needs: changes
@@ -214,8 +173,6 @@ jobs:
       BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
       CI_EVENT: ${{ startsWith(github.ref, 'refs/tags/v') && 'tag' || github.event_name }}
     outputs:
-      lint: ${{ steps.filter.outputs.lint }}
-      rust-check: ${{ steps.filter.outputs.rust-check }}
       rust: ${{ steps.filter.outputs.rust }}
       vitest: ${{ steps.filter.outputs.vitest }}
       website: ${{ steps.filter.outputs.website }}
@@ -264,7 +221,7 @@ jobs:
         run: bun scripts/ci.ts ios
 
   verify:
-    needs: [changes, lint, rust-check, vitest, website, rust, storybook, ios]
+    needs: [changes, lint, vitest, website, rust, storybook, ios]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -273,12 +230,8 @@ jobs:
         if: needs.changes.result != 'success'
         run: exit 1
 
-      - name: Require lint to succeed when changes selected it, and to be skipped otherwise
-        if: needs.lint.result != (needs.changes.outputs.lint == 'true' && 'success' || 'skipped')
-        run: exit 1
-
-      - name: Require rust-check to succeed when changes selected it, and to be skipped otherwise
-        if: needs.rust-check.result != (needs.changes.outputs.rust-check == 'true' && 'success' || 'skipped')
+      - name: Require lint to succeed on every event but a push to main, and to be skipped on it
+        if: needs.lint.result != ((github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')) && 'success' || 'skipped')
         run: exit 1
 
       - name: Require vitest to succeed when changes selected it, and to be skipped otherwise

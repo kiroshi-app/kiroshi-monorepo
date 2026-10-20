@@ -133,7 +133,6 @@ export const GROUP_ORDER: Group[] = [
 ]
 
 const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
-	"rust-check": "on a merge_group only",
 	website: "on a merge_group and on a v* tag",
 	rust: "on a merge_group and on a v* tag",
 	storybook: "on a merge_group and on a v* tag",

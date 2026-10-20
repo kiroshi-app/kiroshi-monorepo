@@ -64,13 +64,16 @@ const SETUP_STEPS = new Set([
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
 
-const OFF_PULL_REQUEST_JOBS: Group[] = [
-	"rust-check",
-	"website",
-	"rust",
-	"storybook",
-	"ios",
-]
+const LOCAL_ONLY_GROUPS: Group[] = ["rust-check"]
+
+const CI_JOBS = GROUP_ORDER.filter(
+	(group) => !LOCAL_ONLY_GROUPS.includes(group),
+)
+
+const LINT_EVENTS =
+	"github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')"
+
+const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "rust", "storybook", "ios"]
 
 const EVERY_PATH_TOUCHED = {
 	rust: true,
@@ -212,7 +215,6 @@ const MERGE_GROUP_JOB_SET = [
 	"changes",
 	"lint",
 	"rust",
-	"rust-check",
 	"storybook",
 	"verify",
 	"vitest",
@@ -290,9 +292,6 @@ describe("the gate", () => {
 				`${group} skips a pull_request, CI runs it on a merge_group and on a v* tag`,
 			)
 		}
-		expect(offPullRequestNote("rust-check")).toBe(
-			"rust-check skips a pull_request, CI runs it on a merge_group only",
-		)
 		expect(offPullRequestNote("ios")).toBe(
 			"ios skips a pull_request, CI runs it on a push to main only",
 		)
@@ -344,15 +343,20 @@ describe("ci:fast", () => {
 })
 
 describe("the jobs of ci.yml", () => {
-	it("gate exactly the groups of scripts/ci.ts, one job per group", () => {
+	it("gate every group of scripts/ci.ts but the local rust-check, one job per group", () => {
 		const gatedJobs = Object.keys(workflow.jobs).filter(
 			(job) => !UNGATED_JOBS.has(job),
 		)
 
-		expect(gatedJobs.sort()).toEqual([...GROUP_ORDER].sort())
+		expect(gatedJobs.sort()).toEqual([...CI_JOBS].sort())
 	})
 
-	it.each(GROUP_ORDER.filter((group) => group !== "vitest"))(
+	it("carries no rust-check job and no rust-check verify step", () => {
+		expect(workflow.jobs["rust-check"]).toBeUndefined()
+		expect(JSON.stringify(workflow.jobs.verify)).not.toContain("rust-check")
+	})
+
+	it.each(CI_JOBS.filter((group) => group !== "vitest"))(
 		"%s runs its checks through bun scripts/ci.ts",
 		(job) => {
 			const gateSteps = runStepsOf(job).filter(
@@ -403,7 +407,7 @@ describe("the jobs of ci.yml", () => {
 		).toBe("2")
 	})
 
-	it.each(GROUP_ORDER)("%s bounds its gate by the job timeout only", (job) => {
+	it.each(CI_JOBS)("%s bounds its gate by the job timeout only", (job) => {
 		const stepTimeouts = (workflow.jobs[job]?.steps ?? []).flatMap(
 			(step) => step["timeout-minutes"] ?? [],
 		)
@@ -411,7 +415,15 @@ describe("the jobs of ci.yml", () => {
 		expect(stepTimeouts).toEqual([])
 	})
 
-	it.each(GROUP_ORDER)(
+	it("starts lint without changes on every event but a push to main, and has verify require it then and its skip on a push to main", () => {
+		expect(workflow.jobs.lint?.needs).toBeUndefined()
+		expect(workflow.jobs.lint?.if).toBe(LINT_EVENTS)
+		expect(verifyCondition("lint")).toBe(
+			`needs.lint.result != ((${LINT_EVENTS}) && 'success' || 'skipped')`,
+		)
+	})
+
+	it.each(CI_JOBS.filter((group) => group !== "lint"))(
 		"runs %s when changes selects it, and has verify require it then and its skip otherwise",
 		(job) => {
 			const selected = `needs.changes.outputs.${job} == 'true'`
@@ -456,7 +468,7 @@ describe("the jobs of ci.yml", () => {
 		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(["changes", "ios", "verify"])
 	})
 
-	it("keeps the desktop jobs but rust-check on a v* tag, never ios", () => {
+	it("keeps the desktop jobs on a v* tag, never ios", () => {
 		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
 			"lint",
@@ -495,6 +507,12 @@ describe("the jobs of ci.yml", () => {
 		const results = { ...resultsByRule(A_PULL_REQUEST), [job]: result }
 
 		expect(failingVerifySteps(A_PULL_REQUEST, results)).not.toEqual([])
+	})
+
+	it("has verify fail on a push to main when lint ran", () => {
+		const results = { ...resultsByRule(A_PUSH_TO_MAIN), lint: "success" }
+
+		expect(failingVerifySteps(A_PUSH_TO_MAIN, results)).not.toEqual([])
 	})
 
 	it.each(["rust", "storybook", "website"])(
@@ -538,7 +556,6 @@ describe("the jobs of ci.yml", () => {
 		expect(workflow.jobs.verify?.needs).toEqual([
 			"changes",
 			"lint",
-			"rust-check",
 			"vitest",
 			"website",
 			"rust",
