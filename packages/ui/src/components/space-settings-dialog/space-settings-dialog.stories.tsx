@@ -797,24 +797,20 @@ const NOA: SpaceMember = {
 	fingerprint: NOA_FINGERPRINT,
 }
 
-const MAYA_FINGERPRINT = "maple cotton harbor lemon pilot window"
-
 const MAYA: SpaceMember = {
 	id: "maya",
 	name: "Maya Chen",
 	email: "maya@example.com",
 	status: "joined",
-	fingerprint: MAYA_FINGERPRINT,
+	fingerprint: "maple cotton harbor lemon pilot window",
 }
-
-const TOM_FINGERPRINT = "copper silent garden oyster rocket meadow"
 
 const TOM: SpaceMember = {
 	id: "tom",
 	name: "Tom Okafor",
 	email: "tom@example.com",
 	status: "joined",
-	fingerprint: TOM_FINGERPRINT,
+	fingerprint: "copper silent garden oyster rocket meadow",
 }
 
 const TOM_PENDING: SpaceMember = {
