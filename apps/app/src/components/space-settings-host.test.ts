@@ -825,8 +825,8 @@ describe("SpaceSettingsHost members on the desktop", () => {
 				.map((node) => node.textContent),
 		).toEqual(["Steve Puget", "Sam Carter (you)", "Tom Reed"])
 		expect(
-			within(members).getByText("orbit velvet canal fossil ripple mango"),
-		).toBeTruthy()
+			within(members).queryByText("orbit velvet canal fossil ripple mango"),
+		).toBeNull()
 		expect(
 			within(members)
 				.getAllByRole("button")
