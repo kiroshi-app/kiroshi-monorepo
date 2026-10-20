@@ -498,6 +498,17 @@ describe("useMembers", () => {
 		})
 	})
 
+	it("asks to confirm the removal of its own host row on the host desktop and sends it to the host", async () => {
+		const { panel, transport } = await watchHome()
+
+		act(() => panel().onRemove(STEVE_ROW))
+		expect(panel().removing).toEqual(STEVE_ROW)
+		act(() => panel().onRemoveConfirm())
+		await settle()
+
+		expect(transport.remove).toHaveBeenCalledWith("home", "steve")
+	})
+
 	it("closes the removal without a call on cancel", async () => {
 		const { panel, transport } = await watchHome()
 
@@ -817,14 +828,11 @@ describe("useMembers on a joined space", () => {
 		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
-	it.each([
-		[{ kind: "hostNotRemovable" }, "host"],
-		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
-	] as const)(
-		"names the roster host in the failure to remove it when the host answers %o",
+	it.each([[{ kind: "hostNotRemovable" }, "host"]] as const)(
+		"names the roster host in the failure to remove it, sending nothing even when the host would answer %o",
 		async (error, reason) => {
 			rosterAnswered([LEA, TOM])
-			const { panel } = watchStudio({
+			const { panel, transport } = watchStudio({
 				list: vi.fn(async () =>
 					ok([{ ...LEA_ANSWERED, name: "Lea Martin" }, TOM_ANSWERED]),
 				),
@@ -833,9 +841,10 @@ describe("useMembers on a joined space", () => {
 			await waitFor(() => expect(panel().members).toHaveLength(2))
 
 			act(() => panel().onRemove(LEA_ROW))
-			act(() => panel().onRemoveConfirm())
 			await settle()
 
+			expect(transport.remove).not.toHaveBeenCalled()
+			expect(panel().removing).toBeNull()
 			expect(panel().failure).toEqual({
 				action: "remove",
 				reason,
