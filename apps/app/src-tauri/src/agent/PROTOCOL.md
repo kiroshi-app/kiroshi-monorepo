@@ -629,6 +629,10 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
 - `interrupt` ends the turn with `result.subtype = "error_during_execution"` and
   **leaves the session usable**: a following prompt answers normally.
 - `close` ends one session and nothing else — the sidecar serves the others.
+- The host's exit is the only thing that ends the process: close stdin →
+  `SIGTERM` → `SIGKILL`, on the whole group. The sidecar spawns real
+  grandchildren (the agent, its MCP servers), so the group kill is what keeps
+  orphans off the machine.
 
 ### The lease of a running run
 
