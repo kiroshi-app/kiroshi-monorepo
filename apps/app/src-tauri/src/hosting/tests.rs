@@ -2183,14 +2183,11 @@ fn an_invitation_sent_again_whose_list_does_not_read_back_is_named_as_sent() {
 
 		let refused = harness.invited_again("early").await;
 
-		assert!(
-			matches!(
-				&refused,
-				Err(MembersError::InvitedButNotListed { cause })
-					if matches!(**cause, MembersError::Unreachable { .. })
-			),
-			"{refused:?}"
-		);
+		assert!(matches!(
+			&refused,
+			Err(MembersError::InvitedButNotListed { cause })
+				if matches!(**cause, MembersError::Unreachable { .. })
+		));
 		assert_eq!(
 			harness.member_calls(),
 			calls_then_read_back(&["GET", "DELETE early", "POST invitations early@example.com"])
@@ -2214,8 +2211,7 @@ fn a_member_not_needing_a_new_invitation_is_refused_invite_again_before_any_chan
 		for user_id in ["joiner", "guest", "owner"] {
 			assert_eq!(
 				harness.invited_again(user_id).await,
-				Err(MembersError::NotNeedingInvitation),
-				"{user_id}"
+				Err(MembersError::NotNeedingInvitation)
 			);
 		}
 		assert_eq!(harness.invited_again("stranger").await, Err(MembersError::UnknownMember));
@@ -2483,7 +2479,7 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 		let listed = list(app.handle(), PERSONAL.to_owned()).await;
 
 		let Err(MembersError::Unreachable { reason }) = listed else {
-			panic!("a closed port is unreachable, not {listed:?}");
+			panic!("a closed port is unreachable");
 		};
 		assert!(reason.contains("could not be reached"), "{reason}");
 	});
