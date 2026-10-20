@@ -27,6 +27,7 @@ use super::contract::{
 use super::members::{joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
+use super::wait_reason::{wait_of, Stall};
 use crate::account::session::AccountSession;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
@@ -368,6 +369,10 @@ impl Member {
 		self.app.state::<RelayGuests>().is_waiting(id)
 	}
 
+	fn last_wait(&self) -> Option<JoinedSpaceWaitReason> {
+		self.app.state::<RelayGuests>().last_wait(INSTANCE).map(|wait| wait.reason)
+	}
+
 	fn device(&self) -> DeviceKeys {
 		let state = self.app.state::<DeviceKeysState>();
 		DeviceKeys::from_secret(&state.keys().expect("the device keys").secret())
@@ -444,6 +449,8 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 		let member = Member::new("join-accepted").await;
 		let host = member.host();
 		member.relay.hosting(HostSide::Answering(host.admitted()));
+		let earlier = wait_of(Stall::Unreachable("the relay answered 503".to_owned()));
+		member.app.state::<RelayGuests>().waited(INSTANCE, earlier);
 
 		let joined = member.accepted().await.expect("the join");
 		let members = until("the roster of two devices", || async {
@@ -454,6 +461,7 @@ fn an_accepted_invitation_joins_holds_the_key_feeds_the_members_and_answers_onli
 		.await;
 
 		assert_eq!(joined.state, JoinedSpaceState::Online);
+		assert_eq!(member.last_wait(), None);
 		assert_eq!(joined.name, "Studio");
 		assert_eq!(member.relay.room().accepted, vec![INVITATION.to_owned()]);
 		assert_eq!(member.relay.joins().len(), 1);
@@ -736,6 +744,7 @@ fn a_waiting_socket_held_open_asks_again_for_its_rekey_and_comes_online_once_adm
 			(member.relay.joins().len() >= 3).then_some(())
 		})
 		.await;
+		let waited_before = member.last_wait();
 		member.relay.hosting(HostSide::Answering(answer));
 		until("the key handed over", || async { member.held_key_id() }).await;
 		until("the waiting socket to stop", || async {
@@ -754,6 +763,8 @@ fn a_waiting_socket_held_open_asks_again_for_its_rekey_and_comes_online_once_adm
 		assert!(joins.iter().all(is_missed_rekey));
 		assert_eq!(member.relay.connections(), 2, "the accept and one waiting connection");
 		assert_eq!(member.listed().await[0].state, JoinedSpaceState::Online);
+		assert_eq!(waited_before, Some(JoinedSpaceWaitReason::HostSilent));
+		assert_eq!(member.last_wait(), None);
 	});
 }
 
@@ -830,6 +841,7 @@ fn a_waiting_join_the_relay_answers_410_on_ends_its_wait() {
 
 		assert!(was_waiting);
 		assert!(!member.is_waiting(&joined.id));
+		assert_eq!(member.last_wait(), None);
 		assert_eq!(
 			*removed.lock().expect("the events"),
 			vec![json!({ "id": joined.id, "name": "Studio", "reason": "removed" })]
@@ -874,11 +886,14 @@ fn a_waiting_socket_stops_on_removal_and_on_sign_out() {
 		let kept = member.accepted().await.expect("the join waits again");
 		relay::reconciled(member.app.handle()).await;
 		let was_waiting_again = member.is_waiting(&kept.id);
+		let waited_before = member.last_wait();
 		drop(relay::signed_out(member.app.handle()).await);
 
 		assert!(was_waiting && !after_removal);
 		assert!(was_waiting_again);
 		assert!(!member.is_waiting(&kept.id));
+		assert!(waited_before.is_some());
+		assert_eq!(member.last_wait(), None);
 	});
 }
 

@@ -23,6 +23,7 @@ use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
 use super::roster_set::HeldRoster;
+use super::wait_reason::wait_ended;
 use super::waiting::{self, WaitingJoin};
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
@@ -173,6 +174,10 @@ impl RelayGuests {
 
 	pub(super) fn waited(&self, instance_id: &str, wait: JoinedSpaceWait) {
 		self.waits().insert(instance_id.to_owned(), wait);
+	}
+
+	pub(super) fn wait_ended(&self, instance_id: &str) {
+		self.waits().remove(instance_id);
 	}
 
 	pub(super) fn last_wait(&self, instance_id: &str) -> Option<JoinedSpaceWait> {
@@ -580,6 +585,8 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 	let repository = ready(&state)?.joined_spaces();
 	for joined in repository.list().await? {
 		if repository.remove(joined.id.clone()).await? {
+			let JoinedReach::Relay { instance_id } = &joined.reach;
+			wait_ended(app, instance_id);
 			announce_change(app, joined.id)?;
 		}
 	}
@@ -969,6 +976,7 @@ pub(super) async fn entry_evicted<R: Runtime>(
 		return Ok(());
 	}
 	let JoinedReach::Relay { instance_id } = &found.reach;
+	wait_ended(app, instance_id);
 	log::warn!(
 		"joined space {id} (instance {instance_id}) was removed: its membership ended ({reason:?})"
 	);

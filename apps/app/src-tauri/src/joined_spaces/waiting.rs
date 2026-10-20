@@ -15,7 +15,7 @@ use super::join::{
 };
 use super::members;
 use super::relay::{self, RelayGuests};
-use super::wait_reason::{waited, Stall};
+use super::wait_reason::{wait_ended, waited, Stall};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
@@ -215,7 +215,7 @@ async fn listened<R: Runtime>(
 				}
 			}
 			_ = &mut silence => {
-				return Attempt::Dropped(Stall::Silent(SILENCE_BOUND));
+				return Attempt::Dropped(Stall::PongMissing(SILENCE_BOUND));
 			}
 		}
 	}
@@ -238,6 +238,7 @@ async fn is_kept<R: Runtime>(
 	};
 	match kept_answer(app, instance_id, &handed).await {
 		Ok(()) => {
+			wait_ended(app, instance_id);
 			log::info!(
 				"the waiting join of instance {instance_id} kept a rekey: space key_id {}",
 				handed.space.key_id

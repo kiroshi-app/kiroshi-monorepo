@@ -14,6 +14,7 @@ pub(super) enum Stall {
 	AskNotSent(String),
 	Asked,
 	Silent(Duration),
+	PongMissing(Duration),
 	Closed(Option<CloseFrame>),
 	SocketFailed(String),
 	SocketEnded,
@@ -45,6 +46,9 @@ pub(super) fn wait_of(stall: Stall) -> JoinedSpaceWait {
 		),
 		Stall::Silent(bound) => {
 			(Reason::HostSilent, format!("no verified rekey came within {bound:?}"))
+		}
+		Stall::PongMissing(bound) => {
+			(Reason::SocketClosed, format!("no frame or pong arrived for {bound:?}"))
 		}
 		Stall::Closed(frame) => {
 			(Reason::SocketClosed, format!("the relay closed the socket: {frame:?}"))
@@ -100,6 +104,12 @@ pub(super) fn last_wait<R: Runtime>(app: &AppHandle<R>, instance_id: &str) -> Jo
 		.unwrap_or_else(|| wait_of(Stall::NoRekeyYet))
 }
 
+pub(super) fn wait_ended<R: Runtime>(app: &AppHandle<R>, instance_id: &str) {
+	if let Some(guests) = app.try_state::<RelayGuests>() {
+		guests.wait_ended(instance_id);
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -118,6 +128,7 @@ mod tests {
 			(Stall::AskNotSent("broken pipe".to_owned()), Reason::RekeySendFailed),
 			(Stall::Asked, Reason::HostSilent),
 			(Stall::Silent(Duration::from_secs(15)), Reason::HostSilent),
+			(Stall::PongMissing(Duration::from_secs(90)), Reason::SocketClosed),
 			(Stall::Closed(Some(absent)), Reason::SocketClosed),
 			(Stall::SocketFailed("reset".to_owned()), Reason::SocketClosed),
 			(Stall::SocketEnded, Reason::SocketClosed),

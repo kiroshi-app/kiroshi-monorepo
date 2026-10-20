@@ -14,7 +14,7 @@ use super::contract::{JoinedSpace, JoinedSpaceError};
 use super::held::{self, device_keys};
 use super::relay::{self, RelayGuests, RelayJoinError};
 use super::roster_set::{verified_handover, Handed};
-use super::wait_reason::{waited, Stall};
+use super::wait_reason::{wait_ended, waited, Stall};
 use crate::account::cloud::{Cloud, DeviceRegisterError, MeError};
 use crate::account::session::{self, AccountSession};
 use crate::crypto::device_keys::{verify, DeviceKeys};
@@ -60,6 +60,7 @@ async fn attempted<R: Runtime>(
 	let url = member_socket_of(app, &bearer, &device, instance_id).await?;
 	if let Some(handed) = answered(app, url, &bearer, instance_id, &device).await? {
 		kept_answer(app, instance_id, &handed).await?;
+		wait_ended(app, instance_id);
 		log::info!(
 			"the join of instance {instance_id} kept a rekey: space key_id {}",
 			handed.space.key_id
