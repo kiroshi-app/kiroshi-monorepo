@@ -199,9 +199,13 @@ impl RelayGuests {
 			});
 	}
 
+	fn relay_device_forgotten(&self) {
+		*self.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) = None;
+	}
+
 	pub(super) fn relay_device_forgotten_on_refusal(&self, opened: &Opened) {
 		if matches!(opened, Opened::Unknown | Opened::Forbidden | Opened::Gone(_)) {
-			*self.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) = None;
+			self.relay_device_forgotten();
 		}
 	}
 
@@ -634,7 +638,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	let guests = app.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
 	guests.removed().clear();
-	*guests.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) = None;
+	guests.relay_device_forgotten();
 	let running: Vec<(String, Guest)> = guests.guests().drain().collect();
 	for (id, guest) in running {
 		finished(&id, guest).await;
