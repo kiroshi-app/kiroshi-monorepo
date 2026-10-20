@@ -30,7 +30,7 @@
         )
         static let accepted = ScriptedTransport.Answer.status(
             200,
-            #"{"id":"\#(studioId)","name":"Studio","role":"member","createdAt":"2026-10-19T09:00:00.000Z"}"#
+            #"{"instanceId":"\#(studioId)","name":"Studio"}"#
         )
 
         static func state(_ state: String) -> ScriptedTransport.Answer {
@@ -45,6 +45,11 @@
             switch fixture {
             case .invitationJoining: answers[acceptPath] = .pending
             case .invitationCouldNotAccept: answers[acceptPath] = .offline
+            case .invitationAlreadyJoined:
+                answers[acceptPath] = CloudFixture.error(
+                    409, code: "ALREADY_JOINED",
+                    message: "The membership of the instance is already joined")
+            case .invitationNotFound: answers[acceptPath] = .status(404, "")
             case .invitationWithdrawn: answers[statePath] = state("withdrawn")
             case .invitationExpired: answers[statePath] = state("expired")
             case .invitationOtherEmail:
@@ -69,7 +74,7 @@
             case .invitationSheet:
                 invitations.openLink(invitationId)
             case .invitationJoining, .invitationHostOffline, .invitationCouldNotAccept,
-                .invitationJoined:
+                .invitationJoined, .invitationAlreadyJoined, .invitationNotFound:
                 invitations.open(invitation)
                 invitations.accept(invitation)
             case .invitationWithdrawn, .invitationExpired:

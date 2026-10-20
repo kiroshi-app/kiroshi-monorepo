@@ -72,6 +72,38 @@ struct InvitationsTests {
         #expect(invitations.phase(of: invitation) == .open)
     }
 
+    @Test func anAlreadyJoinedAcceptJoinsTheListedSpaceLikeAnAcceptedOne() async {
+        let (invitations, _) = make([
+            InvitationsFixture.acceptPath: CloudFixture.error(
+                409, code: "ALREADY_JOINED", message: "already joined")
+        ])
+        await invitations.refresh()
+        invitations.open(invitation)
+
+        invitations.accept(invitation)
+        await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        await waitUntil { invitations.opened == nil }
+
+        #expect(
+            outcomes.joined == [
+                Space(
+                    id: InvitationsFixture.studioId, name: "Studio", role: .member,
+                    isHostOnline: true)
+            ])
+        #expect(invitations.pending.isEmpty)
+        #expect(invitations.phase(of: invitation) == .open)
+    }
+
+    @Test func aBareNotFoundAcceptSaysThereIsNoSuchInvitation() async {
+        let (invitations, _) = make([InvitationsFixture.acceptPath: .status(404, "")])
+
+        invitations.accept(invitation)
+        await waitUntil { invitations.phase(of: invitation) == .refused(.unknown) }
+
+        #expect(invitations.joins.isEmpty)
+        #expect(outcomes.joined.isEmpty)
+    }
+
     @Test func oneJoinRunsAtATimeForAnInvitation() async {
         let (invitations, transport) = make([
             InvitationsFixture.acceptPath: CloudFixture.error(
