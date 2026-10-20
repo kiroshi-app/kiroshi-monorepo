@@ -383,7 +383,13 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 
 struct Unlisted {
 	bearer: String,
-	held: Vec<(String, String)>,
+	held: Vec<UnlistedEntry>,
+}
+
+struct UnlistedEntry {
+	id: String,
+	instance_id: String,
+	was_running: bool,
 }
 
 async fn memberships_followed<R: Runtime>(
@@ -406,13 +412,12 @@ async fn departures_read<'a, R: Runtime>(
 	app: &AppHandle<R>,
 	cloud: &Cloud,
 	unlisted: &'a Unlisted,
-) -> Vec<(&'a str, JoinedSpaceRemovalReason)> {
+) -> Vec<(&'a UnlistedEntry, JoinedSpaceRemovalReason)> {
 	let mut departed = Vec::new();
-	for (id, instance_id) in &unlisted.held {
-		departed.push((
-			id.as_str(),
-			unlisted_reason(app, cloud, &unlisted.bearer, id, instance_id).await,
-		));
+	for entry in &unlisted.held {
+		let reason =
+			unlisted_reason(app, cloud, &unlisted.bearer, &entry.id, &entry.instance_id).await;
+		departed.push((entry, reason));
 	}
 	departed
 }
@@ -421,16 +426,37 @@ async fn departed_evicted<R: Runtime>(
 	app: &AppHandle<R>,
 	guests: &RelayGuests,
 	bearer: &str,
-	departed: Vec<(&str, JoinedSpaceRemovalReason)>,
+	departed: Vec<(&UnlistedEntry, JoinedSpaceRemovalReason)>,
 ) -> Result<(), String> {
-	let is_same_account = session_bearer(app)?.as_deref() == Some(bearer);
-	for (id, reason) in departed {
-		let is_still_unlisted = guests.unlisted().remove(id);
-		if is_same_account && is_still_unlisted {
-			entry_evicted(app, id, reason).await.map_err(described)?;
+	let still_unlisted: Vec<bool> = {
+		let mut unlisted = guests.unlisted();
+		departed.iter().map(|(entry, _)| unlisted.remove(&entry.id)).collect()
+	};
+	if session_bearer(app)?.as_deref() != Some(bearer) {
+		return Ok(());
+	}
+	for ((entry, reason), is_still_unlisted) in departed.into_iter().zip(still_unlisted) {
+		if is_still_unlisted {
+			entry_evicted(app, &entry.id, reason).await.map_err(described)?;
+		} else if entry.was_running {
+			guest_restarted(app, guests, entry).await;
 		}
 	}
 	Ok(())
+}
+
+async fn guest_restarted<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+	entry: &UnlistedEntry,
+) {
+	if let Err(failure) = started_in_turn(app, guests, &entry.id).await {
+		log::warn!(
+			"joined space {} (instance {}) was joined again while unlisted and its guest did not start again: {failure:?}",
+			entry.id,
+			entry.instance_id
+		);
+	}
 }
 
 async fn listed_followed_unlisted_stopped<R: Runtime>(
@@ -459,8 +485,9 @@ async fn listed_followed_unlisted_stopped<R: Runtime>(
 	let mut unlisted = Vec::new();
 	for (id, instance_id) in held.iter().map(relay_instance) {
 		if !listed.iter().any(|instance| instance.id == instance_id) {
-			unlisted_stopped(guests, id).await;
-			unlisted.push((id.to_owned(), instance_id.to_owned()));
+			let was_running = unlisted_stopped(guests, id).await;
+			let (id, instance_id) = (id.to_owned(), instance_id.to_owned());
+			unlisted.push(UnlistedEntry { id, instance_id, was_running });
 		}
 	}
 	Ok(Some(Unlisted { bearer, held: unlisted }))
@@ -494,13 +521,15 @@ async fn listed_followed<R: Runtime>(
 	announce_change(app, joined.id).map_err(described)
 }
 
-async fn unlisted_stopped(guests: &RelayGuests, id: &str) {
+async fn unlisted_stopped(guests: &RelayGuests, id: &str) -> bool {
 	guests.unlisted().insert(id.to_owned());
 	let guest = guests.guests().remove(id);
+	let was_running = guest.is_some();
 	if let Some(guest) = guest {
 		finished(id, guest).await;
 	}
 	guests.waiting_stopped(id).await;
+	was_running
 }
 
 async fn unlisted_reason<R: Runtime>(
@@ -556,6 +585,14 @@ async fn started<R: Runtime>(
 ) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
 	let guests = app.state::<RelayGuests>();
 	let _turn = guests.turn.lock().await;
+	started_in_turn(app, &guests, id).await
+}
+
+async fn started_in_turn<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+	id: &str,
+) -> Result<(joined_spaces::JoinedSpace, Reached), JoinedSpaceError> {
 	if guests.removed().contains(id) {
 		return Err(JoinedSpaceError::RemovedByRotation);
 	}

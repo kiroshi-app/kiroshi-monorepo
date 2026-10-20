@@ -1005,6 +1005,20 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 		);
 		assert!(removed.lock().expect("the events").is_empty());
 		assert_eq!(member.listed().await.len(), 1);
+		assert!(member.app.state::<RelayGuests>().is_running(&paused.joined.id));
+	});
+}
+
+#[test]
+fn an_unlisted_space_kept_on_a_sign_out_during_the_429_pause_starts_no_guest() {
+	run(async {
+		let member = Member::new("no-guest-after-sign-out-during-pause").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+
+		member.signed_out_of_the_store();
+		paused.reconciliation.await.expect("the reconciliation ends");
+
+		assert!(!member.app.state::<RelayGuests>().is_running(&paused.joined.id));
 	});
 }
 
