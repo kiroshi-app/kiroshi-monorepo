@@ -201,7 +201,7 @@ async fn listened<R: Runtime>(
 							return Attempt::Joined;
 						}
 					}
-					Some(Ok(Message::Close(frame))) => return Attempt::Dropped(Stall::Closed(frame)),
+					Some(Ok(Message::Close(frame))) => return closed(app, instance_id, frame),
 					Some(Ok(_)) => {}
 					Some(Err(error)) => return Attempt::Dropped(Stall::SocketFailed(error.to_string())),
 					None => return Attempt::Dropped(Stall::SocketEnded),
@@ -251,6 +251,14 @@ async fn is_kept<R: Runtime>(
 			false
 		}
 	}
+}
+
+fn closed<R: Runtime>(app: &AppHandle<R>, instance_id: &str, frame: Option<CloseFrame>) -> Attempt {
+	let Some(departure) = frame.as_ref().and_then(relay::departure_closing) else {
+		return Attempt::Dropped(Stall::Closed(frame));
+	};
+	waited(app, instance_id, Stall::Departed(departure));
+	Attempt::Departed(departure)
 }
 
 fn left<R: Runtime>(app: &AppHandle<R>, id: &str, stop: &watch::Receiver<bool>) {

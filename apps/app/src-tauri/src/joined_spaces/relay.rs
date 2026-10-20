@@ -930,6 +930,14 @@ fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str)
 	}
 }
 
+pub(super) fn departure_closing(frame: &CloseFrame) -> Option<Departure> {
+	match u16::from(frame.code) {
+		MEMBERSHIP_ENDED => Some(Departure::MemberRemoved),
+		SPACE_DELETED => Some(Departure::SpaceDeleted),
+		_ => None,
+	}
+}
+
 fn closed_by_relay(frame: Option<CloseFrame>) -> Ended {
 	match frame.map(|frame| u16::from(frame.code)) {
 		Some(SPACE_DELETED) => Ended::Evicted(JoinedSpaceRemovalReason::Deleted),

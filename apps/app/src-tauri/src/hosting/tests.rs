@@ -205,22 +205,6 @@ async fn members_listed(Served(relay): Served<Relay>, headers: HeaderMap) -> Res
 	answered_json(StatusCode::OK, Value::Array(relay.members.lock().expect("the relay").clone()))
 }
 
-async fn member_invited(
-	Served(relay): Served<Relay>,
-	headers: HeaderMap,
-	body: String,
-) -> Response {
-	assert_eq!(bearer_of(&headers), BEARER);
-	let body: Value = serde_json::from_str(&body).expect("a json body");
-	let email = body["email"].as_str().expect("an email").to_owned();
-	if let Some(forced) = member_call(&relay, format!("POST {email}")) {
-		return forced;
-	}
-	let invited = cloud_member(&uuid::Uuid::new_v4().to_string(), &email, "member", "pending");
-	relay.members.lock().expect("the relay").push(invited.clone());
-	answered_json(StatusCode::CREATED, invited)
-}
-
 async fn member_removed(
 	Served(relay): Served<Relay>,
 	Path((_, user_id)): Path<(String, String)>,
@@ -739,9 +723,9 @@ impl Harness {
 				.route("/devices/{id}", delete(device_deleted))
 				.route("/api/auth/sign-out", post(cloud_signed_out))
 				.route("/instances/{id}/relay/host", get(host))
-				.route("/instances/{id}/members", get(members_listed).post(member_invited))
+				.route("/instances/{id}/members", get(members_listed).post(invitation_sent))
 				.route("/instances/{id}/members/{user_id}", delete(member_removed))
-				.route("/instances/{id}/invitations", get(invitations_listed).post(invitation_sent))
+				.route("/instances/{id}/invitations", get(invitations_listed))
 				.route("/instances/{id}/invitations/{invitation_id}", delete(invitation_withdrawn))
 				.route(
 					"/instances/{id}/invitations/{invitation_id}/resend",
@@ -6290,16 +6274,27 @@ impl Harness {
 	}
 
 	fn approved(&self, device: &SealingMember) {
+		self.listed_as(device, "approved");
+	}
+
+	fn listed_pending(&self, device: &SealingMember) {
+		self.listed_as(device, "pending");
+	}
+
+	fn listed_as(&self, device: &SealingMember, status: &str) {
 		let host = self.host_listed();
 		let mut listed = self.relay.listed_devices.lock().expect("the relay");
 		let listed = listed.get_or_insert_with(|| vec![host]);
-		listed.push(listed_device(&device.relay_device_id, &device.account_id, &device.keys));
+		listed.retain(|listed| listed["id"] != device.relay_device_id.as_str());
+		let mut entry = listed_device(&device.relay_device_id, &device.account_id, &device.keys);
+		entry["status"] = json!(status);
+		listed.push(entry);
 	}
 
 	fn unlisted(&self, device: &SealingMember) {
 		let mut listed = self.relay.listed_devices.lock().expect("the relay");
 		let listed = listed.as_mut().expect("a device list");
-		listed.retain(|listed| listed["deviceId"] != device.relay_device_id.as_str());
+		listed.retain(|listed| listed["id"] != device.relay_device_id.as_str());
 	}
 
 	fn device_lists(&self) -> usize {
@@ -6362,8 +6357,9 @@ impl Harness {
 
 fn listed_device(relay_device_id: &str, account_id: &str, keys: &DeviceKeys) -> Value {
 	json!({
-		"deviceId": relay_device_id,
+		"id": relay_device_id,
 		"userId": account_id,
+		"status": "approved",
 		"ed25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(keys.signing_public().as_bytes()),
 		"x25519PublicKey": BASE64_URL_SAFE_NO_PAD.encode(keys.agreement_public().as_bytes()),
 	})
@@ -6899,6 +6895,7 @@ fn a_pending_device_gets_no_rekey_until_the_device_list_returns_it_approved() {
 		let pending = SealingMember::new("guest");
 
 		harness.approved(&approved);
+		harness.listed_pending(&pending);
 		relay.sent(device_approved_event(&pending.relay_device_id, "guest")).await;
 		relay.addressed(&approved, "rekey").await;
 		let before_approval = harness.rostered_as(&pending).await;
