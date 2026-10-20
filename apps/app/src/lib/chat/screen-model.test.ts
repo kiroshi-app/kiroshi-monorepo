@@ -291,6 +291,49 @@ describe("toRuns", () => {
 		])
 	})
 
+	it("splits a relayed prompt from one written here by the same account", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({
+					id: "here-1",
+					authorAccountId: "account-lea",
+					writtenFrom: "here",
+				}),
+				prompt({
+					id: "relay-1",
+					authorAccountId: "account-lea",
+					writtenFrom: "relay",
+				}),
+			]),
+		)
+
+		expect(runs.map((run) => run.map((row) => row.messageId))).toEqual([
+			["here-1"],
+			["relay-1"],
+		])
+	})
+
+	it("keeps a pending prompt in the run of one written here by the same account", () => {
+		const runs = toRuns(
+			toTranscriptRows([
+				prompt({
+					id: "here-1",
+					authorAccountId: "account-lea",
+					writtenFrom: "here",
+				}),
+				prompt({
+					id: "local-1",
+					authorAccountId: "account-lea",
+					writtenFrom: undefined,
+				}),
+			]),
+		)
+
+		expect(runs.map((run) => run.map((row) => row.messageId))).toEqual([
+			["here-1", "local-1"],
+		])
+	})
+
 	it("opens a new block after a long pause", () => {
 		const runs = toRuns(
 			toTranscriptRows([
