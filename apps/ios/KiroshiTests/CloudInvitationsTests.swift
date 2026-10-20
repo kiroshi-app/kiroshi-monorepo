@@ -59,16 +59,30 @@ struct CloudInvitationsTests {
         #expect(try await invitations.state(of: invitation.id) == .refused(refusal))
     }
 
-    @Test func acceptingPostsToTheInvitedSpace() async throws {
-        let (invitations, transport) = cloud([
-            InvitationsFixture.acceptPath: InvitationsFixture.accepted
-        ])
+    @Test func acceptingPostsToTheInvitationWithTheBearer() async throws {
+        let path = "/invitations/\(invitation.id)/accept"
+        let (invitations, transport) = cloud([path: InvitationsFixture.accepted])
 
         #expect(try await invitations.accept(invitation, bearer: "bearer-1") == .done)
 
         let request = try #require(await transport.requests.first)
+        #expect(invitation.id != invitation.instanceId)
         #expect(request.httpMethod == "POST")
-        #expect(request.url?.path() == "/invitations/\(InvitationsFixture.studioId)/accept")
+        #expect(request.url?.path() == path)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer bearer-1")
+    }
+
+    @Test func decliningPostsToTheInvitationWithTheBearer() async throws {
+        let path = "/invitations/\(invitation.id)/decline"
+        let (invitations, transport) = cloud([path: .status(204, "")])
+
+        #expect(try await invitations.decline(invitation, bearer: "bearer-1") == .done)
+
+        let request = try #require(await transport.requests.first)
+        #expect(invitation.id != invitation.instanceId)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path() == path)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer bearer-1")
     }
 
     @Test(arguments: [

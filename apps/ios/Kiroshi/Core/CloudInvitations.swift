@@ -99,7 +99,7 @@ struct CloudInvitations: Sendable {
     {
         guard
             let (status, data) = try await send(
-                "invitations/\(invitation.instanceId)/\(verb)", method: "POST", bearer: bearer)
+                "invitations/\(invitation.id)/\(verb)", method: "POST", bearer: bearer)
         else { return .unreachable }
         switch status {
         case 200, 204: return .done

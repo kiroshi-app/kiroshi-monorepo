@@ -12,8 +12,8 @@
         static let listPath = "/invitations"
         static let statePath = "/invitations/\(invitationId)/state"
         static let otherEmailStatePath = "/invitations/\(otherEmailInvitationId)/state"
-        static let acceptPath = "/invitations/\(studioId)/accept"
-        static let declinePath = "/invitations/\(studioId)/decline"
+        static let acceptPath = "/invitations/\(invitationId)/accept"
+        static let declinePath = "/invitations/\(invitationId)/decline"
         static let leavePath = "/instances/\(studioId)/membership"
 
         static let personal = ScriptedTransport.Answer.status(
