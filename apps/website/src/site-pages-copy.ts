@@ -29,7 +29,7 @@ export const SITE_PAGES_COPY = {
 					[
 						"Your conversations, files, skills and memory live on your computer. Kiroshi's servers don't store them.",
 						"What the agent works on goes to the model provider you configured, under your own account with it.",
-						"In the online mode, the relay stores your account, your sessions and your Spaces. It passes messages along without storing them, protected by TLS but not end-to-end encrypted.",
+						"In the online mode, the relay stores your account, your sessions and your Spaces. It passes messages along without storing them, end-to-end encrypted, so it can't read them.",
 						"Kiroshi runs no analytics, no crash reporting and no tracking of its own. The agent, which the desktop app runs, sends its own usage data to the model provider you configured.",
 						"You can delete your account in the iPhone app only, and some data stays behind. Both are explained below.",
 					],
@@ -44,7 +44,8 @@ export const SITE_PAGES_COPY = {
 						"if you sign in with Google or Apple, your account id there and the access, refresh and ID tokens they issue, stored without extra encryption. The ID token also carries your email address and your name;",
 						"for each session, a session token, your IP address, your browser's or app's user agent, a device name, the platform, and when the session started and was last used, to the minute;",
 						"for a sign-in by email, the code, stored hashed, or the link, filed under your email address;",
-						"for each request to sign the desktop app in, your computer's name, the platform, a local callback address, a hashed secret, and who approved it.",
+						"for each request to sign the desktop app in, your computer's name, the platform, a local callback address, a hashed secret, and who approved it;",
+						"for each of your devices, its public keys, whether you approved it, and when it was added and last active.",
 					],
 					"The desktop app sends your computer's name as its device name, and that name often includes your first name. The iPhone app sends \"iPhone\". You see the list of your devices, and whoever approves a desktop sign-in on kiroshi.app/authorize sees that computer's name.",
 					"On the iPhone, the app keeps your session token in the Keychain. It keeps your last Space, and the list of accounts that accepted message routing, in its settings on the device.",
@@ -64,10 +65,38 @@ export const SITE_PAGES_COPY = {
 				body: [
 					"On your computer, the app keeps your Spaces, companions, conversations, messages, missions, routines and their runs in a database in the app's data folder, com.kiroshi.app, with no time limit. Attachments, up to 10 MB each and 20 per message, are kept beside it until you delete the conversation.",
 					"Skills, memory and plugins are kept in git repositories on your computer. Removing a line from a skill or from memory leaves that line in the git history.",
-					"In a Space shared online, messages between members and the computer that hosts the Space go through the relay: their text, tool output, profile pictures and photos sent from the iPhone. The relay adds the sender's account id, name and picture, forwards each message to the computer that hosts the Space and to every member of the Space, and writes none of it anywhere.",
-					"Messages are protected by TLS on their way to and from api.kiroshi.app, but they aren't end-to-end encrypted: the relay reads the content of every message a member sends while it forwards it.",
+					"In a Space shared online, messages between members and the computer that hosts the Space go through the relay: their text, tool output, profile pictures and photos sent from the iPhone. The relay adds the id of the sending device, forwards each message between the computer that hosts the Space and the devices of its members, and writes none of it anywhere.",
+					"Messages are end-to-end encrypted between devices, and protected by TLS on their way to and from api.kiroshi.app. The relay can't read them.",
 					"A message you send in someone else's Space runs on the computer that hosts the Space and with the model provider its host configured. Its content reaches that provider under the host's account, and the computer that hosts the Space keeps your name and your messages with no time limit.",
 					"The iPhone app stores no messages. Photos you pick go through the relay to the computer that hosts the Space.",
+				],
+			},
+			{
+				heading: "What the relay can and cannot read",
+				body: [
+					"The relay stores:",
+					[
+						"your account;",
+						"the id and name of each Space shared online;",
+						"the email address of each member of a Space;",
+						"your plan;",
+						"the public keys of your devices.",
+					],
+					"The relay distributes:",
+					[
+						"the public keys of your devices, to your other devices and to the computer that hosts each Space you joined;",
+						"invitations, to the email address invited.",
+					],
+					"Because the relay hands out the keys, adding a device to your account shows its fingerprint on the new device and on the one that approves it, for you to compare. When they match, no key was swapped on the way.",
+					"The relay can't read the content of anything that travels end-to-end encrypted between devices:",
+					[
+						"conversations;",
+						"missions;",
+						"approvals;",
+						"avatars;",
+						"the roster of a Space, its list of devices.",
+					],
+					"The host of a Space is always a computer a person controls, never a Kiroshi server: your computer for a Space you share, its owner's computer for a Space you joined.",
 				],
 			},
 			{
@@ -135,6 +164,7 @@ export const SITE_PAGES_COPY = {
 						"Your account and your Google or Apple tokens: until you delete your account.",
 						"Sessions: a session lasts 7 days and renews while you use it. Expired sessions aren't cleared, so a session, with its IP address, user agent and device name, stays until you sign it out or delete your account.",
 						"Sign-in codes and links: valid for 5 minutes and deleted once used. Unused ones are never cleared.",
+						"The public keys of your devices: until you remove the device, refuse its request or delete your account. Signing out doesn't remove them, and a request no one approves stays after it expires.",
 						"Desktop sign-in requests: valid for 10 minutes and never cleared. Approved ones go with your account. Pending, cancelled or expired ones stay, with the computer's name, even after your account is deleted.",
 						"Spaces: until the owner deletes the Space or their account.",
 						"Memberships: until the member is removed, the Space is deleted or the account is deleted. An account created by an invitation stays after the Space.",
@@ -152,7 +182,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Deleting your account",
 				body: [
 					"You can delete your account from Settings in the iPhone app. The desktop app and kiroshi.app can't delete an account: they can only sign sessions out.",
-					"Deleting your account removes your account, your Google or Apple tokens, your sessions, your approved desktop sign-in requests, the Spaces you own and your memberships. It leaves behind:",
+					"Deleting your account removes your account, your Google or Apple tokens, your sessions, your approved desktop sign-in requests, your devices with their public keys, the Spaces you own and your memberships. It leaves behind:",
 					[
 						"your Google grant, which Kiroshi never revokes;",
 						"your Apple grant, if Kiroshi's request to revoke it fails;",
@@ -178,7 +208,7 @@ export const SITE_PAGES_COPY = {
 				heading: "Changes to this policy",
 				body: [
 					"When this policy changes, the new version replaces this page and the date below changes with it.",
-					"Last updated: 15 October 2026.",
+					"Last updated: 19 October 2026.",
 				],
 			},
 			{

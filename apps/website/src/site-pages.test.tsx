@@ -86,7 +86,7 @@ const sectionNamed = (heading: string) =>
 		.parentElement as HTMLElement
 
 describe("the privacy page", () => {
-	it("renders its sixteen sections in order", async () => {
+	it("renders its seventeen sections in order", async () => {
 		await openPage("/privacy", privacy.title)
 		expect(sectionHeadings()).toEqual([
 			"Who we are",
@@ -94,6 +94,7 @@ describe("the privacy page", () => {
 			"Your account",
 			"Spaces and members",
 			"Messages and conversations",
+			"What the relay can and cannot read",
 			"Your model provider",
 			"Applications and secrets",
 			"The website and sign-in",
@@ -121,6 +122,45 @@ describe("the privacy page", () => {
 		expect(mainText()).not.toMatch(/\b(sas|sarl|eurl|siren|siret|rcs)\b/)
 	})
 
+	it("says what the relay stores, distributes and cannot read, and who hosts a Space", async () => {
+		await openPage("/privacy", privacy.title)
+		const relay = sectionNamed("What the relay can and cannot read")
+		const [stores, distributes, unreadable] = within(relay).getAllByRole("list")
+		expect(within(stores).getAllByRole("listitem")).toHaveLength(5)
+		expect(stores.textContent).toContain("the public keys of your devices")
+		expect(within(distributes).getAllByRole("listitem")).toHaveLength(2)
+		expect(distributes.textContent).toContain("invitations")
+		expect(relay.textContent).toContain(
+			"adding a device to your account shows its fingerprint on the new device and on the one that approves it",
+		)
+		expect(within(unreadable).getAllByRole("listitem")).toHaveLength(5)
+		expect(relay.textContent).toContain(
+			"The host of a Space is always a computer a person controls",
+		)
+	})
+
+	it("never says the relay reads messages or that they aren't end-to-end encrypted", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(mainText()).not.toMatch(
+			/relay reads|not end-to-end encrypted|aren't end-to-end encrypted/,
+		)
+	})
+
+	it("names the public keys of your devices among what your account stores, and when they go", async () => {
+		await openPage("/privacy", privacy.title)
+		expect(
+			within(sectionNamed("Your account")).getByText(
+				/for each of your devices, its public keys/,
+			),
+		).toBeDefined()
+		expect(sectionNamed("Deleting your account").textContent).toContain(
+			"your devices with their public keys",
+		)
+		expect(sectionNamed("How long we keep things").textContent).toContain(
+			"The public keys of your devices: until you remove the device",
+		)
+	})
+
 	it("lists what account deletion leaves behind", async () => {
 		await openPage("/privacy", privacy.title)
 		const deletion = sectionNamed("Deleting your account")
@@ -132,7 +172,7 @@ describe("the privacy page", () => {
 		await openPage("/privacy", privacy.title)
 		expect(sectionNamed("Contact").textContent).toContain("support@kiroshi.app")
 		expect(sectionNamed("Children").textContent).toContain("16")
-		expect(mainText()).toContain("last updated: 15 october 2026.")
+		expect(mainText()).toContain("last updated: 19 october 2026.")
 	})
 })
 
