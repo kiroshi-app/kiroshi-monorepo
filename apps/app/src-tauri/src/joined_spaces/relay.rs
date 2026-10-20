@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -49,6 +50,8 @@ const CALLS_IN_FLIGHT: usize = 64;
 
 const HOST_ANSWER_BOUND: Duration = Duration::from_secs(15);
 
+const LEAVE_BOUND: Duration = Duration::from_secs(5);
+
 pub struct RelayGuests {
 	cloud: Cloud,
 	guests: Mutex<HashMap<String, Guest>>,
@@ -57,6 +60,7 @@ pub struct RelayGuests {
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
+	gestures: AtomicU64,
 	known_relay_device: Mutex<Option<KnownRelayDevice>>,
 	members_reading: Mutex<HashMap<String, bool>>,
 	answer_bound: Duration,
@@ -155,6 +159,7 @@ impl RelayGuests {
 			waiting: Mutex::new(HashMap::new()),
 			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
+			gestures: AtomicU64::new(0),
 			known_relay_device: Mutex::new(None),
 			members_reading: Mutex::new(HashMap::new()),
 			answer_bound: HOST_ANSWER_BOUND,
@@ -229,6 +234,14 @@ impl RelayGuests {
 		self.unlisted.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
+	fn gesture_made(&self) {
+		self.gestures.fetch_add(1, Ordering::SeqCst);
+	}
+
+	fn gestures_made(&self) -> u64 {
+		self.gestures.load(Ordering::SeqCst)
+	}
+
 	fn ended_error(&self, id: &str) -> JoinedSpaceError {
 		if self.removed().contains(id) {
 			return JoinedSpaceError::RemovedByRotation;
@@ -296,6 +309,21 @@ impl RelayGuests {
 	}
 
 	#[cfg(test)]
+	pub(crate) fn is_removed(&self, id: &str) -> bool {
+		self.removed().contains(id)
+	}
+
+	#[cfg(test)]
+	pub(crate) fn is_unlisted(&self, id: &str) -> bool {
+		self.unlisted().contains(id)
+	}
+
+	#[cfg(test)]
+	pub(super) fn presence(&self, id: &str) -> Option<Presence> {
+		self.reached(id).map(|reached| *reached.link.presence().borrow())
+	}
+
+	#[cfg(test)]
 	pub(crate) fn turn(&self) -> &tokio::sync::Mutex<()> {
 		&self.turn
 	}
@@ -359,6 +387,7 @@ pub async fn joined<R: Runtime>(
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	guests.unlisted().remove(&joined.id);
+	guests.gesture_made();
 	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
 	Ok(JoinedSpace::presented(joined, guests.cloud(), wait))
@@ -381,6 +410,12 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 	}
 }
 
+struct Listing {
+	bearer: String,
+	instances: Vec<CloudInstance>,
+	gestures: u64,
+}
+
 struct Unlisted {
 	bearer: String,
 	held: Vec<UnlistedEntry>,
@@ -396,12 +431,18 @@ async fn memberships_followed<R: Runtime>(
 	app: &AppHandle<R>,
 	guests: &RelayGuests,
 ) -> Result<(), String> {
+	let Some(listing) = listing_read(app, guests).await? else {
+		return Ok(());
+	};
 	let unlisted = {
 		let _turn = guests.turn.lock().await;
-		listed_followed_unlisted_stopped(app, guests).await?
-	};
-	let Some(unlisted) = unlisted else {
-		return Ok(());
+		if is_outdated(app, guests, &listing)? {
+			log::info!(
+				"the cloud memberships were read while a join, a leave or a sign-out moved the joined spaces: the next reconciliation follows them"
+			);
+			return Ok(());
+		}
+		listed_followed_unlisted_stopped(app, guests, listing).await?
 	};
 	let departed = departures_read(app, guests.cloud(), &unlisted).await;
 	let _turn = guests.turn.lock().await;
@@ -459,21 +500,39 @@ async fn guest_restarted<R: Runtime>(
 	}
 }
 
-async fn listed_followed_unlisted_stopped<R: Runtime>(
+async fn listing_read<R: Runtime>(
 	app: &AppHandle<R>,
 	guests: &RelayGuests,
-) -> Result<Option<Unlisted>, String> {
+) -> Result<Option<Listing>, String> {
+	let gestures = guests.gestures_made();
 	let Some(bearer) = session_bearer(app)? else {
 		return Ok(None);
 	};
-	let listed = match guests.cloud.instances(&bearer).await {
-		Ok(listed) => listed,
+	match guests.cloud.instances(&bearer).await {
+		Ok(instances) => Ok(Some(Listing { bearer, instances, gestures })),
 		Err(InstancesError::Revoked) => {
 			session::revoked(app, &bearer);
-			return Err("the cloud refused the account (401)".to_owned());
+			Err("the cloud refused the account (401)".to_owned())
 		}
-		Err(InstancesError::Unreachable(reason)) => return Err(reason),
-	};
+		Err(InstancesError::Unreachable(reason)) => Err(reason),
+	}
+}
+
+fn is_outdated<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+	listing: &Listing,
+) -> Result<bool, String> {
+	let is_signed_in_as_listed = session_bearer(app)?.as_deref() == Some(listing.bearer.as_str());
+	Ok(!is_signed_in_as_listed || guests.gestures_made() != listing.gestures)
+}
+
+async fn listed_followed_unlisted_stopped<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+	listing: Listing,
+) -> Result<Unlisted, String> {
+	let Listing { bearer, instances: listed, .. } = listing;
 	let state = app.state::<db::DatabaseState>();
 	let database = ready(&state).map_err(described)?;
 	let hosted = database.space_hosting().registered_instance_ids().await.map_err(described)?;
@@ -490,7 +549,7 @@ async fn listed_followed_unlisted_stopped<R: Runtime>(
 			unlisted.push(UnlistedEntry { id, instance_id, was_running });
 		}
 	}
-	Ok(Some(Unlisted { bearer, held: unlisted }))
+	Ok(Unlisted { bearer, held: unlisted })
 }
 
 fn relay_instance(joined: &joined_spaces::JoinedSpace) -> (&str, &str) {
@@ -692,6 +751,7 @@ pub async fn left<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<(), Joined
 	if !repository.remove(id.to_owned()).await? {
 		return Err(unknown());
 	}
+	guests.gesture_made();
 	let guest = guests.guests().remove(id);
 	if let Some(guest) = guest {
 		finished(id, guest).await;
@@ -710,7 +770,13 @@ async fn membership_ended<R: Runtime>(
 		Ok(None) => return Err(JoinedSpaceError::NeedsSignIn),
 		Err(error) => return Err(JoinedSpaceError::SessionStore { detail: format!("{error:?}") }),
 	};
-	match cloud.leave_instance(&bearer, instance_id).await {
+	// The leave stays under turn so that no join, reconciliation or sign-out interleaves between
+	// the relay ending the membership and the entry leaving: LEAVE_BOUND caps their queue.
+	let Ok(left) = timeout(LEAVE_BOUND, cloud.leave_instance(&bearer, instance_id)).await else {
+		let detail = format!("the relay did not answer the leave within {LEAVE_BOUND:?}");
+		return Err(JoinedSpaceError::RelayUnreachable { detail });
+	};
+	match left {
 		Ok(()) | Err(LeaveCallError::UnknownMembership) => Ok(()),
 		Err(LeaveCallError::OwnerNotRemovable) => Err(JoinedSpaceError::OwnerNotRemovable),
 		Err(LeaveCallError::Revoked) => {
@@ -727,6 +793,7 @@ async fn membership_ended<R: Runtime>(
 pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::MutexGuard<'_, ()>> {
 	let guests = app.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
+	guests.gesture_made();
 	guests.removed().clear();
 	guests.unlisted().clear();
 	guests.relay_device_forgotten();

@@ -8,7 +8,7 @@ use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, RawQuery, State as Served};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
@@ -26,6 +26,7 @@ use super::commands::{
 use super::contract::{
 	JoinedSpace, JoinedSpaceError, JoinedSpaceState, JoinedSpaceWait, JoinedSpaceWaitReason,
 };
+use super::member_link::Presence;
 use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
@@ -91,6 +92,9 @@ struct Room {
 	member_refusal: Option<(StatusCode, Value)>,
 	retry_after: Option<&'static str>,
 	upgrades: Vec<Instant>,
+	instance_reads: usize,
+	is_instance_list_stalled: bool,
+	leave: (StatusCode, Value),
 }
 
 #[derive(Clone)]
@@ -114,6 +118,9 @@ impl Relay {
 			member_refusal: None,
 			retry_after: None,
 			upgrades: Vec::new(),
+			instance_reads: 0,
+			is_instance_list_stalled: false,
+			leave: (StatusCode::NO_CONTENT, Value::Null),
 		})))
 	}
 
@@ -166,6 +173,7 @@ impl Relay {
 			.route("/devices", post(device_registered))
 			.route("/instances", get(instances_listed))
 			.route("/instances/{id}/roster", get(roster_read))
+			.route("/instances/{id}/membership", delete(membership_left))
 			.route("/invitations", get(invitations_listed))
 			.route("/invitations/{id}/accept", post(invitation_accepted))
 			.route("/instances/{id}/relay/member", get(member_socket))
@@ -228,12 +236,25 @@ async fn device_registered() -> Response {
 }
 
 async fn instances_listed(Served(relay): Served<Relay>) -> Response {
+	let is_stalled = {
+		let mut room = relay.room();
+		room.instance_reads += 1;
+		room.is_instance_list_stalled
+	};
+	if is_stalled {
+		std::future::pending::<()>().await;
+	}
 	let room = relay.room();
 	let mut listed = room.other_memberships.clone();
 	if !room.accepted.is_empty() {
 		listed.insert(0, json!({ "id": INSTANCE, "name": "Studio" }));
 	}
 	answered_json(StatusCode::OK, Value::Array(listed))
+}
+
+async fn membership_left(Served(relay): Served<Relay>) -> Response {
+	let (status, body) = relay.room().leave.clone();
+	answered_json(status, body)
 }
 
 async fn roster_read(Served(relay): Served<Relay>) -> Response {
@@ -877,13 +898,15 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 const WHILE_PAUSED: Duration = Duration::from_secs(2);
 
 struct UnlistedDuringAPause {
+	host: SealingHost,
 	joined: JoinedSpace,
 	reconciliation: tauri::async_runtime::JoinHandle<()>,
 	pause_ends: Instant,
 }
 
 async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDuringAPause {
-	let joined = online_with_two_members(member, &member.host()).await;
+	let host = member.host();
+	let joined = online_with_two_members(member, &host).await;
 	joined_space_connect(member.app.handle().clone(), joined.id.clone())
 		.await
 		.expect("the joined space connects");
@@ -902,7 +925,7 @@ async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDu
 		(!guests.is_running(&joined.id)).then_some(())
 	})
 	.await;
-	UnlistedDuringAPause { joined, reconciliation, pause_ends }
+	UnlistedDuringAPause { host, joined, reconciliation, pause_ends }
 }
 
 #[test]
@@ -1033,6 +1056,85 @@ fn an_unlisted_space_is_kept_when_the_account_signs_out_during_the_429_pause() {
 		paused.reconciliation.await.expect("the reconciliation ends");
 
 		assert!(removed.lock().expect("the events").is_empty());
+		assert_eq!(member.listed().await.len(), 1);
+	});
+}
+
+#[test]
+fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_again() {
+	run(async {
+		let member = Member::new("guest-runs-again").await;
+		let paused = unlisted_during_a_pause(&member, Duration::from_secs(3)).await;
+		member.signed_out_of_the_store();
+		paused.reconciliation.await.expect("the reconciliation ends");
+		member.signed_in_again();
+		member.relay.room().member_refusal = None;
+		member.relay.greets_after_the_next_members_read(vec![paused.host.hello()]);
+
+		let connection =
+			joined_space_connect(member.app.handle().clone(), paused.joined.id.clone()).await;
+		let guests = member.app.state::<RelayGuests>();
+		until("the restarted link to be online", || async {
+			(guests.presence(&paused.joined.id) == Some(Presence::Online)).then_some(())
+		})
+		.await;
+
+		assert_eq!(connection.map(|connection| connection.id), Ok(paused.joined.id.clone()));
+		assert!(guests.is_running(&paused.joined.id));
+	});
+}
+
+const WHILE_STALLED: Duration = Duration::from_secs(2);
+
+#[test]
+fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers() {
+	run(async {
+		let member = Member::new("gestures-during-a-stalled-list").await;
+		let joined = online_with_two_members(&member, &member.host()).await;
+		let reads = {
+			let mut room = member.relay.room();
+			room.is_instance_list_stalled = true;
+			room.instance_reads
+		};
+		let app = member.app.handle().clone();
+		let reconciliation =
+			tauri::async_runtime::spawn(async move { relay::reconciled(&app).await });
+		until("the instance list to be asked", || async {
+			(member.relay.room().instance_reads > reads).then_some(())
+		})
+		.await;
+
+		let app = member.app.handle();
+		let other = tokio::time::timeout(
+			WHILE_STALLED,
+			relay::joined(app, OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
+		)
+		.await;
+		let left = tokio::time::timeout(WHILE_STALLED, relay::left(app, &joined.id)).await;
+		let signed_out = tokio::time::timeout(WHILE_STALLED, relay::signed_out(app)).await;
+		reconciliation.abort();
+
+		assert!(other.expect("the join is not held by the stalled list").is_ok());
+		assert_eq!(left.expect("the leave is not held by the stalled list"), Ok(()));
+		assert!(signed_out.expect("the sign out is not held by the stalled list").is_some());
+	});
+}
+
+#[test]
+fn a_leave_the_relay_fails_keeps_the_space_connectable() {
+	run(async {
+		let member = Member::new("leave-refused").await;
+		let joined = online_with_two_members(&member, &member.host()).await;
+		member.relay.room().leave = refusal(StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE");
+
+		let left = relay::left(member.app.handle(), &joined.id).await;
+		let connection = joined_space_connect(member.app.handle().clone(), joined.id.clone()).await;
+
+		assert!(matches!(left, Err(JoinedSpaceError::RelayRefused { .. })), "{left:?}");
+		let guests = member.app.state::<RelayGuests>();
+		assert!(!guests.is_removed(&joined.id));
+		assert!(!guests.is_unlisted(&joined.id));
+		assert_eq!(connection.map(|connection| connection.id), Ok(joined.id.clone()));
 		assert_eq!(member.listed().await.len(), 1);
 	});
 }
