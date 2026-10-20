@@ -41,8 +41,6 @@ const settings = {
 			},
 			manage: "Gérer le compte",
 			signOut: "Se déconnecter",
-			caption:
-				"Votre nom, votre offre et vos ordinateurs connectés se gèrent sur kiroshi.app.",
 		},
 		signedOutFromTheSite: {
 			title: "Vous avez été déconnecté sur kiroshi.app",
@@ -73,8 +71,6 @@ const settings = {
 		signOutFailed: "Impossible de se déconnecter de Kiroshi",
 		devices: {
 			title: "Vos appareils",
-			description:
-				"Chaque appareil listé ici lit vos espaces. Retirez celui que vous n’utilisez plus.",
 			thisDevice: "Cet appareil",
 			activeNow: "Actif maintenant",
 			otherDevices: "Autres appareils",

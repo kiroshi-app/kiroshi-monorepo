@@ -320,7 +320,7 @@ const MemberRow = ({
 }: MemberRowProps) => {
 	const { t } = useTranslation("settings")
 	const name = nameOf(member)
-	const { status, email, fingerprint, expiresInDays, sentAt } = member
+	const { status, email, expiresInDays, sentAt } = member
 
 	const removal: MemberAction = {
 		icon: <Icons.Delete />,
@@ -375,14 +375,6 @@ const MemberRow = ({
 				{subline === undefined ? null : (
 					<p className="truncate text-muted-foreground text-xs/4">{subline}</p>
 				)}
-				{fingerprint === undefined || isInvitation(member) ? null : (
-					<p
-						className="break-words font-mono text-muted-foreground text-xs/4.5"
-						data-slot="member-fingerprint"
-					>
-						{fingerprint}
-					</p>
-				)}
 				<p className="break-words text-destructive text-xs" role="status">
 					{failureText}
 				</p>
@@ -435,9 +427,6 @@ const MemberRowSkeleton = () => (
 				<SkeletonBar className="h-2.5 w-(--skeleton-title)" />
 			</div>
 			<div className="flex h-4 items-center">
-				<SkeletonBar className="h-2 w-(--skeleton-sub)" isFaint />
-			</div>
-			<div className="flex h-4.5 items-center">
 				<SkeletonBar className="h-2 w-(--skeleton-sub)" isFaint />
 			</div>
 		</div>

@@ -24,7 +24,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One device as every device surface names it: its kind as a 20px mark, its name, an optional activity line, the six words of its fingerprint in the mono face, and an optional trailing meta. The approval dialog, Your devices and the new-device screen draw the same card, so a reader compares the six words across two screens without the layout moving under them. `isNameStrong` sets the name one weight up, for the dialog where the card is the subject of the question.",
+					"One device as every device surface names it: its kind as a 20px mark, its name, an optional activity line, the six words of an optional fingerprint in the mono face, and an optional trailing meta. The approval dialog and the new-device screen pass the fingerprint, so a reader compares the six words across two screens without the layout moving under them; Your devices passes none. `isNameStrong` sets the name one weight up, for the dialog where the card is the subject of the question.",
 			},
 		},
 	},
@@ -64,19 +64,28 @@ export const Default = meta.story({
 })
 
 export const WithMeta = meta.story({
-	args: { ...THIS_MACBOOK_PRO, meta: "Active now" },
+	args: {
+		kind: THIS_MACBOOK_PRO.kind,
+		name: THIS_MACBOOK_PRO.name,
+		meta: "Active now",
+	},
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 7.1: this device in Your devices, with no activity line and its trailing meta. Check the meta holds its width at the end of the row while the name and the six words take the rest. Pick \`Default\` for a card with an activity line.`,
+				story: `${ARTBOARD} Artboard 7.1: this device in Your devices, with no activity line, no fingerprint and its trailing meta. Check the name is the only line beside the mark, with no empty line left where the six words were, and the meta holds its width at the end of the row. Pick \`Default\` for a card with an activity line.`,
 			},
 		},
 	},
-	play: async ({ canvas }) => {
+	play: async ({ canvas, canvasElement }) => {
 		const meta = canvas.getByText("Active now")
+		const name = canvas.getByText(THIS_MACBOOK_PRO.name)
 
 		await expect(getComputedStyle(meta).flexShrink).toBe("0")
 		await expect(canvas.queryByText("Asked just now")).toBe(null)
+		await expect(
+			canvasElement.querySelector('[data-slot="device-fingerprint"]'),
+		).toBeNull()
+		await expect(name.parentElement?.childElementCount).toBe(1)
 	},
 })
 

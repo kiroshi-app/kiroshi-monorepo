@@ -100,7 +100,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"Every device signed in to the reader's account, under their account in Settings. This device comes first on its own card, then the other devices in one list, each with its activity line, its six words and a Remove. Remove swaps that row in place for a confirm on the destructive tint, so the reader reads the six words again before answering; the confirm is the component's own state, the removal it triggers is the host's, handed back through `removal` while it travels and when it fails. A removed device simply leaves the list. While the list is read, a skeleton the shape of the two groups fills the content column.",
+					"Every device signed in to the reader's account, under their account in Settings. This device comes first on its own card, then the other devices in one list, each with its activity line and a Remove. Remove swaps that row in place for a confirm on the destructive tint that still names the device by its mark, its name and its activity line; the confirm is the component's own state, the removal it triggers is the host's, handed back through `removal` while it travels and when it fails. A removed device simply leaves the list. While the list is read, a skeleton the shape of the two groups fills the content column.",
 			},
 		},
 	},
@@ -119,7 +119,7 @@ export const Default = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 7.1: the reader's MacBook Pro and two other devices. Check the section heading and its description, the This device card with Active now, the Other devices list with one hairline between rows, and a Remove on each row named after the row's device. Pick \`Confirming\` for the confirm Remove opens, \`Empty\` for an account with no other device and \`Loading\` while the list is read.`,
+				story: `${ARTBOARD} Artboard 7.1: the reader's MacBook Pro and two other devices. Check the section shows no heading and no description above the cards yet stays a region named Your devices, that no card shows a fingerprint, the This device card with Active now, the Other devices list with one hairline between rows, and a Remove on each row named after the row's device. Pick \`Confirming\` for the confirm Remove opens, \`Empty\` for an account with no other device and \`Loading\` while the list is read.`,
 			},
 		},
 	},
@@ -127,10 +127,16 @@ export const Default = meta.story({
 		const section = await devicesSection()
 
 		await expect(
-			within(section).getByText(
+			within(section).queryByRole("heading", { name: "Your devices" }),
+		).toBe(null)
+		await expect(
+			within(section).queryByText(
 				"Every device here reads your spaces. Remove one you don’t use anymore.",
 			),
-		).toBeVisible()
+		).toBe(null)
+		await expect(section.querySelector("[data-slot=device-fingerprint]")).toBe(
+			null,
+		)
 		await expect(
 			within(section).getByRole("heading", { name: "This device" }),
 		).toBeVisible()
@@ -156,7 +162,7 @@ export const Confirming = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 7: Remove pressed on the iPhone. Check the row is replaced in place, not added below, by the confirm on the destructive tint, that focus lands on Cancel, that Remove calls back with the device, and that Cancel puts the row back and returns focus to its Remove. Pick \`Removing\` for the removal in flight.`,
+				story: `${ARTBOARD} Artboard 7: Remove pressed on the iPhone. Check the row is replaced in place, not added below, by the confirm on the destructive tint, that it still names the device by its mark, its name and its activity line with no fingerprint, that focus lands on Cancel, that Remove calls back with the device, and that Cancel puts the row back and returns focus to its Remove. Pick \`Removing\` for the removal in flight.`,
 			},
 		},
 	},
@@ -168,6 +174,11 @@ export const Confirming = meta.story({
 		await expect(within(section).getAllByRole("listitem")).toHaveLength(2)
 		await expect(within(section).getAllByRole("listitem")[1]).toBe(confirm)
 		await expect(confirm).toHaveTextContent(CONFIRM_TITLE)
+		await expect(confirm).toHaveTextContent("Active yesterday")
+		await expect(confirm.querySelector("svg")).not.toBe(null)
+		await expect(confirm.querySelector("[data-slot=device-fingerprint]")).toBe(
+			null,
+		)
 		await expect(confirm).toHaveTextContent(
 			"It will be signed out and won’t read your spaces.",
 		)
@@ -276,7 +287,7 @@ export const Loading = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 7.5: the devices are being read. Check the section reads busy, draws no group label, and that its skeleton, this device's bar card then a framed list of three rows, reaches the bottom of the content column. Pick \`Default\` for the read list.`,
+				story: `${ARTBOARD} Artboard 7.5: the devices are being read. Check the section reads busy, draws no group label, and that its skeleton, this device's bar card then a framed list of three rows of a name bar and an activity bar, reaches the bottom of the content column. Pick \`Default\` for the read list.`,
 			},
 		},
 	},
@@ -295,7 +306,7 @@ export const Loading = meta.story({
 		await expect(
 			within(section).queryByRole("heading", { name: "This device" }),
 		).toBe(null)
-		await expect(slotsIn(skeleton, "skeleton")).toHaveLength(15)
+		await expect(slotsIn(skeleton, "skeleton")).toHaveLength(12)
 		await expect(
 			getComputedStyle(skeleton.lastElementChild as Element).flexGrow,
 		).toBe("1")
