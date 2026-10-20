@@ -4,6 +4,7 @@ mod bundled;
 mod common;
 
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bundled::bundled_bots;
@@ -11,20 +12,31 @@ use common::removed_on_drop::RemovedOnDrop;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::commands::{
 	agent_shutdown, agent_start_or_resume_session, agent_submit_prompt, shutdown_session,
-	terminate_session,
+	terminate_session, EVENT_CHANNEL,
 };
-use kiroshi_app::agent::contract::{RuntimeScope, SessionHandle, TransportError};
+use kiroshi_app::agent::contract::{RuntimeScope, SessionHandle, SubmittedTurn, TransportError};
 use kiroshi_app::agent::sidecar::live_groups;
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::conversations::contract::UPDATED_EVENT;
 use kiroshi_app::db;
+use serde_json::Value;
 use tauri::test::{mock_builder, MockRuntime};
-use tauri::{App, Manager};
+use tauri::{App, Listener, Manager};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
 const DEADLINE: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(25);
+
+const A_CONVERSATION: &str = "
+	INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id)
+		VALUES ('c1', 'topic', 'Lifecycle', 1, 1, 'personal');
+	INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+		VALUES ('c1', 'default', 'lead', 1, 0);
+";
+
+type Heard = Arc<Mutex<Vec<(&'static str, Value)>>>;
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -288,4 +300,136 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 	});
 
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
+}
+
+fn heard(app: &App<MockRuntime>) -> Heard {
+	let heard: Heard = Arc::default();
+	for channel in [EVENT_CHANNEL, UPDATED_EVENT] {
+		let kept = heard.clone();
+		app.listen(channel, move |event| {
+			let payload = serde_json::from_str(event.payload()).expect("a json payload");
+			kept.lock().expect("the log").push((channel, payload));
+		});
+	}
+	heard
+}
+
+fn turn_outcomes(heard: &Heard) -> Vec<Value> {
+	heard
+		.lock()
+		.expect("the log")
+		.iter()
+		.filter(|(channel, payload)| {
+			*channel == EVENT_CHANNEL
+				&& payload["event"]["type"] == "turnEnded"
+				&& payload["scope"]["runtimeSessionId"] == "r1"
+		})
+		.map(|(_, payload)| payload["event"]["ended"]["outcome"].clone())
+		.collect()
+}
+
+fn conversations_updated(heard: &Heard) -> usize {
+	heard.lock().expect("the log").iter().filter(|(channel, _)| *channel == UPDATED_EVENT).count()
+}
+
+fn database_of(app: &App<MockRuntime>) -> &db::Database {
+	app.state::<db::DatabaseState>().inner().as_ref().expect("the database is open")
+}
+
+async fn running_runs(app: &App<MockRuntime>) -> i64 {
+	database_of(app)
+		.call(|connection| {
+			Ok(connection.query_row(
+				"SELECT count(*) FROM turn_runs WHERE turn_id = 't1' AND state = 'running'",
+				[],
+				|row| row.get(0),
+			)?)
+		})
+		.await
+		.expect("the runs count")
+}
+
+async fn completed_at(app: &App<MockRuntime>) -> Option<i64> {
+	database_of(app)
+		.call(|connection| {
+			Ok(connection.query_row(
+				"SELECT completed_at FROM turns WHERE id = 't1'",
+				[],
+				|row| row.get(0),
+			)?)
+		})
+		.await
+		.expect("the turn reads")
+}
+
+async fn a_turn_running(app: &App<MockRuntime>) {
+	database_of(app)
+		.call_mut(|connection| Ok(connection.execute_batch(A_CONVERSATION)?))
+		.await
+		.expect("the conversation is planted");
+	start(app).await.expect("the session under test starts");
+	let turn = SubmittedTurn { turn_id: "t1".to_owned(), prompt_id: "p1".to_owned() };
+	agent_submit_prompt(app.state::<AgentState>(), scope(), "take your time".into(), Some(turn))
+		.await
+		.expect("the prompt is taken");
+	let deadline = tokio::time::Instant::now() + DEADLINE;
+	while running_runs(app).await == 0 {
+		assert!(tokio::time::Instant::now() < deadline, "timed out waiting for the run to start");
+		tokio::time::sleep(POLL).await;
+	}
+}
+
+async fn assert_the_run_was_ended(app: &App<MockRuntime>, heard: &Heard, updated_before: usize) {
+	assert!(completed_at(app).await.is_some(), "the turn of the ended run was left open");
+	assert_eq!(running_runs(app).await, 0, "the ended run is still held as running");
+	assert!(
+		conversations_updated(heard) > updated_before,
+		"the front was not told the conversation changed"
+	);
+	poll_until("the front to hear the run end", || !turn_outcomes(heard).is_empty()).await;
+	assert_eq!(turn_outcomes(heard), ["cancelled"], "the front heard another end of the run");
+}
+
+fn ended_mid_turn(end: impl AsyncFnOnce(&App<MockRuntime>)) {
+	let _serial = serial();
+	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
+	std::env::set_var("FAKE_AGENT_SCENARIO", "slow");
+
+	let app = app();
+	let heard = heard(&app);
+	runtime().block_on(async {
+		a_turn_running(&app).await;
+		let updated_before = conversations_updated(&heard);
+
+		end(&app).await;
+
+		assert_the_run_was_ended(&app, &heard, updated_before).await;
+		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.state::<AgentState>().inner()).await;
+	});
+
+	std::env::remove_var("FAKE_AGENT_SCENARIO");
+}
+
+#[test]
+fn a_session_replaced_mid_turn_ends_its_run_before_the_new_one_is_installed() {
+	ended_mid_turn(async |app| {
+		start_run(app, RuntimeScope { epoch: 2, ..scope() })
+			.await
+			.expect("the replacing session starts");
+	});
+}
+
+#[test]
+fn a_session_shut_down_mid_turn_ends_its_run_as_cancelled() {
+	ended_mid_turn(async |app| {
+		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
+	});
+}
+
+#[test]
+fn a_quit_mid_turn_ends_the_run_before_the_sidecar_is_terminated() {
+	ended_mid_turn(async |app| {
+		terminate_session(app.state::<AgentState>().inner()).await;
+	});
 }

@@ -9,8 +9,8 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, Mutex};
 
 use super::contract::{
-	AgentEvent, ConnectionState, PermissionDecision, SubmittedTurn, TransportError, TurnOutcome,
-	TurnState,
+	AgentEvent, ConnectionState, PermissionDecision, SubmittedTurn, TransportError, TurnEnded,
+	TurnOutcome, TurnState,
 };
 use super::protocol::{self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest};
 use super::sidecar::Sidecar;
@@ -27,7 +27,13 @@ pub trait EventSink: Send + Sync + 'static {
 	fn submitted(&self, _turn: SubmittedTurn) {}
 
 	fn withdrawn(&self) {}
+
+	fn drained(&self) -> Drained {
+		Box::pin(std::future::ready(()))
+	}
 }
+
+pub type Drained = Pin<Box<dyn Future<Output = ()> + Send>>;
 
 pub type Answering = Pin<Box<dyn Future<Output = HostAnswer> + Send>>;
 
@@ -89,6 +95,10 @@ impl EventSink for GatedSink {
 
 	fn withdrawn(&self) {
 		self.inner.withdrawn();
+	}
+
+	fn drained(&self) -> Drained {
+		self.inner.drained()
 	}
 }
 
@@ -247,6 +257,21 @@ impl Shared {
 			running.id,
 			running.started_at.elapsed().as_millis()
 		);
+	}
+
+	fn ended_by_shutdown(&mut self, session: &str) -> Option<AgentEvent> {
+		self.running.as_ref()?;
+		log::info!("the session shut down while its turn ran session={session}");
+		self.turn_ended(session, TurnOutcome::Cancelled);
+		Some(AgentEvent::TurnEnded {
+			ended: TurnEnded {
+				session_id: self.translator.session_id().map(str::to_owned),
+				outcome: TurnOutcome::Cancelled,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		})
 	}
 }
 
@@ -439,7 +464,14 @@ impl Session {
 	}
 
 	pub async fn shutdown(&self) {
-		self.shared.lock().await.shutting_down = true;
+		{
+			let mut shared = self.shared.lock().await;
+			shared.shutting_down = true;
+			if let Some(ended) = shared.ended_by_shutdown(&self.key) {
+				self.sink.emit(ended);
+			}
+		}
+		self.sink.drained().await;
 		let _ = self.write(protocol::close_command(&self.key));
 		self.sidecar.detach(&self.key);
 	}
@@ -567,8 +599,11 @@ async fn read_loop(
 			continue;
 		}
 
-		let (entering, events, ending) = {
+		{
 			let mut guard = shared.lock().await;
+			if guard.shutting_down {
+				return;
+			}
 			let entering = match guard.turn {
 				TurnState::Submitting if is_turn_activity(&frame) => {
 					guard.set_turn(TurnState::Running)
@@ -581,11 +616,9 @@ async fn read_loop(
 				guard.turn_ended(&desk.key, outcome);
 			}
 			let ending = outcome.and_then(|outcome| guard.set_turn(outcome.into()));
-			(entering, events, ending)
-		};
-
-		for event in entering.into_iter().chain(events).chain(ending) {
-			sink.emit(event);
+			for event in entering.into_iter().chain(events).chain(ending) {
+				sink.emit(event);
+			}
 		}
 	}
 

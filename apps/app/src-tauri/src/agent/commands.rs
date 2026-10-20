@@ -290,7 +290,7 @@ struct RunSink<R: Runtime> {
 
 impl<R: Runtime> TurnSink for RunSink<R> {
 	fn emit(&self, event: AgentEvent, turn: Option<EventTurn>) {
-		if !self.live.holds(&self.scope) {
+		if !self.live.holds(&self.scope) && !closes_the_run(&event) {
 			return;
 		}
 		if let AgentEvent::QuestionRequested { request } = &event {
@@ -310,6 +310,14 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 			self.record_writes();
 		}
 	}
+}
+
+fn closes_the_run(event: &AgentEvent) -> bool {
+	matches!(
+		event,
+		AgentEvent::TurnEnded { .. }
+			| AgentEvent::Failed { error: TransportError::WriteFailed { .. } }
+	)
 }
 
 impl<R: Runtime> RunSink<R> {
