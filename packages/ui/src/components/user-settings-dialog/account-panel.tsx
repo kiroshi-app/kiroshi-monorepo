@@ -67,7 +67,7 @@ const AccountIntro = ({ title, body }: AccountIntroProps) => (
 
 type AccountActionsProps = {
 	buttons: ReactNode
-	caption: string
+	caption?: string
 	children?: ReactNode
 }
 
@@ -78,7 +78,7 @@ const AccountActions = ({
 }: AccountActionsProps) => (
 	<div className="flex flex-col items-start gap-2">
 		<div className="flex flex-wrap items-center gap-2">{buttons}</div>
-		<p className={CAPTION_CLASS}>{caption}</p>
+		{caption ? <p className={CAPTION_CLASS}>{caption}</p> : null}
 		{children}
 	</div>
 )
@@ -181,7 +181,6 @@ const AccountPanel = ({
 							</Button>
 						</>
 					}
-					caption={t("account.signedIn.caption")}
 				/>
 				{devices ? <YourDevices {...devices} /> : null}
 			</div>

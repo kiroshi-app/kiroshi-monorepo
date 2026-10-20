@@ -40,7 +40,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"What this computer shows while it waits to join an account it just signed in to: an approval from a device the reader already uses, or a six-digit code sent to their email when they have no other device. One centred column, four steps the host chooses: `waiting`, `code`, `expired` and `rejected`. Every step but the code names this computer on the same device card the approving device shows, so the reader compares the six words across both screens. The code step keeps Approve this computer disabled, yet focusable, until all six digits are in.",
+					"What this computer shows while it waits to join an account it just signed in to: an approval from a device the reader already uses, or a six-digit code sent to their email when they have no other device. One centred column, four steps the host chooses: `waiting`, `code`, `expired` and `rejected`. Every step but the code names this computer on the same device card the approving device shows, by its kind and its name, with no fingerprint. The code step keeps Approve this computer disabled, yet focusable, until all six digits are in.",
 			},
 		},
 	},
@@ -67,7 +67,7 @@ export const Waiting = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 10: this computer waits for another device to approve it. Check the laptop tile, the title and the body naming the email, the card with This device, the spinner beside Waiting for approval… announced politely, and the two links calling back. Pick \`Code\` for the reader with no other device.`,
+				story: `${ARTBOARD} Artboard 10: this computer waits for another device to approve it. Check the laptop tile, the title and the body naming the email, the card with This device and no fingerprint, the spinner beside Waiting for approval… announced politely, and the two links calling back. Pick \`Code\` for the reader with no other device.`,
 			},
 		},
 	},
@@ -85,6 +85,7 @@ export const Waiting = meta.story({
 		)
 		await expect(glyphIn(screen, Icons.Laptop)).not.toBe(null)
 		await expect(slotIn(screen, "device-card")).toHaveTextContent("This device")
+		await expect(screen).not.toHaveTextContent(NEW_MACBOOK_AIR.fingerprint)
 		await expect(
 			slotIn(screen, "device-card").getBoundingClientRect().width,
 		).toBe(440)
@@ -123,6 +124,7 @@ export const Code = meta.story({
 
 		await expect(glyphIn(screen, Icons.Mail)).not.toBe(null)
 		await expect(screen.querySelector("[data-slot=device-card]")).toBe(null)
+		await expect(screen).not.toHaveTextContent(NEW_MACBOOK_AIR.fingerprint)
 		await expect(slots).toHaveLength(6)
 		await expect(slots[0]?.getBoundingClientRect().width).toBe(48)
 		await expect(slots[0]?.getBoundingClientRect().height).toBe(56)
@@ -158,7 +160,7 @@ export const Expired = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 10.2: nobody approved in time. Check the card stays, Ask again is the primary and calls back, and the two links of the waiting step come back. Pick \`Waiting\` for the request still open.`,
+				story: `${ARTBOARD} Artboard 10.2: nobody approved in time. Check the card stays with no fingerprint, Ask again is the primary and calls back, and the two links of the waiting step come back. Pick \`Waiting\` for the request still open.`,
 			},
 		},
 	},
@@ -167,6 +169,9 @@ export const Expired = meta.story({
 			canvas.getByRole("heading", { name: "The request expired" }),
 		).toBeVisible()
 		await expect(slotIn(screenIn(canvasElement), "device-card")).toBeVisible()
+		await expect(screenIn(canvasElement)).not.toHaveTextContent(
+			NEW_MACBOOK_AIR.fingerprint,
+		)
 		await userEvent.click(canvas.getByRole("button", { name: "Ask again" }))
 		await expect(args.onAskAgain).toHaveBeenCalledOnce()
 		await expect(linksIn(canvasElement)).toEqual([
@@ -182,7 +187,7 @@ export const Rejected = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 10.3: the reader's other device said this one isn't theirs. Check the title, the body naming the email, the card, and Back to sign in as the single way out. Pick \`Expired\` for a request nobody answered.`,
+				story: `${ARTBOARD} Artboard 10.3: the reader's other device said this one isn't theirs. Check the title, the body naming the email, the card with no fingerprint, and Back to sign in as the single way out. Pick \`Expired\` for a request nobody answered.`,
 			},
 		},
 	},
@@ -192,6 +197,9 @@ export const Rejected = meta.story({
 		).toBeVisible()
 		await expect(screenIn(canvasElement)).toHaveTextContent(
 			"Someone using noa@example.com said it isn't theirs, so it was signed out.",
+		)
+		await expect(screenIn(canvasElement)).not.toHaveTextContent(
+			NEW_MACBOOK_AIR.fingerprint,
 		)
 		await expect(linksIn(canvasElement)).toEqual(["Back to sign in"])
 		await userEvent.click(

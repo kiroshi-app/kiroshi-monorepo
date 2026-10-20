@@ -18,7 +18,7 @@ const DEVICE_MARKS = {
 	desktop: Icons.Desktop,
 } satisfies Record<DeviceKind, Icon>
 
-type DeviceSummaryProps = Device & {
+type DeviceSummaryProps = Omit<Device, "fingerprint"> & {
 	isNameStrong?: boolean
 	nameId?: string
 	children?: ReactNode
@@ -27,7 +27,6 @@ type DeviceSummaryProps = Device & {
 const DeviceSummary = ({
 	kind,
 	name,
-	fingerprint,
 	activity,
 	isNameStrong = false,
 	nameId,
@@ -53,12 +52,6 @@ const DeviceSummary = ({
 						{activity}
 					</p>
 				) : null}
-				<p
-					className="wrap-break-word font-mono text-muted-foreground text-xs leading-4.5"
-					data-slot="device-fingerprint"
-				>
-					{fingerprint}
-				</p>
 				{children}
 			</div>
 		</div>

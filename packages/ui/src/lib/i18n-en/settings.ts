@@ -40,8 +40,6 @@ const settings = {
 			},
 			manage: "Manage account",
 			signOut: "Sign out",
-			caption:
-				"Your name, plan and signed-in computers are managed on kiroshi.app.",
 		},
 		signedOutFromTheSite: {
 			title: "You were signed out on kiroshi.app",
@@ -70,8 +68,6 @@ const settings = {
 		signOutFailed: "Couldn’t sign out of Kiroshi",
 		devices: {
 			title: "Your devices",
-			description:
-				"Every device here reads your spaces. Remove one you don’t use anymore.",
 			thisDevice: "This device",
 			activeNow: "Active now",
 			otherDevices: "Other devices",

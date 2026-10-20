@@ -44,9 +44,9 @@ const CONFIRM_BUTTON_CLASS =
 	"h-7.5 rounded-full px-3.5 text-compact leading-4 data-disabled:pointer-events-none"
 
 const SKELETON_ROWS = [
-	{ id: "first", name: "w-24", activity: "w-30", fingerprint: "w-49" },
-	{ id: "second", name: "w-32", activity: "w-25", fingerprint: "w-45" },
-	{ id: "third", name: "w-21", activity: "w-33", fingerprint: "w-51" },
+	{ id: "first", name: "w-24", activity: "w-30" },
+	{ id: "second", name: "w-32", activity: "w-25" },
+	{ id: "third", name: "w-21", activity: "w-33" },
 ]
 
 type BoneProps = {
@@ -103,7 +103,6 @@ const DevicesSkeleton = () => (
 					<div className="flex flex-col gap-1.5">
 						<Bone className={cn("h-2.5", row.name)} />
 						<Bone className={cn("h-2 bg-muted/65", row.activity)} />
-						<Bone className={cn("h-2 bg-muted/65", row.fingerprint)} />
 					</div>
 				</div>
 			))}
@@ -123,7 +122,12 @@ const DeviceRow = ({ device, focusTaker, onRemovePress }: DeviceRowProps) => {
 
 	return (
 		<li className="flex items-center gap-3 py-3 ps-3.5 pe-3">
-			<DeviceSummary {...device} nameId={nameId} />
+			<DeviceSummary
+				activity={device.activity}
+				kind={device.kind}
+				name={device.name}
+				nameId={nameId}
+			/>
 			<span className="flex w-18 shrink-0 justify-center">
 				<button
 					aria-describedby={nameId}
@@ -164,7 +168,7 @@ const RemovalConfirm = ({
 			data-slot="device-removal-confirm"
 		>
 			<DeviceSummary
-				fingerprint={device.fingerprint}
+				activity={device.activity}
 				isNameStrong
 				kind={device.kind}
 				name={t("account.devices.confirm.title", { device: device.name })}
@@ -221,7 +225,6 @@ const YourDevices = ({
 }: YourDevicesProps) => {
 	const { t } = useTranslation("settings")
 	const phase = useSkeletonTiming(isPending)
-	const titleId = useId()
 	const [confirmingId, setConfirmingId] = useState<string | null>(
 		removal?.deviceId ?? null,
 	)
@@ -263,33 +266,27 @@ const YourDevices = ({
 	return (
 		<section
 			aria-busy={isWaiting || undefined}
-			aria-labelledby={titleId}
+			aria-label={t("account.devices.title")}
 			className="flex min-h-0 flex-1 flex-col gap-5"
 		>
-			<div className="flex flex-col gap-1">
-				<h3
-					className="font-semibold text-base text-foreground leading-5.5"
-					id={titleId}
-				>
-					{t("account.devices.title")}
-				</h3>
-				<p className="text-compact text-muted-foreground leading-4.5">
-					{t("account.devices.description")}
-				</p>
-			</div>
 			{phase === "skeleton" ? <DevicesSkeleton /> : null}
 			{isWaiting ? null : (
 				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-1.5">
-						<h4 className={GROUP_LABEL_CLASS}>
+						<h3 className={GROUP_LABEL_CLASS}>
 							{t("account.devices.thisDevice")}
-						</h4>
-						<DeviceCard {...thisDevice} meta={t("account.devices.activeNow")} />
+						</h3>
+						<DeviceCard
+							activity={thisDevice.activity}
+							kind={thisDevice.kind}
+							meta={t("account.devices.activeNow")}
+							name={thisDevice.name}
+						/>
 					</div>
 					<div className="flex flex-col gap-1.5">
-						<h4 className={GROUP_LABEL_CLASS}>
+						<h3 className={GROUP_LABEL_CLASS}>
 							{t("account.devices.otherDevices")}
-						</h4>
+						</h3>
 						{otherDevices.length > 0 ? (
 							<ul className={LIST_CLASS}>
 								{otherDevices.map((device) =>

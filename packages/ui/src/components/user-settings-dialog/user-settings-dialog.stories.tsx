@@ -697,7 +697,7 @@ export const AccountLoading = meta.story({
 		).toBe(probedStyleOf("bg-border", "backgroundColor", card))
 		await expect(within(panel).queryAllByRole("button")).toHaveLength(0)
 		await expect(panel).not.toHaveTextContent(ACCOUNT.signedOut.title)
-		await expect(panel).not.toHaveTextContent(ACCOUNT.signedIn.caption)
+		await expect(panel).not.toHaveTextContent(ACCOUNT.signedIn.manage)
 	},
 })
 
@@ -792,7 +792,7 @@ export const SignedIn = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 3.9: a reader signed in to Kiroshi on the Pro plan. Check that the card wears their initials, names them, shows their email as handed in and their plan behind the Free during the beta badge, that Manage account carries the external link mark and calls back, that Sign out calls back, and that the caption says where the account is managed. Pick `WithALongEmail` for an address wider than the card.",
+					"Artboard 3.9: a reader signed in to Kiroshi on the Pro plan. Check that the card wears their initials, names them, shows their email as handed in and their plan behind the Free during the beta badge, that Manage account carries the external link mark and calls back, that Sign out calls back, and that no caption sits under the two actions. Pick `WithALongEmail` for an address wider than the card.",
 			},
 		},
 	},
@@ -812,13 +812,13 @@ export const SignedIn = meta.story({
 		await expect(getComputedStyle(badge).fontSize).toBe("12px")
 		await expect(getComputedStyle(badge).lineHeight).toBe("16px")
 		await expect(within(panel).getByText(PLAN.pro)).toBeVisible()
-		await expect(
-			within(panel).getByText(ACCOUNT.signedIn.caption),
-		).toBeVisible()
+		const manage = within(panel).getByRole("button", {
+			name: ACCOUNT.signedIn.manage,
+		})
+		await expect(manage.parentElement?.parentElement?.children).toHaveLength(1)
+		await expect(panel).not.toHaveTextContent("managed on kiroshi.app")
 
-		await userEvent.click(
-			within(panel).getByRole("button", { name: ACCOUNT.signedIn.manage }),
-		)
+		await userEvent.click(manage)
 		await expect(args.account?.onManageAccount).toHaveBeenCalledOnce()
 
 		await userEvent.click(

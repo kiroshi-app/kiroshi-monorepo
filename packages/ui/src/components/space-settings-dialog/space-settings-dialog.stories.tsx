@@ -797,24 +797,20 @@ const NOA: SpaceMember = {
 	fingerprint: NOA_FINGERPRINT,
 }
 
-const MAYA_FINGERPRINT = "maple cotton harbor lemon pilot window"
-
 const MAYA: SpaceMember = {
 	id: "maya",
 	name: "Maya Chen",
 	email: "maya@example.com",
 	status: "joined",
-	fingerprint: MAYA_FINGERPRINT,
+	fingerprint: "maple cotton harbor lemon pilot window",
 }
-
-const TOM_FINGERPRINT = "copper silent garden oyster rocket meadow"
 
 const TOM: SpaceMember = {
 	id: "tom",
 	name: "Tom Okafor",
 	email: "tom@example.com",
 	status: "joined",
-	fingerprint: TOM_FINGERPRINT,
+	fingerprint: "copper silent garden oyster rocket meadow",
 }
 
 const TOM_PENDING: SpaceMember = {
@@ -831,9 +827,9 @@ const SAM_INVITED: SpaceMember = {
 	expiresInDays: 7,
 }
 
-const NOA_ROW = ["N", "Noa Lambert", "noa@example.com", NOA_FINGERPRINT, "Host"]
+const NOA_ROW = ["N", "Noa Lambert", "noa@example.com", "Host"]
 
-const MAYA_ROW = ["M", "Maya Chen", "maya@example.com", MAYA_FINGERPRINT]
+const MAYA_ROW = ["M", "Maya Chen", "maya@example.com"]
 
 const TOM_ROW = ["tom@example.com", "Invited · expires in 6 days"]
 
@@ -940,7 +936,7 @@ export const MembersLoading = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 1.8. The member list still on its way. Check that the invite form stays rendered, that no Invitations section shows, that member row skeletons of three bars (10px name, 8px email, 8px fingerprint) sit inside one bordered frame under the Members label, filling the panel to the bottom, the last one cut by the edge, each at the height of a loaded member row with its fingerprint and divider, and that the panel reads busy.",
+					"Artboard 1.8. The member list still on its way. Check that the invite form stays rendered, that no Invitations section shows, that member row skeletons of two bars (10px name, 8px email) sit inside one bordered frame under the Members label, filling the panel to the bottom, the last one cut by the edge, each at the height of a loaded member row with its divider, and that the panel reads busy.",
 			},
 		},
 	},
@@ -958,10 +954,10 @@ export const MembersLoading = meta.story({
 			Math.abs(frame.getBoundingClientRect().bottom - contentBottomOf(panel)),
 		).toBeLessThan(1)
 		const [firstRow] = slotsIn(list, "list-skeleton-row")
-		await expect(firstRow?.getBoundingClientRect().height).toBe(71)
+		await expect(firstRow?.getBoundingClientRect().height).toBe(53)
 		const bars = [...firstRow.querySelectorAll("[data-slot=skeleton]")]
 		await expect(bars.map((bar) => bar.getBoundingClientRect().height)).toEqual(
-			[28, 10, 8, 8],
+			[28, 10, 8],
 		)
 		await expect(slotsIn(panel, "space-member")).toHaveLength(0)
 		await expect(within(panel).queryByText("Invitations")).toBeNull()
@@ -1890,7 +1886,7 @@ export const MembersWithInvitations = meta.story({
 		docs: {
 			description: {
 				story:
-					"Row 1 of the Mockup page, host view. Studio holds Tom's and Sam's pending invitations, so an Invitations section sits above the Members section, 24px apart, each a 12/16 medium label 6px over a bordered list with a 14px radius. Rows pad 8px block, 12px start, 8px end, 10px apart. Each invitation says when it expires and offers an X to withdraw it. Noa's and Maya's rows carry their fingerprint in the monospace face; Noa wears the Host tag, Maya offers a trash to remove her. Every action is icon-only, 28px square, named after the action and the person, with the focus ring under the keyboard.",
+					"Row 1 of the Mockup page, host view. Studio holds Tom's and Sam's pending invitations, so an Invitations section sits above the Members section, 24px apart, each a 12/16 medium label 6px over a bordered list with a 14px radius. Rows pad 8px block, 12px start, 8px end, 10px apart. Each invitation says when it expires and offers an X to withdraw it. Noa's and Maya's rows show no fingerprint, though both members carry one; Noa wears the Host tag, Maya offers a trash to remove her. Every action is icon-only, 28px square, named after the action and the person, with the focus ring under the keyboard.",
 			},
 		},
 	},
@@ -1936,15 +1932,10 @@ export const MembersWithInvitations = meta.story({
 			rowStyle.columnGap,
 		]).toEqual(["8px", "8px", "12px", "8px", "10px"])
 
-		const fingerprint = slotIn(row, "member-fingerprint")
-		await expect(fingerprint.previousElementSibling).toHaveTextContent(
-			"maya@example.com",
-		)
-		await expect(getComputedStyle(fingerprint).fontFamily).toContain(
-			"monospace",
-		)
-		await expect(getComputedStyle(fingerprint).fontSize).toBe("12px")
-		await expect(getComputedStyle(fingerprint).lineHeight).toBe("18px")
+		await expect(
+			panel.querySelector("[data-slot=member-fingerprint]"),
+		).toBeNull()
+		await expect(row.getBoundingClientRect().height).toBe(52)
 
 		const withdrawTom = within(rowOf(panel, "tom@example.com")).getByRole(
 			"button",
@@ -1963,9 +1954,7 @@ export const MembersWithInvitations = meta.story({
 		}
 		const host = rowOf(panel, "Noa Lambert")
 		await expect(within(host).queryByRole("button")).toBeNull()
-		await expect(slotIn(host, "member-fingerprint")).toHaveTextContent(
-			NOA_FINGERPRINT,
-		)
+		await expect(host).not.toHaveTextContent(NOA_FINGERPRINT)
 
 		await userEvent.click(withdrawTom)
 		await expect(MEMBERS_PANEL.onWithdraw).toHaveBeenCalledWith(TOM_PENDING)
@@ -2004,7 +1993,7 @@ export const MembersMemberViewWithInvitation = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard 9 of the Mockup page, member view. Tom opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, Sam's pending invitation under Invitations, then the Members list. Noa's row wears the Host tag over an empty action slot, Maya's offers a trash to remove her, and Tom's own row reads `(you)` with his fingerprint and no action. Leave lives in the Danger zone tab, see `JoinedDanger`.",
+					"Artboard 9 of the Mockup page, member view. Tom opens the Members tab of Studio, which Noa hosts: no Share card, the invite field, Sam's pending invitation under Invitations, then the Members list. Noa's row wears the Host tag over an empty action slot, Maya's offers a trash to remove her, and Tom's own row reads `(you)` with no fingerprint and no action. Leave lives in the Danger zone tab, see `JoinedDanger`.",
 			},
 		},
 	},
@@ -2017,7 +2006,7 @@ export const MembersMemberViewWithInvitation = meta.story({
 			SAM_INVITED_ROW,
 			NOA_ROW,
 			MAYA_ROW,
-			["T", TOM_VIEWER, "tom@example.com", TOM_FINGERPRINT],
+			["T", TOM_VIEWER, "tom@example.com"],
 		])
 		await expect(
 			within(listNamed(panel, "Members"))
