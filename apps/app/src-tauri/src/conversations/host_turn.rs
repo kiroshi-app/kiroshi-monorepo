@@ -83,11 +83,10 @@ pub(crate) struct HeldTurn {
 
 impl HeldTurn {
 	fn answer(&self, outcome: &CancelOutcome) {
-		let answers = match locked(&self.running).get_mut(&self.conversation_id) {
-			Some(running_turn) => mem::take(&mut running_turn.answers),
-			None => return,
-		};
-		for answer in answers {
+		let answers = locked(&self.running)
+			.get_mut(&self.conversation_id)
+			.map(|running_turn| mem::take(&mut running_turn.answers));
+		for answer in answers.into_iter().flatten() {
 			if answer.send(outcome.clone()).is_err() {
 				log::debug!("the caller of a stop on {} stopped waiting", self.conversation_id);
 			}
@@ -1024,7 +1023,7 @@ mod tests {
 		assert_eq!(outcome, CancelOutcome::Failed { failures: vec![unavailable_store("b1")] });
 	}
 
-	async fn a_driven_turn(
+	fn a_driven_turn(
 		app: &AppHandle<MockRuntime>,
 		room: &Room,
 	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
@@ -1050,7 +1049,7 @@ mod tests {
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
 		speaking_in(app.handle(), &room, &room.bot_ids).await;
-		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+		let (driving, _events) = a_driven_turn(app.handle(), &room);
 
 		let outcome = stopped(app.handle(), scope_in(&room, &room.bot_ids[0])).await;
 		let left_open = open_runs(app.handle()).await;
@@ -1067,7 +1066,7 @@ mod tests {
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada"]).await;
 		let ada = scope_in(&room, &room.bot_ids[0]);
-		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+		let (driving, _events) = a_driven_turn(app.handle(), &room);
 		let mut announced = events::subscribed(app.handle());
 
 		let outcome = stopped(app.handle(), ada.clone()).await;
@@ -1085,7 +1084,7 @@ mod tests {
 		app.manage(AgentState::default());
 		let room =
 			Room { id: "c1".to_owned(), bot_ids: vec!["b-ada".to_owned(), "b-grace".to_owned()] };
-		let (driving, _events) = a_driven_turn(app.handle(), &room).await;
+		let (driving, _events) = a_driven_turn(app.handle(), &room);
 
 		let outcome = stopped(app.handle(), scope_in(&room, "b-ada")).await;
 		driving.abort();
