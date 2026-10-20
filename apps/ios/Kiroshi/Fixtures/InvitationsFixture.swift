@@ -30,7 +30,7 @@
         )
         static let accepted = ScriptedTransport.Answer.status(
             200,
-            #"{"id":"\#(studioId)","name":"Studio","role":"member","createdAt":"2026-10-19T09:00:00.000Z"}"#
+            #"{"instanceId":"\#(studioId)","name":"Studio"}"#
         )
 
         static func state(_ state: String) -> ScriptedTransport.Answer {

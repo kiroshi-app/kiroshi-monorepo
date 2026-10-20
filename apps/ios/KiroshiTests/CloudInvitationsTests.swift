@@ -70,6 +70,40 @@ struct CloudInvitationsTests {
         #expect(request.httpMethod == "POST")
         #expect(request.url?.path() == path)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer bearer-1")
+        guard case .status(let status, let body) = InvitationsFixture.accepted else {
+            Issue.record("The accept fixture holds no answer")
+            return
+        }
+        let answered = try JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: String]
+        #expect(status == 200)
+        #expect(answered == ["instanceId": invitation.instanceId, "name": invitation.instanceName])
+    }
+
+    @Test func anAlreadyJoinedAcceptGoesOnWithTheJoin() async throws {
+        let (invitations, _) = cloud([
+            InvitationsFixture.acceptPath: CloudFixture.error(
+                409, code: "ALREADY_JOINED", message: "already joined")
+        ])
+
+        #expect(try await invitations.accept(invitation, bearer: "b") == .done)
+    }
+
+    @Test func anotherConflictOfTheAcceptCouldNotAccept() async throws {
+        let (invitations, _) = cloud([
+            InvitationsFixture.acceptPath: CloudFixture.error(409, code: "CONFLICT", message: "no")
+        ])
+
+        #expect(try await invitations.accept(invitation, bearer: "b") == .unreachable)
+    }
+
+    @Test(arguments: [
+        ScriptedTransport.Answer.status(404, ""), .status(404, "Not Found"),
+        CloudFixture.error(404, code: "INSTANCE_NOT_FOUND", message: "gone"),
+    ])
+    func anyNotFoundOfTheAcceptIsNoSuchInvitation(answer: ScriptedTransport.Answer) async throws {
+        let (invitations, _) = cloud([InvitationsFixture.acceptPath: answer])
+
+        #expect(try await invitations.accept(invitation, bearer: "b") == .refused(.unknown))
     }
 
     @Test func decliningPostsToTheInvitationWithTheBearer() async throws {

@@ -75,11 +75,21 @@ struct CloudInvitations: Sendable {
     }
 
     func accept(_ invitation: Invitation, bearer: String) async throws -> InvitationAnswer {
-        try await answer(invitation, "accept", bearer: bearer)
+        guard let (status, data) = try await post(invitation, "accept", bearer: bearer) else {
+            return .unreachable
+        }
+        switch status {
+        case 404: return .refused(.unknown)
+        case 409 where Self.code(in: data) == "ALREADY_JOINED": return .done
+        default: return Self.answer(status, data)
+        }
     }
 
     func decline(_ invitation: Invitation, bearer: String) async throws -> InvitationAnswer {
-        try await answer(invitation, "decline", bearer: bearer)
+        guard let (status, data) = try await post(invitation, "decline", bearer: bearer) else {
+            return .unreachable
+        }
+        return Self.answer(status, data)
     }
 
     func leave(_ invitation: Invitation, bearer: String) async throws -> InvitationAnswer {
@@ -94,21 +104,24 @@ struct CloudInvitations: Sendable {
         }
     }
 
-    private func answer(_ invitation: Invitation, _ verb: String, bearer: String) async throws
-        -> InvitationAnswer
+    private func post(_ invitation: Invitation, _ verb: String, bearer: String) async throws
+        -> (Int, Data)?
     {
-        guard
-            let (status, data) = try await send(
-                "invitations/\(invitation.id)/\(verb)", method: "POST", bearer: bearer)
-        else { return .unreachable }
+        try await send("invitations/\(invitation.id)/\(verb)", method: "POST", bearer: bearer)
+    }
+
+    private static func answer(_ status: Int, _ data: Data) -> InvitationAnswer {
         switch status {
-        case 200, 204: return .done
-        case 401: return .unauthenticated
+        case 200, 204: .done
+        case 401: .unauthenticated
         case 403, 404, 410:
-            let code = try? JSONDecoder().decode(RefusalBody.self, from: data).error.code
-            return code.flatMap(Self.refusal(coded:)).map { .refused($0) } ?? .unreachable
-        default: return .unreachable
+            code(in: data).flatMap(refusal(coded:)).map { .refused($0) } ?? .unreachable
+        default: .unreachable
         }
+    }
+
+    private static func code(in data: Data) -> String? {
+        try? JSONDecoder().decode(RefusalBody.self, from: data).error.code
     }
 
     private static func refusal(coded code: String) -> InvitationRefusal? {
