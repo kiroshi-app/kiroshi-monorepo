@@ -2814,20 +2814,19 @@ describe("ThreadScreen", () => {
 		})
 	})
 
+	const STUDIO_HOST: OpenJoinedHost = {
+		spaceName: "Studio Nord",
+		hostName: "Lea",
+		isOnline: false,
+		isDown: true,
+	}
+
 	describe("on a joined Space waiting for its host", () => {
 		const renderWaiting = async (hostWait: HostWait) => {
 			render(
 				createElement(
 					OpenJoinedHostContext.Provider,
-					{
-						value: {
-							spaceName: "Studio Nord",
-							hostName: "Lea",
-							isOnline: false,
-							isDown: true,
-							hostWait,
-						},
-					},
+					{ value: { ...STUDIO_HOST, hostWait } },
 					screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })),
 				),
 				{ wrapper: createQueryTestWrapper().wrapper },
@@ -2864,13 +2863,6 @@ describe("ThreadScreen", () => {
 	})
 
 	describe("the pending slot on a joined Space", () => {
-		const STUDIO_HOST: OpenJoinedHost = {
-			spaceName: "Studio Nord",
-			hostName: "Lea",
-			isOnline: false,
-			isDown: true,
-		}
-
 		const PERMISSION_ASKED: AgentEvent[] = [
 			{
 				type: "permissionRequested",
