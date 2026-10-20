@@ -5,73 +5,74 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import { useAnnotationMode } from "./use-annotation-mode"
 
-const ANNOTATION_CHORD: KeyboardEventInit = {
-	key: "F",
-	metaKey: true,
-	shiftKey: true,
+const mountToolbar = (isActive: boolean) => {
+	const host = document.createElement("agentation-toolbar")
+	const controls = document.createElement("div")
+	controls.setAttribute("role", "group")
+	controls.setAttribute("aria-label", "Feedback controls")
+	controls.setAttribute("aria-hidden", String(!isActive))
+	host.attachShadow({ mode: "open" }).append(controls)
+	document.body.append(host)
+	return controls
 }
 
-const press = (init: KeyboardEventInit) => {
-	act(() => {
-		document.body.dispatchEvent(
-			new KeyboardEvent("keydown", {
-				bubbles: true,
-				cancelable: true,
-				...init,
-			}),
-		)
-	})
-}
-
-const pressPrevented = (init: KeyboardEventInit) => {
-	const consume = (event: Event) => event.preventDefault()
-	document.addEventListener("keydown", consume, { once: true })
-	press(init)
-}
+const settle = () => act(() => Promise.resolve())
 
 describe("useAnnotationMode", () => {
-	afterEach(cleanup)
+	afterEach(() => {
+		cleanup()
+		document.body.innerHTML = ""
+	})
 
-	it("starts with annotation mode off", () => {
+	it("stays hidden before the toolbar has attached its shadow root", () => {
 		const { result } = renderHook(useAnnotationMode)
 
 		expect(result.current).toBe(false)
 	})
 
-	it("turns annotation mode on with Cmd+Shift+F and off with Escape", () => {
+	it("shows once a toolbar mounted later reports annotation mode active", async () => {
 		const { result } = renderHook(useAnnotationMode)
 
-		press(ANNOTATION_CHORD)
-		expect(result.current).toBe(true)
-
-		press({ key: "Escape" })
-		expect(result.current).toBe(false)
-	})
-
-	it("turns annotation mode off on a second Cmd+Shift+F", () => {
-		const { result } = renderHook(useAnnotationMode)
-
-		press(ANNOTATION_CHORD)
-		press(ANNOTATION_CHORD)
-
-		expect(result.current).toBe(false)
-	})
-
-	it("stays on when the toolbar consumed the Escape for one of its own layers", () => {
-		const { result } = renderHook(useAnnotationMode)
-
-		press(ANNOTATION_CHORD)
-		pressPrevented({ key: "Escape" })
+		mountToolbar(true)
+		await settle()
 
 		expect(result.current).toBe(true)
 	})
 
-	it("ignores Cmd+F, Cmd+Shift+Option+F and a chord typed mid composition", () => {
+	it("follows the controls going active, then inactive", async () => {
+		const controls = mountToolbar(false)
+		const { result } = renderHook(useAnnotationMode)
+		expect(result.current).toBe(false)
+
+		controls.setAttribute("aria-hidden", "false")
+		await settle()
+		expect(result.current).toBe(true)
+
+		controls.setAttribute("aria-hidden", "true")
+		await settle()
+		expect(result.current).toBe(false)
+	})
+
+	it("stays visible when an Escape only closes one of the toolbar layers", async () => {
+		const controls = mountToolbar(true)
+		const layer = document.createElement("div")
+		layer.setAttribute("data-active", "true")
+		controls.append(layer)
 		const { result } = renderHook(useAnnotationMode)
 
-		press({ key: "f", metaKey: true })
-		press({ ...ANNOTATION_CHORD, altKey: true })
-		press({ ...ANNOTATION_CHORD, isComposing: true })
+		layer.setAttribute("data-active", "false")
+		layer.remove()
+		await settle()
+
+		expect(result.current).toBe(true)
+	})
+
+	it("hides when the toolbar unmounts", async () => {
+		mountToolbar(true)
+		const { result } = renderHook(useAnnotationMode)
+
+		document.querySelector("agentation-toolbar")?.remove()
+		await settle()
 
 		expect(result.current).toBe(false)
 	})

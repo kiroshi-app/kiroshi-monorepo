@@ -1,33 +1,47 @@
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 
-const isAnnotationChord = (event: KeyboardEvent) =>
-	(event.metaKey || event.ctrlKey) &&
-	event.shiftKey &&
-	event.key.toLowerCase() === "f"
+const TOOLBAR_HOST = "agentation-toolbar"
 
-const isLeavingAnnotation = (event: KeyboardEvent) =>
-	event.key === "Escape" && !event.defaultPrevented
+const CONTROLS_GROUP = '[role="group"][aria-label="Feedback controls"]'
 
-export const useAnnotationMode = () => {
-	const [isAnnotating, setIsAnnotating] = useState(false)
-
-	useEffect(() => {
-		const press = (event: KeyboardEvent) => {
-			if (event.isComposing || event.altKey) return
-
-			if (isAnnotationChord(event)) {
-				setIsAnnotating((wasAnnotating) => !wasAnnotating)
-				return
-			}
-
-			if (isLeavingAnnotation(event)) {
-				setIsAnnotating(false)
-			}
-		}
-
-		window.addEventListener("keydown", press)
-		return () => window.removeEventListener("keydown", press)
-	}, [])
-
-	return isAnnotating
+const CONTROLS_CHANGES: MutationObserverInit = {
+	subtree: true,
+	childList: true,
+	attributeFilter: ["aria-hidden"],
 }
+
+const findToolbarRoot = () =>
+	document.querySelector(TOOLBAR_HOST)?.shadowRoot ?? null
+
+const isAnnotationActive = () =>
+	findToolbarRoot()
+		?.querySelector(CONTROLS_GROUP)
+		?.getAttribute("aria-hidden") === "false"
+
+const subscribeToAnnotationMode = (onChange: () => void) => {
+	const controlsObserver = new MutationObserver(onChange)
+	let watchedRoot: ShadowRoot | null = null
+
+	const watchToolbarRoot = () => {
+		if (watchedRoot?.host.isConnected) return
+
+		controlsObserver.disconnect()
+		watchedRoot = findToolbarRoot()
+		if (watchedRoot) {
+			controlsObserver.observe(watchedRoot, CONTROLS_CHANGES)
+		}
+		onChange()
+	}
+
+	const pageObserver = new MutationObserver(watchToolbarRoot)
+	pageObserver.observe(document.body, { childList: true, subtree: true })
+	watchToolbarRoot()
+
+	return () => {
+		pageObserver.disconnect()
+		controlsObserver.disconnect()
+	}
+}
+
+export const useAnnotationMode = () =>
+	useSyncExternalStore(subscribeToAnnotationMode, isAnnotationActive)
