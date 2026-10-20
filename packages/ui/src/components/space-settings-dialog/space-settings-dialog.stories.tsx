@@ -1395,12 +1395,21 @@ const INVITE_FAILED_ARGS = inviteFailedArgs({
 	email: "sam@example.com",
 })
 
+type InviteUnreachable = Pick<
+	Extract<MembersFailure, { action: "invite" }>,
+	"reason" | "status" | "code"
+>
+
 const inviteUnreachableStory = (
-	failure: MembersFailure,
+	failure: InviteUnreachable,
 	message: string,
 	story: string,
 ) => ({
-	args: inviteFailedArgs(failure),
+	args: inviteFailedArgs({
+		action: "invite",
+		email: "sam@example.com",
+		...failure,
+	}),
 	parameters: { docs: { description: { story } } },
 	play: async () => {
 		await failureLineIn(await membersPanelIn(), message)
@@ -1436,7 +1445,7 @@ export const MembersInviteFailed = meta.story({
 
 export const MembersInviteFailedOffline = meta.story(
 	inviteUnreachableStory(
-		{ action: "invite", reason: "offline", email: "sam@example.com" },
+		{ reason: "offline" },
 		"Couldn’t invite sam@example.com, this computer is offline. Connect to the internet and try again.",
 		"The invite never left because this computer is offline. Pick it to check the line says so and asks to connect.",
 	),
@@ -1444,7 +1453,7 @@ export const MembersInviteFailedOffline = meta.story(
 
 export const MembersInviteFailedTimedOut = meta.story(
 	inviteUnreachableStory(
-		{ action: "invite", reason: "timedOut", email: "sam@example.com" },
+		{ reason: "timedOut" },
 		"Kiroshi took too long to answer, sam@example.com wasn’t invited. Try again in a moment.",
 		"Kiroshi did not answer the invite in time. Pick it to check the line says nobody was invited and to try again.",
 	),
@@ -1452,7 +1461,7 @@ export const MembersInviteFailedTimedOut = meta.story(
 
 export const MembersInviteFailedUnsent = meta.story(
 	inviteUnreachableStory(
-		{ action: "invite", reason: "unsent", email: "sam@example.com" },
+		{ reason: "unsent" },
 		"The invitation to sam@example.com didn’t leave this computer. Check your connection and try again.",
 		"The invite request failed before reaching Kiroshi. Pick it to check the line points to the connection.",
 	),
@@ -1461,10 +1470,8 @@ export const MembersInviteFailedUnsent = meta.story(
 export const MembersInviteFailedRelayStatus = meta.story(
 	inviteUnreachableStory(
 		{
-			action: "invite",
 			reason: "relayStatus",
 			status: 503,
-			email: "sam@example.com",
 		},
 		"Kiroshi answered with error 503, sam@example.com wasn’t invited. Try again in a moment.",
 		"Kiroshi answered the invite with an error status, passed as `status`. Pick it to check the line names the status.",
@@ -1474,10 +1481,8 @@ export const MembersInviteFailedRelayStatus = meta.story(
 export const MembersInviteFailedRelayConflict = meta.story(
 	inviteUnreachableStory(
 		{
-			action: "invite",
 			reason: "relayConflict",
 			code: "ALREADY_INVITED",
-			email: "sam@example.com",
 		},
 		"Kiroshi refused to invite sam@example.com (ALREADY_INVITED). Check the member list, then try again.",
 		"Kiroshi refused the invite with a conflict code, passed as `code`. Pick it to check the line names the code.",
@@ -1487,9 +1492,7 @@ export const MembersInviteFailedRelayConflict = meta.story(
 export const MembersInviteFailedUnreadableConflict = meta.story(
 	inviteUnreachableStory(
 		{
-			action: "invite",
 			reason: "unreadableConflict",
-			email: "sam@example.com",
 		},
 		"Kiroshi refused to invite sam@example.com without saying why. Check the member list, then try again.",
 		"Kiroshi refused the invite with a conflict this computer could not read. Pick it to check the line says no reason came back.",
@@ -1498,7 +1501,7 @@ export const MembersInviteFailedUnreadableConflict = meta.story(
 
 export const MembersInviteFailedUnreadableList = meta.story(
 	inviteUnreachableStory(
-		{ action: "invite", reason: "unreadableList", email: "sam@example.com" },
+		{ reason: "unreadableList" },
 		"Couldn’t read the member list from Kiroshi, sam@example.com wasn’t invited. Try again in a moment.",
 		"The member list Kiroshi answered with could not be read. Pick it to check the line says nobody was invited.",
 	),
@@ -1506,7 +1509,7 @@ export const MembersInviteFailedUnreadableList = meta.story(
 
 export const MembersInviteFailedListNotReadBack = meta.story(
 	inviteUnreachableStory(
-		{ action: "invite", reason: "listNotReadBack", email: "sam@example.com" },
+		{ reason: "listNotReadBack" },
 		"The invitation to sam@example.com was sent, but the member list didn’t refresh. Open this space’s settings again to see it.",
 		"The invitation landed but the member list did not read back. Pick it to check the line says it was sent, never that it failed.",
 	),
