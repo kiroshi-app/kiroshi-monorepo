@@ -385,6 +385,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"authorBotId": null,
 					"authorAccountId": null,
 					"authorName": null,
+					"writtenFrom": "here",
 					"repliedToMessageId": null,
 					"runtimeSessionId": null,
 				},
@@ -400,6 +401,7 @@ fn a_turn_written_over_ipc_reads_back_as_the_page_the_reader_displays() {
 					"authorBotId": BOT,
 					"authorAccountId": null,
 					"authorName": null,
+					"writtenFrom": null,
 					"repliedToMessageId": "m1",
 					"runtimeSessionId": null,
 				}
@@ -748,6 +750,7 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 			"authorBotId": BOT,
 			"authorAccountId": null,
 			"authorName": null,
+			"writtenFrom": null,
 			"repliedToMessageId": null,
 			"runtimeSessionId": null,
 		}),
