@@ -2257,8 +2257,8 @@ export const MembersShareFailedDeviceRefused = meta.story(
 export const MembersShareFailedKeysMissing = meta.story(
 	shareFailedStory(
 		"keysMissing",
-		"This computer doesn’t have the keys for this space. Sign out, sign in again and approve it on a device you already use.",
-		"Sharing failed because this computer lacks the space's keys. Pick it to check the notice walks through signing in again and approving.",
+		"This computer couldn’t read the keys for this space. Quit Kiroshi, open it again, then turn hosting on again.",
+		"Sharing failed because this computer couldn't load its own device keys or read the space's key from its store, with no other device involved. Pick it to check the notice says to quit Kiroshi, open it again and turn hosting on again.",
 	),
 )
 
@@ -2281,7 +2281,7 @@ export const MembersShareFailedTakenOver = meta.story(
 export const MembersShareFailedStreamClosed = meta.story(
 	shareFailedStory(
 		"streamClosed",
-		"The connection to Kiroshi closed. Turn it on again.",
-		"Sharing stopped because the connection to Kiroshi closed. Pick it over the unknown story when the failure is known to be the connection.",
+		"This computer stopped hosting this space. Turn hosting on again.",
+		"Sharing stopped because this computer's local event stream closed, not the relay. Pick it over the unknown story when hosting ended on this computer itself.",
 	),
 )

@@ -371,12 +371,13 @@ const settings = {
 					deviceRefused:
 						"Quelqu’un a choisi Pas moi sur un autre appareil, cet ordinateur a donc été déconnecté. Reconnectez-vous et approuvez-le sur un appareil que vous utilisez déjà.",
 					keysMissing:
-						"Cet ordinateur n’a pas les clés de cet espace. Déconnectez-vous, reconnectez-vous et approuvez-le sur un appareil que vous utilisez déjà.",
+						"Cet ordinateur n’a pas pu lire les clés de cet espace. Quittez Kiroshi, rouvrez-le, puis réactivez l’hébergement.",
 					instanceGone:
 						"Cet espace n’existe plus sur Kiroshi. Réactivez-le pour l’héberger depuis cet ordinateur.",
 					takenOver:
 						"Un autre ordinateur héberge maintenant cet espace. Réactivez-le pour l’héberger depuis celui-ci.",
-					streamClosed: "La connexion à Kiroshi a été coupée. Réactivez-le.",
+					streamClosed:
+						"Cet ordinateur a arrêté d’héberger cet espace. Réactivez l’hébergement.",
 					unknown: "Vérifiez votre connexion et réactivez-le.",
 				},
 			},

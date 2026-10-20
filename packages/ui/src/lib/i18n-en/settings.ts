@@ -358,12 +358,13 @@ const settings = {
 					deviceRefused:
 						"Someone chose Not me on another device, so this computer was signed out. Sign in again and approve it on a device you already use.",
 					keysMissing:
-						"This computer doesn’t have the keys for this space. Sign out, sign in again and approve it on a device you already use.",
+						"This computer couldn’t read the keys for this space. Quit Kiroshi, open it again, then turn hosting on again.",
 					instanceGone:
 						"This space no longer exists on Kiroshi. Turn it on again to host it from this computer.",
 					takenOver:
 						"Another computer hosts this space now. Turn it on again to host it from this one.",
-					streamClosed: "The connection to Kiroshi closed. Turn it on again.",
+					streamClosed:
+						"This computer stopped hosting this space. Turn hosting on again.",
 					unknown: "Check your connection and turn it on again.",
 				},
 			},
