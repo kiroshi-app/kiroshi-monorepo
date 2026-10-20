@@ -260,9 +260,7 @@ impl Shared {
 	}
 
 	fn ended_by_shutdown(&mut self, session: &str) -> Option<AgentEvent> {
-		if self.running.is_none() {
-			return None;
-		}
+		self.running.as_ref()?;
 		log::info!("the session shut down while its turn ran session={session}");
 		self.turn_ended(session, TurnOutcome::Cancelled);
 		Some(AgentEvent::TurnEnded {
