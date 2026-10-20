@@ -4323,15 +4323,8 @@ fn a_human_message_records_whether_it_was_written_here_or_came_through_the_relay
 			"args": host.sent("vouched"),
 		}))
 		.await;
-		let unvouched = NewUserMessage {
-			id: "unvouched".to_owned(),
-			conversation_id: host.conversation_id.clone(),
-			turn_id: "unvouched".to_owned(),
-			author_bot_id: None,
-			replied_to_message_id: None,
-			content: "hello".to_owned(),
-			created_at: 1,
-		};
+		let unvouched = serde_json::from_value(host.unstarted("unvouched")["message"].clone())
+			.expect("the message parses");
 		conversation_send_user_message(
 			host.app.handle().clone(),
 			host.app.state(),
