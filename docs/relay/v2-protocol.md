@@ -264,6 +264,13 @@ from the relay device list, and trusts the roster it signs.
 POST /invitations/{invitationId}/accept        bearer of the invited account
 ```
 
+The invitation id is a UUID the relay generates when it creates the invitation.
+The id is checked as a UUID before anything else: a malformed id answers 404
+`NOT_FOUND`. Deprecated fallback: an id naming no invitation is read as an
+instance id, and the route answers for the latest invitation of the bearer email
+to that instance. When that email holds none while another email does, the answer
+is 403 `INVITATION_EMAIL_MISMATCH`; when no email holds one, 404 `NOT_FOUND`.
+
 `GET /invitations` lists the pending invitations of the account, each carrying
 `id`, `instanceId`, `instanceName`, `inviterEmail`, `invitedAt` and `expiresAt`.
 
@@ -273,17 +280,44 @@ POST /invitations/{invitationId}/accept        bearer of the invited account
 | 409 `ALREADY_JOINED` | The account already accepted it | the join below, on the listed `instanceId` |
 | 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` | `invitationExpired` |
 | 410 `INVITATION_WITHDRAWN` | The host took it back | `invitationWithdrawn` |
-| 410 `INVITATION_USED` | It was already accepted | `invitationUsed` |
+| 410 `INVITATION_USED` | It was already accepted or declined | `invitationUsed` |
 | 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account | `invitationOtherEmail` |
-| 404 | No such invitation | `noInvitation` |
+| 404 `NOT_FOUND` | A malformed id, or no such invitation | `noInvitation` |
 | unreachable, any other status | | `couldNotAccept` |
 
 The Tauri command is `invitation_accept(invitationId)`. On every refusal of the
 accept the desktop stores no joined Space.
 
-A link `kiroshi://join?invitation=<invitationId>`, the id matching
-`[A-Za-z0-9_-]{1,128}`, opens the app and hands that invitation id to the front,
-which accepts it the same way. Any other `kiroshi://join` URL is ignored.
+The invitation email carries the Join link
+`https://kiroshi.app/join?invitation={invitationId}`. The website join page hands
+that id to the desktop as `kiroshi://join?invitation={invitationId}`.
+
+The desktop takes a `kiroshi://join` URL with no path and no fragment whose query
+is exactly `invitation=` followed by 1 to 128 characters of `[A-Za-z0-9_-]`. It
+opens the app and hands that invitation id to the front, which accepts it the
+same way. Any other `kiroshi://join` URL is ignored.
+
+## Invitation decline
+
+```
+POST /invitations/{invitationId}/decline       bearer of the invited account
+```
+
+The request has no body. The invitation id, its malformed-id 404 and its
+deprecated instance-id fallback are those of the [accept](#invitation-accept).
+A declined invitation is used: it can no longer be accepted nor declined.
+
+| Answer | Meaning |
+| --- | --- |
+| 204, empty body | The invitation is declined |
+| 401 `UNAUTHENTICATED` | No bearer, an unknown token or an expired session |
+| 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account |
+| 404 `NOT_FOUND` | A malformed id, or no such invitation |
+| 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` |
+| 410 `INVITATION_WITHDRAWN` | The host took it back |
+| 410 `INVITATION_USED` | It was already accepted or declined |
+
+The Tauri command is `invitation_decline(invitationId)`.
 
 ## Joining by the first rekey
 
