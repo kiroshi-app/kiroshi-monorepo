@@ -1,4 +1,6 @@
+use std::collections::hash_map::RandomState;
 use std::future::Future;
+use std::hash::{BuildHasher, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,7 +28,7 @@ use super::replay::{self, LastSent, Relaying, Ring, Stamped};
 use super::roster::{self, Rostered};
 use super::wire::{self, Dropped, HostKeys, Opened as OpenedFrame, Refusal, Wire};
 use super::{admission, devices, entered, handover, members, Hosting};
-use crate::account::cloud::{DeviceRegisterError, MeError, RegisterError};
+use crate::account::cloud::{retry_after, Cloud, DeviceRegisterError, MeError, RegisterError};
 use crate::account::session::{self, AccountSession};
 use crate::db::{self, Database};
 use crate::host_api::events::{FELL_BEHIND, SEND_PATIENCE};
@@ -41,6 +43,8 @@ pub(crate) const SILENCE_BOUND: Duration = Duration::from_secs(90);
 const FIRST_BACKOFF: Duration = Duration::from_secs(1);
 
 const BACKOFF_CAP: Duration = Duration::from_secs(60);
+
+const STEADY_OPEN: Duration = Duration::from_secs(30);
 
 const CONNECT_BOUND: Duration = Duration::from_secs(20);
 
@@ -72,6 +76,7 @@ pub(crate) enum Opened {
 	Forbidden,
 	Unknown,
 	Gone(Option<Departure>),
+	RateLimited(Duration),
 	Unreachable(String),
 }
 
@@ -108,22 +113,33 @@ enum Next {
 	Stopped,
 }
 
-pub(crate) struct Backoff(Duration);
+pub(crate) struct Backoff {
+	next: Duration,
+	opened_at: Option<Instant>,
+}
 
 impl Backoff {
 	pub(crate) fn first() -> Self {
-		Self(FIRST_BACKOFF)
+		Self { next: FIRST_BACKOFF, opened_at: None }
 	}
 
-	pub(crate) fn reset(&mut self) {
-		self.0 = FIRST_BACKOFF;
+	pub(crate) fn socket_opened(&mut self) {
+		self.opened_at = Some(Instant::now());
 	}
 
 	pub(crate) fn step(&mut self) -> Duration {
-		let waited = self.0;
-		self.0 = (waited * 2).min(BACKOFF_CAP);
-		waited
+		if self.opened_at.take().is_some_and(|opened_at| opened_at.elapsed() >= STEADY_OPEN) {
+			self.next = FIRST_BACKOFF;
+		}
+		let full = self.next;
+		self.next = (full * 2).min(BACKOFF_CAP);
+		jittered(full)
 	}
+}
+
+fn jittered(step: Duration) -> Duration {
+	let drawn = RandomState::new().build_hasher().finish() as f64 / u64::MAX as f64;
+	step + (step / 2).mul_f64(drawn)
 }
 
 pub(super) async fn hosted<R: Runtime>(
@@ -203,6 +219,10 @@ async fn attempted<R: Runtime>(
 			return failed(HostingFailureKind::AccountSessionStoreFailed, detail);
 		}
 	};
+	let cloud = &app.state::<Hosting>().cloud;
+	if until_stopped(stop, cloud.unpaused()).await.is_none() {
+		return Next::Stopped;
+	}
 	let relay_device_id = match relay_device(app, &bearer, &hosted.space_id, serving.keys).await {
 		Ok(relay_device_id) => relay_device_id,
 		Err(next) => return next,
@@ -215,13 +235,13 @@ async fn attempted<R: Runtime>(
 			Err(next) => return next,
 		},
 	};
-	let url = app.state::<Hosting>().cloud.host_relay_url(&instance_id, &relay_device_id);
-	let opened = until_stopped(stop, opened(url, &bearer)).await;
+	let url = cloud.host_relay_url(&instance_id, &relay_device_id);
+	let opened = until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await;
 	match opened {
 		None => Next::Stopped,
 		Some(Opened::Socket(socket)) => {
 			*replaced = None;
-			backoff.reset();
+			backoff.socket_opened();
 			entered(app, &hosted.space_id, Some(&instance_id), HostingState::Online);
 			let ids = Ids { space_id: &hosted.space_id, instance_id: &instance_id };
 			let ended = tokio::select! {
@@ -264,6 +284,9 @@ async fn attempted<R: Runtime>(
 			"kiroshi-cloud answered the instance it just registered as gone (relay answered 410)"
 				.to_owned(),
 		),
+		Some(Opened::RateLimited(retry_after)) => {
+			Next::Retry(format!("the relay rate limited the host socket for {retry_after:?}"))
+		}
 		Some(Opened::Unreachable(reason)) => Next::Retry(reason),
 	}
 }
@@ -383,7 +406,12 @@ async fn registered<R: Runtime>(
 	Ok(instance_id)
 }
 
-pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
+pub(crate) async fn opened_unpaused(cloud: &Cloud, url: String, bearer: &str) -> Opened {
+	cloud.unpaused().await;
+	opened(cloud, url, bearer).await
+}
+
+pub(crate) async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
 	let mut request = match url.into_client_request() {
 		Ok(request) => request,
 		Err(error) => return Opened::Unreachable(format!("the relay url is unusable: {error}")),
@@ -397,6 +425,13 @@ pub(crate) async fn opened(url: String, bearer: &str) -> Opened {
 	match timeout(CONNECT_BOUND, connect_async(request)).await {
 		Err(_) => Opened::Unreachable(format!("the relay did not answer within {CONNECT_BOUND:?}")),
 		Ok(Ok((socket, _))) => Opened::Socket(Box::new(socket)),
+		Ok(Err(SocketError::Http(response)))
+			if response.status() == StatusCode::TOO_MANY_REQUESTS =>
+		{
+			let retry_after = retry_after(response.headers());
+			cloud.rate_limited(&path, retry_after);
+			Opened::RateLimited(retry_after)
+		}
 		Ok(Err(SocketError::Http(response))) => {
 			refused(&path, response.status(), response.body().as_deref())
 		}
@@ -868,14 +903,58 @@ pub(crate) async fn until_stopped<F: Future>(
 mod tests {
 	use super::*;
 
+	fn is_drawn_within(waited: Duration, step_secs: u64) -> bool {
+		let step = Duration::from_secs(step_secs);
+		waited >= step && waited <= step + step / 2
+	}
+
 	#[test]
-	fn the_backoff_doubles_from_one_second_to_a_minute_and_resets() {
-		let mut backoff = Backoff(FIRST_BACKOFF);
+	fn every_wait_adds_up_to_half_of_a_doubled_step_capped_at_a_minute() {
+		let mut backoff = Backoff::first();
 
-		let waits: Vec<u64> = (0..8).map(|_| backoff.step().as_secs()).collect();
-		backoff.reset();
+		let waits: Vec<Duration> = (0..8).map(|_| backoff.step()).collect();
 
-		assert_eq!(waits, vec![1, 2, 4, 8, 16, 32, 60, 60]);
-		assert_eq!(backoff.step(), FIRST_BACKOFF);
+		let steps = [1, 2, 4, 8, 16, 32, 60, 60];
+		assert!(
+			waits.iter().zip(steps).all(|(waited, step)| is_drawn_within(*waited, step)),
+			"{waits:?}"
+		);
+	}
+
+	#[test]
+	fn the_steps_are_drawn_rather_than_fixed() {
+		let mut drawn = std::collections::HashSet::new();
+		for _ in 0..20 {
+			drawn.insert(Backoff::first().step());
+		}
+
+		assert!(drawn.len() > 1, "{drawn:?}");
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_socket_closed_within_thirty_seconds_of_its_opening_keeps_doubling_the_step() {
+		let mut backoff = Backoff::first();
+		let first = [backoff.step(), backoff.step(), backoff.step()];
+
+		backoff.socket_opened();
+		tokio::time::advance(STEADY_OPEN - Duration::from_secs(1)).await;
+		let after_a_short_socket = backoff.step();
+
+		assert!(first.iter().zip([1, 2, 4]).all(|(waited, full)| is_drawn_within(*waited, full)));
+		assert!(is_drawn_within(after_a_short_socket, 8), "{after_a_short_socket:?}");
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_socket_open_thirty_seconds_resets_the_step_to_one_second() {
+		let mut backoff = Backoff::first();
+		for _ in 0..5 {
+			backoff.step();
+		}
+
+		backoff.socket_opened();
+		tokio::time::advance(STEADY_OPEN).await;
+		let after_a_steady_socket = backoff.step();
+
+		assert!(is_drawn_within(after_a_steady_socket, 1), "{after_a_steady_socket:?}");
 	}
 }

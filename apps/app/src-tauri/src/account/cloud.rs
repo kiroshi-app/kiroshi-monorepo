@@ -1,11 +1,15 @@
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Duration;
 
 use base64::prelude::{Engine as _, BASE64_URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use reqwest::header::{HeaderMap, RETRY_AFTER};
 use reqwest::{Client, Method, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::time::{sleep_until, Instant};
 
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
@@ -50,6 +54,26 @@ const NONCE_LENGTH: usize = 32;
 const REQUEST_BOUND: Duration = Duration::from_secs(20);
 
 const REFUSAL_DETAIL_BOUND: usize = 512;
+
+const PAUSE_WITHOUT_RETRY_AFTER: Duration = Duration::from_secs(5);
+
+const LONGEST_PAUSE: Duration = Duration::from_secs(120);
+
+static PAUSES: LazyLock<Mutex<HashMap<String, Instant>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub(crate) fn retry_after(headers: &HeaderMap) -> Duration {
+	let Some(value) = headers.get(RETRY_AFTER) else {
+		return PAUSE_WITHOUT_RETRY_AFTER;
+	};
+	match value.to_str().ok().and_then(|value| value.trim().parse::<u64>().ok()) {
+		Some(seconds) => Duration::from_secs(seconds).min(LONGEST_PAUSE),
+		None => {
+			log::warn!("the relay sent a Retry-After that is not whole seconds: {value:?}");
+			PAUSE_WITHOUT_RETRY_AFTER
+		}
+	}
+}
 
 pub fn api_url() -> String {
 	resolve_api_url(env!("KIROSHI_CLOUD_API_URL"), std::env::var(API_URL_OVERRIDE).ok())
@@ -974,6 +998,28 @@ impl Cloud {
 		format!("{}{path}", self.base)
 	}
 
+	pub(crate) fn rate_limited(&self, path: &str, retry_after: Duration) {
+		let until = Instant::now() + retry_after;
+		let mut pauses = PAUSES.lock().unwrap_or_else(PoisonError::into_inner);
+		let paused = pauses.entry(self.base.clone()).or_insert(until);
+		*paused = (*paused).max(until);
+		log::warn!(
+			"the relay answered {} to {path}: background requests pause for {retry_after:?}",
+			StatusCode::TOO_MANY_REQUESTS
+		);
+	}
+
+	fn paused_until(&self) -> Option<Instant> {
+		let pauses = PAUSES.lock().unwrap_or_else(PoisonError::into_inner);
+		pauses.get(&self.base).copied().filter(|until| *until > Instant::now())
+	}
+
+	pub(crate) async fn unpaused(&self) {
+		while let Some(until) = self.paused_until() {
+			sleep_until(until).await;
+		}
+	}
+
 	async fn sent(
 		&self,
 		request: impl FnOnce(&Client) -> RequestBuilder,
@@ -998,7 +1044,7 @@ impl Cloud {
 				failure: TransportFailure::Unsent,
 				reason: format!("the cloud client could not be built: {error}"),
 			})?;
-		request(&client).send().await.map_err(|error| {
+		let answered = request(&client).send().await.map_err(|error| {
 			let failure = if error.is_timeout() {
 				TransportFailure::TimedOut
 			} else if error.is_connect() {
@@ -1008,7 +1054,11 @@ impl Cloud {
 			};
 			let reason = format!("the cloud could not be reached: {}", error.without_url());
 			Unanswered { failure, reason }
-		})
+		})?;
+		if answered.status() == StatusCode::TOO_MANY_REQUESTS {
+			self.rate_limited(answered.url().path(), retry_after(answered.headers()));
+		}
+		Ok(answered)
 	}
 }
 
@@ -1197,6 +1247,79 @@ mod tests {
 
 	async fn invited(status: u16, body: &str) -> Result<(), MemberCallError> {
 		answering(status, body).await.invite_member("bearer", INSTANCE, "ada@example.com").await
+	}
+
+	async fn rate_limiting(retry_after: &'static str, reached: Arc<Mutex<usize>>) -> Cloud {
+		serving(Router::new().fallback(move || {
+			let reached = Arc::clone(&reached);
+			async move {
+				*reached.lock().expect("the count") += 1;
+				(Answered::TOO_MANY_REQUESTS, [(RETRY_AFTER, retry_after)], "slow down")
+			}
+		}))
+		.await
+	}
+
+	fn retried_after(value: Option<&str>) -> Duration {
+		let mut headers = HeaderMap::new();
+		if let Some(value) = value {
+			headers.insert(RETRY_AFTER, value.parse().expect("a header value"));
+		}
+		retry_after(&headers)
+	}
+
+	#[test]
+	fn the_retry_after_reads_its_whole_seconds() {
+		assert_eq!(retried_after(Some("7")), Duration::from_secs(7));
+	}
+
+	#[test]
+	fn a_retry_after_absent_or_not_in_whole_seconds_pauses_five_seconds() {
+		assert_eq!(retried_after(None), Duration::from_secs(5));
+		assert_eq!(retried_after(Some("Wed, 21 Oct 2026 07:28:00 GMT")), Duration::from_secs(5));
+		assert_eq!(retried_after(Some("1.5")), Duration::from_secs(5));
+	}
+
+	#[test]
+	fn a_retry_after_above_two_minutes_pauses_two_minutes() {
+		assert_eq!(retried_after(Some("121")), Duration::from_secs(120));
+		assert_eq!(retried_after(Some("86400")), Duration::from_secs(120));
+		assert_eq!(retried_after(Some("120")), Duration::from_secs(120));
+	}
+
+	#[tokio::test]
+	async fn a_429_pauses_every_cloud_of_its_base_for_its_retry_after() {
+		let cloud = rate_limiting("2", Arc::new(Mutex::new(0))).await;
+		let other = Cloud::new(&cloud.base);
+
+		let read = cloud.me("bearer").await;
+		tokio::time::pause();
+		let paused_at = Instant::now();
+		let early = tokio::time::timeout(Duration::from_millis(1900), other.unpaused()).await;
+		other.unpaused().await;
+
+		assert_eq!(
+			read,
+			Err(MeError::Unreachable(format!(
+				"the cloud answered {}",
+				Answered::TOO_MANY_REQUESTS
+			)))
+		);
+		assert!(early.is_err());
+		assert!(paused_at.elapsed() >= Duration::from_millis(1900));
+	}
+
+	#[tokio::test]
+	async fn a_gesture_still_reaches_the_relay_while_it_pauses_the_background() {
+		let reached = Arc::new(Mutex::new(0));
+		let cloud = rate_limiting("60", Arc::clone(&reached)).await;
+
+		let first = cloud.invite_member("bearer", INSTANCE, "ada@example.com").await;
+		let again = cloud.invite_member("bearer", INSTANCE, "ada@example.com").await;
+
+		assert!(cloud.paused_until().is_some());
+		assert!(first.is_err() && again.is_err());
+		assert_eq!(*reached.lock().expect("the count"), 2);
 	}
 
 	#[tokio::test]

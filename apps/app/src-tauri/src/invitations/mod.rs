@@ -161,6 +161,7 @@ async fn polled<R: Runtime>(app: AppHandle<R>) {
 	polls.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		polls.tick().await;
+		app.state::<Invitations>().cloud.unpaused().await;
 		if let Err(failure) = read(&app).await {
 			eprintln!("the invitations were not polled: {failure:?}");
 		}

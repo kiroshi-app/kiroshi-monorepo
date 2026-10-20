@@ -175,6 +175,7 @@ async fn followed<R: Runtime>(app: AppHandle<R>) {
 	}
 	let mut approval = devices.approval.subscribe();
 	loop {
+		devices.cloud.unpaused().await;
 		let held = approval.borrow_and_update().clone();
 		match held {
 			DeviceApproval::Pending { expires_at } => {
@@ -196,6 +197,7 @@ async fn followed<R: Runtime>(app: AppHandle<R>) {
 
 async fn registered_once_answered<R: Runtime>(app: &AppHandle<R>, devices: &Devices) -> bool {
 	loop {
+		devices.cloud.unpaused().await;
 		match registration(app, devices).await {
 			Ok(approval) => {
 				entered(app, devices, approval);

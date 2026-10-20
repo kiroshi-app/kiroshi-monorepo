@@ -21,7 +21,7 @@ use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::devices;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
+	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
 };
 
 pub(super) struct WaitingJoin {
@@ -80,7 +80,7 @@ pub(super) async fn joins_started<R: Runtime>(
 	Ok(())
 }
 
-async fn waited_for_host<R: Runtime>(
+pub(super) async fn waited_for_host<R: Runtime>(
 	app: AppHandle<R>,
 	id: String,
 	instance_id: String,
@@ -144,6 +144,9 @@ async fn attempted<R: Runtime>(
 		Ok(device) => device,
 		Err(failure) => return Attempt::Dropped(Stall::DeviceKeys(failure)),
 	};
+	let guests = app.state::<RelayGuests>().inner();
+	let cloud = guests.cloud();
+	cloud.unpaused().await;
 	let url = match member_socket_of(app, &bearer, &device, instance_id).await {
 		Ok(url) => url,
 		Err(JoinedSpaceError::SessionRevoked) => {
@@ -151,10 +154,12 @@ async fn attempted<R: Runtime>(
 		}
 		Err(failure) => return Attempt::Dropped(Stall::SocketUrl(failure)),
 	};
-	match opened(url, &bearer).await {
+	let opened = opened_unpaused(cloud, url, &bearer).await;
+	guests.relay_device_forgotten_on_refusal(&opened);
+	match opened {
 		Opened::Socket(socket) => {
 			log::info!("the waiting join of instance {instance_id} opened its member socket");
-			backoff.reset();
+			backoff.socket_opened();
 			listened(app, *socket, instance_id, &device).await
 		}
 		Opened::Revoked => {
@@ -164,6 +169,7 @@ async fn attempted<R: Runtime>(
 		Opened::Gone(Some(departure)) => Attempt::Departed(departure),
 		Opened::Forbidden | Opened::Gone(None) => Attempt::Dropped(Stall::Forbidden),
 		Opened::Unknown => Attempt::Dropped(Stall::Unknown),
+		Opened::RateLimited(retry_after) => Attempt::Dropped(Stall::RateLimited(retry_after)),
 		Opened::Unreachable(reason) => Attempt::Dropped(Stall::Unreachable(reason)),
 	}
 }

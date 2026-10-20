@@ -116,9 +116,17 @@ pub(super) async fn member_socket_of<R: Runtime>(
 	device: &DeviceKeys,
 	instance_id: &str,
 ) -> Result<String, JoinedSpaceError> {
-	let cloud = app.state::<RelayGuests>().inner().cloud();
-	let relay_device_id = relay_device_of(app, cloud, bearer, device, instance_id).await?;
-	Ok(relay::member_socket_url(cloud, instance_id, &relay_device_id))
+	let guests = app.state::<RelayGuests>().inner();
+	let device_id = device.device_id().to_string();
+	let relay_device_id = match guests.known_relay_device(bearer, &device_id) {
+		Some(known) => known,
+		None => {
+			let read = relay_device_of(app, guests.cloud(), bearer, device, instance_id).await?;
+			guests.relay_device_known(bearer, &device_id, &read);
+			read
+		}
+	};
+	Ok(relay::member_socket_url(guests.cloud(), instance_id, &relay_device_id))
 }
 
 async fn relay_device_of<R: Runtime>(
@@ -166,11 +174,17 @@ async fn answered<R: Runtime>(
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<Handed>, JoinedSpaceError> {
-	let mut socket = match opened(url, bearer).await {
+	let guests = app.state::<RelayGuests>().inner();
+	let opened = opened(guests.cloud(), url, bearer).await;
+	guests.relay_device_forgotten_on_refusal(&opened);
+	let mut socket = match opened {
 		Opened::Socket(socket) => socket,
 		Opened::Revoked => return Err(revoked(app, bearer)),
 		Opened::Forbidden | Opened::Unknown | Opened::Gone(_) => {
 			return Err(JoinedSpaceError::NoInvitation { inviter_email: None })
+		}
+		Opened::RateLimited(retry_after) => {
+			return Ok(waiting(app, instance_id, Stall::RateLimited(retry_after)))
 		}
 		Opened::Unreachable(reason) => {
 			return Ok(waiting(app, instance_id, Stall::Unreachable(reason)))
