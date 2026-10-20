@@ -1336,31 +1336,31 @@ fn an_accept_in_flight_during_sign_out_answers_not_signed_in_and_leaves_no_relay
 	});
 }
 
+const WHILE_SIGNING_OUT: Duration = Duration::from_secs(2);
+
 #[test]
-fn a_connect_waiting_on_the_turn_during_sign_out_answers_unknown_and_starts_no_guest() {
+fn a_connect_during_a_stalled_sign_out_answers_unknown_and_starts_no_guest() {
 	run(async {
 		let mut harness = Harness::new(Some(BEARER)).await;
 		let id = harness.accepted().await;
-		let guests = harness.app.state::<RelayGuests>();
 		harness.cloud.is_sign_out_open.send_replace(false);
 
-		let signing_out = async {
-			let signed_out = sign_out(harness.app.handle()).await;
-			(signed_out, guests.turn().try_lock().is_err())
-		};
+		let signing_out = sign_out(harness.app.handle());
 		let connecting = async {
-			let is_holding_the_turn =
+			let is_sign_out_asked =
 				|| (harness.cloud.sign_outs_asked.load(Ordering::SeqCst) > 0).then_some(());
-			harness.noticed_until("the sign out holding the turn", is_holding_the_turn).await;
-			let connecting = harness.connect(&id);
+			harness.noticed_until("the stalled sign out", is_sign_out_asked).await;
+			let connected = tokio::time::timeout(WHILE_SIGNING_OUT, harness.connect(&id)).await;
 			harness.cloud.is_sign_out_open.send_replace(true);
-			connecting.await
+			connected
 		};
-		let ((signed_out, is_turn_handed_on), connected) = tokio::join!(signing_out, connecting);
+		let (signed_out, connected) = tokio::join!(signing_out, connecting);
 
 		signed_out.expect("the sign out");
-		assert!(is_turn_handed_on, "the connect skipped the turn");
-		assert_eq!(connected, Err(JoinedSpaceError::UnknownJoinedSpace { id: id.clone() }));
+		assert_eq!(
+			connected.expect("the connect is not held by the stalled sign out"),
+			Err(JoinedSpaceError::UnknownJoinedSpace { id: id.clone() })
+		);
 		assert!(!is_guest_running(&harness, &id));
 		assert!(harness.members.try_recv().is_err());
 		assert!(harness.stored().await.is_empty());
