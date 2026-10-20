@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
-import { StrictMode } from "react"
+import { lazy, StrictMode, Suspense } from "react"
 import { createRoot } from "react-dom/client"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
@@ -35,6 +35,14 @@ exposeScrollTrace()
 
 applyLanguage(readMirror().language)
 
+const AnnotationToolbar = import.meta.env.DEV
+	? lazy(() =>
+			import("@/components/annotation-toolbar").then((module) => ({
+				default: module.AnnotationToolbar,
+			})),
+		)
+	: undefined
+
 const queryClient = createQueryClient()
 invalidateOnHostReconnect(queryClient)
 
@@ -45,6 +53,11 @@ createRoot(document.getElementById("root")!).render(
 				<App />
 			</I18nProvider>
 			{import.meta.env.DEV && <ReactQueryDevtools />}
+			{AnnotationToolbar && (
+				<Suspense>
+					<AnnotationToolbar />
+				</Suspense>
+			)}
 		</QueryClientProvider>
 	</StrictMode>,
 )

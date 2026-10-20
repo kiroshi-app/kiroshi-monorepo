@@ -60,6 +60,20 @@ describe("useWorkspaceShortcuts", () => {
 		expect(event.defaultPrevented).toBe(true)
 	})
 
+	it("leaves Cmd+Shift+F to the annotation toolbar", () => {
+		const shortcuts = mounted()
+
+		const event = pressOn(document.body, {
+			key: "f",
+			metaKey: true,
+			shiftKey: true,
+		})
+
+		expect(shortcuts.onOpenUserSettings).not.toHaveBeenCalled()
+		expect(shortcuts.onStartConversation).not.toHaveBeenCalled()
+		expect(event.defaultPrevented).toBe(false)
+	})
+
 	it("starts an empty conversation on Cmd+N with no companion selected", () => {
 		const shortcuts = mounted()
 

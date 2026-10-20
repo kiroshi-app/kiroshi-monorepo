@@ -211,6 +211,17 @@ const pressOnControl = (key: string, held: KeyboardEventInit = {}) => {
 
 afterEach(cleanup)
 
+it("keeps the palette closed on Cmd+Shift+F", () => {
+	const result = renderSearch({
+		navigation: aNavigation().navigation,
+		port: aPort(),
+	})
+
+	act(() => press("f", { metaKey: true, shiftKey: true }))
+
+	expect(result.current.isOpen).toBe(false)
+})
+
 it("opens the palette on an empty query, the All tab and the current space", () => {
 	const { navigation } = aNavigation()
 	const result = renderSearch({ navigation, port: aPort() })
