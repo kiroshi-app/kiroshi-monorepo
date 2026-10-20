@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { type ComponentType, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { expect, fireEvent, fn, screen, waitFor, within } from "storybook/test"
 
@@ -42,6 +42,7 @@ import {
 	type MembersPanelProps,
 	type SpaceMember,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import type { settings } from "@workspace/ui/lib/i18n-en/settings"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 const FILLED_SPACE: SpaceSettingsValue = {
@@ -728,19 +729,52 @@ const questionIn = async (title: string) => {
 	return popup
 }
 
-const ShareFailureNotice = () => {
+type HostingFailureReason = keyof typeof settings.space.hosting.failed.reasons
+
+type ShareFailureNoticeProps = {
+	reason: HostingFailureReason
+}
+
+const ShareFailureNotice = ({ reason }: ShareFailureNoticeProps) => {
 	const { t } = useTranslation("settings")
 
 	useEffect(() => {
 		const notice = raiseFailureNotice({
 			title: t("space.hosting.failed.title", { name: STUDIO }),
-			description: t("space.hosting.failed.description"),
+			description: t(`space.hosting.failed.reasons.${reason}`),
 		})
 		return () => endNotice(notice)
-	}, [t])
+	}, [t, reason])
 
 	return null
 }
+
+const shareFailedStory = (
+	reason: HostingFailureReason,
+	description: string,
+	story: string,
+) => ({
+	args: notSharedArgs("off"),
+	decorators: [
+		(Story: ComponentType) => (
+			<>
+				<Story />
+				<NoticeSurface />
+				<ShareFailureNotice reason={reason} />
+			</>
+		),
+	],
+	parameters: { docs: { description: { story } } },
+	play: async () => {
+		const panel = await membersPanelIn()
+		await expect(shareSwitchIn(panel)).not.toBeChecked()
+		const title = await waitFor(() => slotIn(document.body, "toast-title"))
+		await expect(title).toHaveTextContent("Couldn’t host Studio")
+		await expect(slotIn(document.body, "toast-description").textContent).toBe(
+			description,
+		)
+	},
+})
 
 const SAM_PENDING: SpaceMember = {
 	id: "sam",
@@ -2188,32 +2222,66 @@ export const MembersSignedOut = meta.story({
 	},
 })
 
-export const MembersShareFailed = meta.story({
-	args: notSharedArgs("off"),
-	decorators: [
-		(Story) => (
-			<>
-				<Story />
-				<NoticeSurface />
-				<ShareFailureNotice />
-			</>
-		),
-	],
-	parameters: {
-		docs: {
-			description: {
-				story:
-					"Sharing could not start: the switch is back off and a failure notice names the space and says what to do, staying until it is closed. The app raises the notice with `raiseFailureNotice` and the catalogue's `space.hosting.failed` copy; the dialog only draws the switch.",
-			},
-		},
-	},
-	play: async () => {
-		const panel = await membersPanelIn()
-		await expect(shareSwitchIn(panel)).not.toBeChecked()
-		const title = await waitFor(() => slotIn(document.body, "toast-title"))
-		await expect(title).toHaveTextContent("Couldn’t host Studio")
-		await expect(slotIn(document.body, "toast-description")).toHaveTextContent(
-			"Check your connection and turn it on again.",
-		)
-	},
-})
+export const MembersShareFailed = meta.story(
+	shareFailedStory(
+		"unknown",
+		"Check your connection and turn it on again.",
+		"Sharing could not start: the switch is back off and a failure notice names the space and says what to do, staying until it is closed. The app raises the notice with `raiseFailureNotice` and the catalogue's `space.hosting.failed` copy; the dialog only draws the switch.",
+	),
+)
+
+export const MembersShareFailedNotOwner = meta.story(
+	shareFailedStory(
+		"notOwner",
+		"Another account hosts this space. Sign in with that account, or turn it on again to host it from this one.",
+		"Sharing failed because another Kiroshi account hosts the space. Pick it to check the notice points to signing in with that account or hosting from this one.",
+	),
+)
+
+export const MembersShareFailedDeviceAwaitingApproval = meta.story(
+	shareFailedStory(
+		"deviceAwaitingApproval",
+		"This computer isn’t approved yet. Approve it on a device you already use, then turn it on again.",
+		"Sharing failed because no other device of the account has approved this computer yet. Pick it to check the notice sends the reader to approve it first.",
+	),
+)
+
+export const MembersShareFailedDeviceRefused = meta.story(
+	shareFailedStory(
+		"deviceRefused",
+		"Someone chose Not me on another device, so this computer was signed out. Sign in again and approve it on a device you already use.",
+		"Sharing failed because another device of the account answered Not me for this computer. Pick it over the awaiting-approval story when the refusal already happened.",
+	),
+)
+
+export const MembersShareFailedKeysMissing = meta.story(
+	shareFailedStory(
+		"keysMissing",
+		"This computer couldn’t read the keys for this space. Quit Kiroshi, open it again, then turn hosting on again.",
+		"Sharing failed because this computer couldn't load its own device keys or read the space's key from its store, with no other device involved. Pick it to check the notice says to quit Kiroshi, open it again and turn hosting on again.",
+	),
+)
+
+export const MembersShareFailedInstanceGone = meta.story(
+	shareFailedStory(
+		"instanceGone",
+		"This space no longer exists on Kiroshi. Turn it on again to host it from this computer.",
+		"Sharing failed because Kiroshi no longer holds the hosted space. Pick it to check the notice says turning it on again hosts it anew.",
+	),
+)
+
+export const MembersShareFailedTakenOver = meta.story(
+	shareFailedStory(
+		"takenOver",
+		"Another computer hosts this space now. Turn it on again to host it from this one.",
+		"Sharing stopped because another computer of the account took over hosting. Pick it to check the notice offers taking it back.",
+	),
+)
+
+export const MembersShareFailedStreamClosed = meta.story(
+	shareFailedStory(
+		"streamClosed",
+		"This computer stopped hosting this space. Turn hosting on again.",
+		"Sharing stopped because this computer's local event stream closed, not the relay. Pick it over the unknown story when hosting ended on this computer itself.",
+	),
+)
