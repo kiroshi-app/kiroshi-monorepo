@@ -33,8 +33,8 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
-	SILENCE_BOUND,
+	opened, opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket,
+	PING_EVERY, SILENCE_BOUND,
 };
 
 const HOST_ABSENT: u16 = 4002;
@@ -738,11 +738,7 @@ async fn attempted<R: Runtime>(
 	};
 	let cloud = &app.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
-	let opening = async {
-		cloud.unpaused().await;
-		opened(cloud, url, &bearer).await
-	};
-	match until_stopped(stop, opening).await {
+	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await {
 		None => (Ended::Stopped, held),
 		Some(Opened::Socket(socket)) => {
 			log::info!(
@@ -788,11 +784,7 @@ async fn departure_asked<R: Runtime>(
 	};
 	let cloud = &app.state::<RelayGuests>().cloud;
 	let url = member_socket_url(cloud, &linked.instance_id, &held.roster.own.relay_device_id);
-	let opening = async {
-		cloud.unpaused().await;
-		opened(cloud, url, &bearer).await
-	};
-	match until_stopped(stop, opening).await? {
+	match until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await? {
 		Opened::Gone(Some(departure)) => Some(reason_of(departure)),
 		_ => Some(JoinedSpaceRemovalReason::Removed),
 	}

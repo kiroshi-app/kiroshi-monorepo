@@ -21,7 +21,7 @@ use crate::db;
 use crate::db::repositories::joined_spaces::JoinedReach;
 use crate::devices;
 use crate::hosting::relay::{
-	opened, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
+	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Socket, SILENCE_BOUND,
 };
 
 pub(super) struct WaitingJoin {
@@ -153,8 +153,7 @@ async fn attempted<R: Runtime>(
 		}
 		Err(failure) => return Attempt::Dropped(Stall::SocketUrl(failure)),
 	};
-	cloud.unpaused().await;
-	match opened(cloud, url, &bearer).await {
+	match opened_unpaused(cloud, url, &bearer).await {
 		Opened::Socket(socket) => {
 			log::info!("the waiting join of instance {instance_id} opened its member socket");
 			backoff.socket_opened();

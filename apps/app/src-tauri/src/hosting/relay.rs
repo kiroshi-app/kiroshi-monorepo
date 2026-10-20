@@ -237,11 +237,7 @@ async fn attempted<R: Runtime>(
 		},
 	};
 	let url = cloud.host_relay_url(&instance_id, &relay_device_id);
-	let opened = until_stopped(stop, async {
-		cloud.unpaused().await;
-		opened(cloud, url, &bearer).await
-	})
-	.await;
+	let opened = until_stopped(stop, opened_unpaused(cloud, url, &bearer)).await;
 	match opened {
 		None => Next::Stopped,
 		Some(Opened::Socket(socket)) => {
@@ -409,6 +405,11 @@ async fn registered<R: Runtime>(
 	);
 	hosted.instance_id = Some(instance_id.clone());
 	Ok(instance_id)
+}
+
+pub(crate) async fn opened_unpaused(cloud: &Cloud, url: String, bearer: &str) -> Opened {
+	cloud.unpaused().await;
+	opened(cloud, url, bearer).await
 }
 
 pub(crate) async fn opened(cloud: &Cloud, url: String, bearer: &str) -> Opened {
