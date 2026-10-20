@@ -42,6 +42,7 @@ import {
 	type MembersPanelProps,
 	type SpaceMember,
 } from "@workspace/ui/components/space-settings-dialog/members-panel"
+import type { settings } from "@workspace/ui/lib/i18n-en/settings"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 
 const FILLED_SPACE: SpaceSettingsValue = {
@@ -728,15 +729,7 @@ const questionIn = async (title: string) => {
 	return popup
 }
 
-type HostingFailureReason =
-	| "notOwner"
-	| "deviceAwaitingApproval"
-	| "deviceRefused"
-	| "keysMissing"
-	| "instanceGone"
-	| "takenOver"
-	| "streamClosed"
-	| "unknown"
+type HostingFailureReason = keyof typeof settings.space.hosting.failed.reasons
 
 type ShareFailureNoticeProps = {
 	reason: HostingFailureReason
