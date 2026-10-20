@@ -49,11 +49,23 @@ type MembersFailureReason =
 	| "unreachable"
 	| "generic"
 
+type InviteUnreachableReason =
+	| "offline"
+	| "timedOut"
+	| "unsent"
+	| "relayStatus"
+	| "relayConflict"
+	| "unreadableConflict"
+	| "unreadableList"
+	| "listNotReadBack"
+
 type MembersFailure =
 	| {
 			action: "invite"
-			reason: MembersFailureReason | "limitReached"
+			reason: MembersFailureReason | "limitReached" | InviteUnreachableReason
 			email: string
+			status?: number
+			code?: string
 	  }
 	| {
 			action: "withdraw"
@@ -137,6 +149,8 @@ const useFailureText = (
 		space,
 		email: isInvite ? failure.email : failure.member.email,
 		name: isInvite ? "" : nameOf(failure.member),
+		status: isInvite ? String(failure.status ?? "") : "",
+		code: isInvite ? (failure.code ?? "") : "",
 	})
 }
 
@@ -572,6 +586,7 @@ const MembersPanel = ({
 
 export {
 	type InviteRefusal,
+	type InviteUnreachableReason,
 	type MembersFailure,
 	MembersPanel,
 	type MembersPanelProps,
