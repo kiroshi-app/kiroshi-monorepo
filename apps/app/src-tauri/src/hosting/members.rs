@@ -5,7 +5,9 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::time::{interval, MissedTickBehavior};
 
-use super::contract::{Member, MemberStatus, MembersChanged, MembersError, SpaceMembers};
+use super::contract::{
+	Member, MemberStatus, MembersChanged, MembersError, SpaceMembers, UnreachableReason,
+};
 use super::{devices, Hosting};
 use crate::account::cloud::MemberCallError;
 use crate::account::contract::AccountState;
@@ -14,6 +16,8 @@ use crate::db::DatabaseState;
 use crate::events::{self, MEMBERS_CHANGED};
 use crate::spaces::commands::ready;
 use crate::spaces::contract::SpaceError;
+
+const NO_EMAIL_DOMAIN: &str = "none";
 
 pub(crate) const MEMBERS_EVERY: Duration = Duration::from_secs(15);
 
@@ -34,18 +38,31 @@ pub async fn invite<R: Runtime>(
 	email: String,
 ) -> Result<SpaceMembers, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
-	let email = normalized_email(&email).ok_or(MembersError::NotAnEmail)?;
+	let domain = email_domain(&email);
+	log::info!("inviting an address of domain {domain} into instance {instance_id}");
+	invited(app, &space_id, &instance_id, &email)
+		.await
+		.inspect_err(|failure| failure_logged("invite", &instance_id, domain, failure))
+}
+
+async fn invited<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	instance_id: &str,
+	email: &str,
+) -> Result<SpaceMembers, MembersError> {
+	let email = normalized_email(email).ok_or(MembersError::NotAnEmail)?;
 	if is_own_account(app, &email) {
 		return Err(MembersError::OwnAccount);
 	}
 	let bearer = bearer_of(app)?;
-	let _turn = devices::settled_turn(app, &space_id).await?;
+	let _turn = devices::settled_turn(app, space_id).await?;
 	app.state::<Hosting>()
 		.cloud
-		.invite_member(&bearer, &instance_id, &email)
+		.invite_member(&bearer, instance_id, &email)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	read_back(app, &space_id, &instance_id).await
+	read_back(app, space_id, instance_id).await
 }
 
 pub async fn withdraw<R: Runtime>(
@@ -54,14 +71,25 @@ pub async fn withdraw<R: Runtime>(
 	invitation_id: String,
 ) -> Result<SpaceMembers, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
+	withdrawn(app, &space_id, &instance_id, &invitation_id)
+		.await
+		.inspect_err(|failure| failure_logged("withdraw", &instance_id, NO_EMAIL_DOMAIN, failure))
+}
+
+async fn withdrawn<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	instance_id: &str,
+	invitation_id: &str,
+) -> Result<SpaceMembers, MembersError> {
 	let bearer = bearer_of(app)?;
-	let _turn = devices::settled_turn(app, &space_id).await?;
+	let _turn = devices::settled_turn(app, space_id).await?;
 	app.state::<Hosting>()
 		.cloud
-		.withdraw_invitation(&bearer, &instance_id, &invitation_id)
+		.withdraw_invitation(&bearer, instance_id, invitation_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	read_back(app, &space_id, &instance_id).await
+	read_back(app, space_id, instance_id).await
 }
 
 pub async fn resend<R: Runtime>(
@@ -86,9 +114,20 @@ pub async fn remove<R: Runtime>(
 	user_id: String,
 ) -> Result<SpaceMembers, MembersError> {
 	let instance_id = instance_of(app, &space_id).await?;
+	removed(app, &space_id, &instance_id, &user_id)
+		.await
+		.inspect_err(|failure| failure_logged("remove", &instance_id, NO_EMAIL_DOMAIN, failure))
+}
+
+async fn removed<R: Runtime>(
+	app: &AppHandle<R>,
+	space_id: &str,
+	instance_id: &str,
+	user_id: &str,
+) -> Result<SpaceMembers, MembersError> {
 	let bearer = bearer_of(app)?;
-	let _turn = devices::settled_turn(app, &space_id).await?;
-	let members = cloud_members(app, &bearer, &instance_id).await?;
+	let _turn = devices::settled_turn(app, space_id).await?;
+	let members = cloud_members(app, &bearer, instance_id).await?;
 	let status = members
 		.iter()
 		.find(|member| member.user_id == user_id)
@@ -101,11 +140,11 @@ pub async fn remove<R: Runtime>(
 	}
 	app.state::<Hosting>()
 		.cloud
-		.remove_member(&bearer, &instance_id, &user_id)
+		.remove_member(&bearer, instance_id, user_id)
 		.await
 		.inspect_err(|failure| signed_out_if_revoked(app, &bearer, failure))?;
-	devices::member_removed(app, &space_id, &user_id).await?;
-	read_back(app, &space_id, &instance_id).await
+	devices::member_removed(app, space_id, user_id).await?;
+	read_back(app, space_id, instance_id).await
 }
 
 pub async fn invite_again<R: Runtime>(
@@ -192,6 +231,16 @@ pub(super) fn signed_out_if_revoked<R: Runtime>(
 	}
 }
 
+fn email_domain(raw: &str) -> &str {
+	raw.trim().rsplit_once('@').map_or(NO_EMAIL_DOMAIN, |(_, domain)| domain)
+}
+
+fn failure_logged(action: &str, instance_id: &str, domain: &str, failure: &MembersError) {
+	log::error!(
+		"the member {action} on instance {instance_id} (email domain {domain}) failed: {failure:?}"
+	);
+}
+
 fn is_own_account<R: Runtime>(app: &AppHandle<R>, email: &str) -> bool {
 	matches!(
 		app.state::<AccountSession>().current(),
@@ -264,14 +313,22 @@ pub(super) async fn read_back<R: Runtime>(
 	space_id: &str,
 	instance_id: &str,
 ) -> Result<SpaceMembers, MembersError> {
-	let listed = listed(app, space_id, instance_id).await.map_err(|failure| match failure {
-		MembersError::Unreachable { reason } => MembersError::Unreachable {
-			reason: format!("the change landed but the member list did not read back: {reason}"),
-		},
-		failure => failure,
-	})?;
+	let listed =
+		listed(app, space_id, instance_id).await.map_err(not_read_back).inspect_err(|failure| {
+			log::warn!("the members of instance {instance_id} did not read back: {failure:?}")
+		})?;
 	announced(app, space_id, listed.clone());
 	Ok(listed)
+}
+
+fn not_read_back(failure: MembersError) -> MembersError {
+	match failure {
+		MembersError::Unreachable { reason, detail } => MembersError::Unreachable {
+			reason: UnreachableReason::ListNotReadBack { cause: Box::new(reason) },
+			detail,
+		},
+		failure => failure,
+	}
 }
 
 fn announced_if_changed<R: Runtime>(app: &AppHandle<R>, space_id: &str, listed: SpaceMembers) {

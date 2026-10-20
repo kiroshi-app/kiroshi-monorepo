@@ -10,7 +10,9 @@ use serde_json::{json, Value};
 use super::contract::{AccountPlan, KiroshiAccount};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::devices::contract::{DeviceKind, DeviceStatus};
-use crate::hosting::contract::{InvitationState, SpaceInvitation};
+use crate::hosting::contract::{
+	InvitationState, SpaceInvitation, TransportFailure, UnreachableReason,
+};
 use crate::invitations::contract::Invitation;
 use crate::mcp_oauth::commands::is_openable;
 use crate::missions::github::installed_tls_provider;
@@ -46,6 +48,8 @@ const DEVICE_CHALLENGE_INVALID: &str = "DEVICE_CHALLENGE_INVALID";
 const NONCE_LENGTH: usize = 32;
 
 const REQUEST_BOUND: Duration = Duration::from_secs(20);
+
+const REFUSAL_DETAIL_BOUND: usize = 512;
 
 pub fn api_url() -> String {
 	resolve_api_url(env!("KIROSHI_CLOUD_API_URL"), std::env::var(API_URL_OVERRIDE).ok())
@@ -189,7 +193,23 @@ pub enum MemberCallError {
 	UnknownMember,
 	UnknownInvitation,
 	OwnerNotRemovable,
-	Unreachable(String),
+	Unreachable { reason: UnreachableReason, detail: String },
+}
+
+impl MemberCallError {
+	fn unsent(detail: String) -> Self {
+		MemberCallError::Unreachable {
+			reason: UnreachableReason::Transport { failure: TransportFailure::Unsent },
+			detail,
+		}
+	}
+
+	fn unreadable_list(error: reqwest::Error) -> Self {
+		MemberCallError::Unreachable {
+			reason: UnreachableReason::UnreadableList,
+			detail: error.without_url().to_string(),
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -221,24 +241,33 @@ pub struct JoinedInstance {
 	pub name: String,
 }
 
-enum Unanswered {
-	Offline(String),
-	Unreachable(String),
+struct Unanswered {
+	failure: TransportFailure,
+	reason: String,
 }
 
 impl From<Unanswered> for String {
 	fn from(unanswered: Unanswered) -> Self {
-		match unanswered {
-			Unanswered::Offline(reason) | Unanswered::Unreachable(reason) => reason,
-		}
+		unanswered.reason
 	}
 }
 
 impl From<Unanswered> for InvitationCallError {
-	fn from(unanswered: Unanswered) -> Self {
-		match unanswered {
-			Unanswered::Offline(reason) => InvitationCallError::Offline(reason),
-			Unanswered::Unreachable(reason) => InvitationCallError::Unreachable(reason),
+	fn from(Unanswered { failure, reason }: Unanswered) -> Self {
+		match failure {
+			TransportFailure::Offline => InvitationCallError::Offline(reason),
+			TransportFailure::TimedOut | TransportFailure::Unsent => {
+				InvitationCallError::Unreachable(reason)
+			}
+		}
+	}
+}
+
+impl From<Unanswered> for MemberCallError {
+	fn from(Unanswered { failure, reason }: Unanswered) -> Self {
+		MemberCallError::Unreachable {
+			reason: UnreachableReason::Transport { failure },
+			detail: reason,
 		}
 	}
 }
@@ -717,16 +746,9 @@ impl Cloud {
 		instance_id: &str,
 	) -> Result<Vec<CloudMember>, MemberCallError> {
 		let members = self.members_url(instance_id);
-		let answered = self
-			.answered(|client| client.get(members).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.get(members).bearer_auth(bearer)).await?;
 		let answered = member_call_answered(answered).await?;
-		answered.json::<Vec<CloudMember>>().await.map_err(|error| {
-			MemberCallError::Unreachable(format!(
-				"the member list answered by the cloud did not parse: {error}"
-			))
-		})
+		answered.json::<Vec<CloudMember>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
 	pub async fn roster(
@@ -735,16 +757,9 @@ impl Cloud {
 		instance_id: &str,
 	) -> Result<Vec<CloudRosterMember>, MemberCallError> {
 		let roster = self.at(&format!("{INSTANCES_PATH}/{instance_id}/roster"));
-		let answered = self
-			.answered(|client| client.get(roster).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.get(roster).bearer_auth(bearer)).await?;
 		let answered = member_call_answered(answered).await?;
-		answered.json::<Vec<CloudRosterMember>>().await.map_err(|error| {
-			MemberCallError::Unreachable(format!(
-				"the roster answered by the relay did not parse: {error}"
-			))
-		})
+		answered.json::<Vec<CloudRosterMember>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
 	pub async fn invite_member(
@@ -755,10 +770,8 @@ impl Cloud {
 	) -> Result<(), MemberCallError> {
 		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
 		let body = json!({ "email": email });
-		let answered = self
-			.answered(|client| client.post(invitations).bearer_auth(bearer).json(&body))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered =
+			self.reached(|client| client.post(invitations).bearer_auth(bearer).json(&body)).await?;
 		if answered.status() == StatusCode::BAD_REQUEST {
 			return Err(MemberCallError::InvalidEmail);
 		}
@@ -771,16 +784,12 @@ impl Cloud {
 		instance_id: &str,
 	) -> Result<Vec<SpaceInvitation>, MemberCallError> {
 		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
-		let answered = self
-			.answered(|client| client.get(invitations).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.get(invitations).bearer_auth(bearer)).await?;
 		let answered = member_call_answered(answered).await?;
-		let sent = answered.json::<Vec<SentInvitation>>().await.map_err(|error| {
-			MemberCallError::Unreachable(format!(
-				"the invitation list answered by the cloud did not parse: {error}"
-			))
-		})?;
+		let sent = answered
+			.json::<Vec<SentInvitation>>()
+			.await
+			.map_err(MemberCallError::unreadable_list)?;
 		Ok(sent.into_iter().filter_map(SentInvitation::into_shown).collect())
 	}
 
@@ -791,10 +800,7 @@ impl Cloud {
 		invitation_id: &str,
 	) -> Result<(), MemberCallError> {
 		let invitation = self.sent_invitation_url(instance_id, &[invitation_id])?;
-		let answered = self
-			.answered(|client| client.delete(invitation).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.delete(invitation).bearer_auth(bearer)).await?;
 		invitation_answered(answered).await
 	}
 
@@ -805,10 +811,7 @@ impl Cloud {
 		invitation_id: &str,
 	) -> Result<(), MemberCallError> {
 		let resend = self.sent_invitation_url(instance_id, &[invitation_id, "resend"])?;
-		let answered = self
-			.answered(|client| client.post(resend).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.post(resend).bearer_auth(bearer)).await?;
 		invitation_answered(answered).await
 	}
 
@@ -818,16 +821,9 @@ impl Cloud {
 		instance_id: &str,
 	) -> Result<Vec<CloudDevice>, MemberCallError> {
 		let devices = self.at(&format!("{INSTANCES_PATH}/{instance_id}{DEVICES_PATH}"));
-		let answered = self
-			.answered(|client| client.get(devices).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.get(devices).bearer_auth(bearer)).await?;
 		let answered = member_call_answered(answered).await?;
-		answered.json::<Vec<CloudDevice>>().await.map_err(|error| {
-			MemberCallError::Unreachable(format!(
-				"the device list answered by the relay did not parse: {error}"
-			))
-		})
+		answered.json::<Vec<CloudDevice>>().await.map_err(MemberCallError::unreadable_list)
 	}
 
 	pub async fn remove_member(
@@ -837,16 +833,13 @@ impl Cloud {
 		user_id: &str,
 	) -> Result<(), MemberCallError> {
 		let mut member = Url::parse(&self.members_url(instance_id)).map_err(|error| {
-			MemberCallError::Unreachable(format!("the member url is unusable: {error}"))
+			MemberCallError::unsent(format!("the member url is unusable: {error}"))
 		})?;
 		member
 			.path_segments_mut()
-			.map_err(|()| MemberCallError::Unreachable("the cloud url has no path".to_owned()))?
+			.map_err(|()| MemberCallError::unsent("the cloud url has no path".to_owned()))?
 			.push(user_id);
-		let answered = self
-			.answered(|client| client.delete(member).bearer_auth(bearer))
-			.await
-			.map_err(MemberCallError::Unreachable)?;
+		let answered = self.reached(|client| client.delete(member).bearer_auth(bearer)).await?;
 		if answered.status() == StatusCode::NOT_FOUND {
 			return Err(MemberCallError::UnknownMember);
 		}
@@ -943,11 +936,11 @@ impl Cloud {
 	) -> Result<Url, MemberCallError> {
 		let invitations = self.at(&format!("{INSTANCES_PATH}/{instance_id}{INVITATIONS_PATH}"));
 		let mut invitation = Url::parse(&invitations).map_err(|error| {
-			MemberCallError::Unreachable(format!("the invitation url is unusable: {error}"))
+			MemberCallError::unsent(format!("the invitation url is unusable: {error}"))
 		})?;
 		invitation
 			.path_segments_mut()
-			.map_err(|()| MemberCallError::Unreachable("the cloud url has no path".to_owned()))?
+			.map_err(|()| MemberCallError::unsent("the cloud url has no path".to_owned()))?
 			.extend(segments);
 		Ok(invitation)
 	}
@@ -995,17 +988,21 @@ impl Cloud {
 		request: impl FnOnce(&Client) -> RequestBuilder,
 	) -> Result<reqwest::Response, Unanswered> {
 		installed_tls_provider();
-		let client = Client::builder().timeout(REQUEST_BOUND).build().map_err(|error| {
-			Unanswered::Unreachable(format!("the cloud client could not be built: {error}"))
-		})?;
+		let client =
+			Client::builder().timeout(REQUEST_BOUND).build().map_err(|error| Unanswered {
+				failure: TransportFailure::Unsent,
+				reason: format!("the cloud client could not be built: {error}"),
+			})?;
 		request(&client).send().await.map_err(|error| {
-			let is_offline = error.is_connect() && !error.is_timeout();
-			let reason = format!("the cloud could not be reached: {}", error.without_url());
-			if is_offline {
-				Unanswered::Offline(reason)
+			let failure = if error.is_timeout() {
+				TransportFailure::TimedOut
+			} else if error.is_connect() {
+				TransportFailure::Offline
 			} else {
-				Unanswered::Unreachable(reason)
-			}
+				TransportFailure::Unsent
+			};
+			let reason = format!("the cloud could not be reached: {}", error.without_url());
+			Unanswered { failure, reason }
 		})
 	}
 }
@@ -1082,7 +1079,11 @@ async fn member_call_answered(
 		StatusCode::UNAUTHORIZED => Err(MemberCallError::Revoked),
 		StatusCode::FORBIDDEN => Err(MemberCallError::Forbidden),
 		StatusCode::CONFLICT => Err(conflicted(answered).await),
-		_ => successful(answered).map_err(MemberCallError::Unreachable),
+		status if status.is_success() => Ok(answered),
+		status => Err(MemberCallError::Unreachable {
+			reason: UnreachableReason::RelayStatus { status: status.as_u16() },
+			detail: refusal_detail(answered).await,
+		}),
 	}
 }
 
@@ -1094,20 +1095,52 @@ async fn invitation_answered(answered: reqwest::Response) -> Result<(), MemberCa
 }
 
 async fn conflicted(answered: reqwest::Response) -> MemberCallError {
-	let refusal = match answered.json::<Refusal>().await {
+	let body = match answered.text().await {
+		Ok(body) => body,
+		Err(error) => {
+			return unreadable_conflict(format!(
+				"the conflict body did not read: {}",
+				error.without_url()
+			))
+		}
+	};
+	let refusal = match serde_json::from_str::<Refusal>(&body) {
 		Ok(refusal) => refusal,
 		Err(error) => {
-			return MemberCallError::Unreachable(format!(
-				"the cloud answered a conflict with an unreadable body: {error}"
-			))
+			return unreadable_conflict(format!("the conflict body did not parse: {error}"))
 		}
 	};
 	match refusal.error.code.as_str() {
 		"ALREADY_MEMBER" => MemberCallError::AlreadyMember,
 		"MEMBER_LIMIT_REACHED" => MemberCallError::LimitReached,
 		"OWNER_NOT_REMOVABLE" => MemberCallError::OwnerNotRemovable,
-		code => MemberCallError::Unreachable(format!("the cloud answered a conflict coded {code}")),
+		_ => MemberCallError::Unreachable {
+			reason: UnreachableReason::RelayConflict { code: refusal.error.code },
+			detail: bounded(&body),
+		},
 	}
+}
+
+fn unreadable_conflict(detail: String) -> MemberCallError {
+	MemberCallError::Unreachable {
+		reason: UnreachableReason::RelayConflict { code: String::new() },
+		detail,
+	}
+}
+
+async fn refusal_detail(answered: reqwest::Response) -> String {
+	match answered.text().await {
+		Ok(body) => bounded(&body),
+		Err(error) => format!("the body did not read: {}", error.without_url()),
+	}
+}
+
+fn bounded(body: &str) -> String {
+	let mut end = body.len().min(REFUSAL_DETAIL_BOUND);
+	while !body.is_char_boundary(end) {
+		end -= 1;
+	}
+	body[..end].to_owned()
 }
 
 fn successful(answered: reqwest::Response) -> Result<reqwest::Response, String> {
@@ -1120,7 +1153,120 @@ fn successful(answered: reqwest::Response) -> Result<reqwest::Response, String> 
 
 #[cfg(test)]
 mod tests {
+	use std::net::Ipv4Addr;
+
+	use axum::http::StatusCode as Answered;
+	use axum::Router;
+	use tokio::net::TcpListener;
+
 	use super::*;
+
+	const INSTANCE: &str = "i1";
+
+	async fn answering(status: u16, body: &'static str) -> Cloud {
+		let status = Answered::from_u16(status).expect("a valid status");
+		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the fake binds");
+		let address = listener.local_addr().expect("the fake is named");
+		let router = Router::new().fallback(move || async move { (status, body) });
+		tokio::spawn(async move { axum::serve(listener, router).await.expect("the fake serves") });
+		Cloud::new(&format!("http://{address}"))
+	}
+
+	async fn invited(status: u16, body: &'static str) -> Result<(), MemberCallError> {
+		answering(status, body).await.invite_member("bearer", INSTANCE, "ada@example.com").await
+	}
+
+	#[tokio::test]
+	async fn an_unmapped_status_is_a_relay_status_carrying_its_body() {
+		for status in [404, 422, 429, 500] {
+			assert_eq!(
+				invited(status, r#"{"error":{"code":"X"}}"#).await,
+				Err(MemberCallError::Unreachable {
+					reason: UnreachableReason::RelayStatus { status },
+					detail: r#"{"error":{"code":"X"}}"#.to_owned(),
+				}),
+				"{status}"
+			);
+		}
+	}
+
+	#[tokio::test]
+	async fn a_relay_status_keeps_at_most_the_first_512_bytes_of_its_body() {
+		let body: &'static str = format!("a{}", "é".repeat(300)).leak();
+
+		let Err(MemberCallError::Unreachable { detail, .. }) = invited(500, body).await else {
+			panic!("a 500 is unreachable");
+		};
+
+		assert_eq!(detail.len(), 511);
+		assert!(body.starts_with(&detail));
+	}
+
+	#[tokio::test]
+	async fn the_mapped_refusals_are_unchanged() {
+		assert_eq!(invited(400, "{}").await, Err(MemberCallError::InvalidEmail));
+		assert_eq!(invited(401, "{}").await, Err(MemberCallError::Revoked));
+		assert_eq!(invited(403, "{}").await, Err(MemberCallError::Forbidden));
+		for (code, refusal) in [
+			("ALREADY_MEMBER", MemberCallError::AlreadyMember),
+			("MEMBER_LIMIT_REACHED", MemberCallError::LimitReached),
+			("OWNER_NOT_REMOVABLE", MemberCallError::OwnerNotRemovable),
+		] {
+			let body = format!(r#"{{"error":{{"code":"{code}"}}}}"#).leak();
+			assert_eq!(invited(409, body).await, Err(refusal), "{code}");
+		}
+	}
+
+	#[tokio::test]
+	async fn a_404_on_a_sent_invitation_is_still_an_unknown_invitation() {
+		let cloud = answering(404, "{}").await;
+
+		assert_eq!(
+			cloud.withdraw_invitation("bearer", INSTANCE, "inv1").await,
+			Err(MemberCallError::UnknownInvitation)
+		);
+	}
+
+	#[tokio::test]
+	async fn a_conflict_with_another_code_is_a_relay_conflict_carrying_it() {
+		let body = r#"{"error":{"code":"ALREADY_INVITED","message":"held"}}"#;
+
+		assert_eq!(
+			invited(409, body).await,
+			Err(MemberCallError::Unreachable {
+				reason: UnreachableReason::RelayConflict { code: "ALREADY_INVITED".to_owned() },
+				detail: body.to_owned(),
+			})
+		);
+	}
+
+	#[tokio::test]
+	async fn a_conflict_with_an_unreadable_body_is_a_relay_conflict_with_no_code() {
+		let Err(MemberCallError::Unreachable { reason, detail }) = invited(409, "busy").await
+		else {
+			panic!("an unreadable conflict is unreachable");
+		};
+
+		assert_eq!(reason, UnreachableReason::RelayConflict { code: String::new() });
+		assert!(detail.contains("did not parse"), "{detail}");
+	}
+
+	#[tokio::test]
+	async fn a_closed_port_is_an_offline_transport() {
+		let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("a port binds");
+		let address = closed.local_addr().expect("the port is named");
+		drop(closed);
+
+		let Err(MemberCallError::Unreachable { reason, .. }) =
+			Cloud::new(&format!("http://{address}"))
+				.invite_member("bearer", INSTANCE, "ada@example.com")
+				.await
+		else {
+			panic!("a closed port is unreachable");
+		};
+
+		assert_eq!(reason, UnreachableReason::Transport { failure: TransportFailure::Offline });
+	}
 
 	#[test]
 	fn the_base_url_loses_its_trailing_slash() {

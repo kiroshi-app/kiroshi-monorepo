@@ -160,7 +160,8 @@ pub enum MembersError {
 	},
 	#[serde(rename_all = "camelCase")]
 	Unreachable {
-		reason: String,
+		reason: UnreachableReason,
+		detail: String,
 	},
 	#[serde(rename_all = "camelCase")]
 	SessionStore {
@@ -180,6 +181,36 @@ pub enum MembersError {
 	},
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum UnreachableReason {
+	#[serde(rename_all = "camelCase")]
+	Transport {
+		failure: TransportFailure,
+	},
+	#[serde(rename_all = "camelCase")]
+	RelayStatus {
+		status: u16,
+	},
+	#[serde(rename_all = "camelCase")]
+	RelayConflict {
+		code: String,
+	},
+	UnreadableList,
+	#[serde(rename_all = "camelCase")]
+	ListNotReadBack {
+		cause: Box<UnreachableReason>,
+	},
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TransportFailure {
+	Offline,
+	TimedOut,
+	Unsent,
+}
+
 impl From<SpaceError> for MembersError {
 	fn from(error: SpaceError) -> Self {
 		MembersError::Space { error }
@@ -197,7 +228,9 @@ impl From<MemberCallError> for MembersError {
 			MemberCallError::UnknownMember => MembersError::UnknownMember,
 			MemberCallError::UnknownInvitation => MembersError::UnknownInvitation,
 			MemberCallError::OwnerNotRemovable => MembersError::HostNotRemovable,
-			MemberCallError::Unreachable(reason) => MembersError::Unreachable { reason },
+			MemberCallError::Unreachable { reason, detail } => {
+				MembersError::Unreachable { reason, detail }
+			}
 		}
 	}
 }
@@ -267,15 +300,48 @@ mod tests {
 	}
 
 	#[test]
+	fn an_unreachable_refusal_crosses_with_its_reason_tagged_on_kind_and_its_detail() {
+		let relay_status = UnreachableReason::RelayStatus { status: 404 };
+		for (reason, crossed) in [
+			(
+				UnreachableReason::Transport { failure: TransportFailure::Offline },
+				json!({ "kind": "transport", "failure": "offline" }),
+			),
+			(
+				UnreachableReason::Transport { failure: TransportFailure::TimedOut },
+				json!({ "kind": "transport", "failure": "timedOut" }),
+			),
+			(
+				UnreachableReason::Transport { failure: TransportFailure::Unsent },
+				json!({ "kind": "transport", "failure": "unsent" }),
+			),
+			(relay_status.clone(), json!({ "kind": "relayStatus", "status": 404 })),
+			(
+				UnreachableReason::RelayConflict { code: "ALREADY_INVITED".to_owned() },
+				json!({ "kind": "relayConflict", "code": "ALREADY_INVITED" }),
+			),
+			(UnreachableReason::UnreadableList, json!({ "kind": "unreadableList" })),
+			(
+				UnreachableReason::ListNotReadBack { cause: Box::new(relay_status) },
+				json!({
+					"kind": "listNotReadBack",
+					"cause": { "kind": "relayStatus", "status": 404 }
+				}),
+			),
+		] {
+			assert_eq!(
+				to_value(MembersError::Unreachable { reason, detail: "body".to_owned() })
+					.expect("the refusal serializes"),
+				json!({ "kind": "unreachable", "reason": crossed, "detail": "body" })
+			);
+		}
+	}
+
+	#[test]
 	fn a_members_refusal_crosses_tagged_on_kind() {
 		assert_eq!(
 			to_value(MembersError::OwnAccount).expect("the refusal serializes"),
 			json!({ "kind": "ownAccount" })
-		);
-		assert_eq!(
-			to_value(MembersError::Unreachable { reason: "down".to_owned() })
-				.expect("the refusal serializes"),
-			json!({ "kind": "unreachable", "reason": "down" })
 		);
 		assert_eq!(
 			to_value(MembersError::from(SpaceError::LastSpace)).expect("the refusal serializes"),

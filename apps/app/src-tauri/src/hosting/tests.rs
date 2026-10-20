@@ -24,7 +24,8 @@ use super::bridge::{belongs_to_the_host, LocalApi};
 use super::contract::{AccountDevices, RosterDevice};
 use super::contract::{
 	HostingFailureKind, HostingState, InvitationState, Member, MemberStatus, MembersError,
-	SpaceInvitation, SpaceMembers, CHANGED_EVENT, MEMBERS_CHANGED_EVENT,
+	SpaceInvitation, SpaceMembers, TransportFailure, UnreachableReason, CHANGED_EVENT,
+	MEMBERS_CHANGED_EVENT,
 };
 use super::devices::{devices, remove_device};
 use super::members::{invite, invite_again, list, remove, resend, withdraw};
@@ -2530,17 +2531,46 @@ fn a_5xx_or_an_unreadable_list_is_unreachable_with_its_cause() {
 	run(async {
 		let harness = Harness::hosted("members-5xx").await;
 
-		harness.cloud_answers(StatusCode::SERVICE_UNAVAILABLE, json!({}));
-		let Err(MembersError::Unreachable { reason }) = harness.listed().await else {
-			panic!("a 503 is unreachable");
-		};
-		assert!(reason.contains("503"), "{reason}");
+		harness.cloud_answers(StatusCode::SERVICE_UNAVAILABLE, json!({ "down": true }));
+		assert_eq!(
+			harness.listed().await,
+			Err(MembersError::Unreachable {
+				reason: UnreachableReason::RelayStatus { status: 503 },
+				detail: r#"{"down":true}"#.to_owned(),
+			})
+		);
 
 		harness.cloud_answers(StatusCode::OK, json!({ "members": [] }));
-		let Err(MembersError::Unreachable { reason }) = harness.listed().await else {
+		let Err(MembersError::Unreachable { reason, detail }) = harness.listed().await else {
 			panic!("an unreadable list is unreachable");
 		};
-		assert!(reason.contains("did not parse"), "{reason}");
+		assert_eq!(reason, UnreachableReason::UnreadableList);
+		assert!(detail.contains("decoding"), "{detail}");
+	});
+}
+
+#[test]
+fn an_invite_that_landed_but_did_not_read_back_is_told_apart_from_one_that_never_landed() {
+	run(async {
+		let harness = Harness::hosted("members-invite-not-read-back").await;
+		harness.cloud_refuses("GET", StatusCode::BAD_GATEWAY, json!({}));
+
+		let refused = harness.invited("ada@example.com").await;
+
+		assert_eq!(
+			refused,
+			Err(MembersError::Unreachable {
+				reason: UnreachableReason::ListNotReadBack {
+					cause: Box::new(UnreachableReason::RelayStatus { status: 502 }),
+				},
+				detail: "{}".to_owned(),
+			})
+		);
+		assert_eq!(
+			harness.relay.invitations.lock().expect("the relay").len(),
+			1,
+			"the invitation landed"
+		);
 	});
 }
 
@@ -2553,10 +2583,10 @@ fn one_invitation_in_a_state_the_relay_never_sends_makes_the_list_unreachable() 
 			cloud_invitation("i2", "eve@example.com", "invited"),
 		]);
 
-		let Err(MembersError::Unreachable { reason }) = harness.listed().await else {
+		let Err(MembersError::Unreachable { reason, .. }) = harness.listed().await else {
 			panic!("an unknown invitation state is unreachable");
 		};
-		assert!(reason.contains("invitation list answered by the cloud did not parse"), "{reason}");
+		assert_eq!(reason, UnreachableReason::UnreadableList);
 	});
 }
 
@@ -2582,10 +2612,11 @@ fn an_unreachable_cloud_is_unreachable_with_its_cause() {
 
 		let listed = list(app.handle(), PERSONAL.to_owned()).await;
 
-		let Err(MembersError::Unreachable { reason }) = listed else {
+		let Err(MembersError::Unreachable { reason, detail }) = listed else {
 			panic!("a closed port is unreachable");
 		};
-		assert!(reason.contains("could not be reached"), "{reason}");
+		assert_eq!(reason, UnreachableReason::Transport { failure: TransportFailure::Offline });
+		assert!(detail.contains("could not be reached"), "{detail}");
 	});
 }
 
