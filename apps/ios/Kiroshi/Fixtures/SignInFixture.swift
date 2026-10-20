@@ -150,6 +150,8 @@
         case invitationJoined = "4.7"
         case invitationExpired = "invitation-expired"
         case invitationOtherEmail = "invitation-other-email"
+        case invitationAlreadyJoined = "invitation-already-joined"
+        case invitationNotFound = "invitation-not-found"
 
         @MainActor static var opened: SignInFixture?
 
@@ -238,7 +240,8 @@
             case .opening, .email, .code: [:]
             case .invitationBadge, .invitationMenu, .invitationSheet, .invitationJoining,
                 .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
-                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                .invitationJoined, .invitationExpired, .invitationOtherEmail,
+                .invitationAlreadyJoined, .invitationNotFound:
                 InvitationsFixture.answers(self)
             case .approvalWaiting, .approvalRefused, .approvalExpired, .approvalCode,
                 .approvalApproved:
@@ -286,7 +289,8 @@
                 .approvalApproved, .deviceRequest, .invitationBadge, .invitationMenu,
                 .invitationSheet, .invitationJoining,
                 .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
-                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                .invitationJoined, .invitationExpired, .invitationOtherEmail,
+                .invitationAlreadyJoined, .invitationNotFound:
                 true
             case .home, .homeMenu, .conversations, .conversationsLive, .conversationIcons, .thread,
                 .threadHostOffline,
@@ -423,7 +427,8 @@
                     transport: DeviceMovedRelayTransport(), clock: ContinuousRelayClock())
             case .invitationBadge, .invitationMenu, .invitationSheet, .invitationJoining,
                 .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
-                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                .invitationJoined, .invitationExpired, .invitationOtherEmail,
+                .invitationAlreadyJoined, .invitationNotFound:
                 return InvitationsFixture.relay(self)
             case .joinSpace:
                 return RelayEnvironment(
@@ -519,7 +524,8 @@
                 .approvalApproved, .deviceRequest, .invitationBadge, .invitationMenu,
                 .invitationSheet, .invitationJoining,
                 .invitationHostOffline, .invitationCouldNotAccept, .invitationWithdrawn,
-                .invitationJoined, .invitationExpired, .invitationOtherEmail:
+                .invitationJoined, .invitationExpired, .invitationOtherEmail,
+                .invitationAlreadyJoined, .invitationNotFound:
                 break
             }
             return model

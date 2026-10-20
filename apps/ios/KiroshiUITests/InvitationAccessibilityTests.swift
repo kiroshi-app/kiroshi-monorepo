@@ -9,13 +9,14 @@ final class InvitationAccessibilityTests: XCTestCase {
     static let sheetLabels: Set<String> = [
         "Studio", "Invited by noa@example.com", "Accept", "Decline", "Joining…", "Try again",
         "Expires", "October 25", "Host", "Offline", "Invitation", "Withdrawn", "Expired",
-        "For another email",
+        "For another email", "Not found",
         "What you share in Studio can be read by its members and their devices, and by nobody else.",
         "noa@example.com’s computer is offline. You can accept once it’s back.",
         "Couldn’t accept. Kiroshi’s servers didn’t answer.",
         "noa@example.com withdrew this invitation. Ask them to invite you again.",
         "This invitation expired. Ask noa@example.com to invite you again.",
         "This invitation is for another email. Sign in with the email noa@example.com invited, then accept it again.",
+        "This invitation doesn’t exist anymore. Ask noa@example.com to invite you again.",
     ]
 
     static let acceptTitles = ["Accept", "Joining…", "Try again"]
@@ -93,6 +94,10 @@ final class InvitationAccessibilityTests: XCTestCase {
                 "invitation-other-email",
                 "This invitation is for another email. Sign in with the email noa@example.com invited, then accept it again."
             ),
+            (
+                "invitation-not-found",
+                "This invitation doesn’t exist anymore. Ask noa@example.com to invite you again."
+            ),
         ]
         for (fixture, shown) in states {
             let app = launchInEnglish(fixture)
@@ -115,12 +120,15 @@ final class InvitationAccessibilityTests: XCTestCase {
     }
 
     func testAcceptingLandsOnTheJoinedSpace() throws {
-        let app = launch("4.7")
-        let space = app.navigationBars["Studio"].buttons["Space"]
+        for fixture in ["4.7", "invitation-already-joined"] {
+            let app = launch(fixture)
+            let space = app.navigationBars["Studio"].buttons["Space"]
 
-        XCTAssertTrue(space.waitForExistence(timeout: 15))
-        XCTAssertEqual(space.value as? String, "Studio, online")
-        XCTAssertFalse(app.buttons["Accept"].exists)
-        XCTAssertTrue(app.staticTexts["Juniper"].waitForExistence(timeout: 10))
+            XCTAssertTrue(space.waitForExistence(timeout: 15), fixture)
+            XCTAssertEqual(space.value as? String, "Studio, online", fixture)
+            XCTAssertFalse(app.buttons["Accept"].exists, fixture)
+            XCTAssertTrue(app.staticTexts["Juniper"].waitForExistence(timeout: 10), fixture)
+            app.terminate()
+        }
     }
 }
