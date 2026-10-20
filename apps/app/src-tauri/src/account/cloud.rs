@@ -1163,16 +1163,20 @@ mod tests {
 
 	const INSTANCE: &str = "i1";
 
-	async fn answering(status: u16, body: &'static str) -> Cloud {
+	async fn answering(status: u16, body: &str) -> Cloud {
 		let status = Answered::from_u16(status).expect("a valid status");
+		let body = body.to_owned();
 		let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the fake binds");
 		let address = listener.local_addr().expect("the fake is named");
-		let router = Router::new().fallback(move || async move { (status, body) });
+		let router = Router::new().fallback(move || {
+			let body = body.clone();
+			async move { (status, body) }
+		});
 		tokio::spawn(async move { axum::serve(listener, router).await.expect("the fake serves") });
 		Cloud::new(&format!("http://{address}"))
 	}
 
-	async fn invited(status: u16, body: &'static str) -> Result<(), MemberCallError> {
+	async fn invited(status: u16, body: &str) -> Result<(), MemberCallError> {
 		answering(status, body).await.invite_member("bearer", INSTANCE, "ada@example.com").await
 	}
 
@@ -1192,9 +1196,9 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_relay_status_keeps_at_most_the_first_512_bytes_of_its_body() {
-		let body: &'static str = format!("a{}", "é".repeat(300)).leak();
+		let body = format!("a{}", "é".repeat(300));
 
-		let Err(MemberCallError::Unreachable { detail, .. }) = invited(500, body).await else {
+		let Err(MemberCallError::Unreachable { detail, .. }) = invited(500, &body).await else {
 			panic!("a 500 is unreachable");
 		};
 
@@ -1212,8 +1216,8 @@ mod tests {
 			("MEMBER_LIMIT_REACHED", MemberCallError::LimitReached),
 			("OWNER_NOT_REMOVABLE", MemberCallError::OwnerNotRemovable),
 		] {
-			let body = format!(r#"{{"error":{{"code":"{code}"}}}}"#).leak();
-			assert_eq!(invited(409, body).await, Err(refusal), "{code}");
+			let body = format!(r#"{{"error":{{"code":"{code}"}}}}"#);
+			assert_eq!(invited(409, &body).await, Err(refusal), "{code}");
 		}
 	}
 
