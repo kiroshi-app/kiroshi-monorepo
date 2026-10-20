@@ -1,5 +1,6 @@
 import { describeProvider } from "./describe"
 import { describeError } from "./describe-error"
+import { createHeartbeats, HEARTBEAT_INTERVAL_MS } from "./heartbeat"
 import type { HostError } from "./host"
 import { closeHostChannel, openHostChannel, settleHostAnswer } from "./host"
 import {
@@ -91,9 +92,17 @@ type Handler = (command: Command, session: string) => unknown
 export const createRouter = (
 	provider: AgentProvider,
 	write: (payload: unknown) => void,
+	heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
 ) => {
-	const emitter = (session: string) => (frame: SessionFrame) =>
+	const heartbeats = createHeartbeats(
+		(session, frame) => write({ session, frame }),
+		heartbeatIntervalMs,
+	)
+
+	const emitter = (session: string) => (frame: SessionFrame) => {
 		write({ session, frame })
+		heartbeats.observe(session, frame)
+	}
 
 	const opening = new Map<string, Promise<AgentSession | undefined>>()
 
@@ -126,6 +135,7 @@ export const createRouter = (
 			void opened.close()
 		})
 		opening.delete(session)
+		heartbeats.stop(session)
 		closeHostChannel(session)
 	}
 
@@ -182,7 +192,10 @@ export const createRouter = (
 		opening.set(session, open(command, session))
 
 	const promptSession = (command: Command, session: string) =>
-		on(session, (opened) => opened.prompt(command.text ?? ""))
+		on(session, (opened) => {
+			heartbeats.queried(session)
+			opened.prompt(command.text ?? "")
+		})
 
 	const interruptSession = (_command: Command, session: string) =>
 		on(session, (opened) => {

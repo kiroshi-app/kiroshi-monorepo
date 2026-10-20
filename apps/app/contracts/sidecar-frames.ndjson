@@ -24,6 +24,7 @@
 {"session":"k1","frame":{"type":"control_request","request_id":"req-0002","request":{"subtype":"initialize"}}}
 {"session":"k1","frame":{"type":"host_request","requestId":"host-0001","request":{"subtype":"routine","operation":"create","payload":{"title":"Morning report"}}}}
 {"session":"k1","frame":{"type":"control_response","response":{"subtype":"error","request_id":"req-0001","error":"the session no longer holds that request"}}}
+{"session":"k1","frame":{"type":"heartbeat"}}
 {"session":"k1","frame":{"type":"result","subtype":"success","session_id":"sdk-0001","is_error":false,"structured_output":{"summary":"the release note is drafted"},"total_cost_usd":0.0412,"modelUsage":{"claude-sonnet-4-5":{"inputTokens":1200,"outputTokens":340}}}}
 {"session":"k1","frame":{"type":"settings_rejected","detail":"bypassPermissions is refused, this session opens under auto."}}
 {"session":"k1","frame":{"type":"server_env_rejected","detail":"clock was left out for want of CLOCK_URL"}}

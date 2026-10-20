@@ -79,6 +79,7 @@ pub enum Frame {
 	Assistant(MessageFrame),
 	User(MessageFrame),
 	Result(ResultFrame),
+	Heartbeat,
 	Commands(CommandsFrame),
 	ControlRequest(ControlRequestFrame),
 	HostRequest(HostRequestFrame),
@@ -193,7 +194,7 @@ pub enum ContentBlock {
 	Ignored,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ResultFrame {
 	#[serde(default)]
 	pub subtype: Option<String>,

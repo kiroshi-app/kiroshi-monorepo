@@ -144,6 +144,7 @@ struct Run {
 	cwd: String,
 	announced: bool,
 	pending_permission: Option<String>,
+	owes_interrupt_answer: bool,
 }
 
 impl Run {
@@ -183,6 +184,7 @@ impl Run {
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
 			pending_permission: None,
+			owes_interrupt_answer: false,
 			settings,
 		}
 	}
@@ -403,6 +405,15 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 		"stalled_reply" => {
 			emit_text_stream(key, &format!("echo :: {text}"));
 		}
+		"deaf_interrupt" if run.owes_interrupt_answer => {
+			run.owes_interrupt_answer = false;
+			emit_result(key, run, "error_during_execution", false);
+			emit_text_turn(key, run, &format!("echo :: {text}"));
+			emit_result(key, run, "success", false);
+		}
+		"deaf_interrupt" => {
+			emit_text_stream(key, &format!("echo :: {text}"));
+		}
 		"crash_mid_reply" => {
 			emit_text_stream(key, &format!("echo :: {text}"));
 			emit_closed(key, "the agent exited unexpectedly");
@@ -560,8 +571,12 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 	}
 }
 
-fn on_interrupt(key: &str, runs: &HashMap<String, Run>) {
-	let Some(run) = runs.get(key) else { return };
+fn on_interrupt(key: &str, runs: &mut HashMap<String, Run>) {
+	let Some(run) = runs.get_mut(key) else { return };
+	if run.scenario == "deaf_interrupt" {
+		run.owes_interrupt_answer = true;
+		return;
+	}
 	emit_result(key, run, "error_during_execution", false);
 }
 
@@ -638,7 +653,7 @@ fn serve() {
 		match command["type"].as_str() {
 			Some("open") => on_open(&key, &mut runs, &command),
 			Some("prompt") => on_prompt(&key, &mut runs, command["text"].as_str().unwrap_or("")),
-			Some("interrupt") => on_interrupt(&key, &runs),
+			Some("interrupt") => on_interrupt(&key, &mut runs),
 			Some("permission") => on_permission(&key, &mut runs, &command),
 			Some("close") => {
 				runs.remove(&key);

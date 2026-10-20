@@ -6,12 +6,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 
 use super::contract::{
 	AgentEvent, ConnectionState, PermissionDecision, SubmittedTurn, TransportError, TurnEnded,
 	TurnOutcome, TurnState,
 };
+use super::lease::{Lapse, Liveness, RunLease};
 use super::protocol::{self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest};
 use super::sidecar::Sidecar;
 use super::translate::Translator;
@@ -128,6 +129,7 @@ pub struct SessionOptions {
 	pub output_schema: Option<serde_json::Value>,
 	pub mission_thread: bool,
 	pub hosts: Vec<Arc<dyn HostRequests>>,
+	pub lease: RunLease,
 }
 
 impl SessionOptions {
@@ -145,6 +147,7 @@ impl SessionOptions {
 			output_schema: None,
 			mission_thread: false,
 			hosts: Vec::new(),
+			lease: RunLease::default(),
 		}
 	}
 
@@ -198,6 +201,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn leased(mut self, lease: RunLease) -> Self {
+		self.lease = lease;
+		self
+	}
+
 	pub fn open_request(&self, partial_messages: bool) -> OpenRequest {
 		OpenRequest {
 			cwd: self.cwd.to_string_lossy().into_owned(),
@@ -227,11 +235,14 @@ struct Shared {
 	turn: TurnState,
 	shutting_down: bool,
 	running: Option<RunningTurn>,
+	lease: RunLease,
+	owes_result: bool,
 }
 
 struct RunningTurn {
 	id: Option<String>,
 	started_at: Instant,
+	liveness: Liveness,
 }
 
 impl Shared {
@@ -245,7 +256,54 @@ impl Shared {
 
 	fn turn_started(&mut self, session: &str, id: Option<String>) {
 		log::info!("the turn started session={session} turn={id:?}");
-		self.running = Some(RunningTurn { id, started_at: Instant::now() });
+		self.running = Some(RunningTurn {
+			id,
+			started_at: Instant::now(),
+			liveness: Liveness::since(tokio::time::Instant::now()),
+		});
+	}
+
+	fn liveness(&mut self) -> Option<&mut Liveness> {
+		self.running.as_mut().map(|running| &mut running.liveness)
+	}
+
+	fn heard(&mut self) {
+		if let Some(liveness) = self.liveness() {
+			liveness.heard(tokio::time::Instant::now());
+		}
+	}
+
+	fn lease_deadline(&self) -> Option<tokio::time::Instant> {
+		let running = self.running.as_ref()?;
+		let waiting_on_person = self.translator.is_waiting_on_person();
+		running.liveness.deadline(self.lease, waiting_on_person).map(|(at, _)| at)
+	}
+
+	fn lapse_due(&self) -> Option<Lapse> {
+		let running = self.running.as_ref()?;
+		let waiting_on_person = self.translator.is_waiting_on_person();
+		running.liveness.lapse_due(self.lease, waiting_on_person, tokio::time::Instant::now())
+	}
+
+	fn end_lapsed(&mut self, session: &str, lapse: Lapse) -> Vec<AgentEvent> {
+		log::warn!(
+			"the turn lost its lease session={session} turn={:?} reason={lapse}",
+			self.running.as_ref().and_then(|running| running.id.as_deref())
+		);
+		self.turn_ended(session, TurnOutcome::Failed);
+		self.owes_result |= lapse == Lapse::InterruptUnanswered;
+		let mut events = self.translator.abandon_turn();
+		events.extend(self.set_turn(TurnState::Failed));
+		events
+	}
+
+	fn drops_stale(&mut self, frame: &Frame) -> bool {
+		let is_result = matches!(frame, Frame::Result(_));
+		if self.owes_result && is_turn_frame(frame) {
+			self.owes_result = !is_result;
+			return true;
+		}
+		is_result && self.running.is_none()
 	}
 
 	fn turn_ended(&mut self, session: &str, outcome: TurnOutcome) {
@@ -281,6 +339,7 @@ pub struct Session {
 	shared: Arc<Mutex<Shared>>,
 	sink: Arc<dyn EventSink>,
 	resumed: bool,
+	rearmed: Arc<Notify>,
 }
 
 impl Session {
@@ -299,7 +358,10 @@ impl Session {
 			turn: TurnState::Idle,
 			shutting_down: false,
 			running: None,
+			lease: options.lease,
+			owes_result: false,
 		}));
+		let rearmed = Arc::new(Notify::new());
 
 		let (opened_tx, opened_rx) = oneshot::channel::<Result<(), TransportError>>();
 		let desk = HostDesk {
@@ -308,10 +370,17 @@ impl Session {
 			hosts: options.hosts.clone(),
 			sink: sink.clone(),
 		};
-		tokio::spawn(read_loop(frames, shared.clone(), sink.clone(), opened_tx, desk));
+		tokio::spawn(read_loop(
+			frames,
+			shared.clone(),
+			sink.clone(),
+			opened_tx,
+			desk,
+			rearmed.clone(),
+		));
 
 		let request = options.open_request(sidecar.supports(PARTIAL_MESSAGES));
-		let session = Self { sidecar, key, shared, sink, resumed };
+		let session = Self { sidecar, key, shared, sink, resumed, rearmed };
 		if let Err(error) = session.write(protocol::open_command(&session.key, &request)) {
 			session.sidecar.detach(&session.key);
 			return Err(error);
@@ -386,6 +455,7 @@ impl Session {
 			shared.turn_started(&self.key, turn.as_ref().map(|turn| turn.turn_id.clone()));
 			shared.set_turn(TurnState::Submitting)
 		};
+		self.rearmed.notify_one();
 		let handed = turn.is_some();
 		if let Some(turn) = turn {
 			self.sink.submitted(turn);
@@ -408,18 +478,25 @@ impl Session {
 				return Err(TransportError::NoActiveTurn);
 			}
 			shared.translator.mark_cancelling();
+			if let Some(liveness) = shared.liveness() {
+				liveness.interrupted(tokio::time::Instant::now());
+			}
 			shared.set_turn(TurnState::Stopping)
 		};
+		self.rearmed.notify_one();
 		self.emit(stopping);
 		self.write(protocol::interrupt_command(&self.key))
 	}
 
 	async fn take_pending_input(&self, id: &str) -> Result<Value, TransportError> {
 		let mut shared = self.shared.lock().await;
-		shared
+		let input = shared
 			.translator
 			.take_permission_input(id)
-			.ok_or_else(|| TransportError::UnknownPermission { id: id.to_owned() })
+			.ok_or_else(|| TransportError::UnknownPermission { id: id.to_owned() })?;
+		shared.heard();
+		self.rearmed.notify_one();
+		Ok(input)
 	}
 
 	pub async fn respond_to_permission(
@@ -513,6 +590,10 @@ fn is_turn_activity(frame: &Frame) -> bool {
 	matches!(frame, Frame::StreamEvent(_) | Frame::Assistant(_) | Frame::ControlRequest(_))
 }
 
+fn is_turn_frame(frame: &Frame) -> bool {
+	is_turn_activity(frame) || matches!(frame, Frame::User(_) | Frame::Result(_))
+}
+
 fn crashed(closed: &ClosedFrame) -> TransportError {
 	TransportError::Crashed { code: None, detail: closed.detail.clone() }
 }
@@ -561,12 +642,25 @@ async fn read_loop(
 	sink: Arc<dyn EventSink>,
 	opened_tx: oneshot::Sender<Result<(), TransportError>>,
 	desk: HostDesk,
+	rearmed: Arc<Notify>,
 ) {
 	let mut opened_tx = Some(opened_tx);
 	let mut seen: u64 = 0;
 
-	while let Some(raw) = frames.recv().await {
+	loop {
+		let raw = tokio::select! {
+			biased;
+			received = frames.recv() => match received {
+				Some(raw) => raw,
+				None => break,
+			},
+			() = lease_lapsed(&shared, &rearmed) => {
+				end_lapsed_turn(&shared, sink.as_ref(), &desk.key).await;
+				continue;
+			}
+		};
 		seen += 1;
+		shared.lock().await.heard();
 		let Ok(frame) = serde_json::from_value::<Frame>(raw) else {
 			sink.emit(AgentEvent::Failed {
 				error: TransportError::InvalidFrame {
@@ -599,10 +693,17 @@ async fn read_loop(
 			continue;
 		}
 
+		if let Frame::Heartbeat = frame {
+			continue;
+		}
+
 		{
 			let mut guard = shared.lock().await;
 			if guard.shutting_down {
 				return;
+			}
+			if guard.drops_stale(&frame) {
+				continue;
 			}
 			let entering = match guard.turn {
 				TurnState::Submitting if is_turn_activity(&frame) => {
@@ -627,6 +728,33 @@ async fn read_loop(
 		return;
 	}
 	on_exit(shared, sink, &desk.key, None).await;
+}
+
+async fn lease_lapsed(shared: &Mutex<Shared>, rearmed: &Notify) {
+	loop {
+		let deadline = shared.lock().await.lease_deadline();
+		let Some(deadline) = deadline else {
+			rearmed.notified().await;
+			continue;
+		};
+		tokio::select! {
+			() = tokio::time::sleep_until(deadline) => return,
+			() = rearmed.notified() => {}
+		}
+	}
+}
+
+async fn end_lapsed_turn(shared: &Mutex<Shared>, sink: &dyn EventSink, session: &str) {
+	let events = {
+		let mut guard = shared.lock().await;
+		let Some(lapse) = guard.lapse_due() else {
+			return;
+		};
+		guard.end_lapsed(session, lapse)
+	};
+	for event in events {
+		sink.emit(event);
+	}
 }
 
 async fn on_exit(

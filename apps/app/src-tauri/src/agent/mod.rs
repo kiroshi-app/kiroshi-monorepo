@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod contract;
 pub mod host;
+pub mod lease;
 pub mod protocol;
 pub mod redact;
 pub mod reply_writer;
