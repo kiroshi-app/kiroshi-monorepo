@@ -17,6 +17,7 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 use super::commands::{
@@ -29,6 +30,7 @@ use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
 use super::relay::{self, RelayGuests};
 use super::test_host::SealingHost;
 use super::wait_reason::{wait_of, Stall};
+use super::waiting;
 use crate::account::session::AccountSession;
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
@@ -68,6 +70,7 @@ enum HostSide {
 	Absent,
 	Closing(u16),
 	Silent,
+	Leaving(Duration),
 	Answering(String),
 	GreetingAfterRead { frames: Vec<String>, reads: usize },
 }
@@ -156,15 +159,6 @@ impl Relay {
 		self.room().connections
 	}
 
-	async fn gaps_between_upgrades(&self, from: usize, gaps: usize) -> Vec<Duration> {
-		within(Duration::from_secs(15), "the next member socket upgrades", || async {
-			let upgrades = self.room().upgrades.clone();
-			let ours = upgrades.get(from..).filter(|ours| ours.len() > gaps)?;
-			Some(ours.windows(2).map(|pair| pair[1] - pair[0]).collect())
-		})
-		.await
-	}
-
 	async fn served(&self) -> String {
 		let router = Router::new()
 			.route("/me", get(me))
@@ -183,7 +177,7 @@ impl Relay {
 async fn served(router: Router) -> String {
 	let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.expect("the fake binds");
 	let address = listener.local_addr().expect("the fake is named");
-	tauri::async_runtime::spawn(async move {
+	tokio::spawn(async move {
 		axum::serve(listener, router).await.expect("the fake serves");
 	});
 	format!("http://{address}")
@@ -328,6 +322,12 @@ fn is_missed_rekey(frame: &Value) -> bool {
 }
 
 async fn membered(relay: Relay, mut socket: WebSocket) {
+	let host = relay.room().host.clone();
+	if let HostSide::Leaving(after) = host {
+		tokio::time::sleep(after).await;
+		let close = CloseFrame { code: HOST_ABSENT, reason: "".into() };
+		return socket.send(Message::Close(Some(close))).await.expect("the close leaves");
+	}
 	while let Some(Ok(frame)) = socket.recv().await {
 		let Message::Text(text) = frame else {
 			continue;
@@ -352,7 +352,9 @@ async fn membered(relay: Relay, mut socket: WebSocket) {
 				Message::Close(Some(close))
 			}
 			HostSide::Closing(code) => Message::Close(Some(CloseFrame { code, reason: "".into() })),
-			HostSide::Silent | HostSide::GreetingAfterRead { .. } => continue,
+			HostSide::Silent | HostSide::Leaving(_) | HostSide::GreetingAfterRead { .. } => {
+				continue
+			}
 			HostSide::Answering(answer) => Message::Text(answer.into()),
 		};
 		if socket.send(answer).await.is_err() {
@@ -872,44 +874,74 @@ fn a_waiting_join_the_relay_answers_403_on_settles_waiting_as_not_a_member() {
 	});
 }
 
-#[test]
-fn a_waiting_join_the_relay_answers_429_on_waits_its_retry_after_before_the_next_upgrade() {
-	run(async {
-		let member = Member::new("join-rate-limited").await;
-		member.relay.hosting(HostSide::Silent);
-		let joined = member.accepted().await.expect("the join waits");
-		let before = {
-			let mut room = member.relay.room();
-			room.retry_after = Some("2");
-			room.upgrades.len()
-		};
+const SIMULATED: Duration = Duration::from_secs(600);
+const SIMULATED_TICK: Duration = Duration::from_millis(10);
 
-		relay::reconciled(member.app.handle()).await;
-		let gaps = member.relay.gaps_between_upgrades(before, 1).await;
+async fn waited_for_ten_minutes(member: &Member) {
+	let (_stop, stopped) = watch::channel(false);
+	let id = "joined-space-waiting".to_owned();
+	let waiting =
+		waiting::waited_for_host(member.app.handle().clone(), id, INSTANCE.to_owned(), stopped);
+	let ten_minutes = async {
+		for _ in 0..SIMULATED.as_millis() / SIMULATED_TICK.as_millis() {
+			tokio::time::advance(SIMULATED_TICK).await;
+		}
+	};
+	tokio::select! {
+		() = waiting => panic!("the wait ended before ten minutes"),
+		() = ten_minutes => {}
+	}
+}
 
-		assert!(gaps[0] >= Duration::from_millis(1900), "{gaps:?}");
-		assert_eq!(member.last_wait(), Some(JoinedSpaceWaitReason::RelayUnreachable));
-		assert!(member.is_waiting(&joined.id));
-	});
+#[tokio::test(start_paused = true)]
+async fn a_waiting_join_whose_socket_closes_a_second_after_opening_sends_at_most_twenty_upgrades_in_ten_minutes(
+) {
+	let member = Member::new("join-short-sockets-ten-minutes").await;
+	member.relay.hosting(HostSide::Leaving(Duration::from_secs(1)));
+
+	waited_for_ten_minutes(&member).await;
+
+	let room = member.relay.room();
+	let upgrades = room.upgrades.len();
+	assert!((10..=20).contains(&upgrades), "{upgrades} upgrades");
+	assert_eq!(room.me_reads, 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_waiting_join_answered_429_after_30_seconds_sends_at_most_twenty_one_upgrades_in_ten_minutes(
+) {
+	let member = Member::new("join-rate-limited-ten-minutes").await;
+	member.relay.room().retry_after = Some("30");
+
+	waited_for_ten_minutes(&member).await;
+
+	let room = member.relay.room();
+	let gaps: Vec<Duration> = room.upgrades.windows(2).map(|pair| pair[1] - pair[0]).collect();
+	assert!((10..=21).contains(&room.upgrades.len()), "{} upgrades", room.upgrades.len());
+	assert!(gaps.iter().all(|gap| *gap >= Duration::from_secs(30)), "{gaps:?}");
+	drop(room);
+	assert_eq!(member.last_wait(), Some(JoinedSpaceWaitReason::RelayUnreachable));
 }
 
 #[test]
-fn a_waiting_socket_the_relay_closes_right_after_its_opening_keeps_doubling_its_back_off() {
+fn a_waiting_join_refused_on_its_known_relay_device_reads_its_account_again() {
 	run(async {
-		let member = Member::new("join-short-socket").await;
-		member.relay.hosting(HostSide::Absent);
+		let member = Member::new("join-refused-device").await;
+		member.relay.hosting(HostSide::Silent);
 		member.accepted().await.expect("the join waits");
-		let (before, me_reads) = {
-			let room = member.relay.room();
+		let (upgrades, me_reads) = {
+			let mut room = member.relay.room();
+			room.member_refusal = Some(refusal(StatusCode::FORBIDDEN, "NOT_A_MEMBER"));
 			(room.upgrades.len(), room.me_reads)
 		};
 
 		relay::reconciled(member.app.handle()).await;
-		let gaps = member.relay.gaps_between_upgrades(before, 3).await;
+		until("a second refused upgrade", || async {
+			(member.relay.room().upgrades.len() >= upgrades + 2).then_some(())
+		})
+		.await;
 
-		assert!(gaps[1] >= Duration::from_millis(1000), "{gaps:?}");
-		assert!(gaps[2] >= Duration::from_millis(2000), "{gaps:?}");
-		assert_eq!(member.relay.room().me_reads, me_reads);
+		assert!(member.relay.room().me_reads > me_reads);
 	});
 }
 

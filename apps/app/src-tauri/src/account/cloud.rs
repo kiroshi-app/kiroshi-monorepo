@@ -57,15 +57,22 @@ const REFUSAL_DETAIL_BOUND: usize = 512;
 
 const PAUSE_WITHOUT_RETRY_AFTER: Duration = Duration::from_secs(5);
 
+const LONGEST_PAUSE: Duration = Duration::from_secs(120);
+
 static PAUSES: LazyLock<Mutex<HashMap<String, Instant>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub(crate) fn retry_after(headers: &HeaderMap) -> Duration {
-	headers
-		.get(RETRY_AFTER)
-		.and_then(|value| value.to_str().ok())
-		.and_then(|value| value.trim().parse::<u64>().ok())
-		.map_or(PAUSE_WITHOUT_RETRY_AFTER, Duration::from_secs)
+	let Some(value) = headers.get(RETRY_AFTER) else {
+		return PAUSE_WITHOUT_RETRY_AFTER;
+	};
+	match value.to_str().ok().and_then(|value| value.trim().parse::<u64>().ok()) {
+		Some(seconds) => Duration::from_secs(seconds).min(LONGEST_PAUSE),
+		None => {
+			log::warn!("the relay sent a Retry-After that is not whole seconds: {value:?}");
+			PAUSE_WITHOUT_RETRY_AFTER
+		}
+	}
 }
 
 pub fn api_url() -> String {
@@ -1253,14 +1260,31 @@ mod tests {
 		.await
 	}
 
-	#[test]
-	fn the_retry_after_reads_its_seconds_and_falls_back_to_five() {
+	fn retried_after(value: Option<&str>) -> Duration {
 		let mut headers = HeaderMap::new();
-		let absent = retry_after(&headers);
-		headers.insert(RETRY_AFTER, "7".parse().expect("a header value"));
+		if let Some(value) = value {
+			headers.insert(RETRY_AFTER, value.parse().expect("a header value"));
+		}
+		retry_after(&headers)
+	}
 
-		assert_eq!(absent, Duration::from_secs(5));
-		assert_eq!(retry_after(&headers), Duration::from_secs(7));
+	#[test]
+	fn the_retry_after_reads_its_whole_seconds() {
+		assert_eq!(retried_after(Some("7")), Duration::from_secs(7));
+	}
+
+	#[test]
+	fn a_retry_after_absent_or_not_in_whole_seconds_pauses_five_seconds() {
+		assert_eq!(retried_after(None), Duration::from_secs(5));
+		assert_eq!(retried_after(Some("Wed, 21 Oct 2026 07:28:00 GMT")), Duration::from_secs(5));
+		assert_eq!(retried_after(Some("1.5")), Duration::from_secs(5));
+	}
+
+	#[test]
+	fn a_retry_after_above_two_minutes_pauses_two_minutes() {
+		assert_eq!(retried_after(Some("121")), Duration::from_secs(120));
+		assert_eq!(retried_after(Some("86400")), Duration::from_secs(120));
+		assert_eq!(retried_after(Some("120")), Duration::from_secs(120));
 	}
 
 	#[tokio::test]

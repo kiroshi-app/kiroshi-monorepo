@@ -174,8 +174,10 @@ async fn answered<R: Runtime>(
 	instance_id: &str,
 	device: &DeviceKeys,
 ) -> Result<Option<Handed>, JoinedSpaceError> {
-	let cloud = app.state::<RelayGuests>().inner().cloud();
-	let mut socket = match opened(cloud, url, bearer).await {
+	let guests = app.state::<RelayGuests>().inner();
+	let opened = opened(guests.cloud(), url, bearer).await;
+	guests.relay_device_forgotten_on_refusal(&opened);
+	let mut socket = match opened {
 		Opened::Socket(socket) => socket,
 		Opened::Revoked => return Err(revoked(app, bearer)),
 		Opened::Forbidden | Opened::Unknown | Opened::Gone(_) => {

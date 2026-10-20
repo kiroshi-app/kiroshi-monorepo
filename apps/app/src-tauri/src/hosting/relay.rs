@@ -137,10 +137,9 @@ impl Backoff {
 	}
 }
 
-fn jittered(full: Duration) -> Duration {
-	let half = full / 2;
+fn jittered(step: Duration) -> Duration {
 	let drawn = RandomState::new().build_hasher().finish() as f64 / u64::MAX as f64;
-	half + half.mul_f64(drawn)
+	step + (step / 2).mul_f64(drawn)
 }
 
 pub(super) async fn hosted<R: Runtime>(
@@ -904,20 +903,20 @@ pub(crate) async fn until_stopped<F: Future>(
 mod tests {
 	use super::*;
 
-	fn is_drawn_within(waited: Duration, full_secs: u64) -> bool {
-		let full = Duration::from_secs(full_secs);
-		waited >= full / 2 && waited <= full
+	fn is_drawn_within(waited: Duration, step_secs: u64) -> bool {
+		let step = Duration::from_secs(step_secs);
+		waited >= step && waited <= step + step / 2
 	}
 
 	#[test]
-	fn every_step_waits_between_half_and_all_of_a_doubled_step_capped_at_a_minute() {
+	fn every_wait_adds_up_to_half_of_a_doubled_step_capped_at_a_minute() {
 		let mut backoff = Backoff::first();
 
 		let waits: Vec<Duration> = (0..8).map(|_| backoff.step()).collect();
 
-		let fulls = [1, 2, 4, 8, 16, 32, 60, 60];
+		let steps = [1, 2, 4, 8, 16, 32, 60, 60];
 		assert!(
-			waits.iter().zip(fulls).all(|(waited, full)| is_drawn_within(*waited, full)),
+			waits.iter().zip(steps).all(|(waited, step)| is_drawn_within(*waited, step)),
 			"{waits:?}"
 		);
 	}

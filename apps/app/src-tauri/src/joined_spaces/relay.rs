@@ -33,8 +33,8 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened, opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket,
-	PING_EVERY, SILENCE_BOUND,
+	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
+	SILENCE_BOUND,
 };
 
 const HOST_ABSENT: u16 = 4002;
@@ -197,6 +197,12 @@ impl RelayGuests {
 				device_id: device_id.to_owned(),
 				relay_device_id: relay_device_id.to_owned(),
 			});
+	}
+
+	pub(super) fn relay_device_forgotten_on_refusal(&self, opened: &Opened) {
+		if matches!(opened, Opened::Unknown | Opened::Forbidden | Opened::Gone(_)) {
+			*self.known_relay_device.lock().unwrap_or_else(PoisonError::into_inner) = None;
+		}
 	}
 
 	pub(super) fn members_read_started(&self, id: &str) -> Option<MembersReading<'_>> {
@@ -458,7 +464,7 @@ async fn unlisted_reason<R: Runtime>(
 		}
 	};
 	let url = member_socket_url(cloud, instance_id, &roster.own.relay_device_id);
-	match opened(cloud, url, bearer).await {
+	match opened_unpaused(cloud, url, bearer).await {
 		Opened::Gone(Some(departure)) => reason_of(departure),
 		_ => JoinedSpaceRemovalReason::Unknown,
 	}
