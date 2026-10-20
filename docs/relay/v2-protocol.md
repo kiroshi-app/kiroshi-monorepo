@@ -265,8 +265,7 @@ POST /invitations/{invitationId}/accept        bearer of the invited account
 ```
 
 The invitation id is a UUID the relay generates when it creates the invitation.
-The id is checked as a UUID before anything else: a malformed id answers 404
-`NOT_FOUND`. Deprecated fallback: an id naming no invitation is read as an
+A malformed id answers 404 `NOT_FOUND`. Deprecated fallback: an id naming no invitation is read as an
 instance id, and the route answers for the latest invitation of the bearer email
 to that instance. When that email holds none while another email does, the answer
 is 403 `INVITATION_EMAIL_MISMATCH`; when no email holds one, 404 `NOT_FOUND`.
