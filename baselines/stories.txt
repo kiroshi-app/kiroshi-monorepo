@@ -1581,6 +1581,13 @@ settings-space-spacesettingsdialog--members-remove-confirm
 settings-space-spacesettingsdialog--members-remove-failed
 settings-space-spacesettingsdialog--members-remove-host-refused
 settings-space-spacesettingsdialog--members-share-failed
+settings-space-spacesettingsdialog--members-share-failed-device-awaiting-approval
+settings-space-spacesettingsdialog--members-share-failed-device-refused
+settings-space-spacesettingsdialog--members-share-failed-instance-gone
+settings-space-spacesettingsdialog--members-share-failed-keys-missing
+settings-space-spacesettingsdialog--members-share-failed-not-owner
+settings-space-spacesettingsdialog--members-share-failed-stream-closed
+settings-space-spacesettingsdialog--members-share-failed-taken-over
 settings-space-spacesettingsdialog--members-shared
 settings-space-spacesettingsdialog--members-sharing
 settings-space-spacesettingsdialog--members-signed-out

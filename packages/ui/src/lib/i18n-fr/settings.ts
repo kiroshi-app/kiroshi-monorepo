@@ -363,6 +363,22 @@ const settings = {
 			failed: {
 				title: "Impossible d’héberger {{name}}",
 				description: "Vérifiez votre connexion et réactivez-le.",
+				reasons: {
+					notOwner:
+						"Un autre compte héberge cet espace. Connectez-vous avec ce compte, ou réactivez-le pour l’héberger depuis celui-ci.",
+					deviceAwaitingApproval:
+						"Cet ordinateur n’est pas encore approuvé. Approuvez-le sur un appareil que vous utilisez déjà, puis réactivez-le.",
+					deviceRefused:
+						"Quelqu’un a choisi Pas moi sur un autre appareil, cet ordinateur a donc été déconnecté. Reconnectez-vous et approuvez-le sur un appareil que vous utilisez déjà.",
+					keysMissing:
+						"Cet ordinateur n’a pas les clés de cet espace. Déconnectez-vous, reconnectez-vous et approuvez-le sur un appareil que vous utilisez déjà.",
+					instanceGone:
+						"Cet espace n’existe plus sur Kiroshi. Réactivez-le pour l’héberger depuis cet ordinateur.",
+					takenOver:
+						"Un autre ordinateur héberge maintenant cet espace. Réactivez-le pour l’héberger depuis celui-ci.",
+					streamClosed: "La connexion à Kiroshi a été coupée. Réactivez-le.",
+					unknown: "Vérifiez votre connexion et réactivez-le.",
+				},
 			},
 			stopFailed: {
 				title: "Impossible d’arrêter d’héberger {{name}}",

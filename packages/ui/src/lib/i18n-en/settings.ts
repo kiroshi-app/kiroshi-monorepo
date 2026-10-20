@@ -350,6 +350,22 @@ const settings = {
 			failed: {
 				title: "Couldn’t host {{name}}",
 				description: "Check your connection and turn it on again.",
+				reasons: {
+					notOwner:
+						"Another account hosts this space. Sign in with that account, or turn it on again to host it from this one.",
+					deviceAwaitingApproval:
+						"This computer isn’t approved yet. Approve it on a device you already use, then turn it on again.",
+					deviceRefused:
+						"Someone chose Not me on another device, so this computer was signed out. Sign in again and approve it on a device you already use.",
+					keysMissing:
+						"This computer doesn’t have the keys for this space. Sign out, sign in again and approve it on a device you already use.",
+					instanceGone:
+						"This space no longer exists on Kiroshi. Turn it on again to host it from this computer.",
+					takenOver:
+						"Another computer hosts this space now. Turn it on again to host it from this one.",
+					streamClosed: "The connection to Kiroshi closed. Turn it on again.",
+					unknown: "Check your connection and turn it on again.",
+				},
 			},
 			stopFailed: {
 				title: "Couldn’t stop hosting {{name}}",
