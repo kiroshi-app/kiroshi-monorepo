@@ -270,19 +270,17 @@ async fn member_socket(
 		return StatusCode::UNAUTHORIZED.into_response();
 	}
 	let Some(device) = device_of(query.as_deref()) else {
-		return answered_json(
-			StatusCode::BAD_REQUEST,
-			refusal(StatusCode::BAD_REQUEST, "MISSING_DEVICE").1,
-		);
+		return StatusCode::BAD_REQUEST.into_response();
 	};
 	let refusal = relay.room().member_refusal.clone();
 	if let Some((status, body)) = refusal {
 		return answered_json(status, body);
 	}
-	let mut room = relay.room();
-	room.connections += 1;
-	room.socket_devices.push(device);
-	drop(room);
+	{
+		let mut room = relay.room();
+		room.connections += 1;
+		room.socket_devices.push(device);
+	}
 	upgrade.on_upgrade(move |socket| membered(relay, socket))
 }
 
