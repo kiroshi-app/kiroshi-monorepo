@@ -315,7 +315,7 @@ A declined invitation is used: it can no longer be accepted nor declined.
 | 410 `INVITATION_EXPIRED` | The invitation outlived its `expiresAt` | `withdrawn` |
 | 410 `INVITATION_WITHDRAWN` | The host took it back | `withdrawn` |
 | 410 `INVITATION_USED` | It was already accepted or declined | `withdrawn` |
-| unreachable, any other status | | `offline` when the device is offline, `serversUnreachable` otherwise |
+| unreachable, any other status | | `offline` on a failed connection, `serversUnreachable` on a timeout or any other status |
 
 The Tauri command is `invitation_decline(invitationId)`.
 
