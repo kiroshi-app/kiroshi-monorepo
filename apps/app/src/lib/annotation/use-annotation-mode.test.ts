@@ -61,7 +61,6 @@ describe("useAnnotationMode", () => {
 		const { result } = renderHook(useAnnotationMode)
 
 		layer.setAttribute("data-active", "false")
-		layer.remove()
 		await settle()
 
 		expect(result.current).toBe(true)
