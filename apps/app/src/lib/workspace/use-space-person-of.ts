@@ -6,6 +6,7 @@ import type { WorkspaceCore } from "./use-workspace-core"
 
 import { signedInAccountIdOf } from "../account/use-account"
 import {
+	HOSTED_HERE,
 	type PersonOf,
 	personNameOf,
 	type SpaceHost,
@@ -26,7 +27,6 @@ export const useSpacePersonOf = ({
 	const unnamed = useChatCopy()("working.name")
 
 	return useMemo(() => {
-		const hosted: SpaceHost = { kind: "hosted" }
 		const hostsByRowId = new Map<string, SpaceHost>(
 			joined.map(({ id }, index) => [
 				joinedRowIdOf(id),
@@ -34,7 +34,7 @@ export const useSpacePersonOf = ({
 			]),
 		)
 		const hostOf = (spaceRowId: string | null) =>
-			(spaceRowId && hostsByRowId.get(spaceRowId)) || hosted
+			(spaceRowId && hostsByRowId.get(spaceRowId)) || HOSTED_HERE
 		return (spaceRowId) => (author) =>
 			personNameOf({ accountId, host: hostOf(spaceRowId) }, author, unnamed)
 	}, [accountId, joined, membersOfEach, unnamed])

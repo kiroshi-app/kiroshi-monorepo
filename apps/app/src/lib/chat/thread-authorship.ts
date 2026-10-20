@@ -20,9 +20,11 @@ export type MessageAuthorship = Pick<
 	"authorAccountId" | "authorName" | "writtenFrom"
 >
 
+export const HOSTED_HERE: SpaceHost = { kind: "hosted" }
+
 export const HOSTED_SIGNED_OUT: ThreadAuthorship = {
 	accountId: null,
-	host: { kind: "hosted" },
+	host: HOSTED_HERE,
 }
 
 export const ThreadAuthorshipContext =
