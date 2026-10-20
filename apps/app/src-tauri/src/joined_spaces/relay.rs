@@ -16,13 +16,14 @@ use super::commands::{
 	announce_change, announce_reconnection, announce_removal, ready, JoinedSpaceRemovalReason,
 	JoinedSpaceRemoved,
 };
-use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError};
+use super::contract::{JoinedSpace, JoinedSpaceConnection, JoinedSpaceError, JoinedSpaceWait};
 use super::held::{self, Held};
 use super::member_link::{MemberLink, Presence, Resync, LEARN_BOUND};
 use super::member_wire::{Heard, MemberWire};
 use super::members;
 use super::proxy;
 use super::roster_set::HeldRoster;
+use super::wait_reason::wait_ended;
 use super::waiting::{self, WaitingJoin};
 use crate::account::cloud::{Cloud, CloudInstance, InstancesError, LeaveCallError};
 use crate::account::session::{self, AccountSession};
@@ -53,6 +54,7 @@ pub struct RelayGuests {
 	guests: Mutex<HashMap<String, Guest>>,
 	removed: Mutex<HashSet<String>>,
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
+	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
 	answer_bound: Duration,
 	resend_every: Duration,
@@ -114,6 +116,7 @@ impl RelayGuests {
 			guests: Mutex::new(HashMap::new()),
 			removed: Mutex::new(HashSet::new()),
 			waiting: Mutex::new(HashMap::new()),
+			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
 			answer_bound: HOST_ANSWER_BOUND,
 			resend_every: PING_EVERY,
@@ -163,6 +166,22 @@ impl RelayGuests {
 
 	pub(super) fn waiting(&self) -> MutexGuard<'_, HashMap<String, WaitingJoin>> {
 		self.waiting.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn waits(&self) -> MutexGuard<'_, HashMap<String, JoinedSpaceWait>> {
+		self.waits.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	pub(super) fn waited(&self, instance_id: &str, wait: JoinedSpaceWait) {
+		self.waits().insert(instance_id.to_owned(), wait);
+	}
+
+	pub(super) fn wait_ended(&self, instance_id: &str) {
+		self.waits().remove(instance_id);
+	}
+
+	pub(super) fn last_wait(&self, instance_id: &str) -> Option<JoinedSpaceWait> {
+		self.waits().get(instance_id).cloned()
 	}
 
 	async fn waiting_stopped(&self, id: &str) {
@@ -253,12 +272,12 @@ pub async fn joined<R: Runtime>(
 		remote_space_id: None,
 		name: name.or(held_name).unwrap_or_else(|| instance_id.clone()),
 	};
-	let state = held::state_of(app, &instance_id)?;
+	let wait = held::wait(app, &instance_id)?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
 	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
-	Ok(JoinedSpace::presented(joined, guests.cloud(), state))
+	Ok(JoinedSpace::presented(joined, guests.cloud(), wait))
 }
 
 pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
@@ -267,10 +286,14 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 	};
 	let _turn = guests.turn.lock().await;
 	if let Err(failure) = memberships_followed(app, &guests).await {
-		eprintln!("the joined spaces did not follow the cloud memberships: {failure}");
+		log::warn!(
+			"the joined spaces of every instance did not follow the cloud memberships: {failure}"
+		);
 	}
 	if let Err(failure) = waiting::joins_started(app, &guests).await {
-		eprintln!("the joined spaces waiting for their host were not all followed: {failure:?}");
+		log::warn!(
+			"the joined spaces of every instance waiting for their host were not all followed: {failure:?}"
+		);
 	}
 }
 
@@ -364,7 +387,9 @@ async fn unlisted_reason<R: Runtime>(
 		Ok(Some(roster)) => roster,
 		Ok(None) => return JoinedSpaceRemovalReason::Unknown,
 		Err(failure) => {
-			eprintln!("joined space {id} could not ask the relay why it is unlisted: {failure:?}");
+			log::warn!(
+				"joined space {id} (instance {instance_id}) could not ask the relay why it is unlisted: {failure:?}"
+			);
 			return JoinedSpaceRemovalReason::Unknown;
 		}
 	};
@@ -412,24 +437,30 @@ async fn started<R: Runtime>(
 	let unknown = || JoinedSpaceError::UnknownJoinedSpace { id: id.to_owned() };
 	let found = found.ok_or_else(unknown)?;
 	let JoinedReach::Relay { instance_id } = found.reach.clone();
+	log::info!("joined space {id} (instance {instance_id}) connects from the front");
 	let is_signed_in = is_signed_in(app).unwrap_or_else(|reason| {
-		eprintln!("joined space {id} was not connected: {reason}");
+		log::warn!("joined space {id} (instance {instance_id}) was not connected: {reason}");
 		false
 	});
 	if !is_signed_in || devices::is_awaiting_approval(app) {
+		log::warn!(
+			"joined space {id} (instance {instance_id}) was not connected: no account is signed in or this device awaits its approval"
+		);
 		return Err(JoinedSpaceError::HostOffline { id: id.to_owned() });
 	}
 	if let Some(reached) = guests.reached(id) {
 		return Ok((found, reached));
 	}
-	let waiting = || JoinedSpaceError::WaitingForHost { id: id.to_owned() };
-	let held = held::held(app, &instance_id).await?.ok_or_else(waiting)?;
-	let link = Arc::new(MemberLink::new());
+	let held = match held::held(app, &instance_id).await? {
+		Ok(held) => held,
+		Err(wait) => return Err(waiting_for_host(id, &instance_id, wait)),
+	};
+	let link = Arc::new(MemberLink::new(&instance_id));
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
 	let reread = {
-		let (app, id) = (app.clone(), id.to_owned());
-		Arc::new(move || reread_announced(&app, &id))
+		let (app, id, instance_id) = (app.clone(), id.to_owned(), instance_id.clone());
+		Arc::new(move || reread_announced(&app, &id, &instance_id))
 	};
 	let origin = proxy::served(Arc::clone(&link), Arc::clone(&token), reread, stopped.clone())
 		.await
@@ -445,6 +476,21 @@ async fn started<R: Runtime>(
 	};
 	guests.guests().insert(id.to_owned(), Guest { origin, token, link, stop, run });
 	Ok((found, reached))
+}
+
+fn waiting_for_host(id: &str, instance_id: &str, wait: JoinedSpaceWait) -> JoinedSpaceError {
+	log::warn!(
+		"joined space {id} (instance {instance_id}) was not connected: it waits for its host ({:?}): {}",
+		wait.reason,
+		wait.detail
+	);
+	let JoinedSpaceWait { reason, detail } = wait;
+	JoinedSpaceError::WaitingForHost {
+		id: id.to_owned(),
+		instance_id: instance_id.to_owned(),
+		reason,
+		detail,
+	}
 }
 
 async fn learned<R: Runtime>(
@@ -527,7 +573,9 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 		waiting.finished(&id).await;
 	}
 	if let Err(failure) = relay_entries_dropped(app).await {
-		eprintln!("the relay spaces were not all dropped on sign out: {failure:?}");
+		log::error!(
+			"the relay spaces of every instance were not all dropped on sign out: {failure:?}"
+		);
 	}
 	Some(turn)
 }
@@ -537,6 +585,8 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 	let repository = ready(&state)?.joined_spaces();
 	for joined in repository.list().await? {
 		if repository.remove(joined.id.clone()).await? {
+			let JoinedReach::Relay { instance_id } = &joined.reach;
+			wait_ended(app, instance_id);
 			announce_change(app, joined.id)?;
 		}
 	}
@@ -546,7 +596,10 @@ async fn relay_entries_dropped<R: Runtime>(app: &AppHandle<R>) -> Result<(), Joi
 async fn finished(id: &str, guest: Guest) {
 	guest.stop.send_replace(true);
 	if let Err(error) = guest.run.await {
-		eprintln!("the member relay of joined space {id} ended abnormally: {error}");
+		log::error!(
+			"the member relay of joined space {id} (instance {}) ended abnormally: {error}",
+			guest.link.instance_id()
+		);
 	}
 }
 
@@ -574,7 +627,7 @@ async fn guest_linked<R: Runtime>(
 				guests.removed().insert(linked.id.clone());
 				linked.link.ended(Presence::Ended);
 				guests.left(&linked.id, &linked.link);
-				return eprintln!(
+				return log::error!(
 					"joined space {} (instance {}) heard no hello from its present host: the device left its roster",
 					linked.id, linked.instance_id
 				);
@@ -582,18 +635,20 @@ async fn guest_linked<R: Runtime>(
 			Ended::SignedOut(reason) => {
 				linked.link.ended(Presence::Down);
 				app.state::<RelayGuests>().left(&linked.id, &linked.link);
-				return eprintln!(
+				return log::warn!(
 					"joined space {} (instance {}) left its member relay: {reason}",
-					linked.id, linked.instance_id
+					linked.id,
+					linked.instance_id
 				);
 			}
 			Ended::Dropped(reason) => {
 				linked.link.closed(Presence::Down);
-				eprintln!(
-					"joined space {} (instance {}) lost its member relay: {reason}",
+				let step = backoff.step();
+				log::warn!(
+					"joined space {} (instance {}) lost its member relay and retries in {step:?}: {reason}",
 					linked.id, linked.instance_id
 				);
-				if until_stopped(&mut stop, sleep(backoff.step())).await.is_none() {
+				if until_stopped(&mut stop, sleep(step)).await.is_none() {
 					return linked.link.ended(Presence::Ended);
 				}
 				linked.link.connecting();
@@ -621,6 +676,11 @@ async fn attempted<R: Runtime>(
 	match until_stopped(stop, opened(url, &bearer)).await {
 		None => (Ended::Stopped, held),
 		Some(Opened::Socket(socket)) => {
+			log::info!(
+				"joined space {} (instance {}) opened its member relay socket",
+				linked.id,
+				linked.instance_id
+			);
 			backoff.reset();
 			online(app, *socket, linked, held, stop).await
 		}
@@ -646,9 +706,9 @@ async fn departure_asked<R: Runtime>(
 	let bearer = match app.state::<AccountSession>().bearer() {
 		Ok(Some(bearer)) => bearer,
 		unasked => {
-			eprintln!(
-				"joined space {} could not ask the relay why its membership ended: {unasked:?}",
-				linked.id
+			log::warn!(
+				"joined space {} (instance {}) could not ask the relay why its membership ended: {unasked:?}",
+				linked.id, linked.instance_id
 			);
 			return Some(JoinedSpaceRemovalReason::Removed);
 		}
@@ -717,7 +777,10 @@ async fn sealed_session<R: Runtime>(
 			_ = stop.changed() => {
 				let close = CloseFrame { code: CloseCode::Normal, reason: "".into() };
 				if let Err(reason) = sent(&mut sink, Message::Close(Some(close))).await {
-					eprintln!("a member relay was left without its 1000 close frame: {reason}");
+					log::warn!(
+						"joined space {} (instance {}) left its member relay without its 1000 close frame: {reason}",
+						linked.id, linked.instance_id
+					);
 				}
 				return Ended::Stopped;
 			}
@@ -734,7 +797,10 @@ async fn sealed_session<R: Runtime>(
 			Some(call) = calls.recv(), if is_greeted => Outgoing::Sealed(call),
 			_ = sleep_until(hello_deadline), if !is_greeted => return Ended::Removed,
 			_ = sleep_until(resume_deadline.unwrap_or_else(Instant::now)), if resume_deadline.is_some() => {
-				eprintln!("joined space {} heard no answer to its relay resume", linked.id);
+				log::warn!(
+					"joined space {} (instance {}) heard no answer to its relay resume",
+					linked.id, linked.instance_id
+				);
 				resynced(app, linked, link.resume_lapsed())
 			}
 			_ = pings.tick() => Outgoing::Ping,
@@ -769,9 +835,10 @@ async fn heard<R: Runtime>(
 	let heard = match wire.opened(text).await {
 		Ok(heard) => heard,
 		Err(refusal) => {
-			eprintln!(
+			log::error!(
 				"joined space {} (instance {}) dropped a relay frame: {refusal:?}",
-				linked.id, linked.instance_id
+				linked.id,
+				linked.instance_id
 			);
 			return Outgoing::Nothing;
 		}
@@ -786,9 +853,11 @@ async fn heard<R: Runtime>(
 		Heard::Current => Outgoing::Nothing,
 		Heard::Rekey(handed) => match held::kept(app, &linked.instance_id, &handed).await {
 			Ok(true) => {
-				eprintln!(
-					"joined space {} (instance {}) took space key_id {}",
-					linked.id, linked.instance_id, handed.space.key_id
+				log::info!(
+					"joined space {} (instance {}) kept a rekey: space key_id {}",
+					linked.id,
+					linked.instance_id,
+					handed.space.key_id
 				);
 				wire.rekeyed(*handed);
 				members::read_soon(app, &linked.joined);
@@ -799,16 +868,18 @@ async fn heard<R: Runtime>(
 				}
 			}
 			Ok(false) => {
-				eprintln!(
-					"joined space {} (instance {}) kept its roster: the rekey carried an older one",
-					linked.id, linked.instance_id
+				log::error!(
+					"joined space {} (instance {}) dropped a rekey: it carried an older roster",
+					linked.id,
+					linked.instance_id
 				);
 				Outgoing::Nothing
 			}
 			Err(failure) => {
-				eprintln!(
-					"joined space {} (instance {}) kept its space key: the rekey was not stored: {failure:?}",
-					linked.id, linked.instance_id
+				log::error!(
+					"joined space {} (instance {}) dropped a rekey: it was not stored: {failure:?}",
+					linked.id,
+					linked.instance_id
 				);
 				Outgoing::Nothing
 			}
@@ -828,11 +899,11 @@ async fn roster_taken<R: Runtime>(
 			wire.roster_taken(roster);
 			members::read_soon(app, &linked.joined);
 		}
-		Ok(false) => eprintln!(
+		Ok(false) => log::warn!(
 			"joined space {} (instance {}) kept its roster: roster version {version} is not newer than the stored one",
 			linked.id, linked.instance_id
 		),
-		Err(failure) => eprintln!(
+		Err(failure) => log::error!(
 			"joined space {} (instance {}) kept its roster: roster version {version} was not stored: {failure:?}",
 			linked.id, linked.instance_id
 		),
@@ -845,15 +916,17 @@ fn resynced<R: Runtime>(app: &AppHandle<R>, linked: &Linked, resync: Resync) -> 
 		Resync::InStep => Outgoing::Nothing,
 		Resync::Resume(frame) => Outgoing::Sealed(frame),
 		Resync::Reread => {
-			reread_announced(app, &linked.id);
+			reread_announced(app, &linked.id, &linked.instance_id);
 			Outgoing::Nothing
 		}
 	}
 }
 
-fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str) {
+fn reread_announced<R: Runtime>(app: &AppHandle<R>, id: &str, instance_id: &str) {
 	if let Err(failure) = announce_reconnection(app, id.to_owned()) {
-		eprintln!("joined space {id} must reread its host and the front was not told: {failure:?}");
+		log::error!(
+			"joined space {id} (instance {instance_id}) must reread its host and the front was not told: {failure:?}"
+		);
 	}
 }
 
@@ -882,7 +955,10 @@ async fn evicted<R: Runtime>(
 	linked.link.ended(Presence::Ended);
 	guests.left(id, &linked.link);
 	if let Err(failure) = entry_evicted(app, id, reason).await {
-		eprintln!("joined space {id} whose membership ended was not evicted: {failure:?}");
+		log::error!(
+			"joined space {id} (instance {}) whose membership ended was not evicted: {failure:?}",
+			linked.instance_id
+		);
 	}
 }
 
@@ -899,7 +975,11 @@ pub(super) async fn entry_evicted<R: Runtime>(
 	if !repository.remove(id.to_owned()).await? {
 		return Ok(());
 	}
-	eprintln!("joined space {id} was removed: its membership ended ({reason:?})");
+	let JoinedReach::Relay { instance_id } = &found.reach;
+	wait_ended(app, instance_id);
+	log::warn!(
+		"joined space {id} (instance {instance_id}) was removed: its membership ended ({reason:?})"
+	);
 	announce_change(app, id.to_owned())?;
 	announce_removal(app, JoinedSpaceRemoved { id: id.to_owned(), name: found.name, reason })
 }

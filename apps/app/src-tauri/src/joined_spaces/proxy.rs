@@ -53,12 +53,15 @@ pub(super) async fn served(
 ) -> std::io::Result<String> {
 	let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
 	let origin = format!("http://{}", listener.local_addr()?);
+	let instance_id = link.instance_id().to_owned();
 	let router = routed(Proxy { link, token, reread });
 	tauri::async_runtime::spawn(async move {
 		if let Some(Err(failure)) =
 			until_stopped(&mut stop, axum::serve(listener, router).into_future()).await
 		{
-			eprintln!("a joined space proxy stopped serving: {failure}");
+			log::error!(
+				"the joined space proxy of instance {instance_id} stopped serving: {failure}"
+			);
 		}
 	});
 	Ok(origin)
@@ -150,7 +153,10 @@ async fn avatar(State(proxy): State<Proxy>, Path(file): Path<String>) -> Respons
 	let Some((bytes, content_type)) =
 		relayed.and_then(|relayed| Some((relayed.bytes()?, relayed.content_type)))
 	else {
-		eprintln!("a joined space proxy got an avatar from the host it could not read");
+		log::warn!(
+			"the joined space proxy of instance {} got an avatar from the host it could not read",
+			proxy.link.instance_id()
+		);
 		return UNREAD_AVATAR.into_response();
 	};
 	let headers = [
@@ -169,20 +175,27 @@ async fn events_opened(State(proxy): State<Proxy>, upgrade: WebSocketUpgrade) ->
 	let Some(heard) = proxy.link.subscribed() else {
 		return HOST_OFFLINE.into_response();
 	};
+	let instance_id = proxy.link.instance_id().to_owned();
+	let failed_instance_id = instance_id.clone();
 	upgrade
-		.on_failed_upgrade(|failure| {
-			eprintln!("a joined space proxy event client never connected: {failure}")
+		.on_failed_upgrade(move |failure| {
+			log::warn!(
+				"a joined space proxy event client of instance {failed_instance_id} never connected: {failure}"
+			)
 		})
-		.on_upgrade(|socket| relayed_with_rereads(socket, heard, proxy.reread))
+		.on_upgrade(|socket| relayed_with_rereads(socket, heard, proxy.reread, instance_id))
 }
 
 async fn relayed_with_rereads(
 	mut socket: WebSocket,
 	mut heard: broadcast::Receiver<Frame>,
 	reread: Reread,
+	instance_id: String,
 ) {
 	while let Some((behind, missed)) = events::relayed_until_behind(socket, &mut heard).await {
-		eprintln!("a joined space proxy event client fell {missed} events behind and rereads");
+		log::warn!(
+			"a joined space proxy event client of instance {instance_id} fell {missed} events behind and rereads"
+		);
 		reread();
 		socket = behind;
 	}
@@ -273,7 +286,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_front_event_socket_outlives_a_relay_drop_and_closes_when_the_guest_ends() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());
@@ -293,7 +306,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_front_event_socket_that_falls_behind_rereads_once_and_hears_the_next_frame() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());
@@ -348,7 +361,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_held_avatar_crosses_as_its_bytes_and_a_foreign_or_huge_one_is_refused() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let (calls, sent) = mpsc::channel(4);
 		link.opened(calls);
 		a_host_answering_avatars(link.clone(), sent);
@@ -387,7 +400,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_asked_without_an_admitted_token_is_refused_before_the_relay() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
@@ -406,7 +419,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_asked_of_an_offline_host_answers_the_offline_text() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		link.closed(Presence::Down);
 		let token = Arc::new(HostToken::random());
 		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
@@ -424,7 +437,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_preflight_from_the_packaged_window_is_allowed_before_any_token() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
 
 		for path in
@@ -452,7 +465,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_attachment_is_still_not_served_by_the_proxy() {
-		let link = Arc::new(MemberLink::new());
+		let link = Arc::new(MemberLink::new("instance-1"));
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());

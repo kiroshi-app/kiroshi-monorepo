@@ -922,6 +922,7 @@ export type JoinedSpace = {
 	remoteSpaceId: string | null,
 	name: string,
 	state: JoinedSpaceState,
+	wait?: JoinedSpaceWait | null,
 };
 
 export type JoinedSpaceConnection = {
@@ -932,7 +933,7 @@ export type JoinedSpaceConnection = {
 	name: string,
 };
 
-export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string } | { kind: "invitationExpired" } | { kind: "invitationWithdrawn" } | { kind: "invitationUsed" } | { kind: "invitationOtherEmail" } | { kind: "couldNotAccept"; detail: string } | { kind: "noInvitation"; inviterEmail: string | null } | { kind: "notInRoster" } | { kind: "badSignature" } | { kind: "removedByRotation" } | { kind: "waitingForHost"; id: string } | { kind: "keyStore"; detail: string };
+export type JoinedSpaceError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownJoinedSpace"; id: string } | { kind: "undeliverable"; detail: string } | { kind: "hostOffline"; id: string } | { kind: "proxyUnavailable"; detail: string } | { kind: "ownerNotRemovable" } | { kind: "needsSignIn" } | { kind: "sessionRevoked" } | { kind: "sessionStore"; detail: string } | { kind: "relayUnreachable"; detail: string } | { kind: "relayRefused"; detail: string } | { kind: "invitationExpired" } | { kind: "invitationWithdrawn" } | { kind: "invitationUsed" } | { kind: "invitationOtherEmail" } | { kind: "couldNotAccept"; detail: string } | { kind: "noInvitation"; inviterEmail: string | null } | { kind: "notInRoster" } | { kind: "badSignature" } | { kind: "removedByRotation" } | { kind: "waitingForHost"; id: string; instanceId: string; reason: JoinedSpaceWaitReason; detail: string } | { kind: "keyStore"; detail: string };
 
 export type JoinedSpaceMember = {
 	userId: string,
@@ -963,6 +964,13 @@ export type JoinedSpaceRemoved = {
 export type JoinedSpaceRole = "host" | "guest";
 
 export type JoinedSpaceState = "online" | "waitingForHost";
+
+export type JoinedSpaceWait = {
+	reason: JoinedSpaceWaitReason,
+	detail: string,
+};
+
+export type JoinedSpaceWaitReason = "relayUnreachable" | "rekeySendFailed" | "hostSilent" | "socketClosed" | "rekeyNotVerified" | "notMember" | "unknownInstance" | "deviceKeysUnreadable" | "deviceAwaitingApproval" | "socketUrlFailed" | "rosterMissing" | "keychainReadFailed";
 
 export type Json = null | boolean | number | null | string | Json[] | { [key in string]: Json };
 

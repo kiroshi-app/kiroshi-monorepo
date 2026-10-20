@@ -70,6 +70,7 @@ impl Sequence {
 }
 
 pub(super) struct MemberLink {
+	instance_id: String,
 	calls: Mutex<Option<mpsc::Sender<String>>>,
 	events: Mutex<Option<broadcast::Sender<Frame>>>,
 	pending: Mutex<HashMap<u64, oneshot::Sender<Answer>>>,
@@ -79,8 +80,9 @@ pub(super) struct MemberLink {
 }
 
 impl MemberLink {
-	pub(super) fn new() -> Self {
+	pub(super) fn new(instance_id: &str) -> Self {
 		Self {
+			instance_id: instance_id.to_owned(),
 			calls: Mutex::new(None),
 			events: Mutex::new(Some(broadcast::channel(BUFFERED_EVENTS).0)),
 			pending: Mutex::new(HashMap::new()),
@@ -88,6 +90,10 @@ impl MemberLink {
 			next_call: AtomicU64::new(1),
 			sequence: Mutex::new(Sequence::Unknown),
 		}
+	}
+
+	pub(super) fn instance_id(&self) -> &str {
+		&self.instance_id
 	}
 
 	fn calls(&self) -> MutexGuard<'_, Option<mpsc::Sender<String>>> {
@@ -200,7 +206,10 @@ impl MemberLink {
 
 	pub(super) fn received(&self, text: &str) -> Resync {
 		let Ok(frame) = serde_json::from_str::<Value>(text) else {
-			eprintln!("the member relay sent a frame that is not json");
+			log::warn!(
+				"the member relay of instance {} sent a frame that is not json",
+				self.instance_id
+			);
 			return Resync::InStep;
 		};
 		if let Some(event) = frame.get("event") {
@@ -296,16 +305,23 @@ impl MemberLink {
 				.and_then(Value::as_u64)
 				.and_then(|status| u16::try_from(status).ok()),
 		) else {
-			return eprintln!(
-				"the member relay sent a frame that is neither an event nor an answer"
+			return log::warn!(
+				"the member relay of instance {} sent a frame that is neither an event nor an answer",
+				self.instance_id
 			);
 		};
 		let Some(caller) = self.pending().remove(&id) else {
-			return eprintln!("the member relay answered call {id} that no caller awaits");
+			return log::warn!(
+				"the member relay of instance {} answered call {id} that no caller awaits",
+				self.instance_id
+			);
 		};
 		let body = frame.get("body").cloned().unwrap_or(Value::Null);
 		if caller.send(Answer { status, body }).is_err() {
-			eprintln!("the member relay answered call {id} after its caller left");
+			log::warn!(
+				"the member relay of instance {} answered call {id} after its caller left",
+				self.instance_id
+			);
 		}
 	}
 
@@ -315,7 +331,7 @@ impl MemberLink {
 			return;
 		};
 		if events.receiver_count() > 0 && events.send(event.into()).is_err() {
-			eprintln!("a relayed event found no listener left");
+			log::warn!("a relayed event of instance {} found no listener left", self.instance_id);
 		}
 	}
 }
@@ -331,7 +347,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_call_is_framed_with_an_id_and_its_answer_reaches_the_caller() {
-		let link = MemberLink::new();
+		let link = MemberLink::new("instance-1");
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 
@@ -350,7 +366,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_call_while_closed_or_cut_by_a_close_gets_no_answer() {
-		let link = MemberLink::new();
+		let link = MemberLink::new("instance-1");
 		assert!(link.called("space_list", json!({})).await.is_none());
 
 		let (calls, mut sent) = mpsc::channel(4);
@@ -369,7 +385,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_link_ended_for_good_closes_every_subscriber_and_takes_no_new_one() {
 		for presence in [Presence::Ended, Presence::Down] {
-			let link = MemberLink::new();
+			let link = MemberLink::new("instance-1");
 			let (calls, _sent) = mpsc::channel(4);
 			link.opened(calls);
 			let mut heard = link.subscribed().expect("a subscriber");
@@ -384,7 +400,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_event_frame_reaches_every_subscriber_unwrapped() {
-		let link = MemberLink::new();
+		let link = MemberLink::new("instance-1");
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let mut heard = link.subscribed().expect("an open session");
@@ -435,7 +451,7 @@ mod tests {
 	}
 
 	fn an_open_link_applied_to(epoch: &str, seq: u64) -> MemberLink {
-		let link = MemberLink::new();
+		let link = MemberLink::new("instance-1");
 		let (calls, _sent) = mpsc::channel(4);
 		assert_eq!(link.opened(calls), Resync::Reread);
 		assert_eq!(link.received(&stamped(epoch, seq)), Resync::InStep);
@@ -605,7 +621,7 @@ mod tests {
 
 	#[test]
 	fn a_link_that_awaits_no_replay_drops_one_meant_for_another_member_and_adopts_the_live_frame() {
-		let link = MemberLink::new();
+		let link = MemberLink::new("instance-1");
 		let (calls, _sent) = mpsc::channel(4);
 		assert_eq!(link.opened(calls), Resync::Reread);
 		let mut heard = link.subscribed().expect("an open session");

@@ -43,12 +43,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) {
 	let deep_link = app.deep_link();
 	#[cfg(any(windows, target_os = "linux"))]
 	if let Err(failure) = deep_link.register_all() {
-		eprintln!("the kiroshi scheme was not registered with the system: {failure}");
+		log::warn!("the kiroshi scheme was not registered with the system: {failure}");
 	}
 	match deep_link.get_current() {
 		Ok(Some(launched)) => received(app, invitations_of(&launched)),
 		Ok(None) => {}
-		Err(failure) => eprintln!("the link that launched the app did not read: {failure}"),
+		Err(failure) => log::warn!("the link that launched the app did not read: {failure}"),
 	}
 	let handle = app.clone();
 	deep_link.on_open_url(move |event| {
@@ -67,7 +67,7 @@ fn invitations_of(urls: &[Url]) -> Vec<String> {
 		.filter_map(|url| {
 			let invitation = invitation_of(url);
 			if invitation.is_none() {
-				eprintln!("a kiroshi://join link that names no invitation was ignored");
+				log::warn!("a kiroshi://join link that names no invitation was ignored");
 			}
 			invitation
 		})
@@ -86,7 +86,7 @@ fn invitation_of(url: &Url) -> Option<String> {
 
 fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
 	let Some(join_links) = app.try_state::<JoinLinks>() else {
-		return eprintln!("a join link arrived before its inbox was installed");
+		return log::warn!("a join link arrived before its inbox was installed");
 	};
 	let mut inbox = join_links.inbox();
 	if !inbox.is_listened {
@@ -103,7 +103,7 @@ fn received<R: Runtime>(app: &AppHandle<R>, invitations: Vec<String>) {
 
 pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
 	let Some(join_links) = app.try_state::<JoinLinks>() else {
-		return eprintln!("the front listens for join links before their inbox was installed");
+		return log::warn!("the front listens for join links before their inbox was installed");
 	};
 	let held = {
 		let mut inbox = join_links.inbox();
@@ -115,7 +115,7 @@ pub(super) fn listened<R: Runtime>(app: &AppHandle<R>) {
 
 fn announced<R: Runtime>(app: &AppHandle<R>, invitation_id: String) {
 	if let Err(failure) = events::emit(app, JOIN_LINK_OPENED, JoinLinkOpened { invitation_id }) {
-		eprintln!("a join link did not reach the front: {failure}");
+		log::warn!("a join link did not reach the front: {failure}");
 	}
 }
 

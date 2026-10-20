@@ -71,7 +71,11 @@ async fn polled<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) -> Infalli
 
 async fn read<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) {
 	if let Err(failure) = refreshed(app, joined).await {
-		eprintln!("the members of joined space {} were not read: {failure:?}", joined.id);
+		let JoinedReach::Relay { instance_id } = &joined.reach;
+		log::warn!(
+			"the members of joined space {} (instance {instance_id}) were not read: {failure:?}",
+			joined.id
+		);
 	}
 }
 
@@ -157,6 +161,7 @@ mod tests {
 	use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 	use tokio::time::timeout;
 
+	use super::super::contract::JoinedSpaceWaitReason;
 	use super::super::held::{device_keys, kept};
 	use super::super::roster_set::fixtures::{signed_set, Device};
 	use super::super::roster_set::{verified_set, Handed};
@@ -528,7 +533,12 @@ mod tests {
 		];
 
 		for connection in connections {
-			let waiting = JoinedSpaceError::WaitingForHost { id: joined.id.clone() };
+			let waiting = JoinedSpaceError::WaitingForHost {
+				id: joined.id.clone(),
+				instance_id: INSTANCE.to_owned(),
+				reason: JoinedSpaceWaitReason::HostSilent,
+				detail: "no verified rekey from the host has reached this device yet".to_owned(),
+			};
 			assert_eq!(connection.map(|found| found.id), Err(waiting));
 		}
 		let guests = app.state::<RelayGuests>();

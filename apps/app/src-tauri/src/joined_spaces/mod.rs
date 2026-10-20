@@ -13,4 +13,5 @@ mod roster_set;
 pub(crate) mod test_host;
 #[cfg(test)]
 mod tests;
+mod wait_reason;
 mod waiting;

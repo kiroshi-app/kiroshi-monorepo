@@ -18,6 +18,7 @@ import {
 	type JoinedSpaceError,
 	type JoinedSpaceReconnected,
 } from "../bindings"
+import type { ReporterFacts } from "../failure-report"
 import reachSource from "../../../src-tauri/src/hosting/reach.rs?raw"
 
 const HOST = "http://192.168.1.20:45367"
@@ -73,7 +74,8 @@ const joinedHostsOf = ({ join, answer = answerJoined }: Seed = {}) => {
 	const sockets: ReturnType<typeof socketStub>[] = []
 	const socketUrls: string[] = []
 	const reportFailure = vi.fn()
-	const reportJoinRefusal = vi.fn<(notice: NoticeMessage) => void>()
+	const reportJoinRefusal =
+		vi.fn<(notice: NoticeMessage, facts: ReporterFacts) => void>()
 	const joinSpy = vi.fn(join ?? (async (id: string) => joinedConnection(id)))
 	const hosts = createJoinedHosts({
 		local,
@@ -449,11 +451,34 @@ describe("connecting a joined space", () => {
 			status: "refused",
 			failure: "This space is no longer in your list",
 		})
-		expect(reportJoinRefusal).toHaveBeenCalledExactlyOnceWith({
-			title: "This space is no longer in your list",
-			description: "You may have left it. Ask its host for a new invitation.",
-		})
+		expect(reportJoinRefusal).toHaveBeenCalledExactlyOnceWith(
+			{
+				title: "This space is no longer in your list",
+				description: "You may have left it. Ask its host for a new invitation.",
+			},
+			{ command: "joined_space_connect", space: "garage" },
+		)
 		expect(reportFailure).not.toHaveBeenCalled()
+	})
+
+	it("reports a wait for the host with its instance and the join command", async () => {
+		const refusal: JoinedSpaceError = {
+			kind: "waitingForHost",
+			id: "garage",
+			instanceId: "instance-1",
+			reason: "hostSilent",
+			detail: "no verified rekey came within 15s",
+		}
+		const { hosts, reportJoinRefusal } = joinedHostsOf({
+			join: async () => ({ status: "error", error: refusal }),
+		})
+
+		await hosts.connect("garage")
+
+		expect(reportJoinRefusal.mock.calls[0]?.[1]).toEqual({
+			command: "joined_space_connect",
+			space: "instance-1",
+		})
 	})
 
 	it("records a rejected connect, then retries on the next one", async () => {
