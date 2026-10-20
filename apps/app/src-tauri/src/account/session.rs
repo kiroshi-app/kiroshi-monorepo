@@ -388,43 +388,53 @@ async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexG
 
 pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError> {
 	let session = app.state::<AccountSession>();
-	let mut waiting = session.turn.lock().await;
-	closed(&mut waiting).await;
-	let _relay_turn = signed_in_work_stopped(app).await;
-	if let Some(bearer) = session.bearer()? {
-		if let Err(reason) = relay_device_deleted(app, &bearer).await {
-			eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
-		}
-		if let Err(reason) = session.cloud.sign_out(&bearer).await {
-			eprintln!(
-				"the cloud did not close the session, the bearer is deleted anyway: {reason}"
-			);
-		}
+	let (bearer, relay_device) = {
+		let mut waiting = session.turn.lock().await;
+		let bearer = session.bearer()?;
+		let relay_device = held_relay_device(app).await;
+		closed(&mut waiting).await;
+		let _relay_turn = signed_in_work_stopped(app).await;
+		relay_device_forgotten(app).await;
+		session.forget_bearer()?;
+		entered(app, SIGNED_OUT);
+		(bearer, relay_device)
+	};
+	let Some(bearer) = bearer else {
+		return Ok(());
+	};
+	if let Err(reason) = relay_device_deleted(app, &bearer, relay_device).await {
+		eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
 	}
-	relay_device_forgotten(app).await;
-	session.forget_bearer()?;
-	entered(app, SIGNED_OUT);
+	if let Err(reason) = session.cloud.sign_out(&bearer).await {
+		eprintln!("the cloud did not close the session, the bearer is deleted anyway: {reason}");
+	}
 	Ok(())
 }
 
-async fn relay_device_deleted<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> Result<(), String> {
+async fn held_relay_device<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
 	let Some((account_id, device_id)) = relay_device_owner(app)? else {
-		return Ok(());
+		return Ok(None);
 	};
-	let held = signed_in_database(app)?
+	signed_in_database(app)?
 		.relay_devices()
 		.relay_device_id(account_id, device_id)
 		.await
-		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))?;
-	match held {
-		Some(relay_device_id) => app
-			.state::<AccountSession>()
-			.cloud
-			.delete_device(bearer, &relay_device_id)
-			.await
-			.map_err(|failure| failure.to_string()),
-		None => Ok(()),
-	}
+		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))
+}
+
+async fn relay_device_deleted<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	relay_device: Result<Option<String>, String>,
+) -> Result<(), String> {
+	let Some(relay_device_id) = relay_device? else {
+		return Ok(());
+	};
+	app.state::<AccountSession>()
+		.cloud
+		.delete_device(bearer, &relay_device_id)
+		.await
+		.map_err(|failure| failure.to_string())
 }
 
 async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {

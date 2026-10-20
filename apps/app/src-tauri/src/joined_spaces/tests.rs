@@ -28,11 +28,11 @@ use super::contract::{
 };
 use super::member_link::Presence;
 use super::members::{self, joined_space_members, MEMBERS_CHANGED_EVENT};
-use super::relay::{self, RelayGuests};
+use super::relay::{self, RelayGuests, RelayJoinError};
 use super::test_host::SealingHost;
 use super::wait_reason::{wait_of, Stall};
 use super::waiting;
-use crate::account::session::AccountSession;
+use crate::account::session::{self, AccountSession};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::DeviceKeys;
 use crate::crypto::fingerprint::fingerprint;
@@ -95,6 +95,8 @@ struct Room {
 	instance_reads: usize,
 	is_instance_list_stalled: bool,
 	leave: (StatusCode, Value),
+	is_sign_out_stalled: bool,
+	sign_out_calls: Vec<(&'static str, String)>,
 }
 
 #[derive(Clone)]
@@ -121,6 +123,8 @@ impl Relay {
 			instance_reads: 0,
 			is_instance_list_stalled: false,
 			leave: (StatusCode::NO_CONTENT, Value::Null),
+			is_sign_out_stalled: false,
+			sign_out_calls: Vec::new(),
 		})))
 	}
 
@@ -171,6 +175,8 @@ impl Relay {
 			.route("/me", get(me))
 			.route("/devices/challenge", post(device_challenged))
 			.route("/devices", post(device_registered))
+			.route("/devices/{id}", delete(device_deleted))
+			.route("/api/auth/sign-out", post(session_closed))
 			.route("/instances", get(instances_listed))
 			.route("/instances/{id}/roster", get(roster_read))
 			.route("/instances/{id}/membership", delete(membership_left))
@@ -233,6 +239,27 @@ async fn device_registered() -> Response {
 		StatusCode::CREATED,
 		json!({ "id": MEMBER_RELAY_ID, "createdAt": "2026-10-01T00:00:00.000Z", "transferred": false, "status": "approved" }),
 	)
+}
+
+async fn device_deleted(Served(relay): Served<Relay>, headers: HeaderMap) -> StatusCode {
+	sign_out_called(&relay, "device deletion", &headers).await
+}
+
+async fn session_closed(Served(relay): Served<Relay>, headers: HeaderMap) -> StatusCode {
+	sign_out_called(&relay, "session close", &headers).await
+}
+
+async fn sign_out_called(relay: &Relay, call: &'static str, headers: &HeaderMap) -> StatusCode {
+	let bearer = headers.get(header::AUTHORIZATION).and_then(|value| value.to_str().ok());
+	let is_stalled = {
+		let mut room = relay.room();
+		room.sign_out_calls.push((call, bearer.unwrap_or_default().to_owned()));
+		room.is_sign_out_stalled
+	};
+	if is_stalled {
+		std::future::pending::<()>().await;
+	}
+	StatusCode::NO_CONTENT
 }
 
 async fn instances_listed(Served(relay): Served<Relay>) -> Response {
@@ -1117,6 +1144,40 @@ fn a_join_a_leave_and_a_sign_out_complete_while_the_instance_list_never_answers(
 		assert!(other.expect("the join is not held by the stalled list").is_ok());
 		assert_eq!(left.expect("the leave is not held by the stalled list"), Ok(()));
 		assert!(signed_out.expect("the sign out is not held by the stalled list").is_some());
+	});
+}
+
+#[test]
+fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
+	run(async {
+		let member = Member::new("sign-out-never-answered").await;
+		let joined = online_with_two_members(&member, &member.host()).await;
+		session::restore(member.app.handle().clone()).await;
+		member.relay.room().is_sign_out_stalled = true;
+		let app = member.app.handle().clone();
+		let sign_out = tauri::async_runtime::spawn(async move { session::sign_out(&app).await });
+		until("the stalled device deletion", || async {
+			(!member.relay.room().sign_out_calls.is_empty()).then_some(())
+		})
+		.await;
+
+		let app = member.app.handle();
+		let again =
+			tokio::time::timeout(WHILE_STALLED, relay::joined(app, INSTANCE.to_owned(), None))
+				.await;
+		let left = tokio::time::timeout(WHILE_STALLED, relay::left(app, &joined.id)).await;
+		sign_out.abort();
+
+		let again = again.expect("the join is not held by the stalled sign-out");
+		assert!(matches!(again, Err(RelayJoinError::SignedOut)), "{again:?}");
+		assert_eq!(
+			left.expect("the leave is not held by the stalled sign-out"),
+			Err(JoinedSpaceError::UnknownJoinedSpace { id: joined.id.clone() })
+		);
+		assert_eq!(
+			member.relay.room().sign_out_calls,
+			vec![("device deletion", format!("Bearer {MEMBER_BEARER}"))]
+		);
 	});
 }
 
