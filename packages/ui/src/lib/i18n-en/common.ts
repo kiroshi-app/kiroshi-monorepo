@@ -55,7 +55,6 @@ const common = {
 		approval: {
 			title: "{{device}} wants to use your account",
 			body: "If it’s yours, approve it and it’ll read your spaces. If it isn’t, choose Not me and it’ll be signed out.",
-			hint: "Approve only if {{device}} shows these same six words.",
 			notMe: "Not me",
 			approve: "Approve",
 			approving: "Approving…",

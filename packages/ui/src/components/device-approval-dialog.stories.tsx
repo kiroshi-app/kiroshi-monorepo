@@ -1,9 +1,14 @@
 import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { expectHeadingFont, slotIn } from "@workspace/storybook/story-utils"
+import {
+	expectHeadingFont,
+	glyphIn,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { DeviceApprovalDialog } from "@workspace/ui/components/device-approval-dialog"
 import { ASKING_PHONE } from "@workspace/ui/components/device-card.fixtures"
+import { Icons } from "@workspace/ui/components/icons"
 
 const ARTBOARD =
 	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only."
@@ -27,7 +32,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The question another device puts to this one when it signs in to the same account: who asks, the six words it shows, and two answers. Approve lets it read the reader's spaces; Not me signs it out. Fully controlled: the host opens it, hands in the asking device and the status of the answer, and closes it once the answer landed, so nothing here dismisses it on its own. While the answer travels both actions hold still and keep their focus; when it fails the reason shows above them and the primary offers to try again.",
+					"The question another device puts to this one when it signs in to the same account: who asks, named by its kind, its name and its activity line, and two answers. Approve lets it read the reader's spaces; Not me signs it out. Fully controlled: the host opens it, hands in the asking device and the status of the answer, and closes it once the answer landed, so nothing here dismisses it on its own. While the answer travels both actions hold still and keep their focus; when it fails the reason shows above them and the primary offers to try again.",
 			},
 		},
 	},
@@ -44,7 +49,7 @@ export const Default = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 6: another device just asked. Check the title names it, the card shows its six words, the hint asks to compare them, and that Approve and Not me each call back. Pick \`Approving\` for the answer in flight and \`Error\` for the answer that failed.`,
+				story: `${ARTBOARD} Artboard 6: another device just asked. Check the title names it, the card shows its phone mark, its name and its activity line with no fingerprint, and that Approve and Not me each call back. Pick \`Approving\` for the answer in flight and \`Error\` for the answer that failed.`,
 			},
 		},
 	},
@@ -53,14 +58,11 @@ export const Default = meta.story({
 		await expect(dialog).toHaveAccessibleName(TITLE)
 		await expect(dialog.getBoundingClientRect().width).toBe(DIALOG_WIDTH)
 		await expectHeadingFont(within(dialog).getByRole("heading"))
-		await expect(slotIn(dialog, "device-card")).toHaveTextContent(
-			"antenna hockey hawk giant tree palm",
-		)
-		await expect(
-			within(dialog).getByText(
-				"Approve only if Noa’s iPhone 17 shows these same six words.",
-			),
-		).toBeVisible()
+		const card = slotIn(dialog, "device-card")
+		await expect(card).toHaveTextContent(ASKING_PHONE.name)
+		await expect(card).toHaveTextContent("Asked just now")
+		await expect(glyphIn(card, Icons.Smartphone)).not.toBe(null)
+		await expect(dialog).not.toHaveTextContent(ASKING_PHONE.fingerprint)
 		await expect(within(dialog).queryByRole("alert")).toBe(null)
 
 		await userEvent.click(
@@ -89,6 +91,7 @@ export const Approving = meta.story({
 		const primary = within(dialog).getByRole("button", { name: "Approving…" })
 		const notMe = within(dialog).getByRole("button", { name: "Not me" })
 
+		await expect(dialog).not.toHaveTextContent(ASKING_PHONE.fingerprint)
 		await expect(primary).toHaveAttribute("aria-disabled", "true")
 		await expect(notMe).toHaveAttribute("aria-disabled", "true")
 		await expect(primary).not.toHaveAttribute("disabled")
@@ -117,6 +120,7 @@ export const Error = meta.story({
 		const dialog = await approvalDialog()
 		const alert = within(dialog).getByRole("alert")
 
+		await expect(dialog).not.toHaveTextContent(ASKING_PHONE.fingerprint)
 		await expect(alert).toHaveTextContent(
 			"Couldn’t approve Noa’s iPhone 17. Check your connection and try again.",
 		)

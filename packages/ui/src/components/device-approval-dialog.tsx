@@ -62,12 +62,7 @@ const DeviceApprovalDialog = ({
 							{t("devices.approval.body")}
 						</AlertDialog.Description>
 					</div>
-					<div className="flex flex-col gap-2">
-						<DeviceCard {...device} isNameStrong />
-						<p className="text-muted-foreground text-xs">
-							{t("devices.approval.hint", { device: device.name })}
-						</p>
-					</div>
+					<DeviceCard {...device} isNameStrong />
 					{hasFailed ? (
 						<DeviceFailure>
 							{t("devices.approval.failed", { device: device.name })}

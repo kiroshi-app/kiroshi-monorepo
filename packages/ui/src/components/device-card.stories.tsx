@@ -1,7 +1,7 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { probedStyleOf, slotIn } from "@workspace/storybook/story-utils"
+import { slotIn } from "@workspace/storybook/story-utils"
 import { DeviceCard } from "@workspace/ui/components/device-card"
 import {
 	ASKING_PHONE,
@@ -24,7 +24,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"One device as every device surface names it: its kind as a 20px mark, its name, an optional activity line, the six words of an optional fingerprint in the mono face, and an optional trailing meta. The approval dialog and the new-device screen pass the fingerprint, so a reader compares the six words across two screens without the layout moving under them; Your devices passes none. `isNameStrong` sets the name one weight up, for the dialog where the card is the subject of the question.",
+					"One device as every device surface names it: its kind as a 20px mark, its name, an optional activity line and an optional trailing meta. The approval dialog, Your devices and the new-device screen draw the same card, and none of them shows the device's fingerprint. `isNameStrong` sets the name one weight up, for the dialog where the card is the subject of the question.",
 			},
 		},
 	},
@@ -42,37 +42,27 @@ export const Default = meta.story({
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 6: the asking device inside the approval dialog. Check the phone mark, the name one weight up, the activity line in the muted foreground and the six words in the mono face on the same muted colour. Pick \`WithMeta\` for the card that names this device.`,
+				story: `${ARTBOARD} Artboard 6: the asking device inside the approval dialog. Check the phone mark, the name one weight up, the activity line in the muted foreground, and no fingerprint. Pick \`WithMeta\` for the card that names this device.`,
 			},
 		},
 	},
 	play: async ({ canvasElement }) => {
 		const card = slotIn(canvasElement, "device-card")
-		const fingerprint = slotIn(card, "device-fingerprint")
 
 		await expect(card).toHaveTextContent("Noa’s iPhone 17")
 		await expect(card).toHaveTextContent("Asked just now")
-		await expect(fingerprint).toHaveTextContent(
-			"antenna hockey hawk giant tree palm",
-		)
-		await expect(getComputedStyle(fingerprint).fontFamily).toBe(
-			probedStyleOf("font-mono", "fontFamily", card),
-		)
+		await expect(card).not.toHaveTextContent(ASKING_PHONE.fingerprint)
 		await expect(getComputedStyle(card).borderTopLeftRadius).toBe("14px")
 		await expect(card.getBoundingClientRect().width).toBe(DIALOG_CARD_WIDTH)
 	},
 })
 
 export const WithMeta = meta.story({
-	args: {
-		kind: THIS_MACBOOK_PRO.kind,
-		name: THIS_MACBOOK_PRO.name,
-		meta: "Active now",
-	},
+	args: { ...THIS_MACBOOK_PRO, meta: "Active now" },
 	parameters: {
 		docs: {
 			description: {
-				story: `${ARTBOARD} Artboard 7.1: this device in Your devices, with no activity line, no fingerprint and its trailing meta. Check the name is the only line beside the mark, with no empty line left where the six words were, and the meta holds its width at the end of the row. Pick \`Default\` for a card with an activity line.`,
+				story: `${ARTBOARD} Artboard 7.1: this device in Your devices, with no activity line and its trailing meta. Check the name is the only line beside the mark, with no fingerprint and no empty line under it, and the meta holds its width at the end of the row. Pick \`Default\` for a card with an activity line.`,
 			},
 		},
 	},
@@ -82,9 +72,9 @@ export const WithMeta = meta.story({
 
 		await expect(getComputedStyle(meta).flexShrink).toBe("0")
 		await expect(canvas.queryByText("Asked just now")).toBe(null)
-		await expect(
-			canvasElement.querySelector('[data-slot="device-fingerprint"]'),
-		).toBeNull()
+		await expect(canvasElement).not.toHaveTextContent(
+			THIS_MACBOOK_PRO.fingerprint,
+		)
 		await expect(name.parentElement?.childElementCount).toBe(1)
 	},
 })
@@ -106,7 +96,7 @@ export const LongContent = meta.story({
 		docs: {
 			description: {
 				story:
-					"A device name with no break opportunity in a 320px column. Check the name wraps inside the card instead of pushing the meta out of it, and that the six words stay whole. Pick `WithMeta` for the realistic name.",
+					"A device name with no break opportunity in a 320px column. Check the name wraps inside the card instead of pushing the meta out of it, with no fingerprint under it. Pick `WithMeta` for the realistic name.",
 			},
 		},
 	},
@@ -114,5 +104,6 @@ export const LongContent = meta.story({
 		const card = slotIn(canvasElement, "device-card")
 
 		await expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth)
+		await expect(card).not.toHaveTextContent(THIS_MACBOOK_PRO.fingerprint)
 	},
 })
