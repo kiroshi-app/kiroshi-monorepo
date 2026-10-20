@@ -74,9 +74,10 @@ and one whose unsent frames exceed 4 MiB because the client reads too slowly.
 
 ## Frames
 
-Every frame is one WebSocket text frame holding one JSON object. The schema's
-root `oneOf` lists the three shapes, defined in `$defs` as `CallFrame`,
-`AnswerFrame` and `EventFrame`.
+Every WebSocket text frame holds one v2 envelope of
+[`v2-protocol.md`](v2-protocol.md). The frames below are the JSON object that
+envelope seals. The schema's root `oneOf` lists the three shapes, defined in
+`$defs` as `CallFrame`, `AnswerFrame` and `EventFrame`.
 
 A member sends call frames only. It receives answer frames and event frames, and
 tells them apart this way: a frame with an `event` key is an event frame; a frame
@@ -110,7 +111,6 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 200 | `commands.<command>.ok` |
 | 500 | `commands.<command>.error`, or a string when the host could not read the args |
 | 400 | a string: the frame is not `{id, command, args}` with `args` an object |
-| 400 | `{ "error": "<reason>" }`, `id` null: the relay refused the frame (see [Frames the relay refuses](#frames-the-relay-refuses)) |
 | 403 | `"this command belongs to the host"`: the command is not open to members, or no command bears this name |
 | 403 | `"this command reaches outside the shared space"`: an id in `args` names something outside the shared space |
 | 403 | `{ "kind": "refusedToAMember" }`: the command would reach what belongs to the host person |
@@ -237,23 +237,11 @@ answers
 `spaceId` is the space the host shares. Every `spaceId` a member sends in `args`
 must be this one. The call takes no args.
 
-### The sender stamp
+### The author of a call
 
-The relay writes a `sender` object on every frame a member sends before it hands
-the frame to the host:
-
-```json
-{ "id": 7, "command": "conversation_send_turn", "args": {}, "sender": { "accountId": "acc-1", "name": "Ada", "image": null } }
-```
-
-- `accountId`: the kiroshi-cloud account that opened the member socket.
-- `name`: that account's name.
-- `image`: that account's picture URL, or `null` when the account has none.
-
-The relay writes it over any `sender` the member put in the frame, and leaves
-every other key unchanged; a client has no reason to send one. The host reads
-`sender.accountId` and takes it as the author of what the call writes. A call
-that reaches the host without it still runs, with no member named as its author.
+The host takes the author of what a call writes from the roster row of the device
+that sealed it. A `sender` or `from` key inside the frame is ignored; a client has
+no reason to send one.
 
 ### Frames the relay refuses
 
@@ -266,8 +254,9 @@ member:
 ```
 
 `body.error` is `"Frame must be text"` for a binary frame and `"Frame must be a
-JSON object"` otherwise. `id` is `null` because the relay reads no id from such a
-frame: a client fails the call it was sending, if any, by itself.
+JSON object"` otherwise. That answer carries no `"v": 2`, so the client drops it
+like any envelope that is not v2: it fails the call it was sending, if any, by
+itself.
 
 ## Close codes
 

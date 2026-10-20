@@ -13,8 +13,10 @@ Three files make the contract:
   the BIP39 English word list the fingerprint reads (SHA-256
   `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`).
 
-The plaintext of a v2 frame is a v1 frame of
-[`member-socket.md`](member-socket.md), encoded as UTF-8 JSON.
+The plaintext of a v2 frame is one call, answer or event frame of
+[`member-socket.md`](member-socket.md), encoded as UTF-8 JSON. v2 is the only
+protocol: the host and every member drop an envelope whose `v` is absent or other
+than 2 without reading its content.
 
 ## Notation
 
@@ -159,7 +161,7 @@ ids of every device with its public keys.
   `from` resolves to no roster row is dropped.
 
 The host drops a frame that is not `"v": 2`, resolves to no roster row or fails a
-step of Open. It sends nothing back and logs one line naming the Space, the wire
+step of Open, and a member drops a host frame the same way. It sends nothing back and logs one line naming the Space, the wire
 `from` and the typed error, never the frame.
 
 ### AAD: canonical header bytes

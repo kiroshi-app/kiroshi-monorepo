@@ -41,6 +41,7 @@ pub enum MemberStatus {
 	Host,
 	Pending,
 	Joined,
+	NeedsInvitation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -124,6 +125,7 @@ pub enum MembersError {
 	UnknownInvitation,
 	NotPending,
 	NotJoined,
+	NotNeedingInvitation,
 	HostNotRemovable,
 	NotOwner,
 	NeedsSignIn,
@@ -148,6 +150,14 @@ pub enum MembersError {
 	#[serde(rename_all = "camelCase")]
 	Space {
 		error: SpaceError,
+	},
+	#[serde(rename_all = "camelCase")]
+	RemovedButNotInvited {
+		cause: Box<MembersError>,
+	},
+	#[serde(rename_all = "camelCase")]
+	InvitedButNotListed {
+		cause: Box<MembersError>,
 	},
 }
 
@@ -245,6 +255,17 @@ mod tests {
 		assert_eq!(
 			to_value(MembersError::from(SpaceError::LastSpace)).expect("the refusal serializes"),
 			json!({ "kind": "space", "error": { "kind": "lastSpace" } })
+		);
+		assert_eq!(
+			to_value(MembersError::RemovedButNotInvited {
+				cause: Box::new(MembersError::LimitReached)
+			})
+			.expect("the refusal serializes"),
+			json!({ "kind": "removedButNotInvited", "cause": { "kind": "limitReached" } })
+		);
+		assert_eq!(
+			to_value(MemberStatus::NeedsInvitation).expect("the status serializes"),
+			json!("needsInvitation")
 		);
 	}
 }

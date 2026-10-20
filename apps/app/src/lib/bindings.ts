@@ -154,6 +154,7 @@ export const commands = {
 	hostingWithdrawInvitation: (spaceId: string, invitationId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_withdraw_invitation", { spaceId, invitationId })),
 	hostingResendInvitation: (spaceId: string, invitationId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_resend_invitation", { spaceId, invitationId })),
 	hostingRemoveMember: (spaceId: string, userId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_remove_member", { spaceId, userId })),
+	hostingInviteMemberAgain: (spaceId: string, userId: string) => typedError<SpaceMembers, MembersError>(__TAURI_INVOKE("hosting_invite_member_again", { spaceId, userId })),
 	hostingDevices: (spaceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_devices", { spaceId })),
 	hostingRemoveDevice: (spaceId: string, deviceId: string) => typedError<AccountDevices[], MembersError>(__TAURI_INVOKE("hosting_remove_device", { spaceId, deviceId })),
 	invitationsList: () => typedError<Invitation[], InvitationError>(__TAURI_INVOKE("invitations_list")),
@@ -1024,7 +1025,7 @@ export type Member = {
 	status: MemberStatus,
 };
 
-export type MemberStatus = "host" | "pending" | "joined";
+export type MemberStatus = "host" | "pending" | "joined" | "needsInvitation";
 
 export type MembersChanged = {
 	spaceId: string,
@@ -1032,7 +1033,7 @@ export type MembersChanged = {
 	invitations: SpaceInvitation[],
 };
 
-export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError };
+export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "notNeedingInvitation" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError } | { kind: "removedButNotInvited"; cause: MembersError } | { kind: "invitedButNotListed"; cause: MembersError };
 
 export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
 

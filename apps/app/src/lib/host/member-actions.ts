@@ -1,3 +1,4 @@
+import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import type {
 	InviteRefusal,
 	MembersFailure,
@@ -106,6 +107,20 @@ const dataOf = <Data>(answer: MembersAnswer<Data>): Data => {
 	return answer.data
 }
 
+export type InviteAgainRefusal = { member: HostedMember; cause: unknown }
+
+export const membersAfterInviteAgain = async (
+	transport: MembersTransport,
+	spaceId: string,
+	member: HostedMember,
+): Promise<HostedMember[]> => {
+	try {
+		return dataOf(await transport.inviteAgain(spaceId, member.userId))
+	} catch (cause) {
+		throw { member, cause } satisfies InviteAgainRefusal
+	}
+}
+
 export const readMembers = async (
 	transport: MembersTransport,
 	spaceId: string,
@@ -139,6 +154,32 @@ const inviteFailureOf = (
 		email,
 	},
 })
+
+const INVITE_AGAIN_OUTCOMES: Partial<
+	Record<MembersError["kind"], "removed" | "listed">
+> = {
+	removedButNotInvited: "removed",
+	invitedButNotListed: "listed",
+}
+
+export const inviteAgainFailureOf = ({
+	member,
+	cause,
+}: InviteAgainRefusal): NoticeMessage => {
+	const shown = toSpaceMember(member)
+	const outcome = reasonOf(INVITE_AGAIN_OUTCOMES, membersErrorOf(cause))
+	const copy = { name: shown.name ?? shown.email, email: shown.email }
+	return {
+		title: i18n.t(
+			`settings:space.members.invitedAgainFailure.${outcome}.title`,
+			copy,
+		),
+		description: i18n.t(
+			`settings:space.members.invitedAgainFailure.${outcome}.description`,
+			copy,
+		),
+	}
+}
 
 export const refusalOf = (
 	run: MemberAction,

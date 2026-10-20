@@ -249,6 +249,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("hosting_withdraw_invitation", Reach::Scoped(SPACE_ID)),
 	("hosting_resend_invitation", Reach::Scoped(SPACE_ID)),
 	("hosting_remove_member", Reach::Scoped(SPACE_ID)),
+	("hosting_invite_member_again", Reach::Scoped(SPACE_ID)),
 	("hosting_devices", Reach::Scoped(SPACE_ID)),
 	("hosting_remove_device", Reach::Scoped(SPACE_ID)),
 	("invitations_list", Reach::HostOnly),

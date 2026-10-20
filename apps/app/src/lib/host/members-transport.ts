@@ -33,6 +33,10 @@ export type MembersTransport = {
 		spaceId: string,
 		userId: string,
 	) => Promise<MembersAnswer<HostedMember[]>>
+	inviteAgain: (
+		spaceId: string,
+		userId: string,
+	) => Promise<MembersAnswer<HostedMember[]>>
 	onChanged: (
 		listener: (changed: MembersChanged) => void,
 	) => Promise<() => void>
@@ -110,6 +114,13 @@ export const membersTransport: MembersTransport = {
 			invoke<SpaceMembers>("hosting_remove_member", { spaceId, userId }).then(
 				membersOf,
 			),
+		),
+	inviteAgain: (spaceId, userId) =>
+		answerOf(
+			invoke<SpaceMembers>("hosting_invite_member_again", {
+				spaceId,
+				userId,
+			}).then(membersOf),
 		),
 	onChanged: (listener) =>
 		listen<MembersChanged>(HOSTING_MEMBERS_CHANGED_EVENT, (event) =>

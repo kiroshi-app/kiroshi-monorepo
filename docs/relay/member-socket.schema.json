@@ -3355,7 +3355,8 @@
       "enum": [
         "host",
         "pending",
-        "joined"
+        "joined",
+        "needsInvitation"
       ]
     },
     "MembersChanged": {
@@ -3477,6 +3478,17 @@
           "properties": {
             "kind": {
               "const": "notJoined"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "notNeedingInvitation"
             }
           },
           "required": [
@@ -3611,6 +3623,36 @@
           "required": [
             "kind",
             "error"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/MembersError"
+            },
+            "kind": {
+              "const": "removedButNotInvited"
+            }
+          },
+          "required": [
+            "kind",
+            "cause"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/MembersError"
+            },
+            "kind": {
+              "const": "invitedButNotListed"
+            }
+          },
+          "required": [
+            "kind",
+            "cause"
           ],
           "type": "object"
         }
@@ -9919,6 +9961,29 @@
         "required": [
           "spaceId",
           "email"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/MembersError"
+      },
+      "ok": {
+        "$ref": "#/$defs/SpaceMembers"
+      }
+    },
+    "hosting_invite_member_again": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId",
+          "userId"
         ],
         "type": "object"
       },

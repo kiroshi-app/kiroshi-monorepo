@@ -149,6 +149,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		hosting::commands::hosting_withdraw_invitation::<tauri::Wry>,
 		hosting::commands::hosting_resend_invitation::<tauri::Wry>,
 		hosting::commands::hosting_remove_member::<tauri::Wry>,
+		hosting::commands::hosting_invite_member_again::<tauri::Wry>,
 		hosting::commands::hosting_devices::<tauri::Wry>,
 		hosting::commands::hosting_remove_device::<tauri::Wry>,
 		invitations::commands::invitations_list::<tauri::Wry>,

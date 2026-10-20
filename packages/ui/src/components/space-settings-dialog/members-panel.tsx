@@ -21,7 +21,12 @@ import { useSkeletonTiming } from "@workspace/ui/hooks/use-skeleton-timing"
 import { formatDateTime } from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
-type SpaceMemberStatus = "host" | "joined" | "pending" | "expired"
+type SpaceMemberStatus =
+	| "host"
+	| "joined"
+	| "needsInvitation"
+	| "pending"
+	| "expired"
 
 type SpaceMember = {
 	id: string
@@ -76,6 +81,8 @@ type MembersPanelProps = {
 	removing?: SpaceMember | null
 	onRemove: (member: SpaceMember) => void
 	onWithdraw: (member: SpaceMember) => void
+	onInviteAgain: (member: SpaceMember) => void
+	invitingAgainId?: string
 	onRemoveConfirm: () => void
 	onRemoveCancel: () => void
 }
@@ -263,12 +270,13 @@ type MemberAction = {
 
 type MemberRowProps = Pick<
 	MembersPanelProps,
-	"onInvite" | "onRemove" | "onWithdraw"
+	"onInvite" | "onRemove" | "onWithdraw" | "onInviteAgain"
 > & {
 	member: SpaceMember
 	failureText: string
 	isViewer: boolean
 	isDisabled: boolean
+	isInvitingAgain: boolean
 }
 
 const MemberRow = ({
@@ -276,14 +284,21 @@ const MemberRow = ({
 	failureText,
 	isViewer,
 	isDisabled,
+	isInvitingAgain,
 	onInvite,
 	onRemove,
 	onWithdraw,
+	onInviteAgain,
 }: MemberRowProps) => {
 	const { t } = useTranslation("settings")
 	const name = nameOf(member)
 	const { status, email, fingerprint, expiresInDays, sentAt } = member
 
+	const removal: MemberAction = {
+		icon: <Icons.Delete />,
+		label: t("space.members.removeLabel", { name }),
+		run: () => onRemove(member),
+	}
 	const actionOf: Partial<Record<SpaceMemberStatus, MemberAction>> = {
 		pending: {
 			icon: <Icons.Close />,
@@ -295,17 +310,15 @@ const MemberRow = ({
 			label: t("space.members.inviteAgainLabel", { email }),
 			run: () => onInvite(email),
 		},
-		joined: {
-			icon: <Icons.Delete />,
-			label: t("space.members.removeLabel", { name }),
-			run: () => onRemove(member),
-		},
+		joined: removal,
+		needsInvitation: removal,
 	}
 	const action = isViewer ? undefined : actionOf[status]
 
 	const sublineOf: Record<SpaceMemberStatus, string | undefined> = {
 		host: email,
 		joined: email,
+		needsInvitation: t("space.members.needsInvitation"),
 		pending:
 			expiresInDays === undefined
 				? undefined
@@ -355,6 +368,18 @@ const MemberRow = ({
 				>
 					{t(`space.members.status.${status}`)}
 				</span>
+			) : null}
+			{status === "needsInvitation" && !isViewer ? (
+				<Button
+					aria-label={t("space.members.inviteAgainLabel", { email })}
+					className="rounded-control"
+					disabled={isDisabled || isInvitingAgain}
+					onClick={() => onInviteAgain(member)}
+					size="sm"
+					variant="outline"
+				>
+					{t("space.members.inviteMemberAgain")}
+				</Button>
 			) : null}
 			{action ? (
 				<Button
@@ -433,6 +458,8 @@ const MembersPanel = ({
 	removing,
 	onRemove,
 	onWithdraw,
+	onInviteAgain,
+	invitingAgainId,
 	onRemoveConfirm,
 	onRemoveCancel,
 }: MembersPanelProps) => {
@@ -470,10 +497,12 @@ const MembersPanel = ({
 			<MemberRow
 				failureText={rowFailure?.member.id === member.id ? rowFailureText : ""}
 				isDisabled={blockedBy === "hostOffline"}
+				isInvitingAgain={member.id === invitingAgainId}
 				isViewer={member.id === viewerId}
 				key={member.id}
 				member={member}
 				onInvite={onInvite}
+				onInviteAgain={onInviteAgain}
 				onRemove={onRemove}
 				onWithdraw={onWithdraw}
 			/>
