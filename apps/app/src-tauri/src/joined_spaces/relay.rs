@@ -53,6 +53,7 @@ pub struct RelayGuests {
 	cloud: Cloud,
 	guests: Mutex<HashMap<String, Guest>>,
 	removed: Mutex<HashSet<String>>,
+	unlisted: Mutex<HashSet<String>>,
 	waiting: Mutex<HashMap<String, WaitingJoin>>,
 	waits: Mutex<HashMap<String, JoinedSpaceWait>>,
 	turn: tokio::sync::Mutex<()>,
@@ -150,6 +151,7 @@ impl RelayGuests {
 			cloud: Cloud::new(api_url),
 			guests: Mutex::new(HashMap::new()),
 			removed: Mutex::new(HashSet::new()),
+			unlisted: Mutex::new(HashSet::new()),
 			waiting: Mutex::new(HashMap::new()),
 			waits: Mutex::new(HashMap::new()),
 			turn: tokio::sync::Mutex::new(()),
@@ -221,6 +223,10 @@ impl RelayGuests {
 
 	fn removed(&self) -> MutexGuard<'_, HashSet<String>> {
 		self.removed.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn unlisted(&self) -> MutexGuard<'_, HashSet<String>> {
+		self.unlisted.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 
 	fn ended_error(&self, id: &str) -> JoinedSpaceError {
@@ -311,9 +317,12 @@ impl RelayGuests {
 }
 
 fn is_signed_in<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+	session_bearer(app).map(|bearer| bearer.is_some())
+}
+
+fn session_bearer<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
 	app.state::<AccountSession>()
 		.bearer()
-		.map(|bearer| bearer.is_some())
 		.map_err(|error| format!("the account session store failed: {error:?}"))
 }
 
@@ -349,6 +358,7 @@ pub async fn joined<R: Runtime>(
 	let wait = held::wait(app, &instance_id)?;
 	let joined = repository.join(candidate).await?;
 	guests.removed().remove(&joined.id);
+	guests.unlisted().remove(&joined.id);
 	members::read_soon(app, &joined);
 	announce_change(app, joined.id.clone())?;
 	Ok(JoinedSpace::presented(joined, guests.cloud(), wait))
@@ -358,12 +368,12 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 	let Some(guests) = app.try_state::<RelayGuests>() else {
 		return;
 	};
-	let _turn = guests.turn.lock().await;
 	if let Err(failure) = memberships_followed(app, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance did not follow the cloud memberships: {failure}"
 		);
 	}
+	let _turn = guests.turn.lock().await;
 	if let Err(failure) = waiting::joins_started(app, &guests).await {
 		log::warn!(
 			"the joined spaces of every instance waiting for their host were not all followed: {failure:?}"
@@ -371,16 +381,46 @@ pub async fn reconciled<R: Runtime>(app: &AppHandle<R>) {
 	}
 }
 
+struct Unlisted {
+	bearer: String,
+	held: Vec<(String, String)>,
+}
+
 async fn memberships_followed<R: Runtime>(
 	app: &AppHandle<R>,
 	guests: &RelayGuests,
 ) -> Result<(), String> {
-	let bearer = app
-		.state::<AccountSession>()
-		.bearer()
-		.map_err(|error| format!("the account session store failed: {error:?}"))?;
-	let Some(bearer) = bearer else {
+	let unlisted = {
+		let _turn = guests.turn.lock().await;
+		listed_followed_unlisted_stopped(app, guests).await?
+	};
+	let Some(unlisted) = unlisted else {
 		return Ok(());
+	};
+	let mut departed = Vec::new();
+	for (id, instance_id) in &unlisted.held {
+		departed.push((
+			id,
+			unlisted_reason(app, guests.cloud(), &unlisted.bearer, id, instance_id).await,
+		));
+	}
+	let _turn = guests.turn.lock().await;
+	let is_same_account = session_bearer(app)?.as_deref() == Some(unlisted.bearer.as_str());
+	for (id, reason) in departed {
+		let is_still_unlisted = guests.unlisted().remove(id);
+		if is_same_account && is_still_unlisted {
+			entry_evicted(app, id, reason).await.map_err(described)?;
+		}
+	}
+	Ok(())
+}
+
+async fn listed_followed_unlisted_stopped<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+) -> Result<Option<Unlisted>, String> {
+	let Some(bearer) = session_bearer(app)? else {
+		return Ok(None);
 	};
 	let listed = match guests.cloud.instances(&bearer).await {
 		Ok(listed) => listed,
@@ -398,12 +438,14 @@ async fn memberships_followed<R: Runtime>(
 	for instance in &listed {
 		listed_followed(app, repository, &held, &hosted, instance).await?;
 	}
+	let mut unlisted = Vec::new();
 	for (id, instance_id) in held.iter().map(relay_instance) {
 		if !listed.iter().any(|instance| instance.id == instance_id) {
-			unlisted_dropped(app, guests, &bearer, id, instance_id).await?;
+			unlisted_stopped(guests, id).await;
+			unlisted.push((id.to_owned(), instance_id.to_owned()));
 		}
 	}
-	Ok(())
+	Ok(Some(Unlisted { bearer, held: unlisted }))
 }
 
 fn relay_instance(joined: &joined_spaces::JoinedSpace) -> (&str, &str) {
@@ -434,20 +476,13 @@ async fn listed_followed<R: Runtime>(
 	announce_change(app, joined.id).map_err(described)
 }
 
-async fn unlisted_dropped<R: Runtime>(
-	app: &AppHandle<R>,
-	guests: &RelayGuests,
-	bearer: &str,
-	id: &str,
-	instance_id: &str,
-) -> Result<(), String> {
+async fn unlisted_stopped(guests: &RelayGuests, id: &str) {
+	guests.unlisted().insert(id.to_owned());
 	let guest = guests.guests().remove(id);
 	if let Some(guest) = guest {
 		finished(id, guest).await;
 	}
 	guests.waiting_stopped(id).await;
-	let reason = unlisted_reason(app, guests.cloud(), bearer, id, instance_id).await;
-	entry_evicted(app, id, reason).await.map_err(described)
 }
 
 async fn unlisted_reason<R: Runtime>(
@@ -638,6 +673,7 @@ pub async fn signed_out<R: Runtime>(app: &AppHandle<R>) -> Option<tokio::sync::M
 	let guests = app.try_state::<RelayGuests>()?.inner();
 	let turn = guests.turn.lock().await;
 	guests.removed().clear();
+	guests.unlisted().clear();
 	guests.relay_device_forgotten();
 	let running: Vec<(String, Guest)> = guests.guests().drain().collect();
 	for (id, guest) in running {
