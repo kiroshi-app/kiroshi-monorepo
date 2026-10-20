@@ -1,4 +1,6 @@
-type CiEvent = "push" | "pull_request" | "merge_group"
+type CiEvent = "pull_request" | "merge_group" | "push" | "tag"
+
+const CI_EVENTS: CiEvent[] = ["pull_request", "merge_group", "push", "tag"]
 
 type FilteredJobs = {
 	rust: boolean
@@ -7,6 +9,8 @@ type FilteredJobs = {
 	storybook: boolean
 	ios: boolean
 }
+
+type SelectedJobs = FilteredJobs & { lint: boolean; "rust-check": boolean }
 
 type ChangeSet = { event: CiEvent; paths: string[] }
 
@@ -31,6 +35,16 @@ const EVERY_JOB: FilteredJobs = {
 	website: true,
 	storybook: true,
 	ios: true,
+}
+
+const NO_JOB: SelectedJobs = {
+	lint: false,
+	"rust-check": false,
+	rust: false,
+	vitest: false,
+	website: false,
+	storybook: false,
+	ios: false,
 }
 
 const isUnder = (path: string, directories: string[]) =>
@@ -61,8 +75,8 @@ const touchesStorybook = (path: string) =>
 const touchesIos = (path: string) =>
 	path.startsWith("apps/ios/") || IOS_ROOT_FILES.includes(path)
 
-export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
-	if (event === "push" || paths.some(isShared)) return EVERY_JOB
+export const touchedJobs = (paths: string[]): FilteredJobs => {
+	if (paths.some(isShared)) return EVERY_JOB
 	return {
 		rust: paths.some(touchesRust),
 		vitest: paths.some(touchesVitest),
@@ -72,9 +86,29 @@ export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	}
 }
 
+const isDiffed = (event: CiEvent) =>
+	event === "pull_request" || event === "merge_group"
+
+export const decideJobs = ({ event, paths }: ChangeSet): SelectedJobs => {
+	if (event === "push") return { ...NO_JOB, ios: true }
+	if (event === "tag")
+		return {
+			...NO_JOB,
+			lint: true,
+			rust: true,
+			vitest: true,
+			website: true,
+			storybook: true,
+		}
+	const touched = touchedJobs(paths)
+	if (event === "pull_request")
+		return { ...NO_JOB, lint: true, vitest: touched.vitest }
+	return { ...touched, lint: true, "rust-check": touched.rust, ios: false }
+}
+
 const readEvent = (name: string | undefined): CiEvent => {
-	if (name === "push" || name === "pull_request" || name === "merge_group")
-		return name
+	const event = CI_EVENTS.find((candidate) => candidate === name)
+	if (event) return event
 	throw new Error(`unsupported event "${name}"`)
 }
 
@@ -89,7 +123,7 @@ const changedPaths = (base: string | undefined) => {
 
 const main = ([eventName, base]: string[]) => {
 	const event = readEvent(eventName)
-	const paths = event === "push" ? [] : changedPaths(base)
+	const paths = isDiffed(event) ? changedPaths(base) : []
 	for (const [job, runs] of Object.entries(decideJobs({ event, paths })))
 		console.log(`${job}=${runs}`)
 }

@@ -8,11 +8,12 @@ import {
 	GATE,
 	GROUP_ORDER,
 	type Group,
-	postMergeNote,
+	offPullRequestNote,
 	SIMULATOR_LOOKUP,
 	type Step,
 	skipReason,
 } from "./ci"
+import { decideJobs } from "./ci-changes"
 
 type WorkflowStep = {
 	name?: string
@@ -58,20 +59,18 @@ const SETUP_STEPS = new Set([
 	"Select the Xcode pinned in .xcode-version",
 	"Install XcodeGen",
 	"Boot the simulator while the app builds",
+	"Fetch the base the changed test files are read against",
 ])
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
 
-const ON_PUSH_ONLY = "github.event_name == 'push' && "
-
-const ON_MAIN_ONLY = "github.ref == 'refs/heads/main' && "
-
-const ON_PULL_REQUEST_OR_MERGE_GROUP =
-	"(github.event_name == 'pull_request' || github.event_name == 'merge_group') && "
-
-const POST_MERGE_JOBS: Group[] = ["rust", "storybook", "ios"]
-
-const PULL_REQUEST_JOBS = ["rust-check", "vitest", "website"]
+const OFF_PULL_REQUEST_JOBS: Group[] = [
+	"rust-check",
+	"website",
+	"rust",
+	"storybook",
+	"ios",
+]
 
 const EVERY_PATH_TOUCHED = {
 	rust: true,
@@ -121,6 +120,10 @@ const evaluate = (expression: string, scope: ExpressionScope): unknown =>
 				JSON.stringify(lookUp(scope, path) ?? null),
 			)
 			.replace("always()", "true")
+			.replace(
+				/startsWith\(/g,
+				"((value, prefix) => String(value).startsWith(prefix))(",
+			)
 			.replace(/'([^']*)'/g, '"$1"')
 			.replace(/([!=])=/g, "$1==")})`,
 	)()
@@ -130,9 +133,17 @@ const interpolate = (template: string, scope: ExpressionScope) =>
 		String(evaluate(expression, scope)),
 	)
 
-const EVERY_OUTPUT_TRUE = Object.fromEntries(
-	Object.keys(EVERY_PATH_TOUCHED).map((job) => [job, "true"]),
-)
+type CiEvent = Parameters<typeof decideJobs>[0]["event"]
+
+const ciEventOf = (github: GitHubContext) =>
+	interpolate(workflow.jobs.changes?.env?.CI_EVENT ?? "", { github }) as CiEvent
+
+const outputsOn = (github: GitHubContext) =>
+	Object.fromEntries(
+		Object.entries(
+			decideJobs({ event: ciEventOf(github), paths: ["bun.lock"] }),
+		).map(([job, runs]) => [job, String(runs)]),
+	)
 
 const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
 	github,
@@ -140,7 +151,7 @@ const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
 		...Object.fromEntries(
 			Object.entries(results).map(([job, result]) => [job, { result }]),
 		),
-		changes: { result: results.changes, outputs: EVERY_OUTPUT_TRUE },
+		changes: { result: results.changes, outputs: outputsOn(github) },
 	},
 })
 
@@ -171,6 +182,11 @@ const A_PUSH_TO_MAIN: GitHubContext = {
 	ref: "refs/heads/main",
 }
 
+const A_RELEASE_TAG: GitHubContext = {
+	event_name: "push",
+	ref: "refs/tags/v1.2.0",
+}
+
 const A_PULL_REQUEST: GitHubContext = {
 	event_name: "pull_request",
 	ref: "refs/pull/7/merge",
@@ -185,10 +201,19 @@ const queueCommit = (pullRequest: number): GitHubContext => ({
 
 const A_QUEUE_COMMIT = queueCommit(7)
 
-const PULL_REQUEST_JOB_SET = [
+const A_PULL_REQUEST_ON_BASE: GitHubContext = {
+	...A_PULL_REQUEST,
+	event: { pull_request: { base: { sha: "pull-base" } } },
+}
+
+const PULL_REQUEST_JOB_SET = ["changes", "lint", "verify", "vitest"]
+
+const MERGE_GROUP_JOB_SET = [
 	"changes",
 	"lint",
+	"rust",
 	"rust-check",
+	"storybook",
 	"verify",
 	"vitest",
 	"website",
@@ -256,17 +281,20 @@ describe("the gate", () => {
 		expect(playing).toEqual(["storybook"])
 	})
 
-	it("notes rust, storybook and ios as post-merge jobs, nothing else", () => {
-		expect(GROUP_ORDER.filter((group) => postMergeNote(group))).toEqual(
-			POST_MERGE_JOBS,
+	it("notes every group a pull_request skips, nothing else", () => {
+		expect(GROUP_ORDER.filter((group) => offPullRequestNote(group))).toEqual(
+			OFF_PULL_REQUEST_JOBS,
 		)
-		for (const group of ["rust", "storybook"] as const) {
-			expect(postMergeNote(group)).toBe(
-				`${group} is a post-merge job, CI runs it on a push to main and on a v* tag`,
+		for (const group of ["website", "rust", "storybook"] as const) {
+			expect(offPullRequestNote(group)).toBe(
+				`${group} skips a pull_request, CI runs it on a merge_group and on a v* tag`,
 			)
 		}
-		expect(postMergeNote("ios")).toBe(
-			"ios is a post-merge job, CI runs it on a push to main only",
+		expect(offPullRequestNote("rust-check")).toBe(
+			"rust-check skips a pull_request, CI runs it on a merge_group only",
+		)
+		expect(offPullRequestNote("ios")).toBe(
+			"ios skips a pull_request, CI runs it on a push to main only",
 		)
 	})
 
@@ -324,7 +352,7 @@ describe("the jobs of ci.yml", () => {
 		expect(gatedJobs.sort()).toEqual([...GROUP_ORDER].sort())
 	})
 
-	it.each(GROUP_ORDER)(
+	it.each(GROUP_ORDER.filter((group) => group !== "vitest"))(
 		"%s runs its checks through bun scripts/ci.ts",
 		(job) => {
 			const gateSteps = runStepsOf(job).filter(
@@ -337,6 +365,44 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
+	it.each([
+		[A_PULL_REQUEST, "bun scripts/ci.ts changed"],
+		[A_QUEUE_COMMIT, "bun scripts/ci.ts vitest"],
+		[A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
+	])(
+		"has vitest run one gate through bun scripts/ci.ts on %p",
+		(github, command) => {
+			const gateSteps = runStepsOf("vitest").filter(
+				(step) =>
+					!SETUP_STEPS.has(step.name ?? "") &&
+					evaluate(step.if ?? "true", scopeOf(github)),
+			)
+
+			expect(gateSteps.map((step) => step.run?.trim())).toEqual([command])
+		},
+	)
+
+	it("has vitest read the changed test files of a pull_request against its base, fetched as origin/main", () => {
+		const vitest = workflow.jobs.vitest
+		const scope = scopeOf(A_PULL_REQUEST_ON_BASE)
+		const fetchStep = stepNamed(
+			"vitest",
+			"Fetch the base the changed test files are read against",
+		)
+
+		expect(interpolate(vitest?.env?.BASE ?? "", scope)).toBe("pull-base")
+		expect(evaluate(fetchStep?.if ?? "false", scope)).toBe(true)
+		expect(fetchStep?.run).toBe(
+			'git fetch --depth=1 origin "+$BASE:refs/remotes/origin/main"',
+		)
+		expect(
+			interpolate(
+				String(vitest?.steps?.[0]?.with?.["fetch-depth"] ?? ""),
+				scope,
+			),
+		).toBe("2")
+	})
+
 	it.each(GROUP_ORDER)("%s bounds its gate by the job timeout only", (job) => {
 		const stepTimeouts = (workflow.jobs[job]?.steps ?? []).flatMap(
 			(step) => step["timeout-minutes"] ?? [],
@@ -345,47 +411,30 @@ describe("the jobs of ci.yml", () => {
 		expect(stepTimeouts).toEqual([])
 	})
 
-	it("runs ios on a push to main only, never on a v* tag or a pull_request, within 60 minutes", () => {
-		const filter = "needs.changes.outputs.ios == 'true'"
+	it.each(GROUP_ORDER)(
+		"runs %s when changes selects it, and has verify require it then and its skip otherwise",
+		(job) => {
+			const selected = `needs.changes.outputs.${job} == 'true'`
 
-		expect(workflow.jobs.ios?.if).toBe(`${ON_MAIN_ONLY}${filter}`)
-		expect(verifyCondition("ios")).toBe(
-			`needs.ios.result != (${ON_MAIN_ONLY}${filter} && 'success' || 'skipped')`,
-		)
+			expect(workflow.jobs[job]?.if).toBe(selected)
+			expect(verifyCondition(job)).toBe(
+				`needs.${job}.result != (${selected} && 'success' || 'skipped')`,
+			)
+		},
+	)
+
+	it("bounds ios by 60 minutes", () => {
 		expect(workflow.jobs.ios?.["timeout-minutes"]).toBe(60)
 	})
 
-	it.each(["rust", "storybook"])(
-		"runs %s on a push only and has verify expect it skipped on a pull_request",
-		(job) => {
-			const filter = `needs.changes.outputs.${job} == 'true'`
-
-			expect(workflow.jobs[job]?.if).toBe(`${ON_PUSH_ONLY}${filter}`)
-			expect(verifyCondition(job)).toBe(
-				`needs.${job}.result != (${ON_PUSH_ONLY}${filter} && 'success' || 'skipped')`,
-			)
-		},
-	)
-
-	it("runs rust-check on a pull_request or a merge_group only and has verify expect it skipped on a push", () => {
-		const filter = "needs.changes.outputs.rust == 'true'"
-
-		expect(workflow.jobs["rust-check"]?.if).toBe(
-			`${ON_PULL_REQUEST_OR_MERGE_GROUP}${filter}`,
-		)
-		expect(verifyCondition("rust-check")).toBe(
-			`needs.rust-check.result != (${ON_PULL_REQUEST_OR_MERGE_GROUP}${filter} && 'success' || 'skipped')`,
-		)
+	it.each([
+		[A_PULL_REQUEST, "pull_request"],
+		[A_QUEUE_COMMIT, "merge_group"],
+		[A_PUSH_TO_MAIN, "push"],
+		[A_RELEASE_TAG, "tag"],
+	])("hands changes the event of %p as %s", (github, event) => {
+		expect(ciEventOf(github)).toBe(event)
 	})
-
-	it.each(["vitest", "website"])(
-		"has verify require %s whenever its paths changed",
-		(job) => {
-			expect(verifyCondition(job)).toBe(
-				`needs.${job}.result != (needs.changes.outputs.${job} == 'true' && 'success' || 'skipped')`,
-			)
-		},
-	)
 
 	it("triggers on a push, a pull_request and a merge_group asking for checks", () => {
 		expect(workflow.on).toEqual({
@@ -395,15 +444,21 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it("runs the pull_request jobs on a merge_group, and skips rust, storybook and ios", () => {
+	it("runs only changes, lint and vitest on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
-		expect(jobsRunningOn(A_QUEUE_COMMIT)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
-	it("keeps every job but rust-check on a push to main", () => {
-		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual([
+	it("runs every desktop job on a merge_group, never ios", () => {
+		expect(jobsRunningOn(A_QUEUE_COMMIT)).toEqual(MERGE_GROUP_JOB_SET)
+	})
+
+	it("runs only changes and ios on a push to main", () => {
+		expect(jobsRunningOn(A_PUSH_TO_MAIN)).toEqual(["changes", "ios", "verify"])
+	})
+
+	it("keeps the desktop jobs but rust-check on a v* tag, never ios", () => {
+		expect(jobsRunningOn(A_RELEASE_TAG)).toEqual([
 			"changes",
-			"ios",
 			"lint",
 			"rust",
 			"storybook",
@@ -413,14 +468,15 @@ describe("the jobs of ci.yml", () => {
 		])
 	})
 
-	it("has verify pass on a merge_group when every job succeeded or was skipped by rule", () => {
-		expect(
-			failingVerifySteps(A_QUEUE_COMMIT, resultsByRule(A_QUEUE_COMMIT)),
-		).toEqual([])
-	})
+	it.each([A_PULL_REQUEST, A_QUEUE_COMMIT, A_PUSH_TO_MAIN, A_RELEASE_TAG])(
+		"has verify pass on %p when every job succeeded or was skipped by rule",
+		(github) => {
+			expect(failingVerifySteps(github, resultsByRule(github))).toEqual([])
+		},
+	)
 
 	it.each(
-		PULL_REQUEST_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
+		MERGE_GROUP_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
 			[job, "failure"],
 			[job, "skipped"],
 		]),
@@ -429,6 +485,26 @@ describe("the jobs of ci.yml", () => {
 
 		expect(failingVerifySteps(A_QUEUE_COMMIT, results)).not.toEqual([])
 	})
+
+	it.each(
+		PULL_REQUEST_JOB_SET.filter((job) => job !== "verify").flatMap((job) => [
+			[job, "failure"],
+			[job, "skipped"],
+		]),
+	)("has verify fail on a pull_request when %s ended %s", (job, result) => {
+		const results = { ...resultsByRule(A_PULL_REQUEST), [job]: result }
+
+		expect(failingVerifySteps(A_PULL_REQUEST, results)).not.toEqual([])
+	})
+
+	it.each(["rust", "storybook", "website"])(
+		"has verify fail on a pull_request when %s ran",
+		(job) => {
+			const results = { ...resultsByRule(A_PULL_REQUEST), [job]: "success" }
+
+			expect(failingVerifySteps(A_PULL_REQUEST, results)).not.toEqual([])
+		},
+	)
 
 	it("diffs a merge_group against its base_sha, fetched before the diff", () => {
 		const changes = workflow.jobs.changes
@@ -462,8 +538,12 @@ describe("the jobs of ci.yml", () => {
 		expect(workflow.jobs.verify?.needs).toEqual([
 			"changes",
 			"lint",
-			...PULL_REQUEST_JOBS,
-			...POST_MERGE_JOBS,
+			"rust-check",
+			"vitest",
+			"website",
+			"rust",
+			"storybook",
+			"ios",
 		])
 	})
 
