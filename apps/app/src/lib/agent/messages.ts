@@ -56,6 +56,10 @@ export function describeTransportError(
 			return t("screen.transport.unknownPermission", { id: error.id })
 		case "writeFailed":
 			return t("screen.transport.writeFailed", { detail: error.detail })
+		case "runLapsed":
+			return error.lapse === "silent"
+				? t("screen.transport.runLapsedSilent")
+				: t("screen.transport.runLapsedInterrupt")
 		case "readFailed":
 			return t("screen.transport.readFailed", { detail: error.detail })
 		case "unknownFailure":

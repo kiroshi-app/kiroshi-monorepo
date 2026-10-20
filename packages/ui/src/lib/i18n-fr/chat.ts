@@ -488,6 +488,10 @@ const chat = {
 			unknownPermission:
 				"Demande d’autorisation introuvable ({{id}}). Ignorez-la.",
 			writeFailed: "Impossible d’envoyer le message ({{detail}}). Réessayez.",
+			runLapsedSilent:
+				"L’agent ne répondait plus, sa réponse s’est arrêtée. Renvoyez votre message.",
+			runLapsedInterrupt:
+				"L’agent n’a pas répondu à l’arrêt, sa réponse s’est arrêtée. Renvoyez votre message.",
 			readFailed:
 				"Impossible de charger les messages précédents ({{detail}}). Réessayez.",
 			unknownFailure: "Une erreur est survenue ({{detail}}). Réessayez.",

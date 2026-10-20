@@ -139,6 +139,7 @@ const TRANSPORT_KINDS: Record<TransportError["kind"], true> = {
 	staleRuntimeSession: true,
 	unknownPermission: true,
 	writeFailed: true,
+	runLapsed: true,
 	readFailed: true,
 	unknownFailure: true,
 	hostOffline: true,

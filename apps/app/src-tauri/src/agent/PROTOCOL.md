@@ -640,15 +640,14 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
   run (`agent/lease.rs`). A run that hears nothing for `RUN_SILENCE_BOUND` (60 s), or
   whose `interrupt` gets no `result` within `INTERRUPT_ANSWER_BOUND` (15 s), ends as a
   provider error ends: its open reply settles `failed`, `turnEnded` with `failed`, the
-  run leaves `turn_runs`, the turn completes when no other run holds it, and the session
-  takes the next prompt. The log line names the lapse.
+  run leaves `turn_runs`, the turn completes when no other run holds it. A non fatal
+  `failed` with `runLapsed` follows, naming the lapse (`silent` or `interruptUnanswered`)
+  and its bound in `boundMs`.
 - The silence bound sleeps while a permission or a question waits on the person.
-- After an unanswered interrupt, the frames of that query up to its late `result` are
-  dropped; a `result` reaching a session with no running turn ends nothing.
-- The host's exit is the only thing that ends the process: close stdin →
-  `SIGTERM` → `SIGKILL`, on the whole group. The sidecar spawns real
-  grandchildren (the agent, its MCP servers), so the group kill is what keeps
-  orphans off the machine.
+- A lapse closes the sidecar session of the lapsed query and opens a new one under a new
+  key, resuming the same SDK session id. The host detaches the lapsed key first, so
+  every later frame of that query, its late `result` included, reaches no session, and
+  the next prompt never queues behind a query that may never answer.
 
 ## What is deliberately not forwarded
 

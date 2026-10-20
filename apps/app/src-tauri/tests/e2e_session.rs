@@ -14,7 +14,7 @@ use kiroshi_app::agent::contract::{
 	AgentEvent, CheckReport, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
 	ScopedEvent, TransportError, TurnOutcome,
 };
-use kiroshi_app::agent::lease::RunLease;
+use kiroshi_app::agent::lease::{Lapse, RunLease};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
@@ -356,6 +356,7 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 const BOT: &str = "default";
 const PROMPT: &str = "hello";
 const STREAMED: &str = "echo :: hello";
+const RESUMED: &str = "resumed fake-session-0001 :: hello";
 
 struct Stored {
 	app: AppOfItsOwn,
@@ -516,6 +517,18 @@ impl Stored {
 			.collect()
 	}
 
+	fn lapses(&self) -> Vec<Lapse> {
+		agent_events(&self.log.held())
+			.into_iter()
+			.filter_map(|event| match event {
+				AgentEvent::Failed { error: TransportError::RunLapsed { lapse, .. } } => {
+					Some(lapse)
+				}
+				_ => None,
+			})
+			.collect()
+	}
+
 	fn reply_of(&self, turn_id: &str) -> Option<StoredMessage> {
 		self.replies().into_iter().find(|reply| reply.turn_id == turn_id)
 	}
@@ -533,30 +546,9 @@ fn outlast_the_lease() {
 }
 
 #[test]
-fn a_sidecar_gone_silent_mid_reply_fails_its_run_once_and_the_next_prompt_starts_a_turn() {
+fn a_query_that_never_answers_loses_its_lease_and_the_next_prompt_still_gets_a_whole_reply() {
 	let _serial = serial();
-	let stored = launch_leased("lease-silent", "stalled_reply");
-	stored.start();
-
-	stored.submit("t1", "p1");
-	stored.completed("t1");
-	outlast_the_lease();
-
-	let reply = stored.only_reply();
-	assert_eq!(reply.content, STREAMED);
-	assert_eq!(reply.state, MessageState::Failed);
-	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed]);
-
-	stored.submit("t2", "p2");
-	let next = stored.wait_for("the next turn to stream", |stored| stored.reply_of("t2"));
-	assert_eq!(next.content, STREAMED);
-	stored.close();
-}
-
-#[test]
-fn an_interrupt_left_unanswered_fails_its_run_and_its_late_answer_changes_nothing() {
-	let _serial = serial();
-	let stored = launch_leased("lease-deaf", "deaf_interrupt");
+	let stored = launch_leased("lease-hung", "hung_query");
 	stored.start();
 
 	stored.submit("t1", "p1");
@@ -573,9 +565,43 @@ fn an_interrupt_left_unanswered_fails_its_run_and_its_late_answer_changes_nothin
 	assert_eq!(stored.completed_at("t1"), Some(failed_at));
 	assert_eq!(stored.reply_of("t1"), Some(failed));
 	let answered = stored.reply_of("t2").expect("the next turn replied");
-	assert_eq!(answered.content, STREAMED);
+	assert_eq!(answered.content, RESUMED);
 	assert_eq!(answered.state, MessageState::Complete);
 	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
+	assert_eq!(stored.lapses(), vec![Lapse::InterruptUnanswered]);
+	stored.close();
+}
+
+#[test]
+fn a_sidecar_silent_past_its_lease_then_replaying_its_query_changes_neither_turn() {
+	let _serial = serial();
+	let stored = launch_leased("lease-silent", "silent_replay");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	let failed_at = stored.completed("t1");
+	let failed = stored.only_reply();
+	assert_eq!(failed.content, STREAMED);
+	assert_eq!(failed.state, MessageState::Failed);
+	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+	outlast_the_lease();
+
+	assert_eq!(stored.completed_at("t1"), Some(failed_at));
+	assert_eq!(stored.reply_of("t1"), Some(failed));
+	let replies: Vec<_> =
+		stored.replies().into_iter().filter(|reply| reply.turn_id == "t2").collect();
+	assert_eq!(replies.len(), 1, "the replayed query wrote into the next turn: {replies:#?}");
+	assert_eq!(replies[0].content, RESUMED);
+	assert_eq!(replies[0].state, MessageState::Complete);
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
+	assert!(
+		permission_request(&agent_events(&stored.log.held())).is_none(),
+		"the replayed permission reached the front"
+	);
+	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
 	stored.close();
 }
 

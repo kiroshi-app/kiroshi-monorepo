@@ -1,6 +1,7 @@
 use std::fmt;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
@@ -21,7 +22,17 @@ impl Default for RunLease {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl RunLease {
+	pub(crate) fn bound_of(&self, lapse: Lapse) -> Duration {
+		match lapse {
+			Lapse::Silent => self.silence,
+			Lapse::InterruptUnanswered => self.interrupt_answer,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub enum Lapse {
 	Silent,
 	InterruptUnanswered,
@@ -70,15 +81,6 @@ impl Liveness {
 		let silent = (!waiting_on_person).then(|| (self.heard_at + lease.silence, Lapse::Silent));
 		unanswered.into_iter().chain(silent).min_by_key(|(at, _)| *at)
 	}
-
-	pub(crate) fn lapse_due(
-		&self,
-		lease: RunLease,
-		waiting_on_person: bool,
-		now: Instant,
-	) -> Option<Lapse> {
-		self.deadline(lease, waiting_on_person).filter(|(at, _)| *at <= now).map(|(_, lapse)| lapse)
-	}
 }
 
 #[cfg(test)]
@@ -99,8 +101,7 @@ mod tests {
 
 		liveness.heard(after(start, 50));
 
-		assert_eq!(liveness.lapse_due(LEASE, false, after(start, 100)), None);
-		assert_eq!(liveness.lapse_due(LEASE, false, after(start, 110)), Some(Lapse::Silent));
+		assert_eq!(liveness.deadline(LEASE, false), Some((after(start, 110), Lapse::Silent)));
 	}
 
 	#[test]
@@ -111,10 +112,9 @@ mod tests {
 		liveness.interrupted(after(start, 5));
 		liveness.heard(after(start, 19));
 
-		assert_eq!(liveness.lapse_due(LEASE, false, after(start, 19)), None);
 		assert_eq!(
-			liveness.lapse_due(LEASE, false, after(start, 20)),
-			Some(Lapse::InterruptUnanswered)
+			liveness.deadline(LEASE, false),
+			Some((after(start, 20), Lapse::InterruptUnanswered))
 		);
 	}
 
@@ -127,8 +127,8 @@ mod tests {
 
 		liveness.interrupted(after(start, 600));
 		assert_eq!(
-			liveness.lapse_due(LEASE, true, after(start, 615)),
-			Some(Lapse::InterruptUnanswered)
+			liveness.deadline(LEASE, true),
+			Some((after(start, 615), Lapse::InterruptUnanswered))
 		);
 	}
 
@@ -141,8 +141,14 @@ mod tests {
 		liveness.interrupted(after(start, 10));
 
 		assert_eq!(
-			liveness.lapse_due(LEASE, false, after(start, 15)),
-			Some(Lapse::InterruptUnanswered)
+			liveness.deadline(LEASE, false),
+			Some((after(start, 15), Lapse::InterruptUnanswered))
 		);
+	}
+
+	#[test]
+	fn each_lapse_is_bounded_by_its_own_bound() {
+		assert_eq!(LEASE.bound_of(Lapse::Silent), Duration::from_secs(60));
+		assert_eq!(LEASE.bound_of(Lapse::InterruptUnanswered), Duration::from_secs(15));
 	}
 }

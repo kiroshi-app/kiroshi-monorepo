@@ -61,6 +61,7 @@ const SESSION_ENDING: Record<TransportError["kind"], boolean> = {
 	staleRuntimeSession: false,
 	unknownPermission: false,
 	writeFailed: false,
+	runLapsed: false,
 	readFailed: false,
 	unknownFailure: false,
 	hostOffline: false,

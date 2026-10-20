@@ -144,7 +144,7 @@ struct Run {
 	cwd: String,
 	announced: bool,
 	pending_permission: Option<String>,
-	owes_interrupt_answer: bool,
+	hung: bool,
 }
 
 impl Run {
@@ -184,7 +184,7 @@ impl Run {
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
 			pending_permission: None,
-			owes_interrupt_answer: false,
+			hung: false,
 			settings,
 		}
 	}
@@ -405,14 +405,20 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 		"stalled_reply" => {
 			emit_text_stream(key, &format!("echo :: {text}"));
 		}
-		"deaf_interrupt" if run.owes_interrupt_answer => {
-			run.owes_interrupt_answer = false;
-			emit_result(key, run, "error_during_execution", false);
-			emit_text_turn(key, run, &format!("echo :: {text}"));
-			emit_result(key, run, "success", false);
-		}
-		"deaf_interrupt" => {
+		"hung_query" | "silent_replay" if run.hung => {}
+		"hung_query" | "silent_replay" if !run.resumed => {
+			run.hung = true;
 			emit_text_stream(key, &format!("echo :: {text}"));
+			if run.scenario == "silent_replay" {
+				*held_replay() = Some(key.to_owned());
+			}
+		}
+		"silent_replay" => {
+			if let Some(lapsed) = held_replay().take() {
+				replay_lapsed_query(&lapsed, run);
+			}
+			emit_text_turn(key, run, &format!("resumed {} :: {text}", run.session_id));
+			emit_result(key, run, "success", false);
 		}
 		"crash_mid_reply" => {
 			emit_text_stream(key, &format!("echo :: {text}"));
@@ -571,10 +577,31 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 	}
 }
 
-fn on_interrupt(key: &str, runs: &mut HashMap<String, Run>) {
-	let Some(run) = runs.get_mut(key) else { return };
-	if run.scenario == "deaf_interrupt" {
-		run.owes_interrupt_answer = true;
+fn held_replay() -> std::sync::MutexGuard<'static, Option<String>> {
+	static LAPSED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+	LAPSED.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn replay_lapsed_query(lapsed: &str, run: &Run) {
+	emit_text_turn(lapsed, run, "replayed after the lapse");
+	emit(
+		lapsed,
+		json!({
+			"type": "control_request",
+			"request_id": "perm_fake_replayed",
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": "Write",
+				"input": { "file_path": "/fake/replayed.txt", "content": "late" }
+			}
+		}),
+	);
+	emit_result(lapsed, run, "success", false);
+}
+
+fn on_interrupt(key: &str, runs: &HashMap<String, Run>) {
+	let Some(run) = runs.get(key) else { return };
+	if run.hung {
 		return;
 	}
 	emit_result(key, run, "error_during_execution", false);
@@ -653,7 +680,7 @@ fn serve() {
 		match command["type"].as_str() {
 			Some("open") => on_open(&key, &mut runs, &command),
 			Some("prompt") => on_prompt(&key, &mut runs, command["text"].as_str().unwrap_or("")),
-			Some("interrupt") => on_interrupt(&key, &mut runs),
+			Some("interrupt") => on_interrupt(&key, &runs),
 			Some("permission") => on_permission(&key, &mut runs, &command),
 			Some("close") => {
 				runs.remove(&key);
