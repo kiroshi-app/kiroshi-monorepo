@@ -55,7 +55,7 @@ const NOT_OWNER: HostingState = {
 	detail: "relay answered 403",
 }
 
-const COULDNT_HOST_HOME: NoticeMessage = {
+const UNKNOWN_FAILURE_OF_HOME: NoticeMessage = {
 	title: "Couldn’t host Home",
 	description: "Check your connection and turn it on again.",
 }
@@ -298,7 +298,7 @@ describe("useHosting notices", () => {
 		expect(result.current?.hosting).toBe("off")
 		expect(reportFailure).not.toHaveBeenCalled()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
-			...COULDNT_HOST_HOME,
+			...UNKNOWN_FAILURE_OF_HOME,
 			report: expect.objectContaining({
 				context: expect.objectContaining({ raisedIn: "use-hosting" }),
 			}),
@@ -335,7 +335,7 @@ describe("useHosting notices", () => {
 
 		expect(result.current).toBeUndefined()
 		expect(raiseFailureNotice).toHaveBeenCalledExactlyOnceWith({
-			...COULDNT_HOST_HOME,
+			...UNKNOWN_FAILURE_OF_HOME,
 			report: expect.objectContaining({
 				context: expect.objectContaining({ raisedIn: "use-hosting" }),
 			}),
