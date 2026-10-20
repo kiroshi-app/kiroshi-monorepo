@@ -151,9 +151,10 @@ export const isListNotReadBack = (reason: unknown): boolean => {
 	)
 }
 
-type InviteFailure = Extract<MembersFailure, { action: "invite" }>
-
-type InviteFailureCause = Pick<InviteFailure, "reason" | "status" | "code">
+type InviteFailureCause = Pick<
+	Extract<MembersFailure, { action: "invite" }>,
+	"reason" | "status" | "code"
+>
 
 const unreachableCauseOf = (
 	reason: UnreachableReason | undefined,
