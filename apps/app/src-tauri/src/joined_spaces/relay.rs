@@ -397,15 +397,33 @@ async fn memberships_followed<R: Runtime>(
 	let Some(unlisted) = unlisted else {
 		return Ok(());
 	};
+	let departed = departures_read(app, guests.cloud(), &unlisted).await;
+	let _turn = guests.turn.lock().await;
+	departed_evicted(app, guests, &unlisted.bearer, departed).await
+}
+
+async fn departures_read<'a, R: Runtime>(
+	app: &AppHandle<R>,
+	cloud: &Cloud,
+	unlisted: &'a Unlisted,
+) -> Vec<(&'a str, JoinedSpaceRemovalReason)> {
 	let mut departed = Vec::new();
 	for (id, instance_id) in &unlisted.held {
 		departed.push((
-			id,
-			unlisted_reason(app, guests.cloud(), &unlisted.bearer, id, instance_id).await,
+			id.as_str(),
+			unlisted_reason(app, cloud, &unlisted.bearer, id, instance_id).await,
 		));
 	}
-	let _turn = guests.turn.lock().await;
-	let is_same_account = session_bearer(app)?.as_deref() == Some(unlisted.bearer.as_str());
+	departed
+}
+
+async fn departed_evicted<R: Runtime>(
+	app: &AppHandle<R>,
+	guests: &RelayGuests,
+	bearer: &str,
+	departed: Vec<(&str, JoinedSpaceRemovalReason)>,
+) -> Result<(), String> {
+	let is_same_account = session_bearer(app)?.as_deref() == Some(bearer);
 	for (id, reason) in departed {
 		let is_still_unlisted = guests.unlisted().remove(id);
 		if is_same_account && is_still_unlisted {
