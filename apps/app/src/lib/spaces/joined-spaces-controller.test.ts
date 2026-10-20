@@ -4,6 +4,7 @@ import {
 	raiseFailureNotice,
 	raiseTransientNotice,
 } from "@workspace/ui/components/notice-surface"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	createJoinedSpacesController,
@@ -22,6 +23,7 @@ import type {
 	JoinedSpaceMember,
 	JoinedSpaceRemovalReason,
 	JoinedSpaceRemoved,
+	JoinedSpaceWaitReason,
 } from "../bindings"
 import { createStore } from "../store"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -649,6 +651,43 @@ describe("a joined space turning to wait for its host", () => {
 			HOST_OFFLINE_NOTICE,
 		)
 	})
+
+	it.each([
+		"relayUnreachable",
+		"rekeySendFailed",
+		"hostSilent",
+		"socketClosed",
+		"rekeyNotVerified",
+		"notMember",
+		"unknownInstance",
+		"deviceKeysUnreadable",
+		"deviceAwaitingApproval",
+		"socketUrlFailed",
+		"rosterMissing",
+		"keychainReadFailed",
+	] satisfies JoinedSpaceWaitReason[])(
+		"describes the host offline notice with the %s wait copy, never its detail",
+		async (reason) => {
+			const gear = await withStudio()
+
+			gear.wire.hold([
+				{ ...WAITING_STUDIO, wait: { reason, detail: "relay said 502" } },
+			])
+			gear.wire.announce()
+			await settle()
+
+			const description = i18n.t(
+				`chat:spaceAccessBanner.offline.reasons.${reason}`,
+				{ space: "Studio Nord", host: "Lea" },
+			)
+			expect(gear.reportHostOffline).toHaveBeenCalledExactlyOnceWith({
+				title: HOST_OFFLINE_NOTICE.title,
+				description,
+			})
+			expect(description).not.toBe(HOST_OFFLINE_NOTICE.description)
+			expect(description).not.toContain("relay said 502")
+		},
+	)
 
 	it("raises nothing for a space already waiting", async () => {
 		const gear = await gearFor([WAITING_STUDIO])

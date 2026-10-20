@@ -152,6 +152,7 @@ import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
 import type { DepartureReason } from "@/lib/spaces/joined-spaces-controller"
 import {
+	type HostWait,
 	type OpenJoinedHost,
 	OpenJoinedHostContext,
 } from "@/lib/spaces/open-joined-host"
@@ -2810,6 +2811,109 @@ describe("ThreadScreen", () => {
 			expect(accessBanner()).toBeNull()
 			expect(screen.getByRole("textbox")).toBeTruthy()
 			expect(document.querySelector('[data-slot="toast"]')).toBeNull()
+		})
+	})
+
+	const STUDIO_HOST: OpenJoinedHost = {
+		spaceName: "Studio Nord",
+		hostName: "Lea",
+		isOnline: false,
+		isDown: true,
+	}
+
+	describe("on a joined Space waiting for its host", () => {
+		const renderWaiting = async (hostWait: HostWait) => {
+			render(
+				createElement(
+					OpenJoinedHostContext.Provider,
+					{ value: { ...STUDIO_HOST, hostWait } },
+					screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })),
+				),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
+		}
+
+		const offlineBanner = () =>
+			document.querySelector<HTMLElement>(
+				'[data-slot="space-access-banner"][data-reason="offline"]',
+			)
+
+		it("keeps the transcript and the composer, and shows the offline banner naming why", async () => {
+			await renderWaiting({ reason: "hostSilent" })
+
+			expect(screen.getByText("held")).toBeTruthy()
+			expect(
+				within(offlineBanner() as HTMLElement).getByText(
+					"You can read what’s here. Lea hasn’t answered yet, ask them to open Kiroshi on their computer.",
+				),
+			).toBeTruthy()
+			expect(document.querySelector('[data-slot="prompt-input"]')).toBeTruthy()
+		})
+
+		it("keeps the generic offline body when the wait names no reason", async () => {
+			await renderWaiting({})
+
+			expect(
+				within(offlineBanner() as HTMLElement).getByText(
+					"You can read what’s here. You can send again once Kiroshi is open on Lea’s computer.",
+				),
+			).toBeTruthy()
+		})
+	})
+
+	describe("the pending slot on a joined Space", () => {
+		const PERMISSION_ASKED: AgentEvent[] = [
+			{
+				type: "permissionRequested",
+				request: {
+					id: "perm-1",
+					toolName: "Bash",
+					title: "Run the walls check",
+					detail: null,
+				},
+			},
+		]
+
+		const askPermissionUnder = async (host: OpenJoinedHost) => {
+			const room = await roomOf({ names: ["Ada"] })
+			render(
+				createElement(
+					OpenJoinedHostContext.Provider,
+					{ value: host },
+					screenOf(room.thread),
+				),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
+			await room.send("@Ada now")
+			act(() => {
+				room.driver.pushTo(room.idOf("Ada"), FIRST_TOKEN)
+				room.driver.pushTo(room.idOf("Ada"), PERMISSION_ASKED)
+			})
+			await settle()
+		}
+
+		const isApprovalAsked = () =>
+			screen.queryAllByText("Run the walls check").length > 0
+
+		it("keeps the approval asked while the host is awaited", async () => {
+			await askPermissionUnder({
+				...STUDIO_HOST,
+				hostWait: { reason: "hostSilent" },
+			})
+
+			expect(isApprovalAsked()).toBe(true)
+			expect(
+				document.querySelector('[data-slot="space-access-banner"]'),
+			).toBeTruthy()
+		})
+
+		it("drops the approval once the Space departed", async () => {
+			await askPermissionUnder({ ...STUDIO_HOST, departure: "removed" })
+
+			expect(isApprovalAsked()).toBe(false)
+			expect(document.querySelector('[data-slot="prompt-input"]')).toBeNull()
 		})
 	})
 })

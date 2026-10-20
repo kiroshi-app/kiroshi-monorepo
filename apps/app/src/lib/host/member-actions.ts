@@ -13,7 +13,7 @@ import type {
 	MembersTransport,
 } from "./members-transport"
 
-import type { Member, MembersError } from "../bindings"
+import type { Member, MembersError, UnreachableReason } from "../bindings"
 
 export type MemberAction =
 	| { action: "invite"; spaceId: string; email: string }
@@ -144,15 +144,46 @@ export const membersAfter = async (
 const membersErrorOf = (reason: unknown): MembersError | undefined =>
 	reason instanceof Error ? undefined : (reason as MembersError)
 
+export const isListNotReadBack = (reason: unknown): boolean => {
+	const error = membersErrorOf(reason)
+	return (
+		error?.kind === "unreachable" && error.reason?.kind === "listNotReadBack"
+	)
+}
+
+type InviteFailureCause = Pick<
+	Extract<MembersFailure, { action: "invite" }>,
+	"reason" | "status" | "code"
+>
+
+const unreachableCauseOf = (
+	reason: UnreachableReason | undefined,
+): InviteFailureCause => {
+	if (!reason) return { reason: "unreachable" }
+	switch (reason.kind) {
+		case "transport":
+			return { reason: reason.failure }
+		case "relayStatus":
+			return { reason: "relayStatus", status: reason.status }
+		case "relayConflict":
+			return { reason: "relayConflict", code: reason.code }
+		default:
+			return { reason: reason.kind }
+	}
+}
+
+const inviteFailureCauseOf = (
+	error: MembersError | undefined,
+): InviteFailureCause =>
+	error?.kind === "unreachable"
+		? unreachableCauseOf(error.reason)
+		: { reason: reasonOf(INVITE_REASONS, error) }
+
 const inviteFailureOf = (
 	email: string,
 	error: MembersError | undefined,
 ): MemberActionRefusal => ({
-	failure: {
-		action: "invite",
-		reason: reasonOf(INVITE_REASONS, error),
-		email,
-	},
+	failure: { action: "invite", ...inviteFailureCauseOf(error), email },
 })
 
 const INVITE_AGAIN_OUTCOMES: Partial<

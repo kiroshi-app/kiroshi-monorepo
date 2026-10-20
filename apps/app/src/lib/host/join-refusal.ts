@@ -1,7 +1,7 @@
 import type { NoticeMessage } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import type { JoinedSpaceError } from "../bindings"
+import type { JoinedSpaceError, JoinedSpaceWaitReason } from "../bindings"
 
 const NOTICE_KEYS = {
 	hostOffline: "hostOffline",
@@ -47,9 +47,23 @@ const noticeOf = (key: NoticeKey): NoticeMessage => ({
 	description: i18n.t(`chat:screen.notice.${key}.description`),
 })
 
-export const joinRefusalNoticeOf = ({
-	kind,
-}: JoinedSpaceError): NoticeMessage => noticeOf(NOTICE_KEYS[kind])
+const waitingForHostNoticeOf = (
+	reason: JoinedSpaceWaitReason | undefined,
+): NoticeMessage => {
+	const notice = noticeOf(NOTICE_KEYS.waitingForHost)
+	if (!reason) return notice
+	return {
+		...notice,
+		description: i18n.t(
+			`chat:screen.notice.joinRefused.waitingForHost.reasons.${reason}`,
+		),
+	}
+}
+
+export const joinRefusalNoticeOf = (error: JoinedSpaceError): NoticeMessage =>
+	error.kind === "waitingForHost"
+		? waitingForHostNoticeOf(error.reason)
+		: noticeOf(NOTICE_KEYS[error.kind])
 
 export const unexpectedJoinNotice = (): NoticeMessage =>
 	noticeOf("joinRefused.unexpected")

@@ -21,6 +21,7 @@ import { fingerprintIn, hostFirst, joinedMembersOf } from "./joined-members"
 import {
 	type InviteAgainRefusal,
 	inviteAgainFailureOf,
+	isListNotReadBack,
 	type MemberAction,
 	type MemberActionRefusal,
 	membersAfter,
@@ -184,6 +185,12 @@ export const useMembers = (
 				reportSentTo(run.member.email)
 			}
 			if (run.action === "withdraw") reportSuccess(withdrawnNotice(run.member))
+		},
+		onError: (error, run) => {
+			if (!isListNotReadBack(error)) return
+			void queryClient.invalidateQueries({
+				queryKey: hostQueryKeys.membersOf(run.spaceId),
+			})
 		},
 		meta: { rendersErrorInline: true },
 	})

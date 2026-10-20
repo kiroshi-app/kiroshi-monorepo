@@ -8,7 +8,7 @@ import {
 	raiseFailureNotice,
 } from "@workspace/ui/components/notice-surface"
 import type { SpaceMember } from "@workspace/ui/components/space-settings-dialog/members-panel"
-import "@workspace/ui/lib/i18n"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import { listen } from "./index"
 import { toSpaceMember } from "./member-actions"
@@ -266,10 +266,10 @@ describe("useMembers", () => {
 		[
 			{
 				kind: "unreachable",
-				reason: { kind: "relayStatus", status: 503 },
+				reason: { kind: "transport", failure: "offline" },
 				detail: "relay down",
 			},
-			"unreachable",
+			"offline",
 		],
 		[{ kind: "limitReached" }, "limitReached"],
 		[{ kind: "unknownMember" }, "generic"],
@@ -295,6 +295,133 @@ describe("useMembers", () => {
 			expect(reportSuccess).not.toHaveBeenCalled()
 		},
 	)
+
+	it.each([
+		[{ kind: "transport", failure: "offline" }, { reason: "offline" }],
+		[{ kind: "transport", failure: "timedOut" }, { reason: "timedOut" }],
+		[{ kind: "transport", failure: "unsent" }, { reason: "unsent" }],
+		[
+			{ kind: "relayStatus", status: 503 },
+			{ reason: "relayStatus", status: 503 },
+		],
+		[
+			{ kind: "relayConflict", code: "member_exists" },
+			{ reason: "relayConflict", code: "member_exists" },
+		],
+		[{ kind: "unreadableConflict" }, { reason: "unreadableConflict" }],
+		[{ kind: "unreadableList" }, { reason: "unreadableList" }],
+		[
+			{
+				kind: "listNotReadBack",
+				cause: { kind: "transport", failure: "timedOut" },
+			},
+			{ reason: "listNotReadBack" },
+		],
+	] as const)(
+		"holds the unreachable invite failure for %o under its own copy key, without a notice",
+		async (unreachableReason, cause) => {
+			const { panel } = await watchHome({
+				invite: vi.fn(async () =>
+					refused({
+						kind: "unreachable",
+						reason: unreachableReason,
+						detail: "relay down",
+					}),
+				),
+			})
+
+			act(() => panel().onInvite("sam@example.com"))
+			await settle()
+
+			expect(panel().failure).toEqual({
+				action: "invite",
+				email: "sam@example.com",
+				...cause,
+			})
+			expect(
+				i18n.exists(`settings:space.members.failure.invite.${cause.reason}`),
+			).toBe(true)
+			expect(raiseFailureNotice).not.toHaveBeenCalled()
+		},
+	)
+
+	it("holds the unreachable invite failure when the error carries no reason", async () => {
+		const { panel } = await watchHome({
+			invite: vi.fn(async () =>
+				refused({ kind: "unreachable", detail: "relay down" } as MembersError),
+			),
+		})
+
+		act(() => panel().onInvite("sam@example.com"))
+		await settle()
+
+		expect(panel().failure).toEqual({
+			action: "invite",
+			reason: "unreachable",
+			email: "sam@example.com",
+		})
+	})
+
+	it("reads the member list again when the invite was sent but the list was not read back", async () => {
+		const { panel, transport } = await watchHome({
+			invite: vi.fn(async () =>
+				refused({
+					kind: "unreachable",
+					reason: {
+						kind: "listNotReadBack",
+						cause: { kind: "unreadableList" },
+					},
+					detail: "list unreadable",
+				}),
+			),
+		})
+		vi.mocked(transport.list).mockClear()
+
+		act(() => panel().onInvite("sam@example.com"))
+		await settle()
+
+		expect(transport.list).toHaveBeenCalledExactlyOnceWith("home")
+	})
+
+	it("does not read the member list again for any other unreachable invite", async () => {
+		const { panel, transport } = await watchHome({
+			invite: vi.fn(async () =>
+				refused({
+					kind: "unreachable",
+					reason: { kind: "unreadableList" },
+					detail: "list unreadable",
+				}),
+			),
+		})
+		vi.mocked(transport.list).mockClear()
+
+		act(() => panel().onInvite("sam@example.com"))
+		await settle()
+
+		expect(transport.list).not.toHaveBeenCalled()
+	})
+
+	it("holds the transport reason of the expired email when the resend is unreachable", async () => {
+		const { panel } = await watchHome({
+			list: vi.fn(async () => ok([STEVE, BOB_EXPIRED])),
+			resend: vi.fn(async () =>
+				refused({
+					kind: "unreachable",
+					reason: { kind: "transport", failure: "timedOut" },
+					detail: "timed out",
+				}),
+			),
+		})
+
+		act(() => panel().onInvite("bob@example.com"))
+		await settle()
+
+		expect(panel().failure).toEqual({
+			action: "invite",
+			reason: "timedOut",
+			email: "bob@example.com",
+		})
+	})
 
 	it("holds a generic invite failure when the invite is rejected", async () => {
 		const { panel } = await watchHome({
@@ -353,7 +480,8 @@ describe("useMembers", () => {
 		expect(panel().refusal).toBeUndefined()
 		expect(panel().failure).toEqual({
 			action: "invite",
-			reason: "unreachable",
+			reason: "relayStatus",
+			status: 503,
 			email: "sam@example.com",
 		})
 	})
@@ -1266,10 +1394,10 @@ describe("useMembers on the invitations of a hosted space", () => {
 		[
 			{
 				kind: "unreachable",
-				reason: { kind: "relayStatus", status: 503 },
+				reason: { kind: "transport", failure: "offline" },
 				detail: "relay down",
 			},
-			"unreachable",
+			"offline",
 		],
 		[{ kind: "limitReached" }, "limitReached"],
 		[{ kind: "unknownInvitation" }, "generic"],
