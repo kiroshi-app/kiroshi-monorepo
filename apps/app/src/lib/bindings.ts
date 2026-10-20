@@ -1043,7 +1043,7 @@ export type MembersChanged = {
 	invitations: SpaceInvitation[],
 };
 
-export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "notNeedingInvitation" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError } | { kind: "removedButNotInvited"; cause: MembersError } | { kind: "invitedButNotListed"; cause: MembersError };
+export type MembersError = { kind: "notHosting" } | { kind: "notAnEmail" } | { kind: "ownAccount" } | { kind: "alreadyInvited" } | { kind: "limitReached" } | { kind: "unknownMember" } | { kind: "unknownInvitation" } | { kind: "notPending" } | { kind: "notJoined" } | { kind: "notNeedingInvitation" } | { kind: "hostNotRemovable" } | { kind: "notOwner" } | { kind: "needsSignIn" } | { kind: "unknownDevice" } | { kind: "hostDeviceNotRemovable" } | { kind: "keyNotRotated"; reason: string } | { kind: "deviceKeys"; error: DeviceKeysError } | { kind: "unreachable"; reason: UnreachableReason; detail: string } | { kind: "sessionStore"; detail: string } | { kind: "space"; error: SpaceError } | { kind: "removedButNotInvited"; cause: MembersError } | { kind: "invitedButNotListed"; cause: MembersError };
 
 export type MessageCompletion = "streaming" | "complete" | "cancelled" | "failed";
 
@@ -1655,6 +1655,8 @@ export type TranscriptWindow = {
 
 export type TransportError = { kind: "binaryNotFound"; searched: string[] } | { kind: "notAuthenticated" } | { kind: "authCheckFailed"; detail: string } | { kind: "spawnFailed"; detail: string } | { kind: "startupTimeout"; timeoutMs: number } | { kind: "crashed"; code: number | null; detail: string | null } | { kind: "resumeFailed"; forgotSessionId: boolean } | { kind: "invalidFrame"; detail: string } | { kind: "settingsRejected"; detail: string } | { kind: "serverEnvRejected"; detail: string } | { kind: "notStarted" } | { kind: "turnAlreadyRunning" } | { kind: "transitionInProgress" } | { kind: "noActiveTurn" } | { kind: "staleRuntimeSession"; runtimeSessionId: string } | { kind: "unknownPermission"; id: string } | { kind: "writeFailed"; detail: string };
 
+export type TransportFailure = "offline" | "timedOut" | "unsent";
+
 export type TriggerDecision = { kind: "started"; runId: string } | { kind: "skipped"; runId: string; reason: SkipReason } | { kind: "refused"; by: Refusal };
 
 export type TriggerEvent = TriggerEvent_Serialize | TriggerEvent_Deserialize;
@@ -1710,6 +1712,8 @@ export type TurnEnded_Serialize = {
 export type TurnOutcome = "completed" | "cancelled" | "failed";
 
 export type TurnState = "idle" | "submitting" | "running" | "stopping" | "failed";
+
+export type UnreachableReason = { kind: "transport"; failure: TransportFailure } | { kind: "relayStatus"; status: number } | { kind: "relayConflict"; code: string } | { kind: "unreadableConflict" } | { kind: "unreadableList" } | { kind: "listNotReadBack"; cause: UnreachableReason };
 
 export type UpdateChannel = "stable" | "beta";
 

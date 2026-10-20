@@ -3604,16 +3604,20 @@
         },
         {
           "properties": {
+            "detail": {
+              "type": "string"
+            },
             "kind": {
               "const": "unreachable"
             },
             "reason": {
-              "type": "string"
+              "$ref": "#/$defs/UnreachableReason"
             }
           },
           "required": [
             "kind",
-            "reason"
+            "reason",
+            "detail"
           ],
           "type": "object"
         },
@@ -8012,6 +8016,13 @@
         }
       ]
     },
+    "TransportFailure": {
+      "enum": [
+        "offline",
+        "timedOut",
+        "unsent"
+      ]
+    },
     "TriggerDecision": {
       "anyOf": [
         {
@@ -8167,6 +8178,93 @@
         "running",
         "stopping",
         "failed"
+      ]
+    },
+    "UnreachableReason": {
+      "anyOf": [
+        {
+          "properties": {
+            "failure": {
+              "$ref": "#/$defs/TransportFailure"
+            },
+            "kind": {
+              "const": "transport"
+            }
+          },
+          "required": [
+            "kind",
+            "failure"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "relayStatus"
+            },
+            "status": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "relayConflict"
+            }
+          },
+          "required": [
+            "kind",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unreadableConflict"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "unreadableList"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/UnreachableReason"
+            },
+            "kind": {
+              "const": "listNotReadBack"
+            }
+          },
+          "required": [
+            "kind",
+            "cause"
+          ],
+          "type": "object"
+        }
       ]
     }
   },

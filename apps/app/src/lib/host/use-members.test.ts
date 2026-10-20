@@ -263,7 +263,14 @@ describe("useMembers", () => {
 		[{ kind: "notHosting" }, "notHosting"],
 		[{ kind: "notOwner" }, "notOwner"],
 		[{ kind: "needsSignIn" }, "needsSignIn"],
-		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+		[
+			{
+				kind: "unreachable",
+				reason: { kind: "relayStatus", status: 503 },
+				detail: "relay down",
+			},
+			"unreachable",
+		],
 		[{ kind: "limitReached" }, "limitReached"],
 		[{ kind: "unknownMember" }, "generic"],
 		[{ kind: "sessionStore", detail: "locked" }, "generic"],
@@ -328,7 +335,11 @@ describe("useMembers", () => {
 			.fn<MembersTransport["invite"]>()
 			.mockResolvedValueOnce(refused({ kind: "alreadyInvited" }))
 			.mockResolvedValueOnce(
-				refused({ kind: "unreachable", reason: "relay down" }),
+				refused({
+					kind: "unreachable",
+					reason: { kind: "relayStatus", status: 503 },
+					detail: "relay down",
+				}),
 			)
 		const { panel } = await watchHome({ invite })
 
@@ -362,7 +373,11 @@ describe("useMembers", () => {
 	it("raises a failure notice when the read fails", async () => {
 		const { panel } = await watchHome({
 			list: vi.fn(async () =>
-				refused({ kind: "unreachable", reason: "relay down" }),
+				refused({
+					kind: "unreachable",
+					reason: { kind: "relayStatus", status: 503 },
+					detail: "relay down",
+				}),
 			),
 		})
 
@@ -396,7 +411,14 @@ describe("useMembers", () => {
 		[{ kind: "notHosting" }, "notHosting"],
 		[{ kind: "notOwner" }, "notOwner"],
 		[{ kind: "needsSignIn" }, "needsSignIn"],
-		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+		[
+			{
+				kind: "unreachable",
+				reason: { kind: "relayStatus", status: 503 },
+				detail: "relay down",
+			},
+			"unreachable",
+		],
 		[{ kind: "notJoined" }, "generic"],
 	] as const)(
 		"keeps the list and holds the withdraw failure for %o as %s, without a notice",
@@ -458,7 +480,14 @@ describe("useMembers", () => {
 		[{ kind: "notHosting" }, "notHosting"],
 		[{ kind: "notOwner" }, "notOwner"],
 		[{ kind: "needsSignIn" }, "needsSignIn"],
-		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+		[
+			{
+				kind: "unreachable",
+				reason: { kind: "relayStatus", status: 503 },
+				detail: "relay down",
+			},
+			"unreachable",
+		],
 		[{ kind: "notPending" }, "generic"],
 	] as const)(
 		"keeps the list and holds the remove failure for %o as %s, without a notice",
@@ -567,7 +596,11 @@ describe("useMembers", () => {
 	it("stops waiting on the members once their read fails", async () => {
 		const { panel } = await watchHome({
 			list: vi.fn(async () =>
-				refused({ kind: "unreachable", reason: "relay down" }),
+				refused({
+					kind: "unreachable",
+					reason: { kind: "relayStatus", status: 503 },
+					detail: "relay down",
+				}),
 			),
 		})
 
@@ -774,7 +807,11 @@ describe("useMembers on a joined space", () => {
 		const { panel, transport } = watchStudio(
 			{
 				list: vi.fn(async () =>
-					refused({ kind: "unreachable", reason: "down" }),
+					refused({
+						kind: "unreachable",
+						reason: { kind: "relayStatus", status: 503 },
+						detail: "down",
+					}),
 				),
 			},
 			{ isHostOffline: true },
@@ -1125,7 +1162,11 @@ describe("useMembers on the invitations of a hosted space", () => {
 			inviteAgain: vi.fn(async () =>
 				refused({
 					kind: "invitedButNotListed",
-					cause: { kind: "unreachable", reason: "down" },
+					cause: {
+						kind: "unreachable",
+						reason: { kind: "relayStatus", status: 503 },
+						detail: "down",
+					},
 				}),
 			),
 		})
@@ -1146,7 +1187,11 @@ describe("useMembers on the invitations of a hosted space", () => {
 		const { panel } = await watchHome({
 			list: vi.fn(async () => ok([STEVE, ADA_NEEDS_INVITATION])),
 			inviteAgain: vi.fn(async () =>
-				refused({ kind: "unreachable", reason: "down" }),
+				refused({
+					kind: "unreachable",
+					reason: { kind: "relayStatus", status: 503 },
+					detail: "down",
+				}),
 			),
 		})
 
@@ -1218,7 +1263,14 @@ describe("useMembers on the invitations of a hosted space", () => {
 		[{ kind: "notHosting" }, "notHosting"],
 		[{ kind: "notOwner" }, "notOwner"],
 		[{ kind: "needsSignIn" }, "needsSignIn"],
-		[{ kind: "unreachable", reason: "relay down" }, "unreachable"],
+		[
+			{
+				kind: "unreachable",
+				reason: { kind: "relayStatus", status: 503 },
+				detail: "relay down",
+			},
+			"unreachable",
+		],
 		[{ kind: "limitReached" }, "limitReached"],
 		[{ kind: "unknownInvitation" }, "generic"],
 		[{ kind: "alreadyInvited" }, "generic"],

@@ -112,8 +112,10 @@ async fn roster_of<R: Runtime>(
 			session::revoked(app, &bearer);
 			return Err(JoinedSpaceError::SessionRevoked);
 		}
-		Err(MemberCallError::Unreachable(detail)) => {
-			return Err(JoinedSpaceError::RelayUnreachable { detail })
+		Err(MemberCallError::Unreachable { reason, detail }) => {
+			return Err(JoinedSpaceError::RelayUnreachable {
+				detail: format!("{reason:?}: {detail}"),
+			})
 		}
 		Err(refusal) => {
 			return Err(JoinedSpaceError::RelayRefused { detail: format!("{refusal:?}") })
