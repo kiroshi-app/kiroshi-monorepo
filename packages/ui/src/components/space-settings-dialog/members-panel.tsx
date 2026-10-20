@@ -135,15 +135,29 @@ const failureKeyOf = (failure: MembersFailure, viewerId?: string) => {
 	}
 }
 
+const withKnownDetail = (failure: MembersFailure): MembersFailure => {
+	if (failure.action !== "invite") {
+		return failure
+	}
+	if (failure.reason === "relayStatus" && failure.status === undefined) {
+		return { ...failure, reason: "unreachable" }
+	}
+	if (failure.reason === "relayConflict" && failure.code === undefined) {
+		return { ...failure, reason: "unreadableConflict" }
+	}
+	return failure
+}
+
 const useFailureText = (
-	failure: MembersFailure | undefined,
+	reported: MembersFailure | undefined,
 	space: string,
 	viewerId?: string,
 ) => {
 	const { t } = useTranslation("settings")
-	if (!failure) {
+	if (!reported) {
 		return ""
 	}
+	const failure = withKnownDetail(reported)
 	const isInvite = failure.action === "invite"
 	return t(failureKeyOf(failure, viewerId), {
 		space,

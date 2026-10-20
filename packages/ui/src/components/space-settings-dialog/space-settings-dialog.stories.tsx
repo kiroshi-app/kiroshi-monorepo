@@ -1515,6 +1515,24 @@ export const MembersInviteFailedListNotReadBack = meta.story(
 	),
 )
 
+export const MembersInviteFailedRelayStatusUnknown = meta.story({
+	tags: ["test-only"],
+	...inviteUnreachableStory(
+		{ reason: "relayStatus" },
+		"Couldn’t reach Kiroshi to invite sam@example.com. Check your connection and try again.",
+		"Kiroshi answered with an error status the app did not pass. Pick it to check the line falls back to the unreachable sentence, never an empty status.",
+	),
+})
+
+export const MembersInviteFailedRelayConflictUnknown = meta.story({
+	tags: ["test-only"],
+	...inviteUnreachableStory(
+		{ reason: "relayConflict" },
+		"Kiroshi refused to invite sam@example.com without saying why. Check the member list, then try again.",
+		"Kiroshi refused the invite with a conflict code the app did not pass. Pick it to check the line falls back to the unreadable conflict sentence, never empty parentheses.",
+	),
+})
+
 export const MembersInviteFailedResend = meta.story({
 	tags: ["test-only"],
 	args: INVITE_FAILED_ARGS,

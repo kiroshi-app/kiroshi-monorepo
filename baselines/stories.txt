@@ -1583,7 +1583,9 @@ settings-space-spacesettingsdialog--members-invite-failed
 settings-space-spacesettingsdialog--members-invite-failed-list-not-read-back
 settings-space-spacesettingsdialog--members-invite-failed-offline
 settings-space-spacesettingsdialog--members-invite-failed-relay-conflict
+settings-space-spacesettingsdialog--members-invite-failed-relay-conflict-unknown
 settings-space-spacesettingsdialog--members-invite-failed-relay-status
+settings-space-spacesettingsdialog--members-invite-failed-relay-status-unknown
 settings-space-spacesettingsdialog--members-invite-failed-resend
 settings-space-spacesettingsdialog--members-invite-failed-timed-out
 settings-space-spacesettingsdialog--members-invite-failed-unreadable-conflict
