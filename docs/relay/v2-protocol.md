@@ -283,7 +283,7 @@ is 403 `INVITATION_EMAIL_MISMATCH`; when no email holds one, 404 `NOT_FOUND`.
 | 410 `INVITATION_WITHDRAWN` | The host took it back | `invitationWithdrawn` |
 | 410 `INVITATION_USED` | It was already accepted or declined | `invitationUsed` |
 | 403 `INVITATION_EMAIL_MISMATCH` | It names another email than the account | `invitationOtherEmail` |
-| 404 `NOT_FOUND` | A malformed id, or no such invitation | `noInvitation` |
+| 404 `NOT_FOUND` | A malformed id, or no such invitation. Any 404, whatever the code in its body, means the invitation no longer exists. | `noInvitation` |
 | unreachable, any other status | | `couldNotAccept` |
 
 The Tauri command is `invitation_accept(invitationId)`. On every refusal of the
