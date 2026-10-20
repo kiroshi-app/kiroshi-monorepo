@@ -12,6 +12,7 @@ import {
 	switcherSpacesOf,
 } from "./joined-spaces-controller"
 import {
+	type HostWait,
 	isHostDown,
 	isHostOnline,
 	type OpenJoinedHost,
@@ -19,6 +20,7 @@ import {
 import type { SpacesController, SpacesState } from "./spaces-controller"
 import type { Invitations } from "./use-invitations"
 
+import type { JoinedSpace } from "../bindings"
 import { isDesktopHost, joinedHosts } from "../host"
 import { useController, useControllerState } from "../use-controller"
 import type { RosterController } from "../bots/roster-controller"
@@ -95,6 +97,11 @@ export const useSwitcherSpaces = (
 	)
 }
 
+const hostWaitOf = (joined: JoinedSpace): HostWait | undefined =>
+	joined.state === "waitingForHost"
+		? { reason: joined.wait?.reason }
+		: undefined
+
 const departedHostOf = (departed: DepartedSpace): OpenJoinedHost => ({
 	spaceName: departed.space,
 	hostName: departed.host,
@@ -120,6 +127,7 @@ export const useOpenJoinedHost = (
 					hostName: controller.hostNameOf(open.id),
 					isOnline: isHostOnline(connections[open.id]),
 					isDown: isHostDown(connections[open.id]),
+					hostWait: hostWaitOf(open),
 				}
 			: null
 	}, [joinedSpaces, openId, departed, selectedSpaceId, connections, controller])

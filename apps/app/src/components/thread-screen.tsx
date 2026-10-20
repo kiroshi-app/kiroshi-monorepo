@@ -222,7 +222,10 @@ import { useInvokePhaseEnd } from "@/lib/perf/use-invoke-phase-end"
 import { useSkeletonSlot } from "@/lib/query/use-skeleton-slot"
 import type { ReportedRun } from "@/lib/routines/routine-contract"
 import type { MessageLandingController } from "@/lib/search/message-landing-controller"
-import { OpenJoinedHostContext } from "@/lib/spaces/open-joined-host"
+import {
+	OpenJoinedHostContext,
+	spaceAccessOf,
+} from "@/lib/spaces/open-joined-host"
 
 const THREAD_TRANSCRIPT_SKELETON = <ThreadTranscriptSkeleton />
 
@@ -1666,7 +1669,7 @@ function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
 	const view = useThreadView(props)
 	const joinedHost = useContext(OpenJoinedHostContext)
-	const departure = joinedHost?.departure
+	const access = spaceAccessOf(joinedHost)
 	useInvokePhaseEnd(
 		"thread open",
 		view.facts.isFirstLoadPending ? null : shownConversationIdOf(thread),
@@ -1681,7 +1684,7 @@ function ThreadView(props: ThreadViewProps) {
 			anchorOnSend={view.isSoloThread}
 			busy={view.facts.isBusy}
 			composer={
-				departure ? undefined : (
+				access ? undefined : (
 					<ThreadComposerSlot
 						bots={known}
 						canAttach={view.canAttach}
@@ -1720,11 +1723,12 @@ function ThreadView(props: ThreadViewProps) {
 					: view.t("screen.label")
 			}
 			notice={
-				joinedHost && departure ? (
+				joinedHost && access ? (
 					<SpaceAccessBanner
 						host={joinedHost.hostName}
-						reason={departure}
+						reason={access.reason}
 						space={joinedHost.spaceName}
+						waitReason={access.waitReason}
 					/>
 				) : (
 					<ThreadNotices
@@ -1753,7 +1757,7 @@ function ThreadView(props: ThreadViewProps) {
 			}
 			onFollowChange={view.controller.follow}
 			pending={
-				departure ? undefined : (
+				access ? undefined : (
 					<ThreadPending
 						authors={view.authors}
 						permission={view.facts.permission}

@@ -19,6 +19,7 @@ import {
 	type JoinedSpaceError,
 	type JoinedSpaceRemovalReason,
 	type JoinedSpaceRemoved,
+	type JoinedSpaceWaitReason,
 } from "../bindings"
 import { failureReporterIn } from "../failure-report"
 import { joinedHosts, listen } from "../host"
@@ -141,6 +142,11 @@ const rowIdOf = (joined: JoinedSpace): string => joinedRowIdOf(joined.id)
 
 export const isJoinedRowId = (rowId: string): boolean =>
 	rowId.startsWith(JOINED_ROW_PREFIX)
+
+const hostOfflineBodyKeyOf = (reason: JoinedSpaceWaitReason | undefined) =>
+	reason
+		? (`chat:spaceAccessBanner.offline.reasons.${reason}` as const)
+		: "chat:spaceAccessBanner.offline.body"
 
 const isWaitingForHost = (joined: JoinedSpace) =>
 	joined.state === "waitingForHost"
@@ -336,7 +342,7 @@ export const createJoinedSpacesController = ({
 		const naming = { space: joined.name, host: hostNameOf(joined.id) }
 		return {
 			title: i18n.t("chat:spaceAccessBanner.offline.title", naming),
-			description: i18n.t("chat:spaceAccessBanner.offline.body", naming),
+			description: i18n.t(hostOfflineBodyKeyOf(joined.wait?.reason), naming),
 		}
 	}
 

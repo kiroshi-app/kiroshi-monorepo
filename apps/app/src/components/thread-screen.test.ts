@@ -152,6 +152,7 @@ import { useCompanionMenuLookup } from "@/lib/sidebar/companion-menu"
 import { useCompanionSelectGuard } from "@/lib/sidebar/companion-select"
 import type { DepartureReason } from "@/lib/spaces/joined-spaces-controller"
 import {
+	type HostWait,
 	type OpenJoinedHost,
 	OpenJoinedHostContext,
 } from "@/lib/spaces/open-joined-host"
@@ -2810,6 +2811,55 @@ describe("ThreadScreen", () => {
 			expect(accessBanner()).toBeNull()
 			expect(screen.getByRole("textbox")).toBeTruthy()
 			expect(document.querySelector('[data-slot="toast"]')).toBeNull()
+		})
+	})
+
+	describe("on a joined Space waiting for its host", () => {
+		const renderWaiting = async (hostWait: HostWait) => {
+			render(
+				createElement(
+					OpenJoinedHostContext.Provider,
+					{
+						value: {
+							spaceName: "Studio Nord",
+							hostName: "Lea",
+							isOnline: false,
+							isDown: true,
+							hostWait,
+						},
+					},
+					screenOf(threadOf({ id: "bot-1", name: "Nyx", said: "held" })),
+				),
+				{ wrapper: createQueryTestWrapper().wrapper },
+			)
+			await settle()
+		}
+
+		const offlineBanner = () =>
+			document.querySelector<HTMLElement>(
+				'[data-slot="space-access-banner"][data-reason="offline"]',
+			)
+
+		it("keeps the transcript and shows the offline banner naming why, where the composer was", async () => {
+			await renderWaiting({ reason: "hostSilent" })
+
+			expect(screen.getByText("held")).toBeTruthy()
+			expect(
+				within(offlineBanner() as HTMLElement).getByText(
+					"You can read what’s here. Lea hasn’t answered yet, ask them to open Kiroshi on their computer.",
+				),
+			).toBeTruthy()
+			expect(screen.queryByRole("textbox")).toBeNull()
+		})
+
+		it("keeps the generic offline body when the wait names no reason", async () => {
+			await renderWaiting({})
+
+			expect(
+				within(offlineBanner() as HTMLElement).getByText(
+					"You can read what’s here. You can send again once Kiroshi is open on Lea’s computer.",
+				),
+			).toBeTruthy()
 		})
 	})
 })
