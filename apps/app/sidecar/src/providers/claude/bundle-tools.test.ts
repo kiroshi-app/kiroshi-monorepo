@@ -80,6 +80,19 @@ describe("bundleTools", () => {
 		expect(Object.keys(theTool().inputSchema)).not.toContain("bundle")
 	})
 
+	it("tells the bot the agent file takes the whole block, created when missing, the rest rendered by the app", () => {
+		const said = theTool().description
+
+		expect(said).toContain(
+			"For agents/agent.md the text is the whole block of what you learned",
+		)
+		expect(said).toContain(
+			"the block is created on your first write when the file has none",
+		)
+		expect(said).toContain("the rest of the file is kept as the app renders it")
+		expect(said).not.toContain("nothing else of that file moves")
+	})
+
 	it("hands the call to the bundle host of its session and speaks the answer back", async () => {
 		const asked = aHost(() => ({ result: A_RECORDED }))
 

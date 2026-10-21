@@ -944,7 +944,7 @@
 	},
 	{
 		"name": "bundle_write",
-		"description": "Write one file of your own directory, the one your instructions name as the place your skills live, and keep it as one change in your history. A skill file under skills/ ending in .md is written whole, its folders created. agents/agent.md takes only what you learned: the text replaces the block between its two kiroshi memory lines and nothing else of that file moves. It answers the id of the change, or unchanged when the file already says that.",
+		"description": "Write one file of your own directory, the one your instructions name as the place your skills live, and keep it as one change in your history. A skill file under skills/ ending in .md is written whole, its folders created. For agents/agent.md the text is the whole block of what you learned: the block is created on your first write when the file has none, and the rest of the file is kept as the app renders it. It answers the id of the change, or unchanged when the file already says that.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",
