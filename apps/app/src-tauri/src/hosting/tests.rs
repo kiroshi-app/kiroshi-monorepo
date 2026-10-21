@@ -961,6 +961,29 @@ impl MemberWire {
 		self.socket.send(message).await
 	}
 
+	async fn close_frame(&mut self) -> Option<CloseFrame> {
+		loop {
+			let frame = tokio::time::timeout(PATIENCE, self.recv()).await.expect("a frame in time");
+			match frame {
+				Some(Ok(Message::Close(close))) => return close,
+				Some(Ok(_)) => {}
+				other => panic!("the relay took no close frame: {other:?}"),
+			}
+		}
+	}
+
+	async fn texts_until_closed(&mut self) -> Vec<String> {
+		let mut texts = Vec::new();
+		loop {
+			let frame = tokio::time::timeout(PATIENCE, self.recv()).await.expect("the socket ends");
+			match frame {
+				Some(Ok(Message::Text(text))) => texts.push(text.as_str().to_owned()),
+				Some(Ok(Message::Close(_)) | Err(_)) | None => return texts,
+				Some(Ok(_)) => {}
+			}
+		}
+	}
+
 	async fn sealed_sent(&mut self, plaintext: &str, challenge: Option<[u8; CHALLENGE_LENGTH]>) {
 		self.ctr += 1;
 		let sealed = self.device.sealed(&self.space(), self.ctr, plaintext, challenge);
@@ -1668,9 +1691,9 @@ fn stopping_closes_with_1000_clears_the_flag_and_keeps_the_instance() {
 		let (registered, _) = harness.stored().await;
 
 		assert_eq!(harness.stopped().await, HostingState::Off);
-		let closed = tokio::time::timeout(PATIENCE, member.recv()).await.expect("a frame in time");
+		let closed = member.close_frame().await;
 
-		let Some(Ok(Message::Close(Some(close)))) = closed else {
+		let Some(close) = closed else {
 			panic!("the relay took no close frame: {closed:?}");
 		};
 		assert_eq!(close.code, 1000);
@@ -1907,9 +1930,8 @@ fn signing_out_closes_the_relay_and_needs_a_sign_in_keeping_the_flag() {
 		members_heard(&mut member).await;
 
 		signed_out(harness.app.handle()).await;
-		let closed = tokio::time::timeout(PATIENCE, member.recv()).await.expect("a frame in time");
+		member.close_frame().await;
 
-		assert!(matches!(closed, Some(Ok(Message::Close(_)))), "{closed:?}");
 		assert_eq!(harness.state(), HostingState::NeedsSignIn);
 		assert_eq!(harness.stored().await.1, vec![PERSONAL.to_owned()]);
 	});
@@ -1991,9 +2013,9 @@ fn deleting_a_hosted_space_closes_its_relay_with_1000_and_reads_off() {
 		space_delete(harness.app.handle().clone(), harness.app.state(), work.clone())
 			.await
 			.expect("the space is deleted");
-		let closed = tokio::time::timeout(PATIENCE, member.recv()).await.expect("a frame in time");
+		let closed = member.close_frame().await;
 
-		let Some(Ok(Message::Close(Some(close)))) = closed else {
+		let Some(close) = closed else {
 			panic!("the relay took no close frame: {closed:?}");
 		};
 		assert_eq!(close.code, 1000);
@@ -6231,8 +6253,8 @@ fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
 
 		assert_eq!(failure, HostingFailureKind::SealingFailed);
 		assert!(detail.contains("reserved ctr bound"), "{detail}");
-		let sent = tokio::time::timeout(PATIENCE, member.recv()).await.expect("the socket ends");
-		assert!(!matches!(sent, Some(Ok(Message::Text(_)))), "{sent:?}");
+		let sent = member.texts_until_closed().await;
+		assert!(sent.is_empty(), "{sent:?}");
 	});
 }
 
