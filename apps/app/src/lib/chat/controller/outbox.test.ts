@@ -14,6 +14,7 @@ import {
 import type { ChatController } from "../chat-controller"
 import type { ChatDriver } from "../driver"
 import type { FakeChatDriver } from "../fake-driver"
+import type { CancelOutcome, TurnState } from "../../agent/contract"
 import { createFakeTranscriptStore } from "../../conversations/fake-transcript-store"
 import type { TranscriptStore } from "../../conversations/store-port"
 import type { TranscriptMessage } from "../../conversations/transcript-contract"
@@ -95,6 +96,71 @@ describe("createChatController", () => {
 		await vi.runAllTimersAsync()
 		expect(controller.getState().turn).toBe("idle")
 		expect(controller.getState().messages.at(-1)?.completion).toBe("complete")
+	})
+
+	it.each<[string, CancelOutcome, TurnState]>([
+		["cancelled", { kind: "cancelled" }, "idle"],
+		["nothingToCancel", { kind: "nothingToCancel" }, "idle"],
+		[
+			"failed",
+			{
+				kind: "failed",
+				failures: [
+					{
+						botId: BOT,
+						reason: {
+							source: "session",
+							error: { kind: "writeFailed", detail: "pipe closed" },
+						},
+					},
+				],
+			},
+			"failed",
+		],
+	])("leaves stopping when the stop answers %s", async (_, outcome, landed) => {
+		const { controller } = await bootedHarness({
+			replyFor: () => "one two three",
+			driver: (fake) => ({
+				...fake,
+				cancelTurn: () => Promise.resolve(outcome),
+			}),
+		})
+		await controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+
+		await controller.stop()
+
+		expect(controller.getState().turn).toBe(landed)
+	})
+
+	it("names the reason when the stop answers failed", async () => {
+		const { controller } = await bootedHarness({
+			replyFor: () => "one two three",
+			driver: (fake) => ({
+				...fake,
+				cancelTurn: () =>
+					Promise.resolve({
+						kind: "failed",
+						failures: [
+							{
+								botId: BOT,
+								reason: {
+									source: "store",
+									error: { kind: "unknownTurn", id: "t-1" },
+								},
+							},
+						],
+					}),
+			}),
+		})
+		await controller.send("hello")
+		await vi.advanceTimersByTimeAsync(STEP_MS * 2)
+
+		await controller.stop()
+
+		const [failure] = controller.getState().errors.slice(-1)
+		expect(failure?.error.kind).toBe("writeFailed")
+		expect(JSON.stringify(failure?.error)).toContain("unknownTurn")
 	})
 })
 

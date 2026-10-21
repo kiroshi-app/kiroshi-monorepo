@@ -1,6 +1,7 @@
 import type { SubmittedAttachment } from "./attachments-contract"
 
 import type {
+	CancelOutcome,
 	CheckReport,
 	ConversationNaming,
 	PermissionDecision,
@@ -31,7 +32,7 @@ export type ChatDriver = {
 		conversationId: string,
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
-	cancelTurn: (scope: RuntimeScope) => Promise<void>
+	cancelTurn: (scope: RuntimeScope) => Promise<CancelOutcome>
 	respondToPermission: (
 		scope: RuntimeScope,
 		id: string,

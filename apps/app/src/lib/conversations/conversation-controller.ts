@@ -53,6 +53,7 @@ import { createStore } from "../store"
 import type {
 	ActivityEvent,
 	AgentEvent,
+	CancelOutcome,
 	ChatMessage,
 	ConversationNaming,
 	PermissionDecision,
@@ -67,6 +68,7 @@ import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
 	isSameRuntimeScope,
+	toCancelError,
 	toReadError,
 	toTransportError,
 } from "../chat/chat-state"
@@ -183,7 +185,7 @@ export type ConversationControllerOptions = {
 	onCompanionArrived?: CompanionArrivalListener
 	onMessageStored?: MessageStoredListener
 	onReconnected?: ReconnectionListener
-	onForeignSpeakerSilent?: (conversationId: string) => void
+	rereadConversation?: (conversationId: string) => void
 	senderAccountId?: () => string | null
 }
 
@@ -328,7 +330,7 @@ export const createConversationController = (
 	const transcript = createTranscriptController(store)
 	const hearSilence = ({ conversationId }: RuntimeScope) => {
 		sync()
-		options.onForeignSpeakerSilent?.(conversationId)
+		options.rereadConversation?.(conversationId)
 	}
 	const foreignTurns = createForeignTurns(transcript, now, hearSilence)
 	const enqueue = createQueue()
@@ -423,21 +425,24 @@ export const createConversationController = (
 			}
 		})
 
-	const foreignSpeakingBot = (
-		speaker: ForeignSpeaker,
-		startedAt = speaker.startedAt,
-	): SpeakingBot => ({
+	const foreignSpeakingBot = (speaker: ForeignSpeaker): SpeakingBot => ({
 		botId: speaker.scope.botId,
 		work: {
 			...workingFor(speaker.activities, speaker.hasWritten),
-			startedAt,
+			startedAt: speaker.startedAt,
 		},
 		hasPublished: speaker.hasWritten,
 		isForeign: true,
-		stop: () => stopForeignTurn(speaker.scope),
+		stop: () => cancelRun(speaker.scope),
 	})
 
+	const unheardScopeOf = (
+		conversationId: string,
+		botId: string,
+	): RuntimeScope => ({ conversationId, botId, runtimeSessionId: "", epoch: 0 })
+
 	const unheardSpeakingBot = (
+		conversationId: string,
 		botId: string,
 		startedAt: number,
 	): SpeakingBot => ({
@@ -445,7 +450,7 @@ export const createConversationController = (
 		work: { ...workingFor([], false), startedAt },
 		hasPublished: false,
 		isForeign: true,
-		stop: null,
+		stop: () => cancelRun(unheardScopeOf(conversationId, botId)),
 	})
 
 	const storedSpeakingBots = (
@@ -456,8 +461,8 @@ export const createConversationController = (
 		return botIds.map((botId) => {
 			const speaker = heard.find(({ scope }) => scope.botId === botId)
 			return speaker
-				? foreignSpeakingBot(speaker, startedAt)
-				: unheardSpeakingBot(botId, startedAt)
+				? foreignSpeakingBot(speaker)
+				: unheardSpeakingBot(conversationId, botId, startedAt)
 		})
 	}
 
@@ -1510,22 +1515,38 @@ export const createConversationController = (
 		releasePrompt(held, id)
 	}
 
+	const settleStop = (
+		{ conversationId }: RuntimeScope,
+		outcome: CancelOutcome,
+	) => {
+		if (outcome.kind !== "failed") {
+			options.rereadConversation?.(conversationId)
+			return
+		}
+		for (const failure of outcome.failures) {
+			noteSpeakerFailure(failure.botId, toCancelError(failure))
+		}
+		sync()
+	}
+
+	const refuseStop = ({ botId }: RuntimeScope, reason: unknown) => {
+		noteSpeakerFailure(botId, toTransportError(reason))
+		sync()
+	}
+
+	const cancelRun = (scope: RuntimeScope) =>
+		driver.cancelTurn(scope).then(
+			(outcome) => settleStop(scope, outcome),
+			(reason) => refuseStop(scope, reason),
+		)
+
 	const cancelSpeaker = async (held: Speaker) => {
 		held.isDropped = true
 		if (held.pending) {
 			await respond(held.pending.request.id, "deny")
 		}
 		if (held.scope) {
-			await driver.cancelTurn(held.scope).catch(() => undefined)
-		}
-	}
-
-	const stopForeignTurn = async (scope: RuntimeScope) => {
-		try {
-			await driver.cancelTurn(scope)
-		} catch (reason) {
-			noteSpeakerFailure(scope.botId, toTransportError(reason))
-			sync()
+			await cancelRun(held.scope)
 		}
 	}
 

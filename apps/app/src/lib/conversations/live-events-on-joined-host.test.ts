@@ -12,6 +12,7 @@ import {
 } from "vitest"
 
 import {
+	type ConversationController,
 	type ConversationControllerOptions,
 	createConversationController,
 } from "./conversation-controller"
@@ -28,6 +29,7 @@ import { JOINED_SPACE_RECONNECTED_EVENT } from "../bindings"
 import { useControllerState } from "../use-controller"
 import type {
 	AgentEvent,
+	CancelOutcome,
 	EventTurn,
 	PermissionRequest,
 	QuestionAnswers,
@@ -41,7 +43,10 @@ import {
 	type RosterSpace,
 } from "../bots/roster-controller"
 import { useRosterReads } from "../bots/use-roster"
-import { createChatController } from "../chat/chat-controller"
+import {
+	type ChatControllerOptions,
+	createChatController,
+} from "../chat/chat-controller"
 import {
 	questionMessageIdOf,
 	questionMessageText,
@@ -310,11 +315,15 @@ type Prepare = (opening: Opening) => Promise<void>
 
 const NOTHING_TO_PREPARE: Prepare = async () => undefined
 
-const openSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
+const openSoloChat = async (
+	prepare = NOTHING_TO_PREPARE,
+	options: ChatControllerOptions = {},
+) => {
 	const store = createFakeTranscriptStore()
 	const { scripted, driver } = liveDriver(store)
 	const controller = createChatController(driver, store, {
 		senderAccountId: () => MEMBER,
+		...options,
 	})
 	const detach = controller.attach()
 	const chat = await store.mainChat(BOT, null)
@@ -1089,7 +1098,7 @@ describe("the working state the stored open turn carries", () => {
 		const rereadRows: string[] = []
 		const { controller, detach, botId, conversation, conversationId } =
 			await openRoom(NOTHING_TO_PREPARE, {
-				onForeignSpeakerSilent: (id) => rereadRows.push(id),
+				rereadConversation: (id) => rereadRows.push(id),
 			})
 		await act(() => controller.open(rowOf(conversation, [botId])))
 		vi.useFakeTimers()
@@ -1157,6 +1166,170 @@ describe("the working state the stored open turn carries", () => {
 		await act(() => controller.open(rowOf(conversation, [botId])))
 
 		expect(workOf(controller.getState())).toEqual(["searching"])
+		detach()
+	})
+})
+
+const WRITE_FAILED = { kind: "writeFailed", detail: "pipe closed" } as const
+
+const refusedBySession = (botId: string): CancelOutcome => ({
+	kind: "failed",
+	failures: [{ botId, reason: { source: "session", error: WRITE_FAILED } }],
+})
+
+const refusedByStore = (botId: string): CancelOutcome => ({
+	kind: "failed",
+	failures: [
+		{
+			botId,
+			reason: { source: "store", error: { kind: "unknownTurn", id: "t-1" } },
+		},
+	],
+})
+
+const openStoredOnlyRoom = async () => {
+	const rereadRows: string[] = []
+	const room = await openRoom(NOTHING_TO_PREPARE, {
+		rereadConversation: (id) => rereadRows.push(id),
+	})
+	await act(() => room.controller.open(rowOf(room.conversation, [room.botId])))
+	return { ...room, rereadRows }
+}
+
+const pressStop = async (controller: ConversationController) => {
+	const [speaking] = controller.getState().speakers
+	await act(async () => {
+		await speaking?.stop?.()
+	})
+}
+
+describe("the Stop of a bot working from the stored turn alone", () => {
+	it("cancels the turn of that conversation and bot", async () => {
+		const { controller, detach, scripted, botId, conversationId } =
+			await openStoredOnlyRoom()
+		const asked: RuntimeScope[] = []
+		scripted.answerCancelWith((scope) => {
+			asked.push(scope)
+			return Promise.resolve({ kind: "cancelled" })
+		})
+
+		expect(controller.getState().speakers[0]?.stop).not.toBeNull()
+		await pressStop(controller)
+
+		expect(asked).toMatchObject([{ conversationId, botId }])
+		detach()
+	})
+
+	it.each<CancelOutcome>([{ kind: "cancelled" }, { kind: "nothingToCancel" }])(
+		"turns the indicator off once the row is read again after $kind",
+		async (outcome) => {
+			const {
+				controller,
+				detach,
+				scripted,
+				conversation,
+				conversationId,
+				rereadRows,
+			} = await openStoredOnlyRoom()
+			scripted.answerCancelWith(() => Promise.resolve(outcome))
+
+			await pressStop(controller)
+
+			expect(rereadRows).toEqual([conversationId])
+			expect(controller.getState().latestError).toBeNull()
+
+			await act(() => controller.open(rowOf(conversation, null)))
+
+			expect(speakersOf(controller.getState())).toEqual([])
+			detach()
+		},
+	)
+
+	it.each([
+		["the session refuses", refusedBySession, "pipe closed"],
+		["the store refuses", refusedByStore, "unknownTurn"],
+	])(
+		"keeps the indicator on and names the bot when %s",
+		async (_, refusal, reason) => {
+			const { controller, detach, scripted, botId, rereadRows } =
+				await openStoredOnlyRoom()
+			scripted.answerCancelWith(() => Promise.resolve(refusal(botId)))
+
+			await pressStop(controller)
+
+			const { latestError } = controller.getState()
+			expect(latestError).toMatchObject({
+				botId,
+				error: { kind: "writeFailed" },
+			})
+			expect(JSON.stringify(latestError?.error)).toContain(reason)
+			expect(speakersOf(controller.getState())).toEqual([botId])
+			expect(rereadRows).toEqual([])
+			detach()
+		},
+	)
+
+	it("keeps the indicator on and names the bot when the call rejects", async () => {
+		const { controller, detach, scripted, botId, rereadRows } =
+			await openStoredOnlyRoom()
+		scripted.answerCancelWith(() => Promise.reject(WRITE_FAILED))
+
+		await pressStop(controller)
+
+		expect(controller.getState().latestError).toMatchObject({
+			botId,
+			error: WRITE_FAILED,
+		})
+		expect(speakersOf(controller.getState())).toEqual([botId])
+		expect(rereadRows).toEqual([])
+		detach()
+	})
+
+	it("starts the clock of a bot heard live from its live run, not the older open turn", async () => {
+		const heardAt = STARTED_AT + 60_000
+		const { controller, detach, botId, conversation, conversationId } =
+			await openRoom(NOTHING_TO_PREPARE, { now: () => heardAt })
+		await act(() => controller.open(rowOf(conversation, [botId])))
+
+		await emitLocally("agent://event", {
+			scope: { ...foreignScope(conversationId), botId },
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		expect(startedWorkOf(controller.getState())).toEqual([heardAt])
+		detach()
+	})
+})
+
+describe("a foreign speaker silent in the solo chat", () => {
+	it("closes it after a minute of silence and reads the stored turn again once", async () => {
+		const rereadRows: string[] = []
+		const { controller, detach, botId, conversationId } = await openSoloChat(
+			NOTHING_TO_PREPARE,
+			{ rereadConversation: (id) => rereadRows.push(id) },
+		)
+		vi.useFakeTimers()
+		onTestFinished(() => {
+			vi.useRealTimers()
+		})
+		await emitLocally("agent://event", {
+			scope: foreignScope(conversationId),
+			turn: storedTurn(conversationId),
+			event: SEARCHING,
+		})
+
+		act(() => vi.advanceTimersByTime(FOREIGN_SPEAKER_SILENCE_MS - 1))
+
+		expect(sidebarActivityFor(controller.stateFor(botId)).isWorking).toBe(true)
+		expect(rereadRows).toEqual([])
+
+		act(() => vi.advanceTimersByTime(1))
+
+		expect(sidebarActivityFor(controller.stateFor(botId))).toEqual({
+			isWorking: false,
+		})
+		expect(rereadRows).toEqual([conversationId])
 		detach()
 	})
 })

@@ -10,9 +10,15 @@ import type { PromptRows } from "./prompt-rows"
 import type { PromptSubmission } from "./prompt-submission"
 import type { SessionRunner } from "./session-runner"
 
-import { canStopTurn, isSessionReady, toTransportError } from "../chat-state"
+import {
+	canStopTurn,
+	isSessionReady,
+	toCancelError,
+	toTransportError,
+} from "../chat-state"
 import { isPostedRequest } from "../posted-question"
 import { answersFromText } from "../question-message"
+import type { CancelOutcome } from "../../agent/contract"
 
 type OutboxParts = {
 	openedFor: SessionRunner["openedFor"]
@@ -122,6 +128,24 @@ export const createOutbox = (
 		}
 	}
 
+	const leaveStopping = (bot: BotChat) => {
+		if (bot.state.turn !== "stopping") {
+			return
+		}
+		announce(bot, { type: "turnChanged", state: "idle" })
+		pump(bot)
+	}
+
+	const settleStop = (bot: BotChat, outcome: CancelOutcome) => {
+		if (outcome.kind !== "failed") {
+			leaveStopping(bot)
+			return
+		}
+		for (const failure of outcome.failures) {
+			dispatch(bot, { type: "stopRejected", error: toCancelError(failure) })
+		}
+	}
+
 	const stop = async (bot: BotChat) => {
 		const runtime = bot.state.runtime
 		if (!runtime || !canStopTurn(bot.state.turn)) {
@@ -130,7 +154,7 @@ export const createOutbox = (
 		announce(bot, { type: "turnChanged", state: "stopping" })
 		recordHeld(bot)
 		try {
-			await driver.cancelTurn(runtime)
+			settleStop(bot, await driver.cancelTurn(runtime))
 		} catch (reason) {
 			dispatch(bot, { type: "stopRejected", error: toTransportError(reason) })
 		}

@@ -1,5 +1,6 @@
 import type {
 	AgentEvent,
+	CancelOutcome,
 	PermissionDecision,
 	QuestionAnswers,
 	RuntimeScope,
@@ -25,11 +26,16 @@ type Decided = {
 	decision: PermissionDecision
 }
 
+type CancelAnswer = (scope: RuntimeScope) => Promise<CancelOutcome>
+
+const CANCELLED: CancelOutcome = { kind: "cancelled" }
+
 export type ScriptedDriver = ChatDriver & {
 	submissions: Submission[]
 	pushTo: (botId: string, events: AgentEvent[]) => void
 	emit: (scope: RuntimeScope, event: AgentEvent, hostId?: string | null) => void
 	cancelled: string[]
+	answerCancelWith: (answer: CancelAnswer) => void
 	answered: Answered[]
 	decided: Decided[]
 	shutdowns: string[]
@@ -47,6 +53,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 	const answered: Answered[] = []
 	const decided: Decided[] = []
 	const shutdowns: string[] = []
+	let answerCancel: CancelAnswer = () => Promise.resolve(CANCELLED)
 
 	const scopeOf = (botId: string) => {
 		const last = submissions.findLast(
@@ -71,6 +78,9 @@ export const createScriptedDriver = (): ScriptedDriver => {
 	return {
 		submissions,
 		cancelled,
+		answerCancelWith: (answer) => {
+			answerCancel = answer
+		},
 		answered,
 		decided,
 		shutdowns,
@@ -97,7 +107,7 @@ export const createScriptedDriver = (): ScriptedDriver => {
 		storeAttachments: () => Promise.resolve([]),
 		cancelTurn: (scope) => {
 			cancelled.push(scope.botId)
-			return Promise.resolve()
+			return answerCancel(scope)
 		},
 		respondToPermission: (scope, id, decision) => {
 			decided.push({ botId: scope.botId, id, decision })

@@ -106,6 +106,7 @@ export type ChatControllerOptions = {
 	senderAccountId?: () => string | null
 	onMessageStored?: MessageStoredListener
 	onReconnected?: ReconnectionListener
+	rereadConversation?: (conversationId: string) => void
 }
 
 export function createChatController(
