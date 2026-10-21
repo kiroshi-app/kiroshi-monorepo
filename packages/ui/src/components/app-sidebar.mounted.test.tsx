@@ -7,6 +7,7 @@ import {
 	AppSidebar,
 	type AppSidebarBot,
 	type AppSidebarConversation,
+	type AppSidebarProps,
 	type AppSidebarSection,
 	type Space,
 } from "@workspace/ui/components/app-sidebar"
@@ -186,10 +187,7 @@ const WORKING_REVIEW: AppSidebarConversation = {
 	participants: [WORKING_ATLAS],
 }
 
-interface StopActions {
-	onStopBot?: (id: string) => void
-	onStopConversation?: (id: string) => void
-}
+type StopActions = Pick<AppSidebarProps, "onStopBot" | "onStopConversation">
 
 const renderWorkingRoster = (actions: StopActions) =>
 	render(
@@ -206,8 +204,7 @@ const renderWorkingRoster = (actions: StopActions) =>
 		</WorkspaceShell>,
 	)
 
-const stopFor = (name: string) =>
-	screen.queryByRole("button", { name: `Stop ${name}` })
+const stopName = (name: string) => `Stop ${name}`
 
 describe("AppSidebar roster stop mounted", () => {
 	afterEach(cleanup)
@@ -216,9 +213,7 @@ describe("AppSidebar roster stop mounted", () => {
 		const onStopBot = vi.fn()
 		renderWorkingRoster({ onStopBot })
 
-		const stop = stopFor(ATLAS.name)
-		expect(stop).not.toBeNull()
-		if (stop) fireEvent.click(stop)
+		fireEvent.click(screen.getByRole("button", { name: stopName(ATLAS.name) }))
 
 		expect(onStopBot).toHaveBeenCalledExactlyOnceWith(ATLAS.id)
 	})
@@ -227,9 +222,7 @@ describe("AppSidebar roster stop mounted", () => {
 		const onStopConversation = vi.fn()
 		renderWorkingRoster({ onStopConversation })
 
-		const stop = stopFor(REVIEW.name)
-		expect(stop).not.toBeNull()
-		if (stop) fireEvent.click(stop)
+		fireEvent.click(screen.getByRole("button", { name: stopName(REVIEW.name) }))
 
 		expect(onStopConversation).toHaveBeenCalledExactlyOnceWith(REVIEW.id)
 	})
@@ -237,7 +230,6 @@ describe("AppSidebar roster stop mounted", () => {
 	it("draws no Stop on a working row without its action", () => {
 		renderWorkingRoster({})
 
-		expect(stopFor(ATLAS.name)).toBeNull()
-		expect(stopFor(REVIEW.name)).toBeNull()
+		expect(screen.queryByRole("button", { name: /^Stop / })).toBeNull()
 	})
 })
