@@ -2656,7 +2656,6 @@ describe("ThreadScreen", () => {
 				chat: {
 					state: {
 						...thread.chat.state,
-						turn: "idle",
 						foreignTurn: {
 							scope: {
 								conversationId: "elsewhere",
