@@ -1063,6 +1063,8 @@ mod tests {
 			.add_bot(shared.id.clone(), dropped.id.clone(), None)
 			.await
 			.expect("the shared bot joins the space that goes");
+		joined_on(&database, &shared.id, &kept, 1).await;
+		joined_on(&database, &shared.id, &dropped.id, 2).await;
 		let main_chat = database
 			.conversations()
 			.ensure_chat(shared.id.clone(), None)
@@ -1159,6 +1161,8 @@ mod tests {
 			.add_bot(dying.id.clone(), kept.id.clone(), None)
 			.await
 			.expect("the dying bot joins the space that stays");
+		joined_on(&database, &dying.id, &dropped, 1).await;
+		joined_on(&database, &dying.id, &kept.id, 2).await;
 		let room = database
 			.conversations()
 			.create_conversation(ConversationDraft {
