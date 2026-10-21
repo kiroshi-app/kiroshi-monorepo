@@ -736,9 +736,9 @@ mod tests {
 
 	impl Harness {
 		fn new(name: &str, api_url: &str) -> Self {
-			let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-account-{name}")));
-			let _ = std::fs::remove_dir_all(&root);
-			Self::holding(Ok(root), api_url)
+			let unique = uuid::Uuid::new_v4();
+			let folder = std::env::temp_dir().join(format!("kiroshi-account-{name}-{unique}"));
+			Self::holding(Ok(RemovedOnDrop(folder)), api_url)
 		}
 
 		fn without_store(api_url: &str) -> Self {
@@ -1249,6 +1249,7 @@ mod tests {
 			let harness = Harness::new("named-rename", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			harness.renamed_to(" Grace ").await;
 			harness.names_settled().await;
@@ -1268,6 +1269,7 @@ mod tests {
 			harness.store(BEARER);
 
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 			harness.renamed_to("Grace").await;
 			harness.renamed_to("  ").await;
 			harness.names_settled().await;
@@ -1300,6 +1302,7 @@ mod tests {
 			let harness = Harness::new("named-500", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
 			harness.names_settled().await;
@@ -1319,6 +1322,7 @@ mod tests {
 			let harness = Harness::new("named-401", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
 
@@ -1363,6 +1367,7 @@ mod tests {
 			let harness = Harness::new("named-twice", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			harness.renamed_to("Ada").await;
 			harness.renamed_to("Grace").await;
