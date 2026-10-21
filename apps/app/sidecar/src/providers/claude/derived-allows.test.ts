@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import {
+	lstatSync,
+	mkdirSync,
+	mkdtempSync,
+	realpathSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join, matchesGlob } from "node:path"
 
@@ -35,7 +43,7 @@ let user: string
 let space: string
 
 beforeEach(() => {
-	root = mkdtempSync(join(tmpdir(), "kiroshi-allows-"))
+	root = realpathSync(mkdtempSync(join(tmpdir(), "kiroshi-allows-")))
 	bot = join(root, "bots", "b1")
 	user = join(root, "user")
 	space = join(root, "spaces", "s1")
@@ -72,6 +80,23 @@ const editPatterns = (allows: string[]): string[] =>
 
 const matchedBy = (patterns: string[], path: string): boolean =>
 	patterns.some((pattern) => matchesGlob(path, pattern))
+
+type EditVerdict = "allowed" | "refused" | "unmatched"
+
+const claudeCodeVerdict = (patterns: string[], path: string): EditVerdict => {
+	if (lstatSync(path).isSymbolicLink()) {
+		return "refused"
+	}
+	const spellings = [path, realpathSync(path)]
+	return spellings.every((spelling) => matchedBy(patterns, spelling))
+		? "allowed"
+		: "unmatched"
+}
+
+const placeFile = (path: string) => {
+	mkdirSync(join(path, ".."), { recursive: true })
+	writeFileSync(path, "")
+}
 
 describe("derived allows", () => {
 	it("allows the kiroshi server and every resolved server, one rule each", () => {
@@ -147,6 +172,33 @@ describe("derived allows", () => {
 		for (const path of probes.filter((probe) => matchedBy(patterns, probe))) {
 			expect(isBundleWrite(scope, "Edit", { file_path: path })).toBe(true)
 		}
+	})
+
+	it("never allows a write through a bundle symlink whose real path leaves the bundle", () => {
+		const scope = { botPath: bot, userPath: user, spacePath: space }
+		const outside = join(root, "outside")
+		placeFile(join(outside, "SKILL.md"))
+		placeFile(join(outside, "notes.md"))
+		placeFile(join(bot, "skills", "brief", "SKILL.md"))
+		symlinkSync(outside, join(bot, "skills", "escape"))
+		symlinkSync(join(bot, "skills", "brief"), join(bot, "skills", "alias"))
+		symlinkSync(join(outside, "notes.md"), join(bot, "notes.md"))
+		const patterns = editPatterns(allowsOf(requestFor()))
+		const escaping = join(bot, "skills", "escape", "SKILL.md")
+		const aliased = join(bot, "skills", "alias", "SKILL.md")
+		const linkedDocument = join(bot, "notes.md")
+
+		for (const path of [escaping, aliased, linkedDocument]) {
+			expect(matchedBy(patterns, path)).toBe(true)
+		}
+		expect(isBundleWrite(scope, "Edit", { file_path: escaping })).toBe(false)
+		expect(claudeCodeVerdict(patterns, escaping)).toBe("unmatched")
+		expect(isBundleWrite(scope, "Edit", { file_path: linkedDocument })).toBe(
+			false,
+		)
+		expect(claudeCodeVerdict(patterns, linkedDocument)).toBe("refused")
+		expect(isBundleWrite(scope, "Edit", { file_path: aliased })).toBe(true)
+		expect(claudeCodeVerdict(patterns, aliased)).toBe("allowed")
 	})
 
 	it("keeps the declared rules, a deny on AskUserQuestion among them, beside the derived allows", () => {
