@@ -1311,14 +1311,14 @@ mod tests {
 	}
 
 	impl Answers {
-		fn pulls_of(&self, repository: &str) -> (Value, String) {
+		fn pulls_for(&self, repository: &str) -> (Value, String) {
 			match self.of_repository.get(repository) {
 				Some((pulls, _)) => (pulls.clone(), etag_of(pulls)),
 				None => (self.pulls.clone(), self.etag.clone()),
 			}
 		}
 
-		fn checks_of(&self, repository: &str) -> Value {
+		fn checks_for(&self, repository: &str) -> Value {
 			match self.of_repository.get(repository) {
 				Some((_, checks)) => checks.clone(),
 				None => self.checks.clone(),
@@ -1468,7 +1468,7 @@ mod tests {
 			)
 				.into_response();
 		}
-		let (pulls, etag) = held.pulls_of(&repository);
+		let (pulls, etag) = held.pulls_for(&repository);
 		if conditional_on.as_deref() == Some(etag.as_str()) {
 			if let Some(asked) = held.asked.last_mut() {
 				asked.not_modified = true;
@@ -1496,7 +1496,7 @@ mod tests {
 		headers: HeaderMap,
 	) -> Answered {
 		answered(&answers, "pull".to_owned(), format!("{owner}/{name}"), &headers, |held, of| {
-			held.pulls_of(of).0[0].clone()
+			held.pulls_for(of).0[0].clone()
 		})
 		.await
 	}
@@ -1507,7 +1507,7 @@ mod tests {
 		headers: HeaderMap,
 	) -> Answered {
 		answered(&answers, "checks".to_owned(), format!("{owner}/{name}"), &headers, |held, of| {
-			held.checks_of(of)
+			held.checks_for(of)
 		})
 		.await
 	}
