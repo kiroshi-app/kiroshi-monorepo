@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ETAG, IF_NONE_MATCH, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ETAG, IF_NONE_MATCH, LINK, USER_AGENT};
 use reqwest::{Client, Response, StatusCode};
+use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{AppHandle, Manager, Runtime};
@@ -37,6 +38,22 @@ const RETRY_AFTER_HEADER: &str = "retry-after";
 
 const FAILED_CONCLUSIONS: [&str; 5] =
 	["failure", "timed_out", "action_required", "startup_failure", "cancelled"];
+
+const OPEN: &str = "open";
+
+const DIRTY: &str = "dirty";
+
+const CLEAN: &str = "clean";
+
+const CONFLICTS_WITH_MAIN: &str = "conflicts with main";
+
+const QUEUE_REF_PREFIX: &str = "gh-readonly-queue/";
+
+const ADDED_TO_QUEUE: &str = "added_to_merge_queue";
+
+const REMOVED_FROM_QUEUE: &str = "removed_from_merge_queue";
+
+const TIMELINE_PAGES_READ_BACK: usize = 2;
 
 pub struct Poller {
 	stop: signal::Sender<bool>,
@@ -118,16 +135,98 @@ impl Reach {
 		read(self.sent(url, etag).await?).await
 	}
 
-	async fn checks(&self, repository: &str, head_sha: &str) -> Result<Answer<Runs>, Failure> {
+	async fn checks(
+		&self,
+		repository: &str,
+		head_sha: &str,
+		etag: Option<&str>,
+	) -> Result<Answer<Runs>, Failure> {
 		let url = format!("{}/repos/{repository}/commits/{head_sha}/check-runs", self.base);
+		read(self.sent(url, etag).await?).await
+	}
+
+	async fn pull(
+		&self,
+		repository: &str,
+		number: u64,
+		etag: Option<&str>,
+	) -> Result<Answer<Pull>, Failure> {
+		let url = format!("{}/repos/{repository}/pulls/{number}", self.base);
+		read(self.sent(url, etag).await?).await
+	}
+
+	async fn timeline(
+		&self,
+		repository: &str,
+		number: u64,
+	) -> Result<Answer<Vec<TimelineEvent>>, Failure> {
+		let url = format!("{}/repos/{repository}/issues/{number}/timeline?per_page=100", self.base);
+		let first = self.sent(url, None).await?;
+		let Some(last) = self.linked(&first, "last") else {
+			return read(first).await;
+		};
+		let mut tail: Vec<TimelineEvent> = Vec::new();
+		let mut page = Some(last);
+		for _ in 0..TIMELINE_PAGES_READ_BACK {
+			let Some(url) = page.take() else {
+				break;
+			};
+			let answer = self.sent(url, None).await?;
+			page = self.linked(&answer, "prev");
+			match read::<Vec<TimelineEvent>>(answer).await? {
+				Answer::Read { held: mut events, .. } => {
+					events.append(&mut tail);
+					tail = events;
+				}
+				Answer::Held { until_ms } => return Ok(Answer::Held { until_ms }),
+				Answer::Unchanged => return Ok(Answer::Unchanged),
+			}
+			if queue_window_read(&tail) {
+				break;
+			}
+		}
+		Ok(Answer::Read { etag: None, held: tail })
+	}
+
+	fn linked(&self, answer: &Response, relation: &str) -> Option<String> {
+		let marker = format!("rel=\"{relation}\"");
+		let within = format!("{}/", self.base);
+		answer
+			.headers()
+			.get(LINK)?
+			.to_str()
+			.ok()?
+			.split(',')
+			.find(|part| part.contains(&marker))
+			.and_then(|part| part.split_once('<')?.1.split_once('>'))
+			.map(|(url, _)| url.to_owned())
+			.filter(|url| url.starts_with(&within))
+	}
+
+	async fn queue_runs(&self, repository: &str) -> Result<Answer<WorkflowRuns>, Failure> {
+		let url =
+			format!("{}/repos/{repository}/actions/runs?event=merge_group&per_page=50", self.base);
+		read(self.sent(url, None).await?).await
+	}
+
+	async fn jobs(&self, repository: &str, run_id: u64) -> Result<Answer<Jobs>, Failure> {
+		let url =
+			format!("{}/repos/{repository}/actions/runs/{run_id}/jobs?per_page=100", self.base);
 		read(self.sent(url, None).await?).await
 	}
 }
 
 #[derive(Default)]
 pub(crate) struct Kept {
-	etags: HashMap<String, String>,
+	etags: HashMap<(String, Resource), String>,
 	held_until_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Resource {
+	Listing,
+	Pull,
+	CheckRuns,
 }
 
 impl Kept {
@@ -139,9 +238,13 @@ impl Kept {
 		self.held_until_ms = Some(until_ms);
 	}
 
-	fn remember(&mut self, mission_id: &str, etag: Option<String>) {
+	fn etag(&self, mission_id: &str, resource: Resource) -> Option<String> {
+		self.etags.get(&(mission_id.to_owned(), resource)).cloned()
+	}
+
+	fn remember(&mut self, mission_id: &str, resource: Resource, etag: Option<String>) {
 		if let Some(etag) = etag {
-			self.etags.insert(mission_id.to_owned(), etag);
+			self.etags.insert((mission_id.to_owned(), resource), etag);
 		}
 	}
 }
@@ -186,11 +289,65 @@ struct Pull {
 	html_url: String,
 	merged_at: Option<String>,
 	head: Head,
+	#[serde(default)]
+	auto_merge: Option<IgnoredAny>,
+	#[serde(default)]
+	updated_at: Option<String>,
+	#[serde(default)]
+	mergeable_state: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct Head {
 	sha: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct TimelineEvent {
+	#[serde(default)]
+	id: Option<u64>,
+	#[serde(default)]
+	event: Option<String>,
+	#[serde(default)]
+	created_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WorkflowRuns {
+	#[serde(default)]
+	workflow_runs: Vec<WorkflowRun>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WorkflowRun {
+	id: u64,
+	head_branch: Option<String>,
+	status: Option<String>,
+	conclusion: Option<String>,
+	#[serde(default)]
+	created_at: Option<String>,
+	#[serde(default)]
+	updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Jobs {
+	#[serde(default)]
+	jobs: Vec<Job>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Job {
+	name: String,
+	conclusion: Option<String>,
+	#[serde(default)]
+	steps: Vec<Step>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Step {
+	name: String,
+	conclusion: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -240,7 +397,39 @@ struct Fingerprint {
 	head_sha: String,
 	checks: Checks,
 	merged: bool,
+	#[serde(default)]
+	queue: Option<Queue>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct Queue {
+	auto_merge: bool,
+	updated_at: Option<String>,
+	ejected_by_event: Option<u64>,
+	conflicted_on: Option<String>,
+	blocker: Option<Blocker>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Blocker {
+	MergeQueueEjected,
+	ConflictsWithMain,
+}
+
+enum QueueEvent {
+	Added { at: Option<String> },
+	Removed(Removal),
+}
+
+struct Removal {
+	id: u64,
+	at: Option<String>,
+	added_at: Option<String>,
+}
+
+type Heard = (Queue, Option<MissionEntry>);
 
 impl Fingerprint {
 	fn held(stored: &str) -> Result<Option<Self>, Failure> {
@@ -252,13 +441,38 @@ impl Fingerprint {
 			.map_err(|error| Failure::Unreadable(format!("a fingerprint it kept: {error}")))
 	}
 
-	fn of(pull: &Pull, checks: Checks) -> Self {
+	fn of(pull: &Pull, checks: Checks, held: Option<&Fingerprint>) -> Self {
+		let carried = held.filter(|held| held.number == pull.number);
+		let unmoved = carried.is_some_and(|held| held.head_sha == pull.head.sha);
+		let standing = carried.and_then(|held| held.queue.clone()).unwrap_or_default();
 		Self {
 			number: pull.number,
 			state: pull.state.clone(),
 			head_sha: pull.head.sha.clone(),
 			checks,
 			merged: pull.merged_at.is_some(),
+			queue: Some(Queue {
+				blocker: standing.blocker.filter(|_| unmoved),
+				..Queue::observed(pull, &standing)
+			}),
+		}
+	}
+
+	fn held_back(&self) -> bool {
+		self.queue.as_ref().is_some_and(|queue| queue.blocker.is_some())
+	}
+
+	fn green(&self) -> bool {
+		self.state == OPEN && self.checks == Checks::Passed
+	}
+}
+
+impl Queue {
+	fn observed(pull: &Pull, standing: &Queue) -> Self {
+		Self {
+			auto_merge: pull.auto_merge.is_some(),
+			updated_at: pull.updated_at.clone(),
+			..standing.clone()
 		}
 	}
 }
@@ -310,7 +524,10 @@ async fn seen(
 	mission: WatchedMission,
 ) -> Result<Option<Mission>, Failure> {
 	let held = Fingerprint::held(&mission.fingerprint)?;
-	let sent = kept.etags.get(&mission.id).cloned();
+	if let Some(green) = held.clone().filter(Fingerprint::green) {
+		return queued(reach, database, kept, &mission, green).await;
+	}
+	let sent = kept.etag(&mission.id, Resource::Listing);
 	match reach.pulls(&mission, sent.as_deref()).await? {
 		Answer::Held { until_ms } => {
 			kept.hold_until(until_ms);
@@ -352,7 +569,7 @@ async fn listed(
 	pulls: Vec<Pull>,
 ) -> Result<Option<Mission>, Failure> {
 	let Some(pull) = pulls.into_iter().next() else {
-		kept.remember(&mission.id, etag);
+		kept.remember(&mission.id, Resource::Listing, etag);
 		return Ok(None);
 	};
 	let settled = match asks_for_checks(held.as_ref(), &pull) {
@@ -362,7 +579,7 @@ async fn listed(
 			None => return Ok(None),
 		},
 	};
-	let fresh = Fingerprint::of(&pull, settled.checks);
+	let fresh = Fingerprint::of(&pull, settled.checks, held.as_ref());
 	let written = recorded(
 		database,
 		&mission.id,
@@ -372,7 +589,7 @@ async fn listed(
 		&settled.failed,
 	)
 	.await?;
-	kept.remember(&mission.id, etag);
+	kept.remember(&mission.id, Resource::Listing, etag);
 	Ok(written)
 }
 
@@ -382,14 +599,275 @@ async fn learned_checks(
 	repository: &str,
 	head_sha: &str,
 ) -> Result<Option<Settled>, Failure> {
-	match reach.checks(repository, head_sha).await? {
-		Answer::Read { held: runs, .. } => Ok(Some(concluded(&runs))),
-		Answer::Unchanged => Ok(None),
+	Ok(heard(kept, reach.checks(repository, head_sha, None).await?).map(|runs| concluded(&runs)))
+}
+
+fn heard<T>(kept: &mut Kept, answer: Answer<T>) -> Option<T> {
+	match answer {
+		Answer::Read { held, .. } => Some(held),
+		Answer::Unchanged => None,
 		Answer::Held { until_ms } => {
 			kept.hold_until(until_ms);
-			Ok(None)
+			None
 		}
 	}
+}
+
+async fn queued(
+	reach: &Reach,
+	database: &db::Database,
+	kept: &mut Kept,
+	mission: &WatchedMission,
+	held: Fingerprint,
+) -> Result<Option<Mission>, Failure> {
+	let repository = &mission.repository;
+	let sent = kept.etag(&mission.id, Resource::Pull);
+	let pull = match reach.pull(repository, held.number, sent.as_deref()).await? {
+		Answer::Held { until_ms } => {
+			kept.hold_until(until_ms);
+			return Ok(None);
+		}
+		Answer::Unchanged => None,
+		Answer::Read { etag, held: pull } => Some((etag, pull)),
+	};
+	if let Some((_, pull)) =
+		pull.as_ref().filter(|(_, pull)| pull.state != held.state || pull.head.sha != held.head_sha)
+	{
+		let moved = vec![pull.clone()];
+		return listed(reach, database, kept, mission, Some(held), None, moved).await;
+	}
+	let sent = kept.etag(&mission.id, Resource::CheckRuns);
+	let (checks_etag, settled) =
+		match reach.checks(repository, &held.head_sha, sent.as_deref()).await? {
+			Answer::Held { until_ms } => {
+				kept.hold_until(until_ms);
+				return Ok(None);
+			}
+			Answer::Unchanged => (None, Settled::holding(Checks::Passed)),
+			Answer::Read { etag, held: runs } => (etag, concluded(&runs)),
+		};
+	if settled.checks != Checks::Passed {
+		let fresh = Fingerprint { checks: settled.checks, ..held.clone() };
+		return recorded(database, &mission.id, Some(&held), fresh, None, &settled.failed).await;
+	}
+	let Some((pull_etag, pull)) = pull else {
+		kept.remember(&mission.id, Resource::CheckRuns, checks_etag);
+		return Ok(None);
+	};
+	let Some((fresh, entry)) = queue_heard(reach, kept, repository, &held, &pull).await? else {
+		return Ok(None);
+	};
+	let stored = match fresh == held && entry.is_none() {
+		true => None,
+		false => written(database, &mission.id, entry.into_iter().collect(), &fresh, None).await?,
+	};
+	if held.queue.is_some() {
+		kept.remember(&mission.id, Resource::Pull, pull_etag);
+	}
+	kept.remember(&mission.id, Resource::CheckRuns, checks_etag);
+	Ok(stored)
+}
+
+async fn queue_heard(
+	reach: &Reach,
+	kept: &mut Kept,
+	repository: &str,
+	held: &Fingerprint,
+	pull: &Pull,
+) -> Result<Option<(Fingerprint, Option<MissionEntry>)>, Failure> {
+	let Some(standing) = held.queue.clone() else {
+		return Ok(Some((Fingerprint::of(pull, Checks::Passed, Some(held)), None)));
+	};
+	let moved = queue_moved(reach, kept, repository, pull, standing).await?;
+	Ok(moved.map(|(queue, entry)| (Fingerprint { queue: Some(queue), ..held.clone() }, entry)))
+}
+
+async fn queue_moved(
+	reach: &Reach,
+	kept: &mut Kept,
+	repository: &str,
+	pull: &Pull,
+	standing: Queue,
+) -> Result<Option<Heard>, Failure> {
+	let queue = Queue::observed(pull, &standing);
+	if pull.mergeable_state.as_deref() == Some(DIRTY) {
+		return Ok(Some(conflicted(pull, queue)));
+	}
+	match standing.blocker {
+		Some(Blocker::ConflictsWithMain) => return Ok(Some(resolved(pull, queue))),
+		Some(Blocker::MergeQueueEjected) if queue.auto_merge => {
+			return Ok(Some(released(pull.number, queue)));
+		}
+		_ => (),
+	}
+	let dropped = standing.auto_merge && !queue.auto_merge;
+	let touched = !queue.auto_merge && standing.updated_at != queue.updated_at;
+	if !dropped && !touched {
+		return Ok(Some((queue, None)));
+	}
+	let Some(events) = heard(kept, reach.timeline(repository, pull.number).await?) else {
+		return Ok(None);
+	};
+	match last_queue_event(&events) {
+		Some(QueueEvent::Removed(removal)) => {
+			ejected(reach, kept, repository, pull.number, removal, queue).await
+		}
+		Some(QueueEvent::Added { at }) if standing.blocker == Some(Blocker::MergeQueueEjected) => {
+			requeued(reach, kept, repository, pull.number, at, queue).await
+		}
+		_ => Ok(Some((queue, None))),
+	}
+}
+
+fn conflicted(pull: &Pull, queue: Queue) -> Heard {
+	if queue.conflicted_on.as_ref() == Some(&pull.head.sha) {
+		return (queue, None);
+	}
+	let blocker = Blocker::ConflictsWithMain;
+	let entry = held_back(pull.number, blocker, vec![CONFLICTS_WITH_MAIN.to_owned()]);
+	let queue =
+		Queue { conflicted_on: Some(pull.head.sha.clone()), blocker: Some(blocker), ..queue };
+	(queue, Some(entry))
+}
+
+fn resolved(pull: &Pull, queue: Queue) -> Heard {
+	match pull.mergeable_state.as_deref() == Some(CLEAN) {
+		true => released(pull.number, queue),
+		false => (queue, None),
+	}
+}
+
+fn released(number: u64, queue: Queue) -> Heard {
+	let entry = entry(MissionEventKind::Ready, json!({ "pullRequest": number }));
+	(Queue { blocker: None, ..queue }, Some(entry))
+}
+
+async fn ejected(
+	reach: &Reach,
+	kept: &mut Kept,
+	repository: &str,
+	number: u64,
+	removal: Removal,
+	queue: Queue,
+) -> Result<Option<Heard>, Failure> {
+	if queue.ejected_by_event == Some(removal.id) {
+		return Ok(Some((queue, None)));
+	}
+	let Some(runs) = heard(kept, reach.queue_runs(repository).await?) else {
+		return Ok(None);
+	};
+	let checks = match ejecting_run(&runs, number, &removal) {
+		None => Vec::new(),
+		Some(run) => match heard(kept, reach.jobs(repository, run.id).await?) {
+			Some(jobs) => red_jobs(&jobs),
+			None => return Ok(None),
+		},
+	};
+	let blocker = Blocker::MergeQueueEjected;
+	let queue = Queue { ejected_by_event: Some(removal.id), blocker: Some(blocker), ..queue };
+	Ok(Some((queue, Some(held_back(number, blocker, checks)))))
+}
+
+async fn requeued(
+	reach: &Reach,
+	kept: &mut Kept,
+	repository: &str,
+	number: u64,
+	added_at: Option<String>,
+	queue: Queue,
+) -> Result<Option<Heard>, Failure> {
+	let Some(runs) = heard(kept, reach.queue_runs(repository).await?) else {
+		return Ok(None);
+	};
+	let green = own_queue_run(&runs, number, added_at.as_deref()).is_some_and(|run| {
+		run.status.as_deref() == Some("completed") && run.conclusion.as_deref() == Some("success")
+	});
+	match green {
+		true => Ok(Some(released(number, queue))),
+		false => Ok(Some((queue, None))),
+	}
+}
+
+fn last_queue_event(events: &[TimelineEvent]) -> Option<QueueEvent> {
+	let (index, last) = events.iter().enumerate().rev().find(|(_, event)| queued_event(event))?;
+	if last.event.as_deref() == Some(ADDED_TO_QUEUE) {
+		return Some(QueueEvent::Added { at: last.created_at.clone() });
+	}
+	let added =
+		events[..index].iter().rev().find(|event| event.event.as_deref() == Some(ADDED_TO_QUEUE));
+	Some(QueueEvent::Removed(Removal {
+		id: last.id.unwrap_or_default(),
+		at: last.created_at.clone(),
+		added_at: added.and_then(|added| added.created_at.clone()),
+	}))
+}
+
+fn queue_window_read(events: &[TimelineEvent]) -> bool {
+	let Some(index) = events.iter().rposition(queued_event) else {
+		return false;
+	};
+	events[..=index].iter().any(|event| event.event.as_deref() == Some(ADDED_TO_QUEUE))
+}
+
+fn queued_event(event: &TimelineEvent) -> bool {
+	matches!(event.event.as_deref(), Some(ADDED_TO_QUEUE | REMOVED_FROM_QUEUE))
+}
+
+fn ejecting_run<'a>(
+	runs: &'a WorkflowRuns,
+	number: u64,
+	removal: &Removal,
+) -> Option<&'a WorkflowRun> {
+	let since = removal.added_at.as_deref();
+	if let Some(own) = own_queue_run(runs, number, since) {
+		return Some(own).filter(|run| red(run.conclusion.as_deref()));
+	}
+	runs.workflow_runs
+		.iter()
+		.filter(|run| red(run.conclusion.as_deref()))
+		.filter(|run| at_or_after(run.updated_at.as_deref(), since))
+		.filter(|run| at_or_after(removal.at.as_deref(), run.updated_at.as_deref()))
+		.max_by(|one, other| one.updated_at.cmp(&other.updated_at))
+}
+
+fn own_queue_run<'a>(
+	runs: &'a WorkflowRuns,
+	number: u64,
+	since: Option<&str>,
+) -> Option<&'a WorkflowRun> {
+	let marker = format!("/pr-{number}-");
+	runs.workflow_runs.iter().find(|run| {
+		let named = run
+			.head_branch
+			.as_deref()
+			.is_some_and(|branch| branch.starts_with(QUEUE_REF_PREFIX) && branch.contains(&marker));
+		named && at_or_after(run.created_at.as_deref(), since)
+	})
+}
+
+fn at_or_after(at: Option<&str>, since: Option<&str>) -> bool {
+	match (at, since) {
+		(Some(at), Some(since)) => at >= since,
+		_ => true,
+	}
+}
+
+fn red_jobs(jobs: &Jobs) -> Vec<String> {
+	jobs.jobs
+		.iter()
+		.filter(|job| red(job.conclusion.as_deref()))
+		.map(|job| match job.steps.iter().find(|step| red(step.conclusion.as_deref())) {
+			Some(step) => format!("{}: {}", job.name, step.name),
+			None => job.name.clone(),
+		})
+		.collect()
+}
+
+fn held_back(number: u64, blocker: Blocker, checks: Vec<String>) -> MissionEntry {
+	entry(
+		MissionEventKind::ChecksFailed,
+		json!({ "pullRequest": number, "reason": blocker, "checks": checks }),
+	)
 }
 
 async fn recorded(
@@ -404,7 +882,17 @@ async fn recorded(
 		return Ok(None);
 	}
 	let entries = appended(held, &fresh, url, failed);
-	let stored = serde_json::to_string(&fresh)
+	written(database, mission_id, entries, &fresh, url).await
+}
+
+async fn written(
+	database: &db::Database,
+	mission_id: &str,
+	entries: Vec<MissionEntry>,
+	fresh: &Fingerprint,
+	url: Option<&str>,
+) -> Result<Option<Mission>, Failure> {
+	let stored = serde_json::to_string(fresh)
 		.map_err(|error| Failure::Unreadable(format!("no fingerprint: {error}")))?;
 	Ok(database
 		.missions()
@@ -459,6 +947,7 @@ fn moved_checks(held: Option<&Fingerprint>, fresh: &Fingerprint) -> Option<Missi
 		return None;
 	}
 	match fresh.checks {
+		Checks::Passed if fresh.held_back() => None,
 		Checks::Passed => Some(MissionEventKind::Ready),
 		Checks::Failed => Some(MissionEventKind::ChecksFailed),
 		Checks::None | Checks::Pending => None,
@@ -474,8 +963,12 @@ fn entry(kind: MissionEventKind, payload: serde_json::Value) -> MissionEntry {
 }
 
 fn concluded(runs: &Runs) -> Settled {
-	let failed: Vec<String> =
-		runs.check_runs.iter().filter(|run| failed(run)).map(|run| run.name.clone()).collect();
+	let failed: Vec<String> = runs
+		.check_runs
+		.iter()
+		.filter(|run| red(run.conclusion.as_deref()))
+		.map(|run| run.name.clone())
+		.collect();
 	if !failed.is_empty() {
 		return Settled { checks: Checks::Failed, failed };
 	}
@@ -488,8 +981,8 @@ fn concluded(runs: &Runs) -> Settled {
 	}
 }
 
-fn failed(run: &CheckRun) -> bool {
-	run.conclusion.as_deref().is_some_and(|held| FAILED_CONCLUSIONS.contains(&held))
+fn red(conclusion: Option<&str>) -> bool {
+	conclusion.is_some_and(|held| FAILED_CONCLUSIONS.contains(&held))
 }
 
 async fn read<T: serde::de::DeserializeOwned>(answer: Response) -> Result<Answer<T>, Failure> {
@@ -557,12 +1050,13 @@ pub(crate) fn headers() -> HeaderMap {
 
 #[cfg(test)]
 mod tests {
+	use std::hash::{DefaultHasher, Hash, Hasher};
 	use std::net::{Ipv4Addr, SocketAddr};
 	use std::sync::atomic::{AtomicI64, Ordering};
 	use std::sync::mpsc::channel;
 	use std::sync::Arc;
 
-	use axum::extract::{Path as AxumPath, State as Extracted};
+	use axum::extract::{Path as AxumPath, RawQuery, State as Extracted};
 	use axum::response::{IntoResponse, Response as Answered};
 	use axum::routing::get;
 	use axum::Router;
@@ -583,6 +1077,8 @@ mod tests {
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const NOON: i64 = 1_800_000_000_000;
+
+	const TIMELINE_PAGE: usize = 100;
 
 	const A_BRANCH: &str = "feature/ope-27";
 
@@ -624,14 +1120,20 @@ mod tests {
 		repository: String,
 		conditional_on: Option<String>,
 		bearing: bool,
+		not_modified: bool,
 	}
 
 	struct Answers {
+		base: String,
 		pulls: Value,
 		checks: Value,
+		timeline: Value,
+		queue_runs: Value,
+		jobs: Value,
 		etag: String,
 		reset_at_s: Option<i64>,
 		refused_repository: Option<String>,
+		refused_path: Option<(String, Option<i64>)>,
 		asked: Vec<Asked>,
 	}
 
@@ -643,22 +1145,32 @@ mod tests {
 
 	impl Stub {
 		async fn holding(pulls: Value, etag: &str) -> Self {
-			let answers = Arc::new(Mutex::new(Answers {
-				pulls,
-				checks: json!({ "check_runs": [] }),
-				etag: etag.to_owned(),
-				reset_at_s: None,
-				refused_repository: None,
-				asked: Vec::new(),
-			}));
 			let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
 				.await
 				.expect("the stub binds");
 			let address: SocketAddr = listener.local_addr().expect("the stub is named");
+			let base = format!("http://{address}");
+			let answers = Arc::new(Mutex::new(Answers {
+				base: base.clone(),
+				pulls,
+				checks: json!({ "check_runs": [] }),
+				timeline: json!([]),
+				queue_runs: json!({ "workflow_runs": [] }),
+				jobs: json!({ "jobs": [] }),
+				etag: etag.to_owned(),
+				reset_at_s: None,
+				refused_repository: None,
+				refused_path: None,
+				asked: Vec::new(),
+			}));
 			let (stop, halted) = signal::channel(false);
 			let router = Router::new()
 				.route("/repos/{owner}/{name}/pulls", get(pulls_of))
+				.route("/repos/{owner}/{name}/pulls/{number}", get(pull_of))
 				.route("/repos/{owner}/{name}/commits/{sha}/check-runs", get(checks_of))
+				.route("/repos/{owner}/{name}/issues/{number}/timeline", get(timeline_of))
+				.route("/repos/{owner}/{name}/actions/runs", get(queue_runs_of))
+				.route("/repos/{owner}/{name}/actions/runs/{id}/jobs", get(jobs_of))
 				.with_state(answers.clone());
 			let mut halting = halted;
 			tokio::spawn(async move {
@@ -668,7 +1180,7 @@ mod tests {
 					})
 					.await;
 			});
-			Stub { base: format!("http://{address}"), answers, stop }
+			Stub { base, answers, stop }
 		}
 
 		async fn answering(&self, pulls: Value, etag: &str) {
@@ -679,6 +1191,21 @@ mod tests {
 
 		async fn checking(&self, checks: Value) {
 			self.answers.lock().await.checks = checks;
+		}
+
+		async fn queueing(&self, timeline: Value, queue_runs: Value, jobs: Value) {
+			let mut held = self.answers.lock().await;
+			held.timeline = timeline;
+			held.queue_runs = queue_runs;
+			held.jobs = jobs;
+		}
+
+		async fn refusing_path(&self, path: &str, reset_at_s: Option<i64>) {
+			self.answers.lock().await.refused_path = Some((path.to_owned(), reset_at_s));
+		}
+
+		async fn accepting(&self) {
+			self.answers.lock().await.refused_path = None;
 		}
 
 		async fn refusing_until(&self, reset_at_s: i64) {
@@ -721,6 +1248,7 @@ mod tests {
 			repository: repository.clone(),
 			conditional_on: conditional_on.clone(),
 			bearing: bearing(&headers),
+			not_modified: false,
 		});
 		if held.refused_repository.as_deref() == Some(repository.as_str()) {
 			return (StatusCode::FORBIDDEN, String::new()).into_response();
@@ -737,9 +1265,23 @@ mod tests {
 				.into_response();
 		}
 		if conditional_on.as_deref() == Some(held.etag.as_str()) {
+			if let Some(asked) = held.asked.last_mut() {
+				asked.not_modified = true;
+			}
 			return StatusCode::NOT_MODIFIED.into_response();
 		}
 		as_json(Some(&held.etag), &held.pulls)
+	}
+
+	async fn pull_of(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name, _)): AxumPath<(String, String, String)>,
+		headers: HeaderMap,
+	) -> Answered {
+		answered(&answers, "pull".to_owned(), format!("{owner}/{name}"), &headers, |held| {
+			held.pulls[0].clone()
+		})
+		.await
 	}
 
 	async fn checks_of(
@@ -747,14 +1289,138 @@ mod tests {
 		AxumPath((owner, name, _)): AxumPath<(String, String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
+		answered(&answers, "checks".to_owned(), format!("{owner}/{name}"), &headers, |held| {
+			held.checks.clone()
+		})
+		.await
+	}
+
+	async fn queue_runs_of(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name)): AxumPath<(String, String)>,
+		headers: HeaderMap,
+	) -> Answered {
+		answered(&answers, "runs".to_owned(), format!("{owner}/{name}"), &headers, |held| {
+			held.queue_runs.clone()
+		})
+		.await
+	}
+
+	async fn jobs_of(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name, id)): AxumPath<(String, String, String)>,
+		headers: HeaderMap,
+	) -> Answered {
+		answered(&answers, format!("jobs/{id}"), format!("{owner}/{name}"), &headers, |held| {
+			held.jobs.clone()
+		})
+		.await
+	}
+
+	async fn timeline_of(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		AxumPath((owner, name, number)): AxumPath<(String, String, String)>,
+		RawQuery(query): RawQuery,
+		headers: HeaderMap,
+	) -> Answered {
 		let mut held = answers.lock().await;
+		let page = query
+			.as_deref()
+			.and_then(|query| query.split('&').find_map(|pair| pair.strip_prefix("page=")))
+			.and_then(|page| page.parse::<usize>().ok())
+			.unwrap_or(1);
+		let path = match page {
+			1 => "timeline".to_owned(),
+			page => format!("timeline/{page}"),
+		};
 		held.asked.push(Asked {
-			path: "checks".to_owned(),
+			path: path.clone(),
 			repository: format!("{owner}/{name}"),
 			conditional_on: None,
 			bearing: bearing(&headers),
+			not_modified: false,
 		});
-		as_json(None, &held.checks)
+		if let Some(refusal) = refusal(&held, &path) {
+			return refusal;
+		}
+		let events = held.timeline.as_array().cloned().expect("the stub timeline is an array");
+		let last = events.len().div_ceil(TIMELINE_PAGE).max(1);
+		let shown =
+			events.into_iter().skip((page - 1) * TIMELINE_PAGE).take(TIMELINE_PAGE).collect();
+		let mut answer = as_json(None, &Value::Array(shown));
+		if last == 1 {
+			return answer;
+		}
+		let page_url = |page: usize| {
+			format!(
+				"{}/repos/{owner}/{name}/issues/{number}/timeline?per_page={TIMELINE_PAGE}&page={page}",
+				held.base
+			)
+		};
+		let mut links = vec![format!("<{}>; rel=\"last\"", page_url(last))];
+		if page > 1 {
+			links.push(format!("<{}>; rel=\"prev\"", page_url(page - 1)));
+		}
+		answer.headers_mut().insert(
+			LINK,
+			HeaderValue::from_str(&links.join(", ")).expect("the stub link is a header value"),
+		);
+		answer
+	}
+
+	async fn answered(
+		answers: &Mutex<Answers>,
+		path: String,
+		repository: String,
+		headers: &HeaderMap,
+		body: fn(&Answers) -> Value,
+	) -> Answered {
+		let mut held = answers.lock().await;
+		let conditional_on =
+			headers.get(IF_NONE_MATCH).and_then(|held| held.to_str().ok()).map(str::to_owned);
+		let body = body(&held);
+		let etag = etag_of(&body);
+		let refused = refusal(&held, &path);
+		let not_modified = refused.is_none() && conditional_on.as_deref() == Some(etag.as_str());
+		held.asked.push(Asked {
+			path,
+			repository,
+			conditional_on,
+			bearing: bearing(headers),
+			not_modified,
+		});
+		if let Some(refused) = refused {
+			return refused;
+		}
+		if not_modified {
+			return StatusCode::NOT_MODIFIED.into_response();
+		}
+		as_json(Some(&etag), &body)
+	}
+
+	fn refusal(held: &Answers, path: &str) -> Option<Answered> {
+		let (refused, reset_at_s) = held.refused_path.clone()?;
+		if path != refused && !path.starts_with(&format!("{refused}/")) {
+			return None;
+		}
+		Some(match reset_at_s {
+			Some(reset_at_s) => (
+				StatusCode::FORBIDDEN,
+				[
+					(RATE_LIMIT_REMAINING_HEADER, "0".to_owned()),
+					(RATE_LIMIT_RESET_HEADER, reset_at_s.to_string()),
+				],
+				String::new(),
+			)
+				.into_response(),
+			None => (StatusCode::INTERNAL_SERVER_ERROR, String::new()).into_response(),
+		})
+	}
+
+	fn etag_of(body: &Value) -> String {
+		let mut hasher = DefaultHasher::new();
+		body.to_string().hash(&mut hasher);
+		format!("\"{:x}\"", hasher.finish())
 	}
 
 	fn bearing(headers: &HeaderMap) -> bool {
@@ -782,6 +1448,196 @@ mod tests {
 			"merged_at": merged.then(|| "2026-09-04T10:00:00Z".to_owned()),
 			"head": { "sha": head_sha },
 		}])
+	}
+
+	fn a_pull_in_queue(auto_merge: bool, mergeable_state: &str, updated_at: &str) -> Value {
+		a_pull_numbered(7, auto_merge, mergeable_state, updated_at)
+	}
+
+	fn a_pull_numbered(
+		number: u64,
+		auto_merge: bool,
+		mergeable_state: &str,
+		updated_at: &str,
+	) -> Value {
+		json!([{
+			"number": number,
+			"state": "open",
+			"html_url": A_PULL_URL,
+			"merged_at": null,
+			"head": { "sha": "abc" },
+			"auto_merge": auto_merge.then(|| json!({ "merge_method": "squash" })),
+			"mergeable_state": mergeable_state,
+			"updated_at": updated_at,
+		}])
+	}
+
+	fn a_timeline(events: &[&str]) -> Value {
+		Value::Array(
+			events
+				.iter()
+				.enumerate()
+				.map(|(index, event)| json!({ "id": index + 1, "event": event }))
+				.collect(),
+		)
+	}
+
+	fn a_timeline_at(events: &[(&str, Option<u64>, &str)]) -> Value {
+		Value::Array(
+			events
+				.iter()
+				.map(|(event, id, at)| json!({ "id": id, "event": event, "created_at": at }))
+				.collect(),
+		)
+	}
+
+	const MERGE_GROUP_RUNS_OF_OCTOBER_20: [(u64, &str, &str, &str, &str); 12] = [
+		(
+			39502695777,
+			"pr-1464-449dc6f3dde1781f5f09425af5938cba43e9e8ea",
+			"failure",
+			"21:43:45",
+			"21:53:13",
+		),
+		(
+			39502670368,
+			"pr-1459-9fa22ed84a7356cb0b07424d5e0d7b2fc941c9ca",
+			"success",
+			"21:43:33",
+			"21:54:26",
+		),
+		(
+			39498731185,
+			"pr-1461-9fa22ed84a7356cb0b07424d5e0d7b2fc941c9ca",
+			"failure",
+			"21:14:26",
+			"21:24:49",
+		),
+		(
+			39497664694,
+			"pr-1463-c54a1ac9ded47859edda764ae587621b4200f3a8",
+			"success",
+			"21:06:35",
+			"21:09:07",
+		),
+		(
+			39493626311,
+			"pr-1461-c54a1ac9ded47859edda764ae587621b4200f3a8",
+			"failure",
+			"20:37:56",
+			"20:46:04",
+		),
+		(
+			39493448657,
+			"pr-1458-37a4b0bdcb53113991f290b4e46467ef21df8245",
+			"success",
+			"20:36:41",
+			"20:42:36",
+		),
+		(
+			39493075995,
+			"pr-1457-ee5e0fab921dda571556d2751f77b3c00d92584d",
+			"success",
+			"20:34:05",
+			"20:44:33",
+		),
+		(
+			39493072332,
+			"pr-1460-e84c54ed91b8627da555fb43f10b2bc5e09d3356",
+			"success",
+			"20:34:03",
+			"20:42:36",
+		),
+		(
+			39492927586,
+			"pr-1458-5dbeb5e8dc7fc0a360abffab5273ae1356584d3e",
+			"success",
+			"20:33:03",
+			"20:38:50",
+		),
+		(
+			39492582053,
+			"pr-1457-b7db962da54fca96ad56a7107ca30e4b124c97fa",
+			"failure",
+			"20:30:41",
+			"20:33:05",
+		),
+		(
+			39492580943,
+			"pr-1460-25c31319862d9acb425cf442ae657ee802addde3",
+			"failure",
+			"20:30:41",
+			"20:34:22",
+		),
+		(
+			39492578935,
+			"pr-1459-e84c54ed91b8627da555fb43f10b2bc5e09d3356",
+			"failure",
+			"20:30:40",
+			"20:33:36",
+		),
+	];
+
+	fn merge_group_runs_since(first_id: u64) -> Value {
+		let runs = MERGE_GROUP_RUNS_OF_OCTOBER_20
+			.iter()
+			.skip_while(|(id, ..)| *id != first_id)
+			.map(|(id, branch, conclusion, created, updated)| {
+				json!({
+					"id": id,
+					"head_branch": format!("gh-readonly-queue/main/{branch}"),
+					"status": "completed",
+					"conclusion": conclusion,
+					"created_at": format!("2026-10-20T{created}Z"),
+					"updated_at": format!("2026-10-20T{updated}Z"),
+				})
+			})
+			.collect::<Vec<_>>();
+		json!({ "workflow_runs": runs })
+	}
+
+	fn rust_and_verify_red_at_gate() -> Value {
+		json!({ "jobs": [
+			{ "name": "rust", "conclusion": "failure", "steps": [
+				{ "name": "Gate", "conclusion": "failure" },
+			] },
+			{ "name": "verify", "conclusion": "failure", "steps": [
+				{ "name": REQUIRE_RUST, "conclusion": "failure" },
+			] },
+		] })
+	}
+
+	const REQUIRE_RUST: &str =
+		"Require rust to succeed when changes selected it, and to be skipped otherwise";
+
+	fn queue_runs(runs: &[(u64, &str)]) -> Value {
+		let mut workflow_runs = vec![json!({
+			"id": 900,
+			"head_branch": "gh-readonly-queue/main/pr-8-0f0f",
+			"status": "completed",
+			"conclusion": "failure",
+		})];
+		workflow_runs.extend(runs.iter().map(|(id, conclusion)| {
+			json!({
+				"id": id,
+				"head_branch": format!("gh-readonly-queue/main/pr-7-{id}"),
+				"status": "completed",
+				"conclusion": conclusion,
+			})
+		}));
+		json!({ "workflow_runs": workflow_runs })
+	}
+
+	fn rust_red_at_gate() -> Value {
+		json!({ "jobs": [
+			{ "name": "lint", "conclusion": "success", "steps": [
+				{ "name": "Gate", "conclusion": "success" },
+			] },
+			{ "name": "rust", "conclusion": "failure", "steps": [
+				{ "name": "Install dependencies", "conclusion": "success" },
+				{ "name": "Gate", "conclusion": "failure" },
+			] },
+		] })
 	}
 
 	fn a_run(status: &str, conclusion: Option<&str>) -> Value {
@@ -1063,15 +1919,15 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_settled_check_state_on_an_unmoved_head_sha_reads_no_check_runs() {
+	async fn a_red_check_state_on_an_unmoved_head_sha_reads_no_check_runs() {
 		let (database, dir) = planted().await;
 		let mission = an_armed_mission(&database).await;
 		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
 		let clock = Ticking::at(NOON);
 		let mut kept = Kept::default();
-		stub.checking(a_run("completed", Some("success"))).await;
+		stub.checking(a_run("completed", Some("failure"))).await;
 		walked(&stub, &database, &mut kept, &clock).await;
-		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 		let read_checks = stub.asked_about("checks").await.len();
 
 		stub.answering(a_pull("open", "abc", false), "\"two\"").await;
@@ -1081,7 +1937,7 @@ mod tests {
 		assert_eq!(
 			stub.asked_about("checks").await.len(),
 			read_checks,
-			"a settled check state on an unmoved head sha was read again"
+			"a red check state on an unmoved head sha was read again"
 		);
 		assert_eq!(from_github(&database, &mission.id).await.len(), 2);
 
@@ -1411,6 +2267,565 @@ mod tests {
 		assert_eq!(refused, 1, "the refusal was not the end of the pass");
 		assert_eq!(stub.asked().await.len(), 1, "a request landed before the reset");
 		assert!(from_github(&database, &mission.id).await.is_empty());
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn ready_in_queue(pull: Value) -> (Database, RemovedOnDrop, Mission, Stub, Kept) {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(pull, "\"one\"").await;
+		stub.checking(a_run("completed", Some("success"))).await;
+		let mut kept = Kept::default();
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON)).await;
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+		(database, dir, mission, stub, kept)
+	}
+
+	async fn fingerprint_of(database: &Database, mission_id: &str) -> Value {
+		let watched = database.missions().watched().await.expect("the watched missions read");
+		let held = watched
+			.into_iter()
+			.find(|mission| mission.id == mission_id)
+			.expect("the mission is watched")
+			.fingerprint;
+		serde_json::from_str(&held).expect("the fingerprint is JSON")
+	}
+
+	#[tokio::test]
+	async fn a_pull_request_whose_auto_merge_drops_after_green_head_checks_appends_one_ejection() {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::ChecksFailed,
+				json!({
+					"pullRequest": 7,
+					"reason": "merge_queue_ejected",
+					"checks": ["rust: Gate"],
+				}),
+			)),
+		);
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			1,
+			"the same ejection read on two ticks was appended twice"
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_pull_request_turned_dirty_by_a_merge_on_main_appends_one_conflict_then_ready_once_clean(
+	) {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.answering(a_pull_in_queue(false, "dirty", "t2"), "\"two\"").await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::ChecksFailed,
+				json!({
+					"pullRequest": 7,
+					"reason": "conflicts_with_main",
+					"checks": ["conflicts with main"],
+				}),
+			)),
+		);
+		assert_eq!(red_checks_of(&database, &mission.id).await, 1);
+		assert!(
+			stub.asked_about("runs").await.is_empty(),
+			"the queue dropping a conflicted pull request was read as a second ejection"
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"three\"").await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(MissionEventKind::Ready, json!({ "pullRequest": 7 }))),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_batch_victim_removed_from_the_queue_returns_to_ready_on_a_green_merge_group_run() {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(false, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::ChecksFailed,
+				json!({
+					"pullRequest": 7,
+					"reason": "merge_queue_ejected",
+					"checks": ["rust: Gate"],
+				}),
+			)),
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.answering(a_pull_in_queue(false, "clean", "t3"), "\"three\"").await;
+		stub.queueing(
+			a_timeline(&[
+				"added_to_merge_queue",
+				"removed_from_merge_queue",
+				"added_to_merge_queue",
+			]),
+			queue_runs(&[(102, "success"), (101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(MissionEventKind::Ready, json!({ "pullRequest": 7 }))),
+		);
+		assert_eq!(red_checks_of(&database, &mission.id).await, 1);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn head_checks_held_as_passed_that_turn_red_on_a_rerun_append_checks_failed_naming_them()
+	{
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.checking(a_run("completed", Some("failure"))).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await.last(),
+			Some(&(
+				MissionEventKind::ChecksFailed,
+				json!({ "pullRequest": 7, "checks": [A_CHECK] }),
+			)),
+		);
+		assert_eq!(red_checks_of(&database, &mission.id).await, 1);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_fingerprint_stored_before_the_queue_was_watched_reads_without_appending_anything() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		database
+			.missions()
+			.record_github(
+				mission.id.clone(),
+				vec![entry(MissionEventKind::Ready, json!({ "pullRequest": 7 }))],
+				r#"{"number":7,"state":"open","headSha":"abc","checks":"passed","merged":false}"#
+					.to_owned(),
+				Some(A_PULL_URL.to_owned()),
+			)
+			.await
+			.expect("the legacy fingerprint is kept");
+		let stub = Stub::holding(a_pull_in_queue(false, "dirty", "t2"), "\"one\"").await;
+		stub.checking(a_run("completed", Some("success"))).await;
+		stub.queueing(
+			a_timeline(&["removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		let before = from_github(&database, &mission.id).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(from_github(&database, &mission.id).await, before, "the legacy read appended");
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+		assert_eq!(
+			fingerprint_of(&database, &mission.id).await["queue"],
+			json!({
+				"autoMerge": false,
+				"updatedAt": "t2",
+				"ejectedByEvent": null,
+				"conflictedOn": null,
+				"blocker": null,
+			}),
+		);
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			1,
+			"the read after the legacy one did not hear the conflict"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_pull_request_with_pending_head_checks_is_read_with_no_extra_request() {
+		let (database, dir) = planted().await;
+		an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull_in_queue(false, "dirty", "t1"), "\"one\"").await;
+		stub.checking(a_run("in_progress", None)).await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.answering(a_pull_in_queue(false, "dirty", "t2"), "\"two\"").await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			stub.asked().await.iter().map(|asked| asked.path.as_str()).collect::<Vec<_>>(),
+			vec!["pulls", "checks", "pulls", "checks", "pulls", "checks"],
+			"a pull request with pending head checks was read beyond its listing and checks"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_merge_group_read_answered_an_error_or_a_hold_leaves_state_and_fingerprint_unchanged()
+	{
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		let fingerprint = fingerprint_of(&database, &mission.id).await;
+		let events = from_github(&database, &mission.id).await;
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+
+		stub.refusing_path("runs", None).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.refusing_path("runs", Some(NOON / 1000 + 600)).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(from_github(&database, &mission.id).await, events);
+		assert_eq!(fingerprint_of(&database, &mission.id).await, fingerprint);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+		assert!(kept.held(NOON), "the hold the merge group read answered was not kept");
+
+		stub.accepting().await;
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON + 601_000)).await;
+
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			1,
+			"the ejection was lost once the merge group read answered again"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_ejection_read_again_on_later_ticks_appends_nothing() {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(false, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		let ejected = a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]);
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(ejected, queue_runs(&[(101, "failure")]), rust_red_at_gate()).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		stub.answering(a_pull_in_queue(false, "clean", "t3"), "\"three\"").await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			1,
+			"the same removal from the queue was appended a second time"
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_green_mission_on_an_unmoved_pull_request_costs_two_not_modified_answers_per_tick() {
+		let (database, dir, _, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		walked(&stub, &database, &mut kept, &clock).await;
+		let before = stub.asked().await.len();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let tick: Vec<(String, bool, bool)> = stub.asked().await[before..]
+			.iter()
+			.map(|asked| (asked.path.clone(), asked.conditional_on.is_some(), asked.not_modified))
+			.collect();
+		assert_eq!(
+			tick,
+			vec![("pull".to_owned(), true, true), ("checks".to_owned(), true, true)],
+			"an unmoved green pull request cost more than two not modified answers"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_blocked_mission_whose_head_checks_go_pending_then_passed_on_the_same_sha_appends_no_ready(
+	) {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		let ejected = from_github(&database, &mission.id).await;
+
+		stub.checking(a_run("in_progress", None)).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.checking(a_run("completed", Some("success"))).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			from_github(&database, &mission.id).await,
+			ejected,
+			"a re-run on the ejected head sha appended an entry"
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_timeline_longer_than_one_page_is_read_for_its_latest_queue_event_from_the_last_page()
+	{
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		let mut events = vec!["added_to_merge_queue"];
+		events.extend(std::iter::repeat_n("commented", 120));
+		events.push("removed_from_merge_queue");
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(a_timeline(&events), queue_runs(&[(101, "failure")]), rust_red_at_gate())
+			.await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert!(
+			stub.asked().await.iter().any(|asked| asked.path == "timeline/2"),
+			"the last page of the timeline was not read"
+		);
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			1,
+			"the removal on the last page of the timeline was not heard"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn ejected_in_batch(
+		number: u64,
+		queued: Value,
+		ejected: Value,
+		runs: Value,
+	) -> (Vec<(MissionEventKind, Value)>, Vec<String>) {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_numbered(number, false, "clean", "queued")).await;
+		stub.queueing(queued, json!({ "workflow_runs": [] }), json!({ "jobs": [] })).await;
+		let clock = Ticking::at(NOON);
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.answering(a_pull_numbered(number, false, "clean", "ejected"), "\"two\"").await;
+		stub.queueing(ejected, runs, rust_and_verify_red_at_gate()).await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let jobs_read = stub
+			.asked()
+			.await
+			.into_iter()
+			.filter(|asked| asked.path.starts_with("jobs/"))
+			.map(|asked| asked.path)
+			.collect();
+		let events = from_github(&database, &mission.id).await;
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+		(events, jobs_read)
+	}
+
+	fn ejected_by_its_batch(number: u64) -> (MissionEventKind, Value) {
+		(
+			MissionEventKind::ChecksFailed,
+			json!({
+				"pullRequest": number,
+				"reason": "merge_queue_ejected",
+				"checks": ["rust: Gate", format!("verify: {REQUIRE_RUST}")],
+			}),
+		)
+	}
+
+	#[tokio::test]
+	async fn a_pull_request_ejected_inside_a_batch_names_the_red_jobs_of_the_run_that_ejected_its_batch(
+	) {
+		let queue_of_1461 = [
+			("added_to_merge_queue", Some(33783317038), "2026-10-20T20:37:41Z"),
+			("removed_from_merge_queue", Some(33784016820), "2026-10-20T20:46:19Z"),
+			("added_to_merge_queue", Some(33786198713), "2026-10-20T21:14:08Z"),
+			("removed_from_merge_queue", Some(33786981687), "2026-10-20T21:24:57Z"),
+			("added_to_merge_queue", Some(33788328282), "2026-10-20T21:43:26Z"),
+			("removed_from_merge_queue", Some(33789107681), "2026-10-20T21:54:53Z"),
+		];
+		let (events, jobs_read) = ejected_in_batch(
+			1461,
+			a_timeline_at(&queue_of_1461[..5]),
+			a_timeline_at(&queue_of_1461),
+			merge_group_runs_since(39502695777),
+		)
+		.await;
+
+		assert_eq!(events.last(), Some(&ejected_by_its_batch(1461)));
+		assert_eq!(
+			jobs_read,
+			vec!["jobs/39502695777".to_owned()],
+			"#1461 was named after one of its own earlier runs, not the #1464 batch run"
+		);
+
+		let queue_of_1462 = [
+			("auto_merge_enabled", None, "2026-10-20T20:40:20Z"),
+			("added_to_merge_queue", None, "2026-10-20T20:42:07Z"),
+			("removed_from_merge_queue", Some(33784017181), "2026-10-20T20:46:20Z"),
+		];
+		let (events, jobs_read) = ejected_in_batch(
+			1462,
+			a_timeline_at(&queue_of_1462[..2]),
+			a_timeline_at(&queue_of_1462),
+			merge_group_runs_since(39493626311),
+		)
+		.await;
+
+		assert_eq!(events.last(), Some(&ejected_by_its_batch(1462)));
+		assert_eq!(
+			jobs_read,
+			vec!["jobs/39493626311".to_owned()],
+			"#1462 was not named after the #1461 run that ejected its batch"
+		);
+	}
+
+	#[tokio::test]
+	async fn auto_merge_dropped_with_no_removal_after_the_last_add_appends_nothing() {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		let before = from_github(&database, &mission.id).await;
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&[
+				"added_to_merge_queue",
+				"removed_from_merge_queue",
+				"added_to_merge_queue",
+			]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(from_github(&database, &mission.id).await, before);
+		assert!(stub.asked_about("runs").await.is_empty(), "a dropped auto merge read the runs");
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_second_ejection_with_no_newer_merge_group_run_still_appends_one_checks_failed() {
+		let (database, dir, mission, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(false, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		stub.answering(a_pull_in_queue(false, "clean", "t3"), "\"three\"").await;
+		stub.queueing(
+			a_timeline(&[
+				"added_to_merge_queue",
+				"removed_from_merge_queue",
+				"added_to_merge_queue",
+				"removed_from_merge_queue",
+			]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		walked(&stub, &database, &mut kept, &clock).await;
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		assert_eq!(
+			red_checks_of(&database, &mission.id).await,
+			2,
+			"a second removal on the same merge group run was swallowed or doubled"
+		);
+		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
