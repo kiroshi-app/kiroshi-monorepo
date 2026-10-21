@@ -60,7 +60,7 @@ pub const REFUSED_BY_DESIGN: [&str; 34] = [
 	"Bash(gh api* --field*)",
 	"Bash(gh api* --raw-field*)",
 	"Bash(gh api* --input*)",
-	"Bash(git push* main)",
+	"Bash(git push* origin main)",
 	"Bash(git push* origin main *)",
 	"Bash(git push* +main)",
 	"Bash(git push* +main *)",
@@ -259,7 +259,7 @@ mod tests {
 		an_api_call_carrying_a_typed_field_long_is_denied: "Bash(gh api* --field*)",
 		an_api_call_carrying_a_raw_field_long_is_denied: "Bash(gh api* --raw-field*)",
 		an_api_call_carrying_an_input_is_denied: "Bash(gh api* --input*)",
-		a_push_ending_on_main_is_denied: "Bash(git push* main)",
+		a_push_ending_on_main_on_origin_is_denied: "Bash(git push* origin main)",
 		a_push_to_main_on_origin_followed_by_an_argument_is_denied:
 			"Bash(git push* origin main *)",
 		a_forced_push_ending_on_main_is_denied: "Bash(git push* +main)",
@@ -350,6 +350,12 @@ mod tests {
 		"git push --force-with-lease origin feature/ope-1-x",
 	];
 
+	const HEAD_PUSH_COMMANDS: [&str; 2] = ["git push -u origin HEAD", "git push origin HEAD"];
+
+	fn first_pushes() -> impl Iterator<Item = &'static str> {
+		FEATURE_BRANCH_PUSHES.into_iter().chain(HEAD_PUSH_COMMANDS)
+	}
+
 	fn assert_matched_by_no_deny_rule(command: &str) {
 		let matched: Vec<String> = tracked_rules(DENY_KEY)
 			.into_iter()
@@ -413,7 +419,7 @@ mod tests {
 
 	#[test]
 	fn no_deny_rule_matches_a_feature_branch_push_chained_with_a_pull_request_to_main() {
-		for push in FEATURE_BRANCH_PUSHES {
+		for push in first_pushes() {
 			assert_matched_by_no_deny_rule(&format!(
 				"{push} && gh pr create --base main --title x --body y"
 			));
@@ -421,17 +427,26 @@ mod tests {
 	}
 
 	#[test]
+	fn no_deny_rule_matches_a_first_push_chained_with_a_pull_request_ending_on_main() {
+		for push in first_pushes() {
+			assert_matched_by_no_deny_rule(&format!("{push} && gh pr create --base main"));
+		}
+	}
+
+	#[test]
 	fn no_deny_rule_matches_a_feature_branch_push_chained_with_an_auto_merge() {
-		for push in FEATURE_BRANCH_PUSHES {
+		for push in first_pushes() {
 			assert_matched_by_no_deny_rule(&format!("{push} && gh pr merge --auto 12"));
 		}
 	}
 
 	#[test]
 	fn no_deny_rule_matches_a_piped_feature_branch_push_chained_with_a_pull_request_to_main() {
-		assert_matched_by_no_deny_rule(
-			"git push -u origin feature/ope-1-x 2>&1 | tail -3 && gh pr create --base main --title x",
-		);
+		for push in ["git push -u origin feature/ope-1-x"].into_iter().chain(HEAD_PUSH_COMMANDS) {
+			assert_matched_by_no_deny_rule(&format!(
+				"{push} 2>&1 | tail -3 && gh pr create --base main --title x"
+			));
+		}
 	}
 
 	#[test]
@@ -440,16 +455,26 @@ mod tests {
 
 		for command in [
 			"git push --force origin main",
-			"git push --force-with-lease origin feature/ope-1-x main",
+			"git push -f origin main",
+			"git push --force-with-lease origin main",
 			"git push origin feature/ope-1-x:main",
 			"git push origin +main",
 			"git push origin main",
 			"git push -u origin main",
+			"git push origin main --verbose",
 			"git push origin HEAD:main",
+			"git push origin refs/heads/main",
 			"git push origin feature/ope-1-x && git push origin main",
 		] {
 			assert!(matched_by(&denies, command), "{command} is not denied");
 		}
+	}
+
+	#[test]
+	fn a_multi_refspec_push_naming_main_is_left_to_the_branch_protection_of_main() {
+		let command = "git push --force-with-lease origin feature/ope-1-x main";
+
+		assert!(!matched_by(&tracked_rules(DENY_KEY), command), "{command} is denied");
 	}
 
 	macro_rules! asked_by_the_tracked_settings {
