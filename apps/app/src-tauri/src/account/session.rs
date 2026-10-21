@@ -388,43 +388,53 @@ async fn signed_in_work_stopped<R: Runtime>(app: &AppHandle<R>) -> Option<MutexG
 
 pub async fn sign_out<R: Runtime>(app: &AppHandle<R>) -> Result<(), AccountError> {
 	let session = app.state::<AccountSession>();
-	let mut waiting = session.turn.lock().await;
-	closed(&mut waiting).await;
-	let _relay_turn = signed_in_work_stopped(app).await;
-	if let Some(bearer) = session.bearer()? {
-		if let Err(reason) = relay_device_deleted(app, &bearer).await {
-			eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
-		}
-		if let Err(reason) = session.cloud.sign_out(&bearer).await {
-			eprintln!(
-				"the cloud did not close the session, the bearer is deleted anyway: {reason}"
-			);
-		}
+	let (bearer, relay_device) = {
+		let mut waiting = session.turn.lock().await;
+		let bearer = session.bearer()?;
+		let relay_device = held_relay_device(app).await;
+		closed(&mut waiting).await;
+		let _relay_turn = signed_in_work_stopped(app).await;
+		relay_device_forgotten(app).await;
+		session.forget_bearer()?;
+		entered(app, SIGNED_OUT);
+		(bearer, relay_device)
+	};
+	let Some(bearer) = bearer else {
+		return Ok(());
+	};
+	if let Err(reason) = relay_device_deleted(app, &bearer, relay_device).await {
+		eprintln!("the relay device was not deleted, the sign-out goes on: {reason}");
 	}
-	relay_device_forgotten(app).await;
-	session.forget_bearer()?;
-	entered(app, SIGNED_OUT);
+	if let Err(reason) = session.cloud.sign_out(&bearer).await {
+		eprintln!("the cloud did not close the session, the bearer is deleted anyway: {reason}");
+	}
 	Ok(())
 }
 
-async fn relay_device_deleted<R: Runtime>(app: &AppHandle<R>, bearer: &str) -> Result<(), String> {
+async fn held_relay_device<R: Runtime>(app: &AppHandle<R>) -> Result<Option<String>, String> {
 	let Some((account_id, device_id)) = relay_device_owner(app)? else {
-		return Ok(());
+		return Ok(None);
 	};
-	let held = signed_in_database(app)?
+	signed_in_database(app)?
 		.relay_devices()
 		.relay_device_id(account_id, device_id)
 		.await
-		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))?;
-	match held {
-		Some(relay_device_id) => app
-			.state::<AccountSession>()
-			.cloud
-			.delete_device(bearer, &relay_device_id)
-			.await
-			.map_err(|failure| failure.to_string()),
-		None => Ok(()),
-	}
+		.map_err(|failure| format!("the relay device id did not read: {failure:?}"))
+}
+
+async fn relay_device_deleted<R: Runtime>(
+	app: &AppHandle<R>,
+	bearer: &str,
+	relay_device: Result<Option<String>, String>,
+) -> Result<(), String> {
+	let Some(relay_device_id) = relay_device? else {
+		return Ok(());
+	};
+	app.state::<AccountSession>()
+		.cloud
+		.delete_device(bearer, &relay_device_id)
+		.await
+		.map_err(|failure| failure.to_string())
 }
 
 async fn relay_device_forgotten<R: Runtime>(app: &AppHandle<R>) {
@@ -726,9 +736,9 @@ mod tests {
 
 	impl Harness {
 		fn new(name: &str, api_url: &str) -> Self {
-			let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-account-{name}")));
-			let _ = std::fs::remove_dir_all(&root);
-			Self::holding(Ok(root), api_url)
+			let unique = uuid::Uuid::new_v4();
+			let folder = std::env::temp_dir().join(format!("kiroshi-account-{name}-{unique}"));
+			Self::holding(Ok(RemovedOnDrop(folder)), api_url)
 		}
 
 		fn without_store(api_url: &str) -> Self {
@@ -1239,6 +1249,7 @@ mod tests {
 			let harness = Harness::new("named-rename", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			harness.renamed_to(" Grace ").await;
 			harness.names_settled().await;
@@ -1258,6 +1269,7 @@ mod tests {
 			harness.store(BEARER);
 
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 			harness.renamed_to("Grace").await;
 			harness.renamed_to("  ").await;
 			harness.names_settled().await;
@@ -1290,6 +1302,7 @@ mod tests {
 			let harness = Harness::new("named-500", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
 			harness.names_settled().await;
@@ -1309,6 +1322,7 @@ mod tests {
 			let harness = Harness::new("named-401", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			let answered = harness.renamed_to("Grace").await;
 
@@ -1353,6 +1367,7 @@ mod tests {
 			let harness = Harness::new("named-twice", &stub(cloudy.clone()).await);
 			harness.store(BEARER);
 			restore(harness.app.handle().clone()).await;
+			harness.names_settled().await;
 
 			harness.renamed_to("Ada").await;
 			harness.renamed_to("Grace").await;
