@@ -17,7 +17,7 @@ const AHEAD_OF_MAIN: [&str; 3] = ["rev-list", "--count", "origin/main..HEAD"];
 const STATUS: [&str; 2] = ["status", "--porcelain"];
 
 #[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub(super) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Read {
