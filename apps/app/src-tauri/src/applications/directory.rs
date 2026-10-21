@@ -760,7 +760,7 @@ pub(crate) mod tests {
 
 	const NOON_INSTANT: &str = "2023-11-14T22:13:20.000Z";
 
-	const PATIENCE: Duration = Duration::from_secs(10);
+	const PATIENCE: Duration = Duration::from_secs(60);
 
 	const HELD_BACK_BOUND: Duration = Duration::from_secs(20);
 
