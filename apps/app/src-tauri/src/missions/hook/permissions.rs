@@ -366,10 +366,11 @@ mod tests {
 	}
 
 	#[test]
-	fn the_tracked_allows_are_the_three_feature_branch_pushes() {
+	fn the_tracked_allows_are_the_auto_merge_and_the_three_feature_branch_pushes() {
 		assert_eq!(
 			tracked_rules(ALLOW_KEY),
 			[
+				"Bash(gh pr merge --auto *)",
 				"Bash(git push --force-with-lease origin feature/*)",
 				"Bash(git push origin feature/*)",
 				"Bash(git push -u origin feature/*)",
@@ -394,16 +395,21 @@ mod tests {
 		assert_eq!(permission_keys, BTreeSet::from([ALLOW_KEY, ASK_KEY, DENY_KEY]));
 	}
 
-	#[test]
-	fn the_tracked_denies_are_the_refused_pushes_to_main() {
-		let refused_pushes: BTreeSet<String> = REFUSED_BY_DESIGN
+	fn refused_by_design_starting_with(prefix: &str) -> BTreeSet<String> {
+		REFUSED_BY_DESIGN
 			.into_iter()
-			.filter(|rule| rule.starts_with("Bash(git push"))
+			.filter(|rule| rule.starts_with(prefix))
 			.map(str::to_owned)
-			.collect();
+			.collect()
+	}
+
+	#[test]
+	fn the_tracked_denies_are_the_refused_pushes_to_main_and_the_refused_merges() {
+		let refused_pushes = refused_by_design_starting_with("Bash(git push");
+		let refused_merges = refused_by_design_starting_with("Bash(gh pr merge*");
 
 		assert_eq!(refused_pushes.len(), 8);
-		assert_eq!(BTreeSet::from_iter(tracked_rules(DENY_KEY)), refused_pushes);
+		assert_eq!(BTreeSet::from_iter(tracked_rules(DENY_KEY)), &refused_pushes | &refused_merges);
 	}
 
 	#[test]
@@ -477,18 +483,38 @@ mod tests {
 		assert!(!matched_by(&tracked_rules(DENY_KEY), command), "{command} is denied");
 	}
 
-	macro_rules! asked_by_the_tracked_settings {
-		($($name:ident: $command:literal,)*) => {
+	macro_rules! decided_by_the_tracked_settings {
+		($decision:expr => $($name:ident: $command:literal,)*) => {
 			$(
 				#[test]
 				fn $name() {
-					assert_eq!(tracked_decision($command), Some(ASK_KEY), $command);
+					assert_eq!(tracked_decision($command), Some($decision), $command);
 				}
 			)*
 		};
 	}
 
-	asked_by_the_tracked_settings! {
+	decided_by_the_tracked_settings! { ALLOW_KEY =>
+		an_auto_merge_of_a_numbered_pr_is_allowed: "gh pr merge --auto 12",
+		an_auto_merge_with_no_argument_is_allowed: "gh pr merge --auto",
+	}
+
+	decided_by_the_tracked_settings! { DENY_KEY =>
+		an_auto_merge_carrying_the_long_squash_is_denied: "gh pr merge --auto 12 --squash",
+		an_auto_merge_carrying_the_long_merge_is_denied: "gh pr merge --auto 12 --merge",
+		an_auto_merge_carrying_the_long_rebase_is_denied: "gh pr merge --auto 12 --rebase",
+		an_auto_merge_carrying_the_admin_bypass_is_denied: "gh pr merge --auto 12 --admin",
+		an_auto_merge_carrying_the_short_squash_is_denied: "gh pr merge --auto 12 -s",
+		an_auto_merge_carrying_the_short_merge_is_denied: "gh pr merge --auto 12 -m",
+		an_auto_merge_carrying_the_short_rebase_is_denied: "gh pr merge --auto 12 -r",
+		an_auto_merge_carrying_the_short_squash_before_the_number_is_denied:
+			"gh pr merge --auto -s 12",
+		an_auto_merge_carrying_a_delete_and_squash_bundle_is_denied: "gh pr merge --auto -ds 12",
+		an_auto_merge_carrying_a_delete_and_merge_bundle_is_denied: "gh pr merge --auto -dm 12",
+		an_auto_merge_carrying_a_delete_and_rebase_bundle_is_denied: "gh pr merge --auto -dr 12",
+	}
+
+	decided_by_the_tracked_settings! { ASK_KEY =>
 		a_long_force_before_the_remote_is_asked: "git push --force origin feature/ope-1-x",
 		a_long_force_between_the_remote_and_the_branch_is_asked:
 			"git push origin --force feature/ope-1-x",
