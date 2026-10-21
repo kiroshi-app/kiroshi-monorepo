@@ -2647,6 +2647,47 @@ describe("ThreadScreen", () => {
 		expect(cancelled).toEqual(["Nyx"])
 	})
 
+	it("stops the turn the solo companion runs in another conversation", async () => {
+		const thread = threadOf({ id: "bot-1", name: "Nyx", said: "the answer" })
+		const cancelled: string[] = []
+		render(
+			screenOf({
+				...thread,
+				chat: {
+					state: {
+						...thread.chat.state,
+						turn: "idle",
+						foreignTurn: {
+							scope: {
+								conversationId: "elsewhere",
+								botId: "bot-1",
+								runtimeSessionId: "run-of-another-window",
+								epoch: 1,
+							},
+							activities: [],
+							startedAt: 1,
+							hasWritten: false,
+							permission: null,
+							question: null,
+						},
+					},
+					controller: stubController({
+						stop: async () => {
+							cancelled.push("Nyx")
+						},
+					}),
+				},
+			}),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		await settle()
+
+		fireEvent.click(screen.getByRole("button", { name: "Stop Nyx" }))
+		await settle()
+
+		expect(cancelled).toEqual(["Nyx"])
+	})
+
 	it("opens a searched message centred, highlighted and paged both ways", async () => {
 		const room = await longRoomOf()
 		const landings = createMessageLandingController()
