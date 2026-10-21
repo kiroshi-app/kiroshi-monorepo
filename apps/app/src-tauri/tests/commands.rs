@@ -2,6 +2,8 @@ mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex};
+#[cfg(unix)]
+use std::time::Duration;
 
 use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
@@ -19,6 +21,12 @@ use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
+
+#[cfg(unix)]
+const PATIENCE: Duration = Duration::from_secs(60);
+
+#[cfg(unix)]
+const QUIT_HELD_OPEN: Duration = Duration::from_secs(3600);
 
 fn app() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
@@ -131,12 +139,12 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 }
 
 #[cfg(unix)]
-async fn frozen(state: &AgentState) {
-	let sidecar = state.sidecar().await.expect("the sidecar runs");
-	let group = -(sidecar.pid() as libc::pid_t);
-	assert_eq!(unsafe { libc::kill(group, libc::SIGSTOP) }, 0, "the sidecar group stops");
+fn signalled(pid: u32, signal: libc::c_int) {
+	let group = -(pid as libc::pid_t);
+	assert_eq!(unsafe { libc::kill(group, signal) }, 0, "the sidecar group takes the signal");
 }
 
+#[cfg(unix)]
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
@@ -160,15 +168,21 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.expect("session starts");
 
 		let state = app.state::<AgentState>();
-		#[cfg(unix)]
-		frozen(&state).await;
+		let sidecar = state.sidecar().await.expect("the sidecar runs");
+		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
+		signalled(sidecar.pid(), libc::SIGSTOP);
 		tokio::join!(
 			async {
-				shutdown_session(&state, &a_scope_value()).await;
+				tokio::time::timeout(PATIENCE, shutdown_session(&state, &a_scope_value()))
+					.await
+					.expect("the shutdown never waited on the quit held open");
 				finished.lock().expect("order").push("shutdown");
+				signalled(sidecar.pid(), libc::SIGCONT);
 			},
 			async {
-				terminate_session(&state).await;
+				tokio::time::timeout(PATIENCE, terminate_session(&state))
+					.await
+					.expect("the quit ends once its sidecar runs again");
 				finished.lock().expect("order").push("terminate");
 			},
 		);
