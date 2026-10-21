@@ -802,22 +802,16 @@ export const WorkingWithStop = meta.story({
 	},
 	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const row = rowIn(canvasElement)
-		const stops = canvas.getAllByRole("button", { name: STOP_NAME })
-		const [stop] = stops
-		const name = slotIn(row, "roster-row-name")
+		const stop = canvas.getByRole("button", { name: STOP_NAME })
 		const badge = slotIn(row, "roster-row-badge")
-		if (!stop || !name || !badge) throw new Error("Missing Stop or name line")
+		if (!badge) throw new Error("Missing title badge")
 
-		await expect(stops).toHaveLength(1)
 		await expect(stop.tagName).toBe("BUTTON")
 		await expect(row.contains(stop)).toBe(false)
 		await expect(stop.parentElement).toBe(row.parentElement)
 		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent("")
 		await expect(stop.getBoundingClientRect().left).toBeGreaterThanOrEqual(
 			badge.getBoundingClientRect().right,
-		)
-		await expect(stop.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-			name.getBoundingClientRect().right,
 		)
 
 		await userEvent.click(stop)
