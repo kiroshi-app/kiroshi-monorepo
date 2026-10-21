@@ -5,7 +5,7 @@ use tauri::{AppHandle, Runtime};
 use super::own_write::{
 	write_own_file, BundleWrite, BundleWriteRefusal, BundleWritten, RefusalKind,
 };
-use crate::agent::commands::{announce, reconcile_bot};
+use crate::agent::commands::{announce, learned_block, reconcile_bot, store_a_changed_block};
 use crate::agent::contract::{AgentEvent, EvolvedBundle, RuntimeScope};
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::ready;
@@ -15,6 +15,7 @@ const NO_STORE: &str = "the store of this session is not open";
 const UNREAD_BOT: &str = "the bot of this session could not be read";
 const NO_BOT: &str = "the bot of this session is gone";
 const NO_ROOT: &str = "this session has no bundles directory";
+const UNSTORED_MEMORY: &str = "the write was recorded but the memory it holds was not stored";
 
 #[derive(Debug)]
 pub struct BundleHost<R: Runtime> {
@@ -40,9 +41,11 @@ impl<R: Runtime> BundleHost<R> {
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_BOT.to_owned()))?;
 		let root = super::root(&self.app)
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_ROOT.to_owned()))?;
+		let held = learned_block(&root, &bot.id);
 		let written = write_own_file(&root, &bot, asked)?;
 		if let BundleWritten::Recorded { commit_id, title } = &written {
 			reconcile_bot(database, &root, &bot).await;
+			let stored = store_a_changed_block(database, &root, &bot.id, held).await;
 			announce(
 				&self.app,
 				Some(self.scope.clone()),
@@ -52,6 +55,9 @@ impl<R: Runtime> BundleHost<R> {
 					title: title.clone(),
 				},
 			);
+			stored.map_err(|error| {
+				BundleWriteRefusal::unexpected(format!("{UNSTORED_MEMORY}: {error:?}"))
+			})?;
 		}
 		Ok(written)
 	}

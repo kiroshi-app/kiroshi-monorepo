@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Runtime, State};
 
 use super::contract::PluginScope;
+use crate::agent::commands::{learned_block, store_a_changed_block};
 use crate::bundles::{self, plugin, ApplicationMark};
 use crate::conversations::commands::{bot_owner, bot_row, bundled, ready, recounted};
 use crate::conversations::contract::{
@@ -335,9 +336,10 @@ pub async fn plugin_revert<R: Runtime>(
 	match &target {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
-			let held = block_memory(root, id);
+			let _memory = bundles::holding_the_memory(id).await;
+			let held = learned_block(root, id);
 			unreverted(bundles::revert(root, id, &oldest_commit_id, &newest_commit_id))?;
-			store_a_restored_memory(database, root, id, held).await?;
+			store_a_changed_block(database, root, id, held).await?;
 		}
 		Plugin::Owned { path, .. } => {
 			unreverted(plugin::revert(path, &oldest_commit_id, &newest_commit_id))?;
@@ -350,28 +352,11 @@ fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, Transcrip
 	reverted.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 
-fn block_memory(root: &Path, bot_id: &str) -> Option<String> {
-	bundles::generated(root, bot_id).map(|written| written.memory)
-}
-
-async fn store_a_restored_memory(
-	database: &db::Database,
-	root: &Path,
-	bot_id: &str,
-	held: Option<String>,
-) -> Result<(), TranscriptStoreError> {
-	let Some(restored) =
-		block_memory(root, bot_id).filter(|restored| held.as_ref() != Some(restored))
-	else {
-		return Ok(());
-	};
-	database.conversations().adopt_memory(bot_id.to_owned(), restored).await?;
-	Ok(())
-}
-
 #[cfg(test)]
 mod tests {
 	use std::fs;
+
+	use futures_util::FutureExt as _;
 
 	use super::*;
 	use crate::agent::contract::RuntimeScope;
@@ -670,25 +655,34 @@ mod tests {
 
 	const THE_AGENT: &str = "agents/agent.md";
 
-	async fn a_learned_write(app: &App<MockRuntime>, bot_id: &str, memory: &str) -> String {
-		let session = BundleHost::new(
-			app.handle().clone(),
-			RuntimeScope {
-				conversation_id: "c1".to_owned(),
-				bot_id: bot_id.to_owned(),
-				runtime_session_id: "r1".to_owned(),
-				epoch: 0,
-			},
-		);
+	fn a_session_of(bot_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 0,
+		}
+	}
+
+	async fn a_bot_write(app: &App<MockRuntime>, bot_id: &str, path: &str, text: &str) -> String {
+		let session = BundleHost::new(app.handle().clone(), a_session_of(bot_id));
 		let answer = session
 			.answer(serde_json::json!({
 				"subtype": "bundle",
 				"operation": "write",
-				"payload": { "path": THE_AGENT, "text": memory, "title": "Learned the day", "summary": "They said so." },
+				"payload": { "path": path, "text": text, "title": "Learned the day", "summary": "They said so." },
 			}))
 			.await
 			.expect("the write is served");
 		answer["commitId"].as_str().expect("a commit id is answered").to_owned()
+	}
+
+	async fn a_learned_write(app: &App<MockRuntime>, bot_id: &str, memory: &str) -> String {
+		a_bot_write(app, bot_id, THE_AGENT, memory).await
+	}
+
+	fn the_learned_block(root: &Path, bot_id: &str) -> String {
+		bundles::generated(root, bot_id).expect("the agent file reads").memory
 	}
 
 	async fn stored(app: &App<MockRuntime>, bot_id: &str) -> StoredBot {
@@ -740,6 +734,46 @@ mod tests {
 		assert_eq!(bundles::history(&root, &bot_id).expect("the history reads").len(), commits);
 		let read = Bot::of(stored(&app, &bot_id).await, None, Some(&root));
 		assert_eq!(read.memory, "");
+	}
+
+	#[tokio::test]
+	async fn a_session_starting_around_the_undo_of_the_learned_block_s_creation_leaves_it_undone() {
+		let app = a_host("undo-learned-block-mid-session-start");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		let scope = a_session_of(&bot_id);
+		let mut starting = Box::pin(crate::agent::commands::laid_down_session(
+			app.handle(),
+			database(&app),
+			&scope,
+		));
+		let mut undo = Box::pin(undoing(&app, &bot_id, &created));
+
+		assert!(starting.as_mut().now_or_never().is_none(), "the session start did not wait");
+		assert!(undo.as_mut().now_or_never().is_none(), "the undo did not wait");
+		starting.await.map(|_| ()).expect("the session lays its bundle down");
+		undo.await.expect("the undo lands");
+
+		assert_eq!(the_learned_block(&root, &bot_id), "");
+		assert_eq!(stored(&app, &bot_id).await.memory, "");
+	}
+
+	#[tokio::test]
+	async fn a_bundle_write_leaves_a_memory_stored_without_a_learned_block_as_it_was() {
+		let app = a_host("stored-memory-without-a-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		database(&app)
+			.conversations()
+			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
+			.await
+			.expect("the memory is stored");
+		assert_eq!(the_learned_block(&root, &bot_id), "");
+
+		a_bot_write(&app, &bot_id, "skills/baking/SKILL.md", "Bake at 220 degrees.").await;
+
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 	}
 
 	#[tokio::test]
