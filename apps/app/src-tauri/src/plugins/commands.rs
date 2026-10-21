@@ -697,17 +697,19 @@ mod tests {
 			.expect("the agent file reads")
 	}
 
-	async fn undone(app: &App<MockRuntime>, bot_id: &str, commit_id: &str) {
-		let state = app.state::<db::DatabaseState>();
+	async fn undoing(
+		app: &App<MockRuntime>,
+		bot_id: &str,
+		commit_id: &str,
+	) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
 		plugin_revert(
 			app.handle().clone(),
-			state,
+			app.state::<db::DatabaseState>(),
 			bot(bot_id),
 			commit_id.to_owned(),
 			commit_id.to_owned(),
 		)
 		.await
-		.expect("the undo lands");
 	}
 
 	#[tokio::test]
@@ -718,7 +720,7 @@ mod tests {
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 
-		undone(&app, &bot_id, &created).await;
+		undoing(&app, &bot_id, &created).await.expect("the undo lands");
 		let undone_agent = agent_bytes(&root, &bot_id);
 		let commits = bundles::history(&root, &bot_id).expect("the history reads").len();
 		let after_undo = stored(&app, &bot_id).await;
@@ -740,7 +742,7 @@ mod tests {
 		a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let moved = a_learned_write(&app, &bot_id, "They bake on Saturdays.").await;
 
-		undone(&app, &bot_id, &moved).await;
+		undoing(&app, &bot_id, &moved).await.expect("the undo lands");
 
 		let after_undo = stored(&app, &bot_id).await;
 		assert_eq!(after_undo.memory, "They bake on Sundays.");
@@ -754,14 +756,7 @@ mod tests {
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		database(&app).conversations().delete_bot(bot_id.clone()).await.expect("the row goes");
 
-		let refused = plugin_revert(
-			app.handle().clone(),
-			app.state::<db::DatabaseState>(),
-			bot(&bot_id),
-			created.clone(),
-			created,
-		)
-		.await;
+		let refused = undoing(&app, &bot_id, &created).await;
 
 		assert_eq!(refused.map(|_| ()), Err(TranscriptStoreError::UnknownBot { id: bot_id }));
 	}
