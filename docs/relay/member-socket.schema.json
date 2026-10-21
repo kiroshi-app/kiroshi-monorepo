@@ -20,19 +20,15 @@
     },
     "ActiveTurn": {
       "properties": {
-        "botIds": {
+        "bots": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/WorkingBot"
           },
           "type": "array"
-        },
-        "startedAt": {
-          "type": "integer"
         }
       },
       "required": [
-        "startedAt",
-        "botIds"
+        "bots"
       ],
       "type": "object"
     },
@@ -8405,6 +8401,21 @@
           "type": "object"
         }
       ]
+    },
+    "WorkingBot": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "startedAt": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "botId",
+        "startedAt"
+      ],
+      "type": "object"
     },
     "WrittenFrom": {
       "enum": [

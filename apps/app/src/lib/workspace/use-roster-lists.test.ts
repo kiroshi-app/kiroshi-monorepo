@@ -207,7 +207,9 @@ describe("useRosterLists", () => {
 						lastActivityAt: 0,
 						lastWord: null,
 						soloBotId: null,
-						activeTurn: openBotIds && { startedAt: 1, botIds: openBotIds },
+						activeTurn: openBotIds && {
+							bots: openBotIds.map((botId) => ({ botId, startedAt: 1 })),
+						},
 					},
 				),
 			)

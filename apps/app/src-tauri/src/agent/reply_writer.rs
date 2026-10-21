@@ -1604,8 +1604,8 @@ mod tests {
 				(conversation["lastWord"]["text"].clone(), conversation["activeTurn"].clone())
 			})
 			.collect();
-		let started = json!({ "startedAt": 1, "botIds": [] });
-		let speaking = json!({ "startedAt": 1, "botIds": [DEFAULT_BOT_ID] });
+		let started = json!({ "bots": [] });
+		let speaking = json!({ "bots": [{ "botId": DEFAULT_BOT_ID, "startedAt": 1 }] });
 		let first_reply = json!("w1 w2 w3 w4 w5 w6 w7 w8 w9 w10");
 		assert_eq!(
 			rows,
@@ -1698,10 +1698,11 @@ mod tests {
 			panic!("four updates were expected, {} were heard", heard.len());
 		};
 		let bots_of =
-			|update: &serde_json::Value| update["conversation"]["activeTurn"]["botIds"].clone();
-		assert_eq!(bots_of(started), json!([DEFAULT_BOT_ID]));
-		assert_eq!(bots_of(opened), json!([DEFAULT_BOT_ID]));
-		assert_eq!(bots_of(payload), json!([DEFAULT_BOT_ID]));
+			|update: &serde_json::Value| update["conversation"]["activeTurn"]["bots"].clone();
+		let speaking = json!([{ "botId": DEFAULT_BOT_ID, "startedAt": 1 }]);
+		assert_eq!(bots_of(started), speaking);
+		assert_eq!(bots_of(opened), speaking);
+		assert_eq!(bots_of(payload), speaking);
 		assert_eq!(completed["conversation"]["activeTurn"], json!(null));
 		let conversation = &payload["conversation"];
 		let mut fields: Vec<&str> = conversation
@@ -1808,7 +1809,9 @@ mod tests {
 	fn working(bot_ids: &[&str]) -> serde_json::Value {
 		let mut bot_ids = bot_ids.to_vec();
 		bot_ids.sort_unstable();
-		json!({ "startedAt": 1, "botIds": bot_ids })
+		let bots: Vec<_> =
+			bot_ids.iter().map(|bot_id| json!({ "botId": bot_id, "startedAt": 1 })).collect();
+		json!({ "bots": bots })
 	}
 
 	fn cancelled_turn() -> AgentEvent {

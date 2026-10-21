@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
@@ -20,8 +20,13 @@ pub struct LastWord {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveTurn {
+	pub bots: Vec<WorkingBot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkingBot {
+	pub bot_id: String,
 	pub started_at: i64,
-	pub bot_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,20 +112,21 @@ fn active_rows() -> String {
 			word.author_bot_id AS word_author_bot_id,
 			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
 			word.written_from AS word_written_from,
-			(SELECT MIN(open_turn.started_at) FROM turns AS open_turn
+			EXISTS (SELECT 1 FROM turns AS open_turn
 				WHERE open_turn.conversation_id = conversations.id
-					AND open_turn.completed_at IS NULL) AS open_turn_started_at,
-			(SELECT json_group_array(working.bot_id) FROM (
-				SELECT reply.author_bot_id AS bot_id FROM turns AS open_turn
+					AND open_turn.completed_at IS NULL) AS has_open_turn,
+			(SELECT json_group_array(json_array(working.bot_id, working.started_at)) FROM (
+				SELECT reply.author_bot_id AS bot_id, open_turn.started_at AS started_at
+					FROM turns AS open_turn
 					JOIN messages AS reply
 						ON reply.turn_id = open_turn.id AND reply.role = 'assistant'
 					WHERE open_turn.conversation_id = conversations.id
 						AND open_turn.completed_at IS NULL AND reply.author_bot_id IS NOT NULL
 				UNION ALL
-				SELECT run.bot_id FROM turns AS open_turn
+				SELECT run.bot_id, open_turn.started_at FROM turns AS open_turn
 					JOIN turn_runs AS run ON run.turn_id = open_turn.id
 					WHERE open_turn.conversation_id = conversations.id
-						AND open_turn.completed_at IS NULL) AS working) AS open_turn_bot_ids
+						AND open_turn.completed_at IS NULL) AS working) AS open_turn_bots
 		FROM conversations
 		LEFT JOIN conversation_participants AS solo_seat
 			ON conversations.kind = '{CHAT_KIND}' AND solo_seat.conversation_id = conversations.id
@@ -337,10 +343,7 @@ fn active(row: &Row<'_>) -> rusqlite::Result<ActiveConversation> {
 			.map(|at| last_word(row, at))
 			.transpose()?,
 		solo_bot_id: row.get("solo_bot_id")?,
-		active_turn: row
-			.get::<_, Option<i64>>("open_turn_started_at")?
-			.map(|started_at| active_turn(row, started_at))
-			.transpose()?,
+		active_turn: row.get::<_, bool>("has_open_turn")?.then(|| active_turn(row)).transpose()?,
 	})
 }
 
@@ -352,14 +355,21 @@ fn listed_row(row: &Row<'_>) -> rusqlite::Result<ListedConversation> {
 	})
 }
 
-fn active_turn(row: &Row<'_>, started_at: i64) -> rusqlite::Result<ActiveTurn> {
-	let bot_ids: String = row.get("open_turn_bot_ids")?;
-	let mut bot_ids: Vec<String> = serde_json::from_str(&bot_ids).map_err(|error| {
+fn active_turn(row: &Row<'_>) -> rusqlite::Result<ActiveTurn> {
+	let links: String = row.get("open_turn_bots")?;
+	let links: Vec<(String, i64)> = serde_json::from_str(&links).map_err(|error| {
 		rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 	})?;
-	bot_ids.sort_unstable();
-	bot_ids.dedup();
-	Ok(ActiveTurn { started_at, bot_ids })
+	let mut earliest: BTreeMap<String, i64> = BTreeMap::new();
+	for (bot_id, started_at) in links {
+		let start = earliest.entry(bot_id).or_insert(started_at);
+		*start = (*start).min(started_at);
+	}
+	let bots = earliest
+		.into_iter()
+		.map(|(bot_id, started_at)| WorkingBot { bot_id, started_at })
+		.collect();
+	Ok(ActiveTurn { bots })
 }
 
 fn last_word(row: &Row<'_>, at: i64) -> rusqlite::Result<LastWord> {
@@ -803,10 +813,15 @@ mod tests {
 		by_id.active_turn
 	}
 
-	fn open_turn_of(started_at: i64, bot_ids: &[&str]) -> Option<ActiveTurn> {
+	fn open_turn_of(bots: &[(&str, i64)]) -> Option<ActiveTurn> {
 		Some(ActiveTurn {
-			started_at,
-			bot_ids: bot_ids.iter().map(|id| (*id).to_owned()).collect(),
+			bots: bots
+				.iter()
+				.map(|(bot_id, started_at)| WorkingBot {
+					bot_id: (*bot_id).to_owned(),
+					started_at: *started_at,
+				})
+				.collect(),
 		})
 	}
 
@@ -814,7 +829,7 @@ mod tests {
 	async fn a_turn_without_a_reply_yet_is_open_with_no_bot() {
 		let (database, _dir) = a_room_mid_turn().await;
 
-		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &[]));
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[]));
 	}
 
 	#[tokio::test]
@@ -834,26 +849,43 @@ mod tests {
 		completed(&database, "t1").await;
 		let after = active_turn_of_c01(&database).await;
 
-		assert_eq!(streaming, open_turn_of(40, &["b1", "b2"]));
-		assert_eq!(between_replies, open_turn_of(40, &["b1", "b2"]));
-		assert_eq!(all_settled, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(streaming, open_turn_of(&[("b1", 40), ("b2", 40)]));
+		assert_eq!(between_replies, open_turn_of(&[("b1", 40), ("b2", 40)]));
+		assert_eq!(all_settled, open_turn_of(&[("b1", 40), ("b2", 40)]));
 		assert_eq!(after, None);
 	}
 
-	#[tokio::test]
-	async fn the_earliest_open_turn_dates_the_open_turn_and_every_open_turn_names_its_bots() {
-		let later = "INSERT INTO turns (id, conversation_id, seq, started_at)
+	async fn turns_planted_at_30_and_50(database: &Database) {
+		let turns = "INSERT INTO turns (id, conversation_id, seq, started_at)
 			VALUES ('t2', 'c01', 2, 50), ('t0', 'c01', 0, 30);";
-		let (database, _dir) = a_room_mid_turn().await;
 		database
-			.call_mut(move |connection| Ok(connection.execute_batch(later)?))
+			.call_mut(move |connection| Ok(connection.execute_batch(turns)?))
 			.await
 			.expect("the turns are planted");
-		reply_opened(&database, "r0", "t0", "b1").await;
+	}
+
+	#[tokio::test]
+	async fn each_bot_is_dated_from_the_earliest_open_turn_it_works_in() {
+		let (database, _dir) = a_room_mid_turn().await;
+		turns_planted_at_30_and_50(&database).await;
+
 		reply_opened(&database, "r2", "t2", "b2").await;
+		reply_opened(&database, "r0", "t0", "b1").await;
+		reply_opened(&database, "r3", "t2", "b1").await;
+
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[("b1", 30), ("b2", 50)]));
+	}
+
+	#[tokio::test]
+	async fn a_bot_is_dated_from_its_open_turn_never_from_a_completed_one() {
+		let (database, _dir) = a_room_mid_turn().await;
+		turns_planted_at_30_and_50(&database).await;
+		reply_opened(&database, "r0", "t0", "b1").await;
 		completed(&database, "t0").await;
 
-		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+		run_started(&database, "b1").await;
+
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[("b1", 40)]));
 	}
 
 	#[tokio::test]
@@ -908,8 +940,8 @@ mod tests {
 		let one_ended = active_turn_of_c01(&database).await;
 		run_ended(&database, "b2").await;
 
-		assert_eq!(both_running, open_turn_of(40, &["b1", "b2"]));
-		assert_eq!(one_ended, open_turn_of(40, &["b1", "b2"]));
+		assert_eq!(both_running, open_turn_of(&[("b1", 40), ("b2", 40)]));
+		assert_eq!(one_ended, open_turn_of(&[("b1", 40), ("b2", 40)]));
 		assert_eq!(active_turn_of_c01(&database).await, None);
 	}
 
@@ -927,7 +959,7 @@ mod tests {
 		run_started(&database, "b2").await;
 		run_ended(&database, "b2").await;
 
-		assert_eq!(one_abandoned, open_turn_of(40, &["b2"]));
+		assert_eq!(one_abandoned, open_turn_of(&[("b2", 40)]));
 		assert_eq!(active_turn_of_c01(&database).await, None);
 	}
 
@@ -938,7 +970,7 @@ mod tests {
 
 		run_started(&database, "b2").await;
 
-		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[("b2", 40)]));
 	}
 
 	async fn awaited(database: &Database, bot_ids: &[&str]) {
@@ -1006,7 +1038,7 @@ mod tests {
 
 		assert!(released, "the awaited run was kept");
 		assert_eq!(runs_of_t1(&database).await, vec![("b1".to_owned(), "running".to_owned())]);
-		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b1"]));
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[("b1", 40)]));
 	}
 
 	#[tokio::test]
@@ -1020,7 +1052,7 @@ mod tests {
 		run_started(&database, "b2").await;
 
 		assert_eq!(after_the_deadline, None);
-		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(40, &["b2"]));
+		assert_eq!(active_turn_of_c01(&database).await, open_turn_of(&[("b2", 40)]));
 	}
 
 	#[tokio::test]

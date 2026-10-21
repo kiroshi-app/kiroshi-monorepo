@@ -934,7 +934,7 @@ mod tests {
 		let told = told(&mut announced);
 		assert_eq!(
 			active_turns(&told),
-			vec![json!({ "startedAt": 1, "botIds": [waiter] }), Value::Null]
+			vec![json!({ "bots": [{ "botId": waiter, "startedAt": 1 }] }), Value::Null]
 		);
 		assert_eq!(shut_down_scopes(&agent_events(&told)), vec![scope_in(&room, &speaker)]);
 	}
@@ -1009,7 +1009,7 @@ mod tests {
 		.await;
 
 		assert_eq!(released, Ok(true), "the deadline left the turn working");
-		assert_eq!(heard, vec![json!({ "startedAt": 1, "botIds": [ada] })]);
+		assert_eq!(heard, vec![json!({ "bots": [{ "botId": ada, "startedAt": 1 }] })]);
 		drop(stop);
 	}
 
