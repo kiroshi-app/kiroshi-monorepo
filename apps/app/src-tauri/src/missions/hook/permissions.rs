@@ -34,7 +34,7 @@ const MISSION_GESTURES: [&str; 10] = [
 	"Bash(killall -9 com.apple.CoreSimulatorService)",
 ];
 
-pub const REFUSED_BY_DESIGN: [&str; 28] = [
+pub const REFUSED_BY_DESIGN: [&str; 34] = [
 	"Bash(gh pr merge* --squash*)",
 	"Bash(gh pr merge* --merge*)",
 	"Bash(gh pr merge* --rebase*)",
@@ -45,6 +45,12 @@ pub const REFUSED_BY_DESIGN: [&str; 28] = [
 	"Bash(gh pr merge* -m *)",
 	"Bash(gh pr merge* -r)",
 	"Bash(gh pr merge* -r *)",
+	"Bash(gh pr merge* -s*)",
+	"Bash(gh pr merge* -m*)",
+	"Bash(gh pr merge* -r*)",
+	"Bash(gh pr merge* -d*s*)",
+	"Bash(gh pr merge* -d*m*)",
+	"Bash(gh pr merge* -d*r*)",
 	"Bash(gh api* -X*)",
 	"Bash(gh api* --method*)",
 	"Bash(gh api* -f*)",
@@ -226,6 +232,13 @@ mod tests {
 		a_merge_commit_merge_short_followed_by_an_argument_is_denied: "Bash(gh pr merge* -m *)",
 		a_rebase_merge_short_is_denied: "Bash(gh pr merge* -r)",
 		a_rebase_merge_short_followed_by_an_argument_is_denied: "Bash(gh pr merge* -r *)",
+		a_bundle_led_by_the_squash_short_is_denied: "Bash(gh pr merge* -s*)",
+		a_bundle_led_by_the_merge_commit_short_is_denied: "Bash(gh pr merge* -m*)",
+		a_bundle_led_by_the_rebase_short_is_denied: "Bash(gh pr merge* -r*)",
+		a_bundle_led_by_the_delete_short_carrying_a_squash_is_denied: "Bash(gh pr merge* -d*s*)",
+		a_bundle_led_by_the_delete_short_carrying_a_merge_commit_is_denied:
+			"Bash(gh pr merge* -d*m*)",
+		a_bundle_led_by_the_delete_short_carrying_a_rebase_is_denied: "Bash(gh pr merge* -d*r*)",
 		an_api_call_naming_its_method_short_is_denied: "Bash(gh api* -X*)",
 		an_api_call_naming_its_method_long_is_denied: "Bash(gh api* --method*)",
 		an_api_call_carrying_a_typed_field_short_is_denied: "Bash(gh api* -F*)",
@@ -289,6 +302,40 @@ mod tests {
 			"gh pr merge --auto 12",
 			"gh pr merge 12 --subject x",
 			"git push --force-with-lease origin feature/ope-1-main",
+		] {
+			let matched: Vec<&str> = REFUSED_BY_DESIGN
+				.into_iter()
+				.filter(|rule| pinned_wildcard_match(rule, command))
+				.collect();
+			assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+		}
+	}
+
+	#[test]
+	fn a_bundle_of_short_merge_flags_carrying_a_merge_method_is_matched_by_a_deny_rule() {
+		for command in [
+			"gh pr merge 1 -sd",
+			"gh pr merge 1 -ds",
+			"gh pr merge 1 -dsa",
+			"gh pr merge 1 -dm",
+			"gh pr merge 1 -dr",
+			"gh pr merge -rd 1",
+		] {
+			assert!(
+				REFUSED_BY_DESIGN.into_iter().any(|rule| pinned_wildcard_match(rule, command)),
+				"{command} is matched by no deny rule"
+			);
+		}
+	}
+
+	#[test]
+	fn no_deny_rule_matches_a_merge_carrying_only_the_delete_or_the_auto_flags() {
+		for command in [
+			"gh pr merge 1 -d",
+			"gh pr merge 1 --auto",
+			"gh pr merge --auto 12",
+			"gh pr merge 12 --subject x",
+			"gh pr merge 1 --delete-branch --auto",
 		] {
 			let matched: Vec<&str> = REFUSED_BY_DESIGN
 				.into_iter()
