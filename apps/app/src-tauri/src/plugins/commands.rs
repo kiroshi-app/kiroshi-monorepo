@@ -711,7 +711,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn undoing_the_write_that_created_the_learned_block_holds_across_the_next_session_start() {
+	async fn undoing_the_learned_block_s_creation_holds_across_the_next_session_start() {
 		let app = a_host("undo-learned-block");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
 		let root = bundles::root(app.handle()).expect("the bundles have a home");
