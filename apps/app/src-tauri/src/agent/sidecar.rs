@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
@@ -143,6 +143,7 @@ pub struct Sidecar {
 	capabilities: Vec<String>,
 	gone: Arc<AtomicBool>,
 	exit_report: ExitReport,
+	terminate_grace: std::sync::Mutex<Duration>,
 }
 
 impl Sidecar {
@@ -211,7 +212,12 @@ impl Sidecar {
 			capabilities: announced.capabilities,
 			gone,
 			exit_report,
+			terminate_grace: std::sync::Mutex::new(TERMINATE_GRACE),
 		}))
+	}
+
+	pub fn set_terminate_grace(&self, grace: Duration) {
+		*self.terminate_grace.lock().unwrap_or_else(PoisonError::into_inner) = grace;
 	}
 
 	pub fn pid(&self) -> u32 {
@@ -432,7 +438,8 @@ impl Sidecar {
 
 		if !matches!(child.try_wait(), Ok(Some(_))) {
 			signal_group(self.pid, Signal::Term);
-			let _ = tokio::time::timeout(TERMINATE_GRACE, child.wait()).await;
+			let grace = *self.terminate_grace.lock().unwrap_or_else(PoisonError::into_inner);
+			let _ = tokio::time::timeout(grace, child.wait()).await;
 		}
 		sweep_group(self.pid);
 		*slot = None;
@@ -820,6 +827,11 @@ fn settle_answer(answers: &Answers, line: &str) {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn a_sidecar_gets_half_a_second_to_end_on_its_own_before_its_group_is_killed() {
+		assert_eq!(TERMINATE_GRACE, Duration::from_millis(500));
+	}
 
 	#[test]
 	fn the_build_tree_is_read_under_the_name_the_build_wrote() {
