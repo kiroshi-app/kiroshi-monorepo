@@ -335,8 +335,9 @@ pub async fn plugin_revert<R: Runtime>(
 	match &target {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
+			let held = block_memory(root, id);
 			unreverted(bundles::revert(root, id, &oldest_commit_id, &newest_commit_id))?;
-			store_the_restored_memory(database, root, id).await?;
+			store_a_restored_memory(database, root, id, held).await?;
 		}
 		Plugin::Owned { path, .. } => {
 			unreverted(plugin::revert(path, &oldest_commit_id, &newest_commit_id))?;
@@ -349,15 +350,22 @@ fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, Transcrip
 	reverted.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 
-async fn store_the_restored_memory(
+fn block_memory(root: &Path, bot_id: &str) -> Option<String> {
+	bundles::generated(root, bot_id).map(|written| written.memory)
+}
+
+async fn store_a_restored_memory(
 	database: &db::Database,
 	root: &Path,
 	bot_id: &str,
+	held: Option<String>,
 ) -> Result<(), TranscriptStoreError> {
-	let Some(restored) = bundles::generated(root, bot_id) else {
+	let Some(restored) =
+		block_memory(root, bot_id).filter(|restored| held.as_ref() != Some(restored))
+	else {
 		return Ok(());
 	};
-	database.conversations().adopt_memory(bot_id.to_owned(), restored.memory).await?;
+	database.conversations().adopt_memory(bot_id.to_owned(), restored).await?;
 	Ok(())
 }
 
@@ -759,5 +767,35 @@ mod tests {
 		let refused = undoing(&app, &bot_id, &created).await;
 
 		assert_eq!(refused.map(|_| ()), Err(TranscriptStoreError::UnknownBot { id: bot_id }));
+	}
+
+	#[tokio::test]
+	async fn undoing_a_skill_write_leaves_a_memory_stored_alone_as_it_was() {
+		let app = a_host("undo-skill-stored-memory");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		database(&app)
+			.conversations()
+			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
+			.await
+			.expect("the memory is stored");
+		let skill = bundles::dir(&root, &bot_id).expect("the bundle is held").join("skills/baking");
+		fs::create_dir_all(&skill).expect("the skill directory is made");
+		fs::write(skill.join("SKILL.md"), "---\nname: baking\n---\n\nBake.\n")
+			.expect("the skill lands");
+		plugin_write_skill_file(
+			app.handle().clone(),
+			bot(&bot_id),
+			"baking".to_owned(),
+			"SKILL.md".to_owned(),
+			"---\nname: baking\n---\n\nBake at 220 degrees.\n".to_owned(),
+		)
+		.await
+		.expect("the skill is written");
+		let written = bundles::history(&root, &bot_id).expect("the history reads")[0].id.clone();
+
+		undoing(&app, &bot_id, &written).await.expect("the undo lands");
+
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 	}
 }
