@@ -326,18 +326,39 @@ pub async fn plugin_history_diff<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_revert<R: Runtime>(
 	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
 	scope: PluginScope,
 	oldest_commit_id: String,
 	newest_commit_id: String,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
 	let target = writable(&app, &scope)?;
-	let reverted = match &target {
-		Plugin::Bot { root, id } => bundles::revert(root, id, &oldest_commit_id, &newest_commit_id),
-		Plugin::Owned { path, .. } => plugin::revert(path, &oldest_commit_id, &newest_commit_id),
-	};
-	reverted
-		.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })?;
+	match &target {
+		Plugin::Bot { root, id } => {
+			let database = ready(&state)?;
+			unreverted(bundles::revert(root, id, &oldest_commit_id, &newest_commit_id))?;
+			store_the_restored_memory(database, root, id).await?;
+		}
+		Plugin::Owned { path, .. } => {
+			unreverted(plugin::revert(path, &oldest_commit_id, &newest_commit_id))?;
+		}
+	}
 	history_of(&target)
+}
+
+fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, TranscriptStoreError> {
+	reverted.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
+}
+
+async fn store_the_restored_memory(
+	database: &db::Database,
+	root: &Path,
+	bot_id: &str,
+) -> Result<(), TranscriptStoreError> {
+	let Some(restored) = bundles::generated(root, bot_id) else {
+		return Ok(());
+	};
+	database.conversations().adopt_memory(bot_id.to_owned(), restored.memory).await?;
+	Ok(())
 }
 
 #[cfg(test)]
@@ -345,6 +366,10 @@ mod tests {
 	use std::fs;
 
 	use super::*;
+	use crate::agent::contract::RuntimeScope;
+	use crate::agent::host::Host as _;
+	use crate::bundles::host::BundleHost;
+	use crate::conversations::contract::Bot;
 	use crate::db::repositories::conversations::BotIdentity;
 	use crate::db::DatabaseError;
 	use crate::environment::contract::EnvScope;
@@ -633,5 +658,111 @@ mod tests {
 			Err(TranscriptStoreError::SystemSkill { id: "remembering".to_owned() })
 		);
 		assert_eq!(fs::read_to_string(marked.join("SKILL.md")).expect("the skill reads"), held);
+	}
+
+	const THE_AGENT: &str = "agents/agent.md";
+
+	async fn a_learned_write(app: &App<MockRuntime>, bot_id: &str, memory: &str) -> String {
+		let session = BundleHost::new(
+			app.handle().clone(),
+			RuntimeScope {
+				conversation_id: "c1".to_owned(),
+				bot_id: bot_id.to_owned(),
+				runtime_session_id: "r1".to_owned(),
+				epoch: 0,
+			},
+		);
+		let answer = session
+			.answer(serde_json::json!({
+				"subtype": "bundle",
+				"operation": "write",
+				"payload": { "path": THE_AGENT, "text": memory, "title": "Learned the day", "summary": "They said so." },
+			}))
+			.await
+			.expect("the write is served");
+		answer["commitId"].as_str().expect("a commit id is answered").to_owned()
+	}
+
+	async fn stored(app: &App<MockRuntime>, bot_id: &str) -> StoredBot {
+		database(app)
+			.conversations()
+			.bot(bot_id.to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is there")
+	}
+
+	fn agent_bytes(root: &Path, bot_id: &str) -> Vec<u8> {
+		fs::read(bundles::agent_file(root, bot_id).expect("the agent file is there"))
+			.expect("the agent file reads")
+	}
+
+	async fn undone(app: &App<MockRuntime>, bot_id: &str, commit_id: &str) {
+		let state = app.state::<db::DatabaseState>();
+		plugin_revert(
+			app.handle().clone(),
+			state,
+			bot(bot_id),
+			commit_id.to_owned(),
+			commit_id.to_owned(),
+		)
+		.await
+		.expect("the undo lands");
+	}
+
+	#[tokio::test]
+	async fn undoing_the_write_that_created_the_learned_block_holds_across_the_next_session_start() {
+		let app = a_host("undo-learned-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
+
+		undone(&app, &bot_id, &created).await;
+		let undone_agent = agent_bytes(&root, &bot_id);
+		let commits = bundles::history(&root, &bot_id).expect("the history reads").len();
+		let after_undo = stored(&app, &bot_id).await;
+		assert_eq!(after_undo.memory, "");
+
+		bundles::ensure(&root, &after_undo).expect("the session start lays the bundle down");
+
+		assert_eq!(agent_bytes(&root, &bot_id), undone_agent);
+		assert_eq!(bundles::history(&root, &bot_id).expect("the history reads").len(), commits);
+		let read = Bot::of(stored(&app, &bot_id).await, None, Some(&root));
+		assert_eq!(read.memory, "");
+	}
+
+	#[tokio::test]
+	async fn undoing_a_later_learned_write_stores_the_memory_the_restored_block_holds() {
+		let app = a_host("undo-later-learned-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		let moved = a_learned_write(&app, &bot_id, "They bake on Saturdays.").await;
+
+		undone(&app, &bot_id, &moved).await;
+
+		let after_undo = stored(&app, &bot_id).await;
+		assert_eq!(after_undo.memory, "They bake on Sundays.");
+		assert_eq!(Bot::of(after_undo, None, Some(&root)).memory, "They bake on Sundays.");
+	}
+
+	#[tokio::test]
+	async fn an_undo_whose_memory_cannot_be_stored_answers_that_failure() {
+		let app = a_host("undo-unstored-memory");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		database(&app).conversations().delete_bot(bot_id.clone()).await.expect("the row goes");
+
+		let refused = plugin_revert(
+			app.handle().clone(),
+			app.state::<db::DatabaseState>(),
+			bot(&bot_id),
+			created.clone(),
+			created,
+		)
+		.await;
+
+		assert_eq!(refused.map(|_| ()), Err(TranscriptStoreError::UnknownBot { id: bot_id }));
 	}
 }

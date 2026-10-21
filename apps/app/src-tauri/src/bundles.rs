@@ -2116,6 +2116,21 @@ mod tests {
 	}
 
 	#[test]
+	fn a_memory_stored_alone_is_written_into_the_block_when_the_session_starts() {
+		let root = a_root("stored-memory-ensured");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		assert!(!written_agent(&root, &bot.id).contains(MEMORY_OPEN));
+
+		bot.memory = "They bake on Sundays.".to_owned();
+		ensure(&root, &bot).expect("the session start lays the bundle down");
+
+		assert_eq!(generated(&root, &bot.id).expect("the file reads").memory, bot.memory);
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
 	fn a_memory_saved_from_settings_lands_in_the_block_and_clearing_it_empties_it_for_good() {
 		let root = a_root("saved-memory");
 		let mut bot = a_bot("Bean", "Answer briefly.");
