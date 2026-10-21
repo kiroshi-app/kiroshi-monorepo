@@ -139,12 +139,6 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 }
 
 #[cfg(unix)]
-fn signalled(pid: u32, signal: libc::c_int) {
-	let sent = unsafe { libc::kill(pid as libc::pid_t, signal) };
-	assert_eq!(sent, 0, "signal {signal} to {pid}: {}", std::io::Error::last_os_error());
-}
-
-#[cfg(unix)]
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
@@ -177,7 +171,8 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 					.await
 					.expect("the shutdown never waited on the quit held open");
 				finished.lock().expect("order").push("shutdown");
-				signalled(sidecar.pid(), libc::SIGKILL);
+				let killed = unsafe { libc::kill(sidecar.pid() as libc::pid_t, libc::SIGKILL) };
+				assert_eq!(killed, 0, "the sidecar ends: {}", std::io::Error::last_os_error());
 			},
 			async {
 				tokio::time::timeout(PATIENCE, terminate_session(&state))
