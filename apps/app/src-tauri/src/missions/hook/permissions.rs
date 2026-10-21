@@ -162,6 +162,8 @@ mod tests {
 	use super::*;
 	use crate::removed_on_drop::RemovedOnDrop;
 
+	const ASK_KEY: &str = "ask";
+
 	const A_BRANCH: &str = "feature/ope-1101-a-branch";
 
 	fn a_checkout(name: &str) -> RemovedOnDrop {
@@ -324,8 +326,26 @@ mod tests {
 		rules.iter().any(|rule| pinned_wildcard_match(rule, command))
 	}
 
+	fn tracked_decision(command: &str) -> Option<&'static str> {
+		[DENY_KEY, ASK_KEY, ALLOW_KEY]
+			.into_iter()
+			.find(|key| matched_by(&tracked_rules(key), command))
+	}
+
 	#[test]
-	fn the_tracked_settings_hold_only_the_allow_and_deny_permissions() {
+	fn the_tracked_allows_are_the_three_feature_branch_pushes() {
+		assert_eq!(
+			tracked_rules(ALLOW_KEY),
+			[
+				"Bash(git push --force-with-lease origin feature/*)",
+				"Bash(git push origin feature/*)",
+				"Bash(git push -u origin feature/*)",
+			]
+		);
+	}
+
+	#[test]
+	fn the_tracked_settings_hold_only_the_allow_ask_and_deny_permissions() {
 		let settings = tracked_settings();
 
 		let keys: Vec<&String> =
@@ -338,7 +358,7 @@ mod tests {
 			.collect();
 
 		assert_eq!(keys, [PERMISSIONS_KEY]);
-		assert_eq!(permission_keys, BTreeSet::from([ALLOW_KEY, DENY_KEY]));
+		assert_eq!(permission_keys, BTreeSet::from([ALLOW_KEY, ASK_KEY, DENY_KEY]));
 	}
 
 	#[test]
@@ -354,16 +374,13 @@ mod tests {
 	}
 
 	#[test]
-	fn the_tracked_settings_allow_a_feature_branch_push_with_lease_or_upstream() {
-		let allows = tracked_rules(ALLOW_KEY);
-		let denies = tracked_rules(DENY_KEY);
-
+	fn the_tracked_settings_allow_a_feature_branch_push_plain_with_lease_or_upstream() {
 		for command in [
 			"git push --force-with-lease origin feature/ope-1-x",
+			"git push origin feature/ope-1-x",
 			"git push -u origin feature/ope-1-x",
 		] {
-			assert!(matched_by(&allows, command), "{command} is not allowed");
-			assert!(!matched_by(&denies, command), "{command} is denied");
+			assert_eq!(tracked_decision(command), Some(ALLOW_KEY), "{command}");
 		}
 	}
 
@@ -381,15 +398,36 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn the_tracked_settings_allow_no_forced_push_without_a_lease() {
-		let allows = tracked_rules(ALLOW_KEY);
+	macro_rules! asked_by_the_tracked_settings {
+		($($name:ident: $command:literal,)*) => {
+			$(
+				#[test]
+				fn $name() {
+					assert_eq!(tracked_decision($command), Some(ASK_KEY), $command);
+				}
+			)*
+		};
+	}
 
-		for command in
-			["git push --force origin feature/ope-1-x", "git push -f origin feature/ope-1-x"]
-		{
-			assert!(!matched_by(&allows, command), "{command} is allowed");
-		}
+	asked_by_the_tracked_settings! {
+		a_long_force_before_the_remote_is_asked: "git push --force origin feature/ope-1-x",
+		a_long_force_between_the_remote_and_the_branch_is_asked:
+			"git push origin --force feature/ope-1-x",
+		a_long_force_after_the_branch_is_asked: "git push origin feature/ope-1-x --force",
+		a_long_force_after_a_lease_push_is_asked:
+			"git push --force-with-lease origin feature/ope-1-x --force",
+		a_short_force_before_the_remote_is_asked: "git push -f origin feature/ope-1-x",
+		a_short_force_between_the_remote_and_the_branch_is_asked:
+			"git push origin -f feature/ope-1-x",
+		a_short_force_after_the_branch_is_asked: "git push origin feature/ope-1-x -f",
+		a_short_force_after_an_upstream_push_is_asked: "git push -u origin feature/ope-1-x -f",
+		a_bundle_led_by_the_short_force_is_asked: "git push origin feature/ope-1-x -fu",
+		a_bundle_ending_on_the_short_force_is_asked: "git push origin feature/ope-1-x -uf",
+		a_bundle_holding_the_short_force_before_the_remote_is_asked:
+			"git push -uf origin feature/ope-1-x",
+		a_forced_refspec_after_the_branch_is_asked:
+			"git push origin feature/ope-1-x +feature/ope-1-y",
+		a_forced_refspec_alone_after_the_remote_is_asked: "git push origin +feature/ope-1-x",
 	}
 
 	#[test]
