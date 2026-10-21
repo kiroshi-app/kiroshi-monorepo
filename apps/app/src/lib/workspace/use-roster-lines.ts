@@ -53,6 +53,7 @@ export const useRosterLines = ({
 
 	const sidebarActions = useSidebarActions({
 		attachments,
+		chat: chat.controller,
 		collapsedSections: collapsedSections.controller,
 		drafts,
 		joinedSpaces: joinedSpaces.controller,

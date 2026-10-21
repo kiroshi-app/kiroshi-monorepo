@@ -84,6 +84,7 @@ export type ChatController = {
 		attachments: SubmittedAttachment[],
 	) => Promise<string[]>
 	stop: () => Promise<void>
+	stopFor: (botId: string) => Promise<void>
 	discard: (id: string) => void
 	dismissError: (id: string) => void
 	respond: (id: string, decision: PermissionDecision) => Promise<void>
@@ -227,6 +228,12 @@ export function createChatController(
 		reportRun: opening.reportRun,
 		storeAttachments: prompts.storeAttachments,
 		stop: () => onSelected(outbox.stop, undefined),
+		stopFor: async (botId) => {
+			const bot = bots.get(botId)
+			if (bot) {
+				await outbox.stop(bot)
+			}
+		},
 		discard: (id) =>
 			forSelected((bot) => dispatch(bot, { type: "outboxEntryRemoved", id })),
 		dismissError: (id) =>
