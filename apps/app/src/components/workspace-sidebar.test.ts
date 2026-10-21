@@ -56,6 +56,7 @@ const mountApp = async () => {
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()
 	const bot = await store.createBot(newBotIdentity([]), space.id)
+	const otherBot = await store.createBot(newBotIdentity([bot]), space.id)
 	const conversation = await store.createConversation({
 		botIds: [bot.id],
 		sectionId: null,
@@ -63,17 +64,24 @@ const mountApp = async () => {
 		title: CONVERSATION_TITLE,
 	})
 	const driver = createFakeChatDriver({ stepMs: STEP_MS })
+	const submitPrompt = vi.spyOn(driver, "submitPrompt")
 	const cancelTurn = vi.spyOn(driver, "cancelTurn")
 	harness.store = store
 	harness.driver = driver
 	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle(SETTLE_MS)
-	const cancelledScopes = () =>
-		cancelTurn.mock.calls.map(([{ botId, conversationId }]) => ({
+	const scopesOf = (spy: typeof submitPrompt | typeof cancelTurn) => () =>
+		spy.mock.calls.map(([{ botId, conversationId }]) => ({
 			botId,
 			conversationId,
 		}))
-	return { bot, conversation, cancelledScopes }
+	return {
+		bot,
+		otherBot,
+		conversation,
+		promptedScopes: scopesOf(submitPrompt),
+		cancelledScopes: scopesOf(cancelTurn),
+	}
 }
 
 const rowFor = (name: string) => {
@@ -127,21 +135,25 @@ describe("the roster Stop", () => {
 		vi.useRealTimers()
 	})
 
-	it("stops the solo thread of a working companion row", async () => {
+	it("stops the solo thread of a working companion row behind another companion", async () => {
 		vi.useFakeTimers()
-		const { bot, conversation, cancelledScopes } = await mountApp()
+		const { bot, otherBot, conversation, promptedScopes, cancelledScopes } =
+			await mountApp()
 
 		await open(bot.name)
 		await send("map the repository")
+		const [soloScope] = promptedScopes()
+		await open(otherBot.name)
 
+		expect(soloScope.conversationId).not.toBe(conversation.id)
+		expect(rosterStopFor(otherBot.name)).toBeNull()
 		expect(rosterStopFor(CONVERSATION_TITLE)).toBeNull()
 
 		await pressRosterStop(bot.name)
 
-		const [cancelled, ...others] = cancelledScopes()
-		expect(others).toEqual([])
-		expect(cancelled.botId).toBe(bot.id)
-		expect(cancelled.conversationId).not.toBe(conversation.id)
+		expect(cancelledScopes()).toEqual([
+			{ botId: bot.id, conversationId: soloScope.conversationId },
+		])
 		expect(rosterStopFor(bot.name)).toBeNull()
 	})
 
