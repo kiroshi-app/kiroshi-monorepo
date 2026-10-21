@@ -93,6 +93,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 				onDelete={rows.onDeleteConversation}
 				onOpenSettings={rows.onOpenConversationSettings}
 				onSelect={rows.onSelectConversation}
+				onStop={rows.onStopConversation}
 			/>
 		)
 	if (!entry.bot) return null
@@ -108,6 +109,7 @@ const RosterRow = ({ entry, isSlotted, rows }: RosterRowProps) => {
 			onEdit={rows.onEditBot}
 			onRemoveFromSpace={rows.onRemoveBotFromSpace}
 			onSelect={rows.onSelectBot}
+			onStop={rows.onStopBot}
 			openSpaceId={rows.spaceId}
 			spaces={rows.spaces}
 		/>
