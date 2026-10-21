@@ -317,17 +317,15 @@ mod tests {
 
 		let keys: Vec<&String> =
 			settings.as_object().expect("the settings are an object").keys().collect();
-		let permission_keys: Vec<&String> = settings[PERMISSIONS_KEY]
+		let permission_keys: BTreeSet<&str> = settings[PERMISSIONS_KEY]
 			.as_object()
 			.expect("the permissions are an object")
 			.keys()
+			.map(String::as_str)
 			.collect();
 
 		assert_eq!(keys, [PERMISSIONS_KEY]);
-		assert_eq!(
-			BTreeSet::from_iter(permission_keys),
-			BTreeSet::from([&ALLOW_KEY.to_owned(), &DENY_KEY.to_owned()])
-		);
+		assert_eq!(permission_keys, BTreeSet::from([ALLOW_KEY, DENY_KEY]));
 	}
 
 	#[test]
