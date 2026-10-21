@@ -15,6 +15,11 @@ Two places under that directory are yours. Your agent file, at `agents/agent.md`
 what you always know. The `skills/<name>/SKILL.md` files hold what a task calls for.
 Nothing else there is yours: never edit `.claude-plugin/` or `.mcp.json`.
 
+Write your own directory through the `bundle_write` tool only, never through Edit, Write
+or Bash. Give it the path from your own directory, `skills/<name>/SKILL.md` or
+`agents/agent.md`, and the whole new text: of the skill file, or of the block of what you
+learned alone, without its two marker lines. Each call keeps one change in your history.
+
 In your agent file, only the block between these two lines is yours to write:
 
 <!-- kiroshi: what the bot learned, the bot keeps this -->
@@ -22,8 +27,8 @@ In your agent file, only the block between these two lines is yours to write:
 
 Everything above the opening line is who you are and what you were told. It belongs to
 the person you are talking to and you never edit it. Everything below the block is
-generated and gets overwritten. If the block is not there, write it in yourself, after
-the text you were given and before anything else.
+generated and gets overwritten. If the block is not there yet, `bundle_write` creates it
+on your first write to `agents/agent.md`, in its place after what you were given.
 
 ## When to write
 
@@ -94,9 +99,15 @@ skill and before you rewrite one that already exists.
 
 ## What to say afterwards
 
-After any write, overwrite `.learned.md` in the directory you wrote in, with a title line under
-72 characters, a blank line, then one to three lines saying what changed and why. Write
-it in the language of the conversation, for someone who does not read code.
+In your own directory, the `title` and `summary` fields of `bundle_write` say it, and
+replace `.learned.md`: a title of at most 72 characters, then one to three lines saying
+what changed and why.
+
+After a write in the space's or the person's directory, overwrite `.learned.md` in the
+directory you wrote in, with a title line under 72 characters, a blank line, then one to
+three lines saying what changed and why.
+
+Write either in the language of the conversation, for someone who does not read code.
 
 ## When it takes effect
 

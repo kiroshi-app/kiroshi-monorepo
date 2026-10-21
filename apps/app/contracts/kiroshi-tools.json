@@ -941,5 +941,38 @@
 			],
 			"additionalProperties": false
 		}
+	},
+	{
+		"name": "bundle_write",
+		"description": "Write one file of your own directory, the one your instructions name as the place your skills live, and keep it as one change in your history. A skill file under skills/ ending in .md is written whole, its folders created. For agents/agent.md the text is the whole block of what you learned: the block is created on your first write when the file has none, and the rest of the file is kept as the app renders it. It answers the id of the change, or unchanged when the file already says that.",
+		"inputSchema": {
+			"$schema": "https://json-schema.org/draft/2020-12/schema",
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "The file, relative to your own directory: skills/<name>/SKILL.md, another .md under skills/, or agents/agent.md."
+				},
+				"text": {
+					"type": "string",
+					"description": "The whole new text of a skill file, or for agents/agent.md the whole new text of the block of what you learned, without its two kiroshi lines."
+				},
+				"title": {
+					"type": "string",
+					"description": "What changed, in one line of at most 72 characters, in the language of the conversation, for someone who does not read code."
+				},
+				"summary": {
+					"type": "string",
+					"description": "One to three lines saying what changed and why, in the language of the conversation."
+				}
+			},
+			"required": [
+				"path",
+				"text",
+				"title",
+				"summary"
+			],
+			"additionalProperties": false
+		}
 	}
 ]

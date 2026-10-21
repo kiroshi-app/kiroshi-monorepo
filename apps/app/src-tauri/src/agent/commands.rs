@@ -21,6 +21,7 @@ use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
 use crate::bundles;
+use crate::bundles::host::BundleHost;
 use crate::companions::host::CompanionHost;
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
@@ -447,7 +448,7 @@ fn bot_database<R: Runtime>(app: &AppHandle<R>) -> Option<&db::Database> {
 	app.try_state::<db::DatabaseState>()?.inner().as_ref().ok()
 }
 
-async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
+pub(crate) async fn reconcile_bot(database: &db::Database, root: &Path, bot: &StoredBot) {
 	if let Some(found) = bundles::adopted(root, bot) {
 		let _ = database.conversations().adopt_instructions(bot.id.clone(), found).await;
 	}
@@ -992,6 +993,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.conversation_id.clone(),
 			scope.bot_id.clone(),
 		)))
+		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
 		.leased(state.lease);
