@@ -383,7 +383,7 @@ impl Fingerprint {
 	}
 
 	fn green(&self) -> bool {
-		self.state == OPEN && !self.merged && self.checks == Checks::Passed
+		self.state == OPEN && self.checks == Checks::Passed
 	}
 }
 
