@@ -34,11 +34,17 @@ const MISSION_GESTURES: [&str; 10] = [
 	"Bash(killall -9 com.apple.CoreSimulatorService)",
 ];
 
-pub const REFUSED_BY_DESIGN: [&str; 20] = [
+pub const REFUSED_BY_DESIGN: [&str; 28] = [
 	"Bash(gh pr merge* --squash*)",
 	"Bash(gh pr merge* --merge*)",
 	"Bash(gh pr merge* --rebase*)",
 	"Bash(gh pr merge* --admin*)",
+	"Bash(gh pr merge* -s)",
+	"Bash(gh pr merge* -s *)",
+	"Bash(gh pr merge* -m)",
+	"Bash(gh pr merge* -m *)",
+	"Bash(gh pr merge* -r)",
+	"Bash(gh pr merge* -r *)",
 	"Bash(gh api* -X*)",
 	"Bash(gh api* --method*)",
 	"Bash(gh api* -f*)",
@@ -48,6 +54,8 @@ pub const REFUSED_BY_DESIGN: [&str; 20] = [
 	"Bash(gh api* --input*)",
 	"Bash(git push* main)",
 	"Bash(git push* main *)",
+	"Bash(git push* +main)",
+	"Bash(git push* +main *)",
 	"Bash(git push*:main)",
 	"Bash(git push*:main *)",
 	"Bash(git push*refs/heads/main)",
@@ -212,6 +220,12 @@ mod tests {
 		a_merge_commit_merge_is_denied: "Bash(gh pr merge* --merge*)",
 		a_rebase_merge_is_denied: "Bash(gh pr merge* --rebase*)",
 		an_admin_merge_is_denied: "Bash(gh pr merge* --admin*)",
+		a_squash_merge_short_is_denied: "Bash(gh pr merge* -s)",
+		a_squash_merge_short_followed_by_an_argument_is_denied: "Bash(gh pr merge* -s *)",
+		a_merge_commit_merge_short_is_denied: "Bash(gh pr merge* -m)",
+		a_merge_commit_merge_short_followed_by_an_argument_is_denied: "Bash(gh pr merge* -m *)",
+		a_rebase_merge_short_is_denied: "Bash(gh pr merge* -r)",
+		a_rebase_merge_short_followed_by_an_argument_is_denied: "Bash(gh pr merge* -r *)",
 		an_api_call_naming_its_method_short_is_denied: "Bash(gh api* -X*)",
 		an_api_call_naming_its_method_long_is_denied: "Bash(gh api* --method*)",
 		an_api_call_carrying_a_typed_field_short_is_denied: "Bash(gh api* -F*)",
@@ -221,6 +235,8 @@ mod tests {
 		an_api_call_carrying_an_input_is_denied: "Bash(gh api* --input*)",
 		a_push_ending_on_main_is_denied: "Bash(git push* main)",
 		a_push_to_main_followed_by_a_flag_is_denied: "Bash(git push* main *)",
+		a_forced_push_ending_on_main_is_denied: "Bash(git push* +main)",
+		a_forced_push_to_main_followed_by_a_flag_is_denied: "Bash(git push* +main *)",
 		a_push_of_a_refspec_ending_on_main_is_denied: "Bash(git push*:main)",
 		a_push_of_a_refspec_on_main_followed_by_a_flag_is_denied: "Bash(git push*:main *)",
 		a_push_ending_on_the_full_ref_of_main_is_denied: "Bash(git push*refs/heads/main)",
@@ -231,6 +247,57 @@ mod tests {
 		a_write_of_the_shipped_app_data_is_denied:
 			"Write(~/Library/Application Support/com.kiroshi.app/**)",
 		a_worktree_removal_is_denied: "Bash(git worktree remove *)",
+	}
+
+	const SPARED: [&str; 3] = [
+		"gh pr merge --auto 12",
+		"gh pr merge 12 --subject x",
+		"git push --force-with-lease origin feature/ope-1-main",
+	];
+
+	fn pinned_wildcard_match(rule: &str, command: &str) -> bool {
+		let Some(pattern) = rule.strip_prefix("Bash(").and_then(|rule| rule.strip_suffix(')'))
+		else {
+			return false;
+		};
+		let pattern = pattern.trim();
+		let mut body = regex::escape(pattern).replace("\\*", ".*");
+		if body.ends_with(" .*") && pattern.matches('*').count() == 1 {
+			body = format!("{}( .*)?", &body[..body.len() - 3]);
+		}
+		regex::Regex::new(&format!("(?s)^{body}$")).expect("the rule compiles").is_match(command)
+	}
+
+	#[test]
+	fn the_short_merge_flags_and_the_forced_pushes_to_main_are_matched_by_a_deny_rule() {
+		let denied = [
+			("Bash(gh pr merge* -s)", "gh pr merge 12 -s"),
+			("Bash(gh pr merge* -s *)", "gh pr merge -s 12"),
+			("Bash(gh pr merge* -m)", "gh pr merge 12 --delete-branch -m"),
+			("Bash(gh pr merge* -m *)", "gh pr merge -m --auto 12"),
+			("Bash(gh pr merge* -r)", "gh pr merge 12 -r"),
+			("Bash(gh pr merge* -r *)", "gh pr merge -r 12"),
+			("Bash(git push* +main)", "git push origin +main"),
+			("Bash(git push* +main *)", "git push origin +main --verbose"),
+			("Bash(git push*refs/heads/main)", "git push origin +refs/heads/main"),
+			("Bash(git push*refs/heads/main *)", "git push origin +refs/heads/main --verbose"),
+		];
+
+		for (rule, command) in denied {
+			assert!(REFUSED_BY_DESIGN.contains(&rule), "{rule} is not in the refused list");
+			assert!(pinned_wildcard_match(rule, command), "{rule} does not match {command}");
+		}
+	}
+
+	#[test]
+	fn no_deny_rule_matches_an_auto_merge_a_subject_or_a_lease_push_to_a_branch_named_main() {
+		for command in SPARED {
+			let matched: Vec<&str> = REFUSED_BY_DESIGN
+				.into_iter()
+				.filter(|rule| pinned_wildcard_match(rule, command))
+				.collect();
+			assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+		}
 	}
 
 	#[test]
