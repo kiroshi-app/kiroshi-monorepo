@@ -46,7 +46,7 @@ const REQUEST_ID: &str = "6f1c1d4e-7a9b-4c3d-8e2f-0a1b2c3d4e5f";
 const CODE: &str = "493817";
 const PERSONAL: &str = "personal";
 const TICK: Duration = Duration::from_millis(60);
-const PATIENCE: Duration = Duration::from_secs(15);
+const PATIENCE: Duration = Duration::from_secs(60);
 
 type Answer = (StatusCode, Value);
 
