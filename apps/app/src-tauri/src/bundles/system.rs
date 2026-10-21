@@ -151,6 +151,19 @@ mod tests {
 	}
 
 	#[test]
+	fn the_learn_skill_writes_the_own_directory_through_bundle_write_alone() {
+		let text = String::from_utf8_lossy(embedded(LEARN));
+		let said_in_one_breath = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+		for said in [
+			"through the `bundle_write` tool only, never through Edit, Write or Bash",
+			"the `title` and `summary` fields of `bundle_write` say it, and replace `.learned.md`",
+		] {
+			assert!(said_in_one_breath.contains(said), "{said} is missing");
+		}
+	}
+
+	#[test]
 	fn the_routines_skill_is_preloaded_and_says_when_to_ask_before_it_writes() {
 		let text = String::from_utf8_lossy(embedded(ROUTINES));
 

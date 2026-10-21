@@ -6,7 +6,9 @@ import { join } from "node:path"
 import type { Settings } from "@anthropic-ai/claude-agent-sdk"
 
 import { claudeSourceExecutable } from "./build"
+import { BUNDLE_WRITE_TOOL_NAME } from "./bundle-tools"
 import { EXECUTABLE_OVERRIDE_ENV } from "./executable"
+import { KIROSHI_SERVER } from "./kiroshi-server"
 import type { Servers } from "./server-env"
 import { buildOptions } from "./session"
 
@@ -46,6 +48,21 @@ const allowsOf = (request: SessionRequest, servers: Servers = {}): string[] => {
 	return (options.settings as Settings).permissions?.allow ?? []
 }
 
+const servedBy = (rule: string, toolName: string): boolean =>
+	rule === toolName || toolName.startsWith(`${rule.replace(/__\*$/, "")}__`)
+
+const settled = (permissions: Settings["permissions"], toolName: string) => {
+	const matched = (rules: string[] = []) =>
+		rules.some((rule) => servedBy(rule, toolName))
+	if (matched(permissions?.deny)) {
+		return "deny"
+	}
+	if (matched(permissions?.ask)) {
+		return "ask"
+	}
+	return matched(permissions?.allow) ? "allow" : "classifier"
+}
+
 describe("derived allows", () => {
 	it("allows the kiroshi server and every resolved server, one rule each", () => {
 		const allows = allowsOf(requestFor(), {
@@ -61,6 +78,18 @@ describe("derived allows", () => {
 			"mcp__linear",
 			"mcp__paper",
 		])
+	})
+
+	it("settles a bundle_write call as allow by a rule, before any classifier step", () => {
+		const options = buildOptions(requestFor(), undefined, undefined, {
+			servers: { kiroshi: server },
+			rejections: [],
+		})
+		const permissions = (options.settings as Settings).permissions
+
+		expect(
+			settled(permissions, `mcp__${KIROSHI_SERVER}__${BUNDLE_WRITE_TOOL_NAME}`),
+		).toBe("allow")
 	})
 
 	it("normalizes a server name the way Claude Code prefixes its tools", () => {

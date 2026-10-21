@@ -309,7 +309,8 @@ Every other command names its session.
   resolved server (the name normalized as Claude Code prefixes MCP tools). No `Edit`,
   `Write` or `Bash` rule and no per-tool MCP rule is derived: every other call stays with
   the classifier, a write to a bundle file among them, since Claude Code treats every path
-  under an inline plugin directory as sensitive before it reads any allow rule. The
+  under an inline plugin directory as sensitive before it reads any allow rule: a bot writes
+  its own bundle through `mcp__kiroshi__bundle_write`, which `mcp__kiroshi` allows. The
   declared `ask` and `deny` rules ride beside the derived allows and a deny still wins, so a
   bot denying `AskUserQuestion` or `mcp__kiroshi__mission_escalate` keeps that deny. The
   floor in `managedSettings` is unchanged and still denies what it denies, above all of
@@ -634,6 +635,40 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
   author `null` for the person and the snippet plain text;
 - `kind` is applied inside both searches, before their caps: each list holds up
   to its cap of entries of that kind; nothing matched answers two empty lists.
+
+`bundle` is served by `bundles::host::BundleHost`. Its one operation `write`,
+from the tool `bundle_write`, writes one file of the bundle of the session's bot
+and records it as one commit of that bundle's history, so a bot never writes
+its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
+`title` and `summary`:
+
+- the bundle is the one of the bot the session was opened for, never one the
+  payload names; a payload naming any other field is refused as
+  `unreadableRequest` and nothing is written;
+- `path` is relative to the bundle: a `.md` file under `skills/` is written
+  whole, its missing directories created; `agents/agent.md` takes `text` as the
+  block between its two kiroshi memory markers, and every byte outside them is
+  left as it was;
+- a `path` that is absolute, holds a `..` segment, resolves through a symbolic
+  link, or names `.claude-plugin`, `.mcp.json`, `.applications.json`,
+  `settings.json`, `hooks` or `.git` (whatever the case), a path under `agents/`
+  other than `agents/agent.md`, and any other path are refused as
+  `forbiddenPath`; an `agents/agent.md` lacking either marker is refused as
+  `missingMemoryMarkers`, and a memory `text` holding a kiroshi marker as
+  `markerInText`;
+- `title` is trimmed and refused as `invalidTitle` when empty, past 72
+  characters or longer than one line;
+- the write and its commit hold the lock of that bundle, the one the turn-end
+  evolve takes, and the commit is `git::record` as the bot, `title` its title and
+  `summary` its body, like the turn-end commit `.learned.md` titles;
+- the answer is `{ "outcome": "recorded", "commitId", "title" }`, and the host
+  then emits the turn-end `botEvolved` event for the bot's bundle on
+  `agent://event`, under the session's scope; a `text` equal to what the file
+  already holds answers `{ "outcome": "unchanged" }`, records nothing and emits
+  nothing;
+- every refusal is `{ "kind", "reason" }` and writes nothing; a write that lands
+  but cannot be recorded is refused as `writeFailed`, the file staying for the
+  turn-end evolve to record.
 
 ## Stop and shutdown
 
