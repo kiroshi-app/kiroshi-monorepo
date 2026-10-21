@@ -9,6 +9,7 @@ use reqwest::header::{HeaderMap, RETRY_AFTER};
 use reqwest::{Client, Method, RequestBuilder, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::Notify;
 use tokio::time::{sleep_until, Instant};
 
 use super::contract::{AccountPlan, KiroshiAccount};
@@ -61,6 +62,8 @@ const LONGEST_PAUSE: Duration = Duration::from_secs(120);
 
 static PAUSES: LazyLock<Mutex<HashMap<String, Instant>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
+
+static PAUSES_LIFTED: Notify = Notify::const_new();
 
 pub(crate) fn retry_after(headers: &HeaderMap) -> Duration {
 	let Some(value) = headers.get(RETRY_AFTER) else {
@@ -1015,9 +1018,24 @@ impl Cloud {
 	}
 
 	pub(crate) async fn unpaused(&self) {
-		while let Some(until) = self.paused_until() {
-			sleep_until(until).await;
+		loop {
+			let lifted = PAUSES_LIFTED.notified();
+			tokio::pin!(lifted);
+			lifted.as_mut().enable();
+			let Some(until) = self.paused_until() else {
+				return;
+			};
+			tokio::select! {
+				() = sleep_until(until) => {}
+				() = lifted => {}
+			}
 		}
+	}
+
+	#[cfg(test)]
+	pub(crate) fn pause_lifted(&self) {
+		PAUSES.lock().unwrap_or_else(PoisonError::into_inner).remove(&self.base);
+		PAUSES_LIFTED.notify_waiters();
 	}
 
 	async fn sent(

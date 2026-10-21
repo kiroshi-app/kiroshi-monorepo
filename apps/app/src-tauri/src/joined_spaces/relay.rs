@@ -33,6 +33,7 @@ use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
+use crate::hosting::MEMBERS_EVERY;
 use crate::hosting::relay::{
 	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, FIRST_BACKOFF,
 	PING_EVERY, SILENCE_BOUND,
@@ -66,6 +67,7 @@ pub struct RelayGuests {
 	answer_bound: Duration,
 	resend_every: Duration,
 	first_retry: Duration,
+	members_every: Duration,
 }
 
 struct KnownRelayDevice {
@@ -166,6 +168,7 @@ impl RelayGuests {
 			answer_bound: HOST_ANSWER_BOUND,
 			resend_every: PING_EVERY,
 			first_retry: FIRST_BACKOFF,
+			members_every: MEMBERS_EVERY,
 		}
 	}
 
@@ -186,6 +189,15 @@ impl RelayGuests {
 	#[cfg(test)]
 	pub(crate) fn retrying_first_after(self, first_retry: Duration) -> Self {
 		Self { first_retry, ..self }
+	}
+
+	#[cfg(test)]
+	pub(crate) fn reading_members_every(self, members_every: Duration) -> Self {
+		Self { members_every, ..self }
+	}
+
+	pub(super) fn members_every(&self) -> Duration {
+		self.members_every
 	}
 
 	pub(super) fn answer_bound(&self) -> Duration {
