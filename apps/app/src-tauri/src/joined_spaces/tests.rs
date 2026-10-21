@@ -90,6 +90,7 @@ struct Room {
 	rosters_in_flight: usize,
 	rosters_in_flight_at_most: usize,
 	member_refusal: Option<(StatusCode, Value)>,
+	next_upgrade_refusal: Option<(StatusCode, Value)>,
 	retry_after: Option<&'static str>,
 	upgrades: Vec<Instant>,
 	instance_reads: usize,
@@ -118,6 +119,7 @@ impl Relay {
 			rosters_in_flight: 0,
 			rosters_in_flight_at_most: 0,
 			member_refusal: None,
+			next_upgrade_refusal: None,
 			retry_after: None,
 			upgrades: Vec::new(),
 			instance_reads: 0,
@@ -348,7 +350,8 @@ async fn member_socket(
 	let (refusal, retry_after) = {
 		let mut room = relay.room();
 		room.upgrades.push(Instant::now());
-		(room.member_refusal.clone(), room.retry_after)
+		let refusal = room.next_upgrade_refusal.take().or_else(|| room.member_refusal.clone());
+		(refusal, room.retry_after)
 	};
 	if let Some(retry_after) = retry_after {
 		return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, retry_after)])
@@ -934,13 +937,18 @@ struct UnlistedDuringAPause {
 async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDuringAPause {
 	let host = member.host();
 	let joined = online_with_two_members(member, &host).await;
+	let connections = member.relay.connections();
 	joined_space_connect(member.app.handle().clone(), joined.id.clone())
 		.await
 		.expect("the joined space connects");
+	until("the guest socket to open", || async {
+		(member.relay.connections() > connections).then_some(())
+	})
+	.await;
 	{
 		let mut room = member.relay.room();
 		room.accepted.clear();
-		room.member_refusal = Some(refusal(StatusCode::GONE, "MEMBER_REMOVED"));
+		room.next_upgrade_refusal = Some(refusal(StatusCode::GONE, "MEMBER_REMOVED"));
 	}
 	let guests = member.app.state::<RelayGuests>();
 	assert!(guests.is_running(&joined.id));
@@ -1095,7 +1103,6 @@ fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_ag
 		member.signed_out_of_the_store();
 		paused.reconciliation.await.expect("the reconciliation ends");
 		member.signed_in_again();
-		member.relay.room().member_refusal = None;
 		member.relay.greets_after_the_next_members_read(vec![paused.host.hello()]);
 
 		let connection =
