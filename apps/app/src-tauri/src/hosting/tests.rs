@@ -4572,7 +4572,7 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 		messages.end_run(ended(&ada)).await.expect("the second run ends");
 		let after_the_last = read_by_the_guest().await;
 
-		let mut both = vec!["default".to_owned(), ada.clone()];
+		let mut both = ["default".to_owned(), ada.clone()];
 		both.sort_unstable();
 		let both: Vec<_> =
 			both.iter().map(|bot_id| json!({ "botId": bot_id, "startedAt": 1 })).collect();
