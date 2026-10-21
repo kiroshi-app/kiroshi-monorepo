@@ -393,6 +393,25 @@ describe("chatReducer", () => {
 		expect(rejected.errors.at(-1)?.error.kind).toBe("writeFailed")
 	})
 
+	it("marks the failure of a refused Stop, and no refused prompt", () => {
+		const submitted = reduce(opened, { type: "promptSubmitted" })
+		const refusedPrompt = reduce(submitted, {
+			type: "promptRejected",
+			id: "m-1",
+			error: { kind: "notStarted" },
+		})
+		const refusedStop = reduce(submitted, {
+			type: "stopRejected",
+			error: { kind: "notStarted" },
+		})
+
+		expect(refusedPrompt.errors.at(-1)?.isStopFailure).toBe(undefined)
+		expect(refusedStop.errors.at(-1)).toMatchObject({
+			error: { kind: "notStarted" },
+			isStopFailure: true,
+		})
+	})
+
 	it("keeps connection and version across a session reset", () => {
 		const ready = applyEvents(initialChatState, [
 			{ type: "connectionChanged", state: "ready" },
