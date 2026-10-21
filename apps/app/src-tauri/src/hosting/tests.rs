@@ -37,8 +37,8 @@ use super::sealing_member::{
 };
 use super::wire::{host_keys, HELLO};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
-use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
 use crate::account::contract::SignedOutReason;
+use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
 use crate::account::session::restore;
 use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;

@@ -746,7 +746,8 @@ fn every_refusal_of_the_relay_accept_answers_its_kind_and_stores_no_joined_space
 		}
 		member.relay.accepting(StatusCode::INTERNAL_SERVER_ERROR, json!({}));
 		let failing = member.accepted().await.map(|joined| joined.id);
-		let unreached = Member::over("join-unreached", Relay::new(), &a_closed_port().await, PATIENCE);
+		let unreached =
+			Member::over("join-unreached", Relay::new(), &a_closed_port().await, PATIENCE);
 		let unreachable = unreached.accepted().await.map(|joined| joined.id);
 
 		assert!(matches!(failing, Err(JoinedSpaceError::CouldNotAccept { .. })), "{failing:?}");
@@ -1190,8 +1191,7 @@ fn a_join_and_a_leave_answer_while_the_relay_never_answers_a_sign_out() {
 
 		let app = member.app.handle();
 		let again =
-			tokio::time::timeout(PATIENCE, relay::joined(app, INSTANCE.to_owned(), None))
-				.await;
+			tokio::time::timeout(PATIENCE, relay::joined(app, INSTANCE.to_owned(), None)).await;
 		let left = tokio::time::timeout(PATIENCE, relay::left(app, &joined.id)).await;
 		sign_out.abort();
 
@@ -1688,7 +1688,8 @@ impl Peers {
 		let cloud = relay.served().await;
 		let local =
 			served(Router::new().route("/api/invoke/{command}", post(local_answered))).await;
-		let (host, _root, temporary) = signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
+		let (host, _root, temporary) =
+			signed_in("joined-admission-host", OWNER_BEARER, &cloud, PATIENCE);
 		let local = LocalApi::new(local, LOCAL_TOKEN.to_owned()).expect("the local client builds");
 		host.manage(Hosting::new(&cloud, Some(local)));
 		hosting_start(host.handle().clone(), SPACE.to_owned()).await.expect("the hosting starts");

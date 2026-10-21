@@ -33,11 +33,11 @@ use crate::db::repositories::joined_spaces::{self, JoinedReach};
 use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
-use crate::hosting::MEMBERS_EVERY;
 use crate::hosting::relay::{
 	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, FIRST_BACKOFF,
 	PING_EVERY, SILENCE_BOUND,
 };
+use crate::hosting::MEMBERS_EVERY;
 
 const HOST_ABSENT: u16 = 4002;
 
