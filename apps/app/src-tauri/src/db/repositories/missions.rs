@@ -1202,7 +1202,7 @@ mod tests {
 
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::{count_of, open, Database};
+	use crate::db::{count_of, open, opened_on, Database};
 	use crate::missions::contract::{MissionNote, MissionOutcome};
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -1803,6 +1803,9 @@ mod tests {
 			.open(a_draft("c2", "b2", "Already done"), a_key())
 			.await
 			.expect("the mission opens");
+		opened_on(&database, &here.id, 1).await;
+		opened_on(&database, &there.id, 2).await;
+		opened_on(&database, &closed.id, 3).await;
 		database
 			.missions()
 			.append(here.id.clone(), an_entry(MissionEventKind::Escalated))

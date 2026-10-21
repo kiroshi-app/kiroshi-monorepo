@@ -254,6 +254,20 @@ pub(in crate::db) async fn joined_on(
 }
 
 #[cfg(test)]
+pub(crate) async fn opened_on(database: &Database, mission_id: &str, opened_at: i64) {
+	let mission_id = mission_id.to_owned();
+	database
+		.call_mut(move |connection| {
+			Ok(connection.execute(
+				"UPDATE missions SET opened_at = ?2 WHERE id = ?1",
+				rusqlite::params![mission_id, opened_at],
+			)?)
+		})
+		.await
+		.expect("the mission is dated");
+}
+
+#[cfg(test)]
 pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
 	database
 		.call(move |connection| {
