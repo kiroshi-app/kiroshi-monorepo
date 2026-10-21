@@ -86,7 +86,7 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 	let Some(credentials) = app.try_state::<Credentials>() else {
 		return eprintln!("no mission is watched on github: no credentials are kept");
 	};
-	let unbearing = match Reach::bearing(base, Credential::None) {
+	let reach = match Reach::bearing(base, Credential::None) {
 		Ok(reach) => reach,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure}"),
 	};
@@ -98,8 +98,7 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 			_ = ticker.tick() => {
 				checkout::pass(&app, database).await;
 				let credential = credentials.resolved(store::root(&app).as_deref()).await;
-				let reach = unbearing.carrying(credential);
-				pass(&app, &reach, database, &mut kept, &SystemClock).await;
+				pass(&app, &reach.carrying(credential), database, &mut kept, &SystemClock).await;
 			}
 		}
 	}
