@@ -48,6 +48,7 @@ const MEMBER_RELAY_ID: &str = "r-member";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
 const PATIENCE: Duration = Duration::from_secs(10);
 const POLL_EVERY: Duration = Duration::from_millis(100);
+const FIRST_RETRY: Duration = Duration::from_millis(1);
 
 #[derive(Clone)]
 struct Cloud {
@@ -328,7 +329,7 @@ impl Harness {
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		app.manage(Invitations::new(&api_url).polling_every(every));
-		app.manage(RelayGuests::new(&api_url));
+		app.manage(RelayGuests::new(&api_url).retrying_first_after(FIRST_RETRY));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
 			let hearing = Arc::clone(&heard);
@@ -1019,12 +1020,12 @@ fn every_invoke_sent_right_after_connecting_a_learned_entry_gets_the_host_answer
 		let repository = state.as_ref().expect("the database").joined_spaces();
 		repository.learned(id.clone(), SHARED_SPACE.to_owned()).await.expect("the shared space");
 		harness.cloud.is_member_relay_open.send_replace(false);
+		let asked_before = harness.member_relays_asked();
 
 		let connection = harness.connect(&id).await.expect("the connection");
 		let invoking = futures_util::future::join_all(
 			(0..3).map(|_| proxied(&connection, "conversation_list")),
 		);
-		let asked_before = harness.member_relays_asked();
 		let answering = async {
 			let is_asked = || (harness.member_relays_asked() > asked_before).then_some(());
 			harness.noticed_until("the member relay open", is_asked).await;
@@ -1184,11 +1185,11 @@ fn an_unreadable_410_on_reconnect_is_taken_as_a_403_and_keeps_the_entry() {
 		let id = harness.accepted().await;
 		let (_connection, mut member) = connected(&mut harness, &id).await;
 		harness.refusing_members(refusal(StatusCode::GONE, "SOMETHING_ELSE"));
+		let asked_before = harness.member_relays_asked();
 
 		closed_with(&mut member, 4005).await;
-		harness
-			.noticed_until("the reconnect", || (harness.member_relays_asked() > 1).then_some(()))
-			.await;
+		let is_reconnecting = || (harness.member_relays_asked() > asked_before).then_some(());
+		harness.noticed_until("the reconnect", is_reconnecting).await;
 
 		assert_eq!(harness.stored().await.len(), 1);
 		assert!(harness.heard(REMOVED_EVENT).is_empty());
