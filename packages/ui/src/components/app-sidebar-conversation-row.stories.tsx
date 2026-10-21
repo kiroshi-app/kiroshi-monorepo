@@ -19,6 +19,7 @@ import {
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
+import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarConversationRow",
@@ -333,5 +334,36 @@ export const OpenRowWithMissionStrips = meta.story({
 				boxOf(row, "conversation-subject-icon").bottom,
 			)
 		}
+	},
+})
+
+const liftDown = fn()
+
+const LIFT_SPYING_ON_DOWN: Lifter = {
+	...STILL_LIFT,
+	handlersFor: (id) => ({
+		...STILL_LIFT.handlersFor(id),
+		onPointerDown: liftDown,
+	}),
+}
+
+const STOP_DESK_ROOM = `Stop ${DESK_ROOM.name}`
+
+export const WorkingConversationStopsWithItsId = meta.story({
+	args: { lift: LIFT_SPYING_ON_DOWN, onStop: fn() },
+	play: async ({ args, canvas }) => {
+		await userEvent.click(canvas.getByRole("button", { name: STOP_DESK_ROOM }))
+		await expect(args.onStop).toHaveBeenCalledOnce()
+		await expect(args.onStop).toHaveBeenCalledWith(DESK_ROOM.id)
+		await expect(args.onSelect).not.toHaveBeenCalled()
+		await expect(liftDown).not.toHaveBeenCalled()
+		await expect(within(document.body).queryByRole("menu")).toBeNull()
+	},
+})
+
+export const IdleConversationGivenOnStopHasNoStop = meta.story({
+	args: { conversation: roomOf([ATLAS]), onStop: fn() },
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByRole("button", { name: /^Stop / })).toBeNull()
 	},
 })

@@ -43,6 +43,7 @@ interface ConversationRosterRowProps extends RosterRowSlot, RosterPinActions {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
+	onStop?: (id: string) => void
 	lift: Lifter
 }
 
@@ -61,6 +62,7 @@ const ConversationRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
+	onStop,
 }: ConversationRosterRowProps) => {
 	const { t } = useTranslation("bots")
 
@@ -90,6 +92,7 @@ const ConversationRosterRow = ({
 							if (lift.hasJustDropped()) return
 							onSelect?.(conversation.id)
 						}}
+						onStop={onStop ? () => onStop(conversation.id) : undefined}
 						preview={previewOf(t, conversation) ?? ""}
 						previewTrailing={
 							<ConversationBotPile bots={heldBotsOf(conversation)} />
