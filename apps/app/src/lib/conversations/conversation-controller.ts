@@ -68,6 +68,7 @@ import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
 	isSameRuntimeScope,
+	stopFailureOf,
 	toCancelError,
 	toReadError,
 	toTransportError,
@@ -369,6 +370,11 @@ export const createConversationController = (
 
 	const noteSpeakerFailure = (botId: string, error: TransportError) => {
 		latestError = { ...chatErrorOf(error, errorCount), botId }
+		errorCount += 1
+	}
+
+	const noteStopFailure = (botId: string, error: TransportError) => {
+		latestError = { ...stopFailureOf(error, errorCount), botId }
 		errorCount += 1
 	}
 
@@ -1524,13 +1530,13 @@ export const createConversationController = (
 			return
 		}
 		for (const failure of outcome.failures) {
-			noteSpeakerFailure(failure.botId, toCancelError(failure))
+			noteStopFailure(failure.botId, toCancelError(failure))
 		}
 		sync()
 	}
 
 	const refuseStop = ({ botId }: RuntimeScope, reason: unknown) => {
-		noteSpeakerFailure(botId, toTransportError(reason))
+		noteStopFailure(botId, toTransportError(reason))
 		sync()
 	}
 

@@ -30,6 +30,7 @@ export type ChatError = {
 	id: string
 	error: TransportError
 	botId?: string
+	isStopFailure?: boolean
 }
 
 export type OutboxEntry = {
@@ -216,6 +217,11 @@ export const chatErrorOf = (
 	error,
 })
 
+export const stopFailureOf = (
+	error: TransportError,
+	count: number,
+): ChatError => ({ ...chatErrorOf(error, count), isStopFailure: true })
+
 const MAX_ERRORS = 20
 
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
@@ -293,7 +299,10 @@ function setTurn(state: ChatState, next: TurnState): ChatState {
 }
 
 function pushError(state: ChatState, error: TransportError): ChatState {
-	const entry = chatErrorOf(error, state.errorCount)
+	return pushEntry(state, chatErrorOf(error, state.errorCount))
+}
+
+function pushEntry(state: ChatState, entry: ChatError): ChatState {
 	return {
 		...state,
 		errorCount: state.errorCount + 1,
@@ -499,7 +508,7 @@ function applyOutboxEntryRemoved(state: ChatState, id: string): ChatState {
 }
 
 function applyStopRejected(state: ChatState, error: TransportError): ChatState {
-	const next = pushError(state, error)
+	const next = pushEntry(state, stopFailureOf(error, state.errorCount))
 	return next.turn === "stopping" ? { ...next, turn: "failed" } : next
 }
 

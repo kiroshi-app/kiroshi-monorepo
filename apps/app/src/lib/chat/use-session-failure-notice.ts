@@ -30,6 +30,7 @@ type SessionFailure = {
 
 type FailureReading = {
 	error: ChatError
+	botName?: string
 	onRestart?: () => void
 	onSignIn?: () => void
 }
@@ -39,11 +40,21 @@ type RaisedFailure = {
 	noticeId: Promise<string>
 }
 
+const stopFailureTitleOf = (t: ChatCopy, botName: string | undefined) =>
+	botName
+		? t("screen.notice.stopFailedNamed", { name: botName })
+		: t("screen.notice.stopFailed")
+
+const titleOf = (t: ChatCopy, error: ChatError, botName: string | undefined) =>
+	error.isStopFailure
+		? stopFailureTitleOf(t, botName)
+		: noticeTitleFor(t, error.error)
+
 const transportMessageOf = (
 	t: ChatCopy,
-	{ error, onRestart, onSignIn }: FailureReading,
+	{ error, botName, onRestart, onSignIn }: FailureReading,
 ): NoticeMessage => {
-	const title = noticeTitleFor(t, error.error)
+	const title = titleOf(t, error, botName)
 
 	if (isSignedOut(error.error) && onSignIn) {
 		return {
@@ -129,7 +140,12 @@ export const useSessionFailureNotice = ({
 			errorId: error.id,
 			noticeId: raiseReportedFailure(
 				{
-					...transportMessageOf(t, { error, onRestart, onSignIn }),
+					...transportMessageOf(t, {
+						error,
+						botName: context.botName,
+						onRestart,
+						onSignIn,
+					}),
 					onClose: dismissUnlessReleased,
 				},
 				{ raisedIn: "use-session-failure-notice", ...context },
