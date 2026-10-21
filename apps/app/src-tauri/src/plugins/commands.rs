@@ -359,6 +359,7 @@ mod tests {
 	use futures_util::FutureExt as _;
 
 	use super::*;
+	use crate::agent::commands::laid_down_session;
 	use crate::agent::contract::RuntimeScope;
 	use crate::agent::host::Host as _;
 	use crate::bundles::host::BundleHost;
@@ -743,16 +744,12 @@ mod tests {
 		let root = bundles::root(app.handle()).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let scope = a_session_of(&bot_id);
-		let mut starting = Box::pin(crate::agent::commands::laid_down_session(
-			app.handle(),
-			database(&app),
-			&scope,
-		));
+		let mut starting = Box::pin(laid_down_session(app.handle(), database(&app), &scope));
 		let mut undo = Box::pin(undoing(&app, &bot_id, &created));
 
-		assert!(starting.as_mut().now_or_never().is_none(), "the session start did not wait");
-		assert!(undo.as_mut().now_or_never().is_none(), "the undo did not wait");
-		starting.await.map(|_| ()).expect("the session lays its bundle down");
+		assert!(starting.as_mut().now_or_never().is_none(), "the session start ended in one poll");
+		assert!(undo.as_mut().now_or_never().is_none(), "the undo did not wait for the session");
+		starting.await.expect("the session lays its bundle down");
 		undo.await.expect("the undo lands");
 
 		assert_eq!(the_learned_block(&root, &bot_id), "");
