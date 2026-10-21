@@ -56,7 +56,7 @@ pub enum RefusalKind {
 	Unexpected,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct BundleWriteRefusal {
 	pub kind: RefusalKind,
 	pub reason: String,
@@ -68,7 +68,7 @@ impl BundleWriteRefusal {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 enum Target {
 	Skill,
 	Memory,
