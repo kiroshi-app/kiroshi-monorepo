@@ -10,7 +10,9 @@ use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
 use event_log::EventLog;
 use kiroshi_app::agent::commands::EVENT_CHANNEL;
-use kiroshi_app::agent::contract::{AgentEvent, RuntimeScope, ScopedEvent, TurnOutcome};
+use kiroshi_app::agent::contract::{
+	AgentEvent, ConnectionState, RuntimeScope, ScopedEvent, TurnOutcome,
+};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
@@ -118,6 +120,18 @@ impl Recorder {
 			None => panic!("waited {DEADLINE:?} for {expected} and only saw {:#?}", self.events()),
 		}
 	}
+}
+
+fn is_ready_under(seen: &[ScopedEvent], scope: Option<&RuntimeScope>) -> Option<()> {
+	seen.iter()
+		.any(|scoped| {
+			scoped.scope.as_ref() == scope
+				&& matches!(
+					scoped.event,
+					AgentEvent::ConnectionChanged { state: ConnectionState::Ready }
+				)
+		})
+		.then_some(())
 }
 
 fn heard(relayed: &[Relayed]) -> Vec<ScopedEvent> {
@@ -317,6 +331,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 	let named: RuntimeScope = serde_json::from_value(run.clone()).expect("the scope parses");
 
 	harness.call("agent_check", json!({ "scope": Value::Null })).expect("the check reports");
+	harness.wait_for("the unscoped check to end ready", |seen| is_ready_under(seen, None));
 	assert!(
 		harness.events().iter().all(|scoped| scoped.scope.is_none()),
 		"a check made before any run invented one: {:#?}",
@@ -325,6 +340,7 @@ fn every_event_names_the_run_it_belongs_to_and_a_check_echoes_the_callers() {
 
 	harness.forget_events();
 	harness.call("agent_check", json!({ "scope": run })).expect("the check reports");
+	harness.wait_for("the check of run 1 to end ready", |seen| is_ready_under(seen, Some(&named)));
 	let echoed = harness.events();
 	assert!(
 		!echoed.is_empty() && echoed.iter().all(|scoped| scoped.scope.as_ref() == Some(&named)),
