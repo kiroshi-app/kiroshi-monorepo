@@ -111,7 +111,6 @@ fn leased_pushes(root: &Path) -> Vec<String> {
 
 fn leasable(branch: &str) -> bool {
 	branch != MAIN_BRANCH
-		&& !branch.is_empty()
 		&& branch
 			.chars()
 			.all(|character| character.is_ascii_alphanumeric() || "._/-".contains(character))
