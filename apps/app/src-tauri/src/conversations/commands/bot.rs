@@ -545,6 +545,7 @@ pub async fn conversation_set_bot_memory<R: Runtime>(
 	let bundle_root = bundles::root(&app);
 	let database = ready(&state)?;
 	let repository = database.conversations();
+	let _memory = bundles::holding_the_memory(&id).await;
 	let previous = repository.bot(id.clone()).await?;
 	let learned = memory.trim().to_owned();
 	let updated = repository.set_memory(id.clone(), learned.clone()).await?;
