@@ -400,6 +400,10 @@ impl Harness {
 		refusals.insert(INSTANCE.to_owned(), (status, body));
 	}
 
+	fn admitting_members(&self) {
+		self.cloud.member_refusals.lock().expect("the cloud").remove(INSTANCE);
+	}
+
 	fn account_calls(&self) -> (usize, usize) {
 		let cloud = &self.cloud;
 		(
@@ -881,9 +885,11 @@ async fn closed_offline(
 	connection: &JoinedSpaceConnection,
 ) {
 	let dropped = harness.app.state::<RelayGuests>().link_dropped(id);
+	harness.refusing_members(refusal(StatusCode::SERVICE_UNAVAILABLE, "HOST_ABSENT"));
 	closed_with(member, 4002).await;
 	tokio::time::timeout(PATIENCE, dropped).await.expect("the link dropped in time");
 	let offline = proxied(connection, "conversation_list").await;
+	harness.admitting_members();
 	assert_eq!(offline.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
