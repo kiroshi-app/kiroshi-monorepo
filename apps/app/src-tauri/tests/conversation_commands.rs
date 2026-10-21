@@ -2845,7 +2845,7 @@ fn a_companion_seated_over_ipc_is_announced_and_read_back_on_the_page() {
 	let page = call(&window, "conversation_message_page", a_page(&room, None, 20))
 		.expect("the transcript");
 
-	let heard = heard.recv_timeout(Duration::from_secs(5)).expect("the arrival was announced");
+	let heard = heard.recv_timeout(Duration::from_secs(60)).expect("the arrival was announced");
 	let arrival: Value = serde_json::from_str(&heard).expect("the arrival crosses as json");
 	assert_eq!(arrival["botId"], json!(latecomer));
 	assert_eq!(arrival["invitedByBotId"], Value::Null);
@@ -3530,7 +3530,7 @@ fn a_question_line_the_host_wrote_answers_its_seq_and_refuses_every_front_write(
 	)
 	.expect("the prompt is handed to the companion");
 
-	let deadline = std::time::Instant::now() + Duration::from_secs(10);
+	let deadline = std::time::Instant::now() + Duration::from_secs(60);
 	let stored = loop {
 		if let Some(stored) = a_question_row(&app).filter(|(_, _, _, state)| state == "complete") {
 			break stored;

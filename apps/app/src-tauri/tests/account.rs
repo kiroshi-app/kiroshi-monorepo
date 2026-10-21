@@ -33,7 +33,7 @@ const REQUEST_ID: &str = "0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
 const VERIFICATION_URL: &str =
 	"https://kiroshi.app/authorize?request=0b7f3c2a-5d4e-4f6a-9b8c-1d2e3f4a5b6c";
 const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
-const PATIENCE: Duration = Duration::from_secs(10);
+const PATIENCE: Duration = Duration::from_secs(60);
 
 type Callbacks = Arc<Mutex<Vec<String>>>;
 

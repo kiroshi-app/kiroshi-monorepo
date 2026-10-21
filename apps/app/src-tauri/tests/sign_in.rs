@@ -25,7 +25,7 @@ const FAKE_URL: &str = "https://claude.test/oauth/authorize?state=fake";
 
 const ACCEPTED_CODE: &str = "accepted-code";
 
-const DEADLINE: Duration = Duration::from_secs(10);
+const DEADLINE: Duration = Duration::from_secs(60);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

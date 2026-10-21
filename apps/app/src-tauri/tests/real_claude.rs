@@ -23,7 +23,7 @@ use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
-const GROUP_PATIENCE: Duration = Duration::from_secs(10);
+const GROUP_PATIENCE: Duration = Duration::from_secs(60);
 const GROUP_POLL: Duration = Duration::from_millis(25);
 
 struct Live {

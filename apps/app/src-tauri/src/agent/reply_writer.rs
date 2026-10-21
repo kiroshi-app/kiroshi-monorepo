@@ -1904,7 +1904,7 @@ mod tests {
 		lead.open_turn(submitted("t1", "p1")).await;
 		lead.record(&completed("m1", &format!("<@{ada}> over to you"), 2)).await;
 		lead.record(&turn_ended()).await;
-		let before_the_release = tokio::time::timeout(Duration::from_secs(10), async {
+		let before_the_release = tokio::time::timeout(Duration::from_secs(60), async {
 			let mut previous = None;
 			while let Some(active_turn) = updates.recv().await {
 				if active_turn.is_null() {

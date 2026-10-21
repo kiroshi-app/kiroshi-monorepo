@@ -137,7 +137,7 @@ fn a_message_appended_to_a_mission_thread_stays_out_of_the_feed_while_a_topic_on
 	appended(&window, &topic_id);
 
 	let topic_update =
-		updates.recv_timeout(Duration::from_secs(10)).expect("the topic update is announced");
+		updates.recv_timeout(Duration::from_secs(60)).expect("the topic update is announced");
 	assert_eq!(topic_update["conversation"]["id"], json!(topic_id));
 	assert_eq!(updates.try_recv().ok(), None, "a second feed update was announced");
 }

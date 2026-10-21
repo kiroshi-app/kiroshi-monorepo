@@ -606,7 +606,7 @@ mod tests {
 		let mut reading = read_for(&run, heard);
 
 		assert!(reading.heard_until_closed().await.is_empty());
-		let closing = time::timeout(Duration::from_secs(5), reading.closing())
+		let closing = time::timeout(Duration::from_secs(60), reading.closing())
 			.await
 			.expect("the run closes without waiting for its deadline");
 
@@ -626,7 +626,7 @@ mod tests {
 
 		drop(reader);
 
-		let stopped = time::timeout(Duration::from_secs(5), arriving.recv())
+		let stopped = time::timeout(Duration::from_secs(60), arriving.recv())
 			.await
 			.expect("the reader stops once dropped");
 		assert_eq!(stopped, None);

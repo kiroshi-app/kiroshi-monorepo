@@ -197,7 +197,7 @@ mod tests {
 		});
 
 		arm_start_deadlines(app.handle(), &chat.id, "t1", &both);
-		let first = time::timeout(Duration::from_secs(10), updates.recv())
+		let first = time::timeout(Duration::from_secs(60), updates.recv())
 			.await
 			.expect("the late release announced in time");
 

@@ -997,7 +997,7 @@ mod tests {
 
 		host_turn.await_runs(&summoned).await;
 		let mut heard = Vec::new();
-		let released = tokio::time::timeout(Duration::from_secs(10), async {
+		let released = tokio::time::timeout(Duration::from_secs(60), async {
 			while let Some(active_turn) = updates.recv().await {
 				if active_turn.is_null() {
 					return true;

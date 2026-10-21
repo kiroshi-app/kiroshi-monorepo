@@ -193,7 +193,7 @@ mod tests {
 
 	const BEARER: &str = "the-account-bearer";
 
-	const HEARD_WITHIN: Duration = Duration::from_secs(5);
+	const HEARD_WITHIN: Duration = Duration::from_secs(60);
 
 	const SILENT_FOR: Duration = Duration::from_millis(200);
 

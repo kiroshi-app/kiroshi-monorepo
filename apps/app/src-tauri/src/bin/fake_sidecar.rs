@@ -76,6 +76,17 @@ fn escape_group() {
 #[cfg(not(unix))]
 fn escape_group() {}
 
+#[cfg(unix)]
+fn deaf_to_term() {
+	if std::env::var("FAKE_AGENT_IGNORE_TERM").is_err() {
+		return;
+	}
+	unsafe { libc::signal(libc::SIGTERM, libc::SIG_IGN) };
+}
+
+#[cfg(not(unix))]
+fn deaf_to_term() {}
+
 fn read_setting(settings: &HashMap<String, String>, key: &str) -> Option<String> {
 	settings.get(key).cloned().or_else(|| std::env::var(key).ok())
 }
@@ -901,6 +912,7 @@ fn capabilities() -> Vec<String> {
 
 fn main() {
 	escape_group();
+	deaf_to_term();
 
 	if !std::env::args().any(|argument| argument == "--serve") {
 		eprintln!("usage: fake_sidecar --serve");

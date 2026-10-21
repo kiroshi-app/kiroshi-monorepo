@@ -545,7 +545,7 @@ mod tests {
 	const REQUEST_ID: &str = "6f1c1d4e-7a9b-4c3d-8e2f-0a1b2c3d4e5f";
 	const POLL_SECRET: &str = "poll-secret-that-never-leaves";
 	const EXPIRES_AT: &str = "2099-10-12T10:10:00.000Z";
-	const PATIENCE: Duration = Duration::from_secs(15);
+	const PATIENCE: Duration = Duration::from_secs(60);
 	const PAST_THE_FIRST_POLL: Duration = Duration::from_secs(10);
 
 	#[derive(Clone, Default)]

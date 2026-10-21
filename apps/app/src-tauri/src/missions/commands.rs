@@ -685,6 +685,11 @@ mod tests {
 		let here = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let there = a_mission(&app, a_draft("c2", "b2", "Ship it")).await;
 		let done = a_mission(&app, a_draft("c2", "b2", "Old work")).await;
+		let state = app.state::<db::DatabaseState>();
+		let database = ready(&state).expect("the store is open");
+		db::opened_on(database, &here.id, 1).await;
+		db::opened_on(database, &there.id, 2).await;
+		db::opened_on(database, &done.id, 3).await;
 		mission_escalate(app.handle().clone(), app.state(), here.id.clone(), a_note())
 			.await
 			.expect("the mission is escalated");

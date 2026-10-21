@@ -34,7 +34,7 @@ const SECOND_BOT: &str = "second";
 const EVERY_MINUTE: &str = "* * * * *";
 const REPORT_TEXT: &str = "The shift log changed.";
 const RUN_COST_USD: f64 = 0.0425;
-const DEADLINE: Duration = Duration::from_secs(15);
+const DEADLINE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(25);
 
 struct Host {

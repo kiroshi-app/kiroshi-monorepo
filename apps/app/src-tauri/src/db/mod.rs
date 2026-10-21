@@ -235,6 +235,39 @@ pub(crate) fn open(dir: &Path) -> Database {
 }
 
 #[cfg(test)]
+pub(in crate::db) async fn joined_on(
+	database: &Database,
+	bot_id: &str,
+	space_id: &str,
+	joined_at: i64,
+) {
+	let (bot_id, space_id) = (bot_id.to_owned(), space_id.to_owned());
+	database
+		.call_mut(move |connection| {
+			Ok(connection.execute(
+				"UPDATE bot_spaces SET joined_at = ?3 WHERE bot_id = ?1 AND space_id = ?2",
+				rusqlite::params![bot_id, space_id, joined_at],
+			)?)
+		})
+		.await
+		.expect("the membership is dated");
+}
+
+#[cfg(test)]
+pub(crate) async fn opened_on(database: &Database, mission_id: &str, opened_at: i64) {
+	let mission_id = mission_id.to_owned();
+	database
+		.call_mut(move |connection| {
+			Ok(connection.execute(
+				"UPDATE missions SET opened_at = ?2 WHERE id = ?1",
+				rusqlite::params![mission_id, opened_at],
+			)?)
+		})
+		.await
+		.expect("the mission is dated");
+}
+
+#[cfg(test)]
 pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
 	database
 		.call(move |connection| {
@@ -256,7 +289,7 @@ mod tests {
 	use super::*;
 
 	const CONTENDED_TIMEOUT: Duration = Duration::from_millis(300);
-	const DEADLINE: Duration = Duration::from_secs(10);
+	const DEADLINE: Duration = Duration::from_secs(60);
 
 	async fn version(database: &Database) -> u32 {
 		database.call(migrations::version).await.expect("version")

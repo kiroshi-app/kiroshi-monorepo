@@ -2,6 +2,8 @@ mod bundled;
 mod common;
 
 use std::sync::{Arc, Mutex};
+#[cfg(unix)]
+use std::time::Duration;
 
 use bundled::bundled_bots;
 use common::{an_app_of_its_own, AppOfItsOwn};
@@ -19,6 +21,12 @@ use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
 use tauri::webview::InvokeRequest;
 use tauri::{Listener, Manager, WebviewWindow, WebviewWindowBuilder};
+
+#[cfg(unix)]
+const PATIENCE: Duration = Duration::from_secs(60);
+
+#[cfg(unix)]
+const QUIT_HELD_OPEN: Duration = Duration::from_secs(3600);
 
 fn app() -> AppOfItsOwn {
 	let app = an_app_of_its_own(
@@ -130,10 +138,12 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	)));
 }
 
+#[cfg(unix)]
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
 	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_IGNORE_TERM", "1");
 
 	let app = app();
 	let runtime = tokio::runtime::Runtime::new().expect("runtime");
@@ -153,19 +163,28 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.expect("session starts");
 
 		let state = app.state::<AgentState>();
+		let sidecar = state.sidecar().await.expect("the sidecar runs");
+		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
 		tokio::join!(
 			async {
-				shutdown_session(&state, &a_scope_value()).await;
+				tokio::time::timeout(PATIENCE, shutdown_session(&state, &a_scope_value()))
+					.await
+					.expect("the shutdown never waited on the quit held open");
 				finished.lock().expect("order").push("shutdown");
+				let killed = unsafe { libc::kill(sidecar.pid() as libc::pid_t, libc::SIGKILL) };
+				assert_eq!(killed, 0, "the sidecar ends: {}", std::io::Error::last_os_error());
 			},
 			async {
-				terminate_session(&state).await;
+				tokio::time::timeout(PATIENCE, terminate_session(&state))
+					.await
+					.expect("the quit ends once its sidecar is gone");
 				finished.lock().expect("order").push("terminate");
 			},
 		);
 	});
 
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
+	std::env::remove_var("FAKE_AGENT_IGNORE_TERM");
 	assert_eq!(*finished.lock().expect("order"), ["shutdown", "terminate"]);
 }
 

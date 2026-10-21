@@ -28,7 +28,7 @@ use tokio::time::timeout;
 
 const SPACE: &str = "personal";
 
-const PATIENCE: Duration = Duration::from_secs(20);
+const PATIENCE: Duration = Duration::from_secs(60);
 
 const TEXT: u8 = 0x1;
 

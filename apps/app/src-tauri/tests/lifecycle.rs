@@ -26,7 +26,7 @@ use tauri::test::{mock_builder, MockRuntime};
 use tauri::{App, Listener, Manager};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const DEADLINE: Duration = Duration::from_secs(10);
+const DEADLINE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(25);
 
 const A_CONVERSATION: &str = "

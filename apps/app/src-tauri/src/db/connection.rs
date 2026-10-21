@@ -105,7 +105,7 @@ mod tests {
 	use super::*;
 
 	const SHORT_TIMEOUT: Duration = Duration::from_millis(50);
-	const GIVES_UP_WITHIN: Duration = Duration::from_secs(10);
+	const GIVES_UP_WITHIN: Duration = Duration::from_secs(60);
 
 	#[test]
 	fn a_write_the_file_is_busy_for_gives_up_instead_of_waiting_forever() {

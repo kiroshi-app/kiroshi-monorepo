@@ -375,7 +375,7 @@ mod tests {
 	use super::super::*;
 	use super::*;
 	use crate::db::connection::temp_dir;
-	use crate::db::{count_of, open};
+	use crate::db::{count_of, joined_on, open};
 
 	#[tokio::test]
 	async fn a_database_nobody_has_written_to_has_no_bot_and_no_participants() {
@@ -967,6 +967,8 @@ mod tests {
 			.await
 			.expect("zed joins the second space");
 		let space_id = home_of(repository, &ada).await;
+		joined_on(&database, &zed.id, &space_id, 1).await;
+		joined_on(&database, &zed.id, &elsewhere.id, 2).await;
 		repository.create_conversation(a_draft(&space_id, &[&ada])).await.expect("the room");
 		for _ in 0..2 {
 			repository

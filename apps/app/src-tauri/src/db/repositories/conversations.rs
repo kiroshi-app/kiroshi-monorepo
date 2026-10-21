@@ -1200,7 +1200,7 @@ mod tests {
 	use crate::db::repositories::messages::{
 		MessagePage, MessagePageQuery, MessagesAroundQuery, NewAssistantMessage, NewTurn,
 	};
-	use crate::db::{count_of, open, Database};
+	use crate::db::{count_of, joined_on, open, Database};
 	use crate::search::contract::CatalogueScope;
 
 	pub(super) fn an_identity(name: &str) -> BotIdentity {
@@ -1880,6 +1880,8 @@ mod tests {
 			.add_bot(bot.id.clone(), joined.id.clone(), None)
 			.await
 			.expect("the bot joins the second space");
+		joined_on(&database, &bot.id, &home, 1).await;
+		joined_on(&database, &bot.id, &joined.id, 2).await;
 
 		let at_home = repository
 			.ensure_chat(bot.id.clone(), Some(home.clone()))

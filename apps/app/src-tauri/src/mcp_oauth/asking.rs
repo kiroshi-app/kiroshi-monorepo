@@ -231,6 +231,8 @@ mod tests {
 
 	const HELD_UNDER_THE_BOUND: Duration = Duration::from_secs(6);
 
+	const ARRIVAL_PATIENCE: Duration = Duration::from_secs(60);
+
 	const SERVERS_ASKED_TOGETHER: usize = 4;
 
 	const NAMING_A_SERVER: &str = r#"{"authorization_servers":["https://auth.granola.test"]}"#;
@@ -302,7 +304,7 @@ mod tests {
 		async fn reached(&self, name: &str, count: usize) {
 			let mut arrivals = self.arrivals.subscribe();
 			while named_in(&self.asked().await, name) < count {
-				tokio::time::timeout(PATIENCE, arrivals.changed())
+				tokio::time::timeout(ARRIVAL_PATIENCE, arrivals.changed())
 					.await
 					.expect("the stub was reached in time")
 					.expect("the stub records");

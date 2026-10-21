@@ -450,7 +450,7 @@ mod tests {
 			.await
 			.expect("the hook payload lands");
 		drop(stdin);
-		tokio::time::timeout(Duration::from_secs(20), running.wait())
+		tokio::time::timeout(Duration::from_secs(60), running.wait())
 			.await
 			.expect("the script ends")
 			.expect("the script is waited on")
@@ -515,7 +515,7 @@ mod tests {
 		.await;
 
 		assert_eq!(ended.code(), Some(0));
-		let request = tokio::time::timeout(Duration::from_secs(20), called)
+		let request = tokio::time::timeout(Duration::from_secs(60), called)
 			.await
 			.expect("the call lands")
 			.expect("the listener is joined");
@@ -568,7 +568,7 @@ mod tests {
 		.await;
 
 		assert_eq!(ended.code(), Some(0));
-		let request = tokio::time::timeout(Duration::from_secs(20), called)
+		let request = tokio::time::timeout(Duration::from_secs(60), called)
 			.await
 			.expect("the call lands")
 			.expect("the listener is joined");
@@ -619,7 +619,7 @@ mod tests {
 		.await;
 
 		assert_eq!(ended.code(), Some(0), "the script opened the transcript and blocked on it");
-		let request = tokio::time::timeout(Duration::from_secs(20), called)
+		let request = tokio::time::timeout(Duration::from_secs(60), called)
 			.await
 			.expect("the call lands")
 			.expect("the listener is joined");

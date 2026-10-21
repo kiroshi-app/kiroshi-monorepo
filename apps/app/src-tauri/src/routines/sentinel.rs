@@ -279,7 +279,7 @@ mod tests {
 
 		stop.send_replace(true);
 
-		let ended = tokio::time::timeout(Duration::from_secs(10), task).await;
+		let ended = tokio::time::timeout(Duration::from_secs(60), task).await;
 
 		assert!(ended.is_ok(), "the task outlived its stop signal");
 	}

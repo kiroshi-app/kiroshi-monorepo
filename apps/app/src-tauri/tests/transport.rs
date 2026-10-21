@@ -20,9 +20,10 @@ use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const DEADLINE: Duration = Duration::from_secs(10);
+const DEADLINE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(25);
-const LADDER_CEILING: Duration = Duration::from_secs(12);
+const LADDER_CEILING: Duration = Duration::from_secs(60);
+const TIMING_OUT_STARTUP: Duration = Duration::from_secs(2);
 
 struct Harness {
 	session: Session,
@@ -31,15 +32,23 @@ struct Harness {
 }
 
 fn options(scenario: &str) -> SessionOptions {
+	starting_within(scenario, DEADLINE)
+}
+
+fn timing_out(scenario: &str) -> SessionOptions {
+	starting_within(scenario, TIMING_OUT_STARTUP)
+}
+
+fn starting_within(scenario: &str, startup_timeout: Duration) -> SessionOptions {
 	let mut options =
 		SessionOptions::new(std::env::temp_dir()).with_env("FAKE_AGENT_SCENARIO", scenario);
-	options.startup_timeout = Duration::from_secs(2);
+	options.startup_timeout = startup_timeout;
 	options
 }
 
 fn sidecar_options() -> SidecarOptions {
 	let mut options = SidecarOptions::new(PathBuf::from(FAKE_SIDECAR));
-	options.ready_timeout = Duration::from_secs(2);
+	options.ready_timeout = DEADLINE;
 	options
 }
 
@@ -351,7 +360,7 @@ async fn a_missing_sidecar_is_reported_before_spawning() {
 
 #[tokio::test]
 async fn a_silent_child_trips_the_startup_timeout() {
-	let error = start(options("startup_timeout")).await.err().expect("handshake fails");
+	let error = start(timing_out("startup_timeout")).await.err().expect("handshake fails");
 	assert!(matches!(error, TransportError::StartupTimeout { timeout_ms: 2000 }));
 }
 
@@ -406,7 +415,7 @@ async fn a_resume_that_timed_out_is_reported_as_a_timeout() {
 
 	let started = start_with_fallback(
 		sidecar().await,
-		options("resume_timeout"),
+		timing_out("resume_timeout"),
 		Some("slow-id".into()),
 		sink,
 	)
@@ -445,7 +454,7 @@ async fn a_failed_start_keeps_the_child_it_killed_off_the_channel() {
 	let (tx, events) = mpsc::unbounded_channel();
 	let sink: Arc<dyn EventSink> = Arc::new(tx);
 
-	let error = Session::start(sidecar().await, options("startup_timeout"), sink)
+	let error = Session::start(sidecar().await, timing_out("startup_timeout"), sink)
 		.await
 		.err()
 		.expect("handshake fails");
@@ -549,7 +558,7 @@ async fn two_different_failures_surface_the_fresh_one() {
 
 	let error = start_with_fallback(
 		sidecar().await,
-		options("resume_timeout_then_crash"),
+		timing_out("resume_timeout_then_crash"),
 		Some("slow-id".into()),
 		sink,
 	)

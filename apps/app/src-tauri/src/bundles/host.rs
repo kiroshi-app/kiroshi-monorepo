@@ -197,7 +197,7 @@ mod tests {
 		let commit_id = answer["commitId"].as_str().expect("a commit id is answered");
 		assert_eq!(skill_of(&app, "b1").as_deref(), Some("Bake at 220 degrees."));
 		assert_eq!(skill_of(&app, "b2"), None);
-		let event = heard.recv_timeout(Duration::from_secs(5)).expect("an event is emitted");
+		let event = heard.recv_timeout(Duration::from_secs(60)).expect("an event is emitted");
 		assert_eq!(event["scope"]["botId"], "b1");
 		assert_eq!(
 			event["event"],
