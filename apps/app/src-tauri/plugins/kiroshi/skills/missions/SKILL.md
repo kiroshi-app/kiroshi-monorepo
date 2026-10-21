@@ -78,6 +78,8 @@ Ask, never guess. When the person handed you the work, put the question to them 
 handed it to you, mention that companion in the conversation the mission came from, and
 ask there.
 
+When you do not hold `mission_escalate`, mention in the conversation the mission came from the companion who handed you the work, and ask there.
+
 ## The summary of a close
 
 Say where the work landed, in a few lines, for someone who did not follow any of it: what

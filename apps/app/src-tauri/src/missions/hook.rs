@@ -7,6 +7,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use super::contract::MissionError;
 use crate::private_files;
 
+mod permissions;
+
 const MISSIONS_DIR: &str = "missions";
 
 const HOOK_DIR: &str = "hook";
@@ -50,7 +52,7 @@ pub fn installed(dir: &Path, workspace: &str, url: &str, key: &str) -> Result<()
 	let script = laid_out(dir, url, key)?;
 	let settings = root.join(CLAUDE_DIR).join(SETTINGS_NAME);
 	let held = read(&settings)?;
-	let merged = merged(held, &command(&script))?;
+	let merged = permissions::granted(merged(held, &command(&script))?, &root)?;
 	let written = serde_json::to_vec_pretty(&merged)
 		.map_err(|error| unreachable(format!("the settings were not rendered: {error}")))?;
 	private_files::replace_atomically(&settings, &written).map_err(|error| {
@@ -256,7 +258,12 @@ mod tests {
 		installed(&dir.join("hook"), &workspace_of(&dir), A_URL, A_KEY).expect("the hook installs");
 
 		let settings = settings_of(&dir);
-		assert_eq!(settings["permissions"], json!({ "allow": ["Bash(ls:*)"] }));
+		assert_eq!(settings["permissions"]["allow"][0], json!("Bash(ls:*)"));
+		assert_eq!(
+			settings["permissions"]["deny"].as_array().map(Vec::len),
+			Some(permissions::REFUSED_BY_DESIGN.len()),
+			"the refused-by-design rules were not written beside the held ones"
+		);
 		assert_eq!(
 			settings["hooks"]["PreToolUse"],
 			json!([{ "hooks": [{ "type": "command", "command": ANOTHER_HOOK }] }]),
