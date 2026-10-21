@@ -17,6 +17,8 @@ const MAIN_BRANCH: &str = "main";
 
 const LEASED_PUSH: &str = "Bash(git push --force-with-lease origin ";
 
+const HEAD_PUSHES: [&str; 2] = ["Bash(git push -u origin HEAD)", "Bash(git push origin HEAD)"];
+
 const DEV_DATA: &str = "Library/Application Support/com.kiroshi.app.dev/**";
 
 const CURRENT_BRANCH: [&str; 4] = ["symbolic-ref", "--quiet", "--short", "HEAD"];
@@ -58,8 +60,8 @@ pub const REFUSED_BY_DESIGN: [&str; 34] = [
 	"Bash(gh api* --field*)",
 	"Bash(gh api* --raw-field*)",
 	"Bash(gh api* --input*)",
-	"Bash(git push* main)",
-	"Bash(git push* main *)",
+	"Bash(git push* origin main)",
+	"Bash(git push* origin main *)",
 	"Bash(git push* +main)",
 	"Bash(git push* +main *)",
 	"Bash(git push*:main)",
@@ -80,7 +82,8 @@ pub fn granted(held: Value, root: &Path) -> Result<Value, MissionError> {
 	else {
 		return Err(unreachable("the permissions of the workspace hold no object".to_owned()));
 	};
-	let allows = held_rules(&mut permissions, ALLOW_KEY)?.into_iter().filter(|rule| !leases(rule));
+	let allows =
+		held_rules(&mut permissions, ALLOW_KEY)?.into_iter().filter(|rule| !pushes_a_branch(rule));
 	permissions.insert(ALLOW_KEY.to_owned(), with(allows.collect(), allowed(root)));
 	let denies = held_rules(&mut permissions, DENY_KEY)?;
 	permissions
@@ -105,22 +108,23 @@ fn with(mut kept: Vec<Value>, rules: Vec<String>) -> Value {
 	Value::Array(kept)
 }
 
-fn leases(rule: &Value) -> bool {
-	rule.as_str().is_some_and(|rule| rule.starts_with(LEASED_PUSH))
+fn pushes_a_branch(rule: &Value) -> bool {
+	rule.as_str().is_some_and(|rule| rule.starts_with(LEASED_PUSH) || HEAD_PUSHES.contains(&rule))
 }
 
 fn allowed(root: &Path) -> Vec<String> {
 	let mut rules: Vec<String> = MISSION_GESTURES.map(str::to_owned).to_vec();
 	rules.extend(dev_data_edits());
-	rules.extend(leased_pushes(root));
+	rules.extend(branch_pushes(root));
 	rules
 }
 
-fn leased_pushes(root: &Path) -> Vec<String> {
+fn branch_pushes(root: &Path) -> Vec<String> {
 	let Some(branch) = checked_out(root).filter(|branch| leasable(branch)) else {
 		return Vec::new();
 	};
-	vec![format!("{LEASED_PUSH}{branch})"), format!("{LEASED_PUSH}HEAD:{branch})")]
+	let leased = [format!("{LEASED_PUSH}{branch})"), format!("{LEASED_PUSH}HEAD:{branch})")];
+	leased.into_iter().chain(HEAD_PUSHES.map(str::to_owned)).collect()
 }
 
 fn leasable(branch: &str) -> bool {
@@ -199,6 +203,13 @@ mod tests {
 			.collect()
 	}
 
+	fn head_pushes_in(settings: &Value) -> Vec<String> {
+		rules_of(settings, ALLOW_KEY)
+			.into_iter()
+			.filter(|rule| HEAD_PUSHES.contains(&rule.as_str()))
+			.collect()
+	}
+
 	fn assert_denied(name: &str, rule: &str) {
 		let root = a_checkout(name);
 
@@ -248,8 +259,9 @@ mod tests {
 		an_api_call_carrying_a_typed_field_long_is_denied: "Bash(gh api* --field*)",
 		an_api_call_carrying_a_raw_field_long_is_denied: "Bash(gh api* --raw-field*)",
 		an_api_call_carrying_an_input_is_denied: "Bash(gh api* --input*)",
-		a_push_ending_on_main_is_denied: "Bash(git push* main)",
-		a_push_to_main_followed_by_a_flag_is_denied: "Bash(git push* main *)",
+		a_push_ending_on_main_on_origin_is_denied: "Bash(git push* origin main)",
+		a_push_to_main_on_origin_followed_by_an_argument_is_denied:
+			"Bash(git push* origin main *)",
 		a_forced_push_ending_on_main_is_denied: "Bash(git push* +main)",
 		a_forced_push_to_main_followed_by_a_flag_is_denied: "Bash(git push* +main *)",
 		a_push_of_a_refspec_ending_on_main_is_denied: "Bash(git push*:main)",
@@ -332,6 +344,27 @@ mod tests {
 			.find(|key| matched_by(&tracked_rules(key), command))
 	}
 
+	const FEATURE_BRANCH_PUSHES: [&str; 3] = [
+		"git push -u origin feature/ope-1-x",
+		"git push origin feature/ope-1-x",
+		"git push --force-with-lease origin feature/ope-1-x",
+	];
+
+	const HEAD_PUSH_COMMANDS: [&str; 2] = ["git push -u origin HEAD", "git push origin HEAD"];
+
+	fn first_pushes() -> impl Iterator<Item = &'static str> {
+		FEATURE_BRANCH_PUSHES.into_iter().chain(HEAD_PUSH_COMMANDS)
+	}
+
+	fn assert_matched_by_no_deny_rule(command: &str) {
+		let matched: Vec<String> = tracked_rules(DENY_KEY)
+			.into_iter()
+			.chain(REFUSED_BY_DESIGN.map(str::to_owned))
+			.filter(|rule| pinned_wildcard_match(rule, command))
+			.collect();
+		assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+	}
+
 	#[test]
 	fn the_tracked_allows_are_the_three_feature_branch_pushes() {
 		assert_eq!(
@@ -385,17 +418,63 @@ mod tests {
 	}
 
 	#[test]
+	fn no_deny_rule_matches_a_feature_branch_push_chained_with_a_pull_request_to_main() {
+		for push in first_pushes() {
+			assert_matched_by_no_deny_rule(&format!(
+				"{push} && gh pr create --base main --title x --body y"
+			));
+		}
+	}
+
+	#[test]
+	fn no_deny_rule_matches_a_first_push_chained_with_a_pull_request_ending_on_main() {
+		for push in first_pushes() {
+			assert_matched_by_no_deny_rule(&format!("{push} && gh pr create --base main"));
+		}
+	}
+
+	#[test]
+	fn no_deny_rule_matches_a_feature_branch_push_chained_with_an_auto_merge() {
+		for push in first_pushes() {
+			assert_matched_by_no_deny_rule(&format!("{push} && gh pr merge --auto 12"));
+		}
+	}
+
+	#[test]
+	fn no_deny_rule_matches_a_piped_feature_branch_push_chained_with_a_pull_request_to_main() {
+		for push in ["git push -u origin feature/ope-1-x"].into_iter().chain(HEAD_PUSH_COMMANDS) {
+			assert_matched_by_no_deny_rule(&format!(
+				"{push} 2>&1 | tail -3 && gh pr create --base main --title x"
+			));
+		}
+	}
+
+	#[test]
 	fn the_tracked_settings_deny_every_push_to_main() {
 		let denies = tracked_rules(DENY_KEY);
 
 		for command in [
 			"git push --force origin main",
-			"git push --force-with-lease origin feature/ope-1-x main",
+			"git push -f origin main",
+			"git push --force-with-lease origin main",
 			"git push origin feature/ope-1-x:main",
 			"git push origin +main",
+			"git push origin main",
+			"git push -u origin main",
+			"git push origin main --verbose",
+			"git push origin HEAD:main",
+			"git push origin refs/heads/main",
+			"git push origin feature/ope-1-x && git push origin main",
 		] {
 			assert!(matched_by(&denies, command), "{command} is not denied");
 		}
+	}
+
+	#[test]
+	fn a_multi_refspec_push_naming_main_is_left_to_the_branch_protection_of_main() {
+		let command = "git push --force-with-lease origin feature/ope-1-x main";
+
+		assert!(!matched_by(&tracked_rules(DENY_KEY), command), "{command} is denied");
 	}
 
 	macro_rules! asked_by_the_tracked_settings {
@@ -517,12 +596,35 @@ mod tests {
 	}
 
 	#[test]
+	fn a_checkout_on_a_branch_is_allowed_to_push_its_head() {
+		let root = on_branch("head", A_BRANCH);
+
+		let settings = granted(json!({}), &root).expect("granted");
+
+		assert_eq!(
+			head_pushes_in(&settings),
+			["Bash(git push -u origin HEAD)", "Bash(git push origin HEAD)"],
+		);
+	}
+
+	#[test]
+	fn a_head_push_left_by_a_branch_is_dropped_once_the_checkout_is_on_main() {
+		let root = on_branch("head-on-main", MAIN_BRANCH);
+		let held = json!({ "permissions": { "allow": HEAD_PUSHES } });
+
+		let settings = granted(held, &root).expect("granted");
+
+		assert!(head_pushes_in(&settings).is_empty(), "got {:?}", head_pushes_in(&settings));
+	}
+
+	#[test]
 	fn a_checkout_on_main_gets_no_lease_push_and_every_other_rule() {
 		let root = on_branch("on-main", MAIN_BRANCH);
 
 		let settings = granted(json!({}), &root).expect("granted");
 
 		assert!(leases_in(&settings).is_empty(), "got {:?}", leases_in(&settings));
+		assert!(head_pushes_in(&settings).is_empty(), "got {:?}", head_pushes_in(&settings));
 		assert_eq!(rules_of(&settings, ALLOW_KEY).len(), MISSION_GESTURES.len() + 2);
 		assert_eq!(rules_of(&settings, DENY_KEY), REFUSED_BY_DESIGN);
 	}
@@ -536,6 +638,7 @@ mod tests {
 		let settings = granted(json!({}), &root).expect("granted");
 
 		assert!(leases_in(&settings).is_empty(), "got {:?}", leases_in(&settings));
+		assert!(head_pushes_in(&settings).is_empty(), "got {:?}", head_pushes_in(&settings));
 		assert_eq!(rules_of(&settings, ALLOW_KEY).len(), MISSION_GESTURES.len() + 2);
 		assert_eq!(rules_of(&settings, DENY_KEY), REFUSED_BY_DESIGN);
 	}
@@ -562,7 +665,7 @@ mod tests {
 		assert_eq!(twice[PERMISSIONS_KEY]["defaultMode"], json!("auto"));
 		assert_eq!(rules_of(&twice, ALLOW_KEY).first().map(String::as_str), Some("Bash(ls *)"));
 		assert_eq!(rules_of(&twice, DENY_KEY).first().map(String::as_str), Some("Read(./.env)"));
-		assert_eq!(rules_of(&twice, ALLOW_KEY).len(), 1 + MISSION_GESTURES.len() + 4);
+		assert_eq!(rules_of(&twice, ALLOW_KEY).len(), 1 + MISSION_GESTURES.len() + 6);
 		assert_eq!(rules_of(&twice, DENY_KEY).len(), 1 + REFUSED_BY_DESIGN.len());
 	}
 
