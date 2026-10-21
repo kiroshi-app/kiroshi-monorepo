@@ -471,6 +471,10 @@ const chat = {
 			unknownPermission:
 				"Couldn’t match this approval request ({{id}}). Dismiss it.",
 			writeFailed: "Couldn’t send the message ({{detail}}). Retry.",
+			runLapsedSilent:
+				"The agent stopped answering, so its reply ended. Send your message again.",
+			runLapsedInterrupt:
+				"The agent didn’t answer the stop, so its reply ended. Send your message again.",
 			readFailed: "Couldn’t load earlier messages ({{detail}}). Retry.",
 			unknownFailure: "Something went wrong ({{detail}}). Retry.",
 		},

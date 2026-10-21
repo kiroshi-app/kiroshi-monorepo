@@ -14,6 +14,7 @@ use kiroshi_app::agent::contract::{
 	AgentEvent, CheckReport, ConnectionState, PermissionDecision, PermissionRequest, RuntimeScope,
 	ScopedEvent, TransportError, TurnOutcome,
 };
+use kiroshi_app::agent::lease::{Lapse, RunLease};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::commands::invoke_handler;
@@ -355,20 +356,26 @@ fn a_session_streams_survives_a_relaunch_and_leaves_no_orphan() {
 const BOT: &str = "default";
 const PROMPT: &str = "hello";
 const STREAMED: &str = "echo :: hello";
+const RESUMED: &str = "resumed fake-session-0001 :: hello";
 
 struct Stored {
 	app: AppOfItsOwn,
 	window: WebviewWindow<MockRuntime>,
 	conversation_id: String,
+	log: Arc<EventLog<ScopedEvent>>,
 	_scenario: RemovedOnDrop,
 }
 
 fn launch_stored(name: &str, played: &str) -> Stored {
+	launch_stored_with(name, played, AgentState::default())
+}
+
+fn launch_stored_with(name: &str, played: &str, state: AgentState) -> Stored {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, FAKE_SIDECAR);
 	let scenario = scenario(played);
 	let app = an_app_of_its_own(
 		&format!("e2e-{name}"),
-		mock_builder().manage(AgentState::default()).invoke_handler(invoke_handler()),
+		mock_builder().manage(state).invoke_handler(invoke_handler()),
 	);
 	app.manage(db::bootstrap(app.handle()));
 	bundled_bots(&app, &["default"]);
@@ -378,7 +385,14 @@ fn launch_stored(name: &str, played: &str) -> Stored {
 	let chat =
 		invoke(&window, "conversation_main_chat", json!({ "botId": BOT })).expect("the chat");
 	let conversation_id = chat["id"].as_str().expect("the chat holds an id").to_owned();
-	Stored { app, window, conversation_id, _scenario: scenario }
+	let log = Arc::new(EventLog::new());
+	let sink = log.clone();
+	app.listen(EVENT_CHANNEL, move |event| {
+		if let Ok(parsed) = serde_json::from_str::<ScopedEvent>(event.payload()) {
+			sink.push(parsed);
+		}
+	});
+	Stored { app, window, conversation_id, log, _scenario: scenario }
 }
 
 impl Stored {
@@ -492,6 +506,143 @@ impl Stored {
 	fn close(self) {
 		tauri::async_runtime::block_on(terminate_session(&self.app.state::<AgentState>()));
 	}
+
+	fn turn_endings(&self) -> Vec<TurnOutcome> {
+		agent_events(&self.log.held())
+			.into_iter()
+			.filter_map(|event| match event {
+				AgentEvent::TurnEnded { ended } => Some(ended.outcome),
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn lapses(&self) -> Vec<Lapse> {
+		agent_events(&self.log.held())
+			.into_iter()
+			.filter_map(|event| match event {
+				AgentEvent::Failed { error: TransportError::RunLapsed { lapse, .. } } => {
+					Some(lapse)
+				}
+				_ => None,
+			})
+			.collect()
+	}
+
+	fn reply_of(&self, turn_id: &str) -> Option<StoredMessage> {
+		self.replies().into_iter().find(|reply| reply.turn_id == turn_id)
+	}
+}
+
+const SHORT_LEASE: RunLease =
+	RunLease { silence: Duration::from_millis(800), interrupt_answer: Duration::from_millis(200) };
+
+fn launch_leased(name: &str, played: &str) -> Stored {
+	launch_stored_with(name, played, AgentState::leasing(SHORT_LEASE))
+}
+
+fn outlast_the_lease() {
+	std::thread::sleep(SHORT_LEASE.silence * 2);
+}
+
+#[test]
+fn a_query_that_never_answers_loses_its_lease_and_the_next_prompt_still_gets_a_whole_reply() {
+	let _serial = serial();
+	let stored = launch_leased("lease-hung", "hung_query");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	stored.wait_for("the streamed reply", |stored| stored.reply_of("t1"));
+	stored.call("agent_cancel_turn", json!({ "scope": stored.scope() })).expect("cancelled");
+	let failed_at = stored.completed("t1");
+	let failed = stored.only_reply();
+	assert_eq!(failed.state, MessageState::Failed);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+	outlast_the_lease();
+
+	assert_eq!(stored.completed_at("t1"), Some(failed_at));
+	assert_eq!(stored.reply_of("t1"), Some(failed));
+	let answered = stored.reply_of("t2").expect("the next turn replied");
+	assert_eq!(answered.content, RESUMED);
+	assert_eq!(answered.state, MessageState::Complete);
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
+	assert_eq!(stored.lapses(), vec![Lapse::InterruptUnanswered]);
+	stored.close();
+}
+
+#[test]
+fn a_sidecar_silent_past_its_lease_then_replaying_its_query_changes_neither_turn() {
+	let _serial = serial();
+	let stored = launch_leased("lease-silent", "silent_replay");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	let failed_at = stored.completed("t1");
+	let failed = stored.only_reply();
+	assert_eq!(failed.content, STREAMED);
+	assert_eq!(failed.state, MessageState::Failed);
+	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
+
+	stored.submit("t2", "p2");
+	stored.completed("t2");
+	outlast_the_lease();
+
+	assert_eq!(stored.completed_at("t1"), Some(failed_at));
+	assert_eq!(stored.reply_of("t1"), Some(failed));
+	let replies: Vec<_> =
+		stored.replies().into_iter().filter(|reply| reply.turn_id == "t2").collect();
+	assert_eq!(replies.len(), 1, "the replayed query wrote into the next turn: {replies:#?}");
+	assert_eq!(replies[0].content, RESUMED);
+	assert_eq!(replies[0].state, MessageState::Complete);
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Failed, TurnOutcome::Completed]);
+	assert!(
+		permission_request(&agent_events(&stored.log.held())).is_none(),
+		"the replayed permission reached the front"
+	);
+	assert_eq!(stored.lapses(), vec![Lapse::Silent]);
+	stored.close();
+}
+
+#[test]
+fn a_run_ending_before_its_lease_stays_completed() {
+	let _serial = serial();
+	let stored = launch_leased("lease-answered", "normal");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	let completed_at = stored.completed("t1");
+	outlast_the_lease();
+
+	assert_eq!(stored.completed_at("t1"), Some(completed_at));
+	assert_eq!(stored.only_reply().state, MessageState::Complete);
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	stored.close();
+}
+
+#[test]
+fn a_run_waiting_on_the_person_outlives_its_lease() {
+	let _serial = serial();
+	let stored = launch_leased("lease-permission", "permission");
+	stored.start();
+
+	stored.submit("t1", "p1");
+	let request = stored.log.until(DEADLINE, |scoped| permission_request(&agent_events(scoped)));
+	let request = request.expect("the permission is requested");
+	outlast_the_lease();
+	assert_eq!(stored.completed_at("t1"), None, "the lease ended a run waiting on the person");
+	assert!(stored.turn_endings().is_empty());
+
+	stored
+		.call(
+			"agent_respond_to_permission",
+			json!({ "scope": stored.scope(), "id": request.id, "decision": "allowOnce" }),
+		)
+		.expect("the permission is answered");
+	stored.completed("t1");
+	assert_eq!(stored.turn_endings(), vec![TurnOutcome::Completed]);
+	stored.close();
 }
 
 #[test]

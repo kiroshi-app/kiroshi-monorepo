@@ -51,4 +51,25 @@ describe("describeTransportError", () => {
 			'the server "linear" was left out: LINEAR_KEY is defined by no scope. The other applications still run, so fix this one and restart the session.',
 		)
 	})
+
+	it("tells a silent agent apart from a stop it never answered", () => {
+		expect(
+			describeTransportError(t, {
+				kind: "runLapsed",
+				lapse: "silent",
+				boundMs: 60_000,
+			}),
+		).toBe(
+			"The agent stopped answering, so its reply ended. Send your message again.",
+		)
+		expect(
+			describeTransportError(t, {
+				kind: "runLapsed",
+				lapse: "interruptUnanswered",
+				boundMs: 15_000,
+			}),
+		).toBe(
+			"The agent didn’t answer the stop, so its reply ended. Send your message again.",
+		)
+	})
 })

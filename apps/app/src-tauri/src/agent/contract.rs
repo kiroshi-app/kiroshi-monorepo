@@ -237,6 +237,11 @@ pub enum TransportError {
 	WriteFailed {
 		detail: String,
 	},
+	#[serde(rename_all = "camelCase")]
+	RunLapsed {
+		lapse: crate::agent::lease::Lapse,
+		bound_ms: u64,
+	},
 }
 
 impl TransportError {
@@ -282,6 +287,7 @@ impl std::fmt::Display for TransportError {
 			}
 			TransportError::UnknownPermission { id } => write!(f, "unknown permission {id}"),
 			TransportError::WriteFailed { detail } => write!(f, "write failed: {detail}"),
+			TransportError::RunLapsed { lapse, bound_ms } => write!(f, "{lapse} ({bound_ms} ms)"),
 		}
 	}
 }

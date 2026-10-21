@@ -130,6 +130,10 @@ impl Translator {
 		self.cancelling = true;
 	}
 
+	pub fn is_waiting_on_person(&self) -> bool {
+		!self.pending_permissions.is_empty()
+	}
+
 	pub fn take_permission_input(&mut self, request_id: &str) -> Option<Value> {
 		self.pending_permissions.remove(request_id)
 	}
@@ -162,6 +166,7 @@ impl Translator {
 			| Frame::Closed(_)
 			| Frame::ControlResponse(_)
 			| Frame::HostRequest(_)
+			| Frame::Heartbeat
 			| Frame::Ignored => Vec::new(),
 		}
 	}
@@ -306,7 +311,14 @@ impl Translator {
 		} else {
 			TurnOutcome::Completed
 		};
+		self.end_turn(outcome, frame)
+	}
 
+	pub fn abandon_turn(&mut self) -> Vec<AgentEvent> {
+		self.end_turn(TurnOutcome::Failed, ResultFrame::default())
+	}
+
+	fn end_turn(&mut self, outcome: TurnOutcome, frame: ResultFrame) -> Vec<AgentEvent> {
 		let mut events = Vec::new();
 		if let Some(message) = self.streaming_message.take() {
 			if let Some(completion) = ending_for(outcome, message.spoke) {

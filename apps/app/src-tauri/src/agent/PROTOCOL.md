@@ -456,6 +456,7 @@ The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 | `user` | `SDKUserMessage` — `tool_result` with `is_error` | `activity` (succeeded / failed) |
 | `result` | `SDKResultMessage` — `subtype`, `session_id`, `is_error`, or the sidecar when a stop lands on a prompt still held | `turnEnded` |
 | `host_request` | the sidecar, from `askHost` | nothing — it is answered, not read |
+| `heartbeat` | the sidecar, every `HEARTBEAT_INTERVAL_MS` while a query of the session is in flight | nothing: it renews the lease of the running run |
 | `control_request` / `can_use_tool` | the sidecar, from `canUseTool` | `permissionRequested` |
 | `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
 | `settings_rejected` | the sidecar, when the bot's `settings.json` is refused in part or in whole | `failed` — `settingsRejected`, the frame's `detail` as its reason |
@@ -633,6 +634,25 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
   grandchildren (the agent, its MCP servers), so the group kill is what keeps
   orphans off the machine.
 
+### The lease of a running run
+
+- From each `prompt` until the `result` of that query, through a pending `interrupt`,
+  the sidecar writes `{"type":"heartbeat"}` in the envelope of the session every
+  `HEARTBEAT_INTERVAL_MS` (10 s, `sidecar/src/heartbeat.ts`). Two prompts in flight keep
+  it beating until both results; `closed` and `close` stop it.
+- The host counts every frame of the session, heartbeat or other, as life for its running
+  run (`agent/lease.rs`). A run that hears nothing for `RUN_SILENCE_BOUND` (60 s), or
+  whose `interrupt` gets no `result` within `INTERRUPT_ANSWER_BOUND` (15 s), ends as a
+  provider error ends: its open reply settles `failed`, `turnEnded` with `failed`, the
+  run leaves `turn_runs`, the turn completes when no other run holds it. A non fatal
+  `failed` with `runLapsed` follows, naming the lapse (`silent` or `interruptUnanswered`)
+  and its bound in `boundMs`.
+- The silence bound sleeps while a permission or a question waits on the person.
+- A lapse closes the sidecar session of the lapsed query and opens a new one under a new
+  key, resuming the same SDK session id. The host detaches the lapsed key first, so
+  every later frame of that query, its late `result` included, reaches no session, and
+  the next prompt never queues behind a query that may never answer.
+
 ## What is deliberately not forwarded
 
 The sidecar's stderr is read line by line and written to the install's log file
@@ -717,6 +737,7 @@ Sidecar → host, inside the envelope of a session:
 {"type":"control_request",…}
 {"type":"host_request",…}
 {"type":"control_response",…}
+{"type":"heartbeat"}
 {"type":"result",…}
 {"type":"settings_rejected","detail":"…"}
 {"type":"server_env_rejected","detail":"…"}

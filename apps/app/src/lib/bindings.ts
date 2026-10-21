@@ -981,6 +981,8 @@ export type KiroshiAccount = {
 	plan: AccountPlan | null,
 };
 
+export type Lapse = "silent" | "interruptUnanswered";
+
 export type LastWord = {
 	text: string | null,
 	at: number,
@@ -1655,7 +1657,7 @@ export type TranscriptWindow = {
 	hasNewer: boolean,
 };
 
-export type TransportError = { kind: "binaryNotFound"; searched: string[] } | { kind: "notAuthenticated" } | { kind: "authCheckFailed"; detail: string } | { kind: "spawnFailed"; detail: string } | { kind: "startupTimeout"; timeoutMs: number } | { kind: "crashed"; code: number | null; detail: string | null } | { kind: "resumeFailed"; forgotSessionId: boolean } | { kind: "invalidFrame"; detail: string } | { kind: "settingsRejected"; detail: string } | { kind: "serverEnvRejected"; detail: string } | { kind: "notStarted" } | { kind: "turnAlreadyRunning" } | { kind: "transitionInProgress" } | { kind: "noActiveTurn" } | { kind: "staleRuntimeSession"; runtimeSessionId: string } | { kind: "unknownPermission"; id: string } | { kind: "writeFailed"; detail: string };
+export type TransportError = { kind: "binaryNotFound"; searched: string[] } | { kind: "notAuthenticated" } | { kind: "authCheckFailed"; detail: string } | { kind: "spawnFailed"; detail: string } | { kind: "startupTimeout"; timeoutMs: number } | { kind: "crashed"; code: number | null; detail: string | null } | { kind: "resumeFailed"; forgotSessionId: boolean } | { kind: "invalidFrame"; detail: string } | { kind: "settingsRejected"; detail: string } | { kind: "serverEnvRejected"; detail: string } | { kind: "notStarted" } | { kind: "turnAlreadyRunning" } | { kind: "transitionInProgress" } | { kind: "noActiveTurn" } | { kind: "staleRuntimeSession"; runtimeSessionId: string } | { kind: "unknownPermission"; id: string } | { kind: "writeFailed"; detail: string } | { kind: "runLapsed"; lapse: Lapse; boundMs: number };
 
 export type TransportFailure = "offline" | "timedOut" | "unsent";
 

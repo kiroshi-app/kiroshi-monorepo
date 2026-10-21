@@ -12,6 +12,7 @@ use super::contract::{
 	ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
 };
 use super::host::hosted;
+use super::lease::RunLease;
 use super::protocol::{self, Checked};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
@@ -468,6 +469,7 @@ pub struct AgentState {
 	tools: Catalogue<String>,
 	host_writes: Arc<HostWrites>,
 	host_turns: HostTurns,
+	lease: RunLease,
 }
 
 struct Catalogue<Item> {
@@ -490,6 +492,7 @@ impl Default for AgentState {
 			tools: Catalogue::of(protocol::TOOLS),
 			host_writes: Arc::default(),
 			host_turns: HostTurns::default(),
+			lease: RunLease::default(),
 		}
 	}
 }
@@ -526,6 +529,10 @@ impl<Item: Clone> Catalogue<Item> {
 }
 
 impl AgentState {
+	pub fn leasing(lease: RunLease) -> Self {
+		Self { lease, ..Self::default() }
+	}
+
 	pub fn host_writes(&self) -> &HostWrites {
 		&self.host_writes
 	}
@@ -985,7 +992,8 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 			scope.bot_id.clone(),
 		)))
 		.answering(output_schema)
-		.on_mission_thread(mission_thread);
+		.on_mission_thread(mission_thread)
+		.leased(state.lease);
 
 	let refused_id = resume.clone();
 	let started = match start_with_fallback(sidecar, options, resume, sink.clone()).await {

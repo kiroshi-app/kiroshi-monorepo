@@ -3213,6 +3213,12 @@
         }
       ]
     },
+    "Lapse": {
+      "enum": [
+        "silent",
+        "interruptUnanswered"
+      ]
+    },
     "LastWord": {
       "properties": {
         "at": {
@@ -8031,6 +8037,26 @@
           "required": [
             "kind",
             "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "boundMs": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "runLapsed"
+            },
+            "lapse": {
+              "$ref": "#/$defs/Lapse"
+            }
+          },
+          "required": [
+            "kind",
+            "lapse",
+            "boundMs"
           ],
           "type": "object"
         }

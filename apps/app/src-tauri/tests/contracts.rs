@@ -194,6 +194,7 @@ fn frame_names(frame: Frame) -> Vec<&'static str> {
 			assert_eq!(held.detail.as_deref(), Some("clock was left out for want of CLOCK_URL"));
 			vec!["server_env_rejected"]
 		}
+		Frame::Heartbeat => vec!["heartbeat"],
 		Frame::Ignored => vec!["ignored"],
 	}
 }
@@ -331,6 +332,7 @@ fn every_frame_the_sidecar_sends_reads_as_the_variant_the_host_matches() {
 				"control_request/can_use_tool",
 				"control_request/ignored",
 				"control_response",
+				"heartbeat",
 				"host_request",
 				"ignored",
 				"mcp_oauth_authorize",
