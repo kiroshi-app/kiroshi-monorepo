@@ -298,6 +298,89 @@ mod tests {
 		}
 	}
 
+	fn tracked_settings() -> Value {
+		serde_json::from_str(include_str!("../../../../../../.claude/settings.json"))
+			.expect("the tracked settings are json")
+	}
+
+	fn tracked_rules(key: &str) -> Vec<String> {
+		rules_of(&tracked_settings(), key)
+	}
+
+	fn matched_by(rules: &[String], command: &str) -> bool {
+		rules.iter().any(|rule| pinned_wildcard_match(rule, command))
+	}
+
+	#[test]
+	fn the_tracked_settings_hold_only_the_allow_and_deny_permissions() {
+		let settings = tracked_settings();
+
+		let keys: Vec<&String> =
+			settings.as_object().expect("the settings are an object").keys().collect();
+		let permission_keys: Vec<&String> = settings[PERMISSIONS_KEY]
+			.as_object()
+			.expect("the permissions are an object")
+			.keys()
+			.collect();
+
+		assert_eq!(keys, [PERMISSIONS_KEY]);
+		assert_eq!(
+			BTreeSet::from_iter(permission_keys),
+			BTreeSet::from([&ALLOW_KEY.to_owned(), &DENY_KEY.to_owned()])
+		);
+	}
+
+	#[test]
+	fn the_tracked_denies_are_the_refused_pushes_to_main() {
+		let refused_pushes: BTreeSet<String> = REFUSED_BY_DESIGN
+			.into_iter()
+			.filter(|rule| rule.starts_with("Bash(git push"))
+			.map(str::to_owned)
+			.collect();
+
+		assert_eq!(refused_pushes.len(), 8);
+		assert_eq!(BTreeSet::from_iter(tracked_rules(DENY_KEY)), refused_pushes);
+	}
+
+	#[test]
+	fn the_tracked_settings_allow_a_feature_branch_push_with_lease_or_upstream() {
+		let allows = tracked_rules(ALLOW_KEY);
+		let denies = tracked_rules(DENY_KEY);
+
+		for command in [
+			"git push --force-with-lease origin feature/ope-1-x",
+			"git push -u origin feature/ope-1-x",
+		] {
+			assert!(matched_by(&allows, command), "{command} is not allowed");
+			assert!(!matched_by(&denies, command), "{command} is denied");
+		}
+	}
+
+	#[test]
+	fn the_tracked_settings_deny_every_push_to_main() {
+		let denies = tracked_rules(DENY_KEY);
+
+		for command in [
+			"git push --force origin main",
+			"git push --force-with-lease origin feature/ope-1-x main",
+			"git push origin feature/ope-1-x:main",
+			"git push origin +main",
+		] {
+			assert!(matched_by(&denies, command), "{command} is not denied");
+		}
+	}
+
+	#[test]
+	fn the_tracked_settings_allow_no_forced_push_without_a_lease() {
+		let allows = tracked_rules(ALLOW_KEY);
+
+		for command in
+			["git push --force origin feature/ope-1-x", "git push -f origin feature/ope-1-x"]
+		{
+			assert!(!matched_by(&allows, command), "{command} is allowed");
+		}
+	}
+
 	#[test]
 	fn the_gestures_of_a_mission_are_allowed() {
 		let root = a_checkout("gestures");
