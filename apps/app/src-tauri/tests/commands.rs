@@ -130,6 +130,13 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 	)));
 }
 
+#[cfg(unix)]
+async fn frozen(state: &AgentState) {
+	let sidecar = state.sidecar().await.expect("the sidecar runs");
+	let group = -(sidecar.pid() as libc::pid_t);
+	assert_eq!(unsafe { libc::kill(group, libc::SIGSTOP) }, 0, "the sidecar group stops");
+}
+
 #[test]
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
@@ -153,6 +160,8 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		.expect("session starts");
 
 		let state = app.state::<AgentState>();
+		#[cfg(unix)]
+		frozen(&state).await;
 		tokio::join!(
 			async {
 				shutdown_session(&state, &a_scope_value()).await;
