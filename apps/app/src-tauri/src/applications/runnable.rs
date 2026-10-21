@@ -1,6 +1,6 @@
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use reqwest::{StatusCode, Url};
 use serde_json::Value;
@@ -97,9 +97,14 @@ async fn answered(url: Url) -> Result<StatusCode, ApplicationsError> {
 }
 
 fn on_path(path: &OsStr, command: &str) -> bool {
+	located(path, command).is_some()
+}
+
+pub(crate) fn located(path: &OsStr, command: &str) -> Option<PathBuf> {
 	let named = candidates(command);
-	env::split_paths(path)
-		.any(|directory| named.iter().any(|candidate| executable(directory.join(candidate))))
+	env::split_paths(path).find_map(|directory| {
+		named.iter().map(|candidate| directory.join(candidate)).find(|held| executable(held))
+	})
 }
 
 #[cfg(windows)]
@@ -123,14 +128,14 @@ fn candidates(command: &str) -> Vec<String> {
 }
 
 #[cfg(unix)]
-fn executable(candidate: PathBuf) -> bool {
+fn executable(candidate: &Path) -> bool {
 	use std::os::unix::fs::PermissionsExt;
 
 	candidate.metadata().is_ok_and(|held| held.is_file() && held.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(not(unix))]
-fn executable(candidate: PathBuf) -> bool {
+fn executable(candidate: &Path) -> bool {
 	candidate.is_file()
 }
 

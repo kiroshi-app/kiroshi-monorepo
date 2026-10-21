@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::future::Future;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ETAG, IF_NONE_MATCH, LINK, USER_AGENT};
@@ -12,8 +14,10 @@ use tokio::sync::watch as signal;
 use super::checkout;
 use super::commands::announce_change;
 use super::contract::{Mission, MissionEntry, MissionError, MissionEventKind, WatchedMission};
+use super::credentials::{Credential, Credentials, TokenSource};
 use crate::conversations::commands::ready;
 use crate::db;
+use crate::environment::store;
 use crate::routines::core::{Clock, SystemClock};
 
 pub const TICK: Duration = Duration::from_secs(120);
@@ -55,6 +59,8 @@ const REMOVED_FROM_QUEUE: &str = "removed_from_merge_queue";
 
 const TIMELINE_PAGES_READ_BACK: usize = 2;
 
+const TOKEN_SOURCE: &str = "tokenSource";
+
 pub struct Poller {
 	stop: signal::Sender<bool>,
 }
@@ -77,7 +83,10 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure:?}"),
 	};
-	let reach = match Reach::bearing(base, token()) {
+	let Some(credentials) = app.try_state::<Credentials>() else {
+		return eprintln!("no mission is watched on github: no credentials are kept");
+	};
+	let unbearing = match Reach::bearing(base, Credential::None) {
 		Ok(reach) => reach,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure}"),
 	};
@@ -88,6 +97,8 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 			_ = halted.changed() => return,
 			_ = ticker.tick() => {
 				checkout::pass(&app, database).await;
+				let credential = credentials.resolved(store::root(&app).as_deref()).await;
+				let reach = unbearing.carrying(credential);
 				pass(&app, &reach, database, &mut kept, &SystemClock).await;
 			}
 		}
@@ -97,29 +108,49 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 pub(crate) struct Reach {
 	client: Client,
 	base: String,
-	token: Option<String>,
+	credential: Credential,
+	queue_runs_this_tick: Mutex<HashMap<String, WorkflowRuns>>,
+	jobs_this_tick: Mutex<HashMap<(String, u64), Jobs>>,
 }
 
 impl Reach {
-	pub(crate) fn bearing(base: String, token: Option<String>) -> Result<Self, String> {
+	pub(crate) fn bearing(base: String, credential: Credential) -> Result<Self, String> {
 		installed_tls_provider();
 		let client = Client::builder()
 			.timeout(TIMEOUT)
 			.default_headers(headers())
 			.build()
 			.map_err(|error| format!("the http client was not built: {error}"))?;
-		Ok(Self { client, base, token })
+		Ok(Self::of(client, base, credential))
+	}
+
+	fn of(client: Client, base: String, credential: Credential) -> Self {
+		Self {
+			client,
+			base,
+			credential,
+			queue_runs_this_tick: Mutex::default(),
+			jobs_this_tick: Mutex::default(),
+		}
+	}
+
+	fn carrying(&self, credential: Credential) -> Self {
+		Self::of(self.client.clone(), self.base.clone(), credential)
 	}
 
 	async fn sent(&self, url: String, etag: Option<&str>) -> Result<Response, Failure> {
 		let mut request = self.client.get(&url);
-		if let Some(token) = self.token.as_deref() {
+		if let Some(token) = self.credential.token() {
 			request = request.bearer_auth(token);
 		}
 		if let Some(etag) = etag {
 			request = request.header(IF_NONE_MATCH, etag);
 		}
-		request.send().await.map_err(|error| Failure::Unreached(error.to_string()))
+		let answer = request.send().await.map_err(|error| Failure::Unreached(error.to_string()))?;
+		if answer.status() == StatusCode::UNAUTHORIZED && self.credential.token().is_some() {
+			return Err(Failure::TokenRefused(self.credential.source()));
+		}
+		Ok(answer)
 	}
 
 	async fn pulls(
@@ -161,16 +192,22 @@ impl Reach {
 		number: u64,
 	) -> Result<Answer<Vec<TimelineEvent>>, Failure> {
 		let url = format!("{}/repos/{repository}/issues/{number}/timeline?per_page=100", self.base);
-		let first = self.sent(url, None).await?;
-		let Some(last) = self.linked(&first, "last") else {
-			return read(first).await;
+		let answer = self.sent(url, None).await?;
+		let last = self.linked(&answer, "last");
+		let first = match read::<Vec<TimelineEvent>>(answer).await? {
+			Answer::Read { held, .. } if last.is_some() => held,
+			answered => return Ok(answered),
 		};
 		let mut tail: Vec<TimelineEvent> = Vec::new();
-		let mut page = Some(last);
+		let mut page = last;
 		for _ in 0..TIMELINE_PAGES_READ_BACK {
 			let Some(url) = page.take() else {
 				break;
 			};
+			if first_page(&url) {
+				tail = [first, tail].concat();
+				break;
+			}
 			let answer = self.sent(url, None).await?;
 			page = self.linked(&answer, "prev");
 			match read::<Vec<TimelineEvent>>(answer).await? {
@@ -206,20 +243,50 @@ impl Reach {
 	async fn queue_runs(&self, repository: &str) -> Result<Answer<WorkflowRuns>, Failure> {
 		let url =
 			format!("{}/repos/{repository}/actions/runs?event=merge_group&per_page=50", self.base);
-		read(self.sent(url, None).await?).await
+		read_once(&self.queue_runs_this_tick, repository.to_owned(), self.sent(url, None)).await
 	}
 
 	async fn jobs(&self, repository: &str, run_id: u64) -> Result<Answer<Jobs>, Failure> {
 		let url =
 			format!("{}/repos/{repository}/actions/runs/{run_id}/jobs?per_page=100", self.base);
-		read(self.sent(url, None).await?).await
+		read_once(&self.jobs_this_tick, (repository.to_owned(), run_id), self.sent(url, None)).await
 	}
+}
+
+async fn read_once<K, T>(
+	this_tick: &Mutex<HashMap<K, T>>,
+	key: K,
+	sent: impl Future<Output = Result<Response, Failure>>,
+) -> Result<Answer<T>, Failure>
+where
+	K: Eq + std::hash::Hash,
+	T: Clone + serde::de::DeserializeOwned,
+{
+	if let Some(held) = locked(this_tick).get(&key).cloned() {
+		return Ok(Answer::Read { etag: None, held });
+	}
+	let answer = read::<T>(sent.await?).await?;
+	if let Answer::Read { held, .. } = &answer {
+		locked(this_tick).insert(key, held.clone());
+	}
+	Ok(answer)
+}
+
+fn locked<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
+	held.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn first_page(url: &str) -> bool {
+	reqwest::Url::parse(url).is_ok_and(|url| {
+		url.query_pairs().find(|(name, _)| name == "page").is_none_or(|(_, page)| page == "1")
+	})
 }
 
 #[derive(Default)]
 pub(crate) struct Kept {
 	etags: HashMap<(String, Resource), String>,
 	held_until_ms: Option<i64>,
+	refused: Option<Credential>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -236,6 +303,18 @@ impl Kept {
 
 	fn hold_until(&mut self, until_ms: i64) {
 		self.held_until_ms = Some(until_ms);
+	}
+
+	fn hold_started(&self, before: Option<i64>, now_ms: i64) -> Option<i64> {
+		self.held_until_ms.filter(|_| self.held_until_ms != before && self.held(now_ms))
+	}
+
+	fn first_refusal_of(&mut self, credential: &Credential) -> bool {
+		if self.refused.as_ref() == Some(credential) {
+			return false;
+		}
+		self.refused = Some(credential.clone());
+		true
 	}
 
 	fn etag(&self, mission_id: &str, resource: Resource) -> Option<String> {
@@ -260,6 +339,7 @@ enum Failure {
 	Unreached(String),
 	Unreadable(String),
 	Refused(u16),
+	TokenRefused(TokenSource),
 	Storage(MissionError),
 }
 
@@ -269,6 +349,9 @@ impl std::fmt::Display for Failure {
 			Failure::Unreached(detail) => write!(formatter, "github was not reached: {detail}"),
 			Failure::Unreadable(detail) => write!(formatter, "github answered {detail}"),
 			Failure::Refused(status) => write!(formatter, "github refused with {status}"),
+			Failure::TokenRefused(source) => {
+				write!(formatter, "github refused the token from {}", source_name(*source))
+			}
 			Failure::Storage(failure) => {
 				write!(formatter, "the mission was not written: {failure:?}")
 			}
@@ -496,18 +579,125 @@ pub(crate) async fn pass<R: Runtime>(
 			return eprintln!("the missions watched on github were not read: {failure:?}");
 		}
 	};
+	let ids: Vec<String> = watched.iter().map(|mission| mission.id.clone()).collect();
 	for mission in watched {
 		if kept.held(clock.now_ms()) {
 			return;
 		}
 		let id = mission.id.clone();
+		let before = kept.held_until_ms;
 		match seen(reach, database, kept, mission).await {
 			Ok(Some(written)) => told(app, &written),
 			Ok(None) => (),
+			Err(Failure::TokenRefused(source)) => {
+				if kept.first_refusal_of(&reach.credential) {
+					noted_on_every(app, database, &ids, refused_note(source)).await;
+				}
+				return;
+			}
 			Err(failure) => {
 				eprintln!("what became of mission {id} on github was not read: {failure}");
 			}
 		}
+		if let Some(until_ms) = kept.hold_started(before, clock.now_ms()) {
+			return noted_on_every(app, database, &ids, paused_note(until_ms)).await;
+		}
+	}
+}
+
+async fn noted_on_every<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	ids: &[String],
+	note: MissionEntry,
+) {
+	for id in ids {
+		match database.missions().append(id.clone(), note.clone()).await {
+			Ok(written) => told(app, &written),
+			Err(failure) => {
+				eprintln!("mission {id} was not told how github is polled: {failure:?}")
+			}
+		}
+	}
+}
+
+pub(crate) async fn source_noted<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	mission_id: &str,
+) -> Result<Option<Mission>, MissionError> {
+	let credentials = app.try_state::<Credentials>().ok_or_else(|| MissionError::Unexpected {
+		detail: "no github credentials are kept".to_owned(),
+	})?;
+	let source = credentials.resolved(store::root(app).as_deref()).await.source();
+	let events = database.missions().detail(mission_id.to_owned()).await?.events;
+	let last = events
+		.iter()
+		.rev()
+		.filter(|event| event.kind == MissionEventKind::Note && event.source == SOURCE)
+		.find_map(|event| event.payload.get(TOKEN_SOURCE).cloned());
+	if last == Some(json!(source)) {
+		return Ok(None);
+	}
+	Ok(Some(database.missions().append(mission_id.to_owned(), source_note(source)).await?))
+}
+
+fn source_note(source: TokenSource) -> MissionEntry {
+	let message = match source {
+		TokenSource::Secrets => {
+			"GitHub polling with a token from Secrets: 5000 calls an hour.".to_owned()
+		}
+		TokenSource::Gh => "GitHub polling with a token from gh: 5000 calls an hour.".to_owned(),
+		TokenSource::None => format!(
+			"GitHub polling without a token: {} calls an hour, which two watched missions exceed. \
+			 Add GITHUB_TOKEN to Secrets or sign in with gh.",
+			hourly_limit(source)
+		),
+	};
+	entry(
+		MissionEventKind::Note,
+		json!({ TOKEN_SOURCE: source, "hourlyLimit": hourly_limit(source), "message": message }),
+	)
+}
+
+fn hourly_limit(source: TokenSource) -> u32 {
+	match source {
+		TokenSource::Secrets | TokenSource::Gh => 5000,
+		TokenSource::None => 60,
+	}
+}
+
+fn paused_note(until_ms: i64) -> MissionEntry {
+	let resumes = chrono::DateTime::from_timestamp_millis(until_ms)
+		.map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string())
+		.unwrap_or_else(|| until_ms.to_string());
+	entry(
+		MissionEventKind::Note,
+		json!({
+			"pausedUntil": until_ms,
+			"message": format!("GitHub polling is paused by the rate limit until {resumes}."),
+		}),
+	)
+}
+
+fn refused_note(source: TokenSource) -> MissionEntry {
+	let message = match source {
+		TokenSource::Secrets => {
+			"GitHub refused the token from Secrets. Replace GITHUB_TOKEN in Secrets."
+		}
+		TokenSource::Gh => {
+			"GitHub refused the token from gh. Sign in again with gh auth login, then reopen the app."
+		}
+		TokenSource::None => "GitHub refused the call.",
+	};
+	entry(MissionEventKind::Note, json!({ "refusedTokenSource": source, "message": message }))
+}
+
+fn source_name(source: TokenSource) -> &'static str {
+	match source {
+		TokenSource::Secrets => "Secrets",
+		TokenSource::Gh => "gh",
+		TokenSource::None => "nowhere",
 	}
 }
 
@@ -1024,13 +1214,6 @@ fn owner_of(repository: &str) -> Result<&str, Failure> {
 		.ok_or_else(|| Failure::Unreadable("a repository named without an owner".to_owned()))
 }
 
-fn token() -> Option<String> {
-	["GITHUB_TOKEN", "GH_TOKEN"]
-		.into_iter()
-		.find_map(|name| std::env::var(name).ok())
-		.filter(|held| !held.trim().is_empty())
-}
-
 pub(crate) fn installed_tls_provider() {
 	static ONCE: std::sync::Once = std::sync::Once::new();
 	ONCE.call_once(|| {
@@ -1070,6 +1253,7 @@ mod tests {
 	use super::super::contract::{
 		MissionDraft, MissionEvent, MissionNote, MissionState, MissionWatch, Ticket,
 	};
+	use super::super::credentials::tests::{a_gh, a_secret};
 	use super::*;
 	use crate::db::connection::temp_dir;
 	use crate::db::{open, Database};
@@ -1119,7 +1303,7 @@ mod tests {
 		path: String,
 		repository: String,
 		conditional_on: Option<String>,
-		bearing: bool,
+		bearer: Option<String>,
 		not_modified: bool,
 	}
 
@@ -1134,6 +1318,7 @@ mod tests {
 		reset_at_s: Option<i64>,
 		refused_repository: Option<String>,
 		refused_path: Option<(String, Option<i64>)>,
+		refusing_tokens: bool,
 		asked: Vec<Asked>,
 	}
 
@@ -1161,6 +1346,7 @@ mod tests {
 				reset_at_s: None,
 				refused_repository: None,
 				refused_path: None,
+				refusing_tokens: false,
 				asked: Vec::new(),
 			}));
 			let (stop, halted) = signal::channel(false);
@@ -1212,6 +1398,10 @@ mod tests {
 			self.answers.lock().await.reset_at_s = Some(reset_at_s);
 		}
 
+		async fn refusing_tokens(&self) {
+			self.answers.lock().await.refusing_tokens = true;
+		}
+
 		async fn refusing(&self, repository: &str) {
 			self.answers.lock().await.refused_repository = Some(repository.to_owned());
 		}
@@ -1230,7 +1420,11 @@ mod tests {
 		}
 
 		fn reach(&self) -> Reach {
-			Reach::bearing(self.base.clone(), None).expect("the client builds")
+			self.reach_carrying(Credential::None)
+		}
+
+		fn reach_carrying(&self, credential: Credential) -> Reach {
+			Reach::bearing(self.base.clone(), credential).expect("the client builds")
 		}
 	}
 
@@ -1247,11 +1441,14 @@ mod tests {
 			path: "pulls".to_owned(),
 			repository: repository.clone(),
 			conditional_on: conditional_on.clone(),
-			bearing: bearing(&headers),
+			bearer: bearer(&headers),
 			not_modified: false,
 		});
 		if held.refused_repository.as_deref() == Some(repository.as_str()) {
 			return (StatusCode::FORBIDDEN, String::new()).into_response();
+		}
+		if held.refusing_tokens && bearer(&headers).is_some() {
+			return (StatusCode::UNAUTHORIZED, String::new()).into_response();
 		}
 		if let Some(reset_at_s) = held.reset_at_s {
 			return (
@@ -1337,7 +1534,7 @@ mod tests {
 			path: path.clone(),
 			repository: format!("{owner}/{name}"),
 			conditional_on: None,
-			bearing: bearing(&headers),
+			bearer: bearer(&headers),
 			not_modified: false,
 		});
 		if let Some(refusal) = refusal(&held, &path) {
@@ -1386,7 +1583,7 @@ mod tests {
 			path,
 			repository,
 			conditional_on,
-			bearing: bearing(headers),
+			bearer: bearer(headers),
 			not_modified,
 		});
 		if let Some(refused) = refused {
@@ -1423,11 +1620,12 @@ mod tests {
 		format!("\"{:x}\"", hasher.finish())
 	}
 
-	fn bearing(headers: &HeaderMap) -> bool {
+	fn bearer(headers: &HeaderMap) -> Option<String> {
 		headers
 			.get(AUTHORIZATION)
 			.and_then(|held| held.to_str().ok())
-			.is_some_and(|held| held.starts_with("Bearer "))
+			.and_then(|held| held.strip_prefix("Bearer "))
+			.map(str::to_owned)
 	}
 
 	fn as_json(etag: Option<&str>, held: &Value) -> Answered {
@@ -1768,9 +1966,8 @@ mod tests {
 		announced_by(&stub.reach(), database, kept, clock).await
 	}
 
-	async fn walked_bearing(stub: &Stub, database: &Database, token: Option<&str>) {
-		let reach =
-			Reach::bearing(stub.base.clone(), token.map(str::to_owned)).expect("the client builds");
+	async fn walked_bearing(stub: &Stub, database: &Database, credential: Credential) {
+		let reach = stub.reach_carrying(credential);
 		announced_by(&reach, database, &mut Kept::default(), &Ticking::at(NOON)).await;
 	}
 
@@ -1979,14 +2176,95 @@ mod tests {
 		an_armed_mission(&database).await;
 		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
 
-		walked_bearing(&stub, &database, None).await;
-		walked_bearing(&stub, &database, Some("a-token-from-the-environment")).await;
+		walked_bearing(&stub, &database, Credential::None).await;
+		walked_bearing(&stub, &database, Credential::Secrets("a-token".to_owned())).await;
 
 		assert_eq!(
-			stub.asked().await.iter().map(|asked| asked.bearing).collect::<Vec<_>>(),
+			stub.asked().await.iter().map(|asked| asked.bearer.is_some()).collect::<Vec<_>>(),
 			vec![false, false, true, true],
 			"a request was made without the bearer the pass was given"
 		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	async fn bearers_with(secret: Option<&str>, gh: Option<&str>) -> Vec<Option<String>> {
+		let (database, dir) = planted().await;
+		an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let secrets = temp_dir();
+		let bin = temp_dir();
+		if let Some(secret) = secret {
+			a_secret(&secrets, secret);
+		}
+		if let Some(token) = gh {
+			a_gh(&bin, &format!("echo {token}"));
+		}
+		let credentials = Credentials::searching(bin.as_os_str().to_owned());
+
+		walked_bearing(&stub, &database, credentials.resolved(Some(&secrets)).await).await;
+
+		let bearers = stub.asked().await.into_iter().map(|asked| asked.bearer).collect();
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+		bearers
+	}
+
+	#[tokio::test]
+	async fn every_call_of_a_pass_bears_the_github_token_kept_in_secrets() {
+		let bearers = bearers_with(Some("a-token-from-secrets"), None).await;
+
+		assert_eq!(bearers, vec![Some("a-token-from-secrets".to_owned()); 2]);
+	}
+
+	#[tokio::test]
+	async fn every_call_of_a_pass_bears_the_token_of_gh_when_secrets_hold_none() {
+		let bearers = bearers_with(None, Some("a-token-from-gh")).await;
+
+		assert_eq!(bearers, vec![Some("a-token-from-gh".to_owned()); 2]);
+	}
+
+	#[tokio::test]
+	async fn no_call_of_a_pass_bears_a_token_when_neither_secrets_nor_gh_answer_one() {
+		let bearers = bearers_with(None, None).await;
+
+		assert_eq!(bearers, vec![None; 2]);
+	}
+
+	#[tokio::test]
+	async fn the_token_kept_in_secrets_wins_over_the_token_of_gh() {
+		let bearers = bearers_with(Some("a-token-from-secrets"), Some("a-token-from-gh")).await;
+
+		assert_eq!(bearers, vec![Some("a-token-from-secrets".to_owned()); 2]);
+	}
+
+	#[tokio::test]
+	async fn a_token_github_refuses_is_named_once_on_every_watched_mission_and_moves_no_state() {
+		let (database, dir) = planted().await;
+		let one = an_armed_mission(&database).await;
+		let other = an_armed_mission_on(&database, HIDDEN_REPOSITORY).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		stub.refusing_tokens().await;
+		let reach = stub.reach_carrying(Credential::Gh("a-token-from-gh".to_owned()));
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+
+		announced_by(&reach, &database, &mut kept, &clock).await;
+		announced_by(&reach, &database, &mut kept, &clock).await;
+
+		assert_eq!(stub.asked().await.len(), 2, "a pass went on after its token was refused");
+		for mission in [&one, &other] {
+			let notes = from_github(&database, &mission.id).await;
+			assert_eq!(notes.len(), 1, "got {notes:?}");
+			assert_eq!(notes[0].0, MissionEventKind::Note);
+			assert_eq!(notes[0].1["refusedTokenSource"], json!("gh"));
+			assert!(
+				!notes[0].1.to_string().contains("a-token-from-gh"),
+				"the note shows the token"
+			);
+			assert_eq!(state_of(&database, &mission.id).await, (mission.state, false));
+		}
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
@@ -2255,9 +2533,11 @@ mod tests {
 	async fn a_refusal_carrying_a_rate_limit_reset_stops_every_request_before_that_reset() {
 		let (database, dir) = planted().await;
 		let mission = an_armed_mission(&database).await;
+		let other = an_armed_mission_on(&database, HIDDEN_REPOSITORY).await;
 		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
 		let clock = Ticking::at(NOON);
 		let mut kept = Kept::default();
+		let fingerprints = stored_fingerprints(&database).await;
 		stub.refusing_until(NOON / 1000 + 600).await;
 
 		walked(&stub, &database, &mut kept, &clock).await;
@@ -2266,7 +2546,16 @@ mod tests {
 
 		assert_eq!(refused, 1, "the refusal was not the end of the pass");
 		assert_eq!(stub.asked().await.len(), 1, "a request landed before the reset");
-		assert!(from_github(&database, &mission.id).await.is_empty());
+		assert_eq!(stored_fingerprints(&database).await, fingerprints);
+		for mission in [&mission, &other] {
+			let notes = from_github(&database, &mission.id).await;
+			assert_eq!(notes.len(), 1, "got {notes:?}");
+			assert_eq!(notes[0].0, MissionEventKind::Note);
+			assert_eq!(notes[0].1["pausedUntil"], json!(NOON + 600_000));
+			let message = notes[0].1["message"].as_str().expect("the note says something");
+			assert!(message.starts_with("GitHub polling is paused by the rate limit until "));
+			assert_eq!(state_of(&database, &mission.id).await, (mission.state, false));
+		}
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
@@ -2281,6 +2570,11 @@ mod tests {
 		walked(&stub, &database, &mut kept, &Ticking::at(NOON)).await;
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 		(database, dir, mission, stub, kept)
+	}
+
+	async fn stored_fingerprints(database: &Database) -> Vec<(String, String)> {
+		let watched = database.missions().watched().await.expect("the watched missions read");
+		watched.into_iter().map(|mission| (mission.id, mission.fingerprint)).collect()
 	}
 
 	async fn fingerprint_of(database: &Database, mission_id: &str) -> Value {
@@ -2549,7 +2843,13 @@ mod tests {
 		stub.refusing_path("runs", Some(NOON / 1000 + 600)).await;
 		walked(&stub, &database, &mut kept, &clock).await;
 
-		assert_eq!(from_github(&database, &mission.id).await, events);
+		let after = from_github(&database, &mission.id).await;
+		assert_eq!(after[..events.len()], events[..]);
+		assert_eq!(
+			after[events.len()..].iter().map(|(kind, _)| *kind).collect::<Vec<_>>(),
+			vec![MissionEventKind::Note],
+			"the hold was not named once, or the error appended something"
+		);
 		assert_eq!(fingerprint_of(&database, &mission.id).await, fingerprint);
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 		assert!(kept.held(NOON), "the hold the merge group read answered was not kept");
@@ -2662,15 +2962,50 @@ mod tests {
 
 		walked(&stub, &database, &mut kept, &clock).await;
 
-		assert!(
-			stub.asked().await.iter().any(|asked| asked.path == "timeline/2"),
-			"the last page of the timeline was not read"
-		);
+		let pages: Vec<String> = stub
+			.asked()
+			.await
+			.into_iter()
+			.filter(|asked| asked.path.starts_with("timeline"))
+			.map(|asked| asked.path)
+			.collect();
+		assert_eq!(pages, vec!["timeline", "timeline/2"], "a page of the timeline was read twice");
 		assert_eq!(
 			red_checks_of(&database, &mission.id).await,
 			1,
 			"the removal on the last page of the timeline was not heard"
 		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn two_missions_ejected_on_one_tick_read_the_merge_group_runs_and_their_jobs_once() {
+		let (database, dir) = planted().await;
+		let one = an_armed_mission(&database).await;
+		let other = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull_in_queue(true, "clean", "t1"), "\"one\"").await;
+		stub.checking(a_run("completed", Some("success"))).await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		walked(&stub, &database, &mut kept, &clock).await;
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		let timeline = a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]);
+		stub.queueing(timeline, queue_runs(&[(101, "failure")]), rust_red_at_gate()).await;
+		let before = stub.asked().await.len();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let shared: Vec<String> = stub.asked().await[before..]
+			.iter()
+			.map(|asked| asked.path.clone())
+			.filter(|path| path == "runs" || path.starts_with("jobs/"))
+			.collect();
+		assert_eq!(shared, vec!["runs", "jobs/101"], "one tick read the same resource twice");
+		for mission in [&one, &other] {
+			assert_eq!(red_checks_of(&database, &mission.id).await, 1);
+		}
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");

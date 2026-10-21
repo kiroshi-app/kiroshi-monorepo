@@ -426,8 +426,27 @@ pub async fn mission_watch<R: Runtime>(
 	let database = ready(&state)?;
 	let (armed, key) =
 		database.missions().arm(mission_id, watch, uuid::Uuid::new_v4().to_string()).await?;
+	let armed = told_how_github_is_polled(&app, database, armed).await;
 	let mission = recounted_once(&app, database, armed).await;
 	Ok(MissionWatching { mission, url, key, header: HEADER.to_owned() })
+}
+
+async fn told_how_github_is_polled<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	armed: Mission,
+) -> Mission {
+	match github::source_noted(app, database, &armed.id).await {
+		Ok(Some(written)) => written,
+		Ok(None) => armed,
+		Err(failure) => {
+			eprintln!(
+				"mission {} was armed and not told how github is polled: {failure:?}",
+				armed.id
+			);
+			armed
+		}
+	}
 }
 
 async fn recounted_once<R: Runtime>(
@@ -614,7 +633,10 @@ mod tests {
 	use tauri::{App, Listener as _};
 
 	use super::super::contract::{MissionOutcome, Ticket};
+	use super::super::credentials::Credentials;
 	use super::*;
+	use crate::environment::contract::EnvScope;
+	use crate::environment::store;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -1366,6 +1388,49 @@ mod tests {
 			webhook.stop();
 		}
 		fs::remove_dir_all(&here).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn arming_names_how_github_is_polled_again_only_once_that_source_changed() {
+		let app = a_host("polled").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		app.manage(Credentials::searching(std::ffi::OsString::new()));
+		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+		let arm = || {
+			mission_watch(
+				app.handle().clone(),
+				app.state(),
+				opened.id.clone(),
+				a_watch("feature/a"),
+			)
+		};
+
+		arm().await.expect("the mission is armed");
+		arm().await.expect("the mission is armed again");
+		let secrets = store::root(app.handle()).expect("the secrets folder resolves");
+		store::set(&secrets, &EnvScope::User, "GITHUB_TOKEN", "a-token")
+			.expect("the secret is kept");
+		arm().await.expect("the mission is armed with a token");
+
+		let events = ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.missions()
+			.detail(opened.id.clone())
+			.await
+			.expect("the mission reads")
+			.events;
+		let named: Vec<(serde_json::Value, serde_json::Value)> = events
+			.into_iter()
+			.filter(|event| event.kind == MissionEventKind::Note && event.source == github::SOURCE)
+			.map(|event| {
+				(event.payload["tokenSource"].clone(), event.payload["hourlyLimit"].clone())
+			})
+			.collect();
+		assert_eq!(named, vec![(json!("none"), json!(60)), (json!("secrets"), json!(5000))]);
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
 	}
 
 	#[tokio::test]
