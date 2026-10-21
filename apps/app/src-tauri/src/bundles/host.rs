@@ -36,7 +36,7 @@ impl<R: Runtime> BundleHost<R> {
 			.conversations()
 			.bot(self.scope.bot_id.clone())
 			.await
-			.map_err(|_| BundleWriteRefusal::unexpected(UNREAD_BOT.to_owned()))?
+			.map_err(|error| BundleWriteRefusal::unexpected(format!("{UNREAD_BOT}: {error:?}")))?
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_BOT.to_owned()))?;
 		let root = super::root(&self.app)
 			.ok_or_else(|| BundleWriteRefusal::unexpected(NO_ROOT.to_owned()))?;
@@ -70,8 +70,8 @@ impl<R: Runtime> Host for BundleHost<R> {
 		payload: Value,
 	) -> Result<Value, BundleWriteRefusal> {
 		let state = Self::database(&self.app)?;
-		let database =
-			ready(&state).map_err(|_| BundleWriteRefusal::unexpected(NO_STORE.to_owned()))?;
+		let database = ready(&state)
+			.map_err(|error| BundleWriteRefusal::unexpected(format!("{NO_STORE}: {error:?}")))?;
 		match operation {
 			Operation::Write => {
 				let asked: BundleWrite = Self::read(payload)?;
