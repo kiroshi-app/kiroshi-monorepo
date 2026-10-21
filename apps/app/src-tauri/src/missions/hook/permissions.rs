@@ -425,6 +425,9 @@ mod tests {
 		a_bundle_ending_on_the_short_force_is_asked: "git push origin feature/ope-1-x -uf",
 		a_bundle_holding_the_short_force_before_the_remote_is_asked:
 			"git push -uf origin feature/ope-1-x",
+		a_forced_refspec_after_the_branch_is_asked:
+			"git push origin feature/ope-1-x +feature/ope-1-y",
+		a_forced_refspec_alone_after_the_remote_is_asked: "git push origin +feature/ope-1-x",
 	}
 
 	#[test]

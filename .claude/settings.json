@@ -6,6 +6,7 @@
 			"Bash(git push -u origin feature/*)"
 		],
 		"ask": [
+			"Bash(git push* +*)",
 			"Bash(git push* --force)",
 			"Bash(git push* --force *)",
 			"Bash(git push* -f*)",
