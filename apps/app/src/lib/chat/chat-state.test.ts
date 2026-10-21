@@ -405,7 +405,7 @@ describe("chatReducer", () => {
 			error: { kind: "notStarted" },
 		})
 
-		expect(refusedPrompt.errors.at(-1)?.isStopFailure).toBe(undefined)
+		expect(refusedPrompt.errors.at(-1)?.isStopFailure).toBeUndefined()
 		expect(refusedStop.errors.at(-1)).toMatchObject({
 			error: { kind: "notStarted" },
 			isStopFailure: true,

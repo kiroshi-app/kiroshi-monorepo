@@ -2021,9 +2021,9 @@ describe("a failure reaching a speaker", () => {
 	it("leaves the failure a speaker reports unmarked as a Stop failure", async () => {
 		await failWith(CRASHED)
 
-		expect(harness.controller.getState().latestError?.isStopFailure).toBe(
-			undefined,
-		)
+		expect(
+			harness.controller.getState().latestError?.isStopFailure,
+		).toBeUndefined()
 	})
 
 	it("marks the failure of a Stop the runtime could not carry out", async () => {
