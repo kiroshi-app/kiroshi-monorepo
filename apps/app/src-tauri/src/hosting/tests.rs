@@ -4499,7 +4499,7 @@ fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 		direct(&host.window, "conversation_complete_turn", json!({ "id": "t1", "completedAt": 3 }));
 		let after_the_turn = read_by_the_guest().await;
 
-		let speaking = Some(json!({ "startedAt": 1, "botIds": ["default"] }));
+		let speaking = Some(json!({ "bots": [{ "botId": "default", "startedAt": 1 }] }));
 		assert_eq!(during_the_turn, speaking);
 		assert_eq!(once_the_reply_settled, speaking);
 		assert_eq!(after_the_turn, Some(Value::Null));
@@ -4574,7 +4574,9 @@ fn a_guest_reads_the_open_turn_of_a_room_while_the_second_of_its_two_bots_still_
 
 		let mut both = vec!["default".to_owned(), ada.clone()];
 		both.sort_unstable();
-		assert_eq!(while_the_second_writes, Some(json!({ "startedAt": 1, "botIds": both })));
+		let both: Vec<_> =
+			both.iter().map(|bot_id| json!({ "botId": bot_id, "startedAt": 1 })).collect();
+		assert_eq!(while_the_second_writes, Some(json!({ "bots": both })));
 		assert_eq!(after_the_last, Some(Value::Null));
 	});
 }
@@ -4638,7 +4640,7 @@ fn a_guest_reads_the_turn_as_not_working_once_a_handed_bot_misses_its_start_dead
 			.expect("the deadline announced in time");
 		let after_the_deadline = read_by_the_guest().await;
 
-		assert_eq!(while_awaited, Some(json!({ "startedAt": 1, "botIds": [ada] })));
+		assert_eq!(while_awaited, Some(json!({ "bots": [{ "botId": ada, "startedAt": 1 }] })));
 		assert_eq!(announced_at_the_deadline, Some(Value::Null));
 		assert_eq!(after_the_deadline, Some(Value::Null));
 	});

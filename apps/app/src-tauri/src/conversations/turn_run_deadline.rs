@@ -201,7 +201,7 @@ mod tests {
 			.await
 			.expect("the late release announced in time");
 
-		assert_eq!(first, Some(json!({ "startedAt": 1, "botIds": ["early"] })));
+		assert_eq!(first, Some(json!({ "bots": [{ "botId": "early", "startedAt": 1 }] })));
 		assert!(updates.try_recv().is_err(), "the started run announced an update");
 	}
 }
