@@ -149,6 +149,7 @@ fn signalled(pid: u32, signal: libc::c_int) {
 fn shutting_down_a_session_never_queues_behind_the_quit() {
 	std::env::set_var(SIDECAR_OVERRIDE_ENV, env!("CARGO_BIN_EXE_fake_sidecar"));
 	std::env::set_var("FAKE_AGENT_IGNORE_EOF", "1");
+	std::env::set_var("FAKE_AGENT_IGNORE_TERM", "1");
 
 	let app = app();
 	let runtime = tokio::runtime::Runtime::new().expect("runtime");
@@ -170,7 +171,6 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		let state = app.state::<AgentState>();
 		let sidecar = state.sidecar().await.expect("the sidecar runs");
 		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
-		signalled(sidecar.pid(), libc::SIGSTOP);
 		tokio::join!(
 			async {
 				tokio::time::timeout(PATIENCE, shutdown_session(&state, &a_scope_value()))
@@ -189,6 +189,7 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 	});
 
 	std::env::remove_var("FAKE_AGENT_IGNORE_EOF");
+	std::env::remove_var("FAKE_AGENT_IGNORE_TERM");
 	assert_eq!(*finished.lock().expect("order"), ["shutdown", "terminate"]);
 }
 
