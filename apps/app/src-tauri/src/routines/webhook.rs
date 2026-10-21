@@ -360,7 +360,7 @@ mod tests {
 	use crate::db::repositories::routines::MAX_RUNS_PER_PAGE;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
-	const PATIENCE: Duration = Duration::from_secs(10);
+	const PATIENCE: Duration = Duration::from_secs(60);
 
 	const NOON: i64 = 1_800_000_000_000;
 

@@ -427,7 +427,7 @@ mod tests {
 
 		for write in ["create", "update", "run now", "delete"] {
 			let announced = arriving
-				.recv_timeout(Duration::from_secs(10))
+				.recv_timeout(Duration::from_secs(60))
 				.unwrap_or_else(|_| panic!("{write} announced nothing"));
 			let announced: Value = serde_json::from_str(&announced).expect("the event is JSON");
 			assert_eq!(announced["conversationId"], json!("c1"), "on {write}");

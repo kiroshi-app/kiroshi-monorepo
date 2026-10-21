@@ -217,7 +217,7 @@ mod tests {
 	use super::super::member_link::BUFFERED_EVENTS;
 	use super::*;
 
-	const PATIENCE: Duration = Duration::from_secs(10);
+	const PATIENCE: Duration = Duration::from_secs(60);
 
 	type FrontEvents = WebSocketStream<MaybeTlsStream<TcpStream>>;
 

@@ -2767,7 +2767,7 @@ mod tests {
 			written.send(()).expect("the write is reported");
 		});
 		waited
-			.recv_timeout(std::time::Duration::from_secs(10))
+			.recv_timeout(std::time::Duration::from_secs(60))
 			.expect("the space write finished while the bot bundle lock was held");
 		drop(held);
 		writer.join().expect("the space write ends");

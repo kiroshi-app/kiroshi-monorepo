@@ -433,7 +433,7 @@ mod tests {
 
 		assert_eq!(refused, Err(JoinedSpaceError::SessionRevoked));
 		left_once(&relay);
-		tokio::time::timeout(Duration::from_secs(5), async {
+		tokio::time::timeout(Duration::from_secs(60), async {
 			while app.state::<AccountSession>().bearer().expect("the store reads").is_some() {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}

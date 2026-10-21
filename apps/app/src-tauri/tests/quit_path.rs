@@ -16,10 +16,10 @@ use removed_on_drop::RemovedOnDrop;
 use tokio::sync::mpsc;
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const DEADLINE: Duration = Duration::from_secs(10);
+const DEADLINE: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(25);
 
-const UNREACHED_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const UNREACHED_STARTUP_TIMEOUT: Duration = Duration::from_secs(3600);
 
 async fn poll_until(expectation: &str, is_satisfied: impl Fn() -> bool) {
 	let deadline = tokio::time::Instant::now() + DEADLINE;

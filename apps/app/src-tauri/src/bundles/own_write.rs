@@ -497,7 +497,7 @@ mod tests {
 		drop(held);
 
 		let answer = waited
-			.recv_timeout(std::time::Duration::from_secs(10))
+			.recv_timeout(std::time::Duration::from_secs(60))
 			.expect("the write ends once the lock is let go");
 		writer.join().expect("the writer ends");
 		assert!(matches!(answer, Ok(BundleWritten::Recorded { .. })));

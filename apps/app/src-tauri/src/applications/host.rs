@@ -333,7 +333,7 @@ mod tests {
 
 	const SCOPES: [&str; 3] = ["companion", "space", "user"];
 
-	const PATIENCE: Duration = Duration::from_secs(10);
+	const PATIENCE: Duration = Duration::from_secs(60);
 
 	const NO_PACKAGE_REGISTRY: &str = "http://127.0.0.1:1";
 

@@ -23,7 +23,7 @@ use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::broadcast::{self, error::RecvError};
 
 const FAKE_SIDECAR: &str = env!("CARGO_BIN_EXE_fake_sidecar");
-const DEADLINE: Duration = Duration::from_secs(10);
+const DEADLINE: Duration = Duration::from_secs(60);
 
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 

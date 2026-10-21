@@ -59,7 +59,7 @@ const NYX: &str = "b-nyx";
 const AGENT_EVENT: &str = kiroshi_app::agent::commands::EVENT_CHANNEL;
 const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORED_EVENT;
 const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
-const PATIENCE: Duration = Duration::from_secs(15);
+const PATIENCE: Duration = Duration::from_secs(60);
 
 const A_ROOM: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES

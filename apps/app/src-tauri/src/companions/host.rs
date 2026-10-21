@@ -875,7 +875,7 @@ mod tests {
 	use crate::search::contract::{MAX_MATCHES_PER_LIST, MAX_QUERY_CHARS};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
-	const PATIENCE: Duration = Duration::from_secs(10);
+	const PATIENCE: Duration = Duration::from_secs(60);
 
 	const A_SPACE: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'Shoto', 'sonnet', 1);

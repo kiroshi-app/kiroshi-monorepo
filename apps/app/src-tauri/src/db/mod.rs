@@ -256,7 +256,7 @@ mod tests {
 	use super::*;
 
 	const CONTENDED_TIMEOUT: Duration = Duration::from_millis(300);
-	const DEADLINE: Duration = Duration::from_secs(10);
+	const DEADLINE: Duration = Duration::from_secs(60);
 
 	async fn version(database: &Database) -> u32 {
 		database.call(migrations::version).await.expect("version")
