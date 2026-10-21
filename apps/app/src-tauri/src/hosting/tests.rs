@@ -6233,7 +6233,6 @@ fn a_reserved_ctr_bound_that_does_not_read_back_sends_nothing_and_fails() {
 
 		harness.started().await;
 		let mut member = harness.member().await;
-		member.sealed_sent(HELLO, None).await;
 		let (failure, detail) = harness.failed().await;
 
 		assert_eq!(failure, HostingFailureKind::SealingFailed);
