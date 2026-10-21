@@ -259,6 +259,8 @@ export const WithPreview = meta.story({
 	},
 })
 
+const STOP_NAME = "Stop Atlas"
+
 export const WorkingPreview = meta.story({
 	args: {
 		media: <BotIdentityAvatar name="Atlas" seed="atlas" size={40} working />,
@@ -274,11 +276,12 @@ export const WorkingPreview = meta.story({
 			},
 		},
 	},
-	play: async ({ canvasElement }) => {
+	play: async ({ canvas, canvasElement }) => {
 		const preview = slotIn(rowIn(canvasElement), "roster-row-preview")
 
 		await expect(preview?.children).toHaveLength(1)
 		await expect(preview?.firstElementChild).toHaveTextContent("Thinking")
+		await expect(canvas.queryByRole("button", { name: STOP_NAME })).toBeNull()
 	},
 })
 
@@ -765,5 +768,86 @@ export const BoxMetrics = meta.story({
 
 		await expect(boxOf(plain)).toEqual(BOX_ON_B1E22DA1.open)
 		await expect(boxOf(stripped)).toEqual(BOX_ON_B1E22DA1.openWithStrips)
+	},
+})
+
+const WORKING_WITH_STOP_ARGS = {
+	media: <BotIdentityAvatar name="Atlas" seed="atlas" size={40} working />,
+	timestamp: "09:24",
+	preview: "Thinking",
+	isWorking: true,
+	onStop: fn(),
+}
+
+export const WorkingWithStop = meta.story({
+	tags: ["test-only"],
+	args: {
+		...WORKING_WITH_STOP_ARGS,
+		trailing: <BotTitleBadge data-slot="roster-row-badge" title={LONG_TITLE} />,
+	},
+	render: (args) => (
+		<Shell>
+			<SidebarMenuItem style={{ width: NARROW_ROW_WIDTH }}>
+				<SidebarListRow {...args} />
+			</SidebarMenuItem>
+		</Shell>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A working companion given a way to stop it, held at 200px. Check a Stop sits at the end of the name line in place of the timestamp, beside the row button and never inside it, clear of the name and of the cut title. Pick `WorkingPreview` for the same row with nothing to stop.",
+			},
+		},
+	},
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
+		const row = rowIn(canvasElement)
+		const stop = canvas.getByRole("button", { name: STOP_NAME })
+		const badge = slotIn(row, "roster-row-badge")
+		if (!badge) throw new Error("Missing title badge")
+
+		await expect(stop.tagName).toBe("BUTTON")
+		await expect(row.contains(stop)).toBe(false)
+		await expect(stop.parentElement).toBe(row.parentElement)
+		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent("")
+		await expect(stop.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			badge.getBoundingClientRect().right,
+		)
+
+		await userEvent.click(stop)
+		await expect(args.onStop).toHaveBeenCalledOnce()
+		await expect(args.onSelect).not.toHaveBeenCalled()
+
+		row.focus()
+		await userEvent.tab()
+		await expect(stop).toHaveFocus()
+		await expect(stop.matches(":focus-visible")).toBe(true)
+		await expect(getComputedStyle(stop).boxShadow).not.toBe("none")
+		await userEvent.keyboard("{Enter}")
+		await expect(args.onStop).toHaveBeenCalledTimes(2)
+		await expect(args.onSelect).not.toHaveBeenCalled()
+	},
+})
+
+export const WorkingWithStopOnIconRail = meta.story({
+	tags: ["test-only"],
+	args: WORKING_WITH_STOP_ARGS,
+	render: (args) => (
+		<Shell isOpen={false}>
+			<SidebarMenuItem>
+				<SidebarListRow {...args} />
+			</SidebarMenuItem>
+		</Shell>
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The working row given a way to stop it, on the icon rail. Check no Stop is drawn: the rail keeps only the media. Pick `WorkingWithStop` for the open sidebar.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(canvas.queryByRole("button", { name: STOP_NAME })).toBeNull()
 	},
 })

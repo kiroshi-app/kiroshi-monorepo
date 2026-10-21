@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use chrono::{DateTime, Local};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ETAG, IF_NONE_MATCH, LINK, USER_AGENT};
 use reqwest::{Client, Response, StatusCode};
 use serde::de::IgnoredAny;
@@ -17,6 +18,16 @@ use crate::db;
 use crate::routines::core::{Clock, SystemClock};
 
 pub const TICK: Duration = Duration::from_secs(120);
+
+const LISTING_CADENCE: Duration = Duration::from_secs(600);
+
+const RUNNING_CADENCE: Duration = Duration::from_secs(360);
+
+const GREEN_CADENCE: Duration = Duration::from_secs(900);
+
+const REPLIES_KEPT_FOR: Duration = Duration::from_secs(3600);
+
+const RATE_LIMIT_FLOOR: i64 = 10;
 
 pub const SOURCE: &str = "github";
 
@@ -77,7 +88,7 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 		Ok(database) => database,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure:?}"),
 	};
-	let reach = match Reach::bearing(base, token()) {
+	let reach = match Reach::at(base) {
 		Ok(reach) => reach,
 		Err(failure) => return eprintln!("no mission is watched on github: {failure}"),
 	};
@@ -97,73 +108,90 @@ async fn polling<R: Runtime>(app: AppHandle<R>, base: String, mut halted: signal
 pub(crate) struct Reach {
 	client: Client,
 	base: String,
-	token: Option<String>,
 }
 
 impl Reach {
-	pub(crate) fn bearing(base: String, token: Option<String>) -> Result<Self, String> {
+	pub(crate) fn at(base: String) -> Result<Self, String> {
 		installed_tls_provider();
 		let client = Client::builder()
 			.timeout(TIMEOUT)
 			.default_headers(headers())
 			.build()
 			.map_err(|error| format!("the http client was not built: {error}"))?;
-		Ok(Self { client, base, token })
+		Ok(Self { client, base })
 	}
 
-	async fn sent(&self, url: String, etag: Option<&str>) -> Result<Response, Failure> {
-		let mut request = self.client.get(&url);
-		if let Some(token) = self.token.as_deref() {
-			request = request.bearer_auth(token);
+	async fn fetched(&self, replies: &mut Replies, url: String) -> Result<Reply, Failure> {
+		if let Some(until_ms) = replies.holding() {
+			return Ok(Reply::held(until_ms));
 		}
-		if let Some(etag) = etag {
+		if let Some(asked) = replies.this_pass.get(&url) {
+			return asked.clone().map_err(Failure::Unreached);
+		}
+		let stored = replies.stored.get(&url);
+		let reply = self.sent(&url, stored, replies.now_ms).await;
+		if let Ok(reply) = &reply {
+			replies.heard(&url, reply);
+		}
+		replies.this_pass.insert(url, reply.clone());
+		reply.map_err(Failure::Unreached)
+	}
+
+	async fn sent(&self, url: &str, stored: Option<&Reply>, now_ms: i64) -> Result<Reply, String> {
+		let mut request = self.client.get(url);
+		if let Some(etag) = stored.and_then(|stored| stored.etag.as_deref()) {
 			request = request.header(IF_NONE_MATCH, etag);
 		}
-		request.send().await.map_err(|error| Failure::Unreached(error.to_string()))
+		let answer = request.send().await.map_err(|error| error.to_string())?;
+		Reply::of(answer, stored, now_ms).await
 	}
 
 	async fn pulls(
 		&self,
+		replies: &mut Replies,
 		mission: &WatchedMission,
-		etag: Option<&str>,
+		committed: Option<&str>,
 	) -> Result<Answer<Vec<Pull>>, Failure> {
 		let owner = owner_of(&mission.repository)?;
 		let url = format!(
 			"{}/repos/{}/pulls?head={}:{}&state=all&sort=updated&direction=desc&per_page=1",
 			self.base, mission.repository, owner, mission.branch
 		);
-		read(self.sent(url, etag).await?).await
+		read(&self.fetched(replies, url).await?, committed)
 	}
 
 	async fn checks(
 		&self,
+		replies: &mut Replies,
 		repository: &str,
 		head_sha: &str,
-		etag: Option<&str>,
+		committed: Option<&str>,
 	) -> Result<Answer<Runs>, Failure> {
 		let url = format!("{}/repos/{repository}/commits/{head_sha}/check-runs", self.base);
-		read(self.sent(url, etag).await?).await
+		read(&self.fetched(replies, url).await?, committed)
 	}
 
 	async fn pull(
 		&self,
+		replies: &mut Replies,
 		repository: &str,
 		number: u64,
-		etag: Option<&str>,
+		committed: Option<&str>,
 	) -> Result<Answer<Pull>, Failure> {
 		let url = format!("{}/repos/{repository}/pulls/{number}", self.base);
-		read(self.sent(url, etag).await?).await
+		read(&self.fetched(replies, url).await?, committed)
 	}
 
 	async fn timeline(
 		&self,
+		replies: &mut Replies,
 		repository: &str,
 		number: u64,
 	) -> Result<Answer<Vec<TimelineEvent>>, Failure> {
 		let url = format!("{}/repos/{repository}/issues/{number}/timeline?per_page=100", self.base);
-		let first = self.sent(url, None).await?;
+		let first = self.fetched(replies, url).await?;
 		let Some(last) = self.linked(&first, "last") else {
-			return read(first).await;
+			return read(&first, None);
 		};
 		let mut tail: Vec<TimelineEvent> = Vec::new();
 		let mut page = Some(last);
@@ -171,14 +199,14 @@ impl Reach {
 			let Some(url) = page.take() else {
 				break;
 			};
-			let answer = self.sent(url, None).await?;
+			let answer = self.fetched(replies, url).await?;
 			page = self.linked(&answer, "prev");
-			match read::<Vec<TimelineEvent>>(answer).await? {
+			match read::<Vec<TimelineEvent>>(&answer, None)? {
 				Answer::Read { held: mut events, .. } => {
 					events.append(&mut tail);
 					tail = events;
 				}
-				Answer::Held { until_ms } => return Ok(Answer::Held { until_ms }),
+				Answer::Held => return Ok(Answer::Held),
 				Answer::Unchanged => return Ok(Answer::Unchanged),
 			}
 			if queue_window_read(&tail) {
@@ -188,14 +216,12 @@ impl Reach {
 		Ok(Answer::Read { etag: None, held: tail })
 	}
 
-	fn linked(&self, answer: &Response, relation: &str) -> Option<String> {
+	fn linked(&self, answer: &Reply, relation: &str) -> Option<String> {
 		let marker = format!("rel=\"{relation}\"");
 		let within = format!("{}/", self.base);
 		answer
-			.headers()
-			.get(LINK)?
-			.to_str()
-			.ok()?
+			.link
+			.as_deref()?
 			.split(',')
 			.find(|part| part.contains(&marker))
 			.and_then(|part| part.split_once('<')?.1.split_once('>'))
@@ -203,23 +229,107 @@ impl Reach {
 			.filter(|url| url.starts_with(&within))
 	}
 
-	async fn queue_runs(&self, repository: &str) -> Result<Answer<WorkflowRuns>, Failure> {
+	async fn queue_runs(
+		&self,
+		replies: &mut Replies,
+		repository: &str,
+	) -> Result<Answer<WorkflowRuns>, Failure> {
 		let url =
 			format!("{}/repos/{repository}/actions/runs?event=merge_group&per_page=50", self.base);
-		read(self.sent(url, None).await?).await
+		read(&self.fetched(replies, url).await?, None)
 	}
 
-	async fn jobs(&self, repository: &str, run_id: u64) -> Result<Answer<Jobs>, Failure> {
+	async fn jobs(
+		&self,
+		replies: &mut Replies,
+		repository: &str,
+		run_id: u64,
+	) -> Result<Answer<Jobs>, Failure> {
 		let url =
 			format!("{}/repos/{repository}/actions/runs/{run_id}/jobs?per_page=100", self.base);
-		read(self.sent(url, None).await?).await
+		read(&self.fetched(replies, url).await?, None)
+	}
+}
+
+#[derive(Clone)]
+struct Reply {
+	status: StatusCode,
+	etag: Option<String>,
+	link: Option<String>,
+	body: Vec<u8>,
+	refused_until_ms: Option<i64>,
+	spent_until_ms: Option<i64>,
+	asked_at_ms: i64,
+}
+
+impl Reply {
+	async fn of(answer: Response, stored: Option<&Reply>, now_ms: i64) -> Result<Self, String> {
+		let status = answer.status();
+		let headers = answer.headers();
+		let refused_until_ms = refused_until(status, headers, now_ms);
+		let spent_until_ms = spent_until(headers);
+		if let Some(stored) = stored.filter(|_| status == StatusCode::NOT_MODIFIED) {
+			return Ok(Self { spent_until_ms, asked_at_ms: now_ms, ..stored.clone() });
+		}
+		let etag = headers.get(ETAG).and_then(|held| held.to_str().ok()).map(str::to_owned);
+		let link = headers.get(LINK).and_then(|held| held.to_str().ok()).map(str::to_owned);
+		let body = answer.bytes().await.map_err(|error| error.to_string())?.to_vec();
+		Ok(Self { status, etag, link, body, refused_until_ms, spent_until_ms, asked_at_ms: now_ms })
+	}
+
+	fn held(until_ms: i64) -> Self {
+		Self {
+			status: StatusCode::TOO_MANY_REQUESTS,
+			etag: None,
+			link: None,
+			body: Vec::new(),
+			refused_until_ms: Some(until_ms),
+			spent_until_ms: None,
+			asked_at_ms: 0,
+		}
+	}
+
+	fn hold_ms(&self) -> Option<i64> {
+		self.refused_until_ms.max(self.spent_until_ms)
+	}
+}
+
+#[derive(Default)]
+pub(crate) struct Replies {
+	stored: HashMap<String, Reply>,
+	this_pass: HashMap<String, Result<Reply, String>>,
+	held_until_ms: Option<i64>,
+	now_ms: i64,
+}
+
+impl Replies {
+	fn begin(&mut self, now_ms: i64) {
+		let kept_for_ms = REPLIES_KEPT_FOR.as_millis() as i64;
+		self.now_ms = now_ms;
+		self.this_pass.clear();
+		self.stored.retain(|_, reply| now_ms - reply.asked_at_ms < kept_for_ms);
+	}
+
+	fn holding(&self) -> Option<i64> {
+		self.held_until_ms.filter(|until| self.now_ms < *until)
+	}
+
+	fn heard(&mut self, url: &str, reply: &Reply) {
+		if let Some(until_ms) = reply.hold_ms() {
+			self.held_until_ms = Some(until_ms);
+		}
+		if reply.status.is_success() && reply.etag.is_some() {
+			self.stored.insert(url.to_owned(), reply.clone());
+		}
 	}
 }
 
 #[derive(Default)]
 pub(crate) struct Kept {
 	etags: HashMap<(String, Resource), String>,
-	held_until_ms: Option<i64>,
+	read_at_ms: HashMap<String, i64>,
+	noted_hold_until_ms: Option<i64>,
+	replies: Replies,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -231,11 +341,24 @@ enum Resource {
 
 impl Kept {
 	fn held(&self, now_ms: i64) -> bool {
-		self.held_until_ms.is_some_and(|until| now_ms < until)
+		self.replies.held_until_ms.is_some_and(|until| now_ms < until)
 	}
 
-	fn hold_until(&mut self, until_ms: i64) {
-		self.held_until_ms = Some(until_ms);
+	fn due(&self, mission_id: &str, cadence: Duration) -> bool {
+		let cadence_ms = cadence.as_millis() as i64;
+		let now_ms = self.replies.now_ms;
+		self.read_at_ms.get(mission_id).is_none_or(|at| now_ms - at >= cadence_ms)
+	}
+
+	fn read(&mut self, mission_id: &str) {
+		self.read_at_ms.insert(mission_id.to_owned(), self.replies.now_ms);
+	}
+
+	fn unnoted_hold(&mut self) -> Option<i64> {
+		let until_ms =
+			self.replies.holding().filter(|until| self.noted_hold_until_ms != Some(*until))?;
+		self.noted_hold_until_ms = Some(until_ms);
+		Some(until_ms)
 	}
 
 	fn etag(&self, mission_id: &str, resource: Resource) -> Option<String> {
@@ -251,7 +374,7 @@ impl Kept {
 
 enum Answer<T> {
 	Unchanged,
-	Held { until_ms: i64 },
+	Held,
 	Read { etag: Option<String>, held: T },
 }
 
@@ -490,22 +613,79 @@ pub(crate) async fn pass<R: Runtime>(
 	kept: &mut Kept,
 	clock: &dyn Clock,
 ) {
+	let now_ms = clock.now_ms();
+	kept.replies.begin(now_ms);
 	let watched = match database.missions().watched().await {
 		Ok(watched) => watched,
 		Err(failure) => {
 			return eprintln!("the missions watched on github were not read: {failure:?}");
 		}
 	};
+	let ids: Vec<String> = watched.iter().map(|mission| mission.id.clone()).collect();
 	for mission in watched {
-		if kept.held(clock.now_ms()) {
-			return;
+		if kept.held(now_ms) {
+			break;
 		}
 		let id = mission.id.clone();
-		match seen(reach, database, kept, mission).await {
+		match read_when_due(reach, database, kept, mission).await {
 			Ok(Some(written)) => told(app, &written),
 			Ok(None) => (),
 			Err(failure) => {
 				eprintln!("what became of mission {id} on github was not read: {failure}");
+			}
+		}
+	}
+	noted_hold(app, database, kept, &ids).await;
+}
+
+async fn read_when_due(
+	reach: &Reach,
+	database: &db::Database,
+	kept: &mut Kept,
+	mission: WatchedMission,
+) -> Result<Option<Mission>, Failure> {
+	let held = Fingerprint::held(&mission.fingerprint)?;
+	if !kept.due(&mission.id, cadence(held.as_ref())) {
+		return Ok(None);
+	}
+	let id = mission.id.clone();
+	let seen = seen(reach, database, kept, mission, held).await;
+	if kept.replies.holding().is_none() {
+		kept.read(&id);
+	}
+	seen
+}
+
+fn cadence(held: Option<&Fingerprint>) -> Duration {
+	match held {
+		Some(held) if held.green() => GREEN_CADENCE,
+		Some(held) if held.state == OPEN && !held.checks.settled() => RUNNING_CADENCE,
+		_ => LISTING_CADENCE,
+	}
+}
+
+async fn noted_hold<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	kept: &mut Kept,
+	watched: &[String],
+) {
+	let Some(until_ms) = kept.unnoted_hold() else {
+		return;
+	};
+	let Some(resumes_at) = DateTime::from_timestamp_millis(until_ms) else {
+		return eprintln!("the watch is held by github until an instant out of range: {until_ms}");
+	};
+	let line = format!(
+		"GitHub's rate limit is spent: the watch resumes at {}.",
+		resumes_at.with_timezone(&Local).format("%H:%M")
+	);
+	for id in watched {
+		let note = entry(MissionEventKind::Note, json!({ "line": line }));
+		match database.missions().append(id.clone(), note).await {
+			Ok(noted) => told(app, &noted),
+			Err(failure) => {
+				eprintln!("mission {id} was not told github holds the watch: {failure:?}")
 			}
 		}
 	}
@@ -522,17 +702,14 @@ async fn seen(
 	database: &db::Database,
 	kept: &mut Kept,
 	mission: WatchedMission,
+	held: Option<Fingerprint>,
 ) -> Result<Option<Mission>, Failure> {
-	let held = Fingerprint::held(&mission.fingerprint)?;
 	if let Some(green) = held.clone().filter(Fingerprint::green) {
 		return queued(reach, database, kept, &mission, green).await;
 	}
 	let sent = kept.etag(&mission.id, Resource::Listing);
-	match reach.pulls(&mission, sent.as_deref()).await? {
-		Answer::Held { until_ms } => {
-			kept.hold_until(until_ms);
-			Ok(None)
-		}
+	match reach.pulls(&mut kept.replies, &mission, sent.as_deref()).await? {
+		Answer::Held => Ok(None),
 		Answer::Unchanged => settling(reach, database, kept, &mission, held).await,
 		Answer::Read { etag, held: pulls } => {
 			listed(reach, database, kept, &mission, held, etag, pulls).await
@@ -599,17 +776,14 @@ async fn learned_checks(
 	repository: &str,
 	head_sha: &str,
 ) -> Result<Option<Settled>, Failure> {
-	Ok(heard(kept, reach.checks(repository, head_sha, None).await?).map(|runs| concluded(&runs)))
+	let answer = reach.checks(&mut kept.replies, repository, head_sha, None).await?;
+	Ok(heard(answer).map(|runs| concluded(&runs)))
 }
 
-fn heard<T>(kept: &mut Kept, answer: Answer<T>) -> Option<T> {
+fn heard<T>(answer: Answer<T>) -> Option<T> {
 	match answer {
 		Answer::Read { held, .. } => Some(held),
-		Answer::Unchanged => None,
-		Answer::Held { until_ms } => {
-			kept.hold_until(until_ms);
-			None
-		}
+		Answer::Unchanged | Answer::Held => None,
 	}
 }
 
@@ -622,11 +796,9 @@ async fn queued(
 ) -> Result<Option<Mission>, Failure> {
 	let repository = &mission.repository;
 	let sent = kept.etag(&mission.id, Resource::Pull);
-	let pull = match reach.pull(repository, held.number, sent.as_deref()).await? {
-		Answer::Held { until_ms } => {
-			kept.hold_until(until_ms);
-			return Ok(None);
-		}
+	let pull = match reach.pull(&mut kept.replies, repository, held.number, sent.as_deref()).await?
+	{
+		Answer::Held => return Ok(None),
 		Answer::Unchanged => None,
 		Answer::Read { etag, held: pull } => Some((etag, pull)),
 	};
@@ -638,11 +810,8 @@ async fn queued(
 	}
 	let sent = kept.etag(&mission.id, Resource::CheckRuns);
 	let (checks_etag, settled) =
-		match reach.checks(repository, &held.head_sha, sent.as_deref()).await? {
-			Answer::Held { until_ms } => {
-				kept.hold_until(until_ms);
-				return Ok(None);
-			}
+		match reach.checks(&mut kept.replies, repository, &held.head_sha, sent.as_deref()).await? {
+			Answer::Held => return Ok(None),
 			Answer::Unchanged => (None, Settled::holding(Checks::Passed)),
 			Answer::Read { etag, held: runs } => (etag, concluded(&runs)),
 		};
@@ -705,7 +874,8 @@ async fn queue_moved(
 	if !dropped && !touched {
 		return Ok(Some((queue, None)));
 	}
-	let Some(events) = heard(kept, reach.timeline(repository, pull.number).await?) else {
+	let Some(events) = heard(reach.timeline(&mut kept.replies, repository, pull.number).await?)
+	else {
 		return Ok(None);
 	};
 	match last_queue_event(&events) {
@@ -753,12 +923,12 @@ async fn ejected(
 	if queue.ejected_by_event == Some(removal.id) {
 		return Ok(Some((queue, None)));
 	}
-	let Some(runs) = heard(kept, reach.queue_runs(repository).await?) else {
+	let Some(runs) = heard(reach.queue_runs(&mut kept.replies, repository).await?) else {
 		return Ok(None);
 	};
 	let checks = match ejecting_run(&runs, number, &removal) {
 		None => Vec::new(),
-		Some(run) => match heard(kept, reach.jobs(repository, run.id).await?) {
+		Some(run) => match heard(reach.jobs(&mut kept.replies, repository, run.id).await?) {
 			Some(jobs) => red_jobs(&jobs),
 			None => return Ok(None),
 		},
@@ -776,7 +946,7 @@ async fn requeued(
 	added_at: Option<String>,
 	queue: Queue,
 ) -> Result<Option<Heard>, Failure> {
-	let Some(runs) = heard(kept, reach.queue_runs(repository).await?) else {
+	let Some(runs) = heard(reach.queue_runs(&mut kept.replies, repository).await?) else {
 		return Ok(None);
 	};
 	let green = own_queue_run(&runs, number, added_at.as_deref()).is_some_and(|run| {
@@ -985,32 +1155,40 @@ fn red(conclusion: Option<&str>) -> bool {
 	conclusion.is_some_and(|held| FAILED_CONCLUSIONS.contains(&held))
 }
 
-async fn read<T: serde::de::DeserializeOwned>(answer: Response) -> Result<Answer<T>, Failure> {
-	if answer.status() == StatusCode::NOT_MODIFIED {
+fn read<T: serde::de::DeserializeOwned>(
+	reply: &Reply,
+	committed: Option<&str>,
+) -> Result<Answer<T>, Failure> {
+	if reply.refused_until_ms.is_some() {
+		return Ok(Answer::Held);
+	}
+	if !reply.status.is_success() {
+		return Err(Failure::Refused(reply.status.as_u16()));
+	}
+	if committed.is_some() && reply.etag.as_deref() == committed {
 		return Ok(Answer::Unchanged);
 	}
-	if let Some(until_ms) = held_until(&answer) {
-		return Ok(Answer::Held { until_ms });
-	}
-	if !answer.status().is_success() {
-		return Err(Failure::Refused(answer.status().as_u16()));
-	}
-	let etag = answer.headers().get(ETAG).and_then(|held| held.to_str().ok()).map(str::to_owned);
-	let held = answer.json::<T>().await.map_err(|error| Failure::Unreadable(error.to_string()))?;
-	Ok(Answer::Read { etag, held })
+	let held = serde_json::from_slice::<T>(&reply.body)
+		.map_err(|error| Failure::Unreadable(error.to_string()))?;
+	Ok(Answer::Read { etag: reply.etag.clone(), held })
 }
 
-fn held_until(answer: &Response) -> Option<i64> {
-	let refused = matches!(answer.status(), StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS);
+fn refused_until(status: StatusCode, headers: &HeaderMap, now_ms: i64) -> Option<i64> {
+	let refused = matches!(status, StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS);
 	if !refused {
 		return None;
 	}
-	let headers = answer.headers();
 	let spent = seconds(headers, RATE_LIMIT_REMAINING_HEADER) == Some(0);
 	if let Some(reset) = seconds(headers, RATE_LIMIT_RESET_HEADER).filter(|_| spent) {
 		return Some(reset * 1000);
 	}
-	seconds(headers, RETRY_AFTER_HEADER).map(|after| SystemClock.now_ms() + after.max(0) * 1000)
+	seconds(headers, RETRY_AFTER_HEADER).map(|after| now_ms + after.max(0) * 1000)
+}
+
+fn spent_until(headers: &HeaderMap) -> Option<i64> {
+	seconds(headers, RATE_LIMIT_REMAINING_HEADER)
+		.filter(|remaining| *remaining <= RATE_LIMIT_FLOOR)?;
+	seconds(headers, RATE_LIMIT_RESET_HEADER).map(|reset| reset * 1000)
 }
 
 fn seconds(headers: &HeaderMap, name: &str) -> Option<i64> {
@@ -1022,13 +1200,6 @@ fn owner_of(repository: &str) -> Result<&str, Failure> {
 		.split_once('/')
 		.map(|(owner, _)| owner)
 		.ok_or_else(|| Failure::Unreadable("a repository named without an owner".to_owned()))
-}
-
-fn token() -> Option<String> {
-	["GITHUB_TOKEN", "GH_TOKEN"]
-		.into_iter()
-		.find_map(|name| std::env::var(name).ok())
-		.filter(|held| !held.trim().is_empty())
 }
 
 pub(crate) fn installed_tls_provider() {
@@ -1134,7 +1305,25 @@ mod tests {
 		reset_at_s: Option<i64>,
 		refused_repository: Option<String>,
 		refused_path: Option<(String, Option<i64>)>,
+		limit: Option<(i64, i64)>,
+		of_repository: HashMap<String, (Value, Value)>,
 		asked: Vec<Asked>,
+	}
+
+	impl Answers {
+		fn pulls_for(&self, repository: &str) -> (Value, String) {
+			match self.of_repository.get(repository) {
+				Some((pulls, _)) => (pulls.clone(), etag_of(pulls)),
+				None => (self.pulls.clone(), self.etag.clone()),
+			}
+		}
+
+		fn checks_for(&self, repository: &str) -> Value {
+			match self.of_repository.get(repository) {
+				Some((_, checks)) => checks.clone(),
+				None => self.checks.clone(),
+			}
+		}
 	}
 
 	struct Stub {
@@ -1161,6 +1350,8 @@ mod tests {
 				reset_at_s: None,
 				refused_repository: None,
 				refused_path: None,
+				limit: None,
+				of_repository: HashMap::new(),
 				asked: Vec::new(),
 			}));
 			let (stop, halted) = signal::channel(false);
@@ -1171,7 +1362,8 @@ mod tests {
 				.route("/repos/{owner}/{name}/issues/{number}/timeline", get(timeline_of))
 				.route("/repos/{owner}/{name}/actions/runs", get(queue_runs_of))
 				.route("/repos/{owner}/{name}/actions/runs/{id}/jobs", get(jobs_of))
-				.with_state(answers.clone());
+				.with_state(answers.clone())
+				.layer(axum::middleware::map_response_with_state(answers.clone(), limited));
 			let mut halting = halted;
 			tokio::spawn(async move {
 				let _ = axum::serve(listener, router)
@@ -1216,6 +1408,18 @@ mod tests {
 			self.answers.lock().await.refused_repository = Some(repository.to_owned());
 		}
 
+		async fn limiting(&self, limit: Option<(i64, i64)>) {
+			self.answers.lock().await.limit = limit;
+		}
+
+		async fn holding_for(&self, repository: &str, pulls: Value, checks: Value) {
+			self.answers.lock().await.of_repository.insert(repository.to_owned(), (pulls, checks));
+		}
+
+		async fn asked_paths(&self, from: usize) -> Vec<String> {
+			self.asked().await[from..].iter().map(|asked| asked.path.clone()).collect()
+		}
+
 		async fn asked_about(&self, path: &str) -> Vec<String> {
 			self.asked()
 				.await
@@ -1230,7 +1434,7 @@ mod tests {
 		}
 
 		fn reach(&self) -> Reach {
-			Reach::bearing(self.base.clone(), None).expect("the client builds")
+			Reach::at(self.base.clone()).expect("the client builds")
 		}
 	}
 
@@ -1264,13 +1468,26 @@ mod tests {
 			)
 				.into_response();
 		}
-		if conditional_on.as_deref() == Some(held.etag.as_str()) {
+		let (pulls, etag) = held.pulls_for(&repository);
+		if conditional_on.as_deref() == Some(etag.as_str()) {
 			if let Some(asked) = held.asked.last_mut() {
 				asked.not_modified = true;
 			}
 			return StatusCode::NOT_MODIFIED.into_response();
 		}
-		as_json(Some(&held.etag), &held.pulls)
+		as_json(Some(&etag), &pulls)
+	}
+
+	async fn limited(
+		Extracted(answers): Extracted<Arc<Mutex<Answers>>>,
+		mut answer: Answered,
+	) -> Answered {
+		if let Some((remaining, reset_at_s)) = answers.lock().await.limit {
+			let headers = answer.headers_mut();
+			headers.entry(RATE_LIMIT_REMAINING_HEADER).or_insert(HeaderValue::from(remaining));
+			headers.entry(RATE_LIMIT_RESET_HEADER).or_insert(HeaderValue::from(reset_at_s));
+		}
+		answer
 	}
 
 	async fn pull_of(
@@ -1278,8 +1495,8 @@ mod tests {
 		AxumPath((owner, name, _)): AxumPath<(String, String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
-		answered(&answers, "pull".to_owned(), format!("{owner}/{name}"), &headers, |held| {
-			held.pulls[0].clone()
+		answered(&answers, "pull".to_owned(), format!("{owner}/{name}"), &headers, |held, of| {
+			held.pulls_for(of).0[0].clone()
 		})
 		.await
 	}
@@ -1289,8 +1506,8 @@ mod tests {
 		AxumPath((owner, name, _)): AxumPath<(String, String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
-		answered(&answers, "checks".to_owned(), format!("{owner}/{name}"), &headers, |held| {
-			held.checks.clone()
+		answered(&answers, "checks".to_owned(), format!("{owner}/{name}"), &headers, |held, of| {
+			held.checks_for(of)
 		})
 		.await
 	}
@@ -1300,7 +1517,7 @@ mod tests {
 		AxumPath((owner, name)): AxumPath<(String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
-		answered(&answers, "runs".to_owned(), format!("{owner}/{name}"), &headers, |held| {
+		answered(&answers, "runs".to_owned(), format!("{owner}/{name}"), &headers, |held, _| {
 			held.queue_runs.clone()
 		})
 		.await
@@ -1311,7 +1528,7 @@ mod tests {
 		AxumPath((owner, name, id)): AxumPath<(String, String, String)>,
 		headers: HeaderMap,
 	) -> Answered {
-		answered(&answers, format!("jobs/{id}"), format!("{owner}/{name}"), &headers, |held| {
+		answered(&answers, format!("jobs/{id}"), format!("{owner}/{name}"), &headers, |held, _| {
 			held.jobs.clone()
 		})
 		.await
@@ -1333,21 +1550,30 @@ mod tests {
 			1 => "timeline".to_owned(),
 			page => format!("timeline/{page}"),
 		};
+		let conditional_on =
+			headers.get(IF_NONE_MATCH).and_then(|held| held.to_str().ok()).map(str::to_owned);
+		let events = held.timeline.as_array().cloned().expect("the stub timeline is an array");
+		let last = events.len().div_ceil(TIMELINE_PAGE).max(1);
+		let shown = Value::Array(
+			events.into_iter().skip((page - 1) * TIMELINE_PAGE).take(TIMELINE_PAGE).collect(),
+		);
+		let etag = etag_of(&shown);
+		let refused = refusal(&held, &path);
+		let not_modified = refused.is_none() && conditional_on.as_deref() == Some(etag.as_str());
 		held.asked.push(Asked {
 			path: path.clone(),
 			repository: format!("{owner}/{name}"),
-			conditional_on: None,
+			conditional_on,
 			bearing: bearing(&headers),
-			not_modified: false,
+			not_modified,
 		});
-		if let Some(refusal) = refusal(&held, &path) {
+		if let Some(refusal) = refused {
 			return refusal;
 		}
-		let events = held.timeline.as_array().cloned().expect("the stub timeline is an array");
-		let last = events.len().div_ceil(TIMELINE_PAGE).max(1);
-		let shown =
-			events.into_iter().skip((page - 1) * TIMELINE_PAGE).take(TIMELINE_PAGE).collect();
-		let mut answer = as_json(None, &Value::Array(shown));
+		if not_modified {
+			return StatusCode::NOT_MODIFIED.into_response();
+		}
+		let mut answer = as_json(Some(&etag), &shown);
 		if last == 1 {
 			return answer;
 		}
@@ -1373,12 +1599,12 @@ mod tests {
 		path: String,
 		repository: String,
 		headers: &HeaderMap,
-		body: fn(&Answers) -> Value,
+		body: fn(&Answers, &str) -> Value,
 	) -> Answered {
 		let mut held = answers.lock().await;
 		let conditional_on =
 			headers.get(IF_NONE_MATCH).and_then(|held| held.to_str().ok()).map(str::to_owned);
-		let body = body(&held);
+		let body = body(&held, &repository);
 		let etag = etag_of(&body);
 		let refused = refusal(&held, &path);
 		let not_modified = refused.is_none() && conditional_on.as_deref() == Some(etag.as_str());
@@ -1765,13 +1991,8 @@ mod tests {
 		kept: &mut Kept,
 		clock: &Ticking,
 	) -> Vec<Value> {
+		kept.read_at_ms.clear();
 		announced_by(&stub.reach(), database, kept, clock).await
-	}
-
-	async fn walked_bearing(stub: &Stub, database: &Database, token: Option<&str>) {
-		let reach =
-			Reach::bearing(stub.base.clone(), token.map(str::to_owned)).expect("the client builds");
-		announced_by(&reach, database, &mut Kept::default(), &Ticking::at(NOON)).await;
 	}
 
 	#[tokio::test]
@@ -1974,18 +2195,27 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_token_in_the_environment_is_carried_as_a_bearer_and_the_pass_runs_without_one() {
-		let (database, dir) = planted().await;
-		an_armed_mission(&database).await;
-		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+	async fn no_request_on_any_endpoint_carries_an_authorization_header() {
+		let (database, dir, _, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		stub.answering(a_pull_in_queue(false, "clean", "t2"), "\"two\"").await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
 
-		walked_bearing(&stub, &database, None).await;
-		walked_bearing(&stub, &database, Some("a-token-from-the-environment")).await;
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON)).await;
 
-		assert_eq!(
-			stub.asked().await.iter().map(|asked| asked.bearing).collect::<Vec<_>>(),
-			vec![false, false, true, true],
-			"a request was made without the bearer the pass was given"
+		let asked = stub.asked().await;
+		let mut paths: Vec<&str> = asked.iter().map(|asked| asked.path.as_str()).collect();
+		paths.sort_unstable();
+		paths.dedup();
+		assert_eq!(paths, vec!["checks", "jobs/101", "pull", "pulls", "runs", "timeline"]);
+		assert!(
+			asked.iter().all(|asked| !asked.bearing),
+			"a request carried an authorization header: {asked:?}"
 		);
 
 		stub.stop.send_replace(true);
@@ -2266,10 +2496,47 @@ mod tests {
 
 		assert_eq!(refused, 1, "the refusal was not the end of the pass");
 		assert_eq!(stub.asked().await.len(), 1, "a request landed before the reset");
-		assert!(from_github(&database, &mission.id).await.is_empty());
+		assert_eq!(from_github(&database, &mission.id).await, vec![hold_note(NOON + 600_000)]);
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn hold_note(until_ms: i64) -> (MissionEventKind, Value) {
+		let resumes_at = DateTime::from_timestamp_millis(until_ms)
+			.expect("the reset is an instant")
+			.with_timezone(&Local)
+			.format("%H:%M");
+		let line = format!("GitHub's rate limit is spent: the watch resumes at {resumes_at}.");
+		(MissionEventKind::Note, json!({ "line": line }))
+	}
+
+	const TICK_MS: i64 = TICK.as_millis() as i64;
+
+	const HOUR_MS: i64 = 3_600_000;
+
+	async fn ticks_of_an_hour(
+		stub: &Stub,
+		database: &Database,
+		kept: &mut Kept,
+		from_ms: i64,
+	) -> Vec<(i64, Vec<String>)> {
+		let app = a_host();
+		let reach = stub.reach();
+		let mut asked = Vec::new();
+		for at in (from_ms..from_ms + HOUR_MS).step_by(TICK_MS as usize) {
+			let before = stub.asked().await.len();
+			pass(app.handle(), &reach, database, kept, &Ticking::at(at)).await;
+			let paths = stub.asked_paths(before).await;
+			if !paths.is_empty() {
+				asked.push((at - from_ms, paths));
+			}
+		}
+		asked
+	}
+
+	fn calls_in(ticks: &[(i64, Vec<String>)]) -> usize {
+		ticks.iter().map(|(_, paths)| paths.len()).sum()
 	}
 
 	async fn ready_in_queue(pull: Value) -> (Database, RemovedOnDrop, Mission, Stub, Kept) {
@@ -2549,7 +2816,8 @@ mod tests {
 		stub.refusing_path("runs", Some(NOON / 1000 + 600)).await;
 		walked(&stub, &database, &mut kept, &clock).await;
 
-		assert_eq!(from_github(&database, &mission.id).await, events);
+		let noted: Vec<_> = events.into_iter().chain([hold_note(NOON + 600_000)]).collect();
+		assert_eq!(from_github(&database, &mission.id).await, noted);
 		assert_eq!(fingerprint_of(&database, &mission.id).await, fingerprint);
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::ReadyToMerge, false));
 		assert!(kept.held(NOON), "the hold the merge group read answered was not kept");
@@ -2826,6 +3094,290 @@ mod tests {
 			"a second removal on the same merge group run was swallowed or doubled"
 		);
 		assert_eq!(state_of(&database, &mission.id).await, (MissionState::WaitingBot, false));
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn every_endpoint_is_asked_again_conditional_on_the_entity_tag_it_answered() {
+		let stub = Stub::holding(a_pull_in_queue(true, "clean", "t1"), "\"one\"").await;
+		stub.checking(a_run("completed", Some("success"))).await;
+		stub.queueing(
+			a_timeline(&["added_to_merge_queue", "removed_from_merge_queue"]),
+			queue_runs(&[(101, "failure")]),
+			rust_red_at_gate(),
+		)
+		.await;
+		let watched = WatchedMission {
+			id: "m1".to_owned(),
+			branch: A_BRANCH.to_owned(),
+			repository: A_REPOSITORY.to_owned(),
+			fingerprint: String::new(),
+		};
+		let reach = stub.reach();
+		let mut replies = Replies::default();
+
+		for at in [NOON, NOON + TICK_MS] {
+			replies.begin(at);
+			reach.pulls(&mut replies, &watched, None).await.expect("the listing reads");
+			reach.pull(&mut replies, A_REPOSITORY, 7, None).await.expect("the pull reads");
+			reach.checks(&mut replies, A_REPOSITORY, "abc", None).await.expect("the checks read");
+			reach.timeline(&mut replies, A_REPOSITORY, 7).await.expect("the timeline reads");
+			reach.queue_runs(&mut replies, A_REPOSITORY).await.expect("the runs read");
+			reach.jobs(&mut replies, A_REPOSITORY, 101).await.expect("the jobs read");
+		}
+
+		let asked = stub.asked().await;
+		let (first, second) = asked.split_at(6);
+		assert!(first.iter().all(|asked| asked.conditional_on.is_none()), "got {first:?}");
+		assert_eq!(
+			second.iter().map(|asked| asked.path.as_str()).collect::<Vec<_>>(),
+			vec!["pulls", "pull", "checks", "timeline", "runs", "jobs/101"],
+		);
+		assert!(
+			second.iter().all(|asked| asked.conditional_on.is_some() && asked.not_modified),
+			"an endpoint was asked again without the entity tag it answered: {second:?}"
+		);
+
+		stub.stop.send_replace(true);
+	}
+
+	async fn standing_of(
+		database: &Database,
+		mission_id: &str,
+	) -> (Value, MissionState, i64, usize) {
+		(
+			fingerprint_of(database, mission_id).await,
+			state_of(database, mission_id).await.0,
+			state_seq_of(database, mission_id).await,
+			events_of(database, mission_id).await.len(),
+		)
+	}
+
+	#[tokio::test]
+	async fn answers_not_modified_leave_the_fingerprint_the_state_and_the_thread_untouched() {
+		let (database, dir, green, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let clock = Ticking::at(NOON);
+		walked(&stub, &database, &mut kept, &clock).await;
+		let standing = standing_of(&database, &green.id).await;
+		let before = stub.asked().await.len();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let tick = stub.asked().await.split_off(before);
+		assert!(!tick.is_empty() && tick.iter().all(|asked| asked.not_modified), "got {tick:?}");
+		assert_eq!(standing_of(&database, &green.id).await, standing);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn running_checks_answered_not_modified_leave_the_mission_untouched() {
+		let (database, dir) = planted().await;
+		let mission = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		stub.checking(a_run("in_progress", None)).await;
+		let clock = Ticking::at(NOON);
+		let mut kept = Kept::default();
+		walked(&stub, &database, &mut kept, &clock).await;
+		let standing = standing_of(&database, &mission.id).await;
+		let before = stub.asked().await.len();
+
+		walked(&stub, &database, &mut kept, &clock).await;
+
+		let tick = stub.asked().await.split_off(before);
+		assert_eq!(
+			tick.iter().map(|asked| asked.path.as_str()).collect::<Vec<_>>(),
+			["pulls", "checks"]
+		);
+		assert!(tick.iter().all(|asked| asked.not_modified), "got {tick:?}");
+		assert_eq!(standing_of(&database, &mission.id).await, standing);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn one_pass_asks_each_url_once_across_missions_of_the_same_repository() {
+		let (database, dir) = planted().await;
+		let first = an_armed_mission(&database).await;
+		let second = an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let mut kept = Kept::default();
+
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON)).await;
+
+		assert_eq!(stub.asked_paths(0).await, vec!["pulls", "checks"]);
+		for mission in [first, second] {
+			assert_eq!(
+				from_github(&database, &mission.id).await,
+				vec![(MissionEventKind::Note, json!({ "pullRequest": 7, "url": A_PULL_URL }))],
+				"a mission sharing the answers of the pass did not read them"
+			);
+		}
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_mission_with_no_pull_request_yet_spends_at_most_six_calls_an_hour() {
+		let (database, dir) = planted().await;
+		an_armed_mission(&database).await;
+		let stub = Stub::holding(json!([]), "\"none\"").await;
+
+		let ticks = ticks_of_an_hour(&stub, &database, &mut Kept::default(), NOON).await;
+
+		assert!(calls_in(&ticks) <= 6, "a mission with no pull request spent {ticks:?}");
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_pull_request_whose_checks_run_spends_at_most_thirty_calls_an_hour() {
+		let (database, dir) = planted().await;
+		an_armed_mission(&database).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		stub.checking(a_run("in_progress", None)).await;
+
+		let ticks = ticks_of_an_hour(&stub, &database, &mut Kept::default(), NOON).await;
+
+		assert!(calls_in(&ticks) <= 30, "a pull request with running checks spent {ticks:?}");
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_green_or_queued_pull_request_where_nothing_moves_spends_at_most_eight_calls_an_hour()
+	{
+		for auto_merge in [false, true] {
+			let (database, dir, _, stub, mut kept) =
+				ready_in_queue(a_pull_in_queue(auto_merge, "clean", "t1")).await;
+
+			let ticks = ticks_of_an_hour(&stub, &database, &mut kept, NOON).await;
+
+			assert!(calls_in(&ticks) <= 8, "queued {auto_merge}, the pull request spent {ticks:?}");
+
+			stub.stop.send_replace(true);
+			std::fs::remove_dir_all(&dir).expect("cleanup");
+		}
+	}
+
+	#[tokio::test]
+	async fn a_green_a_queued_and_a_running_mission_together_spend_under_forty_calls_an_hour() {
+		let (database, dir) = planted().await;
+		let stub = Stub::holding(json!([]), "\"none\"").await;
+		let green = a_run("completed", Some("success"));
+		let watched = [
+			("shoto290/green", a_pull_in_queue(false, "clean", "t1"), green.clone()),
+			("shoto290/queued", a_pull_in_queue(true, "clean", "t1"), green),
+			("shoto290/running", a_pull("open", "abc", false), a_run("in_progress", None)),
+		];
+		for (repository, pulls, checks) in watched {
+			an_armed_mission_on(&database, repository).await;
+			stub.holding_for(repository, pulls, checks).await;
+		}
+
+		let ticks = ticks_of_an_hour(&stub, &database, &mut Kept::default(), NOON).await;
+
+		assert!(calls_in(&ticks) < 40, "three watched missions spent {ticks:?}");
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_green_mission_whose_head_sha_moves_returns_to_the_running_cadence_on_that_pass() {
+		let (database, dir, _, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(false, "clean", "t1")).await;
+		stub.answering(a_pull("open", "def", false), "\"two\"").await;
+		stub.checking(a_run("in_progress", None)).await;
+
+		let ticks = ticks_of_an_hour(&stub, &database, &mut kept, NOON).await;
+
+		let green = GREEN_CADENCE.as_millis() as i64;
+		let seen = (green + TICK_MS - 1) / TICK_MS * TICK_MS;
+		let running = RUNNING_CADENCE.as_millis() as i64;
+		assert_eq!(
+			ticks[..3].to_vec(),
+			vec![
+				(seen, vec!["pull".to_owned(), "checks".to_owned()]),
+				(seen + running, vec!["pulls".to_owned(), "checks".to_owned()]),
+				(seen + 2 * running, vec!["pulls".to_owned(), "checks".to_owned()]),
+			],
+			"the moved head sha did not bring the mission back to the running cadence"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_answer_with_ten_calls_remaining_stops_every_request_until_the_reset() {
+		let (database, dir) = planted().await;
+		an_armed_mission(&database).await;
+		an_armed_mission_on(&database, HIDDEN_REPOSITORY).await;
+		let stub = Stub::holding(a_pull("open", "abc", false), "\"one\"").await;
+		let reset_ms = NOON + 900_000;
+		stub.limiting(Some((10, reset_ms / 1000))).await;
+		let mut kept = Kept::default();
+
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON)).await;
+		walked(&stub, &database, &mut kept, &Ticking::at(reset_ms - 1)).await;
+
+		assert_eq!(stub.asked_paths(0).await, vec!["pulls"], "a request landed before the reset");
+
+		stub.limiting(None).await;
+		walked(&stub, &database, &mut kept, &Ticking::at(reset_ms)).await;
+
+		assert_eq!(
+			stub.asked_about("pulls").await.len(),
+			3,
+			"the watch did not resume at the reset"
+		);
+
+		stub.stop.send_replace(true);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_rate_limited_refusal_holds_every_mission_in_its_state_and_notes_each_once() {
+		let (database, dir, green, stub, mut kept) =
+			ready_in_queue(a_pull_in_queue(true, "clean", "t1")).await;
+		let other = an_armed_mission_on(&database, HIDDEN_REPOSITORY).await;
+		let reset_ms = NOON + 1_800_000;
+		let standing = [state_of(&database, &green.id).await, state_of(&database, &other.id).await];
+		let thread = from_github(&database, &green.id).await;
+		stub.refusing_path("checks", Some(reset_ms / 1000)).await;
+
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON + TICK_MS)).await;
+		let refused = stub.asked().await.len();
+		walked(&stub, &database, &mut kept, &Ticking::at(NOON + 2 * TICK_MS)).await;
+
+		assert_eq!(stub.asked().await.len(), refused, "a request landed before the reset");
+		assert_eq!(red_checks_of(&database, &green.id).await, 0, "the refusal read as a red check");
+		assert_eq!(
+			[state_of(&database, &green.id).await, state_of(&database, &other.id).await],
+			standing
+		);
+		let noted: Vec<_> = thread.into_iter().chain([hold_note(reset_ms)]).collect();
+		assert_eq!(from_github(&database, &green.id).await, noted);
+		assert_eq!(from_github(&database, &other.id).await, vec![hold_note(reset_ms)]);
+
+		stub.accepting().await;
+		walked(&stub, &database, &mut kept, &Ticking::at(reset_ms)).await;
+
+		assert!(stub.asked().await.len() > refused, "the watch did not resume at the reset");
+		for mission in [&green, &other] {
+			let thread = from_github(&database, &mission.id).await;
+			let held = thread.iter().filter(|entry| **entry == hold_note(reset_ms)).count();
+			assert_eq!(held, 1, "the hold was noted more than once: {thread:?}");
+		}
 
 		stub.stop.send_replace(true);
 		std::fs::remove_dir_all(&dir).expect("cleanup");

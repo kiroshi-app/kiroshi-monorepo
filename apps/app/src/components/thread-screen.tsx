@@ -1033,9 +1033,9 @@ const BotThreadTail = ({
 	readerName,
 	onStop,
 }: BotThreadTailProps) => {
-	const stop: BotStopProps = canStopTurn(thread.state.turn)
-		? { stoppable: true, onStop }
-		: {}
+	const isStoppable =
+		canStopTurn(thread.state.turn) || thread.state.foreignTurn !== null
+	const stop: BotStopProps = isStoppable ? { stoppable: true, onStop } : {}
 	usePostedOnboardingStep({
 		controller: thread.controller,
 		botId: thread.bot.id,

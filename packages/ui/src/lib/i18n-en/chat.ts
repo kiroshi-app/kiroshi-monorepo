@@ -284,6 +284,8 @@ const chat = {
 			notAuthenticated: "You’re not signed in",
 			unavailable: "Couldn’t reach the agent",
 			failed: "Couldn’t send that request",
+			stopFailed: "Couldn’t stop the agent",
+			stopFailedNamed: "Couldn’t stop {{name}}",
 			unauthorized: {
 				title: "The host refused this call.",
 				description: "Open the link from the desktop app again.",

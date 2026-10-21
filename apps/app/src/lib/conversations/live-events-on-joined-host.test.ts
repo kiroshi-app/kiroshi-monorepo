@@ -55,6 +55,7 @@ import {
 	sidebarActivityFor,
 	toRuns,
 	toTranscriptRows,
+	workingStateFor,
 } from "../chat/screen-model"
 import { useAskedQuestion } from "../chat/use-asked-question"
 import type { HostSocket } from "../host/http"
@@ -1353,6 +1354,112 @@ describe("a foreign speaker silent in the solo chat", () => {
 			isWorking: false,
 		})
 		expect(rereadRows).toEqual([conversationId])
+		detach()
+	})
+})
+
+const openSoloChatWithForeignTurn = async () => {
+	const solo = await openSoloChat()
+	const scope = foreignScope(solo.conversationId)
+	const turn = storedTurn(solo.conversationId)
+	await emitLocally("agent://event", { scope, turn, event: SEARCHING })
+	const asked: RuntimeScope[] = []
+	const answerCancelWith = (answer: () => Promise<CancelOutcome>) =>
+		solo.scripted.answerCancelWith((cancelled) => {
+			asked.push(cancelled)
+			return answer()
+		})
+	return { ...solo, scope, turn, asked, answerCancelWith }
+}
+
+describe("the Stop of a turn the other Mac started in the solo chat", () => {
+	it("cancels the foreign scope and shows the chat idle once the turn ends", async () => {
+		const { controller, detach, botId, scope, turn, asked, answerCancelWith } =
+			await openSoloChatWithForeignTurn()
+		answerCancelWith(() => Promise.resolve({ kind: "cancelled" }))
+
+		expect(controller.stateFor(botId).turn).toBe("idle")
+		expect(workingStateFor(controller.stateFor(botId))).not.toBeNull()
+
+		await act(() => controller.stop())
+		await emitLocally("agent://event", { scope, turn, event: TURN_ENDED })
+
+		expect(asked).toEqual([scope])
+		expect(controller.stateFor(botId)).toMatchObject({
+			turn: "idle",
+			foreignTurn: null,
+			errors: [],
+		})
+		expect(workingStateFor(controller.stateFor(botId))).toBeNull()
+		detach()
+	})
+
+	it("sends one cancel for the scope while the first is in flight", async () => {
+		const { controller, detach, scope, asked, answerCancelWith } =
+			await openSoloChatWithForeignTurn()
+		let answer: (outcome: CancelOutcome) => void = () => undefined
+		const answered = new Promise<CancelOutcome>((resolve) => {
+			answer = resolve
+		})
+		answerCancelWith(() => answered)
+
+		const pressed = [controller.stop(), controller.stop()]
+		await settled()
+
+		expect(asked).toEqual([scope])
+
+		answer({ kind: "cancelled" })
+		await act(() => Promise.all(pressed))
+		await act(() => controller.stop())
+
+		expect(asked).toEqual([scope, scope])
+		detach()
+	})
+
+	it.each([
+		["the session refuses", refusedBySession, "pipe closed"],
+		["the store refuses", refusedByStore, "unknownTurn"],
+	])(
+		"keeps the indicator on and shows the failure when %s",
+		async (_, refusal, reason) => {
+			const { controller, detach, botId, answerCancelWith } =
+				await openSoloChatWithForeignTurn()
+			answerCancelWith(() => Promise.resolve(refusal(botId)))
+
+			await act(() => controller.stop())
+
+			const { errors, foreignTurn } = controller.stateFor(botId)
+			expect(errors).toMatchObject([{ error: { kind: "writeFailed" } }])
+			expect(JSON.stringify(errors)).toContain(reason)
+			expect(foreignTurn).not.toBeNull()
+			detach()
+		},
+	)
+
+	it("keeps the indicator on and shows the failure when the call rejects", async () => {
+		const { controller, detach, botId, answerCancelWith } =
+			await openSoloChatWithForeignTurn()
+		answerCancelWith(() => Promise.reject(WRITE_FAILED))
+
+		await act(() => controller.stop())
+
+		const { errors, foreignTurn } = controller.stateFor(botId)
+		expect(errors).toMatchObject([{ error: WRITE_FAILED }])
+		expect(foreignTurn).not.toBeNull()
+		detach()
+	})
+
+	it("cancels its own runtime, not the foreign scope, while its own turn runs", async () => {
+		const { controller, detach, botId, scope, asked, answerCancelWith } =
+			await openSoloChatWithForeignTurn()
+		answerCancelWith(() => Promise.resolve({ kind: "cancelled" }))
+		await act(() => controller.send("and here?"))
+		await settled()
+
+		await act(() => controller.stop())
+
+		expect(asked).toMatchObject([{ botId }])
+		expect(asked).not.toContainEqual(scope)
 		detach()
 	})
 })

@@ -38,6 +38,7 @@ import {
 	DialogTitle,
 	DialogTrigger as Trigger,
 } from "@workspace/ui/components/ui/dialog"
+import { useChatCopy } from "@workspace/ui/hooks/use-chat-copy"
 
 const SAVED: NoticeMessage = {
 	title: "Routine saved",
@@ -945,6 +946,49 @@ export const ReportWithoutCompanionName = meta.story({
 		).toBeVisible()
 
 		writeText.mockRestore()
+	},
+})
+
+const STOPPED_COMPANION = "Ichi"
+
+const StopFailedNotice = () => {
+	const t = useChatCopy()
+
+	return (
+		<NoticeDemo
+			label="Stop the companion"
+			raise={() =>
+				raiseFailureNotice({
+					title: t("screen.notice.stopFailedNamed", {
+						name: STOPPED_COMPANION,
+					}),
+				})
+			}
+		/>
+	)
+}
+
+export const StopFailedNamed = meta.story({
+	tags: ["test-only"],
+	render: () => <StopFailedNotice />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A Stop the host could not carry out, titled from the chat catalogue with the companion it was aimed at. Check that the title reads `Couldn’t stop` followed by the companion name, mirroring the `Stop {{name}}` button that raised it.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Stop the companion" }),
+		)
+
+		await failureNotice()
+		await expect(
+			within(viewport()).getByText(`Couldn’t stop ${STOPPED_COMPANION}`),
+		).toBeVisible()
 	},
 })
 

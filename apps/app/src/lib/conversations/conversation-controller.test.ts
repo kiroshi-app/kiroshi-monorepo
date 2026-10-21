@@ -2017,6 +2017,47 @@ describe("a failure reaching a speaker", () => {
 		expect(runningIn(harness.controller)).toEqual([])
 		expect(harness.controller.getState().latestError?.error).toEqual(CRASHED)
 	})
+
+	it("leaves the failure a speaker reports unmarked as a Stop failure", async () => {
+		await failWith(CRASHED)
+
+		expect(
+			harness.controller.getState().latestError?.isStopFailure,
+		).toBeUndefined()
+	})
+
+	it("marks the failure of a Stop the runtime could not carry out", async () => {
+		harness.driver.answerCancelWith(() =>
+			Promise.resolve({
+				kind: "failed",
+				failures: [
+					{ botId: ada, reason: { source: "session", error: CRASHED } },
+				],
+			}),
+		)
+
+		await harness.controller.stop()
+		await harness.settled()
+
+		expect(harness.controller.getState().latestError).toMatchObject({
+			botId: ada,
+			error: CRASHED,
+			isStopFailure: true,
+		})
+	})
+
+	it("marks the failure of a Stop the runtime refused", async () => {
+		harness.driver.answerCancelWith(() => Promise.reject(SERVER_ENV_REJECTED))
+
+		await harness.controller.stop()
+		await harness.settled()
+
+		expect(harness.controller.getState().latestError).toMatchObject({
+			botId: ada,
+			error: SERVER_ENV_REJECTED,
+			isStopFailure: true,
+		})
+	})
 })
 
 describe("the pages a conversation holds", () => {

@@ -18,7 +18,8 @@ import {
 } from "../chat-state"
 import { isPostedRequest } from "../posted-question"
 import { answersFromText } from "../question-message"
-import type { CancelOutcome } from "../../agent/contract"
+import type { CancelOutcome, RuntimeScope } from "../../agent/contract"
+import { keyOf } from "../../conversations/foreign-turns"
 
 type OutboxParts = {
 	openedFor: SessionRunner["openedFor"]
@@ -36,6 +37,8 @@ export const createOutbox = (
 		answer,
 	}: OutboxParts,
 ) => {
+	const cancellingForeignScopes = new Set<string>()
+
 	const sessionForOutbox = async (bot: BotChat) => {
 		if (isSessionReady(bot.state)) {
 			return true
@@ -146,17 +149,45 @@ export const createOutbox = (
 		}
 	}
 
-	const stop = async (bot: BotChat) => {
+	const cancel = async (bot: BotChat, scope: RuntimeScope) => {
+		try {
+			settleStop(bot, await driver.cancelTurn(scope))
+		} catch (reason) {
+			dispatch(bot, { type: "stopRejected", error: toTransportError(reason) })
+		}
+	}
+
+	const stopOwnTurn = async (bot: BotChat) => {
 		const runtime = bot.state.runtime
-		if (!runtime || !canStopTurn(bot.state.turn)) {
+		if (!runtime) {
 			return
 		}
 		announce(bot, { type: "turnChanged", state: "stopping" })
 		recordHeld(bot)
+		await cancel(bot, runtime)
+	}
+
+	const stopForeignTurn = async (bot: BotChat, scope: RuntimeScope) => {
+		const key = keyOf(scope)
+		if (cancellingForeignScopes.has(key)) {
+			return
+		}
+		cancellingForeignScopes.add(key)
 		try {
-			settleStop(bot, await driver.cancelTurn(runtime))
-		} catch (reason) {
-			dispatch(bot, { type: "stopRejected", error: toTransportError(reason) })
+			await cancel(bot, scope)
+		} finally {
+			cancellingForeignScopes.delete(key)
+		}
+	}
+
+	const stop = async (bot: BotChat) => {
+		if (canStopTurn(bot.state.turn)) {
+			await stopOwnTurn(bot)
+			return
+		}
+		const { foreignTurn } = bot.state
+		if (foreignTurn) {
+			await stopForeignTurn(bot, foreignTurn.scope)
 		}
 	}
 
