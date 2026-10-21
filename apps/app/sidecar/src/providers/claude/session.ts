@@ -8,8 +8,13 @@ import {
 } from "@anthropic-ai/claude-agent-sdk"
 
 import { agentStderr } from "./agent-stderr"
-import { readBotSettings, type SettingsOptions } from "./bot-settings"
+import {
+	readBotSettings,
+	type SettingsOptions,
+	withAllows,
+} from "./bot-settings"
 import type { BundleScope } from "./bundle-writes"
+import { derivedAllows } from "./derived-allows"
 import { resolveExecutable } from "./executable"
 import { KIROSHI_SERVER, kiroshiServer } from "./kiroshi-server"
 import {
@@ -119,7 +124,13 @@ export const buildOptions = (
 		resume: request.resume,
 		includePartialMessages: request.partialMessages,
 		canUseTool,
-		...settings,
+		...withAllows(
+			settings,
+			derivedAllows({
+				pluginPath: request.pluginPath,
+				servers: Object.keys(resolved.servers),
+			}),
+		),
 		...(handsServers(request)
 			? {
 					plugins: localPlugins(pluginPaths(request)),

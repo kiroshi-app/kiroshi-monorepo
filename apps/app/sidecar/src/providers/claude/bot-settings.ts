@@ -112,6 +112,26 @@ const rejectionOf = (declared: Declared, permissions: Declared): string => {
 		.join(" ")
 }
 
+export const withAllows = (
+	options: SettingsOptions,
+	allows: string[],
+): SettingsOptions => {
+	if (allows.length === 0) {
+		return options
+	}
+	const permissions = options.settings?.permissions ?? {}
+	return {
+		...options,
+		settings: {
+			...options.settings,
+			permissions: {
+				...permissions,
+				allow: [...(permissions.allow ?? []), ...allows],
+			},
+		},
+	}
+}
+
 export const readBotSettings = (request: SessionRequest): BotSettings => {
 	if (!request.settingsPath) {
 		return { options: locked(request.outputStyle) }
