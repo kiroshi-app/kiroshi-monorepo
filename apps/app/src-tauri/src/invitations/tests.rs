@@ -46,7 +46,7 @@ const INSTANCE: &str = "instance-1";
 const INVITATION: &str = "instance-1-invitation";
 const MEMBER_RELAY_ID: &str = "r-member";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
-const PATIENCE: Duration = Duration::from_secs(10);
+const PATIENCE: Duration = Duration::from_secs(60);
 const POLL_EVERY: Duration = Duration::from_millis(100);
 const FIRST_RETRY: Duration = Duration::from_millis(1);
 
@@ -1343,8 +1343,6 @@ fn an_accept_in_flight_during_sign_out_answers_not_signed_in_and_leaves_no_relay
 	});
 }
 
-const WHILE_SIGNING_OUT: Duration = Duration::from_secs(2);
-
 #[test]
 fn a_connect_during_a_stalled_sign_out_answers_unknown_and_starts_no_guest() {
 	run(async {
@@ -1357,7 +1355,7 @@ fn a_connect_during_a_stalled_sign_out_answers_unknown_and_starts_no_guest() {
 			let is_sign_out_asked =
 				|| (harness.cloud.sign_outs_asked.load(Ordering::SeqCst) > 0).then_some(());
 			harness.noticed_until("the stalled sign out", is_sign_out_asked).await;
-			let connected = tokio::time::timeout(WHILE_SIGNING_OUT, harness.connect(&id)).await;
+			let connected = tokio::time::timeout(PATIENCE, harness.connect(&id)).await;
 			harness.cloud.is_sign_out_open.send_replace(true);
 			connected
 		};

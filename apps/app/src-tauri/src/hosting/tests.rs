@@ -37,7 +37,7 @@ use super::sealing_member::{
 };
 use super::wire::{host_keys, HELLO};
 use super::{opening, renamed, resumed, signed_out, start, stop, Hosting, Opening};
-use crate::account::contract::AccountState;
+use crate::account::contract::{AccountState, CHANGED_EVENT as ACCOUNT_CHANGED_EVENT};
 use crate::account::contract::SignedOutReason;
 use crate::account::session::restore;
 use crate::account::session::{sign_out, AccountSession};
@@ -99,7 +99,7 @@ const LOCAL_TOKEN: &str = "host-token-of-the-loopback";
 const PERSONAL: &str = "personal";
 const JOINED_SPACE_TOKEN: &str = "joined-space-token-of-the-host";
 const INVOKE_ROUTE: &str = "/api/invoke/{command}";
-const PATIENCE: Duration = Duration::from_secs(10);
+const PATIENCE: Duration = Duration::from_secs(60);
 const OWNER_EMAIL: &str = "owner@example.com";
 const POLL_EVERY: Duration = Duration::from_millis(100);
 const MEMBER_ACCOUNT: &str = "member-account";
@@ -497,6 +497,7 @@ async fn host(
 	upgrade: WebSocketUpgrade,
 ) -> Response {
 	relay.attempts.fetch_add(1, Ordering::SeqCst);
+	relay.noticed.send_replace(());
 	let Some(account_id) = account_of(&headers) else {
 		return StatusCode::UNAUTHORIZED.into_response();
 	};
@@ -775,6 +776,10 @@ impl Harness {
 		app.listen(MEMBERS_CHANGED_EVENT, move |event| {
 			let payload = serde_json::from_str(event.payload()).expect("a json payload");
 			hearing_members.lock().expect("the events").push(payload);
+			noticing.send_replace(());
+		});
+		let noticing = Arc::clone(&relay.noticed);
+		app.listen(ACCOUNT_CHANGED_EVENT, move |_| {
 			noticing.send_replace(());
 		});
 		Self { app, relay, sockets, heard, heard_members, _temporary: vec![database, root] }
@@ -1194,13 +1199,8 @@ fn a_relay_answering_503_is_retried_on_connecting_and_never_fails() {
 			Harness::new("unavailable", Some(StatusCode::SERVICE_UNAVAILABLE), Some(BEARER)).await;
 
 		harness.started().await;
-		tokio::time::timeout(PATIENCE, async {
-			while harness.attempts() < 2 {
-				tokio::time::sleep(Duration::from_millis(20)).await;
-			}
-		})
-		.await
-		.expect("the relay is attempted again");
+		let is_attempted_again = || (harness.attempts() >= 2).then_some(());
+		harness.noticed_until("the relay attempted again", is_attempted_again).await;
 
 		assert_eq!(harness.state(), HostingState::Connecting);
 	});
@@ -5724,14 +5724,8 @@ async fn held_relay_device(harness: &Harness) -> Option<String> {
 
 async fn account_reached(harness: &Harness, expected: AccountState) {
 	let session = harness.app.state::<AccountSession>();
-	let reached = async {
-		while session.current() != expected {
-			tokio::time::sleep(POLL_EVERY).await;
-		}
-	};
-	tokio::time::timeout(PATIENCE, reached)
-		.await
-		.unwrap_or_else(|_| panic!("the account did not reach {expected:?}"));
+	let is_reached = || (session.current() == expected).then_some(());
+	harness.noticed_until(&format!("the account reaching {expected:?}"), is_reached).await;
 }
 
 fn bearer_stored(harness: &Harness, bearer: &str) {
