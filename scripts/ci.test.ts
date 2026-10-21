@@ -59,7 +59,7 @@ const SETUP_STEPS = new Set([
 	"Select the Xcode pinned in .xcode-version",
 	"Install XcodeGen",
 	"Boot the simulator while the app builds",
-	"Fetch the base the changed test files are read against",
+	"Read the changed test files against the base the merge ref was built on",
 ])
 
 const UNGATED_JOBS = new Set(["changes", "verify"])
@@ -203,11 +203,6 @@ const queueCommit = (pullRequest: number): GitHubContext => ({
 })
 
 const A_QUEUE_COMMIT = queueCommit(7)
-
-const A_PULL_REQUEST_ON_BASE: GitHubContext = {
-	...A_PULL_REQUEST,
-	event: { pull_request: { base: { sha: "pull-base" } } },
-}
 
 const PULL_REQUEST_JOB_SET = ["changes", "lint", "verify", "vitest"]
 
@@ -386,19 +381,17 @@ describe("the jobs of ci.yml", () => {
 		},
 	)
 
-	it("has vitest read the changed test files of a pull_request against its base, fetched as origin/main", () => {
+	it("has vitest read the changed test files of a pull_request against the first parent of its merge ref, set as origin/main", () => {
 		const vitest = workflow.jobs.vitest
-		const scope = scopeOf(A_PULL_REQUEST_ON_BASE)
-		const fetchStep = stepNamed(
+		const scope = scopeOf(A_PULL_REQUEST)
+		const baseStep = stepNamed(
 			"vitest",
-			"Fetch the base the changed test files are read against",
+			"Read the changed test files against the base the merge ref was built on",
 		)
 
-		expect(interpolate(vitest?.env?.BASE ?? "", scope)).toBe("pull-base")
-		expect(evaluate(fetchStep?.if ?? "false", scope)).toBe(true)
-		expect(fetchStep?.run).toBe(
-			'git fetch --depth=1 origin "+$BASE:refs/remotes/origin/main"',
-		)
+		expect(vitest?.env?.BASE).toBeUndefined()
+		expect(evaluate(baseStep?.if ?? "false", scope)).toBe(true)
+		expect(baseStep?.run).toBe("git update-ref refs/remotes/origin/main HEAD^1")
 		expect(
 			interpolate(
 				String(vitest?.steps?.[0]?.with?.["fetch-depth"] ?? ""),

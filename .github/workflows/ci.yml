@@ -66,8 +66,6 @@ jobs:
     if: needs.changes.outputs.vitest == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      BASE: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,9 +78,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Fetch the base the changed test files are read against
+      - name: Read the changed test files against the base the merge ref was built on
         if: github.event_name == 'pull_request'
-        run: git fetch --depth=1 origin "+$BASE:refs/remotes/origin/main"
+        run: git update-ref refs/remotes/origin/main HEAD^1
 
       - name: Gate on the test files the pull request changed
         if: github.event_name == 'pull_request'
