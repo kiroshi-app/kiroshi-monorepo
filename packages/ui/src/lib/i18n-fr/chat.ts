@@ -298,6 +298,8 @@ const chat = {
 			notAuthenticated: "Vous n’êtes pas connecté",
 			unavailable: "Impossible de joindre l’agent",
 			failed: "Impossible d’envoyer cette demande",
+			stopFailed: "Impossible d’arrêter l’agent",
+			stopFailedNamed: "Impossible d’arrêter {{name}}",
 			unauthorized: {
 				title: "L’hôte a refusé cet appel.",
 				description: "Rouvrez le lien depuis l’application de bureau.",

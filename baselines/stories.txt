@@ -1184,6 +1184,7 @@ overlays-noticesurface--report-copy-rejected
 overlays-noticesurface--report-from-local-side
 overlays-noticesurface--report-without-companion-name
 overlays-noticesurface--stacked
+overlays-noticesurface--stop-failed-named
 overlays-noticesurface--with-action
 overlays-noticesurface--with-dialog
 overlays-noticesurface--with-full-report
