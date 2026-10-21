@@ -128,12 +128,7 @@ export const buildOptions = (
 			settings,
 			derivedAllows({
 				pluginPath: request.pluginPath,
-				sharedPaths: definedPaths([
-					request.userPluginPath,
-					request.spacePluginPath,
-				]),
 				servers: Object.keys(resolved.servers),
-				platform: floor.platform,
 			}),
 		),
 		...(handsServers(request)

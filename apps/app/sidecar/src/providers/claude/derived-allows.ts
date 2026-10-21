@@ -1,4 +1,3 @@
-import { bundleEditRules } from "./bundle-writes"
 import { KIROSHI_SERVER } from "./kiroshi-server"
 
 const CONNECTOR_PREFIX = "claude.ai "
@@ -10,30 +9,18 @@ const toolPrefixName = (server: string): string => {
 		: normalized
 }
 
-const serverAllows = (servers: string[]): string[] => [
-	...new Set(
-		[KIROSHI_SERVER, ...servers].map(
-			(server) => `mcp__${toolPrefixName(server)}`,
-		),
-	),
-]
-
 type AllowScope = {
 	pluginPath?: string
-	sharedPaths: string[]
 	servers: string[]
-	platform: NodeJS.Platform
 }
 
-export const derivedAllows = ({
-	pluginPath,
-	sharedPaths,
-	servers,
-	platform,
-}: AllowScope): string[] =>
+export const derivedAllows = ({ pluginPath, servers }: AllowScope): string[] =>
 	pluginPath
 		? [
-				...serverAllows(servers),
-				...bundleEditRules(pluginPath, sharedPaths, platform),
+				...new Set(
+					[KIROSHI_SERVER, ...servers].map(
+						(server) => `mcp__${toolPrefixName(server)}`,
+					),
+				),
 			]
 		: []

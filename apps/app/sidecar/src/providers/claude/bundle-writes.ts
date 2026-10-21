@@ -9,8 +9,6 @@ import {
 	sep,
 } from "node:path"
 
-import { rulesFor } from "./security-floor"
-
 const WRITERS = new Set(["Write", "Edit"])
 
 const RESERVED = new Set([
@@ -26,16 +24,6 @@ const RESERVED = new Set([
 const DOCUMENTS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".toml"])
 
 const AGENT_FILE = join("agents", "agent.md")
-
-const SKILLS = "skills"
-
-const RESERVED_EXTENSIONS = new Set(
-	[...RESERVED].map((entry) => extname(entry)),
-)
-
-const TOP_LEVEL_DOCUMENTS = [...DOCUMENTS].filter(
-	(extension) => !RESERVED_EXTENSIONS.has(extension),
-)
 
 const isDocument = (target: string): boolean =>
 	DOCUMENTS.has(extname(target).toLowerCase())
@@ -97,28 +85,3 @@ export const isBundleWrite = (
 	const shared = pathInside(userPath, real) ?? pathInside(spacePath, real)
 	return shared !== undefined && isOpenEntry(shared)
 }
-
-const documentsIn = (directory: string, extensions: string[]): string[] =>
-	extensions.map((extension) => join(directory, `*${extension}`))
-
-const openDocuments = (root: string): string[] => [
-	...documentsIn(root, TOP_LEVEL_DOCUMENTS),
-	...documentsIn(join(root, SKILLS, "**"), [...DOCUMENTS]),
-]
-
-export const bundleEditRules = (
-	botPath: string,
-	sharedPaths: string[],
-	platform: NodeJS.Platform,
-): string[] =>
-	rulesFor(
-		"Edit",
-		{
-			directories: [],
-			files: [
-				join(botPath, AGENT_FILE),
-				...[botPath, ...sharedPaths].flatMap(openDocuments),
-			],
-		},
-		platform,
-	)
