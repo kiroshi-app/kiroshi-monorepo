@@ -148,6 +148,7 @@ interface BotRosterActions {
 	onAddBotToSpace?: (botId: string, spaceId: string) => void
 	onRemoveBotFromSpace?: (botId: string, spaceId: string) => void
 	onDeleteBot?: (id: string) => void
+	onStopBot?: (id: string) => void
 }
 
 interface SectionNaming {
@@ -204,6 +205,7 @@ interface ConversationRosterActions {
 	onSelectConversation?: (id: string) => void
 	onOpenConversationSettings?: (id: string) => void
 	onDeleteConversation?: (id: string) => void
+	onStopConversation?: (id: string) => void
 }
 
 type SidebarShellProps = Omit<

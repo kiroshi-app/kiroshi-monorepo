@@ -1232,17 +1232,28 @@ export const Working = meta.story({
 			{ ...ROSTER[3], status: "working", pose: "working" },
 			ROSTER[4],
 		]),
+		conversationsBySpaceId: inHome([
+			{
+				id: "drafting-room",
+				name: "Drafting room",
+				participants: [{ ...ROSTER[2], status: "working", pose: "writing" }],
+				lastMessage: "Drafting the launch note.",
+				timestamp: "09:41",
+			},
+		]),
 		selectedBotId: "cinder",
+		onStopBot: fn(),
+		onStopConversation: fn(),
 	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Four companions running at once and one at rest. Check that each running row holds its own work pose in the avatar and no activity dot, that the verb takes over the message line while it runs, and that the row at rest keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. The running line also shimmers, the same sweep the activity indicator runs over its own label, so a row reads as busy from the message line alone and not only from its avatar. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest, `WorkingLongSummary` for a shimmering line too long for its row.",
+					"Four companions running at once and one at rest, beside a room whose companion is running. Every running row, companion or room, carries its own Stop and hands back its own id; the row at rest carries none. Check that each running row holds its own work pose in the avatar and no activity dot, that the verb takes over the message line while it runs, and that the row at rest keeps its blot and its idle frame instead. This is the only state that moves: a running avatar animates, and every other row in the panel is a still frame, so motion in the list means work in the list. The panel reports itself busy while any row runs, and the announcement stays outside it: a live region nested inside an `aria-busy` landmark is swallowed and never reaches a screen reader. The running line also shimmers, the same sweep the activity indicator runs over its own label, so a row reads as busy from the message line alone and not only from its avatar. Pick `Identities` for the rows that hold still, `PermissionPending` for the one running state that looks like rest, `WorkingLongSummary` for a shimmering line too long for its row.",
 			},
 		},
 	},
-	play: async ({ canvas, canvasElement, userEvent }) => {
+	play: async ({ args, canvas, canvasElement, userEvent }) => {
 		const panel = canvas.getByRole("complementary", { name: "Conversations" })
 		await expect(panel).toHaveAttribute("aria-busy", "true")
 
@@ -1286,6 +1297,18 @@ export const Working = meta.story({
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Cinder selected, writing",
 		)
+
+		await expect(
+			canvas.queryByRole("button", { name: "Stop Ember" }),
+		).toBeNull()
+		await userEvent.click(canvas.getByRole("button", { name: "Stop Cinder" }))
+		await expect(args.onStopBot).toHaveBeenCalledOnce()
+		await expect(args.onStopBot).toHaveBeenCalledWith("cinder")
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Stop Drafting room" }),
+		)
+		await expect(args.onStopConversation).toHaveBeenCalledOnce()
+		await expect(args.onStopConversation).toHaveBeenCalledWith("drafting-room")
 	},
 })
 

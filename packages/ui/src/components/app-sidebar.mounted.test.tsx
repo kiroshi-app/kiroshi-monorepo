@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render } from "@testing-library/react"
-import { afterEach, describe, expect, it } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
 	AppSidebar,
@@ -176,5 +176,68 @@ describe("AppSidebar merged roster order mounted", () => {
 			MIDDLE_REVIEW.name,
 			OLDER_ATLAS.name,
 		])
+	})
+})
+
+const WORKING_ATLAS: AppSidebarBot = { ...ATLAS, status: "working" }
+
+const WORKING_REVIEW: AppSidebarConversation = {
+	...REVIEW,
+	participants: [WORKING_ATLAS],
+}
+
+interface StopActions {
+	onStopBot?: (id: string) => void
+	onStopConversation?: (id: string) => void
+}
+
+const renderWorkingRoster = (actions: StopActions) =>
+	render(
+		<WorkspaceShell
+			sidebar={
+				<AppSidebar
+					bots={[WORKING_ATLAS]}
+					conversations={[WORKING_REVIEW]}
+					{...actions}
+				/>
+			}
+		>
+			{null}
+		</WorkspaceShell>,
+	)
+
+const stopFor = (name: string) =>
+	screen.queryByRole("button", { name: `Stop ${name}` })
+
+describe("AppSidebar roster stop mounted", () => {
+	afterEach(cleanup)
+
+	it("stops a working companion row with its bot id", () => {
+		const onStopBot = vi.fn()
+		renderWorkingRoster({ onStopBot })
+
+		const stop = stopFor(ATLAS.name)
+		expect(stop).not.toBeNull()
+		if (stop) fireEvent.click(stop)
+
+		expect(onStopBot).toHaveBeenCalledExactlyOnceWith(ATLAS.id)
+	})
+
+	it("stops a working conversation row with its conversation id", () => {
+		const onStopConversation = vi.fn()
+		renderWorkingRoster({ onStopConversation })
+
+		const stop = stopFor(REVIEW.name)
+		expect(stop).not.toBeNull()
+		if (stop) fireEvent.click(stop)
+
+		expect(onStopConversation).toHaveBeenCalledExactlyOnceWith(REVIEW.id)
+	})
+
+	it("draws no Stop on a working row without its action", () => {
+		renderWorkingRoster({})
+
+		expect(stopFor(ATLAS.name)).toBeNull()
+		expect(stopFor(REVIEW.name)).toBeNull()
 	})
 })
