@@ -126,13 +126,25 @@ impl ConversationInPage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveTurn {
-	pub started_at: i64,
-	pub bot_ids: Vec<String>,
+	pub bots: Vec<WorkingBot>,
 }
 
 impl From<conversations::ActiveTurn> for ActiveTurn {
 	fn from(turn: conversations::ActiveTurn) -> Self {
-		Self { started_at: turn.started_at, bot_ids: turn.bot_ids }
+		Self { bots: turn.bots.into_iter().map(Into::into).collect() }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingBot {
+	pub bot_id: String,
+	pub started_at: i64,
+}
+
+impl From<conversations::WorkingBot> for WorkingBot {
+	fn from(bot: conversations::WorkingBot) -> Self {
+		Self { bot_id: bot.bot_id, started_at: bot.started_at }
 	}
 }
 

@@ -43,7 +43,9 @@ export type StoredConversation = Conversation &
 export const storedSpeakerIdsOf = ({
 	activeTurn,
 }: StoredConversation): string[] | undefined =>
-	activeTurn === undefined ? undefined : (activeTurn?.botIds ?? [])
+	activeTurn === undefined
+		? undefined
+		: (activeTurn?.bots.map(({ botId }) => botId) ?? [])
 
 const toBotRow = (id: string, face: BotFace): AppSidebarBot => ({
 	id,

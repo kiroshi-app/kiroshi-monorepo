@@ -1041,7 +1041,9 @@ const rowOf = (
 	lastActivityAt: STARTED_AT,
 	lastWord: null,
 	soloBotId: null,
-	activeTurn: openBotIds && { startedAt: STARTED_AT, botIds: openBotIds },
+	activeTurn: openBotIds && {
+		bots: openBotIds.map((botId) => ({ botId, startedAt: STARTED_AT })),
+	},
 })
 
 const startedWorkOf = ({
@@ -1059,6 +1061,27 @@ describe("the working state the stored open turn carries", () => {
 		expect(speakersOf(controller.getState())).toEqual([botId])
 		expect(workOf(controller.getState())).toEqual(["thinking"])
 		expect(startedWorkOf(controller.getState())).toEqual([STARTED_AT])
+		detach()
+	})
+
+	it("dates each unheard working line from the open turn of its own bot", async () => {
+		const { controller, detach, botId, conversation } = await openRoom()
+		const laterBotId = "bot-joined-later"
+
+		await act(() =>
+			controller.open({
+				...rowOf(conversation, null),
+				activeTurn: {
+					bots: [
+						{ botId, startedAt: 30 },
+						{ botId: laterBotId, startedAt: 50 },
+					],
+				},
+			}),
+		)
+
+		expect(speakersOf(controller.getState())).toEqual([botId, laterBotId])
+		expect(startedWorkOf(controller.getState())).toEqual([30, 50])
 		detach()
 	})
 

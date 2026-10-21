@@ -24,7 +24,8 @@ pub use avatar::AvatarBlot;
 pub use bots::{Bot, BotIdentity};
 pub use icon::conversation_icons;
 pub use page::{
-	ActiveConversation, ActivePage, ActiveTurn, LastWord, ListedConversation, Listing, LISTED_KINDS,
+	ActiveConversation, ActivePage, ActiveTurn, LastWord, ListedConversation, Listing, WorkingBot,
+	LISTED_KINDS,
 };
 
 use bots::{

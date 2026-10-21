@@ -455,10 +455,10 @@ export const createConversationController = (
 
 	const storedSpeakingBots = (
 		conversationId: string,
-		{ startedAt, botIds }: ActiveTurn,
+		{ bots }: ActiveTurn,
 	): SpeakingBot[] => {
 		const heard = foreignTurns.speakersIn(conversationId)
-		return botIds.map((botId) => {
+		return bots.map(({ botId, startedAt }) => {
 			const speaker = heard.find(({ scope }) => scope.botId === botId)
 			return speaker
 				? foreignSpeakingBot(speaker)

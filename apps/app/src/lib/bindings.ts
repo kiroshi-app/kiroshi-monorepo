@@ -316,8 +316,7 @@ export type AccountState = ({ kind: "signedOut"; reason: SignedOutReason | null 
 } & KiroshiAccount | ({ kind: "unreachable"; reason: string }) & { expiresAt?: never; failure?: never; verificationUrl?: never } | ({ kind: "failed"; failure: AccountFailure }) & { expiresAt?: never; reason?: never; verificationUrl?: never };
 
 export type ActiveTurn = {
-	startedAt: number,
-	botIds: string[],
+	bots: WorkingBot[],
 };
 
 export type ActivityEvent = {
@@ -1755,6 +1754,11 @@ export type UserPreferences = {
 export type UserPreferencesError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "rejectedProfilePicture"; reason: AvatarRejection };
 
 export type WindowFrameError = { kind: "unsupported" } | { kind: "invalidBounds" } | { kind: "unavailable" } | { kind: "overlayFailed" };
+
+export type WorkingBot = {
+	botId: string,
+	startedAt: number,
+};
 
 export type WrittenFrom = "here" | "relay";
 
