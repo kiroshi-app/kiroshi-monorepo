@@ -249,12 +249,6 @@ mod tests {
 		a_worktree_removal_is_denied: "Bash(git worktree remove *)",
 	}
 
-	const SPARED: [&str; 3] = [
-		"gh pr merge --auto 12",
-		"gh pr merge 12 --subject x",
-		"git push --force-with-lease origin feature/ope-1-main",
-	];
-
 	fn pinned_wildcard_match(rule: &str, command: &str) -> bool {
 		let Some(pattern) = rule.strip_prefix("Bash(").and_then(|rule| rule.strip_suffix(')'))
 		else {
@@ -291,7 +285,11 @@ mod tests {
 
 	#[test]
 	fn no_deny_rule_matches_an_auto_merge_a_subject_or_a_lease_push_to_a_branch_named_main() {
-		for command in SPARED {
+		for command in [
+			"gh pr merge --auto 12",
+			"gh pr merge 12 --subject x",
+			"git push --force-with-lease origin feature/ope-1-main",
+		] {
 			let matched: Vec<&str> = REFUSED_BY_DESIGN
 				.into_iter()
 				.filter(|rule| pinned_wildcard_match(rule, command))
