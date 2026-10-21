@@ -5,8 +5,8 @@ use std::path::{Component, Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-	bot_recorded, dir, serialised, Evolved, AGENTS_DIR, AGENT_EXTENSION, AGENT_NAME, HOOKS_DIR,
-	MANIFEST_DIR, MARKS_NAME, MCP_NAME, MEMORY_CLOSE, MEMORY_OPEN, SETTINGS_NAME, SKILLS_DIR,
+	bot_recorded, dir, rewrite_agent_holding, serialised, Evolved, AGENTS_DIR, AGENT_EXTENSION,
+	AGENT_NAME, HOOKS_DIR, MANIFEST_DIR, MARKS_NAME, MCP_NAME, SETTINGS_NAME, SKILLS_DIR,
 };
 use crate::db::repositories::conversations::Bot;
 use crate::private_files;
@@ -48,7 +48,6 @@ pub enum BundleWritten {
 #[serde(rename_all = "camelCase")]
 pub enum RefusalKind {
 	ForbiddenPath,
-	MissingMemoryMarkers,
 	MarkerInText,
 	InvalidTitle,
 	WriteFailed,
@@ -87,17 +86,13 @@ pub fn write_own_file(
 	refuse_a_link(&bundle, &relative)?;
 	let file = bundle.join(&relative);
 	let held = held_text(&file)?;
-	let next = match target {
-		Target::Skill => asked.text,
-		Target::Memory => with_memory(held.as_deref(), &asked.text)?,
-	};
-	if held.as_deref() == Some(next.as_str()) {
+	match target {
+		Target::Skill => write_skill(&file, &asked.text)?,
+		Target::Memory => write_memory(root, bot, &asked.text)?,
+	}
+	if held_text(&file)? == held {
 		return Ok(BundleWritten::Unchanged);
 	}
-	if let Some(parent) = file.parent() {
-		private_files::create_dir(parent).map_err(failed_write)?;
-	}
-	private_files::replace(&file, next.as_bytes()).map_err(failed_write)?;
 	match bot_recorded(&bundle, title, asked.summary.trim()) {
 		Evolved::Recorded(evolution) => {
 			Ok(BundleWritten::Recorded { commit_id: evolution.commit_id, title: evolution.title })
@@ -180,22 +175,21 @@ fn held_text(file: &Path) -> Result<Option<String>, BundleWriteRefusal> {
 	}
 }
 
-fn with_memory(agent: Option<&str>, memory: &str) -> Result<String, BundleWriteRefusal> {
+fn write_skill(file: &Path, text: &str) -> Result<(), BundleWriteRefusal> {
+	if let Some(parent) = file.parent() {
+		private_files::create_dir(parent).map_err(failed_write)?;
+	}
+	private_files::replace(file, text.as_bytes()).map_err(failed_write)
+}
+
+fn write_memory(root: &Path, bot: &Bot, memory: &str) -> Result<(), BundleWriteRefusal> {
 	if memory.contains(KIROSHI_MARK) {
 		return Err(BundleWriteRefusal::new(
 			RefusalKind::MarkerInText,
 			"the text holds a kiroshi marker line; write only what you learned",
 		));
 	}
-	let unmarked = || {
-		BundleWriteRefusal::new(
-			RefusalKind::MissingMemoryMarkers,
-			"agents/agent.md holds no block of what you learned between its two kiroshi lines",
-		)
-	};
-	let (above, rest) = agent.and_then(|text| text.split_once(MEMORY_OPEN)).ok_or_else(unmarked)?;
-	let (_, below) = rest.split_once(MEMORY_CLOSE).ok_or_else(unmarked)?;
-	Ok(format!("{above}{MEMORY_OPEN}\n\n{}\n\n{MEMORY_CLOSE}{below}", memory.trim()))
+	rewrite_agent_holding(root, bot, memory).map_err(failed_write)
 }
 
 fn forbidden(reason: impl Into<String>) -> BundleWriteRefusal {
@@ -208,8 +202,10 @@ fn failed_write(error: std::io::Error) -> BundleWriteRefusal {
 
 #[cfg(test)]
 mod tests {
-	use super::super::tests::{a_bot, a_root};
-	use super::super::{agent_file, git, history, write, Author};
+	use super::super::tests::{a_bot, a_root, drop_a_skill, written_agent};
+	use super::super::{
+		git, history, rewrite_agent, write, Author, CARRIED_OPEN, MEMORY_CLOSE, MEMORY_OPEN,
+	};
 	use super::*;
 
 	const A_SKILL: &str = "skills/baking/SKILL.md";
@@ -277,23 +273,69 @@ mod tests {
 	}
 
 	#[test]
-	fn the_agent_file_moves_only_between_its_memory_markers() {
+	fn the_agent_file_is_rendered_by_the_host_around_the_new_memory() {
 		let root = a_root("own-write-memory");
 		let bot = a_bot_that_learned("They bake on Sundays.");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
 		laid_down(&root, &bot);
-		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
-		let before = fs::read_to_string(&agent).expect("the agent file reads");
+		let before = written_agent(&root, &bot.id);
 
 		write_own_file(&root, &bot, asking(THE_AGENT, "They bake on Saturdays.", "Moved the day"))
 			.expect("the memory is written");
 
-		let after = fs::read_to_string(&agent).expect("the agent file reads");
+		let after = written_agent(&root, &bot.id);
 		let (above, _) = before.split_once(MEMORY_OPEN).expect("the block opens");
 		let (_, below) = before.split_once(MEMORY_CLOSE).expect("the block closes");
+		assert!(below.contains(CARRIED_OPEN), "got {before}");
 		assert_eq!(
 			after,
 			format!("{above}{MEMORY_OPEN}\n\nThey bake on Saturdays.\n\n{MEMORY_CLOSE}{below}")
 		);
+		rewrite_agent(&root, &bot).expect("the host renders the agent file again");
+		assert_eq!(written_agent(&root, &bot.id), after);
+	}
+
+	#[test]
+	fn an_agent_file_with_no_memory_block_gets_one_between_the_brief_and_the_carried_skills() {
+		let root = a_root("own-write-unmarked");
+		let bot = a_bot("Bean", "Answer briefly.");
+		drop_a_skill(&root, &bot.id, "baking", true, "Bake at 220 degrees.");
+		laid_down(&root, &bot);
+		assert!(!written_agent(&root, &bot.id).contains(MEMORY_OPEN));
+		let before = commits(&root, &bot);
+
+		let written =
+			write_own_file(&root, &bot, asking(THE_AGENT, "They bake on Sundays.", "Kept the day"))
+				.expect("the memory is written");
+
+		let agent = written_agent(&root, &bot.id);
+		assert_eq!(agent.matches(MEMORY_OPEN).count(), 1, "got {agent}");
+		assert_eq!(agent.matches(MEMORY_CLOSE).count(), 1, "got {agent}");
+		let brief = agent.find("Answer briefly.").expect("the brief is there");
+		let open = agent.find(MEMORY_OPEN).expect("the block opens");
+		let kept = agent.find("They bake on Sundays.").expect("the line is kept");
+		let close = agent.find(MEMORY_CLOSE).expect("the block closes");
+		let carried = agent.find(CARRIED_OPEN).expect("the skills are carried");
+		assert!(brief < open && open < kept && kept < close && close < carried, "got {agent}");
+		assert!(matches!(written, BundleWritten::Recorded { .. }));
+		assert_eq!(commits(&root, &bot), before + 1);
+		assert_eq!(history(&root, &bot.id).expect("the history reads")[0].title, "Kept the day");
+	}
+
+	#[test]
+	fn an_empty_memory_renders_the_agent_file_without_a_block() {
+		let root = a_root("own-write-forgotten");
+		let bot = a_bot_that_learned("They bake on Sundays.");
+		laid_down(&root, &bot);
+
+		let written = write_own_file(&root, &bot, asking(THE_AGENT, "", "Forgot the day"))
+			.expect("the memory is cleared");
+
+		let agent = written_agent(&root, &bot.id);
+		assert!(!agent.contains(MEMORY_OPEN), "got {agent}");
+		assert!(!agent.contains(MEMORY_CLOSE), "got {agent}");
+		assert!(!agent.contains("They bake on Sundays."), "got {agent}");
+		assert!(matches!(written, BundleWritten::Recorded { .. }));
 	}
 
 	#[test]
@@ -394,40 +436,18 @@ mod tests {
 	}
 
 	#[test]
-	fn an_agent_file_lacking_a_memory_marker_is_refused_and_left_alone() {
-		let root = a_root("own-write-unmarked");
-		let bot = a_bot("Bean", "Answer briefly.");
-		let bundle = laid_down(&root, &bot);
-		let agent = agent_file(&root, &bot.id).expect("the agent file is there");
-		let unmarked = fs::read_to_string(&agent).expect("the agent file reads");
-		let before = commits(&root, &bot);
-
-		assert_eq!(
-			refused_kind(&root, &bot, asking(THE_AGENT, "They bake.", "Kept")),
-			RefusalKind::MissingMemoryMarkers
-		);
-		private_files::replace(&agent, format!("{unmarked}\n{MEMORY_OPEN}\n\nHalf.\n").as_bytes())
-			.expect("the half block lands");
-		git::commit(&bundle, Author::User, "Half", "").expect("the half block is recorded");
-
-		assert_eq!(
-			refused_kind(&root, &bot, asking(THE_AGENT, "They bake.", "Kept")),
-			RefusalKind::MissingMemoryMarkers
-		);
-		assert_nothing_written(&root, &bot, &bundle, before + 1);
-	}
-
-	#[test]
 	fn a_memory_holding_a_kiroshi_marker_is_refused() {
 		let root = a_root("own-write-marker");
 		let bot = a_bot_that_learned("They bake on Sundays.");
 		let bundle = laid_down(&root, &bot);
+		let agent = written_agent(&root, &bot.id);
 		let before = commits(&root, &bot);
 
 		assert_eq!(
 			refused_kind(&root, &bot, asking(THE_AGENT, &format!("x\n{MEMORY_CLOSE}\ny"), "Kept")),
 			RefusalKind::MarkerInText
 		);
+		assert_eq!(written_agent(&root, &bot.id), agent);
 		assert_nothing_written(&root, &bot, &bundle, before);
 	}
 

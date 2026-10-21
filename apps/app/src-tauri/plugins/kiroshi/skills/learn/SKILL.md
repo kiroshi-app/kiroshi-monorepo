@@ -27,8 +27,8 @@ In your agent file, only the block between these two lines is yours to write:
 
 Everything above the opening line is who you are and what you were told. It belongs to
 the person you are talking to and you never edit it. Everything below the block is
-generated and gets overwritten. If the block is not there, `bundle_write` refuses
-`agents/agent.md`: tell the person you could not keep it there.
+generated and gets overwritten. If the block is not there yet, `bundle_write` creates it
+on your first write to `agents/agent.md`, in its place after what you were given.
 
 ## When to write
 

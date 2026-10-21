@@ -647,14 +647,15 @@ its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
   `unreadableRequest` and nothing is written;
 - `path` is relative to the bundle: a `.md` file under `skills/` is written
   whole, its missing directories created; `agents/agent.md` takes `text` as the
-  block between its two kiroshi memory markers, and every byte outside them is
-  left as it was;
+  memory of the bot and is rendered again by the host renderer (`rewrite_agent_holding`):
+  the block sits after the brief and before the carried skills, created when the file
+  held none, and an empty `text` renders the file with no block and, once recorded,
+  empties the stored memory of the bot;
 - a `path` that is absolute, holds a `..` segment, resolves through a symbolic
   link, or names `.claude-plugin`, `.mcp.json`, `.applications.json`,
   `settings.json`, `hooks` or `.git` (whatever the case), a path under `agents/`
   other than `agents/agent.md`, and any other path are refused as
-  `forbiddenPath`; an `agents/agent.md` lacking either marker is refused as
-  `missingMemoryMarkers`, and a memory `text` holding a kiroshi marker as
+  `forbiddenPath`; a memory `text` holding a kiroshi marker is refused as
   `markerInText`;
 - `title` is trimmed and refused as `invalidTitle` when empty, past 72
   characters or longer than one line;
@@ -663,8 +664,8 @@ its own bundle through `Edit`, `Write` or `Bash`. It takes `path`, `text`,
   `summary` its body, like the turn-end commit `.learned.md` titles;
 - the answer is `{ "outcome": "recorded", "commitId", "title" }`, and the host
   then emits the turn-end `botEvolved` event for the bot's bundle on
-  `agent://event`, under the session's scope; a `text` equal to what the file
-  already holds answers `{ "outcome": "unchanged" }`, records nothing and emits
+  `agent://event`, under the session's scope; a write that leaves the file as it
+  already was answers `{ "outcome": "unchanged" }`, records nothing and emits
   nothing;
 - every refusal is `{ "kind", "reason" }` and writes nothing; a write that lands
   but cannot be recorded is refused as `writeFailed`, the file staying for the

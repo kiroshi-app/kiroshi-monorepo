@@ -112,8 +112,9 @@ mod tests {
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 	const TWO_BOTS: &str = "
-		INSERT INTO bots (id, name, model, created_at)
-			VALUES ('b1', 'First', 'sonnet', 1), ('b2', 'Second', 'sonnet', 1);
+		INSERT INTO bots (id, name, model, created_at, memory)
+			VALUES ('b1', 'First', 'sonnet', 1, 'They bake on Sundays.'),
+				('b2', 'Second', 'sonnet', 1, '');
 		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
 			VALUES ('b1', 'personal', 1), ('b2', 'personal', 1);
 	";
@@ -208,6 +209,33 @@ mod tests {
 
 		assert_eq!(answer, json!({ "outcome": "unchanged" }));
 		assert!(heard.recv_timeout(Duration::from_millis(300)).is_err());
+	}
+
+	#[tokio::test]
+	async fn an_empty_memory_clears_the_block_and_the_stored_memory_of_the_bot() {
+		let app = an_app_with_two_bundles("forgotten").await;
+		let asked = json!({
+			"subtype": "bundle",
+			"operation": "write",
+			"payload": { "path": "agents/agent.md", "text": "", "title": "Forgot the day", "summary": "" },
+		});
+
+		let answer = serving(&app, "b1").answer(asked).await.expect("the write is served");
+
+		assert_eq!(answer["outcome"], "recorded");
+		let root = bundles::root(app.handle()).expect("the bundles directory resolves");
+		let agent = bundles::agent_file(&root, "b1").expect("the agent file is there");
+		let text = std::fs::read_to_string(agent).expect("the agent file reads");
+		assert!(!text.contains("They bake on Sundays."), "got {text}");
+		let state = app.state::<db::DatabaseState>();
+		let stored = ready(&state)
+			.expect("the database opens")
+			.conversations()
+			.bot("b1".to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is there");
+		assert_eq!(stored.memory, "");
 	}
 
 	#[tokio::test]

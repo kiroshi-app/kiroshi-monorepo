@@ -158,6 +158,7 @@ mod tests {
 		for said in [
 			"through the `bundle_write` tool only, never through Edit, Write or Bash",
 			"the `title` and `summary` fields of `bundle_write` say it, and replace `.learned.md`",
+			"If the block is not there yet, `bundle_write` creates it on your first write",
 		] {
 			assert!(said_in_one_breath.contains(said), "{said} is missing");
 		}
