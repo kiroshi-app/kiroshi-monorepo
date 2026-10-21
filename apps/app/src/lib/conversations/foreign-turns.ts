@@ -65,7 +65,7 @@ export type ForeignTurns = {
 
 export const FOREIGN_SPEAKER_SILENCE_MS = 60_000
 
-const keyOf = ({ runtimeSessionId, epoch }: RuntimeScope) =>
+export const keyOf = ({ runtimeSessionId, epoch }: RuntimeScope) =>
 	`${runtimeSessionId}:${epoch}`
 
 export const createForeignTurns = (
