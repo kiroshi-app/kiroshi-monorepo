@@ -1172,12 +1172,12 @@ describe("the working state the stored open turn carries", () => {
 
 const WRITE_FAILED = { kind: "writeFailed", detail: "pipe closed" } as const
 
-const SESSION_REFUSED = (botId: string): CancelOutcome => ({
+const refusedBySession = (botId: string): CancelOutcome => ({
 	kind: "failed",
 	failures: [{ botId, reason: { source: "session", error: WRITE_FAILED } }],
 })
 
-const STORE_REFUSED = (botId: string): CancelOutcome => ({
+const refusedByStore = (botId: string): CancelOutcome => ({
 	kind: "failed",
 	failures: [
 		{
@@ -1246,8 +1246,8 @@ describe("the Stop of a bot working from the stored turn alone", () => {
 	)
 
 	it.each([
-		["the session refuses", SESSION_REFUSED, "pipe closed"],
-		["the store refuses", STORE_REFUSED, "unknownTurn"],
+		["the session refuses", refusedBySession, "pipe closed"],
+		["the store refuses", refusedByStore, "unknownTurn"],
 	])(
 		"keeps the indicator on and names the bot when %s",
 		async (_, refusal, reason) => {
