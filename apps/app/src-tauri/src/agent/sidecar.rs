@@ -132,6 +132,8 @@ type StdinChannel = std::sync::Mutex<Option<mpsc::UnboundedSender<Value>>>;
 
 type ExitReport = Arc<std::sync::Mutex<Option<TransportError>>>;
 
+type TerminateGrace = Arc<std::sync::Mutex<Duration>>;
+
 pub struct Sidecar {
 	stdin_tx: StdinChannel,
 	routes: Routes,
@@ -143,7 +145,7 @@ pub struct Sidecar {
 	capabilities: Vec<String>,
 	gone: Arc<AtomicBool>,
 	exit_report: ExitReport,
-	terminate_grace: std::sync::Mutex<Duration>,
+	terminate_grace: TerminateGrace,
 }
 
 impl Sidecar {
@@ -168,12 +170,14 @@ impl Sidecar {
 		let kept_stderr = StderrTail::default();
 		let stderr_reader = tokio::spawn(keep_stderr(stderr, kept_stderr.clone()));
 		let exit_report = ExitReport::default();
+		let terminate_grace: TerminateGrace = Arc::new(std::sync::Mutex::new(TERMINATE_GRACE));
 		let exit = ExitWatch {
 			child: child.clone(),
 			pid,
 			stderr: kept_stderr,
 			stderr_reader,
 			report: exit_report.clone(),
+			grace: terminate_grace.clone(),
 		};
 		tokio::spawn(read_loop(
 			stdout,
@@ -212,12 +216,16 @@ impl Sidecar {
 			capabilities: announced.capabilities,
 			gone,
 			exit_report,
-			terminate_grace: std::sync::Mutex::new(TERMINATE_GRACE),
+			terminate_grace,
 		}))
 	}
 
 	pub fn set_terminate_grace(&self, grace: Duration) {
 		*self.terminate_grace.lock().unwrap_or_else(PoisonError::into_inner) = grace;
+	}
+
+	fn terminate_grace(&self) -> Duration {
+		granted(&self.terminate_grace)
 	}
 
 	pub fn pid(&self) -> u32 {
@@ -438,8 +446,7 @@ impl Sidecar {
 
 		if !matches!(child.try_wait(), Ok(Some(_))) {
 			signal_group(self.pid, Signal::Term);
-			let grace = *self.terminate_grace.lock().unwrap_or_else(PoisonError::into_inner);
-			let _ = tokio::time::timeout(grace, child.wait()).await;
+			let _ = tokio::time::timeout(self.terminate_grace(), child.wait()).await;
 		}
 		sweep_group(self.pid);
 		*slot = None;
@@ -602,10 +609,18 @@ pub fn live_groups() -> Vec<u32> {
 	LIVE_GROUPS.lock().expect("live groups").clone()
 }
 
-async fn reap(child: &Arc<Mutex<Option<Child>>>, pid: u32) -> Option<ExitStatus> {
+fn granted(grace: &TerminateGrace) -> Duration {
+	*grace.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+async fn reap(
+	child: &Arc<Mutex<Option<Child>>>,
+	pid: u32,
+	grace: &TerminateGrace,
+) -> Option<ExitStatus> {
 	let mut slot = child.lock().await;
 	let handle = slot.as_mut()?;
-	let waited = tokio::time::timeout(TERMINATE_GRACE, handle.wait()).await.ok()?;
+	let waited = tokio::time::timeout(granted(grace), handle.wait()).await.ok()?;
 	sweep_group(pid);
 	waited.ok()
 }
@@ -616,11 +631,12 @@ struct ExitWatch {
 	stderr: StderrTail,
 	stderr_reader: JoinHandle<()>,
 	report: ExitReport,
+	grace: TerminateGrace,
 }
 
 impl ExitWatch {
 	async fn record(self) {
-		let status = reap(&self.child, self.pid).await;
+		let status = reap(&self.child, self.pid, &self.grace).await;
 		let detail = startup_detail(status, self.stderr.clone(), self.stderr_reader).await;
 		let code = status.and_then(|status| status.code());
 		log::info!(
