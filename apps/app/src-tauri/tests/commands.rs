@@ -140,8 +140,8 @@ fn shutdown_announces_the_connection_state_on_the_single_event_channel() {
 
 #[cfg(unix)]
 fn signalled(pid: u32, signal: libc::c_int) {
-	let group = -(pid as libc::pid_t);
-	assert_eq!(unsafe { libc::kill(group, signal) }, 0, "the sidecar group takes the signal");
+	let sent = unsafe { libc::kill(pid as libc::pid_t, signal) };
+	assert_eq!(sent, 0, "signal {signal} to {pid}: {}", std::io::Error::last_os_error());
 }
 
 #[cfg(unix)]
@@ -177,12 +177,12 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 					.await
 					.expect("the shutdown never waited on the quit held open");
 				finished.lock().expect("order").push("shutdown");
-				signalled(sidecar.pid(), libc::SIGCONT);
+				signalled(sidecar.pid(), libc::SIGKILL);
 			},
 			async {
 				tokio::time::timeout(PATIENCE, terminate_session(&state))
 					.await
-					.expect("the quit ends once its sidecar runs again");
+					.expect("the quit ends once its sidecar is gone");
 				finished.lock().expect("order").push("terminate");
 			},
 		);
