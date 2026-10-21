@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
-import type { RuntimeScope } from "@/lib/agent/contract"
 import { newBotIdentity } from "@/lib/bots/bot-settings"
 import type { FakeChatDriver } from "@/lib/chat/fake-driver"
 import { createFakeChatDriver } from "@/lib/chat/fake-driver"
@@ -69,7 +68,12 @@ const mountApp = async () => {
 	harness.driver = driver
 	render(createElement(App), { wrapper: createQueryTestWrapper().wrapper })
 	await settle(SETTLE_MS)
-	return { bot, conversation, cancelTurn }
+	const cancelledScopes = () =>
+		cancelTurn.mock.calls.map(([{ botId, conversationId }]) => ({
+			botId,
+			conversationId,
+		}))
+	return { bot, conversation, cancelledScopes }
 }
 
 const rowFor = (name: string) => {
@@ -115,9 +119,6 @@ const pressRosterStop = async (name: string) => {
 	await settle(SETTLE_MS)
 }
 
-const conversationsOf = (cancelTurn: { mock: { calls: [RuntimeScope][] } }) =>
-	cancelTurn.mock.calls.map(([scope]) => scope.conversationId)
-
 describe("the roster Stop", () => {
 	afterEach(() => {
 		layout?.restore()
@@ -128,7 +129,7 @@ describe("the roster Stop", () => {
 
 	it("stops the solo thread of a working companion row", async () => {
 		vi.useFakeTimers()
-		const { bot, conversation, cancelTurn } = await mountApp()
+		const { bot, conversation, cancelledScopes } = await mountApp()
 
 		await open(bot.name)
 		await send("map the repository")
@@ -137,15 +138,16 @@ describe("the roster Stop", () => {
 
 		await pressRosterStop(bot.name)
 
-		expect(cancelTurn).toHaveBeenCalledOnce()
-		expect(cancelTurn.mock.calls[0][0].botId).toBe(bot.id)
-		expect(conversationsOf(cancelTurn)).not.toContain(conversation.id)
+		const [cancelled, ...others] = cancelledScopes()
+		expect(others).toEqual([])
+		expect(cancelled.botId).toBe(bot.id)
+		expect(cancelled.conversationId).not.toBe(conversation.id)
 		expect(rosterStopFor(bot.name)).toBeNull()
 	})
 
 	it("stops every companion speaking in a working conversation row", async () => {
 		vi.useFakeTimers()
-		const { bot, conversation, cancelTurn } = await mountApp()
+		const { bot, conversation, cancelledScopes } = await mountApp()
 
 		await open(CONVERSATION_TITLE)
 		await send("map the repository")
@@ -154,8 +156,9 @@ describe("the roster Stop", () => {
 
 		await pressRosterStop(CONVERSATION_TITLE)
 
-		expect(conversationsOf(cancelTurn)).toEqual([conversation.id])
-		expect(cancelTurn.mock.calls[0][0].botId).toBe(bot.id)
+		expect(cancelledScopes()).toEqual([
+			{ botId: bot.id, conversationId: conversation.id },
+		])
 		expect(rosterStopFor(CONVERSATION_TITLE)).toBeNull()
 	})
 })
