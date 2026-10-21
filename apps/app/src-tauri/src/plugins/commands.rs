@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Runtime, State};
@@ -336,16 +337,31 @@ pub async fn plugin_revert<R: Runtime>(
 	match &target {
 		Plugin::Bot { root, id } => {
 			let database = ready(&state)?;
-			let _memory = bundles::holding_the_memory(id).await;
-			let held = learned_block(root, id);
-			unreverted(bundles::revert(root, id, &oldest_commit_id, &newest_commit_id))?;
-			store_a_changed_block(database, root, id, held).await?;
+			let stored_at_once = std::future::ready(());
+			revert_a_bot(database, root, id, &oldest_commit_id, &newest_commit_id, stored_at_once)
+				.await?;
 		}
 		Plugin::Owned { path, .. } => {
 			unreverted(plugin::revert(path, &oldest_commit_id, &newest_commit_id))?;
 		}
 	}
 	history_of(&target)
+}
+
+async fn revert_a_bot(
+	database: &db::Database,
+	root: &Path,
+	id: &str,
+	oldest_commit_id: &str,
+	newest_commit_id: &str,
+	before_storing: impl Future<Output = ()>,
+) -> Result<(), TranscriptStoreError> {
+	let _memory = bundles::holding_the_memory(id).await;
+	let held = learned_block(root, id);
+	unreverted(bundles::revert(root, id, oldest_commit_id, newest_commit_id))?;
+	before_storing.await;
+	store_a_changed_block(database, root, id, held).await?;
+	Ok(())
 }
 
 fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, TranscriptStoreError> {
@@ -355,8 +371,10 @@ fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, Transcrip
 #[cfg(test)]
 mod tests {
 	use std::fs;
+	use std::pin::pin;
+	use std::time::Duration;
 
-	use futures_util::FutureExt as _;
+	use tokio::sync::oneshot;
 
 	use super::*;
 	use crate::agent::commands::laid_down_session;
@@ -655,6 +673,7 @@ mod tests {
 	}
 
 	const THE_AGENT: &str = "agents/agent.md";
+	const A_SESSION_START: Duration = Duration::from_millis(500);
 
 	fn a_session_of(bot_id: &str) -> RuntimeScope {
 		RuntimeScope {
@@ -738,20 +757,34 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_session_starting_around_the_undo_of_the_learned_block_s_creation_leaves_it_undone() {
+	async fn a_session_starting_between_the_revert_and_the_stored_memory_leaves_the_block_undone() {
 		let app = a_host("undo-learned-block-mid-session-start");
 		let (bot_id, _) = a_bot_in_a_space(&app).await;
 		let root = bundles::root(app.handle()).expect("the bundles have a home");
 		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
 		let scope = a_session_of(&bot_id);
-		let mut starting = Box::pin(laid_down_session(app.handle(), database(&app), &scope));
-		let mut undo = Box::pin(undoing(&app, &bot_id, &created));
+		let (reverted, paused) = oneshot::channel();
+		let (resumed, resuming) = oneshot::channel();
+		let before_storing = async move {
+			reverted.send(()).expect("the test hears the revert");
+			resuming.await.expect("the test resumes the undo");
+		};
+		let undo = revert_a_bot(database(&app), &root, &bot_id, &created, &created, before_storing);
+		let a_session_in_the_window = async {
+			paused.await.expect("the undo pauses after its revert");
+			let mut starting = pin!(laid_down_session(app.handle(), database(&app), &scope));
+			let early = tokio::time::timeout(A_SESSION_START, starting.as_mut()).await;
+			resumed.send(()).expect("the undo is resumed");
+			match early {
+				Ok(started) => started,
+				Err(_) => starting.await,
+			}
+		};
 
-		assert!(starting.as_mut().now_or_never().is_none(), "the session start ended in one poll");
-		assert!(undo.as_mut().now_or_never().is_none(), "the undo did not wait for the session");
-		starting.await.expect("the session lays its bundle down");
-		undo.await.expect("the undo lands");
+		let (undone, started) = tokio::join!(undo, a_session_in_the_window);
 
+		undone.expect("the undo lands");
+		started.expect("the session lays its bundle down");
 		assert_eq!(the_learned_block(&root, &bot_id), "");
 		assert_eq!(stored(&app, &bot_id).await.memory, "");
 	}

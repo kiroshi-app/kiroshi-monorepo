@@ -33,6 +33,7 @@ impl<R: Runtime> BundleHost<R> {
 		database: &db::Database,
 		asked: BundleWrite,
 	) -> Result<BundleWritten, BundleWriteRefusal> {
+		let _memory = super::holding_the_memory(&self.scope.bot_id).await;
 		let bot = database
 			.conversations()
 			.bot(self.scope.bot_id.clone())
