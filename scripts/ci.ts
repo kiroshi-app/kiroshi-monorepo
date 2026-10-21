@@ -182,7 +182,9 @@ const captured = ({ command, operation }: Captured) => {
 		stderr: "pipe",
 	})
 	if (finished.exitCode !== 0) {
-		throw new Error(`${operation} failed: ${finished.stderr.toString().trim()}`)
+		throw new Error(
+			`${operation} failed: ${command.join(" ")} exited with ${finished.exitCode}: ${finished.stderr.toString().trim()}`,
+		)
 	}
 	return finished.stdout.toString().trim()
 }
