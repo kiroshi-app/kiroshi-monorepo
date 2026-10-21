@@ -1,8 +1,10 @@
+use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Runtime, State};
 
 use super::contract::PluginScope;
+use crate::agent::commands::{learned_block, store_a_changed_block};
 use crate::bundles::{self, plugin, ApplicationMark};
 use crate::conversations::commands::{bot_owner, bot_row, bundled, ready, recounted};
 use crate::conversations::contract::{
@@ -326,25 +328,60 @@ pub async fn plugin_history_diff<R: Runtime>(
 #[specta::specta]
 pub async fn plugin_revert<R: Runtime>(
 	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
 	scope: PluginScope,
 	oldest_commit_id: String,
 	newest_commit_id: String,
 ) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
 	let target = writable(&app, &scope)?;
-	let reverted = match &target {
-		Plugin::Bot { root, id } => bundles::revert(root, id, &oldest_commit_id, &newest_commit_id),
-		Plugin::Owned { path, .. } => plugin::revert(path, &oldest_commit_id, &newest_commit_id),
-	};
-	reverted
-		.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })?;
+	match &target {
+		Plugin::Bot { root, id } => {
+			let database = ready(&state)?;
+			let stored_at_once = std::future::ready(());
+			revert_a_bot(database, root, id, &oldest_commit_id, &newest_commit_id, stored_at_once)
+				.await?;
+		}
+		Plugin::Owned { path, .. } => {
+			unreverted(plugin::revert(path, &oldest_commit_id, &newest_commit_id))?;
+		}
+	}
 	history_of(&target)
+}
+
+async fn revert_a_bot(
+	database: &db::Database,
+	root: &Path,
+	id: &str,
+	oldest_commit_id: &str,
+	newest_commit_id: &str,
+	before_storing: impl Future<Output = ()>,
+) -> Result<(), TranscriptStoreError> {
+	let _memory = bundles::holding_the_memory(id).await;
+	let held = learned_block(root, id);
+	unreverted(bundles::revert(root, id, oldest_commit_id, newest_commit_id))?;
+	before_storing.await;
+	store_a_changed_block(database, root, id, held).await?;
+	Ok(())
+}
+
+fn unreverted(reverted: Result<String, git2::Error>) -> Result<String, TranscriptStoreError> {
+	reverted.map_err(|error| TranscriptStoreError::UnwritableBundle { detail: error.to_string() })
 }
 
 #[cfg(test)]
 mod tests {
 	use std::fs;
+	use std::pin::pin;
+	use std::time::Duration;
+
+	use tokio::sync::oneshot;
 
 	use super::*;
+	use crate::agent::commands::laid_down_session;
+	use crate::agent::contract::RuntimeScope;
+	use crate::agent::host::Host as _;
+	use crate::bundles::host::BundleHost;
+	use crate::conversations::contract::Bot;
 	use crate::db::repositories::conversations::BotIdentity;
 	use crate::db::DatabaseError;
 	use crate::environment::contract::EnvScope;
@@ -633,5 +670,196 @@ mod tests {
 			Err(TranscriptStoreError::SystemSkill { id: "remembering".to_owned() })
 		);
 		assert_eq!(fs::read_to_string(marked.join("SKILL.md")).expect("the skill reads"), held);
+	}
+
+	const THE_AGENT: &str = "agents/agent.md";
+	const A_SESSION_START: Duration = Duration::from_millis(500);
+
+	fn a_session_of(bot_id: &str) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: "c1".to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 0,
+		}
+	}
+
+	async fn a_bot_write(app: &App<MockRuntime>, bot_id: &str, path: &str, text: &str) -> String {
+		let session = BundleHost::new(app.handle().clone(), a_session_of(bot_id));
+		let answer = session
+			.answer(serde_json::json!({
+				"subtype": "bundle",
+				"operation": "write",
+				"payload": { "path": path, "text": text, "title": "Learned the day", "summary": "They said so." },
+			}))
+			.await
+			.expect("the write is served");
+		answer["commitId"].as_str().expect("a commit id is answered").to_owned()
+	}
+
+	async fn a_learned_write(app: &App<MockRuntime>, bot_id: &str, memory: &str) -> String {
+		a_bot_write(app, bot_id, THE_AGENT, memory).await
+	}
+
+	fn the_learned_block(root: &Path, bot_id: &str) -> String {
+		bundles::generated(root, bot_id).expect("the agent file reads").memory
+	}
+
+	async fn stored(app: &App<MockRuntime>, bot_id: &str) -> StoredBot {
+		database(app)
+			.conversations()
+			.bot(bot_id.to_owned())
+			.await
+			.expect("the bot reads")
+			.expect("the bot is there")
+	}
+
+	fn agent_bytes(root: &Path, bot_id: &str) -> Vec<u8> {
+		fs::read(bundles::agent_file(root, bot_id).expect("the agent file is there"))
+			.expect("the agent file reads")
+	}
+
+	async fn undoing(
+		app: &App<MockRuntime>,
+		bot_id: &str,
+		commit_id: &str,
+	) -> Result<Vec<BotHistoryEntry>, TranscriptStoreError> {
+		plugin_revert(
+			app.handle().clone(),
+			app.state::<db::DatabaseState>(),
+			bot(bot_id),
+			commit_id.to_owned(),
+			commit_id.to_owned(),
+		)
+		.await
+	}
+
+	#[tokio::test]
+	async fn undoing_the_learned_block_s_creation_holds_across_the_next_session_start() {
+		let app = a_host("undo-learned-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
+
+		undoing(&app, &bot_id, &created).await.expect("the undo lands");
+		let undone_agent = agent_bytes(&root, &bot_id);
+		let commits = bundles::history(&root, &bot_id).expect("the history reads").len();
+		let after_undo = stored(&app, &bot_id).await;
+		assert_eq!(after_undo.memory, "");
+
+		bundles::ensure(&root, &after_undo).expect("the session start lays the bundle down");
+
+		assert_eq!(agent_bytes(&root, &bot_id), undone_agent);
+		assert_eq!(bundles::history(&root, &bot_id).expect("the history reads").len(), commits);
+		let read = Bot::of(stored(&app, &bot_id).await, None, Some(&root));
+		assert_eq!(read.memory, "");
+	}
+
+	#[tokio::test]
+	async fn a_session_starting_between_the_revert_and_the_stored_memory_leaves_the_block_undone() {
+		let app = a_host("undo-learned-block-mid-session-start");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		let scope = a_session_of(&bot_id);
+		let (reverted, paused) = oneshot::channel();
+		let (resumed, resuming) = oneshot::channel();
+		let before_storing = async move {
+			reverted.send(()).expect("the test hears the revert");
+			resuming.await.expect("the test resumes the undo");
+		};
+		let undo = revert_a_bot(database(&app), &root, &bot_id, &created, &created, before_storing);
+		let a_session_in_the_window = async {
+			paused.await.expect("the undo pauses after its revert");
+			let mut starting = pin!(laid_down_session(app.handle(), database(&app), &scope));
+			let early = tokio::time::timeout(A_SESSION_START, starting.as_mut()).await;
+			resumed.send(()).expect("the undo is resumed");
+			match early {
+				Ok(started) => started,
+				Err(_) => starting.await,
+			}
+		};
+
+		let (undone, started) = tokio::join!(undo, a_session_in_the_window);
+
+		undone.expect("the undo lands");
+		started.expect("the session lays its bundle down");
+		assert_eq!(the_learned_block(&root, &bot_id), "");
+		assert_eq!(stored(&app, &bot_id).await.memory, "");
+	}
+
+	#[tokio::test]
+	async fn a_bundle_write_leaves_a_memory_stored_without_a_learned_block_as_it_was() {
+		let app = a_host("stored-memory-without-a-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		database(&app)
+			.conversations()
+			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
+			.await
+			.expect("the memory is stored");
+		assert_eq!(the_learned_block(&root, &bot_id), "");
+
+		a_bot_write(&app, &bot_id, "skills/baking/SKILL.md", "Bake at 220 degrees.").await;
+
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
+	}
+
+	#[tokio::test]
+	async fn undoing_a_later_learned_write_stores_the_memory_the_restored_block_holds() {
+		let app = a_host("undo-later-learned-block");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		let moved = a_learned_write(&app, &bot_id, "They bake on Saturdays.").await;
+
+		undoing(&app, &bot_id, &moved).await.expect("the undo lands");
+
+		let after_undo = stored(&app, &bot_id).await;
+		assert_eq!(after_undo.memory, "They bake on Sundays.");
+		assert_eq!(Bot::of(after_undo, None, Some(&root)).memory, "They bake on Sundays.");
+	}
+
+	#[tokio::test]
+	async fn an_undo_whose_memory_cannot_be_stored_answers_that_failure() {
+		let app = a_host("undo-unstored-memory");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let created = a_learned_write(&app, &bot_id, "They bake on Sundays.").await;
+		database(&app).conversations().delete_bot(bot_id.clone()).await.expect("the row goes");
+
+		let refused = undoing(&app, &bot_id, &created).await;
+
+		assert_eq!(refused.map(|_| ()), Err(TranscriptStoreError::UnknownBot { id: bot_id }));
+	}
+
+	#[tokio::test]
+	async fn undoing_a_skill_write_leaves_a_memory_stored_alone_as_it_was() {
+		let app = a_host("undo-skill-stored-memory");
+		let (bot_id, _) = a_bot_in_a_space(&app).await;
+		let root = bundles::root(app.handle()).expect("the bundles have a home");
+		database(&app)
+			.conversations()
+			.set_memory(bot_id.clone(), "They bake on Sundays.".to_owned())
+			.await
+			.expect("the memory is stored");
+		let skill = bundles::dir(&root, &bot_id).expect("the bundle is held").join("skills/baking");
+		fs::create_dir_all(&skill).expect("the skill directory is made");
+		fs::write(skill.join("SKILL.md"), "---\nname: baking\n---\n\nBake.\n")
+			.expect("the skill lands");
+		plugin_write_skill_file(
+			app.handle().clone(),
+			bot(&bot_id),
+			"baking".to_owned(),
+			"SKILL.md".to_owned(),
+			"---\nname: baking\n---\n\nBake at 220 degrees.\n".to_owned(),
+		)
+		.await
+		.expect("the skill is written");
+		let written = bundles::history(&root, &bot_id).expect("the history reads")[0].id.clone();
+
+		undoing(&app, &bot_id, &written).await.expect("the undo lands");
+
+		assert_eq!(stored(&app, &bot_id).await.memory, "They bake on Sundays.");
 	}
 }

@@ -185,6 +185,18 @@ fn commits(bundle: &Path) -> &'static Mutex<()> {
 	held.entry(bundle.to_path_buf()).or_insert_with(|| Box::leak(Box::new(Mutex::new(()))))
 }
 
+static MEMORIES: LazyLock<Mutex<HashMap<String, &'static tokio::sync::Mutex<()>>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub async fn holding_the_memory(bot_id: &str) -> tokio::sync::MutexGuard<'static, ()> {
+	let memory: &'static tokio::sync::Mutex<()> = {
+		let mut held = MEMORIES.lock().unwrap_or_else(PoisonError::into_inner);
+		held.entry(bot_id.to_owned())
+			.or_insert_with(|| Box::leak(Box::new(tokio::sync::Mutex::new(()))))
+	};
+	memory.lock().await
+}
+
 pub(super) fn serialised(bundle: &Path) -> MutexGuard<'static, ()> {
 	commits(bundle).lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -674,7 +686,9 @@ pub fn adopted(root: &Path, bot: &Bot) -> Option<String> {
 }
 
 pub fn adopted_memory(root: &Path, bot: &Bot) -> Option<String> {
-	generated(root, &bot.id).map(|held| held.memory).filter(|found| edited(found, &bot.memory))
+	generated(root, &bot.id)
+		.map(|held| held.memory)
+		.filter(|found| !found.is_empty() && edited(found, &bot.memory))
 }
 
 pub fn edited(found: &str, stored: &str) -> bool {
@@ -2111,6 +2125,21 @@ mod tests {
 
 		bot.memory = "They bake on Sundays.".to_owned();
 		assert_eq!(adopted_memory(&root, &bot), None, "an unchanged block was adopted again");
+
+		let _ = fs::remove_dir_all(&root);
+	}
+
+	#[test]
+	fn a_memory_stored_alone_is_written_into_the_block_when_the_session_starts() {
+		let root = a_root("stored-memory-ensured");
+		let mut bot = a_bot("Bean", "Answer briefly.");
+		write(&root, &bot).expect("the bundle is written");
+		assert!(!written_agent(&root, &bot.id).contains(MEMORY_OPEN));
+
+		bot.memory = "They bake on Sundays.".to_owned();
+		ensure(&root, &bot).expect("the session start lays the bundle down");
+
+		assert_eq!(generated(&root, &bot.id).expect("the file reads").memory, bot.memory);
 
 		let _ = fs::remove_dir_all(&root);
 	}

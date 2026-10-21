@@ -27,7 +27,7 @@ use crate::conversations::commands::{announce_conversation, ready, space_of_the_
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::{ended_as, HostTurns};
 use crate::db;
-use crate::db::repositories::conversations::{Bot as StoredBot, MISSION_KIND};
+use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
 use crate::db::repositories::runtime_context::ParticipantKey;
 use crate::db::repositories::space_children::SpaceChild;
 use crate::environment::connection;
@@ -457,6 +457,24 @@ pub(crate) async fn reconcile_bot(database: &db::Database, root: &Path, bot: &St
 	}
 }
 
+pub(crate) fn learned_block(root: &Path, bot_id: &str) -> Option<String> {
+	bundles::generated(root, bot_id).map(|written| written.memory)
+}
+
+pub(crate) async fn store_a_changed_block(
+	database: &db::Database,
+	root: &Path,
+	bot_id: &str,
+	held: Option<String>,
+) -> Result<(), ConversationError> {
+	let Some(changed) =
+		learned_block(root, bot_id).filter(|changed| held.as_ref() != Some(changed))
+	else {
+		return Ok(());
+	};
+	database.conversations().adopt_memory(bot_id.to_owned(), changed).await
+}
+
 #[derive(Default)]
 struct Gate {
 	quitting: bool,
@@ -800,6 +818,24 @@ async fn runtime_identity<R: Runtime>(
 	let database = state.as_ref().map_err(|failure| {
 		identity_refused(&scope.bot_id, &format!("{DATABASE_UNREACHED}: {failure:?}"))
 	})?;
+	let LaidDownSession { bundle, space_id, serving } =
+		laid_down_session(app, database, scope).await?;
+	let server_env = served_environment(app, sidecar, &scope.bot_id, &space_id, &serving).await;
+	Ok(RuntimeIdentity { bundle, server_env, space_id })
+}
+
+pub(crate) struct LaidDownSession {
+	bundle: Bundle,
+	space_id: String,
+	serving: Vec<PathBuf>,
+}
+
+pub(crate) async fn laid_down_session<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	scope: &RuntimeScope,
+) -> Result<LaidDownSession, TransportError> {
+	let _memory = bundles::holding_the_memory(&scope.bot_id).await;
 	let ResolvedRun { bot, space_id, root } =
 		resolved_run(database, bundles::root(app), scope).await?;
 	let system = bundles::system::laid_down(app);
@@ -817,12 +853,8 @@ async fn runtime_identity<R: Runtime>(
 	.map_err(unavailable_bundle)?;
 	reconcile_bot(database, &root, &bot).await;
 	let serving: Vec<PathBuf> =
-		[system.clone(), user.clone(), space.clone(), Some(PathBuf::from(&bundle.path))]
-			.into_iter()
-			.flatten()
-			.collect();
-	let server_env = served_environment(app, sidecar, &bot.id, &space_id, &serving).await;
-	Ok(RuntimeIdentity { bundle, server_env, space_id })
+		[system, user, space, Some(PathBuf::from(&bundle.path))].into_iter().flatten().collect();
+	Ok(LaidDownSession { bundle, space_id, serving })
 }
 
 async fn resolved_run(
