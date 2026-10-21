@@ -342,7 +342,7 @@ mod tests {
 	use crate::db::connection::temp_dir;
 	use crate::db::repositories::conversations::{Bot, BotIdentity, ConversationDraft};
 	use crate::db::repositories::messages::{MessagePageQuery, NewAssistantMessage, NewTurn};
-	use crate::db::{count_of, open, Database};
+	use crate::db::{count_of, joined_on, open, Database};
 
 	fn an_identity(name: &str) -> BotIdentity {
 		BotIdentity {
@@ -800,6 +800,8 @@ mod tests {
 			.add_bot(bot.id.clone(), elsewhere.id.clone(), Some(writers.id.clone()))
 			.await
 			.expect("the bot joins the second space");
+		joined_on(&database, &bot.id, &home, 1).await;
+		joined_on(&database, &bot.id, &elsewhere.id, 2).await;
 
 		assert_eq!(
 			roster_of(&database, &elsewhere.id).await,

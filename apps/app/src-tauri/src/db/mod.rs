@@ -235,6 +235,25 @@ pub(crate) fn open(dir: &Path) -> Database {
 }
 
 #[cfg(test)]
+pub(in crate::db) async fn joined_on(
+	database: &Database,
+	bot_id: &str,
+	space_id: &str,
+	joined_at: i64,
+) {
+	let (bot_id, space_id) = (bot_id.to_owned(), space_id.to_owned());
+	database
+		.call_mut(move |connection| {
+			Ok(connection.execute(
+				"UPDATE bot_spaces SET joined_at = ?3 WHERE bot_id = ?1 AND space_id = ?2",
+				rusqlite::params![bot_id, space_id, joined_at],
+			)?)
+		})
+		.await
+		.expect("the membership is dated");
+}
+
+#[cfg(test)]
 pub(in crate::db) async fn count_of(database: &Database, table: &'static str) -> u32 {
 	database
 		.call(move |connection| {
