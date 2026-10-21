@@ -362,10 +362,8 @@ fn active_turn(row: &Row<'_>) -> rusqlite::Result<ActiveTurn> {
 	})?;
 	let mut earliest: BTreeMap<String, i64> = BTreeMap::new();
 	for (bot_id, started_at) in links {
-		earliest
-			.entry(bot_id)
-			.and_modify(|earliest| *earliest = (*earliest).min(started_at))
-			.or_insert(started_at);
+		let start = earliest.entry(bot_id).or_insert(started_at);
+		*start = (*start).min(started_at);
 	}
 	let bots = earliest
 		.into_iter()
