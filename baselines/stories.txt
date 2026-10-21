@@ -1056,6 +1056,8 @@ navigation-sidebarlistrow--with-strips
 navigation-sidebarlistrow--with-title-cut-before-name
 navigation-sidebarlistrow--with-trailing-badge-and-timestamp
 navigation-sidebarlistrow--working-preview
+navigation-sidebarlistrow--working-with-stop
+navigation-sidebarlistrow--working-with-stop-on-icon-rail
 navigation-sidebarmenurow--default
 navigation-sidebarmenurow--long-content
 navigation-sidebarmenurow--selected
