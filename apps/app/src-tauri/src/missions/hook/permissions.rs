@@ -350,12 +350,13 @@ mod tests {
 		"git push --force-with-lease origin feature/ope-1-x",
 	];
 
-	fn deny_rules_matching(command: &str) -> Vec<String> {
-		tracked_rules(DENY_KEY)
+	fn assert_matched_by_no_deny_rule(command: &str) {
+		let matched: Vec<String> = tracked_rules(DENY_KEY)
 			.into_iter()
 			.chain(REFUSED_BY_DESIGN.map(str::to_owned))
 			.filter(|rule| pinned_wildcard_match(rule, command))
-			.collect()
+			.collect();
+		assert!(matched.is_empty(), "{command} is denied by {matched:?}");
 	}
 
 	#[test]
@@ -413,29 +414,24 @@ mod tests {
 	#[test]
 	fn no_deny_rule_matches_a_feature_branch_push_chained_with_a_pull_request_to_main() {
 		for push in FEATURE_BRANCH_PUSHES {
-			let command = format!("{push} && gh pr create --base main --title x --body y");
-			let matched = deny_rules_matching(&command);
-			assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+			assert_matched_by_no_deny_rule(&format!(
+				"{push} && gh pr create --base main --title x --body y"
+			));
 		}
 	}
 
 	#[test]
 	fn no_deny_rule_matches_a_feature_branch_push_chained_with_an_auto_merge() {
 		for push in FEATURE_BRANCH_PUSHES {
-			let command = format!("{push} && gh pr merge --auto 12");
-			let matched = deny_rules_matching(&command);
-			assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+			assert_matched_by_no_deny_rule(&format!("{push} && gh pr merge --auto 12"));
 		}
 	}
 
 	#[test]
 	fn no_deny_rule_matches_a_piped_feature_branch_push_chained_with_a_pull_request_to_main() {
-		let command =
-			"git push -u origin feature/ope-1-x 2>&1 | tail -3 && gh pr create --base main --title x";
-
-		let matched = deny_rules_matching(command);
-
-		assert!(matched.is_empty(), "{command} is denied by {matched:?}");
+		assert_matched_by_no_deny_rule(
+			"git push -u origin feature/ope-1-x 2>&1 | tail -3 && gh pr create --base main --title x",
+		);
 	}
 
 	#[test]
