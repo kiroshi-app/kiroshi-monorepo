@@ -336,6 +336,8 @@ mod tests {
 			"gh pr merge --auto 12",
 			"gh pr merge 12 --subject x",
 			"gh pr merge 1 --delete-branch --auto",
+			"gh pr merge 12 -d --auto",
+			"gh pr merge --auto -d 12",
 		] {
 			let matched: Vec<&str> = REFUSED_BY_DESIGN
 				.into_iter()
