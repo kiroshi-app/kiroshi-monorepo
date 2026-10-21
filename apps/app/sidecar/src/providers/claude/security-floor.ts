@@ -73,7 +73,7 @@ const posixPath = (path: string): string =>
 const denyPath = (platform: NodeJS.Platform, path: string): string =>
 	platform === "win32" ? posixPath(path) : path
 
-const rulesFor = (
+export const rulesFor = (
 	tool: string,
 	{ directories, files }: Denial,
 	platform: NodeJS.Platform,

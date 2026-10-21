@@ -303,6 +303,19 @@ Every other command names its session.
   the allowlist, named — rides a `settings_rejected` frame to the reader's notice.
   `disableBypassPermissionsMode` is forced to `disable` even for a bot carrying no file at all,
   and `settingSources: []` stays set either way: this is the only settings file a session reads.
+  A session carrying a `pluginPath` gets allow rules derived on top of the declared allows,
+  so its sanctioned gestures never reach the auto mode classifier, which runs before
+  `canUseTool` and would otherwise refuse them: `mcp__kiroshi` and one `mcp__<name>` per
+  resolved server (the name normalized as Claude Code prefixes MCP tools), `Edit` on the
+  bot's `agents/agent.md`, on the top-level documents of the bot, user and space bundles
+  (every document extension a reserved entry does not carry, so no top-level `.json`), and
+  on every document under their `skills/`. These rules are a subset of what `canUseTool`
+  lets through as a bundle write and never match a reserved entry. No `Bash` rule and no
+  per-tool MCP rule is derived: every other call, a top-level `.json` or a document in
+  another folder of a bundle among them, stays with the classifier. The declared `ask` and
+  `deny` rules ride beside the derived allows and a deny still wins, so a bot denying
+  `AskUserQuestion` or `mcp__kiroshi__mission_escalate` keeps that deny. The floor in
+  `managedSettings` is unchanged and still denies what it denies, above all of these.
 - `appDataDir` is the directory the host keeps its own data in, sent when the host knows
   it. The sidecar never reads it: it hands it to the security floor, which the session
   carries as `managedSettings`, the policy tier a bot's own settings cannot loosen. The

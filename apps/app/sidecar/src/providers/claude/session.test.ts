@@ -188,7 +188,7 @@ describe("buildOptions", () => {
 		expect(options.permissionMode).toBe("acceptEdits")
 		expect(settingsOf(options)).toEqual({
 			permissions: {
-				allow: ["Read(**)"],
+				allow: expect.arrayContaining(["Read(**)"]),
 				disableBypassPermissionsMode: "disable",
 			},
 			outputStyle: "default",
@@ -287,11 +287,17 @@ describe("buildOptions", () => {
 				buildOptions({ ...request, outputStyle: "Concise" }, undefined),
 			),
 		).toEqual({
-			permissions: { disableBypassPermissionsMode: "disable" },
+			permissions: {
+				allow: expect.any(Array),
+				disableBypassPermissionsMode: "disable",
+			},
 			outputStyle: "Concise",
 		})
 		expect(settingsOf(buildOptions(request, undefined))).toEqual({
-			permissions: { disableBypassPermissionsMode: "disable" },
+			permissions: {
+				allow: expect.any(Array),
+				disableBypassPermissionsMode: "disable",
+			},
 		})
 	})
 
