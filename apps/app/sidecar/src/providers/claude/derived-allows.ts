@@ -18,7 +18,7 @@ const serverAllows = (servers: string[]): string[] => [
 	),
 ]
 
-export type AllowScope = {
+type AllowScope = {
 	pluginPath?: string
 	sharedPaths: string[]
 	servers: string[]
