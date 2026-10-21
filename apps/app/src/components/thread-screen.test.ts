@@ -327,6 +327,7 @@ const stubController = (
 	reportRun: async () => "",
 	storeAttachments: async () => [],
 	stop: async () => undefined,
+	stopFor: async () => undefined,
 	discard: () => undefined,
 	respond: async () => undefined,
 	answer: async () => undefined,

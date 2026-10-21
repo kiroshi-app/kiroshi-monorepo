@@ -24,6 +24,7 @@ let printedLabels: MockInstance<typeof console.info>
 const sourceShowingOpenThread = () =>
 	({
 		attachments: UNUSED,
+		chat: UNUSED,
 		collapsedSections: UNUSED,
 		drafts: UNUSED,
 		joinedSpaces: {

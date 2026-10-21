@@ -1,9 +1,15 @@
 import { useMemo } from "react"
 
 import type { AppSidebarProps } from "@workspace/ui/components/app-sidebar"
+import { i18n } from "@workspace/ui/lib/i18n"
 
+import {
+	type FailureCorrelation,
+	raiseReportedFailure,
+} from "../failure-report"
 import type { RosterController } from "../bots/roster-controller"
 import type { AttachmentsController } from "../chat/attachments-controller"
+import type { ChatController } from "../chat/chat-controller"
 import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
@@ -45,11 +51,14 @@ export type SidebarActions = Required<
 		| "onSelectBot"
 		| "onSelectConversation"
 		| "onSelectSpace"
+		| "onStopBot"
+		| "onStopConversation"
 	>
 >
 
 export type SidebarActionsSource = {
 	attachments: AttachmentsController
+	chat: Pick<ChatController, "stopFor">
 	collapsedSections: CollapsedSectionsController
 	drafts: DraftsController
 	joinedSpaces: JoinedSpacesController
@@ -71,8 +80,34 @@ const openSpaceRowId = (
 	spaces: SpacesController,
 ) => openRowIdOf(joinedSpaces.getState(), spaces.getState().selectedSpaceId)
 
+const stopReportingFailure = (
+	stop: () => Promise<unknown>,
+	correlation: FailureCorrelation,
+) => {
+	void stop().catch((reason: unknown) => {
+		console.error("roster stop failed", reason)
+		void raiseReportedFailure(
+			{ title: i18n.t("chat:screen.notice.stopFailed") },
+			{ ...correlation, raisedIn: "use-sidebar-actions" },
+		)
+	})
+}
+
+const stopSpeakersIn = (runtimes: ConversationRuntimes, id: string) => {
+	const held = runtimes.heldFor(id)
+	if (!held) {
+		return
+	}
+	const { speakers } = held.getState()
+	stopReportingFailure(
+		() => Promise.all(speakers.map((speaking) => speaking.stop?.())),
+		{ conversation: id },
+	)
+}
+
 export const useSidebarActions = ({
 	attachments,
+	chat,
 	collapsedSections,
 	drafts,
 	joinedSpaces,
@@ -171,9 +206,16 @@ export const useSidebarActions = ({
 				)
 				joinedSpaces.selectSpace(id)
 			},
+			onStopBot: (id) => {
+				stopReportingFailure(() => chat.stopFor(id), { botId: id })
+			},
+			onStopConversation: (id) => {
+				stopSpeakersIn(runtimes, id)
+			},
 		}),
 		[
 			attachments,
+			chat,
 			collapsedSections,
 			drafts,
 			joinedSpaces,
