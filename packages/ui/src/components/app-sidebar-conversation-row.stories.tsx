@@ -353,7 +353,8 @@ export const WorkingConversationStopsWithItsId = meta.story({
 	args: { lift: LIFT_SPYING_ON_DOWN, onStop: fn() },
 	play: async ({ args, canvas }) => {
 		await userEvent.click(canvas.getByRole("button", { name: STOP_DESK_ROOM }))
-		await expect(args.onStop).toHaveBeenCalledExactlyOnceWith(DESK_ROOM.id)
+		await expect(args.onStop).toHaveBeenCalledOnce()
+		await expect(args.onStop).toHaveBeenCalledWith(DESK_ROOM.id)
 		await expect(args.onSelect).not.toHaveBeenCalled()
 		await expect(liftDown).not.toHaveBeenCalled()
 		await expect(within(document.body).queryByRole("menu")).toBeNull()

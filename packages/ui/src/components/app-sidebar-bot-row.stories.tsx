@@ -86,7 +86,8 @@ export const WorkingBotStopsWithItsId = meta.story({
 		await userEvent.click(
 			canvas.getByRole("button", { name: `Stop ${BEACON.name}` }),
 		)
-		await expect(args.onStop).toHaveBeenCalledExactlyOnceWith(BEACON.id)
+		await expect(args.onStop).toHaveBeenCalledOnce()
+		await expect(args.onStop).toHaveBeenCalledWith(BEACON.id)
 		await expect(args.onSelect).not.toHaveBeenCalled()
 		await expect(liftDown).not.toHaveBeenCalled()
 		await expect(within(document.body).queryByRole("menu")).toBeNull()
