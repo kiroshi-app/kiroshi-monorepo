@@ -1591,6 +1591,99 @@
       ],
       "type": "object"
     },
+    "CancelFailure": {
+      "properties": {
+        "botId": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/CancelFailureReason"
+        }
+      },
+      "required": [
+        "botId",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "CancelFailureReason": {
+      "anyOf": [
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/TransportError"
+            },
+            "source": {
+              "const": "session"
+            }
+          },
+          "required": [
+            "source",
+            "error"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/TranscriptStoreError"
+            },
+            "source": {
+              "const": "store"
+            }
+          },
+          "required": [
+            "source",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CancelOutcome": {
+      "anyOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "nothingToCancel"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "failures": {
+              "items": {
+                "$ref": "#/$defs/CancelFailure"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "failed"
+            }
+          },
+          "required": [
+            "kind",
+            "failures"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "Catalogue": {
       "properties": {
         "chats": {
@@ -8378,7 +8471,7 @@
         "$ref": "#/$defs/TransportError"
       },
       "ok": {
-        "type": "null"
+        "$ref": "#/$defs/CancelOutcome"
       }
     },
     "agent_check": {

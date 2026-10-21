@@ -86,6 +86,7 @@ pub enum Frame {
 	ControlResponse(ControlResponseFrame),
 	SettingsRejected(RejectionFrame),
 	ServerEnvRejected(RejectionFrame),
+	InterruptFailed(RejectionFrame),
 	#[serde(other)]
 	Ignored,
 }

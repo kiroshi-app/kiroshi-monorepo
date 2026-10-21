@@ -54,7 +54,7 @@ export const commands = {
 	turnId: string,
 	promptId: string,
 } | null) => typedError<null, TransportError>(__TAURI_INVOKE("agent_submit_prompt", { scope, text, turn })),
-	agentCancelTurn: (scope: RuntimeScope) => typedError<null, TransportError>(__TAURI_INVOKE("agent_cancel_turn", { scope })),
+	agentCancelTurn: (scope: RuntimeScope) => typedError<CancelOutcome, TransportError>(__TAURI_INVOKE("agent_cancel_turn", { scope })),
 	diagnostics: () => __TAURI_INVOKE<Diagnostics>("diagnostics"),
 	logTail: (lines: number) => typedError<string[], LogFileError>(__TAURI_INVOKE("log_tail", { lines })),
 	logReveal: () => typedError<null, LogFileError>(__TAURI_INVOKE("log_reveal")),
@@ -590,6 +590,15 @@ export type BotTriggerSources_Serialize = {
 	triggerSources: TriggerSource_Serialize[],
 	failure: TranscriptStoreError | null,
 };
+
+export type CancelFailure = {
+	botId: string,
+	reason: CancelFailureReason,
+};
+
+export type CancelFailureReason = { source: "session"; error: TransportError } | { source: "store"; error: TranscriptStoreError };
+
+export type CancelOutcome = { kind: "cancelled" } | { kind: "nothingToCancel" } | { kind: "failed"; failures: CancelFailure[] };
 
 export type Catalogue = {
 	chats: CatalogueChat[],

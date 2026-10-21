@@ -3381,7 +3381,11 @@ fn cancelling_before_any_submit_closes_the_turn_the_host_opened() {
 
 	let cancelled = call(&window, "agent_cancel_turn", json!({ "scope": scope }));
 
-	assert!(cancelled.is_err(), "a cancel with nothing submitted was reported as done");
+	assert_eq!(
+		cancelled,
+		Ok(json!({ "kind": "nothingToCancel" })),
+		"a cancel with nothing submitted was reported as done"
+	);
 	assert!(completed_at(&app, "t1").is_some(), "the unsubmitted host turn was left open");
 	assert_eq!(completed_at(&app, "t2"), None, "a turn the front owns was closed by the host");
 }
@@ -3465,7 +3469,11 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 
 	let cancelled = call(&window, "agent_cancel_turn", json!({ "scope": silent }));
 
-	assert!(cancelled.is_err(), "a cancel with nothing submitted was reported as done");
+	assert_eq!(
+		cancelled,
+		Ok(json!({ "kind": "nothingToCancel" })),
+		"a cancel with nothing submitted was reported as done"
+	);
 	let writes = app.state::<AgentState>();
 	assert!(
 		writes.host_writes().was_submitted("t1"),

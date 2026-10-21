@@ -82,6 +82,7 @@ const REFRESH = "mcp_oauth_refresh"
 const SIGN_IN = "sign_in"
 const SIGN_IN_CODE = "sign_in_code"
 const SIGN_IN_CANCEL = "sign_in_cancel"
+const INTERRUPT_FAILED = "interrupt_failed"
 
 const write = (payload: unknown) => {
 	process.stdout.write(`${JSON.stringify(payload)}\n`)
@@ -197,10 +198,20 @@ export const createRouter = (
 			opened.prompt(command.text ?? "")
 		})
 
-	const interruptSession = (_command: Command, session: string) =>
-		on(session, (opened) => {
-			void opened.interrupt()
-		})
+	const interruptSession = async (_command: Command, session: string) => {
+		const refuse = (detail: string) =>
+			emitter(session)({ type: INTERRUPT_FAILED, detail })
+		const opened = await opening.get(session)
+		if (!opened) {
+			refuse(`the sidecar holds no open session ${session}`)
+			return
+		}
+		try {
+			await opened.interrupt()
+		} catch (error) {
+			refuse(describeError(error))
+		}
+	}
 
 	const decidePermission = (command: Command, session: string) =>
 		on(session, (opened) => {

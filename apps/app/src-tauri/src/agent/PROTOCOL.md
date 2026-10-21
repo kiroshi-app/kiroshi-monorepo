@@ -472,6 +472,7 @@ The frame is an `SDKMessage` verbatim, plus the four the sidecar adds itself.
 | `control_request` / `can_use_tool`, tool `AskUserQuestion` | the sidecar, from `canUseTool` | `questionRequested` |
 | `settings_rejected` | the sidecar, when the bot's `settings.json` is refused in part or in whole | `failed` — `settingsRejected`, the frame's `detail` as its reason |
 | `server_env_rejected` | the sidecar, when a declared MCP server is left out for want of a variable, or when a kept server has not connected | `failed` — `serverEnvRejected`, raised as a non terminal notice reading the frame's `detail` and telling the reader the conversation carries on with the other servers |
+| `interrupt_failed` | the sidecar, when an `interrupt` names a session it does not hold, or when `Query.interrupt()` rejects | `failed` — `writeFailed`, the frame's `detail` as its reason; while a stop is in flight it also ends the turn as `failed` |
 
 Every other `SDKMessage` type is dropped: `translate.rs` reads what the contract
 needs and nothing else, so a new SDK message is inert until it is asked for.
@@ -639,6 +640,8 @@ tool `conversation_search`, with `query` and an optional `kind` (`main`,
 
 - `interrupt` ends the turn with `result.subtype = "error_during_execution"` and
   **leaves the session usable**: a following prompt answers normally.
+- An `interrupt` that cannot land is never dropped: a session the sidecar does not
+  hold, or an `interrupt()` that rejects, answers `interrupt_failed` naming the reason.
 - `close` ends one session and nothing else — the sidecar serves the others.
 - The host's exit is the only thing that ends the process: close stdin →
   `SIGTERM` → `SIGKILL`, on the whole group. The sidecar spawns real
@@ -752,6 +755,7 @@ Sidecar → host, inside the envelope of a session:
 {"type":"result",…}
 {"type":"settings_rejected","detail":"…"}
 {"type":"server_env_rejected","detail":"…"}
+{"type":"interrupt_failed","detail":"…"}
 {"type":"closed","detail":"…"}
 ```
 
