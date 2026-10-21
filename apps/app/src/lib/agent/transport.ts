@@ -1,4 +1,5 @@
 import type {
+	CancelOutcome,
 	CheckReport,
 	ConversationNaming,
 	LiveSession,
@@ -50,7 +51,7 @@ export const agentTransport: ChatDriver = {
 		}),
 
 	cancelTurn: (scope: RuntimeScope) =>
-		invoke<void>("agent_cancel_turn", { scope }),
+		invoke<CancelOutcome>("agent_cancel_turn", { scope }),
 
 	respondToPermission: (
 		scope: RuntimeScope,

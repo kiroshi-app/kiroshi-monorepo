@@ -16,7 +16,7 @@ import {
 import type { ChatDriver } from "../driver"
 import { withPostedRows } from "../posted-question"
 import { PROMPTS_PER_RUN } from "../rotation"
-import type { AgentEvent } from "../../agent/contract"
+import type { AgentEvent, RuntimeScope } from "../../agent/contract"
 import {
 	createMessageStoredListener,
 	createReconnectionListener,
@@ -50,7 +50,11 @@ export const createChatContext = (
 		options.onMessageStored ?? createMessageStoredListener()
 	const onReconnected = options.onReconnected ?? createReconnectionListener()
 	const transcript = createTranscriptController(store)
-	const foreignTurns = createForeignTurns(transcript, now)
+	const hearSilence = ({ conversationId }: RuntimeScope) => {
+		botsShowing(conversationId).forEach(showForeignTurn)
+		options.rereadConversation?.(conversationId)
+	}
+	const foreignTurns = createForeignTurns(transcript, now, hearSilence)
 
 	const bots = new Map<string, BotChat>()
 	const transitions = new Map<string, BotTransition>()

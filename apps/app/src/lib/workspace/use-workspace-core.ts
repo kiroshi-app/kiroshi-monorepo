@@ -41,13 +41,16 @@ export const useWorkspaceCore = () => {
 	const driver = useMemo(() => createChatDriver(store), [store])
 	const account = useWatchedAccount()
 	const senderAccountId = useSignedInAccountId()
-	const chat = useChat(driver, store, { senderAccountId })
 	const roster = useRoster(store)
+	const chat = useChat(driver, store, {
+		senderAccountId,
+		rereadConversation: roster.controller.rereadConversationRow,
+	})
 	const conversationRuntimes = useMemo(
 		() =>
 			createConversationRuntimes(driver, store, {
 				onNamed: roster.controller.nameConversation,
-				onForeignSpeakerSilent: roster.controller.rereadConversationRow,
+				rereadConversation: roster.controller.rereadConversationRow,
 				senderAccountId,
 			}),
 		[driver, store, roster.controller, senderAccountId],

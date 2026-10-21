@@ -6,6 +6,7 @@ import type {
 	ActivityEvent,
 	AgentCommand,
 	AgentEvent,
+	CancelFailure,
 	ConnectionState,
 	MessageCompletion,
 	PermissionDecision,
@@ -193,6 +194,9 @@ export const toStoreError = unlessHostOffline((reason) => ({
 	kind: "writeFailed",
 	detail: `the transcript store refused it (${refusalOf(reason)})`,
 }))
+
+export const toCancelError = ({ reason }: CancelFailure): TransportError =>
+	reason.source === "session" ? reason.error : toStoreError(reason.error)
 
 export const toAnswerError = unlessHostOffline((reason) => ({
 	kind: "unknownFailure",

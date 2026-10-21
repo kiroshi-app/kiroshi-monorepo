@@ -144,12 +144,12 @@ export function createFakeChatDriver(
 			}
 			const run = heldFor(scope)
 			if (!run?.turnActive) {
-				return Promise.reject({ kind: "noActiveTurn" })
+				return Promise.resolve({ kind: "nothingToCancel" })
 			}
 			clearQueue(run)
 			emitFor(run, { type: "turnChanged", state: "stopping" })
 			finishTurn(run, "cancelled")
-			return Promise.resolve()
+			return Promise.resolve({ kind: "cancelled" })
 		},
 
 		respondToPermission: resolvePermission,
