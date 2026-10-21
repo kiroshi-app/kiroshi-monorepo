@@ -64,8 +64,8 @@ const RESEND_EVERY: Duration = Duration::from_millis(200);
 const HOST_ABSENT: u16 = 4002;
 const MEMBERSHIP_ENDED: u16 = 4003;
 const SPACE_DELETED: u16 = 4007;
-const NO_PERIODIC_MEMBERS_READ: Duration = Duration::from_secs(3600);
 const LONG_PAUSE: Duration = Duration::from_secs(3600);
+const ENDING_PAUSE: Duration = Duration::from_secs(90);
 
 #[derive(Clone)]
 enum HostSide {
@@ -511,7 +511,6 @@ fn signed_in(
 	app.manage(SpaceKeys::new(InstallKind::Dev, identifier, Some(profile)));
 	app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), cloud));
 	let guests = RelayGuests::new(cloud).answering_within(answer_bound);
-	let guests = guests.reading_members_every(NO_PERIODIC_MEMBERS_READ);
 	app.manage(guests.resending_every(RESEND_EVERY));
 	app.manage(Invitations::new(cloud));
 	let root_path = root.to_path_buf();
@@ -945,9 +944,10 @@ struct UnlistedDuringAPause {
 	host: SealingHost,
 	joined: JoinedSpace,
 	reconciliation: tauri::async_runtime::JoinHandle<()>,
+	pause_ends: Instant,
 }
 
-async fn unlisted_during_a_pause(member: &Member) -> UnlistedDuringAPause {
+async fn unlisted_during_a_pause(member: &Member, pause: Duration) -> UnlistedDuringAPause {
 	let host = member.host();
 	let joined = online_with_two_members(member, &host).await;
 	let connections = member.relay.connections();
@@ -965,27 +965,22 @@ async fn unlisted_during_a_pause(member: &Member) -> UnlistedDuringAPause {
 	}
 	let guests = member.app.state::<RelayGuests>();
 	assert!(guests.is_running(&joined.id));
-	guests.cloud().rate_limited("/instances", LONG_PAUSE);
+	let pause_ends = Instant::now() + pause;
+	guests.cloud().rate_limited("/instances", pause);
 	let app = member.app.handle().clone();
 	let reconciliation = tauri::async_runtime::spawn(async move { relay::reconciled(&app).await });
 	until("the unlisted guest to stop", || async {
 		(!guests.is_running(&joined.id)).then_some(())
 	})
 	.await;
-	UnlistedDuringAPause { host, joined, reconciliation }
-}
-
-fn pause_lifted(member: &Member) -> Instant {
-	let pause_ends = Instant::now();
-	member.app.state::<RelayGuests>().cloud().pause_lifted();
-	pause_ends
+	UnlistedDuringAPause { host, joined, reconciliation, pause_ends }
 }
 
 #[test]
 fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
 	run(async {
 		let member = Member::new("join-during-pause").await;
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, LONG_PAUSE).await;
 
 		let joined = tokio::time::timeout(
 			PATIENCE,
@@ -1005,7 +1000,7 @@ fn a_join_completes_while_a_reconciliation_waits_on_a_429_pause() {
 fn a_leave_completes_while_a_reconciliation_waits_on_a_429_pause() {
 	run(async {
 		let member = Member::new("leave-during-pause").await;
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, LONG_PAUSE).await;
 
 		let left =
 			tokio::time::timeout(PATIENCE, relay::left(member.app.handle(), &paused.joined.id))
@@ -1021,7 +1016,7 @@ fn a_leave_completes_while_a_reconciliation_waits_on_a_429_pause() {
 fn a_sign_out_completes_while_a_reconciliation_waits_on_a_429_pause() {
 	run(async {
 		let member = Member::new("sign-out-during-pause").await;
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, LONG_PAUSE).await;
 
 		let signed_out =
 			tokio::time::timeout(PATIENCE, relay::signed_out(member.app.handle())).await;
@@ -1037,19 +1032,18 @@ fn an_unlisted_space_is_evicted_with_its_departure_reason_once_the_429_pause_end
 	run(async {
 		let member = Member::new("evicted-after-pause").await;
 		let removed = heard_on(&member.app, REMOVED_EVENT);
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		let other = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(member.app.handle(), OTHER_INSTANCE.to_owned(), Some("Harbour".into())),
 		)
 		.await;
-		let pause_ends = pause_lifted(&member);
 		paused.reconciliation.await.expect("the reconciliation ends");
 		let evicted_at = Instant::now();
 
 		assert!(other.expect("the other join is not held by the pause").is_ok());
-		assert!(evicted_at >= pause_ends);
+		assert!(evicted_at >= paused.pause_ends);
 		assert_eq!(
 			*removed.lock().expect("the events"),
 			vec![json!({ "id": paused.joined.id, "name": "Studio", "reason": "removed" })]
@@ -1067,14 +1061,13 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 	run(async {
 		let member = Member::new("joined-again-during-pause").await;
 		let removed = heard_on(&member.app, REMOVED_EVENT);
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		let again = tokio::time::timeout(
 			PATIENCE,
 			relay::joined(member.app.handle(), INSTANCE.to_owned(), None),
 		)
 		.await;
-		pause_lifted(&member);
 		paused.reconciliation.await.expect("the reconciliation ends");
 
 		assert_eq!(
@@ -1091,10 +1084,9 @@ fn an_unlisted_space_joined_again_during_the_429_pause_is_kept() {
 fn an_unlisted_space_kept_on_a_sign_out_during_the_429_pause_starts_no_guest() {
 	run(async {
 		let member = Member::new("no-guest-after-sign-out-during-pause").await;
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		member.signed_out_of_the_store();
-		pause_lifted(&member);
 		paused.reconciliation.await.expect("the reconciliation ends");
 
 		assert!(!member.app.state::<RelayGuests>().is_running(&paused.joined.id));
@@ -1106,10 +1098,9 @@ fn an_unlisted_space_is_kept_when_the_account_signs_out_during_the_429_pause() {
 	run(async {
 		let member = Member::new("signed-out-of-the-store-during-pause").await;
 		let removed = heard_on(&member.app, REMOVED_EVENT);
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 
 		member.signed_out_of_the_store();
-		pause_lifted(&member);
 		paused.reconciliation.await.expect("the reconciliation ends");
 
 		assert!(removed.lock().expect("the events").is_empty());
@@ -1121,9 +1112,8 @@ fn an_unlisted_space_is_kept_when_the_account_signs_out_during_the_429_pause() {
 fn a_guest_stopped_by_a_reconciliation_runs_again_until_online_once_connected_again() {
 	run(async {
 		let member = Member::new("guest-runs-again").await;
-		let paused = unlisted_during_a_pause(&member).await;
+		let paused = unlisted_during_a_pause(&member, ENDING_PAUSE).await;
 		member.signed_out_of_the_store();
-		pause_lifted(&member);
 		paused.reconciliation.await.expect("the reconciliation ends");
 		member.signed_in_again();
 		member.relay.greets_after_the_next_members_read(vec![paused.host.hello()]);

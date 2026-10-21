@@ -17,6 +17,7 @@ use crate::db::repositories::joined_space_members::{JoinedSpaceMember, JoinedSpa
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::events::{self, JOINED_SPACE_MEMBERS_CHANGED};
 use crate::hosting::roster::Rostered;
+use crate::hosting::MEMBERS_EVERY;
 
 pub const MEMBERS_CHANGED_EVENT: &str = "joined-space://members-changed";
 
@@ -60,7 +61,7 @@ pub(super) fn alongside<R: Runtime>(
 }
 
 async fn polled<R: Runtime>(app: &AppHandle<R>, joined: &JoinedSpace) -> Infallible {
-	let mut reads = interval(app.state::<RelayGuests>().members_every());
+	let mut reads = interval(MEMBERS_EVERY);
 	reads.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	loop {
 		reads.tick().await;

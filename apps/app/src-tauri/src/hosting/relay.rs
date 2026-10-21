@@ -40,7 +40,7 @@ pub(crate) const PING_EVERY: Duration = Duration::from_secs(30);
 
 pub(crate) const SILENCE_BOUND: Duration = Duration::from_secs(90);
 
-pub(crate) const FIRST_BACKOFF: Duration = Duration::from_secs(1);
+const FIRST_BACKOFF: Duration = Duration::from_secs(1);
 
 const BACKOFF_CAP: Duration = Duration::from_secs(60);
 
@@ -114,18 +114,13 @@ enum Next {
 }
 
 pub(crate) struct Backoff {
-	first: Duration,
 	next: Duration,
 	opened_at: Option<Instant>,
 }
 
 impl Backoff {
 	pub(crate) fn first() -> Self {
-		Self::starting_at(FIRST_BACKOFF)
-	}
-
-	pub(crate) fn starting_at(first: Duration) -> Self {
-		Self { first, next: first, opened_at: None }
+		Self { next: FIRST_BACKOFF, opened_at: None }
 	}
 
 	pub(crate) fn socket_opened(&mut self) {
@@ -134,7 +129,7 @@ impl Backoff {
 
 	pub(crate) fn step(&mut self) -> Duration {
 		if self.opened_at.take().is_some_and(|opened_at| opened_at.elapsed() >= STEADY_OPEN) {
-			self.next = self.first;
+			self.next = FIRST_BACKOFF;
 		}
 		let full = self.next;
 		self.next = (full * 2).min(BACKOFF_CAP);

@@ -48,7 +48,6 @@ const MEMBER_RELAY_ID: &str = "r-member";
 const SHARED_SPACE: &str = "shared-space-of-the-host";
 const PATIENCE: Duration = Duration::from_secs(60);
 const POLL_EVERY: Duration = Duration::from_millis(100);
-const FIRST_RETRY: Duration = Duration::from_millis(1);
 
 #[derive(Clone)]
 struct Cloud {
@@ -329,7 +328,7 @@ impl Harness {
 		}
 		app.manage(AccountSession::new(Ok::<PathBuf, _>(root.to_path_buf()), &api_url));
 		app.manage(Invitations::new(&api_url).polling_every(every));
-		app.manage(RelayGuests::new(&api_url).retrying_first_after(FIRST_RETRY));
+		app.manage(RelayGuests::new(&api_url));
 		let heard = Arc::new(Mutex::new(Vec::new()));
 		for event in [CHANGED_EVENT, JOINED_CHANGED, REMOVED_EVENT, RECONNECTED_EVENT] {
 			let hearing = Arc::clone(&heard);

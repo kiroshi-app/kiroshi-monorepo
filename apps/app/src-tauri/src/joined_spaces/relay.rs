@@ -34,10 +34,9 @@ use crate::devices;
 use crate::host_api::token::HostToken;
 use crate::hosting::bridge::SHARED_SPACE_COMMAND;
 use crate::hosting::relay::{
-	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, FIRST_BACKOFF,
-	PING_EVERY, SILENCE_BOUND,
+	opened_unpaused, sent, until_stopped, Backoff, Departure, Opened, Sink, Socket, PING_EVERY,
+	SILENCE_BOUND,
 };
-use crate::hosting::MEMBERS_EVERY;
 
 const HOST_ABSENT: u16 = 4002;
 
@@ -66,8 +65,6 @@ pub struct RelayGuests {
 	members_reading: Mutex<HashMap<String, bool>>,
 	answer_bound: Duration,
 	resend_every: Duration,
-	first_retry: Duration,
-	members_every: Duration,
 }
 
 struct KnownRelayDevice {
@@ -167,8 +164,6 @@ impl RelayGuests {
 			members_reading: Mutex::new(HashMap::new()),
 			answer_bound: HOST_ANSWER_BOUND,
 			resend_every: PING_EVERY,
-			first_retry: FIRST_BACKOFF,
-			members_every: MEMBERS_EVERY,
 		}
 	}
 
@@ -184,20 +179,6 @@ impl RelayGuests {
 	#[cfg(test)]
 	pub(crate) fn resending_every(self, resend_every: Duration) -> Self {
 		Self { resend_every, ..self }
-	}
-
-	#[cfg(test)]
-	pub(crate) fn retrying_first_after(self, first_retry: Duration) -> Self {
-		Self { first_retry, ..self }
-	}
-
-	#[cfg(test)]
-	pub(crate) fn reading_members_every(self, members_every: Duration) -> Self {
-		Self { members_every, ..self }
-	}
-
-	pub(super) fn members_every(&self) -> Duration {
-		self.members_every
 	}
 
 	pub(super) fn answer_bound(&self) -> Duration {
@@ -861,7 +842,7 @@ async fn guest_linked<R: Runtime>(
 	mut held: Held,
 	mut stop: watch::Receiver<bool>,
 ) {
-	let mut backoff = Backoff::starting_at(app.state::<RelayGuests>().first_retry);
+	let mut backoff = Backoff::first();
 	loop {
 		let (ended, kept) = attempted(&app, &linked, held, &mut stop, &mut backoff).await;
 		held = kept;
