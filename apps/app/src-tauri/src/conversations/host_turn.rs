@@ -586,17 +586,22 @@ impl<R: Runtime> HostTurn<R> {
 			scope.bot_id,
 			scope.runtime_session_id
 		);
-		let forgotten = match database(&self.app) {
-			Ok(database) => database
-				.runtime_context()
-				.forget_provider_session(self.participant(&scope.bot_id), refused)
-				.await
-				.map_err(TranscriptStoreError::from),
-			Err(error) => Err(error),
-		};
-		if let Err(error) = forgotten {
+		if let Err(error) = self.forgot(scope, refused).await {
 			log::warn!("{} could not forget the refused resume: {error:?}", self.label());
 		}
+	}
+
+	async fn forgot(
+		&self,
+		scope: &RuntimeScope,
+		refused: String,
+	) -> Result<(), TranscriptStoreError> {
+		let participant = self.participant(&scope.bot_id);
+		database(&self.app)?
+			.runtime_context()
+			.forget_provider_session(participant, refused)
+			.await?;
+		Ok(())
 	}
 
 	async fn submitted(&self, ridden: &Ridden, prompt_id: &str) -> Result<(), TransportError> {

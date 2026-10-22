@@ -504,26 +504,9 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 		}
 		"held_echo" => {
 			run.held_prompt = Some(text.to_owned());
-			ask_to_write(key, run);
+			ask_to_write(key, run, format!("perm_fake_{key}_{}", next_message_id()));
 		}
-		"permission" => {
-			let request_id = format!("perm_fake_{key}");
-			run.pending_permission = Some(request_id.clone());
-			emit(
-				key,
-				json!({
-					"type": "control_request",
-					"request_id": request_id,
-					"request": {
-						"subtype": "can_use_tool",
-						"tool_name": "Write",
-						"display_name": "Write",
-						"description": "notes.txt",
-						"input": { "file_path": "/fake/notes.txt", "content": "hello" }
-					}
-				}),
-			);
-		}
+		"permission" => ask_to_write(key, run, format!("perm_fake_{key}")),
 		"question" => {
 			let request_id = format!("ask_fake_{key}");
 			run.pending_permission = Some(request_id.clone());
@@ -675,8 +658,7 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	emit_result(key, run, "success", false);
 }
 
-fn ask_to_write(key: &str, run: &mut Run) {
-	let request_id = format!("perm_fake_{key}_{}", next_message_id());
+fn ask_to_write(key: &str, run: &mut Run, request_id: String) {
 	run.pending_permission = Some(request_id.clone());
 	emit(
 		key,
