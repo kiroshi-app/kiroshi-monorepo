@@ -193,7 +193,7 @@ describe("useMissions", () => {
 		expect(listMissions).toHaveBeenCalledTimes(1)
 	})
 
-	it("reads nothing while no host is reachable", async () => {
+	it("reads nothing and stays pending while no host is reachable", async () => {
 		reachable.host = null
 		const { result } = renderHook(() => useMissions("c-1"), {
 			wrapper: createQueryTestWrapper().wrapper,
@@ -203,6 +203,7 @@ describe("useMissions", () => {
 		expect(listMissions).not.toHaveBeenCalled()
 		expect(result.current.missions).toEqual([])
 		expect(result.current.hasFailed).toBe(false)
+		expect(result.current.isPending).toBe(true)
 	})
 
 	it("reads the missions again when they mount after every reader left", async () => {
@@ -232,6 +233,7 @@ describe("useMissions", () => {
 
 		expect(listMissions).toHaveBeenCalledTimes(2)
 		expect(result.current.hasFailed).toBe(true)
+		expect(result.current.isPending).toBe(false)
 	})
 
 	it("patches a change into the conversation and the space feed it holds at once", async () => {

@@ -7,7 +7,7 @@ import { missionQueryKeys } from "./mission-query-keys"
 import { missionsTransport } from "./missions-transport"
 
 import { useReachableHost } from "@/lib/host/use-reachable-host"
-import { hasLastReadFailed, isFirstReadPending } from "@/lib/query/last-read"
+import { hasLastReadFailed } from "@/lib/query/last-read"
 
 const NO_MISSIONS: Mission[] = []
 
@@ -35,8 +35,8 @@ export const useMissions = (
 	const { data, refetch } = read
 	const open = data?.open ?? NO_MISSIONS
 	const closed = data?.done ?? NO_MISSIONS
-	const isPending = isFirstReadPending(read)
 	const hasFailed = hasLastReadFailed(read)
+	const isPending = read.isPending && !hasFailed
 
 	const reload = useCallback(() => {
 		if (canRead) {
