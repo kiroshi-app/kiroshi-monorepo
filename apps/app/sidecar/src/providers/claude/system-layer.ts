@@ -38,7 +38,7 @@ const memberLine = ({ name, email, isHost }: SpaceMember): string => {
 	return `- ${signed}${isHost ? " (the host)" : ""}`
 }
 
-export const severalWritersLine = (members: SpaceMember[]): string =>
+const severalWritersLine = (members: SpaceMember[]): string =>
 	[
 		"Several people write here. Each message names the person who wrote it and the computer they wrote it from, and you answer the person who wrote the message you are answering. The people of this space:",
 		...members.map(memberLine),
