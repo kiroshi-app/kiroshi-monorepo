@@ -8,6 +8,7 @@ import { newBotIdentity } from "./bot-settings"
 import {
 	createRosterController,
 	type RosterController,
+	type RosterSpace,
 } from "./roster-controller"
 import { useRosterReads } from "./use-roster"
 
@@ -401,4 +402,114 @@ it("notifies its subscribers once for several roster cache events in one tick", 
 	expect(listener).toHaveBeenCalledOnce()
 	expect(topicTitlesIn(controller, garage.spaceRowId)).toEqual(["Third"])
 	stop()
+})
+
+const switchTo = (
+	controller: RosterController,
+	spaces: RosterSpace[],
+	space: RosterSpace,
+) =>
+	act(async () => {
+		void controller.load({
+			spaces,
+			spaceRowId: space.spaceRowId,
+			lastRowId: null,
+		})
+		controller.enter({ ...space, lastRowId: null })
+	})
+
+const createdWhileAway = async (
+	{ store, companion }: Seeded,
+	space: RosterSpace,
+	hostId: string | null,
+) => {
+	await store.createConversation({
+		spaceId: space.spaceId,
+		sectionId: null,
+		title: "Created while away",
+		botIds: [companion.id],
+	})
+	await emitOnHost(
+		"conversation://created",
+		{
+			spaceId: space.spaceId,
+			conversation: await firstTopicIn(store, space.spaceId),
+		},
+		hostId,
+	)
+}
+
+it("lists a conversation created in a local space while a joined space was active once the person comes back to it", async () => {
+	const seeded = await seededStore()
+	const { controller } = mountRoster(seeded.store)
+	const localSpaces = [LOCAL, seeded.garage]
+	await switchTo(controller, localSpaces, LOCAL)
+	await switchTo(controller, [seeded.shed], seeded.shed)
+
+	await createdWhileAway(seeded, seeded.garage, null)
+	await switchTo(controller, localSpaces, seeded.garage)
+
+	await vi.waitFor(() =>
+		expect(topicTitlesIn(controller, seeded.garage.spaceRowId)).toEqual([
+			"Created while away",
+			`Topic of ${seeded.garage.spaceId}`,
+		]),
+	)
+})
+
+it("lists a conversation created in a joined space while a local space was active once the person comes back to it", async () => {
+	const seeded = await seededStore()
+	const { controller } = mountRoster(seeded.store)
+	const localSpaces = [LOCAL, seeded.garage]
+	await switchTo(controller, [seeded.shed], seeded.shed)
+	await switchTo(controller, localSpaces, LOCAL)
+
+	await createdWhileAway(seeded, seeded.shed, SHED_HOST)
+	await switchTo(controller, [seeded.shed], seeded.shed)
+
+	await vi.waitFor(() =>
+		expect(topicTitlesIn(controller, seeded.shed.spaceRowId)).toEqual([
+			"Created while away",
+			`Topic of ${seeded.shed.spaceId}`,
+		]),
+	)
+})
+
+it("keeps the rows it holds for a space on screen while it rereads that space on entry", async () => {
+	const seeded = await seededStore()
+	const { controller } = mountRoster(seeded.store)
+	await switchTo(controller, [seeded.shed], seeded.shed)
+	await switchTo(controller, [LOCAL, seeded.garage], LOCAL)
+	const pageReads = vi
+		.spyOn(seeded.store, "conversationPage")
+		.mockImplementation(neverAnswered)
+
+	await switchTo(controller, [seeded.shed], seeded.shed)
+
+	expect(pageReads).toHaveBeenCalledOnce()
+	expect(controller.getState()).toMatchObject({
+		hasLoaded: true,
+		isRosterPending: false,
+	})
+	expect(topicTitlesIn(controller, seeded.shed.spaceRowId)).toEqual([
+		`Topic of ${seeded.shed.spaceId}`,
+	])
+})
+
+it("neither drops nor duplicates a row when the person switches spaces back and forth", async () => {
+	const seeded = await seededStore()
+	const { controller, queryClient } = mountRoster(seeded.store)
+	const localSpaces = [LOCAL, seeded.garage]
+	const spacesHeldWith = (space: RosterSpace) =>
+		space === seeded.shed ? [seeded.shed] : localSpaces
+	const visits = [LOCAL, seeded.shed, seeded.garage, seeded.shed, LOCAL]
+
+	for (const space of [...visits, ...visits]) {
+		await switchTo(controller, spacesHeldWith(space), space)
+		await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0))
+
+		expect(topicTitlesIn(controller, space.spaceRowId)).toEqual([
+			`Topic of ${space.spaceId}`,
+		])
+	}
 })

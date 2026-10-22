@@ -639,7 +639,6 @@ describe("createRosterController on a space", () => {
 		const away = await store.createBot(newBotIdentity([]), elsewhere.id)
 		const controller = mountRoster(store)
 		await controller.load(opening(null, "personal", ["personal", elsewhere.id]))
-		const read = vi.spyOn(store, "bots")
 
 		controller.enter({
 			spaceRowId: elsewhere.id,
@@ -650,7 +649,7 @@ describe("createRosterController on a space", () => {
 		const state = controller.getState()
 		expect(state.bots.map((bot) => bot.id)).toEqual([away.id])
 		expect(state.selectedBotId).toBe(away.id)
-		expect(read).not.toHaveBeenCalled()
+		expect(state.isRosterPending).toBe(false)
 	})
 
 	it("selects nothing when the space it lands on holds no companion", async () => {
