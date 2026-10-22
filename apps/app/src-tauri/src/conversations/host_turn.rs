@@ -35,6 +35,8 @@ use crate::routines::runner::{
 
 const STOP_ANSWER_BOUND: Duration = Duration::from_secs(30);
 
+const LOST_QUEUE: &str = "the session lost the queued turn before it ran";
+
 type Running = Arc<Mutex<HashMap<String, RunningTurn>>>;
 
 type SpeakingOrder = Arc<tokio::sync::Mutex<()>>;
@@ -492,10 +494,7 @@ impl<R: Runtime> HostTurn<R> {
 					}
 					kept.push(speaker);
 				}
-				Ok(LinePlace::Absent) => {
-					self.note_handovers(&speaker, waiting).await;
-					self.release(speaker.scope).await;
-				}
+				Ok(LinePlace::Absent) => self.ended_unheard(speaker, waiting).await,
 				Err(error) if speaker.is_in_line => self.rejected(&speaker.scope, error).await,
 				Err(error) => {
 					log::warn!(
@@ -510,6 +509,33 @@ impl<R: Runtime> HostTurn<R> {
 		}
 		self.cancel_running(gone).await;
 		kept
+	}
+
+	async fn ended_unheard(&self, speaker: Speaker, waiting: &mut Vec<Summons>) {
+		if speaker.is_in_line && self.is_still_awaited(&speaker.scope.bot_id).await {
+			let reason = TransportError::WriteFailed { detail: LOST_QUEUE.to_owned() };
+			return self.rejected(&speaker.scope, reason).await;
+		}
+		self.note_handovers(&speaker, waiting).await;
+		self.release(speaker.scope).await;
+	}
+
+	async fn is_still_awaited(&self, bot_id: &str) -> bool {
+		match self.awaited_run(bot_id).await {
+			Ok(is_awaited) => is_awaited,
+			Err(error) => {
+				log::warn!(
+					"{} could not read whether the run of {bot_id} is still awaited: {error:?}",
+					self.label()
+				);
+				false
+			}
+		}
+	}
+
+	async fn awaited_run(&self, bot_id: &str) -> Result<bool, TranscriptStoreError> {
+		let messages = database(&self.app)?.messages();
+		Ok(messages.is_run_awaited(self.turn_id.clone(), bot_id.to_owned()).await?)
 	}
 
 	async fn place_of(&self, scope: &RuntimeScope) -> Result<LinePlace, TransportError> {
@@ -1001,6 +1027,98 @@ mod tests {
 	use crate::events::{self, Frame};
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
+	#[cfg(unix)]
+	use crate::{
+		agent::commands::a_session_held_by_the_app,
+		agent::session::{EventSink, Session, SessionOptions},
+		agent::sidecar::{Sidecar, SidecarOptions},
+		removed_on_drop::RemovedOnDrop,
+	};
+
+	#[cfg(unix)]
+	const OPENING_SIDECAR: &str = r#"#!/bin/sh
+printf '%s\n' '{"type":"ready","provider":"stub","version":"0"}'
+while IFS= read -r line; do
+	case "$line" in
+	*'"type":"open"'*)
+		key=$(printf '%s' "$line" | sed -n 's/.*"session":"\([^"]*\)".*/\1/p')
+		printf '{"session":"%s","frame":{"type":"opened"}}\n' "$key"
+		;;
+	esac
+done
+"#;
+
+	#[cfg(unix)]
+	struct Unheard;
+
+	#[cfg(unix)]
+	impl EventSink for Unheard {
+		fn emit(&self, _event: AgentEvent) {}
+	}
+
+	#[cfg(unix)]
+	struct HeldSession {
+		session: Arc<Session>,
+		_sidecar: RemovedOnDrop,
+	}
+
+	#[cfg(unix)]
+	async fn a_session_held_for(app: &AppHandle<MockRuntime>, scope: &RuntimeScope) -> HeldSession {
+		use std::os::unix::fs::PermissionsExt;
+
+		let script = RemovedOnDrop(std::env::temp_dir().join(format!(
+			"kiroshi-opening-sidecar-{}-{}.sh",
+			std::process::id(),
+			uuid::Uuid::new_v4()
+		)));
+		std::fs::write(&*script, OPENING_SIDECAR).expect("the sidecar script is written");
+		std::fs::set_permissions(&*script, std::fs::Permissions::from_mode(0o755))
+			.expect("the sidecar script runs");
+		let sidecar = Sidecar::start(SidecarOptions::new(script.to_path_buf()))
+			.await
+			.expect("the sidecar is ready");
+		let options = SessionOptions::new(std::env::temp_dir());
+		let session =
+			Session::start(sidecar, options, Arc::new(Unheard)).await.expect("the session opens");
+		let session = Arc::new(session);
+		a_session_held_by_the_app(app, scope, session.clone());
+		HeldSession { session, _sidecar: script }
+	}
+
+	#[cfg(unix)]
+	fn submitted(turn_id: &str, prompt_id: &str) -> SubmittedTurn {
+		SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: prompt_id.to_owned() }
+	}
+
+	#[cfg(unix)]
+	fn in_line(scope: RuntimeScope) -> Speaker {
+		Speaker { scope, written: Vec::new(), is_in_line: true }
+	}
+
+	#[cfg(unix)]
+	fn told_in_turn(told: &[(String, Value)], scope: &RuntimeScope) -> Vec<AgentEvent> {
+		agent_events(told)
+			.into_iter()
+			.filter(|scoped| scoped.scope.as_ref() == Some(scope))
+			.filter(|scoped| scoped.turn.as_ref().is_some_and(|turn| turn.turn_id == "t1"))
+			.map(|scoped| scoped.event)
+			.collect()
+	}
+
+	#[cfg(unix)]
+	fn failure_detail(event: &AgentEvent) -> &str {
+		match event {
+			AgentEvent::Failed { error: TransportError::WriteFailed { detail } } => detail,
+			other => panic!("the member heard {other:?} and not a failure"),
+		}
+	}
+
+	#[cfg(unix)]
+	async fn an_awaited_run(app: &AppHandle<MockRuntime>, room: &Room, bot_id: &str) {
+		let messages = database(app).expect("the database opens").messages();
+		messages.start_turn(turn_in(room)).await.expect("the turn opens");
+		messages.await_runs("t1".to_owned(), vec![bot_id.to_owned()]).await.expect("awaited");
+	}
 
 	fn speaking_as(scope: RuntimeScope) -> Speaker {
 		Speaker { scope, written: Vec::new(), is_in_line: false }
@@ -1595,5 +1713,94 @@ mod tests {
 		assert!(speaking.is_empty(), "a stopped turn started a companion");
 		assert_eq!(answered.await, Ok(CancelOutcome::Cancelled));
 		drop(held);
+	}
+
+	#[cfg(unix)]
+	#[tokio::test]
+	async fn a_relay_closed_under_a_queued_turn_withdraws_it_and_fails_it_to_the_member() {
+		let app = an_app_of_its_own("host-turn-closed-queued", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let ada = scope_in(&room, &room.bot_ids[0]);
+		an_awaited_run(app.handle(), &room, &ada.bot_id).await;
+		let held = a_session_held_for(app.handle(), &ada).await;
+		held.session.submit("host first", Some(submitted("t0", "h1"))).await.expect("t0 runs");
+		let handed = held.session.submit_in_line("member second", submitted("t1", "p1")).await;
+		assert_eq!(handed, Ok(Handed::Queued));
+		let mut announced = events::subscribed(app.handle());
+		let (_stop, stopped) = watch::channel(false);
+		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let closed = ReadFailure::Ended("the relay closed".to_owned());
+
+		host_turn.lost(&closed, vec![in_line(ada.clone())], Vec::new()).await;
+
+		assert_eq!(
+			held.session.place_of("t1").await,
+			LinePlace::Absent,
+			"the prompt stayed queued"
+		);
+		let told = told(&mut announced);
+		let heard = told_in_turn(&told, &ada);
+		assert_eq!(heard.len(), 2, "the member heard {heard:?}");
+		assert!(failure_detail(&heard[0]).contains("the relay closed"), "{heard:?}");
+		assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+		assert_eq!(open_runs(app.handle()).await, 0, "the queued run was not abandoned");
+		assert!(shut_down_scopes(&agent_events(&told)).is_empty(), "the live run was shut down");
+	}
+
+	#[cfg(unix)]
+	#[tokio::test]
+	async fn a_queued_turn_lost_from_its_session_during_a_lag_is_rejected_and_not_released() {
+		let app = an_app_of_its_own("host-turn-lost-queue", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let ada = scope_in(&room, &room.bot_ids[0]);
+		an_awaited_run(app.handle(), &room, &ada.bot_id).await;
+		let held = a_session_held_for(app.handle(), &ada).await;
+		app.state::<AgentState>().host_turns().note_started(&ada);
+		let mut announced = events::subscribed(app.handle());
+		let (_stop, stopped) = watch::channel(false);
+		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let mut waiting = Vec::new();
+
+		let kept = host_turn.reconciled(vec![in_line(ada.clone())], &mut waiting).await;
+
+		assert!(kept.is_empty(), "the lost turn was kept");
+		let told = told(&mut announced);
+		let heard = told_in_turn(&told, &ada);
+		assert_eq!(heard.len(), 2, "the member heard {heard:?}");
+		assert_eq!(failure_detail(&heard[0]), LOST_QUEUE);
+		assert_eq!(heard[1], ended_as(TurnOutcome::Failed));
+		assert_eq!(open_runs(app.handle()).await, 0, "the awaited run was not abandoned");
+		assert!(shut_down_scopes(&agent_events(&told)).is_empty(), "the lost turn was released");
+		assert!(app.state::<AgentState>().host_turns().has_started(&ada), "the run was released");
+		assert!(held.session.is_idle().await);
+	}
+
+	#[cfg(unix)]
+	#[tokio::test]
+	async fn a_queued_turn_that_ended_unheard_during_a_lag_is_released_without_a_failure() {
+		let app = an_app_of_its_own("host-turn-ended-unheard", mock_builder());
+		app.manage(db::bootstrap(app.handle()));
+		app.manage(AgentState::default());
+		let room = a_room_running(app.handle(), &["Ada"]).await;
+		let ada = scope_in(&room, &room.bot_ids[0]);
+		let messages = database(app.handle()).expect("the database opens").messages();
+		messages.start_turn(turn_in(&room)).await.expect("the turn opens");
+		let _held = a_session_held_for(app.handle(), &ada).await;
+		app.state::<AgentState>().host_turns().note_started(&ada);
+		let mut announced = events::subscribed(app.handle());
+		let (_stop, stopped) = watch::channel(false);
+		let host_turn = a_host_turn(app.handle(), &room, stopped);
+		let mut waiting = Vec::new();
+
+		let kept = host_turn.reconciled(vec![in_line(ada.clone())], &mut waiting).await;
+
+		assert!(kept.is_empty(), "the ended turn was kept");
+		let told = told(&mut announced);
+		assert!(told_in_turn(&told, &ada).is_empty(), "the ended turn was failed");
+		assert_eq!(shut_down_scopes(&agent_events(&told)), vec![ada.clone()]);
 	}
 }

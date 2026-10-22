@@ -1431,6 +1431,17 @@ pub(crate) fn a_run_held_by_the_app<R: Runtime>(
 }
 
 #[cfg(test)]
+pub(crate) fn a_session_held_by_the_app<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: &RuntimeScope,
+	session: Arc<Session>,
+) {
+	let live = &app.state::<AgentState>().live;
+	live.take_over(scope.clone());
+	live.install(scope, session);
+}
+
+#[cfg(test)]
 pub(crate) fn a_host_wide_announce<R: Runtime>(app: &AppHandle<R>, event: AgentEvent) {
 	announce(app, None, event);
 }
