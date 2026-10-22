@@ -573,9 +573,8 @@ impl<R: Runtime> HostTurn<R> {
 		};
 		if active.provider_session_id.is_none() {
 			log::info!(
-				"{} starts {bot_id} fresh: runtime session {} holds nothing to resume",
-				self.label(),
-				active.id
+				"{} starts {bot_id} fresh: its runtime session holds nothing to resume",
+				self.label()
 			);
 		}
 		Ok(active)
@@ -601,10 +600,9 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn resume_refused(&self, scope: &RuntimeScope, refused: String) {
 		log::warn!(
-			"{} starts {} fresh: runtime session {} refused its resume",
+			"{} starts {} fresh: its runtime session refused its resume",
 			self.label(),
-			scope.bot_id,
-			scope.runtime_session_id
+			scope.bot_id
 		);
 		if let Err(error) = self.forgot(scope, refused).await {
 			log::warn!("{} could not forget the refused resume: {error:?}", self.label());
