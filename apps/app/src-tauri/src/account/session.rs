@@ -188,7 +188,7 @@ pub(crate) async fn this_computer() -> &'static str {
 	THIS_COMPUTER.get_or_init(device_name).await
 }
 
-pub(crate) async fn device_name() -> String {
+async fn device_name() -> String {
 	let read =
 		tokio::process::Command::new("scutil").args(["--get", "ComputerName"]).output().await;
 	let named = match read {
