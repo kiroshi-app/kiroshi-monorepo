@@ -111,7 +111,6 @@ const UpdateReady = ({
 				tooltip={label}
 				tooltipSide="right"
 				size="icon-sm"
-				variant="default"
 				disabled={isBlocked}
 				focusableWhenDisabled
 				onClick={onRestart}
