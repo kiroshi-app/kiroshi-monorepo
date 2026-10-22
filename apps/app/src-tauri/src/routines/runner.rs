@@ -356,7 +356,6 @@ async fn closed<R: Runtime>(
 
 pub(crate) struct RelayReader(JoinHandle<ReadFailure>);
 
-#[derive(Debug)]
 pub(crate) enum ReadFailure {
 	Lagged { missed: u64 },
 	Ended(String),
