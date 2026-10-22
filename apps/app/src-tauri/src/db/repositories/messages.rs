@@ -964,7 +964,7 @@ fn cancelled_run(
 ) -> Result<(), TranscriptError> {
 	let transaction = write_transaction(connection)?;
 	transaction.execute(CANCEL_OPEN_MESSAGES_OF_RUN, params![turn_id, bot_id])?;
-	transaction.execute(RELEASE_RUN, params![turn_id, bot_id, RUNNING])?;
+	transaction.execute(RELEASE_RUNS_OF_BOT, params![turn_id, bot_id])?;
 	transaction.execute(COMPLETE_TURN_NO_BOT_RUNS_ON, params![turn_id, cancelled_at])?;
 	transaction.commit()?;
 	Ok(())
@@ -2191,6 +2191,30 @@ mod tests {
 			states(&stored),
 			vec![MessageState::Cancelled, MessageState::Complete, MessageState::Streaming]
 		);
+	}
+
+	#[tokio::test]
+	async fn cancelling_an_awaited_run_releases_it_and_closes_the_turn_it_held_open() {
+		let dir = temp_dir();
+		let database = seeded(&dir).await;
+		a_turn(&database, "t1", "c1").await;
+		let messages = database.messages();
+		messages.await_runs("t1".into(), vec!["b1".into()]).await.expect("b1 is awaited");
+
+		messages.cancel_run("t1".into(), "b1".into(), 3).await.expect("the run is cancelled");
+
+		assert_eq!(rows_in(&database, "turn_runs").await, 0, "the awaited run was kept");
+		let completed_at = database
+			.call(|connection| {
+				Ok(connection.query_row(
+					"SELECT completed_at FROM turns WHERE id = 't1'",
+					[],
+					|row| row.get::<_, Option<i64>>(0),
+				)?)
+			})
+			.await
+			.expect("the turn reads");
+		assert_eq!(completed_at, Some(3));
 	}
 
 	#[tokio::test]

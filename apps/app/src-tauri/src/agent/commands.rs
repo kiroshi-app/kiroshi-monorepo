@@ -16,7 +16,7 @@ use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
-use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
+use super::session::{Bundle, EventSink, GatedSink, Handed, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
@@ -55,7 +55,7 @@ pub(crate) fn announce<R: Runtime>(
 	announce_in_turn(app, scope, None, event);
 }
 
-fn announce_in_turn<R: Runtime>(
+pub(crate) fn announce_in_turn<R: Runtime>(
 	app: &AppHandle<R>,
 	scope: Option<RuntimeScope>,
 	turn: Option<EventTurn>,
@@ -263,6 +263,16 @@ impl<S: Clone> Live<S> {
 
 	fn holds(&self, scope: &RuntimeScope) -> bool {
 		self.runs.lock().expect("live runs").values().any(|run| &run.scope == scope)
+	}
+
+	fn live_scope_of(&self, held_by: &ParticipantKey) -> Option<RuntimeScope> {
+		self.runs
+			.lock()
+			.expect("live runs")
+			.values()
+			.filter(|run| run.session.is_some() && &participant_key(&run.scope) == held_by)
+			.max_by_key(|run| run.started_at)
+			.map(|run| run.scope.clone())
 	}
 
 	fn is_foreign(&self, scope: &RuntimeScope) -> bool {
@@ -975,7 +985,37 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	cwd: Option<String>,
 	output_schema: Option<JsonValue>,
 ) -> Result<SessionHandle, TransportError> {
-	let output_schema = output_schema.map(JsonValue::into);
+	let start = RunStart {
+		scope,
+		resume,
+		cwd,
+		output_schema: output_schema.map(JsonValue::into),
+		lineage: Lineage::RecordedByTheCaller,
+	};
+	start_run(app, &state, &database, start).await
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Lineage {
+	RecordedByTheCaller,
+	RecordedByTheRun,
+}
+
+pub(crate) struct RunStart {
+	pub scope: RuntimeScope,
+	pub resume: Option<String>,
+	pub cwd: Option<String>,
+	pub output_schema: Option<serde_json::Value>,
+	pub lineage: Lineage,
+}
+
+pub(crate) async fn start_run<R: Runtime>(
+	app: AppHandle<R>,
+	state: &AgentState,
+	database: &db::DatabaseState,
+	start: RunStart,
+) -> Result<SessionHandle, TransportError> {
+	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
 	let _claim = state.claim(&scope)?;
 
 	let admitted = state.live.take_over(scope.clone());
@@ -986,7 +1026,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 	}
 
 	let sidecar = state.sidecar().await?;
-	let mission_thread = opens_on_a_mission_thread(&database, &scope.conversation_id).await;
+	let mission_thread = opens_on_a_mission_thread(database, &scope.conversation_id).await;
 	let running_in =
 		cwd.map(PathBuf::from).unwrap_or_else(|| its_own_directory(&app, &scope.bot_id));
 
@@ -994,7 +1034,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		app: app.clone(),
 		scope: scope.clone(),
 		live: state.live.clone(),
-		records_its_own_lineage: lineage_is_held_elsewhere,
+		records_its_own_lineage: lineage_is_held_elsewhere || lineage == Lineage::RecordedByTheRun,
 	});
 	let attachments = Arc::new(TurnAttachments::default());
 	let sink: Arc<dyn EventSink> = Arc::new(ReplyWriter::spawn(
@@ -1004,11 +1044,11 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		attachments.clone(),
 		announcing,
 	));
-	let identity = match runtime_identity(&app, &database, &scope, &sidecar).await {
+	let identity = match runtime_identity(&app, database, &scope, &sidecar).await {
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
-	let members = members_reading(&app, &database, &identity.space_id).await;
+	let members = members_reading(&app, database, &identity.space_id).await;
 	let options = SessionOptions::new(running_in)
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
@@ -1061,7 +1101,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 
 	if let Some(refusal) = &started.resume_refusal {
 		let forgot_session_id =
-			forget_the_id_a_refusal_blames(&database, &scope, refused_id, refusal).await;
+			forget_the_id_a_refusal_blames(database, &scope, refused_id, refusal).await;
 		sink.emit(AgentEvent::Failed { error: TransportError::ResumeFailed { forgot_session_id } });
 	}
 
@@ -1145,6 +1185,43 @@ pub async fn agent_submit_prompt(
 		state.host_writes.record_submitted(&turn_id);
 	}
 	Ok(())
+}
+
+pub(crate) fn live_run_of(
+	state: &AgentState,
+	participant: &ParticipantKey,
+) -> Option<RuntimeScope> {
+	state.live.live_scope_of(participant)
+}
+
+pub(crate) async fn submit_in_line(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	text: &str,
+	turn: SubmittedTurn,
+) -> Result<Handed, TransportError> {
+	let turn_id = turn.turn_id.clone();
+	let handed = state.live.session_for(scope)?.submit_in_line(text, turn).await?;
+	state.host_writes.record_submitted(&turn_id);
+	Ok(handed)
+}
+
+pub(crate) async fn withdraw_queued(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> bool {
+	match state.live.session_for(scope) {
+		Ok(session) => session.withdraw(turn_id).await,
+		Err(_) => false,
+	}
+}
+
+pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
+	match state.live.session_for(scope) {
+		Ok(session) => session.is_idle().await,
+		Err(_) => true,
+	}
 }
 
 #[tauri::command]
@@ -1760,6 +1837,20 @@ mod tests {
 
 	fn is_unheld(outcome: &Result<&str, TransportError>) -> bool {
 		matches!(outcome, Err(TransportError::NotStarted))
+	}
+
+	#[test]
+	fn a_participant_rides_its_installed_run_and_another_conversation_of_the_bot_does_not() {
+		let live = Live::<&str>::default();
+		let held_by = participant_key(&a_scope());
+		live.take_over(a_scope());
+		assert_eq!(live.live_scope_of(&held_by), None, "a run still starting was offered");
+
+		assert!(live.install(&a_scope(), REPLACED_SESSION));
+		let elsewhere = ParticipantKey { conversation_id: "c2".into(), ..held_by.clone() };
+
+		assert_eq!(live.live_scope_of(&held_by), Some(a_scope()));
+		assert_eq!(live.live_scope_of(&elsewhere), None, "another conversation shared the run");
 	}
 
 	#[test]

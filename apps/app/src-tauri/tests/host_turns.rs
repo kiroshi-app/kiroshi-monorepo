@@ -14,12 +14,22 @@ use axum::Router;
 use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signature, VerifyingKey};
 use kiroshi_app::account::session::{restore, AccountSession};
-use kiroshi_app::agent::commands::{agent_cancel_turn, shutdown_session, terminate_session};
-use kiroshi_app::agent::contract::{CancelOutcome, RuntimeScope};
+use kiroshi_app::agent::commands::{
+	agent_cancel_turn, agent_live_sessions, agent_respond_to_permission,
+	agent_start_or_resume_session, agent_submit_prompt, shutdown_session, terminate_session,
+};
+use kiroshi_app::agent::contract::{
+	CancelOutcome, LiveSession, PermissionDecision, RuntimeScope, SubmittedTurn,
+};
 use kiroshi_app::agent::sidecar::SIDECAR_OVERRIDE_ENV;
 use kiroshi_app::agent::AgentState;
 use kiroshi_app::bundles;
 use kiroshi_app::commands::invoke_handler;
+use kiroshi_app::conversations::commands::{
+	conversation_open_runtime_session, conversation_send_user_message,
+};
+use kiroshi_app::conversations::contract::NewUserMessage;
+use kiroshi_app::conversations::turn_run_deadline::TurnRunDeadlines;
 use kiroshi_app::crypto::commands::{DeviceKeysState, SpaceKeys};
 use kiroshi_app::crypto::device_keys::{self, DeviceId, DeviceKeys};
 use kiroshi_app::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
@@ -30,6 +40,7 @@ use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageRole, StoredMessage};
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
+use kiroshi_app::hosting::authorship::Caller;
 use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
@@ -53,6 +64,8 @@ const HOST_DEVICE: &str = "0b7d3c2e-1f4a-4c5d-8e6f-7a8b9c0d1e2f";
 const GUEST_DEVICE: &str = "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
 const GUEST: &str = "guest";
 const ROOM: &str = "room-1";
+const SECOND_ROOM: &str = "room-2";
+const MISSION_THREAD: &str = "mission-thread-1";
 const ADA: &str = "b-ada";
 const GRACE: &str = "b-grace";
 const NYX: &str = "b-nyx";
@@ -60,6 +73,7 @@ const AGENT_EVENT: &str = kiroshi_app::agent::commands::EVENT_CHANNEL;
 const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORED_EVENT;
 const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
 const PATIENCE: Duration = Duration::from_secs(60);
+const SHORT_START_DEADLINE: Duration = Duration::from_millis(300);
 
 const A_ROOM: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES
@@ -183,9 +197,13 @@ fn scenario(name: &str) -> RemovedOnDrop {
 }
 
 fn sent(id: &str, turn_id: &str, content: &str) -> Value {
+	sent_in(ROOM, id, turn_id, content)
+}
+
+fn sent_in(conversation_id: &str, id: &str, turn_id: &str, content: &str) -> Value {
 	json!({
 		"id": id,
-		"conversationId": ROOM,
+		"conversationId": conversation_id,
 		"turnId": turn_id,
 		"content": content,
 		"createdAt": 1,
@@ -479,6 +497,109 @@ impl Host {
 			.expect("the sessions count")
 	}
 
+	async fn host_run(&self, conversation_id: &str, bot_id: &str) -> RuntimeScope {
+		let opened = conversation_open_runtime_session(
+			self.app.state(),
+			conversation_id.to_owned(),
+			bot_id.to_owned(),
+			1,
+			None,
+			None,
+		)
+		.await
+		.expect("the host opens a runtime session");
+		let scope = RuntimeScope {
+			conversation_id: conversation_id.to_owned(),
+			bot_id: bot_id.to_owned(),
+			runtime_session_id: opened.id,
+			epoch: opened.seq,
+		};
+		agent_start_or_resume_session(
+			self.app.handle().clone(),
+			self.app.state(),
+			self.app.state(),
+			scope.clone(),
+			None,
+			None,
+			None,
+		)
+		.await
+		.expect("the host run starts");
+		scope
+	}
+
+	async fn host_says(&self, scope: &RuntimeScope, id: &str, turn_id: &str, content: &str) {
+		let message = NewUserMessage {
+			id: id.to_owned(),
+			conversation_id: scope.conversation_id.clone(),
+			turn_id: turn_id.to_owned(),
+			author_bot_id: None,
+			replied_to_message_id: None,
+			content: content.to_owned(),
+			created_at: 1,
+		};
+		let summoned = vec![scope.bot_id.clone()];
+		conversation_send_user_message(
+			self.app.handle().clone(),
+			self.app.state(),
+			Caller::Host,
+			message,
+			summoned,
+		)
+		.await
+		.expect("the host message is stored");
+		let turn = SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: id.to_owned() };
+		agent_submit_prompt(self.app.state(), scope.clone(), content.to_owned(), Some(turn))
+			.await
+			.expect("the host prompt is submitted");
+	}
+
+	async fn allow_write(&mut self, bot_id: &str, nth: usize) {
+		self.heard_until(|frames| asked_to_write(frames, bot_id).len() >= nth).await;
+		let (scope, id) = asked_to_write(&self.frames, bot_id).swap_remove(nth - 1);
+		agent_respond_to_permission(self.app.state(), scope, id, PermissionDecision::AllowOnce)
+			.await
+			.expect("the write is allowed");
+	}
+
+	async fn live_runs_of(&self, bot_id: &str) -> Vec<LiveSession> {
+		let live = agent_live_sessions(self.app.state()).await.expect("the live runs read");
+		live.into_iter().filter(|run| run.bot_id == bot_id).collect()
+	}
+
+	fn scopes_heard(&self, bot_id: &str) -> Vec<String> {
+		let mut heard: Vec<String> = published(&self.frames, AGENT_EVENT)
+			.filter(|payload| payload["scope"]["botId"] == bot_id)
+			.filter_map(|payload| payload["scope"]["runtimeSessionId"].as_str())
+			.map(str::to_owned)
+			.collect();
+		heard.dedup();
+		heard
+	}
+
+	async fn runtime_sessions_of(&self, bot_id: &'static str) -> Vec<(String, String)> {
+		database_of(&self.app)
+			.call(move |connection| {
+				let mut rows = connection.prepare(
+					"SELECT id, status FROM runtime_sessions
+						WHERE conversation_id = ?1 AND bot_id = ?2 ORDER BY seq",
+				)?;
+				let read = rows
+					.query_map([ROOM, bot_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+					.collect::<Result<Vec<_>, _>>()?;
+				Ok(read)
+			})
+			.await
+			.expect("the runtime sessions read")
+	}
+
+	async fn plant(&self, planted: &'static str) {
+		database_of(&self.app)
+			.call_mut(move |connection| Ok(connection.execute_batch(planted)?))
+			.await
+			.expect("the conversation is planted");
+	}
+
 	fn agent_events(&self, bot_id: &str) -> Vec<Value> {
 		agent_events_in(&self.frames, bot_id).cloned().collect()
 	}
@@ -545,6 +666,24 @@ fn agent_events_in<'a>(
 	published(frames, AGENT_EVENT)
 		.filter(move |payload| payload["scope"]["botId"] == bot_id)
 		.map(|payload| &payload["event"])
+}
+
+fn asked_to_write(frames: &[Value], bot_id: &str) -> Vec<(RuntimeScope, String)> {
+	published(frames, AGENT_EVENT)
+		.filter(|payload| payload["scope"]["botId"] == bot_id)
+		.filter(|payload| payload["event"]["type"] == "permissionRequested")
+		.map(|payload| {
+			let scope = serde_json::from_value(payload["scope"].clone()).expect("a runtime scope");
+			let id = payload["event"]["request"]["id"].as_str().expect("a request id").to_owned();
+			(scope, id)
+		})
+		.collect()
+}
+
+fn shut_downs_in(frames: &[Value], bot_id: &str) -> usize {
+	agent_events_in(frames, bot_id)
+		.filter(|event| event["type"] == "connectionChanged" && event["state"] == "checking")
+		.count()
 }
 
 fn turns_closed_in(frames: &[Value], bot_id: &str) -> usize {
@@ -661,23 +800,24 @@ fn a_bot_outside_the_shared_space_is_refused_and_nothing_is_stored() {
 }
 
 #[test]
-fn a_second_call_while_a_turn_runs_is_refused_naming_the_running_turn() {
+fn a_second_call_while_a_turn_runs_queues_behind_it_in_the_same_run() {
 	let _serial = serial();
 	block_on(async {
-		let mut host = Host::hosting("running", "slow").await;
+		let mut host = Host::hosting("running", "held_echo").await;
 
 		let first = host.send_turn(sent("p1", "t1", "take your time"), &[ADA]).await;
 		let second = host.send_turn(sent("p2", "t2", "and now?"), &[ADA]).await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.turns_closed_for(ADA, 1).await;
 
 		assert_eq!(first["status"], json!(200), "{first}");
-		assert_eq!(second["status"], json!(500), "{second}");
-		assert_eq!(
-			second["body"],
-			json!({ "kind": "turnAlreadyRunning", "conversationId": ROOM, "turnId": "t1" })
-		);
-		let ids: Vec<String> =
-			host.transcript().await.into_iter().map(|message| message.id).collect();
-		assert_eq!(ids, vec!["p1"], "the refused call stored a message");
+		assert_eq!(second["status"], json!(200), "{second}");
+		let transcript = host.transcript().await;
+		let turns: Vec<&str> =
+			replies_of(&transcript, ADA).iter().map(|reply| reply.turn_id.as_str()).collect();
+		assert_eq!(turns, vec!["t1", "t2"], "the room holds {transcript:#?}");
+		assert_eq!(host.scopes_heard(ADA).len(), 1, "the queued call opened another run");
 		host.quit().await;
 	});
 }
@@ -820,6 +960,229 @@ fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_se
 		assert_eq!(host.runs_of("t1").await, 0, "a run of the shut session was kept");
 		let next = host.send_turn(sent("p2", "t2", "and now?"), &[GRACE]).await;
 		assert_eq!(next["status"], json!(200), "the shut session still holds the room: {next}");
+		host.quit().await;
+	});
+}
+
+const A_SECOND_ROOM_AND_A_MISSION_THREAD: &str = "
+	INSERT INTO conversations (id, kind, title, created_at, updated_at, space_id)
+		VALUES ('room-2', 'topic', 'Second room', 1, 1, 'personal'),
+			('mission-thread-1', 'mission', 'Mission thread', 1, 1, 'personal');
+	INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+		VALUES ('room-2', 'b-ada', 'lead', 1, 0),
+			('mission-thread-1', 'b-ada', 'lead', 1, 0);
+";
+
+#[test]
+fn a_member_turn_joins_the_live_host_run_without_a_new_row_or_a_new_process() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("join-host-run", "normal").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.turn_ended_for(ADA).await;
+
+		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+		host.heard_until(|frames| {
+			agent_events_in(frames, ADA).filter(|event| event["type"] == "turnEnded").count() >= 2
+		})
+		.await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		assert_eq!(host.scopes_heard(ADA), vec![held.runtime_session_id.clone()]);
+		let live = host.live_runs_of(ADA).await;
+		assert_eq!(live.len(), 1, "the member turn opened another process: {live:#?}");
+		assert_eq!(live[0].runtime_session_id, held.runtime_session_id);
+		assert_eq!(
+			host.runtime_sessions_of(ADA).await,
+			vec![(held.runtime_session_id.clone(), "active".to_owned())],
+			"the member turn moved the host row"
+		);
+		let transcript = host.transcript().await;
+		let replies = replies_of(&transcript, ADA);
+		assert_eq!(replies.len(), 2, "the room holds {transcript:#?}");
+		assert_eq!(replies[1].turn_id, "t1");
+		assert!(replies[1].content.starts_with("echo :: ["), "{}", replies[1].content);
+		assert!(replies[1].content.ends_with("]\nmember second"), "{}", replies[1].content);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_turn_during_a_running_host_turn_queues_and_both_answers_land_in_order() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queue-behind-host", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+
+		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.heard_until(|frames| {
+			agent_events_in(frames, ADA).filter(|event| event["type"] == "turnEnded").count() >= 2
+		})
+		.await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		let transcript = host.transcript().await;
+		let replies = replies_of(&transcript, ADA);
+		let turns: Vec<&str> = replies.iter().map(|reply| reply.turn_id.as_str()).collect();
+		assert_eq!(turns, vec!["t0", "t1"], "the room holds {transcript:#?}");
+		assert_eq!(replies[0].content, "echo :: host first");
+		assert!(replies[1].content.ends_with("]\nmember second"), "{}", replies[1].content);
+		assert_eq!(host.scopes_heard(ADA), vec![held.runtime_session_id.clone()]);
+		assert_eq!(host.live_runs_of(ADA).await.len(), 1);
+		assert_eq!(
+			host.runtime_sessions_of(ADA).await,
+			vec![(held.runtime_session_id.clone(), "active".to_owned())]
+		);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_turn_with_no_live_run_resumes_the_stored_session_under_the_same_row() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("resume-stored", "unmentioned_echo").await;
+
+		host.send_turn(sent("p1", "t1", "first round"), &[ADA]).await;
+		host.turns_closed_for(ADA, 1).await;
+		let rows = host.runtime_sessions_of(ADA).await;
+		host.send_turn(sent("p2", "t2", "second round"), &[ADA]).await;
+		host.turns_closed_for(ADA, 2).await;
+
+		assert_eq!(rows.len(), 1, "{rows:?}");
+		assert_eq!(host.runtime_sessions_of(ADA).await, rows, "the resume moved the row");
+		assert_eq!(host.scopes_heard(ADA), vec![rows[0].0.clone()]);
+		let transcript = host.transcript().await;
+		let replies = replies_of(&transcript, ADA);
+		assert_eq!(replies.len(), 2, "the room holds {transcript:#?}");
+		assert!(replies[0].content.contains("The new message:"), "{}", replies[0].content);
+		assert!(
+			replies[1].content.starts_with("resumed fake-session-0001 :: ["),
+			"{}",
+			replies[1].content
+		);
+		assert!(replies[1].content.ends_with("]\nsecond round"), "{}", replies[1].content);
+		assert!(host.live_runs_of(ADA).await.is_empty(), "the resumed run outlived its turn");
+		host.quit().await;
+	});
+}
+
+#[test]
+fn another_conversation_and_a_mission_thread_of_the_same_bot_each_keep_their_own_run() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("two-conversations", "held_echo").await;
+		host.plant(A_SECOND_ROOM_AND_A_MISSION_THREAD).await;
+		let held = host.host_run(ROOM, ADA).await;
+
+		let elsewhere = host.send_turn(sent_in(SECOND_ROOM, "p1", "t1", "over here"), &[ADA]).await;
+		let threaded =
+			host.send_turn(sent_in(MISSION_THREAD, "p2", "t2", "and here"), &[ADA]).await;
+		host.heard_until(|frames| asked_to_write(frames, ADA).len() >= 2).await;
+		let live = host.live_runs_of(ADA).await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.heard_until(|frames| shut_downs_in(frames, ADA) >= 2).await;
+
+		assert_eq!(elsewhere["status"], json!(200), "{elsewhere}");
+		assert_eq!(threaded["status"], json!(200), "{threaded}");
+		let mut conversations: Vec<&str> =
+			live.iter().map(|run| run.conversation_id.as_str()).collect();
+		conversations.sort_unstable();
+		assert_eq!(conversations, vec![MISSION_THREAD, ROOM, SECOND_ROOM], "{live:#?}");
+		let distinct: std::collections::HashSet<&str> =
+			live.iter().map(|run| run.runtime_session_id.as_str()).collect();
+		assert_eq!(distinct.len(), 3, "two conversations shared a run: {live:#?}");
+		let still_live = host.live_runs_of(ADA).await;
+		assert_eq!(still_live.len(), 1, "{still_live:#?}");
+		assert_eq!(still_live[0].runtime_session_id, held.runtime_session_id);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_companion_named_by_a_bot_rides_the_host_run_through_the_same_path() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("mention-joins", "room_handover").await;
+		let held = host.host_run(ROOM, GRACE).await;
+
+		let answer = host.send_turn(sent("p1", "t1", "<@b-ada> who takes the walls?"), &[]).await;
+		host.turn_ended_for(GRACE).await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		assert_eq!(host.scopes_heard(GRACE), vec![held.runtime_session_id.clone()]);
+		let grace = host.live_runs_of(GRACE).await;
+		assert_eq!(grace.len(), 1, "{grace:#?}");
+		assert_eq!(grace[0].runtime_session_id, held.runtime_session_id);
+		let transcript = host.transcript().await;
+		assert_eq!(replies_of(&transcript, GRACE).len(), 1, "the room holds {transcript:#?}");
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_turn_queued_past_its_start_deadline_keeps_its_run_until_it_is_answered() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queued-past-deadline", "held_echo").await;
+		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+
+		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		let awaited = host.runs_of("t1").await;
+		let completed_while_queued = host.completed_at("t1").await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.heard_until(|frames| {
+			agent_events_in(frames, ADA).filter(|event| event["type"] == "turnEnded").count() >= 2
+		})
+		.await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		assert_eq!(awaited, 1, "the queued run expired at its start deadline");
+		assert_eq!(completed_while_queued, None, "the queued turn closed before it was answered");
+		let transcript = host.transcript().await;
+		let answered: Vec<&StoredMessage> = replies_of(&transcript, ADA)
+			.into_iter()
+			.filter(|reply| reply.turn_id == "t1")
+			.collect();
+		assert_eq!(answered.len(), 1, "the room holds {transcript:#?}");
+		assert!(answered[0].content.ends_with("]\nmember second"), "{}", answered[0].content);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awaited() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("withdrawn-by-stop", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+
+		let outcome =
+			agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), held)
+				.await;
+
+		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
+		assert_eq!(host.runs_of("t1").await, 0, "the withdrawn run was left awaited");
+		assert!(host.completed_at("t1").await.is_some(), "the withdrawn turn was left open");
+		let transcript = host.transcript().await;
+		assert!(
+			replies_of(&transcript, ADA).iter().all(|reply| reply.turn_id != "t1"),
+			"the withdrawn prompt was answered: {transcript:#?}"
+		);
 		host.quit().await;
 	});
 }

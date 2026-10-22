@@ -17,7 +17,7 @@ const NO_DEADLINES: &str = "the host holds no turn run deadlines";
 
 type TurnRun = (String, String);
 
-pub(crate) struct TurnRunDeadlines {
+pub struct TurnRunDeadlines {
 	start_within: Duration,
 	armed: Arc<Mutex<Armed>>,
 }
@@ -35,7 +35,7 @@ impl Default for TurnRunDeadlines {
 }
 
 impl TurnRunDeadlines {
-	pub(crate) fn after(start_within: Duration) -> Self {
+	pub fn after(start_within: Duration) -> Self {
 		Self { start_within, armed: Arc::default() }
 	}
 }
@@ -45,6 +45,10 @@ impl Armed {
 		self.last_hold += 1;
 		self.holds.insert(run, self.last_hold);
 		self.last_hold
+	}
+
+	fn suspend(&mut self, run: &TurnRun) {
+		self.holds.remove(run);
 	}
 
 	fn disarm(&mut self, run: &TurnRun, hold: u64) -> bool {
@@ -98,6 +102,15 @@ pub(crate) fn arm_start_deadlines<R: Runtime>(
 			}
 		}
 	});
+}
+
+pub(crate) fn suspend_start_deadline<R: Runtime>(app: &AppHandle<R>, turn_id: &str, bot_id: &str) {
+	match managed::<R, TurnRunDeadlines>(app, NO_DEADLINES) {
+		Ok(deadlines) => locked(&deadlines.armed).suspend(&(turn_id.to_owned(), bot_id.to_owned())),
+		Err(missing) => {
+			eprintln!("turn {turn_id} could not suspend the start deadline of {bot_id}: {missing}")
+		}
+	}
 }
 
 fn locked(armed: &Mutex<Armed>) -> MutexGuard<'_, Armed> {

@@ -155,6 +155,7 @@ struct Run {
 	cwd: String,
 	announced: bool,
 	pending_permission: Option<String>,
+	held_prompt: Option<String>,
 	hung: bool,
 }
 
@@ -195,6 +196,7 @@ impl Run {
 			cwd: as_a_child_would_see_it(command["cwd"].as_str().unwrap_or_default()),
 			announced: false,
 			pending_permission: None,
+			held_prompt: None,
 			hung: false,
 			settings,
 		}
@@ -500,24 +502,11 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 			emit_text_turn(key, run, "done");
 			emit_result(key, run, "success", false);
 		}
-		"permission" => {
-			let request_id = format!("perm_fake_{key}");
-			run.pending_permission = Some(request_id.clone());
-			emit(
-				key,
-				json!({
-					"type": "control_request",
-					"request_id": request_id,
-					"request": {
-						"subtype": "can_use_tool",
-						"tool_name": "Write",
-						"display_name": "Write",
-						"description": "notes.txt",
-						"input": { "file_path": "/fake/notes.txt", "content": "hello" }
-					}
-				}),
-			);
+		"held_echo" => {
+			run.held_prompt = Some(text.to_owned());
+			ask_to_write(key, run, format!("perm_fake_{key}_{}", next_message_id()));
 		}
+		"permission" => ask_to_write(key, run, format!("perm_fake_{key}")),
 		"question" => {
 			let request_id = format!("ask_fake_{key}");
 			run.pending_permission = Some(request_id.clone());
@@ -572,6 +561,15 @@ fn on_prompt(key: &str, runs: &mut HashMap<String, Run>, text: &str) {
 					"event": { "type": "message_start", "message": { "id": next_message_id(), "role": "assistant" } }
 				}),
 			);
+		}
+		"unmentioned_echo" => {
+			let reply = if run.resumed {
+				format!("resumed {} :: {text}", run.session_id)
+			} else {
+				format!("echo :: {text}")
+			};
+			emit_text_turn(key, run, &reply.replace("<@", "<"));
+			emit_result(key, run, "success", false);
 		}
 		_ => {
 			let reply = if run.resumed {
@@ -654,7 +652,28 @@ fn on_permission(key: &str, runs: &mut HashMap<String, Run>, command: &Value) {
 	if let Some(read) = answers_read(&command["decision"]["updatedInput"]) {
 		emit_text_turn(key, run, &read);
 	}
+	if let Some(held) = run.held_prompt.take() {
+		emit_text_turn(key, run, &format!("echo :: {held}"));
+	}
 	emit_result(key, run, "success", false);
+}
+
+fn ask_to_write(key: &str, run: &mut Run, request_id: String) {
+	run.pending_permission = Some(request_id.clone());
+	emit(
+		key,
+		json!({
+			"type": "control_request",
+			"request_id": request_id,
+			"request": {
+				"subtype": "can_use_tool",
+				"tool_name": "Write",
+				"display_name": "Write",
+				"description": "notes.txt",
+				"input": { "file_path": "/fake/notes.txt", "content": "hello" }
+			}
+		}),
+	);
 }
 
 fn serve() {
