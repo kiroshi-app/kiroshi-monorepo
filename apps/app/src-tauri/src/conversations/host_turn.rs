@@ -893,6 +893,10 @@ mod tests {
 	use crate::routines::runner::read;
 	use crate::test_app::an_app_of_its_own;
 
+	fn speaking_as(scope: RuntimeScope) -> Speaker {
+		Speaker { scope, written: Vec::new(), is_in_line: false }
+	}
+
 	fn a_speaker() -> Speaker {
 		let scope = RuntimeScope {
 			conversation_id: "c1".to_owned(),
@@ -900,7 +904,7 @@ mod tests {
 			runtime_session_id: "s1".to_owned(),
 			epoch: 1,
 		};
-		Speaker { scope, written: Vec::new(), is_in_line: false }
+		speaking_as(scope)
 	}
 
 	#[test]
@@ -1098,11 +1102,7 @@ mod tests {
 		for scope in &speakers {
 			app.state::<AgentState>().host_turns().note_started(scope);
 		}
-		let speaking = speakers.iter().map(|scope| Speaker {
-			scope: scope.clone(),
-			written: Vec::new(),
-			is_in_line: false,
-		});
+		let speaking = speakers.iter().map(|scope| speaking_as(scope.clone()));
 
 		host_turn.drive(held, speaking.collect(), heard, &mut reading).await;
 
@@ -1131,11 +1131,7 @@ mod tests {
 		let (_stop, stopped) = watch::channel(false);
 		let host_turn = a_host_turn(app.handle(), &room, stopped);
 		app.state::<AgentState>().host_turns().note_started(&scope_in(&room, &speaker));
-		let speaking = vec![Speaker {
-			scope: scope_in(&room, &speaker),
-			written: Vec::new(),
-			is_in_line: false,
-		}];
+		let speaking = vec![speaking_as(scope_in(&room, &speaker))];
 		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
 
 		host_turn.lost(&mut reading, speaking, waiting).await;
@@ -1310,11 +1306,7 @@ mod tests {
 	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
 		let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
 		let host_turn = a_host_turn(app, room, held.stopped.clone());
-		let speaking = room.bot_ids.iter().map(|bot_id| Speaker {
-			scope: scope_in(room, bot_id),
-			written: Vec::new(),
-			is_in_line: false,
-		});
+		let speaking = room.bot_ids.iter().map(|bot_id| speaking_as(scope_in(room, bot_id)));
 		let speaking: Vec<Speaker> = speaking.collect();
 		let (events, heard) = mpsc::unbounded_channel();
 		let (mut reading, _lagging) = a_lagging_reader();
@@ -1414,7 +1406,7 @@ mod tests {
 		};
 		events.send(completed).expect("the turn listens");
 		let (mut reading, _lagging) = a_lagging_reader();
-		let speaking = vec![Speaker { scope: ada, written: Vec::new(), is_in_line: false }];
+		let speaking = vec![speaking_as(ada)];
 
 		host_turn.drive(held, speaking, heard, &mut reading).await;
 
@@ -1437,11 +1429,7 @@ mod tests {
 		let (events, heard) = mpsc::unbounded_channel::<ScopedEvent>();
 		drop(events);
 		let (mut reading, _lagging) = a_lagging_reader();
-		let speaking = vec![Speaker {
-			scope: scope_in(&room, &room.bot_ids[0]),
-			written: Vec::new(),
-			is_in_line: false,
-		}];
+		let speaking = vec![speaking_as(scope_in(&room, &room.bot_ids[0]))];
 
 		host_turn.drive(held, speaking, heard, &mut reading).await;
 
