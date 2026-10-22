@@ -1048,7 +1048,7 @@ pub(crate) async fn start_run<R: Runtime>(
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
-	let members = members_reading(&app, &database, &identity.space_id).await;
+	let members = members_reading(&app, database, &identity.space_id).await;
 	let options = SessionOptions::new(running_in)
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
