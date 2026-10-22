@@ -1034,6 +1034,9 @@ export const createRosterController = (
 				lastRowId,
 			)
 			choose({ spaceRowId, lastRowId, ...choiceOf(landing), ...NO_SETTINGS })
+			if (rosterReadIn(spaceRowId) !== undefined) {
+				void rereadRosterIn(spaceRowId)
+			}
 		},
 
 		select: (id: string) => {
