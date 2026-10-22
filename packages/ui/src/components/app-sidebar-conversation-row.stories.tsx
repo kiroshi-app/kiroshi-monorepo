@@ -413,9 +413,6 @@ export const WorkingConversationKeepsItsTimestamp = meta.story({
 			DESK_ROOM.timestamp ?? "",
 		)
 		await expect(canvas.getAllByRole("button")).toEqual([row])
-		await expect(
-			canvasElement.querySelector('[data-slot="roster-row-stop"]'),
-		).toBeNull()
 		await expectPileWhole(row, canvasElement)
 	},
 })

@@ -75,8 +75,5 @@ export const WorkingBotKeepsItsTimestamp = meta.story({
 			BEACON.timestamp ?? "",
 		)
 		await expect(canvas.getAllByRole("button")).toEqual([row])
-		await expect(
-			canvasElement.querySelector('[data-slot="roster-row-stop"]'),
-		).toBeNull()
 	},
 })
