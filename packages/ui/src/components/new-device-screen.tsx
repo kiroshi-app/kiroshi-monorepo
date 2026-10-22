@@ -5,6 +5,10 @@ import { type ReactNode, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { type Device, DeviceCard } from "@workspace/ui/components/device-card"
+import {
+	FullWindowContent,
+	FullWindowLayout,
+} from "@workspace/ui/components/full-window-layout"
 import { Icons } from "@workspace/ui/components/icons"
 import { Button } from "@workspace/ui/components/ui/button"
 import {
@@ -176,27 +180,25 @@ const NewDeviceScreen = ({
 	}
 
 	return (
-		<div
-			className="flex min-h-full flex-1 flex-col items-center justify-center gap-5 overflow-y-auto p-6"
-			data-step={step}
-			data-slot="new-device-screen"
-		>
-			<span className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40">
-				<Mark aria-hidden="true" className="size-6 text-foreground" />
-			</span>
-			<div className="flex w-105 max-w-full flex-col gap-2 text-center">
-				<h1 className="text-balance font-semibold text-[22px] text-foreground leading-7 tracking-[-0.01em]">
-					{t(`devices.newDevice.${step}.title`)}
-				</h1>
-				<p className="text-pretty text-muted-foreground text-sm">
-					{t(`devices.newDevice.${step}.body`, { email })}
-				</p>
-			</div>
-			{body[step]}
-			<div className="flex flex-wrap justify-center gap-5 pt-1">
-				{links[step]}
-			</div>
-		</div>
+		<FullWindowLayout data-step={step} data-slot="new-device-screen">
+			<FullWindowContent className="gap-5 p-6">
+				<span className="grid size-14 shrink-0 place-items-center rounded-[1rem] bg-muted/40">
+					<Mark aria-hidden="true" className="size-6 text-foreground" />
+				</span>
+				<div className="flex w-105 max-w-full flex-col gap-2 text-center">
+					<h1 className="text-balance font-semibold text-[22px] text-foreground leading-7 tracking-[-0.01em]">
+						{t(`devices.newDevice.${step}.title`)}
+					</h1>
+					<p className="text-pretty text-muted-foreground text-sm">
+						{t(`devices.newDevice.${step}.body`, { email })}
+					</p>
+				</div>
+				{body[step]}
+				<div className="flex flex-wrap justify-center gap-5 pt-1">
+					{links[step]}
+				</div>
+			</FullWindowContent>
+		</FullWindowLayout>
 	)
 }
 

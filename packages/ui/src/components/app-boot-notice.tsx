@@ -1,5 +1,9 @@
 import { BOOT_MARK_SIZE } from "@workspace/ui/components/app-boot-screen"
 import { BrandMark } from "@workspace/ui/components/app-icon-mark"
+import {
+	FullWindowContent,
+	FullWindowLayout,
+} from "@workspace/ui/components/full-window-layout"
 import { Notice } from "@workspace/ui/components/notice"
 
 type AppBootNoticeProps = {
@@ -9,16 +13,14 @@ type AppBootNoticeProps = {
 }
 
 const AppBootNotice = ({ title, description, onRetry }: AppBootNoticeProps) => (
-	<div
-		data-slot="app-boot-notice"
-		className="flex h-svh w-full flex-col items-center justify-center gap-6 bg-background p-6"
-		data-tauri-drag-region="deep"
-	>
-		<BrandMark size={BOOT_MARK_SIZE} />
-		<div className="w-full max-w-sm" data-tauri-drag-region="false">
-			<Notice description={description} retry={{ onRetry }} title={title} />
-		</div>
-	</div>
+	<FullWindowLayout data-slot="app-boot-notice" data-tauri-drag-region="deep">
+		<FullWindowContent className="gap-6 p-6">
+			<BrandMark size={BOOT_MARK_SIZE} />
+			<div className="w-full max-w-sm" data-tauri-drag-region="false">
+				<Notice description={description} retry={{ onRetry }} title={title} />
+			</div>
+		</FullWindowContent>
+	</FullWindowLayout>
 )
 
 export { AppBootNotice }

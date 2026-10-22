@@ -2,6 +2,7 @@ import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	centredInWindowOf,
 	glyphIn,
 	probedStyleOf,
 	slotIn,
@@ -13,7 +14,6 @@ import {
 } from "@workspace/ui/components/device-card.fixtures"
 import { Icons } from "@workspace/ui/components/icons"
 import { NewDeviceScreen } from "@workspace/ui/components/new-device-screen"
-import { WorkspaceShell } from "@workspace/ui/components/workspace-shell"
 
 const ARTBOARD =
 	"Measured against the Paper page `Mockup` of `Kiroshi, E2E Spaces v2`, dark only, the desktop as the new device, full window with no sidebar."
@@ -54,11 +54,6 @@ const meta = preview.meta({
 		onSignOut: fn(),
 		onBackToSignIn: fn(),
 	},
-	render: (args) => (
-		<WorkspaceShell>
-			<NewDeviceScreen {...args} />
-		</WorkspaceShell>
-	),
 })
 
 export const Waiting = meta.story({
@@ -207,4 +202,44 @@ export const Rejected = meta.story({
 		)
 		await expect(args.onBackToSignIn).toHaveBeenCalledOnce()
 	},
+})
+
+export const WaitingCentredIn700pxWindow = meta.story({
+	args: { step: "waiting" },
+	...centredInWindowOf(700),
+})
+
+export const WaitingCentredIn1100pxWindow = meta.story({
+	args: { step: "waiting" },
+	...centredInWindowOf(1100),
+})
+
+export const CodeCentredIn700pxWindow = meta.story({
+	args: { step: "code" },
+	...centredInWindowOf(700),
+})
+
+export const CodeCentredIn1100pxWindow = meta.story({
+	args: { step: "code" },
+	...centredInWindowOf(1100),
+})
+
+export const ExpiredCentredIn700pxWindow = meta.story({
+	args: { step: "expired" },
+	...centredInWindowOf(700),
+})
+
+export const ExpiredCentredIn1100pxWindow = meta.story({
+	args: { step: "expired" },
+	...centredInWindowOf(1100),
+})
+
+export const RejectedCentredIn700pxWindow = meta.story({
+	args: { step: "rejected" },
+	...centredInWindowOf(700),
+})
+
+export const RejectedCentredIn1100pxWindow = meta.story({
+	args: { step: "rejected" },
+	...centredInWindowOf(1100),
 })
