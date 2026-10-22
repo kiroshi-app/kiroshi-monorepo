@@ -12,15 +12,16 @@ use tokio::time;
 use super::commands::announce_conversation;
 use super::context::{bounded_context, headed_message, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
-use super::turn_run_deadline::arm_start_deadlines;
+use super::turn_run_deadline::{arm_start_deadlines, suspend_start_deadline};
 use crate::agent::commands::{
 	agent_shutdown, announce, announce_in_turn, cancel_session_turn, live_run_of, run_is_idle,
 	start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
-	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome,
+	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome, TurnState,
 };
+use crate::agent::session::Handed;
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
@@ -328,6 +329,7 @@ struct Summons {
 struct Speaker {
 	scope: RuntimeScope,
 	written: Vec<String>,
+	is_in_line: bool,
 }
 
 struct Ridden {
@@ -351,6 +353,15 @@ enum SpeakerEnd {
 }
 
 impl Speaker {
+	fn is_delivered_by(&mut self, event: &AgentEvent) -> bool {
+		let is_delivered = self.is_in_line
+			&& matches!(event, AgentEvent::TurnChanged { state: TurnState::Submitting });
+		if is_delivered {
+			self.is_in_line = false;
+		}
+		is_delivered
+	}
+
 	fn end_after(&mut self, event: &AgentEvent) -> Option<SpeakerEnd> {
 		match event {
 			AgentEvent::MessageStarted { message } | AgentEvent::MessageCompleted { message } => {
@@ -418,6 +429,10 @@ impl<R: Runtime> HostTurn<R> {
 			let Some(at) = speaking.iter().position(|speaker| self.hears(speaker, &scoped)) else {
 				continue;
 			};
+			if speaking[at].is_delivered_by(&scoped.event) {
+				let bot_ids = [speaking[at].scope.bot_id.clone()];
+				arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
+			}
 			let Some(end) = speaking[at].end_after(&scoped.event) else {
 				continue;
 			};
@@ -495,7 +510,7 @@ impl<R: Runtime> HostTurn<R> {
 
 	async fn begin(&self, summons: Summons) -> Option<Speaker> {
 		match self.speak(&summons).await {
-			Ok(scope) => Some(Speaker { scope, written: Vec::new() }),
+			Ok(speaker) => Some(speaker),
 			Err(refusal) => {
 				self.refused(&summons.bot_id, refusal).await;
 				None
@@ -503,7 +518,7 @@ impl<R: Runtime> HostTurn<R> {
 		}
 	}
 
-	async fn speak(&self, summons: &Summons) -> Result<RuntimeScope, Refusal> {
+	async fn speak(&self, summons: &Summons) -> Result<Speaker, Refusal> {
 		let participant = self.participant(&summons.bot_id);
 		let order = self.agent().map_err(Refusal::Unready)?.host_turns().order_of(&participant);
 		let _in_order = order.lock().await;
@@ -511,10 +526,15 @@ impl<R: Runtime> HostTurn<R> {
 		if self.has_stopped() {
 			return Err(Refusal::Stopped(ridden.scope));
 		}
-		if let Err(error) = self.submitted(&ridden, &summons.prompt_id).await {
-			return Err(Refusal::Unsubmitted(ridden.scope, error));
+		let handed = match self.submitted(&ridden, &summons.prompt_id).await {
+			Ok(handed) => handed,
+			Err(error) => return Err(Refusal::Unsubmitted(ridden.scope, error)),
+		};
+		let is_in_line = handed == Handed::Queued;
+		if is_in_line {
+			suspend_start_deadline(&self.app, &self.turn_id, &summons.bot_id);
 		}
-		Ok(ridden.scope)
+		Ok(Speaker { scope: ridden.scope, written: Vec::new(), is_in_line })
 	}
 
 	async fn ridden(&self, participant: ParticipantKey) -> Result<Ridden, Refusal> {
@@ -604,7 +624,7 @@ impl<R: Runtime> HostTurn<R> {
 		Ok(())
 	}
 
-	async fn submitted(&self, ridden: &Ridden, prompt_id: &str) -> Result<(), TransportError> {
+	async fn submitted(&self, ridden: &Ridden, prompt_id: &str) -> Result<Handed, TransportError> {
 		let text = self
 			.prompt_for(ridden, prompt_id)
 			.await
@@ -880,7 +900,7 @@ mod tests {
 			runtime_session_id: "s1".to_owned(),
 			epoch: 1,
 		};
-		Speaker { scope, written: Vec::new() }
+		Speaker { scope, written: Vec::new(), is_in_line: false }
 	}
 
 	#[test]
@@ -1078,8 +1098,11 @@ mod tests {
 		for scope in &speakers {
 			app.state::<AgentState>().host_turns().note_started(scope);
 		}
-		let speaking =
-			speakers.iter().map(|scope| Speaker { scope: scope.clone(), written: Vec::new() });
+		let speaking = speakers.iter().map(|scope| Speaker {
+			scope: scope.clone(),
+			written: Vec::new(),
+			is_in_line: false,
+		});
 
 		host_turn.drive(held, speaking.collect(), heard, &mut reading).await;
 
@@ -1108,7 +1131,11 @@ mod tests {
 		let (_stop, stopped) = watch::channel(false);
 		let host_turn = a_host_turn(app.handle(), &room, stopped);
 		app.state::<AgentState>().host_turns().note_started(&scope_in(&room, &speaker));
-		let speaking = vec![Speaker { scope: scope_in(&room, &speaker), written: Vec::new() }];
+		let speaking = vec![Speaker {
+			scope: scope_in(&room, &speaker),
+			written: Vec::new(),
+			is_in_line: false,
+		}];
 		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
 
 		host_turn.lost(&mut reading, speaking, waiting).await;
@@ -1283,10 +1310,11 @@ mod tests {
 	) -> (tauri::async_runtime::JoinHandle<()>, mpsc::UnboundedSender<ScopedEvent>) {
 		let held = app.state::<AgentState>().host_turns().hold(&room.id, "t1").expect("held");
 		let host_turn = a_host_turn(app, room, held.stopped.clone());
-		let speaking = room
-			.bot_ids
-			.iter()
-			.map(|bot_id| Speaker { scope: scope_in(room, bot_id), written: Vec::new() });
+		let speaking = room.bot_ids.iter().map(|bot_id| Speaker {
+			scope: scope_in(room, bot_id),
+			written: Vec::new(),
+			is_in_line: false,
+		});
 		let speaking: Vec<Speaker> = speaking.collect();
 		let (events, heard) = mpsc::unbounded_channel();
 		let (mut reading, _lagging) = a_lagging_reader();
@@ -1386,7 +1414,7 @@ mod tests {
 		};
 		events.send(completed).expect("the turn listens");
 		let (mut reading, _lagging) = a_lagging_reader();
-		let speaking = vec![Speaker { scope: ada, written: Vec::new() }];
+		let speaking = vec![Speaker { scope: ada, written: Vec::new(), is_in_line: false }];
 
 		host_turn.drive(held, speaking, heard, &mut reading).await;
 
@@ -1409,8 +1437,11 @@ mod tests {
 		let (events, heard) = mpsc::unbounded_channel::<ScopedEvent>();
 		drop(events);
 		let (mut reading, _lagging) = a_lagging_reader();
-		let speaking =
-			vec![Speaker { scope: scope_in(&room, &room.bot_ids[0]), written: Vec::new() }];
+		let speaking = vec![Speaker {
+			scope: scope_in(&room, &room.bot_ids[0]),
+			written: Vec::new(),
+			is_in_line: false,
+		}];
 
 		host_turn.drive(held, speaking, heard, &mut reading).await;
 

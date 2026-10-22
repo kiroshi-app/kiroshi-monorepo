@@ -16,7 +16,7 @@ use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
-use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
+use super::session::{Bundle, EventSink, GatedSink, Handed, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
@@ -1199,11 +1199,11 @@ pub(crate) async fn submit_in_line(
 	scope: &RuntimeScope,
 	text: &str,
 	turn: SubmittedTurn,
-) -> Result<(), TransportError> {
+) -> Result<Handed, TransportError> {
 	let turn_id = turn.turn_id.clone();
-	state.live.session_for(scope)?.submit_in_line(text, turn).await?;
+	let handed = state.live.session_for(scope)?.submit_in_line(text, turn).await?;
 	state.host_writes.record_submitted(&turn_id);
-	Ok(())
+	Ok(handed)
 }
 
 pub(crate) async fn withdraw_queued(

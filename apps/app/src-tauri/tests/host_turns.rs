@@ -29,6 +29,7 @@ use kiroshi_app::conversations::commands::{
 	conversation_open_runtime_session, conversation_send_user_message,
 };
 use kiroshi_app::conversations::contract::NewUserMessage;
+use kiroshi_app::conversations::turn_run_deadline::TurnRunDeadlines;
 use kiroshi_app::crypto::commands::{DeviceKeysState, SpaceKeys};
 use kiroshi_app::crypto::device_keys::{self, DeviceId, DeviceKeys};
 use kiroshi_app::crypto::frame::{self, Frame, Header, CHALLENGE_LENGTH};
@@ -72,6 +73,7 @@ const AGENT_EVENT: &str = kiroshi_app::agent::commands::EVENT_CHANNEL;
 const MESSAGE_STORED: &str = kiroshi_app::conversations::contract::MESSAGE_STORED_EVENT;
 const CONVERSATION_UPDATED: &str = kiroshi_app::conversations::contract::UPDATED_EVENT;
 const PATIENCE: Duration = Duration::from_secs(60);
+const SHORT_START_DEADLINE: Duration = Duration::from_millis(300);
 
 const A_ROOM: &str = "
 	INSERT INTO bots (id, name, model, created_at) VALUES
@@ -1120,6 +1122,67 @@ fn a_companion_named_by_a_bot_rides_the_host_run_through_the_same_path() {
 		assert_eq!(grace[0].runtime_session_id, held.runtime_session_id);
 		let transcript = host.transcript().await;
 		assert_eq!(replies_of(&transcript, GRACE).len(), 1, "the room holds {transcript:#?}");
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_member_turn_queued_past_its_start_deadline_keeps_its_run_until_it_is_answered() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queued-past-deadline", "held_echo").await;
+		host.app.manage(TurnRunDeadlines::after(SHORT_START_DEADLINE));
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+
+		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+		tokio::time::sleep(SHORT_START_DEADLINE * 3).await;
+		let awaited = host.runs_of("t1").await;
+		let completed_while_queued = host.completed_at("t1").await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.heard_until(|frames| {
+			agent_events_in(frames, ADA).filter(|event| event["type"] == "turnEnded").count() >= 2
+		})
+		.await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		assert_eq!(awaited, 1, "the queued run expired at its start deadline");
+		assert_eq!(completed_while_queued, None, "the queued turn closed before it was answered");
+		let transcript = host.transcript().await;
+		let answered: Vec<&StoredMessage> = replies_of(&transcript, ADA)
+			.into_iter()
+			.filter(|reply| reply.turn_id == "t1")
+			.collect();
+		assert_eq!(answered.len(), 1, "the room holds {transcript:#?}");
+		assert!(answered[0].content.ends_with("]\nmember second"), "{}", answered[0].content);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awaited() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("withdrawn-by-stop", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+
+		let outcome =
+			agent_cancel_turn(host.app.handle().clone(), host.app.state::<AgentState>(), held)
+				.await;
+
+		assert_eq!(outcome, Ok(CancelOutcome::Cancelled));
+		assert_eq!(host.runs_of("t1").await, 0, "the withdrawn run was left awaited");
+		assert!(host.completed_at("t1").await.is_some(), "the withdrawn turn was left open");
+		let transcript = host.transcript().await;
+		assert!(
+			replies_of(&transcript, ADA).iter().all(|reply| reply.turn_id != "t1"),
+			"the withdrawn prompt was answered: {transcript:#?}"
+		);
 		host.quit().await;
 	});
 }

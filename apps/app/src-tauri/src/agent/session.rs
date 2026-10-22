@@ -251,6 +251,12 @@ struct Shared {
 	lease: RunLease,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Handed {
+	Delivered,
+	Queued,
+}
+
 struct QueuedPrompt {
 	text: String,
 	turn: SubmittedTurn,
@@ -552,7 +558,7 @@ impl Session {
 		&self,
 		text: &str,
 		turn: SubmittedTurn,
-	) -> Result<(), TransportError> {
+	) -> Result<Handed, TransportError> {
 		let mut shared = self.shared.lock().await;
 		if shared.is_mid_turn() {
 			log::info!(
@@ -561,9 +567,10 @@ impl Session {
 				turn.turn_id
 			);
 			shared.queued.push_back(QueuedPrompt { text: text.to_owned(), turn });
-			return Ok(());
+			return Ok(Handed::Queued);
 		}
-		self.line().deliver(&mut shared, text, Some(turn))
+		self.line().deliver(&mut shared, text, Some(turn))?;
+		Ok(Handed::Delivered)
 	}
 
 	pub async fn withdraw(&self, turn_id: &str) -> bool {
