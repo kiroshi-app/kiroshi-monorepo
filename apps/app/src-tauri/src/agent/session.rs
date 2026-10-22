@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -247,7 +247,13 @@ struct Shared {
 	turn: TurnState,
 	shutting_down: bool,
 	running: Option<RunningTurn>,
+	queued: VecDeque<QueuedPrompt>,
 	lease: RunLease,
+}
+
+struct QueuedPrompt {
+	text: String,
+	turn: SubmittedTurn,
 }
 
 struct RunningTurn {
@@ -257,6 +263,10 @@ struct RunningTurn {
 }
 
 impl Shared {
+	fn is_mid_turn(&self) -> bool {
+		matches!(self.turn, TurnState::Submitting | TurnState::Running | TurnState::Stopping)
+	}
+
 	fn set_turn(&mut self, next: TurnState) -> Option<AgentEvent> {
 		if self.turn == next {
 			return None;
@@ -334,15 +344,88 @@ impl Shared {
 		self.running.as_ref()?;
 		log::info!("the session shut down while its turn ran session={session}");
 		self.turn_ended(session, TurnOutcome::Cancelled);
-		Some(AgentEvent::TurnEnded {
+		Some(self.ended_as(TurnOutcome::Cancelled))
+	}
+
+	fn ended_as(&self, outcome: TurnOutcome) -> AgentEvent {
+		AgentEvent::TurnEnded {
 			ended: TurnEnded {
 				session_id: self.translator.session_id().map(str::to_owned),
-				outcome: TurnOutcome::Cancelled,
+				outcome,
 				structured_output: None,
 				total_cost_usd: None,
 				model_usage: None,
 			},
-		})
+		}
+	}
+
+	fn abandon_queued(&mut self, outcome: TurnOutcome) -> Abandoned {
+		let turns: Vec<SubmittedTurn> = self.queued.drain(..).map(|queued| queued.turn).collect();
+		for turn in &turns {
+			log::info!("a queued prompt was dropped session={} turn={}", self.key, turn.turn_id);
+		}
+		Abandoned { turns, ended: self.ended_as(outcome) }
+	}
+}
+
+struct Abandoned {
+	turns: Vec<SubmittedTurn>,
+	ended: AgentEvent,
+}
+
+impl Abandoned {
+	fn tell(self, sink: &dyn EventSink) {
+		for turn in self.turns {
+			sink.submitted(turn);
+			sink.emit(self.ended.clone());
+		}
+	}
+}
+
+struct Line<'a> {
+	sidecar: &'a Sidecar,
+	sink: &'a dyn EventSink,
+	rearmed: &'a Notify,
+}
+
+impl Line<'_> {
+	fn deliver(
+		&self,
+		shared: &mut Shared,
+		text: &str,
+		turn: Option<SubmittedTurn>,
+	) -> Result<(), TransportError> {
+		let key = shared.key.clone();
+		shared.turn_started(&key, turn.as_ref().map(|turn| turn.turn_id.clone()));
+		let entering = shared.set_turn(TurnState::Submitting);
+		self.rearmed.notify_one();
+		let handed = turn.is_some();
+		if let Some(turn) = turn {
+			self.sink.submitted(turn);
+		}
+		if let Some(entering) = entering {
+			self.sink.emit(entering);
+		}
+		let written = self.sidecar.send(protocol::prompt_command(&key, text));
+		if written.is_err() {
+			shared.turn_ended(&key, TurnOutcome::Failed);
+		}
+		if written.is_err() && handed {
+			self.sink.withdrawn();
+		}
+		written
+	}
+
+	fn deliver_next(&self, shared: &mut Shared) {
+		if shared.is_mid_turn() {
+			return;
+		}
+		let Some(next) = shared.queued.pop_front() else {
+			return;
+		};
+		if let Err(error) = self.deliver(shared, &next.text, Some(next.turn)) {
+			self.sink.emit(AgentEvent::Failed { error });
+		}
 	}
 }
 
@@ -373,6 +456,7 @@ impl Session {
 			turn: TurnState::Idle,
 			shutting_down: false,
 			running: None,
+			queued: VecDeque::new(),
 			lease: options.lease,
 		}));
 		let rearmed = Arc::new(Notify::new());
@@ -457,32 +541,45 @@ impl Session {
 		text: &str,
 		turn: Option<SubmittedTurn>,
 	) -> Result<(), TransportError> {
-		let (key, entering) = {
-			let mut shared = self.shared.lock().await;
-			if matches!(
-				shared.turn,
-				TurnState::Submitting | TurnState::Running | TurnState::Stopping
-			) {
-				return Err(TransportError::TurnAlreadyRunning);
-			}
-			let key = shared.key.clone();
-			shared.turn_started(&key, turn.as_ref().map(|turn| turn.turn_id.clone()));
-			(key, shared.set_turn(TurnState::Submitting))
-		};
-		self.rearmed.notify_one();
-		let handed = turn.is_some();
-		if let Some(turn) = turn {
-			self.sink.submitted(turn);
+		let mut shared = self.shared.lock().await;
+		if shared.is_mid_turn() {
+			return Err(TransportError::TurnAlreadyRunning);
 		}
-		self.emit(entering);
-		let written = self.write(protocol::prompt_command(&key, text));
-		if written.is_err() {
-			self.shared.lock().await.turn_ended(&key, TurnOutcome::Failed);
+		self.line().deliver(&mut shared, text, turn)
+	}
+
+	pub async fn submit_in_line(
+		&self,
+		text: &str,
+		turn: SubmittedTurn,
+	) -> Result<(), TransportError> {
+		let mut shared = self.shared.lock().await;
+		if shared.is_mid_turn() {
+			log::info!(
+				"a prompt waits for the running turn session={} turn={}",
+				shared.key,
+				turn.turn_id
+			);
+			shared.queued.push_back(QueuedPrompt { text: text.to_owned(), turn });
+			return Ok(());
 		}
-		if written.is_err() && handed {
-			self.sink.withdrawn();
-		}
-		written
+		self.line().deliver(&mut shared, text, Some(turn))
+	}
+
+	pub async fn withdraw(&self, turn_id: &str) -> bool {
+		let mut shared = self.shared.lock().await;
+		let held = shared.queued.len();
+		shared.queued.retain(|queued| queued.turn.turn_id != turn_id);
+		shared.queued.len() < held
+	}
+
+	pub async fn is_idle(&self) -> bool {
+		let shared = self.shared.lock().await;
+		!shared.is_mid_turn() && shared.queued.is_empty()
+	}
+
+	fn line(&self) -> Line<'_> {
+		Line { sidecar: &self.sidecar, sink: self.sink.as_ref(), rearmed: &self.rearmed }
 	}
 
 	pub async fn cancel_turn(&self) -> Result<(), TransportError> {
@@ -562,6 +659,7 @@ impl Session {
 			if let Some(ended) = shared.ended_by_shutdown(&key) {
 				self.sink.emit(ended);
 			}
+			shared.abandon_queued(TurnOutcome::Cancelled).tell(self.sink.as_ref());
 			key
 		};
 		self.sink.drained().await;
@@ -669,7 +767,8 @@ async fn read_loop(
 			Next::Frame(raw) => raw,
 			Next::Ended => break,
 			Next::Lapsed => {
-				if let Some(reopened) = end_lapsed_turn(&shared, sink.as_ref(), &mut desk).await {
+				let lapsed = end_lapsed_turn(&shared, sink.as_ref(), &mut desk, &rearmed).await;
+				if let Some(reopened) = lapsed {
 					frames = reopened;
 				}
 				continue;
@@ -733,6 +832,10 @@ async fn read_loop(
 			for event in entering.into_iter().chain(events).chain(ending) {
 				sink.emit(event);
 			}
+			if outcome.is_some() {
+				let line = Line { sidecar: &desk.sidecar, sink: sink.as_ref(), rearmed: &rearmed };
+				line.deliver_next(&mut guard);
+			}
 		}
 	}
 
@@ -767,6 +870,7 @@ async fn end_lapsed_turn(
 	shared: &Mutex<Shared>,
 	sink: &dyn EventSink,
 	desk: &mut HostDesk,
+	rearmed: &Notify,
 ) -> Option<mpsc::UnboundedReceiver<Value>> {
 	let mut guard = shared.lock().await;
 	let (deadline, lapse) = guard.lease_deadline()?;
@@ -778,8 +882,12 @@ async fn end_lapsed_turn(
 	}
 	let (frames, reopened) = guard.reopen(&desk.sidecar);
 	desk.key = guard.key.clone();
-	if let Err(error) = reopened {
-		sink.emit(AgentEvent::Failed { error });
+	match reopened {
+		Ok(()) => Line { sidecar: &desk.sidecar, sink, rearmed }.deliver_next(&mut guard),
+		Err(error) => {
+			sink.emit(AgentEvent::Failed { error });
+			guard.abandon_queued(TurnOutcome::Failed).tell(sink);
+		}
 	}
 	Some(frames)
 }
@@ -790,13 +898,13 @@ async fn on_exit(
 	session: &str,
 	reason: Option<TransportError>,
 ) {
-	let failing = {
+	let (failing, abandoned) = {
 		let mut guard = shared.lock().await;
 		if guard.shutting_down {
 			return;
 		}
 		guard.turn_ended(session, TurnOutcome::Failed);
-		guard.set_turn(TurnState::Failed)
+		(guard.set_turn(TurnState::Failed), guard.abandon_queued(TurnOutcome::Failed))
 	};
 
 	sink.emit(AgentEvent::ConnectionChanged { state: ConnectionState::Crashed });
@@ -809,6 +917,7 @@ async fn on_exit(
 	if let Some(event) = failing {
 		sink.emit(event);
 	}
+	abandoned.tell(sink.as_ref());
 }
 
 #[cfg(test)]

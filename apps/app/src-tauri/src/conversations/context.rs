@@ -115,6 +115,19 @@ pub async fn message_header(
 	Ok(header_of(&message, None))
 }
 
+pub async fn headed_message(
+	database: &Database,
+	conversation_id: String,
+	message_id: String,
+) -> Result<String, TranscriptStoreError> {
+	let message = database
+		.messages()
+		.message(conversation_id, message_id.clone())
+		.await?
+		.ok_or(TranscriptStoreError::UnknownMessage { id: message_id })?;
+	Ok(format!("{}\n{}", header_of(&message, None), message.content))
+}
+
 fn header_of(message: &StoredMessage, room: Option<&Room>) -> String {
 	author_header(&author_of(message, room), message.created_at)
 }

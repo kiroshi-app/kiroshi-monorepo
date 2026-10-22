@@ -9,8 +9,8 @@ use std::time::Duration;
 use kiroshi_app::agent::commands::start_with_fallback;
 use kiroshi_app::agent::contract::{
 	ActivityKind, ActivityStatus, AgentCommand, AgentEvent, ConnectionState, MessageCompletion,
-	OfferedModel, PermissionDecision, PermissionRequest, QuestionRequest, TransportError,
-	TurnOutcome, TurnState,
+	OfferedModel, PermissionDecision, PermissionRequest, QuestionRequest, SubmittedTurn,
+	TransportError, TurnOutcome, TurnState,
 };
 use kiroshi_app::agent::protocol::AuthorizeRequest;
 use kiroshi_app::agent::session::{EventSink, Session, SessionOptions, PARTIAL_MESSAGES};
@@ -1033,4 +1033,77 @@ async fn a_flow_the_caller_saw_settle_sends_no_cancel() {
 	sidecar.checked(&Values::new()).await.expect("a later command is answered");
 
 	assert!(!cancel_file.is_file(), "a settled flow asked the sidecar to cancel");
+}
+
+fn a_turn(turn_id: &str) -> SubmittedTurn {
+	SubmittedTurn { turn_id: turn_id.to_owned(), prompt_id: format!("prompt-of-{turn_id}") }
+}
+
+async fn allowed(harness: &mut Harness) {
+	let request = harness.wait_for_permission().await;
+	harness
+		.session
+		.respond_to_permission(&request.id, PermissionDecision::AllowOnce)
+		.await
+		.expect("decision accepted");
+}
+
+#[tokio::test]
+async fn a_prompt_handed_in_line_during_a_turn_goes_out_once_that_turn_ends() {
+	let mut harness = start(options("held_echo")).await.expect("session starts");
+	harness.session.submit_in_line("first", a_turn("t1")).await.expect("the first goes out");
+	harness.session.submit_in_line("second", a_turn("t2")).await.expect("the second waits");
+	assert!(!harness.session.is_idle().await, "a session holding a prompt read as idle");
+
+	allowed(&mut harness).await;
+	let first = harness.drain_turn().await;
+	allowed(&mut harness).await;
+	let second = harness.drain_turn().await;
+
+	assert_eq!(assistant_text(&first), "echo :: first");
+	assert_eq!(outcome(&first), Some(TurnOutcome::Completed));
+	assert_eq!(assistant_text(&second), "echo :: second");
+	assert_eq!(outcome(&second), Some(TurnOutcome::Completed));
+	assert!(harness.session.is_idle().await, "the session kept a prompt it had sent");
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_withdrawn_prompt_never_goes_out() {
+	let mut harness = start(options("held_echo")).await.expect("session starts");
+	harness.session.submit_in_line("first", a_turn("t1")).await.expect("the first goes out");
+	harness.session.submit_in_line("second", a_turn("t2")).await.expect("the second waits");
+
+	let has_withdrawn = harness.session.withdraw("t2").await;
+	allowed(&mut harness).await;
+	let first = harness.drain_turn().await;
+
+	assert!(has_withdrawn, "the waiting prompt was not withdrawn");
+	assert!(!harness.session.withdraw("t2").await, "a prompt was withdrawn twice");
+	assert_eq!(assistant_text(&first), "echo :: first");
+	assert!(harness.session.is_idle().await, "the withdrawn prompt went out");
+	harness.session.shutdown().await;
+}
+
+#[tokio::test]
+async fn a_shutdown_ends_every_prompt_still_in_line_as_cancelled() {
+	let mut harness = start(options("held_echo")).await.expect("session starts");
+	harness.session.submit_in_line("first", a_turn("t1")).await.expect("the first goes out");
+	harness.session.submit_in_line("second", a_turn("t2")).await.expect("the second waits");
+	harness.wait_for_permission().await;
+
+	harness.session.shutdown().await;
+	let heard = harness.wait_for("both turns ended", |events| endings(events).len() >= 2).await;
+
+	assert_eq!(endings(&heard), vec![TurnOutcome::Cancelled, TurnOutcome::Cancelled]);
+}
+
+fn endings(events: &[AgentEvent]) -> Vec<TurnOutcome> {
+	events
+		.iter()
+		.filter_map(|event| match event {
+			AgentEvent::TurnEnded { ended } => Some(ended.outcome),
+			_ => None,
+		})
+		.collect()
 }
