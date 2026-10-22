@@ -85,6 +85,28 @@ describe("useMissions", () => {
 		expect(result.current.hasFailed).toBe(false)
 	})
 
+	it("reads pending until the missions answer, then settles on an empty answer", async () => {
+		let answer: (missions: { open: Mission[]; done: Mission[] }) => void = () =>
+			undefined
+		listMissions.mockReturnValue(
+			new Promise((resolve) => {
+				answer = resolve
+			}),
+		)
+		const { result } = renderHook(() => useMissions("c-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+
+		await waitFor(() => expect(result.current.isPending).toBe(true))
+		expect(result.current.hasFailed).toBe(false)
+
+		act(() => answer({ open: [], done: [] }))
+
+		await waitFor(() => expect(result.current.isPending).toBe(false))
+		expect(result.current.missions).toEqual([])
+		expect(result.current.hasFailed).toBe(false)
+	})
+
 	it("holds its read still when the roster clock ticks", async () => {
 		const { result } = renderHook(() => useMissions("c-1"), {
 			wrapper: createQueryTestWrapper().wrapper,

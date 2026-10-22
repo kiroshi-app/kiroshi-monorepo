@@ -33,6 +33,7 @@ import {
 	type MissionCardWrap,
 	wrapCard,
 } from "@workspace/ui/components/mission-card"
+import { MissionsFeedSkeleton } from "@workspace/ui/components/missions-feed-skeleton"
 import { NestedSidebarProvider } from "@workspace/ui/components/nested-sidebar-provider"
 import { Notice } from "@workspace/ui/components/notice"
 import {
@@ -144,6 +145,7 @@ type RoutinesPanelMissions = {
 type RoutinesPanelListProps = {
 	missions: RoutinesPanelMissions
 	routines: RoutineRowModel[]
+	isMissionsPending?: boolean
 	isRoutinesPending?: boolean
 	failure: RoutinesFailure | null
 	onRetry: () => void
@@ -188,6 +190,7 @@ const RoutineRowSkeleton = () => (
 const RoutinesPanelBody = ({
 	missions,
 	routines,
+	isMissionsPending = false,
 	isRoutinesPending = false,
 	failure,
 	onRetry,
@@ -205,6 +208,9 @@ const RoutinesPanelBody = ({
 	const routinesPhase = useSkeletonTiming(isRoutinesPending)
 	const isAwaitingRoutines =
 		routinesPhase === "delay" || routinesPhase === "skeleton"
+	const missionsPhase = useSkeletonTiming(isMissionsPending)
+	const isAwaitingMissions =
+		missionsPhase === "delay" || missionsPhase === "skeleton"
 
 	const notice = failure ? (
 		<Notice
@@ -290,6 +296,21 @@ const RoutinesPanelBody = ({
 						title={t("routines.empty.title")}
 					/>
 				)}
+			</>
+		)
+	}
+
+	if (isAwaitingMissions) {
+		return (
+			<>
+				{notice}
+				<div
+					aria-busy="true"
+					className="flex min-h-0 flex-1 flex-col"
+					data-slot="missions-pending"
+				>
+					{missionsPhase === "skeleton" ? <MissionsFeedSkeleton /> : null}
+				</div>
 			</>
 		)
 	}
