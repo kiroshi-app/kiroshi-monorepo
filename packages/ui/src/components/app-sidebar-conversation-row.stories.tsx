@@ -20,7 +20,6 @@ import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conv
 import { ConversationIcons } from "@workspace/ui/components/icons"
 import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
-import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarConversationRow",
@@ -404,44 +403,16 @@ export const OpenRowWithMissionStrips = meta.story({
 	},
 })
 
-const liftDown = fn()
-
-const LIFT_SPYING_ON_DOWN: Lifter = {
-	...STILL_LIFT,
-	handlersFor: (id) => ({
-		...STILL_LIFT.handlersFor(id),
-		onPointerDown: liftDown,
-	}),
-}
-
-const STOP_DESK_ROOM = `Stop ${DESK_ROOM.name}`
-
-export const WorkingConversationStopsWithItsId = meta.story({
-	args: { lift: LIFT_SPYING_ON_DOWN, onStop: fn() },
-	play: async ({ args, canvas, canvasElement }) => {
+export const WorkingConversationKeepsItsTimestamp = meta.story({
+	play: async ({ canvas, canvasElement }) => {
 		const row = rowIn(canvasElement)
-		const stopButton = canvas.getByRole("button", { name: STOP_DESK_ROOM })
-		const stop = stopButton.getBoundingClientRect()
-		const pile = boxOf(row, "conversation-bot-pile")
-		await expectPileWhole(row, canvasElement)
 		await expect(
-			pile.right <= stop.left ||
-				stop.right <= pile.left ||
-				pile.bottom <= stop.top ||
-				stop.bottom <= pile.top,
-		).toBe(true)
-		await userEvent.click(stopButton)
-		await expect(args.onStop).toHaveBeenCalledOnce()
-		await expect(args.onStop).toHaveBeenCalledWith(DESK_ROOM.id)
-		await expect(args.onSelect).not.toHaveBeenCalled()
-		await expect(liftDown).not.toHaveBeenCalled()
-		await expect(within(document.body).queryByRole("menu")).toBeNull()
-	},
-})
-
-export const IdleConversationGivenOnStopHasNoStop = meta.story({
-	args: { conversation: roomOf([ATLAS]), onStop: fn() },
-	play: async ({ canvas }) => {
-		await expect(canvas.queryByRole("button", { name: /^Stop / })).toBeNull()
+			slotIn(slotIn(row, "roster-row-preview"), "text-shimmer"),
+		).toBeVisible()
+		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+			DESK_ROOM.timestamp ?? "",
+		)
+		await expect(canvas.getAllByRole("button")).toEqual([row])
+		await expectPileWhole(row, canvasElement)
 	},
 })

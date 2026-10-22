@@ -11,7 +11,6 @@ import {
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { BotRosterRow } from "@workspace/ui/components/app-sidebar-bot-row"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
-import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
 const meta = preview.meta({
 	title: "Navigation/AppSidebarBotRow",
@@ -65,38 +64,16 @@ export const BotOwnRowKeepsItsAvatarAndNoPile = meta.story({
 	},
 })
 
-const liftDown = fn()
-
-const LIFT_SPYING_ON_DOWN: Lifter = {
-	...STILL_LIFT,
-	handlersFor: (id) => ({
-		...STILL_LIFT.handlersFor(id),
-		onPointerDown: liftDown,
-	}),
-}
-
-export const WorkingBotStopsWithItsId = meta.story({
-	args: {
-		bot: BEACON,
-		isSelected: false,
-		lift: LIFT_SPYING_ON_DOWN,
-		onStop: fn(),
-	},
-	play: async ({ args, canvas, userEvent }) => {
-		await userEvent.click(
-			canvas.getByRole("button", { name: `Stop ${BEACON.name}` }),
+export const WorkingBotKeepsItsTimestamp = meta.story({
+	args: { bot: BEACON, isSelected: false },
+	play: async ({ canvas, canvasElement }) => {
+		const row = slotIn(canvasElement, "sidebar-menu-button")
+		await expect(
+			slotIn(slotIn(row, "roster-row-preview"), "text-shimmer"),
+		).toBeVisible()
+		await expect(slotIn(row, "roster-row-timestamp")).toHaveTextContent(
+			BEACON.timestamp ?? "",
 		)
-		await expect(args.onStop).toHaveBeenCalledOnce()
-		await expect(args.onStop).toHaveBeenCalledWith(BEACON.id)
-		await expect(args.onSelect).not.toHaveBeenCalled()
-		await expect(liftDown).not.toHaveBeenCalled()
-		await expect(within(document.body).queryByRole("menu")).toBeNull()
-	},
-})
-
-export const IdleBotGivenOnStopHasNoStop = meta.story({
-	args: { isSelected: false, onStop: fn() },
-	play: async ({ canvas }) => {
-		await expect(canvas.queryByRole("button", { name: /^Stop / })).toBeNull()
+		await expect(canvas.getAllByRole("button")).toEqual([row])
 	},
 })
