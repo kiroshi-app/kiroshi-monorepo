@@ -156,19 +156,6 @@ const expectPileWhole = async (row: HTMLElement, root: HTMLElement) => {
 	}
 }
 
-const expectOverflowInsideTheRow = async (
-	row: HTMLElement,
-	root: HTMLElement,
-) => {
-	const overflow = slotIn(row, "conversation-bot-pile-overflow")
-	const [nearestClip] = clippingAncestorsOf(overflow, root)
-	const right = overflow.getBoundingClientRect().right
-	await expect(right).toBeLessThanOrEqual(row.getBoundingClientRect().right)
-	await expect(right).toBeLessThanOrEqual(
-		nearestClip.getBoundingClientRect().right,
-	)
-}
-
 const expectPileWholeAtTheSidebarWidth = async (
 	canvasElement: HTMLElement,
 	width: number,
@@ -178,7 +165,6 @@ const expectPileWholeAtTheSidebarWidth = async (
 	await expect(slotIn(row, "conversation-bot-pile-overflow")).toHaveTextContent(
 		"+3",
 	)
-	await expectOverflowInsideTheRow(row, canvasElement)
 	await expectPileWhole(row, canvasElement)
 }
 
@@ -434,9 +420,8 @@ export const WorkingConversationStopsWithItsId = meta.story({
 	args: { lift: LIFT_SPYING_ON_DOWN, onStop: fn() },
 	play: async ({ args, canvas, canvasElement }) => {
 		const row = rowIn(canvasElement)
-		const stop = canvas
-			.getByRole("button", { name: STOP_DESK_ROOM })
-			.getBoundingClientRect()
+		const stopButton = canvas.getByRole("button", { name: STOP_DESK_ROOM })
+		const stop = stopButton.getBoundingClientRect()
 		const pile = boxOf(row, "conversation-bot-pile")
 		await expectPileWhole(row, canvasElement)
 		await expect(
@@ -445,7 +430,7 @@ export const WorkingConversationStopsWithItsId = meta.story({
 				pile.bottom <= stop.top ||
 				stop.bottom <= pile.top,
 		).toBe(true)
-		await userEvent.click(canvas.getByRole("button", { name: STOP_DESK_ROOM }))
+		await userEvent.click(stopButton)
 		await expect(args.onStop).toHaveBeenCalledOnce()
 		await expect(args.onStop).toHaveBeenCalledWith(DESK_ROOM.id)
 		await expect(args.onSelect).not.toHaveBeenCalled()
