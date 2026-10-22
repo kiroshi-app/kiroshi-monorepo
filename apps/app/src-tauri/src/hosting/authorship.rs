@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use specta::datatype::DataType;
 use specta::function::FunctionArg;
@@ -8,14 +10,16 @@ use tauri::ipc::{CommandArg, CommandItem, InvokeError};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
-use super::contract::{Member, MemberStatus};
+use super::contract::{Member, MemberStatus, MembersError, SpaceMembers};
 use super::{members, Hosting};
 use crate::account::contract::{AccountState, KiroshiAccount};
-use crate::account::session::{device_name, AccountSession};
+use crate::account::session::{this_computer, AccountSession};
 use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
+
+const MEMBERS_READ_BOUND: Duration = Duration::from_secs(3);
 
 #[derive(Clone)]
 pub struct RelayedMember {
@@ -104,7 +108,7 @@ impl Caller {
 	) -> Result<AccountAuthor, DatabaseError> {
 		match self {
 			Caller::Host => {
-				let computer = Some(device_name().await);
+				let computer = Some(this_computer().await.to_owned());
 				Ok(AccountAuthor { computer, ..host_author(app, database).await? })
 			}
 			Caller::Relayed(None) => Ok(AccountAuthor::default()),
@@ -174,11 +178,24 @@ async fn hosted_members<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Optio
 	if known.is_some() {
 		return known;
 	}
-	match members::list(app, space_id.to_owned()).await {
-		Ok(listed) => Some(listed.members),
-		Err(failure) => {
+	listed_within_bound(space_id, members::list(app, space_id.to_owned())).await
+}
+
+async fn listed_within_bound(
+	space_id: &str,
+	listing: impl Future<Output = Result<SpaceMembers, MembersError>>,
+) -> Option<Vec<Member>> {
+	match tokio::time::timeout(MEMBERS_READ_BOUND, listing).await {
+		Ok(Ok(listed)) => Some(listed.members),
+		Ok(Err(failure)) => {
 			log::warn!(
 				"the members of hosted space {space_id} were not read for a session: {failure:?}"
+			);
+			None
+		}
+		Err(_) => {
+			log::warn!(
+				"the members of hosted space {space_id} were not read for a session within {MEMBERS_READ_BOUND:?}"
 			);
 			None
 		}
@@ -234,4 +251,40 @@ async fn listed_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -
 
 fn member_among(members: &[Member], user_id: &str) -> Option<Member> {
 	members.iter().find(|member| member.user_id == user_id).cloned()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[tokio::test(start_paused = true)]
+	async fn a_members_read_past_its_bound_opens_the_session_with_no_member_list() {
+		let started = tokio::time::Instant::now();
+
+		let listed =
+			listed_within_bound("s1", std::future::pending::<Result<SpaceMembers, MembersError>>())
+				.await;
+
+		assert_eq!(listed, None);
+		assert_eq!(started.elapsed(), MEMBERS_READ_BOUND);
+	}
+
+	#[tokio::test(start_paused = true)]
+	async fn a_members_read_within_its_bound_names_the_members() {
+		let member = Member {
+			user_id: "u1".to_owned(),
+			name: None,
+			email: "bea@example.com".to_owned(),
+			status: MemberStatus::Joined,
+		};
+		let answered = SpaceMembers { members: vec![member.clone()], invitations: Vec::new() };
+
+		let listed = listed_within_bound("s1", async {
+			tokio::time::sleep(MEMBERS_READ_BOUND - Duration::from_millis(1)).await;
+			Ok(answered)
+		})
+		.await;
+
+		assert_eq!(listed, Some(vec![member]));
+	}
 }

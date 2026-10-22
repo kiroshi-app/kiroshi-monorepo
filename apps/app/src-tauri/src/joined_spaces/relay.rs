@@ -678,7 +678,7 @@ async fn started_in_turn<R: Runtime>(
 		Ok(held) => held,
 		Err(wait) => return Err(waiting_for_host(id, &instance_id, wait)),
 	};
-	let link = Arc::new(MemberLink::new(&instance_id, session::device_name().await));
+	let link = Arc::new(MemberLink::new(&instance_id, session::this_computer().await.to_owned()));
 	let token = Arc::new(HostToken::random());
 	let (stop, stopped) = watch::channel(false);
 	let reread = {

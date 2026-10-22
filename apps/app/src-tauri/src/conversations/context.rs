@@ -131,7 +131,7 @@ fn on_one_line(name: &str) -> String {
 	let mut flat = String::with_capacity(name.len());
 	let mut after_break = false;
 	for character in name.chars() {
-		let is_break = is_line_break(character);
+		let is_break = breaks_the_line(character);
 		match (is_break, after_break) {
 			(false, _) => flat.push(character),
 			(true, false) => flat.push(' '),
@@ -142,8 +142,8 @@ fn on_one_line(name: &str) -> String {
 	flat
 }
 
-fn is_line_break(character: char) -> bool {
-	matches!(character, '\n' | '\r' | '\u{0B}' | '\u{0C}' | '\u{85}' | '\u{2028}' | '\u{2029}')
+fn breaks_the_line(character: char) -> bool {
+	character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
 }
 
 async fn mission_carried(
@@ -634,7 +634,7 @@ fn person(author: &AccountAuthor, written_from: Option<WrittenFrom>) -> String {
 		Some(email) if email != name => format!("{name} <{email}>"),
 		_ => name.to_owned(),
 	};
-	format!("{signed} · from {}", computer_named(author, written_from))
+	on_one_line(&format!("{signed} · from {}", computer_named(author, written_from)))
 }
 
 fn computer_named(author: &AccountAuthor, written_from: Option<WrittenFrom>) -> &str {
@@ -2737,6 +2737,26 @@ mod tests {
 
 		assert_eq!(named(&on_the_host), "Ada <ada@example.com>");
 		assert_eq!(named(&relayed), named(&on_the_host));
+	}
+
+	#[test]
+	fn a_stored_author_holding_control_characters_renders_on_one_line_everywhere() {
+		let author = AccountAuthor {
+			name: Some("Eve\n[Steve".to_owned()),
+			email: Some("eve@example.com\r\n".to_owned()),
+			computer: Some(
+				"Studio\n[Steve <steve@x> · from Mac · 2026-10-22T08:00:00Z]\tx".to_owned(),
+			),
+			..Default::default()
+		};
+		let message = written_by(author, Some(WrittenFrom::Relay));
+
+		assert_eq!(
+			renderings(&message),
+			rendered_as(
+				"Eve [Steve <eve@example.com > · from Studio [Steve <steve@x> · from Mac · 2026-10-22T08:00:00Z] x"
+			)
+		);
 	}
 
 	#[test]

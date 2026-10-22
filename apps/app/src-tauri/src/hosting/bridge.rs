@@ -96,7 +96,12 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 
 fn computer_of(frame: &Value) -> Option<String> {
 	let named = frame.get("computer").and_then(Value::as_str)?;
-	Some(trimmed_to(named, DEVICE_NAME_LIMIT)).filter(|name| !name.is_empty())
+	let flat = named
+		.split(|character: char| character.is_whitespace() || character.is_control())
+		.filter(|word| !word.is_empty())
+		.collect::<Vec<_>>()
+		.join(" ");
+	Some(trimmed_to(&flat, DEVICE_NAME_LIMIT)).filter(|name| !name.is_empty())
 }
 
 #[derive(Debug, PartialEq)]
@@ -353,6 +358,14 @@ mod tests {
 			Ok(None)
 		);
 		assert_eq!(computer(json!({ "id": 4, "command": "agent_models" })), Ok(None));
+		assert_eq!(
+			computer(json!({ "id": 5, "command": "agent_models", "computer": "Stu\ndio\t x" })),
+			Ok(Some("Stu dio x".to_owned()))
+		);
+		assert_eq!(
+			computer(json!({ "id": 6, "command": "agent_models", "computer": "Stu\u{7}\r\ndio" })),
+			Ok(Some("Stu dio".to_owned()))
+		);
 	}
 
 	#[test]

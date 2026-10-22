@@ -4341,7 +4341,7 @@ fn one_account_reads_as_one_name_on_the_host_or_through_the_relay_and_each_line_
 				json!({ "conversationId": host.conversation_id, "messageId": id }),
 			)
 		};
-		let here = crate::account::session::device_name().await;
+		let here = crate::account::session::this_computer().await;
 		let at = "1970-01-01T00:00:00Z";
 
 		assert_eq!(

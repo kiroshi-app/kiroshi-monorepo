@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
-use tokio::sync::{MutexGuard, Notify};
+use tokio::sync::{MutexGuard, Notify, OnceCell};
 
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
@@ -180,6 +180,12 @@ pub async fn sign_in<R: Runtime>(
 	);
 	*waiting = Some(tauri::async_runtime::spawn(approved(app.clone(), listener, nonce, request)));
 	Ok(())
+}
+
+static THIS_COMPUTER: OnceCell<String> = OnceCell::const_new();
+
+pub(crate) async fn this_computer() -> &'static str {
+	THIS_COMPUTER.get_or_init(device_name).await
 }
 
 pub(crate) async fn device_name() -> String {
@@ -1258,6 +1264,15 @@ mod tests {
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
 		});
+	}
+
+	#[tokio::test]
+	async fn this_computer_is_read_once_and_the_same_name_answers_every_later_ask() {
+		let first = this_computer().await;
+		let later = this_computer().await;
+
+		assert!(!first.is_empty());
+		assert!(std::ptr::eq(first, later), "the computer name was read again");
 	}
 
 	#[test]
