@@ -1,7 +1,7 @@
 import { expect, fn, userEvent } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { slotIn } from "@workspace/storybook/story-utils"
+import { centredInWindowOf, slotIn } from "@workspace/storybook/story-utils"
 import { AppBootNotice } from "@workspace/ui/components/app-boot-notice"
 import { BRAND_NAME } from "@workspace/ui/components/app-icon-mark"
 
@@ -54,4 +54,14 @@ export const Default = meta.story({
 
 		await expect(args.onRetry).toHaveBeenCalled()
 	},
+})
+
+export const CentredIn700pxWindow = meta.story({
+	tags: ["test-only"],
+	...centredInWindowOf(700),
+})
+
+export const CentredIn1100pxWindow = meta.story({
+	tags: ["test-only"],
+	...centredInWindowOf(1100),
 })

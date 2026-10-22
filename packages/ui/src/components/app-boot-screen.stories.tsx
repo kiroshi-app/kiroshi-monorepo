@@ -1,7 +1,11 @@
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { expectCellsIn, slotIn } from "@workspace/storybook/story-utils"
+import {
+	centredInWindowOf,
+	expectCellsIn,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import { AppBootScreen } from "@workspace/ui/components/app-boot-screen"
 import { BRAND_NAME } from "@workspace/ui/components/app-icon-mark"
 
@@ -57,7 +61,7 @@ export const Default = meta.story({
 		await expect(canvas.getByRole("status")).toHaveTextContent(
 			"Starting Kiroshi",
 		)
-		await expect(screen.children).toHaveLength(2)
+		await expect(slotIn(screen, "full-window-content").children).toHaveLength(2)
 		await expectBootAvatar(screen)
 	},
 })
@@ -99,4 +103,14 @@ export const WindowSurfaceDark = meta.story({
 		await expect(screen).toHaveAttribute("data-tauri-drag-region", "deep")
 		await expectBootAvatar(screen)
 	},
+})
+
+export const CentredIn700pxWindow = meta.story({
+	tags: ["test-only"],
+	...centredInWindowOf(700),
+})
+
+export const CentredIn1100pxWindow = meta.story({
+	tags: ["test-only"],
+	...centredInWindowOf(1100),
 })

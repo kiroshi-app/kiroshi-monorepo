@@ -114,6 +114,42 @@ export const slotIn = (root: Element, slot: string) => {
 	return node
 }
 
+export const expectCentredInWindow = async (root: Element) => {
+	const block = slotIn(root, "full-window-content").getBoundingClientRect()
+	const spaceBelow = window.innerHeight - block.bottom
+
+	await expect(Math.abs(block.top - spaceBelow)).toBeLessThanOrEqual(1)
+}
+
+type CentringPlayContext = { canvasElement: HTMLElement }
+
+export const centredInWindowOf = (height: number) => {
+	const viewport = `window-${height}`
+
+	return {
+		globals: { viewport: { value: viewport } },
+		parameters: {
+			viewport: {
+				options: {
+					[viewport]: {
+						name: `${height}px tall window`,
+						styles: { width: "1280px", height: `${height}px` },
+					},
+				},
+			},
+			docs: {
+				description: {
+					story: `The screen in a window ${height}px tall, mounted bare the way the app mounts it. Check that its content block has as much space above it as below it, within 1px. Pick the twin at the other height to see the same centring hold on a short and a tall window.`,
+				},
+			},
+		},
+		play: async ({ canvasElement }: CentringPlayContext) => {
+			await expect(window.innerHeight).toBe(height)
+			await expectCentredInWindow(canvasElement)
+		},
+	}
+}
+
 const strokesOf = (Glyph: Icon) => {
 	const host = document.createElement("div")
 	host.innerHTML = renderToStaticMarkup(<Glyph />)
