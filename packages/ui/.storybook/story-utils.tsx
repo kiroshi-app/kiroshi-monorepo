@@ -1,5 +1,5 @@
 import { OverlayScrollbars } from "overlayscrollbars"
-import type { ComponentType, ReactNode } from "react"
+import type { ComponentType, CSSProperties, ReactNode } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ExtraProps } from "react-markdown"
 import { expect, waitFor } from "storybook/test"
@@ -85,8 +85,19 @@ export const Row = ({ children }: { children: React.ReactNode }) => (
 	<div className="flex flex-wrap items-center gap-3">{children}</div>
 )
 
-export const SidebarFrame = ({ children }: { children: ReactNode }) => (
-	<SidebarProvider>
+type SidebarFrameProps = {
+	children: ReactNode
+	width?: number
+}
+
+export const SidebarFrame = ({ children, width }: SidebarFrameProps) => (
+	<SidebarProvider
+		style={
+			width === undefined
+				? undefined
+				: ({ "--sidebar-width": `${width}px` } as CSSProperties)
+		}
+	>
 		<Sidebar aria-label="Roster" collapsible="none" role="complementary">
 			<SidebarContent>{children}</SidebarContent>
 		</Sidebar>

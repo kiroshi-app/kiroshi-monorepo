@@ -45,7 +45,8 @@ const TIMESTAMP: Record<RowGeometry, string> = {
 	activity: "shrink-0 text-[11px] text-muted-foreground leading-5 tabular-nums",
 }
 
-const PREVIEW_LINE = "flex h-4 min-w-0 items-center justify-end gap-2"
+const PREVIEW_LINE =
+	"flex h-4 min-w-0 items-center justify-end gap-2 [&_svg]:size-full!"
 
 const PREVIEW_BESIDE_TRAILING = "min-w-0 flex-1 pe-0"
 
