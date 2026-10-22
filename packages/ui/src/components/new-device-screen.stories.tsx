@@ -205,49 +205,41 @@ export const Rejected = meta.story({
 })
 
 export const WaitingCentredIn700pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "waiting" },
 	...centredInWindowOf(700),
 })
 
 export const WaitingCentredIn1100pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "waiting" },
 	...centredInWindowOf(1100),
 })
 
 export const CodeCentredIn700pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "code" },
 	...centredInWindowOf(700),
 })
 
 export const CodeCentredIn1100pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "code" },
 	...centredInWindowOf(1100),
 })
 
 export const ExpiredCentredIn700pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "expired" },
 	...centredInWindowOf(700),
 })
 
 export const ExpiredCentredIn1100pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "expired" },
 	...centredInWindowOf(1100),
 })
 
 export const RejectedCentredIn700pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "rejected" },
 	...centredInWindowOf(700),
 })
 
 export const RejectedCentredIn1100pxWindow = meta.story({
-	tags: ["test-only"],
 	args: { step: "rejected" },
 	...centredInWindowOf(1100),
 })

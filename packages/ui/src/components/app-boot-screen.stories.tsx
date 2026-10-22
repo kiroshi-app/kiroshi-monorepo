@@ -106,11 +106,9 @@ export const WindowSurfaceDark = meta.story({
 })
 
 export const CentredIn700pxWindow = meta.story({
-	tags: ["test-only"],
 	...centredInWindowOf(700),
 })
 
 export const CentredIn1100pxWindow = meta.story({
-	tags: ["test-only"],
 	...centredInWindowOf(1100),
 })
