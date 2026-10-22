@@ -286,7 +286,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_front_event_socket_outlives_a_relay_drop_and_closes_when_the_guest_ends() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());
@@ -306,7 +306,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_front_event_socket_that_falls_behind_rereads_once_and_hears_the_next_frame() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let (calls, _sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());
@@ -361,7 +361,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_held_avatar_crosses_as_its_bytes_and_a_foreign_or_huge_one_is_refused() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let (calls, sent) = mpsc::channel(4);
 		link.opened(calls);
 		a_host_answering_avatars(link.clone(), sent);
@@ -400,7 +400,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_asked_without_an_admitted_token_is_refused_before_the_relay() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
@@ -419,7 +419,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_avatar_asked_of_an_offline_host_answers_the_offline_text() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		link.closed(Presence::Down);
 		let token = Arc::new(HostToken::random());
 		let origin = a_guest_proxy(link, token.clone(), no_reread()).await;
@@ -437,7 +437,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn a_preflight_from_the_packaged_window_is_allowed_before_any_token() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let origin = a_guest_proxy(link, Arc::new(HostToken::random()), no_reread()).await;
 
 		for path in
@@ -465,7 +465,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn an_attachment_is_still_not_served_by_the_proxy() {
-		let link = Arc::new(MemberLink::new("instance-1"));
+		let link = Arc::new(MemberLink::new("instance-1", "Studio".to_owned()));
 		let (calls, mut sent) = mpsc::channel(4);
 		link.opened(calls);
 		let token = Arc::new(HostToken::random());

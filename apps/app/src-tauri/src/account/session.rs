@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::net::TcpListener;
-use tokio::sync::{MutexGuard, Notify};
+use tokio::sync::{MutexGuard, Notify, OnceCell};
 
 use super::callback;
 use super::cloud::{AuthorizationRequest, Cloud, MeError, PollError, Polled};
@@ -37,7 +37,7 @@ const DEVICE_REFUSED: AccountState =
 
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
-const DEVICE_NAME_LIMIT: usize = 64;
+pub(crate) const DEVICE_NAME_LIMIT: usize = 64;
 
 const DISPLAY_NAME_LIMIT: usize = 80;
 
@@ -182,6 +182,12 @@ pub async fn sign_in<R: Runtime>(
 	Ok(())
 }
 
+static THIS_COMPUTER: OnceCell<String> = OnceCell::const_new();
+
+pub(crate) async fn this_computer() -> &'static str {
+	THIS_COMPUTER.get_or_init(device_name).await
+}
+
 async fn device_name() -> String {
 	let read =
 		tokio::process::Command::new("scutil").args(["--get", "ComputerName"]).output().await;
@@ -210,7 +216,7 @@ fn device_name_of(named: &str) -> String {
 	}
 }
 
-fn trimmed_to(named: &str, utf16_limit: usize) -> String {
+pub(crate) fn trimmed_to(named: &str, utf16_limit: usize) -> String {
 	let mut utf16_units = 0;
 	named
 		.trim()
@@ -1258,6 +1264,15 @@ mod tests {
 
 			assert_eq!(cloudy.renamed(), vec![json!({ "name": "Grace" })]);
 		});
+	}
+
+	#[tokio::test]
+	async fn this_computer_is_read_once_and_the_same_name_answers_every_later_ask() {
+		let first = this_computer().await;
+		let later = this_computer().await;
+
+		assert!(!first.is_empty());
+		assert!(std::ptr::eq(first, later), "the computer name was read again");
 	}
 
 	#[test]

@@ -17,6 +17,12 @@ export type ServerEnv = {
 	failure?: string
 }
 
+export type SpaceMember = {
+	name?: string
+	email: string
+	isHost: boolean
+}
+
 export type SessionRequest = {
 	session?: string
 	cwd: string
@@ -36,6 +42,7 @@ export type SessionRequest = {
 	connection?: Record<string, string>
 	outputSchema?: Record<string, unknown>
 	missionThread?: boolean
+	members?: SpaceMember[]
 }
 
 export type PermissionDecision =

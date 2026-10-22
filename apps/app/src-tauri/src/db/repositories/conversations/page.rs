@@ -111,7 +111,8 @@ fn active_rows() -> String {
 			word.content AS word_text, word.created_at AS word_at,
 			word.author_bot_id AS word_author_bot_id,
 			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
-			word.written_from AS word_written_from,
+			word.written_from AS word_written_from, word.author_email AS word_author_email,
+			word.author_computer AS word_author_computer,
 			EXISTS (SELECT 1 FROM turns AS open_turn
 				WHERE open_turn.conversation_id = conversations.id
 					AND open_turn.completed_at IS NULL) AS has_open_turn,
@@ -382,6 +383,8 @@ fn last_word(row: &Row<'_>, at: i64) -> rusqlite::Result<LastWord> {
 		author: AccountAuthor {
 			account_id: row.get("word_author_account_id")?,
 			name: row.get("word_author_name")?,
+			email: row.get("word_author_email")?,
+			computer: row.get("word_author_computer")?,
 		},
 		written_from: row.get("word_written_from")?,
 	})
@@ -634,6 +637,7 @@ mod tests {
 			author: AccountAuthor {
 				account_id: Some("acc-ada".to_owned()),
 				name: Some("Ada".to_owned()),
+				..Default::default()
 			},
 			written_from: Some(WrittenFrom::Relay),
 		};

@@ -209,6 +209,12 @@ describe("serve", () => {
 		expect(sessionRequest(openCommand()).missionThread).toBeUndefined()
 	})
 
+	it("carries the members the open command names", () => {
+		const members = [{ name: "Ada", email: "ada@example.com", isHost: true }]
+		expect(sessionRequest(openCommand({ members })).members).toEqual(members)
+		expect(sessionRequest(openCommand()).members).toBeUndefined()
+	})
+
 	it("carries the environment the open command holds to the provider", () => {
 		const request = sessionRequest(openCommand())
 

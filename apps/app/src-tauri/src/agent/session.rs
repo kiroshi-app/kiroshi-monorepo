@@ -13,7 +13,9 @@ use super::contract::{
 	TurnOutcome, TurnState,
 };
 use super::lease::{Lapse, Liveness, RunLease};
-use super::protocol::{self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest};
+use super::protocol::{
+	self, ClosedFrame, Frame, HostAnswer, HostRequestFrame, OpenRequest, SpaceMember,
+};
 use super::sidecar::Sidecar;
 use super::translate::Translator;
 use crate::environment::contract::{ResolvedEnv, Values};
@@ -128,6 +130,7 @@ pub struct SessionOptions {
 	pub connection: Values,
 	pub output_schema: Option<serde_json::Value>,
 	pub mission_thread: bool,
+	pub members: Vec<SpaceMember>,
 	pub hosts: Vec<Arc<dyn HostRequests>>,
 	pub lease: RunLease,
 }
@@ -146,6 +149,7 @@ impl SessionOptions {
 			connection: Values::new(),
 			output_schema: None,
 			mission_thread: false,
+			members: Vec::new(),
 			hosts: Vec::new(),
 			lease: RunLease::default(),
 		}
@@ -201,6 +205,11 @@ impl SessionOptions {
 		self
 	}
 
+	pub fn read_by(mut self, members: Vec<SpaceMember>) -> Self {
+		self.members = members;
+		self
+	}
+
 	pub fn leased(mut self, lease: RunLease) -> Self {
 		self.lease = lease;
 		self
@@ -226,6 +235,7 @@ impl SessionOptions {
 			connection: self.connection.clone(),
 			output_schema: self.output_schema.clone(),
 			mission_thread: self.mission_thread,
+			members: self.members.clone(),
 		}
 	}
 }
@@ -898,6 +908,30 @@ mod tests {
 		assert_eq!(serialized(options().on_mission_thread(true))["missionThread"], true);
 		assert_eq!(serialized(options().on_mission_thread(false)).get("missionThread"), None);
 		assert_eq!(serialized(options()).get("missionThread"), None);
+	}
+
+	#[test]
+	fn a_run_names_the_members_reading_it_only_when_there_are_some() {
+		let serialized = |options: SessionOptions| {
+			serde_json::to_value(options.open_request(true)).expect("the request serializes")
+		};
+		let members = vec![
+			SpaceMember {
+				name: Some("Ada".to_owned()),
+				email: "ada@example.com".to_owned(),
+				is_host: true,
+			},
+			SpaceMember { name: None, email: "bea@example.com".to_owned(), is_host: false },
+		];
+
+		assert_eq!(
+			serialized(options().read_by(members))["members"],
+			serde_json::json!([
+				{ "name": "Ada", "email": "ada@example.com", "isHost": true },
+				{ "email": "bea@example.com", "isHost": false },
+			])
+		);
+		assert_eq!(serialized(options()).get("members"), None);
 	}
 
 	#[test]

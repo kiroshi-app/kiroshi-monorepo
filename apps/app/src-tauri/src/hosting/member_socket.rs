@@ -122,12 +122,13 @@ fn frames() -> BTreeMap<String, Value> {
 		(
 			"CallFrame".to_owned(),
 			json!({
-				"description": "A member calls one command of the host. args defaults to {} when absent.",
+				"description": "A member calls one command of the host. args defaults to {} when absent. computer names the computer the member writes from.",
 				"type": "object",
 				"properties": {
 					"id": id,
 					"command": { "type": "string" },
 					"args": { "type": "object" },
+					"computer": { "type": "string" },
 				},
 				"required": ["id", "command"],
 			}),

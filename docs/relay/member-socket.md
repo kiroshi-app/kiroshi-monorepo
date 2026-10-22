@@ -86,7 +86,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 ### The call frame
 
 ```json
-{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] } }
+{ "id": 7, "command": "conversation_send_turn", "args": { "message": {}, "summoned": ["bot-1"] }, "computer": "Studio" }
 ```
 
 - `id`: a string or a number, unique among the client's calls still awaiting an
@@ -95,6 +95,10 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 - `command`: a key of the schema's `commands` object.
 - `args`: an object shaped by `commands.<command>.args`. Absent means `{}`. Keys are
   camelCase. An optional arg (nullable in the schema) may be omitted.
+- `computer`: optional, the name of the computer the member writes from. The host
+  records it on every message that call writes and names it to the agent. Absent,
+  the agent reads that the message came from another computer. The desktop client
+  sends its computer name on every call.
 
 ### The answer frame
 

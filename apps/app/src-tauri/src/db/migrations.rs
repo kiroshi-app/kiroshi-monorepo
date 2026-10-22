@@ -68,6 +68,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 59, statements: MISSION_THREADS_OF_SPACE },
 	Migration { version: 60, statements: MISSION_HANDOFF },
 	Migration { version: 61, statements: MESSAGE_WRITTEN_FROM },
+	Migration { version: 62, statements: MESSAGE_AUTHOR_EMAIL_AND_COMPUTER },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1301,6 +1302,13 @@ END
 WHERE role = 'user';
 ";
 
+const MESSAGE_AUTHOR_EMAIL_AND_COMPUTER: &str = "
+ALTER TABLE messages ADD COLUMN author_email TEXT
+	CHECK (author_email IS NULL OR role = 'user');
+ALTER TABLE messages ADD COLUMN author_computer TEXT
+	CHECK (author_computer IS NULL OR role = 'user');
+";
+
 pub fn latest_version() -> u32 {
 	MIGRATIONS.last().map_or(0, |migration| migration.version)
 }
@@ -1414,6 +1422,7 @@ mod tests {
 	const SPACE_REMOVED_DEVICES_STEP: u32 = 58;
 	const MISSION_HANDOFF_STEP: u32 = 60;
 	const MESSAGE_WRITTEN_FROM_STEP: u32 = 61;
+	const MESSAGE_AUTHOR_EMAIL_AND_COMPUTER_STEP: u32 = 62;
 
 	const A_LIVE_SESSION: &str = "INSERT INTO runtime_sessions
 		(id, conversation_id, bot_id, provider_session_id, seq, status, started_at)
@@ -2321,6 +2330,46 @@ mod tests {
 			write(&connection, "UPDATE messages SET written_from = 'abroad' WHERE id = 'unsigned'")
 				.is_err(),
 			"an origin outside here and relay reached the file"
+		);
+
+		drop(connection);
+		fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[test]
+	fn a_human_row_stored_before_the_email_and_computer_step_reads_back_with_neither() {
+		let dir = temp_dir();
+		let mut connection = open(&dir.join(FILE_NAME)).expect("open");
+		apply_each(&mut connection, shipped_before(MESSAGE_AUTHOR_EMAIL_AND_COMPUTER_STEP))
+			.expect("the shipped schema");
+		assert_eq!(version(&connection).expect("version"), MESSAGE_WRITTEN_FROM_STEP);
+		connection.execute_batch(A_HOSTED_HISTORY).expect("the history this build upgrades from");
+		let held = count(&connection, "messages");
+
+		apply(&mut connection).expect("the file comes up to this build");
+
+		assert_eq!(count(&connection, "messages"), held);
+		let filled = connection
+			.query_row(
+				"SELECT COUNT(*) FROM messages
+					WHERE author_email IS NOT NULL OR author_computer IS NOT NULL",
+				[],
+				|row| row.get::<_, i64>(0),
+			)
+			.expect("the messages carry the email and computer columns");
+		assert_eq!(filled, 0, "the step backfilled an email or a computer");
+		assert!(
+			write(
+				&connection,
+				"UPDATE messages SET author_computer = 'Studio' WHERE id = 'answer'"
+			)
+			.is_err(),
+			"a reply of a companion took a computer"
+		);
+		assert!(
+			write(&connection, "UPDATE messages SET author_email = 'a@b.c' WHERE id = 'answer'")
+				.is_err(),
+			"a reply of a companion took an email"
 		);
 
 		drop(connection);

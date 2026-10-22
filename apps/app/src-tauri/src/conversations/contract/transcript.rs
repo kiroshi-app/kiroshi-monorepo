@@ -469,8 +469,11 @@ mod tests {
 
 	#[test]
 	fn a_bot_authored_user_message_carries_no_account_author() {
-		let author =
-			messages::AccountAuthor { account_id: Some("owner".into()), name: Some("Ada".into()) };
+		let author = messages::AccountAuthor {
+			account_id: Some("owner".into()),
+			name: Some("Ada".into()),
+			..Default::default()
+		};
 		let message = |author_bot_id: Option<&str>| NewUserMessage {
 			id: "m1".into(),
 			conversation_id: "c1".into(),

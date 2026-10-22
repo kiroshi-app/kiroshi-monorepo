@@ -67,6 +67,17 @@ pub struct OpenRequest {
 	pub output_schema: Option<Value>,
 	#[serde(skip_serializing_if = "std::ops::Not::not")]
 	pub mission_thread: bool,
+	#[serde(skip_serializing_if = "Vec::is_empty")]
+	pub members: Vec<SpaceMember>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceMember {
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub name: Option<String>,
+	pub email: String,
+	pub is_host: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

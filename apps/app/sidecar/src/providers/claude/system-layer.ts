@@ -1,6 +1,6 @@
 import { type PreloadedSkill, preloadedSkills } from "./system-skills"
 
-import type { SessionRequest } from "../provider"
+import type { SessionRequest, SpaceMember } from "../provider"
 
 export type LayerContext = Pick<
 	SessionRequest,
@@ -9,13 +9,17 @@ export type LayerContext = Pick<
 	| "systemPluginPath"
 	| "userPluginPath"
 	| "spacePluginPath"
+	| "members"
 >
+
+const ONE_READER =
+	"One person is reading you, and you answer that person directly."
 
 export const KIROSHI_LAYER = `You run inside Kiroshi, a desktop app on this person's computer. They keep several bots there, and you are one of them.
 
 When you choose to keep something, it becomes one of your skills. The person can read what you kept, and undo it, in your History.
 
-You are read in a chat window. One person is reading you, and you answer that person directly.
+You are read in a chat window. ${ONE_READER}
 
 Answer in the language that person writes to you in.
 
@@ -26,6 +30,24 @@ Write plain prose, and keep it short. Use markdown only where it makes a reply e
 Leave out file paths, status reports, narration of the tools you are using, and closing recaps of what you just did. Give any of them when you are asked for them, and not before.
 
 You are not Claude Code and never present yourself as it. Say nothing about the machinery you run on — plugins, skills, sessions, system prompts — unless the person asks about it. Asked who you are or what you can do, answer with your name, that you run in Kiroshi, and that you learn from what this person tells you.`
+
+const memberLine = ({ name, email, isHost }: SpaceMember): string => {
+	const flatName = name?.replace(/\s+/g, " ").trim()
+	const signed =
+		flatName && flatName !== email ? `${flatName} <${email}>` : email
+	return `- ${signed}${isHost ? " (the host)" : ""}`
+}
+
+const severalWritersLine = (members: SpaceMember[]): string =>
+	[
+		"Several people write here. Each message names the person who wrote it and the computer they wrote it from, and you answer the person who wrote the message you are answering. The people of this space:",
+		...members.map(memberLine),
+	].join("\n")
+
+const kiroshiLayerFor = (members: SpaceMember[] | undefined): string =>
+	members?.length
+		? KIROSHI_LAYER.replace(ONE_READER, severalWritersLine(members))
+		: KIROSHI_LAYER
 
 export const bundleLine = (pluginPath: string): string =>
 	`Your own skills live in ${pluginPath}, and that is the directory to write a new one into.`
@@ -122,12 +144,13 @@ export const layerFor = (
 		systemPluginPath,
 		userPluginPath,
 		spacePluginPath,
+		members,
 	}: LayerContext,
 	rejections: ServerLine[] = [],
 ): string =>
 	[
 		...(identity ? [identity] : []),
-		KIROSHI_LAYER,
+		kiroshiLayerFor(members),
 		...pluginSection(userPluginPath, userLine),
 		...pluginSection(spacePluginPath, spaceLine),
 		...(pluginPath ? [bundleLine(pluginPath)] : []),
