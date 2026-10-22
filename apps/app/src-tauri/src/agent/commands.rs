@@ -16,7 +16,7 @@ use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
-use super::session::{Bundle, EventSink, GatedSink, Handed, Session, SessionOptions};
+use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
@@ -1217,6 +1217,14 @@ pub(crate) async fn withdraw_queued(
 	}
 }
 
+pub(crate) async fn line_place_of(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> Result<LinePlace, TransportError> {
+	Ok(state.live.session_for(scope)?.place_of(turn_id).await)
+}
+
 pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {
 	match state.live.session_for(scope) {
 		Ok(session) => session.is_idle().await,
@@ -1420,6 +1428,17 @@ pub(crate) fn a_run_held_by_the_app<R: Runtime>(
 	let live = app.state::<AgentState>().live.clone();
 	live.take_over(scope.clone());
 	RunSink { app: app.clone(), scope, live, records_its_own_lineage: false }
+}
+
+#[cfg(test)]
+pub(crate) fn a_session_held_by_the_app<R: Runtime>(
+	app: &AppHandle<R>,
+	scope: &RuntimeScope,
+	session: Arc<Session>,
+) {
+	let live = &app.state::<AgentState>().live;
+	live.take_over(scope.clone());
+	live.install(scope, session);
 }
 
 #[cfg(test)]

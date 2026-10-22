@@ -200,6 +200,8 @@ const RELEASE_EVERY_RUN: &str = "DELETE FROM turn_runs";
 const OPEN_RUNS_OF_BOT: &str = "SELECT DISTINCT turn_runs.turn_id FROM turn_runs
 	JOIN turns ON turns.id = turn_runs.turn_id
 	WHERE turns.conversation_id = ?1 AND turn_runs.bot_id = ?2";
+const RUN_IN_STATE: &str = "SELECT EXISTS (SELECT 1 FROM turn_runs
+	WHERE turn_id = ?1 AND bot_id = ?2 AND state = ?3)";
 const RELEASE_RUNS_OF_BOT: &str = "DELETE FROM turn_runs WHERE turn_id = ?1 AND bot_id = ?2";
 const AWAITED: &str = "awaited";
 const RUNNING: &str = "running";
@@ -358,6 +360,21 @@ impl MessagesRepository {
 		self.call_mut(move |connection| Ok(awaited_runs(connection, &turn_id, &bot_ids)))
 			.await?
 			.at("await_runs", "turn_runs")
+	}
+
+	pub async fn is_run_awaited(
+		&self,
+		turn_id: String,
+		bot_id: String,
+	) -> Result<bool, TranscriptError> {
+		Ok(self
+			.call(move |connection| {
+				Ok(connection
+					.prepare_cached(RUN_IN_STATE)?
+					.query_row(params![turn_id, bot_id, AWAITED], |row| row.get(0))?)
+			})
+			.await
+			.at("is_run_awaited", "turn_runs")?)
 	}
 
 	pub async fn abandon_run(

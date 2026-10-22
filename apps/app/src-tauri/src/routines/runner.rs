@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -353,13 +354,29 @@ async fn closed<R: Runtime>(
 	Ok(())
 }
 
-pub(crate) struct RelayReader(JoinHandle<String>);
+pub(crate) struct RelayReader(JoinHandle<ReadFailure>);
+
+pub(crate) enum ReadFailure {
+	Lagged { missed: u64 },
+	Ended(String),
+}
+
+impl fmt::Display for ReadFailure {
+	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			ReadFailure::Lagged { missed } => {
+				write!(formatter, "the relay dropped {missed} frames")
+			}
+			ReadFailure::Ended(reason) => formatter.write_str(reason),
+		}
+	}
+}
 
 impl RelayReader {
-	pub(crate) async fn failure(&mut self) -> String {
+	pub(crate) async fn failure(&mut self) -> ReadFailure {
 		match (&mut self.0).await {
 			Ok(failure) => failure,
-			Err(error) => format!("the relay reader stopped: {error}"),
+			Err(error) => ReadFailure::Ended(format!("the relay reader stopped: {error}")),
 		}
 	}
 }
@@ -390,23 +407,23 @@ async fn relayed(
 	mut heard: broadcast::Receiver<Frame>,
 	keeps: impl Fn(&RuntimeScope) -> bool,
 	events: mpsc::UnboundedSender<ScopedEvent>,
-) -> String {
+) -> ReadFailure {
 	loop {
 		let frame = match heard.recv().await {
 			Ok(frame) => frame,
-			Err(RecvError::Lagged(missed)) => return format!("the relay dropped {missed} frames"),
-			Err(RecvError::Closed) => return "the relay closed".to_owned(),
+			Err(RecvError::Lagged(missed)) => return ReadFailure::Lagged { missed },
+			Err(RecvError::Closed) => return ReadFailure::Ended("the relay closed".to_owned()),
 		};
 		let scoped = match agent_event(&frame) {
 			Ok(Some(scoped)) => scoped,
 			Ok(None) => continue,
-			Err(failure) => return failure,
+			Err(failure) => return ReadFailure::Ended(failure),
 		};
 		if !scoped.scope.as_ref().is_some_and(&keeps) {
 			continue;
 		}
 		if events.send(scoped).is_err() {
-			return "the reader's owner stopped listening".to_owned();
+			return ReadFailure::Ended("the reader's owner stopped listening".to_owned());
 		}
 	}
 }
