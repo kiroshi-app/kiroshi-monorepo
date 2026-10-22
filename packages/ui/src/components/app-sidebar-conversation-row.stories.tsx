@@ -18,6 +18,7 @@ import {
 } from "@workspace/ui/components/app-sidebar.fixtures"
 import { ConversationRosterRow } from "@workspace/ui/components/app-sidebar-conversation-row"
 import { ConversationIcons } from "@workspace/ui/components/icons"
+import { SIDEBAR_MIN_WIDTH } from "@workspace/ui/components/sidebar-resize"
 import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 import type { Lifter } from "@workspace/ui/hooks/use-roster-lift"
 
@@ -27,8 +28,8 @@ const meta = preview.meta({
 	tags: ["test-only"],
 	parameters: { layout: "fullscreen" },
 	decorators: [
-		(Story) => (
-			<SidebarFrame>
+		(Story, { parameters }) => (
+			<SidebarFrame width={parameters.sidebarWidth}>
 				<SidebarMenu>
 					<Story />
 				</SidebarMenu>
@@ -115,6 +116,85 @@ const expectKnockoutCutToTheRow = async (row: HTMLElement) => {
 		layer = layer.parentElement
 	}
 }
+
+const DEFAULT_SIDEBAR_WIDTH = 256
+
+const clippingAncestorsOf = (node: Element, root: Element) => {
+	const clips: Element[] = []
+	for (
+		let ancestor = node.parentElement;
+		ancestor && ancestor !== root;
+		ancestor = ancestor.parentElement
+	) {
+		if (getComputedStyle(ancestor).overflowX !== "visible") clips.push(ancestor)
+	}
+	return clips
+}
+
+const expectInside = async (inner: DOMRect, outer: DOMRect) => {
+	await expect(inner.left).toBeGreaterThanOrEqual(outer.left)
+	await expect(inner.top).toBeGreaterThanOrEqual(outer.top)
+	await expect(inner.right).toBeLessThanOrEqual(outer.right)
+	await expect(inner.bottom).toBeLessThanOrEqual(outer.bottom)
+}
+
+const expectPileWhole = async (row: HTMLElement, root: HTMLElement) => {
+	const slots = [
+		...slotsIn(row, "conversation-bot-pile-bot"),
+		...slotsIn(row, "conversation-bot-pile-overflow"),
+	]
+	const clips = [row, ...clippingAncestorsOf(slots[0], root)]
+	for (const slot of slots) {
+		for (const drawn of [slot, ...slotsIn(slot, "outlined-hexagon")]) {
+			for (const clip of clips) {
+				await expectInside(
+					drawn.getBoundingClientRect(),
+					clip.getBoundingClientRect(),
+				)
+			}
+		}
+	}
+}
+
+const expectOverflowInsideTheRow = async (
+	row: HTMLElement,
+	root: HTMLElement,
+) => {
+	const overflow = slotIn(row, "conversation-bot-pile-overflow")
+	const [nearestClip] = clippingAncestorsOf(overflow, root)
+	const right = overflow.getBoundingClientRect().right
+	await expect(right).toBeLessThanOrEqual(row.getBoundingClientRect().right)
+	await expect(right).toBeLessThanOrEqual(
+		nearestClip.getBoundingClientRect().right,
+	)
+}
+
+const expectPileWholeAtTheSidebarWidth = async (
+	canvasElement: HTMLElement,
+	width: number,
+) => {
+	const row = rowIn(canvasElement)
+	await expect(row.getBoundingClientRect().width).toBe(width)
+	await expect(slotIn(row, "conversation-bot-pile-overflow")).toHaveTextContent(
+		"+3",
+	)
+	await expectOverflowInsideTheRow(row, canvasElement)
+	await expectPileWhole(row, canvasElement)
+}
+
+export const PileWholeAtTheNarrowestSidebar = meta.story({
+	parameters: { sidebarWidth: SIDEBAR_MIN_WIDTH },
+	args: { conversation: roomOf(FIVE_BOTS) },
+	play: ({ canvasElement }) =>
+		expectPileWholeAtTheSidebarWidth(canvasElement, SIDEBAR_MIN_WIDTH),
+})
+
+export const PileWholeAtTheDefaultSidebar = meta.story({
+	parameters: { sidebarWidth: DEFAULT_SIDEBAR_WIDTH },
+	args: { conversation: roomOf(FIVE_BOTS) },
+	play: ({ canvasElement }) =>
+		expectPileWholeAtTheSidebarWidth(canvasElement, DEFAULT_SIDEBAR_WIDTH),
+})
 
 export const RowWithoutIconOrColour = meta.story({
 	play: async ({ canvasElement }) => {
@@ -252,6 +332,7 @@ export const RowWithABadgeAndAPile = meta.story({
 		await expect(slotIn(row, "conversation-bot-pile")).toHaveAccessibleName(
 			"+3",
 		)
+		await expectPileWhole(row, canvasElement)
 	},
 })
 
@@ -351,7 +432,19 @@ const STOP_DESK_ROOM = `Stop ${DESK_ROOM.name}`
 
 export const WorkingConversationStopsWithItsId = meta.story({
 	args: { lift: LIFT_SPYING_ON_DOWN, onStop: fn() },
-	play: async ({ args, canvas }) => {
+	play: async ({ args, canvas, canvasElement }) => {
+		const row = rowIn(canvasElement)
+		const stop = canvas
+			.getByRole("button", { name: STOP_DESK_ROOM })
+			.getBoundingClientRect()
+		const pile = boxOf(row, "conversation-bot-pile")
+		await expectPileWhole(row, canvasElement)
+		await expect(
+			pile.right <= stop.left ||
+				stop.right <= pile.left ||
+				pile.bottom <= stop.top ||
+				stop.bottom <= pile.top,
+		).toBe(true)
 		await userEvent.click(canvas.getByRole("button", { name: STOP_DESK_ROOM }))
 		await expect(args.onStop).toHaveBeenCalledOnce()
 		await expect(args.onStop).toHaveBeenCalledWith(DESK_ROOM.id)
