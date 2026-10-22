@@ -26,7 +26,7 @@ final class ThreadAccessibilityTests: XCTestCase {
         let working = app.staticTexts["Juniper is working…"]
         XCTAssertTrue(working.waitForExistence(timeout: 10))
         let lastReply = app.staticTexts["They’re waiting for your read."].firstMatch
-        XCTAssertTrue(lastReply.exists)
+        XCTAssertTrue(lastReply.waitForExistence(timeout: 10))
         XCTAssertGreaterThan(working.frame.minY, lastReply.frame.maxY)
         XCTAssertLessThan(working.frame.maxY, composer(in: app).frame.minY)
         XCTAssertTrue(app.buttons["Stop"].exists)
