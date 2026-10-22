@@ -479,8 +479,11 @@ impl<R: Runtime> HostTurn<R> {
 		for mut speaker in speaking {
 			match self.place_of(&speaker.scope).await {
 				Ok(LinePlace::Queued) => {
-					log::info!("{} keeps the queued turn of {}", self.label(), speaker.scope.bot_id);
-					speaker.is_in_line = true;
+					log::info!(
+						"{} keeps the queued turn of {}",
+						self.label(),
+						speaker.scope.bot_id
+					);
 					kept.push(speaker);
 				}
 				Ok(LinePlace::Running) => {
@@ -494,7 +497,15 @@ impl<R: Runtime> HostTurn<R> {
 					self.release(speaker.scope).await;
 				}
 				Err(error) if speaker.is_in_line => self.rejected(&speaker.scope, error).await,
-				Err(_) => gone.push(speaker),
+				Err(error) => {
+					log::warn!(
+						"{} lost the run of {}: {}",
+						self.label(),
+						speaker.scope.bot_id,
+						detail_of(&error)
+					);
+					gone.push(speaker);
+				}
 			}
 		}
 		self.cancel_running(gone).await;
@@ -525,7 +536,15 @@ impl<R: Runtime> HostTurn<R> {
 	async fn withdrew(&self, scope: &RuntimeScope) -> bool {
 		match self.agent() {
 			Ok(agent) => withdraw_queued(&agent, scope, &self.turn_id).await,
-			Err(_) => false,
+			Err(error) => {
+				log::warn!(
+					"{} could not withdraw the queued turn of {}: {}",
+					self.label(),
+					scope.bot_id,
+					detail_of(&error)
+				);
+				false
+			}
 		}
 	}
 

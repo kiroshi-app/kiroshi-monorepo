@@ -356,7 +356,7 @@ async fn closed<R: Runtime>(
 
 pub(crate) struct RelayReader(JoinHandle<ReadFailure>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) enum ReadFailure {
 	Lagged { missed: u64 },
 	Ended(String),
@@ -365,7 +365,9 @@ pub(crate) enum ReadFailure {
 impl fmt::Display for ReadFailure {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			ReadFailure::Lagged { missed } => write!(formatter, "the relay dropped {missed} frames"),
+			ReadFailure::Lagged { missed } => {
+				write!(formatter, "the relay dropped {missed} frames")
+			}
 			ReadFailure::Ended(reason) => formatter.write_str(reason),
 		}
 	}

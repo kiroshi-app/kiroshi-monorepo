@@ -613,6 +613,11 @@ impl Host {
 			.expect("the write is allowed");
 	}
 
+	async fn allowed_in_time(&mut self, bot_id: &str, nth: usize) {
+		let allowed = self.allow_write(bot_id, nth);
+		timeout(PATIENCE, allowed).await.expect("the companion asked to write in time");
+	}
+
 	async fn live_runs_of(&self, bot_id: &str) -> Vec<LiveSession> {
 		let live = agent_live_sessions(self.app.state()).await.expect("the live runs read");
 		live.into_iter().filter(|run| run.bot_id == bot_id).collect()
@@ -1292,7 +1297,7 @@ fn a_queued_member_turn_survives_a_lagged_reader_and_its_reply_is_stored_once() 
 		host.reconnected().await;
 		let kept = host.runs_of("t1").await;
 		host.allow_write(ADA, 1).await;
-		host.allow_write(ADA, 2).await;
+		host.allowed_in_time(ADA, 2).await;
 		host.answered("t1").await;
 
 		assert_eq!(answer["status"], json!(200), "{answer}");
@@ -1332,8 +1337,8 @@ fn queued_member_turns_resubscribed_after_a_lag_are_each_written_once_in_order()
 		stall.released();
 		host.reconnected().await;
 		host.allow_write(ADA, 1).await;
-		host.allow_write(ADA, 2).await;
-		host.allow_write(ADA, 3).await;
+		host.allowed_in_time(ADA, 2).await;
+		host.allowed_in_time(ADA, 3).await;
 		host.answered("t2").await;
 
 		assert_eq!(asked_to_write(&host.frames, ADA).len(), 3, "a queued prompt was written twice");
@@ -1360,7 +1365,9 @@ fn a_queued_member_turn_whose_session_is_gone_after_a_lag_fails_to_the_member() 
 
 		host.session_gone_while_lagging(&held).await;
 		host.reconnected().await;
-		host.heard_until(|frames| failures_in_turn(frames, ADA, "t1").next().is_some()).await;
+		let failed =
+			host.heard_until(|frames| failures_in_turn(frames, ADA, "t1").next().is_some());
+		timeout(PATIENCE, failed).await.expect("the member heard the failure in time");
 
 		let failure = failures_in_turn(&host.frames, ADA, "t1").next().cloned();
 		let failure = failure.expect("the member heard the failure");
