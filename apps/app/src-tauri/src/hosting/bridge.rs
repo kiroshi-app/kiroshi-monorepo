@@ -15,6 +15,7 @@ use super::authorship::RelayedMember;
 use super::reach::{self, Reach};
 use super::Hosting;
 
+use crate::account::session::{trimmed_to, DEVICE_NAME_LIMIT};
 use crate::avatars::Avatars;
 use crate::db::{Database, DatabaseState};
 use crate::file_store::FileStore;
@@ -64,6 +65,7 @@ pub(super) struct MemberCall {
 	command: String,
 	args: Value,
 	sender: String,
+	computer: Option<String>,
 }
 
 pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String> {
@@ -81,11 +83,20 @@ pub(super) fn member_call(text: &str, sender: &str) -> Result<MemberCall, String
 		(Some(id), Some(command), Some(args)) if belongs_to_the_host(command, &args) => {
 			Err(answer(id, StatusCode::FORBIDDEN, json!(HOST_ONLY_REFUSAL)))
 		}
-		(Some(id), Some(command), Some(args)) => {
-			Ok(MemberCall { id, command: command.to_owned(), args, sender: sender.to_owned() })
-		}
+		(Some(id), Some(command), Some(args)) => Ok(MemberCall {
+			id,
+			command: command.to_owned(),
+			args,
+			sender: sender.to_owned(),
+			computer: computer_of(&frame),
+		}),
 		(id, _, _) => Err(refused(id)),
 	}
+}
+
+fn computer_of(frame: &Value) -> Option<String> {
+	let named = frame.get("computer").and_then(Value::as_str)?;
+	Some(trimmed_to(named, DEVICE_NAME_LIMIT)).filter(|name| !name.is_empty())
 }
 
 #[derive(Debug, PartialEq)]
@@ -168,7 +179,11 @@ pub(super) async fn bridged<R: Runtime>(
 		return answer(call.id, StatusCode::FORBIDDEN, json!(OTHER_SPACE_REFUSAL));
 	}
 	let hosting = app.state::<Hosting>();
-	let member = RelayedMember { space_id: shared_space_id.clone(), user_id: call.sender.clone() };
+	let member = RelayedMember {
+		space_id: shared_space_id.clone(),
+		user_id: call.sender.clone(),
+		computer: call.computer.clone(),
+	};
 	let vouched = hosting.relayed.vouch(member);
 	match invoked(&local, &call, &vouched.nonce).await {
 		Ok((status, body)) => answer(call.id, status, body),
@@ -315,8 +330,29 @@ mod tests {
 				command: "agent_models".to_owned(),
 				args: json!({}),
 				sender: "a1".to_owned(),
+				computer: None,
 			})
 		);
+	}
+
+	#[test]
+	fn a_call_carries_the_computer_the_member_named_trimmed_and_none_when_blank_or_absent() {
+		let computer =
+			|frame: Value| member_call(&frame.to_string(), "a1").map(|call| call.computer);
+
+		assert_eq!(
+			computer(json!({ "id": 1, "command": "agent_models", "computer": "  Studio  " })),
+			Ok(Some("Studio".to_owned()))
+		);
+		assert_eq!(
+			computer(json!({ "id": 2, "command": "agent_models", "computer": "  " })),
+			Ok(None)
+		);
+		assert_eq!(
+			computer(json!({ "id": 3, "command": "agent_models", "computer": 7 })),
+			Ok(None)
+		);
+		assert_eq!(computer(json!({ "id": 4, "command": "agent_models" })), Ok(None));
 	}
 
 	#[test]

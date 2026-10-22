@@ -37,7 +37,7 @@ const DEVICE_REFUSED: AccountState =
 
 const SLOW_DOWN: Duration = Duration::from_secs(5);
 
-const DEVICE_NAME_LIMIT: usize = 64;
+pub(crate) const DEVICE_NAME_LIMIT: usize = 64;
 
 const DISPLAY_NAME_LIMIT: usize = 80;
 
@@ -182,7 +182,7 @@ pub async fn sign_in<R: Runtime>(
 	Ok(())
 }
 
-async fn device_name() -> String {
+pub(crate) async fn device_name() -> String {
 	let read =
 		tokio::process::Command::new("scutil").args(["--get", "ComputerName"]).output().await;
 	let named = match read {
@@ -210,7 +210,7 @@ fn device_name_of(named: &str) -> String {
 	}
 }
 
-fn trimmed_to(named: &str, utf16_limit: usize) -> String {
+pub(crate) fn trimmed_to(named: &str, utf16_limit: usize) -> String {
 	let mut utf16_units = 0;
 	named
 		.trim()

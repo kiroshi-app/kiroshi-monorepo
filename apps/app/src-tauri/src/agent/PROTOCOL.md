@@ -235,7 +235,7 @@ Every other command names its session.
 
 | `type` | Carries | Becomes |
 | --- | --- | --- |
-| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?`, `missionThread?` | `query()` options |
+| `open` | `cwd`, `resume?`, `pluginPath?`, `systemPluginPath?`, `userPluginPath?`, `agent?`, `identity?`, `outputStyle?`, `settingsPath?`, `partialMessages`, `env?`, `outputSchema?`, `missionThread?`, `members?` | `query()` options |
 | `prompt` | `text` | one `SDKUserMessage` on the session's prompt stream |
 | `interrupt` | — | `Query.interrupt()` |
 | `permission` | `requestId`, `decision` | the `canUseTool` promise's answer |
@@ -254,6 +254,10 @@ Every other command names its session.
   to write the status of this mission, and let go when `stop_hook_active` is true.
   The mark is dropped at every answer, so each turn is judged on its own calls, and the
   transcript file is never read. A session without it passes no hooks at all.
+- `members` lists the people of a hosted space, each `{ name?, email, isHost }`, and
+  is carried only while the space is hosted with at least one joined member. The
+  system layer then swaps its one reader line for a statement that several people
+  write here, followed by one line per member, the host marked as the host.
 - `resume` is the SDK's `resume`. The stored id is tried first; a refusal falls
   back to a fresh session and the id is given up on only when the refusal was a
   crash — see `commands.rs::start_with_fallback`.

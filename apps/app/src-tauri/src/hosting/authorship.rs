@@ -8,10 +8,11 @@ use tauri::ipc::{CommandArg, CommandItem, InvokeError};
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
-use super::contract::Member;
+use super::contract::{Member, MemberStatus};
 use super::{members, Hosting};
-use crate::account::contract::AccountState;
-use crate::account::session::AccountSession;
+use crate::account::contract::{AccountState, KiroshiAccount};
+use crate::account::session::{device_name, AccountSession};
+use crate::agent::protocol::SpaceMember;
 use crate::db::repositories::messages::{AccountAuthor, WrittenFrom};
 use crate::db::{Database, DatabaseError};
 use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
@@ -20,6 +21,7 @@ use crate::host_api::invoke::RELAYED_MEMBER_HEADER;
 pub struct RelayedMember {
 	pub(super) space_id: String,
 	pub(super) user_id: String,
+	pub(super) computer: Option<String>,
 }
 
 #[derive(Default)]
@@ -101,46 +103,125 @@ impl Caller {
 		database: &Database,
 	) -> Result<AccountAuthor, DatabaseError> {
 		match self {
-			Caller::Host => host_author(app, database).await,
+			Caller::Host => {
+				let computer = Some(device_name().await);
+				Ok(AccountAuthor { computer, ..host_author(app, database).await? })
+			}
 			Caller::Relayed(None) => Ok(AccountAuthor::default()),
-			Caller::Relayed(Some(member)) => Ok(member_author(app, member).await),
+			Caller::Relayed(Some(member)) => member_author(app, database, member).await,
 		}
 	}
+}
+
+fn signed_in_account<R: Runtime>(app: &AppHandle<R>) -> Option<KiroshiAccount> {
+	app.try_state::<AccountSession>().and_then(|session| match session.current() {
+		AccountState::SignedIn(account) => Some(account),
+		_ => None,
+	})
 }
 
 async fn host_author<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &Database,
 ) -> Result<AccountAuthor, DatabaseError> {
-	let account = app.try_state::<AccountSession>().and_then(|session| match session.current() {
-		AccountState::SignedIn(account) => Some(account),
-		_ => None,
-	});
+	let account = signed_in_account(app);
+	let email = account.as_ref().map(|account| account.email.clone());
+	Ok(AccountAuthor {
+		name: host_display_name(database).await?.or_else(|| email.clone()),
+		email,
+		account_id: account.map(|account| account.id),
+		computer: None,
+	})
+}
+
+async fn host_display_name(database: &Database) -> Result<Option<String>, DatabaseError> {
 	let display_name = database.user().preferences().await?.display_name;
-	let name = Some(display_name)
-		.filter(|name| !name.is_empty())
-		.or_else(|| account.as_ref().map(|account| account.email.clone()));
-	Ok(AccountAuthor { account_id: account.map(|account| account.id), name })
+	Ok(Some(display_name).filter(|name| !name.is_empty()))
 }
 
-async fn member_author<R: Runtime>(app: &AppHandle<R>, member: RelayedMember) -> AccountAuthor {
-	let name = match known_name(app, &member) {
-		Some(name) => Some(name),
-		None => listed_name(app, &member).await,
+pub async fn members_of<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	space_id: &str,
+) -> Result<Vec<SpaceMember>, DatabaseError> {
+	let Some(members) = hosted_members(app, space_id).await else {
+		return Ok(Vec::new());
 	};
-	AccountAuthor { account_id: Some(member.user_id), name }
+	if !members.iter().any(|member| member.status == MemberStatus::Joined) {
+		return Ok(Vec::new());
+	}
+	let host_account_id = signed_in_account(app).map(|account| account.id);
+	let mut read_by = Vec::new();
+	for member in members.into_iter().filter(|member| member.status != MemberStatus::Pending) {
+		let name = if host_account_id.as_deref() == Some(member.user_id.as_str()) {
+			host_display_name(database).await?
+		} else {
+			member.name
+		};
+		let is_host = member.status == MemberStatus::Host;
+		read_by.push(SpaceMember { name, email: member.email, is_host });
+	}
+	Ok(read_by)
 }
 
-fn known_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<String> {
+async fn hosted_members<R: Runtime>(app: &AppHandle<R>, space_id: &str) -> Option<Vec<Member>> {
+	let hosting = app.try_state::<Hosting>()?;
+	let known = {
+		let hosts = hosting.hosts();
+		let host = hosts.get(space_id).filter(|host| host.state.is_running())?;
+		host.members.as_ref().map(|known| known.members.clone())
+	};
+	if known.is_some() {
+		return known;
+	}
+	match members::list(app, space_id.to_owned()).await {
+		Ok(listed) => Some(listed.members),
+		Err(failure) => {
+			log::warn!(
+				"the members of hosted space {space_id} were not read for a session: {failure:?}"
+			);
+			None
+		}
+	}
+}
+
+async fn member_author<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &Database,
+	member: RelayedMember,
+) -> Result<AccountAuthor, DatabaseError> {
+	let is_the_host_account =
+		signed_in_account(app).is_some_and(|account| account.id == member.user_id);
+	if is_the_host_account {
+		return Ok(AccountAuthor {
+			computer: member.computer,
+			..host_author(app, database).await?
+		});
+	}
+	let listed = match known_member(app, &member) {
+		Some(listed) => Some(listed),
+		None => listed_member(app, &member).await,
+	};
+	Ok(AccountAuthor {
+		account_id: Some(member.user_id),
+		name: listed
+			.as_ref()
+			.map(|listed| listed.name.clone().unwrap_or_else(|| listed.email.clone())),
+		email: listed.map(|listed| listed.email),
+		computer: member.computer,
+	})
+}
+
+fn known_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<Member> {
 	let hosting = app.state::<Hosting>();
 	let hosts = hosting.hosts();
 	let known = hosts.get(&member.space_id)?.members.as_ref()?;
-	name_among(&known.members, &member.user_id)
+	member_among(&known.members, &member.user_id)
 }
 
-async fn listed_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<String> {
+async fn listed_member<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> Option<Member> {
 	match members::list(app, member.space_id.clone()).await {
-		Ok(listed) => name_among(&listed.members, &member.user_id),
+		Ok(listed) => member_among(&listed.members, &member.user_id),
 		Err(failure) => {
 			log::warn!(
 				"a member name of hosted space {} was not read: {failure:?}",
@@ -151,9 +232,6 @@ async fn listed_name<R: Runtime>(app: &AppHandle<R>, member: &RelayedMember) -> 
 	}
 }
 
-fn name_among(members: &[Member], user_id: &str) -> Option<String> {
-	members
-		.iter()
-		.find(|member| member.user_id == user_id)
-		.map(|member| member.name.clone().unwrap_or_else(|| member.email.clone()))
+fn member_among(members: &[Member], user_id: &str) -> Option<Member> {
+	members.iter().find(|member| member.user_id == user_id).cloned()
 }

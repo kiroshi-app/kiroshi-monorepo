@@ -14,7 +14,7 @@ use super::contract::{
 };
 use super::host::hosted;
 use super::lease::RunLease;
-use super::protocol::{self, Checked};
+use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
 use super::session::{Bundle, EventSink, GatedSink, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
@@ -34,6 +34,7 @@ use crate::environment::connection;
 use crate::environment::contract::{EnvError, EnvOwner, ResolvedEnv, Values};
 use crate::environment::store as environment;
 use crate::events::{self, Frame, AGENT_EVENT, CONVERSATION_UPDATED};
+use crate::hosting::authorship;
 use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
@@ -885,6 +886,20 @@ fn identity_refused(bot_id: &str, step: &str) -> TransportError {
 	TransportError::SpawnFailed { detail }
 }
 
+async fn members_reading<R: Runtime>(
+	app: &AppHandle<R>,
+	state: &db::DatabaseState,
+	space_id: &str,
+) -> Vec<SpaceMember> {
+	let Ok(database) = state.as_ref() else {
+		return Vec::new();
+	};
+	authorship::members_of(app, database, space_id).await.unwrap_or_else(|failure| {
+		log::warn!("the members of space {space_id} were not named to a session: {failure:?}");
+		Vec::new()
+	})
+}
+
 async fn opens_on_a_mission_thread(state: &db::DatabaseState, conversation_id: &str) -> bool {
 	let Ok(database) = state.as_ref() else {
 		return false;
@@ -993,6 +1008,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		Ok(identity) => identity,
 		Err(error) => return Err(refused(sink.as_ref(), error)),
 	};
+	let members = members_reading(&app, &database, &identity.space_id).await;
 	let options = SessionOptions::new(running_in)
 		.bundled(Some(identity.bundle))
 		.serving(identity.server_env)
@@ -1028,6 +1044,7 @@ pub async fn agent_start_or_resume_session<R: Runtime>(
 		.hosting(hosted(BundleHost::new(app.clone(), scope.clone())))
 		.answering(output_schema)
 		.on_mission_thread(mission_thread)
+		.read_by(members)
 		.leased(state.lease);
 
 	let refused_id = resume.clone();

@@ -18,6 +18,7 @@ import type {
 	ServerEnv,
 	SessionFrame,
 	SessionRequest,
+	SpaceMember,
 } from "./providers/provider"
 import { requireProvider } from "./providers/registry"
 
@@ -40,6 +41,7 @@ export type Command = {
 	serverEnv?: ServerEnv
 	outputSchema?: Record<string, unknown>
 	missionThread?: boolean
+	members?: SpaceMember[]
 	connection?: Record<string, string>
 	text?: string
 	url?: string
@@ -73,6 +75,7 @@ export const sessionRequest = (command: Command): SessionRequest => ({
 	connection: command.connection,
 	outputSchema: command.outputSchema,
 	missionThread: command.missionThread,
+	members: command.members,
 })
 
 const AUTHORIZE = "mcp_oauth_authorize"

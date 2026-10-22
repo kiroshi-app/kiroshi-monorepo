@@ -44,6 +44,7 @@ use crate::account::session::{sign_out, AccountSession};
 use crate::agent::commands;
 use crate::agent::contract as agent;
 use crate::agent::protocol::OauthCredentials;
+use crate::agent::protocol::SpaceMember;
 use crate::agent::reply_writer::TurnSink;
 use crate::bundles::{self, BotPermissions, DEFAULT_OUTPUT_STYLE};
 use crate::companions::contract::{
@@ -4307,6 +4308,96 @@ fn a_message_typed_on_the_host_and_one_relayed_from_a_guest_carry_two_authors_re
 		];
 		assert_eq!(Authoring::authors(&read_by_the_guest), expected);
 		assert_eq!(Authoring::authors(&read_by_the_host), expected);
+	});
+}
+
+#[test]
+fn one_account_reads_as_one_name_on_the_host_or_through_the_relay_and_each_line_names_its_computer()
+{
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		direct(&host.window, "conversation_send_user_message", host.sent("typed"));
+		host.relayed_by(
+			"owner",
+			json!({
+				"id": 1,
+				"command": "conversation_send_user_message",
+				"args": host.sent("from-harbour"),
+				"computer": "Harbour",
+			}),
+		)
+		.await;
+		host.relayed(json!({
+			"id": 2,
+			"command": "conversation_send_user_message",
+			"args": host.sent("unnamed-computer"),
+		}))
+		.await;
+
+		let header = |id: &str| {
+			direct(
+				&host.window,
+				"conversation_message_header",
+				json!({ "conversationId": host.conversation_id, "messageId": id }),
+			)
+		};
+		let here = crate::account::session::device_name().await;
+		let at = "1970-01-01T00:00:00Z";
+
+		assert_eq!(
+			header("typed"),
+			json!(format!("[{HOST_NAME} <{OWNER_EMAIL}> · from {here} · {at}]"))
+		);
+		assert_eq!(
+			header("from-harbour"),
+			json!(format!("[{HOST_NAME} <{OWNER_EMAIL}> · from Harbour · {at}]"))
+		);
+		assert_eq!(
+			header("unnamed-computer"),
+			json!(format!("[{GUEST_EMAIL} · from another computer · {at}]"))
+		);
+	});
+}
+
+#[test]
+fn a_hosted_space_with_a_joined_member_names_every_member_to_a_session_and_marks_the_host() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let database = host.reopened_store();
+		let members_of = || super::authorship::members_of(host.app.handle(), &database, PERSONAL);
+		let hosted_with = |members: Vec<Member>| {
+			let hosting = host.app.state::<Hosting>();
+			let mut hosts = hosting.hosts();
+			let hosted = hosts.entry(PERSONAL.to_owned()).or_default();
+			hosted.state = HostingState::Online;
+			hosted.members = Some(SpaceMembers { members, invitations: Vec::new() });
+		};
+		let member =
+			|user_id: &str, name: Option<&str>, email: &str, status: MemberStatus| Member {
+				user_id: user_id.to_owned(),
+				name: name.map(str::to_owned),
+				email: email.to_owned(),
+				status,
+			};
+		let owner = member("owner", Some("Cloud Ada"), OWNER_EMAIL, MemberStatus::Host);
+
+		assert_eq!(members_of().await.expect("the members are read"), vec![], "an unhosted space");
+
+		hosted_with(vec![owner.clone()]);
+		assert_eq!(members_of().await.expect("the members are read"), vec![], "a host alone");
+
+		hosted_with(vec![owner, member(GUEST, None, GUEST_EMAIL, MemberStatus::Joined)]);
+		assert_eq!(
+			members_of().await.expect("the members are read"),
+			vec![
+				SpaceMember {
+					name: Some(HOST_NAME.to_owned()),
+					email: OWNER_EMAIL.to_owned(),
+					is_host: true
+				},
+				SpaceMember { name: None, email: GUEST_EMAIL.to_owned(), is_host: false },
+			]
+		);
 	});
 }
 
