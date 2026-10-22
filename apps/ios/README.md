@@ -140,9 +140,9 @@ Xcode Cloud numbers builds from 1. If TestFlight already holds a `0.1.0` build u
 
 ### Each release
 
-In App Store Connect, answer the build's export compliance question: yes, the app uses encryption, and the algorithm type is the encryption within Apple's operating system only (CryptoKit and the Security framework, no third-party crypto library), not standard algorithms instead of or in addition to Apple's.
+There's nothing to answer per build in App Store Connect. `project.yml` declares `ITSAppUsesNonExemptEncryption` as `NO`: the app uses standard algorithms only, through CryptoKit and the Security framework (Curve25519, ChaChaPoly, HKDF, HMAC and SHA-256, no third-party crypto library), so each build reaches TestFlight without the export compliance question.
 
-`project.yml` declares `ITSAppUsesNonExemptEncryption` as `YES` with no `ITSEncryptionExportComplianceCode`, so each build waits in TestFlight as Missing Compliance until that answer is given.
+Once a year, before 1 February, Steve files the self-classification report to BIS for the year before. A new crypto library, or an algorithm outside CryptoKit, reopens the question before it ships.
 
 ## States without the network
 
