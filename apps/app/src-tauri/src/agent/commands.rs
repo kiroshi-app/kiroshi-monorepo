@@ -16,7 +16,7 @@ use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
 use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
-use super::session::{Bundle, EventSink, GatedSink, Handed, Session, SessionOptions};
+use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
 use crate::applications::host::ApplicationHost;
@@ -1215,6 +1215,14 @@ pub(crate) async fn withdraw_queued(
 		Ok(session) => session.withdraw(turn_id).await,
 		Err(_) => false,
 	}
+}
+
+pub(crate) async fn line_place_of(
+	state: &AgentState,
+	scope: &RuntimeScope,
+	turn_id: &str,
+) -> Result<LinePlace, TransportError> {
+	Ok(state.live.session_for(scope)?.place_of(turn_id).await)
 }
 
 pub(crate) async fn run_is_idle(state: &AgentState, scope: &RuntimeScope) -> bool {

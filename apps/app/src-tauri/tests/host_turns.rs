@@ -2,7 +2,7 @@
 mod removed_on_drop;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Barrier, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -40,11 +40,14 @@ use kiroshi_app::db;
 use kiroshi_app::db::repositories::messages::{MessagePageQuery, MessageRole, StoredMessage};
 use kiroshi_app::environment::contract::{EnvScope, ACCOUNT_BEARER};
 use kiroshi_app::environment::store;
+use kiroshi_app::events::{self, BUFFERED_FRAMES, MISSION_CHANGED};
 use kiroshi_app::hosting::authorship::Caller;
 use kiroshi_app::hosting::commands::hosting_start;
 use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
 use kiroshi_app::logging::contract::InstallKind;
+use kiroshi_app::missions::commands::MissionChanged;
+use kiroshi_app::missions::contract::MissionState;
 use kiroshi_app::routines::webhook::{self, Webhook};
 use removed_on_drop::RemovedOnDrop;
 use serde_json::{json, Value};
@@ -310,6 +313,7 @@ struct Host {
 	guest: GuestDevice,
 	frames: Vec<Value>,
 	calls: u64,
+	sockets: mpsc::UnboundedReceiver<WebSocket>,
 	_scenario: RemovedOnDrop,
 }
 
@@ -373,6 +377,7 @@ impl Host {
 			guest,
 			frames: Vec::new(),
 			calls: 0,
+			sockets,
 			_scenario: scenario,
 		};
 		hosted.greeted().await;
@@ -390,6 +395,52 @@ impl Host {
 	async fn send_turn(&mut self, message: Value, summoned: &[&str]) -> Value {
 		let args = json!({ "message": message, "summoned": summoned });
 		self.called("conversation_send_turn", args).await
+	}
+
+	async fn reconnected(&mut self) {
+		self.member = timeout(PATIENCE, self.sockets.recv())
+			.await
+			.expect("the host came back to the relay in time")
+			.expect("the relay is up");
+		self.guest.challenge = None;
+		self.greeted().await;
+	}
+
+	fn flood(&self) {
+		for order in 0..BUFFERED_FRAMES + 8 {
+			let changed = MissionChanged {
+				mission_id: format!("flood-{order}"),
+				space_id: None,
+				state: MissionState::Working,
+				state_seq: 1,
+				is_agent_running: true,
+				last_activity_at: None,
+			};
+			events::emit(self.app.handle(), MISSION_CHANGED, changed).expect("the flood is sent");
+		}
+	}
+
+	async fn session_gone_while_lagging(&self, scope: &RuntimeScope) {
+		let stall = Stall::every_worker();
+		let state = self.app.state::<AgentState>();
+		let mut shutting = std::pin::pin!(shutdown_session(&state, scope));
+		tokio::select! {
+			biased;
+			() = &mut shutting => {}
+			() = std::future::ready(()) => {}
+		}
+		self.flood();
+		stall.released();
+		shutting.await;
+	}
+
+	async fn answered(&self, turn_id: &'static str) {
+		let closed = async {
+			while self.completed_at(turn_id).await.is_none() {
+				tokio::time::sleep(Duration::from_millis(20)).await;
+			}
+		};
+		timeout(PATIENCE, closed).await.expect("the turn closed in time");
 	}
 
 	async fn called(&mut self, command: &str, args: Value) -> Value {
@@ -669,15 +720,53 @@ fn agent_events_in<'a>(
 }
 
 fn asked_to_write(frames: &[Value], bot_id: &str) -> Vec<(RuntimeScope, String)> {
-	published(frames, AGENT_EVENT)
+	let mut asked: Vec<(RuntimeScope, String)> = Vec::new();
+	let requests = published(frames, AGENT_EVENT)
 		.filter(|payload| payload["scope"]["botId"] == bot_id)
-		.filter(|payload| payload["event"]["type"] == "permissionRequested")
-		.map(|payload| {
-			let scope = serde_json::from_value(payload["scope"].clone()).expect("a runtime scope");
-			let id = payload["event"]["request"]["id"].as_str().expect("a request id").to_owned();
-			(scope, id)
-		})
-		.collect()
+		.filter(|payload| payload["event"]["type"] == "permissionRequested");
+	for payload in requests {
+		let scope = serde_json::from_value(payload["scope"].clone()).expect("a runtime scope");
+		let id = payload["event"]["request"]["id"].as_str().expect("a request id").to_owned();
+		if asked.iter().all(|(_, known)| known != &id) {
+			asked.push((scope, id));
+		}
+	}
+	asked
+}
+
+fn failures_in_turn<'a>(
+	frames: &'a [Value],
+	bot_id: &'a str,
+	turn_id: &'a str,
+) -> impl Iterator<Item = &'a Value> + 'a {
+	published(frames, AGENT_EVENT)
+		.filter(move |payload| payload["scope"]["botId"] == bot_id)
+		.filter(move |payload| payload["turn"]["turnId"] == turn_id)
+		.filter(|payload| payload["event"]["type"] == "failed")
+		.map(|payload| &payload["event"])
+}
+
+struct Stall(Arc<Barrier>);
+
+impl Stall {
+	fn every_worker() -> Self {
+		let workers = tokio::runtime::Handle::current().metrics().num_workers();
+		let entered = Arc::new(Barrier::new(workers + 1));
+		let release = Arc::new(Barrier::new(workers + 1));
+		for _ in 0..workers {
+			let (entered, release) = (entered.clone(), release.clone());
+			tauri::async_runtime::spawn(async move {
+				entered.wait();
+				release.wait();
+			});
+		}
+		entered.wait();
+		Self(release)
+	}
+
+	fn released(self) {
+		self.0.wait();
+	}
 }
 
 fn shut_downs_in(frames: &[Value], bot_id: &str) -> usize {
@@ -1182,6 +1271,106 @@ fn a_queued_member_turn_withdrawn_by_a_stop_leaves_its_run_cancelled_and_not_awa
 		assert!(
 			replies_of(&transcript, ADA).iter().all(|reply| reply.turn_id != "t1"),
 			"the withdrawn prompt was answered: {transcript:#?}"
+		);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_queued_member_turn_survives_a_lagged_reader_and_its_reply_is_stored_once() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queued-reader-lagged", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+		let answer = host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+
+		let stall = Stall::every_worker();
+		host.flood();
+		stall.released();
+		host.reconnected().await;
+		let kept = host.runs_of("t1").await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.answered("t1").await;
+
+		assert_eq!(answer["status"], json!(200), "{answer}");
+		assert_eq!(kept, 1, "the lagged reader ended the queued run");
+		let transcript = host.transcript().await;
+		let answered: Vec<&StoredMessage> = replies_of(&transcript, ADA)
+			.into_iter()
+			.filter(|reply| reply.turn_id == "t1")
+			.collect();
+		assert_eq!(answered.len(), 1, "the room holds {transcript:#?}");
+		assert!(answered[0].content.ends_with("]\nmember second"), "{}", answered[0].content);
+		assert_eq!(host.runs_of("t1").await, 0, "the answered run was kept");
+		let live = host.live_runs_of(ADA).await;
+		assert_eq!(live.len(), 1, "{live:#?}");
+		assert_eq!(live[0].runtime_session_id, held.runtime_session_id);
+		assert_eq!(
+			host.runtime_sessions_of(ADA).await,
+			vec![(held.runtime_session_id.clone(), "active".to_owned())]
+		);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn queued_member_turns_resubscribed_after_a_lag_are_each_written_once_in_order() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queued-resubscribed", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+		host.send_turn(sent("p2", "t2", "member third"), &[ADA]).await;
+
+		let stall = Stall::every_worker();
+		host.flood();
+		stall.released();
+		host.reconnected().await;
+		host.allow_write(ADA, 1).await;
+		host.allow_write(ADA, 2).await;
+		host.allow_write(ADA, 3).await;
+		host.answered("t2").await;
+
+		assert_eq!(asked_to_write(&host.frames, ADA).len(), 3, "a queued prompt was written twice");
+		let transcript = host.transcript().await;
+		let replies = replies_of(&transcript, ADA);
+		let turns: Vec<&str> = replies.iter().map(|reply| reply.turn_id.as_str()).collect();
+		assert_eq!(turns, vec!["t0", "t1", "t2"], "the room holds {transcript:#?}");
+		assert!(replies[1].content.ends_with("]\nmember second"), "{}", replies[1].content);
+		assert!(replies[2].content.ends_with("]\nmember third"), "{}", replies[2].content);
+		assert_eq!(host.scopes_heard(ADA), vec![held.runtime_session_id.clone()]);
+		host.quit().await;
+	});
+}
+
+#[test]
+fn a_queued_member_turn_whose_session_is_gone_after_a_lag_fails_to_the_member() {
+	let _serial = serial();
+	block_on(async {
+		let mut host = Host::hosting("queued-session-gone", "held_echo").await;
+		let held = host.host_run(ROOM, ADA).await;
+		host.host_says(&held, "h1", "t0", "host first").await;
+		host.heard_until(|frames| !asked_to_write(frames, ADA).is_empty()).await;
+		host.send_turn(sent("p1", "t1", "member second"), &[ADA]).await;
+
+		host.session_gone_while_lagging(&held).await;
+		host.reconnected().await;
+		host.heard_until(|frames| failures_in_turn(frames, ADA, "t1").next().is_some()).await;
+
+		let failure = failures_in_turn(&host.frames, ADA, "t1").next().cloned();
+		let failure = failure.expect("the member heard the failure");
+		assert!(failure["error"]["kind"].is_string(), "the failure carries no reason: {failure}");
+		host.answered("t1").await;
+		assert_eq!(host.runs_of("t1").await, 0, "the failed run was kept");
+		let transcript = host.transcript().await;
+		assert!(
+			replies_of(&transcript, ADA).iter().all(|reply| reply.turn_id != "t1"),
+			"the failed turn was answered: {transcript:#?}"
 		);
 		host.quit().await;
 	});

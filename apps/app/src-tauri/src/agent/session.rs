@@ -257,6 +257,13 @@ pub enum Handed {
 	Queued,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinePlace {
+	Running,
+	Queued,
+	Absent,
+}
+
 struct QueuedPrompt {
 	text: String,
 	turn: SubmittedTurn,
@@ -578,6 +585,18 @@ impl Session {
 		let held = shared.queued.len();
 		shared.queued.retain(|queued| queued.turn.turn_id != turn_id);
 		shared.queued.len() < held
+	}
+
+	pub async fn place_of(&self, turn_id: &str) -> LinePlace {
+		let shared = self.shared.lock().await;
+		let running_id = shared.running.as_ref().and_then(|running| running.id.as_deref());
+		if running_id == Some(turn_id) {
+			return LinePlace::Running;
+		}
+		if shared.queued.iter().any(|queued| queued.turn.turn_id == turn_id) {
+			return LinePlace::Queued;
+		}
+		LinePlace::Absent
 	}
 
 	pub async fn is_idle(&self) -> bool {

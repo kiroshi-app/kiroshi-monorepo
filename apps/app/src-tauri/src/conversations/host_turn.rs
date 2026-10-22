@@ -14,14 +14,14 @@ use super::context::{bounded_context, headed_message, mentioned_bot_ids};
 use super::contract::{SentMessage, TranscriptStoreError};
 use super::turn_run_deadline::{arm_start_deadlines, suspend_start_deadline};
 use crate::agent::commands::{
-	agent_shutdown, announce, announce_in_turn, cancel_session_turn, live_run_of, run_is_idle,
-	start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
+	agent_shutdown, announce, announce_in_turn, cancel_session_turn, line_place_of, live_run_of,
+	run_is_idle, start_run, submit_in_line, withdraw_queued, Lineage, RunStart,
 };
 use crate::agent::contract::{
 	AgentEvent, CancelFailure, CancelFailureReason, CancelOutcome, EventTurn, RuntimeScope,
 	ScopedEvent, SubmittedTurn, TransportError, TurnEnded, TurnOutcome, TurnState,
 };
-use crate::agent::session::Handed;
+use crate::agent::session::{Handed, LinePlace};
 use crate::agent::translate::now_ms;
 use crate::agent::AgentState;
 use crate::db;
@@ -29,7 +29,8 @@ use crate::db::repositories::conversations::Seat;
 use crate::db::repositories::runtime_context::{ParticipantKey, RuntimeSession};
 use crate::events::CONVERSATION_UPDATED;
 use crate::routines::runner::{
-	database, detail_of, ends_the_session, listen, managed, RelayReader, NO_AGENT, NO_DATABASE,
+	database, detail_of, ends_the_session, listen, managed, ReadFailure, RelayReader, NO_AGENT,
+	NO_DATABASE,
 };
 
 const STOP_ANSWER_BOUND: Duration = Duration::from_secs(30);
@@ -300,9 +301,6 @@ pub(crate) async fn run<R: Runtime>(
 	if summoned.is_empty() {
 		return;
 	}
-	let (events, heard) = mpsc::unbounded_channel();
-	let conversation_id = message.conversation_id.clone();
-	let mut listening = listen(&app, move |scope| scope.conversation_id == conversation_id, events);
 	let first = summoned
 		.into_iter()
 		.map(|bot_id| Summons { bot_id, prompt_id: message.id.clone() })
@@ -314,6 +312,7 @@ pub(crate) async fn run<R: Runtime>(
 		prompt_id: message.id,
 		stopped: held.stopped.clone(),
 	};
+	let (mut listening, heard) = turn.listening();
 	let speaking = turn.wave(&held, first).await;
 	tauri::async_runtime::spawn(async move {
 		turn.drive(held, speaking, heard, &mut listening).await;
@@ -422,7 +421,17 @@ impl<R: Runtime> HostTurn<R> {
 				}
 			};
 			let Some(scoped) = heard_event else {
-				self.lost(reading, speaking, waiting).await;
+				let failure = reading.failure().await;
+				if let ReadFailure::Lagged { missed } = failure {
+					log::warn!("{} missed {missed} relay frames and listens again", self.label());
+					(*reading, heard) = self.listening();
+					speaking = self.reconciled(speaking, &mut waiting).await;
+					if speaking.is_empty() && !waiting.is_empty() {
+						speaking = self.wave(&held, mem::take(&mut waiting)).await;
+					}
+					continue;
+				}
+				self.lost(&failure, speaking, waiting).await;
 				held.answer(&CancelOutcome::Cancelled);
 				return;
 			};
@@ -430,8 +439,7 @@ impl<R: Runtime> HostTurn<R> {
 				continue;
 			};
 			if speaking[at].is_delivered_by(&scoped.event) {
-				let bot_ids = [speaking[at].scope.bot_id.clone()];
-				arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
+				self.delivered(&speaking[at].scope);
 			}
 			let Some(end) = speaking[at].end_after(&scoped.event) else {
 				continue;
@@ -451,9 +459,94 @@ impl<R: Runtime> HostTurn<R> {
 		}
 	}
 
-	async fn lost(&self, reading: &mut RelayReader, speaking: Vec<Speaker>, waiting: Vec<Summons>) {
-		let failure = reading.failure().await;
+	fn listening(&self) -> (RelayReader, mpsc::UnboundedReceiver<ScopedEvent>) {
+		let (events, heard) = mpsc::unbounded_channel();
+		let conversation_id = self.conversation_id.clone();
+		let reading =
+			listen(&self.app, move |scope| scope.conversation_id == conversation_id, events);
+		(reading, heard)
+	}
+
+	fn delivered(&self, scope: &RuntimeScope) {
+		log::info!("{} delivers the queued turn of {}", self.label(), scope.bot_id);
+		let bot_ids = [scope.bot_id.clone()];
+		arm_start_deadlines(&self.app, &self.conversation_id, &self.turn_id, &bot_ids);
+	}
+
+	async fn reconciled(&self, speaking: Vec<Speaker>, waiting: &mut Vec<Summons>) -> Vec<Speaker> {
+		let mut kept = Vec::new();
+		let mut gone = Vec::new();
+		for mut speaker in speaking {
+			match self.place_of(&speaker.scope).await {
+				Ok(LinePlace::Queued) => {
+					log::info!("{} keeps the queued turn of {}", self.label(), speaker.scope.bot_id);
+					speaker.is_in_line = true;
+					kept.push(speaker);
+				}
+				Ok(LinePlace::Running) => {
+					if mem::take(&mut speaker.is_in_line) {
+						self.delivered(&speaker.scope);
+					}
+					kept.push(speaker);
+				}
+				Ok(LinePlace::Absent) => {
+					self.note_handovers(&speaker, waiting).await;
+					self.release(speaker.scope).await;
+				}
+				Err(error) if speaker.is_in_line => self.rejected(&speaker.scope, error).await,
+				Err(_) => gone.push(speaker),
+			}
+		}
+		self.cancel_running(gone).await;
+		kept
+	}
+
+	async fn place_of(&self, scope: &RuntimeScope) -> Result<LinePlace, TransportError> {
+		line_place_of(&*self.agent()?, scope, &self.turn_id).await
+	}
+
+	async fn lost(&self, failure: &ReadFailure, speaking: Vec<Speaker>, waiting: Vec<Summons>) {
 		log::error!("{} stopped hearing the sessions it runs: {failure}", self.label());
+		let reason = TransportError::WriteFailed {
+			detail: format!("the host stopped hearing the run: {failure}"),
+		};
+		let mut running = Vec::new();
+		for speaker in speaking {
+			if speaker.is_in_line && self.withdrew(&speaker.scope).await {
+				self.rejected(&speaker.scope, reason.clone()).await;
+			} else {
+				running.push(speaker);
+			}
+		}
+		self.cancel_running(running).await;
+		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
+	}
+
+	async fn withdrew(&self, scope: &RuntimeScope) -> bool {
+		match self.agent() {
+			Ok(agent) => withdraw_queued(&agent, scope, &self.turn_id).await,
+			Err(_) => false,
+		}
+	}
+
+	async fn rejected(&self, scope: &RuntimeScope, reason: TransportError) {
+		log::warn!(
+			"{} rejects the queued turn of {}: {}",
+			self.label(),
+			scope.bot_id,
+			detail_of(&reason)
+		);
+		self.abandon(&scope.bot_id).await;
+		let failed = [AgentEvent::Failed { error: reason }, ended_as(TurnOutcome::Failed)];
+		for event in failed {
+			announce_in_turn(&self.app, Some(scope.clone()), Some(self.event_turn()), event);
+		}
+	}
+
+	async fn cancel_running(&self, speaking: Vec<Speaker>) {
+		if speaking.is_empty() {
+			return;
+		}
 		for speaker in &speaking {
 			self.tell_cancelled(&speaker.scope);
 		}
@@ -461,7 +554,6 @@ impl<R: Runtime> HostTurn<R> {
 			speaking.iter().map(|speaker| speaker.scope.bot_id.as_str()).collect();
 		self.end_cancelled_runs(&bot_ids).await;
 		join_all(speaking.into_iter().map(|speaker| self.shut_down_started(speaker.scope))).await;
-		join_all(waiting.iter().map(|summons| self.abandon(&summons.bot_id))).await;
 	}
 
 	async fn end_cancelled_runs(&self, bot_ids: &[&str]) {
@@ -774,16 +866,16 @@ impl<R: Runtime> HostTurn<R> {
 	}
 
 	fn tell_cancelled(&self, scope: &RuntimeScope) {
-		let turn = EventTurn {
-			turn_id: self.turn_id.clone(),
-			conversation_id: self.conversation_id.clone(),
-		};
 		announce_in_turn(
 			&self.app,
 			Some(scope.clone()),
-			Some(turn),
+			Some(self.event_turn()),
 			ended_as(TurnOutcome::Cancelled),
 		);
+	}
+
+	fn event_turn(&self) -> EventTurn {
+		EventTurn { turn_id: self.turn_id.clone(), conversation_id: self.conversation_id.clone() }
 	}
 
 	fn hears(&self, speaker: &Speaker, scoped: &ScopedEvent) -> bool {
@@ -1065,6 +1157,12 @@ mod tests {
 		(read(lagging, |_| true, events), heard)
 	}
 
+	fn a_closed_reader() -> RelayReader {
+		let (_relay, closed) = broadcast::channel(1);
+		let (events, _heard) = mpsc::unbounded_channel();
+		read(closed, |_| true, events)
+	}
+
 	fn a_host_turn(
 		app: &AppHandle<MockRuntime>,
 		room: &Room,
@@ -1080,7 +1178,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_group_turn_whose_reader_lags_shuts_down_every_speaker() {
+	async fn a_group_turn_whose_sessions_are_gone_after_a_lag_shuts_down_every_speaker() {
 		let app = an_app_of_its_own("host-turn-reader-lag", mock_builder());
 		app.manage(db::bootstrap(app.handle()));
 		app.manage(AgentState::default());
@@ -1115,8 +1213,8 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_group_turn_whose_reader_lags_abandons_every_waiting_bot() {
-		let app = an_app_of_its_own("host-turn-reader-lag-waiting", mock_builder());
+	async fn a_group_turn_whose_relay_closes_abandons_every_waiting_bot() {
+		let app = an_app_of_its_own("host-turn-relay-closed-waiting", mock_builder());
 		app.manage(db::bootstrap(app.handle()));
 		app.manage(AgentState::default());
 		let room = a_room_running(app.handle(), &["Ada", "Grace"]).await;
@@ -1125,14 +1223,14 @@ mod tests {
 		let stored = database(app.handle()).expect("the database opens");
 		stored.messages().await_runs("t1".to_owned(), vec![waiter.clone()]).await.expect("held");
 		let mut announced = events::subscribed(app.handle());
-		let (mut reading, _heard) = a_lagging_reader();
 		let (_stop, stopped) = watch::channel(false);
 		let host_turn = a_host_turn(app.handle(), &room, stopped);
 		app.state::<AgentState>().host_turns().note_started(&scope_in(&room, &speaker));
 		let speaking = vec![speaking_as(scope_in(&room, &speaker))];
 		let waiting = vec![Summons { bot_id: waiter.clone(), prompt_id: "p1".to_owned() }];
 
-		host_turn.lost(&mut reading, speaking, waiting).await;
+		let closed = ReadFailure::Ended("the relay closed".to_owned());
+		host_turn.lost(&closed, speaking, waiting).await;
 
 		let told = told(&mut announced);
 		assert_eq!(
@@ -1426,7 +1524,7 @@ mod tests {
 		let host_turn = a_host_turn(app.handle(), &room, stopped);
 		let (events, heard) = mpsc::unbounded_channel::<ScopedEvent>();
 		drop(events);
-		let (mut reading, _lagging) = a_lagging_reader();
+		let mut reading = a_closed_reader();
 		let speaking = vec![speaking_as(scope_in(&room, &room.bot_ids[0]))];
 
 		host_turn.drive(held, speaking, heard, &mut reading).await;
