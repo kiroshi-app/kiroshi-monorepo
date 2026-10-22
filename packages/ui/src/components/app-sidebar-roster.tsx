@@ -58,7 +58,7 @@ interface SectionNamingGroupProps {
 	conversations: AppSidebarConversation[]
 	rows: RosterRowsContext
 	onCreate: (name: string) => void
-	onStop: () => void
+	onEndNaming: () => void
 }
 
 const SectionNamingGroup = ({
@@ -66,7 +66,7 @@ const SectionNamingGroup = ({
 	conversations,
 	rows,
 	onCreate,
-	onStop,
+	onEndNaming,
 }: SectionNamingGroupProps) => {
 	const { t } = useTranslation("bots")
 
@@ -76,9 +76,9 @@ const SectionNamingGroup = ({
 				<SectionNameField
 					ariaLabel={t("roster.section.createField")}
 					initialName={t("roster.section.createDefault")}
-					onCancel={onStop}
+					onCancel={onEndNaming}
 					onCommit={(name) => {
-						onStop()
+						onEndNaming()
 						onCreate(name)
 					}}
 				/>
@@ -134,14 +134,12 @@ const BotRoster = ({
 	onSelectConversation,
 	onOpenConversationSettings,
 	onDeleteConversation,
-	onStopConversation,
 	onSelectBot,
 	onEditBot,
 	onDuplicateBot,
 	onAddBotToSpace,
 	onRemoveBotFromSpace,
 	onDeleteBot,
-	onStopBot,
 	onCreateSection,
 	onRenameSection,
 	onDeleteSection,
@@ -178,8 +176,6 @@ const BotRoster = ({
 		onRemoveBotFromSpace,
 		onSelectBot,
 		onSelectConversation,
-		onStopBot,
-		onStopConversation,
 		onUnpin: onPinRoster ? unpin : undefined,
 		sections,
 		selectedConversationId,
@@ -255,7 +251,7 @@ const BotRoster = ({
 					onCreate={(name) =>
 						onCreateSection?.(name, naming.rowId ?? undefined)
 					}
-					onStop={() => onNaming?.(null)}
+					onEndNaming={() => onNaming?.(null)}
 					rows={rows}
 				/>
 			) : null}

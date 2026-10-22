@@ -52,7 +52,6 @@ interface BotRosterRowProps extends RosterRowSlot, RosterPinActions {
 	onDelete?: (id: string) => void
 	onMoveToSection?: (id: string, sectionId: string | null) => void
 	onCreateSectionFor?: (id: string) => void
-	onStop?: (id: string) => void
 	lift: Lifter
 }
 
@@ -77,7 +76,6 @@ const BotRosterRow = ({
 	onDelete,
 	onMoveToSection,
 	onCreateSectionFor,
-	onStop,
 }: BotRosterRowProps) => {
 	const { t } = useTranslation("bots")
 	const working = isBusy(bot)
@@ -115,7 +113,6 @@ const BotRosterRow = ({
 							if (lift.hasJustDropped()) return
 							onSelect?.(bot.id)
 						}}
-						onStop={onStop ? () => onStop(bot.id) : undefined}
 						preview={botPreviewOf(t, bot)}
 						strips={missionStripsOf(bot.missions)}
 						timestamp={bot.timestamp ?? ""}

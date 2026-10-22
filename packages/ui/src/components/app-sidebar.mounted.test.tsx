@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { cleanup, render } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
 
 import {
 	AppSidebar,
 	type AppSidebarBot,
 	type AppSidebarConversation,
-	type AppSidebarProps,
 	type AppSidebarSection,
 	type Space,
 } from "@workspace/ui/components/app-sidebar"
@@ -177,59 +176,5 @@ describe("AppSidebar merged roster order mounted", () => {
 			MIDDLE_REVIEW.name,
 			OLDER_ATLAS.name,
 		])
-	})
-})
-
-const WORKING_ATLAS: AppSidebarBot = { ...ATLAS, status: "working" }
-
-const WORKING_REVIEW: AppSidebarConversation = {
-	...REVIEW,
-	participants: [WORKING_ATLAS],
-}
-
-type StopActions = Pick<AppSidebarProps, "onStopBot" | "onStopConversation">
-
-const renderWorkingRoster = (actions: StopActions) =>
-	render(
-		<WorkspaceShell
-			sidebar={
-				<AppSidebar
-					bots={[WORKING_ATLAS]}
-					conversations={[WORKING_REVIEW]}
-					{...actions}
-				/>
-			}
-		>
-			{null}
-		</WorkspaceShell>,
-	)
-
-const stopName = (name: string) => `Stop ${name}`
-
-describe("AppSidebar roster stop mounted", () => {
-	afterEach(cleanup)
-
-	it("stops a working companion row with its bot id", () => {
-		const onStopBot = vi.fn()
-		renderWorkingRoster({ onStopBot })
-
-		fireEvent.click(screen.getByRole("button", { name: stopName(ATLAS.name) }))
-
-		expect(onStopBot).toHaveBeenCalledExactlyOnceWith(ATLAS.id)
-	})
-
-	it("stops a working conversation row with its conversation id", () => {
-		const onStopConversation = vi.fn()
-		renderWorkingRoster({ onStopConversation })
-
-		fireEvent.click(screen.getByRole("button", { name: stopName(REVIEW.name) }))
-
-		expect(onStopConversation).toHaveBeenCalledExactlyOnceWith(REVIEW.id)
-	})
-
-	it("draws no Stop on a working row without its action", () => {
-		renderWorkingRoster({})
-
-		expect(screen.queryByRole("button", { name: /^Stop / })).toBeNull()
 	})
 })

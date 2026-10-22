@@ -933,11 +933,9 @@ navigation-appsidebar--working-long-summary
 navigation-appsidebaractions--conversations-header
 navigation-appsidebaractions--surface-around-empty-copy
 navigation-appsidebarbotrow--bot-own-row-keeps-its-avatar-and-no-pile
-navigation-appsidebarbotrow--idle-bot-given-on-stop-has-no-stop
 navigation-appsidebarbotrow--selected-bot
-navigation-appsidebarbotrow--working-bot-stops-with-its-id
+navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarcarousel--list-per-space
-navigation-appsidebarconversationrow--idle-conversation-given-on-stop-has-no-stop
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
 navigation-appsidebarconversationrow--long-title-and-preview-truncate
 navigation-appsidebarconversationrow--open-row-with-mission-strips
@@ -959,7 +957,7 @@ navigation-appsidebarconversationrow--row-with-one-bot
 navigation-appsidebarconversationrow--row-with-three-bots
 navigation-appsidebarconversationrow--row-with-two-bots
 navigation-appsidebarconversationrow--row-without-icon-or-colour
-navigation-appsidebarconversationrow--working-conversation-stops-with-its-id
+navigation-appsidebarconversationrow--working-conversation-keeps-its-timestamp
 navigation-appsidebarpanel--conversations-with-a-working-bot
 navigation-appsidebarroster--complete
 navigation-appsidebarroster--complete-dark
@@ -1076,8 +1074,6 @@ navigation-sidebarlistrow--with-strips
 navigation-sidebarlistrow--with-title-cut-before-name
 navigation-sidebarlistrow--with-trailing-badge-and-timestamp
 navigation-sidebarlistrow--working-preview
-navigation-sidebarlistrow--working-with-stop
-navigation-sidebarlistrow--working-with-stop-on-icon-rail
 navigation-sidebarmenurow--default
 navigation-sidebarmenurow--long-content
 navigation-sidebarmenurow--selected
