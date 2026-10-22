@@ -15,6 +15,7 @@ export type ConversationMissionsRead = {
 	open: Mission[]
 	closed: Mission[]
 	missions: Mission[]
+	isPending: boolean
 	hasFailed: boolean
 	reload: () => void
 }
@@ -35,6 +36,7 @@ export const useMissions = (
 	const open = data?.open ?? NO_MISSIONS
 	const closed = data?.done ?? NO_MISSIONS
 	const hasFailed = hasLastReadFailed(read)
+	const isPending = read.isPending && !hasFailed
 
 	const reload = useCallback(() => {
 		if (canRead) {
@@ -45,7 +47,7 @@ export const useMissions = (
 	const missions = useMemo(() => [...open, ...closed], [open, closed])
 
 	return useMemo(
-		() => ({ open, closed, missions, hasFailed, reload }),
-		[open, closed, missions, hasFailed, reload],
+		() => ({ open, closed, missions, isPending, hasFailed, reload }),
+		[open, closed, missions, isPending, hasFailed, reload],
 	)
 }

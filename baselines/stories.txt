@@ -499,6 +499,7 @@ conversation-routines-routinespanel--in-workspace-shell
 conversation-routines-routinespanel--leaving-an-unsaved-form-by-back
 conversation-routines-routinespanel--leaving-an-unsaved-form-by-close
 conversation-routines-routinespanel--leaving-by-keyboard
+conversation-routines-routinespanel--missions-loading
 conversation-routines-routinespanel--missions-read-failed
 conversation-routines-routinespanel--no-mission
 conversation-routines-routinespanel--on-shell-surface-closed

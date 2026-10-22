@@ -123,6 +123,7 @@ const ThreadRoutines = ({
 			failure={activityFailure(failure, missions.hasFailed)}
 			form={form}
 			isOpen={activityPanel.isOpen}
+			isMissionsPending={missions.isPending}
 			isRoutinesPending={isPending}
 			missions={{ ...rows, onOpen: onOpenMission, wrap: wrapMissionCard }}
 			onDelete={remove}

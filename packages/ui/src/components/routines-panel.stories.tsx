@@ -757,6 +757,38 @@ export const RoutinesLoading = meta.story({
 	},
 })
 
+export const MissionsLoading = meta.story({
+	args: { missions: NO_MISSION_AT_ALL, isMissionsPending: true },
+	decorators: [
+		(Story) => (
+			<div className="h-[38rem]">
+				<Story />
+			</div>
+		),
+	],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The missions still on their way. Check that grouped mission row skeletons run from under the header to the bottom of the panel, the last one cut by the edge, that the empty state stays away rather than claiming nothing runs here, and that the region reads busy. " +
+					MOUNTED_BY_THE_THREAD,
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement }) => {
+		const pending = slotIn(canvasElement, "missions-pending")
+		await expect(pending).toHaveAttribute("aria-busy", "true")
+
+		const list = await expectSkeletonClippedAtBottomOf(
+			pending.parentElement as HTMLElement,
+		)
+		await expect(list).toBeVisible()
+		await expect(canvas.queryByText("Nothing is running here")).toBeNull()
+		await expect(slotsIn(canvasElement, "activity-empty")).toHaveLength(0)
+		await expect(canvas.queryByText("Couldn’t load missions")).toBeNull()
+	},
+})
+
 export const MissionsReadFailed = meta.story({
 	args: { failure: "missions", missions: NO_MISSION_AT_ALL },
 	parameters: {
