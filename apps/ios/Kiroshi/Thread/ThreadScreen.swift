@@ -94,10 +94,10 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     .padding(.top, 20)
                 }
                 ForEach(model.entries) { message in
+                    let isLastSent = message.id == model.lastSentId
                     ThreadMessageView(message: message, soloCompanion: heading.companion)
                         .onGeometryChange(for: CGFloat?.self) { proxy in
-                            message.id == model.lastSentId
-                                ? proxy.frame(in: .transcript).minY : nil
+                            isLastSent ? proxy.frame(in: .transcript).minY : nil
                         } action: { top in
                             guard let top else { return }
                             if sentTop == nil, scrolling == .followingTheBottom {
