@@ -126,22 +126,15 @@ const common = {
 			available: "Télécharger la mise à jour",
 			downloading: "Téléchargement de la mise à jour",
 			ready: "Redémarrer pour mettre à jour",
-			error: "Mise à jour échouée, télécharger à nouveau",
-			retry: "Télécharger à nouveau la mise à jour",
-		},
-		panel: {
-			title: "Mise à jour prête",
-			version: "Version {{version}}",
+			readyVersion: "Redémarrer pour passer à la version {{version}}",
 			botsBusy_one:
 				"{{count}} compagnon tourne encore. Arrêtez-le pour redémarrer.",
 			botsBusy_many:
 				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
 			botsBusy_other:
 				"{{count}} compagnons tournent encore. Arrêtez-les pour redémarrer.",
-			restart: "Redémarrer maintenant",
-			postpone: "Me le rappeler plus tard",
-			releaseNotes: "Lire les notes de version complètes dans votre navigateur",
-			notes: "Notes de version",
+			error: "Mise à jour échouée, télécharger à nouveau",
+			retry: "Télécharger à nouveau la mise à jour",
 		},
 	},
 	whatsNew: {

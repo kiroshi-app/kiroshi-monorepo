@@ -1,27 +1,16 @@
 // @vitest-environment happy-dom
 
 import { invoke } from "@tauri-apps/api/core"
-import {
-	cleanup,
-	render,
-	renderHook,
-	screen,
-	waitFor,
-} from "@testing-library/react"
+import { cleanup, render, renderHook, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { UpdaterController, UpdaterState } from "./updater-controller"
 import { useUpdateBadge } from "./use-update-badge"
 import type { Updater } from "./use-updater"
 
-import { raiseReportedFailure } from "../failure-report"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
-vi.mock("../failure-report", async (importOriginal) => ({
-	...(await importOriginal<typeof import("../failure-report")>()),
-	raiseReportedFailure: vi.fn(),
-}))
 
 const hostInvoke = vi.mocked(invoke)
 
@@ -51,33 +40,20 @@ const releaseNotesAsked = () =>
 describe("useUpdateBadge", () => {
 	beforeEach(() => {
 		hostInvoke.mockReset()
-		vi.mocked(raiseReportedFailure).mockClear()
 	})
 
 	afterEach(() => {
 		cleanup()
 	})
 
-	it("stays silent and keeps offering the update when the release notes cannot be read", async () => {
-		hostInvoke.mockRejectedValue({
-			kind: "unavailable",
-			version: "1.4.0",
-			detail: "offline",
-		})
-		const updater = updaterOf(OFFERED)
+	it("offers the update without reading its release notes", () => {
 		const mounted = renderHook(
-			({ shown }) => useUpdateBadge({ updater: shown, working: {} }),
-			{
-				wrapper: createQueryTestWrapper().wrapper,
-				initialProps: { shown: updater },
-			},
+			() => useUpdateBadge({ updater: updaterOf(OFFERED), working: {} }),
+			{ wrapper: createQueryTestWrapper().wrapper },
 		)
-		await waitFor(() => expect(releaseNotesAsked()).toBe(1))
-
-		mounted.rerender({ shown: updaterOf(OFFERED) })
 		render(mounted.result.current)
 
-		expect(raiseReportedFailure).not.toHaveBeenCalled()
+		expect(releaseNotesAsked()).toBe(0)
 		expect(screen.getByRole("button", { name: /update/i })).toBeTruthy()
 	})
 })

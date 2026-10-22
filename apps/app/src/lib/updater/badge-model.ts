@@ -5,17 +5,11 @@ import type { UpdaterState } from "./updater-controller"
 
 type UpdateBadgeModel = Pick<
 	UpdateBadgeProps,
-	| "status"
-	| "version"
-	| "releaseNotes"
-	| "releaseNotesUrl"
-	| "progress"
-	| "activeBotCount"
+	"status" | "version" | "progress" | "activeBotCount"
 >
 
 type UpdateBadgeInput = {
 	state: UpdaterState
-	notes: string | null | undefined
 	busyBotCount: number
 }
 
@@ -42,15 +36,10 @@ export const releaseNotesUrlOf = (version: string): string =>
 
 export const toUpdateBadgeProps = ({
 	state,
-	notes,
 	busyBotCount,
 }: UpdateBadgeInput): UpdateBadgeModel => ({
 	status: statusOf(state),
 	version: state.offeredVersion ?? undefined,
-	releaseNotes: notes ?? undefined,
-	releaseNotesUrl: state.offeredVersion
-		? releaseNotesUrlOf(state.offeredVersion)
-		: undefined,
 	progress: downloadedPercentOf(state.host),
 	activeBotCount: busyBotCount,
 })
