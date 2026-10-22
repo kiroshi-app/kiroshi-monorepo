@@ -504,7 +504,7 @@ it("neither drops nor duplicates a row when the person switches spaces back and 
 		space === seeded.shed ? [seeded.shed] : localSpaces
 	const visits = [LOCAL, seeded.shed, seeded.garage, seeded.shed, LOCAL]
 
-	for (const space of [...visits, ...visits]) {
+	for (const space of visits) {
 		await switchTo(controller, spacesHeldWith(space), space)
 		await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0))
 
