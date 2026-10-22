@@ -812,7 +812,8 @@ fn a_chat_past_the_fold_bound_survives_a_dead_host_with_nothing_lost_or_doubled(
 	);
 	assert!(
 		context.contains("The message this one replies to:\nuri: kiroshi://c/")
-			&& context.contains("from: user\nclaude session: unknown\nmessage 3"),
+			&& context.lines().any(|line| line.starts_with("from: user · from "))
+			&& context.contains("\nclaude session: unknown\nmessage 3"),
 		"an answer to an earlier message lost the target it points at: {context}"
 	);
 	assert_eq!(occurrences(&context, "message 3\n"), 1, "the answered message was carried twice");
