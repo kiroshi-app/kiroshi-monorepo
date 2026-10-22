@@ -30,6 +30,23 @@ final class ThreadSendingTests: XCTestCase {
             bubble.frame.maxY, composer(in: app).frame.minY, file: file, line: line)
     }
 
+    func staticTexts(in snapshot: any XCUIElementSnapshot) -> [any XCUIElementSnapshot] {
+        (snapshot.elementType == .staticText ? [snapshot] : [])
+            + snapshot.children.flatMap(staticTexts)
+    }
+
+    func waitForTheReplyToEnd(below sent: String, in app: XCUIApplication) {
+        let isTheReplyWhole = NSPredicate { [self] _, _ in
+            let texts = (try? app.snapshot()).map(staticTexts) ?? []
+            guard let bubble = texts.last(where: { $0.label.contains(sent) }) else { return false }
+            return texts.contains {
+                $0.label.contains("Section 12 of the notes") && $0.frame.minY > bubble.frame.maxY
+            }
+        }
+        wait(for: [expectation(for: isTheReplyWhole, evaluatedWith: nil)], timeout: 30)
+        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
+    }
+
     func sendAndReadTheLongReply(raisingTheKeyboard isKeyboardUp: Bool) {
         let app = launch("long-reply", "-draft", sent)
         XCTAssertTrue(text("That’s the whole checklist", in: app).waitForExistence(timeout: 10))
@@ -86,8 +103,7 @@ final class ThreadSendingTests: XCTestCase {
         let bubble = text(sent, in: app)
         XCTAssertTrue(bubble.waitForExistence(timeout: 10))
         assertInView(bubble, in: app)
-        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
+        waitForTheReplyToEnd(below: sent, in: app)
         assertInView(bubble, in: app)
     }
 
@@ -95,8 +111,7 @@ final class ThreadSendingTests: XCTestCase {
         let app = launch("long-reply", "-draft", sent)
         XCTAssertTrue(text("That’s the whole checklist", in: app).waitForExistence(timeout: 10))
         app.buttons["Send"].tap()
-        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
+        waitForTheReplyToEnd(below: sent, in: app)
         assertInView(text(sent, in: app), in: app)
         let closing = text("They’re waiting for your read.", in: app)
         XCTAssertFalse(closing.exists && closing.isHittable)
@@ -108,8 +123,7 @@ final class ThreadSendingTests: XCTestCase {
         let next = text("And the tag?", in: app)
         XCTAssertTrue(next.waitForExistence(timeout: 10))
         assertInView(next, in: app)
-        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 30))
+        waitForTheReplyToEnd(below: "And the tag?", in: app)
         assertInView(next, in: app)
     }
 }
