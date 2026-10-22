@@ -123,19 +123,12 @@ const common = {
 			available: "Download update",
 			downloading: "Downloading update",
 			ready: "Restart to update",
-			error: "Update failed, download again",
-			retry: "Download the update again",
-		},
-		panel: {
-			title: "Update ready",
-			version: "Version {{version}}",
+			readyVersion: "Restart to update to {{version}}",
 			botsBusy_one: "{{count}} companion is still running. Stop it to restart.",
 			botsBusy_other:
 				"{{count}} companions are still running. Stop them to restart.",
-			restart: "Restart now",
-			postpone: "Remind me later",
-			releaseNotes: "Read the full release notes in your browser",
-			notes: "Release notes",
+			error: "Update failed, download again",
+			retry: "Download the update again",
 		},
 	},
 	whatsNew: {

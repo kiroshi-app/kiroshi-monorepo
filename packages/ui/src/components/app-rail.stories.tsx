@@ -651,7 +651,7 @@ export const UpdateReady = meta.story({
 		docs: {
 			description: {
 				story:
-					"The update installed and waiting for a restart, its panel opening to the right of the rail. Check the badge keeps its place above the gear with the panel open.",
+					"The update installed and waiting for a restart, the badge a single restart control with no panel. Check the badge keeps its place above the gear, on the same column and in the same 36px square.",
 			},
 		},
 	},

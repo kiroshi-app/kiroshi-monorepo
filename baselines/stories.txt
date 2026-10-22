@@ -655,11 +655,8 @@ feedback-updatebadge--default
 feedback-updatebadge--empty
 feedback-updatebadge--error
 feedback-updatebadge--loading
-feedback-updatebadge--long-git-cliff-notes
-feedback-updatebadge--long-git-cliff-notes-dark
 feedback-updatebadge--ready
-feedback-updatebadge--with-active-bots
-feedback-updatebadge--with-release-notes
+feedback-updatebadge--ready-with-companions-running
 forms-checkbox--default
 forms-checkbox--on-dark-surface
 forms-checkbox--states

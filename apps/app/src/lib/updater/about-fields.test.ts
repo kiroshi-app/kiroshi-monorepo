@@ -123,9 +123,9 @@ describe("toAboutUpdate", () => {
 		})
 
 		expect(toAboutUpdate(state).status).toBe("available")
-		expect(
-			toUpdateBadgeProps({ state, notes: null, busyBotCount: 0 }).status,
-		).toBe("available")
+		expect(toUpdateBadgeProps({ state, busyBotCount: 0 }).status).toBe(
+			"available",
+		)
 	})
 })
 
