@@ -12,6 +12,9 @@ struct QuestionPanel: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var sendInset: CGFloat = 10
     @ScaledMetric(relativeTo: .body) private var sendLabelHeight: CGFloat = 30
+    @ScaledMetric(relativeTo: .footnote) private var headerLine: CGFloat = 18
+    @ScaledMetric(relativeTo: .headline) private var questionLine: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var hintLine: CGFloat = 20
 
     init(
         asking: QuestionAsking, draft: QuestionDraft? = nil,
@@ -117,17 +120,20 @@ struct QuestionPanel: View {
             if !draft.isOneOfSeveral {
                 Text(draft.asked.header)
                     .font(.footnote.weight(.semibold))
+                    .frame(minHeight: headerLine)
                     .foregroundStyle(.secondary)
             }
             Text(draft.asked.question)
                 .font(.headline)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: questionLine)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityFocused($isQuestionFocused)
             if draft.asked.multiSelect {
                 Text("Choose any that apply.")
                     .font(.subheadline)
+                    .frame(minHeight: hintLine)
                     .foregroundStyle(.secondary)
             }
         }
@@ -145,10 +151,10 @@ struct QuestionPanel: View {
                 QuestionMark(isMultiSelect: false, isPicked: true)
             }
         }
-        .padding(.vertical, 11)
+        .padding(.vertical, 12)
         .padding(.leading, 16)
         .padding(.trailing, 14)
-        .frame(minHeight: 44)
+        .frame(minHeight: 46)
         .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
