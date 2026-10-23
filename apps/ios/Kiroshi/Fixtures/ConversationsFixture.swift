@@ -608,6 +608,13 @@
             default:
                 break
             }
+            if let question = QuestionsFixture.question(for: fixture) {
+                script.messages[question.companionId] = QuestionsFixture.thread
+                script.question = question
+                if fixture == .questionsList {
+                    script.workingCompanion = atlas.id
+                }
+            }
             if opensEmpty, let opening = opening(fixture) {
                 script.messages[opening] = []
             }
@@ -619,7 +626,8 @@
             case .thread, .emptyThread, .agreement, .workingThread, .workingAfterReply,
                 .threadHostOffline,
                 .swipedThread,
-                .threadFailed, .slowThread, .longReply, .longName, .twoAsks:
+                .threadFailed, .slowThread, .longReply, .longName, .twoAsks, .questionSingle,
+                .questionMulti, .questionSeveral, .questionElsewhere:
                 juniper.id
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup,
                 .sharedThread:
@@ -694,12 +702,14 @@
                     pinPosition: pinPosition, icon: icon, color: color)
             }
 
-            func pageJSON(lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?)
-                -> String
-            {
+            func pageJSON(
+                lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?,
+                isTurnActive: Bool = false
+            ) -> String {
                 let solo = soloBotId.map { #""\#($0)""# } ?? "null"
+                let activeTurn = isTurnActive ? #"{"bots":[]}"# : "null"
                 return
-                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo)}"
+                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo),\"activeTurn\":\(activeTurn)}"
             }
 
             var json: String {
@@ -739,6 +749,7 @@
             var missionFeed: [String] = []
             var pinned: [String] = []
             var refusesPins = false
+            var question: FixtureQuestion?
         }
 
         static let spaceId = "space-studio"
@@ -787,6 +798,7 @@
             let lastActivityAt: Int
             let lastWord: String?
             var soloBotId: Companion.ID?
+            var isTurnActive = false
         }
 
         static func soloRow(of companion: Companion, last: Message) -> PageRow {
@@ -818,7 +830,7 @@
                 rows.map {
                     $0.group.pageJSON(
                         lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord,
-                        soloBotId: $0.soloBotId)
+                        soloBotId: $0.soloBotId, isTurnActive: $0.isTurnActive)
                 }
                 .joined(separator: ",")
             }
@@ -862,13 +874,14 @@
         static func messageJSON(
             id: String, conversationId: String, seq: Int, role: String, content: String,
             createdAt: Int, authorBotId: String? = nil, authorAccountId: String? = nil,
-            authorName: String? = nil
+            authorName: String? = nil, repliedTo: String? = nil
         ) -> String {
             let author = authorBotId.map { #""\#($0)""# } ?? "null"
             let account = authorAccountId.map { #""\#($0)""# } ?? "null"
             let name = authorName.map { #""\#($0)""# } ?? "null"
+            let replied = repliedTo.map { #""\#($0)""# } ?? "null"
             return
-                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name),"repliedToMessageId":null,"runtimeSessionId":null}"#
+                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name),"repliedToMessageId":\#(replied),"runtimeSessionId":null}"#
         }
     }
 
@@ -951,6 +964,8 @@
         private let launchPlanOpened: AsyncStream<Void>.Continuation
         private let playingGroupChanges: Task<Void, Never>?
         private let leaving = Mutex<Task<Void, Never>?>(nil)
+        private let isQuestionAnswered = Mutex(false)
+        private let answeringElsewhere = Mutex<Task<Void, Never>?>(nil)
 
         init(script: FixtureHost.Script, companionsRefusal: FixtureOnce, pins: FixturePins) {
             self.script = script
@@ -1036,6 +1051,7 @@
         func close() {
             playingGroupChanges?.cancel()
             leaving.withLock { $0?.cancel() }
+            answeringElsewhere.withLock { $0?.cancel() }
             listed.finish()
             launchPlanOpened.finish()
             push(.close(1000))
@@ -1088,9 +1104,12 @@
                         group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
                         lastWord: last?.lastWordJSON)
                 }
+                let asking = isQuestionAnswered.withLock { $0 } ? nil : script.question?.companionId
                 let solos = script.companions.compactMap { companion in
                     script.messages[companion.id]?.last.map {
-                        FixtureHost.soloRow(of: companion, last: $0)
+                        var row = FixtureHost.soloRow(of: companion, last: $0)
+                        row.isTurnActive = companion.id == asking
+                        return row
                     }
                 }
                 let pinned = pins.current
@@ -1142,7 +1161,26 @@
             case "agent_cancel_turn":
                 reply(id, "null")
             case "agent_pending_questions":
-                reply(id, "[]")
+                guard let question = script.question,
+                    args["conversationId"] as? String == question.conversationId,
+                    !isQuestionAnswered.withLock({ $0 })
+                else { return reply(id, "[]") }
+                reply(id, question.pending)
+                if let delay = question.answeredElsewhereAfter {
+                    answerElsewhere(question, after: delay)
+                }
+            case "agent_answer_question":
+                reply(id, "null")
+                guard let question = script.question else { return }
+                isQuestionAnswered.withLock { $0 = true }
+                push(.frame(Self.resolved(question)))
+            case "conversation_append_user_message":
+                guard let message = args["message"] as? [String: Any] else { return }
+                reply(id, "4")
+                push(
+                    .frame(
+                        #"{"event":{"event":"conversation://message-stored","payload":\#(FixtureHost.messageJSON(id: message["id"] as? String ?? "", conversationId: message["conversationId"] as? String ?? "", seq: 98, role: "user", content: message["content"] as? String ?? "", createdAt: message["createdAt"] as? Int ?? 0, authorAccountId: CloudFixture.userId, authorName: "Sam", repliedTo: message["repliedToMessageId"] as? String))}}"#
+                    ))
             case "mission_space_feed":
                 reply(id, "[\(script.missionFeed.joined(separator: ","))]")
             case "mission_space_page":
@@ -1187,6 +1225,36 @@
                     .frame(#"{"id":\#(id),"status":403,"body":"this command belongs to the host"}"#)
                 )
             }
+        }
+
+        private static func resolved(_ question: FixtureQuestion) -> String {
+            FixtureHost.agentEvent(
+                question.conversationId,
+                #"{"type":"permissionResolved","id":"\#(QuestionsFixture.questionId)","decision":"allowOnce"}"#
+            )
+        }
+
+        private func answerElsewhere(_ question: FixtureQuestion, after delay: Duration) {
+            answeringElsewhere.withLock { scheduled in
+                guard scheduled == nil else { return }
+                scheduled = Task { [weak self] in
+                    guard (try? await ContinuousClock().sleep(for: delay)) != nil else { return }
+                    self?.playAnswerElsewhere(question)
+                }
+            }
+        }
+
+        private func playAnswerElsewhere(_ question: FixtureQuestion) {
+            isQuestionAnswered.withLock { $0 = true }
+            push(.frame(Self.resolved(question)))
+            let answer = FixtureHost.messageJSON(
+                id: "answer-elsewhere", conversationId: question.conversationId, seq: 97,
+                role: "user", content: "Full changelog", createdAt: Date.now.milliseconds,
+                authorAccountId: "account-host", authorName: "Sam’s Mac",
+                repliedTo: "question-\(QuestionsFixture.questionId)")
+            push(
+                .frame(
+                    #"{"event":{"event":"conversation://message-stored","payload":\#(answer)}}"#))
         }
 
         private static func playGroupChanges(

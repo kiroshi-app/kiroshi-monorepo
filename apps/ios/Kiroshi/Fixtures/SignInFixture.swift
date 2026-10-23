@@ -120,6 +120,11 @@
         case longName = "long-name"
         case longGroup = "long-group"
         case twoAsks = "two-asks"
+        case questionsList = "questions-2.1"
+        case questionSingle = "questions-3.1"
+        case questionMulti = "questions-3.3"
+        case questionSeveral = "questions-3.5"
+        case questionElsewhere = "questions-3.7"
         case missionsButton = "missions-button"
         case conversationMissions = "conversation-missions"
         case conversationNoMissions = "conversation-no-missions"
@@ -233,6 +238,8 @@
                 .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .questionsList, .questionSingle, .questionMulti, .questionSeveral,
+                .questionElsewhere,
                 .missionsButton,
                 .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused,
                 .agreement:
@@ -302,6 +309,8 @@
                 .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .questionsList, .questionSingle, .questionMulti, .questionSeveral,
+                .questionElsewhere,
                 .missionsButton,
                 .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused:
                 true
@@ -357,7 +366,7 @@
             rawValue.hasPrefix("2.") || isInvitation
                 || [
                     .deviceRequest, .missionsButton, .conversationMissions, .conversationNoMissions,
-                    .pinned,
+                    .pinned, .questionsList,
                     .pinnedIcons, .pinRefused,
                 ].contains(self)
         }
@@ -386,6 +395,8 @@
                 .groupFailed,
                 .groupMention,
                 .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .questionsList, .questionSingle, .questionMulti, .questionSeveral,
+                .questionElsewhere,
                 .missionsButton,
                 .conversationMissions, .conversationNoMissions, .pinned, .pinnedIcons, .pinRefused,
                 .agreement, .deviceRequest:
@@ -516,7 +527,9 @@
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .longReply, .slowGroup, .longName,
                 .longGroup,
-                .twoAsks, .missionsButton, .conversationMissions, .conversationNoMissions, .pinned,
+                .twoAsks, .questionsList, .questionSingle, .questionMulti, .questionSeveral,
+                .questionElsewhere, .missionsButton, .conversationMissions, .conversationNoMissions,
+                .pinned,
                 .pinnedIcons, .pinRefused,
                 .missions,
                 .missionThread, .missionWorking, .slowMission, .noMissions, .missionsHostOffline,
