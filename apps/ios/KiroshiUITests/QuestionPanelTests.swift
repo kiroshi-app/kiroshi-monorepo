@@ -90,6 +90,7 @@ final class QuestionPanelTests: XCTestCase {
     }
 
     static let format = "Which format should the release notes take?"
+    static let suggestionBar: CGFloat = 44
 
     func testThePanelTakesThePlaceOfTheComposerUntilSendGivesItBack() throws {
         let app = launchInEnglish("questions-4.1")
@@ -141,6 +142,19 @@ final class QuestionPanelTests: XCTestCase {
         XCTAssertEqual(other(in: app).frame.height, field)
     }
 
+    func testThePanelKeepsTheArtboardMetrics() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        let send = app.buttons["Send"].frame
+
+        XCTAssertEqual(summary.frame.height, 65, accuracy: 0.5)
+        XCTAssertEqual(other(in: app).frame.height, 22, accuracy: 0.5)
+        XCTAssertEqual(send.height, 44, accuracy: 0.5)
+        XCTAssertEqual(send.width, 85, accuracy: 1)
+        XCTAssertEqual(app.frame.maxY - send.maxY, 29, accuracy: 0.5)
+    }
+
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
         let app = launchInEnglish("questions-4.1")
         let summary = option("Summary", in: app)
@@ -154,7 +168,8 @@ final class QuestionPanelTests: XCTestCase {
         let send = app.buttons["Send"]
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        let keyboardTop = app.keyboards.firstMatch.frame.minY - Self.suggestionBar
+        XCTAssertEqual(keyboardTop - send.frame.maxY, 14, accuracy: 0.5)
         keep("4.4 Sticky · Other open, keyboard", of: app)
         try auditThePanel(app, under: Self.format, withTheKeyboard: true)
     }

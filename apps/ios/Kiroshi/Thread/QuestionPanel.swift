@@ -5,10 +5,13 @@ struct QuestionPanel: View {
     let send: (QuestionDraft) -> Void
     @State private var draft: QuestionDraft
     @State private var questionHeight: CGFloat?
+    @State private var isAboveTheHomeIndicator = true
     @FocusState private var isWritingOther: Bool
     @AccessibilityFocusState private var isQuestionFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var sendInset: CGFloat = 10
+    @ScaledMetric(relativeTo: .body) private var sendLabelHeight: CGFloat = 30
 
     init(
         asking: QuestionAsking, draft: QuestionDraft? = nil,
@@ -34,15 +37,20 @@ struct QuestionPanel: View {
             actions
                 .padding(.leading, 6)
                 .padding(.top, 2)
-                .padding(.bottom, 4)
         }
         .padding(.top, 20)
         .padding(.horizontal, 16)
+        .padding(.bottom, bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.safeAreaInsets.bottom > 0
+        } action: { hasInset in
+            isAboveTheHomeIndicator = hasInset
+        }
         .background {
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(Color(.secondarySystemBackground))
-                .shadow(color: Color(.separator), radius: 0, y: -0.5)
+                .shadow(color: Color(.separator).opacity(0.5), radius: 0, y: -0.5)
                 .shadow(
                     color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
                 )
@@ -54,6 +62,11 @@ struct QuestionPanel: View {
         .task(id: asking.question.request.id) {
             isQuestionFocused = true
         }
+    }
+
+    private var bottomPadding: CGFloat {
+        if isWritingOther { return 14 }
+        return isAboveTheHomeIndicator ? -5 : 29
     }
 
     private var question: some View {
@@ -159,18 +172,20 @@ struct QuestionPanel: View {
                     send(draft)
                 }
             } label: {
-                if asking.isSending {
-                    ProgressView()
-                        .accessibilityLabel("Sending your answer")
-                } else {
-                    Text(draft.isLast ? "Send" : "Next")
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 8)
+                Group {
+                    if asking.isSending {
+                        ProgressView()
+                            .accessibilityLabel("Sending your answer")
+                    } else {
+                        Text(draft.isLast ? "Send" : "Next")
+                            .fontWeight(.semibold)
+                    }
                 }
+                .padding(.horizontal, sendInset)
+                .frame(minHeight: sendLabelHeight)
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
-            .controlSize(.large)
             .disabled(!draft.canGoOn)
         }
     }
@@ -197,6 +212,8 @@ struct QuestionOptionButton: View {
     let isPicked: Bool
     let isMultiSelect: Bool
     let pick: () -> Void
+    @ScaledMetric(relativeTo: .body) private var labelLine: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var descriptionLine: CGFloat = 20
 
     var body: some View {
         Button(action: pick) {
@@ -204,10 +221,12 @@ struct QuestionOptionButton: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(option.label)
                         .font(.body)
+                        .frame(minHeight: labelLine)
                         .foregroundStyle(.primary)
                     if let description = option.description, !description.isEmpty {
                         Text(description)
                             .font(.subheadline)
+                            .frame(minHeight: descriptionLine)
                             .foregroundStyle(.secondary)
                     }
                 }
