@@ -50,7 +50,8 @@ struct AgentEvent: Decodable, Equatable, Sendable {
         case messageCompleted(Message)
         case activity(Activity)
         case permissionRequested
-        case questionRequested
+        case questionRequested(QuestionRequest)
+        case permissionResolved(id: String)
         case turnEnded
         case failed
         case other
@@ -98,6 +99,7 @@ struct AgentEvent: Decodable, Equatable, Sendable {
         let id: String?
         let text: String?
         let activity: Activity?
+        let request: QuestionRequest?
 
         var change: Change {
             switch type {
@@ -108,7 +110,8 @@ struct AgentEvent: Decodable, Equatable, Sendable {
             case "messageCompleted": message.map(Change.messageCompleted) ?? .other
             case "activity": activity.map(Change.activity) ?? .other
             case "permissionRequested": .permissionRequested
-            case "questionRequested": .questionRequested
+            case "questionRequested": request.map(Change.questionRequested) ?? .other
+            case "permissionResolved": id.map { Change.permissionResolved(id: $0) } ?? .other
             case "turnEnded": .turnEnded
             case "failed": .failed
             default: .other
@@ -122,6 +125,7 @@ struct AgentEvent: Decodable, Equatable, Sendable {
             case id
             case text
             case activity
+            case request
         }
 
         init(from decoder: any Decoder) throws {
@@ -132,6 +136,9 @@ struct AgentEvent: Decodable, Equatable, Sendable {
             id = try? container.decodeIfPresent(String.self, forKey: .id)
             text = try? container.decodeIfPresent(String.self, forKey: .text)
             activity = try? container.decodeIfPresent(Activity.self, forKey: .activity)
+            request =
+                type == "questionRequested"
+                ? try? container.decodeIfPresent(QuestionRequest.self, forKey: .request) : nil
         }
     }
 }

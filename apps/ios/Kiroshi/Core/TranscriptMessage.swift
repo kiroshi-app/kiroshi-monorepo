@@ -23,4 +23,6 @@ struct TranscriptMessage: Decodable, Equatable, Sendable {
     let authorBotId: String?
     var authorAccountId: String?
     var authorName: String?
+    var turnId: String?
+    var repliedToMessageId: String?
 }
