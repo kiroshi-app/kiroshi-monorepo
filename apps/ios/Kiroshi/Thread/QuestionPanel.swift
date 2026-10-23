@@ -15,6 +15,7 @@ struct QuestionPanel: View {
     @ScaledMetric(relativeTo: .footnote) private var headerLine: CGFloat = 18
     @ScaledMetric(relativeTo: .headline) private var questionLine: CGFloat = 22
     @ScaledMetric(relativeTo: .subheadline) private var hintLine: CGFloat = 20
+    @ScaledMetric(relativeTo: .subheadline) private var segmentsCorner: CGFloat = 18
 
     init(
         asking: QuestionAsking, draft: QuestionDraft? = nil,
@@ -101,7 +102,7 @@ struct QuestionPanel: View {
     }
 
     private var segments: some View {
-        HStack(spacing: 0) {
+        QuestionSegmentsLayout {
             ForEach(draft.request.questions.indices, id: \.self) { index in
                 QuestionSegment(
                     header: draft.request.questions[index].header,
@@ -113,7 +114,7 @@ struct QuestionPanel: View {
             }
         }
         .padding(3)
-        .background(Color(.tertiarySystemFill), in: .capsule)
+        .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: segmentsCorner))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("Questions")
     }
@@ -267,6 +268,53 @@ struct QuestionSegment: View {
         .accessibilityValue(isAnswered ? "Answered" : "")
         .accessibilityAddTraits(isShown ? .isSelected : [])
         .accessibilityRemoveTraits(isShown ? [] : .isSelected)
+    }
+}
+
+struct QuestionSegmentsLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? widestIdealWidth(of: subviews) * CGFloat(subviews.count)
+        let heights = frames(in: width, of: subviews).map(\.height)
+        let height =
+            isInARow(width, subviews) ? heights.max() ?? 0 : heights.reduce(0, +)
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let isRow = isInARow(bounds.width, subviews)
+        for (subview, frame) in zip(subviews, frames(in: bounds.width, of: subviews)) {
+            let height = isRow ? bounds.height : frame.height
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(width: frame.width, height: height))
+        }
+    }
+
+    private func isInARow(_ width: CGFloat, _ subviews: Subviews) -> Bool {
+        widestIdealWidth(of: subviews) * CGFloat(subviews.count) <= width
+    }
+
+    private func widestIdealWidth(of subviews: Subviews) -> CGFloat {
+        subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
+    }
+
+    private func frames(in width: CGFloat, of subviews: Subviews) -> [CGRect] {
+        if isInARow(width, subviews) {
+            let share = width / CGFloat(subviews.count)
+            return subviews.enumerated().map { index, subview in
+                let height = subview.sizeThatFits(ProposedViewSize(width: share, height: nil))
+                    .height
+                return CGRect(x: share * CGFloat(index), y: 0, width: share, height: height)
+            }
+        }
+        var top: CGFloat = 0
+        return subviews.map { subview in
+            let height = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+            defer { top += height }
+            return CGRect(x: 0, y: top, width: width, height: height)
+        }
     }
 }
 
