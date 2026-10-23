@@ -100,10 +100,9 @@ struct NeedsYouLine: View {
 
     var body: some View {
         layout {
-            Label("Needs you", systemImage: "questionmark.bubble.fill")
+            Text("\(Image(systemName: "questionmark.bubble.fill")) Needs you")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color(.systemOrange))
-                .labelIconToTitleSpacing(5)
                 .fixedSize()
             Text(question)
                 .font(.subheadline)

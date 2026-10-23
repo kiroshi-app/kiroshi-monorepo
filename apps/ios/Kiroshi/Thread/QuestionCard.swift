@@ -38,7 +38,7 @@ struct QuestionCard: View {
             if draft.isOneOfSeveral {
                 Picker("Question", selection: shown) {
                     ForEach(draft.request.questions.indices, id: \.self) { index in
-                        segment(index)
+                        Text(draft.request.questions[index].header)
                             .tag(index)
                     }
                 }
@@ -81,12 +81,6 @@ struct QuestionCard: View {
         } set: { index in
             draft.show(index)
         }
-    }
-
-    private func segment(_ index: Int) -> Text {
-        let header = draft.request.questions[index].header
-        guard draft.isAnswered(index) else { return Text(header) }
-        return Text("\(Image(systemName: "checkmark")) \(header)")
     }
 
     private var heading: some View {
