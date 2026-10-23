@@ -23,11 +23,18 @@ struct ConversationRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if let label = summary.timeLabel {
                         Text(label)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(
+                                summary.waitingQuestion == nil
+                                    ? .subheadline : .subheadline.weight(.semibold)
+                            )
+                            .foregroundStyle(
+                                summary.waitingQuestion == nil
+                                    ? Color.secondary : Color(.systemOrange))
                     }
                 }
-                if summary.preview != nil || pile != nil {
+                if let question = summary.waitingQuestion {
+                    NeedsYouLine(question: question)
+                } else if summary.preview != nil || pile != nil {
                     HStack(spacing: 8) {
                         if let preview = summary.preview {
                             Text(preview)
@@ -84,6 +91,32 @@ struct ConversationRow: View {
         dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    }
+}
+
+struct NeedsYouLine: View {
+    let question: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        layout {
+            Label("Needs you", systemImage: "questionmark.bubble.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(.systemOrange))
+                .labelIconToTitleSpacing(5)
+                .fixedSize()
+            Text(question)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var layout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 5))
     }
 }
 

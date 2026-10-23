@@ -132,6 +132,67 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
+    nonisolated static let format =
+        #"{"type":"questionRequested","request":{"id":"q1","questions":[{"header":"Format","question":"Which format should the release notes take?","multiSelect":false,"options":[{"label":"Summary","description":null,"preview":null},{"label":"Full changelog","description":null,"preview":null}]}]}}"#
+
+    @Test func aQuestionMarksItsRowNeedsYouUntilItIsAnswered() async {
+        let host = host
+        let (store, connection, following) = await follow(host)
+        let row = { store.summaries.first { $0.id == "juniper" } }
+
+        host.pushAgent("chat-juniper", Self.format)
+        await waitUntil { row()?.waitingQuestion != nil }
+        #expect(row()?.waitingQuestion == "Which format should the release notes take?")
+        #expect(row()?.timeLabel == "Now")
+        #expect(store.summaries.filter { $0.waitingQuestion != nil }.count == 1)
+
+        host.pushAgent(
+            "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
+        await waitUntil { row()?.waitingQuestion == nil }
+        #expect(row()?.preview == "working…")
+
+        host.pushAgent(
+            "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
+        await waitUntil { row()?.isWorking == false }
+        #expect(row()?.preview == "The release notes are drafted.")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aQuestionWaitingBeforeTheListOpensIsAskedOfTheConversationsAtWork() async throws {
+        let release = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper, atlas], createdAt: 0)
+        let calm = FixtureHost.Group(
+            id: "group-calm", title: "Calm", members: [pico], createdAt: 0)
+        let pending =
+            #"[{"scope":{"conversationId":"group-release","botId":"juniper","runtimeSessionId":"session-1","epoch":1},"turn":{"turnId":"t1","conversationId":"group-release"},"event":\#(Self.format)}]"#
+        let host = TestHost(companions: [juniper], groups: [release, calm]) { call in
+            switch call.command {
+            case "conversation_page":
+                var active = TestHost.pageRow(release, last: nil)
+                active.isTurnActive = true
+                let rows = [active, TestHost.pageRow(calm, last: nil)]
+                return TestHost.ok(call, FixtureHost.conversationPage(rows, cursor: nil, limit: 30))
+            case "agent_pending_questions":
+                return TestHost.ok(call, pending)
+            default:
+                return nil
+            }
+        }
+        let (store, connection, following) = await follow(host)
+
+        let replay = try #require(await host.nextCall("agent_pending_questions"))
+        await waitUntil { store.summaries.contains { $0.waitingQuestion != nil } }
+
+        #expect(
+            try replay.args(as: ThreadStoreTests.InConversation.self).conversationId
+                == "group-release")
+        #expect(
+            store.summaries.filter { $0.waitingQuestion != nil }.map(\.id) == ["group-release"])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func aStoredMessageBecomesThePreviewAndMovesItsCompanionUp() async {
         let host = host
         let (store, connection, following) = await follow(host)
