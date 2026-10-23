@@ -7,6 +7,80 @@ import Testing
 struct CompanionWorkTests {
     let startedAt = Date(milliseconds: 1_791_000_000_000)
 
+    nonisolated static let format = QuestionRequest(
+        id: "q1",
+        questions: [
+            QuestionRequest.Asked(
+                header: "Format", question: "Which format should the release notes take?",
+                options: [
+                    QuestionRequest.Option(label: "Summary", description: nil),
+                    QuestionRequest.Option(label: "Full changelog", description: nil),
+                ], multiSelect: false)
+        ])
+
+    @Test func aQuestionWaitsInItsConversationUntilItIsAnswered() {
+        let work = CompanionWork()
+
+        work.hear(event(.questionRequested(Self.format)))
+        #expect(work.question(in: "c-1")?.request == Self.format)
+        #expect(work.question(in: "c-1")?.turnId == "t-juniper")
+        #expect(work.question(in: "c-2") == nil)
+
+        work.hear(event(.permissionResolved(id: "q1")))
+        #expect(work.question(in: "c-1") == nil)
+    }
+
+    @Test(arguments: [AgentEvent.Change.turnEnded, .failed])
+    func aQuestionLeftWhenItsTurnEndsIsDropped(_ change: AgentEvent.Change) {
+        let work = CompanionWork()
+
+        work.hear(event(.questionRequested(Self.format)))
+        work.hear(event(change, by: "atlas"))
+        #expect(work.question("q1") != nil)
+
+        work.hear(event(change))
+        #expect(work.questions.isEmpty)
+    }
+
+    @Test func aReplayedQuestionAlreadySettledStaysSettled() {
+        let work = CompanionWork()
+        work.hear(event(.questionRequested(Self.format)))
+        work.hear(event(.permissionResolved(id: "q1")))
+
+        work.hear(event(.questionRequested(Self.format)))
+
+        #expect(work.questions.isEmpty)
+    }
+
+    @Test func aQuestionHeardTwiceWaitsOnce() {
+        let work = CompanionWork()
+
+        work.hear(event(.questionRequested(Self.format)))
+        work.hear(event(.questionRequested(Self.format)))
+
+        #expect(work.questions.count == 1)
+    }
+
+    @Test func aQuestionWithoutQuestionsNeverWaits() {
+        let work = CompanionWork()
+
+        work.hear(event(.questionRequested(QuestionRequest(id: "q0", questions: []))))
+
+        #expect(work.questions.isEmpty)
+        #expect(working(work) == ["juniper"])
+    }
+
+    @Test func aDroppedSocketForgetsTheQuestionsAndTheirSettling() {
+        let work = CompanionWork()
+        work.hear(event(.questionRequested(Self.format)))
+        work.hear(event(.permissionResolved(id: "q1")))
+
+        work.apply(.state(.unreachable))
+        work.hear(event(.questionRequested(Self.format)))
+
+        #expect(work.question("q1") != nil)
+    }
+
     func scope(_ botId: String, in conversationId: String = "c-1", session: String? = nil)
         -> AgentEvent.Scope
     {
@@ -32,7 +106,7 @@ struct CompanionWorkTests {
         AgentEvent.Change.turn(.submitting), .turn(.running), .turn(.stopping),
         .activity(AgentEvent.Activity(kind: .tool)),
         .activity(AgentEvent.Activity(kind: .permission)),
-        .permissionRequested, .questionRequested,
+        .permissionRequested, .questionRequested(CompanionWorkTests.format),
     ])
     func whatTheCompanionStartsDoingShowsItWorking(_ change: AgentEvent.Change) {
         let work = CompanionWork(now: { [startedAt] in startedAt })
@@ -60,7 +134,7 @@ struct CompanionWorkTests {
         let work = CompanionWork()
 
         work.hear(event(.turn(.running)))
-        work.hear(event(.questionRequested))
+        work.hear(event(.questionRequested(Self.format)))
         work.hear(event(.turn(.idle)))
         work.hear(
             event(

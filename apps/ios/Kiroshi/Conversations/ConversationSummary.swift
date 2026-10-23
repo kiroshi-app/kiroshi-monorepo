@@ -51,6 +51,7 @@ struct ConversationSummary: Identifiable, Equatable {
     var lastMessage: MessagePreview?
     var activeAt: Date?
     var workingCompanionIds: Set<Companion.ID> = []
+    var waitingQuestion: String?
     var timeLabel: String?
     var preview: String?
 

@@ -110,6 +110,11 @@ final class ConversationsStore {
         var summary = summary
         summary.workingCompanionIds = Set(
             work.workers(in: summary.conversationId).map(\.companionId))
+        if let waiting = work.question(in: summary.conversationId) {
+            summary.waitingQuestion = waiting.request.questions.first?.question
+            summary.timeLabel = String(localized: "Now")
+            return summary
+        }
         guard summary.isWorking else { return summary }
         let working = String(localized: "working…")
         summary.timeLabel = String(localized: "Now")
@@ -414,6 +419,7 @@ final class ConversationsStore {
                 self.opening = nil
                 opened = subject
             }
+            await replayQuestions(in: page, through: relay, generation: generation)
         } catch is CancellationError {
             return
         } catch {
@@ -423,6 +429,21 @@ final class ConversationsStore {
                 generation == self.generation, phase != .loaded
             else { return }
             phase = .failed
+        }
+    }
+
+    private func replayQuestions(
+        in page: ConversationPage?, through relay: ConversationRelay, generation: Int
+    ) async {
+        let asking = (page.map { $0.pinned + $0.conversations } ?? []).filter(\.isTurnActive)
+        for row in asking {
+            guard let questions = try? await relay.pendingQuestions(in: row.group.id) else {
+                continue
+            }
+            guard !Task.isCancelled, generation == self.generation else { return }
+            for question in questions {
+                work.hear(question)
+            }
         }
     }
 

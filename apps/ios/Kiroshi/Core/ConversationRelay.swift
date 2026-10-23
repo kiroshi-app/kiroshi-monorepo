@@ -85,6 +85,20 @@ struct ConversationRelay: Sendable {
             as: [AgentEvent].self)
     }
 
+    func answerQuestion(
+        _ id: String, askedIn scope: AgentEvent.Scope, with answers: [String: String]
+    ) async throws {
+        let args = AnswerArgs(scope: scope, id: id, answers: answers)
+        let answer = try await connection.call("agent_answer_question", args: args)
+        guard answer.status == 200 else { throw Self.refusal(of: answer) }
+    }
+
+    func recordAnswer(_ message: SentMessage) async throws {
+        _ = try await ask(
+            "conversation_append_user_message", AppendArgs(message: AnswerMessage(message)),
+            as: Int.self)
+    }
+
     func cancelTurn(_ scope: AgentEvent.Scope) async throws {
         let answer = try await connection.call("agent_cancel_turn", args: CancelArgs(scope: scope))
         guard answer.status == 200 else { throw Self.refusal(of: answer) }
@@ -201,4 +215,32 @@ private struct SendTurnArgs: Encodable {
 
 private struct CancelArgs: Encodable {
     let scope: AgentEvent.Scope
+}
+
+private struct AnswerArgs: Encodable {
+    let scope: AgentEvent.Scope
+    let id: String
+    let answers: [String: String]
+}
+
+private struct AppendArgs: Encodable {
+    let message: AnswerMessage
+}
+
+private struct AnswerMessage: Encodable {
+    enum CodingKeys: String, CodingKey {
+        case authorBotId
+    }
+
+    let sent: SentMessage
+
+    init(_ sent: SentMessage) {
+        self.sent = sent
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        try sent.encode(to: encoder)
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeNil(forKey: .authorBotId)
+    }
 }

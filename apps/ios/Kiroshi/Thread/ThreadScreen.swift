@@ -11,6 +11,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
     @State private var headerOverhang: CGFloat = 0
     @State private var topShownId: ThreadMessage.ID?
     @State private var gate = SendGate()
+    @State private var heldAnswer: QuestionDraft?
     @Environment(MessageConsent.self) private var consent
 
     var body: some View {
@@ -47,8 +48,16 @@ struct ThreadScreen<Model: ThreadModel>: View {
             }
             .sheet(isPresented: isAskingConsent) {
                 MessageConsentSheet {
-                    gate.agreeAndSend(with: consent) { model.send() }
+                    gate.agreeAndSend(with: consent) {
+                        if let heldAnswer {
+                            model.answer(heldAnswer)
+                        } else {
+                            model.send()
+                        }
+                        heldAnswer = nil
+                    }
                 } notNow: {
+                    heldAnswer = nil
                     gate.notNow()
                 }
             }
@@ -95,16 +104,22 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 }
                 ForEach(model.entries) { message in
                     let isLastSent = message.id == model.lastSentId
-                    ThreadMessageView(message: message, soloCompanion: heading.companion)
-                        .onGeometryChange(for: CGFloat?.self) { proxy in
-                            isLastSent ? proxy.frame(in: .transcript).minY : nil
-                        } action: { top in
-                            guard let top else { return }
-                            if sentTop == nil, scrolling == .followingTheBottom {
-                                position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
-                            }
-                            sentTop = top
+                    if let questionId = message.askedQuestionId {
+                        if let card = model.questionCard(questionId) {
+                            QuestionRow(state: card, send: answer)
                         }
+                    } else {
+                        ThreadMessageView(message: message, soloCompanion: heading.companion)
+                            .onGeometryChange(for: CGFloat?.self) { proxy in
+                                isLastSent ? proxy.frame(in: .transcript).minY : nil
+                            } action: { top in
+                                guard let top else { return }
+                                if sentTop == nil, scrolling == .followingTheBottom {
+                                    position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+                                }
+                                sentTop = top
+                            }
+                    }
                 }
                 if let working = model.working {
                     WorkingLine(working: working)
@@ -154,6 +169,14 @@ struct ThreadScreen<Model: ThreadModel>: View {
             guard scrolling != .followingTheBottom else { return }
             scrolling = .followingTheBottom
             position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+        }
+    }
+
+    private func answer(_ draft: QuestionDraft) {
+        heldAnswer = draft
+        gate.send(with: consent) {
+            model.answer(draft)
+            heldAnswer = nil
         }
     }
 
