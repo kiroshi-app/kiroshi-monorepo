@@ -33,7 +33,7 @@ final class QuestionPanelTests: XCTestCase {
     static let artboardOrange = ["Now", "Needs you"]
 
     func panelTop(under question: String?, in app: XCUIApplication) -> CGFloat {
-        let segments = app.segmentedControls.firstMatch
+        let segments = app.otherElements["Questions"]
         if segments.exists {
             return segments.frame.minY
         }
@@ -198,6 +198,11 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(text("Who reads these notes first?", in: app).waitForExistence(timeout: 5))
         option("People using the app", in: app).tap()
+        let format = app.buttons["Format"]
+        XCTAssertEqual(format.value as? String, "Answered")
+        XCTAssertFalse(format.isSelected)
+        XCTAssertTrue(app.buttons["Audience"].isSelected)
+        XCTAssertEqual(app.otherElements["Questions"].frame.height, 36, accuracy: 0.5)
         keep("4.5 Sticky · 3 questions, segment 2 active", of: app)
         try auditThePanel(app)
         app.buttons["Next"].tap()

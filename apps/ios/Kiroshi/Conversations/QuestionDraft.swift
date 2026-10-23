@@ -90,6 +90,10 @@ struct QuestionDraft: Equatable {
         !answer(at: index).isEmpty
     }
 
+    func isMarkedAnswered(_ index: Int) -> Bool {
+        index != shown && isAnswered(index)
+    }
+
     mutating func pick(_ option: QuestionRequest.Option) {
         typed[shown] = ""
         skipped.remove(shown)

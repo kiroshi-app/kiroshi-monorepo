@@ -72,13 +72,7 @@ struct QuestionPanel: View {
     private var question: some View {
         VStack(alignment: .leading, spacing: 12) {
             if draft.isOneOfSeveral {
-                Picker("Question", selection: shown) {
-                    ForEach(draft.request.questions.indices, id: \.self) { index in
-                        Text(draft.request.questions[index].header)
-                            .tag(index)
-                    }
-                }
-                .pickerStyle(.segmented)
+                segments
             }
             heading
                 .padding(.horizontal, 6)
@@ -100,12 +94,22 @@ struct QuestionPanel: View {
         }
     }
 
-    private var shown: Binding<Int> {
-        Binding {
-            draft.shown
-        } set: { index in
-            draft.show(index)
+    private var segments: some View {
+        HStack(spacing: 0) {
+            ForEach(draft.request.questions.indices, id: \.self) { index in
+                QuestionSegment(
+                    header: draft.request.questions[index].header,
+                    isShown: draft.shown == index,
+                    isAnswered: draft.isMarkedAnswered(index)
+                ) {
+                    draft.show(index)
+                }
+            }
         }
+        .padding(3)
+        .background(Color(.tertiarySystemFill), in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Questions")
     }
 
     private var heading: some View {
@@ -204,6 +208,47 @@ struct LatestMessageButton: View {
             .buttonBorderShape(.circle)
             .accessibilityLabel("Latest message")
             .padding(.bottom, 10)
+    }
+}
+
+struct QuestionSegment: View {
+    let header: String
+    let isShown: Bool
+    let isAnswered: Bool
+    let show: () -> Void
+    @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 30
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: show) {
+            HStack(spacing: 4) {
+                if isAnswered {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color(.systemGreen))
+                }
+                Text(header)
+                    .font(.subheadline.weight(isShown ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: height)
+            .background {
+                if isShown {
+                    Capsule()
+                        .fill(colorScheme == .dark ? Color(.systemGray2) : Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.04), radius: 0.5)
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 3)
+                }
+            }
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(header)
+        .accessibilityValue(isAnswered ? "Answered" : "")
+        .accessibilityAddTraits(isShown ? .isSelected : [])
+        .accessibilityRemoveTraits(isShown ? [] : .isSelected)
     }
 }
 
