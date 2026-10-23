@@ -252,6 +252,9 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(latest.waitForExistence(timeout: 5))
         XCTAssertLessThan(latest.frame.maxY, option("Summary", in: app).frame.minY)
+        XCTAssertEqual(latest.frame.size, CGSize(width: 44, height: 44))
+        let panelTop = app.staticTexts["Format"].frame.minY - 20
+        XCTAssertEqual(panelTop - latest.frame.maxY, 10, accuracy: 1)
         keep("4.8 Sticky · long thread scrolled, panel fixed", of: app)
         try auditThePanel(app, under: Self.format, isScrolledUp: true)
 

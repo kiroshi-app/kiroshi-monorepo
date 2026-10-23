@@ -197,17 +197,24 @@ struct QuestionPanel: View {
 
 struct LatestMessageButton: View {
     let jump: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Button("Latest message", systemImage: "arrow.down", action: jump)
-            .labelStyle(.iconOnly)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 44, height: 44)
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Latest message")
-            .padding(.bottom, 10)
+        Button(action: jump) {
+            Image(systemName: "arrow.down")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(Color(.tertiarySystemBackground), in: .circle)
+                .overlay {
+                    Circle()
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.08), radius: 7, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Latest message")
+        .padding(.bottom, 10)
     }
 }
 
