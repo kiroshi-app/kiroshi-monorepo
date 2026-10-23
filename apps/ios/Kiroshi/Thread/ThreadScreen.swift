@@ -12,7 +12,9 @@ struct ThreadScreen<Model: ThreadModel>: View {
     @State private var topShownId: ThreadMessage.ID?
     @State private var gate = SendGate()
     @State private var heldAnswer: QuestionDraft?
+    @State private var isAwayFromTheEnd = false
     @Environment(MessageConsent.self) private var consent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         transcript
@@ -39,12 +41,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 }
             }
             .safeAreaBar(edge: .bottom) {
-                ThreadComposer(
-                    model: model, isHostOffline: space.offlineSpace != nil,
-                    isDraftKept: gate.isDraftKept
-                ) {
-                    gate.send(with: consent) { model.send() }
-                }
+                bottomBar
             }
             .sheet(isPresented: isAskingConsent) {
                 MessageConsentSheet {
@@ -73,6 +70,46 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 guard let connection = space.connection else { return }
                 await model.follow(connection)
             }
+    }
+
+    private var bottomBar: some View {
+        Group {
+            if let asking = model.asking {
+                questionPanel(asking)
+            } else {
+                ThreadComposer(
+                    model: model, isHostOffline: space.offlineSpace != nil,
+                    isDraftKept: gate.isDraftKept
+                ) {
+                    gate.send(with: consent) { model.send() }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(barAnimation, value: askedId)
+    }
+
+    private func questionPanel(_ asking: QuestionAsking) -> some View {
+        QuestionPanel(asking: asking, jumpToLatest: latestMessageJump, send: answer)
+            .id(asking.question.request.id)
+            .transition(panelTransition)
+    }
+
+    private var latestMessageJump: (() -> Void)? {
+        guard isAwayFromTheEnd else { return nil }
+        return jumpToLatest
+    }
+
+    private var panelTransition: AnyTransition {
+        reduceMotion ? .opacity : .move(edge: .bottom)
+    }
+
+    private var barAnimation: Animation {
+        reduceMotion ? .easeInOut : .snappy
+    }
+
+    private var askedId: String? {
+        model.asking?.question.request.id
     }
 
     @ViewBuilder private var transcript: some View {
@@ -105,8 +142,9 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 ForEach(model.entries) { message in
                     let isLastSent = message.id == model.lastSentId
                     if let questionId = message.askedQuestionId {
-                        if let card = model.questionCard(questionId) {
-                            QuestionRow(state: card, send: answer)
+                        if let answered = model.answeredQuestion(questionId) {
+                            AnsweredQuestionCard(answered: answered)
+                                .padding(.top, 14)
                         }
                     } else {
                         ThreadMessageView(message: message, soloCompanion: heading.companion)
@@ -157,6 +195,11 @@ struct ThreadScreen<Model: ThreadModel>: View {
                 holdTheSentBubble()
             }
         }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            !geometry.isAtTheBottom
+        } action: { _, isAway in
+            isAwayFromTheEnd = isAway
+        }
         .onScrollPhaseChange { _, phase, context in
             if phase == .interacting {
                 scrolling = .reading
@@ -168,6 +211,13 @@ struct ThreadScreen<Model: ThreadModel>: View {
             sentTop = nil
             guard scrolling != .followingTheBottom else { return }
             scrolling = .followingTheBottom
+            position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
+        }
+    }
+
+    private func jumpToLatest() {
+        scrolling = .followingTheBottom
+        withAnimation(reduceMotion ? nil : .default) {
             position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
         }
     }

@@ -1,39 +1,75 @@
 import SwiftUI
 
-struct QuestionRow: View {
-    let state: QuestionCardState
-    let send: (QuestionDraft) -> Void
-
-    var body: some View {
-        Group {
-            switch state {
-            case .asking(let asking):
-                QuestionCard(asking: asking, send: send)
-                    .id(asking.question.request.id)
-            case .answered(let answered):
-                AnsweredQuestionCard(answered: answered)
-            }
-        }
-        .padding(.top, 14)
-    }
-}
-
-struct QuestionCard: View {
+struct QuestionPanel: View {
     let asking: QuestionAsking
+    var jumpToLatest: (() -> Void)?
     let send: (QuestionDraft) -> Void
     @State private var draft: QuestionDraft
+    @State private var questionHeight: CGFloat?
     @FocusState private var isWritingOther: Bool
+    @AccessibilityFocusState private var isQuestionFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     init(
-        asking: QuestionAsking, draft: QuestionDraft? = nil,
+        asking: QuestionAsking, draft: QuestionDraft? = nil, jumpToLatest: (() -> Void)? = nil,
         send: @escaping (QuestionDraft) -> Void
     ) {
         self.asking = asking
+        self.jumpToLatest = jumpToLatest
         self.send = send
         _draft = State(initialValue: draft ?? QuestionDraft(request: asking.question.request))
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ScrollView {
+                question
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxHeight: questionHeight)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentSize.height
+            } action: { _, height in
+                questionHeight = height
+            }
+            actions
+                .padding(.leading, 6)
+                .padding(.top, 2)
+                .padding(.bottom, 4)
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
+                .fill(Color(.secondarySystemBackground))
+                .shadow(color: Color(.separator), radius: 0, y: -0.5)
+                .shadow(
+                    color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
+                )
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            if let jumpToLatest {
+                Button("Latest message", systemImage: "arrow.down", action: jumpToLatest)
+                    .labelStyle(.iconOnly)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .offset(y: -54)
+            }
+        }
+        .tint(Color(.systemBlue))
+        .disabled(asking.isSending)
+        .accessibilityElement(children: .contain)
+        .task(id: asking.question.request.id) {
+            isQuestionFocused = true
+        }
+    }
+
+    private var question: some View {
         VStack(alignment: .leading, spacing: 12) {
             if draft.isOneOfSeveral {
                 Picker("Question", selection: shown) {
@@ -61,18 +97,7 @@ struct QuestionCard: View {
             if asking.hasFailed {
                 ProblemLabel(message: "Couldn’t send your answer. Tap Send to try again.")
             }
-            actions
-                .padding(.leading, 6)
-                .padding(.top, 2)
         }
-        .padding(.top, 14)
-        .padding(.bottom, 12)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 26))
-        .tint(Color(.systemBlue))
-        .disabled(asking.isSending)
-        .accessibilityElement(children: .contain)
     }
 
     private var shown: Binding<Int> {
@@ -95,6 +120,7 @@ struct QuestionCard: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused($isQuestionFocused)
             if draft.asked.multiSelect {
                 Text("Choose any that apply.")
                     .font(.subheadline)
@@ -291,51 +317,51 @@ struct AnsweredQuestionCard: View {
 }
 
 #if DEBUG
-    #Preview("3.1 Card · single select, empty") {
-        QuestionCardPreview(asking: QuestionsFixture.asking(QuestionsFixture.format))
+    #Preview("4.1 Panel · single select, empty") {
+        QuestionPanelPreview(asking: QuestionsFixture.asking(QuestionsFixture.format))
     }
 
-    #Preview("3.2 Card · option chosen") {
+    #Preview("4.2 Panel · option chosen") {
         let asking = QuestionsFixture.asking(QuestionsFixture.format)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
-        return QuestionCardPreview(asking: asking, draft: draft)
+        return QuestionPanelPreview(asking: asking, draft: draft)
     }
 
-    #Preview("3.3 Card · multi-select") {
+    #Preview("4.3 Panel · multi-select") {
         let asking = QuestionsFixture.asking(QuestionsFixture.sections)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
         draft.pick(draft.asked.options[1])
-        return QuestionCardPreview(asking: asking, draft: draft)
+        return QuestionPanelPreview(asking: asking, draft: draft)
     }
 
-    #Preview("3.4 Card · Other typed") {
+    #Preview("4.4 Panel · Other typed") {
         let asking = QuestionsFixture.asking(QuestionsFixture.format)
         var draft = QuestionDraft(request: asking.question.request)
         draft.other = "Changelog, user-facing only"
-        return QuestionCardPreview(asking: asking, draft: draft)
+        return QuestionPanelPreview(asking: asking, draft: draft)
     }
 
-    #Preview("3.5 Card · 3 questions, 1 answered") {
+    #Preview("4.5 Panel · 3 questions, segment 2 · dark") {
         let asking = QuestionsFixture.asking(
             QuestionsFixture.format, QuestionsFixture.audience, QuestionsFixture.length)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
         _ = draft.goOn()
         draft.pick(draft.asked.options[0])
-        return QuestionCardPreview(asking: asking, draft: draft)
+        return QuestionPanelPreview(asking: asking, draft: draft)
             .preferredColorScheme(.dark)
     }
 
-    #Preview("Card · answer refused") {
+    #Preview("Panel · answer refused") {
         var asking = QuestionsFixture.asking(QuestionsFixture.format)
         asking.hasFailed = true
-        return QuestionCardPreview(asking: asking)
+        return QuestionPanelPreview(asking: asking)
     }
 
-    #Preview("3.6 Card · collapsed after Send") {
-        QuestionCardPreview(
+    #Preview("4.6 Answer · after Send") {
+        AnsweredQuestionPreview(
             answered: QuestionAnswered(
                 by: .you,
                 lines: [
@@ -345,40 +371,32 @@ struct AnsweredQuestionCard: View {
                 ]))
     }
 
-    #Preview("3.7 Card · answered on another device") {
-        QuestionCardPreview(
+    #Preview("4.7 Answer · answered on another device") {
+        AnsweredQuestionPreview(
             answered: QuestionAnswered(
                 by: .elsewhere,
                 lines: [QuestionAnswerLine(header: "Format", answer: "Full changelog")]))
     }
 
-    #Preview("3.8 Card · answered from the composer · dark") {
-        QuestionCardPreview(
-            answered: QuestionAnswered(
-                by: .you,
-                lines: [
-                    QuestionAnswerLine(
-                        header: "Format",
-                        answer: "A summary for users, with breaking changes at the top.")
-                ])
-        )
-        .preferredColorScheme(.dark)
+    #Preview("4.8 Panel · thread scrolled up") {
+        QuestionPanelPreview(
+            asking: QuestionsFixture.asking(QuestionsFixture.format), isScrolledUp: true)
     }
 
-    #Preview("Card · skipped") {
-        QuestionCardPreview(answered: QuestionAnswered(by: .you, lines: []))
+    #Preview("Answer · skipped") {
+        AnsweredQuestionPreview(answered: QuestionAnswered(by: .you, lines: []))
     }
 
-    #Preview("Thread · 3.1 question waiting") {
+    #Preview("Thread · 4.1 question waiting") {
         SignInRootView(model: .fixture(.questionSingle))
     }
 
-    #Preview("Thread · 3.5 three questions · dark") {
+    #Preview("Thread · 4.5 three questions · dark") {
         SignInRootView(model: .fixture(.questionSeveral))
             .preferredColorScheme(.dark)
     }
 
-    #Preview("Thread · 3.7 answered on another device") {
+    #Preview("Thread · 4.7 answered on another device") {
         SignInRootView(model: .fixture(.questionElsewhere))
     }
 
@@ -386,21 +404,32 @@ struct AnsweredQuestionCard: View {
         SignInRootView(model: .fixture(.questionsList))
     }
 
-    private struct QuestionCardPreview: View {
-        var asking: QuestionAsking?
+    private struct QuestionPanelPreview: View {
+        let asking: QuestionAsking
         var draft: QuestionDraft?
-        var answered: QuestionAnswered?
+        var isScrolledUp = false
 
         var body: some View {
             ScrollView {
-                Group {
-                    if let answered {
-                        AnsweredQuestionCard(answered: answered)
-                    } else if let asking {
-                        QuestionCard(asking: asking, draft: draft) { _ in }
-                    }
-                }
-                .padding()
+                Text(QuestionsFixture.thread.map(\.content).joined(separator: "\n\n"))
+                    .padding()
+            }
+            .defaultScrollAnchor(.bottom)
+            .safeAreaBar(edge: .bottom) {
+                QuestionPanel(
+                    asking: asking, draft: draft, jumpToLatest: isScrolledUp ? {} : nil
+                ) { _ in }
+            }
+        }
+    }
+
+    private struct AnsweredQuestionPreview: View {
+        let answered: QuestionAnswered
+
+        var body: some View {
+            ScrollView {
+                AnsweredQuestionCard(answered: answered)
+                    .padding()
             }
         }
     }
