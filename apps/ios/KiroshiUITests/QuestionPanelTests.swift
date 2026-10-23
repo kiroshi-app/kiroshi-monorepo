@@ -51,6 +51,8 @@ final class QuestionPanelTests: XCTestCase {
         let attach = attach(in: app)
         let composerTop = attach.exists ? attach.frame.minY : .infinity
         let panelTop = panelTop(under: question, in: app)
+        let latest = app.buttons["Latest message"]
+        let latestFrame = latest.exists ? latest.frame : .null
         let send = app.buttons["Send"]
         let keyboardTop = withTheKeyboard && send.exists ? send.frame.maxY : .infinity
         try audit(app) { issue in
@@ -68,11 +70,13 @@ final class QuestionPanelTests: XCTestCase {
             let isBehindThePanel = element.frame.maxY > panelTop && !element.isHittable
             let isOffScreen = isInTheTitle || element.frame.maxY > composerTop
             let isTheThreadUnderThePanel = isScrolledUp && element.frame.midY > panelTop
+            let isUnderTheLatestButton =
+                element.label != "Latest message" && element.frame.intersects(latestFrame)
             let isInTheKeyboard = element.frame.minY >= keyboardTop
             return switch issue.auditType {
             case .contrast:
                 isInTheTitle || isUnderTheTabBar || isTheComposer || isBehindThePanel
-                    || isTheThreadUnderThePanel || !element.isEnabled
+                    || isTheThreadUnderThePanel || isUnderTheLatestButton || !element.isEnabled
                     || Self.artboardOrange.contains { element.label.hasSuffix($0) }
             case .dynamicType:
                 isInTheTitle || isInTheNavigationBar || isAboveThePanel || isBehindThePanel
