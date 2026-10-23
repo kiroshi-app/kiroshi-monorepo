@@ -47,8 +47,9 @@ protocol ThreadModel: AnyObject, Observable {
     var mentionCandidates: [Companion] { get }
     var hasOlder: Bool { get }
     var olderFailed: Bool { get }
+    var asking: QuestionAsking? { get }
 
-    func questionCard(_ id: String) -> QuestionCardState?
+    func answeredQuestion(_ id: String) -> QuestionAnswered?
     func mention(_ companion: Companion)
     @discardableResult func send() -> Task<Void, Never>?
     @discardableResult func stop() -> Task<Void, Never>?
@@ -59,7 +60,7 @@ protocol ThreadModel: AnyObject, Observable {
 }
 
 extension ThreadModel {
-    func questionCard(_ id: String) -> QuestionCardState? {
+    func answeredQuestion(_ id: String) -> QuestionAnswered? {
         nil
     }
 

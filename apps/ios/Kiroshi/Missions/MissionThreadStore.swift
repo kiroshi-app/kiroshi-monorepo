@@ -256,6 +256,8 @@ extension MissionThreadStore: ThreadModel {
 
     var olderFailed: Bool { false }
 
+    var asking: QuestionAsking? { nil }
+
     func loadOlder() {}
 
     @discardableResult

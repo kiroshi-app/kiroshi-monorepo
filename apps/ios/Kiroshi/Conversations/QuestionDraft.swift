@@ -25,11 +25,6 @@ struct QuestionAsking: Equatable {
     var hasFailed = false
 }
 
-enum QuestionCardState: Equatable {
-    case asking(QuestionAsking)
-    case answered(QuestionAnswered)
-}
-
 struct QuestionDraft: Equatable {
     let request: QuestionRequest
     private(set) var shown = 0

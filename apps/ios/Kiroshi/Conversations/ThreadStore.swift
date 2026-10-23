@@ -113,52 +113,44 @@ final class ThreadStore {
     }
 
     var canSend: Bool {
-        guard isReachable, conversationId != nil, !isSending else { return false }
-        let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard waitingQuestion == nil else { return answering == nil && hasText }
-        return !isWorking && (hasText || !attachments.isEmpty)
+        isReachable && conversationId != nil && !isSending && !isWorking
+            && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !attachments.isEmpty)
     }
 
-    func questionCard(_ id: String) -> QuestionCardState? {
-        if let answering, answering.request.id == id {
-            return .asking(QuestionAsking(question: answering, isSending: true))
+    var asking: QuestionAsking? {
+        if let answering {
+            return QuestionAsking(question: answering, isSending: true)
         }
-        if let waiting = work.question(id), waiting.conversationId == conversationId {
-            return .asking(QuestionAsking(question: waiting, hasFailed: failedAnswerId == id))
-        }
+        guard let waitingQuestion else { return nil }
+        return QuestionAsking(
+            question: waitingQuestion, hasFailed: failedAnswerId == waitingQuestion.request.id)
+    }
+
+    func answeredQuestion(_ id: String) -> QuestionAnswered? {
         if let answered = answeredHere[id] {
-            return .answered(answered)
+            return answered
         }
         if let row = answerRows[id] {
-            return .answered(
-                QuestionAnswered(
-                    by: row.isYours && !answeredElsewhereIds.contains(id) ? .you : .elsewhere,
-                    lines: QuestionDraft.lines(of: row.text, to: askedRequests[id])))
+            return QuestionAnswered(
+                by: row.isYours && !answeredElsewhereIds.contains(id) ? .you : .elsewhere,
+                lines: QuestionDraft.lines(of: row.text, to: askedRequests[id]))
         }
         if answeredElsewhereIds.contains(id) {
-            return .answered(QuestionAnswered(by: .elsewhere, lines: []))
+            return QuestionAnswered(by: .elsewhere, lines: [])
         }
         return nil
     }
 
     @discardableResult
     func answer(_ draft: QuestionDraft) -> Task<Void, Never>? {
-        guard let waiting = work.question(draft.request.id),
+        guard let relay, answering == nil, let waiting = work.question(draft.request.id),
             waiting.conversationId == conversationId
         else { return nil }
-        return deliverAnswer(draft.answers, lines: draft.lines, to: waiting)
-    }
-
-    private func deliverAnswer(
-        _ answers: [String: String], lines: [QuestionAnswerLine], to waiting: WaitingQuestion,
-        keepingOnFailure written: String? = nil
-    ) -> Task<Void, Never>? {
-        guard let relay, answering == nil else { return nil }
         answering = waiting
         failedAnswerId = nil
         let task = Task {
-            await answer(
-                waiting, with: answers, lines: lines, through: relay, keepingOnFailure: written)
+            await answer(waiting, with: draft.answers, lines: draft.lines, through: relay)
         }
         answeringTask = task
         return task
@@ -166,7 +158,7 @@ final class ThreadStore {
 
     private func answer(
         _ waiting: WaitingQuestion, with answers: [String: String], lines: [QuestionAnswerLine],
-        through relay: ConversationRelay, keepingOnFailure written: String?
+        through relay: ConversationRelay
     ) async {
         let id = waiting.request.id
         do {
@@ -177,9 +169,6 @@ final class ThreadStore {
         } catch {
             answering = nil
             failedAnswerId = id
-            if let written, draft.isEmpty {
-                draft = written
-            }
             return
         }
         answering = nil
@@ -266,14 +255,6 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
-        if let waiting = waitingQuestion, let first = waiting.request.questions.first {
-            let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-            draft = ""
-            return deliverAnswer(
-                [first.question: written],
-                lines: [QuestionAnswerLine(header: first.header, answer: written)], to: waiting,
-                keepingOnFailure: written)
-        }
         let outgoing = Outgoing(
             id: makeId(), turnId: makeId(), conversationId: conversationId,
             written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
@@ -432,9 +413,7 @@ final class ThreadStore {
 
     private func hold(_ request: QuestionRequest, askedBy authorId: Companion.ID?) {
         askedRequests[request.id] = request
-        guard work.question(request.id) != nil,
-            !entries.contains(where: { $0.id == request.messageId })
-        else { return }
+        guard !entries.contains(where: { $0.id == request.messageId }) else { return }
         entries.append(
             threadMessage(
                 id: request.messageId, writer: .companion(authorId), text: "",
@@ -534,7 +513,7 @@ extension ThreadStore: ThreadModel {
     }
 
     var working: ThreadWorking? {
-        guard isWorking, waitingQuestion == nil else { return nil }
+        guard isWorking, asking == nil else { return nil }
         return ThreadWorking(
             companion: workingCompanions.first ?? subject.members.first, name: workingName,
             isSeveral: workingCompanions.count > 1, since: workingSince)

@@ -609,7 +609,8 @@
                 break
             }
             if let question = QuestionsFixture.question(for: fixture) {
-                script.messages[question.companionId] = QuestionsFixture.thread
+                script.messages[question.companionId] =
+                    (hasHistory ? releaseHistory : []) + QuestionsFixture.thread
                 script.question = question
                 if fixture == .questionsList {
                     script.workingCompanion = atlas.id
