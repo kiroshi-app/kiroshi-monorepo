@@ -1,6 +1,11 @@
 import Foundation
 
 struct ThreadMessage: Identifiable, Equatable {
+    enum QuestionPart: Equatable {
+        case asking(String)
+        case answer(String)
+    }
+
     static let runGap: TimeInterval = 5 * 60
 
     let id: String
@@ -8,6 +13,7 @@ struct ThreadMessage: Identifiable, Equatable {
     let sentAt: Date
     let author: Companion?
     let initials: String
+    let questionPart: QuestionPart?
     private let authors: [Companion]
     private(set) var text: String
     private(set) var rendered: AttributedString
@@ -19,9 +25,11 @@ struct ThreadMessage: Identifiable, Equatable {
     var closesRun = true
 
     init(
-        id: String, writer: MessageAuthor, text: String, sentAt: Date, authors: [Companion] = []
+        id: String, writer: MessageAuthor, text: String, sentAt: Date, authors: [Companion] = [],
+        questionPart: QuestionPart? = nil
     ) {
         self.id = id
+        self.questionPart = questionPart
         self.writer = writer
         self.sentAt = sentAt
         self.authors = authors
@@ -32,8 +40,21 @@ struct ThreadMessage: Identifiable, Equatable {
         attachedFiles = shown.files
         rendered = Self.render(
             shown.text, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
-        bubbles = Self.bubbles(
-            of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+        bubbles =
+            questionPart == nil
+            ? Self.bubbles(
+                of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson,
+                authors: authors) : []
+    }
+
+    var askedQuestionId: String? {
+        guard case .asking(let id) = questionPart else { return nil }
+        return id
+    }
+
+    var answeredQuestionId: String? {
+        guard case .answer(let id) = questionPart else { return nil }
+        return id
     }
 
     var isYours: Bool {
@@ -55,6 +76,7 @@ struct ThreadMessage: Identifiable, Equatable {
         attachedFiles = shown.files
         rendered = Self.render(
             shown.text, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
+        guard questionPart == nil else { return }
         bubbles = Self.bubbles(
             of: shown.text, id: id, isWrittenByPerson: writer.isWrittenByPerson, authors: authors)
     }

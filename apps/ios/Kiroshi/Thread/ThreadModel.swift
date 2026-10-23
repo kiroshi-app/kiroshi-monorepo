@@ -48,10 +48,22 @@ protocol ThreadModel: AnyObject, Observable {
     var hasOlder: Bool { get }
     var olderFailed: Bool { get }
 
+    func questionCard(_ id: String) -> QuestionCardState?
     func mention(_ companion: Companion)
     @discardableResult func send() -> Task<Void, Never>?
     @discardableResult func stop() -> Task<Void, Never>?
+    @discardableResult func answer(_ draft: QuestionDraft) -> Task<Void, Never>?
     @discardableResult func reload() -> Task<Void, Never>?
     func loadOlder()
     func follow(_ connection: RelayConnection) async
+}
+
+extension ThreadModel {
+    func questionCard(_ id: String) -> QuestionCardState? {
+        nil
+    }
+
+    @discardableResult func answer(_ draft: QuestionDraft) -> Task<Void, Never>? {
+        nil
+    }
 }
