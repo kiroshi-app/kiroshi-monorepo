@@ -413,9 +413,7 @@ final class ThreadStore {
 
     private func hold(_ request: QuestionRequest, askedBy authorId: Companion.ID?) {
         askedRequests[request.id] = request
-        guard work.question(request.id) != nil,
-            !entries.contains(where: { $0.id == request.messageId })
-        else { return }
+        guard !entries.contains(where: { $0.id == request.messageId }) else { return }
         entries.append(
             threadMessage(
                 id: request.messageId, writer: .companion(authorId), text: "",
