@@ -154,10 +154,10 @@ struct QuestionPanel: View {
                 QuestionMark(isMultiSelect: false, isPicked: true)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 11.5)
         .padding(.leading, 16)
         .padding(.trailing, 14)
-        .frame(minHeight: 46)
+        .frame(minHeight: 45)
         .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)

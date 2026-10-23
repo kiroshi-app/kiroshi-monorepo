@@ -94,6 +94,22 @@ final class QuestionPanelTests: XCTestCase {
     }
 
     static let headingHeight: CGFloat = 20 + 18 + 2 + 22 + 12
+    static let artboardPanelTop: CGFloat = 445
+
+    func assertThePanelSitsOnTheArtboard(_ app: XCUIApplication, _ artboard: String) {
+        let top = Self.artboardPanelTop
+        let options: CGFloat = 3 * 65 + 2 * 8
+        XCTAssertEqual(
+            panelTop(above: option("Summary", in: app)), top, accuracy: 0.5, artboard)
+        XCTAssertEqual(
+            app.staticTexts["Format"].frame.midY, top + 20 + 9, accuracy: 0.5, artboard)
+        XCTAssertEqual(
+            text(Self.format, in: app).frame.midY, top + 20 + 18 + 2 + 11, accuracy: 0.5,
+            artboard)
+        XCTAssertEqual(
+            other(in: app).frame.midY, top + Self.headingHeight + options + 12 + 45 / 2,
+            accuracy: 0.5, artboard)
+    }
     static let format = "Which format should the release notes take?"
     static let suggestionBar: CGFloat = 44
 
@@ -153,14 +169,17 @@ final class QuestionPanelTests: XCTestCase {
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         let send = app.buttons["Send"].frame
 
-        XCTAssertEqual(panelTop(above: summary), 444, accuracy: 0.5)
-        XCTAssertEqual(app.staticTexts["Format"].frame.midY, 444 + 20 + 9, accuracy: 0.5)
-        XCTAssertEqual(text(Self.format, in: app).frame.midY, 444 + 20 + 18 + 2 + 11, accuracy: 0.5)
+        assertThePanelSitsOnTheArtboard(app, "4.1")
         XCTAssertEqual(summary.frame.height, 65, accuracy: 0.5)
         XCTAssertEqual(other(in: app).frame.height, 22, accuracy: 0.5)
         XCTAssertEqual(send.height, 44, accuracy: 0.5)
         XCTAssertEqual(send.width, 85, accuracy: 1)
         XCTAssertEqual(app.frame.maxY - send.maxY, 29, accuracy: 0.5)
+
+        summary.tap()
+
+        XCTAssertTrue(summary.isSelected)
+        assertThePanelSitsOnTheArtboard(app, "4.2")
     }
 
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
