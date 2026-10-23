@@ -40,6 +40,11 @@ struct ThreadScreen<Model: ThreadModel>: View {
                     EmptyView()
                 }
             }
+            .overlay(alignment: .bottom) {
+                if model.asking != nil, isAwayFromTheEnd {
+                    LatestMessageButton(jump: jumpToLatest)
+                }
+            }
             .safeAreaBar(edge: .bottom) {
                 bottomBar
             }
@@ -90,14 +95,9 @@ struct ThreadScreen<Model: ThreadModel>: View {
     }
 
     private func questionPanel(_ asking: QuestionAsking) -> some View {
-        QuestionPanel(asking: asking, jumpToLatest: latestMessageJump, send: answer)
+        QuestionPanel(asking: asking, send: answer)
             .id(asking.question.request.id)
             .transition(panelTransition)
-    }
-
-    private var latestMessageJump: (() -> Void)? {
-        guard isAwayFromTheEnd else { return nil }
-        return jumpToLatest
     }
 
     private var panelTransition: AnyTransition {

@@ -2,7 +2,6 @@ import SwiftUI
 
 struct QuestionPanel: View {
     let asking: QuestionAsking
-    var jumpToLatest: (() -> Void)?
     let send: (QuestionDraft) -> Void
     @State private var draft: QuestionDraft
     @State private var questionHeight: CGFloat?
@@ -11,11 +10,10 @@ struct QuestionPanel: View {
     @Environment(\.colorScheme) private var colorScheme
 
     init(
-        asking: QuestionAsking, draft: QuestionDraft? = nil, jumpToLatest: (() -> Void)? = nil,
+        asking: QuestionAsking, draft: QuestionDraft? = nil,
         send: @escaping (QuestionDraft) -> Void
     ) {
         self.asking = asking
-        self.jumpToLatest = jumpToLatest
         self.send = send
         _draft = State(initialValue: draft ?? QuestionDraft(request: asking.question.request))
     }
@@ -48,18 +46,6 @@ struct QuestionPanel: View {
                     color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
                 )
                 .ignoresSafeArea(edges: .bottom)
-        }
-        .overlay(alignment: .top) {
-            if let jumpToLatest {
-                Button("Latest message", systemImage: "arrow.down", action: jumpToLatest)
-                    .labelStyle(.iconOnly)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .offset(y: -54)
-            }
         }
         .tint(Color(.systemBlue))
         .disabled(asking.isSending)
@@ -185,6 +171,22 @@ struct QuestionPanel: View {
             .controlSize(.large)
             .disabled(!draft.canGoOn)
         }
+    }
+}
+
+struct LatestMessageButton: View {
+    let jump: () -> Void
+
+    var body: some View {
+        Button("Latest message", systemImage: "arrow.down", action: jump)
+            .labelStyle(.iconOnly)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Latest message")
+            .padding(.bottom, 10)
     }
 }
 
@@ -415,10 +417,13 @@ struct AnsweredQuestionCard: View {
                     .padding()
             }
             .defaultScrollAnchor(.bottom)
+            .overlay(alignment: .bottom) {
+                if isScrolledUp {
+                    LatestMessageButton {}
+                }
+            }
             .safeAreaBar(edge: .bottom) {
-                QuestionPanel(
-                    asking: asking, draft: draft, jumpToLatest: isScrolledUp ? {} : nil
-                ) { _ in }
+                QuestionPanel(asking: asking, draft: draft) { _ in }
             }
         }
     }
