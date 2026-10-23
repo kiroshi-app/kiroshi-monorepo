@@ -53,7 +53,10 @@ struct QuestionPanel: View {
         .background {
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(Color(.secondarySystemBackground))
-                .shadow(color: Color(.separator).opacity(0.5), radius: 0, y: -0.5)
+                .shadow(
+                    color: Color(.separator).opacity(colorScheme == .dark ? 2 / 3 : 0.5), radius: 0,
+                    y: -0.5
+                )
                 .shadow(
                     color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
                 )
