@@ -305,7 +305,8 @@ struct AnsweredQuestionCard: View {
             Image(systemName: "forward.circle.fill")
         case .you:
             Image(systemName: "checkmark.circle.fill")
-                .symbolRenderingMode(.multicolor)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, Color(.systemGreen))
         case .elsewhere:
             Image(systemName: "laptopcomputer")
         }
