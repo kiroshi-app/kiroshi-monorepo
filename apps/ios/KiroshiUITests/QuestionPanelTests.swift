@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 @MainActor
@@ -43,7 +44,7 @@ final class QuestionPanelTests: XCTestCase {
 
     func auditThePanel(
         _ app: XCUIApplication, under question: String? = nil, atTheLargestSize: Bool = false,
-        withTheKeyboard: Bool = false, isScrolledUp: Bool = false
+        withTheKeyboard: Bool = false, isScrolledUp: Bool = false, neverClipping: [String] = []
     ) throws {
         let titleBottom = titleBottom(in: app)
         let navigationBar = app.navigationBars.firstMatch.frame
@@ -55,6 +56,9 @@ final class QuestionPanelTests: XCTestCase {
         let latestFrame = latest.exists ? latest.frame : .null
         let send = app.buttons["Send"]
         let keyboardTop = withTheKeyboard && send.exists ? send.frame.maxY : .infinity
+        let actionsTop =
+            ["Skip", "Next", "Send"].map { app.buttons[$0] }.filter(\.exists).map(\.frame.minY)
+            .min() ?? .infinity
         try audit(app) { issue in
             guard let element = issue.element else {
                 return issue.auditType == .textClipped
@@ -73,10 +77,16 @@ final class QuestionPanelTests: XCTestCase {
             let isUnderTheLatestButton =
                 element.label != "Latest message" && element.frame.intersects(latestFrame)
             let isInTheKeyboard = element.frame.minY >= keyboardTop
+            let isCutByTheActions =
+                element.frame.minY < actionsTop && element.frame.maxY > actionsTop
+            if issue.auditType == .textClipped && neverClipping.contains(element.label) {
+                return false
+            }
             return switch issue.auditType {
             case .contrast:
                 isInTheTitle || isUnderTheTabBar || isTheComposer || isBehindThePanel
                     || isTheThreadUnderThePanel || isUnderTheLatestButton || !element.isEnabled
+                    || atTheLargestSize && isCutByTheActions
                     || Self.artboardOrange.contains { element.label.hasSuffix($0) }
             case .dynamicType:
                 isInTheTitle || isInTheNavigationBar || isAboveThePanel || isBehindThePanel
@@ -243,6 +253,55 @@ final class QuestionPanelTests: XCTestCase {
         XCTAssertTrue(text("Under a page", in: app).exists)
         XCTAssertTrue(attach(in: app).exists)
         keep("4.6 Sticky · three answers", of: app)
+    }
+
+    static let headers = ["Format", "Audience", "Length"]
+
+    func oneLineWidth(of label: String, at category: UIContentSizeCategory) -> CGFloat {
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        let size = UIFont.preferredFont(forTextStyle: .subheadline, compatibleWith: traits)
+            .pointSize
+        let font = UIFont.systemFont(ofSize: size, weight: .semibold)
+        return (label as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    func dragThePanel(by distance: CGFloat, in app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)))
+    }
+
+    func testTheSegmentLabelsStayWholeAtTheLargestTextSize() throws {
+        let app = launchInEnglish(
+            "questions-4.5", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        let question = text(Self.format, in: app)
+        XCTAssertTrue(question.waitForExistence(timeout: 10))
+        let summary = option("Summary", in: app)
+        let actionsTop = app.buttons["Skip"].frame.minY
+        for _ in 0..<6 where summary.frame.maxY > actionsTop {
+            dragThePanel(by: -200, in: app)
+        }
+        summary.tap()
+        app.buttons["Next"].tap()
+        XCTAssertTrue(text("Who reads these notes first?", in: app).waitForExistence(timeout: 5))
+        let segments = app.otherElements["Questions"]
+        var segmentsTop = -CGFloat.infinity
+        for _ in 0..<6 where segments.frame.minY != segmentsTop {
+            segmentsTop = segments.frame.minY
+            dragThePanel(by: 300, in: app)
+        }
+
+        XCTAssertTrue(app.buttons["Audience"].isSelected)
+        XCTAssertEqual(app.buttons["Format"].value as? String, "Answered")
+        for header in Self.headers {
+            let segment = app.buttons[header].frame
+            XCTAssertTrue(segments.frame.contains(segment), header)
+            XCTAssertGreaterThanOrEqual(
+                segment.width - 2 * 8,
+                oneLineWidth(of: header, at: .accessibilityExtraExtraLarge), header)
+        }
+        keep("4.5 Sticky · largest text", of: app)
+        try auditThePanel(app, atTheLargestSize: true, neverClipping: Self.headers)
     }
 
     func testSkipGivesTheComposerBack() throws {
