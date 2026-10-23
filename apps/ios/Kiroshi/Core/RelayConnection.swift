@@ -34,6 +34,7 @@ actor RelayConnection {
     private var silentPings = 0
     private var nextCallId = 1
     private var challenge: Data?
+    private var keyAskedUnder: UInt32?
     private var pendingCalls: [Int: CheckedContinuation<RelayAnswer, any Error>] = [:]
     private var flights: [Int: RelayFlight] = [:]
     private var callTasks: [Int: Task<Void, Never>] = [:]
@@ -165,12 +166,9 @@ actor RelayConnection {
             opened.close()
             return RelayEnding(.paused, retries: false)
         }
-        let spaceKeys: SpaceKeys
-        if let held = self.spaceKeys {
-            spaceKeys = held
-        } else {
+        if spaceKeys == nil {
             switch await awaitKey(on: opened) {
-            case .keyed(let handed): spaceKeys = handed
+            case .keyed: break
             case .ended(let ending): return ending
             }
             guard !Task.isCancelled else {
@@ -182,13 +180,14 @@ actor RelayConnection {
             of: RelayOutgoing.self, bufferingPolicy: .unbounded)
         socket = opened
         challenge = nil
+        keyAskedUnder = nil
         self.outbox = outbox
         outbox.yield(.hello)
         backoff.reset()
         silentPings = 0
         let ending = await withTaskGroup(of: RelayEnding?.self) { group in
             group.addTask { await self.receiveUntilClosed(opened) }
-            group.addTask { await self.sendUntilClosed(opened, outgoing, under: spaceKeys) }
+            group.addTask { await self.sendUntilClosed(opened, outgoing) }
             group.addTask { await self.keepAlive(opened) }
             group.addTask { await self.askSharedSpace() }
             var ending = RelayEnding(.unreachable, retries: true)
@@ -253,6 +252,15 @@ actor RelayConnection {
     private func keys(handedIn text: String) async -> SpaceKeys? {
         guard let handed = try? await Self.verifying(text, instance: instanceId, device: device)
         else { return nil }
+        await persist(handed)
+        if let held = spaceKeys {
+            return held
+        }
+        spaceKeys = handed.spaceKeys
+        return handed.spaceKeys
+    }
+
+    private func persist(_ handed: HandedSpaceKey) async {
         do {
             try await spaceKeyStore.save(handed, for: instanceId, sealedTo: device.keys)
         } catch {
@@ -260,11 +268,6 @@ actor RelayConnection {
                 "The key of a joined Space wasn't stored: \(String(describing: error), privacy: .public)"
             )
         }
-        if let held = spaceKeys {
-            return held
-        }
-        spaceKeys = handed.spaceKeys
-        return handed.spaceKeys
     }
 
     private func askForKey(on socket: any RelaySocket) async -> KeyWait? {
@@ -317,11 +320,11 @@ actor RelayConnection {
         }
     }
 
-    private func sendUntilClosed(
-        _ socket: any RelaySocket, _ outgoing: AsyncStream<RelayOutgoing>,
-        under keys: SpaceKeys
-    ) async -> RelayEnding? {
+    private func sendUntilClosed(_ socket: any RelaySocket, _ outgoing: AsyncStream<RelayOutgoing>)
+        async -> RelayEnding?
+    {
         for await next in outgoing {
+            guard let keys = spaceKeys else { continue }
             switch next {
             case .hello:
                 do {
@@ -334,6 +337,12 @@ actor RelayConnection {
                 }
             case .call(let id):
                 await send(id, on: socket, under: keys)
+            case .keyRequest:
+                do {
+                    try await socket.send(try await Self.keyRequest(in: instanceId, from: device))
+                } catch {
+                    return RelayEnding(.unreachable, retries: true)
+                }
             }
         }
         return nil
@@ -342,7 +351,10 @@ actor RelayConnection {
     private func send(_ id: Int, on socket: any RelaySocket, under keys: SpaceKeys) async {
         do {
             let ctr = try await nextCtr(under: keys)
-            guard let plaintext = flights[id]?.plaintext, let challenge else { return }
+            guard let flight = flights[id], case .queued = flight.stage, let challenge else {
+                return
+            }
+            let plaintext = flight.plaintext
             flights[id]?.stage = .sent(under: challenge)
             try await socket.send(
                 try await sealed(plaintext, ctr: ctr, challenge: challenge, under: keys))
@@ -379,10 +391,8 @@ actor RelayConnection {
         return String(decoding: try JSONEncoder().encode(frame), as: UTF8.self)
     }
 
-    private func open(_ text: String, under keys: SpaceKeys) async -> RelayOpenedFrame? {
-        guard let frame = try? JSONDecoder().decode(RelayWireFrame.self, from: Data(text.utf8)),
-            frame.v == 2, frame.instance == instanceId, frame.keyId == keys.keyId,
-            let header = header(of: frame),
+    private func open(_ frame: RelayWireFrame, under keys: SpaceKeys) async -> RelayOpenedFrame? {
+        guard let header = header(of: frame),
             let ciphertext = Data(base64Encoded: frame.ct),
             let signature = Data(base64Encoded: frame.sig),
             let lastAccepted = try? await counters.lastAccepted(
@@ -488,8 +498,17 @@ actor RelayConnection {
 
     private func heard(_ text: String) async {
         silentPings = 0
-        guard let spaceKeys, let opened = await open(text, under: spaceKeys), !Task.isCancelled
-        else { return }
+        guard let wire = try? JSONDecoder().decode(RelayWireFrame.self, from: Data(text.utf8))
+        else {
+            await rotate(by: text)
+            return
+        }
+        guard let spaceKeys, wire.v == 2, wire.instance == instanceId else { return }
+        guard wire.keyId == spaceKeys.keyId else {
+            dropped(wire, holding: spaceKeys)
+            return
+        }
+        guard let opened = await open(wire, under: spaceKeys), !Task.isCancelled else { return }
         let frame = opened.plaintext
         guard let head = try? JSONDecoder().decode(RelayFrameHead.self, from: frame) else { return }
         if head.hello != nil {
@@ -501,6 +520,47 @@ actor RelayConnection {
         } else if let id = head.id, let status = head.status {
             settle(id, with: .success(RelayAnswer(status: status, frame: frame)))
         }
+    }
+
+    private func dropped(_ frame: RelayWireFrame, holding held: SpaceKeys) {
+        relayLog.notice(
+            "Dropped a frame of Space \(self.instanceId, privacy: .public) under key \(frame.keyId, privacy: .public), holding key \(held.keyId, privacy: .public)"
+        )
+        guard frame.keyId > held.keyId, keyAskedUnder != held.keyId else { return }
+        keyAskedUnder = held.keyId
+        outbox?.yield(.keyRequest)
+    }
+
+    private func rotate(by text: String) async {
+        guard let handed = try? await Self.verifying(text, instance: instanceId, device: device),
+            let held = spaceKeys, handed.keyId != held.keyId
+        else { return }
+        guard handed.keyId > held.keyId else {
+            relayLog.notice(
+                "Refused key \(handed.keyId, privacy: .public) of Space \(self.instanceId, privacy: .public), holding key \(held.keyId, privacy: .public)"
+            )
+            return
+        }
+        guard handed.hostSigningKey.rawRepresentation == held.hostSigningKey.rawRepresentation
+        else {
+            relayLog.error(
+                "Refused key \(handed.keyId, privacy: .public) of Space \(self.instanceId, privacy: .public): another host signed it"
+            )
+            return
+        }
+        await persist(handed)
+        guard let latest = spaceKeys, handed.keyId > latest.keyId else { return }
+        relayLog.notice(
+            "Space \(self.instanceId, privacy: .public) moved from key \(latest.keyId, privacy: .public) to key \(handed.keyId, privacy: .public)"
+        )
+        spaceKeys = handed.spaceKeys
+        challenge = nil
+        for (id, flight) in flights {
+            if case .queued = flight.stage {
+                flights[id]?.stage = .awaitingChallenge
+            }
+        }
+        outbox?.yield(.hello)
     }
 
     private func heardChallenge(_ fresh: Data) {
@@ -605,6 +665,7 @@ private struct RelayNoArgs: Encodable {}
 private enum RelayOutgoing: Sendable {
     case hello
     case call(Int)
+    case keyRequest
 }
 
 private struct RelayFlight: Sendable {
