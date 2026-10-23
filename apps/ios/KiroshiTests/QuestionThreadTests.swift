@@ -78,11 +78,12 @@ struct QuestionThreadTests {
     }
 
     func isAsking(_ store: ThreadStore) -> Bool {
-        guard case .asking = store.questionCard("q1") else { return false }
-        return true
+        store.asking?.question.request.id == "q1"
     }
 
-    @Test func aQuestionWaitingWhenTheThreadOpensShowsItsCardInsteadOfTheWorkingLine() async {
+    @Test func aQuestionWaitingWhenTheThreadOpensTakesThePlaceOfTheComposerAndOfTheWorkingLine()
+        async throws
+    {
         let host = waitingHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
@@ -91,9 +92,10 @@ struct QuestionThreadTests {
 
         #expect(store.entries.map(\.id) == ["m1", "m2", "question-q1"])
         #expect(store.entries.last?.bubbles.isEmpty == true)
+        #expect(store.answeredQuestion("q1") == nil)
         #expect(store.isWorking)
         #expect(store.working == nil)
-        guard case .asking(let asking) = store.questionCard("q1") else { return }
+        let asking = try #require(store.asking)
         #expect(asking.question.request.questions.map(\.header) == ["Format", "Audience"])
         #expect(asking.question.turnId == "turn-1")
         following.cancel()
@@ -118,12 +120,12 @@ struct QuestionThreadTests {
         await connection.stop()
     }
 
-    @Test func theCardSendsEachAnswerKeyedByItsQuestionThenRecordsTheAnswer() async throws {
+    @Test func thePanelSendsEachAnswerKeyedByItsQuestionThenGivesTheComposerBack() async throws {
         let host = waitingHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
         await waitUntil { isAsking(store) }
-        guard case .asking(let asking) = store.questionCard("q1") else { return }
+        let asking = try #require(store.asking)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
         _ = draft.goOn()
@@ -151,22 +153,24 @@ struct QuestionThreadTests {
         #expect(message.authorBotId == nil)
         #expect(recorded.text.contains(#""authorBotId":null"#))
         #expect(
-            store.questionCard("q1")
-                == .answered(
-                    QuestionAnswered(
-                        by: .you,
-                        lines: [
-                            QuestionAnswerLine(header: "Format", answer: "Summary"),
-                            QuestionAnswerLine(
-                                header: "Audience", answer: "Developers, People using the app"),
-                        ])))
+            store.answeredQuestion("q1")
+                == QuestionAnswered(
+                    by: .you,
+                    lines: [
+                        QuestionAnswerLine(header: "Format", answer: "Summary"),
+                        QuestionAnswerLine(
+                            header: "Audience", answer: "Developers, People using the app"),
+                    ]))
+        #expect(store.asking == nil)
         #expect(work.question(in: "chat-juniper") == nil)
         #expect(store.working != nil)
         following.cancel()
         await connection.stop()
     }
 
-    @Test func theHostEchoingTheAnswerBeforeItAnswersKeepsTheCardYours() async throws {
+    @Test func theHostEchoingTheAnswerBeforeItAnswersKeepsThePanelSendingThenTheAnswerYours()
+        async throws
+    {
         let host = TestHost(
             messages: ["chat-juniper": thread], holding: ["agent_answer_question"],
             answer: { call in
@@ -179,7 +183,7 @@ struct QuestionThreadTests {
         let store = makeStore()
         let (connection, following) = await follow(host, store)
         await waitUntil { isAsking(store) }
-        guard case .asking(let asking) = store.questionCard("q1") else { return }
+        let asking = try #require(store.asking)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
 
@@ -188,25 +192,20 @@ struct QuestionThreadTests {
         host.pushAgent(
             "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
         await waitUntil { work.question("q1") == nil }
-        guard case .asking(let sending) = store.questionCard("q1") else {
-            Issue.record("the card left while its answer was sent")
-            return
-        }
+        let sending = try #require(store.asking, "the panel left while its answer was sent")
         #expect(sending.isSending)
+        #expect(store.working == nil)
 
         host.reply(TestHost.ok(call, "null"))
         await answering?.value
 
-        guard case .answered(let answered) = store.questionCard("q1") else {
-            Issue.record("the card did not collapse")
-            return
-        }
-        #expect(answered.by == .you)
+        #expect(store.asking == nil)
+        #expect(store.answeredQuestion("q1")?.by == .you)
         following.cancel()
         await connection.stop()
     }
 
-    @Test func aRefusedAnswerKeepsTheCardWithItsProblem() async throws {
+    @Test func aRefusedAnswerKeepsThePanelWithItsProblem() async throws {
         let refusing = TestHost(messages: ["chat-juniper": thread]) { call in
             switch call.command {
             case "agent_pending_questions": TestHost.ok(call, Self.pending)
@@ -218,65 +217,52 @@ struct QuestionThreadTests {
         let store = makeStore()
         let (connection, following) = await follow(refusing, store)
         await waitUntil { isAsking(store) }
-        guard case .asking(let asking) = store.questionCard("q1") else { return }
+        let asking = try #require(store.asking)
         var draft = QuestionDraft(request: asking.question.request)
         draft.pick(draft.asked.options[0])
 
         await store.answer(draft)?.value
 
-        guard case .asking(let failed) = store.questionCard("q1") else {
-            Issue.record("the card left after a refused answer")
-            return
-        }
+        let failed = try #require(store.asking, "the panel left after a refused answer")
         #expect(failed.hasFailed)
         #expect(!failed.isSending)
         following.cancel()
         await connection.stop()
     }
 
-    @Test func aMessageSentWhileAQuestionWaitsAnswersItsFirstQuestion() async throws {
+    @Test func skippingSendsNoAnswerAndGivesTheComposerBack() async throws {
         let host = waitingHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
         await waitUntil { isAsking(store) }
-        store.draft = "  A summary for users, with breaking changes at the top. "
-        #expect(store.canSend)
+        var draft = QuestionDraft(request: try #require(store.asking).question.request)
+        let isFirstSkipTheLast = draft.skip()
+        let isSecondSkipTheLast = draft.skip()
+        #expect(!isFirstSkipTheLast)
+        #expect(isSecondSkipTheLast)
 
-        let sending = store.send()
+        let answering = store.answer(draft)
         let call = try #require(await host.nextCall("agent_answer_question"))
-        await sending?.value
+        await answering?.value
 
-        #expect(
-            try call.args(as: AnswerArgs.self).answers == [
-                "Which format should the release notes take?":
-                    "A summary for users, with breaking changes at the top."
-            ])
-        #expect(store.draft.isEmpty)
-        #expect(store.lastSentId == nil)
-        #expect(
-            store.questionCard("q1")
-                == .answered(
-                    QuestionAnswered(
-                        by: .you,
-                        lines: [
-                            QuestionAnswerLine(
-                                header: "Format",
-                                answer: "A summary for users, with breaking changes at the top.")
-                        ])))
+        #expect(try call.args(as: AnswerArgs.self).answers.isEmpty)
+        #expect(store.asking == nil)
+        #expect(store.answeredQuestion("q1") == QuestionAnswered(by: .you, lines: []))
         following.cancel()
         await connection.stop()
     }
 
-    @Test func noFileGoesWithAnAnswerFromTheComposer() async {
+    @Test func nothingLeavesFromTheComposerWhileAQuestionWaits() async {
         let host = waitingHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
         await waitUntil { isAsking(store) }
 
-        store.attachments = [PickedAttachment(id: UUID(), name: "notes.md", data: Data("x".utf8))]
+        store.draft = "A summary for users, with breaking changes at the top."
+
         #expect(!store.canSend)
-        store.draft = "Summary"
-        #expect(store.canSend)
+        #expect(store.send() == nil)
+        #expect(store.draft == "A summary for users, with breaking changes at the top.")
         following.cancel()
         await connection.stop()
     }
@@ -289,20 +275,20 @@ struct QuestionThreadTests {
 
         host.pushAgent(
             "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
-        await waitUntil { store.questionCard("q1") == .answered(.init(by: .elsewhere, lines: [])) }
+        await waitUntil { store.answeredQuestion("q1") == .init(by: .elsewhere, lines: []) }
+        #expect(store.asking == nil)
 
         host.push(
             event: "conversation://message-stored",
             payload: answerRow(content: "Full changelog\n\nDevelopers", account: "host-account"))
         await waitUntil {
-            store.questionCard("q1")
-                == .answered(
-                    .init(
-                        by: .elsewhere,
-                        lines: [
-                            QuestionAnswerLine(header: "Format", answer: "Full changelog"),
-                            QuestionAnswerLine(header: "Audience", answer: "Developers"),
-                        ]))
+            store.answeredQuestion("q1")
+                == .init(
+                    by: .elsewhere,
+                    lines: [
+                        QuestionAnswerLine(header: "Format", answer: "Full changelog"),
+                        QuestionAnswerLine(header: "Audience", answer: "Developers"),
+                    ])
         }
         #expect(store.entries.map(\.id) == ["m1", "m2", "question-q1", "answer-1"])
         #expect(store.entries.last?.bubbles.isEmpty == true)
@@ -310,7 +296,7 @@ struct QuestionThreadTests {
         await connection.stop()
     }
 
-    @Test func aQuestionDroppedWhenItsTurnEndsLeavesNoCardAndNoBubble() async {
+    @Test func aQuestionDroppedWhenItsTurnEndsGivesTheComposerBackAndLeavesNoCardNorBubble() async {
         let host = waitingHost()
         let store = makeStore()
         let (connection, following) = await follow(host, store)
@@ -318,7 +304,9 @@ struct QuestionThreadTests {
 
         host.pushAgent(
             "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
-        await waitUntil { store.questionCard("q1") == nil }
+        await waitUntil { store.asking == nil }
+
+        #expect(store.answeredQuestion("q1") == nil)
 
         #expect(store.entries.flatMap(\.bubbles).count == 2)
         #expect(store.working == nil)
@@ -333,9 +321,8 @@ struct QuestionThreadTests {
         let (connection, following) = await follow(host, store)
 
         #expect(
-            store.questionCard("q1")
-                == .answered(
-                    .init(by: .you, lines: [QuestionAnswerLine(header: nil, answer: "Summary")])))
+            store.answeredQuestion("q1")
+                == .init(by: .you, lines: [QuestionAnswerLine(header: nil, answer: "Summary")]))
         #expect(store.entries.flatMap(\.bubbles).count == 2)
         following.cancel()
         await connection.stop()
