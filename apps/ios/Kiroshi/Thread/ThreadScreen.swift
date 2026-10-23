@@ -15,6 +15,7 @@ struct ThreadScreen<Model: ThreadModel>: View {
     @State private var isAwayFromTheEnd = false
     @Environment(MessageConsent.self) private var consent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         transcript
@@ -206,6 +207,10 @@ struct ThreadScreen<Model: ThreadModel>: View {
             } else if phase == .idle, scrolling == .reading, context.geometry.isAtTheBottom {
                 scrolling = .followingTheBottom
             }
+        }
+        .onChange(of: dynamicTypeSize) {
+            guard scrolling == .followingTheBottom else { return }
+            position.scrollTo(id: Self.transcriptEnd, anchor: .bottom)
         }
         .onChange(of: model.lastSentId) {
             sentTop = nil

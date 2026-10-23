@@ -33,7 +33,7 @@ final class QuestionPanelTests: XCTestCase {
     static let artboardOrange = ["Now", "Needs you"]
 
     func panelTop(under question: String?, in app: XCUIApplication) -> CGFloat {
-        let segments = app.segmentedControls.firstMatch
+        let segments = app.otherElements["Questions"]
         if segments.exists {
             return segments.frame.minY
         }
@@ -90,6 +90,7 @@ final class QuestionPanelTests: XCTestCase {
     }
 
     static let format = "Which format should the release notes take?"
+    static let suggestionBar: CGFloat = 44
 
     func testThePanelTakesThePlaceOfTheComposerUntilSendGivesItBack() throws {
         let app = launchInEnglish("questions-4.1")
@@ -123,6 +124,37 @@ final class QuestionPanelTests: XCTestCase {
         try auditThePanel(app)
     }
 
+    func testPickingOptionsAfterATextSizeChangeLeavesTheThreadWhereItWas() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        let lastMessage = text("One thing before I write.", in: app)
+        let shown = lastMessage.frame
+        let field = other(in: app).frame.height
+        try auditThePanel(app, under: Self.format)
+
+        summary.tap()
+        XCTAssertEqual(lastMessage.frame, shown)
+        XCTAssertEqual(other(in: app).frame.height, field)
+
+        option("Full changelog", in: app).tap()
+        XCTAssertEqual(lastMessage.frame, shown)
+        XCTAssertEqual(other(in: app).frame.height, field)
+    }
+
+    func testThePanelKeepsTheArtboardMetrics() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        let send = app.buttons["Send"].frame
+
+        XCTAssertEqual(summary.frame.height, 65, accuracy: 0.5)
+        XCTAssertEqual(other(in: app).frame.height, 22, accuracy: 0.5)
+        XCTAssertEqual(send.height, 44, accuracy: 0.5)
+        XCTAssertEqual(send.width, 85, accuracy: 1)
+        XCTAssertEqual(app.frame.maxY - send.maxY, 29, accuracy: 0.5)
+    }
+
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
         let app = launchInEnglish("questions-4.1")
         let summary = option("Summary", in: app)
@@ -136,7 +168,8 @@ final class QuestionPanelTests: XCTestCase {
         let send = app.buttons["Send"]
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertLessThanOrEqual(send.frame.maxY, app.keyboards.firstMatch.frame.minY)
+        let keyboardTop = app.keyboards.firstMatch.frame.minY - Self.suggestionBar
+        XCTAssertEqual(keyboardTop - send.frame.maxY, 14, accuracy: 0.5)
         keep("4.4 Sticky · Other open, keyboard", of: app)
         try auditThePanel(app, under: Self.format, withTheKeyboard: true)
     }
@@ -165,6 +198,11 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(text("Who reads these notes first?", in: app).waitForExistence(timeout: 5))
         option("People using the app", in: app).tap()
+        let format = app.buttons["Format"]
+        XCTAssertEqual(format.value as? String, "Answered")
+        XCTAssertFalse(format.isSelected)
+        XCTAssertTrue(app.buttons["Audience"].isSelected)
+        XCTAssertEqual(app.otherElements["Questions"].frame.height, 36, accuracy: 0.5)
         keep("4.5 Sticky · 3 questions, segment 2 active", of: app)
         try auditThePanel(app)
         app.buttons["Next"].tap()
@@ -214,6 +252,9 @@ final class QuestionPanelTests: XCTestCase {
 
         XCTAssertTrue(latest.waitForExistence(timeout: 5))
         XCTAssertLessThan(latest.frame.maxY, option("Summary", in: app).frame.minY)
+        XCTAssertEqual(latest.frame.size, CGSize(width: 44, height: 44))
+        let panelTop = app.staticTexts["Format"].frame.minY - 20
+        XCTAssertEqual(panelTop - latest.frame.maxY, 10, accuracy: 1)
         keep("4.8 Sticky · long thread scrolled, panel fixed", of: app)
         try auditThePanel(app, under: Self.format, isScrolledUp: true)
 

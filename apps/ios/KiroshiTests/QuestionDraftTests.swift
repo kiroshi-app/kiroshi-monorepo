@@ -102,6 +102,33 @@ struct QuestionDraftTests {
         #expect(draft.lines == [QuestionAnswerLine(header: "Format", answer: "Full changelog")])
     }
 
+    @Test func aSegmentIsMarkedAnsweredOnceItsQuestionIsAnsweredAndLeft() {
+        var draft = draft(Self.format, Self.audience, Self.sections)
+        #expect(!draft.isMarkedAnswered(0))
+
+        draft.pick(Self.format.options[0])
+        #expect(!draft.isMarkedAnswered(0))
+
+        _ = draft.goOn()
+        draft.pick(Self.audience.options[0])
+        #expect(draft.isMarkedAnswered(0))
+        #expect(!draft.isMarkedAnswered(1))
+        #expect(!draft.isMarkedAnswered(2))
+
+        draft.show(0)
+        #expect(!draft.isMarkedAnswered(0))
+        #expect(draft.isMarkedAnswered(1))
+    }
+
+    @Test func aSkippedSegmentIsNotMarkedAnswered() {
+        var draft = draft(Self.format, Self.audience)
+
+        _ = draft.skip()
+
+        #expect(draft.shown == 1)
+        #expect(!draft.isMarkedAnswered(0))
+    }
+
     @Test func aMultiSelectJoinsItsLabelsInPickOrder() {
         var draft = draft(Self.sections)
 

@@ -5,9 +5,13 @@ struct QuestionPanel: View {
     let send: (QuestionDraft) -> Void
     @State private var draft: QuestionDraft
     @State private var questionHeight: CGFloat?
+    @State private var isAboveTheHomeIndicator = true
     @FocusState private var isWritingOther: Bool
     @AccessibilityFocusState private var isQuestionFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var sendInset: CGFloat = 10
+    @ScaledMetric(relativeTo: .body) private var sendLabelHeight: CGFloat = 30
 
     init(
         asking: QuestionAsking, draft: QuestionDraft? = nil,
@@ -33,15 +37,20 @@ struct QuestionPanel: View {
             actions
                 .padding(.leading, 6)
                 .padding(.top, 2)
-                .padding(.bottom, 4)
         }
         .padding(.top, 20)
         .padding(.horizontal, 16)
+        .padding(.bottom, bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: Bool.self) { proxy in
+            proxy.safeAreaInsets.bottom > 0
+        } action: { hasInset in
+            isAboveTheHomeIndicator = hasInset
+        }
         .background {
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(Color(.secondarySystemBackground))
-                .shadow(color: Color(.separator), radius: 0, y: -0.5)
+                .shadow(color: Color(.separator).opacity(0.5), radius: 0, y: -0.5)
                 .shadow(
                     color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
                 )
@@ -55,16 +64,15 @@ struct QuestionPanel: View {
         }
     }
 
+    private var bottomPadding: CGFloat {
+        if isWritingOther { return 14 }
+        return isAboveTheHomeIndicator ? -5 : 29
+    }
+
     private var question: some View {
         VStack(alignment: .leading, spacing: 12) {
             if draft.isOneOfSeveral {
-                Picker("Question", selection: shown) {
-                    ForEach(draft.request.questions.indices, id: \.self) { index in
-                        Text(draft.request.questions[index].header)
-                            .tag(index)
-                    }
-                }
-                .pickerStyle(.segmented)
+                segments
             }
             heading
                 .padding(.horizontal, 6)
@@ -86,12 +94,22 @@ struct QuestionPanel: View {
         }
     }
 
-    private var shown: Binding<Int> {
-        Binding {
-            draft.shown
-        } set: { index in
-            draft.show(index)
+    private var segments: some View {
+        HStack(spacing: 0) {
+            ForEach(draft.request.questions.indices, id: \.self) { index in
+                QuestionSegment(
+                    header: draft.request.questions[index].header,
+                    isShown: draft.shown == index,
+                    isAnswered: draft.isMarkedAnswered(index)
+                ) {
+                    draft.show(index)
+                }
+            }
         }
+        .padding(3)
+        .background(Color(.tertiarySystemFill), in: .capsule)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("Questions")
     }
 
     private var heading: some View {
@@ -122,6 +140,7 @@ struct QuestionPanel: View {
                 .font(.body)
                 .focused($isWritingOther)
                 .accessibilityLabel("Other answer")
+                .id(dynamicTypeSize)
             if draft.hasOther {
                 QuestionMark(isMultiSelect: false, isPicked: true)
             }
@@ -157,18 +176,20 @@ struct QuestionPanel: View {
                     send(draft)
                 }
             } label: {
-                if asking.isSending {
-                    ProgressView()
-                        .accessibilityLabel("Sending your answer")
-                } else {
-                    Text(draft.isLast ? "Send" : "Next")
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 8)
+                Group {
+                    if asking.isSending {
+                        ProgressView()
+                            .accessibilityLabel("Sending your answer")
+                    } else {
+                        Text(draft.isLast ? "Send" : "Next")
+                            .fontWeight(.semibold)
+                    }
                 }
+                .padding(.horizontal, sendInset)
+                .frame(minHeight: sendLabelHeight)
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
-            .controlSize(.large)
             .disabled(!draft.canGoOn)
         }
     }
@@ -176,17 +197,65 @@ struct QuestionPanel: View {
 
 struct LatestMessageButton: View {
     let jump: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Button("Latest message", systemImage: "arrow.down", action: jump)
-            .labelStyle(.iconOnly)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 44, height: 44)
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel("Latest message")
-            .padding(.bottom, 10)
+        Button(action: jump) {
+            Image(systemName: "arrow.down")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(Color(.tertiarySystemBackground), in: .circle)
+                .overlay {
+                    Circle()
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.08), radius: 7, y: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Latest message")
+        .padding(.bottom, 10)
+    }
+}
+
+struct QuestionSegment: View {
+    let header: String
+    let isShown: Bool
+    let isAnswered: Bool
+    let show: () -> Void
+    @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 30
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: show) {
+            HStack(spacing: 4) {
+                if isAnswered {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color(.systemGreen))
+                }
+                Text(header)
+                    .font(.subheadline.weight(isShown ? .semibold : .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: height)
+            .background {
+                if isShown {
+                    Capsule()
+                        .fill(colorScheme == .dark ? Color(.systemGray2) : Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.04), radius: 0.5)
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 3)
+                }
+            }
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(header)
+        .accessibilityValue(isAnswered ? "Answered" : "")
+        .accessibilityAddTraits(isShown ? .isSelected : [])
+        .accessibilityRemoveTraits(isShown ? [] : .isSelected)
     }
 }
 
@@ -195,6 +264,8 @@ struct QuestionOptionButton: View {
     let isPicked: Bool
     let isMultiSelect: Bool
     let pick: () -> Void
+    @ScaledMetric(relativeTo: .body) private var labelLine: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var descriptionLine: CGFloat = 20
 
     var body: some View {
         Button(action: pick) {
@@ -202,10 +273,12 @@ struct QuestionOptionButton: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(option.label)
                         .font(.body)
+                        .frame(minHeight: labelLine)
                         .foregroundStyle(.primary)
                     if let description = option.description, !description.isEmpty {
                         Text(description)
                             .font(.subheadline)
+                            .frame(minHeight: descriptionLine)
                             .foregroundStyle(.secondary)
                     }
                 }
