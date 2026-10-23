@@ -53,7 +53,10 @@ struct QuestionPanel: View {
         .background {
             UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28)
                 .fill(Color(.secondarySystemBackground))
-                .shadow(color: Color(.separator).opacity(0.5), radius: 0, y: -0.5)
+                .shadow(
+                    color: Color(.separator).opacity(colorScheme == .dark ? 2 / 3 : 0.5), radius: 0,
+                    y: -0.5
+                )
                 .shadow(
                     color: .black.opacity(colorScheme == .dark ? 0.4 : 0.06), radius: 14, y: -10
                 )
@@ -151,10 +154,10 @@ struct QuestionPanel: View {
                 QuestionMark(isMultiSelect: false, isPicked: true)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 11.5)
         .padding(.leading, 16)
         .padding(.trailing, 14)
-        .frame(minHeight: 46)
+        .frame(minHeight: 45)
         .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
@@ -231,6 +234,7 @@ struct QuestionSegment: View {
     let show: () -> Void
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 30
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: show) {
@@ -242,6 +246,7 @@ struct QuestionSegment: View {
                 }
                 Text(header)
                     .font(.subheadline.weight(isShown ? .semibold : .medium))
+                    .dynamicTypeSize(dynamicTypeSize.oneStepSmaller)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
             }
@@ -262,6 +267,14 @@ struct QuestionSegment: View {
         .accessibilityValue(isAnswered ? "Answered" : "")
         .accessibilityAddTraits(isShown ? .isSelected : [])
         .accessibilityRemoveTraits(isShown ? [] : .isSelected)
+    }
+}
+
+extension DynamicTypeSize {
+    var oneStepSmaller: DynamicTypeSize {
+        let sizes = Self.allCases
+        let index = sizes.firstIndex(of: self) ?? sizes.startIndex
+        return sizes[max(index - 1, sizes.startIndex)]
     }
 }
 
