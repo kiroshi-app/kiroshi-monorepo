@@ -89,6 +89,11 @@ final class QuestionPanelTests: XCTestCase {
         }
     }
 
+    func panelTop(above firstOption: XCUIElement) -> CGFloat {
+        firstOption.frame.minY - Self.headingHeight
+    }
+
+    static let headingHeight: CGFloat = 20 + 18 + 2 + 22 + 12
     static let format = "Which format should the release notes take?"
     static let suggestionBar: CGFloat = 44
 
@@ -148,6 +153,9 @@ final class QuestionPanelTests: XCTestCase {
         XCTAssertTrue(summary.waitForExistence(timeout: 10))
         let send = app.buttons["Send"].frame
 
+        XCTAssertEqual(panelTop(above: summary), 444, accuracy: 0.5)
+        XCTAssertEqual(app.staticTexts["Format"].frame.midY, 444 + 20 + 9, accuracy: 0.5)
+        XCTAssertEqual(text(Self.format, in: app).frame.midY, 444 + 20 + 18 + 2 + 11, accuracy: 0.5)
         XCTAssertEqual(summary.frame.height, 65, accuracy: 0.5)
         XCTAssertEqual(other(in: app).frame.height, 22, accuracy: 0.5)
         XCTAssertEqual(send.height, 44, accuracy: 0.5)
@@ -253,7 +261,7 @@ final class QuestionPanelTests: XCTestCase {
         XCTAssertTrue(latest.waitForExistence(timeout: 5))
         XCTAssertLessThan(latest.frame.maxY, option("Summary", in: app).frame.minY)
         XCTAssertEqual(latest.frame.size, CGSize(width: 44, height: 44))
-        let panelTop = app.staticTexts["Format"].frame.minY - 20
+        let panelTop = panelTop(above: option("Summary", in: app))
         XCTAssertEqual(panelTop - latest.frame.maxY, 10, accuracy: 1)
         keep("4.8 Sticky · long thread scrolled, panel fixed", of: app)
         try auditThePanel(app, under: Self.format, isScrolledUp: true)
