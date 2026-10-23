@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 import Testing
 
 @testable import Kiroshi
@@ -91,6 +92,47 @@ struct SpaceKeyRotationTests {
         await connection.stop()
     }
 
+    @Test func aNewerRekeySignedByAnotherHostIsRefusedAndLogged() async throws {
+        let impostor = FixtureRekey.Device(
+            keys: DeviceKeys(
+                signing: Curve25519.Signing.PrivateKey(),
+                agreement: Curve25519.KeyAgreement.PrivateKey()),
+            relayId: FixtureKeys.hostRelayId, accountId: "noa")
+        let connection = makeConnection(holding: first)
+        let host = RotatingHost(current: first)
+        let updates = await connection.updates()
+        await connection.start()
+        await transport.nextOpening().accept(host)
+        await waitForOnline(updates)
+        #expect(
+            await heard(host, count: 2) == [
+                .hello(keyId: 1), .call("relay_shared_space", keyId: 1),
+            ])
+        let handedAt = Date.now
+
+        try await host.hand(second, signedBy: impostor)
+        _ = try await connection.call("conversation_list")
+
+        #expect(await heard(host, count: 1) == [.call("conversation_list", keyId: 1)])
+        #expect(
+            await keychain.writes.contains(KeychainSpaceKeyStore.account(for: Self.instance))
+                == false)
+        #expect(
+            try relayLog(since: handedAt).contains(
+                "Refused key 2 of Space \(Self.instance): another host signed it"))
+        await connection.stop()
+    }
+
+    func relayLog(since date: Date) throws -> [String] {
+        let log = try OSLogStore(scope: .currentProcessIdentifier)
+        return try log.getEntries(
+            at: log.position(date: date),
+            matching: NSPredicate(
+                format: "subsystem == %@ AND category == %@", "com.kiroshi.app.ios", "relay")
+        )
+        .compactMap { ($0 as? OSLogEntryLog)?.composedMessage }
+    }
+
     @Test func aHeldKeyTheHostHasMovedOnFromAsksForTheCurrentKey() async throws {
         let connection = makeConnection(holding: first)
         let host = RotatingHost(current: second, answersStaleFrames: false)
@@ -153,12 +195,13 @@ actor RotatingHost: RelaySocket {
         (inbound, inboundContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
-    func hand(_ key: Key) throws {
+    func hand(_ key: Key, signedBy signer: FixtureRekey.Device = FixtureRekey.host) throws {
         inboundContinuation.yield(
             .frame(
                 try FixtureRekey.frame(
-                    instance: SpaceKeyRotationTests.instance, spaceKey: key.spaceKey,
-                    keyId: key.keyId)))
+                    instance: SpaceKeyRotationTests.instance,
+                    rostering: [signer, FixtureRekey.member], spaceKey: key.spaceKey,
+                    keyId: key.keyId, signer: signer.keys)))
     }
 
     func announce(_ event: String) throws {
