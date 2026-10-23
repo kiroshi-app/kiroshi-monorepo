@@ -231,6 +231,7 @@ struct QuestionSegment: View {
     let show: () -> Void
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 30
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: show) {
@@ -242,6 +243,7 @@ struct QuestionSegment: View {
                 }
                 Text(header)
                     .font(.subheadline.weight(isShown ? .semibold : .medium))
+                    .dynamicTypeSize(dynamicTypeSize.oneStepSmaller)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
             }
@@ -262,6 +264,14 @@ struct QuestionSegment: View {
         .accessibilityValue(isAnswered ? "Answered" : "")
         .accessibilityAddTraits(isShown ? .isSelected : [])
         .accessibilityRemoveTraits(isShown ? [] : .isSelected)
+    }
+}
+
+extension DynamicTypeSize {
+    var oneStepSmaller: DynamicTypeSize {
+        let sizes = Self.allCases
+        let index = sizes.firstIndex(of: self) ?? sizes.startIndex
+        return sizes[max(index - 1, sizes.startIndex)]
     }
 }
 
