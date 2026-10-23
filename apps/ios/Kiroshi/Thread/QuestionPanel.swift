@@ -8,6 +8,7 @@ struct QuestionPanel: View {
     @FocusState private var isWritingOther: Bool
     @AccessibilityFocusState private var isQuestionFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(
         asking: QuestionAsking, draft: QuestionDraft? = nil,
@@ -122,6 +123,7 @@ struct QuestionPanel: View {
                 .font(.body)
                 .focused($isWritingOther)
                 .accessibilityLabel("Other answer")
+                .id(dynamicTypeSize)
             if draft.hasOther {
                 QuestionMark(isMultiSelect: false, isPicked: true)
             }

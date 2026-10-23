@@ -123,6 +123,24 @@ final class QuestionPanelTests: XCTestCase {
         try auditThePanel(app)
     }
 
+    func testPickingOptionsAfterATextSizeChangeLeavesTheThreadWhereItWas() throws {
+        let app = launchInEnglish("questions-4.1")
+        let summary = option("Summary", in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: 10))
+        let lastMessage = text("One thing before I write.", in: app)
+        let shown = lastMessage.frame
+        let field = other(in: app).frame.height
+        try auditThePanel(app, under: Self.format)
+
+        summary.tap()
+        XCTAssertEqual(lastMessage.frame, shown)
+        XCTAssertEqual(other(in: app).frame.height, field)
+
+        option("Full changelog", in: app).tap()
+        XCTAssertEqual(lastMessage.frame, shown)
+        XCTAssertEqual(other(in: app).frame.height, field)
+    }
+
     func testOtherTypedSitsOnTheKeyboardAndReplacesThePickedOption() throws {
         let app = launchInEnglish("questions-4.1")
         let summary = option("Summary", in: app)
