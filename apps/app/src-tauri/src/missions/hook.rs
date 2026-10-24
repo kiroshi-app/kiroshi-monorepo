@@ -510,6 +510,7 @@ mod tests {
 				"session_id": "s1",
 				"cwd": dir.join("workspace").to_string_lossy(),
 				"message": "Claude needs your permission",
+				"notification_type": "permission_prompt",
 			}),
 		)
 		.await;
@@ -526,6 +527,10 @@ mod tests {
 		assert!(
 			request.contains("\"message\": \"Claude needs your permission\""),
 			"the message of the notification was dropped: {request}"
+		);
+		assert!(
+			request.contains("\"notification\": \"permission_prompt\""),
+			"the kind of the notification was dropped: {request}"
 		);
 
 		fs::remove_dir_all(&dir).expect("cleanup");

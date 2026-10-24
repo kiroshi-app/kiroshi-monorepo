@@ -73,7 +73,7 @@ pub fn run() {
 		.manage(mcp_oauth::commands::McpOauthState::default())
 		.manage(mcp_oauth::reports::ApplicationReports::default())
 		.manage(mcp_oauth::asking::AuthorizationAnswers::default())
-		.manage(missions::commands::AnnouncedRunning::default())
+		.manage(missions::commands::AnnouncedLiveness::default())
 		.manage(conversations::turn_run_deadline::TurnRunDeadlines::default())
 		.manage(updates::Updates::default())
 		.setup(|app| {

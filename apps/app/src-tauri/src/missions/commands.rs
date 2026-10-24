@@ -8,10 +8,11 @@ use super::checkout;
 use super::contract::{
 	ConversationMissions, HookedMission, Mission, MissionAnswer, MissionClosing, MissionDetail,
 	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionHandoff, MissionInSpace,
-	MissionNote, MissionOnBoard, MissionOpened, MissionSpacePage, MissionState, MissionUpdate,
-	MissionWatch, MissionWatching,
+	MissionLiveness, MissionNote, MissionOnBoard, MissionOpened, MissionSpacePage, MissionState,
+	MissionUpdate, MissionWatch, MissionWatching,
 };
 use super::{github, hook};
+use crate::agent::commands::AgentState;
 use crate::avatars;
 use crate::bundles;
 use crate::companions::host::picked;
@@ -52,22 +53,86 @@ pub struct MissionChanged {
 	pub state: MissionState,
 	pub state_seq: i64,
 	pub is_agent_running: bool,
+	#[specta(optional)]
+	pub liveness: MissionLiveness,
 	pub last_activity_at: Option<i64>,
 }
 
-#[derive(Default)]
-pub struct AnnouncedRunning(Mutex<HashMap<String, bool>>);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Pulse {
+	is_agent_running: bool,
+	liveness: MissionLiveness,
+}
 
-impl AnnouncedRunning {
-	fn kept(&self) -> MutexGuard<'_, HashMap<String, bool>> {
+impl Pulse {
+	fn of(mission: &Mission) -> Self {
+		Self { is_agent_running: mission.is_agent_running, liveness: mission.liveness }
+	}
+}
+
+#[derive(Default)]
+pub struct AnnouncedLiveness(Mutex<HashMap<String, Pulse>>);
+
+impl AnnouncedLiveness {
+	fn kept(&self) -> MutexGuard<'_, HashMap<String, Pulse>> {
 		self.0.lock().unwrap_or_else(PoisonError::into_inner)
 	}
 }
 
+pub(crate) fn observed<R: Runtime>(app: &AppHandle<R>, mission: Mission) -> Mission {
+	let Some(agent) = app.try_state::<AgentState>() else {
+		return mission;
+	};
+	let thread = agent.thread_signs(&mission.thread_conversation_id);
+	Mission { liveness: mission.liveness.joined(thread), ..mission }
+}
+
+fn observed_all<R: Runtime>(app: &AppHandle<R>, missions: Vec<Mission>) -> Vec<Mission> {
+	missions.into_iter().map(|mission| observed(app, mission)).collect()
+}
+
 pub(super) fn announce_change<R: Runtime>(
 	app: &AppHandle<R>,
-	mission: &Mission,
+	mission: Mission,
+) -> Result<Mission, MissionError> {
+	announce_when(app, mission, |_, _| true)
+}
+
+pub(super) fn announce_when<R: Runtime>(
+	app: &AppHandle<R>,
+	mission: Mission,
+	is_news: impl FnOnce(&Mission, bool) -> bool,
+) -> Result<Mission, MissionError> {
+	let unmanaged = AnnouncedLiveness::default();
+	let announced = app.try_state::<AnnouncedLiveness>();
+	let mut kept = announced.as_deref().unwrap_or(&unmanaged).kept();
+	let mission = observed(app, mission);
+	let has_pulse_moved = kept.get(&mission.id) != Some(&Pulse::of(&mission));
+	if is_news(&mission, has_pulse_moved) {
+		emit_change(app, &mission)?;
+	}
+	match mission.closed_at {
+		Some(_) => kept.remove(&mission.id),
+		None => kept.insert(mission.id.clone(), Pulse::of(&mission)),
+	};
+	Ok(mission)
+}
+
+pub(crate) async fn announce_thread_moved<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	conversation_id: String,
 ) -> Result<(), MissionError> {
+	let Some(threaded) = database.missions().threaded(conversation_id).await? else {
+		return Ok(());
+	};
+	announce_when(app, threaded, |mission, has_pulse_moved| {
+		mission.closed_at.is_none() && has_pulse_moved
+	})?;
+	Ok(())
+}
+
+fn emit_change<R: Runtime>(app: &AppHandle<R>, mission: &Mission) -> Result<(), MissionError> {
 	events::emit(
 		app,
 		MISSION_CHANGED,
@@ -77,27 +142,11 @@ pub(super) fn announce_change<R: Runtime>(
 			state: mission.state,
 			state_seq: mission.state_seq,
 			is_agent_running: mission.is_agent_running,
+			liveness: mission.liveness,
 			last_activity_at: mission.last_activity_at,
 		},
 	)
-	.map_err(|error| MissionError::Undeliverable { detail: error.to_string() })?;
-	remember_running(app, mission);
-	Ok(())
-}
-
-fn remember_running<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	let Some(announced) = app.try_state::<AnnouncedRunning>() else {
-		return;
-	};
-	let mut kept = announced.kept();
-	match mission.closed_at {
-		Some(_) => kept.remove(&mission.id),
-		None => kept.insert(mission.id.clone(), mission.is_agent_running),
-	};
-}
-
-pub(super) fn announced_running<R: Runtime>(app: &AppHandle<R>, mission_id: &str) -> Option<bool> {
-	app.try_state::<AnnouncedRunning>()?.kept().get(mission_id).copied()
+	.map_err(|error| MissionError::Undeliverable { detail: error.to_string() })
 }
 
 fn refuse_blank(field: &str, held: &str) -> Result<(), MissionError> {
@@ -125,7 +174,7 @@ pub async fn mission_open<R: Runtime>(
 	let workspace = draft.workspace_path.clone();
 	let key = uuid::Uuid::new_v4().to_string();
 	let opened = ready(&state)?.missions().open(draft, key.clone()).await?;
-	announce_change(&app, &opened)?;
+	let opened = announce_change(&app, opened)?;
 	let reach = match workspace {
 		Some(workspace) => reach_of(&app, &opened.id, &workspace, &key),
 		None => UNHEARD.to_owned(),
@@ -230,8 +279,7 @@ pub async fn mission_conclude<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	refuse_blank("source", &closing.source)?;
 	let written = ready(&state)?.missions().close(mission_id, closing).await?;
-	announce_change(&app, &written)?;
-	Ok(written)
+	announce_change(&app, written)
 }
 
 #[tauri::command]
@@ -242,8 +290,7 @@ pub async fn mission_close<R: Runtime>(
 	mission_id: String,
 ) -> Result<Mission, MissionError> {
 	let written = ready(&state)?.missions().dismiss(mission_id, PERSON.to_owned()).await?;
-	announce_change(&app, &written)?;
-	Ok(written)
+	announce_change(&app, written)
 }
 
 #[tauri::command]
@@ -254,8 +301,7 @@ pub async fn mission_reopen<R: Runtime>(
 	mission_id: String,
 ) -> Result<Mission, MissionError> {
 	let written = ready(&state)?.missions().reopen(mission_id, PERSON.to_owned()).await?;
-	announce_change(&app, &written)?;
-	Ok(written)
+	announce_change(&app, written)
 }
 
 pub async fn mission_reopen_unmerged<R: Runtime>(
@@ -267,8 +313,7 @@ pub async fn mission_reopen_unmerged<R: Runtime>(
 	let database = ready(&state)?;
 	refuse_a_merged_mission(database, &mission_id).await?;
 	let written = database.missions().reopen(mission_id, source).await?;
-	announce_change(&app, &written)?;
-	Ok(written)
+	announce_change(&app, written)
 }
 
 async fn refuse_a_merged_mission(
@@ -300,8 +345,7 @@ pub async fn mission_update<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	refused_update(&mission_id, &update)?;
 	let written = ready(&state)?.missions().update(mission_id, update, source).await?;
-	announce_change(&app, &written)?;
-	Ok(written)
+	announce_change(&app, written)
 }
 
 fn refused_update(mission_id: &str, update: &MissionUpdate) -> Result<(), MissionError> {
@@ -346,8 +390,7 @@ pub async fn mission_handoff<R: Runtime>(
 		to_bot_id: successor.id.clone(),
 		source: BOT.to_owned(),
 	};
-	let written = database.missions().hand_off(mission_id, handoff).await?;
-	announce_change(&app, &written)?;
+	let written = announce_change(&app, database.missions().hand_off(mission_id, handoff).await?)?;
 	if written.closed_at.is_none() {
 		summon(&app, &written, from_bot_id, &successor.name)?;
 	}
@@ -393,8 +436,7 @@ async fn appended<R: Runtime>(
 ) -> Result<Mission, MissionError> {
 	refuse_blank("source", &entry.source)?;
 	let written = ready(state)?.missions().append(mission_id, entry).await?;
-	announce_change(app, &written)?;
-	Ok(written)
+	announce_change(app, written)
 }
 
 #[tauri::command]
@@ -406,10 +448,7 @@ pub async fn mission_answered<R: Runtime>(
 	seq: i64,
 ) -> Result<Mission, MissionError> {
 	match ready(&state)?.missions().answer(mission_id, seq, BOT.to_owned()).await? {
-		MissionAnswer::Appended(written) => {
-			announce_change(&app, &written)?;
-			Ok(written)
-		}
+		MissionAnswer::Appended(written) => announce_change(&app, written),
 		MissionAnswer::Stale(stored) => Ok(stored),
 	}
 }
@@ -444,7 +483,7 @@ async fn recounted_once<R: Runtime>(
 		}
 	};
 	checkout::told(app, &mission);
-	mission
+	observed(app, mission)
 }
 
 async fn counted_in_its_checkout(
@@ -498,20 +537,25 @@ fn hook_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, MissionError> {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_list(
+pub async fn mission_list<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	conversation_id: String,
 ) -> Result<ConversationMissions, MissionError> {
-	ready(&state)?.missions().of_conversation(conversation_id).await
+	let ConversationMissions { open, done } =
+		ready(&state)?.missions().of_conversation(conversation_id).await?;
+	Ok(ConversationMissions { open: observed_all(&app, open), done: observed_all(&app, done) })
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_detail(
+pub async fn mission_detail<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	mission_id: String,
 ) -> Result<MissionDetail, MissionError> {
-	ready(&state)?.missions().detail(mission_id).await
+	let MissionDetail { mission, events } = ready(&state)?.missions().detail(mission_id).await?;
+	Ok(MissionDetail { mission: observed(&app, mission), events })
 }
 
 #[tauri::command]
@@ -526,17 +570,20 @@ pub async fn mission_board<R: Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_space_feed(
+pub async fn mission_space_feed<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
 	closed_since: i64,
 ) -> Result<Vec<MissionInSpace>, MissionError> {
-	ready(&state)?.missions().of_space(space_id, closed_since).await
+	let feed = ready(&state)?.missions().of_space(space_id, closed_since).await?;
+	Ok(observed_in_space(&app, feed))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn mission_space_page(
+pub async fn mission_space_page<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
 	closed_since: i64,
@@ -550,7 +597,7 @@ pub async fn mission_space_page(
 		.space_page(space_id, closed_since, after, keyset::page_size(limit))
 		.await?;
 	Ok(MissionSpacePage {
-		missions: page.rows,
+		missions: observed_in_space(&app, page.rows),
 		next_cursor: page.next.map(|keyset| keyset.encoded()),
 	})
 }
@@ -575,6 +622,15 @@ pub async fn mission_reported(
 	ready(&state)?.missions().report(mission_id, turn_id).await
 }
 
+fn observed_in_space<R: Runtime>(
+	app: &AppHandle<R>,
+	feed: Vec<MissionInSpace>,
+) -> Vec<MissionInSpace> {
+	feed.into_iter()
+		.map(|row| MissionInSpace { mission: observed(app, row.mission), ..row })
+		.collect()
+}
+
 async fn with_their_bots<R: Runtime>(
 	app: &AppHandle<R>,
 	database: &db::Database,
@@ -583,7 +639,7 @@ async fn with_their_bots<R: Runtime>(
 	let dir = avatars::Avatars::dir(app);
 	let bundle_root = bundles::root(app);
 	let mut board = Vec::new();
-	for mission in missions {
+	for mission in observed_all(app, missions) {
 		let bot = bot_row(database, &mission.bot_id).await?;
 		board.push(MissionOnBoard {
 			mission,
@@ -798,8 +854,9 @@ mod tests {
 
 		assert_eq!(closed.state, MissionState::Failed, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the failed close left the mission open");
-		let detail =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the mission detail reads");
+		let detail = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("the mission detail reads");
 		assert_eq!(detail.mission.closed_at, closed.closed_at, "the moment it closed moved");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Failed, "got {:?}", last.kind);
@@ -836,8 +893,9 @@ mod tests {
 
 		assert_eq!(closed.state, MissionState::Done, "got {:?}", closed.state);
 		assert!(closed.closed_at.is_some(), "the done close left the mission open");
-		let detail =
-			mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		let detail = mission_detail(app.handle().clone(), app.state(), opened.id)
+			.await
+			.expect("the mission detail reads");
 		let last = detail.events.last().expect("the close event is there");
 		assert_eq!(last.kind, MissionEventKind::Closed, "got {:?}", last.kind);
 		assert_eq!(
@@ -899,6 +957,7 @@ mod tests {
 					"state": "waiting_bot",
 					"stateSeq": asked.state_seq,
 					"isAgentRunning": false,
+					"liveness": "idle",
 					"lastActivityAt": null
 				}),
 				json!({
@@ -907,6 +966,7 @@ mod tests {
 					"state": "working",
 					"stateSeq": answered.state_seq,
 					"isAgentRunning": false,
+					"liveness": "idle",
 					"lastActivityAt": null
 				}),
 				json!({
@@ -915,6 +975,7 @@ mod tests {
 					"state": "waiting_bot",
 					"stateSeq": asked_again.state_seq,
 					"isAgentRunning": false,
+					"liveness": "idle",
 					"lastActivityAt": null
 				}),
 			],
@@ -927,8 +988,9 @@ mod tests {
 		let app = a_host("stale-answer").await;
 		let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
 		let asked = an_agent_question(&app, &opened.id).await;
-		let before =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
+		let before = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("the detail reads");
 		let (sender, received) = channel();
 		app.handle().listen(CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.payload().to_owned());
@@ -943,7 +1005,9 @@ mod tests {
 		.await
 		.expect("the stale answer is taken");
 
-		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
+		let after = mission_detail(app.handle().clone(), app.state(), opened.id)
+			.await
+			.expect("the detail reads");
 		assert_eq!(after.events.len(), before.events.len(), "the stale answer appended an event");
 		assert_eq!(
 			(answered.state, answered.state_seq),
@@ -965,8 +1029,9 @@ mod tests {
 		)
 		.await
 		.expect("the mission closes");
-		let before =
-			mission_detail(app.state(), opened.id.clone()).await.expect("the detail reads");
+		let before = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("the detail reads");
 		let (sender, received) = channel();
 		app.handle().listen(CHANGED_EVENT, move |event| {
 			let _ = sender.send(event.payload().to_owned());
@@ -981,7 +1046,9 @@ mod tests {
 		.await
 		.expect("the closed mission takes the answer quietly");
 
-		let after = mission_detail(app.state(), opened.id).await.expect("the detail reads");
+		let after = mission_detail(app.handle().clone(), app.state(), opened.id)
+			.await
+			.expect("the detail reads");
 		assert_eq!(
 			after.events.len(),
 			before.events.len(),
@@ -1024,6 +1091,7 @@ mod tests {
 					"state": "working",
 					"stateSeq": 1,
 					"isAgentRunning": false,
+					"liveness": "idle",
 					"lastActivityAt": null,
 				}),
 				json!({
@@ -1032,12 +1100,15 @@ mod tests {
 					"state": "waiting_human",
 					"stateSeq": 2,
 					"isAgentRunning": false,
+					"liveness": "needs_you",
 					"lastActivityAt": null,
 				}),
 			],
 			"the front was not told which mission moved and where it stands"
 		);
-		let read = mission_detail(app.state(), opened.id).await.expect("the mission detail reads");
+		let read = mission_detail(app.handle().clone(), app.state(), opened.id)
+			.await
+			.expect("the mission detail reads");
 		assert_eq!(
 			read.mission.space_id.as_deref(),
 			Some("personal"),
@@ -1374,6 +1445,40 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_launch_replaces_the_reader_of_an_open_mission_and_keeps_its_settings_and_its_key() {
+		let app = a_host("launch-reader").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let workspace = a_checkout("launch-reader");
+		let opened =
+			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+				.await
+				.expect("the mission opens");
+		let dir = hook::dir(app.handle(), &opened.mission.id).expect("the hook dir is named");
+		let reader = dir.join("kiroshi-agent-hook.py");
+		fs::write(&reader, "print('an older reader')").expect("an older reader stands");
+		let config = || fs::read_to_string(dir.join("agent-hook.json")).expect("the config reads");
+		let key_before: serde_json::Value =
+			serde_json::from_str(&config()).expect("the config is JSON");
+		let settings_before = hooked_in(&workspace);
+
+		install_hooks_at_launch(app.handle()).await;
+
+		let key_after: serde_json::Value =
+			serde_json::from_str(&config()).expect("the config is JSON");
+		assert_eq!(
+			fs::read_to_string(&reader).expect("the reader reads"),
+			include_str!("../../hooks/kiroshi-agent-hook.py"),
+			"the launch left the older reader in place"
+		);
+		assert_eq!(key_after["key"], key_before["key"], "the launch moved the delivery key");
+		assert_eq!(hooked_in(&workspace), settings_before, "the launch moved the settings");
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+	}
+
+	#[tokio::test]
 	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
 		let app = a_host("refused").await;
 		app.manage(crate::routines::webhook::start(app.handle().clone()));
@@ -1439,5 +1544,291 @@ mod tests {
 		let board =
 			mission_board(app.handle().clone(), app.state()).await.expect("the board reads");
 		assert!(board.is_empty(), "got {board:?}");
+	}
+
+	mod liveness {
+		use std::sync::mpsc::Receiver;
+		use std::time::Duration;
+
+		use serde_json::Value;
+
+		use super::*;
+		use crate::agent::commands::{a_run_held_by_the_app, agent_shutdown};
+		use crate::agent::contract::{
+			AgentEvent, PermissionDecision, PermissionRequest, QuestionRequest, RuntimeScope,
+			TurnEnded, TurnOutcome, TurnState,
+		};
+		use crate::agent::reply_writer::TurnSink;
+
+		const PATIENCE: Duration = Duration::from_secs(10);
+
+		const QUIET: Duration = Duration::from_millis(300);
+
+		async fn a_watched_host(name: &str) -> AppOfItsOwn {
+			let app = a_host(&format!("liveness-{name}")).await;
+			app.manage(AnnouncedLiveness::default());
+			app
+		}
+
+		fn the_thread_of(mission: &Mission) -> RuntimeScope {
+			RuntimeScope {
+				conversation_id: mission.thread_conversation_id.clone(),
+				bot_id: mission.bot_id.clone(),
+				runtime_session_id: "r1".to_owned(),
+				epoch: 1,
+			}
+		}
+
+		fn turned(state: TurnState) -> AgentEvent {
+			AgentEvent::TurnChanged { state }
+		}
+
+		fn ended() -> AgentEvent {
+			AgentEvent::TurnEnded {
+				ended: TurnEnded {
+					session_id: None,
+					outcome: TurnOutcome::Completed,
+					structured_output: None,
+					total_cost_usd: None,
+					model_usage: None,
+				},
+			}
+		}
+
+		fn a_question(id: &str) -> AgentEvent {
+			AgentEvent::QuestionRequested {
+				request: QuestionRequest {
+					id: id.to_owned(),
+					questions: Vec::new(),
+					subject: None,
+				},
+			}
+		}
+
+		fn a_permission(id: &str) -> AgentEvent {
+			AgentEvent::PermissionRequested {
+				request: PermissionRequest {
+					id: id.to_owned(),
+					tool_name: "Bash".to_owned(),
+					title: "Run a command".to_owned(),
+					detail: None,
+				},
+			}
+		}
+
+		fn resolved(id: &str) -> AgentEvent {
+			AgentEvent::PermissionResolved {
+				id: id.to_owned(),
+				decision: PermissionDecision::AllowOnce,
+			}
+		}
+
+		async fn on_the_board(app: &App<MockRuntime>, id: &str) -> MissionLiveness {
+			mission_board(app.handle().clone(), app.state())
+				.await
+				.expect("the board reads")
+				.into_iter()
+				.find(|row| row.mission.id == id)
+				.expect("the mission is on the board")
+				.mission
+				.liveness
+		}
+
+		async fn on_every_read(app: &App<MockRuntime>, id: &str) -> Vec<MissionLiveness> {
+			let handle = app.handle().clone();
+			let listed = mission_list(handle.clone(), app.state(), "c1".to_owned())
+				.await
+				.expect("the conversation lists");
+			let detail = mission_detail(handle.clone(), app.state(), id.to_owned())
+				.await
+				.expect("the detail reads");
+			let feed = mission_space_feed(handle.clone(), app.state(), "personal".to_owned(), 0)
+				.await
+				.expect("the feed reads");
+			let page =
+				mission_space_page(handle, app.state(), "personal".to_owned(), 0, None, None)
+					.await
+					.expect("the page reads");
+			vec![
+				on_the_board(app, id).await,
+				listed.open[0].liveness,
+				detail.mission.liveness,
+				feed[0].mission.liveness,
+				page.missions[0].mission.liveness,
+			]
+		}
+
+		fn listening(app: &App<MockRuntime>) -> Receiver<Value> {
+			let (sender, received) = channel();
+			app.handle().listen(CHANGED_EVENT, move |event| {
+				let payload = serde_json::from_str(event.payload()).expect("the payload is JSON");
+				let _ = sender.send(payload);
+			});
+			received
+		}
+
+		fn heard(received: &Receiver<Value>, expected: usize) -> Vec<Value> {
+			let mut heard = Vec::new();
+			while heard.len() < expected {
+				match received.recv_timeout(PATIENCE) {
+					Ok(payload) => heard.push(payload),
+					Err(_) => return heard,
+				}
+			}
+			heard.extend(std::iter::from_fn(|| received.recv_timeout(QUIET).ok()));
+			heard
+		}
+
+		fn liveness_of(heard: &[Value]) -> Vec<Value> {
+			heard.iter().map(|payload| payload["liveness"].clone()).collect()
+		}
+
+		#[tokio::test]
+		async fn a_thread_turn_alone_reads_working_on_every_read_and_idle_once_it_ends() {
+			let app = a_watched_host("turn").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+
+			run.emit(turned(TurnState::Running), None);
+			let running = on_every_read(&app, &opened.id).await;
+			run.emit(ended(), None);
+			let over = on_every_read(&app, &opened.id).await;
+
+			assert_eq!(running, vec![MissionLiveness::Working; 5]);
+			assert_eq!(over, vec![MissionLiveness::Idle; 5]);
+		}
+
+		#[tokio::test]
+		async fn a_question_or_a_permission_of_the_thread_alone_reads_needs_you_until_resolved() {
+			let app = a_watched_host("prompt").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let mut walked = Vec::new();
+
+			for (raised, settled) in
+				[(a_question("q1"), resolved("q1")), (a_permission("p1"), resolved("p1"))]
+			{
+				run.emit(raised, None);
+				walked.push(on_the_board(&app, &opened.id).await);
+				run.emit(settled, None);
+				walked.push(on_the_board(&app, &opened.id).await);
+			}
+
+			assert_eq!(
+				walked,
+				[MissionLiveness::NeedsYou, MissionLiveness::Idle].repeat(2),
+				"a question, then a permission, each raised then resolved"
+			);
+		}
+
+		#[tokio::test]
+		async fn a_checkout_agent_waiting_on_its_bot_reads_working_only_while_the_thread_answers() {
+			let app = a_watched_host("waiting-bot").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let mut walked = Vec::new();
+
+			for waiting in [MissionEventKind::AgentAsked, MissionEventKind::ChecksFailed] {
+				let entry = MissionEntry::of(waiting, a_note());
+				let asked =
+					mission_note(app.handle().clone(), app.state(), opened.id.clone(), entry)
+						.await
+						.expect("the mission waits on its bot");
+				assert_eq!(asked.state, MissionState::WaitingBot);
+				walked.push(asked.liveness);
+				run.emit(turned(TurnState::Running), None);
+				walked.push(on_the_board(&app, &opened.id).await);
+				run.emit(ended(), None);
+				walked.push(on_the_board(&app, &opened.id).await);
+			}
+
+			assert_eq!(
+				walked,
+				[MissionLiveness::Idle, MissionLiveness::Working, MissionLiveness::Idle].repeat(2)
+			);
+		}
+
+		#[tokio::test]
+		async fn a_status_is_stored_with_its_moment_and_leaves_the_state_and_the_liveness() {
+			let app = a_watched_host("status").await;
+			let quiet = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let escalated = a_mission(&app, a_draft("c1", "b1", "Ship it")).await;
+			let escalated =
+				mission_escalate(app.handle().clone(), app.state(), escalated.id, a_note())
+					.await
+					.expect("the mission is escalated");
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&quiet));
+			run.emit(turned(TurnState::Running), None);
+			let quiet = observed(app.handle(), quiet);
+
+			for before in [quiet, escalated] {
+				let stated = mission_status(
+					app.handle().clone(),
+					app.state(),
+					before.id.clone(),
+					"bot".to_owned(),
+					"Waiting on review".to_owned(),
+				)
+				.await
+				.expect("the status is written");
+
+				let status = stated.status.clone().expect("the status is stored");
+				assert_eq!(status.text, "Waiting on review");
+				assert!(status.written_at > 0, "the status carries no moment");
+				assert_eq!(
+					(stated.state, stated.state_seq, stated.liveness),
+					(before.state, before.state_seq, before.liveness),
+					"a status moved the mission"
+				);
+			}
+		}
+
+		#[tokio::test]
+		async fn a_run_dropped_mid_turn_tells_the_front_its_mission_is_idle() {
+			let app = a_watched_host("dropped").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let received = listening(&app);
+			run.emit(turned(TurnState::Running), None);
+			let started = heard(&received, 1);
+
+			agent_shutdown(app.handle().clone(), app.state(), the_thread_of(&opened))
+				.await
+				.expect("the run is dropped");
+			let dropped = heard(&received, 1);
+
+			assert_eq!(liveness_of(&started), vec![json!("working")], "got {started:?}");
+			assert_eq!(liveness_of(&dropped), vec![json!("idle")], "got {dropped:?}");
+			assert_eq!(on_the_board(&app, &opened.id).await, MissionLiveness::Idle);
+		}
+
+		#[tokio::test]
+		async fn the_front_hears_once_per_liveness_change_of_the_thread() {
+			let app = a_watched_host("once").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let received = listening(&app);
+
+			run.emit(turned(TurnState::Submitting), None);
+			run.emit(turned(TurnState::Running), None);
+			let started = heard(&received, 1);
+			run.emit(a_question("q1"), None);
+			let asked = heard(&received, 1);
+			run.emit(turned(TurnState::Running), None);
+			let unmoved = heard(&received, 0);
+			run.emit(ended(), None);
+			let over = heard(&received, 1);
+
+			assert_eq!(liveness_of(&started), vec![json!("working")], "got {started:?}");
+			assert_eq!(liveness_of(&asked), vec![json!("needs_you")], "got {asked:?}");
+			assert!(unmoved.is_empty(), "a turn already running was told again: {unmoved:?}");
+			assert_eq!(liveness_of(&over), vec![json!("idle")], "got {over:?}");
+			assert!(
+				[&started, &asked, &over]
+					.iter()
+					.all(|told| told[0]["missionId"] == json!(opened.id)),
+				"another mission was told"
+			);
+		}
 	}
 }

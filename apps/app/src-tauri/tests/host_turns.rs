@@ -47,7 +47,7 @@ use kiroshi_app::hosting::roster::{signed_row, Enrolled};
 use kiroshi_app::hosting::{local_api, Hosting};
 use kiroshi_app::logging::contract::InstallKind;
 use kiroshi_app::missions::commands::MissionChanged;
-use kiroshi_app::missions::contract::MissionState;
+use kiroshi_app::missions::contract::{MissionLiveness, MissionState};
 use kiroshi_app::routines::webhook::{self, Webhook};
 use removed_on_drop::RemovedOnDrop;
 use serde_json::{json, Value};
@@ -414,6 +414,7 @@ impl Host {
 				state: MissionState::Working,
 				state_seq: 1,
 				is_agent_running: true,
+				liveness: MissionLiveness::Working,
 				last_activity_at: None,
 			};
 			events::emit(self.app.handle(), MISSION_CHANGED, changed).expect("the flood is sent");

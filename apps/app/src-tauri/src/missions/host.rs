@@ -4,12 +4,12 @@ use tauri::{AppHandle, Runtime};
 
 use super::commands::{
 	mission_conclude, mission_escalate, mission_handoff, mission_note, mission_open,
-	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch,
+	mission_reopen_unmerged, mission_row, mission_status, mission_update, mission_watch, observed,
 };
 use super::contract::{
 	Mission, MissionClosing, MissionDossier, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionFilter, MissionNote, MissionOutcome, MissionRecord,
-	MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
+	MissionEvent, MissionEventKind, MissionFilter, MissionLiveness, MissionNote, MissionOutcome,
+	MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
 };
 use crate::agent::host::{Host, Refusal};
 use crate::conversations::commands::{ready, space_of_the_conversation};
@@ -39,6 +39,10 @@ impl<R: Runtime> MissionHost<R> {
 			source: BOT.to_owned(),
 			workspace_path: asked.workspace_path,
 		}
+	}
+
+	fn observed(&self, record: MissionRecord) -> MissionRecord {
+		MissionRecord { mission: observed(&self.app, record.mission), ..record }
 	}
 
 	fn runs_in(&self, held: &Mission) -> bool {
@@ -219,13 +223,20 @@ impl<R: Runtime> Host for MissionHost<R> {
 				let asked: Sought = Self::read(payload)?;
 				let filter = self.filter(database, asked).await?;
 				let records = database.missions().listed(filter).await?;
-				Self::answered(records.into_iter().map(listed).collect::<Vec<_>>())
+				Self::answered(
+					records
+						.into_iter()
+						.map(|record| self.observed(record))
+						.map(listed)
+						.collect::<Vec<_>>(),
+				)
 			}
 			Operation::Read => {
 				let asked: Named = Self::read(payload)?;
 				let dossier = database.missions().dossier(asked.id).await?;
 				self.refuse_a_mission_of_another_space(database, &dossier.record.mission).await?;
-				Self::answered(read_mission(dossier))
+				let record = self.observed(dossier.record);
+				Self::answered(read_mission(MissionDossier { record, ..dossier }))
 			}
 		}
 	}
@@ -349,6 +360,7 @@ struct Listed {
 	id: String,
 	ticket: Ticket,
 	state: MissionState,
+	liveness: MissionLiveness,
 	bot_id: String,
 	bot_name: String,
 	origin_conversation_id: String,
@@ -364,6 +376,7 @@ fn listed(record: MissionRecord) -> Listed {
 		id: mission.id,
 		ticket: mission.ticket,
 		state: mission.state,
+		liveness: mission.liveness,
 		bot_id: mission.bot_id,
 		bot_name,
 		origin_conversation_id: mission.origin_conversation_id,
@@ -524,7 +537,10 @@ mod tests {
 	}
 
 	async fn events(app: &App<MockRuntime>, id: &str) -> Vec<MissionEvent> {
-		mission_detail(app.state(), id.to_owned()).await.expect("the mission reads").events
+		mission_detail(app.handle().clone(), app.state(), id.to_owned())
+			.await
+			.expect("the mission reads")
+			.events
 	}
 
 	async fn armed_missions(app: &App<MockRuntime>) -> Vec<String> {
@@ -860,6 +876,27 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn list_and_read_carry_the_liveness_the_host_observes() {
+		let app = a_host("liveness").await;
+		let held = a_mission_of(&app, "c1", "b1").await;
+		let its_bot = serving(&app, "c1");
+		let listed = its_bot.answer(asking("list", json!({}))).await.expect("the room lists");
+		its_bot
+			.answer(asking(
+				"escalate",
+				json!({ "id": held.id, "question": "Which copy?", "reason": "Taste" }),
+			))
+			.await
+			.expect("the mission is escalated");
+
+		let read =
+			its_bot.answer(asking("read", json!({ "id": held.id }))).await.expect("it reads");
+
+		assert_eq!(listed[0]["liveness"], json!("idle"), "got {listed}");
+		assert_eq!(read["liveness"], json!("needs_you"), "got {read}");
+	}
+
+	#[tokio::test]
 	async fn read_refuses_a_mission_of_another_space_and_an_unknown_one() {
 		let app = a_host("read-foreign").await;
 		let foreign = a_mission_of(&app, "c3", "b3").await;
@@ -993,7 +1030,10 @@ mod tests {
 		.await
 		.expect("the mission is closed");
 
-		let mission = mission_detail(app.state(), id).await.expect("the mission reads").mission;
+		let mission = mission_detail(app.handle().clone(), app.state(), id)
+			.await
+			.expect("the mission reads")
+			.mission;
 		assert_eq!(mission.state, MissionState::Failed);
 		assert!(mission.closed_at.is_some(), "the failed close left the mission open");
 	}
@@ -1272,7 +1312,9 @@ mod tests {
 		assert_eq!(empty["kind"], json!("nothingToUpdate"));
 		assert_eq!(blank["kind"], json!("blankField"));
 		assert_eq!(blank["field"], json!("objective"));
-		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("it reads");
 		assert_eq!(held.mission, opened);
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
 		assert_eq!(title_of(&app, &opened.thread_conversation_id).await, "Held");
@@ -1399,7 +1441,9 @@ mod tests {
 				json!("alreadyTheOwner"),
 			]
 		);
-		let held = mission_detail(app.state(), opened.id.clone()).await.expect("it reads");
+		let held = mission_detail(app.handle().clone(), app.state(), opened.id.clone())
+			.await
+			.expect("it reads");
 		assert_eq!(held.mission.bot_id, "b1");
 		assert_eq!(kinds(held.events), vec![MissionEventKind::Opened]);
 		assert_eq!(seated_in(&app, &opened.thread_conversation_id).await, thread_seats);

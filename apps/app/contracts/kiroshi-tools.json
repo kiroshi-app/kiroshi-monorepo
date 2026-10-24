@@ -313,7 +313,7 @@
 	},
 	{
 		"name": "mission_status",
-		"description": "Write the status of a mission of yours, every time you stop working on it, whether the work is over or only paused. It is read by whoever follows the conversation the mission came from, who saw none of the work, so it holds on its own and names whoever moves next.",
+		"description": "Write the status of a mission of yours, every time you stop working on it, whether the work is over or only paused. It is a line for the reader and sets no state: whether the mission is idle, working or needs the person is observed by the host, never written by you. It is read by whoever follows the conversation the mission came from, who saw none of the work, so it holds on its own and names whoever moves next.",
 		"inputSchema": {
 			"$schema": "https://json-schema.org/draft/2020-12/schema",
 			"type": "object",

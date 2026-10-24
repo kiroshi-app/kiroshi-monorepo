@@ -16,7 +16,7 @@ use kiroshi_app::host_api::cors;
 use kiroshi_app::host_api::events::SEND_PATIENCE;
 use kiroshi_app::host_api::invoke::MAX_BODY_BYTES;
 use kiroshi_app::missions::commands::MissionChanged;
-use kiroshi_app::missions::contract::MissionState;
+use kiroshi_app::missions::contract::{MissionLiveness, MissionState};
 use kiroshi_app::routines::webhook::{self, Webhook};
 use serde_json::{json, Value};
 use tauri::test::{mock_builder, MockRuntime, INVOKE_KEY};
@@ -292,6 +292,7 @@ fn changed(marker: impl Display) -> MissionChanged {
 		state: MissionState::Working,
 		state_seq: 1,
 		is_agent_running: true,
+		liveness: MissionLiveness::Working,
 		last_activity_at: None,
 	}
 }

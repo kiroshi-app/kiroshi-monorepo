@@ -156,6 +156,7 @@ fn reopening_a_closed_mission_brings_it_back_to_working_and_tells_the_front() {
 		call(&window, "mission_reopen", json!({ "missionId": mission_id })).expect("it reopens");
 
 	assert_eq!(reopened["state"], json!("working"));
+	assert_eq!(reopened["liveness"], json!("idle"));
 	assert_eq!(reopened["closedAt"], Value::Null);
 	assert!(
 		reopened["stateSeq"].as_i64() > closed["stateSeq"].as_i64(),
@@ -169,6 +170,7 @@ fn reopening_a_closed_mission_brings_it_back_to_working_and_tells_the_front() {
 			"state": "working",
 			"stateSeq": reopened["stateSeq"],
 			"isAgentRunning": false,
+			"liveness": "idle",
 			"lastActivityAt": null,
 		})],
 		"the front was not told the mission reopened"
