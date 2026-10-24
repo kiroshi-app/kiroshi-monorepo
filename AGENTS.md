@@ -194,6 +194,8 @@ bun run ios:test     # Generate, then run the iOS tests on the iPhone 17 simulat
 bun run ios:run      # Generate, build and launch the iOS app on the simulator
 ```
 
+A machine opts in to the heavy job slots with `mkdir -p ~/.kiroshi/slots`, `KIROSHI_SLOTS` overriding their number; there, every `xcodebuild` and `cargo` run outside the repository scripts goes through `scripts/slot.sh`, `scripts/slot.sh cargo test ...`.
+
 ## Naming
 
 | Type | Convention | Example |

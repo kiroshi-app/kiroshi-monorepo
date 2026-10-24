@@ -3,9 +3,16 @@ import { fileURLToPath } from "node:url"
 
 import { touchedJobs } from "./ci-changes"
 
-export type Step = { name: string; command: string; cwd?: string }
+export type Step = {
+	name: string
+	command: string
+	cwd?: string
+	heavy?: true
+}
 
 const REPO = fileURLToPath(new URL("..", import.meta.url))
+
+const SLOT = join(REPO, "scripts/slot.sh")
 
 const APP = "apps/app"
 
@@ -21,6 +28,7 @@ const RUSTFMT: Step = {
 const BUILD_SIDECAR: Step = {
 	name: "Build sidecar",
 	command: "bun run --filter sidecar build",
+	heavy: true,
 }
 
 const CLIPPY: Step = {
@@ -28,6 +36,7 @@ const CLIPPY: Step = {
 	command:
 		"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
 	cwd: APP,
+	heavy: true,
 }
 
 const BINDINGS_MATCH: Step = {
@@ -75,6 +84,7 @@ export const GATE = {
 			command:
 				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test bindings",
 			cwd: APP,
+			heavy: true,
 		},
 		BINDINGS_MATCH,
 	],
@@ -94,6 +104,7 @@ export const GATE = {
 			command:
 				"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
 			cwd: APP,
+			heavy: true,
 		},
 		BINDINGS_MATCH,
 	],
@@ -101,6 +112,7 @@ export const GATE = {
 		{
 			name: "Stories played in chromium against the baseline",
 			command: "bun run baseline storybook",
+			heavy: true,
 		},
 	],
 	ios: [
@@ -108,10 +120,12 @@ export const GATE = {
 		{
 			name: "Build for testing",
 			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build build-for-testing`,
+			heavy: true,
 		},
 		{
 			name: "Test on the simulator",
 			command: `apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi ${SIMULATOR_DESTINATION} -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building`,
+			heavy: true,
 		},
 		{
 			name: "Swift format",
@@ -246,10 +260,15 @@ const ensureSimulator = () => {
 
 type Labelled = { label: string; step: Step }
 
+export const spawnedCommand = (step: Step) => {
+	const command = ["bash", "-ec", step.command]
+	return step.heavy ? [SLOT, ...command] : command
+}
+
 const runStep = ({ label, step }: Labelled) => {
 	console.log(`\nci  ${label} / ${step.name}\n    $ ${step.command}`)
 	const finished = Bun.spawnSync({
-		cmd: ["bash", "-ec", step.command],
+		cmd: spawnedCommand(step),
 		cwd: join(REPO, step.cwd ?? ""),
 		stdout: "inherit",
 		stderr: "inherit",
