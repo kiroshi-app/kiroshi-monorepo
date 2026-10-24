@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import type { HTMLAttributes } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { I18nProvider } from "@workspace/ui/components/i18n-provider"
@@ -73,17 +74,22 @@ describe("ToolQuestion hint", () => {
 	})
 })
 
-const pressKey = (init: KeyboardEventInit) => {
+const pressKey = (init: KeyboardEventInit, target: Element = document.body) => {
 	const event = new KeyboardEvent("keydown", {
 		bubbles: true,
 		cancelable: true,
 		...init,
 	})
 	act(() => {
-		document.body.dispatchEvent(event)
+		target.dispatchEvent(event)
 	})
 	return event
 }
+
+const digitKey = (digit: number) => ({
+	key: String(digit),
+	code: `Digit${digit}`,
+})
 
 const checkedLabels = () =>
 	screen
@@ -97,7 +103,7 @@ describe("ToolQuestion digit keys", () => {
 	it("picks the radio of the bare digit and prevents its default", () => {
 		renderPanel({ questions: [PLAN], hasDigitKeys: true })
 
-		const event = pressKey({ key: "2" })
+		const event = pressKey(digitKey(2))
 
 		expect(event.defaultPrevented).toBe(true)
 		expect(
@@ -108,8 +114,8 @@ describe("ToolQuestion digit keys", () => {
 	it("keeps the held radio when its digit is pressed again", () => {
 		renderPanel({ questions: [PLAN], hasDigitKeys: true })
 
-		pressKey({ key: "2" })
-		pressKey({ key: "2" })
+		pressKey(digitKey(2))
+		pressKey(digitKey(2))
 
 		expect(
 			screen.getByRole("radio", { name: "Team" }).getAttribute("aria-checked"),
@@ -119,7 +125,7 @@ describe("ToolQuestion digit keys", () => {
 	it("moves a single-select pick on to the next waiting question", () => {
 		renderPanel({ questions: [PLAN, CHANNELS], hasDigitKeys: true })
 
-		pressKey({ key: "1" })
+		pressKey(digitKey(1))
 
 		expect(screen.getByText(CHANNELS.question)).toBeTruthy()
 	})
@@ -128,53 +134,128 @@ describe("ToolQuestion digit keys", () => {
 		renderPanel({ questions: [CHANNELS], hasDigitKeys: true })
 		const blog = screen.getByRole("checkbox", { name: "Blog" })
 
-		pressKey({ key: "2" })
+		pressKey(digitKey(2))
 		expect(blog.getAttribute("aria-checked")).toBe("true")
 
-		pressKey({ key: "2" })
+		pressKey(digitKey(2))
 		expect(blog.getAttribute("aria-checked")).toBe("false")
 	})
 
-	it.each([
-		{ metaKey: true },
-		{ ctrlKey: true },
-		{ altKey: true },
-		{ shiftKey: true },
-	])("leaves the digit alone with %o held", (modifier) => {
+	it.each([{ metaKey: true }, { ctrlKey: true }, { altKey: true }])(
+		"leaves the digit alone with %o held",
+		(modifier) => {
+			renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+			const event = pressKey({ ...digitKey(1), ...modifier })
+
+			expect(event.defaultPrevented).toBe(false)
+			expect(checkedLabels()).toEqual([])
+		},
+	)
+
+	it("leaves a digit above the option count and every other key alone", () => {
 		renderPanel({ questions: [PLAN], hasDigitKeys: true })
 
-		const event = pressKey({ key: "1", ...modifier })
+		for (const code of [
+			"Digit4",
+			"Digit9",
+			"Digit0",
+			"Numpad0",
+			"KeyA",
+			"Enter",
+		])
+			expect(pressKey({ key: code, code }).defaultPrevented).toBe(false)
+		expect(checkedLabels()).toEqual([])
+	})
+
+	it.each([
+		{ layout: "AZERTY top row", key: "&", code: "Digit1" },
+		{ layout: "Shift on AZERTY", key: "1", code: "Digit1", shiftKey: true },
+		{ layout: "Shift on QWERTY", key: "!", code: "Digit1", shiftKey: true },
+		{ layout: "numeric keypad", key: "1", code: "Numpad1" },
+	])("picks by the physical key on the $layout", ({ layout: _, ...init }) => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		expect(pressKey(init).defaultPrevented).toBe(true)
+		expect(checkedLabels()).toEqual([expect.stringContaining("Starter")])
+	})
+
+	it("leaves a repeated digit untouched", () => {
+		renderPanel({ questions: [CHANNELS], hasDigitKeys: true })
+
+		const event = pressKey({ ...digitKey(2), repeat: true })
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(
+			screen
+				.getByRole("checkbox", { name: "Blog" })
+				.getAttribute("aria-checked"),
+		).toBe("false")
+	})
+
+	it.each<HTMLAttributes<HTMLDivElement>>([
+		{ "aria-modal": true, role: "dialog" },
+		{ role: "menu" },
+	])("leaves the digit to an overlay above the panel, %o", (overlay) => {
+		render(
+			<I18nProvider>
+				<div {...overlay}>
+					<span data-testid="in-overlay" />
+				</div>
+				<ToolQuestion hasDigitKeys questions={[PLAN]} />
+			</I18nProvider>,
+		)
+
+		const event = pressKey(digitKey(1), screen.getByTestId("in-overlay"))
 
 		expect(event.defaultPrevented).toBe(false)
 		expect(checkedLabels()).toEqual([])
 	})
 
-	it("leaves a digit above the option count and every other key alone", () => {
-		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+	it("still picks inside a modal that holds the panel", () => {
+		render(
+			<I18nProvider>
+				<div aria-modal="true" role="dialog">
+					<ToolQuestion hasDigitKeys questions={[PLAN]} />
+				</div>
+			</I18nProvider>,
+		)
 
-		for (const key of ["4", "9", "0", "a", "Enter"])
-			expect(pressKey({ key }).defaultPrevented).toBe(false)
-		expect(checkedLabels()).toEqual([])
+		pressKey(digitKey(2), screen.getByRole("radio", { name: "Starter" }))
+
+		expect(
+			screen.getByRole("radio", { name: "Team" }).getAttribute("aria-checked"),
+		).toBe("true")
+	})
+
+	it("binds and names no more than nine digits", () => {
+		const wide: ToolQuestionItem = {
+			...PLAN,
+			options: Array.from({ length: 12 }, (_, index) => ({
+				label: `Plan ${index + 1}`,
+				description: "A seat count.",
+			})),
+		}
+		renderPanel({ questions: [wide], hasDigitKeys: true })
+
+		expect(
+			screen.getByText("Press 1\u20139 to choose, Return to send"),
+		).toBeTruthy()
+		pressKey(digitKey(9))
+		expect(checkedLabels()).toEqual([expect.stringContaining("Plan 9")])
 	})
 
 	it("binds no digit on a notice", () => {
 		renderPanel({ questions: [NOTICE, PLAN], hasDigitKeys: true })
 
-		expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+		expect(pressKey(digitKey(1)).defaultPrevented).toBe(false)
 	})
 
 	it("lets the digit type into the own-answer field", () => {
 		renderPanel({ questions: [PLAN], hasDigitKeys: true })
 		const field = screen.getByLabelText(chat.toolQuestion.freeText)
 
-		const event = new KeyboardEvent("keydown", {
-			key: "2",
-			bubbles: true,
-			cancelable: true,
-		})
-		act(() => {
-			field.dispatchEvent(event)
-		})
+		const event = pressKey(digitKey(2), field)
 
 		expect(event.defaultPrevented).toBe(false)
 		expect(checkedLabels()).toEqual([])
@@ -185,7 +266,7 @@ describe("ToolQuestion digit keys", () => {
 		(props) => {
 			renderPanel({ questions: [PLAN], ...props })
 
-			expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+			expect(pressKey(digitKey(1)).defaultPrevented).toBe(false)
 		},
 	)
 
@@ -201,7 +282,7 @@ describe("ToolQuestion digit keys", () => {
 				<ToolQuestion hasDigitKeys minimised questions={[PLAN]} />
 			</I18nProvider>,
 		)
-		expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+		expect(pressKey(digitKey(1)).defaultPrevented).toBe(false)
 		expect(removed).toHaveBeenCalledWith("keydown", expect.any(Function), true)
 
 		rerender(

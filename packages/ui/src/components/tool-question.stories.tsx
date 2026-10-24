@@ -745,21 +745,28 @@ export const DigitKeysChoose = meta.story({
 		docs: {
 			description: {
 				story:
-					"The digit keys behind `NothingChosen`: with `hasDigitKeys` a bare digit picks its row exactly as a click does. Check that 2 picks Team, that a digit above the option count and a digit under Cmd, Ctrl, Alt or Shift pick nothing.",
+					"The digit keys behind `NothingChosen`: with `hasDigitKeys` a bare digit picks its row exactly as a click does. The binding reads the physical key, so Shift+1 and the AZERTY top-row 1, which carries `&`, pick Starter. Check that 2 picks Team, and that a digit above the option count and a digit under Cmd, Ctrl or Alt pick nothing.",
 			},
 		},
 	},
-	play: async ({ canvas, userEvent }) => {
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const starter = canvas.getByRole("radio", { name: /Starter/ })
 		const team = canvas.getByRole("radio", { name: /Team/ })
 
 		await userEvent.keyboard("4")
 		await userEvent.keyboard("{Meta>}1{/Meta}{Control>}1{/Control}")
-		await userEvent.keyboard("{Alt>}1{/Alt}{Shift>}1{/Shift}")
+		await userEvent.keyboard("{Alt>}1{/Alt}")
 		for (const row of canvas.getAllByRole("radio"))
 			await expect(row).toHaveAttribute("aria-checked", "false")
 
+		await userEvent.keyboard("{Shift>}1{/Shift}")
+		await expect(starter).toHaveAttribute("aria-checked", "true")
+
 		await userEvent.keyboard("2")
 		await expect(team).toHaveAttribute("aria-checked", "true")
+
+		fireEvent.keyDown(canvasElement, { key: "&", code: "Digit1" })
+		await waitFor(() => expect(starter).toHaveAttribute("aria-checked", "true"))
 	},
 })
 
