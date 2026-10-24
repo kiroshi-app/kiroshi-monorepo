@@ -2344,7 +2344,7 @@ describe("ThreadScreen", () => {
 		expect(askedForm()).toBeTruthy()
 		expect(composerField()).toBeNull()
 		expect(rowIndexOf("Which wall holds?")).toBe(-1)
-		expect(screen.getByText("Return to send.")).toBeTruthy()
+		expect(screen.getByText("Return to send")).toBeTruthy()
 		expect(screen.queryByText(/Press 1-2/)).toBeNull()
 	})
 
