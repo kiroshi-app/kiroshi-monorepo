@@ -16,12 +16,12 @@ Run from the repo root:
 ```bash
 bun run ios:generate  # Generate apps/ios/Kiroshi.xcodeproj from project.yml
 bun run ios:build     # Generate, then build for the iOS Simulator
-bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the simulator IOS_SIMULATOR names ("iPhone 17" when unset), UI tests on two clones of it
+bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the simulator IOS_SIMULATOR names ("iPhone 17" when unset), one test class after the other
 bun run ios:test:unit # Generate, then run the unit tests only (the KiroshiUnit plan) on the same simulator
 bun run ios:run       # Generate, build, then launch the app on the same simulator and open DeviceHub
 ```
 
-The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes in parallel on two clones of the simulator (CI runs them one after the other, clones never start a UI test on its hosted runner), so a UI test never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
+The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes one after the other on the ticket's simulator, as CI does (`-parallel-testing-enabled NO`): parallel testing would shut that simulator down and boot two clones of it at every run, and clones never start a UI test on CI's hosted runner. A UI test still never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
 
 Every generate writes the build number to `BuildNumber.xcconfig` (not committed): Xcode Cloud's `CI_BUILD_NUMBER` when set, else `git rev-list --count HEAD`. The version stays `MARKETING_VERSION` in `project.yml`.
 
@@ -65,7 +65,7 @@ apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiros
 apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
 ```
 
-The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs the UI tests on two clones of it (xcodebuild shuts this simulator down to clone it, then deletes the clones, and the next script boots it again), or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
+The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs every test on that simulator, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
 
 At the end of the mission, shut down and delete that simulator only, never `xcrun simctl shutdown all`, which stops every other agent's:
 
