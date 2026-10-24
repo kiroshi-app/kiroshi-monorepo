@@ -6,7 +6,7 @@ export type PendingQuestion = {
 	text: string
 }
 
-export type QuestionTexts = Record<string, string>
+type QuestionTexts = Record<string, string>
 
 export type SpaceQuestions = {
 	spaceRowId: string | null
@@ -45,33 +45,13 @@ const withAsked = (
 	return unheard.length === 0 ? questions : [...questions, ...unheard]
 }
 
-const sameUnlessRemoved = (
+const withoutQuestionsWhere = (
 	questions: PendingQuestion[],
-	kept: PendingQuestion[],
-): PendingQuestion[] => (kept.length === questions.length ? questions : kept)
-
-const withoutQuestion = (
-	questions: PendingQuestion[],
-	id: string,
-): PendingQuestion[] =>
-	sameUnlessRemoved(
-		questions,
-		questions.filter((question) => question.id !== id),
-	)
-
-const withoutQuestionsOf = (
-	questions: PendingQuestion[],
-	scope: RuntimeScope | null,
-): PendingQuestion[] =>
-	scope === null
-		? questions
-		: sameUnlessRemoved(
-				questions,
-				questions.filter(
-					(question) =>
-						question.scope.runtimeSessionId !== scope.runtimeSessionId,
-				),
-			)
+	isSettled: (question: PendingQuestion) => boolean,
+): PendingQuestion[] => {
+	const kept = questions.filter((question) => !isSettled(question))
+	return kept.length === questions.length ? questions : kept
+}
 
 export const pendingQuestionsAfter = (
 	questions: PendingQuestion[],
@@ -80,10 +60,13 @@ export const pendingQuestionsAfter = (
 ): PendingQuestion[] => {
 	const { scope, event } = scoped
 	if (event.type === "permissionResolved") {
-		return withoutQuestion(questions, event.id)
+		return withoutQuestionsWhere(questions, ({ id }) => id === event.id)
 	}
 	if (event.type === "turnEnded") {
-		return withoutQuestionsOf(questions, scope)
+		return withoutQuestionsWhere(
+			questions,
+			(question) => question.scope.runtimeSessionId === scope?.runtimeSessionId,
+		)
 	}
 	return withAsked(
 		questions,
