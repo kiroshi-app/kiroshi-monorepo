@@ -145,7 +145,7 @@ describe("QuestionPrompt", () => {
 			screen.getByRole("form", { name: "Which wall holds?" }),
 		)
 
-		const event = pressDigit(2, document.body)
+		const event = pressDigit(2)
 
 		expect(event.defaultPrevented).toBe(true)
 		expect(checkedOptions()).toEqual([
