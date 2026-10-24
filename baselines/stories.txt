@@ -553,6 +553,7 @@ conversation-tools-toolquestion--entry-with-link
 conversation-tools-toolquestion--entry-with-secret
 conversation-tools-toolquestion--failure
 conversation-tools-toolquestion--failure-with-action
+conversation-tools-toolquestion--forced-colors-focus-outline
 conversation-tools-toolquestion--four-questions
 conversation-tools-toolquestion--free-text
 conversation-tools-toolquestion--inverse-buttons-focus-visible

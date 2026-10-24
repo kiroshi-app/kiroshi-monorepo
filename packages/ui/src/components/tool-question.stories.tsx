@@ -711,6 +711,50 @@ export const KeyboardFocusRings = meta.story({
 	},
 })
 
+export const ForcedColorsFocusOutline = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION] },
+	render: inComposerSlot,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"With forced colours on, where no box-shadow is painted, the focused option row keeps a visible indicator: its transparent outline takes the system colour, on the opening focus and on keyboard focus alike, while a row without focus stays unoutlined. Outside forced colours the focused row draws no outline. The play emulates forced colours only in the Vitest browser runner.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		const { cdp } = await import("vitest/browser")
+		const emulateForcedColors = (value: "active" | "") =>
+			cdp().send("Emulation.setEmulatedMedia", {
+				features: [{ name: "forced-colors", value }],
+			})
+		const [first, second] = canvas.getAllByRole("radio") as [
+			HTMLElement,
+			HTMLElement,
+		]
+
+		await expect(first).toHaveFocus()
+		await expect(getComputedStyle(first).outlineStyle).toBe("none")
+
+		await emulateForcedColors("active")
+		try {
+			await expect(getComputedStyle(first).outlineStyle).toBe("solid")
+			await expect(getComputedStyle(second).outlineStyle).toBe("none")
+
+			await userEvent.tab()
+			await expect(getComputedStyle(first).outlineStyle).toBe("none")
+			await userEvent.tab({ shift: true })
+			await expect(first).toHaveFocus()
+			await expect(first.matches(":focus-visible")).toBe(true)
+			await expect(getComputedStyle(first).outlineStyle).toBe("solid")
+		} finally {
+			await emulateForcedColors("")
+		}
+	},
+})
+
 export const SingleSelect = meta.story({
 	tags: ["test-only"],
 	parameters: {

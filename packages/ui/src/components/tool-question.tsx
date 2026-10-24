@@ -50,7 +50,7 @@ const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
 
 const QUESTION_ROW_CLASS =
-	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start outline-none focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30"
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30"
 
 const QUESTION_PILL_CLASS =
 	"h-8 rounded-full font-medium text-compact leading-4"
