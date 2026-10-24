@@ -381,3 +381,79 @@ describe("ToolQuestion Return on the other controls", () => {
 		expect(onAnswer).not.toHaveBeenCalled()
 	})
 })
+
+const SECRET: ToolQuestionItem = {
+	question: "Paste the Sentry key",
+	header: "Sentry",
+	options: [],
+	entry: { label: "Sentry key", isSecret: true },
+}
+
+const openPanel = async (props: ToolQuestionProps) => {
+	const view = renderPanel(props)
+	await act(async () => {})
+	return view
+}
+
+describe("ToolQuestion opening focus", () => {
+	afterEach(cleanup)
+
+	it("lands on option 1 without picking it or scrolling the thread", async () => {
+		const focus = vi.spyOn(HTMLElement.prototype, "focus")
+		await openPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		expect(screen.getByRole("radio", { name: "Starter" })).toBe(
+			document.activeElement,
+		)
+		expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+		expect(checkedLabels()).toEqual([])
+		expect(
+			screen
+				.getByRole("button", { name: /send answers/i })
+				.getAttribute("aria-disabled"),
+		).toBe("true")
+		focus.mockRestore()
+	})
+
+	it("lands on option 1 of a multi-select question", async () => {
+		await openPanel({ questions: [CHANNELS] })
+
+		expect(screen.getByRole("checkbox", { name: "Newsletter" })).toBe(
+			document.activeElement,
+		)
+	})
+
+	it.each([
+		{ shown: "an entry", questions: [SECRET] },
+		{ shown: "a notice", questions: [NOTICE] },
+	])("keeps focus on the form when $shown is shown", async ({ questions }) => {
+		await openPanel({ questions })
+
+		expect(screen.getByRole("form")).toBe(document.activeElement)
+	})
+
+	it("lands on option 1 again when the panel reopens from the waiting bar", async () => {
+		const { rerender } = await openPanel({ questions: [PLAN], minimised: true })
+		rerender(
+			<I18nProvider>
+				<ToolQuestion minimised={false} questions={[PLAN]} />
+			</I18nProvider>,
+		)
+		await act(async () => {})
+
+		expect(screen.getByRole("radio", { name: "Starter" })).toBe(
+			document.activeElement,
+		)
+	})
+
+	it("picks by digit, then sends on Return from the focused row", async () => {
+		const onAnswer = vi.fn()
+		await openPanel({ questions: [PLAN], hasDigitKeys: true, onAnswer })
+
+		pressKey(digitKey(2), document.activeElement as Element)
+		expect(checkedLabels()).toEqual([expect.stringContaining("Team")])
+
+		await pressReturn(document.activeElement as HTMLElement)
+		expect(onAnswer).toHaveBeenCalledWith({ [PLAN.question]: "Team" })
+	})
+})
