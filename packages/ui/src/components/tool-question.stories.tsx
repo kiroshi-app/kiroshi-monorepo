@@ -222,6 +222,7 @@ export const NothingChosen = meta.story({
 			await expect(backgroundOf(panel)).toBe(
 				tokenStyleIn(panel, "bg-muted", "backgroundColor"),
 			)
+			await expect(getComputedStyle(panel).borderRadius).toBe("24px")
 			await expect(card.getByText(PLAN_QUESTION.header)).toBeVisible()
 
 			for (const [index, option] of PLAN_QUESTION.options.entries()) {

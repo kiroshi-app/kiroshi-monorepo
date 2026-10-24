@@ -33,7 +33,7 @@ import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
 
 const QUESTION_PANEL_CLASS =
-	"flex w-full flex-col gap-3 rounded-4xl border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+	"flex w-full flex-col gap-3 rounded-[24px] border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
 const QUESTION_SEGMENTS_CLASS =
 	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
