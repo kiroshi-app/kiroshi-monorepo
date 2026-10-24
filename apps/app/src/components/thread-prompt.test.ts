@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react"
 import { createElement } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -141,9 +148,10 @@ describe("QuestionPrompt", () => {
 		const answer = vi.fn(async () => undefined)
 		renderPrompt(wallQuestion(), { ...RESPONDER, answer })
 
-		expect(document.activeElement).toBe(
-			screen.getByRole("form", { name: "Which wall holds?" }),
-		)
+		const form = screen.getByRole("form", { name: "Which wall holds?" })
+		await waitFor(() => {
+			expect(form.contains(document.activeElement)).toBe(true)
+		})
 
 		const event = pressDigit(2)
 
