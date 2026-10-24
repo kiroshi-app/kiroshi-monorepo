@@ -43,7 +43,25 @@ fn named(kind: MissionEventKind) -> rusqlite::Result<String> {
 	}
 }
 
-pub(in crate::db) const MISSION_COLUMNS: &str =
+macro_rules! prompting_notifications {
+	() => {
+		"('permission_prompt', 'elicitation_dialog')"
+	};
+}
+
+macro_rules! a_notification_prompting_nobody {
+	() => {
+		concat!(
+			"(mission_events.kind = 'agent_asked'
+			AND json_extract(mission_events.payload, '$.event') = 'Notification'
+			AND COALESCE(json_extract(mission_events.payload, '$.notification'), '') NOT IN ",
+			prompting_notifications!(),
+			")"
+		)
+	};
+}
+
+pub(in crate::db) const MISSION_COLUMNS: &str = concat!(
 	"SELECT id, origin_conversation_id, bot_id, thread_conversation_id,
 	objective, ticket_platform, ticket_external_id, ticket_url, ticket_title, tools,
 	opened_at, closed_at, reported_at, reported_turn_id,
@@ -77,13 +95,24 @@ pub(in crate::db) const MISSION_COLUMNS: &str =
 		WHERE conversations.id = missions.origin_conversation_id) AS origin_space_id,
 	(SELECT CASE WHEN mission_events.kind = 'agent_asked'
 			AND json_extract(mission_events.payload, '$.event') = 'Notification'
-			AND COALESCE(json_extract(mission_events.payload, '$.notification'), '') <> 'idle_prompt'
-		THEN created_at END
+			AND json_extract(mission_events.payload, '$.notification') IN ",
+	prompting_notifications!(),
+	"	THEN created_at END
 		FROM mission_events
 		WHERE mission_events.mission_id = missions.id
 			AND mission_events.kind IN ('agent_started', 'agent_stopped', 'agent_asked')
-		ORDER BY mission_events.seq DESC LIMIT 1) AS prompted_since_turn_at
-	FROM missions";
+			AND NOT ",
+	a_notification_prompting_nobody!(),
+	"	ORDER BY mission_events.seq DESC LIMIT 1) AS prompted_since_turn_at,
+	COALESCE((SELECT kind FROM mission_events
+		WHERE mission_events.mission_id = missions.id
+			AND mission_events.kind NOT IN ('note', 'agent_started', 'agent_stopped', 'status',
+				'updated', 'handed_off')
+			AND NOT ",
+	a_notification_prompting_nobody!(),
+	"	ORDER BY mission_events.seq DESC LIMIT 1), 'opened') AS liveness_state_kind
+	FROM missions"
+);
 
 const INSERT_MISSION: &str = "INSERT INTO missions
 	(id, origin_conversation_id, bot_id, thread_conversation_id, objective, ticket_platform,
@@ -1105,7 +1134,7 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		state,
 		state_seq: row.get(15)?,
 		is_agent_running: checkout.is_turn_running,
-		liveness: MissionLiveness::observed(state, checkout),
+		liveness: MissionLiveness::observed(derived(row.get(29)?)?, checkout),
 		status: last_status(row)?,
 		last_activity_at: row.get(19)?,
 		last_activity: row.get::<_, Option<String>>(20)?.map(|_| from_text(row, 20)).transpose()?,
@@ -1614,6 +1643,65 @@ mod tests {
 			"a checkout prompt, its approval, the stop waiting on the bot and the idle reminder"
 		);
 		assert_eq!(stopped.state, MissionState::WaitingBot);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	fn a_notification(notification: Option<&str>) -> MissionEntry {
+		let payload = match notification {
+			Some(notification) => json!({ "event": "Notification", "notification": notification }),
+			None => json!({ "event": "Notification" }),
+		};
+		a_hook_call(MissionEventKind::AgentAsked, payload)
+	}
+
+	#[tokio::test]
+	async fn an_elicitation_of_the_checkout_agent_reads_needs_you() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+
+		let asked =
+			appended_on(&database, &opened.id, a_notification(Some("elicitation_dialog"))).await;
+
+		assert_eq!(asked.liveness, MissionLiveness::NeedsYou);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_notification_prompting_nobody_keeps_the_liveness_it_found() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+		let prompting_nobody = [None, Some("auth_success"), Some("idle_prompt")];
+		let mut walked = Vec::new();
+
+		for notification in prompting_nobody {
+			let told = appended_on(&database, &opened.id, a_notification(notification)).await;
+			walked.push(told.liveness);
+		}
+		appended_on(&database, &opened.id, an_entry(MissionEventKind::Escalated)).await;
+		for notification in prompting_nobody {
+			let told = appended_on(&database, &opened.id, a_notification(notification)).await;
+			walked.push(told.liveness);
+		}
+		appended_on(&database, &opened.id, a_notification(Some("permission_prompt"))).await;
+		for notification in prompting_nobody {
+			let told = appended_on(&database, &opened.id, a_notification(notification)).await;
+			walked.push(told.liveness);
+		}
+
+		assert_eq!(
+			walked,
+			[
+				[MissionLiveness::Idle; 3],
+				[MissionLiveness::NeedsYou; 3],
+				[MissionLiveness::NeedsYou; 3],
+			]
+			.concat(),
+			"idle, then escalated, then on a pending permission, each told three empty notifications"
+		);
 
 		drop(database);
 		std::fs::remove_dir_all(&dir).expect("cleanup");

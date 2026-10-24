@@ -423,7 +423,7 @@ mod tests {
 				"state": state,
 				"stateSeq": state_seq,
 				"isAgentRunning": false,
-				"liveness": "needs_you",
+				"liveness": "idle",
 				"lastActivityAt": null,
 			})],
 			"the front was not told the hook moved the mission"
