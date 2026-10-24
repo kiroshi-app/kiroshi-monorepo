@@ -15,7 +15,9 @@ use super::contract::{
 use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
-use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
+use super::reply_writer::{
+	prompts_settled_by, HostWrites, ReplyWriter, SettledPrompts, TurnAttachments, TurnSink,
+};
 use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
@@ -26,6 +28,7 @@ use crate::companions::host::CompanionHost;
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::{ended_as, HostTurns};
+use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::conversations::{Bot as StoredBot, ConversationError, MISSION_KIND};
 use crate::db::repositories::runtime_context::ParticipantKey;
@@ -433,13 +436,10 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 
 impl<R: Runtime> RunSink<R> {
 	fn release_questions_settled_by(&self, event: &AgentEvent) {
-		match event {
-			AgentEvent::PermissionResolved { id, .. } => {
-				self.live.release_question(&self.scope, id)
-			}
-			AgentEvent::TurnEnded { .. } => self.drop_questions(),
-			AgentEvent::Failed { error } if error.is_fatal() => self.drop_questions(),
-			_ => {}
+		match prompts_settled_by(event) {
+			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
+			Some(SettledPrompts::Every) => self.drop_questions(),
+			None => {}
 		}
 	}
 
@@ -686,13 +686,14 @@ impl AgentState {
 		Self { lease, ..Self::default() }
 	}
 
-	fn admit<R: Runtime>(
+	async fn admit<R: Runtime>(
 		&self,
 		app: &AppHandle<R>,
 		scope: RuntimeScope,
 	) -> Admission<Arc<Session>> {
-		let admitted = self.live.take_over(scope);
+		let admitted = self.live.take_over(scope.clone());
 		announce_denied(app, &admitted.dropped);
+		release_stored_prompts(app, &scope).await;
 		admitted
 	}
 
@@ -723,6 +724,10 @@ impl AgentState {
 
 	fn enter_quit(&self) {
 		self.gate.lock().expect("gate").quitting = true;
+	}
+
+	pub(crate) fn is_quitting(&self) -> bool {
+		self.gate.lock().unwrap_or_else(PoisonError::into_inner).quitting
 	}
 
 	pub async fn sidecar(&self) -> Result<Arc<Sidecar>, TransportError> {
@@ -1155,7 +1160,7 @@ pub(crate) async fn start_run<R: Runtime>(
 	let _claim = state.claim(&scope)?;
 
 	let before = state.thread_signs(&scope.conversation_id);
-	let admitted = state.admit(&app, scope.clone());
+	let admitted = state.admit(&app, scope.clone()).await;
 	retell_when_moved(&app, state, &scope, before);
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
@@ -1536,6 +1541,21 @@ pub async fn shutdown_session<R: Runtime>(
 	if let Some(session) = cleared.ended {
 		session.shutdown().await;
 	}
+	release_stored_prompts(app, scope).await;
+}
+
+async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) {
+	let conversation = &scope.conversation_id;
+	let Some(database) = bot_database(app) else {
+		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
+	};
+	let session = scope.runtime_session_id.clone();
+	match database.conversations().release_prompts_of_session(session).await {
+		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
+		Err(failure) => {
+			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
+		}
+	}
 }
 
 pub async fn terminate_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
@@ -1560,6 +1580,16 @@ async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
 			log::warn!("a session did not shut down at quit: {failure}");
 		}
 	}
+	release_every_stored_prompt(app).await;
+}
+
+async fn release_every_stored_prompt<R: Runtime>(app: &AppHandle<R>) {
+	let Some(database) = bot_database(app) else {
+		return log::warn!("the stored prompts stay at quit: no database");
+	};
+	if let Err(failure) = database.conversations().release_every_prompt().await {
+		log::warn!("the stored prompts stay at quit: {failure:?}");
+	}
 }
 
 #[tauri::command]
@@ -1578,6 +1608,12 @@ pub async fn agent_shutdown<R: Runtime>(
 	retell_when_moved(&app, &state, &scope, before);
 	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn a_quitting_host<R: Runtime>(app: &AppHandle<R>) {
+	app.manage(AgentState::default());
+	app.state::<AgentState>().enter_quit();
 }
 
 #[cfg(test)]
@@ -2521,8 +2557,13 @@ mod tests {
 	mod pending_questions {
 		use tauri::test::{mock_builder, MockRuntime};
 
+		use tauri::Listener;
+
 		use super::super::super::contract::{TurnEnded, TurnOutcome};
 		use super::*;
+		use crate::conversations::commands::conversation_list;
+		use crate::conversations::contract::{ConversationState, STATE_CHANGED_EVENT};
+		use crate::db::repositories::conversations::{a_pending_prompt, PendingPrompt, PromptKind};
 		use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
 		fn an_app(name: &str) -> AppOfItsOwn {
@@ -2759,7 +2800,7 @@ mod tests {
 			two_questions_and_one_elsewhere(app.handle());
 			let mut heard = events::subscribed(app.handle());
 
-			app.state::<AgentState>().admit(app.handle(), a_scope());
+			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
 
 			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
 			assert!(pending_in(app.handle(), "c1").await.is_empty());
@@ -2825,6 +2866,109 @@ mod tests {
 
 			assert!(original.try_recv().is_err());
 			assert!(a_late_listener(app.handle()).is_empty());
+		}
+
+		const ONE_SEATED_ROOM: &str = "
+			INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
+			INSERT INTO bot_spaces (bot_id, space_id, joined_at) VALUES ('b1', 'personal', 1);
+			INSERT INTO conversations (id, space_id, kind, title, created_at, updated_at)
+				VALUES ('c1', 'personal', 'topic', 'First', 1, 1);
+			INSERT INTO conversation_participants
+				(conversation_id, bot_id, role, joined_at, join_seq)
+				VALUES ('c1', 'b1', 'lead', 1, 0);
+		";
+
+		fn stored(runtime_session_id: &str, prompt_id: &str) -> PendingPrompt {
+			PendingPrompt {
+				runtime_session_id: runtime_session_id.to_owned(),
+				prompt_id: prompt_id.to_owned(),
+				..a_pending_prompt("c1", PromptKind::Permission)
+			}
+		}
+
+		async fn an_app_storing(name: &str, prompts: Vec<PendingPrompt>) -> AppOfItsOwn {
+			let app = an_app(name);
+			app.manage(AgentState::default());
+			app.manage(db::bootstrap(app.handle()));
+			let database = bot_database(app.handle()).expect("the database opens");
+			database
+				.call_mut(|connection| Ok(connection.execute_batch(ONE_SEATED_ROOM)?))
+				.await
+				.expect("the room is planted");
+			for prompt in prompts {
+				database.conversations().hold_prompt(prompt).await.expect("the prompt is stored");
+			}
+			app
+		}
+
+		async fn stored_prompts(app: &AppOfItsOwn) -> i64 {
+			bot_database(app.handle())
+				.expect("the database opens")
+				.call(|connection| {
+					Ok(connection
+						.query_row("SELECT COUNT(*) FROM pending_prompts", [], |row| row.get(0))?)
+				})
+				.await
+				.expect("the prompts are counted")
+		}
+
+		async fn listed_state(app: &AppOfItsOwn) -> ConversationState {
+			let rows = conversation_list(app.handle().clone(), app.state(), "personal".to_owned())
+				.await
+				.expect("the list reads");
+			rows.into_iter().find(|row| row.conversation.id == "c1").expect("c1 is listed").state
+		}
+
+		fn heard_states(app: &AppOfItsOwn) -> Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+			let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
+			let kept = heard.clone();
+			app.handle().listen(STATE_CHANGED_EVENT, move |event| {
+				let payload: serde_json::Value =
+					serde_json::from_str(event.payload()).expect("the payload is JSON");
+				kept.lock().expect("the list is kept").push(payload["state"].clone());
+			});
+			heard
+		}
+
+		#[tokio::test]
+		async fn a_stopped_session_releases_its_stored_prompts_and_its_conversation_reads_idle() {
+			let app = an_app_storing("stored-stopped", vec![stored("r1", "w1")]).await;
+			a_run_held_by_the_app(app.handle(), a_scope()).emit(question("q1"), the_turn());
+			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
+			let heard = heard_states(&app);
+
+			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+
+			assert_eq!(stored_prompts(&app).await, 0);
+			assert_eq!(listed_state(&app).await, ConversationState::Idle);
+			assert_eq!(*heard.lock().expect("the list is kept"), [serde_json::json!("idle")]);
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_releases_the_stored_prompts_of_its_session_only() {
+			let app =
+				an_app_storing("stored-taken-over", vec![stored("r1", "w1"), stored("r9", "w9")])
+					.await;
+			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
+			let heard = heard_states(&app);
+
+			app.state::<AgentState>().admit(app.handle(), a_scope()).await;
+
+			assert_eq!(stored_prompts(&app).await, 1);
+			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
+			assert!(heard.lock().expect("the list is kept").is_empty());
+		}
+
+		#[tokio::test]
+		async fn a_quit_leaves_no_stored_prompt_behind() {
+			let app =
+				an_app_storing("stored-quit", vec![stored("r1", "w1"), stored("r9", "w9")]).await;
+
+			end_every_session(app.handle(), &app.state::<AgentState>()).await;
+
+			assert_eq!(stored_prompts(&app).await, 0);
+			assert_eq!(listed_state(&app).await, ConversationState::Idle);
 		}
 	}
 }

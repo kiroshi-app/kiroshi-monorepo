@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,24 @@ pub const CREATED_EVENT: &str = "conversation://created";
 pub const UPDATED_EVENT: &str = "conversation://updated";
 
 pub const DELETED_EVENT: &str = "conversation://deleted";
+
+pub const STATE_CHANGED_EVENT: &str = "conversation://state-changed";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationState {
+	Idle,
+	Working,
+	NeedsYou,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationStateChanged {
+	pub conversation_id: String,
+	pub space_id: Option<String>,
+	pub state: ConversationState,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -88,9 +107,14 @@ pub struct ConversationPage {
 }
 
 impl ConversationPage {
-	pub fn of(read: conversations::ActivePage, avatars: Option<&Path>) -> Self {
+	pub fn of(read: conversations::ActivePage, states: &States, avatars: Option<&Path>) -> Self {
 		let drawn = |rows: Vec<conversations::ActiveConversation>| {
-			rows.into_iter().map(|row| ConversationInPage::of(row, avatars)).collect()
+			rows.into_iter()
+				.map(|row| {
+					let state = state_in(states, &row.conversation.id);
+					ConversationInPage::of(row, state, avatars)
+				})
+				.collect()
 		};
 		Self {
 			pinned: drawn(read.pinned),
@@ -109,18 +133,38 @@ pub struct ConversationInPage {
 	pub last_word: Option<LastWord>,
 	pub solo_bot_id: Option<String>,
 	pub active_turn: Option<ActiveTurn>,
+	pub state: ConversationState,
 }
 
 impl ConversationInPage {
-	pub fn of(row: conversations::ActiveConversation, avatars: Option<&Path>) -> Self {
+	pub fn of(
+		row: conversations::ActiveConversation,
+		state: ConversationState,
+		avatars: Option<&Path>,
+	) -> Self {
 		Self {
 			conversation: Conversation::of(row.conversation, avatars),
 			last_activity_at: row.last_activity_at,
 			last_word: row.last_word.map(Into::into),
 			solo_bot_id: row.solo_bot_id,
 			active_turn: row.active_turn.map(Into::into),
+			state,
 		}
 	}
+}
+
+pub type States = HashMap<String, ConversationState>;
+
+pub fn state_in(states: &States, conversation_id: &str) -> ConversationState {
+	states.get(conversation_id).copied().unwrap_or(ConversationState::Idle)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationInList {
+	#[serde(flatten)]
+	pub conversation: Conversation,
+	pub state: ConversationState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

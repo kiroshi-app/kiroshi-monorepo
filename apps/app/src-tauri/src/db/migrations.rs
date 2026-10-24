@@ -69,6 +69,7 @@ const MIGRATIONS: &[Migration] = &[
 	Migration { version: 60, statements: MISSION_HANDOFF },
 	Migration { version: 61, statements: MESSAGE_WRITTEN_FROM },
 	Migration { version: 62, statements: MESSAGE_AUTHOR_EMAIL_AND_COMPUTER },
+	Migration { version: 63, statements: PENDING_PROMPTS },
 ];
 
 const CONVERSATIONS_SCHEMA: &str = "
@@ -1307,6 +1308,20 @@ ALTER TABLE messages ADD COLUMN author_email TEXT
 	CHECK (author_email IS NULL OR role = 'user');
 ALTER TABLE messages ADD COLUMN author_computer TEXT
 	CHECK (author_computer IS NULL OR role = 'user');
+";
+
+const PENDING_PROMPTS: &str = "
+CREATE TABLE pending_prompts (
+	runtime_session_id TEXT NOT NULL,
+	prompt_id TEXT NOT NULL,
+	conversation_id TEXT NOT NULL REFERENCES conversations (id) ON DELETE CASCADE,
+	kind TEXT NOT NULL CHECK (kind IN ('question', 'permission')),
+	request TEXT NOT NULL CHECK (json_valid(request)),
+	asked_at INTEGER NOT NULL,
+	PRIMARY KEY (runtime_session_id, prompt_id)
+);
+
+CREATE INDEX pending_prompts_by_conversation ON pending_prompts (conversation_id);
 ";
 
 pub fn latest_version() -> u32 {

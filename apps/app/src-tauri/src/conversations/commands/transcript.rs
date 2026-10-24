@@ -5,6 +5,7 @@ use super::super::contract::{
 	TerminalCompletion, TranscriptMessage, TranscriptPage, TranscriptStoreError, TranscriptWindow,
 	MESSAGE_STORED_EVENT, UPDATED_EVENT,
 };
+use super::super::state as conversation_state;
 use super::super::{context, host_turn};
 use super::bot::ready;
 use super::room::announce_conversation;
@@ -112,11 +113,14 @@ pub async fn conversation_start_turn<R: Runtime>(
 	state: State<'_, db::DatabaseState>,
 	turn: NewTurn,
 ) -> Result<i64, TranscriptStoreError> {
-	let messages = ready(&state)?.messages();
-	if owned_by_host(&app, |host| host.owns_turn(&turn.id)) {
-		return Ok(messages.ensure_turn(turn.into()).await?);
-	}
-	Ok(messages.start_turn(turn.into()).await?)
+	let database = ready(&state)?;
+	let conversation_id = turn.conversation_id.clone();
+	let seq = match owned_by_host(&app, |host| host.owns_turn(&turn.id)) {
+		true => database.messages().ensure_turn(turn.into()).await?,
+		false => database.messages().start_turn(turn.into()).await?,
+	};
+	conversation_state::observe_reporting(&app, database, &conversation_id).await;
+	Ok(seq)
 }
 
 #[tauri::command]
@@ -127,11 +131,16 @@ pub async fn conversation_complete_turn<R: Runtime>(
 	id: String,
 	completed_at: i64,
 ) -> Result<(), TranscriptStoreError> {
-	let messages = ready(&state)?.messages();
+	let database = ready(&state)?;
 	if owned_by_host(&app, |host| host.owns_turn(&id)) {
 		return Ok(());
 	}
-	Ok(messages.complete_turn(id, completed_at).await?)
+	let conversation_id = database.messages().conversation_of_turn(id.clone()).await?;
+	database.messages().complete_turn(id, completed_at).await?;
+	if let Some(conversation_id) = conversation_id {
+		conversation_state::observe_reporting(&app, database, &conversation_id).await;
+	}
+	Ok(())
 }
 
 #[tauri::command]

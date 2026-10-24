@@ -3,10 +3,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use super::commands::AgentState;
 use super::contract::{
 	AgentEvent, AskedQuestion, ChatMessage, EventTurn, MessageCompletion, MessageRole,
 	QuestionOption, QuestionRequest, RuntimeScope, SubmittedTurn, TransportError, TurnOutcome,
@@ -19,9 +21,10 @@ use crate::conversations::commands::{announce_conversation, ready};
 use crate::conversations::context::mentioned_bot_ids;
 use crate::conversations::contract::TranscriptStoreError;
 use crate::conversations::host_turn::present_bot_ids;
+use crate::conversations::state as conversation_state;
 use crate::conversations::turn_run_deadline::arm_start_deadlines;
 use crate::db;
-use crate::db::repositories::conversations::{MISSION_KIND, TOPIC_KIND};
+use crate::db::repositories::conversations::{PendingPrompt, PromptKind, MISSION_KIND, TOPIC_KIND};
 use crate::db::repositories::messages::{EndedRun, NewAssistantMessage, NewTurn, TerminalState};
 use crate::db::DatabaseError;
 use crate::events::CONVERSATION_UPDATED;
@@ -119,6 +122,20 @@ enum Entry {
 	Drained(oneshot::Sender<()>),
 }
 
+pub(crate) enum SettledPrompts<'a> {
+	One(&'a str),
+	Every,
+}
+
+pub(crate) fn prompts_settled_by(event: &AgentEvent) -> Option<SettledPrompts<'_>> {
+	match event {
+		AgentEvent::PermissionResolved { id, .. } => Some(SettledPrompts::One(id)),
+		AgentEvent::TurnEnded { .. } => Some(SettledPrompts::Every),
+		AgentEvent::Failed { error } if error.is_fatal() => Some(SettledPrompts::Every),
+		_ => None,
+	}
+}
+
 pub trait TurnSink: Send + Sync + 'static {
 	fn emit(&self, event: AgentEvent, turn: Option<EventTurn>);
 }
@@ -140,11 +157,12 @@ impl ReplyWriter {
 			app,
 			conversation_id: scope.conversation_id.clone(),
 			bot_id: scope.bot_id.clone(),
+			runtime_session_id: scope.runtime_session_id.clone(),
 			owned,
 		};
 		tauri::async_runtime::spawn(write_then_forward(
 			queued,
-			Desk { store, turn: None, attachments, inner },
+			Desk { store, turn: None, attachments, inner, holds_prompts: false },
 		));
 		Self { entries }
 	}
@@ -246,6 +264,7 @@ struct Desk<R: Runtime> {
 	turn: Option<OpenTurn>,
 	attachments: Arc<TurnAttachments>,
 	inner: Arc<dyn TurnSink>,
+	holds_prompts: bool,
 }
 
 impl<R: Runtime> Desk<R> {
@@ -272,6 +291,7 @@ impl<R: Runtime> Desk<R> {
 	}
 
 	async fn record(&mut self, event: &AgentEvent) {
+		self.keep_prompts(event).await;
 		let Some(turn) = self.turn.as_mut() else {
 			return;
 		};
@@ -402,6 +422,34 @@ impl<R: Runtime> Desk<R> {
 		}
 	}
 
+	async fn keep_prompts(&mut self, event: &AgentEvent) {
+		if self.store.is_quitting() {
+			return;
+		}
+		let kept = match event {
+			AgentEvent::QuestionRequested { request } => {
+				self.holds_prompts = true;
+				self.store.hold_prompt(&request.id, PromptKind::Question, request).await
+			}
+			AgentEvent::PermissionRequested { request } => {
+				self.holds_prompts = true;
+				self.store.hold_prompt(&request.id, PromptKind::Permission, request).await
+			}
+			_ if !self.holds_prompts => return,
+			_ => match prompts_settled_by(event) {
+				Some(SettledPrompts::One(id)) => self.store.release_prompt(id).await,
+				Some(SettledPrompts::Every) => {
+					self.holds_prompts = false;
+					self.store.release_prompts().await
+				}
+				None => return,
+			},
+		};
+		if let Err(error) = kept {
+			self.store.report("a pending prompt", &error);
+		}
+	}
+
 	async fn ask(&mut self, request: &QuestionRequest) {
 		self.settle_open(TerminalState::Complete).await;
 		let Some(turn) = self.turn.as_mut() else {
@@ -499,6 +547,7 @@ struct Store<R: Runtime> {
 	app: AppHandle<R>,
 	conversation_id: String,
 	bot_id: String,
+	runtime_session_id: String,
 	owned: Arc<HostWrites>,
 }
 
@@ -517,6 +566,55 @@ impl<R: Runtime> Store<R> {
 			"the host could not write {id} of conversation {}: {error:?}",
 			self.conversation_id
 		);
+	}
+
+	fn is_quitting(&self) -> bool {
+		self.app.try_state::<AgentState>().is_some_and(|agent| agent.is_quitting())
+	}
+
+	async fn hold_prompt(
+		&self,
+		prompt_id: &str,
+		kind: PromptKind,
+		request: &impl Serialize,
+	) -> Result<(), TranscriptStoreError> {
+		let request = serde_json::to_string(request).map_err(|failure| {
+			DatabaseError::Sqlite(rusqlite::Error::ToSqlConversionFailure(failure.into()))
+		})?;
+		let prompt = PendingPrompt {
+			runtime_session_id: self.runtime_session_id.clone(),
+			prompt_id: prompt_id.to_owned(),
+			conversation_id: self.conversation_id.clone(),
+			kind,
+			request,
+			asked_at: now_ms(),
+		};
+		let database = self.database()?;
+		database.conversations().hold_prompt(prompt).await?;
+		self.observe_state(database).await;
+		Ok(())
+	}
+
+	async fn release_prompt(&self, prompt_id: &str) -> Result<(), TranscriptStoreError> {
+		let database = self.database()?;
+		let (session, prompt) = (self.runtime_session_id.clone(), prompt_id.to_owned());
+		database.conversations().release_prompt(session, prompt).await?;
+		self.observe_state(database).await;
+		Ok(())
+	}
+
+	async fn release_prompts(&self) -> Result<(), TranscriptStoreError> {
+		let database = self.database()?;
+		database
+			.conversations()
+			.release_prompts_of_session(self.runtime_session_id.clone())
+			.await?;
+		self.observe_state(database).await;
+		Ok(())
+	}
+
+	async fn observe_state(&self, database: &db::Database) {
+		conversation_state::observe_reporting(&self.app, database, &self.conversation_id).await;
 	}
 
 	async fn start_turn(&self, id: &str) -> Result<(), TranscriptStoreError> {
@@ -800,6 +898,8 @@ mod tests {
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
+	const RUNTIME_SESSION_ID: &str = "rs1";
+
 	type Heard = (AgentEvent, Option<EventTurn>);
 
 	const PERSONAL_SPACE: &str = "personal";
@@ -857,9 +957,16 @@ mod tests {
 				app: self.app.handle().clone(),
 				conversation_id: self.conversation_id.clone(),
 				bot_id: bot_id.to_owned(),
+				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
 				owned: Arc::default(),
 			};
-			Desk { store, turn: None, attachments: self.attachments.clone(), inner }
+			Desk {
+				store,
+				turn: None,
+				attachments: self.attachments.clone(),
+				inner,
+				holds_prompts: false,
+			}
 		}
 
 		async fn in_a_room_of_two(name: &str) -> (Self, String) {
@@ -1729,10 +1836,12 @@ mod tests {
 				"sectionId",
 				"soloBotId",
 				"spaceId",
+				"state",
 				"title",
 				"updatedAt"
 			]
 		);
+		assert_eq!(conversation["state"], json!("working"));
 		assert_eq!(conversation["id"], json!(written.conversation_id));
 		assert_eq!(conversation["spaceId"], json!("personal"));
 		assert_eq!(conversation["sectionId"], json!(null));
@@ -1942,5 +2051,109 @@ mod tests {
 		assert_eq!(last_active_turn(&heard), json!(null));
 		assert!(written.completed_at("t1").await.is_some(), "the cancelled turn was left open");
 		assert_eq!(runs_left, 0, "the cancelled run left a run behind");
+	}
+
+	fn a_permission_request(request_id: &str) -> AgentEvent {
+		AgentEvent::PermissionRequested {
+			request: super::super::contract::PermissionRequest {
+				id: request_id.to_owned(),
+				tool_name: "Bash".to_owned(),
+				title: "Run the tests".to_owned(),
+				detail: None,
+			},
+		}
+	}
+
+	fn resolved(request_id: &str) -> AgentEvent {
+		AgentEvent::PermissionResolved {
+			id: request_id.to_owned(),
+			decision: super::super::contract::PermissionDecision::AllowOnce,
+		}
+	}
+
+	async fn held_prompts(written: &Written) -> Vec<(String, String, String)> {
+		written
+			.database()
+			.call(|connection| {
+				let mut statement = connection.prepare(
+					"SELECT runtime_session_id, prompt_id, kind FROM pending_prompts
+					ORDER BY prompt_id",
+				)?;
+				let rows =
+					statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+				Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+			})
+			.await
+			.expect("the prompts are read")
+	}
+
+	fn held(prompt_id: &str, kind: &str) -> (String, String, String) {
+		(RUNTIME_SESSION_ID.to_owned(), prompt_id.to_owned(), kind.to_owned())
+	}
+
+	#[tokio::test]
+	async fn a_question_and_a_permission_request_stay_persisted_until_each_is_resolved() {
+		let written = Written::new("prompts-resolved").await;
+		let mut desk = written.desk();
+		desk.open_turn(submitted("t1", "p1")).await;
+
+		desk.record(&question("q1")).await;
+		desk.record(&a_permission_request("w1")).await;
+		assert_eq!(
+			held_prompts(&written).await,
+			[held("q1", "question"), held("w1", "permission")]
+		);
+
+		desk.record(&resolved("q1")).await;
+		assert_eq!(held_prompts(&written).await, [held("w1", "permission")]);
+		desk.record(&resolved("w1")).await;
+		assert_eq!(held_prompts(&written).await, []);
+	}
+
+	#[tokio::test]
+	async fn the_end_of_its_turn_releases_every_prompt_of_the_session() {
+		let written = Written::new("prompts-turn-ended").await;
+		let mut desk = written.desk();
+		desk.open_turn(submitted("t1", "p1")).await;
+		desk.record(&question("q1")).await;
+		desk.record(&a_permission_request("w1")).await;
+
+		desk.record(&turn_ended()).await;
+
+		assert_eq!(held_prompts(&written).await, []);
+	}
+
+	#[tokio::test]
+	async fn a_run_writes_no_prompt_once_its_host_quits() {
+		let written = Written::new("prompts-quit").await;
+		let mut desk = written.desk();
+		desk.open_turn(submitted("t1", "p1")).await;
+		desk.record(&question("q1")).await;
+
+		commands::a_quitting_host(written.app.handle());
+		desk.record(&turn_ended()).await;
+
+		assert_eq!(held_prompts(&written).await, [held("q1", "question")]);
+	}
+
+	#[tokio::test]
+	async fn a_held_prompt_announces_its_conversation_needs_you_and_its_release_that_it_does_not() {
+		let written = Written::new("prompts-announced").await;
+		let heard = Arc::new(Mutex::new(Vec::new()));
+		let kept = heard.clone();
+		written.app.handle().listen(
+			crate::conversations::contract::STATE_CHANGED_EVENT,
+			move |event| {
+				let payload: serde_json::Value =
+					serde_json::from_str(event.payload()).expect("the payload is JSON");
+				kept.lock().expect("the list is kept").push(payload["state"].clone());
+			},
+		);
+		let mut desk = written.desk();
+
+		desk.record(&question("q1")).await;
+		desk.record(&resolved("q1")).await;
+
+		assert_eq!(*heard.lock().expect("the list is kept"), [json!("needs_you"), json!("idle")]);
 	}
 }

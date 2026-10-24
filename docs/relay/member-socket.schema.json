@@ -2280,6 +2280,24 @@
       ],
       "type": "object"
     },
+    "ConversationInList": {
+      "allOf": [
+        {
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/ConversationState"
+            }
+          },
+          "required": [
+            "state"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Conversation"
+        }
+      ]
+    },
     "ConversationInPage": {
       "allOf": [
         {
@@ -2316,13 +2334,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "state": {
+              "$ref": "#/$defs/ConversationState"
             }
           },
           "required": [
             "lastActivityAt",
             "lastWord",
             "soloBotId",
-            "activeTurn"
+            "activeTurn",
+            "state"
           ],
           "type": "object"
         },
@@ -2410,6 +2432,39 @@
         "pinned",
         "conversations",
         "nextCursor"
+      ],
+      "type": "object"
+    },
+    "ConversationState": {
+      "enum": [
+        "idle",
+        "working",
+        "needs_you"
+      ]
+    },
+    "ConversationStateChanged": {
+      "properties": {
+        "conversationId": {
+          "type": "string"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ConversationState"
+        }
+      },
+      "required": [
+        "conversationId",
+        "spaceId",
+        "state"
       ],
       "type": "object"
     },
@@ -9489,7 +9544,7 @@
       },
       "ok": {
         "items": {
-          "$ref": "#/$defs/Conversation"
+          "$ref": "#/$defs/ConversationInList"
         },
         "type": "array"
       }
@@ -11648,6 +11703,11 @@
     "conversation://message-stored": {
       "payload": {
         "$ref": "#/$defs/TranscriptMessage"
+      }
+    },
+    "conversation://state-changed": {
+      "payload": {
+        "$ref": "#/$defs/ConversationStateChanged"
       }
     },
     "conversation://updated": {

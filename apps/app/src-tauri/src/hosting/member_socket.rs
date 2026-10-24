@@ -33,6 +33,7 @@ const PAYLOADS: &[(&str, Definition)] = &[
 	payload_of(events::CONVERSATION_DELETED),
 	payload_of(events::MESSAGE_STORED),
 	payload_of(events::CONVERSATION_UPDATED),
+	payload_of(events::CONVERSATION_STATE_CHANGED),
 	payload_of(events::HOSTING_CHANGED),
 	payload_of(events::MEMBERS_CHANGED),
 	payload_of(events::MISSION_CHANGED),
