@@ -534,11 +534,11 @@ export const ConversationAnsweredDark = meta.story({
 	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
 })
 
-export const ConversationLongQuestionAt240Pixels = meta.story({
+export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 	tags: ["test-only"],
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
-		sidebarWidth: 240,
+		sidebarWidth: SIDEBAR_MIN_WIDTH,
 	},
 	args: {
 		conversation: {

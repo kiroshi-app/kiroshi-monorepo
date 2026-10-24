@@ -951,7 +951,7 @@ navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark
-navigation-appsidebarconversationrow--conversation-long-question-at-240-pixels
+navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
 navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered

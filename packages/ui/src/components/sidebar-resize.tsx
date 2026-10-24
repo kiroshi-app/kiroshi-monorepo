@@ -16,7 +16,7 @@ import { useSidebar } from "@workspace/ui/components/ui/sidebar"
 import { cn } from "@workspace/ui/lib/utils"
 
 const SIDEBAR_DEFAULT_WIDTH = 304
-const SIDEBAR_MIN_WIDTH = 192
+const SIDEBAR_MIN_WIDTH = 208
 const SIDEBAR_MAX_WIDTH = 416
 const SIDEBAR_WIDTH_STEP = 16
 

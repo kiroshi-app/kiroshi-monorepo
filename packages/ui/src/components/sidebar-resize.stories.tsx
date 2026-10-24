@@ -99,7 +99,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"How wide the panel is, and who decides. The provider owns the width and clamps every answer between 192px and 416px, so no caller can ever hand the shell a width it cannot draw; the handle is the grip on the panel's edge, a `separator` carrying the width as its value. It is a pointer drag, an arrow key step of 16px, and a double press back to the default — three ways to the same number. The handle takes itself off screen wherever a width is not the reader's to set: the icon rail, a narrow window, a shell that declared itself fixed.",
+					"How wide the panel is, and who decides. The provider owns the width and clamps every answer between 208px and 416px, so no caller can ever hand the shell a width it cannot draw; the handle is the grip on the panel's edge, a `separator` carrying the width as its value. It is a pointer drag, an arrow key step of 16px, and a double press back to the default — three ways to the same number. The handle takes itself off screen wherever a width is not the reader's to set: the icon rail, a narrow window, a shell that declared itself fixed.",
 			},
 		},
 	},
@@ -111,7 +111,7 @@ export const Clamped = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader asking for a panel narrower than the app can draw. Check that the width stops at 192px instead of following the pointer to zero, and that the value the handle announces is the clamped one rather than the one that was asked for — the bound belongs to the provider, so nothing downstream ever sees an impossible width.",
+					"The reader asking for a panel narrower than the app can draw. Check that the width stops at 208px instead of following the pointer to zero, and that the value the handle announces is the clamped one rather than the one that was asked for — the bound belongs to the provider, so nothing downstream ever sees an impossible width.",
 			},
 		},
 	},
