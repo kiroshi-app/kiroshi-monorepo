@@ -24,10 +24,7 @@ import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
-import {
-	DIGIT_KEY_LIMIT,
-	useDigitKeys,
-} from "@workspace/ui/hooks/use-digit-keys"
+import { useDigitKeys } from "@workspace/ui/hooks/use-digit-keys"
 import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invalid"
 import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
@@ -219,7 +216,7 @@ const ToolQuestion = ({
 			: undefined
 
 	useDigitKeys({
-		count: Math.min(digitItem?.options.length ?? 0, DIGIT_KEY_LIMIT),
+		count: digitItem?.options.length ?? 0,
 		onDigit: (digit) => {
 			const option = digitItem?.options[digit - 1]
 			if (!digitItem || !option) return

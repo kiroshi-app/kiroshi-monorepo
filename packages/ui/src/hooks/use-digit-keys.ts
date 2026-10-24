@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 
 import { isTypingTarget } from "@workspace/ui/lib/typing-target"
 
-export const DIGIT_KEY_LIMIT = 9
+const DIGIT_KEY_LIMIT = 9
 
 const bareDigitOf = ({
 	key,
