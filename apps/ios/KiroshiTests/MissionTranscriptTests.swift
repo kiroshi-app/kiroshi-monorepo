@@ -42,7 +42,7 @@ struct MissionTranscriptTests {
             ])
     }
 
-    @Test func theCompanionSpeaksInOneBubblePerParagraphLikeTheConversationThread() {
+    @Test func theCompanionSpeaksInOneBubblePerMessageLikeTheConversationThread() {
         let shown = transcript([
             MissionTesting.message(
                 id: "reply", seq: 1, role: "assistant",
@@ -52,7 +52,7 @@ struct MissionTranscriptTests {
         ])
 
         let reply = shown.entries.first
-        #expect(reply?.bubbles.map(\.position) == [.first, .last])
+        #expect(reply?.bubbles.map(\.position) == [.alone])
         #expect(reply?.authorId == "b-1")
         #expect(reply?.closesRun == true)
         #expect(reply?.time == "8:11\u{202F}AM")

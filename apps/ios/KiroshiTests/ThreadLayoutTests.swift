@@ -42,29 +42,16 @@ struct ThreadLayoutTests {
         ]
     }
 
-    @Test func aParagraphIsOneBubble() {
-        #expect(Paragraphs.split("One.\n\nTwo.\n \n\n\nThree.") == ["One.", "Two.", "Three."])
-        #expect(Paragraphs.split("Line one\nLine two") == ["Line one\nLine two"])
-        #expect(Paragraphs.split("\n\nAlone.\n\n") == ["Alone."])
-        #expect(Paragraphs.split("") == [])
-    }
-
-    @Test func aCodeBlockStaysInOneBubbleEvenWithBlankLines() {
-        let text = "Here:\n\n```swift\nlet a = 1\n\nlet b = 2\n```\n\nDone."
-        #expect(
-            Paragraphs.split(text) == ["Here:", "```swift\nlet a = 1\n\nlet b = 2\n```", "Done."])
-    }
-
     @Test func aRunJoinsItsBubblesAndPutsTheAvatarUnderTheLastOne() {
         let shown = ThreadLayout.mark(releaseNotes, time: time)
 
-        #expect(shown.map(\.bubbles.count) == [1, 2, 1])
+        #expect(shown.map(\.bubbles.count) == [1, 1, 1])
         #expect(shown.map(\.opensRun) == [true, true, false])
         #expect(shown.map(\.closesRun) == [true, false, true])
         #expect(shown[0].bubbles.map(\.position) == [.alone])
-        #expect(shown[1].bubbles.map(\.position) == [.first, .middle])
+        #expect(shown[1].bubbles.map(\.position) == [.first])
         #expect(shown[2].bubbles.map(\.position) == [.last])
-        #expect(shown[1].bubbles.map(\.id) == ["drafted-0", "drafted-1"])
+        #expect(shown[1].bubbles.map(\.id) == ["drafted-0"])
     }
 
     @Test func aLongPauseClosesTheRun() {
@@ -105,15 +92,22 @@ struct ThreadLayoutTests {
         #expect(shown.flatMap(\.bubbles).map(\.position) == [.first, .last])
     }
 
-    @Test func aCompanionsMessageStillSplitsIntoOneBubblePerParagraph() {
+    @Test func aCompanionsMessageIsOneBubbleWhateverItHolds() {
         let text = "Drafted.\n\nThree sections.\n\n- new\n- fixed"
         let shown = ThreadLayout.mark([message("reply", text, at: at(9, 0))], time: time)
 
-        #expect(
-            shown[0].bubbles.map { String($0.text.characters) } == [
-                "Drafted.", "Three sections.", "- new\n- fixed",
-            ])
-        #expect(shown[0].bubbles.map(\.position) == [.first, .middle, .last])
+        #expect(shown[0].bubbles.map(\.id) == ["reply-0"])
+        #expect(shown[0].bubbles.map(\.position) == [.alone])
+        #expect(shown[0].bubbles[0].markdown?.blocks.count == 3)
+    }
+
+    @Test func aPersonsMessageIsNeverParsed() {
+        let shown = ThreadLayout.mark(
+            [message("ask", "# Not a heading\n\n- nor a list", at: at(9, 0), isYours: true)],
+            time: time)
+
+        #expect(shown[0].bubbles[0].markdown == nil)
+        #expect(String(shown[0].bubbles[0].text.characters) == "# Not a heading\n\n- nor a list")
     }
 
     @Test func eachDayOpensWithItsSeparatorAndEachMessageCarriesItsTime() {
@@ -208,7 +202,7 @@ struct ThreadLayoutTests {
 }
 
 extension ThreadStoreTests {
-    @Test func theThreadSplitsARepliedParagraphIntoBubblesAndTimesEachMessage() async {
+    @Test func theThreadKeepsARepliedMessageInOneBubbleAndTimesIt() async {
         let host = TestHost(messages: [
             "chat-juniper": [
                 TestHost.message(
@@ -223,7 +217,7 @@ extension ThreadStoreTests {
         let shown = store.entries
         #expect(
             shown.first?.bubbles.map { String($0.text.characters) } == [
-                "Drafted.", "Applications first.",
+                "Drafted.\n\nApplications first."
             ])
         #expect(shown.first?.dayLabel == "Today")
         #expect(shown.first?.time.isEmpty == false)

@@ -20,31 +20,6 @@ struct Bubble: Identifiable, Equatable {
 
     let id: String
     let text: AttributedString
+    var markdown: MarkdownMessage?
     var position = Position.alone
-}
-
-enum Paragraphs {
-    static func split(_ text: String) -> [String] {
-        var paragraphs: [String] = []
-        var lines: [Substring] = []
-        var isInCode = false
-        func close() {
-            if !lines.isEmpty {
-                paragraphs.append(lines.joined(separator: "\n"))
-            }
-            lines = []
-        }
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                isInCode.toggle()
-            }
-            if !isInCode, line.allSatisfy(\.isWhitespace) {
-                close()
-            } else {
-                lines.append(line)
-            }
-        }
-        close()
-        return paragraphs
-    }
 }
