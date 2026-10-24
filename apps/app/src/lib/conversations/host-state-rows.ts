@@ -26,7 +26,7 @@ const moreUrgentOf = (
 	other: ConversationHostState,
 ): ConversationHostState => (URGENCY[other] > URGENCY[one] ? other : one)
 
-export type BotConversationsInSpace = {
+type BotConversationsInSpace = {
 	hostStates: ConversationHostStates
 	soloThreads: SoloThreads
 	conversations: Conversation[]
