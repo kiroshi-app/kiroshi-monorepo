@@ -3,7 +3,8 @@ set -euo pipefail
 
 readonly SLOT_DIRECTORY="$HOME/.kiroshi/slots"
 readonly CORES_PER_SLOT=3
-readonly POLL_SECONDS=1
+readonly POLL_SECONDS=0.5
+readonly RELEASE_POLL_SECONDS=0.2
 readonly NOTICE_SECONDS=30
 readonly LOCK_BUSY=75
 readonly USAGE_ERROR=64
@@ -48,6 +49,14 @@ slot_count() {
 	echo "$KIROSHI_SLOTS"
 }
 
+hold_slot_while_running() {
+	local command_pid=$1
+	trap '' INT TERM HUP
+	while kill -0 "$command_pid" 2>/dev/null; do
+		sleep "$RELEASE_POLL_SECONDS" 9>&-
+	done
+}
+
 take_slot() {
 	local slot="$SLOT_DIRECTORY/$1" status=0
 	exec 9>>"$slot"
@@ -70,6 +79,8 @@ next_notice=$started
 while true; do
 	for ((slot = 1; slot <= slots; slot++)); do
 		if take_slot "$slot"; then
+			hold_slot_while_running $$ </dev/null >/dev/null 2>&1 &
+			exec 9>&-
 			exec "$@"
 		fi
 	done

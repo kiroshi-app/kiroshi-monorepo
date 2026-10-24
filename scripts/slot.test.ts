@@ -57,6 +57,15 @@ const waitUntil = async (condition: () => boolean, timeoutMs: number) => {
 	return condition()
 }
 
+const freesTheSlotWithin = async (timeoutMs: number) => {
+	const next = { name: "next" }
+	const waiting = spawnHolder(next, "1")
+	const hasTaken = await waitUntil(() => hasStarted(next), timeoutMs)
+	release(next)
+	await waiting.exited
+	return hasTaken
+}
+
 beforeEach(() => {
 	home = mkdtempSync(join(tmpdir(), "kiroshi-slot-home-"))
 	marks = mkdtempSync(join(tmpdir(), "kiroshi-slot-marks-"))
@@ -119,12 +128,29 @@ describe("scripts/slot.sh with the lock directory", () => {
 		expect(await waiting.exited).toBe(0)
 	}, 15000)
 
-	it("exits with the exit code of the wrapped command", async () => {
-		expect(await spawnSlotted(["bash", "-c", "exit 42"]).exited).toBe(42)
+	it.each([42, 75])(
+		"exits with the exit code %d of the wrapped command",
+		async (code) => {
+			const exiting = spawnSlotted(["bash", "-c", `exit ${code}`])
+
+			expect(await exiting.exited).toBe(code)
+			expect(await new Response(exiting.stderr).text()).toBe("")
+		},
+	)
+
+	it("frees the slot within 2 seconds of a command whose background child outlives it", async () => {
+		const forking = spawnSlotted([
+			"bash",
+			"-c",
+			"(sleep 5 </dev/null >/dev/null 2>&1) & exit 0",
+		])
+		expect(await forking.exited).toBe(0)
+
+		expect(await freesTheSlotWithin(2000)).toBe(true)
 	})
 
 	it.each(["SIGINT", "SIGTERM"] as const)(
-		"delivers %s to the wrapped command",
+		"delivers %s to the wrapped command and frees the slot once it exits",
 		async (signal) => {
 			const trapping = { name: "trapping" }
 			const running = spawnSlotted([
@@ -136,6 +162,7 @@ describe("scripts/slot.sh with the lock directory", () => {
 
 			running.kill(signal)
 			expect(await running.exited).toBe(3)
+			expect(await freesTheSlotWithin(2000)).toBe(true)
 		},
 	)
 
