@@ -12,11 +12,18 @@ import {
 } from "@workspace/ui/components/kiroshi-hexagon"
 import { OutlinedHexagon } from "@workspace/ui/components/outlined-hexagon"
 
+type PileLayout = "overlapping" | "side-by-side"
+
 const PILE_LIMIT = 3
 const HEXAGON_SIDE = 14
 const STEP = 10
 const KNOCKOUT_WIDTH = 1.5
-const COUNTER_FONT_SIZE = 6.3
+const COUNTER_FONT_RATIO = 0.45
+
+const SIDE: Record<PileLayout, number> = {
+	overlapping: HEXAGON_SIDE,
+	"side-by-side": 16,
+}
 
 const HEXAGON = hexagonOfWidth(HEXAGON_SIDE)
 
@@ -37,9 +44,17 @@ const KNOCKED_OUT_UNDER_NEXT: CSSProperties = {
 	maskComposite: "exclude",
 }
 
-const PILE = "relative block h-4 shrink-0"
+const PILE: Record<PileLayout, string> = {
+	overlapping: "relative block h-4 shrink-0",
+	"side-by-side": "flex h-4 w-fit shrink-0 gap-0.5",
+}
 
-const SLOT = "absolute top-px size-3.5"
+const SLOT: Record<PileLayout, string> = {
+	overlapping: "absolute top-px size-3.5",
+	"side-by-side": "relative size-4",
+}
+
+const FACE = "pointer-events-none absolute inset-0 size-full"
 
 const COUNTER_TEXT = "font-bold tabular-nums"
 
@@ -52,29 +67,39 @@ type PileBot = Omit<ConversationParticipant, "isPerson">
 
 type ConversationBotPileProps = {
 	bots: PileBot[]
+	layout?: PileLayout
 }
 
 type PileSlotProps = {
-	index: number
-	isCovered: boolean
+	layout: PileLayout
+	style?: CSSProperties
 	slot: string
 	children: ReactNode
 }
 
-const PileSlot = ({ index, isCovered, slot, children }: PileSlotProps) => (
-	<span
-		className={SLOT}
-		data-slot={slot}
-		style={{
-			left: index * STEP,
-			...(isCovered ? KNOCKED_OUT_UNDER_NEXT : undefined),
-		}}
-	>
+const PileSlot = ({ layout, style, slot, children }: PileSlotProps) => (
+	<span className={SLOT[layout]} data-slot={slot} style={style}>
 		{children}
 	</span>
 )
 
-const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
+type HexagonFaceProps = {
+	side: number
+	fill: string
+	children: ReactNode
+}
+
+const HexagonFace = ({ side, fill, children }: HexagonFaceProps) => (
+	<svg aria-hidden="true" className={FACE} viewBox={`0 0 ${side} ${side}`}>
+		<path d={roundedHexagonPath(hexagonOfWidth(side))} style={{ fill }} />
+		{children}
+	</svg>
+)
+
+const ConversationBotPile = ({
+	bots,
+	layout = "overlapping",
+}: ConversationBotPileProps) => {
 	const { t } = useTranslation("bots")
 	const isOverflowing = bots.length > PILE_LIMIT
 	const shown = isOverflowing ? bots.slice(0, PILE_LIMIT - 1) : bots
@@ -85,21 +110,48 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 
 	if (slotCount === 0) return null
 
+	const isOverlapping = layout === "overlapping"
+	const side = SIDE[layout]
+	const counterFontSize = side * COUNTER_FONT_RATIO
+	const slotStyleOf = (index: number): CSSProperties | undefined =>
+		isOverlapping
+			? {
+					left: index * STEP,
+					...(index < slotCount - 1 ? KNOCKED_OUT_UNDER_NEXT : undefined),
+				}
+			: undefined
+	const counter = (
+		<text
+			className={COUNTER_TEXT}
+			fontSize={counterFontSize}
+			style={{ fill: "var(--conversation-pile-overflow-foreground)" }}
+			textAnchor="middle"
+			x="50%"
+			y={side / 2 + counterFontSize * CAP_CENTRE_RATIO}
+		>
+			{overflowLabel}
+		</text>
+	)
+
 	return (
 		<span
 			aria-hidden={overflowLabel ? undefined : "true"}
 			aria-label={overflowLabel ?? undefined}
-			className={PILE}
+			className={PILE[layout]}
 			data-slot="conversation-bot-pile"
 			role="img"
-			style={{ width: HEXAGON_SIDE + STEP * (slotCount - 1) }}
+			style={
+				isOverlapping
+					? { width: HEXAGON_SIDE + STEP * (slotCount - 1) }
+					: undefined
+			}
 		>
 			{shown.map((bot, index) => (
 				<PileSlot
-					index={index}
-					isCovered={index < slotCount - 1}
 					key={bot.id}
+					layout={layout}
 					slot="conversation-bot-pile-bot"
+					style={slotStyleOf(index)}
 				>
 					<BotIdentityAvatar
 						blot={bot.blot}
@@ -107,33 +159,32 @@ const ConversationBotPile = ({ bots }: ConversationBotPileProps) => {
 						kind={bot.kind}
 						name={bot.name}
 						seed={bot.id}
-						size={HEXAGON_SIDE}
+						size={side}
 						working={bot.working}
 					/>
-					<OutlinedHexagon fill="none" side={HEXAGON_SIDE} />
+					{isOverlapping ? (
+						<OutlinedHexagon fill="none" side={HEXAGON_SIDE} />
+					) : null}
 				</PileSlot>
 			))}
 			{isOverflowing ? (
 				<PileSlot
-					index={PILE_LIMIT - 1}
-					isCovered={false}
+					layout={layout}
 					slot="conversation-bot-pile-overflow"
+					style={slotStyleOf(PILE_LIMIT - 1)}
 				>
-					<OutlinedHexagon
-						fill="var(--conversation-pile-overflow)"
-						side={HEXAGON_SIDE}
-					>
-						<text
-							className={COUNTER_TEXT}
-							fontSize={COUNTER_FONT_SIZE}
-							style={{ fill: "var(--conversation-pile-overflow-foreground)" }}
-							textAnchor="middle"
-							x="50%"
-							y={HEXAGON.halfWidth + COUNTER_FONT_SIZE * CAP_CENTRE_RATIO}
+					{isOverlapping ? (
+						<OutlinedHexagon
+							fill="var(--conversation-pile-overflow)"
+							side={HEXAGON_SIDE}
 						>
-							{overflowLabel}
-						</text>
-					</OutlinedHexagon>
+							{counter}
+						</OutlinedHexagon>
+					) : (
+						<HexagonFace fill="var(--conversation-pile-overflow)" side={side}>
+							{counter}
+						</HexagonFace>
+					)}
 				</PileSlot>
 			) : null}
 		</span>

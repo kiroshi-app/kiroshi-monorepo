@@ -24,7 +24,6 @@ import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 const meta = preview.meta({
 	title: "Navigation/AppSidebarBotRow",
 	component: BotRosterRow,
-	tags: ["test-only"],
 	parameters: { layout: "fullscreen" },
 	decorators: [
 		(Story) => (
@@ -49,6 +48,7 @@ const meta = preview.meta({
 })
 
 export const SelectedBot = meta.story({
+	tags: ["test-only"],
 	play: async ({ args, canvasElement }) => {
 		const row = slotIn(canvasElement, "sidebar-menu-button")
 		await expect(row).toHaveAttribute("aria-current", "page")
@@ -59,6 +59,7 @@ export const SelectedBot = meta.story({
 })
 
 export const BotOwnRowKeepsItsAvatarAndNoPile = meta.story({
+	tags: ["test-only"],
 	args: { isSelected: false },
 	play: async ({ canvasElement }) => {
 		const row = slotIn(canvasElement, "sidebar-menu-button")
@@ -74,6 +75,7 @@ export const BotOwnRowKeepsItsAvatarAndNoPile = meta.story({
 })
 
 export const WorkingBotKeepsItsTimestamp = meta.story({
+	tags: ["test-only"],
 	args: { bot: BEACON, isSelected: false },
 	play: async ({ canvas, canvasElement }) => {
 		const row = slotIn(canvasElement, "sidebar-menu-button")
@@ -124,17 +126,20 @@ export const BotNeedingYouDark = meta.story({
 })
 
 export const BotAnswered = meta.story({
+	tags: ["test-only"],
 	args: { isSelected: false },
 	play: ({ canvasElement }) => expectBotAnswered(canvasElement),
 })
 
 export const BotAnsweredDark = meta.story({
+	tags: ["test-only"],
 	globals: DARK,
 	args: { isSelected: false },
 	play: ({ canvasElement }) => expectBotAnswered(canvasElement),
 })
 
 export const BotLongQuestionStaysOnOneLine = meta.story({
+	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	args: {
 		bot: { ...ATLAS_NEEDING_YOU, pendingQuestion: LONG_PENDING_QUESTION },
