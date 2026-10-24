@@ -16,9 +16,9 @@ Run from the repo root:
 ```bash
 bun run ios:generate  # Generate apps/ios/Kiroshi.xcodeproj from project.yml
 bun run ios:build     # Generate, then build for the iOS Simulator
-bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the iPhone 17 simulator (iOS 27.0), UI tests on two clones of it (IOS_SIMULATOR="OPE-NN iPhone 17" picks another)
+bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the simulator IOS_SIMULATOR names ("iPhone 17" when unset), UI tests on two clones of it
 bun run ios:test:unit # Generate, then run the unit tests only (the KiroshiUnit plan) on the same simulator
-bun run ios:run       # Generate, build, then launch the app on the booted iOS 27 iPhone, else an iPhone 17, and open DeviceHub (IOS_SIMULATOR="iPhone 18 Pro" picks another)
+bun run ios:run       # Generate, build, then launch the app on the same simulator and open DeviceHub
 ```
 
 The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes in parallel on two clones of the simulator (CI runs them one after the other, clones never start a UI test on its hosted runner), so a UI test never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
@@ -48,12 +48,14 @@ rm -rf ~/Library/Caches/kiroshi-ios
 
 ## Testing while you work
 
-One simulator per ticket, booted once and reused by every run:
+One simulator per ticket, kept for the whole mission. `apps/ios/scripts/simulator.ts` prints the UDID of the simulator `IOS_SIMULATOR` names: it creates it the first time (the device type is the end of the name, `iPhone 17` here), boots it when it's shut down, and never deletes it. `ios:test`, `ios:test:unit` and `ios:run` go through it, so every run of the mission reuses the same booted simulator:
 
 ```bash
-export SIMULATOR=$(xcrun simctl create "OPE-NN iPhone 17" "iPhone 17")
-xcrun simctl bootstatus "$SIMULATOR" -b
+export IOS_SIMULATOR="OPE-NN iPhone 17"
+export SIMULATOR=$(bun apps/ios/scripts/simulator.ts)
 ```
+
+With several simulators booted, `booted` in the commands of this file picks any of them: give `$SIMULATOR` instead, e.g. `xcrun simctl io "$SIMULATOR" screenshot shot.png`.
 
 Build the tests once after each change, then run only the classes your diff touches, as often as you need, without building again:
 
@@ -63,7 +65,14 @@ apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiros
 apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
 ```
 
-The whole plan runs once, before the push, on the same simulator: `IOS_SIMULATOR="OPE-NN iPhone 17" bun run ios:test`, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet. Delete the simulator with the ticket: `xcrun simctl delete "$SIMULATOR"`.
+The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs the UI tests on two clones of it, created, booted and deleted by xcodebuild, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
+
+At the end of the mission, shut down and delete that simulator only, never `xcrun simctl shutdown all`, which stops every other agent's:
+
+```bash
+xcrun simctl shutdown "$SIMULATOR"
+xcrun simctl delete "$SIMULATOR"
+```
 
 ## Device keys and protocol v2
 
