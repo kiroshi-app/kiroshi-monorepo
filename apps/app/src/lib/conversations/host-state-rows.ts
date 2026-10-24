@@ -1,7 +1,6 @@
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 
-import { presentParticipants } from "./roster-conversations"
-import type { Conversation, ConversationHostState } from "./store-contract"
+import type { ConversationHostState } from "./store-contract"
 
 import type { SoloThreads } from "../bots/roster-line"
 import type { ConversationHostStates } from "../bots/roster-pages"
@@ -26,45 +25,25 @@ const moreUrgentOf = (
 	other: ConversationHostState,
 ): ConversationHostState => (URGENCY[other] > URGENCY[one] ? other : one)
 
-type BotConversationsInSpace = {
+type BotSoloThreadsInSpace = {
 	hostStates: ConversationHostStates
 	soloThreads: SoloThreads
-	conversations: Conversation[]
 	spaceId: string | null
 }
-
-type BotSeat = {
-	conversationId: string
-	botId: string
-}
-
-const soloSeatsIn = (soloThreads: SoloThreads, spaceId: string | null) =>
-	Object.entries(soloThreads).flatMap(([conversationId, line]): BotSeat[] =>
-		line.spaceId === spaceId ? [{ conversationId, botId: line.botId }] : [],
-	)
-
-const roomSeatsIn = (conversations: Conversation[]) =>
-	conversations.flatMap((conversation) =>
-		presentParticipants(conversation).map(
-			({ botId }): BotSeat => ({ conversationId: conversation.id, botId }),
-		),
-	)
 
 export const botHostStatesIn = ({
 	hostStates,
 	soloThreads,
-	conversations,
 	spaceId,
-}: BotConversationsInSpace): ConversationHostStates => {
+}: BotSoloThreadsInSpace): ConversationHostStates => {
 	const botStates: ConversationHostStates = {}
-	const seats = [
-		...soloSeatsIn(soloThreads, spaceId),
-		...roomSeatsIn(conversations),
-	]
-	for (const { conversationId, botId } of seats) {
+	for (const [conversationId, line] of Object.entries(soloThreads)) {
 		const state = hostStates[conversationId]
-		if (state !== undefined) {
-			botStates[botId] = moreUrgentOf(botStates[botId] ?? "idle", state)
+		if (line.spaceId === spaceId && state !== undefined) {
+			botStates[line.botId] = moreUrgentOf(
+				botStates[line.botId] ?? "idle",
+				state,
+			)
 		}
 	}
 	return botStates

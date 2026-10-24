@@ -22,7 +22,7 @@ import {
 	withNeedsYou,
 	workingFromHost,
 } from "../conversations/host-state-rows"
-import type { Bot, Conversation } from "../conversations/store-contract"
+import type { Bot } from "../conversations/store-contract"
 import {
 	type missionsBySpaceId,
 	missionsIn,
@@ -31,7 +31,6 @@ import {
 
 type RosterBotsBySpaceInput = {
 	badges: ReturnType<typeof useBotBadges>
-	conversationRosters: Record<string, Conversation[]>
 	hostStates: ConversationHostStates
 	missions: ReturnType<typeof missionsBySpaceId>
 	now: number
@@ -44,7 +43,6 @@ type RosterBotsBySpaceInput = {
 
 export const useRosterBotsBySpace = ({
 	badges,
-	conversationRosters,
 	hostStates,
 	missions,
 	now,
@@ -65,7 +63,6 @@ export const useRosterBotsBySpace = ({
 				const botStates = botHostStatesIn({
 					hostStates,
 					soloThreads,
-					conversations: conversationRosters[spaceId] ?? [],
 					spaceId,
 				})
 				return [
@@ -97,7 +94,6 @@ export const useRosterBotsBySpace = ({
 		)
 	}, [
 		rosters,
-		conversationRosters,
 		hostStates,
 		soloThreads,
 		working,

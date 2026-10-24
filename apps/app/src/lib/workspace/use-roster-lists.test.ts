@@ -214,8 +214,9 @@ const hostReads = (
 	)
 
 describe("useRosterLists", () => {
-	it("shows a pending question on its conversation row and companion row while the host reads needs_you", async () => {
+	it("shows a room question on its room row and leaves the companion row to its solo thread", async () => {
 		const store = createFakeTranscriptStore()
+		const soloThread = await store.mainChat(BOT, null)
 		const conversation = await store.createConversation({
 			spaceId: SPACE,
 			sectionId: null,
@@ -246,22 +247,34 @@ describe("useRosterLists", () => {
 			),
 		)
 		expect(conversationRow()?.badge).toBe("attention")
-		expect(botRow()).toMatchObject({
-			badge: "attention",
-			pendingQuestion: "Which branch should I use?",
-		})
+		expect(botRow()).toMatchObject({ status: "idle", badge: undefined })
+		expect(botRow()?.pendingQuestion).toBeUndefined()
 
 		hostReads(roster, conversation.id, "working")
 
 		await waitFor(() =>
 			expect(conversationRow()?.pendingQuestion).toBeUndefined(),
 		)
-		expect(conversationRow()?.badge).toBeUndefined()
+		expect(conversationRow()).toMatchObject({ status: "working" })
+		expect(botRow()).toMatchObject({ status: "idle" })
+
+		hostReads(roster, soloThread.id, "needs_you")
+
+		await waitFor(() =>
+			expect(botRow()).toMatchObject({
+				badge: "attention",
+				pendingQuestion: "Which branch should I use?",
+			}),
+		)
+
+		hostReads(roster, soloThread.id, "working")
+
+		await waitFor(() => expect(botRow()?.status).toBe("working"))
 		expect(botRow()?.pendingQuestion).toBeUndefined()
-		expect(botRow()?.status).toBe("working")
 
 		heard.emit(ANSWERED)
 		hostReads(roster, conversation.id, "idle")
+		hostReads(roster, soloThread.id, "idle")
 
 		await waitFor(() => expect(conversationRow()?.status).toBe("idle"))
 		expect(botRow()?.status).toBe("idle")

@@ -68,7 +68,6 @@ export const useRosterLists = ({
 		useRosterBots({
 			badges,
 			bots,
-			conversations,
 			hostStates,
 			missions,
 			now,
@@ -83,7 +82,6 @@ export const useRosterLists = ({
 	const rosterBotsBySpace = useSharedStructure(
 		useRosterBotsBySpace({
 			badges,
-			conversationRosters,
 			hostStates,
 			missions,
 			now,
