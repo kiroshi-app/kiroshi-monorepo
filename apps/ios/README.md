@@ -57,15 +57,15 @@ export SIMULATOR=$(bun apps/ios/scripts/simulator.ts)
 
 With several simulators booted, `booted` in the commands of this file picks any of them: give `$SIMULATOR` instead, e.g. `xcrun simctl io "$SIMULATOR" screenshot shot.png`.
 
-Build the tests once after each change, then run only the classes your diff touches, as often as you need, without building again:
+Build the tests once after each change, then run only the classes your diff touches, as often as you need, without building again. `-parallel-testing-enabled NO` runs them on this simulator: without it, the Kiroshi plan's UI tests run on a clone, which shuts this simulator down and boots the clone at every run:
 
 ```bash
 bun run ios:generate
 apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
-apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
+apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
 ```
 
-The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs the UI tests on two clones of it, created, booted and deleted by xcodebuild, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
+The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs the UI tests on two clones of it (xcodebuild shuts this simulator down to clone it, then deletes the clones, and the next script boots it again), or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
 
 At the end of the mission, shut down and delete that simulator only, never `xcrun simctl shutdown all`, which stops every other agent's:
 
