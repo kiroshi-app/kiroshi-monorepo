@@ -228,14 +228,12 @@ const chat = {
 		minimise: "Minimize",
 		pickAny: "Choose any that apply.",
 		hint: {
-			chooseThenSend: "Press {{range}} to choose, Return to send.",
-			chooseThenNext:
-				"Press {{range}} to choose, Return for the next question.",
-			toggleThenSend: "Press {{range}} to toggle, Return to send.",
-			toggleThenNext:
-				"Press {{range}} to toggle, Return for the next question.",
-			send: "Return to send.",
-			next: "Return for the next question.",
+			chooseThenSend: "Press {{range}} to choose, Return to send",
+			chooseThenNext: "Press {{range}} to choose, Return for the next question",
+			toggleThenSend: "Press {{range}} to toggle, Return to send",
+			toggleThenNext: "Press {{range}} to toggle, Return for the next question",
+			send: "Return to send",
+			next: "Return for the next question",
 		},
 		waiting: {
 			title: "{{name}} is waiting on your answer",

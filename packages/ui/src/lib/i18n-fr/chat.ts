@@ -239,15 +239,14 @@ const chat = {
 		minimise: "Réduire",
 		pickAny: "Choisissez toutes celles qui conviennent.",
 		hint: {
-			chooseThenSend:
-				"Appuyez sur {{range}} pour choisir, Retour pour envoyer.",
+			chooseThenSend: "Appuyez sur {{range}} pour choisir, Retour pour envoyer",
 			chooseThenNext:
-				"Appuyez sur {{range}} pour choisir, Retour pour la question suivante.",
-			toggleThenSend: "Appuyez sur {{range}} pour cocher, Retour pour envoyer.",
+				"Appuyez sur {{range}} pour choisir, Retour pour la question suivante",
+			toggleThenSend: "Appuyez sur {{range}} pour cocher, Retour pour envoyer",
 			toggleThenNext:
-				"Appuyez sur {{range}} pour cocher, Retour pour la question suivante.",
-			send: "Retour pour envoyer.",
-			next: "Retour pour la question suivante.",
+				"Appuyez sur {{range}} pour cocher, Retour pour la question suivante",
+			send: "Retour pour envoyer",
+			next: "Retour pour la question suivante",
 		},
 		waiting: {
 			title: "{{name}} attend votre réponse",

@@ -24,6 +24,10 @@ import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
+import {
+	DIGIT_KEY_LIMIT,
+	useDigitKeys,
+} from "@workspace/ui/hooks/use-digit-keys"
 import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invalid"
 import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
@@ -148,7 +152,7 @@ const OPTION_ROW_SLOT = "tool-question-option"
 const isOptionRow = (target: EventTarget) =>
 	target instanceof HTMLElement && target.dataset.slot === OPTION_ROW_SLOT
 
-const digitRangeOf = (count: number) => (count === 1 ? "1" : `1-${count}`)
+const digitRangeOf = (count: number) => (count === 1 ? "1" : `1\u2013${count}`)
 
 const ToolQuestion = ({
 	questions,
@@ -209,6 +213,23 @@ const ToolQuestion = ({
 	}
 
 	const item = questions[shownIndex]
+	const digitItem =
+		hasDigitKeys && !minimised && item && !item.isNotice && !item.entry
+			? item
+			: undefined
+
+	useDigitKeys({
+		count: Math.min(digitItem?.options.length ?? 0, DIGIT_KEY_LIMIT),
+		onDigit: (digit) => {
+			const option = digitItem?.options[digit - 1]
+			if (!digitItem || !option) return
+			const isHeldRadio =
+				!digitItem.multiSelect &&
+				draftOf(digitItem.question).selected.includes(option.label)
+			if (!isHeldRadio) pickOption(digitItem, option.label)
+		},
+	})
+
 	if (!item) return null
 
 	if (minimised) {

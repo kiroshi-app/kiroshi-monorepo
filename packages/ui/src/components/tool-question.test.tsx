@@ -60,7 +60,7 @@ describe("ToolQuestion hint", () => {
 	it("reads only the Return part while no digit keys are wired", () => {
 		renderPanel({ questions: [PLAN] })
 
-		expect(screen.getByText(chat.toolQuestion.hint.send)).toBeTruthy()
+		expect(screen.getByText("Return to send")).toBeTruthy()
 		expect(screen.queryByText(/^Press /)).toBeNull()
 	})
 
@@ -68,8 +68,151 @@ describe("ToolQuestion hint", () => {
 		renderPanel({ questions: [PLAN], hasDigitKeys: true })
 
 		expect(
-			screen.getByText("Press 1-3 to choose, Return to send."),
+			screen.getByText("Press 1\u20133 to choose, Return to send"),
 		).toBeTruthy()
+	})
+})
+
+const pressKey = (init: KeyboardEventInit) => {
+	const event = new KeyboardEvent("keydown", {
+		bubbles: true,
+		cancelable: true,
+		...init,
+	})
+	act(() => {
+		document.body.dispatchEvent(event)
+	})
+	return event
+}
+
+const checkedLabels = () =>
+	screen
+		.queryAllByRole("radio")
+		.filter((row) => row.getAttribute("aria-checked") === "true")
+		.map((row) => row.textContent)
+
+describe("ToolQuestion digit keys", () => {
+	afterEach(cleanup)
+
+	it("picks the radio of the bare digit and prevents its default", () => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		const event = pressKey({ key: "2" })
+
+		expect(event.defaultPrevented).toBe(true)
+		expect(
+			screen.getByRole("radio", { name: "Team" }).getAttribute("aria-checked"),
+		).toBe("true")
+	})
+
+	it("keeps the held radio when its digit is pressed again", () => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		pressKey({ key: "2" })
+		pressKey({ key: "2" })
+
+		expect(
+			screen.getByRole("radio", { name: "Team" }).getAttribute("aria-checked"),
+		).toBe("true")
+	})
+
+	it("moves a single-select pick on to the next waiting question", () => {
+		renderPanel({ questions: [PLAN, CHANNELS], hasDigitKeys: true })
+
+		pressKey({ key: "1" })
+
+		expect(screen.getByText(CHANNELS.question)).toBeTruthy()
+	})
+
+	it("toggles a checkbox on and off with the same digit", () => {
+		renderPanel({ questions: [CHANNELS], hasDigitKeys: true })
+		const blog = screen.getByRole("checkbox", { name: "Blog" })
+
+		pressKey({ key: "2" })
+		expect(blog.getAttribute("aria-checked")).toBe("true")
+
+		pressKey({ key: "2" })
+		expect(blog.getAttribute("aria-checked")).toBe("false")
+	})
+
+	it.each([
+		{ metaKey: true },
+		{ ctrlKey: true },
+		{ altKey: true },
+		{ shiftKey: true },
+	])("leaves the digit alone with %o held", (modifier) => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		const event = pressKey({ key: "1", ...modifier })
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(checkedLabels()).toEqual([])
+	})
+
+	it("leaves a digit above the option count and every other key alone", () => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+
+		for (const key of ["4", "9", "0", "a", "Enter"])
+			expect(pressKey({ key }).defaultPrevented).toBe(false)
+		expect(checkedLabels()).toEqual([])
+	})
+
+	it("binds no digit on a notice", () => {
+		renderPanel({ questions: [NOTICE, PLAN], hasDigitKeys: true })
+
+		expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+	})
+
+	it("lets the digit type into the own-answer field", () => {
+		renderPanel({ questions: [PLAN], hasDigitKeys: true })
+		const field = screen.getByLabelText(chat.toolQuestion.freeText)
+
+		const event = new KeyboardEvent("keydown", {
+			key: "2",
+			bubbles: true,
+			cancelable: true,
+		})
+		act(() => {
+			field.dispatchEvent(event)
+		})
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(checkedLabels()).toEqual([])
+	})
+
+	it.each([{ hasDigitKeys: false }, { hasDigitKeys: true, minimised: true }])(
+		"binds no digit with %o",
+		(props) => {
+			renderPanel({ questions: [PLAN], ...props })
+
+			expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+		},
+	)
+
+	it("removes its listener once minimised or unmounted", () => {
+		const removed = vi.spyOn(window, "removeEventListener")
+		const { rerender, unmount } = renderPanel({
+			questions: [PLAN],
+			hasDigitKeys: true,
+		})
+
+		rerender(
+			<I18nProvider>
+				<ToolQuestion hasDigitKeys minimised questions={[PLAN]} />
+			</I18nProvider>,
+		)
+		expect(pressKey({ key: "1" }).defaultPrevented).toBe(false)
+		expect(removed).toHaveBeenCalledWith("keydown", expect.any(Function), true)
+
+		rerender(
+			<I18nProvider>
+				<ToolQuestion hasDigitKeys questions={[PLAN]} />
+			</I18nProvider>,
+		)
+		removed.mockClear()
+		unmount()
+		expect(removed).toHaveBeenCalledWith("keydown", expect.any(Function), true)
+		removed.mockRestore()
 	})
 })
 
