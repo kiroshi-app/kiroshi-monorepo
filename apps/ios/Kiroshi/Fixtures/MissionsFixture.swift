@@ -185,8 +185,14 @@
         ) -> String {
             let written = status.map { #"{"text":"\#($0)","writtenAt":\#(movedAt)}"# } ?? "null"
             let thread = id == "mission-212" ? threadConversationId : "thread-\(id)"
+            let liveness =
+                switch state {
+                case "waiting_human": "needs_you"
+                case "working", "waiting_bot": isAgentRunning ? "working" : "idle"
+                default: state
+                }
             return
-                #"{"id":"\#(id)","originConversationId":"conversation-roadmap","botId":"\#(botId)","threadConversationId":"\#(thread)","objective":"\#(objective)","ticket":{"platform":"linear","externalId":"\#(ticket)","url":"https://linear.app/kiroshi/issue/\#(ticket)","title":"\#(objective)"},"tools":[],"state":"\#(state)","stateSeq":1,"isAgentRunning":\#(isAgentRunning),"openedAt":\#(movedAt - 600_000),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(movedAt),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}"#
+                #"{"id":"\#(id)","originConversationId":"conversation-roadmap","botId":"\#(botId)","threadConversationId":"\#(thread)","objective":"\#(objective)","ticket":{"platform":"linear","externalId":"\#(ticket)","url":"https://linear.app/kiroshi/issue/\#(ticket)","title":"\#(objective)"},"tools":[],"state":"\#(state)","stateSeq":1,"isAgentRunning":\#(isAgentRunning),"liveness":"\#(liveness)","openedAt":\#(movedAt - 600_000),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(movedAt),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}"#
         }
     }
 #endif

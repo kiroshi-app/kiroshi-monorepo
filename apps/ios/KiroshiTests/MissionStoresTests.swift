@@ -26,7 +26,8 @@ struct MissionStoresTests {
 
     func feed(_ missions: Mission...) -> String {
         let encoded = missions.map {
-            MissionTesting.missionJSON(id: $0.id, state: $0.state.rawValue)
+            MissionTesting.missionJSON(
+                id: $0.id, state: $0.state.rawValue, liveness: $0.liveness?.rawValue)
         }
         return page(
             encoded.map {
@@ -155,6 +156,42 @@ struct MissionStoresTests {
 
         await waitUntil { store.sections.first?.group == .needsYou }
         _ = await nextCall("mission_space_page", on: socket)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aLivenessChangeMovesTheRowLive() async {
+        let connection = makeConnection()
+        let store = MissionsStore()
+        let socket = ScriptedRelaySocket(
+            sharedSpaceId: "s-1", answers: ["conversation_bots": companions])
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        let first = await nextCall("mission_space_page", on: socket)
+        socket.push(
+            .frame(
+                #"{"id":\#(first["id"] as? Int ?? 0),"status":200,"body":\#(feed(MissionTesting.mission(id: "works", liveness: "idle")))}"#
+            ))
+        await waitUntil { store.hasLoaded }
+        let row = { store.sections.flatMap(\.missions).first }
+        #expect(store.sections.map(\.group) == [.working])
+        #expect(row()?.isWorking == false)
+
+        socket.push(
+            .frame(
+                #"{"event":{"event":"mission://changed","payload":{"missionId":"works","state":"working","stateSeq":1,"isAgentRunning":true,"liveness":"working","lastActivityAt":5}}}"#
+            ))
+        await waitUntil { row()?.isWorking == true }
+        #expect(row()?.statusLine == "Working now")
+
+        socket.push(
+            .frame(
+                #"{"event":{"event":"mission://changed","payload":{"missionId":"works","state":"working","stateSeq":1,"isAgentRunning":true,"liveness":"needs_you","lastActivityAt":6}}}"#
+            ))
+        await waitUntil { store.sections.first?.group == .needsYou }
+
+        #expect(row()?.isWorking == false)
         following.cancel()
         await connection.stop()
     }

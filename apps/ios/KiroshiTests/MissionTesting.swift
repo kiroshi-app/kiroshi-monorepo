@@ -19,24 +19,26 @@ enum MissionTesting {
 
     static func mission(
         id: String = "mission-1", state: String = "working", stateSeq: Int = 1,
-        isAgentRunning: Bool = false, status: String? = nil, openedAt: Int = 1_000,
-        lastActivityAt: Int? = nil, botId: String = "bot-1"
+        isAgentRunning: Bool = false, liveness: String? = nil, status: String? = nil,
+        openedAt: Int = 1_000, lastActivityAt: Int? = nil, botId: String = "bot-1"
     ) -> Mission {
         let text = missionJSON(
             id: id, state: state, stateSeq: stateSeq, isAgentRunning: isAgentRunning,
-            status: status, openedAt: openedAt, lastActivityAt: lastActivityAt, botId: botId)
+            liveness: liveness, status: status, openedAt: openedAt,
+            lastActivityAt: lastActivityAt, botId: botId)
         return try! JSONDecoder().decode(Mission.self, from: Data(text.utf8))
     }
 
     static func missionJSON(
         id: String, state: String, stateSeq: Int = 1, isAgentRunning: Bool = false,
-        status: String? = nil, openedAt: Int = 1_000, lastActivityAt: Int? = nil,
-        botId: String = "bot-1"
+        liveness: String? = nil, status: String? = nil, openedAt: Int = 1_000,
+        lastActivityAt: Int? = nil, botId: String = "bot-1"
     ) -> String {
+        let observed = liveness.map { #""liveness":"\#($0)","# } ?? ""
         let written = status.map { #"{"text":"\#($0)","writtenAt":1}"# } ?? "null"
         let activity = lastActivityAt.map(String.init) ?? "null"
         let text = #"""
-            {"id":"\#(id)","originConversationId":"c-1","botId":"\#(botId)","threadConversationId":"thread-\#(id)","objective":"Objective \#(id)","ticket":{"platform":"linear","externalId":"OPE-1","url":"https://linear.app/x","title":"Ticket"},"tools":[],"state":"\#(state)","stateSeq":\#(stateSeq),"isAgentRunning":\#(isAgentRunning),"openedAt":\#(openedAt),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(activity),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}
+            {"id":"\#(id)","originConversationId":"c-1","botId":"\#(botId)","threadConversationId":"thread-\#(id)","objective":"Objective \#(id)","ticket":{"platform":"linear","externalId":"OPE-1","url":"https://linear.app/x","title":"Ticket"},"tools":[],"state":"\#(state)","stateSeq":\#(stateSeq),"isAgentRunning":\#(isAgentRunning),\#(observed)"openedAt":\#(openedAt),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(activity),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}
             """#
         return text
     }

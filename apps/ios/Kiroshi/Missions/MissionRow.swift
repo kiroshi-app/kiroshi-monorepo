@@ -7,7 +7,7 @@ struct MissionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CompanionAvatar(companion, size: .row, isWorking: mission.isAgentRunning)
+            CompanionAvatar(companion, size: .row, isWorking: mission.isWorking)
             VStack(alignment: .leading, spacing: 2) {
                 headerLayout {
                     Text(mission.objective)
