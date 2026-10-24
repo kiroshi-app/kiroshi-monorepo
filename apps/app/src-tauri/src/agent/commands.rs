@@ -1545,15 +1545,16 @@ pub async fn shutdown_session<R: Runtime>(
 }
 
 async fn release_stored_prompts<R: Runtime>(app: &AppHandle<R>, scope: &RuntimeScope) {
-	let session = &scope.runtime_session_id;
+	let conversation = &scope.conversation_id;
 	let Some(database) = bot_database(app) else {
-		return log::warn!("the stored prompts of session {session} stay: no database");
+		return log::warn!("the stored prompts of conversation {conversation} stay: no database");
 	};
-	match database.conversations().release_prompts_of_session(session.clone()).await {
-		Ok(()) => {
-			conversation_state::observe_reporting(app, database, &scope.conversation_id).await
+	let session = scope.runtime_session_id.clone();
+	match database.conversations().release_prompts_of_session(session).await {
+		Ok(()) => conversation_state::observe_reporting(app, database, conversation).await,
+		Err(failure) => {
+			log::warn!("the stored prompts of conversation {conversation} stay: {failure:?}")
 		}
-		Err(failure) => log::warn!("the stored prompts of session {session} stay: {failure:?}"),
 	}
 }
 
