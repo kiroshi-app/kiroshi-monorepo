@@ -226,3 +226,5 @@ Force push, hard reset, `git clean -fd`, branch delete (`-D`), `rm -rf` on a dir
 ### Branch protection
 
 Never push to `main`. Always work on feature branches.
+
+PR already queued and a fix must land: run `scripts/pr-dequeue.sh`, push, then run `gh pr merge --auto <N>` again. Never close the PR.
