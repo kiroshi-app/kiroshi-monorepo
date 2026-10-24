@@ -5,9 +5,6 @@ struct TableCard: View {
     let table: MarkdownTable
     let messageText: String
 
-    @ScaledMetric(relativeTo: .subheadline) private var inset: CGFloat = 12
-    @ScaledMetric(relativeTo: .subheadline) private var cellPadding: CGFloat = 9
-    @ScaledMetric(relativeTo: .subheadline) private var columnGap: CGFloat = 16
     @State private var cardWidth: CGFloat = 0
 
     static func rowCount(_ count: Int) -> String {
@@ -20,7 +17,7 @@ struct TableCard: View {
                 label: Self.rowCount(table.rows.count), copyLabel: "Copy table",
                 copied: table.tabSeparated)
             ScrollView(.horizontal) {
-                grid
+                TableGrid(table: table)
                     .frame(minWidth: cardWidth, alignment: .leading)
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
@@ -46,12 +43,23 @@ struct TableCard: View {
     private func copyMessage() {
         UIPasteboard.general.string = messageText
     }
+}
+
+struct TableGrid: View {
+    let table: MarkdownTable
+
+    @Environment(\.displayScale) private var displayScale
+    @ScaledMetric(relativeTo: .subheadline) private var inset: CGFloat = 12
+    @ScaledMetric(relativeTo: .subheadline) private var columnGap: CGFloat = 16
+    @ScaledMetric(relativeTo: .subheadline) private var minimumColumnWidth: CGFloat = 56
+    @ScaledMetric(relativeTo: .subheadline) private var cellPadding: CGFloat = 8
+    @ScaledMetric(relativeTo: .subheadline) private var headerTopPadding: CGFloat = 9
 
     private var rows: [[MarkdownInline]] {
         [table.header] + table.rows
     }
 
-    private var grid: some View {
+    var body: some View {
         Grid(alignment: .leading, horizontalSpacing: columnGap, verticalSpacing: 0) {
             ForEach(rows.indices, id: \.self) { row in
                 GridRow {
@@ -62,24 +70,29 @@ struct TableCard: View {
                 .accessibilityAddTraits(row == 0 ? .isHeader : [])
                 if row < rows.count - 1 {
                     Rectangle()
-                        .fill(row == 0 ? Color(.separator) : Color(.separator).opacity(0.5))
-                        .frame(height: 1)
+                        .fill(MessageCard.separator)
+                        .frame(height: 1 / displayScale)
                 }
             }
         }
-        .padding(.horizontal, inset)
-        .padding(.bottom, 2)
     }
 
     private func cell(row: Int, column: Int) -> some View {
         let inline = rows[row][safe: column] ?? MarkdownInline(plain: "")
         let alignment = table.alignments[safe: column] ?? .leading
+        let isFirst = column == 0
         let isLast = column == table.columnCount - 1
         return InlineText(inline: inline, codeFont: nil, strongWeight: row == 0 ? nil : .semibold)
             .font(row == 0 ? .subheadline.weight(.semibold) : .subheadline)
             .fixedSize()
-            .padding(.vertical, cellPadding)
-            .frame(maxWidth: isLast ? .infinity : nil, alignment: alignment.frame)
+            .padding(.top, row == 0 ? headerTopPadding : cellPadding)
+            .padding(.bottom, cellPadding)
+            .frame(
+                minWidth: minimumColumnWidth, maxWidth: isFirst ? .infinity : nil,
+                alignment: alignment.frame
+            )
+            .padding(.leading, isFirst ? inset : 0)
+            .padding(.trailing, isLast ? inset : 0)
             .gridColumnAlignment(alignment.horizontal)
     }
 }
