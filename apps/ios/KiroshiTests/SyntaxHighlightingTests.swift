@@ -37,6 +37,29 @@ struct SyntaxHighlightingTests {
         #expect(try colors(of: name, in: code, as: "swift") == [nil])
     }
 
+    @Test(arguments: ["times", "_", "work", "for", "build", "index"])
+    func aSwiftParameterLabelStaysPlain(label: String) throws {
+        let code = """
+            func retry<T>(times: Int = 3, _ work: () async throws -> T) async throws -> T {}
+            func notes(for build: Int) -> String {}
+            subscript(index: Int) -> Int { 0 }
+            """
+
+        #expect(try colors(of: label, in: code, as: "swift") == [nil])
+    }
+
+    @Test(arguments: ["T", "Int", "String"])
+    func aTypeInASwiftSignatureKeepsTheTypeColor(name: String) throws {
+        let code = "func notes<T>(for build: Int, _ value: T) -> String {}"
+
+        #expect(try colors(of: name, in: code, as: "swift") == [Color("syntax-type")])
+    }
+
+    @Test(arguments: ["let _ = value", "for _ in 1..<3 {}", "{ _ in }"])
+    func aSwiftWildcardOutsideASignatureKeepsTheKeywordColor(code: String) throws {
+        #expect(try colors(of: "_", in: code, as: "swift") == [Color("syntax-keyword")])
+    }
+
     @Test func aKeywordKeepsTheCodeWeight() throws {
         let highlighted = SyntaxHighlighting.shared.highlighted(
             MarkdownCode(language: "swift", text: "return value"))
