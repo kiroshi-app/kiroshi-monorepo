@@ -23,11 +23,11 @@ impl PromptKind {
 		}
 	}
 
-	fn read(stored: &str) -> rusqlite::Result<Self> {
+	fn read(stored: &str) -> Option<Self> {
 		match stored {
-			"question" => Ok(PromptKind::Question),
-			"permission" => Ok(PromptKind::Permission),
-			unknown => Err(rusqlite::Error::InvalidColumnType(4, unknown.to_owned(), Type::Text)),
+			"question" => Some(PromptKind::Question),
+			"permission" => Some(PromptKind::Permission),
+			_ => None,
 		}
 	}
 }
@@ -47,8 +47,14 @@ pub struct Activity {
 	pub conversation_id: String,
 	pub space_id: Option<String>,
 	pub has_open_turn: bool,
-	pub pending_prompt: Option<WaitingPrompt>,
+	pub pending_prompt: Option<StoredPrompt>,
 	pub working_bot_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoredPrompt {
+	Readable(WaitingPrompt),
+	Undecodable { prompt_id: String, kind: Option<PromptKind>, failure: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,17 +189,37 @@ fn activities(connection: &Connection, ids: &[String]) -> Result<Vec<Activity>, 
 	Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-fn waiting_prompt(row: &Row<'_>) -> rusqlite::Result<Option<WaitingPrompt>> {
+fn waiting_prompt(row: &Row<'_>) -> rusqlite::Result<Option<StoredPrompt>> {
 	let Some(prompt_id) = row.get::<_, Option<String>>(3)? else {
 		return Ok(None);
 	};
-	let kind = PromptKind::read(&row.get::<_, String>(4)?)?;
-	let request: String = row.get(5)?;
-	let text = match kind {
-		PromptKind::Question => decoded::<QuestionRequest>(5, &request)?.text(),
-		PromptKind::Permission => decoded::<PermissionRequest>(5, &request)?.title,
+	let stored_kind: String = row.get(4)?;
+	let Some(kind) = PromptKind::read(&stored_kind) else {
+		let failure = format!("its kind {stored_kind:?} is neither a question nor a permission");
+		return Ok(Some(StoredPrompt::Undecodable { prompt_id, kind: None, failure }));
 	};
-	Ok(Some(WaitingPrompt { prompt_id, kind, text }))
+	let request: String = row.get(5)?;
+	Ok(Some(match prompt_text(kind, &request) {
+		Ok(text) => StoredPrompt::Readable(WaitingPrompt { prompt_id, kind, text }),
+		Err(failure) => StoredPrompt::Undecodable {
+			prompt_id,
+			kind: Some(kind),
+			failure: format!(
+				"its request is not a {} ({:?} at line {} column {})",
+				kind.stored(),
+				failure.classify(),
+				failure.line(),
+				failure.column()
+			),
+		},
+	}))
+}
+
+fn prompt_text(kind: PromptKind, request: &str) -> serde_json::Result<String> {
+	Ok(match kind {
+		PromptKind::Question => serde_json::from_str::<QuestionRequest>(request)?.text(),
+		PromptKind::Permission => serde_json::from_str::<PermissionRequest>(request)?.title,
+	})
 }
 
 pub(super) fn open_turn_starts(links: &str) -> rusqlite::Result<BTreeMap<String, i64>> {

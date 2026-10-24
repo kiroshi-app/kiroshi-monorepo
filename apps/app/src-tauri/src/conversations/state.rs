@@ -4,11 +4,11 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 use super::contract::{
-	state_in, ConversationState, ConversationStateChanged, ObservedState, States,
+	state_in, ConversationState, ConversationStateChanged, ObservedState, PendingPrompt, States,
 	TranscriptStoreError,
 };
 use crate::db;
-use crate::db::repositories::conversations::Activity;
+use crate::db::repositories::conversations::{Activity, StoredPrompt};
 use crate::events::{self, CONVERSATION_STATE_CHANGED};
 use crate::missions::commands::observed as mission_observed;
 use crate::missions::contract::MissionLiveness;
@@ -116,8 +116,22 @@ async fn origins_needing_you<R: Runtime>(
 fn observed_state(activity: Activity, origins_needing_you: &HashSet<String>) -> ObservedState {
 	ObservedState {
 		state: ranked(&activity, origins_needing_you),
-		pending_prompt: activity.pending_prompt.map(Into::into),
+		pending_prompt: activity
+			.pending_prompt
+			.and_then(|stored| shown_prompt(&activity.conversation_id, stored)),
 		working_bot_ids: activity.working_bot_ids,
+	}
+}
+
+fn shown_prompt(conversation_id: &str, stored: StoredPrompt) -> Option<PendingPrompt> {
+	match stored {
+		StoredPrompt::Readable(prompt) => Some(prompt.into()),
+		StoredPrompt::Undecodable { prompt_id, kind, failure } => {
+			log::warn!(
+				"the pending prompt {prompt_id} of conversation {conversation_id} did not decode: {failure}"
+			);
+			kind.map(|kind| PendingPrompt { prompt_id, kind: kind.into(), text: String::new() })
+		}
 	}
 }
 
@@ -697,5 +711,62 @@ mod tests {
 
 		assert_eq!(read.id, solo.id);
 		assert_eq!(read.state, ConversationState::NeedsYou);
+	}
+
+	const MALFORMED_PROMPTS: &str = "
+		INSERT INTO conversations (id, space_id, kind, title, created_at, updated_at)
+			VALUES ('c2', 'personal', 'topic', 'Old request', 1, 1),
+				('c3', 'personal', 'topic', 'Unknown kind', 1, 1);
+		INSERT INTO pending_prompts
+				(runtime_session_id, prompt_id, conversation_id, kind, request, asked_at)
+			VALUES ('rs2', 'p2', 'c2', 'permission', '{\"tool\": \"Bash\"}', 1);
+		PRAGMA ignore_check_constraints = ON;
+		INSERT INTO pending_prompts
+				(runtime_session_id, prompt_id, conversation_id, kind, request, asked_at)
+			VALUES ('rs3', 'p3', 'c3', 'survey', '{}', 1);
+		PRAGMA ignore_check_constraints = OFF;
+	";
+
+	#[tokio::test]
+	async fn an_undecodable_prompt_degrades_its_own_row_and_leaves_the_rest_of_the_page() {
+		let app = a_host("malformed-prompts").await;
+		ask(&app, PromptKind::Question).await;
+		a_run_of(&app, ("t1", "c1", 1), "b1").await;
+		database(&app)
+			.call_mut(|connection| Ok(connection.execute_batch(MALFORMED_PROMPTS)?))
+			.await
+			.expect("the malformed prompts are planted");
+
+		let page =
+			conversation_page(app.handle().clone(), app.state(), "personal".to_owned(), None, None)
+				.await
+				.expect("the page is read");
+
+		let observed_of = |id: &str| {
+			page.conversations
+				.iter()
+				.find(|row| row.conversation.id == id)
+				.map(|row| serde_json::to_value(&row.observed).expect("the state serializes"))
+		};
+		assert_eq!(
+			observed_of("c1"),
+			Some(json!({
+				"state": "needs_you",
+				"pendingPrompt": the_question(),
+				"workingBotIds": ["b1"],
+			}))
+		);
+		assert_eq!(
+			observed_of("c2"),
+			Some(json!({
+				"state": "needs_you",
+				"pendingPrompt": { "promptId": "p2", "kind": "permission", "text": "" },
+				"workingBotIds": [],
+			}))
+		);
+		assert_eq!(
+			observed_of("c3"),
+			Some(json!({ "state": "needs_you", "pendingPrompt": null, "workingBotIds": [] }))
+		);
 	}
 }
