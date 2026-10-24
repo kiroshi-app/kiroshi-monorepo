@@ -159,6 +159,7 @@
 	--bot-avatar-field-lightness: 0.8;
 	--bot-avatar-ground-strength: 35%;
 	--user-bubble-tint-strength: 50%;
+	--user-bubble-muted-strength: 70%;
 	--user-bubble-tint-muted-strength: 90%;
 	--shell-tint-strength: 20%;
 }
