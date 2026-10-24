@@ -67,6 +67,15 @@
             ```
             """
         static let codeBlock = "Here’s the model with the new field:\n\n" + swiftCode
+        static let fittingCode = """
+            Here’s the short version:
+
+            ```mermaid
+            flowchart LR
+              pr --> main
+              main --> tag
+            ```
+            """
         static let narrowTable = """
             | Platform | Size | Status |
             |---|--:|---|
@@ -152,6 +161,7 @@
             "9": (false, [diagrams]),
             "10": (false, [mixedReply]),
             "all": (true, [everyFamily]),
+            "fitting-code": (false, [fittingCode]),
         ]
 
         static var artboard: (isGroup: Bool, replies: [String]) {

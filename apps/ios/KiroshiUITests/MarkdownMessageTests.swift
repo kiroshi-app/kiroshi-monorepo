@@ -9,6 +9,7 @@ final class MarkdownMessageTests: XCTestCase {
             func notes() -> String { "Thirty-one changes since 4.1" }
         }
         """
+    static let fittingCode = "flowchart LR\n  pr --> main\n  main --> tag"
     static let builds =
         "Platform\tSize\tStatus\nmacOS\t48 MB\tSigned\nWindows\t52 MB\tSigned\nLinux\t61 MB\tBuilding"
 
@@ -69,6 +70,15 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["To do, App Store text reviewed"].exists)
         XCTAssertTrue(app.staticTexts["Secrets sorting"].exists)
         XCTAssertTrue(app.buttons["Copy code"].exists)
+
+        try auditTheReply(app)
+    }
+
+    func testACodeCardWhoseLinesFitPassesTheContrastAudit() throws {
+        let app = launch("markdown", "-artboard", "fitting-code")
+        let code = app.staticTexts[Self.fittingCode]
+        XCTAssertTrue(code.waitForExistence(timeout: 10))
+        XCTAssertLessThanOrEqual(code.frame.maxX, app.buttons["Copy code"].frame.maxX)
 
         try auditTheReply(app)
     }
