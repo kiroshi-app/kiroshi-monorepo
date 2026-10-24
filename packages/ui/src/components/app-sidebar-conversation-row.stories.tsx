@@ -101,6 +101,16 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 	await expect(pile.height).toBe(16)
 }
 
+const expectTwoBotsAndACounter = async (row: HTMLElement) => {
+	await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
+	await expect(slotIn(row, "conversation-bot-pile-overflow")).toHaveTextContent(
+		"+3",
+	)
+	await expect(within(row).getByRole("img", { name: "+3" })).toBe(
+		slotIn(row, "conversation-bot-pile"),
+	)
+}
+
 const expectCellWears = async (row: HTMLElement, token: string) => {
 	const cell = slotIn(row, "outlined-hexagon-face")
 	await expect(cell.style.fill).toBe(`var(${token})`)
@@ -312,13 +322,7 @@ export const RowWithFiveBots = meta.story({
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
-		await expect(
-			slotIn(row, "conversation-bot-pile-overflow"),
-		).toHaveTextContent("+3")
-		await expect(within(row).getByRole("img", { name: "+3" })).toBe(
-			slotIn(row, "conversation-bot-pile"),
-		)
+		await expectTwoBotsAndACounter(row)
 	},
 })
 
@@ -480,16 +484,6 @@ const expectBotsSideBySide = async (row: HTMLElement) => {
 		await expect(getComputedStyle(slot).maskImage).toBe("none")
 	}
 	await expect(slotsIn(pile, "outlined-hexagon")).toHaveLength(0)
-}
-
-const expectTwoBotsAndACounter = async (row: HTMLElement) => {
-	await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
-	await expect(slotIn(row, "conversation-bot-pile-overflow")).toHaveTextContent(
-		"+3",
-	)
-	await expect(within(row).getByRole("img", { name: "+3" })).toBe(
-		slotIn(row, "conversation-bot-pile"),
-	)
 }
 
 const expectLongQuestionBesideAWholePile = async (
