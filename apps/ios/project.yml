@@ -17,6 +17,9 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     exactVersion: 7.1.0
+  Highlightr:
+    url: https://github.com/raspu/Highlightr
+    exactVersion: 2.3.0
 targets:
   Kiroshi:
     type: application
@@ -33,6 +36,8 @@ targets:
     dependencies:
       - package: GoogleSignIn
         product: GoogleSignIn
+      - package: Highlightr
+        product: Highlightr
     info:
       path: Kiroshi/Info.plist
       properties:

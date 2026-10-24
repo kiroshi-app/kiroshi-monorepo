@@ -103,19 +103,13 @@ struct ThreadMessage: Identifiable, Equatable {
     private static func bubbles(
         of text: String, id: String, isWrittenByPerson: Bool, authors: [Companion]
     ) -> [Bubble] {
-        guard !isWrittenByPerson else {
-            let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !whole.isEmpty else { return [] }
-            return [
-                Bubble(
-                    id: "\(id)-0", text: render(whole, isWrittenByPerson: true, authors: authors))
-            ]
-        }
-        return Paragraphs.split(text).enumerated().map { index, paragraph in
-            Bubble(
-                id: "\(id)-\(index)",
-                text: render(paragraph, isWrittenByPerson: false, authors: authors))
-        }
+        let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !whole.isEmpty else { return [] }
+        let shown = render(whole, isWrittenByPerson: isWrittenByPerson, authors: authors)
+        guard !isWrittenByPerson else { return [Bubble(id: "\(id)-0", text: shown)] }
+        return [
+            Bubble(id: "\(id)-0", text: shown, markdown: MarkdownMessage(whole, among: authors))
+        ]
     }
 
     private static func render(_ text: String, isWrittenByPerson: Bool, authors: [Companion])
