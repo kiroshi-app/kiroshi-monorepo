@@ -34,14 +34,14 @@ struct CodeCardColorsTests {
             color: "syntax-number", light: "#272AD8", dark: "#D9C97C",
             increasedLight: "#272AD8", increasedDark: "#D9C97C"),
         Artboard(
-            color: "code-card-label", light: "#6C6C70", dark: "#EBEBF599",
+            color: "card-label", light: "#6C6C70", dark: "#EBEBF599",
             increasedLight: "#545456", increasedDark: "#AEAEB2"),
         Artboard(
-            color: "code-card-stroke", light: "#C6C6C8", dark: "#48484A",
+            color: "card-stroke", light: "#C6C6C8", dark: "#48484A",
             increasedLight: "#8A8A8E", increasedDark: "#7C7C80"),
     ]
 
-    func hex(of color: String, in scheme: ColorScheme, contrast: ColorSchemeContrast) throws
+    static func hex(of color: Color, in scheme: ColorScheme, contrast: ColorSchemeContrast) throws
         -> String
     {
         var environment = EnvironmentValues()
@@ -49,11 +49,17 @@ struct CodeCardColorsTests {
         environment._colorSchemeContrast = contrast
         let srgb = try #require(CGColorSpace(name: CGColorSpace.sRGB))
         let resolved = try #require(
-            Color(color).resolve(in: environment).cgColor
+            color.resolve(in: environment).cgColor
                 .converted(to: srgb, intent: .defaultIntent, options: nil)?.components)
         let bytes = resolved.map { Int(($0 * 255).rounded()) }
         let rgb = bytes.prefix(3).map { String(format: "%02X", $0) }.joined()
         return "#" + rgb + (bytes[3] == 255 ? "" : String(format: "%02X", bytes[3]))
+    }
+
+    func hex(of color: String, in scheme: ColorScheme, contrast: ColorSchemeContrast) throws
+        -> String
+    {
+        try Self.hex(of: Color(color), in: scheme, contrast: contrast)
     }
 
     @Test(arguments: artboards)
