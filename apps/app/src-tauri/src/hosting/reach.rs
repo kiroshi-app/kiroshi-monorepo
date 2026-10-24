@@ -383,6 +383,7 @@ pub(super) const AUDIENCES: &[(&str, Audience)] = &[
 	(crate::conversations::contract::DELETED_EVENT, IN_THE_SPACE),
 	(crate::conversations::contract::MESSAGE_STORED_EVENT, IN_THE_CONVERSATION),
 	(crate::conversations::contract::UPDATED_EVENT, IN_THE_SPACE),
+	(crate::conversations::contract::STATE_CHANGED_EVENT, IN_THE_SPACE),
 	(super::contract::CHANGED_EVENT, Audience::Scoped(space("/spaceId"))),
 	(super::contract::MEMBERS_CHANGED_EVENT, IN_THE_SPACE),
 	(crate::invitations::contract::CHANGED_EVENT, Audience::HostOnly),

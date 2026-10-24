@@ -17,6 +17,7 @@ use crate::bundles;
 use crate::companions::host::picked;
 use crate::conversations::commands::{bot_row, ready, seat_participant};
 use crate::conversations::contract::{Bot, CompanionSpoke};
+use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::keyset;
 use crate::events::{self, COMPANION_SPOKE, MISSION_CHANGED};
@@ -68,6 +69,7 @@ pub(super) fn announce_change<R: Runtime>(
 	app: &AppHandle<R>,
 	mission: &Mission,
 ) -> Result<(), MissionError> {
+	conversation_state::observe_later(app, mission.origin_conversation_id.clone());
 	events::emit(
 		app,
 		MISSION_CHANGED,

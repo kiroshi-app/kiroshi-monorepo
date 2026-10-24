@@ -18,6 +18,7 @@ mod bots;
 mod effort;
 mod icon;
 mod page;
+mod prompts;
 
 pub use amendment::{Amended, ConversationAmendment};
 pub use avatar::AvatarBlot;
@@ -27,6 +28,9 @@ pub use page::{
 	ActiveConversation, ActivePage, ActiveTurn, LastWord, ListedConversation, Listing, WorkingBot,
 	LISTED_KINDS,
 };
+#[cfg(test)]
+pub(crate) use prompts::a_pending_prompt;
+pub use prompts::{Activity, PendingPrompt, PromptKind};
 
 use bots::{
 	bot, bot_at, bot_in, bots_of, counted_bots, created_bot, deleted_bot, ensured_default_bot,

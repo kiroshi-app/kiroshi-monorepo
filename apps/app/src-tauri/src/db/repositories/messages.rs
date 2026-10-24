@@ -429,6 +429,16 @@ impl MessagesRepository {
 		.at("expire_awaited_run", "turn_runs")
 	}
 
+	pub async fn conversation_of_turn(
+		&self,
+		turn_id: String,
+	) -> Result<Option<String>, TranscriptError> {
+		Ok(self
+			.call(move |connection| Ok(conversation_of_turn(connection, &turn_id)?))
+			.await
+			.at("conversation_of_turn", "turns")?)
+	}
+
 	pub async fn complete_turn(
 		&self,
 		id: String,

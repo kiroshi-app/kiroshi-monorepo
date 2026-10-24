@@ -187,6 +187,12 @@ pub struct Mission {
 	pub workspace_path: Option<String>,
 }
 
+impl Mission {
+	pub fn needs_you(&self) -> bool {
+		self.state == MissionState::WaitingHuman
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MissionActivity {

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
+use super::prompts::HAS_OPEN_TURN;
 use super::{
 	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
 	Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
@@ -113,9 +114,7 @@ fn active_rows() -> String {
 			word.author_account_id AS word_author_account_id, word.author_name AS word_author_name,
 			word.written_from AS word_written_from, word.author_email AS word_author_email,
 			word.author_computer AS word_author_computer,
-			EXISTS (SELECT 1 FROM turns AS open_turn
-				WHERE open_turn.conversation_id = conversations.id
-					AND open_turn.completed_at IS NULL) AS has_open_turn,
+			{HAS_OPEN_TURN} AS has_open_turn,
 			(SELECT json_group_array(json_array(working.bot_id, working.started_at)) FROM (
 				SELECT reply.author_bot_id AS bot_id, open_turn.started_at AS started_at
 					FROM turns AS open_turn

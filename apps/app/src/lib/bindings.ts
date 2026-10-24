@@ -96,7 +96,7 @@ export const commands = {
 	conversationBotCommands: (botId: string) => typedError<AgentCommand_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bot_commands", { botId })),
 	conversationMainChat: (botId: string, spaceId: string | null) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_main_chat", { botId, spaceId })),
 	conversationCreate: (spaceId: string, sectionId: string | null, title: string, botIds: string[]) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_create", { spaceId, sectionId, title, botIds })),
-	conversationList: (spaceId: string) => typedError<Conversation[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
+	conversationList: (spaceId: string) => typedError<ConversationInList[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
 	conversationMissionThread: (conversationId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_mission_thread", { conversationId })),
 	conversationPage: (spaceId: string, cursor: string | null, limit: number | null) => typedError<ConversationPage, TranscriptStoreError>(__TAURI_INVOKE("conversation_page", { spaceId, cursor, limit })),
 	conversationLocalIds: () => typedError<string[], TranscriptStoreError>(__TAURI_INVOKE("conversation_local_ids")),
@@ -720,11 +720,16 @@ export type Conversation = {
 	participants: Participant[],
 };
 
+export type ConversationInList = {
+	state: ConversationState,
+} & Conversation;
+
 export type ConversationInPage = {
 	lastActivityAt: number,
 	lastWord: LastWord | null,
 	soloBotId: string | null,
 	activeTurn: ActiveTurn | null,
+	state: ConversationState,
 } & Conversation;
 
 export type ConversationKind = "main" | "topic" | "mission";
@@ -744,6 +749,8 @@ export type ConversationPage = {
 	conversations: ConversationInPage[],
 	nextCursor: string | null,
 };
+
+export type ConversationState = "idle" | "working" | "needs_you";
 
 export type Destination = "companion" | "space" | "user";
 
