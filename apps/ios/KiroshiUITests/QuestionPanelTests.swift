@@ -75,7 +75,10 @@ final class QuestionPanelTests: XCTestCase {
             let isInThePanelsShadow =
                 element.frame.maxY <= panelEdge
                 && element.frame.maxY > panelEdge - Self.panelShadowReach
-            let isBehindThePanel = element.frame.maxY > panelTop && !element.isHittable
+            let isCoveredByThePanel =
+                element.frame.minY >= panelEdge && self.isInTheTranscript(element, of: app)
+            let isBehindThePanel =
+                element.frame.maxY > panelTop && !element.isHittable || isCoveredByThePanel
             let isOffScreen = isInTheTitle || element.frame.maxY > composerTop
             let isTheThreadUnderThePanel = isScrolledUp && element.frame.midY > panelTop
             let isUnderTheLatestButton =
@@ -112,6 +115,11 @@ final class QuestionPanelTests: XCTestCase {
             .map(\.frame)
             .filter { $0.width >= app.frame.width - 1 && $0.maxY >= app.frame.maxY - 1 }
             .min { $0.height < $1.height }?.minY ?? .infinity
+    }
+
+    func isInTheTranscript(_ element: XCUIElement, of app: XCUIApplication) -> Bool {
+        app.scrollViews.firstMatch.descendants(matching: element.elementType)
+            .matching(NSPredicate(format: "label == %@", element.label)).firstMatch.exists
     }
 
     func panelTop(above firstOption: XCUIElement) -> CGFloat {
