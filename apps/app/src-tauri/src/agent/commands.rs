@@ -2573,15 +2573,10 @@ mod tests {
 		}
 
 		fn denied(id: &str) -> Frame {
-			let resolved = ScopedEvent {
-				scope: Some(a_scope()),
-				turn: the_turn(),
-				event: AgentEvent::PermissionResolved {
-					id: id.into(),
-					decision: PermissionDecision::Deny,
-				},
-			};
-			events::frame(AGENT_EVENT, &resolved).expect("a frame")
+			framed(AgentEvent::PermissionResolved {
+				id: id.into(),
+				decision: PermissionDecision::Deny,
+			})
 		}
 
 		fn framed(event: AgentEvent) -> Frame {
