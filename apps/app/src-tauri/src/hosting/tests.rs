@@ -2908,6 +2908,11 @@ fn a_member_reads_the_live_sessions_of_the_shared_space_only() {
 }
 
 #[test]
+fn a_member_reads_the_pending_questions_of_the_shared_space_only() {
+	run(kept_in_the_space_named("agent_pending_questions_in_space", space_named));
+}
+
+#[test]
 fn a_member_lists_the_env_of_the_shared_space_only() {
 	run(kept_in_the_shared_space(
 		"env_list",
@@ -2989,15 +2994,9 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 	run(async {
 		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
 		let app = guest.harness.app.handle();
-		let scope_in = |conversation_id: &str, bot_id: &str| agent::RuntimeScope {
-			conversation_id: conversation_id.to_owned(),
-			bot_id: bot_id.to_owned(),
-			runtime_session_id: format!("r-{conversation_id}"),
-			epoch: 0,
-		};
-		commands::a_run_held_by_the_app(app, scope_in("c-mine", "b-mine"));
-		commands::a_run_held_by_the_app(app, scope_in("c-theirs", "b-theirs"));
-		commands::a_run_held_by_the_app(app, scope_in("c-shared", "b-shared"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-mine", "b-mine"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
 		let listed =
 			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
@@ -3009,6 +3008,154 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 		assert_eq!(conversations, ["c-mine"]);
 		assert_eq!(listed[0].bot_id, "b-mine");
 		assert_eq!(listed[0].runtime_session_id, "r-c-mine");
+	});
+}
+
+fn a_held_scope_in(conversation_id: &str, bot_id: &str) -> agent::RuntimeScope {
+	agent::RuntimeScope {
+		conversation_id: conversation_id.to_owned(),
+		bot_id: bot_id.to_owned(),
+		runtime_session_id: format!("r-{conversation_id}"),
+		epoch: 0,
+	}
+}
+
+fn a_turn_in(conversation_id: &str) -> Option<agent::EventTurn> {
+	Some(agent::EventTurn {
+		turn_id: format!("t-{conversation_id}"),
+		conversation_id: conversation_id.to_owned(),
+	})
+}
+
+fn a_question(id: &str) -> agent::AgentEvent {
+	agent::AgentEvent::QuestionRequested {
+		request: agent::QuestionRequest { id: id.to_owned(), questions: Vec::new(), subject: None },
+	}
+}
+
+fn its_answer(id: &str) -> agent::AgentEvent {
+	agent::AgentEvent::PermissionResolved {
+		id: id.to_owned(),
+		decision: agent::PermissionDecision::AllowOnce,
+	}
+}
+
+async fn pending_in_the_space(
+	app: &tauri::AppHandle<MockRuntime>,
+	space_id: &str,
+) -> Vec<agent::ScopedEvent> {
+	commands::agent_pending_questions_in_space(app.state(), app.state(), space_id.to_owned())
+		.await
+		.expect("the questions read")
+}
+
+async fn pending_in_the_conversation(
+	app: &tauri::AppHandle<MockRuntime>,
+	conversation_id: &str,
+) -> Vec<agent::ScopedEvent> {
+	commands::agent_pending_questions(app.state(), conversation_id.to_owned())
+		.await
+		.expect("the questions read")
+}
+
+#[test]
+fn the_pending_questions_in_a_space_hold_the_questions_of_each_of_its_conversations_only() {
+	run(async {
+		let guest = Guest::of_two_spaces("pending-questions-in-space").await;
+		let app = guest.harness.app.handle();
+		for (conversation_id, bot_id) in
+			[("c-theirs", "b-theirs"), ("c-shared", "b-shared"), ("c-mine", "b-mine")]
+		{
+			commands::a_run_held_by_the_app(app, a_held_scope_in(conversation_id, bot_id))
+				.emit(a_question(&format!("q-{conversation_id}")), a_turn_in(conversation_id));
+		}
+
+		let listed = pending_in_the_space(app, ELSEWHERE).await;
+
+		let mut expected = pending_in_the_conversation(app, "c-theirs").await;
+		expected.extend(pending_in_the_conversation(app, "c-shared").await);
+		assert_eq!(expected.len(), 2);
+		assert_eq!(listed, expected);
+		assert_eq!(
+			pending_in_the_space(app, PERSONAL).await,
+			pending_in_the_conversation(app, "c-mine").await
+		);
+	});
+}
+
+#[test]
+fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go() {
+	run(async {
+		let guest = Guest::of_two_spaces("pending-questions-settled").await;
+		let app = guest.harness.app.handle();
+		let scope = a_held_scope_in("c-theirs", "b-theirs");
+		let cancelled = agent::AgentEvent::TurnEnded {
+			ended: agent::TurnEnded {
+				session_id: None,
+				outcome: agent::TurnOutcome::Cancelled,
+				structured_output: None,
+				total_cost_usd: None,
+				model_usage: None,
+			},
+		};
+
+		for settled in ["answered", "cancelled", "shut down", "taken over"] {
+			let run = commands::a_run_held_by_the_app(app, scope.clone());
+			run.emit(a_question(settled), a_turn_in("c-theirs"));
+			assert_eq!(
+				pending_in_the_space(app, ELSEWHERE).await.len(),
+				1,
+				"{settled} was not asked"
+			);
+			assert!(pending_in_the_space(app, PERSONAL).await.is_empty());
+
+			match settled {
+				"answered" => run.emit(its_answer(settled), a_turn_in("c-theirs")),
+				"cancelled" => run.emit(cancelled.clone(), a_turn_in("c-theirs")),
+				"shut down" => commands::shutdown_session(&app.state(), &scope).await,
+				_ => {
+					commands::a_run_held_by_the_app(app, scope.clone());
+				}
+			}
+
+			assert!(
+				pending_in_the_space(app, ELSEWHERE).await.is_empty(),
+				"{settled} kept it listed"
+			);
+		}
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_reading_the_conversation(
+) {
+	run(async {
+		let mut guest = Guest::of_two_spaces("question-heard").await;
+		let app = guest.harness.app.handle().clone();
+		let scope = a_live_scope_of("c-mine");
+		let run = commands::a_live_run(&app, scope.clone());
+		let elsewhere = commands::a_live_run(&app, a_live_scope_of("c-theirs"));
+
+		elsewhere.emit(a_question("q-theirs"), a_turn_in("c-theirs"));
+		run.emit(a_question("q-mine"), a_turn_in("c-mine"));
+		run.emit(its_answer("q-mine"), a_turn_in("c-mine"));
+		let heard = guest.events_until_the_marker().await;
+
+		let expected: Vec<Value> = [a_question("q-mine"), its_answer("q-mine")]
+			.into_iter()
+			.map(|event| {
+				let emitted = agent::ScopedEvent {
+					scope: Some(scope.clone()),
+					turn: a_turn_in("c-mine"),
+					event,
+				};
+				as_forwarded((
+					commands::EVENT_CHANNEL,
+					serde_json::to_value(emitted).expect("a payload"),
+				))
+			})
+			.collect();
+		assert_eq!(heard, expected);
 	});
 }
 

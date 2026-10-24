@@ -8566,6 +8566,28 @@
         "type": "array"
       }
     },
+    "agent_pending_questions_in_space": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/ScopedEvent_Serialize"
+        },
+        "type": "array"
+      }
+    },
     "agent_respond_to_permission": {
       "args": {
         "properties": {

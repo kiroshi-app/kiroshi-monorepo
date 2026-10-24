@@ -183,6 +183,10 @@ impl<S> Live<S> {
 		self.questions().retain(|question| !question.asked_by(scope));
 	}
 
+	fn pending_questions(&self) -> Vec<PendingQuestion> {
+		self.questions().clone()
+	}
+
 	fn questions_in(&self, conversation_id: &str) -> Vec<ScopedEvent> {
 		self.questions()
 			.iter()
@@ -1368,6 +1372,24 @@ pub async fn agent_pending_questions(
 	conversation_id: String,
 ) -> Result<Vec<ScopedEvent>, TransportError> {
 	Ok(state.live.questions_in(&conversation_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_pending_questions_in_space(
+	state: State<'_, AgentState>,
+	database: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<ScopedEvent>, TranscriptStoreError> {
+	let children = ready(&database)?.space_children();
+	let mut in_the_space = Vec::new();
+	for question in state.live.pending_questions() {
+		let conversation_id = question.scope.conversation_id.clone();
+		if children.holds(space_id.clone(), SpaceChild::Conversation, conversation_id).await? {
+			in_the_space.push(question.scoped());
+		}
+	}
+	Ok(in_the_space)
 }
 
 pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {

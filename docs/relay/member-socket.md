@@ -181,6 +181,7 @@ are open to it, each kept inside the shared space:
 | `search_messages` | `query.spaceId` |
 | `agent_shutdown` | `scope.conversationId` and `scope.botId` |
 | `agent_live_sessions_in_space` | `spaceId` |
+| `agent_pending_questions_in_space` | `spaceId` |
 | `env_list` | `scope` |
 | `env_set` | `scope` |
 | `env_delete` | `scope` |
@@ -202,6 +203,9 @@ are open to it, each kept inside the shared space:
   answers 403 with `{ "kind": "refusedToAMember" }` and keeps the grant.
 - `agent_live_sessions_in_space` answers the live sessions whose conversation
   belongs to `spaceId`, each `{ "botId", "conversationId", "runtimeSessionId", "startedAt" }`.
+- `agent_pending_questions_in_space` answers the questions still waiting in every
+  conversation of `spaceId`, each the `agent://event` payload `agent_pending_questions`
+  answers for its conversation.
 - `hosting://members-changed` reaches a member only when its `spaceId` is the
   shared space.
 
