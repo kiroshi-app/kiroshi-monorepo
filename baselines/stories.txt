@@ -1101,6 +1101,7 @@ navigation-sidebarmenurow--long-content
 navigation-sidebarmenurow--selected
 navigation-sidebarmenurow--with-second-line
 navigation-sidebarresize--clamped
+navigation-sidebarresize--restored-below-the-minimum
 navigation-sidebarresize--right-side
 navigation-skiplink--custom-label
 navigation-skiplink--focused
