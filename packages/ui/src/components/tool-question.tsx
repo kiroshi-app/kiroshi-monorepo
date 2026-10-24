@@ -505,7 +505,7 @@ const WaitingBar = ({
 			className={cn("w-full px-6 py-2", className)}
 			data-slot="tool-question-waiting"
 		>
-			<div className="flex h-12.5 items-center gap-2.5 rounded-full border border-border bg-question-bar py-2 ps-4 pe-2 shadow-[0_1px_3px_rgb(0_0_0/6%)] dark:shadow-[0_1px_3px_rgb(0_0_0/50%)]">
+			<div className="flex h-12.5 items-center gap-2.5 rounded-full border border-question-bar-border bg-question-bar py-2 ps-4 pe-2 shadow-[0_1px_3px_rgb(0_0_0/6%)] dark:shadow-[0_1px_3px_rgb(0_0_0/50%)]">
 				<span
 					aria-hidden="true"
 					className="grid size-4 shrink-0 place-items-center rounded-full bg-warning font-bold text-[11px] text-background leading-none"
@@ -818,7 +818,7 @@ const OptionRow = ({
 	const rowClass = cn(
 		QUESTION_ROW_CLASS,
 		isChecked
-			? "surface-user-bubble text-user-bubble-foreground"
+			? "surface-user-bubble on-user-bubble text-user-bubble-foreground"
 			: "bg-card text-foreground",
 	)
 
@@ -829,7 +829,7 @@ const OptionRow = ({
 				className={cn(
 					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums",
 					isChecked
-						? "bg-user-bubble-foreground/10 text-user-bubble-foreground/80"
+						? "bg-user-bubble-foreground/10 text-user-bubble-foreground/80 dark:bg-user-bubble-foreground/15"
 						: "bg-foreground/6 text-muted-foreground dark:bg-foreground/8",
 				)}
 				data-slot="tool-question-key"
@@ -847,7 +847,7 @@ const OptionRow = ({
 					className={cn(
 						"min-w-0 wrap-break-word text-compact leading-5",
 						isChecked
-							? "text-user-bubble-foreground/70 dark:text-user-bubble-foreground"
+							? "text-user-bubble-foreground/70 dark:text-(--color-muted-foreground)"
 							: "text-muted-foreground",
 					)}
 					id={descriptionId}
@@ -917,7 +917,7 @@ const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
 			<Icons.Check className="size-3" />
 		</span>
 	) : (
-		<span className="size-5 rounded-full border-[1.5px] border-foreground/17" />
+		<span className="size-5 rounded-full border-[1.5px] border-foreground/17 dark:border-question-option-ring" />
 	)
 }
 

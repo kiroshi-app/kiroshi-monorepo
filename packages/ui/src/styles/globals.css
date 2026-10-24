@@ -60,6 +60,8 @@
 	--color-mark: var(--mark);
 	--color-transcript-new-mark: var(--transcript-new-mark);
 	--color-border: var(--border);
+	--color-question-bar-border: var(--question-bar-border);
+	--color-question-option-ring: var(--question-option-ring);
 	--color-shell-border: var(--shell-border);
 	--color-shell-divider: var(--shell-divider);
 	--color-rail-item-selected: var(--rail-item-selected);

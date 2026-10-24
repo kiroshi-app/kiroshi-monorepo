@@ -191,6 +191,8 @@ const panelsIn = (canvasElement: HTMLElement) =>
 const backgroundOf = (element: Element) =>
 	getComputedStyle(element).backgroundColor
 
+const isInDarkTheme = (element: Element) => element.closest(".dark") !== null
+
 const expectChosenPaint = async (row: HTMLElement) => {
 	const bubble = tokenStyleIn(row, "surface-user-bubble", "backgroundColor")
 	await waitFor(() => expect(backgroundOf(row)).toBe(bubble))
@@ -265,7 +267,7 @@ export const OptionChosen = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.2: Team chosen. ${ARTBOARD}The chosen row takes the Space bubble colour with its ink: the key chip at 10% ink, the digit at 80%, the description at 70%, and a heavy check in the trailing slot. Send is drawn at full strength. Pick \`ChosenRowFollowsSpaceTint\` for the same row repainted by another Space.`,
+				story: `Artboard 1.2: Team chosen. ${ARTBOARD}The chosen row takes the Space bubble colour with its ink: the key chip at 10% ink in light and 15% in dark, the digit at 80%, the description at 70% ink in light and in the bubble muted ink in dark, and a heavy check in the trailing slot. Send is drawn at full strength. Pick \`ChosenRowFollowsSpaceTint\` for the same row repainted by another Space.`,
 			},
 		},
 	},
@@ -277,6 +279,28 @@ export const OptionChosen = meta.story({
 
 			await expect(chosen).toHaveAttribute("aria-checked", "true")
 			await expectChosenPaint(chosen)
+			const isDark = isInDarkTheme(panel)
+			await expect(backgroundOf(slotIn(chosen, "tool-question-key"))).toBe(
+				tokenStyleIn(
+					chosen,
+					isDark
+						? "bg-user-bubble-foreground/15"
+						: "bg-user-bubble-foreground/10",
+					"backgroundColor",
+				),
+			)
+			await expect(
+				getComputedStyle(card.getByText("Up to ten seats and shared Spaces."))
+					.color,
+			).toBe(
+				tokenStyleIn(
+					chosen,
+					isDark
+						? "text-(--color-muted-foreground)"
+						: "text-user-bubble-foreground/70",
+					"color",
+				),
+			)
 			await expect(
 				slotIn(chosen, "tool-question-mark").querySelector("svg"),
 			).not.toBeNull()
@@ -332,7 +356,7 @@ export const SeveralChecked = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.3: a multi-select question with Newsletter and Social checked. ${ARTBOARD}The hint line under the question says any may apply, each checked row wears the bubble colour with a filled ink circle holding a check, an unchecked row keeps an empty ring, and the foot hint says the digits toggle.`,
+				story: `Artboard 1.3: a multi-select question with Newsletter and Social checked. ${ARTBOARD}The hint line under the question says any may apply, each checked row wears the bubble colour with a filled ink circle holding a check, an unchecked row keeps an empty ring, #525252 in dark, and the foot hint says the digits toggle.`,
 			},
 		},
 	},
@@ -364,7 +388,9 @@ export const SeveralChecked = meta.story({
 				Number.parseFloat(getComputedStyle(ring).borderTopWidth),
 			).toBeGreaterThan(0)
 			await expect(getComputedStyle(ring).borderTopColor).toBe(
-				tokenStyleIn(unchecked, "border-foreground/17", "borderTopColor"),
+				isInDarkTheme(panel)
+					? "rgb(82, 82, 82)"
+					: tokenStyleIn(unchecked, "border-foreground/17", "borderTopColor"),
 			)
 
 			await expect(
@@ -475,7 +501,7 @@ export const WaitingBar = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`. A screen reader reaches the title as text before Answer, and Answer is described by the question.`,
+				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}A pill bordered in #333335 in dark and in the border colour in light. An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`. A screen reader reaches the title as text before Answer, and Answer is described by the question.`,
 			},
 		},
 	},
@@ -499,6 +525,11 @@ export const WaitingBar = meta.story({
 			).toBeTruthy()
 			await expect(backgroundOf(strip)).toBe(
 				tokenStyleIn(strip, "bg-question-bar", "backgroundColor"),
+			)
+			await expect(getComputedStyle(strip).borderTopColor).toBe(
+				isInDarkTheme(bar)
+					? "rgb(51, 51, 53)"
+					: tokenStyleIn(strip, "border-border", "borderTopColor"),
 			)
 			await expect(backgroundOf(strip.firstElementChild as HTMLElement)).toBe(
 				tokenStyleIn(strip, "bg-warning", "backgroundColor"),
