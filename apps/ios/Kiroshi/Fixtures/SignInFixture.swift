@@ -120,6 +120,7 @@
         case longName = "long-name"
         case longGroup = "long-group"
         case twoAsks = "two-asks"
+        case markdown
         case questionsList = "questions-2.1"
         case questionSingle = "questions-4.1"
         case questionMulti = "questions-4.3"
@@ -237,7 +238,7 @@
                 .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
                 .groupFailed,
                 .groupMention,
-                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks, .markdown,
                 .questionsList, .questionSingle, .questionMulti, .questionSeveral,
                 .questionElsewhere,
                 .missionsButton,
@@ -308,7 +309,7 @@
                 .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
                 .groupFailed,
                 .groupMention,
-                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks, .markdown,
                 .questionsList, .questionSingle, .questionMulti, .questionSeveral,
                 .questionElsewhere,
                 .missionsButton,
@@ -394,7 +395,7 @@
                 .threadFailed, .groupThread, .sharedThread, .sharedList, .groupWorking,
                 .groupFailed,
                 .groupMention,
-                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks,
+                .slowThread, .longReply, .slowGroup, .longName, .longGroup, .twoAsks, .markdown,
                 .questionsList, .questionSingle, .questionMulti, .questionSeveral,
                 .questionElsewhere,
                 .missionsButton,
@@ -527,7 +528,8 @@
                 .groupWorking,
                 .groupFailed, .groupMention, .slowThread, .longReply, .slowGroup, .longName,
                 .longGroup,
-                .twoAsks, .questionsList, .questionSingle, .questionMulti, .questionSeveral,
+                .twoAsks, .markdown, .questionsList, .questionSingle, .questionMulti,
+                .questionSeveral,
                 .questionElsewhere, .missionsButton, .conversationMissions, .conversationNoMissions,
                 .pinned,
                 .pinnedIcons, .pinRefused,
