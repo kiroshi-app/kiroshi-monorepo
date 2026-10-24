@@ -265,6 +265,11 @@ const ToolQuestion = ({
 	const hasSegments = questions.length > 1
 	const hasEntry = !item.isNotice && Boolean(item.entry)
 	const isWaitingOnAnswer = !isAnswered && !isPending
+	const primaryName = waiting
+		? t("toolQuestion.next")
+		: hasEntry
+			? undefined
+			: t("toolQuestion.submit")
 
 	return (
 		<form
@@ -414,13 +419,7 @@ const ToolQuestion = ({
 				) : (
 					<Button
 						aria-disabled={isWaitingOnAnswer ? true : undefined}
-						aria-label={
-							waiting
-								? t("toolQuestion.next")
-								: hasEntry
-									? undefined
-									: t("toolQuestion.submit")
-						}
+						aria-label={primaryName}
 						className={cn(
 							QUESTION_INVERSE_PILL_CLASS,
 							"ms-auto",
