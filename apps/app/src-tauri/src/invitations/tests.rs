@@ -1629,11 +1629,19 @@ fn a_reconciliation_holds_the_relay_turn_and_a_concurrent_accept_yields_one_entr
 		let held = guests.turn().lock().await;
 
 		let mut reconciling = std::pin::pin!(reconciled(harness.app.handle()));
+		let list_read = harness.noticed_until("the instance list read", || {
+			(harness.instances_read() > 0).then_some(())
+		});
+		tokio::select! {
+			() = &mut reconciling => panic!("the reconciliation skipped the turn"),
+			() = list_read => {}
+		}
 		assert!((&mut reconciling).now_or_never().is_none(), "the reconciliation skipped the turn");
-		let read_while_held = harness.instances_read();
+		assert!(harness.stored().await.is_empty());
 		drop(held);
 		reconciling.await;
-		assert_eq!(read_while_held, 0);
+		let stored = harness.stored().await;
+		assert_eq!(stored, vec![a_relay_entry(&stored[0].id, INSTANCE, "Studio")]);
 
 		harness.listing(json!([an_instance(INSTANCE, "Studio"), an_instance("i-b", "Beta")]));
 		harness.cloud.is_call_open.send_replace(false);
