@@ -77,7 +77,7 @@ struct MessageCardHeader: View {
                 Label(copyLabel, systemImage: "square.on.square")
                     .labelStyle(.iconOnly)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color("card-copy"))
                     .frame(minWidth: height, minHeight: height)
             }
         }
