@@ -39,6 +39,9 @@ struct CodeCardColorsTests {
         Artboard(
             color: "card-stroke", light: "#C6C6C8", dark: "#48484A",
             increasedLight: "#6C6C70", increasedDark: "#7C7C80"),
+        Artboard(
+            color: "card-copy", light: "#0088FF", dark: "#0088FF",
+            increasedLight: "#0088FF", increasedDark: "#0088FF"),
     ]
 
     static func hex(of color: Color, in scheme: ColorScheme, contrast: ColorSchemeContrast) throws

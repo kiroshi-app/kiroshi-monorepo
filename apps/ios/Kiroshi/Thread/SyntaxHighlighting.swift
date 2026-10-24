@@ -63,7 +63,9 @@ final class SyntaxHighlighting {
         ) { color, range, _ in
             let text = drawn.attributedSubstring(from: range).string
             let role = (color as? UIColor).flatMap(Self.role)
-            if isAfterSwiftTypeDeclaration, role == nil {
+            if language == "swift", text == "_", Self.isArgumentLabel(in: drawn.string, at: range) {
+                highlighted += Self.piece(text, role: nil)
+            } else if isAfterSwiftTypeDeclaration, role == nil {
                 highlighted += Self.declaredTypeName(in: text)
             } else if role == nil {
                 highlighted += Self.callsAndMembers(
@@ -82,6 +84,11 @@ final class SyntaxHighlighting {
 
     private static let swiftTypeDeclarations: Set<String> = ["struct", "class", "enum", "protocol"]
     private static let functionDeclarations: Set<String> = ["func", "def", "fn", "fun", "function"]
+
+    private static func isArgumentLabel(in code: String, at range: NSRange) -> Bool {
+        let after = (code as NSString).substring(from: NSMaxRange(range))
+        return after.prefixMatch(of: /\s+\w+\s*:/) != nil
+    }
 
     private static func declaredTypeName(in text: String) -> AttributedString {
         let nameStart = text.firstIndex { !$0.isWhitespace } ?? text.endIndex
