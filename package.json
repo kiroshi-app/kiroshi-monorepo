@@ -45,8 +45,8 @@
 		"tokens:build": "bun packages/ui/src/tokens/build-tokens.ts",
 		"ios:generate": "xcodegen generate --spec apps/ios/project.yml",
 		"ios:build": "bun run ios:generate && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -destination 'generic/platform=iOS Simulator' -derivedDataPath apps/ios/build build",
-		"ios:test": "bun run ios:generate && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17},OS=27.0\" -derivedDataPath apps/ios/build -parallel-testing-worker-count 2 -collect-test-diagnostics never test",
-		"ios:test:unit": "bun run ios:generate && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan KiroshiUnit -destination \"platform=iOS Simulator,name=${IOS_SIMULATOR:-iPhone 17},OS=27.0\" -derivedDataPath apps/ios/build -collect-test-diagnostics never test",
+		"ios:test": "bun run ios:generate && SIMULATOR=$(bun apps/ios/scripts/simulator.ts) && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination \"platform=iOS Simulator,id=$SIMULATOR\" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test",
+		"ios:test:unit": "bun run ios:generate && SIMULATOR=$(bun apps/ios/scripts/simulator.ts) && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan KiroshiUnit -destination \"platform=iOS Simulator,id=$SIMULATOR\" -derivedDataPath apps/ios/build -collect-test-diagnostics never test",
 		"ios:run": "bun apps/ios/scripts/run.ts",
 		"prepare": "husky"
 	},

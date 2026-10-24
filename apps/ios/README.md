@@ -16,12 +16,12 @@ Run from the repo root:
 ```bash
 bun run ios:generate  # Generate apps/ios/Kiroshi.xcodeproj from project.yml
 bun run ios:build     # Generate, then build for the iOS Simulator
-bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the iPhone 17 simulator (iOS 27.0), UI tests on two clones of it (IOS_SIMULATOR="OPE-NN iPhone 17" picks another)
+bun run ios:test      # Generate, then run every test (the Kiroshi plan) on the simulator IOS_SIMULATOR names ("iPhone 17" when unset), one test class after the other
 bun run ios:test:unit # Generate, then run the unit tests only (the KiroshiUnit plan) on the same simulator
-bun run ios:run       # Generate, build, then launch the app on the booted iOS 27 iPhone, else an iPhone 17, and open DeviceHub (IOS_SIMULATOR="iPhone 18 Pro" picks another)
+bun run ios:run       # Generate, build, then launch the app on the same simulator and open DeviceHub
 ```
 
-The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes in parallel on two clones of the simulator (CI runs them one after the other, clones never start a UI test on its hosted runner), so a UI test never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
+The two test plans are `Kiroshi.xctestplan` (every test, run once before a pull request) and `KiroshiUnit.xctestplan` (the unit tests, for iterating), both referenced from `project.yml`. A UI test covers only the accessibility of a new screen state; behaviour goes to unit tests. `bun run ios:test` runs the UI test classes one after the other on the ticket's simulator, as CI does (`-parallel-testing-enabled NO`): parallel testing would shut that simulator down and boot two clones of it at every run, and clones never start a UI test on CI's hosted runner. A UI test still never depends on another one or on their order. `KiroshiUITests` launches a Debug build with `-disablesAnimations YES`, which turns UIKit animations off: XCUITest waits for the app's UIKit animations to end before each action, and once the keyboard is up it sometimes waits the full 60 seconds, action after action.
 
 Every generate writes the build number to `BuildNumber.xcconfig` (not committed): Xcode Cloud's `CI_BUILD_NUMBER` when set, else `git rev-list --count HEAD`. The version stays `MARKETING_VERSION` in `project.yml`.
 
@@ -31,13 +31,16 @@ Format Swift with the toolchain's `swift format`, configured by the root `.swift
 swift format lint --recursive apps/ios
 ```
 
-## The packages shared by every worktree
+## What every worktree shares
 
-On a Mac, CI unset, every xcodebuild of `ios:build`, `ios:test`, `ios:test:unit`, `ios:run` and `bun run ci ios` goes through `apps/ios/scripts/xcodebuild.sh`, which checks the Swift packages (GoogleSignIn, AppAuth, GTMAppAuth, GTMSessionFetcher, Highlightr) out once for every worktree, in `~/Library/Caches/kiroshi-ios/SourcePackages` (`-clonedSourcePackagesDirPath`): a new worktree neither fetches them nor checks them out again, and builds running at once share them. CI runs plain `xcodebuild`.
+On a Mac, CI unset, every xcodebuild of `ios:build`, `ios:test`, `ios:test:unit`, `ios:run` and `bun run ci ios` goes through `apps/ios/scripts/xcodebuild.sh`, which shares two things between worktrees, both in `~/Library/Caches/kiroshi-ios`. CI and Xcode Cloud run plain `xcodebuild`.
 
-DerivedData, and so the compilation, stays in each worktree, `apps/ios/build`. One DerivedData shared by two worktrees refuses the second build while the first runs (`database is locked`), and each worktree compiles everything again after the other's build. Xcode's compilation cache doesn't help a new worktree either: its keys hold the worktree's path, and the prefix mapping that takes the path out also rewrites `#filePath`, from which `CompanionAvatarTests` reads its fixtures.
+- `SourcePackages`: the Swift packages (GoogleSignIn, AppAuth, GTMAppAuth, GTMSessionFetcher, Highlightr), checked out once (`-clonedSourcePackagesDirPath`). A new worktree neither fetches them nor checks them out again.
+- `CompilationCache.noindex`: Xcode's compilation cache (`COMPILATION_CACHE_ENABLE_CACHING`), one CAS for every worktree. A new worktree replays from it every compile job another worktree already ran, the SDK's Clang modules and every package, and compiles only our own targets (Kiroshi, KiroshiTests, KiroshiUITests). The keys hold no worktree path: the SDK and Xcode are prefix-mapped (`SWIFT_ENABLE_PREFIX_MAPPING`, `CLANG_ENABLE_PREFIX_MAPPING`), and so are the worktree's `apps/ios/build` and `apps/ios/Kiroshi.xcodeproj`, the packages' working directory (`*_OTHER_PREFIX_MAPPINGS`), by their physical path and, under `/private`, by the path without it, the one Xcode passes. Our sources aren't mapped (`SWIFT_ENABLE_PROJECT_PREFIX_MAPPING` stays off): their keys hold the worktree's path, so `#filePath`, from which `CompanionAvatarTests` reads its fixtures, always names this worktree's files.
 
-Wipe the shared packages while no iOS build runs, from any worktree:
+Builds running at once share both. DerivedData stays in each worktree, `apps/ios/build`, and with it `Build/Products`: one DerivedData shared by two worktrees refuses the second build while the first runs (`database is locked`), and would let one worktree test the other's products.
+
+Wipe the shared caches while no iOS build runs, from any worktree:
 
 ```bash
 rm -rf ~/Library/Caches/kiroshi-ios
@@ -45,22 +48,31 @@ rm -rf ~/Library/Caches/kiroshi-ios
 
 ## Testing while you work
 
-One simulator per ticket, booted once and reused by every run:
+One simulator per ticket, kept for the whole mission. `apps/ios/scripts/simulator.ts` prints the UDID of the simulator `IOS_SIMULATOR` names: it creates it the first time (the device type is the end of the name, `iPhone 17` here), boots it when it's shut down, and never deletes it. `ios:test`, `ios:test:unit` and `ios:run` go through it, so every run of the mission reuses the same booted simulator:
 
 ```bash
-export SIMULATOR=$(xcrun simctl create "OPE-NN iPhone 17" "iPhone 17")
-xcrun simctl bootstatus "$SIMULATOR" -b
+export IOS_SIMULATOR="OPE-NN iPhone 17"
+export SIMULATOR=$(bun apps/ios/scripts/simulator.ts)
 ```
 
-Build the tests once after each change, then run only the classes your diff touches, as often as you need, without building again:
+With several simulators booted, `booted` in the commands of this file picks any of them: give `$SIMULATOR` instead, e.g. `xcrun simctl io "$SIMULATOR" screenshot shot.png`.
+
+Build the tests once after each change, then run only the classes your diff touches, as often as you need, without building again. `-parallel-testing-enabled NO` runs them on this simulator: without it, the Kiroshi plan's UI tests run on a clone, which shuts this simulator down and boots the clone at every run:
 
 ```bash
 bun run ios:generate
 apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build build-for-testing
-apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
+apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination "platform=iOS Simulator,id=$SIMULATOR" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test-without-building -only-testing:KiroshiTests/CompanionAvatarTests -only-testing:KiroshiUITests/ThreadHeaderTests
 ```
 
-The whole plan runs once, before the push, on the same simulator: `IOS_SIMULATOR="OPE-NN iPhone 17" bun run ios:test`, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet. Delete the simulator with the ticket: `xcrun simctl delete "$SIMULATOR"`.
+The whole plan runs once, before the push, on the same simulator: `bun run ios:test`, which reads `IOS_SIMULATOR` and runs every test on that simulator, or `bun run ci ios`, which reads `SIMULATOR` and boots it only when it isn't booted yet.
+
+At the end of the mission, shut down and delete that simulator only, never `xcrun simctl shutdown all`, which stops every other agent's:
+
+```bash
+xcrun simctl shutdown "$SIMULATOR"
+xcrun simctl delete "$SIMULATOR"
+```
 
 ## Device keys and protocol v2
 
