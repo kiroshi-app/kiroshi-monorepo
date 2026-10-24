@@ -61,8 +61,6 @@ const TIMESTAMP_NEEDING_YOU = "font-medium text-warning"
 
 const NEEDS_YOU_LINE = "flex h-4 min-w-0 items-center gap-1 [&_svg]:size-full!"
 
-const NEEDS_YOU_LINE_ALONE = "pe-1"
-
 const NEEDS_YOU_GLYPH =
 	"pointer-events-none flex size-3 shrink-0 items-center justify-center rounded-full bg-warning font-bold text-[9px] text-warning-foreground leading-3 before:content-['?']"
 
@@ -88,7 +86,7 @@ const NeedsYouLine = ({
 
 	return (
 		<span
-			className={cn(NEEDS_YOU_LINE, !trailing && NEEDS_YOU_LINE_ALONE)}
+			className={cn(NEEDS_YOU_LINE, !trailing && "pe-1")}
 			data-slot="roster-row-needs-you"
 		>
 			<span
@@ -176,7 +174,6 @@ const RowAnatomy = ({
 	timestampSlot,
 	previewSlot,
 }: RowAnatomyProps) => {
-	const isNeedingYou = Boolean(pendingQuestion)
 	const previewText =
 		preview === undefined ? null : (
 			<span
@@ -231,7 +228,7 @@ const RowAnatomy = ({
 						<span
 							className={cn(
 								TIMESTAMP[geometry],
-								isNeedingYou && TIMESTAMP_NEEDING_YOU,
+								pendingQuestion && TIMESTAMP_NEEDING_YOU,
 							)}
 							data-slot={timestampSlot}
 						>
@@ -241,7 +238,7 @@ const RowAnatomy = ({
 				</span>
 				{previewLine}
 				{detail}
-				{badge && !isNeedingYou ? (
+				{badge && !pendingQuestion ? (
 					<BotBadgeDot
 						badge={badge}
 						data-slot="bot-activity-dot"

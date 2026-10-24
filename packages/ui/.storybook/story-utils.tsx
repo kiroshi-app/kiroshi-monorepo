@@ -643,7 +643,6 @@ export const expectAnswered = async (row: HTMLElement) => {
 	await expect(
 		row.querySelector('[data-slot="roster-row-needs-you"]'),
 	).toBeNull()
-	await expect(row.querySelector('[data-slot="needs-you-glyph"]')).toBeNull()
 	await expect(row).not.toHaveAccessibleName(new RegExp(NEEDS_YOU_LABEL))
 	await expect(slotIn(row, "roster-row-timestamp")).toHaveStyle({
 		color: colourOfToken("--muted-foreground", row),
