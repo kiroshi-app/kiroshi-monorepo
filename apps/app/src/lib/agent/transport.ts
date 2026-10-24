@@ -11,7 +11,7 @@ import type {
 	SubmittedTurn,
 } from "./contract"
 
-import { activeJoinedSpaceId, invoke, listen } from "../host"
+import { activeJoinedSpaceId, drivesRealHost, invoke, listen } from "../host"
 import type { SubmittedAttachment } from "../chat/attachments-contract"
 import type { ChatDriver } from "../chat/driver"
 import { traceAgentTurn } from "../perf/agent-turn-trace"
@@ -90,3 +90,8 @@ export const liveSessions = () => {
 		? invoke<LiveSession[]>("agent_live_sessions")
 		: invoke<LiveSession[]>("agent_live_sessions_in_space", { spaceId })
 }
+
+export const pendingQuestionsInSpace = (spaceId: string) =>
+	drivesRealHost()
+		? invoke<ScopedEvent[]>("agent_pending_questions_in_space", { spaceId })
+		: Promise.resolve<ScopedEvent[]>([])

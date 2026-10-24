@@ -10,8 +10,7 @@ export type BotBadgeInput = {
 	hasFocus: boolean
 }
 
-const wantsAttention = (state: ChatState): boolean =>
-	state.question !== null || state.permission !== null
+const wantsAttention = (state: ChatState): boolean => state.permission !== null
 
 const hasTurnEnded = (before: ChatState, after: ChatState): boolean =>
 	isTurnBusy(before.turn) &&

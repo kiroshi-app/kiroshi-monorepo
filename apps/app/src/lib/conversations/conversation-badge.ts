@@ -28,7 +28,7 @@ export const conversationBadgeAfter = ({
 	isSelected,
 	hasFocus,
 }: BadgeRuleInput<ConversationAnswer>): BotBadge => {
-	if (after.pendingPrompt) {
+	if (after.pendingPrompt?.kind === "permission") {
 		return "attention"
 	}
 	if (isSelected && hasFocus) {

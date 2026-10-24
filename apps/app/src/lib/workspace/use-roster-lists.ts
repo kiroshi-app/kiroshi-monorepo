@@ -13,6 +13,11 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { useControllerState } from "../use-controller"
 import { useSharedStructure } from "../use-shared-structure"
 import {
+	questionsByConversationIn,
+	withPendingQuestions,
+} from "../agent/pending-questions"
+import { usePendingQuestions } from "../agent/use-pending-questions"
+import {
 	toRailSignals,
 	toSpaceBadges,
 	withBadges,
@@ -43,13 +48,18 @@ export const useRosterLists = ({
 	rosterView,
 	waitingMissionCount,
 }: RosterListsInput) => {
-	const { conversationRuntimes, roster } = core
+	const { conversationRuntimes, driver, roster } = core
 	const { badges, conversationBadges } = drivers
 	const { now, rosters, working } = rosterLines
 	const { bots, missions, rosteredSpaceId } = rosterView
 	const { conversationPreviews, conversationRosters, conversations, previews } =
 		useControllerState(roster.controller)
 	const personOfSpace = useSpacePersonOf(core)
+	const pendingQuestions = usePendingQuestions({
+		driver,
+		roster: roster.controller,
+		spaceRowId: rosteredSpaceId,
+	})
 
 	const rosterBots = useSharedStructure(
 		useRosterBots({
@@ -57,6 +67,7 @@ export const useRosterLists = ({
 			bots,
 			missions,
 			now,
+			pendingQuestions,
 			previews,
 			rosteredSpaceId,
 			working,
@@ -68,6 +79,7 @@ export const useRosterLists = ({
 			badges,
 			missions,
 			now,
+			pendingQuestions,
 			previews,
 			rosters,
 			working,
@@ -89,14 +101,17 @@ export const useRosterLists = ({
 			() =>
 				withMissions(
 					withBadges(
-						toRosterConversations(
-							conversations,
-							{
-								working: conversationWorkers,
-								previews: conversationPreviews,
-								personOf: personOfSpace(rosteredSpaceId),
-							},
-							now,
+						withPendingQuestions(
+							toRosterConversations(
+								conversations,
+								{
+									working: conversationWorkers,
+									previews: conversationPreviews,
+									personOf: personOfSpace(rosteredSpaceId),
+								},
+								now,
+							),
+							questionsByConversationIn(pendingQuestions, rosteredSpaceId),
 						),
 						conversationBadges,
 					),
@@ -111,6 +126,7 @@ export const useRosterLists = ({
 				now,
 				conversationBadges,
 				missions,
+				pendingQuestions,
 			],
 		),
 	)
@@ -123,14 +139,17 @@ export const useRosterLists = ({
 						spaceId,
 						withMissions(
 							withBadges(
-								toRosterConversations(
-									spaceRooms,
-									{
-										working: conversationWorkers,
-										previews: conversationPreviews,
-										personOf: personOfSpace(spaceId),
-									},
-									now,
+								withPendingQuestions(
+									toRosterConversations(
+										spaceRooms,
+										{
+											working: conversationWorkers,
+											previews: conversationPreviews,
+											personOf: personOfSpace(spaceId),
+										},
+										now,
+									),
+									questionsByConversationIn(pendingQuestions, spaceId),
 								),
 								conversationBadges,
 							),
@@ -146,6 +165,7 @@ export const useRosterLists = ({
 				now,
 				conversationBadges,
 				missions,
+				pendingQuestions,
 			],
 		),
 	)
