@@ -518,6 +518,16 @@ conversation-routines-routinespanel--saving
 conversation-routines-routinespanel--toggling
 conversation-routines-routinespanel--without-seated-lead
 conversation-routines-routinespanel--write-failed
+conversation-tools-answeredquestioncard--free-text
+conversation-tools-answeredquestioncard--free-text-dark
+conversation-tools-answeredquestioncard--long-content
+conversation-tools-answeredquestioncard--long-content-dark
+conversation-tools-answeredquestioncard--member-answered
+conversation-tools-answeredquestioncard--member-answered-dark
+conversation-tools-answeredquestioncard--multi-select
+conversation-tools-answeredquestioncard--multi-select-dark
+conversation-tools-answeredquestioncard--you-answered
+conversation-tools-answeredquestioncard--you-answered-dark
 conversation-tools-applicationcard--default
 conversation-tools-applicationcard--with-remote-mark
 conversation-tools-applicationcard--without-mark-or-description
