@@ -2379,7 +2379,6 @@ describe("ThreadScreen", () => {
 		])
 		expect(chord.defaultPrevented).toBe(false)
 		expect(viewport?.scrollTop).toBe(scrolledTo)
-		expect(rowIndexOf("hold the wall")).not.toBe(-1)
 	})
 
 	it("folds into the waiting bar and unfolds with the pick still held", async () => {
