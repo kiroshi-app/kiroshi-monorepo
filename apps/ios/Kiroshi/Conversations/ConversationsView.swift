@@ -14,7 +14,7 @@ struct ConversationsView: View {
         #else
             let opening: Companion.ID? = nil
         #endif
-        _store = State(initialValue: ConversationsStore(work: space.work, opening: opening))
+        _store = State(initialValue: ConversationsStore(opening: opening))
     }
 
     var body: some View {

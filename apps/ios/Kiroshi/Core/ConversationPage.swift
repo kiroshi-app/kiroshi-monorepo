@@ -11,7 +11,7 @@ struct ConversationInPage: Decodable, Sendable {
     let soloBotId: Companion.ID?
     let sectionId: String?
     let pinPosition: Int?
-    let isTurnActive: Bool
+    let state: ConversationState
 
     init(from decoder: any Decoder) throws {
         group = try GroupConversation(from: decoder)
@@ -21,8 +21,7 @@ struct ConversationInPage: Decodable, Sendable {
         soloBotId = try container.decodeIfPresent(String.self, forKey: .soloBotId)
         sectionId = try container.decodeIfPresent(String.self, forKey: .sectionId)
         pinPosition = try container.decodeIfPresent(Int.self, forKey: .pinPosition)
-        isTurnActive =
-            try container.contains(.activeTurn) && !container.decodeNil(forKey: .activeTurn)
+        state = try container.decodeIfPresent(ConversationState.self, forKey: .state) ?? .idle
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -31,7 +30,7 @@ struct ConversationInPage: Decodable, Sendable {
         case soloBotId
         case sectionId
         case pinPosition
-        case activeTurn
+        case state
     }
 
     var groupPlace: PinPlace? {

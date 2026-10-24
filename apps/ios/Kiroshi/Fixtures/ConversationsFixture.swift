@@ -724,12 +724,11 @@
 
             func pageJSON(
                 lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?,
-                isTurnActive: Bool = false
+                state: String = "idle"
             ) -> String {
                 let solo = soloBotId.map { #""\#($0)""# } ?? "null"
-                let activeTurn = isTurnActive ? #"{"bots":[]}"# : "null"
                 return
-                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo),\"activeTurn\":\(activeTurn)}"
+                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo),\"activeTurn\":null,\"state\":\"\(state)\"}"
             }
 
             var json: String {
@@ -818,7 +817,7 @@
             let lastActivityAt: Int
             let lastWord: String?
             var soloBotId: Companion.ID?
-            var isTurnActive = false
+            var state = "idle"
         }
 
         static func soloRow(of companion: Companion, last: Message) -> PageRow {
@@ -850,7 +849,7 @@
                 rows.map {
                     $0.group.pageJSON(
                         lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord,
-                        soloBotId: $0.soloBotId, isTurnActive: $0.isTurnActive)
+                        soloBotId: $0.soloBotId, state: $0.state)
                 }
                 .joined(separator: ",")
             }
@@ -873,6 +872,10 @@
             _ conversationId: String, _ event: String, by companionId: Companion.ID? = nil
         ) -> String {
             #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId, by: companionId)),"event":\#(event),"turn":{"turnId":"turn-live","conversationId":"\#(conversationId)"}}}}"#
+        }
+
+        static func stateChanged(_ conversationId: String, _ state: String) -> String {
+            #"{"event":{"event":"conversation://state-changed","payload":{"conversationId":"\#(conversationId)","spaceId":"\#(spaceId)","state":"\#(state)"}}}"#
         }
 
         static func activity(_ id: String, _ title: String, _ status: String) -> String {
@@ -1123,13 +1126,17 @@
                     let last = script.messages[group.id]?.last
                     return FixtureHost.PageRow(
                         group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
-                        lastWord: last?.lastWordJSON)
+                        lastWord: last?.lastWordJSON,
+                        state: group.id == script.workingGroup?.id ? "working" : "idle")
                 }
                 let asking = isQuestionAnswered.withLock { $0 } ? nil : script.question?.companionId
                 let solos = script.companions.compactMap { companion in
                     script.messages[companion.id]?.last.map {
                         var row = FixtureHost.soloRow(of: companion, last: $0)
-                        row.isTurnActive = companion.id == asking
+                        row.state =
+                            companion.id == asking
+                            ? "needs_you"
+                            : companion.id == script.workingCompanion ? "working" : "idle"
                         return row
                     }
                 }
@@ -1195,6 +1202,7 @@
                 guard let question = script.question else { return }
                 isQuestionAnswered.withLock { $0 = true }
                 push(.frame(Self.resolved(question)))
+                push(.frame(FixtureHost.stateChanged(question.conversationId, "working")))
             case "conversation_append_user_message":
                 guard let message = args["message"] as? [String: Any] else { return }
                 reply(id, "4")
@@ -1268,6 +1276,7 @@
         private func playAnswerElsewhere(_ question: FixtureQuestion) {
             isQuestionAnswered.withLock { $0 = true }
             push(.frame(Self.resolved(question)))
+            push(.frame(FixtureHost.stateChanged(question.conversationId, "working")))
             let answer = FixtureHost.messageJSON(
                 id: "answer-elsewhere", conversationId: question.conversationId, seq: 97,
                 role: "user", content: "Full changelog", createdAt: Date.now.milliseconds,
@@ -1359,6 +1368,7 @@
                             conversationId, #"{"type":"turnChanged","state":"running"}"#,
                             by: companionId), after: .milliseconds(300)))
             }
+            push(.frame(FixtureHost.stateChanged(conversationId, "working")))
             for companionId in summoned {
                 let event = { (event: String) in
                     FixtureHost.agentEvent(conversationId, event, by: companionId)
@@ -1382,6 +1392,7 @@
                         )))
                 push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
             }
+            push(.frame(FixtureHost.stateChanged(conversationId, "idle")))
         }
 
         private func playTurn(after sent: [String: Any]) {
@@ -1393,6 +1404,7 @@
             push(
                 .frame(
                     event(#"{"type":"turnChanged","state":"running"}"#), after: .milliseconds(300)))
+            push(.frame(FixtureHost.stateChanged(conversationId, "working")))
             let tools = [
                 "Read · notes/changelog.md", "Read · apps/app/package.json",
                 "Read · docs/relay/member-socket.md",
@@ -1439,6 +1451,7 @@
                 .frame(
                     event(#"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)))
             push(.frame(event(#"{"type":"turnChanged","state":"idle"}"#)))
+            push(.frame(FixtureHost.stateChanged(conversationId, "idle")))
         }
     }
 #endif
