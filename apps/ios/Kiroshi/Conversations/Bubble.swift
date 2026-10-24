@@ -23,3 +23,29 @@ struct Bubble: Identifiable, Equatable {
     var markdown: MarkdownMessage?
     var position = Position.alone
 }
+
+enum BubbleSplit {
+    static func groups(_ blocks: [MarkdownBlock]) -> [[MarkdownBlock]] {
+        var groups: [[MarkdownBlock]] = []
+        var previous: MarkdownBlock?
+        for block in blocks {
+            defer { previous = block }
+            if block == .rule { continue }
+            if let previous, staysWith(previous, block) {
+                groups[groups.count - 1].append(block)
+            } else {
+                groups.append([block])
+            }
+        }
+        return groups.isEmpty && !blocks.isEmpty ? [blocks] : groups
+    }
+
+    private static func staysWith(_ previous: MarkdownBlock, _ block: MarkdownBlock) -> Bool {
+        switch previous {
+        case .heading: true
+        case .paragraph(let inline):
+            block.isCard || inline.plain.trimmingCharacters(in: .whitespaces).hasSuffix(":")
+        default: false
+        }
+    }
+}

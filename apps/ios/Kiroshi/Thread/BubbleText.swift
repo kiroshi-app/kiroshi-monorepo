@@ -27,6 +27,7 @@ struct BubbleText: View {
             .padding(.horizontal, markdown.hasCard ? cardInset : 14)
             .padding(.top, markdown.blocks.first?.isCard == true ? cardInset : 10)
             .padding(.bottom, markdown.blocks.last?.isCard == true ? cardInset : 10)
+            .accessibilityElement(children: .contain)
         } else {
             Text(bubble.text)
                 .foregroundStyle(isYours ? Color.kiroshi(.userBubbleForeground) : Color.primary)

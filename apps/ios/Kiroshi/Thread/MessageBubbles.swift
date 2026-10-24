@@ -35,10 +35,14 @@ struct MessageBubbles: View {
                         .accessibilityHidden(opensWithText)
                 }
                 ForEach(bubbles) { bubble in
-                    BubbleText(bubble: bubble, isYours: isYours, speaker: speaker, time: time)
-                        .padding(isYours ? .leading : .trailing, isYours ? 70 : 48)
-                        .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
-                        .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
+                    let opensMessage = bubble.id == bubbles.first?.id
+                    BubbleText(
+                        bubble: bubble, isYours: isYours, speaker: opensMessage ? speaker : nil,
+                        time: opensMessage ? time : ""
+                    )
+                    .padding(isYours ? .leading : .trailing, isYours ? 70 : 48)
+                    .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
+                    .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
                 }
             }
         }
