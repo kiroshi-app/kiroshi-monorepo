@@ -37,13 +37,13 @@ export const botHostStatesIn = ({
 	spaceId,
 }: BotSoloThreadsInSpace): ConversationHostStates => {
 	const botStates: ConversationHostStates = {}
-	for (const [conversationId, line] of Object.entries(soloThreads)) {
+	for (const [
+		conversationId,
+		{ spaceId: lineSpaceId, botId },
+	] of Object.entries(soloThreads)) {
 		const state = hostStates[conversationId]
-		if (line.spaceId === spaceId && state !== undefined) {
-			botStates[line.botId] = moreUrgentOf(
-				botStates[line.botId] ?? "idle",
-				state,
-			)
+		if (lineSpaceId === spaceId && state !== undefined) {
+			botStates[botId] = moreUrgentOf(botStates[botId] ?? "idle", state)
 		}
 	}
 	return botStates
