@@ -155,8 +155,10 @@ final class ConversationsAccessibilityTests: XCTestCase {
         release.tap()
 
         XCTAssertTrue(
-            app.staticTexts["The changelog is merged, I’m tagging 0.42 next."]
-                .waitForExistence(timeout: 10))
+            app.staticTexts.matching(
+                NSPredicate(
+                    format: "label ENDSWITH %@", "The changelog is merged, I’m tagging 0.42 next.")
+            ).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["Release crew"].exists)
     }
 

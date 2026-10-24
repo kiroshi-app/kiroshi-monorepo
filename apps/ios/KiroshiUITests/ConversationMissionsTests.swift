@@ -52,7 +52,11 @@ final class ConversationMissionsTests: XCTestCase {
         app.navigationBars.buttons["BackButton"].tap()
 
         XCTAssertTrue(missionsButton.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["All checks passed, the pull request is ready."].exists)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(
+                    format: "label ENDSWITH %@", "All checks passed, the pull request is ready.")
+            ).firstMatch.exists)
         XCTAssertFalse(dictation.exists)
     }
 

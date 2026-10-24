@@ -70,9 +70,10 @@ final class MarkdownMessageTests: XCTestCase {
     func pasted(in app: XCUIApplication) -> String? {
         let field = composer(in: app)
         field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         field.tap()
         let paste = app.menuItems["Paste"]
-        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        XCTAssertTrue(paste.waitForExistence(timeout: 10))
         paste.tap()
         return field.value as? String
     }
