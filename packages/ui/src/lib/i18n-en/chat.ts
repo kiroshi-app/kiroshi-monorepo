@@ -290,6 +290,11 @@ const chat = {
 			failed: "Couldn’t send that request",
 			stopFailed: "Couldn’t stop the agent",
 			stopFailedNamed: "Couldn’t stop {{name}}",
+			questionRunFailed: {
+				title: "{{name}} stopped before you answered",
+				description:
+					"The run failed, so the question is gone. Send a message to start again.",
+			},
 			unauthorized: {
 				title: "The host refused this call.",
 				description: "Open the link from the desktop app again.",

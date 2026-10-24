@@ -992,6 +992,53 @@ export const StopFailedNamed = meta.story({
 	},
 })
 
+const QuestionRunFailedNotice = () => {
+	const t = useChatCopy()
+
+	return (
+		<NoticeDemo
+			label="Fail the run"
+			raise={() =>
+				raiseFailureNotice({
+					title: t("screen.notice.questionRunFailed.title", {
+						name: STOPPED_COMPANION,
+					}),
+					description: t("screen.notice.questionRunFailed.description"),
+				})
+			}
+		/>
+	)
+}
+
+export const QuestionRunFailed = meta.story({
+	tags: ["test-only"],
+	render: () => <QuestionRunFailedNotice />,
+	parameters: {
+		a11y: A11Y_FLOATING_FOCUS_GUARDS,
+		docs: {
+			description: {
+				story:
+					"A run that failed while its question still waited for an answer, titled from the chat catalogue with the companion that asked it. Check that the title names the companion and the description says the question is gone and how to start again.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.click(canvas.getByRole("button", { name: "Fail the run" }))
+
+		await failureNotice()
+		await expect(
+			within(viewport()).getByText(
+				`${STOPPED_COMPANION} stopped before you answered`,
+			),
+		).toBeVisible()
+		await expect(
+			within(viewport()).getByText(
+				"The run failed, so the question is gone. Send a message to start again.",
+			),
+		).toBeVisible()
+	},
+})
+
 export const Stacked = meta.story({
 	parameters: {
 		a11y: A11Y_FLOATING_FOCUS_GUARDS,

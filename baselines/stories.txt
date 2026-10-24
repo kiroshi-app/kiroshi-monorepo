@@ -951,7 +951,7 @@ navigation-appsidebarbotrow--working-bot-keeps-its-timestamp
 navigation-appsidebarcarousel--list-per-space
 navigation-appsidebarconversationrow--conversation-answered
 navigation-appsidebarconversationrow--conversation-answered-dark
-navigation-appsidebarconversationrow--conversation-long-question-at-the-narrowest-sidebar
+navigation-appsidebarconversationrow--conversation-long-question-at-240-pixels
 navigation-appsidebarconversationrow--conversation-needing-you
 navigation-appsidebarconversationrow--conversation-needing-you-dark
 navigation-appsidebarconversationrow--knockout-wears-the-row-at-rest-and-hovered
@@ -1001,6 +1001,8 @@ navigation-appsidebarsection--name-field-commits-on-enter
 navigation-appsidebarsection--open-section
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
+navigation-conversationbotpile--side-by-side-five-bots-show-two-and-a-counter
+navigation-conversationbotpile--side-by-side-three-bots
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--blue
@@ -1214,6 +1216,7 @@ overlays-noticesurface--loading
 overlays-noticesurface--long-content
 overlays-noticesurface--m-13-signed-out
 overlays-noticesurface--marks
+overlays-noticesurface--question-run-failed
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark
 overlays-noticesurface--repeated-failure
