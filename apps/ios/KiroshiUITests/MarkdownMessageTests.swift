@@ -105,10 +105,13 @@ final class MarkdownMessageTests: XCTestCase {
             let isFullyShown =
                 element.frame.minY >= top && element.frame.maxY <= bottom
                 && transcript.contains(element.frame)
+            // SwiftUI samples a horizontally scrolling Text at its natural width, beyond the clip.
+            let runsPastTheTranscript =
+                element.frame.minX < transcript.minX || element.frame.maxX > transcript.maxX
             let isAccepted =
                 switch issue.auditType {
                 case .textClipped, .dynamicType: !isFullyShown
-                case .contrast: element.frame.minY < top
+                case .contrast: element.frame.minY < top || runsPastTheTranscript
                 default: false
                 }
             if !isAccepted {
