@@ -87,9 +87,7 @@ mod tests {
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_path(name: &str) -> RemovedOnDrop {
-		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-system-{name}")));
-		let _ = fs::remove_dir_all(&path);
-		path
+		crate::db::connection::fixture_root(&format!("system-{name}"))
 	}
 
 	fn committed() -> PathBuf {

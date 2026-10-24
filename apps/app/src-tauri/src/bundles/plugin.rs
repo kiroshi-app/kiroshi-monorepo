@@ -179,9 +179,7 @@ mod tests {
 	use std::thread;
 
 	fn a_path(name: &str) -> RemovedOnDrop {
-		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-plugin-{name}")));
-		let _ = fs::remove_dir_all(&path);
-		path
+		crate::db::connection::fixture_root(&format!("plugin-{name}"))
 	}
 
 	fn about_file(path: &Path) -> PathBuf {

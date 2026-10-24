@@ -643,8 +643,7 @@ mod tests {
 
 	#[test]
 	fn a_server_a_session_reported_waiting_reads_connected_once_the_person_authorizes_it() {
-		let root = RemovedOnDrop(std::env::temp_dir().join("kiroshi-mcp-oauth-connect-clears"));
-		let _ = std::fs::remove_dir_all(&root);
+		let root = crate::db::connection::fixture_root("mcp-oauth-connect-clears");
 		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 		let reports = ApplicationReports::default();
 		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
@@ -709,10 +708,7 @@ mod tests {
 	}
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		let root =
-			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-mcp-oauth-commands-{name}")));
-		let _ = std::fs::remove_dir_all(&root);
-		root
+		crate::db::connection::fixture_root(&format!("mcp-oauth-commands-{name}"))
 	}
 
 	fn read_row(root: &Path, owner: &EnvOwner) -> ApplicationRow {

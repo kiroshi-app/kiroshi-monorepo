@@ -1132,9 +1132,7 @@ mod tests {
 	}
 
 	pub(super) fn a_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-bundle-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		crate::db::connection::fixture_root(&format!("bundle-{name}"))
 	}
 
 	#[test]

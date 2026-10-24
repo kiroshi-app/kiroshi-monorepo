@@ -435,9 +435,7 @@ mod tests {
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-environment-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		crate::db::connection::fixture_root(&format!("environment-{name}"))
 	}
 
 	fn a_space() -> EnvScope {

@@ -90,6 +90,17 @@ pub fn temp_dir() -> crate::removed_on_drop::RemovedOnDrop {
 }
 
 #[cfg(test)]
+pub fn fixture_root(name: &str) -> crate::removed_on_drop::RemovedOnDrop {
+	let root = std::env::temp_dir().join(format!("kiroshi-{name}-{}", std::process::id()));
+	match fs::remove_dir_all(&root) {
+		Err(failure) if failure.kind() != std::io::ErrorKind::NotFound => {
+			panic!("the leftover fixture {} was not removed: {failure}", root.display())
+		}
+		_ => crate::removed_on_drop::RemovedOnDrop(root),
+	}
+}
+
+#[cfg(test)]
 pub fn is_busy(error: &DatabaseError) -> bool {
 	matches!(
 		error,

@@ -491,9 +491,7 @@ mod tests {
 	}
 
 	fn a_bundle_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-contract-{name}")));
-		let _ = std::fs::remove_dir_all(&root);
-		root
+		crate::db::connection::fixture_root(&format!("contract-{name}"))
 	}
 
 	#[test]

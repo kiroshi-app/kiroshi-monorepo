@@ -245,7 +245,10 @@ fn a_probe_that_could_not_run_is_reported_apart_from_a_refusal() {
 }
 
 fn a_root(name: &str) -> RemovedOnDrop {
-	let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-connection-check-{name}")));
+	let root = RemovedOnDrop(
+		std::env::temp_dir()
+			.join(format!("kiroshi-connection-check-{name}-{}", std::process::id())),
+	);
 	let _ = std::fs::remove_dir_all(&root);
 	root
 }

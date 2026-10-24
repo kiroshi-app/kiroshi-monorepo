@@ -469,8 +469,7 @@ mod tests {
 	use git2::{DiffFormat, DiffOptions};
 
 	fn a_bundle(name: &str) -> RemovedOnDrop {
-		let bundle = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-git-{name}")));
-		let _ = fs::remove_dir_all(&bundle);
+		let bundle = crate::db::connection::fixture_root(&format!("git-{name}"));
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
 		init(&bundle).expect("the repository is created");
 		bundle
@@ -478,8 +477,7 @@ mod tests {
 
 	#[test]
 	fn a_bundle_with_no_repository_refuses_the_record_and_is_given_none() {
-		let bundle = RemovedOnDrop(std::env::temp_dir().join("kiroshi-git-no-repository"));
-		let _ = fs::remove_dir_all(&bundle);
+		let bundle = crate::db::connection::fixture_root("git-no-repository");
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
 		fs::write(bundle.join("agent.md"), "Answer briefly.").expect("the file lands");
 

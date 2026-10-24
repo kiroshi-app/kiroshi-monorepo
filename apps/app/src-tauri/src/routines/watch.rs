@@ -108,7 +108,6 @@ fn change_of(kind: &EventKind) -> Option<Change> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::removed_on_drop::RemovedOnDrop;
 
 	const NOON: i64 = 1_800_000_000_000;
 
@@ -173,7 +172,7 @@ mod tests {
 
 	#[test]
 	fn a_change_to_a_file_on_disk_carries_its_size() {
-		let dir = RemovedOnDrop(std::env::temp_dir().join("kiroshi-watch-measured"));
+		let dir = crate::db::connection::fixture_root("watch-measured");
 		fs::create_dir_all(&dir).expect("the directory stands");
 		let path = dir.join("a.md");
 		fs::write(&path, b"four").expect("the file lands");
