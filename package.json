@@ -48,6 +48,7 @@
 		"ios:test": "bun run ios:generate && SIMULATOR=$(bun apps/ios/scripts/simulator.ts) && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan Kiroshi -destination \"platform=iOS Simulator,id=$SIMULATOR\" -derivedDataPath apps/ios/build -parallel-testing-enabled NO -collect-test-diagnostics never test",
 		"ios:test:unit": "bun run ios:generate && SIMULATOR=$(bun apps/ios/scripts/simulator.ts) && apps/ios/scripts/xcodebuild.sh -project apps/ios/Kiroshi.xcodeproj -scheme Kiroshi -testPlan KiroshiUnit -destination \"platform=iOS Simulator,id=$SIMULATOR\" -derivedDataPath apps/ios/build -collect-test-diagnostics never test",
 		"ios:run": "bun apps/ios/scripts/run.ts",
+		"ios:screenshots": "apps/ios/scripts/store-screenshots.sh",
 		"prepare": "husky"
 	},
 	"devDependencies": {

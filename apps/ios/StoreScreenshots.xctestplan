@@ -1,0 +1,27 @@
+{
+  "configurations" : [
+    {
+      "id" : "6F1C2B0E-886A-4C55-9E2B-5D3A1F0C8E86",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false
+  },
+  "testTargets" : [
+    {
+      "selectedTests" : [
+        "StoreScreenshots"
+      ],
+      "target" : {
+        "containerPath" : "container:Kiroshi.xcodeproj",
+        "identifier" : "92FDE2B193056DB0187112D0",
+        "name" : "KiroshiUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

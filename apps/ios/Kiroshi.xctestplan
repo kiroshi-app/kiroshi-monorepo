@@ -21,6 +21,9 @@
     },
     {
       "parallelizable" : true,
+      "skippedTests" : [
+        "StoreScreenshots"
+      ],
       "target" : {
         "containerPath" : "container:Kiroshi.xcodeproj",
         "identifier" : "92FDE2B193056DB0187112D0",
