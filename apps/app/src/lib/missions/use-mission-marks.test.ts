@@ -331,6 +331,7 @@ describe("the rail rings of local Spaces", () => {
 			badges: {},
 			missions,
 			now: 0,
+			pendingQuestions: { spaceRowId: null, byConversation: {}, byBot: {} },
 			previews: {} as never,
 			rosters: ROSTERS,
 			working: {} as never,

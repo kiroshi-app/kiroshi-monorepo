@@ -14,6 +14,7 @@ import {
 	type JoinedSpace,
 	type JoinedSpaceMember,
 } from "../bindings"
+import type { ScopedEvent } from "../agent/contract"
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
 import { rosterLinesIn } from "../bots/roster-line"
@@ -21,6 +22,7 @@ import {
 	type ChatController,
 	createChatController,
 } from "../chat/chat-controller"
+import type { ChatDriver } from "../chat/driver"
 import { createConversationController } from "../conversations/conversation-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
@@ -83,8 +85,15 @@ const NO_HELD_CONVERSATIONS: HeldConversations = {
 	heldFor: () => null,
 }
 
+type HeardEvents = Pick<ChatDriver, "subscribe">
+
+const NO_EVENTS: HeardEvents = {
+	subscribe: async () => () => undefined,
+}
+
 type RosterListsWiring = {
 	roster: RosterController
+	driver?: HeardEvents
 	chat?: HeldChat
 	conversationRuntimes?: HeldConversations
 	joinedSpaces?: JoinedSpace[]
@@ -94,6 +103,7 @@ const SIGNED_IN = { kind: "signedIn", id: "account-self" }
 
 const rosterListsOn = ({
 	roster,
+	driver = NO_EVENTS,
 	chat = NO_HELD_CHAT,
 	conversationRuntimes = NO_HELD_CONVERSATIONS,
 	joinedSpaces = [],
@@ -105,6 +115,7 @@ const rosterListsOn = ({
 			joinedSpaces: { state: { joinedSpaces } },
 			chat: { controller: chat },
 			conversationRuntimes,
+			driver,
 			roster: { controller: roster, state: { isRosterPending: false } },
 		},
 		drivers: { badges: {}, conversationBadges: {} },
@@ -139,7 +150,97 @@ const renderRosterLists = (wiring: RosterListsWiring) =>
 		wrapper: createQueryTestWrapper().wrapper,
 	}).result
 
+const createHeardEvents = () => {
+	const listeners = new Set<(scoped: ScopedEvent) => void>()
+	return {
+		subscribe: async (onEvent: (scoped: ScopedEvent) => void) => {
+			listeners.add(onEvent)
+			return () => {
+				listeners.delete(onEvent)
+			}
+		},
+		emit: (scoped: ScopedEvent) =>
+			act(() => {
+				for (const listener of listeners) {
+					listener(scoped)
+				}
+			}),
+	}
+}
+
+const askedIn = (conversationId: string): ScopedEvent => ({
+	scope: {
+		conversationId,
+		botId: BOT,
+		runtimeSessionId: `${conversationId}-run`,
+		epoch: 1,
+	},
+	event: {
+		type: "questionRequested",
+		request: {
+			id: "question-one",
+			questions: [
+				{
+					header: "Branch",
+					question: "Which branch should I use?",
+					options: [],
+					multiSelect: false,
+				},
+			],
+		},
+	},
+})
+
+const ANSWERED: ScopedEvent = {
+	scope: null,
+	event: {
+		type: "permissionResolved",
+		id: "question-one",
+		decision: "allowOnce",
+	},
+}
+
 describe("useRosterLists", () => {
+	it("shows a pending question on its conversation row and companion row until it is answered", async () => {
+		const store = createFakeTranscriptStore()
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [BOT],
+		})
+		const roster = await loadedRoster(store)
+		const heard = createHeardEvents()
+		const { queryClient, wrapper } = createQueryTestWrapper()
+		const { result } = renderHook(
+			() => useRosterLists(rosterListsOn({ roster, driver: heard })),
+			{ wrapper },
+		)
+		await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+		const conversationRow = () =>
+			result.current.rosterConversationsBySpace[SPACE]?.find(
+				({ id }) => id === conversation.id,
+			)
+		const botRow = () =>
+			result.current.rosterBotsBySpace[SPACE]?.find(({ id }) => id === BOT)
+
+		heard.emit(askedIn(conversation.id))
+
+		await waitFor(() =>
+			expect(conversationRow()?.pendingQuestion).toBe(
+				"Which branch should I use?",
+			),
+		)
+		expect(botRow()?.pendingQuestion).toBe("Which branch should I use?")
+
+		heard.emit(ANSWERED)
+
+		await waitFor(() =>
+			expect(conversationRow()?.pendingQuestion).toBeUndefined(),
+		)
+		expect(botRow()?.pendingQuestion).toBeUndefined()
+	})
+
 	it("shows the stored last word on a row whose held controller settled on an older one", async () => {
 		const store = createFakeTranscriptStore()
 		const conversation = await store.createConversation({

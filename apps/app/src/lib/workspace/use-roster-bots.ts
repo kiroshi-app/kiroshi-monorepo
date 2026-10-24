@@ -2,6 +2,11 @@ import { useMemo } from "react"
 
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
+import {
+	questionsByBotIn,
+	type SpaceQuestions,
+	withPendingQuestions,
+} from "../agent/pending-questions"
 import { toRosterBots } from "../bots/bot-settings"
 import { withLineBadges } from "../chat/sidebar-badges"
 import type { useBotBadges } from "../chat/use-bot-badges"
@@ -23,6 +28,7 @@ type RosterBotsInput = {
 	bots: Bot[]
 	missions: ReturnType<typeof missionsBySpaceId>
 	now: number
+	pendingQuestions: SpaceQuestions
 	previews: PreviewsBySpaceId
 	rosteredSpaceId: string | null
 	working: ReturnType<typeof useBotActivity>
@@ -33,6 +39,7 @@ export const useRosterBots = ({
 	bots,
 	missions,
 	now,
+	pendingQuestions,
 	previews,
 	rosteredSpaceId,
 	working,
@@ -45,18 +52,30 @@ export const useRosterBots = ({
 		probeRender("rosterBots")
 		return withMissions(
 			withLineBadges(
-				toRosterBots(
-					bots,
-					{
-						working: activityIn(working, rosteredSpaceId),
-						previews: previewsIn(previews, rosteredSpaceId),
-					},
-					now,
+				withPendingQuestions(
+					toRosterBots(
+						bots,
+						{
+							working: activityIn(working, rosteredSpaceId),
+							previews: previewsIn(previews, rosteredSpaceId),
+						},
+						now,
+					),
+					questionsByBotIn(pendingQuestions, rosteredSpaceId),
 				),
 				badges,
 				rosteredSpaceId,
 			),
 			missionsIn(missions, rosteredSpaceId),
 		)
-	}, [bots, rosteredSpaceId, working, previews, now, badges, missions])
+	}, [
+		bots,
+		rosteredSpaceId,
+		working,
+		previews,
+		now,
+		badges,
+		missions,
+		pendingQuestions,
+	])
 }

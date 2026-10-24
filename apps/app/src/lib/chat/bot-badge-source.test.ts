@@ -165,12 +165,12 @@ describe("createBotBadgeSource", () => {
 		expect(badgeIn(source, "bot-one")).toBe("none")
 	})
 
-	it("reports attention while a question waits", () => {
+	it("reports no attention while only a question waits", () => {
 		const { chat, source } = start()
 
 		chat.publish("bot-one", { ...runs, question: question("q-1") })
 
-		expect(badgeIn(source, "bot-one")).toBe("attention")
+		expect(badgeIn(source, "bot-one")).toBe("none")
 	})
 
 	it("reports attention while a permission waits", () => {
@@ -184,7 +184,7 @@ describe("createBotBadgeSource", () => {
 	it("keeps attention on the selected companion", () => {
 		const { chat, roster, source } = start({ selectedBotId: "bot-one" })
 
-		chat.publish("bot-one", { ...runs, question: question("q-1") })
+		chat.publish("bot-one", { ...runs, permission: permission("p-1") })
 		roster.select("bot-one")
 
 		expect(badgeIn(source, "bot-one")).toBe("attention")
@@ -261,7 +261,7 @@ describe("createBotBadgeSource", () => {
 		const { chat, blur, focus, source } = start({ selectedBotId: "bot-one" })
 
 		blur()
-		chat.publish("bot-one", { ...runs, question: question("q-1") })
+		chat.publish("bot-one", { ...runs, permission: permission("p-1") })
 		focus()
 
 		expect(badgeIn(source, "bot-one")).toBe("attention")
