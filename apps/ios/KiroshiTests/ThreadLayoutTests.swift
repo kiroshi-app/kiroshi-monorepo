@@ -45,13 +45,13 @@ struct ThreadLayoutTests {
     @Test func aRunJoinsItsBubblesAndPutsTheAvatarUnderTheLastOne() {
         let shown = ThreadLayout.mark(releaseNotes, time: time)
 
-        #expect(shown.map(\.bubbles.count) == [1, 1, 1])
+        #expect(shown.map(\.bubbles.count) == [1, 2, 1])
         #expect(shown.map(\.opensRun) == [true, true, false])
         #expect(shown.map(\.closesRun) == [true, false, true])
         #expect(shown[0].bubbles.map(\.position) == [.alone])
-        #expect(shown[1].bubbles.map(\.position) == [.first])
+        #expect(shown[1].bubbles.map(\.position) == [.first, .middle])
         #expect(shown[2].bubbles.map(\.position) == [.last])
-        #expect(shown[1].bubbles.map(\.id) == ["drafted-0"])
+        #expect(shown[1].bubbles.map(\.id) == ["drafted-0", "drafted-1"])
     }
 
     @Test func aLongPauseClosesTheRun() {
@@ -92,13 +92,25 @@ struct ThreadLayoutTests {
         #expect(shown.flatMap(\.bubbles).map(\.position) == [.first, .last])
     }
 
-    @Test func aCompanionsMessageIsOneBubbleWhateverItHolds() {
+    @Test func aCompanionsMessageSplitsIntoOneBubblePerParagraph() {
         let text = "Drafted.\n\nThree sections.\n\n- new\n- fixed"
         let shown = ThreadLayout.mark([message("reply", text, at: at(9, 0))], time: time)
 
-        #expect(shown[0].bubbles.map(\.id) == ["reply-0"])
-        #expect(shown[0].bubbles.map(\.position) == [.alone])
-        #expect(shown[0].bubbles[0].markdown?.blocks.count == 3)
+        #expect(shown[0].bubbles.map(\.id) == ["reply-0", "reply-1", "reply-2"])
+        #expect(shown[0].bubbles.map(\.position) == [.first, .middle, .last])
+        #expect(shown[0].bubbles.map { $0.markdown?.blocks.count } == [1, 1, 1])
+        #expect(shown[0].bubbles.allSatisfy { $0.markdown?.shownText == text })
+    }
+
+    @Test func aStreamingReplyKeepsEachBubbleItAlreadyShows() {
+        var reply = message("reply", "Drafted.", at: at(9, 0))
+        reply.append("\n\nTag it with")
+        let before = reply.bubbles.map(\.id)
+        reply.append(":\n\n```sh\ngit tag v4.2.0\n```\n\nDone")
+
+        #expect(before == ["reply-0", "reply-1"])
+        #expect(reply.bubbles.map(\.id) == ["reply-0", "reply-1", "reply-2"])
+        #expect(reply.bubbles[1].markdown?.blocks.count == 2)
     }
 
     @Test func aPersonsMessageIsNeverParsed() {
@@ -202,7 +214,7 @@ struct ThreadLayoutTests {
 }
 
 extension ThreadStoreTests {
-    @Test func theThreadKeepsARepliedMessageInOneBubbleAndTimesIt() async {
+    @Test func theThreadSplitsARepliedParagraphIntoBubblesAndTimesEachMessage() async {
         let host = TestHost(messages: [
             "chat-juniper": [
                 TestHost.message(
@@ -216,8 +228,9 @@ extension ThreadStoreTests {
 
         let shown = store.entries
         #expect(
-            shown.first?.bubbles.map { String($0.text.characters) } == [
-                "Drafted.\n\nApplications first."
+            shown.first?.bubbles.map(\.markdown?.blocks) == [
+                [.paragraph(MarkdownInline(plain: "Drafted."))],
+                [.paragraph(MarkdownInline(plain: "Applications first."))],
             ])
         #expect(shown.first?.dayLabel == "Today")
         #expect(shown.first?.time.isEmpty == false)

@@ -107,9 +107,9 @@ struct ThreadMessage: Identifiable, Equatable {
         guard !whole.isEmpty else { return [] }
         let shown = render(whole, isWrittenByPerson: isWrittenByPerson, authors: authors)
         guard !isWrittenByPerson else { return [Bubble(id: "\(id)-0", text: shown)] }
-        return [
-            Bubble(id: "\(id)-0", text: shown, markdown: MarkdownMessage(whole, among: authors))
-        ]
+        return MarkdownMessage(whole, among: authors).bubbles.enumerated().map { index, markdown in
+            Bubble(id: "\(id)-\(index)", text: shown, markdown: markdown)
+        }
     }
 
     private static func render(_ text: String, isWrittenByPerson: Bool, authors: [Companion])

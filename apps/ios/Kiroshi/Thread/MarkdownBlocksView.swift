@@ -172,18 +172,28 @@ private struct MarkdownListView: View {
         var body: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(replies.indices, id: \.self) { index in
-                        BubbleText(
-                            bubble: Bubble(
-                                id: "preview-\(index)", text: AttributedString(replies[index]),
-                                markdown: MarkdownMessage(replies[index], among: authors),
-                                position: Bubble.Position(index: index, count: replies.count)),
-                            isYours: false)
+                    ForEach(bubbles) { bubble in
+                        BubbleText(bubble: bubble, isYours: false)
                     }
                 }
                 .padding(.leading, 64)
                 .padding(.trailing, 64)
                 .padding(.vertical, 24)
+            }
+        }
+
+        private var bubbles: [Bubble] {
+            let split = replies.enumerated().flatMap { reply, text in
+                MarkdownMessage(text, among: authors).bubbles.enumerated().map { index, markdown in
+                    Bubble(
+                        id: "preview-\(reply)-\(index)", text: AttributedString(text),
+                        markdown: markdown)
+                }
+            }
+            return split.enumerated().map { index, bubble in
+                var placed = bubble
+                placed.position = Bubble.Position(index: index, count: split.count)
+                return placed
             }
         }
     }
@@ -226,8 +236,17 @@ private struct MarkdownListView: View {
         MarkdownPreview(replies: [MarkdownFixture.diagrams])
     }
 
-    #Preview("10 Mixed reply, one bubble per message") {
+    #Preview("10 Mixed reply, split into bubbles") {
         MarkdownPreview(replies: [MarkdownFixture.mixedReply])
+    }
+
+    #Preview("Every family, split into bubbles") {
+        MarkdownPreview(replies: [MarkdownFixture.everyFamily])
+    }
+
+    #Preview("Every family, split into bubbles · dark") {
+        MarkdownPreview(replies: [MarkdownFixture.everyFamily])
+            .preferredColorScheme(.dark)
     }
 
     #Preview("10 Mixed reply · dark") {

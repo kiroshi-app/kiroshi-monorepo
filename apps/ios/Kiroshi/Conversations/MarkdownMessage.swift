@@ -23,6 +23,15 @@ struct MarkdownMessage: Equatable {
             blocks.filter { !$0.isFootnoteDefinition } + blocks.filter(\.isFootnoteDefinition)
     }
 
+    private init(blocks: [MarkdownBlock], shownText: String) {
+        self.blocks = blocks
+        self.shownText = shownText
+    }
+
+    var bubbles: [MarkdownMessage] {
+        BubbleSplit.groups(blocks).map { MarkdownMessage(blocks: $0, shownText: shownText) }
+    }
+
     var hasCard: Bool {
         blocks.contains(where: \.isCard)
     }

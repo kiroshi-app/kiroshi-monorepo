@@ -43,9 +43,26 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertEqual(pasted(in: app), Self.builds)
     }
 
+    func testCopyMessageFromALaterBubbleCopiesTheWholeMessage() {
+        let app = launch("markdown", "-artboard", "all")
+        let header = app.staticTexts["Status"]
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+
+        header.press(forDuration: 1)
+
+        let copyMessage = app.buttons["Copy Message"]
+        XCTAssertTrue(copyMessage.waitForExistence(timeout: 5))
+        copyMessage.tap()
+        let pasted = pasted(in: app) ?? ""
+        XCTAssertTrue(pasted.hasPrefix("## Release 4.2\nThe build is **green**"), pasted)
+        XCTAssertTrue(pasted.hasSuffix("main --> tag[Tag v4.2]\n```"), pasted)
+    }
+
     func testAReplyWithEveryFamilyReadsBlockByBlockAndPassesTheAudit() throws {
         let app = launch("markdown", "-artboard", "all")
         XCTAssertTrue(app.staticTexts["Juniper, Release 4.2"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["What changed in the thread:"].exists)
+        XCTAssertFalse(app.staticTexts["Juniper, What changed in the thread:"].exists)
         XCTAssertTrue(app.staticTexts["•, Replies stream word by word"].exists)
         XCTAssertTrue(app.staticTexts["Done, Changelog drafted"].exists)
         XCTAssertFalse(app.staticTexts["Done, Changelog drafted"].isSelected)
