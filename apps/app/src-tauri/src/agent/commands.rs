@@ -424,16 +424,7 @@ impl<R: Runtime> RunSink<R> {
 	}
 
 	fn retell_the_mission(&self) {
-		let app = self.app.clone();
-		let conversation_id = self.scope.conversation_id.clone();
-		tauri::async_runtime::spawn(async move {
-			let Some(database) = bot_database(&app) else {
-				return log::warn!("a thread moved and its mission was not read without the store");
-			};
-			if let Err(failure) = announce_thread_moved(&app, database, conversation_id).await {
-				log::warn!("a thread moved and the front was not told of its mission: {failure:?}");
-			}
-		});
+		retell_the_mission(&self.app, self.scope.conversation_id.clone());
 	}
 
 	fn record_its_own_lineage(&self, provider_session_id: String) {
@@ -473,6 +464,29 @@ impl<R: Runtime> RunSink<R> {
 				}
 			}
 		});
+	}
+}
+
+fn retell_the_mission<R: Runtime>(app: &AppHandle<R>, conversation_id: String) {
+	let app = app.clone();
+	tauri::async_runtime::spawn(async move {
+		let Some(database) = bot_database(&app) else {
+			return log::warn!("a thread moved and its mission was not read without the store");
+		};
+		if let Err(failure) = announce_thread_moved(&app, database, conversation_id).await {
+			log::warn!("a thread moved and the front was not told of its mission: {failure:?}");
+		}
+	});
+}
+
+fn retell_when_moved<R: Runtime>(
+	app: &AppHandle<R>,
+	state: &AgentState,
+	scope: &RuntimeScope,
+	before: LivenessSigns,
+) {
+	if state.thread_signs(&scope.conversation_id) != before {
+		retell_the_mission(app, scope.conversation_id.clone());
 	}
 }
 
@@ -1110,7 +1124,9 @@ pub(crate) async fn start_run<R: Runtime>(
 	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
 	let _claim = state.claim(&scope)?;
 
+	let before = state.thread_signs(&scope.conversation_id);
 	let admitted = state.live.take_over(scope.clone());
+	retell_when_moved(&app, state, &scope, before);
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
 	if let Some(previous) = admitted.replaced {
@@ -1515,7 +1531,9 @@ pub async fn agent_shutdown<R: Runtime>(
 	if state.live.is_foreign(&scope) {
 		return Err(stale(&scope));
 	}
+	let before = state.thread_signs(&scope.conversation_id);
 	shutdown_session(&state, &scope).await;
+	retell_when_moved(&app, &state, &scope, before);
 	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
