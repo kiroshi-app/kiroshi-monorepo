@@ -1045,6 +1045,7 @@ const rowOf = (
 	activeTurn: openBotIds && {
 		bots: openBotIds.map((botId) => ({ botId, startedAt: STARTED_AT })),
 	},
+	state: openBotIds ? "working" : "idle",
 })
 
 const startedWorkOf = ({
@@ -1071,7 +1072,7 @@ describe("the working state the stored open turn carries", () => {
 
 		await act(() =>
 			controller.open({
-				...rowOf(conversation, null),
+				...rowOf(conversation, [botId, laterBotId]),
 				activeTurn: {
 					bots: [
 						{ botId, startedAt: 30 },

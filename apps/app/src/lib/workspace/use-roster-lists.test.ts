@@ -210,6 +210,7 @@ describe("useRosterLists", () => {
 						activeTurn: openBotIds && {
 							bots: openBotIds.map((botId) => ({ botId, startedAt: 1 })),
 						},
+						state: openBotIds ? "working" : "idle",
 					},
 				),
 			)
@@ -314,6 +315,7 @@ const hostedAndJoinedPanels = async (selectedRowId: string) => {
 		},
 		soloBotId: null,
 		activeTurn: null,
+		state: "idle" as const,
 	})
 	act(() => {
 		roster.holdPageRow(
