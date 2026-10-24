@@ -111,7 +111,6 @@ export const QuestionPrompt = ({
 	return (
 		<ToolQuestion
 			companionName={companionName}
-			hasDigitKeys
 			minimised={isMinimised}
 			onExpand={() => setIsMinimised(false)}
 			onMinimise={() => setIsMinimised(true)}
