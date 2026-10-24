@@ -413,11 +413,12 @@ describe("chatReducer", () => {
 		})
 	})
 
+	const failed: AgentEvent = {
+		type: "failed",
+		error: { kind: "crashed", code: 1, detail: null },
+	}
+
 	it("marks the failure of a run that held an unanswered question", () => {
-		const failed: AgentEvent = {
-			type: "failed",
-			error: { kind: "crashed", code: 1, detail: null },
-		}
 		const asking = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },
 			{ type: "questionRequested", request: { id: "ask-1", questions: [] } },
@@ -430,10 +431,6 @@ describe("chatReducer", () => {
 	})
 
 	it("leaves the failure of a run without an agent question unmarked", () => {
-		const failed: AgentEvent = {
-			type: "failed",
-			error: { kind: "crashed", code: 1, detail: null },
-		}
 		const running = applyEvents(initialChatState, [
 			{ type: "turnChanged", state: "submitting" },
 		])

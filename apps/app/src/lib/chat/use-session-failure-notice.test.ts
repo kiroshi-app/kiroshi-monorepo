@@ -173,21 +173,20 @@ const UNREACHED: TransportError = {
 	detail: "no agent binary",
 }
 
-const soloFailureOf = (events: AgentEvent[]): ChatError | undefined =>
-	events
+const soloRunFailedAsking = (): ChatError | undefined =>
+	(
+		[
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "questionRequested", request: { id: "ask-1", questions: [] } },
+			{ type: "failed", error: crashed.error },
+		] satisfies AgentEvent[]
+	)
 		.reduce(
 			(state, event) =>
 				chatReducer(state, { type: "driverEvent", scope: null, event }, 0),
 			initialChatState,
 		)
 		.errors.at(-1)
-
-const soloRunFailedAsking = () =>
-	soloFailureOf([
-		{ type: "turnChanged", state: "submitting" },
-		{ type: "questionRequested", request: { id: "ask-1", questions: [] } },
-		{ type: "failed", error: crashed.error },
-	])
 
 const groupRunFailedAsking: ChatError = {
 	...questionRunFailureOf(UNREACHED, 0),
