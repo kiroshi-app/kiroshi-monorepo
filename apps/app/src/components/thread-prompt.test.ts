@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { createElement } from "react"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import "@workspace/ui/lib/i18n"
 
@@ -51,7 +51,26 @@ const scopeQuestion = (subject?: QuestionSubject): QuestionRequest => ({
 	subject,
 })
 
-const renderPrompt = (request: QuestionRequest) =>
+const wallQuestion = (): QuestionRequest => ({
+	id: "q-2",
+	questions: [
+		{
+			header: "Wall",
+			question: "Which wall holds?",
+			options: [
+				{ label: "North", description: null, preview: null },
+				{ label: "South", description: null, preview: null },
+				{ label: "East", description: null, preview: null },
+			],
+			multiSelect: false,
+		},
+	],
+})
+
+const renderPrompt = (
+	request: QuestionRequest,
+	responder: PromptResponder = RESPONDER,
+) =>
 	render(
 		createElement(
 			ConversationApplicationsContext.Provider,
@@ -63,9 +82,24 @@ const renderPrompt = (request: QuestionRequest) =>
 					onOpen: () => undefined,
 				},
 			},
-			createElement(QuestionPrompt, { request, responder: RESPONDER }),
+			createElement(QuestionPrompt, { request, responder }),
 		),
 	)
+
+const pressDigit = (digit: number, target: Element = document.body) => {
+	const event = new KeyboardEvent("keydown", {
+		key: String(digit),
+		code: `Digit${digit}`,
+		bubbles: true,
+		cancelable: true,
+	})
+	act(() => {
+		target.dispatchEvent(event)
+	})
+	return event
+}
+
+const checkedOptions = () => screen.queryAllByRole("radio", { checked: true })
 
 const drawnMark = () => document.querySelector(`img[src="${SENTRY_LOGO}"]`)
 
@@ -93,5 +127,56 @@ describe("QuestionPrompt", () => {
 		renderPrompt(scopeQuestion())
 
 		expect(drawnMark()).toBeNull()
+	})
+
+	it("names the digit range of the unfolded question in its foot hint", () => {
+		renderPrompt(wallQuestion())
+
+		expect(
+			screen.getByText("Press 1\u20133 to choose, Return to send"),
+		).toBeTruthy()
+	})
+
+	it("picks only the second option on the 2 key and sends it on Return", async () => {
+		const answer = vi.fn(async () => undefined)
+		renderPrompt(wallQuestion(), { ...RESPONDER, answer })
+
+		expect(document.activeElement).toBe(
+			screen.getByRole("form", { name: "Which wall holds?" }),
+		)
+
+		const event = pressDigit(2)
+
+		expect(event.defaultPrevented).toBe(true)
+		expect(checkedOptions()).toEqual([
+			screen.getByRole("radio", { name: "South" }),
+		])
+
+		await act(async () => {
+			fireEvent.keyDown(document.activeElement as Element, { key: "Enter" })
+		})
+
+		expect(answer).toHaveBeenCalledOnce()
+		expect(answer).toHaveBeenCalledWith("q-2", { "Which wall holds?": "South" })
+	})
+
+	it("lets a digit typed in the own-answer field stay text", () => {
+		renderPrompt(wallQuestion())
+		const field = screen.getByLabelText("Other answer")
+
+		const event = pressDigit(2, field)
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(checkedOptions()).toEqual([])
+	})
+
+	it("ignores the digit keys while the panel is minimised", () => {
+		renderPrompt(wallQuestion())
+		fireEvent.click(screen.getByRole("button", { name: "Minimize" }))
+
+		const event = pressDigit(2)
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(screen.queryAllByRole("radio")).toEqual([])
 	})
 })

@@ -2344,8 +2344,41 @@ describe("ThreadScreen", () => {
 		expect(askedForm()).toBeTruthy()
 		expect(composerField()).toBeNull()
 		expect(rowIndexOf("Which wall holds?")).toBe(-1)
-		expect(screen.getByText("Return to send")).toBeTruthy()
-		expect(screen.queryByText(/Press 1-2/)).toBeNull()
+		expect(
+			screen.getByText("Press 1\u20132 to choose, Return to send"),
+		).toBeTruthy()
+	})
+
+	it("picks an option from a digit key and leaves the transcript and the chords alone", async () => {
+		await askedSolo()
+		const viewport = document.querySelector<HTMLElement>(
+			'[data-slot="message-scroller-viewport"]',
+		)
+		const scrolledTo = viewport?.scrollTop
+
+		const digit = new KeyboardEvent("keydown", {
+			key: "2",
+			code: "Digit2",
+			bubbles: true,
+			cancelable: true,
+		})
+		const chord = new KeyboardEvent("keydown", {
+			key: "1",
+			code: "Digit1",
+			metaKey: true,
+			bubbles: true,
+			cancelable: true,
+		})
+		await act(async () => {
+			document.body.dispatchEvent(digit)
+			document.body.dispatchEvent(chord)
+		})
+
+		expect(screen.queryAllByRole("radio", { checked: true })).toEqual([
+			screen.getByRole("radio", { name: "South" }),
+		])
+		expect(chord.defaultPrevented).toBe(false)
+		expect(viewport?.scrollTop).toBe(scrolledTo)
 	})
 
 	it("folds into the waiting bar and unfolds with the pick still held", async () => {
