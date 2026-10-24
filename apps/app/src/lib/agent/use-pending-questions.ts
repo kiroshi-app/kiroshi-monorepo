@@ -9,6 +9,7 @@ import {
 	changesPendingQuestions,
 	firstQuestionByConversation,
 	latestQuestionByBot,
+	leavesQuestionsToTheHost,
 	type PendingQuestion,
 	pendingQuestionsAfter,
 	pendingQuestionsOf,
@@ -72,6 +73,10 @@ export const usePendingQuestions = ({
 				.cancelQueries({ queryKey })
 				.then(() => queryClient.refetchQueries({ queryKey }))
 		const follow = (scoped: ScopedEvent) => {
+			if (leavesQuestionsToTheHost(scoped)) {
+				void reread()
+				return
+			}
 			if (!changesPendingQuestions(scoped)) {
 				return
 			}

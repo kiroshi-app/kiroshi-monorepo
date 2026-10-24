@@ -9,9 +9,15 @@ import type { ScopedEvent } from "./contract"
 import { pendingQuestionsInSpace } from "./transport"
 import { usePendingQuestions } from "./use-pending-questions"
 
+import { onHostReconnected } from "../host"
+import { invalidateOnHostReconnect } from "../query/host-invalidations"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
 vi.mock("./transport", () => ({ pendingQuestionsInSpace: vi.fn() }))
+vi.mock("../host", () => ({
+	onHostReconnected: vi.fn(() => () => undefined),
+	joinedHosts: { getState: () => ({ active: null, connections: {} }) },
+}))
 vi.mock("@workspace/ui/components/notice-surface", () => ({
 	raiseFailureNotice: vi.fn(() => "notice-1"),
 	raiseTransientNotice: vi.fn(),
@@ -75,6 +81,19 @@ const turnEndedIn = (conversationId: string, botId = "atlas"): ScopedEvent => ({
 	},
 })
 
+const crashedIn = (conversationId: string, botId = "atlas"): ScopedEvent => ({
+	scope: {
+		conversationId,
+		botId,
+		runtimeSessionId: `${conversationId}-${botId}`,
+		epoch: 1,
+	},
+	event: {
+		type: "failed",
+		error: { kind: "crashed", code: 1, detail: null },
+	},
+})
+
 const createFakeDriver = () => {
 	const listeners = new Set<(scoped: ScopedEvent) => void>()
 	return {
@@ -100,11 +119,12 @@ const hostHolds = (bySpace: Record<string, ScopedEvent[]>) =>
 
 const renderQuestions = (spaceRowId: string | null = "home") => {
 	const driver = createFakeDriver()
+	const { queryClient, wrapper } = createQueryTestWrapper()
 	const rendered = renderHook(
 		({ spaceRowId }) => usePendingQuestions({ driver, roster, spaceRowId }),
-		{ initialProps: { spaceRowId }, wrapper: createQueryTestWrapper().wrapper },
+		{ initialProps: { spaceRowId }, wrapper },
 	)
-	return { driver, ...rendered }
+	return { driver, queryClient, ...rendered }
 }
 
 const listening = (driver: ReturnType<typeof createFakeDriver>) =>
@@ -183,6 +203,39 @@ describe("usePendingQuestions", () => {
 				"room-two": "Deploy now?",
 			}),
 		)
+	})
+
+	it("rereads the space when a run fails without ending its turn", async () => {
+		hostHolds({ "host-home": [asked("q-1", "Which branch?", "room-one")] })
+		const { driver, result } = renderQuestions()
+		await waitFor(() =>
+			expect(result.current.byBot).toEqual({ atlas: "Which branch?" }),
+		)
+		hostHolds({})
+
+		driver.emit(crashedIn("room-one"))
+
+		await waitFor(() => expect(result.current.byConversation).toEqual({}))
+		expect(result.current.byBot).toEqual({})
+		expect(pendingQuestionsInSpace).toHaveBeenCalledTimes(2)
+	})
+
+	it("rereads the space when the host connection comes back", async () => {
+		hostHolds({})
+		const { queryClient, result } = renderQuestions()
+		await waitFor(() => expect(pendingQuestionsInSpace).toHaveBeenCalled())
+		const stopInvalidating = invalidateOnHostReconnect(queryClient)
+		const [reconnected] = vi.mocked(onHostReconnected).mock.calls[0] ?? []
+		hostHolds({ "host-home": [asked("q-1", "Which branch?", "room-one")] })
+
+		act(() => reconnected?.("garage"))
+
+		await waitFor(() =>
+			expect(result.current.byConversation).toEqual({
+				"room-one": "Which branch?",
+			}),
+		)
+		stopInvalidating()
 	})
 
 	it("rereads the space when an answer lands while the host is read", async () => {

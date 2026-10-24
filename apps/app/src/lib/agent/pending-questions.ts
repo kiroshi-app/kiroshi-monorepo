@@ -30,6 +30,9 @@ const askedIn = ({ scope, event }: ScopedEvent): PendingQuestion[] => {
 export const pendingQuestionsOf = (events: ScopedEvent[]): PendingQuestion[] =>
 	events.flatMap(askedIn)
 
+export const leavesQuestionsToTheHost = ({ event }: ScopedEvent): boolean =>
+	event.type === "failed"
+
 export const changesPendingQuestions = ({ event }: ScopedEvent): boolean =>
 	event.type === "questionRequested" ||
 	event.type === "permissionResolved" ||
