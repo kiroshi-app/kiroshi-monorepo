@@ -40,6 +40,8 @@ On a Mac, CI unset, every xcodebuild of `ios:build`, `ios:test`, `ios:test:unit`
 
 Builds running at once share both. DerivedData stays in each worktree, `apps/ios/build`, and with it `Build/Products`: one DerivedData shared by two worktrees refuses the second build while the first runs (`database is locked`), and would let one worktree test the other's products.
 
+On a machine that opted in to the heavy job slots (`~/.kiroshi/slots`), `xcodebuild.sh` runs xcodebuild through `scripts/slot.sh`: when every slot is taken the build prints `slot.sh: xcodebuild ... waiting for one of N slots for Ns` every 30 seconds and starts as soon as one frees, it never fails for lack of a slot. Inside `bun run ci ios`, already in a slot, it takes no second one.
+
 Wipe the shared caches while no iOS build runs, from any worktree:
 
 ```bash
