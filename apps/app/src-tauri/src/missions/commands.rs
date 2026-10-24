@@ -1445,6 +1445,40 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn a_launch_replaces_the_reader_of_an_open_mission_and_keeps_its_settings_and_its_key() {
+		let app = a_host("launch-reader").await;
+		app.manage(crate::routines::webhook::start(app.handle().clone()));
+		let workspace = a_checkout("launch-reader");
+		let opened =
+			mission_open(app.handle().clone(), app.state(), drafted_in("Fix it", Some(&workspace)))
+				.await
+				.expect("the mission opens");
+		let dir = hook::dir(app.handle(), &opened.mission.id).expect("the hook dir is named");
+		let reader = dir.join("kiroshi-agent-hook.py");
+		fs::write(&reader, "print('an older reader')").expect("an older reader stands");
+		let config = || fs::read_to_string(dir.join("agent-hook.json")).expect("the config reads");
+		let key_before: serde_json::Value =
+			serde_json::from_str(&config()).expect("the config is JSON");
+		let settings_before = hooked_in(&workspace);
+
+		install_hooks_at_launch(app.handle()).await;
+
+		let key_after: serde_json::Value =
+			serde_json::from_str(&config()).expect("the config is JSON");
+		assert_eq!(
+			fs::read_to_string(&reader).expect("the reader reads"),
+			include_str!("../../hooks/kiroshi-agent-hook.py"),
+			"the launch left the older reader in place"
+		);
+		assert_eq!(key_after["key"], key_before["key"], "the launch moved the delivery key");
+		assert_eq!(hooked_in(&workspace), settings_before, "the launch moved the settings");
+
+		if let Some(webhook) = app.try_state::<crate::routines::webhook::Webhook>() {
+			webhook.stop();
+		}
+	}
+
+	#[tokio::test]
 	async fn arming_refuses_an_unknown_mission_a_closed_one_and_a_repository_without_an_owner() {
 		let app = a_host("refused").await;
 		app.manage(crate::routines::webhook::start(app.handle().clone()));
