@@ -521,6 +521,13 @@ export const WaitingBar = meta.story({
 	},
 })
 
+const expectOptionRing = (row: HTMLElement) =>
+	waitFor(() =>
+		expect(getComputedStyle(row).boxShadow).toContain(
+			`${tokenStyleIn(row, "text-ring/30", "color")} 0px 0px 0px 3px`,
+		),
+	)
+
 const FoldedPanel = (args: ToolQuestionProps) => {
 	const [isMinimised, setIsMinimised] = useState(true)
 	return (
@@ -569,12 +576,7 @@ export const AnswerPressed = meta.story({
 			const rows = panel.getAllByRole("radio")
 			const first = rows[0] as HTMLElement
 			await expect(first).toHaveFocus()
-			const ring = tokenStyleIn(first, "text-ring/30", "color")
-			await waitFor(() =>
-				expect(getComputedStyle(first).boxShadow).toContain(
-					`${ring} 0px 0px 0px 3px`,
-				),
-			)
+			await expectOptionRing(first)
 			await expect(getComputedStyle(first).outlineStyle).toBe("none")
 			for (const row of rows.slice(1))
 				await expect(getComputedStyle(row).boxShadow).toBe("none")
@@ -599,11 +601,7 @@ export const AnswerPressed = meta.story({
 		const focusedChosen = chosen[1] as HTMLElement
 		await expect(focusedChosen).toHaveFocus()
 		await expectChosenPaint(focusedChosen)
-		await waitFor(() =>
-			expect(getComputedStyle(focusedChosen).boxShadow).toContain(
-				`${tokenStyleIn(focusedChosen, "text-ring/30", "color")} 0px 0px 0px 3px`,
-			),
-		)
+		await expectOptionRing(focusedChosen)
 	},
 })
 
