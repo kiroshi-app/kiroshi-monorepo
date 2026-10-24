@@ -68,6 +68,7 @@ import type { ChatError } from "../chat/chat-state"
 import {
 	chatErrorOf,
 	isSameRuntimeScope,
+	questionRunFailureOf,
 	stopFailureOf,
 	toCancelError,
 	toReadError,
@@ -375,6 +376,11 @@ export const createConversationController = (
 
 	const noteStopFailure = (botId: string, error: TransportError) => {
 		latestError = { ...stopFailureOf(error, errorCount), botId }
+		errorCount += 1
+	}
+
+	const noteQuestionRunFailure = (botId: string, error: TransportError) => {
+		latestError = { ...questionRunFailureOf(error, errorCount), botId }
 		errorCount += 1
 	}
 
@@ -798,7 +804,11 @@ export const createConversationController = (
 	}
 
 	const failSpeaker = (held: Speaker, error: TransportError) => {
-		noteSpeakerFailure(held.botId, error)
+		if (held.pending?.kind === "question") {
+			noteQuestionRunFailure(held.botId, error)
+		} else {
+			noteSpeakerFailure(held.botId, error)
+		}
 		if (needsFreshSession(error)) {
 			closeSpeaker(held, "failed")
 			return

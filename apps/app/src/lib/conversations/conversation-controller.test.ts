@@ -1180,6 +1180,39 @@ describe("createConversationController", () => {
 			})
 		})
 
+		it("marks the failure of a run that held an unanswered question", async () => {
+			const nyx = await askedIn(harness)
+
+			harness.driver.pushTo(nyx, [
+				{
+					type: "failed",
+					error: { kind: "spawnFailed", detail: "no agent binary" },
+				},
+			])
+			await harness.settled()
+
+			expect(harness.controller.getState().latestError).toMatchObject({
+				botId: nyx,
+				isQuestionRunFailure: true,
+			})
+		})
+
+		it("leaves the failure of a run that held a permission unmarked", async () => {
+			const nyx = await permittedIn(harness)
+
+			harness.driver.pushTo(nyx, [
+				{
+					type: "failed",
+					error: { kind: "spawnFailed", detail: "no agent binary" },
+				},
+			])
+			await harness.settled()
+
+			expect(
+				harness.controller.getState().latestError?.isQuestionRunFailure,
+			).toBeUndefined()
+		})
+
 		it("draws the companion that asked as waiting on its first question, not its header", async () => {
 			await askedIn(harness)
 

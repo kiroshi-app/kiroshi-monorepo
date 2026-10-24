@@ -50,7 +50,7 @@ const titleOf = (t: ChatCopy, error: ChatError, botName: string | undefined) =>
 		? stopFailureTitleOf(t, botName)
 		: noticeTitleFor(t, error.error)
 
-const transportMessageOf = (
+const sessionMessageOf = (
 	t: ChatCopy,
 	{ error, botName, onRestart, onSignIn }: FailureReading,
 ): NoticeMessage => {
@@ -71,6 +71,21 @@ const transportMessageOf = (
 				? { label: t("screen.restart"), onPress: onRestart }
 				: undefined,
 	}
+}
+
+const questionRunCopyOf = (t: ChatCopy, botName: string) => ({
+	title: t("screen.notice.questionRunFailed.title", { name: botName }),
+	description: t("screen.notice.questionRunFailed.description"),
+})
+
+const transportMessageOf = (
+	t: ChatCopy,
+	reading: FailureReading,
+): NoticeMessage => {
+	const message = sessionMessageOf(t, reading)
+	return reading.error.isQuestionRunFailure && reading.botName
+		? { ...message, ...questionRunCopyOf(t, reading.botName) }
+		: message
 }
 
 let fadedFailureId: string | null = null
