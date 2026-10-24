@@ -23,6 +23,12 @@
 		0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06),
 		0 12px 28px rgb(0 0 0 / 0.12);
 	--icon-stroke: 0.09em;
+	--question-bar: var(--card);
+	--question-segment-foreground: color-mix(
+		in oklab,
+		var(--muted-foreground) 90%,
+		var(--foreground)
+	);
 }
 
 .dark {
@@ -30,6 +36,8 @@
 	--popover-shadow:
 		0 0 0 1px rgb(255 255 255 / 0.1), 0 0 1px rgb(255 255 255 / 0.16),
 		0 12px 28px rgb(0 0 0 / 0.7);
+	--question-bar: color-mix(in oklab, var(--foreground) 6%, var(--card));
+	--question-segment-foreground: var(--muted-foreground);
 }
 
 @theme inline {
@@ -69,7 +77,10 @@
 	--color-presence-online: var(--presence-online);
 	--color-presence-offline: var(--presence-offline);
 	--color-title-bar-pill: var(--title-bar-pill);
+	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
+	--color-question-bar: var(--question-bar);
+	--color-question-segment-foreground: var(--question-segment-foreground);
 	--radius-xs: calc(var(--radius-root) * 0.2);
 	--radius-sm: calc(var(--radius-root) * 0.6);
 	--radius-md: calc(var(--radius-root) * 0.8);

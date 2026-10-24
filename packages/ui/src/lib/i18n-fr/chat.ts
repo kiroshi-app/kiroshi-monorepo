@@ -231,9 +231,30 @@ const chat = {
 		blank: "Répondez à cette question pour continuer.",
 		preview: "Aperçu",
 		submit: "Envoyer les réponses",
+		send: "Envoyer",
 		next: "Passer à la question suivante",
+		nextLabel: "Suivante",
 		continue: "Continuer",
-		dismiss: "Ignorer",
+		skip: "Passer",
+		minimise: "Réduire",
+		pickAny: "Choisissez toutes celles qui conviennent.",
+		hint: {
+			chooseThenSend:
+				"Appuyez sur {{range}} pour choisir, Retour pour envoyer.",
+			chooseThenNext:
+				"Appuyez sur {{range}} pour choisir, Retour pour la question suivante.",
+			toggleThenSend: "Appuyez sur {{range}} pour cocher, Retour pour envoyer.",
+			toggleThenNext:
+				"Appuyez sur {{range}} pour cocher, Retour pour la question suivante.",
+			send: "Retour pour envoyer.",
+			next: "Retour pour la question suivante.",
+		},
+		waiting: {
+			title: "{{name}} attend votre réponse",
+			unnamedTitle: "En attente de votre réponse",
+			mark: "?",
+			answer: "Répondre",
+		},
 		copy: "Copier",
 		copied: "Copié",
 		copyAnnounced: "Lien copié dans le presse-papiers",

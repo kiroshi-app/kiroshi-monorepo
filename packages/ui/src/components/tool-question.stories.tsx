@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react"
+import type { ComponentProps, CSSProperties, ReactNode } from "react"
 import { expect, fireEvent, fn, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -10,8 +10,13 @@ import {
 	lineHeightOf,
 	realPointer,
 	slotIn,
+	slotsIn,
 	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
+import {
+	type BotAvatarBlot,
+	blotTint,
+} from "@workspace/ui/components/companion-colour"
 import { Icons } from "@workspace/ui/components/icons"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import { CATALOGUE_APPLICATIONS } from "@workspace/ui/components/plugin-settings/applications.fixtures"
@@ -86,10 +91,10 @@ const RELEASE_QUESTION: ToolQuestionItem = {
 }
 
 const ASKED_BY_THE_SESSION =
-	"`apps/app/src/lib/onboarding/onboarding-steps.ts:52` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:103` draws it with no dismiss, since a posted request cannot be denied."
+	"`apps/app/src/lib/onboarding/onboarding-steps.ts:52` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:103` draws it with no Skip, since a posted request cannot be denied."
 
 const POSTED_BY_ONBOARDING =
-	"`apps/app/src/components/thread-prompt.tsx:103` mounts the card for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
+	"`apps/app/src/components/thread-prompt.tsx:103` mounts the panel for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
 
 const meta = preview.meta({
 	title: "Conversation/Tools/ToolQuestion",
@@ -98,7 +103,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The surface of one `AskUserQuestion` call: one to four questions, answered in a single pass and submitted once. Only one question is ever on screen — the others wait behind their own tab, which carries a check once it holds an answer — because four question at once is a wall nobody reads. Answering a single-select question moves the card to the next one still waiting, and the primary button reads `Next question` until none is left to wait for.\n\nEvery option is one box, and the whole box is the target: the label, the description, the padding around them. Every question also takes a free-text answer, exclusive with the options — typing clears the picks, picking clears the text. The card reports one string per question: the picked labels joined by `, `, or the typed text.",
+					"The question panel of one `AskUserQuestion` call, drawn on the composer shell: one to four questions, answered in a single pass and submitted once. Only one question is ever on screen. With several, a segmented control takes the place of the header label and each answered segment carries a check. Answering a single-select question moves the panel to the next one still waiting, and the foot ends on `Next` until none is left to wait for, then on `Send`.\n\nEvery option is one row, and the whole row is the control, named by its label and described by its description, with its 1-based digit in a key chip. A chosen row takes the Space bubble colour. Every question also takes an answer of the reader's own, exclusive with the options: typing clears the picks, picking clears the text. The panel reports one string per question: the picked labels joined by `, `, or the typed text. While `minimised` is true the same component draws the waiting bar instead.",
 			},
 		},
 	},
@@ -116,23 +121,522 @@ const meta = preview.meta({
 	],
 })
 
-export const SingleSelect = meta.story({
+const boxOf = (element: Element) => element.getBoundingClientRect()
+
+const PLAN_QUESTION: ToolQuestionItem = {
+	question: "Which plan should Northwind start on?",
+	header: "Plan",
+	options: [
+		{ label: "Starter", description: "One seat and the core features." },
+		{ label: "Team", description: "Up to ten seats and shared Spaces." },
+		{
+			label: "Enterprise",
+			description: "Unlimited seats, single sign-on and audit logs.",
+		},
+	],
+}
+
+const CHANNELS_QUESTION: ToolQuestionItem = {
+	question: "Where should the launch be announced?",
+	header: "Channels",
+	multiSelect: true,
+	options: [
+		{ label: "Newsletter", description: "The monthly email to customers." },
+		{ label: "Blog", description: "A post on the Northwind site." },
+		{ label: "Social", description: "A thread on every Northwind account." },
+	],
+}
+
+const LONG_QUESTION: ToolQuestionItem = {
+	...PLAN_QUESTION,
+	question:
+		"Northwind runs three warehouses and a storefront that all share one catalogue, so which plan should the whole team start on before the spring launch?",
+}
+
+const NORTHWIND_TINT: BotAvatarBlot = "green"
+
+const ARTBOARD =
+	"Light and dark side by side, in the composer slot of the green Space Northwind, whose bubble colour paints every chosen row. "
+
+type InComposerSlotProps = { children: ReactNode }
+
+const InComposerSlot = ({ children }: InComposerSlotProps) => (
+	<div
+		className="surface-shell px-(--shell-inset) pt-6 pb-(--shell-inset)"
+		data-space-tint={NORTHWIND_TINT}
+		data-testid="space"
+		style={{ "--space-tint": blotTint(NORTHWIND_TINT) } as CSSProperties}
+	>
+		{children}
+	</div>
+)
+
+const inComposerSlot = (args: ToolQuestionProps) => (
+	<InComposerSlot>
+		<ToolQuestion {...args} />
+	</InComposerSlot>
+)
+
+const narrowComposerSlot = (args: ToolQuestionProps) => (
+	<div className="w-[320px]" data-testid="column">
+		<InComposerSlot>
+			<ToolQuestion {...args} />
+		</InComposerSlot>
+	</div>
+)
+
+const panelsIn = (canvasElement: HTMLElement) =>
+	within(canvasElement).getAllByRole("form")
+
+const backgroundOf = (element: Element) =>
+	getComputedStyle(element).backgroundColor
+
+const expectChosenPaint = async (row: HTMLElement) => {
+	const bubble = tokenStyleIn(row, "surface-user-bubble", "backgroundColor")
+	await waitFor(() => expect(backgroundOf(row)).toBe(bubble))
+	await expect(getComputedStyle(row).color).toBe(
+		tokenStyleIn(row, "text-user-bubble-foreground", "color"),
+	)
+}
+
+const OWN_ANSWER = "Wait until the spring catalogue is ready"
+
+export const NothingChosen = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the foot hint names the range; the panel binds no digit key itself, and without the prop the hint reads the Return part alone. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const panels = panelsIn(canvasElement)
+		await expect(panels).toHaveLength(2)
+
+		for (const panel of panels) {
+			const card = within(panel)
+			await expect(backgroundOf(panel)).toBe(
+				tokenStyleIn(panel, "bg-muted", "backgroundColor"),
+			)
+			await expect(card.getByText(PLAN_QUESTION.header)).toBeVisible()
+
+			for (const [index, option] of PLAN_QUESTION.options.entries()) {
+				const row = card.getByRole("radio", { name: option.label })
+				await expect(row).toHaveAccessibleDescription(option.description)
+				await expect(row).toHaveAttribute("aria-checked", "false")
+				await expect(slotIn(row, "tool-question-key")).toHaveTextContent(
+					String(index + 1),
+				)
+				await expect(backgroundOf(row)).toBe(
+					tokenStyleIn(row, "bg-card", "backgroundColor"),
+				)
+			}
+
+			await expect(
+				card.getByText("Press 1-3 to choose, Return to send."),
+			).toBeVisible()
+			const send = card.getByRole("button", { name: chat.toolQuestion.submit })
+			await expect(send).toHaveTextContent(chat.toolQuestion.send)
+			await expect(send).toHaveAttribute("aria-disabled", "true")
+			await expect(getComputedStyle(send).opacity).toBe("0.4")
+
+			panel.focus()
+			await userEvent.keyboard("2")
+			for (const row of card.getAllByRole("radio"))
+				await expect(row).toHaveAttribute("aria-checked", "false")
+		}
+
+		const light = within(panels[0] as HTMLElement)
+		await userEvent.click(
+			light.getByRole("button", { name: chat.toolQuestion.skip }),
+		)
+		await expect(args.onDeny).toHaveBeenCalledTimes(1)
+		await userEvent.click(
+			light.getByRole("button", { name: chat.toolQuestion.minimise }),
+		)
+		await expect(args.onMinimise).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const OptionChosen = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 1.2: Team chosen. ${ARTBOARD}The chosen row takes the Space bubble colour with its ink: the key chip at 10% ink, the digit at 80%, the description at 70%, and a heavy check in the trailing slot. Send is drawn at full strength. Pick \`ChosenRowFollowsSpaceTint\` for the same row repainted by another Space.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const card = within(panel)
+			const chosen = card.getByRole("radio", { name: "Team" })
+			await userEvent.click(chosen)
+
+			await expect(chosen).toHaveAttribute("aria-checked", "true")
+			await expectChosenPaint(chosen)
+			await expect(
+				slotIn(chosen, "tool-question-mark").querySelector("svg"),
+			).not.toBeNull()
+			await expect(
+				slotIn(
+					card.getByRole("radio", { name: "Starter" }),
+					"tool-question-mark",
+				).childElementCount,
+			).toBe(0)
+			await expect(
+				card.getByRole("button", { name: chat.toolQuestion.submit }),
+			).not.toHaveAttribute("aria-disabled")
+		}
+	},
+})
+
+export const ChosenRowFollowsSpaceTint = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION] },
+	render: inComposerSlot,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"One question that holds at most one answer: picking a second option replaces the first rather than adding to it. Reach for this to check the whole box picks the option — click the description, the padding, anywhere but the preview — that hovering a box says so before the click, and that the preview appears only under the picked option. " +
+					"The chosen row of artboard 1.2 reads the Space bubble colour rather than a fixed accent: switching the Space from green to blue repaints the row it already holds, with no new pick.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const space = canvas.getByTestId("space")
+		const chosen = canvas.getByRole("radio", { name: "Team" })
+		await userEvent.click(chosen)
+		await expectChosenPaint(chosen)
+		const green = backgroundOf(chosen)
+
+		space.dataset.spaceTint = "blue"
+		space.style.setProperty("--space-tint", blotTint("blue"))
+
+		await waitFor(() => expect(backgroundOf(chosen)).not.toBe(green))
+		await expectChosenPaint(chosen)
+	},
+})
+
+export const SeveralChecked = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		questions: [CHANNELS_QUESTION],
+		onMinimise: fn(),
+		hasDigitKeys: true,
+	},
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 1.3: a multi-select question with Newsletter and Social checked. ${ARTBOARD}The hint line under the question says any may apply, each checked row wears the bubble colour with a filled ink circle holding a check, an unchecked row keeps an empty ring, and the foot hint says the digits toggle.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const card = within(panel)
+			await expect(
+				card.getByRole("group", { name: CHANNELS_QUESTION.question }),
+			).toBeVisible()
+			await expect(card.getByText(chat.toolQuestion.pickAny)).toBeVisible()
+
+			for (const label of ["Newsletter", "Social"]) {
+				const row = card.getByRole("checkbox", { name: label })
+				await userEvent.click(row)
+				await expect(row).toHaveAttribute("aria-checked", "true")
+				await expectChosenPaint(row)
+				const mark = slotIn(row, "tool-question-mark")
+					.firstElementChild as HTMLElement
+				await expect(backgroundOf(mark)).toBe(
+					tokenStyleIn(row, "bg-user-bubble-foreground", "backgroundColor"),
+				)
+			}
+
+			const unchecked = card.getByRole("checkbox", { name: "Blog" })
+			await expect(unchecked).toHaveAttribute("aria-checked", "false")
+			const ring = slotIn(unchecked, "tool-question-mark")
+				.firstElementChild as HTMLElement
+			await expect(
+				Number.parseFloat(getComputedStyle(ring).borderTopWidth),
+			).toBeGreaterThan(0)
+			await expect(getComputedStyle(ring).borderTopColor).toBe(
+				tokenStyleIn(unchecked, "border-foreground/17", "borderTopColor"),
+			)
+
+			await expect(
+				card.getByText("Press 1-3 to toggle, Return to send."),
+			).toBeVisible()
+		}
+	},
+})
+
+export const OwnAnswerTyping = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		pseudo: { focus: `input[aria-label="${chat.toolQuestion.freeText}"]` },
+		docs: {
+			description: {
+				story: `Artboard 1.4: an answer of the reader's own, typed into the field under the options. ${ARTBOARD}While the field holds focus it wears a 3px ring in the ring colour at 30% and a caret in the ring colour; while it holds text it ends on a check in the same colour, the picks are dropped, and the foot hint shrinks to the Return key alone.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const card = within(panel)
+			const field = card.getByLabelText(chat.toolQuestion.freeText)
+			const frame = field.parentElement as HTMLElement
+
+			await expect(
+				frame.querySelector('[data-slot="tool-question-own-answer-check"]'),
+			).toBeNull()
+			await userEvent.type(field, OWN_ANSWER)
+
+			const check = slotIn(frame, "tool-question-own-answer-check")
+			await expect(getComputedStyle(check).color).toBe(
+				tokenStyleIn(frame, "text-ring", "color"),
+			)
+			await expect(getComputedStyle(field).caretColor).toBe(
+				tokenStyleIn(frame, "text-ring", "color"),
+			)
+			await expect(getComputedStyle(frame).boxShadow).not.toBe("none")
+			await expect(card.getByText(chat.toolQuestion.hint.send)).toBeVisible()
+			for (const row of card.getAllByRole("radio"))
+				await expect(row).toHaveAttribute("aria-checked", "false")
+		}
+	},
+})
+
+export const SeveralQuestions = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		questions: [PLAN_QUESTION, CHANNELS_QUESTION, RELEASE_QUESTION],
+		onMinimise: fn(),
+		hasDigitKeys: true,
+	},
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 1.5: three questions, the first answered. ${ARTBOARD}A segmented control takes the place of the header label: the segment on screen is lifted on the card colour, an answered one leads with a green check. Picking Team handed the panel over to Channels, and while a question still waits after this one the foot ends on Next with an arrow, and the hint says Return goes there.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		for (const panel of panelsIn(canvasElement)) {
+			const card = within(panel)
+			await userEvent.click(card.getByRole("radio", { name: "Team" }))
+
+			const answered = card.getByRole("tab", { name: PLAN_QUESTION.header })
+			const shown = card.getByRole("tab", { name: CHANNELS_QUESTION.header })
+			await expect(shown).toHaveAttribute("aria-selected", "true")
+			const lifted = tokenStyleIn(shown, "bg-card", "backgroundColor")
+			await waitFor(() => expect(backgroundOf(shown)).toBe(lifted))
+			const check = answered.querySelector("svg") as SVGElement
+			await expect(getComputedStyle(check).color).toBe(
+				tokenStyleIn(answered, "text-bot-badge-done", "color"),
+			)
+			await expect(shown.querySelector("svg")).toBeNull()
+			await expect(
+				card.queryByText(PLAN_QUESTION.header, { selector: "p" }),
+			).not.toBeInTheDocument()
+
+			const next = card.getByRole("button", { name: chat.toolQuestion.next })
+			await expect(next).toHaveTextContent(chat.toolQuestion.nextLabel)
+			await expect(
+				card.queryByRole("button", { name: chat.toolQuestion.submit }),
+			).not.toBeInTheDocument()
+			await expect(
+				card.getByText("Press 1-3 to toggle, Return for the next question."),
+			).toBeVisible()
+		}
+	},
+})
+
+export const WaitingBar = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		questions: [PLAN_QUESTION],
+		minimised: true,
+		companionName: "Shoto",
+		onExpand: fn(),
+	},
+	render: inComposerSlot,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`. A screen reader reaches the title as text before Answer, and Answer is described by the question.`,
+			},
+		},
+	},
+	play: async ({ args, canvasElement, userEvent }) => {
+		const bars = slotsIn(canvasElement, "tool-question-waiting")
+		await expect(bars).toHaveLength(2)
+		await expect(within(canvasElement).queryByRole("form")).toBeNull()
+
+		for (const bar of bars) {
+			const strip = bar.firstElementChild as HTMLElement
+			const question = within(bar).getByText(PLAN_QUESTION.question)
+			const title = within(bar).getByText("Shoto is waiting on your answer")
+			const answer = within(bar).getByRole("button", {
+				name: chat.toolQuestion.waiting.answer,
+			})
+			await expect(title).toBeVisible()
+			await expect(answer).toHaveAccessibleDescription(PLAN_QUESTION.question)
+			await expect(
+				title.compareDocumentPosition(answer) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy()
+			await expect(backgroundOf(strip)).toBe(
+				tokenStyleIn(strip, "bg-question-bar", "backgroundColor"),
+			)
+			await expect(backgroundOf(strip.firstElementChild as HTMLElement)).toBe(
+				tokenStyleIn(strip, "bg-warning", "backgroundColor"),
+			)
+			await expect(getComputedStyle(question).whiteSpace).toBe("nowrap")
+		}
+
+		await userEvent.click(
+			within(bars[0] as HTMLElement).getByRole("button", {
+				name: chat.toolQuestion.waiting.answer,
+			}),
+		)
+		await expect(args.onExpand).toHaveBeenCalledTimes(1)
+	},
+})
+
+export const WaitingBarNarrow = meta.story({
+	args: {
+		questions: [LONG_QUESTION],
+		minimised: true,
+		companionName: "Shoto",
+		onExpand: fn(),
+	},
+	render: narrowComposerSlot,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The waiting bar of artboard 3.1 in a 320px column. The question gives way first and holds one clamped line, the title truncates only once the question has no room left, and Answer keeps its full size inside the column.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const column = canvas.getByTestId("column")
+		const question = canvas.getByText(LONG_QUESTION.question)
+		const answer = canvas.getByRole("button", {
+			name: chat.toolQuestion.waiting.answer,
+		})
+
+		await expect(boxOf(question).height).toBeLessThanOrEqual(
+			lineHeightOf(question),
+		)
+		await expect(answer.scrollWidth).toBe(answer.clientWidth)
+		await expect(boxOf(answer).right).toBeLessThanOrEqual(boxOf(column).right)
+		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
+	},
+})
+
+export const LongQuestionNarrow = meta.story({
+	args: { questions: [LONG_QUESTION], onMinimise: fn() },
+	render: narrowComposerSlot,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A long question in a 320px column: it wraps over several lines inside the panel rather than truncating, and Minimize keeps its place top right.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const column = canvas.getByTestId("column")
+		const question = canvas.getByText(LONG_QUESTION.question)
+
+		await expect(boxOf(question).height).toBeGreaterThan(
+			2 * lineHeightOf(question),
+		)
+		await expect(boxOf(question).right).toBeLessThanOrEqual(boxOf(column).right)
+		await expect(
+			canvas.getByRole("button", { name: chat.toolQuestion.minimise }),
+		).toBeVisible()
+		await expect(column.scrollWidth).toBeLessThanOrEqual(column.clientWidth)
+	},
+})
+
+const hasFocusRing = (element: HTMLElement) => {
+	const style = getComputedStyle(element)
+	return style.outlineStyle !== "none" || style.boxShadow !== "none"
+}
+
+export const KeyboardFocusRings = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION, CHANNELS_QUESTION], onMinimise: fn() },
+	render: inComposerSlot,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"Tab walks the panel from the segments to Send, and every control it lands on draws a visible ring: the segment, Minimize, the option row, the own-answer field through its frame, Skip and Send.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const field = canvas.getByLabelText(chat.toolQuestion.freeText)
+		const stops = [
+			[canvas.getByRole("tab", { name: PLAN_QUESTION.header }), null],
+			[canvas.getByRole("button", { name: chat.toolQuestion.minimise }), null],
+			[canvas.getByRole("radio", { name: "Starter" }), null],
+			[field, field.parentElement],
+			[canvas.getByRole("button", { name: chat.toolQuestion.skip }), null],
+			[canvas.getByRole("button", { name: chat.toolQuestion.next }), null],
+		] as const
+
+		await expect(canvas.getByRole("form")).toHaveFocus()
+		for (const [control, frame] of stops) {
+			await userEvent.tab()
+			await expect(control).toHaveFocus()
+			await expect(control.matches(":focus-visible")).toBe(true)
+			await waitFor(() =>
+				expect(hasFocusRing((frame ?? control) as HTMLElement)).toBe(true),
+			)
+		}
+	},
+})
+
+export const SingleSelect = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` the foot hint reads only `Return to send.`, and that Skip calls `onDeny`. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
 		const submit = canvas.getByRole("button", { name: /send answers/i })
-		await expect(submit).toBeEnabled()
+		await expect(submit).toHaveAttribute("aria-disabled", "true")
 
 		await userEvent.click(
 			canvas.getByText("Server rendering and routing out of the box."),
 		)
+		await expect(submit).not.toHaveAttribute("aria-disabled")
+		await expect(canvas.getByText(chat.toolQuestion.hint.send)).toBeVisible()
+		await expect(canvas.queryByText(/^Press /)).not.toBeInTheDocument()
 		await expect(
 			canvas.getByText("bun create next-app dashboard"),
 		).toBeVisible()
@@ -148,18 +652,21 @@ export const SingleSelect = meta.story({
 			[FRAMEWORK_QUESTION.question]: "Vite",
 		})
 
-		await userEvent.click(canvas.getByRole("button", { name: /dismiss/i }))
+		await userEvent.click(
+			canvas.getByRole("button", { name: chat.toolQuestion.skip }),
+		)
 		await expect(args.onDeny).toHaveBeenCalledTimes(1)
 	},
 })
 
 export const MultiSelect = meta.story({
+	tags: ["test-only"],
 	args: { questions: [SCOPE_QUESTION] },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The same question with `multiSelect` true: several options hold at once and the answer is their labels joined by `, `, in the order they were picked. Check that picking a second option keeps the first, that picking a held option lets it go, and that the card stays put — a question still being built must not be taken as done. " +
+					"The behaviour behind `SeveralChecked`: with `multiSelect` true every row is a checkbox, several hold at once, and the answer is their labels joined by `, `, in the order they were checked. Check that checking a second row keeps the first, that checking a held row lets it go, and that the panel stays on the question, since a question still being built must not be taken as done. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -178,11 +685,12 @@ export const MultiSelect = meta.story({
 })
 
 export const FreeText = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The answer the call never offered. Every question carries a free-text field under its options, and what is typed there is reported as the whole answer — it is not a note attached to a pick. Check that typing drops whatever was picked, that the keyboard alone reaches the options, the field and the submit control, and that the answer is the typed text verbatim. " +
+					"The behaviour behind `OwnAnswerTyping`: the answer the call never offered. What is typed in the own-answer field under the rows is reported as the whole answer, not a note attached to a pick. Check that typing drops whatever was picked, that the keyboard alone reaches the rows, the field, Skip and Send, and that the answer is the typed text verbatim. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -201,6 +709,10 @@ export const FreeText = meta.story({
 
 		await userEvent.tab()
 		await expect(
+			canvas.getByRole("button", { name: chat.toolQuestion.skip }),
+		).toHaveFocus()
+		await userEvent.tab()
+		await expect(
 			canvas.getByRole("button", { name: /send answers/i }),
 		).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
@@ -217,7 +729,7 @@ export const KeyboardOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"The card as a docked surface reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it above the composer. Enter does exactly what the primary button does — it hands over the next question still waiting, and sends the answers once none is. Enter on a question holding nothing does nothing, and every control that already answers to Enter — an option, a tab, the free-text field, a footer button — keeps its own behaviour. " +
+					"The panel reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it. Return on the panel or on an option row does what the end of the foot does: it hands over the next question still waiting, and sends once none is. Return on a question holding nothing sends nothing and says what is missing. Every other control keeps its own Return: a segment, the own-answer field, Skip, Minimize, an exit and a notice action. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -230,22 +742,17 @@ export const KeyboardOnly = meta.story({
 		await expect(args.onAnswer).not.toHaveBeenCalled()
 		await expect(canvas.getByText(SCOPE_QUESTION.question)).toBeVisible()
 
-		await userEvent.click(canvas.getByRole("checkbox", { name: /Chat/ }))
-		await expect(
-			canvas.getByRole("button", { name: /next question/i }),
-		).toBeEnabled()
-
-		card.focus()
+		const checkbox = canvas.getByRole("checkbox", { name: "Chat" })
+		await userEvent.click(checkbox)
+		await expect(checkbox).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
 		await expect(canvas.getByText(RELEASE_QUESTION.question)).toBeVisible()
 
-		await userEvent.click(canvas.getByRole("radio", { name: /Now/ }))
-		await expect(
-			canvas.getByRole("button", { name: /send answers/i }),
-		).toBeEnabled()
-
-		card.focus()
+		const radio = canvas.getByRole("radio", { name: "Now" })
+		await userEvent.click(radio)
+		await expect(radio).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
+		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
 		await expect(args.onAnswer).toHaveBeenCalledWith({
 			[SCOPE_QUESTION.question]: "Chat",
 			[RELEASE_QUESTION.question]: "Now",
@@ -254,6 +761,7 @@ export const KeyboardOnly = meta.story({
 })
 
 export const FourQuestions = meta.story({
+	tags: ["test-only"],
 	args: {
 		questions: [
 			FRAMEWORK_QUESTION,
@@ -266,7 +774,7 @@ export const FourQuestions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The widest call the tool can make: four questions under four tabs, one on screen at a time. The primary button carries the reader through them: it reads `Next question` while another question still waits, and only becomes `Send answers` on the last one, so nothing is sent half-answered. Check that answering a single-select question hands over the next by itself, that pressing the button before the question on screen holds an answer keeps it on screen with an error, that a tab can be reached in any order once the reader wants to change an answer, that an answered tab carries its check, and that the send reports all four at once, keyed by question. " +
+					"The behaviour behind `SeveralQuestions`, at the widest call the tool can make: four questions under four segments, one on screen at a time. The end of the foot carries the reader through them: it reads `Next` while another question still waits, and only becomes `Send` on the last one, so nothing is sent half-answered. Check that answering a single-select question hands over the next by itself, that a segment can be reached in any order to change an answer, that an answered segment carries its check, and that the send reports all four at once, keyed by question. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -318,8 +826,6 @@ export const FourQuestions = meta.story({
 	},
 })
 
-const boxOf = (element: Element) => element.getBoundingClientRect()
-
 export const Narrow = meta.story({
 	args: {
 		questions: [
@@ -333,7 +839,7 @@ export const Narrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The four-tab card in a 320px column, the narrowest surface a transcript ever hands it. Check that the tab strip stays inside the column and scrolls sideways rather than pushing a tab out of it, that the four tabs hold one line by sharing a top edge, that every tab is still reachable by pointer and by arrow key, and that an option below still takes a press and hands the card over to the next question waiting. Pick `FourQuestions` for the same card with room to spread. " +
+					"Four questions in a 320px column, the narrowest surface a transcript ever hands the panel. Check that the segment track stays inside the column and scrolls sideways rather than pushing a segment out of it, that the four segments hold one line by sharing a top edge, that every segment is still reachable by pointer and by arrow key, and that a row below still takes a press and hands the panel over to the next question waiting. Pick `SeveralQuestions` for the same control with room to spread. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -376,7 +882,7 @@ export const LongHeaderScrolls = meta.story({
 		docs: {
 			description: {
 				story:
-					"A header too long for a 320px column, next to a short one. A tab never wraps and never grows past the strip, so a header wider than the whole column ends in an ellipsis instead of pushing the first tab off the button's edge: the strip keeps its one line inside the card and hands the tabs out of view to a sideways scroll, with no scrollbar drawn over them. Check that both tabs share a height and a top edge, that the first tab starts on the same line as the button below, that the strip stops at the edge of the column, that the question below stays clear of the strip, and that walking the strip with the arrow keys brings the tab it lands on back into view. " +
+					"A header too long for a 320px column, next to a short one, in the segmented control. A segment never wraps and never grows past the track, so a header wider than the whole column ends in an ellipsis instead of pushing the first segment out of the panel: the track keeps its one line inside the panel and hands the segments out of view to a sideways scroll, with no scrollbar drawn over them. Check that both segments share a height and a top edge, that the track starts on the same line as Skip below, that the track stops at the edge of the column, that the question below stays clear of it, and that walking the segmented control with the arrow keys brings the segment it lands on back into view. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -392,11 +898,14 @@ export const LongHeaderScrolls = meta.story({
 		const longTab = canvas.getByRole("tab", { name: REGISTRY_QUESTION.header })
 		const shortTab = canvas.getByRole("tab", { name: SCOPE_QUESTION.header })
 		const asked = canvas.getByText(REGISTRY_QUESTION.question)
-		const submit = canvas.getByRole("button", { name: chat.toolQuestion.next })
+		const skip = canvas.getByRole("button", { name: chat.toolQuestion.skip })
 
+		await expect(
+			canvas.getByRole("button", { name: chat.toolQuestion.next }),
+		).toBeVisible()
 		await expect(boxOf(longTab).height).toBe(boxOf(shortTab).height)
 		await expect(boxOf(longTab).top).toBe(boxOf(shortTab).top)
-		await expect(boxOf(longTab).left).toBe(boxOf(submit).left)
+		await expect(boxOf(strip).left).toBe(boxOf(skip).left)
 		await expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth)
 		await expect(boxOf(strip).right).toBeLessThanOrEqual(boxOf(column).right)
 		await expect(boxOf(longTab).bottom).toBeLessThanOrEqual(boxOf(asked).top)
@@ -405,7 +914,8 @@ export const LongHeaderScrolls = meta.story({
 		longTab.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await expect(strip.scrollLeft).toBeGreaterThan(0)
-		await expect(boxOf(shortTab).right).toBeLessThan(boxOf(strip).right)
+		await expect(boxOf(shortTab).right).toBeLessThanOrEqual(boxOf(strip).right)
+		await expect(boxOf(shortTab).left).toBeGreaterThanOrEqual(boxOf(strip).left)
 
 		await userEvent.click(longTab)
 		await userEvent.click(await canvas.findByRole("radio", { name: /Base UI/ }))
@@ -419,7 +929,7 @@ export const ArrowKeyTabs = meta.story({
 		docs: {
 			description: {
 				story:
-					"The tab strip walked with the arrow keys. A tab here changes nothing but which question is on screen, so walking is opening: the arrows select as they move and the card follows without a second press. Check that the question under the strip is the one the arrows landed on. The search palette does the opposite, because a tab there starts a query. " +
+					"The segmented control walked with the arrow keys. A segment changes nothing but which question is on screen, so walking is opening: the arrows select as they move and the panel follows without a second press. Check that the question under the segmented control is the one the arrows landed on. The search palette does the opposite, because selecting there starts a query. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -443,7 +953,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The card for a reader who asked the system to stop moving things. The registry tab transitions every property it changes; the card drops that under `prefers-reduced-motion`, so the fill moves from one tab to the next in a single frame. Check that every tab reports a transition of no duration, and that the strip still selects. " +
+					"The panel for a reader who asked the system to stop moving things. A segment transitions its colour, fill and shadow; the panel drops that under `prefers-reduced-motion`, so the lifted fill moves from one segment to the next in a single frame. Check that every segment reports a transition of no duration, and that the track still selects. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -483,7 +993,7 @@ const expectAskedByShoto = async (canvasElement: HTMLElement, step: string) => {
 	)
 	await expect(within(bubble).getByText(step)).toBeVisible()
 	await expect(
-		within(bubble).queryByRole("button", { name: /dismiss/i }),
+		within(bubble).queryByRole("button", { name: chat.toolQuestion.skip }),
 	).not.toBeInTheDocument()
 }
 
@@ -769,7 +1279,7 @@ export const StepPasteAnApiKey = meta.story({
 		docs: {
 			description: {
 				story:
-					"The same bubble with a single masked field, drawn empty. `Continue` stays enabled: pressing it with no key keeps the step open, marks the field invalid, describes it with the error and puts focus back in it. The key is never drawn, so a screen share during onboarding shows the step without showing the secret. " +
+					"The same bubble with a single masked field, drawn empty. `Continue` is drawn at 40% but stays operable: pressing it with no key keeps the step open, marks the field invalid, describes it with the error and puts focus back in it. The key is never drawn, so a screen share during onboarding shows the step without showing the secret. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
@@ -779,7 +1289,7 @@ export const StepPasteAnApiKey = meta.story({
 		const field = canvas.getByLabelText("Key")
 		const primary = canvas.getByRole("button", { name: "Continue" })
 		await expect(field).toHaveValue("")
-		await expect(primary).toBeEnabled()
+		await expect(primary).toHaveAttribute("aria-disabled", "true")
 
 		await userEvent.click(primary)
 		const error = await canvas.findByRole("alert")
@@ -949,20 +1459,20 @@ export const OptionsAsWholeAnswer = meta.story({
 	},
 })
 
-export const NoDismiss = meta.story({
+export const NoSkip = meta.story({
 	render: (args) => <ToolQuestion {...args} onDeny={undefined} />,
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The same card asked by a host that offers no way to refuse. With no `onDeny`, the dismiss control is not drawn at all: a disabled one would read as a way out that stopped working. The submit control keeps its place. " +
+					"The same panel asked by a host that offers no way to refuse. With no `onDeny`, Skip is not drawn at all: a disabled one would read as a way out that stopped working. Send keeps its place at the end of the foot. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
 	},
 	play: async ({ canvas }) => {
 		await expect(
-			canvas.queryByRole("button", { name: /dismiss/i }),
+			canvas.queryByRole("button", { name: chat.toolQuestion.skip }),
 		).not.toBeInTheDocument()
 		await expect(
 			canvas.getByRole("button", { name: /send answers/i }),
@@ -1063,7 +1573,7 @@ export const Failure = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure carried by the question itself. The block sits above the question line inside the same card: a dot in the destructive token, the sentence that says what went wrong across the whole row, and the raw detail on a surface sized to its own text at the inline start. The question keeps its options below, and the form names the failure in its accessible description, so a screen reader hears what went wrong along with the question it asks. " +
+					"A failure carried by the question itself. The block sits in the head of the panel, between the header label and the question: a dot in the destructive token, the sentence that says what went wrong, and the raw detail on a `card` surface sized to its own text at the inline start. The question keeps its rows below, and the form names the failure in its accessible description, so a screen reader hears what went wrong along with the question it asks. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
@@ -1226,7 +1736,7 @@ export const ApplicationScope = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard E9: the one place in the product where an application's scope is picked. The question carries the application mark on its own line, centred with the text, and answers with three options and no free text. Send stays disabled until an option is picked, and the controls keep the size every other question ships with. Pick `FailureWithAction` for a question that only reports a failure. " +
+					"Artboard E9: the one place in the product where an application's scope is picked. The question carries the application mark on its own line, centred with the text, and answers with three options and no free text. Send is drawn at 40% until an option is picked, and the controls keep the size every other question ships with. Pick `FailureWithAction` for a question that only reports a failure. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
@@ -1247,13 +1757,13 @@ export const ApplicationScope = meta.story({
 
 		await expect(canvas.getAllByRole("radio")).toHaveLength(3)
 		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument()
-		await expect(send).toBeEnabled()
-		await expect(send.getBoundingClientRect().height).toBe(28)
+		await expect(send).toHaveAttribute("aria-disabled", "true")
+		await expect(send.getBoundingClientRect().height).toBe(32)
 
 		await userEvent.click(
 			canvas.getByRole("radio", { name: /Every companion/ }),
 		)
-		await expect(send).toBeEnabled()
+		await expect(send).not.toHaveAttribute("aria-disabled")
 	},
 })
 
@@ -1277,7 +1787,7 @@ export const FailureWithAction = meta.story({
 		docs: {
 			description: {
 				story:
-					"The upper bubble of artboard E11: an item declared a notice, a failure with nothing to answer. A notice takes no question text, so no option, no free text and no question line are drawn, the failure title names the form, and the primary action replaces Send, enabled without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question. `packages/ui/src/components/application-install-turn.tsx:30` posts the notice when the key an install needs was left out: no question, no dismiss, one action to Settings.",
+					"An item declared a notice: a failure with nothing to answer. A notice takes no question text, so no row, no own-answer field and no question line are drawn, the failure title names the form, and its action takes the end of the foot in place of Send, at full strength without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question. `packages/ui/src/components/application-install-turn.tsx:30` posts the notice when the key an install needs was left out: no question, no Skip, one action to Settings.",
 			},
 		},
 	},
@@ -1307,7 +1817,7 @@ export const NoticeInQueue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's option keeps the card on the question, the primary control reads `Send answers` rather than `Next question`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own. No request mixes the two: `packages/ui/src/components/application-install-turn.tsx:30` posts a notice alone and `apps/app/src/components/thread-prompt.tsx:114` maps questions the agent asked, never a notice beside them.",
+					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's row keeps the panel on the question, the foot ends on `Send` rather than `Next`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own. No request mixes the two: `packages/ui/src/components/application-install-turn.tsx:30` posts a notice alone and `apps/app/src/components/thread-prompt.tsx:114` maps questions the agent asked, never a notice beside them.",
 			},
 		},
 	},
@@ -1338,7 +1848,7 @@ const INVERSE_BUTTONS =
 	'button[type="submit"], [data-card="action"] [data-slot="button"]'
 
 const INVERSE_TREATMENT =
-	"The primary controls of the card in the inverse treatment of artboards V1e and V1f, light and dark side by side: `Send answers`, `Next question` on a card with a question still waiting, and the action of a notice, each filled with the `foreground` token with its label and glyph drawn with the `background` token. Dismiss stays outline. "
+	"The pill at the end of the foot in the inverse treatment, light and dark side by side: `Send`, `Next` on a panel with a question still waiting, and the action of a notice, each filled with the `foreground` token with its label and glyph drawn with the `background` token. Skip stays ghost. "
 
 const inverseButtonsIn = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLButtonElement>(INVERSE_BUTTONS),
@@ -1369,11 +1879,11 @@ export const InverseButtonsIdle = meta.story({
 		const buttons = inverseButtonsIn(canvasElement)
 		await expect(buttons.length).toBe(6)
 		for (const button of buttons) await expectInverseAtRest(button)
-		for (const dismiss of within(canvasElement).getAllByRole("button", {
-			name: /dismiss/i,
+		for (const skip of within(canvasElement).getAllByRole("button", {
+			name: chat.toolQuestion.skip,
 		}))
-			await expect(getComputedStyle(dismiss).backgroundColor).not.toBe(
-				tokenStyleIn(dismiss, "bg-foreground", "backgroundColor"),
+			await expect(getComputedStyle(skip).backgroundColor).not.toBe(
+				tokenStyleIn(skip, "bg-foreground", "backgroundColor"),
 			)
 	},
 })
@@ -1442,7 +1952,7 @@ export const InverseButtonsPending = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `${INVERSE_TREATMENT}The only disabled state these buttons have: \`Send answers\` while the answers are on their way. The primitive halves the opacity of the whole button, fill and label together, so the label stays apart from its fill.`,
+				story: `${INVERSE_TREATMENT}\`Send\` while the answers are on their way, the one state where it is disabled rather than drawn at 40%. The primitive halves the opacity of the whole pill, fill and label together, so the label stays apart from its fill.`,
 			},
 		},
 	},
@@ -1472,7 +1982,7 @@ export const ThemesLinkRowAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The link row on the frame of the artboard V1e text field, light and dark side by side: a `muted` fill, a 1px `input` outline and the `radius-control` corner around the read-only link and its copy control.",
+					"The link row of an entry question inside the panel, light and dark side by side: a `muted` fill, a 1px `input` outline and the `radius-control` corner around the read-only link and its copy control, on the frame every settings text field wears.",
 			},
 		},
 	},
