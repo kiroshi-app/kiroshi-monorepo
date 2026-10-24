@@ -22,6 +22,12 @@ struct TableCardTests {
         Artboard(
             name: "row count", color: MessageCard.label, light: "#6C6C70", dark: "#EBEBF599",
             increasedLight: "#545456", increasedDark: "#AEAEB2"),
+        Artboard(
+            name: "fill", color: MessageCard.fill, light: "#FFFFFF", dark: "#2C2C2E",
+            increasedLight: "#FFFFFF", increasedDark: "#2C2C2E"),
+        Artboard(
+            name: "row separator", color: MessageCard.separator, light: "#3C3C434A",
+            dark: "#54545899", increasedLight: "#3C3C434A", increasedDark: "#54545899"),
     ]
 
     func hex(of color: Color, in scheme: ColorScheme, contrast: ColorSchemeContrast) throws
@@ -41,11 +47,6 @@ struct TableCardTests {
                 == artboard.increasedLight)
         #expect(
             try hex(of: artboard.color, in: .dark, contrast: .increased) == artboard.increasedDark)
-    }
-
-    @Test func theTableCardFillMatchesArtboardSevenInLightAndDark() throws {
-        #expect(try hex(of: MessageCard.fill, in: .light, contrast: .standard) == "#FFFFFF")
-        #expect(try hex(of: MessageCard.fill, in: .dark, contrast: .standard) == "#2C2C2E")
     }
 
     @Test(arguments: [(1, "1 row"), (3, "3 rows"), (0, "0 rows")])

@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 
 enum MessageCard {
-    static let fill = Color(.tertiarySystemBackground)
+    static let fill = Color("card-fill")
     static let stroke = Color("card-stroke")
     static let label = Color("card-label")
+    static let separator = Color("card-separator")
     static let cornerRadius: CGFloat = 14
     static let copiedFor = Duration.seconds(2)
 }
