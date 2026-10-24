@@ -240,7 +240,23 @@ private struct MarkdownListView: View {
     }
 
     #Preview("7 Tables") {
-        MarkdownPreview(replies: [MarkdownFixture.builds, MarkdownFixture.changes])
+        MarkdownPreview(replies: [MarkdownFixture.buildsAndLatency])
+    }
+
+    #Preview("7 Tables · dark") {
+        MarkdownPreview(replies: [MarkdownFixture.buildsAndLatency])
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("6c Code block and table · Increase Contrast") {
+        MarkdownPreview(replies: [MarkdownFixture.retryHelperAndBuilds])
+            .environment(\._colorSchemeContrast, .increased)
+    }
+
+    #Preview("6c Code block and table · Increase Contrast · dark") {
+        MarkdownPreview(replies: [MarkdownFixture.retryHelperAndBuilds])
+            .environment(\._colorSchemeContrast, .increased)
+            .preferredColorScheme(.dark)
     }
 
     #Preview("8 Mention chip") {
