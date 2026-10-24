@@ -31,13 +31,16 @@ Format Swift with the toolchain's `swift format`, configured by the root `.swift
 swift format lint --recursive apps/ios
 ```
 
-## The packages shared by every worktree
+## What every worktree shares
 
-On a Mac, CI unset, every xcodebuild of `ios:build`, `ios:test`, `ios:test:unit`, `ios:run` and `bun run ci ios` goes through `apps/ios/scripts/xcodebuild.sh`, which checks the Swift packages (GoogleSignIn, AppAuth, GTMAppAuth, GTMSessionFetcher, Highlightr) out once for every worktree, in `~/Library/Caches/kiroshi-ios/SourcePackages` (`-clonedSourcePackagesDirPath`): a new worktree neither fetches them nor checks them out again, and builds running at once share them. CI runs plain `xcodebuild`.
+On a Mac, CI unset, every xcodebuild of `ios:build`, `ios:test`, `ios:test:unit`, `ios:run` and `bun run ci ios` goes through `apps/ios/scripts/xcodebuild.sh`, which shares two things between worktrees, both in `~/Library/Caches/kiroshi-ios`. CI and Xcode Cloud run plain `xcodebuild`.
 
-DerivedData, and so the compilation, stays in each worktree, `apps/ios/build`. One DerivedData shared by two worktrees refuses the second build while the first runs (`database is locked`), and each worktree compiles everything again after the other's build. Xcode's compilation cache doesn't help a new worktree either: its keys hold the worktree's path, and the prefix mapping that takes the path out also rewrites `#filePath`, from which `CompanionAvatarTests` reads its fixtures.
+- `SourcePackages`: the Swift packages (GoogleSignIn, AppAuth, GTMAppAuth, GTMSessionFetcher, Highlightr), checked out once (`-clonedSourcePackagesDirPath`). A new worktree neither fetches them nor checks them out again.
+- `CompilationCache.noindex`: Xcode's compilation cache (`COMPILATION_CACHE_ENABLE_CACHING`), one CAS for every worktree. A new worktree replays from it every compile job another worktree already ran, the SDK's Clang modules and every package, and compiles only our own targets (Kiroshi, KiroshiTests, KiroshiUITests). The keys hold no worktree path: the SDK and Xcode are prefix-mapped (`SWIFT_ENABLE_PREFIX_MAPPING`, `CLANG_ENABLE_PREFIX_MAPPING`), and so are the worktree's `apps/ios/build` and `apps/ios/Kiroshi.xcodeproj`, the packages' working directory (`*_OTHER_PREFIX_MAPPINGS`), by their physical path and, under `/private`, by the path without it, the one Xcode passes. Our sources aren't mapped (`SWIFT_ENABLE_PROJECT_PREFIX_MAPPING` stays off): their keys hold the worktree's path, so `#filePath`, from which `CompanionAvatarTests` reads its fixtures, always names this worktree's files.
 
-Wipe the shared packages while no iOS build runs, from any worktree:
+Builds running at once share both. DerivedData stays in each worktree, `apps/ios/build`, and with it `Build/Products`: one DerivedData shared by two worktrees refuses the second build while the first runs (`database is locked`), and would let one worktree test the other's products.
+
+Wipe the shared caches while no iOS build runs, from any worktree:
 
 ```bash
 rm -rf ~/Library/Caches/kiroshi-ios
