@@ -184,7 +184,7 @@
                 id: "group-apple", title: "Sign in with Apple on iOS",
                 members: [pico, atlas, juniper], createdAt: 0, icon: "Smartphone"),
             .init(
-                id: "group-pricing", title: "Pricing page: Pro card", members: [mira, juniper],
+                id: "group-landing", title: "Landing page: hero card", members: [mira, juniper],
                 createdAt: 0, icon: "CreditCard"),
             .init(
                 id: "group-release-notes", title: "Release notes for 0.9", members: [juniper],
@@ -207,7 +207,7 @@
                     ("Redeployed, the health check is green.", false, 0, 17, 4),
                     ("Baseline updated, three ids added.", false, 1, 18, 0),
                     ("Waiting on the bearer exchange.", false, 1, 11, 0),
-                    ("The beta label sits next to the price.", false, 2, 15, 0),
+                    ("The beta label sits next to the title.", false, 2, 15, 0),
                     ("The draft is in the conversation.", false, 3, 10, 0),
                 ]
             ).map { group, last in
