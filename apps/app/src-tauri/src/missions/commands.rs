@@ -59,13 +59,13 @@ pub struct MissionChanged {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Pulse {
+struct Pulse {
 	is_agent_running: bool,
 	liveness: MissionLiveness,
 }
 
 impl Pulse {
-	pub(super) fn of(mission: &Mission) -> Self {
+	fn of(mission: &Mission) -> Self {
 		Self { is_agent_running: mission.is_agent_running, liveness: mission.liveness }
 	}
 }
@@ -95,9 +95,26 @@ pub(super) fn announce_change<R: Runtime>(
 	app: &AppHandle<R>,
 	mission: Mission,
 ) -> Result<Mission, MissionError> {
+	announce_when(app, mission, |_, _| true)
+}
+
+pub(super) fn announce_when<R: Runtime>(
+	app: &AppHandle<R>,
+	mission: Mission,
+	is_news: impl FnOnce(&Mission, bool) -> bool,
+) -> Result<Mission, MissionError> {
+	let unmanaged = AnnouncedLiveness::default();
+	let announced = app.try_state::<AnnouncedLiveness>();
+	let mut kept = announced.as_deref().unwrap_or(&unmanaged).kept();
 	let mission = observed(app, mission);
-	emit_change(app, &mission)?;
-	remember_liveness(app, &mission);
+	let has_pulse_moved = kept.get(&mission.id) != Some(&Pulse::of(&mission));
+	if is_news(&mission, has_pulse_moved) {
+		emit_change(app, &mission)?;
+	}
+	match mission.closed_at {
+		Some(_) => kept.remove(&mission.id),
+		None => kept.insert(mission.id.clone(), Pulse::of(&mission)),
+	};
 	Ok(mission)
 }
 
@@ -109,16 +126,9 @@ pub(crate) async fn announce_thread_moved<R: Runtime>(
 	let Some(threaded) = database.missions().threaded(conversation_id).await? else {
 		return Ok(());
 	};
-	let Some(announced) = app.try_state::<AnnouncedLiveness>() else {
-		return Ok(());
-	};
-	let mut kept = announced.kept();
-	let mission = observed(app, threaded);
-	if mission.closed_at.is_some() || kept.get(&mission.id) == Some(&Pulse::of(&mission)) {
-		return Ok(());
-	}
-	emit_change(app, &mission)?;
-	kept.insert(mission.id.clone(), Pulse::of(&mission));
+	announce_when(app, threaded, |mission, has_pulse_moved| {
+		mission.closed_at.is_none() && has_pulse_moved
+	})?;
 	Ok(())
 }
 
@@ -137,21 +147,6 @@ fn emit_change<R: Runtime>(app: &AppHandle<R>, mission: &Mission) -> Result<(), 
 		},
 	)
 	.map_err(|error| MissionError::Undeliverable { detail: error.to_string() })
-}
-
-fn remember_liveness<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	let Some(announced) = app.try_state::<AnnouncedLiveness>() else {
-		return;
-	};
-	let mut kept = announced.kept();
-	match mission.closed_at {
-		Some(_) => kept.remove(&mission.id),
-		None => kept.insert(mission.id.clone(), Pulse::of(mission)),
-	};
-}
-
-pub(super) fn announced_pulse<R: Runtime>(app: &AppHandle<R>, mission_id: &str) -> Option<Pulse> {
-	app.try_state::<AnnouncedLiveness>()?.kept().get(mission_id).copied()
 }
 
 fn refuse_blank(field: &str, held: &str) -> Result<(), MissionError> {
