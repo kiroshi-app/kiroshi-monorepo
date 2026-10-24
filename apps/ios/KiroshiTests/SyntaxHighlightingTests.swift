@@ -23,6 +23,28 @@ struct SyntaxHighlightingTests {
         #expect(try colors(of: " { ", in: code, as: "swift") == [nil])
     }
 
+    @Test(arguments: ["work", "sleep", "seconds"])
+    func aCallOrAMemberTakesTheFunctionColor(name: String) throws {
+        let code = "try? await work()\ntry await Task.sleep(for: .seconds(2))"
+
+        #expect(try colors(of: name, in: code, as: "swift") == [Color("syntax-function")])
+    }
+
+    @Test(arguments: ["retry", "attempt", "times"])
+    func aDeclaredFunctionNameOrAValueStaysPlain(name: String) throws {
+        let code = "func retry() {\n    for attempt in 1..<times { }\n}"
+
+        #expect(try colors(of: name, in: code, as: "swift") == [nil])
+    }
+
+    @Test func aKeywordKeepsTheCodeWeight() throws {
+        let highlighted = SyntaxHighlighting.shared.highlighted(
+            MarkdownCode(language: "swift", text: "return value"))
+        let keyword = try #require(highlighted.range(of: "return"))
+
+        #expect(highlighted[keyword].runs[\.font].map(\.0) == [nil])
+    }
+
     @Test func aDeclaredTypeNameInAnotherLanguageStaysPlain() throws {
         #expect(
             try colors(of: "Release", in: "class Release { tag: string }", as: "typescript")

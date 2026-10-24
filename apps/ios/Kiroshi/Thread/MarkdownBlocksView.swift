@@ -219,8 +219,23 @@ private struct MarkdownListView: View {
         MarkdownPreview(replies: [MarkdownFixture.inlineCode])
     }
 
+    #Preview("6 Code block") {
+        MarkdownPreview(replies: [MarkdownFixture.retryHelper])
+    }
+
     #Preview("6 Code block · dark") {
-        MarkdownPreview(replies: [MarkdownFixture.codeBlock])
+        MarkdownPreview(replies: [MarkdownFixture.retryHelper])
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("6c Code block · Increase Contrast") {
+        MarkdownPreview(replies: [MarkdownFixture.retryHelper])
+            .environment(\._colorSchemeContrast, .increased)
+    }
+
+    #Preview("6c Code block · Increase Contrast · dark") {
+        MarkdownPreview(replies: [MarkdownFixture.retryHelper])
+            .environment(\._colorSchemeContrast, .increased)
             .preferredColorScheme(.dark)
     }
 

@@ -67,6 +67,20 @@
             ```
             """
         static let codeBlock = "Here’s the model with the new field:\n\n" + swiftCode
+        static let retryHelper = """
+            Here it is. It waits a little longer after each failure.
+
+            ```swift
+            func retry<T>(times: Int = 3, _ work: () async throws -> T) async throws -> T {
+                for attempt in 1..<times {
+                    if let value = try? await work() { return value }
+                    // Wait 2s, then 4s, before the next try
+                    try await Task.sleep(for: .seconds(attempt * 2))
+                }
+                return try await work()
+            }
+            ```
+            """
         static let fittingCode = """
             Here’s the short version:
 
@@ -156,6 +170,7 @@
             "4": (false, [quote]),
             "5": (false, [inlineCode]),
             "6": (false, [codeBlock]),
+            "retry": (false, [retryHelper]),
             "7": (false, [builds, changes]),
             "8": (true, [mention]),
             "9": (false, [diagrams]),

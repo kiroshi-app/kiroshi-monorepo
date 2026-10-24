@@ -16,8 +16,8 @@ struct CodeBlockCard: View {
             HStack(spacing: 0) {
                 if let language = code.language {
                     Text(verbatim: language)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color("code-card-label"))
                         .fixedSize()
                 }
                 Spacer(minLength: 8)
@@ -37,6 +37,9 @@ struct CodeBlockCard: View {
             .scrollIndicators(.automatic)
         }
         .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14).strokeBorder(Color("code-card-stroke"))
+        }
         .task(id: copies) {
             guard copies > 0 else { return }
             do {
