@@ -40,6 +40,7 @@ const bots = {
 		pinDrop: "Déposer ici pour épingler",
 		unpin: "Détacher",
 		delete: "Supprimer",
+		needsYou: "Vous attend",
 		working: "{{pose}}…",
 		pose: {
 			thinking: "réfléchit",

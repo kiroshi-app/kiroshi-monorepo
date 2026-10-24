@@ -90,6 +90,7 @@ const ConversationRosterRow = ({
 							if (lift.hasJustDropped()) return
 							onSelect?.(conversation.id)
 						}}
+						pendingQuestion={conversation.pendingQuestion}
 						preview={previewOf(t, conversation) ?? ""}
 						previewTrailing={
 							<ConversationBotPile bots={heldBotsOf(conversation)} />

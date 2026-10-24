@@ -48,6 +48,7 @@ const USER_BUBBLE_PAIR: TokenPair = {
 const WARNING_PAIRS: TokenPair[] = [
 	{ background: ROOT_PAIR.background, foreground: "--warning" },
 	{ background: "--sidebar", foreground: "--warning" },
+	{ background: "--warning", foreground: "--warning-foreground" },
 ]
 
 const TOKEN_PAIRS = [

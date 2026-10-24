@@ -61,3 +61,8 @@ export const STILL_LIFT: Lifter = {
 	}),
 	hasJustDropped: () => false,
 }
+
+export const PENDING_QUESTION = "Ship the release notes as drafted?"
+
+export const LONG_PENDING_QUESTION =
+	"Should I merge the migration branch tonight, or hold it until the staging deploy has run its full suite twice?"

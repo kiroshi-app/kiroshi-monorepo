@@ -48,6 +48,7 @@ const bots = {
 		pinDrop: "Drop here to pin",
 		unpin: "Unpin",
 		delete: "Delete",
+		needsYou: "Needs you",
 		working: "{{pose}}…",
 		pose: {
 			thinking: "thinking",

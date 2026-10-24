@@ -113,6 +113,7 @@ const BotRosterRow = ({
 							if (lift.hasJustDropped()) return
 							onSelect?.(bot.id)
 						}}
+						pendingQuestion={bot.pendingQuestion}
 						preview={botPreviewOf(t, bot)}
 						strips={missionStripsOf(bot.missions)}
 						timestamp={bot.timestamp ?? ""}

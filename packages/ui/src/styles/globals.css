@@ -63,6 +63,7 @@
 	--color-bot-badge-done: var(--bot-badge-done);
 	--color-bot-badge-failed: var(--bot-badge-failed);
 	--color-warning: var(--warning);
+	--color-warning-foreground: var(--warning-foreground);
 	--color-success: var(--success);
 	--color-state-connected: var(--state-connected);
 	--color-presence-online: var(--presence-online);
