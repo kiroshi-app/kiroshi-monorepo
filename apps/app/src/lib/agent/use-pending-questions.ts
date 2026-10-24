@@ -72,16 +72,15 @@ export const usePendingQuestions = ({
 			queryClient
 				.cancelQueries({ queryKey })
 				.then(() => queryClient.refetchQueries({ queryKey }))
+		const asksTheHost = (scoped: ScopedEvent) =>
+			leavesQuestionsToTheHost(scoped) ||
+			(changesPendingQuestions(scoped) && isReading())
 		const follow = (scoped: ScopedEvent) => {
-			if (leavesQuestionsToTheHost(scoped)) {
+			if (asksTheHost(scoped)) {
 				void reread()
 				return
 			}
 			if (!changesPendingQuestions(scoped)) {
-				return
-			}
-			if (isReading()) {
-				void reread()
 				return
 			}
 			queryClient.setQueryData<PendingQuestion[]>(queryKey, (questions) => {
