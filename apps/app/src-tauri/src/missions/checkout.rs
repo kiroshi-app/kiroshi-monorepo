@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 use tokio::process::Command;
 
-use super::commands::{announce_change, announced_pulse, observed, Pulse};
+use super::commands::{announce_change, announce_when};
 use super::contract::{CheckoutCounts, Mission, MissionError};
 use crate::db;
 
@@ -33,11 +33,11 @@ pub(crate) async fn pass<R: Runtime>(app: &AppHandle<R>, database: &db::Database
 		Err(failure) => return eprintln!("the open missions were not read: {failure:?}"),
 	};
 	for mission in open {
-		let mission = observed(app, mission);
-		let is_news = moved.contains(&mission.id)
-			|| announced_pulse(app, &mission.id) != Some(Pulse::of(&mission));
-		if is_news {
-			told(app, &mission);
+		let id = mission.id.clone();
+		let has_moved = moved.contains(&id);
+		let told = announce_when(app, mission, |_, has_pulse_moved| has_moved || has_pulse_moved);
+		if let Err(failure) = told {
+			eprintln!("mission {id} moved and the front was not told: {failure:?}");
 		}
 	}
 }
