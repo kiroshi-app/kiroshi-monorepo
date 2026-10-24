@@ -753,16 +753,13 @@ const hiddenRowIdsOf = (
 const withoutHiddenRows = (
 	{ runs, causes }: ReadRuns,
 	hiddenIds: ReadonlySet<string>,
-): ReadRuns =>
-	hiddenIds.size === 0
-		? { runs, causes }
-		: {
-				runs: toRuns(
-					runs.flat().filter(({ messageId }) => !hiddenIds.has(messageId)),
-					causes,
-				),
-				causes,
-			}
+): ReadRuns => ({
+	runs: toRuns(
+		runs.flat().filter(({ messageId }) => !hiddenIds.has(messageId)),
+		causes,
+	),
+	causes,
+})
 
 type RunRowsProps = Omit<ThreadRunProps, "run" | "presentation"> & {
 	runs: TranscriptRow[][]

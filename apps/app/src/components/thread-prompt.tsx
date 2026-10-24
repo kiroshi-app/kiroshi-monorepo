@@ -142,7 +142,8 @@ export const AnsweredPrompt = ({
 	card: { answer, questions },
 	readerName,
 }: AnsweredPromptProps) => {
-	const person = usePersonOf()(answer)
+	const personOf = usePersonOf()
+	const person = personOf(answer)
 
 	return (
 		<AnsweredQuestionCard
