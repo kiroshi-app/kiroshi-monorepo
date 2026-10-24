@@ -48,6 +48,8 @@ const RELEASE_PROMPT: &str =
 const RELEASE_PROMPTS_OF_SESSION: &str =
 	"DELETE FROM pending_prompts WHERE runtime_session_id = ?1";
 
+const RELEASE_EVERY_PROMPT: &str = "DELETE FROM pending_prompts";
+
 pub(super) const HAS_OPEN_TURN: &str = "EXISTS (SELECT 1 FROM turns AS open_turn
 	WHERE open_turn.conversation_id = conversations.id AND open_turn.completed_at IS NULL)";
 
@@ -98,6 +100,16 @@ impl ConversationsRepository {
 			})
 			.await
 			.at("release_prompts_of_session", "pending_prompts")?)
+	}
+
+	pub async fn release_every_prompt(&self) -> Result<(), ConversationError> {
+		Ok(self
+			.call(|connection| {
+				connection.prepare_cached(RELEASE_EVERY_PROMPT)?.execute([])?;
+				Ok(())
+			})
+			.await
+			.at("release_every_prompt", "pending_prompts")?)
 	}
 
 	pub async fn activity_of(&self, ids: Vec<String>) -> Result<Vec<Activity>, ConversationError> {

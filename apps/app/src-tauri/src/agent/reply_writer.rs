@@ -162,7 +162,7 @@ impl ReplyWriter {
 		};
 		tauri::async_runtime::spawn(write_then_forward(
 			queued,
-			Desk { store, turn: None, attachments, inner },
+			Desk { store, turn: None, attachments, inner, holds_prompts: false },
 		));
 		Self { entries }
 	}
@@ -264,6 +264,7 @@ struct Desk<R: Runtime> {
 	turn: Option<OpenTurn>,
 	attachments: Arc<TurnAttachments>,
 	inner: Arc<dyn TurnSink>,
+	holds_prompts: bool,
 }
 
 impl<R: Runtime> Desk<R> {
@@ -421,20 +422,26 @@ impl<R: Runtime> Desk<R> {
 		}
 	}
 
-	async fn keep_prompts(&self, event: &AgentEvent) {
+	async fn keep_prompts(&mut self, event: &AgentEvent) {
 		if self.store.is_quitting() {
 			return;
 		}
 		let kept = match event {
 			AgentEvent::QuestionRequested { request } => {
+				self.holds_prompts = true;
 				self.store.hold_prompt(&request.id, PromptKind::Question, request).await
 			}
 			AgentEvent::PermissionRequested { request } => {
+				self.holds_prompts = true;
 				self.store.hold_prompt(&request.id, PromptKind::Permission, request).await
 			}
+			_ if !self.holds_prompts => return,
 			_ => match prompts_settled_by(event) {
 				Some(SettledPrompts::One(id)) => self.store.release_prompt(id).await,
-				Some(SettledPrompts::Every) => self.store.release_prompts().await,
+				Some(SettledPrompts::Every) => {
+					self.holds_prompts = false;
+					self.store.release_prompts().await
+				}
 				None => return,
 			},
 		};
@@ -953,7 +960,13 @@ mod tests {
 				runtime_session_id: RUNTIME_SESSION_ID.to_owned(),
 				owned: Arc::default(),
 			};
-			Desk { store, turn: None, attachments: self.attachments.clone(), inner }
+			Desk {
+				store,
+				turn: None,
+				attachments: self.attachments.clone(),
+				inner,
+				holds_prompts: false,
+			}
 		}
 
 		async fn in_a_room_of_two(name: &str) -> (Self, String) {
@@ -2111,7 +2124,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_quitting_host_keeps_the_prompts_its_shutdown_would_end() {
+	async fn a_run_writes_no_prompt_once_its_host_quits() {
 		let written = Written::new("prompts-quit").await;
 		let mut desk = written.desk();
 		desk.open_turn(submitted("t1", "p1")).await;
