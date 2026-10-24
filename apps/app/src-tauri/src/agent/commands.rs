@@ -384,11 +384,11 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 			let asked =
 				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
 			self.live.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
-			return self.retell_the_mission();
+			return retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
 		self.release_questions_settled_by(&event);
 		if moves_the_thread {
-			self.retell_the_mission();
+			retell_the_mission(&self.app, self.scope.conversation_id.clone());
 		}
 		if let AgentEvent::SessionReady { session_id, .. } = &event {
 			self.record_its_own_lineage(session_id.clone());
@@ -421,10 +421,6 @@ impl<R: Runtime> RunSink<R> {
 			}
 			_ => {}
 		}
-	}
-
-	fn retell_the_mission(&self) {
-		retell_the_mission(&self.app, self.scope.conversation_id.clone());
 	}
 
 	fn record_its_own_lineage(&self, provider_session_id: String) {
