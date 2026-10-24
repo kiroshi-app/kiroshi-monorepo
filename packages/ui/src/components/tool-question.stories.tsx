@@ -914,7 +914,8 @@ export const LongHeaderScrolls = meta.story({
 		longTab.focus()
 		await userEvent.keyboard("{ArrowRight}")
 		await expect(strip.scrollLeft).toBeGreaterThan(0)
-		await expect(boxOf(shortTab).right).toBeLessThan(boxOf(strip).right)
+		await expect(boxOf(shortTab).right).toBeLessThanOrEqual(boxOf(strip).right)
+		await expect(boxOf(shortTab).left).toBeGreaterThanOrEqual(boxOf(strip).left)
 
 		await userEvent.click(longTab)
 		await userEvent.click(await canvas.findByRole("radio", { name: /Base UI/ }))
