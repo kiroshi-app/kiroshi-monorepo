@@ -2994,15 +2994,9 @@ fn the_live_sessions_in_a_space_hold_only_the_sessions_of_its_conversations() {
 	run(async {
 		let guest = Guest::of_two_spaces("live-sessions-in-space").await;
 		let app = guest.harness.app.handle();
-		let scope_in = |conversation_id: &str, bot_id: &str| agent::RuntimeScope {
-			conversation_id: conversation_id.to_owned(),
-			bot_id: bot_id.to_owned(),
-			runtime_session_id: format!("r-{conversation_id}"),
-			epoch: 0,
-		};
-		commands::a_run_held_by_the_app(app, scope_in("c-mine", "b-mine"));
-		commands::a_run_held_by_the_app(app, scope_in("c-theirs", "b-theirs"));
-		commands::a_run_held_by_the_app(app, scope_in("c-shared", "b-shared"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-mine", "b-mine"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-theirs", "b-theirs"));
+		commands::a_run_held_by_the_app(app, a_held_scope_in("c-shared", "b-shared"));
 
 		let listed =
 			commands::agent_live_sessions_in_space(app.state(), app.state(), PERSONAL.to_owned())
