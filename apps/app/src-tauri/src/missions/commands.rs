@@ -1519,7 +1519,7 @@ mod tests {
 		use serde_json::Value;
 
 		use super::*;
-		use crate::agent::commands::a_run_held_by_the_app;
+		use crate::agent::commands::{a_run_held_by_the_app, agent_shutdown};
 		use crate::agent::contract::{
 			AgentEvent, PermissionDecision, PermissionRequest, QuestionRequest, RuntimeScope,
 			TurnEnded, TurnOutcome, TurnState,
@@ -1747,6 +1747,25 @@ mod tests {
 					"a status moved the mission"
 				);
 			}
+		}
+
+		#[tokio::test]
+		async fn a_run_dropped_mid_turn_tells_the_front_its_mission_is_idle() {
+			let app = a_watched_host("dropped").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let received = listening(&app);
+			run.emit(turned(TurnState::Running), None);
+			let started = heard(&received, 1);
+
+			agent_shutdown(app.handle().clone(), app.state(), the_thread_of(&opened))
+				.await
+				.expect("the run is dropped");
+			let dropped = heard(&received, 1);
+
+			assert_eq!(liveness_of(&started), vec![json!("working")], "got {started:?}");
+			assert_eq!(liveness_of(&dropped), vec![json!("idle")], "got {dropped:?}");
+			assert_eq!(on_the_board(&app, &opened.id).await, MissionLiveness::Idle);
 		}
 
 		#[tokio::test]
