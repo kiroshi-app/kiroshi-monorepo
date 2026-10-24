@@ -141,7 +141,11 @@ describe("QuestionPrompt", () => {
 		const answer = vi.fn(async () => undefined)
 		renderPrompt(wallQuestion(), { ...RESPONDER, answer })
 
-		const event = pressDigit(2)
+		expect(document.activeElement).toBe(
+			screen.getByRole("form", { name: "Which wall holds?" }),
+		)
+
+		const event = pressDigit(2, document.body)
 
 		expect(event.defaultPrevented).toBe(true)
 		expect(checkedOptions()).toEqual([
@@ -149,9 +153,7 @@ describe("QuestionPrompt", () => {
 		])
 
 		await act(async () => {
-			fireEvent.keyDown(screen.getByRole("radio", { name: "South" }), {
-				key: "Enter",
-			})
+			fireEvent.keyDown(document.activeElement as Element, { key: "Enter" })
 		})
 
 		expect(answer).toHaveBeenCalledOnce()
