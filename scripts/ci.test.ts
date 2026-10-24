@@ -12,6 +12,7 @@ import {
 	SIMULATOR_LOOKUP,
 	type Step,
 	skipReason,
+	spawnedCommand,
 } from "./ci"
 import { decideJobs } from "./ci-changes"
 
@@ -278,6 +279,38 @@ describe("the gate", () => {
 		expect(playing).toEqual(["storybook"])
 	})
 
+	it("marks heavy exactly the clippy, cargo test, sidecar build, storybook and xcodebuild steps", () => {
+		const heavy = GROUP_ORDER.flatMap((group) =>
+			GATE[group]
+				.filter((step) => step.heavy)
+				.map((step) => `${group} / ${step.name}`),
+		)
+
+		expect(heavy).toEqual([
+			"rust-check / Build sidecar",
+			"rust-check / Clippy",
+			"rust-check / Regenerate the bindings",
+			"rust / Build sidecar",
+			"rust / Clippy",
+			"rust / Test",
+			"storybook / Stories played in chromium against the baseline",
+			"ios / Build for testing",
+			"ios / Test on the simulator",
+		])
+	})
+
+	it("passes a heavy step through scripts/slot.sh, every other step straight to bash", () => {
+		for (const step of GROUP_ORDER.flatMap((group) => GATE[group])) {
+			const command = spawnedCommand(step)
+			const bash = ["bash", "-ec", step.command]
+
+			if (step.heavy) {
+				expect(command.slice(1)).toEqual(bash)
+				expect(command[0]).toEndWith("/scripts/slot.sh")
+			} else expect(command).toEqual(bash)
+		}
+	})
+
 	it("notes every group a pull_request skips, nothing else", () => {
 		expect(GROUP_ORDER.filter((group) => offPullRequestNote(group))).toEqual(
 			OFF_PULL_REQUEST_JOBS,
@@ -334,6 +367,10 @@ describe("ci:fast", () => {
 	it("leaves the full unit set and the perf set to the gate", () => {
 		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
 		for (const step of GATE.vitest) expect(fastSteps()).not.toContainEqual(step)
+	})
+
+	it("takes no slot", () => {
+		expect(fastSteps().filter((step) => step.heavy)).toEqual([])
 	})
 })
 

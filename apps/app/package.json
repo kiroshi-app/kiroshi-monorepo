@@ -14,7 +14,7 @@
 		"build": "tsc -b && vite build",
 		"serve": "vite preview",
 		"types": "tsc -b",
-		"test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
+		"test": "vitest run && ../../scripts/slot.sh cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude",
 		"test:unit": "vitest run",
 		"test:live": "cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test real_claude -- --ignored --test-threads=1",
 		"lint": "biome lint",
