@@ -50,8 +50,7 @@ struct ConversationSummary: Identifiable, Equatable {
     var conversationId: String?
     var lastMessage: MessagePreview?
     var activeAt: Date?
-    var workingCompanionIds: Set<Companion.ID> = []
-    var waitingQuestion: String?
+    var state = ConversationState.idle
     var timeLabel: String?
     var preview: String?
 
@@ -65,7 +64,11 @@ struct ConversationSummary: Identifiable, Equatable {
     }
 
     var isWorking: Bool {
-        !workingCompanionIds.isEmpty
+        state == .working
+    }
+
+    var needsYou: Bool {
+        state == .needsYou
     }
 
     var lastActivity: Date {

@@ -12,6 +12,15 @@ enum MissionGroup: CaseIterable, Sendable {
         }
     }
 
+    init?(_ liveness: Mission.Liveness) {
+        switch liveness {
+        case .needsYou: self = .needsYou
+        case .working, .idle: self = .working
+        case .readyToMerge: self = .review
+        case .failed, .done, .closed: return nil
+        }
+    }
+
     var title: String {
         switch self {
         case .needsYou: "Needs you"
@@ -30,7 +39,7 @@ struct MissionSection: Identifiable, Equatable, Sendable {
     static func sections(of entries: [MissionInSpace]) -> [MissionSection] {
         let ordered = entries.map(\.mission).sorted(by: movedLater)
         return MissionGroup.allCases.compactMap { group in
-            let missions = ordered.filter { MissionGroup($0.state) == group }
+            let missions = ordered.filter { $0.group == group }
             return missions.isEmpty ? nil : MissionSection(group: group, missions: missions)
         }
     }
@@ -46,12 +55,21 @@ extension Mission {
         max(openedAt, lastActivityAt ?? 0, closedAt ?? 0)
     }
 
+    var group: MissionGroup? {
+        guard let liveness else { return MissionGroup(state) }
+        return MissionGroup(liveness)
+    }
+
+    var isWorking: Bool {
+        liveness.map { $0 == .working } ?? isAgentRunning
+    }
+
     var statusLine: String {
-        if state == .readyToMerge { return "Ready to merge" }
-        if isAgentRunning, MissionGroup(state) == .working { return "Working now" }
+        if group == .review { return "Ready to merge" }
+        if isWorking, group == .working { return "Working now" }
         let written = status?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !written.isEmpty { return written }
-        return state == .waitingHuman ? "Blocked on you" : "Working now"
+        return group == .needsYou ? "Blocked on you" : "Working now"
     }
 
     func titleLine(companion: MissionCompanion?) -> String {
@@ -70,6 +88,7 @@ extension Mission {
         if changed.stateSeq >= stateSeq {
             moved.state = changed.state
             moved.stateSeq = changed.stateSeq
+            moved.liveness = changed.liveness
         }
         return moved
     }

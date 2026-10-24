@@ -24,16 +24,14 @@ struct ConversationRow: View {
                     if let label = summary.timeLabel {
                         Text(label)
                             .font(
-                                summary.waitingQuestion == nil
-                                    ? .subheadline : .subheadline.weight(.semibold)
+                                summary.needsYou ? .subheadline.weight(.semibold) : .subheadline
                             )
                             .foregroundStyle(
-                                summary.waitingQuestion == nil
-                                    ? Color.secondary : Color(.systemOrange))
+                                summary.needsYou ? Color(.systemOrange) : Color.secondary)
                     }
                 }
-                if let question = summary.waitingQuestion {
-                    NeedsYouLine(question: question)
+                if summary.needsYou {
+                    NeedsYouLine(detail: summary.preview)
                 } else if summary.preview != nil || pile != nil {
                     HStack(spacing: 8) {
                         if let preview = summary.preview {
@@ -46,7 +44,7 @@ struct ConversationRow: View {
                             Spacer(minLength: 0)
                         }
                         if let pile {
-                            ConversationBotPile(members: pile, working: summary.workingCompanionIds)
+                            ConversationBotPile(members: pile)
                         }
                     }
                 }
@@ -95,7 +93,7 @@ struct ConversationRow: View {
 }
 
 struct NeedsYouLine: View {
-    let question: String
+    let detail: String?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -104,11 +102,13 @@ struct NeedsYouLine: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color(.systemOrange))
                 .fixedSize()
-            Text(question)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if let detail {
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 

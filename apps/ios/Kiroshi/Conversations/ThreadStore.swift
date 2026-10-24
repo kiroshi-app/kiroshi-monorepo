@@ -432,7 +432,7 @@ final class ThreadStore {
         case .groupDeleted(let id) where subject.isGroup(id):
             isDeleted = true
         case .messageStored, .agent, .companionsChanged, .groupCreated, .groupUpdated,
-            .groupDeleted:
+            .groupDeleted, .stateChanged:
             break
         }
     }

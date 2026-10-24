@@ -13,7 +13,6 @@ struct ConversationsStoreTests {
     let juniper = Companion(id: "juniper", name: "Juniper")
     let atlas = Companion(id: "atlas", name: "Atlas")
     let pico = Companion(id: "pico", name: "Pico")
-    let work = CompanionWork()
 
     func makeConnection() -> RelayConnection {
         RelayConnection(
@@ -31,22 +30,12 @@ struct ConversationsStoreTests {
     func follow(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>)
     {
         let connection = makeConnection()
-        let store = ConversationsStore(work: work)
-        await feed(work, from: connection)
+        let store = ConversationsStore()
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
         await waitUntil { store.phase == .loaded }
         return (store, connection, following)
-    }
-
-    func feed(_ work: CompanionWork, from connection: RelayConnection) async {
-        let updates = await connection.updates()
-        Task {
-            for await update in updates {
-                work.apply(update)
-            }
-        }
     }
 
     var host: TestHost {
@@ -86,8 +75,7 @@ struct ConversationsStoreTests {
     @Test func asksForTheCompanionsOfTheSpaceTheHostShares() async throws {
         let host = host
         let connection = makeConnection()
-        let store = ConversationsStore(work: work)
-        await feed(work, from: connection)
+        let store = ConversationsStore()
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
@@ -107,27 +95,52 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
-    @Test func aRunningTurnMarksItsCompanionWorkingUntilItEnds() async {
+    func pushState(_ state: String, of conversationId: String, to host: TestHost) {
+        host.push(
+            event: "conversation://state-changed",
+            payload:
+                #"{"conversationId":"\#(conversationId)","spaceId":"s-1","state":"\#(state)"}"#)
+    }
+
+    @Test func theHostStateMovesItsRowLive() async {
+        let host = host
+        let (store, connection, following) = await follow(host)
+        let row = { store.summaries.first { $0.id == "juniper" } }
+        #expect(store.summaries.allSatisfy { $0.state == .idle })
+
+        pushState("working", of: "chat-juniper", to: host)
+        await waitUntil { row()?.isWorking == true }
+        #expect(row()?.preview == "working…")
+        #expect(row()?.timeLabel == "Now")
+
+        pushState("needs_you", of: "chat-juniper", to: host)
+        await waitUntil { row()?.needsYou == true }
+        #expect(row()?.isWorking == false)
+        #expect(row()?.preview == "The release notes are drafted.")
+        #expect(row()?.timeLabel == "Now")
+
+        pushState("idle", of: "chat-juniper", to: host)
+        await waitUntil { row()?.state == .idle }
+        #expect(row()?.preview == "The release notes are drafted.")
+        #expect(row()?.timeLabel != "Now")
+        #expect(store.summaries.allSatisfy { $0.state == .idle })
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anAgentEventAloneLeavesTheRowAsTheHostLastSaidIt() async {
         let host = host
         let (store, connection, following) = await follow(host)
 
         host.pushAgent("chat-pico", #"{"type":"turnChanged","state":"running"}"#)
-        await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == true }
-        host.pushAgent(
-            "chat-pico", #"{"type":"questionRequested","request":{"id":"q1","questions":[]}}"#)
-        host.pushAgent("chat-pico", #"{"type":"turnChanged","state":"idle"}"#)
+        host.pushAgent("chat-pico", Self.format)
         host.pushAgent(
             "chat-juniper",
             #"{"type":"messageCompleted","message":{"id":"j2","role":"assistant","text":"Done.","timestamp":4000}}"#
         )
         await waitUntil { store.summaries.first { $0.id == "juniper" }?.preview == "Done." }
-        #expect(store.summaries.first { $0.id == "pico" }?.isWorking == true)
-        #expect(work.workers.map(\.conversationId) == ["chat-pico"])
-        host.pushAgent(
-            "chat-pico", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
-        await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == false }
 
-        #expect(store.summaries.allSatisfy { !$0.isWorking })
+        #expect(store.summaries.allSatisfy { $0.state == .idle })
         following.cancel()
         await connection.stop()
     }
@@ -135,60 +148,33 @@ struct ConversationsStoreTests {
     nonisolated static let format =
         #"{"type":"questionRequested","request":{"id":"q1","questions":[{"header":"Format","question":"Which format should the release notes take?","multiSelect":false,"options":[{"label":"Summary","description":null,"preview":null},{"label":"Full changelog","description":null,"preview":null}]}]}}"#
 
-    @Test func aQuestionMarksItsRowNeedsYouUntilItIsAnswered() async {
-        let host = host
-        let (store, connection, following) = await follow(host)
-        let row = { store.summaries.first { $0.id == "juniper" } }
-
-        host.pushAgent("chat-juniper", Self.format)
-        await waitUntil { row()?.waitingQuestion != nil }
-        #expect(row()?.waitingQuestion == "Which format should the release notes take?")
-        #expect(row()?.timeLabel == "Now")
-        #expect(store.summaries.filter { $0.waitingQuestion != nil }.count == 1)
-
-        host.pushAgent(
-            "chat-juniper", #"{"type":"permissionResolved","id":"q1","decision":"allowOnce"}"#)
-        await waitUntil { row()?.waitingQuestion == nil }
-        #expect(row()?.preview == "working…")
-
-        host.pushAgent(
-            "chat-juniper", #"{"type":"turnEnded","ended":{"sessionId":null,"outcome":"success"}}"#)
-        await waitUntil { row()?.isWorking == false }
-        #expect(row()?.preview == "The release notes are drafted.")
-        following.cancel()
-        await connection.stop()
-    }
-
-    @Test func aQuestionWaitingBeforeTheListOpensIsAskedOfTheConversationsAtWork() async throws {
+    @Test func eachPageRowReadsTheStateTheHostComputed() async throws {
         let release = FixtureHost.Group(
             id: "group-release", title: "Release crew", members: [juniper, atlas], createdAt: 0)
         let calm = FixtureHost.Group(
             id: "group-calm", title: "Calm", members: [pico], createdAt: 0)
-        let pending =
-            #"[{"scope":{"conversationId":"group-release","botId":"juniper","runtimeSessionId":"session-1","epoch":1},"turn":{"turnId":"t1","conversationId":"group-release"},"event":\#(Self.format)}]"#
-        let host = TestHost(companions: [juniper], groups: [release, calm]) { call in
-            switch call.command {
-            case "conversation_page":
-                var active = TestHost.pageRow(release, last: nil)
-                active.isTurnActive = true
-                let rows = [active, TestHost.pageRow(calm, last: nil)]
-                return TestHost.ok(call, FixtureHost.conversationPage(rows, cursor: nil, limit: 30))
-            case "agent_pending_questions":
-                return TestHost.ok(call, pending)
-            default:
-                return nil
-            }
+        let odd = FixtureHost.Group(
+            id: "group-odd", title: "Odd", members: [pico], createdAt: 0)
+        let host = TestHost(companions: [juniper], groups: [release, calm, odd]) { call in
+            guard call.command == "conversation_page" else { return nil }
+            var asking = TestHost.pageRow(release, last: nil)
+            asking.state = "needs_you"
+            var working = TestHost.pageRow(calm, last: nil)
+            working.state = "working"
+            var unknown = TestHost.pageRow(odd, last: nil)
+            unknown.state = "dreaming"
+            let page = FixtureHost.conversationPage(
+                [asking, working, unknown], cursor: nil, limit: 30)
+            return TestHost.ok(call, page)
         }
         let (store, connection, following) = await follow(host)
+        let row = { (id: String) in store.summaries.first { $0.id == id } }
 
-        let replay = try #require(await host.nextCall("agent_pending_questions"))
-        await waitUntil { store.summaries.contains { $0.waitingQuestion != nil } }
-
-        #expect(
-            try replay.args(as: ThreadStoreTests.InConversation.self).conversationId
-                == "group-release")
-        #expect(
-            store.summaries.filter { $0.waitingQuestion != nil }.map(\.id) == ["group-release"])
+        #expect(row("group-release")?.needsYou == true)
+        #expect(row("group-release")?.timeLabel == "Now")
+        #expect(row("group-calm")?.isWorking == true)
+        #expect(row("group-calm")?.preview == "working…")
+        #expect(row("group-odd")?.state == .idle)
         following.cancel()
         await connection.stop()
     }
@@ -241,8 +227,7 @@ struct ConversationsStoreTests {
 
     func start(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>) {
         let connection = makeConnection()
-        let store = ConversationsStore(work: work)
-        await feed(work, from: connection)
+        let store = ConversationsStore()
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)
@@ -351,7 +336,7 @@ struct ConversationsStoreTests {
     ) {
         let refusing = TestHost(companions: [juniper], holding: ["conversation_bots"])
         let connection = makeConnection()
-        let store = ConversationsStore(work: work, clock: clock)
+        let store = ConversationsStore(clock: clock)
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(refusing.socket)
@@ -429,7 +414,7 @@ struct ConversationsStoreTests {
         let (store, connection, following) = await follow(host)
         #expect(store.summaries.allSatisfy { $0.timeLabel != nil || $0.lastMessage == nil })
 
-        host.pushAgent("chat-pico", #"{"type":"turnChanged","state":"running"}"#)
+        pushState("working", of: "chat-pico", to: host)
         await waitUntil { store.summaries.first { $0.id == "pico" }?.isWorking == true }
 
         #expect(store.summaries.first { $0.id == "pico" }?.timeLabel == "Now")
@@ -577,20 +562,15 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
-    @Test func aCompanionWorkingInAGroupNamesItInTheRow() async {
+    @Test func aGroupAtWorkReadsWorkingWithoutNamingACompanion() async {
         let host = hostWithGroups
         let (store, connection, following) = await follow(host)
 
-        host.push(
-            event: "agent://event",
-            payload:
-                #"{"scope":{"conversationId":"group-release","botId":"atlas","runtimeSessionId":"session-1","epoch":1},"event":{"type":"turnChanged","state":"running"},"turn":{"turnId":"t1","conversationId":"group-release"}}"#
-        )
+        pushState("working", of: "group-release", to: host)
         await waitUntil { store.summaries.first { $0.id == "group-release" }?.isWorking == true }
 
         let release = store.summaries.first { $0.id == "group-release" }
-        #expect(release?.preview == "Atlas: working…")
-        #expect(release?.workingCompanionIds == ["atlas"])
+        #expect(release?.preview == "working…")
         #expect(release?.timeLabel == "Now")
         following.cancel()
         await connection.stop()

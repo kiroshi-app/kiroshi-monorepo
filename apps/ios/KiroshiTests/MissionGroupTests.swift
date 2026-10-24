@@ -17,6 +17,59 @@ struct MissionGroupTests {
         #expect(MissionGroup(state) == group)
     }
 
+    @Test(
+        arguments: [
+            ("needs_you", "working", MissionGroup?.some(.needsYou), false),
+            ("working", "working", .working, true),
+            ("idle", "working", .working, false),
+            ("ready_to_merge", "ready_to_merge", .review, false),
+            ("failed", "failed", nil, false),
+            ("done", "done", nil, false),
+            ("closed", "closed", nil, false),
+        ])
+    func theHostLivenessPlacesTheMissionAndMovesItsAvatar(
+        liveness: String, state: String, group: MissionGroup?, isWorking: Bool
+    ) {
+        let mission = MissionTesting.mission(
+            state: state, isAgentRunning: !isWorking, liveness: liveness)
+
+        #expect(mission.group == group)
+        #expect(mission.isWorking == isWorking)
+    }
+
+    @Test func theLivenessWinsOverTheStoredState() {
+        let asking = MissionTesting.mission(state: "working", liveness: "needs_you")
+        let answered = MissionTesting.mission(
+            state: "waiting_human", isAgentRunning: true, liveness: "working")
+
+        #expect(asking.group == .needsYou)
+        #expect(asking.statusLine == "Blocked on you")
+        #expect(answered.group == .working)
+        #expect(answered.statusLine == "Working now")
+    }
+
+    @Test(arguments: [nil, "dreaming"])
+    func withoutAReadableLivenessTheStoredStateDecides(liveness: String?) {
+        let asking = MissionTesting.mission(
+            state: "waiting_human", isAgentRunning: true, liveness: liveness)
+        let running = MissionTesting.mission(isAgentRunning: true, liveness: liveness)
+
+        #expect(asking.liveness == nil)
+        #expect(asking.group == .needsYou)
+        #expect(asking.isWorking)
+        #expect(running.group == .working)
+        #expect(running.statusLine == "Working now")
+    }
+
+    @Test func anIdleMissionKeepsItsWrittenStatusAndAStillAvatar() {
+        let idle = MissionTesting.mission(
+            isAgentRunning: true, liveness: "idle", status: "Fixed the red check, CI is running")
+
+        #expect(idle.group == .working)
+        #expect(!idle.isWorking)
+        #expect(idle.statusLine == "Fixed the red check, CI is running")
+    }
+
     @Test func groupsComeInTheArtboardOrderAndEmptyOnesAreLeftOut() {
         let sections = MissionSection.sections(
             of: [
@@ -93,6 +146,28 @@ struct MissionGroupTests {
         #expect(stale.lastActivityAt == 9)
     }
 
+    @Test func aChangeCarriesItsLivenessUnlessItIsStale() {
+        let mission = MissionTesting.mission(state: "working", stateSeq: 4, liveness: "idle")
+        let moved = mission.moved(
+            by: MissionChanged(
+                missionId: mission.id, state: .working, stateSeq: 4, isAgentRunning: false,
+                liveness: .needsYou, lastActivityAt: 9))
+        let stale = mission.moved(
+            by: MissionChanged(
+                missionId: mission.id, state: .working, stateSeq: 3, isAgentRunning: true,
+                liveness: .working, lastActivityAt: 9))
+        let older = mission.moved(
+            by: MissionChanged(
+                missionId: mission.id, state: .working, stateSeq: 5, isAgentRunning: true,
+                lastActivityAt: 9))
+
+        #expect(moved.group == .needsYou)
+        #expect(stale.liveness == .idle)
+        #expect(!stale.isWorking)
+        #expect(older.liveness == nil)
+        #expect(older.isWorking)
+    }
+
     @Test func aMissionChangedFrameIsRead() {
         let frame = MissionTesting.event(
             "mission://changed",
@@ -106,5 +181,19 @@ struct MissionGroupTests {
                     missionId: "m-1", state: .readyToMerge, stateSeq: 2, isAgentRunning: false,
                     lastActivityAt: nil))
         #expect(MissionChanged(MissionTesting.event("routine://changed", payload: "{}")) == nil)
+    }
+
+    @Test func aMissionChangedFrameReadsItsLivenessAndSkipsAnUnknownOne() {
+        let frame = { (liveness: String) in
+            MissionTesting.event(
+                "mission://changed",
+                payload:
+                    #"{"missionId":"m-1","state":"working","stateSeq":2,"isAgentRunning":true,"liveness":"\#(liveness)","lastActivityAt":null}"#
+            )
+        }
+
+        #expect(MissionChanged(frame("needs_you"))?.liveness == .needsYou)
+        #expect(MissionChanged(frame("dreaming"))?.liveness == nil)
+        #expect(MissionChanged(frame("dreaming"))?.state == .working)
     }
 }

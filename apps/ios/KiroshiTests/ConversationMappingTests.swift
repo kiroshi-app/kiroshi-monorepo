@@ -106,6 +106,57 @@ struct ConversationMappingTests {
         #expect(olderRow.pinPosition == nil)
     }
 
+    @Test(arguments: [
+        ("idle", ConversationState.idle),
+        ("working", .working),
+        ("needs_you", .needsYou),
+        ("dreaming", .idle),
+    ])
+    func readsTheStateTheHostComputedForAPageRow(word: String, state: ConversationState)
+        throws
+    {
+        let group = FixtureHost.Group(
+            id: "topic", title: "Topic", members: [Companion(id: "a", name: "Atlas")],
+            createdAt: 1)
+        let row = try JSONDecoder().decode(
+            ConversationInPage.self,
+            from: Data(
+                group.pageJSON(lastActivityAt: 9, lastWord: nil, soloBotId: nil, state: word)
+                    .utf8))
+        let older = try JSONDecoder().decode(
+            ConversationInPage.self,
+            from: Data(
+                #"{"id":"t","title":"Old","createdAt":1,"participants":[],"lastActivityAt":9}"#
+                    .utf8))
+
+        #expect(row.state == state)
+        #expect(older.state == .idle)
+    }
+
+    @Test(arguments: [
+        ("idle", ConversationState.idle, false, false),
+        ("working", .working, true, false),
+        ("needs_you", .needsYou, false, true),
+        ("dreaming", .idle, false, false),
+    ])
+    func readsAStateChange(word: String, state: ConversationState, isWorking: Bool, needsYou: Bool)
+    {
+        let changed = event(
+            "conversation://state-changed",
+            #"{"conversationId":"c1","spaceId":"s1","state":"\#(word)"}"#)
+
+        guard case .stateChanged(let change) = changed else {
+            Issue.record("Expected a state change")
+            return
+        }
+        var summary = ConversationSummary(subject: .companion(Companion(id: "a", name: "Atlas")))
+        summary.state = change.state
+        #expect(change.conversationId == "c1")
+        #expect(change.state == state)
+        #expect(summary.isWorking == isWorking)
+        #expect(summary.needsYou == needsYou)
+    }
+
     @Test func readsTheGroupEventsOfTheSpace() {
         let group = FixtureHost.Group(
             id: "g1", title: "Release crew", members: [Companion(id: "a", name: "Atlas")],

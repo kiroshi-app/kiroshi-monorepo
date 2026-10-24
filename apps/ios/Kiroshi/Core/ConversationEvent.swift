@@ -5,6 +5,7 @@ enum ConversationEvent: Equatable, Sendable {
     case groupCreated(GroupConversation)
     case groupUpdated(GroupConversation)
     case groupDeleted(id: String)
+    case stateChanged(ConversationStateChanged)
 
     init?(_ event: RelayEvent) {
         switch event.name {
@@ -23,6 +24,11 @@ enum ConversationEvent: Equatable, Sendable {
         case "conversation://deleted":
             guard let deleted = try? event.payload(as: GroupDeleted.self) else { return nil }
             self = .groupDeleted(id: deleted.conversationId)
+        case ConversationStateChanged.eventName:
+            guard let changed = try? event.payload(as: ConversationStateChanged.self) else {
+                return nil
+            }
+            self = .stateChanged(changed)
         case "companion://created", "companion://deleted", "companion://updated":
             self = .companionsChanged
         default:

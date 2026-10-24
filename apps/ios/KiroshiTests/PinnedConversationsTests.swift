@@ -68,7 +68,6 @@ struct PinnedConversationsTests {
     let clock = TestRelayClock()
     let juniper = Companion(id: "juniper", name: "Juniper")
     let pico = Companion(id: "pico", name: "Pico")
-    let work = CompanionWork()
 
     func makeConnection() -> RelayConnection {
         RelayConnection(
@@ -86,7 +85,7 @@ struct PinnedConversationsTests {
     func follow(_ host: TestHost) async -> (ConversationsStore, RelayConnection, Task<Void, Never>)
     {
         let connection = makeConnection()
-        let store = ConversationsStore(work: work)
+        let store = ConversationsStore()
         let following = Task { await store.follow(connection) }
         await connection.start()
         await transport.nextOpening().accept(host.socket)

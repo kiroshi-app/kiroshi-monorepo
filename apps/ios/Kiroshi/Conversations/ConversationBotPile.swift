@@ -2,10 +2,9 @@ import SwiftUI
 
 struct ConversationBotPile: View {
     let members: [Companion]
-    let working: Set<Companion.ID>
 
     var body: some View {
-        ScaledPile(pile: PileContent(members: members), working: working)
+        ScaledPile(pile: PileContent(members: members))
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .accessibilityHidden(true)
     }
@@ -35,7 +34,6 @@ private struct ScaledPile: View {
     private static let counterSize = 6.3
 
     let pile: PileContent
-    let working: Set<Companion.ID>
     @ScaledMetric(relativeTo: .subheadline) private var unit: CGFloat = 20 / 15.67
 
     var body: some View {
@@ -43,7 +41,7 @@ private struct ScaledPile: View {
             ForEach(Array(pile.shown.enumerated()), id: \.element.id) { index, member in
                 hole(at: index)
                 slot(at: index) {
-                    CompanionAvatarArt(companion: member, isWorking: working.contains(member.id))
+                    CompanionAvatarArt(companion: member, isWorking: false)
                 }
             }
             if pile.hiddenCount > 0 {
