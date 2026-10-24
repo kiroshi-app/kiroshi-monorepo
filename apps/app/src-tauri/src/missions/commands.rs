@@ -18,6 +18,7 @@ use crate::bundles;
 use crate::companions::host::picked;
 use crate::conversations::commands::{bot_row, ready, seat_participant};
 use crate::conversations::contract::{Bot, CompanionSpoke};
+use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::keyset;
 use crate::events::{self, COMPANION_SPOKE, MISSION_CHANGED};
@@ -109,6 +110,7 @@ pub(super) fn announce_when<R: Runtime>(
 	let mission = observed(app, mission);
 	let has_pulse_moved = kept.get(&mission.id) != Some(&Pulse::of(&mission));
 	if is_news(&mission, has_pulse_moved) {
+		conversation_state::observe_later(app, mission.origin_conversation_id.clone());
 		emit_change(app, &mission)?;
 	}
 	match mission.closed_at {

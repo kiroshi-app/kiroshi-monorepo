@@ -15,7 +15,9 @@ use super::contract::{
 use super::host::hosted;
 use super::lease::RunLease;
 use super::protocol::{self, Checked, SpaceMember};
-use super::reply_writer::{HostWrites, ReplyWriter, TurnAttachments, TurnSink};
+use super::reply_writer::{
+	prompts_settled_by, HostWrites, ReplyWriter, SettledPrompts, TurnAttachments, TurnSink,
+};
 use super::session::{Bundle, EventSink, GatedSink, Handed, LinePlace, Session, SessionOptions};
 use super::sidecar::{self, Sidecar, SidecarOptions};
 use super::translate::now_ms;
@@ -433,13 +435,10 @@ fn closes_the_run(event: &AgentEvent) -> bool {
 
 impl<R: Runtime> RunSink<R> {
 	fn release_questions_settled_by(&self, event: &AgentEvent) {
-		match event {
-			AgentEvent::PermissionResolved { id, .. } => {
-				self.live.release_question(&self.scope, id)
-			}
-			AgentEvent::TurnEnded { .. } => self.drop_questions(),
-			AgentEvent::Failed { error } if error.is_fatal() => self.drop_questions(),
-			_ => {}
+		match prompts_settled_by(event) {
+			Some(SettledPrompts::One(id)) => self.live.release_question(&self.scope, id),
+			Some(SettledPrompts::Every) => self.drop_questions(),
+			None => {}
 		}
 	}
 
@@ -723,6 +722,10 @@ impl AgentState {
 
 	fn enter_quit(&self) {
 		self.gate.lock().expect("gate").quitting = true;
+	}
+
+	pub(crate) fn is_quitting(&self) -> bool {
+		self.gate.lock().unwrap_or_else(PoisonError::into_inner).quitting
 	}
 
 	pub async fn sidecar(&self) -> Result<Arc<Sidecar>, TransportError> {
@@ -1578,6 +1581,12 @@ pub async fn agent_shutdown<R: Runtime>(
 	retell_when_moved(&app, &state, &scope, before);
 	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn a_quitting_host<R: Runtime>(app: &AppHandle<R>) {
+	app.manage(AgentState::default());
+	app.state::<AgentState>().enter_quit();
 }
 
 #[cfg(test)]

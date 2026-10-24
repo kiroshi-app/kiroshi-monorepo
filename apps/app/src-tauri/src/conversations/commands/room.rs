@@ -2,9 +2,11 @@ use tauri::{AppHandle, Runtime, State};
 
 use super::super::context;
 use super::super::contract::{
-	Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInPage, ConversationPage, ConversationStored, RuntimeSession, TranscriptStoreError,
+	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
+	ConversationInList, ConversationInPage, ConversationPage, ConversationState,
+	ConversationStored, RuntimeSession, TranscriptStoreError,
 };
+use super::super::state as conversation_state;
 use super::bot::ready;
 use crate::avatars;
 use crate::companions::launch;
@@ -53,10 +55,19 @@ pub async fn conversation_list<R: Runtime>(
 	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
-) -> Result<Vec<Conversation>, TranscriptStoreError> {
+) -> Result<Vec<ConversationInList>, TranscriptStoreError> {
 	let dir = avatars::Avatars::dir(&app);
-	let stored = ready(&state)?.conversations().conversations(space_id).await?;
-	Ok(stored.into_iter().map(|room| Conversation::of(room, dir.as_deref())).collect())
+	let database = ready(&state)?;
+	let stored = database.conversations().conversations(space_id).await?;
+	let ids = stored.iter().map(|room| room.id.clone()).collect();
+	let states = conversation_state::listed(&app, database, ids).await?;
+	Ok(stored
+		.into_iter()
+		.map(|room| ConversationInList {
+			state: state_in(&states, &room.id),
+			conversation: Conversation::of(room, dir.as_deref()),
+		})
+		.collect())
 }
 
 #[tauri::command]
@@ -81,11 +92,14 @@ pub async fn conversation_page<R: Runtime>(
 ) -> Result<ConversationPage, TranscriptStoreError> {
 	let after = keyset::after(cursor)
 		.map_err(|cursor| TranscriptStoreError::UnreadableCursor { cursor })?;
-	let read = ready(&state)?
+	let database = ready(&state)?;
+	let read = database
 		.conversations()
 		.conversation_page(space_id, after, keyset::page_size(limit))
 		.await?;
-	Ok(ConversationPage::of(read, avatars::Avatars::dir(&app).as_deref()))
+	let ids = read.pinned.iter().chain(&read.page.rows).map(|row| row.conversation.id.clone());
+	let states = conversation_state::listed(&app, database, ids.collect()).await?;
+	Ok(ConversationPage::of(read, &states, avatars::Avatars::dir(&app).as_deref()))
 }
 
 #[tauri::command]
@@ -204,26 +218,39 @@ pub(crate) async fn announce_conversation<R: Runtime>(
 	event: Event<ConversationStored>,
 	conversation_id: &str,
 ) {
-	let failure =
-		match database.conversations().conversation_in_page(conversation_id.to_owned()).await {
-			Ok(Some(row)) => {
-				let conversation =
-					ConversationInPage::of(row, avatars::Avatars::dir(app).as_deref());
-				let space_id = conversation.conversation.space_id.clone();
-				match events::emit(app, event, ConversationStored { space_id, conversation }) {
-					Ok(()) => return,
-					Err(failure) => failure.to_string(),
-				}
-			}
-			Ok(None) => match database.conversations().kind(conversation_id.to_owned()).await {
-				Ok(Some(kind)) if kind == MISSION_KIND => return,
-				Ok(Some(_)) => "the conversation is outside the feed".to_owned(),
-				Ok(None) => "the conversation was not found".to_owned(),
-				Err(failure) => format!("the conversation kind did not read: {failure:?}"),
-			},
-			Err(failure) => format!("the conversation row did not read: {failure:?}"),
-		};
+	let failure = match conversation_state::observe(app, database, conversation_id).await {
+		Ok(state) => match announced(app, database, event, conversation_id, state).await {
+			Ok(()) => return,
+			Err(failure) => failure,
+		},
+		Err(failure) => format!("its state did not read: {failure:?}"),
+	};
 	eprintln!("{} was not announced for conversation {conversation_id}: {failure}", event.name());
+}
+
+async fn announced<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	event: Event<ConversationStored>,
+	conversation_id: &str,
+	state: ConversationState,
+) -> Result<(), String> {
+	match database.conversations().conversation_in_page(conversation_id.to_owned()).await {
+		Ok(Some(row)) => {
+			let conversation =
+				ConversationInPage::of(row, state, avatars::Avatars::dir(app).as_deref());
+			let space_id = conversation.conversation.space_id.clone();
+			events::emit(app, event, ConversationStored { space_id, conversation })
+				.map_err(|failure| failure.to_string())
+		}
+		Ok(None) => match database.conversations().kind(conversation_id.to_owned()).await {
+			Ok(Some(kind)) if kind == MISSION_KIND => Ok(()),
+			Ok(Some(_)) => Err("the conversation is outside the feed".to_owned()),
+			Ok(None) => Err("the conversation was not found".to_owned()),
+			Err(failure) => Err(format!("the conversation kind did not read: {failure:?}")),
+		},
+		Err(failure) => Err(format!("the conversation row did not read: {failure:?}")),
+	}
 }
 
 fn drawn<R: Runtime>(app: &AppHandle<R>, room: StoredConversation) -> Conversation {

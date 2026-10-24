@@ -59,8 +59,8 @@ use crate::conversations::commands::{
 	conversation_update_bot,
 };
 use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord, NewUserMessage,
-	ParticipantRole, TranscriptStoreError, WrittenFrom,
+	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, ConversationState, LastWord,
+	NewUserMessage, ParticipantRole, TranscriptStoreError, WrittenFrom,
 	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
 	MESSAGE_STORED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
@@ -71,6 +71,7 @@ use crate::crypto::error::CryptoError;
 use crate::crypto::frame::CHALLENGE_LENGTH;
 use crate::crypto::space_key::HeldSpaceKey;
 use crate::db::connection::temp_dir;
+use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 use crate::db::repositories::joined_spaces::{JoinedReach, JoinedSpace};
 use crate::db::repositories::messages::{EndedRun, MessagePageQuery, MessageRole, NewTurn};
 use crate::db::{self, DatabaseState};
@@ -4752,6 +4753,50 @@ fn a_guest_reads_the_same_conversation_page_as_the_host_solo_rows_included() {
 }
 
 #[test]
+fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let room = direct(
+			&host.window,
+			"conversation_create",
+			json!({ "spaceId": PERSONAL, "sectionId": null, "title": "Room", "botIds": [] }),
+		);
+		let room_id = room["id"].as_str().expect("the room has an id");
+		let state = host.app.state::<DatabaseState>();
+		let conversations = state.as_ref().expect("the database").conversations();
+		let prompt = a_pending_prompt(room_id, PromptKind::Question);
+		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		let state_of = |rows: &Value| {
+			rows.as_array()
+				.expect("the read holds a list")
+				.iter()
+				.find(|row| row["id"] == room["id"])
+				.map(|row| row["state"].clone())
+		};
+
+		let listed = host
+			.relayed(
+				json!({ "id": 1, "command": "conversation_list", "args": { "spaceId": PERSONAL } }),
+			)
+			.await;
+		let paged = host
+			.relayed(json!({
+				"id": 2,
+				"command": "conversation_page",
+				"args": { "spaceId": PERSONAL, "cursor": null, "limit": null },
+			}))
+			.await;
+
+		assert_eq!(state_of(&listed), Some(json!("needs_you")));
+		assert_eq!(state_of(&paged["conversations"]), Some(json!("needs_you")));
+		assert_eq!(
+			listed,
+			direct(&host.window, "conversation_list", json!({ "spaceId": PERSONAL }))
+		);
+	});
+}
+
+#[test]
 fn a_guest_reads_the_open_turn_of_a_conversation_until_it_completes() {
 	run(async {
 		let host = Authoring::new(Some(BEARER)).await;
@@ -5403,6 +5448,7 @@ fn in_page(
 		last_word,
 		solo_bot_id: None,
 		active_turn: None,
+		state: ConversationState::Idle,
 	})
 }
 

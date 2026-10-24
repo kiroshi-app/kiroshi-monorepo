@@ -154,6 +154,7 @@ reaches a member.
 | `conversation://created` | `{ "spaceId", "conversation" }` | `conversation_create` |
 | `conversation://updated` | `{ "spaceId", "conversation" }` | `conversation_update`; a companion seated in a conversation it was not seated in (`conversation_add_participant`, or a companion inviting another); `conversation_remove_participant`; `conversation_set_lead` |
 | `conversation://deleted` | `{ "spaceId", "conversationId" }` | `conversation_delete` |
+| `conversation://state-changed` | `{ "conversationId", "spaceId", "state" }` | the host, when the state of a conversation moves |
 
 - `conversation` is the whole conversation as stored once the write landed, the
   same shape `conversation_list` returns. A member replaces its row with it.
@@ -162,6 +163,13 @@ reaches a member.
   left. The lead is the seat whose `role` is `"lead"`.
 - Each write fires its event once, after it is stored. Seating a companion
   already seated fires nothing, and a write that fails fires nothing.
+- `state` is one of `idle`, `working`, `needs_you`, the same value every row of
+  `conversation_list` and `conversation_page` carries. `needs_you` wins over
+  `working`, which wins over `idle`: a conversation needs you while an agent
+  question or a permission request waits in it, or while a mission it opened
+  waits on a human; it is working while a turn is open. The host fires
+  `conversation://state-changed` once per move, never for a recompute that lands
+  on the same state.
 
 ### Space-level commands
 
