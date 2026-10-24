@@ -540,6 +540,23 @@
                     + releaseNotes
             case .twoAsks:
                 script.messages[juniper.id] = releaseNotes + twoAsks
+            case .markdown:
+                let artboard = MarkdownFixture.artboard
+                let replies = artboard.replies.enumerated().map { index, reply in
+                    FixtureHost.Message(
+                        id: "md-\(index)", isYours: false, content: reply, daysAgo: 0, hour: 9,
+                        minute: 39 + index, author: artboard.isGroup ? juniper.id : nil)
+                }
+                if artboard.isGroup {
+                    script.messages[releaseCrew.id] = replies
+                } else {
+                    script.messages[juniper.id] =
+                        [
+                            .init(
+                                id: "md-ask", isYours: true, content: MarkdownFixture.ask,
+                                daysAgo: 0, hour: 9, minute: 38)
+                        ] + replies
+                }
             case .threadHostOffline:
                 script.messages[juniper.id] = releaseNotes
                 script.hostLeavesAfter = .seconds(2)
@@ -633,6 +650,8 @@
             case .groupThread, .groupWorking, .groupFailed, .groupMention, .longGroup, .slowGroup,
                 .sharedThread:
                 releaseCrew.id
+            case .markdown:
+                MarkdownFixture.artboard.isGroup ? releaseCrew.id : juniper.id
             case .missionsButton, .conversationMissions:
                 release042.id
             case .conversationNoMissions:
@@ -881,8 +900,9 @@
             let account = authorAccountId.map { #""\#($0)""# } ?? "null"
             let name = authorName.map { #""\#($0)""# } ?? "null"
             let replied = repliedTo.map { #""\#($0)""# } ?? "null"
+            let encoded = String(decoding: try! JSONEncoder().encode(content), as: UTF8.self)
             return
-                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":"\#(content.replacingOccurrences(of: "\n", with: #"\n"#))","completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name),"repliedToMessageId":\#(replied),"runtimeSessionId":null}"#
+                #"{"id":"\#(id)","conversationId":"\#(conversationId)","turnId":"turn-\#(id)","seq":\#(seq),"role":"\#(role)","content":\#(encoded),"completion":"complete","createdAt":\#(createdAt),"authorBotId":\#(author),"authorAccountId":\#(account),"authorName":\#(name),"repliedToMessageId":\#(replied),"runtimeSessionId":null}"#
         }
     }
 
