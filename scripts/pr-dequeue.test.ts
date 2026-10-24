@@ -62,10 +62,9 @@ const valueAfter = (call: string[], flag: string) =>
 
 const describeCall = (call: string[]) => {
 	if (call[0] === "pr") return `pr list --head ${valueAfter(call, "--head")}`
-	const fields = call.filter((argument) => /^(query|id)=/.test(argument))
-	const query = fields.find((field) => field.startsWith("query=")) ?? ""
+	const query = call.find((argument) => argument.startsWith("query=")) ?? ""
 	const [, kind, field] = /^query=(\w+)[^{]*\{\s*(\w+)/.exec(query) ?? []
-	const id = fields.find((field) => field.startsWith("id="))
+	const id = call.find((argument) => argument.startsWith("id="))
 	return `${call.slice(0, 2).join(" ")} ${kind} ${field} ${id}`
 }
 
@@ -98,10 +97,13 @@ const runPrDequeue = async ({
 	pullRequests = [],
 	queueStates = [],
 }: Scenario) => {
-	Bun.spawnSync({
+	const initialised = Bun.spawnSync({
 		cmd: ["git", "init", "--quiet", "--initial-branch", branch, repository],
 		env: withoutGitContext(),
 	})
+	if (initialised.exitCode !== 0) {
+		throw new Error(`git init failed: ${initialised.stderr.toString()}`)
+	}
 	writeFileSync(join(stub, "pull-requests.json"), JSON.stringify(pullRequests))
 	writeFileSync(join(stub, "queue-states"), `${queueStates.join("\n")}\n`)
 	const running = Bun.spawn({
