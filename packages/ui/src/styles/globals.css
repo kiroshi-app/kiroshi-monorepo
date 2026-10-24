@@ -168,6 +168,7 @@
 			var(--card)
 		);
 		--user-bubble-foreground: var(--user-bubble-tint-ink);
+		--user-bubble-muted-strength: var(--user-bubble-tint-muted-strength);
 		--shell-surface: color-mix(
 			in oklab,
 			var(--space-tint) var(--shell-tint-strength),
@@ -306,7 +307,7 @@
 	--color-foreground: var(--user-bubble-foreground);
 	--color-muted-foreground: color-mix(
 		in oklab,
-		var(--user-bubble-foreground) 70%,
+		var(--user-bubble-foreground) var(--user-bubble-muted-strength),
 		var(--user-bubble)
 	);
 }
