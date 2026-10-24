@@ -14,6 +14,7 @@ struct MessageBubbles: View {
     var initials = ""
     var showsAvatar = false
     var name: String?
+    var speaker: String?
     let time: String
     let accessibilityText: Text
 
@@ -31,19 +32,20 @@ struct MessageBubbles: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 14)
+                        .accessibilityHidden(opensWithText)
                 }
                 ForEach(bubbles) { bubble in
-                    BubbleText(bubble: bubble, isYours: isYours)
+                    BubbleText(bubble: bubble, isYours: isYours, speaker: speaker, time: time)
                         .padding(isYours ? .leading : .trailing, isYours ? 70 : 48)
                         .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
                         .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
                 }
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
-        .accessibilityValue(time)
-        .accessibilityAddTraits(.isStaticText)
+        .modifier(
+            MessageAccessibility(
+                readsBlocks: isMarkdown, text: accessibilityText, time: time)
+        )
         .overlayPreferenceValue(BubbleRows.self) { rows in
             if areTimesShown {
                 GeometryReader { proxy in
@@ -66,6 +68,14 @@ struct MessageBubbles: View {
         writer == .you
     }
 
+    private var isMarkdown: Bool {
+        bubbles.contains { $0.markdown != nil }
+    }
+
+    private var opensWithText: Bool {
+        bubbles.first?.markdown?.opensWithText ?? false
+    }
+
     @ViewBuilder private var avatar: some View {
         switch writer {
         case .person where showsAvatar:
@@ -75,6 +85,24 @@ struct MessageBubbles: View {
         case .you, .person, .companion:
             CompanionPlaceholder(size: .message)
                 .hidden()
+        }
+    }
+}
+
+private struct MessageAccessibility: ViewModifier {
+    let readsBlocks: Bool
+    let text: Text
+    let time: String
+
+    func body(content: Content) -> some View {
+        if readsBlocks {
+            content.accessibilityElement(children: .contain)
+        } else {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(text)
+                .accessibilityValue(time)
+                .accessibilityAddTraits(.isStaticText)
         }
     }
 }

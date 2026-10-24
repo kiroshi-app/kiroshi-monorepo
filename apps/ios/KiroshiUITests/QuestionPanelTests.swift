@@ -52,6 +52,7 @@ final class QuestionPanelTests: XCTestCase {
         let attach = attach(in: app)
         let composerTop = attach.exists ? attach.frame.minY : .infinity
         let panelTop = panelTop(under: question, in: app)
+        let panelEdge = panelEdge(in: app)
         let latest = app.buttons["Latest message"]
         let latestFrame = latest.exists ? latest.frame : .null
         let send = app.buttons["Send"]
@@ -71,6 +72,9 @@ final class QuestionPanelTests: XCTestCase {
             let isUnderTheTabBar = element.frame.intersects(tabBar)
             let isTheComposer = element.frame.midY > composerTop
             let isAboveThePanel = element.frame.maxY <= panelTop
+            let isInThePanelsShadow =
+                element.frame.maxY <= panelEdge
+                && element.frame.maxY > panelEdge - Self.panelShadowReach
             let isBehindThePanel = element.frame.maxY > panelTop && !element.isHittable
             let isOffScreen = isInTheTitle || element.frame.maxY > composerTop
             let isTheThreadUnderThePanel = isScrolledUp && element.frame.midY > panelTop
@@ -85,7 +89,8 @@ final class QuestionPanelTests: XCTestCase {
             return switch issue.auditType {
             case .contrast:
                 isInTheTitle || isUnderTheTabBar || isTheComposer || isBehindThePanel
-                    || isTheThreadUnderThePanel || isUnderTheLatestButton || !element.isEnabled
+                    || isInThePanelsShadow || isTheThreadUnderThePanel || isUnderTheLatestButton
+                    || !element.isEnabled
                     || atTheLargestSize && isCutByTheActions
                     || Self.artboardOrange.contains { element.label.hasSuffix($0) }
             case .dynamicType:
@@ -99,11 +104,22 @@ final class QuestionPanelTests: XCTestCase {
         }
     }
 
+    func panelEdge(in app: XCUIApplication) -> CGFloat {
+        let skip = NSPredicate(
+            format: "elementType == %d AND label == 'Skip'", XCUIElement.ElementType.button.rawValue
+        )
+        return app.otherElements.containing(skip).allElementsBoundByIndex
+            .map(\.frame)
+            .filter { $0.width >= app.frame.width - 1 && $0.maxY >= app.frame.maxY - 1 }
+            .min { $0.height < $1.height }?.minY ?? .infinity
+    }
+
     func panelTop(above firstOption: XCUIElement) -> CGFloat {
         firstOption.frame.minY - Self.headingHeight
     }
 
     static let headingHeight: CGFloat = 20 + 18 + 2 + 22 + 12
+    static let panelShadowReach: CGFloat = 14 + 10
     static let artboardPanelTop: CGFloat = 445
 
     func assertThePanelSitsOnTheArtboard(_ app: XCUIApplication, _ artboard: String) {

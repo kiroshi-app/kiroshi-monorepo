@@ -15,7 +15,8 @@ struct ThreadMessageView: View {
                         writer: message.writer, bubbles: message.bubbles,
                         companion: message.author ?? soloCompanion, initials: message.initials,
                         showsAvatar: message.closesRun,
-                        name: message.opensRun ? message.authorName : nil, time: message.time,
+                        name: message.opensRun ? message.authorName : nil,
+                        speaker: message.authorName, time: message.time,
                         accessibilityText: accessibilityText)
                     if !message.attachedFiles.isEmpty {
                         AttachedFiles(names: message.attachedFiles)
