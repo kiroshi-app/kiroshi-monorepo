@@ -18,14 +18,15 @@ if [ ! -d "$SLOT_DIRECTORY" ] || [ -n "${KIROSHI_SLOT:-}" ]; then
 fi
 
 performance_cores() {
-	local levels total=0 level
-	levels=$(sysctl -n hw.nperflevels)
+	local levels total=0 level cores
+	levels=$(sysctl -n hw.nperflevels) || return
 	if [ "$levels" -le 1 ]; then
 		sysctl -n hw.physicalcpu
 		return
 	fi
 	for ((level = 0; level < levels - 1; level++)); do
-		total=$((total + $(sysctl -n "hw.perflevel$level.physicalcpu")))
+		cores=$(sysctl -n "hw.perflevel$level.physicalcpu") || return
+		total=$((total + cores))
 	done
 	echo "$total"
 }
@@ -33,7 +34,10 @@ performance_cores() {
 slot_count() {
 	if [ -z "${KIROSHI_SLOTS:-}" ]; then
 		local cores
-		cores=$(performance_cores)
+		if ! cores=$(performance_cores); then
+			echo "slot.sh: cannot read the performance core count with sysctl, set KIROSHI_SLOTS" >&2
+			exit "$USAGE_ERROR"
+		fi
 		echo $((cores / CORES_PER_SLOT > 1 ? cores / CORES_PER_SLOT : 1))
 		return
 	fi
@@ -60,7 +64,7 @@ take_slot() {
 	return 1
 }
 
-slots=$(slot_count)
+slots=$(slot_count) || exit
 started=$SECONDS
 next_notice=$started
 while true; do
