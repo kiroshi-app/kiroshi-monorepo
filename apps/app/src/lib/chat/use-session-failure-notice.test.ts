@@ -9,9 +9,17 @@ import {
 } from "@workspace/ui/components/notice-surface"
 import { i18n } from "@workspace/ui/lib/i18n"
 
-import { type ChatError, chatErrorOf, toTransportError } from "./chat-state"
+import {
+	type ChatError,
+	chatErrorOf,
+	chatReducer,
+	initialChatState,
+	questionRunFailureOf,
+	toTransportError,
+} from "./chat-state"
 import { useSessionFailureNotice } from "./use-session-failure-notice"
 
+import type { AgentEvent, TransportError } from "@/lib/agent/contract"
 import type { FailureCorrelation } from "@/lib/failure-report"
 import { createHttpHost } from "@/lib/host/http"
 
@@ -157,6 +165,89 @@ it("keeps the title of a failure that is not a Stop, with or without a companion
 	mountOn({ ...crashed, botId: THREAD_CONTEXT.botId })
 	expect(await raisedNotice()).toMatchObject({
 		title: i18n.t("chat:screen.notice.crashed"),
+	})
+})
+
+const UNREACHED: TransportError = {
+	kind: "spawnFailed",
+	detail: "no agent binary",
+}
+
+const soloRunFailedAsking = (): ChatError | undefined =>
+	(
+		[
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "questionRequested", request: { id: "ask-1", questions: [] } },
+			{ type: "failed", error: crashed.error },
+		] satisfies AgentEvent[]
+	)
+		.reduce(
+			(state, event) =>
+				chatReducer(state, { type: "driverEvent", scope: null, event }, 0),
+			initialChatState,
+		)
+		.errors.at(-1)
+
+const groupRunFailedAsking: ChatError = {
+	...questionRunFailureOf(UNREACHED, 0),
+	botId: THREAD_CONTEXT.botId,
+}
+
+const questionRunNotice = {
+	title: i18n.t("chat:screen.notice.questionRunFailed.title", {
+		name: "Atlas",
+	}),
+	description: i18n.t("chat:screen.notice.questionRunFailed.description"),
+}
+
+it("names the companion whose solo run failed before its question was answered", async () => {
+	const error = soloRunFailedAsking()
+	if (!error) {
+		return expect.unreachable("the failed run left no error")
+	}
+	const onRestart = vi.fn()
+
+	renderHook(() =>
+		useSessionFailureNotice({
+			error,
+			onDismiss: vi.fn(),
+			onRestart,
+			context: THREAD_CONTEXT,
+		}),
+	)
+
+	const notice = await raisedNotice()
+	expect(notice).toMatchObject(questionRunNotice)
+	expect(notice.title).not.toBe(i18n.t("chat:screen.notice.crashed"))
+	expect(notice.action).toEqual({
+		label: i18n.t("chat:screen.restart"),
+		onPress: onRestart,
+	})
+})
+
+it("names the companion whose group run failed before its question was answered", async () => {
+	mountOn(groupRunFailedAsking)
+
+	const notice = await raisedNotice()
+	expect(notice).toMatchObject(questionRunNotice)
+	expect(notice.title).not.toBe(i18n.t("chat:screen.notice.unavailable"))
+})
+
+it("keeps the title of a failed run that held no question", async () => {
+	mountOn(chatErrorOf(UNREACHED, 0))
+
+	expect(await raisedNotice()).toMatchObject({
+		title: i18n.t("chat:screen.notice.unavailable"),
+	})
+})
+
+it("keeps the title of a failed question run when the companion is unknown", async () => {
+	const { botName: _, ...nameless } = THREAD_CONTEXT
+
+	mountOn(groupRunFailedAsking, vi.fn(), nameless)
+
+	expect(await raisedNotice()).toMatchObject({
+		title: i18n.t("chat:screen.notice.unavailable"),
 	})
 })
 

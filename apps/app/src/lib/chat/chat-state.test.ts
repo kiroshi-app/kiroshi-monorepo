@@ -14,6 +14,7 @@ import {
 	toStoreError,
 	toTransportError,
 } from "./chat-state"
+import type { PostedRequest } from "./posted-question"
 
 import type { AgentEvent, ChatMessage, RuntimeScope } from "../agent/contract"
 import {
@@ -410,6 +411,45 @@ describe("chatReducer", () => {
 			error: { kind: "notStarted" },
 			isStopFailure: true,
 		})
+	})
+
+	const failed: AgentEvent = {
+		type: "failed",
+		error: { kind: "crashed", code: 1, detail: null },
+	}
+
+	it("marks the failure of a run that held an unanswered question", () => {
+		const asking = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+			{ type: "questionRequested", request: { id: "ask-1", questions: [] } },
+		])
+
+		expect(applyEvents(asking, [failed]).errors.at(-1)).toMatchObject({
+			error: failed.error,
+			isQuestionRunFailure: true,
+		})
+	})
+
+	it("leaves the failure of a run without an agent question unmarked", () => {
+		const running = applyEvents(initialChatState, [
+			{ type: "turnChanged", state: "submitting" },
+		])
+		const postedRequest: PostedRequest = {
+			id: "posted-1",
+			questions: [],
+			isPosted: true,
+		}
+		const posted = reduce(running, {
+			type: "questionPosted",
+			request: postedRequest,
+		})
+
+		expect(
+			applyEvents(running, [failed]).errors.at(-1)?.isQuestionRunFailure,
+		).toBeUndefined()
+		expect(
+			applyEvents(posted, [failed]).errors.at(-1)?.isQuestionRunFailure,
+		).toBeUndefined()
 	})
 
 	it("keeps connection and version across a session reset", () => {

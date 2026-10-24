@@ -31,6 +31,7 @@ export type ChatError = {
 	error: TransportError
 	botId?: string
 	isStopFailure?: boolean
+	isQuestionRunFailure?: boolean
 }
 
 export type OutboxEntry = {
@@ -222,6 +223,11 @@ export const stopFailureOf = (
 	count: number,
 ): ChatError => ({ ...chatErrorOf(error, count), isStopFailure: true })
 
+export const questionRunFailureOf = (
+	error: TransportError,
+	count: number,
+): ChatError => ({ ...chatErrorOf(error, count), isQuestionRunFailure: true })
+
 const MAX_ERRORS = 20
 
 const TURN_TRANSITIONS: Record<TurnState, TurnState[]> = {
@@ -401,8 +407,16 @@ function applyTurnEnded(state: ChatState, ended: TurnEnded): ChatState {
 	}
 }
 
+const holdsAgentQuestion = ({ question }: ChatState): boolean =>
+	question !== null && !isPostedRequest(question)
+
+const runFailureOf = (state: ChatState, error: TransportError): ChatError =>
+	holdsAgentQuestion(state)
+		? questionRunFailureOf(error, state.errorCount)
+		: chatErrorOf(error, state.errorCount)
+
 function applyFailure(state: ChatState, error: TransportError): ChatState {
-	const next = pushError(state, error)
+	const next = pushEntry(state, runFailureOf(state, error))
 	return error.kind === "resumeFailed" && error.forgotSessionId
 		? { ...next, sessionId: null }
 		: next

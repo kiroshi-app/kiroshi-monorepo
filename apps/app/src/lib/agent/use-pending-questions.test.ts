@@ -218,6 +218,7 @@ describe("usePendingQuestions", () => {
 		await waitFor(() => expect(result.current.byConversation).toEqual({}))
 		expect(result.current.byBot).toEqual({})
 		expect(pendingQuestionsInSpace).toHaveBeenCalledTimes(2)
+		expect(raiseFailureNotice).not.toHaveBeenCalled()
 	})
 
 	it("rereads the space when the host connection comes back", async () => {
