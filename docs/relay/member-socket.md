@@ -258,8 +258,10 @@ call when one is exceeded: no file of the batch is stored.
 | all files of one call | 31457280 (30 MiB) | 413, `{ "kind": "tooLargeTogether", "bytes", "limit": 31457280 }` |
 
 An attachment that carries both keys, neither key, or `base64` text that does not
-decode answers 500 with `{ "kind": "unwritable", "detail" }`, the `detail` naming
-the attachment.
+decode refuses the whole call with 500 and
+`{ "kind": "unreadable", "name", "detail" }`: `name` is the attachment's, `detail`
+says which of the three it is. `unwritable` answers 500 only when the host disk
+refused a write.
 
 A batch of 30 MiB is about 40 MiB of base64 in the call, and about 53 MiB once
 the envelope base64-encodes it again in `ct`: under the relay cap of

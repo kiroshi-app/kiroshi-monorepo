@@ -58,7 +58,7 @@ pub(crate) type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
 pub(crate) type Sink = SplitSink<Socket, Message>;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy)]
 struct LastFrames {
 	received: Option<usize>,
 	sent: Option<usize>,

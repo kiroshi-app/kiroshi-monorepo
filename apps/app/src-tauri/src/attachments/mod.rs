@@ -33,6 +33,7 @@ pub enum Rejection {
 	TooMany { count: usize, limit: usize },
 	TooLarge { name: String, bytes: u64, limit: u64 },
 	TooLargeTogether { bytes: u64, limit: u64 },
+	Unreadable { name: String, detail: String },
 	Unwritable { detail: String },
 }
 
@@ -86,16 +87,15 @@ pub fn store(
 }
 
 fn content_of(attachment: &SubmittedAttachment) -> Result<Cow<'_, [u8]>, Rejection> {
-	let unreadable = |reason: &str| Rejection::Unwritable {
-		detail: format!("the attachment {:?} {reason}", attachment.name),
-	};
+	let unreadable =
+		|detail: String| Rejection::Unreadable { name: attachment.name.clone(), detail };
 	match (&attachment.bytes, &attachment.base64) {
 		(Some(bytes), None) => Ok(Cow::Borrowed(bytes)),
 		(None, Some(text)) => BASE64_STANDARD.decode(text).map(Cow::Owned).map_err(|error| {
-			unreadable(&format!("carries base64 text that does not decode: {error}"))
+			unreadable(format!("carries base64 text that does not decode: {error}"))
 		}),
-		(Some(_), Some(_)) => Err(unreadable("carries both base64 and bytes")),
-		(None, None) => Err(unreadable("carries neither base64 nor bytes")),
+		(Some(_), Some(_)) => Err(unreadable("carries both base64 and bytes".to_owned())),
+		(None, None) => Err(unreadable("carries neither base64 nor bytes".to_owned())),
 	}
 }
 
@@ -462,11 +462,9 @@ mod tests {
 			.expect_err("the call is refused");
 
 			match rejection {
-				Rejection::Unwritable { detail } => {
-					assert!(
-						detail.contains("\"photo.jpg\""),
-						"{detail} does not name the attachment"
-					)
+				Rejection::Unreadable { name, detail } => {
+					assert_eq!(name, "photo.jpg");
+					assert!(!detail.is_empty(), "{attachment:?} was refused with no detail");
 				}
 				other => panic!("{attachment:?} was refused as {other:?}"),
 			}

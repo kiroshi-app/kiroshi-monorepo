@@ -32,6 +32,8 @@ pub enum AttachmentStoreError {
 	#[serde(rename_all = "camelCase")]
 	TooLargeTogether { bytes: u64, limit: u64 },
 	#[serde(rename_all = "camelCase")]
+	Unreadable { name: String, detail: String },
+	#[serde(rename_all = "camelCase")]
 	Unwritable { detail: String },
 }
 
@@ -55,6 +57,9 @@ impl From<Rejection> for AttachmentStoreError {
 			}
 			Rejection::TooLargeTogether { bytes, limit } => {
 				AttachmentStoreError::TooLargeTogether { bytes, limit }
+			}
+			Rejection::Unreadable { name, detail } => {
+				AttachmentStoreError::Unreadable { name, detail }
 			}
 			Rejection::Unwritable { detail } => AttachmentStoreError::Unwritable { detail },
 		}
@@ -100,9 +105,37 @@ mod tests {
 			json!({ "kind": "tooLargeTogether", "bytes": 101, "limit": 100 })
 		);
 		assert_eq!(
+			crosses_as(AttachmentStoreError::Unreadable {
+				name: "photo.jpg".to_owned(),
+				detail: "carries neither base64 nor bytes".to_owned()
+			}),
+			json!({
+				"kind": "unreadable",
+				"name": "photo.jpg",
+				"detail": "carries neither base64 nor bytes"
+			})
+		);
+		assert_eq!(
 			crosses_as(AttachmentStoreError::Unwritable { detail: "no space".to_owned() }),
 			json!({ "kind": "unwritable", "detail": "no space" })
 		);
+	}
+
+	#[test]
+	fn only_a_limit_refusal_exceeds_a_limit() {
+		let over = [
+			AttachmentStoreError::TooMany { count: 21, limit: 20 },
+			AttachmentStoreError::TooLarge { name: "a".to_owned(), bytes: 2, limit: 1 },
+			AttachmentStoreError::TooLargeTogether { bytes: 2, limit: 1 },
+		];
+		let within = [
+			AttachmentStoreError::Unreadable { name: "a".to_owned(), detail: "d".to_owned() },
+			AttachmentStoreError::Unwritable { detail: "d".to_owned() },
+			AttachmentStoreError::UnknownConversation { id: "c1".to_owned() },
+		];
+
+		assert!(over.iter().all(AttachmentStoreError::exceeds_a_limit));
+		assert!(!within.iter().any(AttachmentStoreError::exceeds_a_limit));
 	}
 
 	#[test]

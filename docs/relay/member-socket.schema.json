@@ -1141,6 +1141,25 @@
               "type": "string"
             },
             "kind": {
+              "const": "unreadable"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
               "const": "unwritable"
             }
           },

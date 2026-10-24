@@ -464,10 +464,17 @@ async fn a_member_batch_over_the_attachment_limits_answers_413_with_the_typed_re
 	})
 	.to_string();
 	let unknown = json!({ "conversationId": "nowhere", "attachments": [] }).to_string();
+	let unreadable = json!({
+		"conversationId": room["id"],
+		"attachments": [{ "name": "photo.jpg", "base64": "not base64!" }],
+	})
+	.to_string();
 
 	let (status, body) = server.sent(member_invoke("chat_store_attachments", &token, &batch)).await;
 	let (other_status, other_body) =
 		server.sent(member_invoke("chat_store_attachments", &token, &unknown)).await;
+	let (unreadable_status, unreadable_body) =
+		server.sent(member_invoke("chat_store_attachments", &token, &unreadable)).await;
 
 	assert_eq!(status, 413, "{body}");
 	assert_eq!(
@@ -476,6 +483,9 @@ async fn a_member_batch_over_the_attachment_limits_answers_413_with_the_typed_re
 	);
 	assert_eq!(other_status, 500, "{other_body}");
 	assert_eq!(parsed(&other_body)["kind"], json!("unknownConversation"));
+	assert_eq!(unreadable_status, 500, "{unreadable_body}");
+	assert_eq!(parsed(&unreadable_body)["kind"], json!("unreadable"));
+	assert_eq!(parsed(&unreadable_body)["name"], json!("photo.jpg"));
 }
 
 fn member_invoke(command: &str, token: &str, body: &str) -> Vec<u8> {
