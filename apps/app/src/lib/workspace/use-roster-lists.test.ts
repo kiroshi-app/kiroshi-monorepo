@@ -27,6 +27,7 @@ import { createConversationController } from "../conversations/conversation-cont
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { createScriptedDriver } from "../conversations/scripted-driver"
+import type { ConversationHostState } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -200,9 +201,22 @@ const ANSWERED: ScopedEvent = {
 	},
 }
 
+const hostReads = (
+	roster: RosterController,
+	conversationId: string,
+	state: ConversationHostState,
+) =>
+	act(() =>
+		roster.holdHostState(
+			{ hostId: null, spaceId: SPACE },
+			{ conversationId, state },
+		),
+	)
+
 describe("useRosterLists", () => {
-	it("shows a pending question on its conversation row and companion row until it is answered", async () => {
+	it("shows a room question on its room row and leaves the companion row to its solo thread", async () => {
 		const store = createFakeTranscriptStore()
+		const soloThread = await store.mainChat(BOT, null)
 		const conversation = await store.createConversation({
 			spaceId: SPACE,
 			sectionId: null,
@@ -225,20 +239,80 @@ describe("useRosterLists", () => {
 			result.current.rosterBotsBySpace[SPACE]?.find(({ id }) => id === BOT)
 
 		heard.emit(askedIn(conversation.id))
+		hostReads(roster, conversation.id, "needs_you")
 
 		await waitFor(() =>
 			expect(conversationRow()?.pendingQuestion).toBe(
 				"Which branch should I use?",
 			),
 		)
-		expect(botRow()?.pendingQuestion).toBe("Which branch should I use?")
+		expect(conversationRow()?.badge).toBe("attention")
+		expect(botRow()).toMatchObject({ status: "idle", badge: undefined })
+		expect(botRow()?.pendingQuestion).toBeUndefined()
 
-		heard.emit(ANSWERED)
+		hostReads(roster, conversation.id, "working")
 
 		await waitFor(() =>
 			expect(conversationRow()?.pendingQuestion).toBeUndefined(),
 		)
+		expect(conversationRow()).toMatchObject({ status: "working" })
+		expect(botRow()).toMatchObject({ status: "idle" })
+
+		hostReads(roster, soloThread.id, "needs_you")
+
+		await waitFor(() =>
+			expect(botRow()).toMatchObject({
+				badge: "attention",
+				pendingQuestion: "Which branch should I use?",
+			}),
+		)
+
+		hostReads(roster, soloThread.id, "working")
+
+		await waitFor(() => expect(botRow()?.status).toBe("working"))
 		expect(botRow()?.pendingQuestion).toBeUndefined()
+
+		heard.emit(ANSWERED)
+		hostReads(roster, conversation.id, "idle")
+		hostReads(roster, soloThread.id, "idle")
+
+		await waitFor(() => expect(conversationRow()?.status).toBe("idle"))
+		expect(botRow()?.status).toBe("idle")
+	})
+
+	it("shows the host state of a row nothing holds in memory, and follows it on rerender", async () => {
+		const store = createFakeTranscriptStore()
+		const conversation = await store.createConversation({
+			spaceId: SPACE,
+			sectionId: null,
+			title: "Walls",
+			botIds: [BOT],
+		})
+		const roster = await loadedRoster(store)
+		const { result, rerender } = renderHook(
+			() => useRosterLists(rosterListsOn({ roster })),
+			{ wrapper: createQueryTestWrapper().wrapper },
+		)
+		const conversationRow = () =>
+			result.current.rosterConversations.find(
+				({ id }) => id === conversation.id,
+			)
+		expect(conversationRow()).toMatchObject({ status: "idle" })
+
+		hostReads(roster, conversation.id, "working")
+		rerender()
+
+		expect(conversationRow()).toMatchObject({ status: "working" })
+		expect(conversationRow()?.badge).toBeUndefined()
+
+		hostReads(roster, conversation.id, "needs_you")
+		rerender()
+
+		expect(conversationRow()).toMatchObject({
+			status: "idle",
+			badge: "attention",
+		})
+		expect(conversationRow()?.pendingQuestion).toBeUndefined()
 	})
 
 	it("shows the stored last word on a row whose held controller settled on an older one", async () => {

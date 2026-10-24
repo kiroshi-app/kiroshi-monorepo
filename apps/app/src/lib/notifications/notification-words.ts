@@ -49,19 +49,6 @@ export type MissionNotificationWordsInput = {
 	state: NotifiedMissionState
 }
 
-export type MissionQuestionWordsInput = {
-	name: string
-	ticket: string
-}
-
-export const missionQuestionWordsFor = ({
-	name,
-	ticket,
-}: MissionQuestionWordsInput): Pick<NotificationRequest, "title" | "body"> => ({
-	title: name,
-	body: i18n.t("common:notification.mission.question", { ticket }),
-})
-
 export const missionNotificationWordsFor = ({
 	name,
 	ticket,

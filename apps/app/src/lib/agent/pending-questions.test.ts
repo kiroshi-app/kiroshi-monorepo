@@ -7,10 +7,6 @@ import {
 	type PendingQuestion,
 	pendingQuestionsAfter,
 	pendingQuestionsOf,
-	questionsByBotIn,
-	questionsByConversationIn,
-	type SpaceQuestions,
-	withPendingQuestions,
 } from "./pending-questions"
 
 type Asking = {
@@ -156,58 +152,5 @@ describe("the pending question texts", () => {
 			atlas: "Which name?",
 			beacon: "Deploy now?",
 		})
-	})
-})
-
-describe("the roster rows", () => {
-	const shown: SpaceQuestions = {
-		spaceRowId: "home",
-		byConversation: { "room-one": "Which branch?" },
-		byBot: { atlas: "Which name?" },
-	}
-
-	it("carries the pending question on the conversation rows of the space", () => {
-		const rows = withPendingQuestions(
-			[
-				{ id: "room-one", lastMessage: "On it" },
-				{ id: "room-two", lastMessage: "Done" },
-			],
-			questionsByConversationIn(shown, "home"),
-		)
-
-		expect(rows).toEqual([
-			{
-				id: "room-one",
-				lastMessage: "On it",
-				pendingQuestion: "Which branch?",
-			},
-			{ id: "room-two", lastMessage: "Done" },
-		])
-	})
-
-	it("carries the pending question on the companion rows of the space", () => {
-		const rows = withPendingQuestions(
-			[
-				{ id: "atlas", lastMessage: "On it" },
-				{ id: "beacon", lastMessage: "Done" },
-			],
-			questionsByBotIn(shown, "home"),
-		)
-
-		expect(rows).toEqual([
-			{ id: "atlas", lastMessage: "On it", pendingQuestion: "Which name?" },
-			{ id: "beacon", lastMessage: "Done" },
-		])
-	})
-
-	it("leaves the rows of another space on their usual preview", () => {
-		const rows = [{ id: "atlas", lastMessage: "On it" }]
-
-		expect(withPendingQuestions(rows, questionsByBotIn(shown, "work"))).toEqual(
-			rows,
-		)
-		expect(
-			withPendingQuestions(rows, questionsByConversationIn(shown, "work")),
-		).toEqual(rows)
 	})
 })

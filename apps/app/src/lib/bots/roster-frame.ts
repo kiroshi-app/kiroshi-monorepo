@@ -3,7 +3,10 @@ import type { RosterLine } from "./roster-line"
 
 import type { Bot, Conversation } from "../conversations/store-contract"
 
-export type RosterFrame = Omit<RosterState, "previews" | "conversationPreviews">
+export type RosterFrame = Omit<
+	RosterState,
+	"previews" | "conversationPreviews" | "hostStates"
+>
 
 type Sameness<Value> = (held: Value, next: Value) => boolean
 
@@ -81,6 +84,7 @@ const isSameFrame = (held: RosterFrame, next: RosterFrame) =>
 const frameOf = ({
 	previews,
 	conversationPreviews,
+	hostStates,
 	...frame
 }: RosterState): RosterFrame => frame
 

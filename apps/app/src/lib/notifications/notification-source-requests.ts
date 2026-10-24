@@ -1,21 +1,16 @@
 import {
 	type ConversationRound,
 	notificationsFor,
-	notifiesAskedQuestion,
 	notifiesFinishedRound,
 } from "./notification-policy"
 import type { NotificationRequest } from "./notification-port"
 import type { NotificationSourceOptions } from "./notification-source"
 import type { Reading } from "./notification-source-delivery"
-import {
-	missionQuestionWordsFor,
-	notificationWordsFor,
-} from "./notification-words"
+import { notificationWordsFor } from "./notification-words"
 
 import type { ChatState } from "../chat/chat-state"
 import { conversationName } from "../conversations/roster-conversations"
 import type { Conversation } from "../conversations/store-contract"
-import type { Mission } from "../missions/mission-contract"
 
 export type NotifiedBot = {
 	id: string
@@ -25,9 +20,7 @@ export type NotifiedBot = {
 type NotificationRequestsOptions = Pick<
 	NotificationSourceOptions,
 	"chat" | "runtimes" | "roster"
-> & {
-	missionThreads: Map<string, Mission>
-}
+>
 
 const forgetBeyond = <Held>(seen: Map<string, Held>, ids: string[]) => {
 	if (seen.size <= ids.length) {
@@ -44,7 +37,6 @@ export const createNotificationRequests = ({
 	chat,
 	runtimes,
 	roster,
-	missionThreads,
 }: NotificationRequestsOptions) => {
 	const seen = new Map<string, ChatState>()
 	const seenRounds = new Map<string, ConversationRound>()
@@ -138,44 +130,17 @@ export const createNotificationRequests = ({
 	const botNameOf = (botId: string) =>
 		rosteredBots().find(({ id }) => id === botId)?.name
 
-	const missionThreadNotifications = (
-		reading: Reading,
-	): NotificationRequest[] =>
-		[...missionThreads.values()].flatMap((mission) => {
-			const change = roundChangeOf(mission.threadConversationId)
-			const name = botNameOf(mission.botId)
-
-			if (
-				!change ||
-				!name ||
-				!notifiesAskedQuestion({ ...change, ...reading })
-			) {
-				return []
-			}
-
-			return [
-				{
-					target: { kind: "mission" as const, id: mission.id },
-					...missionQuestionWordsFor({
-						name,
-						ticket: mission.ticket.externalId,
-					}),
-				},
-			]
-		})
-
 	const requestsFor = (reading: Reading): NotificationRequest[] => {
 		const { conversations } = roster.getState()
 		const requests = [
 			...botNotifications(reading),
 			...conversationNotifications(conversations, reading),
-			...missionThreadNotifications(reading),
 		]
 
-		forgetBeyond(seenRounds, [
-			...conversations.map((conversation) => conversation.id),
-			...missionThreads.keys(),
-		])
+		forgetBeyond(
+			seenRounds,
+			conversations.map((conversation) => conversation.id),
+		)
 
 		return requests
 	}

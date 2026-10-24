@@ -20,7 +20,6 @@ import type { ChatState } from "../chat/chat-state"
 import type { SpokenWords } from "../conversations/spoken-words"
 import type { Conversation } from "../conversations/store-contract"
 import type {
-	Mission,
 	MissionChanged,
 	MissionOnBoard,
 } from "../missions/mission-contract"
@@ -112,7 +111,6 @@ export const startNotificationSource = ({
 	playChime,
 	reportFailure,
 }: NotificationSourceOptions): (() => void) => {
-	const missionThreads = new Map<string, Mission>()
 	const missionOrigins = new Map<string, MissionEvent>()
 
 	let windowFocus: boolean | undefined
@@ -127,7 +125,6 @@ export const startNotificationSource = ({
 		chat,
 		runtimes,
 		roster,
-		missionThreads,
 	})
 	const notifySpokenWord = createSpokenWordNotifier({
 		roster,
@@ -135,11 +132,10 @@ export const startNotificationSource = ({
 		hasHostFocus,
 		deliver,
 	})
-	const { missionChanged, catchUpOnMissionThreads } =
+	const { missionChanged, catchUpOnMissionOrigins } =
 		createMissionThreadTracking({
 			missions,
 			switches,
-			missionThreads,
 			missionOrigins,
 			currentFocus,
 			botNameOf,
@@ -173,7 +169,7 @@ export const startNotificationSource = ({
 				void missionChanged(changed, hostId ?? null).catch(failWith("send")),
 		)
 		.catch(failWith("send"))
-	void catchUpOnMissionThreads().catch(failWith("send"))
+	void catchUpOnMissionOrigins().catch(failWith("send"))
 	const focus = watchFocus((isFocused) => {
 		windowFocus = isFocused
 	}).catch(failWith("focus"))

@@ -100,6 +100,48 @@ describe("useSpaceMissions", () => {
 		expect(readSpacePage).toHaveBeenCalledTimes(2)
 	})
 
+	it("moves a mission into waiting on you and back as its liveness changes, whatever its state", async () => {
+		let announce: (changed: MissionChanged) => void = () => undefined
+		listenToMissions.mockImplementation((listener) => {
+			announce = listener
+			return Promise.resolve(() => undefined)
+		})
+		const { result } = renderHook(() => useSpaceMissions("s-1"), {
+			wrapper: createQueryTestWrapper().wrapper,
+		})
+		await waitFor(() =>
+			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
+		)
+		await waitFor(() => expect(listenToMissions).toHaveBeenCalled())
+		readSpacePage.mockReturnValue(new Promise(() => undefined))
+		const livenessChange = (liveness: MissionChanged["liveness"]) =>
+			act(() => {
+				announce({
+					missionId: "m-1",
+					spaceId: null,
+					state: "working",
+					stateSeq: 1,
+					isAgentRunning: true,
+					liveness,
+					lastActivityAt: null,
+				})
+			})
+
+		livenessChange("needs_you")
+
+		await waitFor(() =>
+			expect(idsOf(result.current.waitingOnYou)).toEqual(["m-1"]),
+		)
+		expect(result.current.waitingCount).toBe(1)
+
+		livenessChange("working")
+
+		await waitFor(() =>
+			expect(idsOf(result.current.inProgress)).toEqual(["m-1"]),
+		)
+		expect(result.current.waitingCount).toBe(0)
+	})
+
 	it("lists a mission a change closes in earlier today before the reread answers", async () => {
 		let announce: (changed: MissionChanged) => void = () => undefined
 		listenToMissions.mockImplementation((listener) => {

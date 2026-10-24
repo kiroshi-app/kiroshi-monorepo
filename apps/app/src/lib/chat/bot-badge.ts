@@ -1,6 +1,6 @@
 import { type ChatState, isTurnBusy } from "./chat-state"
 
-export type BotBadge = "attention" | "done" | "failed" | "none"
+export type BotBadge = "done" | "failed" | "none"
 
 export type BotBadgeInput = {
 	held: BotBadge
@@ -9,8 +9,6 @@ export type BotBadgeInput = {
 	isSelected: boolean
 	hasFocus: boolean
 }
-
-const wantsAttention = (state: ChatState): boolean => state.permission !== null
 
 const hasTurnEnded = (before: ChatState, after: ChatState): boolean =>
 	isTurnBusy(before.turn) &&
@@ -24,9 +22,6 @@ export const badgeAfter = ({
 	isSelected,
 	hasFocus,
 }: BotBadgeInput): BotBadge => {
-	if (wantsAttention(after)) {
-		return "attention"
-	}
 	if (isSelected && hasFocus) {
 		return "none"
 	}
@@ -36,5 +31,5 @@ export const badgeAfter = ({
 	if (before && hasTurnEnded(before, after)) {
 		return after.turn === "failed" ? "failed" : "done"
 	}
-	return held === "attention" ? "none" : held
+	return held
 }

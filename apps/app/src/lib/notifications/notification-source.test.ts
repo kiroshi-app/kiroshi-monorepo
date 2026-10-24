@@ -21,7 +21,10 @@ import {
 	createFakeMissions,
 	type FakeMissions,
 } from "../missions/fake-missions"
-import type { MissionState } from "../missions/mission-contract"
+import type {
+	MissionLiveness,
+	MissionState,
+} from "../missions/mission-contract"
 import { aMission } from "../missions/mission-fixtures"
 
 const BOT = { kind: "bot", id: "bot-one" } as const
@@ -294,10 +297,12 @@ type Heard = { spaceId: string | null; hostId: string | null }
 
 const HEARD_HERE: Heard = { spaceId: null, hostId: null }
 
+type HeardChange = Heard & { liveness?: MissionLiveness }
+
 const escalate = async (
 	harness: Harness,
 	state: MissionState,
-	{ spaceId, hostId }: Heard = HEARD_HERE,
+	{ spaceId, hostId, liveness }: HeardChange = HEARD_HERE,
 ) => {
 	const mission = aMission({
 		botId: "bot-one",
@@ -313,6 +318,7 @@ const escalate = async (
 			state,
 			stateSeq: 2,
 			isAgentRunning: false,
+			liveness,
 			lastActivityAt: null,
 		},
 		hostId,
@@ -584,105 +590,76 @@ describe("startNotificationSource", () => {
 	})
 })
 
-const askedIn = (harness: Harness, requestId: string) => {
-	harness.runtimes.publish("thread-1", {
-		pendingPrompt: {
-			kind: "question",
-			botId: "bot-one",
-			request: question(requestId),
-		},
-	})
-}
-
-describe("startNotificationSource on a mission thread", () => {
-	it("names the mission whose thread companion asks a question", async () => {
+describe("startNotificationSource on the liveness of a mission", () => {
+	it("names the mission the host reads needs_you whatever its stored state", async () => {
 		const harness = await start()
-		await escalate(harness, "working")
-		seedRound(harness, "thread-1")
 
-		askedIn(harness, "q-1")
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "needs_you" })
 
 		expect(harness.notifications.sent).toEqual([
-			{ target: MISSION, title: "Nyx", body: "Asked you a question on OPE-32" },
+			{ target: MISSION, title: "Nyx", body: "Needs you on OPE-32" },
 		])
 	})
 
-	it("names a mission the board carried before the first change", async () => {
-		const missions = createFakeMissions()
-		missions.place([aMission({ botId: "bot-one" })])
-		const harness = await start({ missions })
-		seedRound(harness, "thread-1")
-
-		askedIn(harness, "q-1")
-
-		expect(harness.notifications.sent).toEqual([
-			{ target: MISSION, title: "Nyx", body: "Asked you a question on OPE-32" },
-		])
-	})
-
-	it("sends nothing while the window holds the focus", async () => {
+	it("stays quiet on a stored escalation the host reads working", async () => {
 		const harness = await start()
-		await escalate(harness, "working")
-		harness.windowFocus.tell(true)
-		seedRound(harness, "thread-1")
 
-		askedIn(harness, "q-1")
+		await escalate(harness, "waiting_human", {
+			...HEARD_HERE,
+			liveness: "working",
+		})
 
 		expect(harness.notifications.sent).toEqual([])
+	})
+
+	it("raises one notification while the host keeps reading needs_you", async () => {
+		const harness = await start()
+		const needsYou = { ...HEARD_HERE, liveness: "needs_you" as const }
+
+		await escalate(harness, "working", needsYou)
+		await escalate(harness, "working", needsYou)
+
+		expect(harness.notifications.sent).toHaveLength(1)
+	})
+
+	it("names the mission again once the host reads needs_you after working", async () => {
+		const harness = await start()
+
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "needs_you" })
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "working" })
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "needs_you" })
+
+		expect(harness.notifications.sent).toHaveLength(2)
 	})
 
 	it("sends nothing while the question switch is off", async () => {
 		const harness = await start({
 			switches: () => ({ ...ALL_ON, notifyOnQuestion: false }),
 		})
-		await escalate(harness, "working")
-		seedRound(harness, "thread-1")
 
-		askedIn(harness, "q-1")
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "needs_you" })
 
 		expect(harness.notifications.sent).toEqual([])
 	})
 
-	it("sends one notification while the same question stands", async () => {
+	it("sends nothing on a question asked in a mission thread the host has not read as needs_you", async () => {
 		const harness = await start()
-		await escalate(harness, "working")
-		seedRound(harness, "thread-1")
-
-		askedIn(harness, "q-1")
-		askedIn(harness, "q-1")
-
-		expect(harness.notifications.sent).toHaveLength(1)
-	})
-
-	it("sends nothing once the mission is closed", async () => {
-		const harness = await start()
-		await escalate(harness, "working")
-		harness.missions.hold({
-			mission: aMission({ botId: "bot-one", state: "done", closedAt: 9 }),
-			events: [],
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "working" })
+		harness.runtimes.publish("thread-1", {})
+		harness.runtimes.publish("thread-1", {
+			pendingPrompt: {
+				kind: "question",
+				botId: "bot-one",
+				request: question("q-1"),
+			},
 		})
-		harness.missions.change({
-			missionId: "mission-1",
-			spaceId: null,
-			state: "done",
-			stateSeq: 3,
-			isAgentRunning: false,
-			lastActivityAt: null,
-		})
-		await Promise.resolve()
-		await Promise.resolve()
-		seedRound(harness, "thread-1")
-
-		askedIn(harness, "q-1")
 
 		expect(harness.notifications.sent).toEqual([])
 	})
 
-	it("lands on the mission thread when the notification is clicked", async () => {
+	it("lands on the mission when the notification is clicked", async () => {
 		const harness = await start()
-		await escalate(harness, "working")
-		seedRound(harness, "thread-1")
-		askedIn(harness, "q-1")
+		await escalate(harness, "working", { ...HEARD_HERE, liveness: "needs_you" })
 
 		harness.notifications.activate(MISSION)
 

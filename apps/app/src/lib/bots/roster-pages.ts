@@ -3,6 +3,7 @@ import type { InfiniteData } from "@tanstack/react-query"
 import type {
 	Bot,
 	Conversation,
+	ConversationHostState,
 	ConversationInPage,
 	ConversationPage,
 	StoredLastWord,
@@ -23,15 +24,20 @@ export type LastWords = {
 
 export type SoloBotIds = Record<string, string>
 
+export type ConversationHostStates = Record<string, ConversationHostState>
+
 export type RosterPage = RosterRead & {
 	lastWords: LastWords
 	soloBotIds: SoloBotIds
+	hostStates: ConversationHostStates
 	nextCursor: string | null
 }
 
 export const NO_LAST_WORDS: LastWords = { companions: {}, conversations: {} }
 
 export const NO_SOLO_BOT_IDS: SoloBotIds = {}
+
+export const NO_HOST_STATES: ConversationHostStates = {}
 
 export type RosterPages = InfiniteData<RosterPage>
 
@@ -109,6 +115,27 @@ export const soloBotIdsIn = ({
 export const soloBotIdsOf = ({ pages }: RosterPages): SoloBotIds =>
 	Object.assign({}, ...pages.map(({ soloBotIds }) => soloBotIds))
 
+export const hostStatesIn = ({
+	pinned,
+	conversations,
+}: ConversationPage): ConversationHostStates =>
+	Object.fromEntries(
+		[...pinned, ...conversations].map(({ id, state }) => [id, state]),
+	)
+
+export const hostStatesOf = ({ pages }: RosterPages): ConversationHostStates =>
+	Object.assign({}, ...pages.toReversed().map(({ hostStates }) => hostStates))
+
+export const withHostState = (
+	paged: RosterPages,
+	conversationId: string,
+	state: ConversationHostState,
+): RosterPages => {
+	const [head, ...laterPages] = paged.pages
+	const hostStates = { ...head.hostStates, [conversationId]: state }
+	return { ...paged, pages: [{ ...head, hostStates }, ...laterPages] }
+}
+
 const withoutRepeats = (conversations: Conversation[]): Conversation[] => {
 	const seenIds = new Set<string>()
 	return conversations.filter(({ id }) => {
@@ -148,6 +175,7 @@ export const withHeldRead = (
 					...read,
 					lastWords: NO_LAST_WORDS,
 					soloBotIds: NO_SOLO_BOT_IDS,
+					hostStates: NO_HOST_STATES,
 					nextCursor: null,
 				},
 			],
@@ -204,6 +232,7 @@ export const withFreshHead = (
 				],
 				lastWords: withWordsOf(heldHead.lastWords, head.lastWords),
 				soloBotIds: { ...heldHead.soloBotIds, ...head.soloBotIds },
+				hostStates: { ...heldHead.hostStates, ...head.hostStates },
 			},
 			...laterPages.map((page) => ({
 				...page,
@@ -227,11 +256,12 @@ export const withPageRow = (
 ): RosterPages => {
 	const [head, ...laterPages] = paged.pages
 	const lastWords = withWordsOf(head.lastWords, lastWordsOfRow(row))
+	const hostStates = { ...head.hostStates, [row.id]: row.state }
 	if (row.soloBotId !== null) {
 		const soloBotIds = { ...head.soloBotIds, [row.id]: row.soloBotId }
 		return {
 			...paged,
-			pages: [{ ...head, lastWords, soloBotIds }, ...laterPages],
+			pages: [{ ...head, lastWords, soloBotIds, hostStates }, ...laterPages],
 		}
 	}
 	return {
@@ -244,6 +274,7 @@ export const withPageRow = (
 					...withoutConversation(head.conversations, row.id),
 				],
 				lastWords,
+				hostStates,
 			},
 			...laterPages.map((page) => ({
 				...page,

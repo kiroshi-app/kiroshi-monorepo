@@ -67,6 +67,7 @@ const personNamedFromRecord: ConversationRosterActivity["personOf"] = ({
 const atRest = (
 	previews: ConversationRosterActivity["previews"] = {},
 ): ConversationRosterActivity => ({
+	hostStates: {},
 	working: {},
 	previews,
 	personOf: personNamedFromRecord,
@@ -194,6 +195,7 @@ describe("toRosterConversations", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
 			{
+				hostStates: {},
 				working: {},
 				previews: {
 					"c-1": {
@@ -317,6 +319,7 @@ describe("toRosterConversations", () => {
 				}),
 			],
 			{
+				hostStates: { "c-1": "working" },
 				working: { "c-1": [working("b-2", "searching")] },
 				previews: {},
 				personOf: personNamedFromRecord,
@@ -335,11 +338,12 @@ describe("toRosterConversations", () => {
 		])
 	})
 
-	it("draws the room of a companion waiting its turn as working", () => {
+	it("draws a room the host reads working as working with no runtime held", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
 			{
-				working: { "c-1": [working("b-1", "waiting")] },
+				hostStates: { "c-1": "working" },
+				working: {},
 				previews: {},
 				personOf: personNamedFromRecord,
 			},
@@ -347,18 +351,27 @@ describe("toRosterConversations", () => {
 		)
 
 		expect(row.status).toBe("working")
-	})
-
-	it("draws a room nobody is answering in at rest", () => {
-		const [row] = toRosterConversations(
-			[conversation()],
-			{ working: { "c-1": [] }, previews: {}, personOf: personNamedFromRecord },
-			NOW,
-		)
-
-		expect(row.status).toBe("idle")
 		expect(row.participants.map((seat) => seat.status)).toEqual(["idle"])
 	})
+
+	it.each(["idle", "needs_you"] as const)(
+		"draws a room the host reads %s at rest, whatever is heard in memory",
+		(state) => {
+			const [row] = toRosterConversations(
+				[conversation()],
+				{
+					hostStates: { "c-1": state },
+					working: { "c-1": [working("b-1", "waiting")] },
+					previews: {},
+					personOf: personNamedFromRecord,
+				},
+				NOW,
+			)
+
+			expect(row.status).toBe("idle")
+			expect(row.participants.map((seat) => seat.status)).toEqual(["idle"])
+		},
+	)
 
 	it("dates a room nothing was said in by the day it was opened", () => {
 		const rows = toRosterConversations(

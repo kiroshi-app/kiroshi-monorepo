@@ -173,21 +173,12 @@ describe("createBotBadgeSource", () => {
 		expect(badgeIn(source, "bot-one")).toBe("none")
 	})
 
-	it("reports attention while a permission waits", () => {
+	it("leaves a waiting permission to the host and reports no attention", () => {
 		const { chat, source } = start()
 
 		chat.publish("bot-one", { ...runs, permission: permission("p-1") })
 
-		expect(badgeIn(source, "bot-one")).toBe("attention")
-	})
-
-	it("keeps attention on the selected companion", () => {
-		const { chat, roster, source } = start({ selectedBotId: "bot-one" })
-
-		chat.publish("bot-one", { ...runs, permission: permission("p-1") })
-		roster.select("bot-one")
-
-		expect(badgeIn(source, "bot-one")).toBe("attention")
+		expect(badgeIn(source, "bot-one")).toBe("none")
 	})
 
 	it("reports none while a turn runs", () => {
@@ -255,16 +246,6 @@ describe("createBotBadgeSource", () => {
 		focus()
 
 		expect(badgeIn(source, "bot-one")).toBe("done")
-	})
-
-	it("keeps attention on the selected companion when the window comes back", () => {
-		const { chat, blur, focus, source } = start({ selectedBotId: "bot-one" })
-
-		blur()
-		chat.publish("bot-one", { ...runs, permission: permission("p-1") })
-		focus()
-
-		expect(badgeIn(source, "bot-one")).toBe("attention")
 	})
 
 	it("keeps every badge when the window loses focus", () => {

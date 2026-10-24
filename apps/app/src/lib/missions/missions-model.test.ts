@@ -9,6 +9,7 @@ import type {
 	Mission,
 	MissionEvent,
 	MissionInSpace,
+	MissionLiveness,
 	MissionOnBoard,
 	MissionState,
 } from "./mission-contract"
@@ -96,7 +97,6 @@ const rowsOf = (read: Partial<ActivityMissionsRead>) =>
 		closed: [],
 		reportedRuns: [],
 		faceOf,
-		waitingMissionIds: new Set<string>(),
 		liveMissionIds: new Set<string>(),
 		now: READ_AT,
 		...read,
@@ -440,19 +440,49 @@ describe("toActivityMissions", () => {
 		])
 	})
 
-	it("reads a mission whose thread waits on the reader as waiting whatever its state", () => {
+	it("reads a mission the host reads needs_you as waiting whatever its stored state", () => {
 		const { open } = rowsOf({
-			open: [missionIn("working")],
-			waitingMissionIds: new Set(["m-working"]),
+			open: [{ ...missionIn("working"), liveness: "needs_you" }],
 		})
 
 		expect(open[0].state).toBe("waiting_human")
 	})
 
-	it("reads a mission from its state again once nothing waits", () => {
-		const { open } = rowsOf({ open: [missionIn("working")] })
+	it("reads a stored escalation the host no longer reads needs_you as working", () => {
+		const { open } = rowsOf({
+			open: [{ ...missionIn("waiting_human"), liveness: "working" }],
+		})
 
 		expect(open[0].state).toBe("working")
+	})
+
+	it("reads a mission the host reads idle from its stored state", () => {
+		const { open } = rowsOf({
+			open: [{ ...missionIn("waiting_bot"), liveness: "idle" }],
+		})
+
+		expect(open[0].state).toBe("waiting_bot")
+	})
+
+	it("draws a mission working exactly when the host reads it working", () => {
+		const { open } = rowsOf({
+			open: [
+				{ ...missionIn("working"), liveness: "working" },
+				{ ...missionIn("waiting_bot"), liveness: "idle" },
+			],
+			liveMissionIds: new Set(["m-waiting_bot"]),
+		})
+
+		expect(open.map(({ isWorking }) => isWorking)).toEqual([true, false])
+	})
+
+	it("reads a mission with no liveness from its stored state and what the front heard", () => {
+		const { open } = rowsOf({
+			open: [missionIn("working")],
+			liveMissionIds: new Set(["m-working"]),
+		})
+
+		expect(open[0]).toMatchObject({ state: "working", isWorking: true })
 	})
 })
 
@@ -754,13 +784,17 @@ const stripsFor = (...states: MissionState[]) =>
 		NO_LISTED_CONVERSATIONS,
 	)["b-1"]
 
-const waitingStripsFor = (waiting: string[], ...states: MissionState[]) =>
+const livenessStripsFor = (...livenesses: MissionLiveness[]) =>
 	missionsByRow(
-		states.map((state, index) =>
-			onBoard({ id: `m-${index + 1}`, openedAt: index + 1, state }),
+		livenesses.map((liveness, index) =>
+			onBoard({
+				id: `m-${index + 1}`,
+				openedAt: index + 1,
+				state: "working",
+				liveness,
+			}),
 		),
 		NO_LISTED_CONVERSATIONS,
-		new Set(waiting),
 	)["b-1"]
 
 describe("missionsByRow", () => {
@@ -768,24 +802,25 @@ describe("missionsByRow", () => {
 		expect(stripsFor("working")).toEqual([shownMission("m-1", "working")])
 	})
 
-	it("shows a mission whose thread waits on the reader as waiting", () => {
-		expect(waitingStripsFor(["m-1"], "working")).toEqual([
+	it("shows a mission the host reads needs_you as waiting", () => {
+		expect(livenessStripsFor("needs_you")).toEqual([
 			shownMission("m-1", "waiting"),
 		])
 	})
 
-	it("orders a mission whose thread waits ahead of the ones that only work", () => {
+	it("orders a mission the host reads needs_you ahead of the ones that only work", () => {
 		expect(
-			waitingStripsFor(["m-2"], "working", "waiting_bot", "working")?.map(
-				({ id }) => id,
-			),
+			livenessStripsFor("working", "needs_you", "idle")?.map(({ id }) => id),
 		).toEqual(["m-2", "m-3", "m-1"])
 	})
 
-	it("shows a mission from its state again once nothing waits", () => {
-		expect(waitingStripsFor([], "working")).toEqual([
-			shownMission("m-1", "working"),
-		])
+	it("shows a stored escalation the host reads working as working", () => {
+		expect(
+			missionsByRow(
+				[onBoard({ id: "m-1", state: "waiting_human", liveness: "working" })],
+				NO_LISTED_CONVERSATIONS,
+			)["b-1"],
+		).toEqual([shownMission("m-1", "working")])
 	})
 
 	it("lists every open mission of the row, most urgent first", () => {
@@ -1134,6 +1169,32 @@ describe("toSpaceMissionGroups", () => {
 			"c-crashes-done",
 			"c-crashes-failed",
 			"c-crashes-closed",
+		])
+	})
+
+	it("groups a mission by its liveness over its stored state", () => {
+		const withLiveness = (
+			state: MissionState,
+			liveness: MissionLiveness,
+			conversationId: string,
+		): MissionInSpace => {
+			const entry = entryOf(state, conversationId, MIDNIGHT + AN_HOUR_MS)
+			return { ...entry, mission: { ...entry.mission, liveness } }
+		}
+
+		const groups = toSpaceMissionGroups({
+			entries: [
+				withLiveness("working", "needs_you", "c-asking"),
+				withLiveness("waiting_human", "working", "c-answered"),
+				withLiveness("waiting_bot", "idle", "c-resting"),
+			],
+			closedSince: MIDNIGHT,
+		})
+
+		expect(idsOf(groups.waitingOnYou)).toEqual(["c-asking-working"])
+		expect(idsOf(groups.inProgress).toSorted()).toEqual([
+			"c-answered-waiting_human",
+			"c-resting-waiting_bot",
 		])
 	})
 })

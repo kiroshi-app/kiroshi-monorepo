@@ -14,11 +14,6 @@ export type SpaceQuestions = {
 	byBot: QuestionTexts
 }
 
-type QuestionRow = {
-	id: string
-	pendingQuestion?: string
-}
-
 const NO_TEXTS: QuestionTexts = {}
 
 const askedIn = ({ scope, event }: ScopedEvent): PendingQuestion[] => {
@@ -102,12 +97,3 @@ export const questionsByConversationIn = (
 	spaceRowId: string | null,
 ): QuestionTexts =>
 	questions.spaceRowId === spaceRowId ? questions.byConversation : NO_TEXTS
-
-export const withPendingQuestions = <Row extends QuestionRow>(
-	rows: Row[],
-	texts: QuestionTexts,
-): Row[] =>
-	rows.map((row) => {
-		const text = texts[row.id]
-		return text === undefined ? row : { ...row, pendingQuestion: text }
-	})

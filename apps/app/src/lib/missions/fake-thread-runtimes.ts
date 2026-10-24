@@ -1,20 +1,13 @@
 import { act } from "@testing-library/react"
 
 import type { MissionSpeakingRuntimes } from "./use-live-missions"
-import type { MissionThreadRuntimes } from "./use-waiting-missions"
-
-import type { PendingPrompt } from "../conversations/conversation-controller"
 
 type ThreadReading = {
-	pendingPrompt: PendingPrompt | null
 	speakers: { botId: string }[]
 }
 
-const NOBODY: ThreadReading = { pendingPrompt: null, speakers: [] }
-
 export type FakeThreadRuntimes = {
-	runtimes: MissionThreadRuntimes & MissionSpeakingRuntimes
-	publish: (conversationId: string, prompt: PendingPrompt | null) => void
+	runtimes: MissionSpeakingRuntimes
 	publishSpeakers: (conversationId: string, botIds: string[]) => void
 }
 
@@ -35,14 +28,10 @@ export const createFakeThreadRuntimes = (): FakeThreadRuntimes => {
 		},
 	}
 
-	const publishReading = (
-		conversationId: string,
-		reading: Partial<ThreadReading>,
-	) => {
+	const publishSpeakers = (conversationId: string, botIds: string[]) => {
 		act(() => {
 			threads.set(conversationId, {
-				...(threads.get(conversationId) ?? NOBODY),
-				...reading,
+				speakers: botIds.map((botId) => ({ botId })),
 			})
 			for (const listener of [...listeners]) {
 				listener()
@@ -50,13 +39,5 @@ export const createFakeThreadRuntimes = (): FakeThreadRuntimes => {
 		})
 	}
 
-	return {
-		runtimes,
-		publish: (conversationId, pendingPrompt) =>
-			publishReading(conversationId, { pendingPrompt }),
-		publishSpeakers: (conversationId, botIds) =>
-			publishReading(conversationId, {
-				speakers: botIds.map((botId) => ({ botId })),
-			}),
-	}
+	return { runtimes, publishSpeakers }
 }

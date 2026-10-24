@@ -166,6 +166,56 @@ it("writes a conversation updated on the host into the roster of its space and r
 	expect(queryClient.isFetching()).toBe(0)
 })
 
+it("writes a conversation state changed on the host into its row and reads nothing", async () => {
+	const { store, garage, controller, queryClient, pageReads, threadReads } =
+		await loadedRoster()
+	const topic = await firstTopicIn(store, garage.spaceId)
+	const localTopic = await firstTopicIn(store, LOCAL.spaceId)
+	expect(controller.getState().hostStates[topic.id]).toBe("idle")
+	pageReads.mockClear()
+
+	await emitOnHost("conversation://state-changed", {
+		conversationId: topic.id,
+		spaceId: garage.spaceId,
+		state: "needs_you",
+	})
+
+	expect(controller.getState().hostStates[topic.id]).toBe("needs_you")
+	expect(controller.getState().hostStates[localTopic.id]).toBe("idle")
+
+	await emitOnHost("conversation://state-changed", {
+		conversationId: topic.id,
+		spaceId: garage.spaceId,
+		state: "working",
+	})
+
+	expect(controller.getState().hostStates[topic.id]).toBe("working")
+	expect(pageReads).not.toHaveBeenCalled()
+	expect(threadReads).not.toHaveBeenCalled()
+	expect(queryClient.isFetching()).toBe(0)
+})
+
+it("writes a conversation state changed on a joined host into the row of that host only", async () => {
+	const { store, shed, controller } = await loadedRoster()
+	const topic = await firstTopicIn(store, shed.spaceId)
+
+	await emitOnHost(
+		"conversation://state-changed",
+		{ conversationId: topic.id, spaceId: shed.spaceId, state: "needs_you" },
+		"another-host",
+	)
+
+	expect(controller.getState().hostStates[topic.id]).toBe("idle")
+
+	await emitOnHost(
+		"conversation://state-changed",
+		{ conversationId: topic.id, spaceId: shed.spaceId, state: "needs_you" },
+		SHED_HOST,
+	)
+
+	expect(controller.getState().hostStates[topic.id]).toBe("needs_you")
+})
+
 it("writes the icon and the colour of a conversation updated on the host into its roster", async () => {
 	const { store, garage, controller } = await loadedRoster()
 	const topic = await firstTopicIn(store, garage.spaceId)

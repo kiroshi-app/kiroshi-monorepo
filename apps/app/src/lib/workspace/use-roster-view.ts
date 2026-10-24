@@ -17,7 +17,7 @@ export const useRosterView = ({
 	openRowId,
 }: RosterViewInput) => {
 	const { roster } = core
-	const { missionMarks, waitingMissionIds } = drivers
+	const { missionMarks } = drivers
 
 	const {
 		bots,
@@ -51,9 +51,8 @@ export const useRosterView = ({
 				entries: missionMarks,
 				conversationRosters,
 				soloThreads,
-				waitingMissionIds,
 			}),
-		[missionMarks, conversationRosters, soloThreads, waitingMissionIds],
+		[missionMarks, conversationRosters, soloThreads],
 	)
 
 	return {

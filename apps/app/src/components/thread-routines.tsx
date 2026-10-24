@@ -14,10 +14,6 @@ import {
 	toActivityMissions,
 } from "@/lib/missions/missions-model"
 import type { ConversationMissionsRead } from "@/lib/missions/use-missions"
-import {
-	type MissionThreadRuntimes,
-	useWaitingMissions,
-} from "@/lib/missions/use-waiting-missions"
 import type { OpenedRoutineController } from "@/lib/routines/opened-routine-controller"
 import { useOpenedRoutine } from "@/lib/routines/use-opened-routine"
 import { useRoutines } from "@/lib/routines/use-routines"
@@ -35,7 +31,6 @@ type ThreadRoutinesProps = {
 	leadBotId?: string
 	liveMissionIds: LiveMissionIds
 	missions: ConversationMissionsRead
-	runtimes: MissionThreadRuntimes
 	faceOf: ThreadNaming["faceOf"]
 	onOpenMission: OpenMission
 	wrapMissionCard: MissionCardWrap
@@ -60,7 +55,6 @@ const ThreadRoutines = ({
 	leadBotId,
 	liveMissionIds,
 	missions,
-	runtimes,
 	faceOf,
 	onOpenMission,
 	wrapMissionCard,
@@ -89,7 +83,6 @@ const ThreadRoutines = ({
 		onOpen: detail.onOpen,
 		onTaken: activityPanel.openedRoutine.leave,
 	})
-	const waitingMissionIds = useWaitingMissions(runtimes, missions.open)
 	const rows = useMemo(
 		() =>
 			toActivityMissions({
@@ -97,19 +90,10 @@ const ThreadRoutines = ({
 				closed: missions.closed,
 				reportedRuns,
 				faceOf,
-				waitingMissionIds,
 				liveMissionIds,
 				now,
 			}),
-		[
-			missions.open,
-			missions.closed,
-			reportedRuns,
-			faceOf,
-			waitingMissionIds,
-			liveMissionIds,
-			now,
-		],
+		[missions.open, missions.closed, reportedRuns, faceOf, liveMissionIds, now],
 	)
 
 	const reloadActivity = () => {

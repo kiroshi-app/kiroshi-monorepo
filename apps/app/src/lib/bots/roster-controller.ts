@@ -15,9 +15,13 @@ import { i18n } from "@workspace/ui/lib/i18n"
 import { newBotIdentity, toIdentity, toSettingsValue } from "./bot-settings"
 import { type RosterLine, rosterLinesIn, type SoloThreads } from "./roster-line"
 import {
+	type ConversationHostStates,
 	cursorAfter,
+	hostStatesIn,
+	hostStatesOf,
 	lastWordsIn,
 	lastWordsOf,
+	NO_HOST_STATES,
 	NO_LAST_WORDS,
 	NO_SOLO_BOT_IDS,
 	ROSTER_PAGE_SIZE,
@@ -31,6 +35,7 @@ import {
 	topicsIn,
 	withFreshHead,
 	withHeldRead,
+	withHostState,
 	withPageRow,
 } from "./roster-pages"
 
@@ -49,6 +54,7 @@ import type {
 	Bot,
 	BotDraft,
 	Conversation,
+	ConversationHostState,
 	ConversationInPage,
 	Participant,
 	RosterPin,
@@ -69,6 +75,11 @@ import {
 
 type SpaceOnHost = { hostId: string | null; spaceId: string | null }
 
+export type ConversationStateChange = {
+	conversationId: string
+	state: ConversationHostState
+}
+
 export type BotPreviews = Record<string, LastWord | undefined>
 
 export type RosterState = {
@@ -79,6 +90,7 @@ export type RosterState = {
 	spaceRowId: string | null
 	previews: Record<string, BotPreviews>
 	soloThreads: SoloThreads
+	hostStates: ConversationHostStates
 	conversationPreviews: ConversationPreviews
 	selectedBotId: string | null
 	selectedConversationId: string | null
@@ -170,6 +182,7 @@ export type RosterController = {
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
 	holdPageRow: (origin: SpaceOnHost, row: ConversationInPage) => void
+	holdHostState: (origin: SpaceOnHost, changed: ConversationStateChange) => void
 	rereadSpaceSoon: (origin: SpaceOnHost) => void
 	rereadSpacesOfBotSoon: (botId: string) => void
 	catchUpWithHost: (hostId: string) => void
@@ -492,6 +505,10 @@ const rosterBaseOf = (
 			),
 		),
 	)
+	const hostStates: ConversationHostStates = Object.assign(
+		{},
+		...paged.map((pages) => (pages ? hostStatesOf(pages) : NO_HOST_STATES)),
+	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
 	const conversations = rosterIn(conversationRosters, choice.spaceRowId)
 	return {
@@ -501,6 +518,7 @@ const rosterBaseOf = (
 		conversations,
 		previews,
 		soloThreads,
+		hostStates,
 		conversationPreviews,
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
@@ -577,6 +595,7 @@ export const createRosterController = (
 			conversations: topicsIn(page),
 			lastWords: lastWordsIn(page),
 			soloBotIds: soloBotIdsIn(page),
+			hostStates: hostStatesIn(page),
 			nextCursor: page.nextCursor,
 		}
 	}
@@ -798,6 +817,20 @@ export const createRosterController = (
 		)
 	}
 
+	const holdHostState = (
+		origin: SpaceOnHost,
+		{ conversationId, state }: ConversationStateChange,
+	) => {
+		const spaceRowId = heldRowIdOf(origin)
+		if (spaceRowId === undefined) {
+			return
+		}
+		queryClient.setQueryData(
+			rosterQuery(spaceRowId).queryKey,
+			(paged) => paged && withHostState(paged, conversationId, state),
+		)
+	}
+
 	const pendingRereads = new Map<string, ReturnType<typeof setTimeout>>()
 
 	const rereadSoon = (spaceRowId: string) => {
@@ -1005,6 +1038,7 @@ export const createRosterController = (
 		reload,
 
 		holdPageRow,
+		holdHostState,
 
 		rereadSpaceSoon,
 

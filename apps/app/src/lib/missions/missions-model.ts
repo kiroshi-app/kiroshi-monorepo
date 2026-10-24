@@ -28,6 +28,7 @@ import type {
 	MissionChanged,
 	MissionEvent,
 	MissionInSpace,
+	MissionLiveness,
 	MissionSpacePage,
 	MissionState,
 } from "./mission-contract"
@@ -51,9 +52,20 @@ const BADGE_BY_STATE: Record<MissionState, BotBadge | null> = {
 export const badgeOfMissionState = (state: MissionState): BotBadge | null =>
 	BADGE_BY_STATE[state]
 
-export type WaitingMissionIds = ReadonlySet<string>
+const STATE_OF_LIVENESS: Record<MissionLiveness, MissionState | null> = {
+	idle: null,
+	working: "working",
+	needs_you: "waiting_human",
+	ready_to_merge: "ready_to_merge",
+	failed: "failed",
+	done: "done",
+	closed: "closed",
+}
 
-const NO_WAITING_MISSIONS: WaitingMissionIds = new Set()
+type MissionStanding = Pick<Mission, "state" | "liveness">
+
+export const missionStateOf = ({ state, liveness }: MissionStanding) =>
+	(liveness && STATE_OF_LIVENESS[liveness]) ?? state
 
 export const AGENT_SILENCE_MS = 2 * 60 * 1000
 
@@ -96,8 +108,13 @@ export const liveMissionsIn = (read: MissionLivenessRead): LiveMissionIds =>
 
 export const withMissionChange = (
 	mission: Mission,
-	{ lastActivityAt, isAgentRunning }: MissionChanged,
-): Mission => ({ ...mission, lastActivityAt, isAgentRunning })
+	{ lastActivityAt, isAgentRunning, liveness }: MissionChanged,
+): Mission => ({
+	...mission,
+	lastActivityAt,
+	isAgentRunning,
+	liveness: liveness ?? mission.liveness,
+})
 
 export const withMissionMove = (
 	mission: Mission,
@@ -139,7 +156,7 @@ const isShownInSpace = (
 	{ mission }: MissionInSpace,
 	closedSince: number,
 ): boolean =>
-	SPACE_GROUP_BY_STATE[mission.state] !== "earlierToday" ||
+	SPACE_GROUP_BY_STATE[missionStateOf(mission)] !== "earlierToday" ||
 	mission.closedAt === null ||
 	mission.closedAt >= closedSince
 
@@ -156,18 +173,10 @@ export const toSpaceMissionGroups = ({
 		.filter((entry) => isShownInSpace(entry, closedSince))
 		.sort((one, other) => lastMovedAt(other) - lastMovedAt(one))
 	for (const entry of shown) {
-		groups[SPACE_GROUP_BY_STATE[entry.mission.state]].push(entry)
+		groups[SPACE_GROUP_BY_STATE[missionStateOf(entry.mission)]].push(entry)
 	}
 	return groups
 }
-
-const WAITING_ON_READER: MissionState = "waiting_human"
-
-const shownStateOf = (
-	mission: Mission,
-	waitingMissionIds: WaitingMissionIds,
-): MissionState =>
-	waitingMissionIds.has(mission.id) ? WAITING_ON_READER : mission.state
 
 const TIME_OF_DAY: Intl.DateTimeFormatOptions = {
 	hour: "2-digit",
@@ -243,10 +252,17 @@ export const toMissionCard = ({
 	...missionProgressOf(mission),
 })
 
+const isMissionWorking = (
+	mission: Mission,
+	liveMissionIds: LiveMissionIds,
+): boolean =>
+	mission.liveness === undefined
+		? liveMissionIds.has(mission.id)
+		: mission.liveness === "working"
+
 const rowsOf = (
 	missions: Mission[],
 	faceOf: MissionFaces,
-	waitingMissionIds: WaitingMissionIds,
 	liveMissionIds: LiveMissionIds,
 	now: number,
 ): MissionCardModel[] =>
@@ -254,8 +270,8 @@ const rowsOf = (
 		toMissionCard({
 			mission,
 			identity: missionFaceOf(faceOf, mission.botId),
-			state: shownStateOf(mission, waitingMissionIds),
-			isWorking: liveMissionIds.has(mission.id),
+			state: missionStateOf(mission),
+			isWorking: isMissionWorking(mission, liveMissionIds),
 			now,
 		}),
 	)
@@ -291,7 +307,7 @@ const closedTodayEntries = (
 						toMissionCard({
 							mission,
 							identity: missionFaceOf(faceOf, mission.botId),
-							state: mission.state,
+							state: missionStateOf(mission),
 							isWorking: false,
 							now,
 						}),
@@ -333,7 +349,6 @@ export type ActivityMissionsRead = {
 	closed: Mission[]
 	reportedRuns: ReportedRunRead[]
 	faceOf: MissionFaces
-	waitingMissionIds: WaitingMissionIds
 	liveMissionIds: LiveMissionIds
 	now: number
 }
@@ -343,14 +358,13 @@ export const toActivityMissions = ({
 	closed,
 	reportedRuns,
 	faceOf,
-	waitingMissionIds,
 	liveMissionIds,
 	now,
 }: ActivityMissionsRead): Omit<RoutinesPanelMissions, "onOpen"> => {
 	const midnight = startOfLocalDay(now)
 
 	return {
-		open: rowsOf(open, faceOf, waitingMissionIds, liveMissionIds, now),
+		open: rowsOf(open, faceOf, liveMissionIds, now),
 		earlierToday: [
 			...closedTodayEntries(closed, faceOf, midnight, now),
 			...reportedTodayEntries(reportedRuns, faceOf, midnight),
@@ -516,7 +530,6 @@ export const missionRowIdOf = (
 export const missionsByRow = (
 	entries: MissionEntry[],
 	listedConversations: { id: string }[],
-	waitingMissionIds: WaitingMissionIds = NO_WAITING_MISSIONS,
 ): MissionsByRow => {
 	const listedConversationIds = new Set(
 		listedConversations.map((conversation) => conversation.id),
@@ -525,7 +538,7 @@ export const missionsByRow = (
 	for (const { mission } of entries) {
 		if (mission.closedAt !== null) continue
 
-		const state = CHIP_STATE_OF[shownStateOf(mission, waitingMissionIds)]
+		const state = CHIP_STATE_OF[missionStateOf(mission)]
 		if (!state) continue
 
 		const rowId = missionRowIdOf(
@@ -566,14 +579,12 @@ export type MissionSpaces = {
 	entries: MissionEntry[]
 	conversationRosters: Record<string, { id: string }[]>
 	soloThreads: SoloThreads
-	waitingMissionIds?: WaitingMissionIds
 }
 
 export const missionsBySpaceId = ({
 	entries,
 	conversationRosters,
 	soloThreads,
-	waitingMissionIds,
 }: MissionSpaces): Record<string, MissionsByRow> => {
 	const spaces = conversationSpaces(conversationRosters, soloThreads)
 	const listed: Record<string, MissionEntry[]> = {}
@@ -586,11 +597,7 @@ export const missionsBySpaceId = ({
 	return Object.fromEntries(
 		Object.entries(listed).map(([spaceId, held]) => [
 			spaceId,
-			missionsByRow(
-				held,
-				conversationRosters[spaceId] ?? [],
-				waitingMissionIds,
-			),
+			missionsByRow(held, conversationRosters[spaceId] ?? []),
 		]),
 	)
 }
@@ -639,8 +646,8 @@ const missionsPanelRowsOf = (
 		...toMissionCard({
 			mission,
 			identity: missionFaceOf(faceOf, mission.botId),
-			state: mission.state,
-			isWorking: liveMissionIds.has(mission.id),
+			state: missionStateOf(mission),
+			isWorking: isMissionWorking(mission, liveMissionIds),
 			now,
 		}),
 		conversationId,

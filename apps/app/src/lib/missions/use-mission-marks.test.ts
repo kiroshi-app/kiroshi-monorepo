@@ -317,7 +317,6 @@ describe("the rail rings of local Spaces", () => {
 		"chat-a": { spaceId: "space-a", botId: "bot-1" },
 		"chat-b": { spaceId: "space-b", botId: "bot-2" },
 	}
-	const NO_WAITING = new Set<string>()
 
 	const useRailRings = (shownSpaceId: string) => {
 		const entries = useMissionMarks(shownSpaceId)
@@ -325,15 +324,16 @@ describe("the rail rings of local Spaces", () => {
 			entries,
 			conversationRosters: {},
 			soloThreads: SOLO_THREADS,
-			waitingMissionIds: NO_WAITING,
 		})
 		const botsBySpace = useRosterBotsBySpace({
 			badges: {},
+			hostStates: {},
 			missions,
 			now: 0,
 			pendingQuestions: { spaceRowId: null, byConversation: {}, byBot: {} },
 			previews: {} as never,
 			rosters: ROSTERS,
+			soloThreads: SOLO_THREADS,
 			working: {} as never,
 		})
 		return toSpaceBadges(botsBySpace, missionRingBadges(botsBySpace))
