@@ -45,6 +45,13 @@ const USER_BUBBLE_PAIR: TokenPair = {
 	foreground: "--user-bubble-foreground",
 }
 
+const USER_BUBBLE_MUTED_PAIR: TokenPair = {
+	background: "--user-bubble",
+	foreground: "--color-muted-foreground",
+}
+
+const TINTED_USER_BUBBLE_PAIRS = [USER_BUBBLE_PAIR, USER_BUBBLE_MUTED_PAIR]
+
 const WARNING_PAIRS: TokenPair[] = [
 	{ background: ROOT_PAIR.background, foreground: "--warning" },
 	{ background: "--sidebar", foreground: "--warning" },
@@ -223,6 +230,7 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 							key={blot}
 							data-blot-scope={blot}
 							data-space-tint={blot}
+							className="on-user-bubble"
 							style={{ "--space-tint": blotTint(blot) } as CSSProperties}
 						/>
 					))}
@@ -235,17 +243,17 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 		const measurements = THEMES.map((scheme) =>
 			probeTheme(pixel, canvasElement, scheme),
 		).flatMap((theme) =>
-			BLOT_TINTS.map((blot) => {
+			BLOT_TINTS.flatMap((blot) => {
 				const scope = theme.scope.querySelector<HTMLElement>(
 					`[data-blot-scope="${blot}"]`,
 				)
 				if (!scope) {
 					throw new Error(`Missing tint scope for ${blot}.`)
 				}
-				return {
-					key: `${theme.scheme} ${blot} ${pairKey(theme.scheme, USER_BUBBLE_PAIR)}`,
-					ratio: measurePair(pixel, { ...theme, scope }, USER_BUBBLE_PAIR),
-				}
+				return TINTED_USER_BUBBLE_PAIRS.map((pair) => ({
+					key: `${theme.scheme} ${blot} ${pairKey(theme.scheme, pair)}`,
+					ratio: measurePair(pixel, { ...theme, scope }, pair),
+				}))
 			}),
 		)
 		const problems = failuresIn(measurements)
