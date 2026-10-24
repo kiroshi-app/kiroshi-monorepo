@@ -266,11 +266,11 @@ impl<S> Live<S> {
 	fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
 		let (is_turn_running, is_permission_pending) = {
 			let runs = self.runs();
-			let in_thread: Vec<&Run<S>> =
-				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
+			let in_thread =
+				|| runs.values().filter(|run| run.scope.conversation_id == conversation_id);
 			(
-				in_thread.iter().any(|run| run.is_mid_turn),
-				in_thread.iter().any(|run| !run.permissions.is_empty()),
+				in_thread().any(|run| run.is_mid_turn),
+				in_thread().any(|run| !run.permissions.is_empty()),
 			)
 		};
 		let is_question_pending = self
