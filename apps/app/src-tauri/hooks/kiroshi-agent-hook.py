@@ -133,6 +133,7 @@ def reported(hook, directory):
 		return payload
 	payload["excerpt"] = excerpt(hook.get("transcript_path"))
 	payload["message"] = text(hook.get("message"))[:MAX_TEXT_CHARACTERS]
+	payload["notification"] = text(hook.get("notification_type"))
 	return payload
 
 

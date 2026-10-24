@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 use tokio::process::Command;
 
-use super::commands::{announce_change, announced_running};
+use super::commands::{announce_change, announced_pulse, observed, Pulse};
 use super::contract::{CheckoutCounts, Mission, MissionError};
 use crate::db;
 
@@ -33,8 +33,9 @@ pub(crate) async fn pass<R: Runtime>(app: &AppHandle<R>, database: &db::Database
 		Err(failure) => return eprintln!("the open missions were not read: {failure:?}"),
 	};
 	for mission in open {
+		let mission = observed(app, mission);
 		let is_news = moved.contains(&mission.id)
-			|| announced_running(app, &mission.id) != Some(mission.is_agent_running);
+			|| announced_pulse(app, &mission.id) != Some(Pulse::of(&mission));
 		if is_news {
 			told(app, &mission);
 		}
@@ -84,7 +85,7 @@ pub(crate) async fn recounted(
 }
 
 pub(crate) fn told<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	if let Err(failure) = announce_change(app, mission) {
+	if let Err(failure) = announce_change(app, mission.clone()) {
 		eprintln!("mission {} moved and the front was not told: {failure:?}", mission.id);
 	}
 }
@@ -143,7 +144,7 @@ mod tests {
 	use tauri::test::mock_builder;
 	use tauri::{Listener as _, Manager as _};
 
-	use super::super::commands::{AnnouncedRunning, CHANGED_EVENT};
+	use super::super::commands::{AnnouncedLiveness, CHANGED_EVENT};
 	use super::super::contract::{
 		MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
 	};
@@ -330,7 +331,7 @@ mod tests {
 		let quiet = a_mission_in(&database, None).await;
 		let started = a_mission_in(&database, None).await;
 		let app = an_app_of_its_own("mission-checkout", mock_builder());
-		app.manage(AnnouncedRunning::default());
+		app.manage(AnnouncedLiveness::default());
 		told(app.handle(), &quiet);
 		told(app.handle(), &started);
 		database

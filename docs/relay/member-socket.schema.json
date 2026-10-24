@@ -4068,6 +4068,9 @@
             }
           ]
         },
+        "liveness": {
+          "$ref": "#/$defs/MissionLiveness"
+        },
         "objective": {
           "type": "string"
         },
@@ -4212,6 +4215,9 @@
               "type": "null"
             }
           ]
+        },
+        "liveness": {
+          "$ref": "#/$defs/MissionLiveness"
         },
         "missionId": {
           "type": "string"
@@ -4760,6 +4766,17 @@
         "conversationTitle"
       ],
       "type": "object"
+    },
+    "MissionLiveness": {
+      "enum": [
+        "idle",
+        "working",
+        "needs_you",
+        "ready_to_merge",
+        "failed",
+        "done",
+        "closed"
+      ]
     },
     "MissionSpacePage": {
       "properties": {

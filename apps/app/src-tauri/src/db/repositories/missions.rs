@@ -10,11 +10,11 @@ use super::keyset::{paged, Keyset, Page};
 use super::messages::conversation_of_turn;
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
-	CheckoutCounts, ConversationMissions, HookedMission, Mission, MissionActivity, MissionAnswer,
-	MissionClosing, MissionDetail, MissionDossier, MissionDraft, MissionEntry, MissionError,
-	MissionEvent, MissionEventKind, MissionFilter, MissionHandoff, MissionInSpace, MissionInThread,
-	MissionRecord, MissionScope, MissionState, MissionStatus, MissionUpdate, MissionWatch, Ticket,
-	WatchedMission,
+	CheckoutCounts, ConversationMissions, HookedMission, LivenessSigns, Mission, MissionActivity,
+	MissionAnswer, MissionClosing, MissionDetail, MissionDossier, MissionDraft, MissionEntry,
+	MissionError, MissionEvent, MissionEventKind, MissionFilter, MissionHandoff, MissionInSpace,
+	MissionInThread, MissionLiveness, MissionRecord, MissionScope, MissionState, MissionStatus,
+	MissionUpdate, MissionWatch, Ticket, WatchedMission,
 };
 
 const MAX_MISSIONS_PER_READ: u32 = 200;
@@ -74,7 +74,15 @@ pub(in crate::db) const MISSION_COLUMNS: &str =
 		ORDER BY mission_events.seq DESC LIMIT 1) AS agent_stopped_at,
 	NULLIF(watch_branch, ''), NULLIF(watch_workspace_path, ''),
 	(SELECT space_id FROM conversations
-		WHERE conversations.id = missions.origin_conversation_id) AS origin_space_id
+		WHERE conversations.id = missions.origin_conversation_id) AS origin_space_id,
+	(SELECT CASE WHEN mission_events.kind = 'agent_asked'
+			AND json_extract(mission_events.payload, '$.event') = 'Notification'
+			AND COALESCE(json_extract(mission_events.payload, '$.notification'), '') <> 'idle_prompt'
+		THEN created_at END
+		FROM mission_events
+		WHERE mission_events.mission_id = missions.id
+			AND mission_events.kind IN ('agent_started', 'agent_stopped', 'agent_asked')
+		ORDER BY mission_events.seq DESC LIMIT 1) AS prompted_since_turn_at
 	FROM missions";
 
 const INSERT_MISSION: &str = "INSERT INTO missions
@@ -556,6 +564,18 @@ impl MissionsRepository {
 
 	pub async fn held(&self, id: String) -> Result<Option<Mission>, MissionError> {
 		Ok(self.access.call(move |connection| held(connection, &id)).await?)
+	}
+
+	pub async fn threaded(&self, conversation_id: String) -> Result<Option<Mission>, MissionError> {
+		Ok(self
+			.access
+			.call(move |connection| {
+				let mut statement = connection.prepare_cached(&format!(
+					"{MISSION_COLUMNS} WHERE thread_conversation_id = ?1"
+				))?;
+				Ok(statement.query_row([conversation_id], mission).optional()?)
+			})
+			.await?)
 	}
 
 	pub async fn detail(&self, id: String) -> Result<MissionDetail, MissionError> {
@@ -1055,6 +1075,15 @@ fn unknown_participant(
 }
 
 pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
+	let state = derived(row.get(14)?)?;
+	let checkout = Liveness {
+		closed_at: row.get(11)?,
+		started_since_stop_at: row.get(16)?,
+		activity_at: row.get(19)?,
+		stopped_at: row.get(24)?,
+		prompted_at: row.get(28)?,
+	}
+	.signs(now());
 	Ok(Mission {
 		id: row.get(0)?,
 		origin_conversation_id: row.get(1)?,
@@ -1073,15 +1102,10 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		closed_at: row.get(11)?,
 		reported_at: row.get(12)?,
 		reported_turn_id: row.get(13)?,
-		state: derived(row.get(14)?)?,
+		state,
 		state_seq: row.get(15)?,
-		is_agent_running: Liveness {
-			closed_at: row.get(11)?,
-			started_since_stop_at: row.get(16)?,
-			activity_at: row.get(19)?,
-			stopped_at: row.get(24)?,
-		}
-		.is_running(now()),
+		is_agent_running: checkout.is_turn_running,
+		liveness: MissionLiveness::observed(state, checkout),
 		status: last_status(row)?,
 		last_activity_at: row.get(19)?,
 		last_activity: row.get::<_, Option<String>>(20)?.map(|_| from_text(row, 20)).transpose()?,
@@ -1111,9 +1135,24 @@ struct Liveness {
 	started_since_stop_at: Option<i64>,
 	activity_at: Option<i64>,
 	stopped_at: Option<i64>,
+	prompted_at: Option<i64>,
 }
 
 impl Liveness {
+	fn signs(&self, now: i64) -> LivenessSigns {
+		LivenessSigns {
+			is_prompt_pending: self.is_prompting(),
+			is_turn_running: self.is_running(now),
+		}
+	}
+
+	fn is_prompting(&self) -> bool {
+		let Some(prompted_at) = self.prompted_at.filter(|_| self.closed_at.is_none()) else {
+			return false;
+		};
+		self.activity_at.is_none_or(|at| at <= prompted_at)
+	}
+
 	fn is_running(&self, now: i64) -> bool {
 		let is_in_a_turn = self.stopped_at.is_none() || self.started_since_stop_at.is_some();
 		let activity_in_a_turn = self.activity_at.filter(|_| is_in_a_turn);
@@ -1479,12 +1518,200 @@ mod tests {
 		std::fs::remove_dir_all(&dir).expect("cleanup");
 	}
 
+	fn a_hook_call(kind: MissionEventKind, payload: Value) -> MissionEntry {
+		MissionEntry { kind, source: "agent-hook".to_owned(), payload }
+	}
+
+	async fn an_open_mission(database: &Database) -> Mission {
+		database
+			.missions()
+			.open(a_draft("c1", "b1", "Fix the crash"), a_key())
+			.await
+			.expect("the mission opens")
+	}
+
+	async fn appended_on(database: &Database, id: &str, entry: MissionEntry) -> Mission {
+		database.missions().append(id.to_owned(), entry).await.expect("the event is appended")
+	}
+
+	#[tokio::test]
+	async fn a_mission_nothing_moves_reads_idle() {
+		let (database, dir) = planted().await;
+
+		let opened = an_open_mission(&database).await;
+		let noted = appended_on(&database, &opened.id, an_entry(MissionEventKind::Note)).await;
+
+		assert_eq!([opened.liveness, noted.liveness], [MissionLiveness::Idle; 2]);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_running_checkout_agent_reads_working_until_it_stops() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+
+		let started =
+			appended_on(&database, &opened.id, an_entry(MissionEventKind::AgentStarted)).await;
+		let stopped =
+			appended_on(&database, &opened.id, an_entry(MissionEventKind::AgentStopped)).await;
+
+		assert_eq!(
+			[started.liveness, stopped.liveness],
+			[MissionLiveness::Working, MissionLiveness::Idle]
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_prompt_of_the_checkout_agent_reads_needs_you_until_the_agent_moves_on() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+		let permission = json!({ "event": "Notification", "notification": "permission_prompt" });
+
+		let asked = appended_on(
+			&database,
+			&opened.id,
+			a_hook_call(MissionEventKind::AgentAsked, permission),
+		)
+		.await;
+		let carried_on = database
+			.missions()
+			.record_activity(opened.id.clone(), an_activity("Bash", "ls"), now() + 1_000)
+			.await
+			.expect("the activity after the approval lands");
+		let stopped = database
+			.missions()
+			.append_delivery(
+				opened.id.clone(),
+				vec![
+					a_hook_call(MissionEventKind::AgentStopped, json!({ "event": "Stop" })),
+					a_hook_call(MissionEventKind::AgentAsked, json!({ "event": "Stop" })),
+				],
+				"the-stop".to_owned(),
+			)
+			.await
+			.expect("the stop lands");
+		let idle_prompt = json!({ "event": "Notification", "notification": "idle_prompt" });
+		let waiting = appended_on(
+			&database,
+			&opened.id,
+			a_hook_call(MissionEventKind::AgentAsked, idle_prompt),
+		)
+		.await;
+
+		assert_eq!(
+			[asked.liveness, carried_on.liveness, stopped.liveness, waiting.liveness],
+			[
+				MissionLiveness::NeedsYou,
+				MissionLiveness::Working,
+				MissionLiveness::Idle,
+				MissionLiveness::Idle
+			],
+			"a checkout prompt, its approval, the stop waiting on the bot and the idle reminder"
+		);
+		assert_eq!(stopped.state, MissionState::WaitingBot);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_unanswered_escalation_reads_needs_you_and_its_answer_reads_idle() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+
+		let escalated =
+			appended_on(&database, &opened.id, an_entry(MissionEventKind::Escalated)).await;
+		let answered = match database
+			.missions()
+			.answer(opened.id.clone(), escalated.state_seq, "bot".to_owned())
+			.await
+			.expect("the answer lands")
+		{
+			MissionAnswer::Appended(answered) => answered,
+			MissionAnswer::Stale(held) => panic!("the answer was stale: {held:?}"),
+		};
+
+		assert_eq!(
+			[escalated.liveness, answered.liveness],
+			[MissionLiveness::NeedsYou, MissionLiveness::Idle]
+		);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn a_checkout_agent_waiting_on_the_bot_reads_idle_without_a_thread_turn() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+
+		let asked = appended_on(
+			&database,
+			&opened.id,
+			a_hook_call(MissionEventKind::AgentAsked, json!({ "event": "Stop" })),
+		)
+		.await;
+		let failed_checks =
+			appended_on(&database, &opened.id, an_entry(MissionEventKind::ChecksFailed)).await;
+
+		assert_eq!([asked.state, failed_checks.state], [MissionState::WaitingBot; 2]);
+		assert_eq!([asked.liveness, failed_checks.liveness], [MissionLiveness::Idle; 2]);
+
+		drop(database);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
+	#[tokio::test]
+	async fn an_agent_started_before_a_restart_and_never_stopped_reads_idle() {
+		let (database, dir) = planted().await;
+		let opened = an_open_mission(&database).await;
+		let long_ago = now() - AGENT_FRESHNESS_MS - 1;
+		let mission_id = opened.id.clone();
+		database
+			.call_mut(move |connection| {
+				Ok(connection.execute(
+					INSERT_EVENT,
+					params![
+						"started",
+						mission_id,
+						"agent_started",
+						"agent-hook",
+						"{}",
+						long_ago,
+						"before-the-restart"
+					],
+				)?)
+			})
+			.await
+			.expect("the agent started before the restart");
+		drop(database);
+
+		let restarted = open(&dir);
+		let held = restarted
+			.missions()
+			.held(opened.id.clone())
+			.await
+			.expect("the mission reads")
+			.expect("the mission is held");
+
+		assert_eq!((held.is_agent_running, held.liveness), (false, MissionLiveness::Idle));
+
+		drop(restarted);
+		std::fs::remove_dir_all(&dir).expect("cleanup");
+	}
+
 	fn liveness(started: Option<i64>, activity: Option<i64>, stopped: Option<i64>) -> Liveness {
 		Liveness {
 			closed_at: None,
 			started_since_stop_at: started,
 			activity_at: activity,
 			stopped_at: stopped,
+			prompted_at: None,
 		}
 	}
 

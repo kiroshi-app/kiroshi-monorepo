@@ -86,6 +86,46 @@ pub enum MissionState {
 	Closed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionLiveness {
+	Idle,
+	Working,
+	NeedsYou,
+	ReadyToMerge,
+	Failed,
+	Done,
+	Closed,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LivenessSigns {
+	pub is_prompt_pending: bool,
+	pub is_turn_running: bool,
+}
+
+impl MissionLiveness {
+	pub fn observed(state: MissionState, signs: LivenessSigns) -> Self {
+		let stored = match state {
+			MissionState::ReadyToMerge => Self::ReadyToMerge,
+			MissionState::Failed => Self::Failed,
+			MissionState::Done => Self::Done,
+			MissionState::Closed => Self::Closed,
+			MissionState::WaitingHuman => Self::NeedsYou,
+			MissionState::Working | MissionState::WaitingBot => Self::Idle,
+		};
+		stored.joined(signs)
+	}
+
+	pub fn joined(self, signs: LivenessSigns) -> Self {
+		match self {
+			Self::Idle | Self::Working if signs.is_prompt_pending => Self::NeedsYou,
+			Self::Idle if signs.is_turn_running => Self::Working,
+			held => held,
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Ticket {
@@ -173,6 +213,8 @@ pub struct Mission {
 	pub state: MissionState,
 	pub state_seq: i64,
 	pub is_agent_running: bool,
+	#[specta(optional)]
+	pub liveness: MissionLiveness,
 	pub opened_at: i64,
 	pub closed_at: Option<i64>,
 	pub reported_at: Option<i64>,
@@ -485,5 +527,102 @@ impl From<MissionError> for TranscriptStoreError {
 			}
 			other => TranscriptStoreError::UnreadableHistory { detail: format!("{other:?}") },
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const NOTHING: LivenessSigns =
+		LivenessSigns { is_prompt_pending: false, is_turn_running: false };
+
+	const PROMPTED: LivenessSigns =
+		LivenessSigns { is_prompt_pending: true, is_turn_running: false };
+
+	const RUNNING: LivenessSigns =
+		LivenessSigns { is_prompt_pending: false, is_turn_running: true };
+
+	const EVERYTHING: LivenessSigns =
+		LivenessSigns { is_prompt_pending: true, is_turn_running: true };
+
+	const OPEN: [MissionState; 2] = [MissionState::Working, MissionState::WaitingBot];
+
+	#[test]
+	fn each_sign_alone_on_an_open_mission_reads_its_own_word() {
+		for state in OPEN {
+			assert_eq!(
+				[NOTHING, PROMPTED, RUNNING].map(|signs| MissionLiveness::observed(state, signs)),
+				[MissionLiveness::Idle, MissionLiveness::NeedsYou, MissionLiveness::Working],
+				"{state:?}"
+			);
+		}
+		assert_eq!(
+			MissionLiveness::observed(MissionState::WaitingHuman, NOTHING),
+			MissionLiveness::NeedsYou,
+			"an unanswered escalation did not read needs you"
+		);
+	}
+
+	#[test]
+	fn needs_you_outranks_working_which_outranks_idle() {
+		for state in OPEN {
+			assert_eq!(MissionLiveness::observed(state, EVERYTHING), MissionLiveness::NeedsYou);
+		}
+		assert_eq!(
+			MissionLiveness::observed(MissionState::WaitingHuman, RUNNING),
+			MissionLiveness::NeedsYou
+		);
+		assert_eq!(
+			[
+				MissionLiveness::Idle.joined(RUNNING),
+				MissionLiveness::Working.joined(PROMPTED),
+				MissionLiveness::NeedsYou.joined(RUNNING),
+				MissionLiveness::Working.joined(NOTHING),
+			],
+			[
+				MissionLiveness::Working,
+				MissionLiveness::NeedsYou,
+				MissionLiveness::NeedsYou,
+				MissionLiveness::Working,
+			],
+			"a sign joined from the thread did not keep the precedence"
+		);
+	}
+
+	#[test]
+	fn a_terminal_state_wins_over_every_sign() {
+		let terminal = [
+			(MissionState::ReadyToMerge, MissionLiveness::ReadyToMerge),
+			(MissionState::Failed, MissionLiveness::Failed),
+			(MissionState::Done, MissionLiveness::Done),
+			(MissionState::Closed, MissionLiveness::Closed),
+		];
+		for (state, word) in terminal {
+			for signs in [NOTHING, PROMPTED, RUNNING, EVERYTHING] {
+				let observed = MissionLiveness::observed(state, signs);
+				assert_eq!(observed, word, "{state:?} under {signs:?}");
+				assert_eq!(observed.joined(EVERYTHING), word, "{state:?} joined a thread");
+			}
+		}
+	}
+
+	#[test]
+	fn the_liveness_is_written_as_its_snake_case_word() {
+		let words = [
+			MissionLiveness::Idle,
+			MissionLiveness::Working,
+			MissionLiveness::NeedsYou,
+			MissionLiveness::ReadyToMerge,
+			MissionLiveness::Failed,
+			MissionLiveness::Done,
+			MissionLiveness::Closed,
+		]
+		.map(|liveness| serde_json::to_value(liveness).expect("it serialises"));
+		assert_eq!(
+			words,
+			["idle", "working", "needs_you", "ready_to_merge", "failed", "done", "closed"]
+				.map(serde_json::Value::from)
+		);
 	}
 }

@@ -1105,6 +1105,7 @@ export type Mission = {
 	state: MissionState,
 	stateSeq: number,
 	isAgentRunning: boolean,
+	liveness?: MissionLiveness,
 	openedAt: number,
 	closedAt: number | null,
 	reportedAt: number | null,
@@ -1130,6 +1131,7 @@ export type MissionChanged = {
 	state: MissionState,
 	stateSeq: number,
 	isAgentRunning: boolean,
+	liveness?: MissionLiveness,
 	lastActivityAt: number | null,
 };
 
@@ -1172,6 +1174,8 @@ export type MissionInSpace = {
 	conversationId: string,
 	conversationTitle: string,
 };
+
+export type MissionLiveness = "idle" | "working" | "needs_you" | "ready_to_merge" | "failed" | "done" | "closed";
 
 export type MissionNote = {
 	source: string,

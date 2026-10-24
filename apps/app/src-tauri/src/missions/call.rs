@@ -106,7 +106,7 @@ async fn carried<R: Runtime>(
 	};
 	match written {
 		Ok(written) => {
-			if let Err(failure) = announce_change(&calls.app, &written) {
+			if let Err(failure) = announce_change(&calls.app, written) {
 				eprintln!("a hook call moved a mission the front was not told about: {failure:?}");
 			}
 			Ok(ACCEPTED)
@@ -160,9 +160,11 @@ fn payload(held: &Map<String, Value>) -> Value {
 	payload.insert("event".to_owned(), json!(text(held, "event")));
 	payload.insert("branch".to_owned(), json!(text(held, "branch")));
 	payload.insert("cwd".to_owned(), json!(text(held, "cwd")));
-	let message = text(held, "message");
-	if !message.is_empty() {
-		payload.insert("message".to_owned(), json!(message));
+	for carried in ["message", "notification"] {
+		let value = text(held, carried);
+		if !value.is_empty() {
+			payload.insert(carried.to_owned(), json!(value));
+		}
 	}
 	Value::Object(payload)
 }
@@ -421,6 +423,7 @@ mod tests {
 				"state": state,
 				"stateSeq": state_seq,
 				"isAgentRunning": false,
+				"liveness": "needs_you",
 				"lastActivityAt": null,
 			})],
 			"the front was not told the hook moved the mission"
