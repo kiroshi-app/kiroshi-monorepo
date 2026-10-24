@@ -6,6 +6,7 @@ import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 	slotIn,
 	slotsIn,
+	tokenStyleIn,
 } from "@workspace/storybook/story-utils"
 import {
 	type AnsweredQuestion,
@@ -206,6 +207,21 @@ const spokenTextOf = (root: HTMLElement) => {
 	return spoken.textContent
 }
 
+const spaceOf = (root: HTMLElement) =>
+	root.querySelector<HTMLElement>("[data-space-tint]") as HTMLElement
+
+const expectRowsPaintedFromSpace = async (root: HTMLElement) => {
+	const spaceBubble = tokenStyleIn(
+		spaceOf(root),
+		"bg-(--user-bubble)",
+		"backgroundColor",
+	)
+
+	for (const row of choicesIn(root)) {
+		await expect(getComputedStyle(row).backgroundColor).toBe(spaceBubble)
+	}
+}
+
 const softBubbleOf = (root: HTMLElement) =>
 	slotIn(
 		root.querySelector('[data-variant="soft"]') as HTMLElement,
@@ -244,6 +260,14 @@ export const YouAnswered = meta.story({
 		)
 		await expect(cardStyle.borderStartStartRadius).toBe("6px")
 		await expect(cardStyle.borderEndStartRadius).toBe("18px")
+		await expectRowsPaintedFromSpace(canvasElement)
+		await expect(getComputedStyle(canvas.getByText("Every table")).color).toBe(
+			tokenStyleIn(
+				spaceOf(canvasElement),
+				"text-(--user-bubble-foreground)",
+				"color",
+			),
+		)
 	},
 })
 
@@ -276,6 +300,7 @@ export const MemberAnswered = meta.story({
 		for (const hidden of choice.querySelectorAll('[aria-hidden="true"]')) {
 			await expect(hidden.textContent).not.toContain("Beta")
 		}
+		await expectRowsPaintedFromSpace(canvasElement)
 	},
 })
 
