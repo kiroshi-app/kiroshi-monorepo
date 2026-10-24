@@ -209,7 +209,7 @@ export const NothingChosen = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the foot hint names the range; the panel binds no digit key itself, and without the prop the hint reads the Return part alone. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
+				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the panel binds the bare digits 1 to 9 up to its option count and the foot hint names the range; without the prop it binds no digit key and the hint reads the Return part alone. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
 			},
 		},
 	},
@@ -237,17 +237,12 @@ export const NothingChosen = meta.story({
 			}
 
 			await expect(
-				card.getByText("Press 1-3 to choose, Return to send."),
+				card.getByText("Press 1\u20133 to choose, Return to send"),
 			).toBeVisible()
 			const send = card.getByRole("button", { name: chat.toolQuestion.submit })
 			await expect(send).toHaveTextContent(chat.toolQuestion.send)
 			await expect(send).toHaveAttribute("aria-disabled", "true")
 			await expect(getComputedStyle(send).opacity).toBe("0.4")
-
-			panel.focus()
-			await userEvent.keyboard("2")
-			for (const row of card.getAllByRole("radio"))
-				await expect(row).toHaveAttribute("aria-checked", "false")
 		}
 
 		const light = within(panels[0] as HTMLElement)
@@ -373,7 +368,7 @@ export const SeveralChecked = meta.story({
 			)
 
 			await expect(
-				card.getByText("Press 1-3 to toggle, Return to send."),
+				card.getByText("Press 1\u20133 to toggle, Return to send"),
 			).toBeVisible()
 		}
 	},
@@ -459,7 +454,9 @@ export const SeveralQuestions = meta.story({
 				card.queryByRole("button", { name: chat.toolQuestion.submit }),
 			).not.toBeInTheDocument()
 			await expect(
-				card.getByText("Press 1-3 to toggle, Return for the next question."),
+				card.getByText(
+					"Press 1\u20133 to toggle, Return for the next question",
+				),
 			).toBeVisible()
 		}
 	},
@@ -622,7 +619,7 @@ export const SingleSelect = meta.story({
 		docs: {
 			description: {
 				story:
-					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` the foot hint reads only `Return to send.`, and that Skip calls `onDeny`. " +
+					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` the foot hint reads only `Return to send` and no digit key is bound, and that Skip calls `onDeny`. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -720,6 +717,99 @@ export const FreeText = meta.story({
 		await expect(args.onAnswer).toHaveBeenCalledWith({
 			[FRAMEWORK_QUESTION.question]: "TanStack Start, once it is stable",
 		})
+	},
+})
+
+export const DigitHintTwoOptions = meta.story({
+	tags: ["test-only"],
+	args: { questions: [REGISTRY_QUESTION], hasDigitKeys: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The foot hint of `NothingChosen` on a question of two options: with `hasDigitKeys` the range ends on the option count of the question on screen, written with an en dash and no final period.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		await expect(
+			canvas.getByText("Press 1\u20132 to choose, Return to send"),
+		).toBeVisible()
+	},
+})
+
+export const DigitKeysChoose = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION], hasDigitKeys: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The digit keys behind `NothingChosen`: with `hasDigitKeys` a bare digit picks its row exactly as a click does. The binding reads the physical key, so Shift+1 and the AZERTY top-row 1, which carries `&`, pick Starter. Check that 2 picks Team, and that a digit above the option count and a digit under Cmd, Ctrl or Alt pick nothing.",
+			},
+		},
+	},
+	play: async ({ canvas, canvasElement, userEvent }) => {
+		const starter = canvas.getByRole("radio", { name: /Starter/ })
+		const team = canvas.getByRole("radio", { name: /Team/ })
+
+		await userEvent.keyboard("4")
+		await userEvent.keyboard("{Meta>}1{/Meta}{Control>}1{/Control}")
+		await userEvent.keyboard("{Alt>}1{/Alt}")
+		for (const row of canvas.getAllByRole("radio"))
+			await expect(row).toHaveAttribute("aria-checked", "false")
+
+		await userEvent.keyboard("{Shift>}1{/Shift}")
+		await expect(starter).toHaveAttribute("aria-checked", "true")
+
+		await userEvent.keyboard("2")
+		await expect(team).toHaveAttribute("aria-checked", "true")
+
+		fireEvent.keyDown(canvasElement, { key: "&", code: "Digit1" })
+		await waitFor(() => expect(starter).toHaveAttribute("aria-checked", "true"))
+	},
+})
+
+export const DigitKeysToggle = meta.story({
+	tags: ["test-only"],
+	args: { questions: [CHANNELS_QUESTION], hasDigitKeys: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The digit keys behind `SeveralChecked`: on a multi-select question a bare digit toggles its row, so the same digit twice lets it go again.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const blog = canvas.getByRole("checkbox", { name: /Blog/ })
+
+		await userEvent.keyboard("2")
+		await expect(blog).toHaveAttribute("aria-checked", "true")
+		await userEvent.keyboard("2")
+		await expect(blog).toHaveAttribute("aria-checked", "false")
+	},
+})
+
+export const DigitTypedIntoOwnAnswer = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION], hasDigitKeys: true },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"The digit keys behind `OwnAnswerTyping`: while the own-answer field holds focus a digit is text, so it lands in the field and picks no row.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		const field = canvas.getByLabelText(chat.toolQuestion.freeText)
+
+		await userEvent.click(field)
+		await userEvent.keyboard("2")
+		await expect(field).toHaveValue("2")
+		for (const row of canvas.getAllByRole("radio"))
+			await expect(row).toHaveAttribute("aria-checked", "false")
 	},
 })
 

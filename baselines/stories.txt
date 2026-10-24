@@ -540,6 +540,10 @@ conversation-tools-toolapproval--with-path
 conversation-tools-toolquestion--application-scope
 conversation-tools-toolquestion--arrow-key-tabs
 conversation-tools-toolquestion--chosen-row-follows-space-tint
+conversation-tools-toolquestion--digit-hint-two-options
+conversation-tools-toolquestion--digit-keys-choose
+conversation-tools-toolquestion--digit-keys-toggle
+conversation-tools-toolquestion--digit-typed-into-own-answer
 conversation-tools-toolquestion--entry-composing
 conversation-tools-toolquestion--entry-composing-legacy-key-code-on-code
 conversation-tools-toolquestion--entry-composing-legacy-key-code-on-key
