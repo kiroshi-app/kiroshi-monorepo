@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use rusqlite::types::Type;
 use rusqlite::{params, params_from_iter, Connection, Row};
-use serde::de::DeserializeOwned;
 
 use super::{ConversationError, ConversationsRepository};
 use crate::agent::contract::{PermissionRequest, QuestionRequest};
@@ -223,7 +222,9 @@ fn prompt_text(kind: PromptKind, request: &str) -> serde_json::Result<String> {
 }
 
 pub(super) fn open_turn_starts(links: &str) -> rusqlite::Result<BTreeMap<String, i64>> {
-	let links: Vec<(String, i64)> = decoded(0, links)?;
+	let links: Vec<(String, i64)> = serde_json::from_str(links).map_err(|error| {
+		rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(error))
+	})?;
 	let mut earliest: BTreeMap<String, i64> = BTreeMap::new();
 	for (bot_id, started_at) in links {
 		let start = earliest.entry(bot_id).or_insert(started_at);
@@ -238,12 +239,6 @@ fn in_start_order(starts: BTreeMap<String, i64>) -> Vec<String> {
 		left_at.cmp(right_at).then_with(|| left_id.cmp(right_id))
 	});
 	starts.into_iter().map(|(bot_id, _)| bot_id).collect()
-}
-
-fn decoded<T: DeserializeOwned>(column: usize, text: &str) -> rusqlite::Result<T> {
-	serde_json::from_str(text).map_err(|error| {
-		rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(error))
-	})
 }
 
 #[cfg(test)]
