@@ -10,6 +10,7 @@ import { useEffect, useState, useSyncExternalStore } from "react"
 import type { ListEnd } from "@workspace/ui/components/list-skeleton"
 
 import {
+	type ConversationStateChange,
 	createRosterController,
 	type RosterController,
 } from "./roster-controller"
@@ -33,6 +34,10 @@ type ConversationStored = {
 }
 
 type ConversationDeleted = { spaceId: string | null; conversationId: string }
+
+type ConversationStateChanged = ConversationStateChange & {
+	spaceId: string | null
+}
 
 type CompanionUpdated = { id: string }
 
@@ -58,6 +63,11 @@ const listenToRosterChanges = (controller: RosterController) =>
 					payload.conversation,
 				),
 			),
+		),
+		listen<ConversationStateChanged>(
+			"conversation://state-changed",
+			({ payload }, hostId) =>
+				controller.holdHostState({ hostId, spaceId: payload.spaceId }, payload),
 		),
 		listen<ConversationDeleted>(
 			"conversation://deleted",

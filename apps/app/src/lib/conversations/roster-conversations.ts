@@ -26,6 +26,7 @@ import type {
 } from "./transcript-state"
 
 import { avatarSrc } from "../host"
+import type { ConversationHostStates } from "../bots/roster-pages"
 import { rosterTimestamp } from "../bots/roster-timestamp"
 
 type BotFace = Pick<Bot, "name" | "avatarBlot" | "avatarImagePath">
@@ -164,6 +165,7 @@ export const toConversationLook = ({
 })
 
 export type ConversationRosterActivity = {
+	hostStates: ConversationHostStates
 	working: Record<string, ConversationWorker[]>
 	previews: ConversationPreviews
 	personOf: (person: LastWordAuthor) => string | undefined
@@ -221,7 +223,10 @@ export const toRosterConversations = (
 ): AppSidebarConversation[] =>
 	mostRecentFirst(conversations, activity).map((conversation) => {
 		const preview = activity.previews[conversation.id]
-		const workers = activity.working[conversation.id] ?? NO_WORKERS
+		const isWorking = activity.hostStates[conversation.id] === "working"
+		const workers = isWorking
+			? (activity.working[conversation.id] ?? NO_WORKERS)
+			: NO_WORKERS
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
@@ -234,6 +239,6 @@ export const toRosterConversations = (
 			lastSpeaker: speakerNameAmong(seated, preview, activity.personOf),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,
 			lastActivityAt: lastSpokeAt(conversation, activity),
-			status: workers.length > 0 ? "working" : "idle",
+			status: isWorking ? "working" : "idle",
 		}
 	})

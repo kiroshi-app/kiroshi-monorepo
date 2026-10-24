@@ -13,8 +13,8 @@ const BEACON = rosterBot("beacon")
 
 describe("withBadges", () => {
 	it("gives a companion the badge held for it", () => {
-		const [atlas] = withBadges([ATLAS], { atlas: "attention" })
-		expect(atlas.badge).toBe("attention")
+		const [atlas] = withBadges([ATLAS], { atlas: "failed" })
+		expect(atlas.badge).toBe("failed")
 	})
 
 	it("gives no badge to a companion carrying none", () => {

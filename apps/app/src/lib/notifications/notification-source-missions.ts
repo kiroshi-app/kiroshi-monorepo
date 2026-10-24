@@ -12,12 +12,12 @@ import {
 	THIS_COMPUTER,
 } from "../missions/mission-event-read"
 import { createMissionStates } from "../missions/mission-states"
+import { missionStateOf } from "../missions/missions-model"
 
 type MissionThreadTrackingOptions = Pick<
 	NotificationSourceOptions,
 	"missions" | "switches"
 > & {
-	missionThreads: Map<string, Mission>
 	missionOrigins: Map<string, MissionEvent>
 	currentFocus: () => boolean
 	botNameOf: (botId: string) => string | undefined
@@ -27,7 +27,6 @@ type MissionThreadTrackingOptions = Pick<
 export const createMissionThreadTracking = ({
 	missions,
 	switches,
-	missionThreads,
 	missionOrigins,
 	currentFocus,
 	botNameOf,
@@ -35,30 +34,28 @@ export const createMissionThreadTracking = ({
 }: MissionThreadTrackingOptions) => {
 	const missionStates = createMissionStates()
 
-	const holdMissionThread = (mission: Mission, hostId: string | null) => {
+	const holdMissionOrigin = (mission: Mission, hostId: string | null) => {
 		missionOrigins.set(mission.id, {
 			missionId: mission.id,
 			spaceId: mission.spaceId,
 			hostId,
 		})
-
-		if (mission.closedAt === null) {
-			missionThreads.set(mission.threadConversationId, mission)
-			return
-		}
-
-		missionThreads.delete(mission.threadConversationId)
 	}
 
 	const missionChanged = async (
 		changed: MissionChanged,
 		hostId: string | null,
 	) => {
-		if (!missionStates.entered(changed)) {
+		const standing = {
+			missionId: changed.missionId,
+			state: missionStateOf(changed),
+		}
+
+		if (!missionStates.entered(standing)) {
 			return
 		}
 
-		missionStates.remember(changed)
+		missionStates.remember(standing)
 
 		const detail = await missions.read({ ...changed, hostId })
 
@@ -67,9 +64,9 @@ export const createMissionThreadTracking = ({
 		}
 
 		const { mission } = detail
-		holdMissionThread(mission, hostId)
+		holdMissionOrigin(mission, hostId)
 
-		const { state } = changed
+		const { state } = standing
 
 		if (!isNotifiedMissionState(state)) {
 			return
@@ -105,11 +102,11 @@ export const createMissionThreadTracking = ({
 		)
 	}
 
-	const catchUpOnMissionThreads = async () => {
+	const catchUpOnMissionOrigins = async () => {
 		for (const { mission } of await missions.board()) {
-			holdMissionThread(mission, THIS_COMPUTER)
+			holdMissionOrigin(mission, THIS_COMPUTER)
 		}
 	}
 
-	return { missionChanged, catchUpOnMissionThreads }
+	return { missionChanged, catchUpOnMissionOrigins }
 }

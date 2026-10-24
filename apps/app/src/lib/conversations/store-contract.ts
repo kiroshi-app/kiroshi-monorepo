@@ -12,6 +12,7 @@ export type {
 	Conversation,
 	ConversationInPage,
 	ConversationPage,
+	ConversationState as ConversationHostState,
 	EnvEntry_Serialize as EnvEntry,
 	EnvOwner,
 	EnvScope_Serialize as EnvScope,

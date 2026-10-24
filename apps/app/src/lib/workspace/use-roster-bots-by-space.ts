@@ -5,9 +5,10 @@ import { probeRender } from "@workspace/ui/lib/render-probe"
 import {
 	questionsByBotIn,
 	type SpaceQuestions,
-	withPendingQuestions,
 } from "../agent/pending-questions"
 import { toRosterBots } from "../bots/bot-settings"
+import type { SoloThreads } from "../bots/roster-line"
+import type { ConversationHostStates } from "../bots/roster-pages"
 import { withLineBadges } from "../chat/sidebar-badges"
 import type { useBotBadges } from "../chat/use-bot-badges"
 import {
@@ -16,7 +17,12 @@ import {
 	previewsIn,
 	type useBotActivity,
 } from "../chat/use-chat"
-import type { Bot } from "../conversations/store-contract"
+import {
+	botHostStatesIn,
+	withNeedsYou,
+	workingFromHost,
+} from "../conversations/host-state-rows"
+import type { Bot, Conversation } from "../conversations/store-contract"
 import {
 	type missionsBySpaceId,
 	missionsIn,
@@ -25,21 +31,27 @@ import {
 
 type RosterBotsBySpaceInput = {
 	badges: ReturnType<typeof useBotBadges>
+	conversationRosters: Record<string, Conversation[]>
+	hostStates: ConversationHostStates
 	missions: ReturnType<typeof missionsBySpaceId>
 	now: number
 	pendingQuestions: SpaceQuestions
 	previews: PreviewsBySpaceId
 	rosters: Record<string, Bot[]>
+	soloThreads: SoloThreads
 	working: ReturnType<typeof useBotActivity>
 }
 
 export const useRosterBotsBySpace = ({
 	badges,
+	conversationRosters,
+	hostStates,
 	missions,
 	now,
 	pendingQuestions,
 	previews,
 	rosters,
+	soloThreads,
 	working,
 }: RosterBotsBySpaceInput) => {
 	// React Compiler hoists probeRender out of the memo, which would make the
@@ -49,27 +61,50 @@ export const useRosterBotsBySpace = ({
 	return useMemo(() => {
 		probeRender("rosterBotsBySpace")
 		return Object.fromEntries(
-			Object.entries(rosters).map(([spaceId, spaceBots]) => [
-				spaceId,
-				withMissions(
-					withLineBadges(
-						withPendingQuestions(
-							toRosterBots(
-								spaceBots,
-								{
-									working: activityIn(working, spaceId),
-									previews: previewsIn(previews, spaceId),
-								},
-								now,
+			Object.entries(rosters).map(([spaceId, spaceBots]) => {
+				const botStates = botHostStatesIn({
+					hostStates,
+					soloThreads,
+					conversations: conversationRosters[spaceId] ?? [],
+					spaceId,
+				})
+				return [
+					spaceId,
+					withMissions(
+						withNeedsYou(
+							withLineBadges(
+								toRosterBots(
+									spaceBots,
+									{
+										working: workingFromHost(
+											botStates,
+											activityIn(working, spaceId),
+										),
+										previews: previewsIn(previews, spaceId),
+									},
+									now,
+								),
+								badges,
+								spaceId,
 							),
+							botStates,
 							questionsByBotIn(pendingQuestions, spaceId),
 						),
-						badges,
-						spaceId,
+						missionsIn(missions, spaceId),
 					),
-					missionsIn(missions, spaceId),
-				),
-			]),
+				]
+			}),
 		)
-	}, [rosters, working, previews, now, badges, missions, pendingQuestions])
+	}, [
+		rosters,
+		conversationRosters,
+		hostStates,
+		soloThreads,
+		working,
+		previews,
+		now,
+		badges,
+		missions,
+		pendingQuestions,
+	])
 }

@@ -411,10 +411,15 @@ const watchTurn = (driver: FakeChatDriver): TurnWatch => {
 	return watch
 }
 
-const streamOneTurn = async (text: string, watch: TurnWatch) => {
+const streamOneTurn = async (
+	text: string,
+	watch: TurnWatch,
+	store: TranscriptStore,
+) => {
 	watch.isEnded = false
 	watch.chunks = 0
 	await submitPrompt(text)
+	await emitHostWorking(store)
 	for (let step = 0; step < STEP_LIMIT && !watch.isEnded; step += 1) {
 		await settle(STEP_MS)
 	}
@@ -446,6 +451,15 @@ const emitOnHost = (event: string, payload: unknown) =>
 			handler({ payload }, null)
 		}
 	})
+
+const emitHostWorking = async (store: TranscriptStore) => {
+	const { spaceId, conversation } = await soloThreadRowOf(store)
+	await emitOnHost("conversation://state-changed", {
+		conversationId: conversation.id,
+		spaceId,
+		state: "working",
+	})
+}
 
 const RECEIVED_TEXT = "A message received"
 
@@ -821,13 +835,13 @@ const measureTurn = async (chunks: number) => {
 	const tally = tallyRenders()
 	const { watch, store, queryClient } = await mountApp(() => replyOf(chunks))
 
-	await streamOneTurn("first turn", watch)
+	await streamOneTurn("first turn", watch, store)
 	await emitHostUpdatesOfTurn(store)
 	const settledTurns = tally.entriesOf("ThreadTurn").map(([key]) => key)
 	tally.reset()
 	const cacheEvents = countCacheEvents(queryClient)
 
-	await streamOneTurn("second turn", watch)
+	await streamOneTurn("second turn", watch, store)
 	await emitHostUpdatesOfTurn(store)
 	await settle(MOUNT_MS)
 	cacheEvents.stop()
@@ -867,11 +881,11 @@ describe("PRF1 render baseline", () => {
 			{
 			  "app": 17,
 			  "appSidebar": 6,
-			  "cacheEvents": 21,
+			  "cacheEvents": 24,
 			  "chunks": 11,
 			  "quietTurn": 2,
-			  "rosterBots": 6,
-			  "rosterBotsBySpace": 6,
+			  "rosterBots": 7,
+			  "rosterBotsBySpace": 7,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -884,11 +898,11 @@ describe("PRF1 render baseline", () => {
 			{
 			  "app": 28,
 			  "appSidebar": 6,
-			  "cacheEvents": 32,
+			  "cacheEvents": 35,
 			  "chunks": 22,
 			  "quietTurn": 2,
-			  "rosterBots": 6,
-			  "rosterBotsBySpace": 6,
+			  "rosterBots": 7,
+			  "rosterBotsBySpace": 7,
 			  "streamingTurn": 2,
 			}
 		`)
@@ -931,10 +945,11 @@ describe("PRF1 render baseline", () => {
 
 	it("counts what the avatars write over sixty frames", async () => {
 		vi.useFakeTimers()
-		const { frames } = await mountApp()
+		const { frames, store } = await mountApp()
 
 		const idle = tallyFrames(frames)
 		await submitPrompt("keep the roster busy")
+		await emitHostWorking(store)
 		await settle(STEP_MS * STEPS_INTO_TURN)
 		const working = tallyFrames(frames)
 

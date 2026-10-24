@@ -26,47 +26,12 @@ const answered = (completion: TranscriptCompletion): ConversationAnswer => ({
 			runtimeSessionId: null,
 		},
 	],
-	pendingPrompt: null,
 })
 
 const answering: ConversationAnswer = {
 	speakers: [speakingBot("bot-one")],
 	waitingBotIds: [],
 	messages: [],
-	pendingPrompt: null,
-}
-
-const asking: ConversationAnswer = {
-	...answering,
-	pendingPrompt: {
-		kind: "question",
-		botId: "bot-one",
-		request: {
-			id: "question-one",
-			questions: [
-				{
-					header: "Pick a branch",
-					question: "Which branch should I use?",
-					options: [],
-					multiSelect: false,
-				},
-			],
-		},
-	},
-}
-
-const approving: ConversationAnswer = {
-	...answering,
-	pendingPrompt: {
-		kind: "permission",
-		botId: "bot-one",
-		request: {
-			id: "permission-one",
-			toolName: "Bash",
-			title: "Run npm test",
-			detail: null,
-		},
-	},
 }
 
 const createFakeRuntimes = () => {
@@ -186,37 +151,6 @@ describe("createConversationBadgeSource", () => {
 	it("reports none while a conversation answers", () => {
 		const { runtimes, source } = start()
 
-		runtimes.publish("room-one", answering)
-
-		expect(source.getBadges()["room-one"]).toBe("none")
-	})
-
-	it("reports attention while the read conversation waits on an approval", () => {
-		const { runtimes, source } = start({
-			selectedConversationId: "room-one",
-		})
-
-		runtimes.publish("room-one", approving)
-
-		expect(source.getBadges()["room-one"]).toBe("attention")
-	})
-
-	it("reports no attention while the conversation only waits on a question", () => {
-		const { runtimes, source } = start({
-			selectedConversationId: "room-two",
-		})
-
-		runtimes.publish("room-one", asking)
-
-		expect(source.getBadges()["room-one"]).toBe("none")
-	})
-
-	it("drops the attention badge once the approval is given", () => {
-		const { runtimes, source } = start({
-			selectedConversationId: "room-one",
-		})
-
-		runtimes.publish("room-one", approving)
 		runtimes.publish("room-one", answering)
 
 		expect(source.getBadges()["room-one"]).toBe("none")

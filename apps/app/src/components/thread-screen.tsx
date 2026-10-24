@@ -1667,7 +1667,7 @@ const askerNameOf = ({ askerBotId, authors, botFace }: AskerSource) =>
 	(askerBotId ? authors.get(askerBotId)?.name : undefined) ?? botFace?.name
 
 function ThreadView(props: ThreadViewProps) {
-	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
+	const { activityPanel, thread, bots: known, onOpenMission } = props
 	const view = useThreadView(props)
 	const joinedHost = useContext(OpenJoinedHostContext)
 	const departure = joinedHost?.departure
@@ -1824,7 +1824,6 @@ function ThreadView(props: ThreadViewProps) {
 				liveMissionIds={view.liveMissionIds}
 				missions={view.missions}
 				onOpenMission={onOpenMission}
-				runtimes={runtimes}
 				wrapMissionCard={view.wrapMissionCard}
 			>
 				{layout}

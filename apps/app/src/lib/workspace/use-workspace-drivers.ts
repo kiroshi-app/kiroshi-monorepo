@@ -1,5 +1,3 @@
-import { useMemo } from "react"
-
 import type { WorkspaceCore } from "./use-workspace-core"
 
 import { useEvolution } from "../bots/use-evolution"
@@ -9,7 +7,6 @@ import { useConversationBadges } from "../conversations/use-conversation-badges"
 import { useExternalLinks } from "../links/use-external-links"
 import { useMissionMarks } from "../missions/use-mission-marks"
 import { useMissionRunDriver } from "../missions/use-mission-run-driver"
-import { useWaitingMissions } from "../missions/use-waiting-missions"
 import { useNotifications } from "../notifications/use-notifications"
 import { onboardingTransport } from "../onboarding/onboarding-transport"
 import { signInWorldOf } from "../onboarding/sign-in-controller"
@@ -98,14 +95,6 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 	})
 
 	const missionMarks = useMissionMarks(spaces.state.selectedSpaceId)
-	const openMissions = useMemo(
-		() => missionMarks.map(({ mission }) => mission),
-		[missionMarks],
-	)
-	const waitingMissionIds = useWaitingMissions(
-		conversationRuntimes,
-		openMissions,
-	)
 
 	const conversationBadges = useConversationBadges({
 		runtimes: conversationRuntimes,
@@ -120,7 +109,6 @@ export const useWorkspaceDrivers = (core: WorkspaceCore) => {
 		signIn,
 		missionMarks,
 		updater,
-		waitingMissionIds,
 	}
 }
 
