@@ -1,4 +1,9 @@
-import type { ComponentProps, CSSProperties, ReactNode } from "react"
+import {
+	type ComponentProps,
+	type CSSProperties,
+	type ReactNode,
+	useState,
+} from "react"
 import { expect, fireEvent, fn, spyOn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -547,6 +552,90 @@ export const WaitingBar = meta.story({
 	},
 })
 
+const expectOptionRing = (row: HTMLElement) =>
+	waitFor(() =>
+		expect(getComputedStyle(row).boxShadow).toContain(
+			`${tokenStyleIn(row, "text-ring/30", "color")} 0px 0px 0px 3px`,
+		),
+	)
+
+const FoldedPanel = (args: ToolQuestionProps) => {
+	const [isMinimised, setIsMinimised] = useState(true)
+	return (
+		<InComposerSlot>
+			<ToolQuestion
+				{...args}
+				minimised={isMinimised}
+				onExpand={() => setIsMinimised(false)}
+				onMinimise={() => setIsMinimised(true)}
+			/>
+		</InComposerSlot>
+	)
+}
+
+export const AnswerPressed = meta.story({
+	globals: { theme_layout: "side-by-side" },
+	args: {
+		questions: [PLAN_QUESTION],
+		companionName: "Shoto",
+		hasDigitKeys: true,
+	},
+	render: (args) => <FoldedPanel {...args} />,
+	parameters: {
+		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
+		docs: {
+			description: {
+				story: `Artboard 3.2: the panel back after Answer on the waiting bar was pressed with the pointer. ${ARTBOARD}Focus lands on option 1, which draws the 3px ring in the \`ring\` token at 30%, flush with the row and without an outline, while every option stays unpicked, Send keeps its unpicked look and the thread does not scroll. The play presses Answer with a real pointer in the Vitest browser runner, where focus moved by script after a click does not match \`:focus-visible\` on its own, then picks option 2 with its digit key, and Arrow Down brings focus onto the chosen row, which draws the same ring over the bubble colour.`,
+			},
+		},
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const real = isInBrowserRunner() ? await realPointer() : undefined
+		const press = (element: HTMLElement) =>
+			real ? real.click(element) : userEvent.click(element)
+
+		for (const index of [0, 1]) {
+			const bar = slotsIn(canvasElement, "tool-question-waiting")[0]
+			const scrollTop = document.scrollingElement?.scrollTop
+			await press(
+				within(bar as HTMLElement).getByRole("button", {
+					name: chat.toolQuestion.waiting.answer,
+				}),
+			)
+
+			const panel = within(panelsIn(canvasElement)[index] as HTMLElement)
+			const rows = panel.getAllByRole("radio")
+			const first = rows[0] as HTMLElement
+			await expect(first).toHaveFocus()
+			await expectOptionRing(first)
+			await expect(getComputedStyle(first).outlineStyle).toBe("none")
+			for (const row of rows.slice(1))
+				await expect(getComputedStyle(row).boxShadow).toBe("none")
+			for (const row of rows)
+				await expect(row).toHaveAttribute("aria-checked", "false")
+			await expect(
+				panel.getByRole("button", { name: /send answers/i }),
+			).toHaveAttribute("aria-disabled", "true")
+			await expect(document.scrollingElement?.scrollTop).toBe(scrollTop)
+		}
+
+		const keyboard = (keys: string) =>
+			real ? real.keyboard(keys) : userEvent.keyboard(keys)
+		await keyboard("2")
+		const chosen = panelsIn(canvasElement).map((panel) =>
+			within(panel).getByRole("radio", { name: "Team" }),
+		)
+		for (const row of chosen)
+			await expect(row).toHaveAttribute("aria-checked", "true")
+
+		await keyboard("{ArrowDown}")
+		const focusedChosen = chosen[1] as HTMLElement
+		await expect(focusedChosen).toHaveFocus()
+		await expectChosenPaint(focusedChosen)
+		await expectOptionRing(focusedChosen)
+	},
+})
+
 export const WaitingBarNarrow = meta.story({
 	args: {
 		questions: [LONG_QUESTION],
@@ -618,29 +707,81 @@ export const KeyboardFocusRings = meta.story({
 		docs: {
 			description: {
 				story:
-					"Tab walks the panel from the segments to Send, and every control it lands on draws a visible ring: the segment, Minimize, the option row, the own-answer field through its frame, Skip and Send.",
+					"The panel opens on option 1, Shift+Tab walks back from there to the segment, Tab walks forward to Send, and every control it lands on draws a visible ring: the segment, Minimize, the option row, the own-answer field through its frame, Skip and Send.",
 			},
 		},
 	},
 	play: async ({ canvas, userEvent }) => {
 		const field = canvas.getByLabelText(chat.toolQuestion.freeText)
+		const option = canvas.getByRole("radio", { name: "Starter" })
+		const minimise = canvas.getByRole("button", {
+			name: chat.toolQuestion.minimise,
+		})
+		const skip = canvas.getByRole("button", { name: chat.toolQuestion.skip })
+		const next = canvas.getByRole("button", { name: chat.toolQuestion.next })
 		const stops = [
-			[canvas.getByRole("tab", { name: PLAN_QUESTION.header }), null],
-			[canvas.getByRole("button", { name: chat.toolQuestion.minimise }), null],
-			[canvas.getByRole("radio", { name: "Starter" }), null],
-			[field, field.parentElement],
-			[canvas.getByRole("button", { name: chat.toolQuestion.skip }), null],
-			[canvas.getByRole("button", { name: chat.toolQuestion.next }), null],
+			[true, minimise, null],
+			[true, canvas.getByRole("tab", { name: PLAN_QUESTION.header }), null],
+			[false, minimise, null],
+			[false, option, null],
+			[false, field, field.parentElement],
+			[false, skip, null],
+			[false, next, null],
 		] as const
 
-		await expect(canvas.getByRole("form")).toHaveFocus()
-		for (const [control, frame] of stops) {
-			await userEvent.tab()
+		await expect(option).toHaveFocus()
+		await waitFor(() => expect(hasFocusRing(option)).toBe(true))
+		for (const [shift, control, frame] of stops) {
+			await userEvent.tab({ shift })
 			await expect(control).toHaveFocus()
 			await expect(control.matches(":focus-visible")).toBe(true)
 			await waitFor(() =>
 				expect(hasFocusRing((frame ?? control) as HTMLElement)).toBe(true),
 			)
+		}
+	},
+})
+
+export const ForcedColorsFocusOutline = meta.story({
+	tags: ["test-only"],
+	args: { questions: [PLAN_QUESTION] },
+	render: inComposerSlot,
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"With forced colours on, where no box-shadow is painted, the focused option row keeps a visible indicator: its transparent outline takes the system colour, on the opening focus and on keyboard focus alike, while a row without focus stays unoutlined. Outside forced colours the focused row draws no outline. The play emulates forced colours only in the Vitest browser runner.",
+			},
+		},
+	},
+	play: async ({ canvas, userEvent }) => {
+		if (!isInBrowserRunner()) return
+		const { cdp } = await import("vitest/browser")
+		const emulateForcedColors = (value: "active" | "") =>
+			cdp().send("Emulation.setEmulatedMedia", {
+				features: [{ name: "forced-colors", value }],
+			})
+		const [first, second] = canvas.getAllByRole("radio") as [
+			HTMLElement,
+			HTMLElement,
+		]
+
+		await expect(first).toHaveFocus()
+		await expect(getComputedStyle(first).outlineStyle).toBe("none")
+
+		await emulateForcedColors("active")
+		try {
+			await expect(getComputedStyle(first).outlineStyle).toBe("solid")
+			await expect(getComputedStyle(second).outlineStyle).toBe("none")
+
+			await userEvent.tab()
+			await expect(getComputedStyle(first).outlineStyle).toBe("none")
+			await userEvent.tab({ shift: true })
+			await expect(first).toHaveFocus()
+			await expect(first.matches(":focus-visible")).toBe(true)
+			await expect(getComputedStyle(first).outlineStyle).toBe("solid")
+		} finally {
+			await emulateForcedColors("")
 		}
 	},
 })
@@ -851,14 +992,13 @@ export const KeyboardOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"The panel reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it. Return on the panel or on an option row does what the end of the foot does: it hands over the next question still waiting, and sends once none is. Return on a question holding nothing sends nothing and says what is missing. Every other control keeps its own Return: a segment, the own-answer field, Skip, Minimize, an exit and a notice action. " +
+					"The panel reached without the mouse: its first option row takes focus the moment it appears, so the reader never hunts for it. Return on the panel or on an option row does what the end of the foot does: it hands over the next question still waiting, and sends once none is. Return on a question holding nothing sends nothing and says what is missing. Every other control keeps its own Return: a segment, the own-answer field, Skip, Minimize, an exit and a notice action. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
 	},
 	play: async ({ args, canvas, userEvent }) => {
-		const card = canvas.getByRole("form")
-		await expect(card).toHaveFocus()
+		await expect(canvas.getByRole("checkbox", { name: "Chat" })).toHaveFocus()
 
 		await userEvent.keyboard("{Enter}")
 		await expect(args.onAnswer).not.toHaveBeenCalled()

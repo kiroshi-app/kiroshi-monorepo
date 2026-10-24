@@ -6,7 +6,9 @@ import {
 	type FormEvent,
 	type KeyboardEvent,
 	type ReactNode,
+	useEffect,
 	useId,
+	useRef,
 	useState,
 } from "react"
 import { useTranslation } from "react-i18next"
@@ -22,7 +24,6 @@ import {
 import { Button } from "@workspace/ui/components/ui/button"
 import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
-import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
 import {
 	DIGIT_KEY_LIMIT,
@@ -49,7 +50,7 @@ const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
 
 const QUESTION_ROW_CLASS =
-	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/30 data-opening-focus:focus:outline-hidden data-opening-focus:focus:ring-3 data-opening-focus:focus:ring-ring/30"
 
 const QUESTION_PILL_CLASS =
 	"h-8 rounded-full font-medium text-compact leading-4"
@@ -149,6 +150,23 @@ const answerOf = ({ selected, text }: Draft) =>
 
 const OPTION_ROW_SLOT = "tool-question-option"
 
+const focusOnOpen = (card: HTMLFormElement) => {
+	const firstRow = card.querySelector<HTMLElement>(
+		`[data-slot="${OPTION_ROW_SLOT}"]`,
+	)
+	if (!firstRow) {
+		card.focus({ preventScroll: true })
+		return
+	}
+	firstRow.dataset.openingFocus = ""
+	firstRow.addEventListener(
+		"blur",
+		() => delete firstRow.dataset.openingFocus,
+		{ once: true },
+	)
+	firstRow.focus({ preventScroll: true })
+}
+
 const isOptionRow = (target: EventTarget) =>
 	target instanceof HTMLElement && target.dataset.slot === OPTION_ROW_SLOT
 
@@ -167,7 +185,7 @@ const ToolQuestion = ({
 	className,
 }: ToolQuestionProps) => {
 	const { t } = useTranslation("chat")
-	const cardRef = useAutoFocus<HTMLFormElement>()
+	const cardRef = useRef<HTMLFormElement>(null)
 	const askedId = useId()
 	const failureId = useId()
 	const blankId = useId()
@@ -231,6 +249,18 @@ const ToolQuestion = ({
 			if (!isHeldRadio) pickOption(digitItem, option.label)
 		},
 	})
+
+	useEffect(() => {
+		const card = cardRef.current
+		if (minimised || !card) return
+		let isCancelled = false
+		queueMicrotask(() => {
+			if (!isCancelled) focusOnOpen(card)
+		})
+		return () => {
+			isCancelled = true
+		}
+	}, [minimised])
 
 	if (!item) return null
 
