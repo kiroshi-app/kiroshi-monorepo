@@ -692,7 +692,7 @@ async fn noted_hold<R: Runtime>(
 }
 
 fn told<R: Runtime>(app: &AppHandle<R>, mission: &Mission) {
-	if let Err(failure) = announce_change(app, mission) {
+	if let Err(failure) = announce_change(app, mission.clone()) {
 		eprintln!("github moved mission {} and the front was not told: {failure:?}", mission.id);
 	}
 }
@@ -2065,6 +2065,7 @@ mod tests {
 				"state": state,
 				"stateSeq": seq,
 				"isAgentRunning": false,
+				"liveness": "idle",
 				"lastActivityAt": null,
 			})],
 			"the front was not told which mission github moved and where it stands"

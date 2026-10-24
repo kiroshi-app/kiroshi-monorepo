@@ -52,7 +52,7 @@ const NOTE =
 	"Record one line of progress on a mission of yours. Write what moved, not what you are about to do."
 
 const STATUS =
-	"Write the status of a mission of yours, every time you stop working on it, whether the work is over or only paused. It is read by whoever follows the conversation the mission came from, who saw none of the work, so it holds on its own and names whoever moves next."
+	"Write the status of a mission of yours, every time you stop working on it, whether the work is over or only paused. It is a line for the reader and sets no state: whether the mission is idle, working or needs the person is observed by the host, never written by you. It is read by whoever follows the conversation the mission came from, who saw none of the work, so it holds on its own and names whoever moves next."
 
 const ESCALATE =
 	"Hand a mission back to the person with the one question that blocks you. The mission waits until they answer."

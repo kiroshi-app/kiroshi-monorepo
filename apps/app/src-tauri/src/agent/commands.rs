@@ -10,7 +10,7 @@ use super::contract::{
 	AccountReport, AgentEvent, CancelFailureReason, CancelOutcome, CheckReport, ConnectionState,
 	ConversationNaming, EventTurn, EvolvedBundle, LiveSession, OfferedModel, PermissionDecision,
 	QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
-	TurnOutcome,
+	TurnOutcome, TurnState,
 };
 use super::host::hosted;
 use super::lease::RunLease;
@@ -39,6 +39,8 @@ use crate::json::JsonValue;
 use crate::logging;
 use crate::mcp_oauth::refresh;
 use crate::mcp_oauth::reports::StandingHost;
+use crate::missions::commands::announce_thread_moved;
+use crate::missions::contract::LivenessSigns;
 use crate::missions::host::MissionHost;
 use crate::private_files;
 use crate::routines::host::RoutineHost;
@@ -136,9 +138,16 @@ struct Run<S> {
 	scope: RuntimeScope,
 	session: Option<S>,
 	started_at: i64,
+	is_mid_turn: bool,
+	permissions: HashSet<String>,
 }
 
 impl<S> Run<S> {
+	fn settle(&mut self) {
+		self.is_mid_turn = false;
+		self.permissions.clear();
+	}
+
 	fn reported(&self) -> LiveSession {
 		LiveSession {
 			bot_id: self.scope.bot_id.clone(),
@@ -200,6 +209,56 @@ impl<S> Live<S> {
 		let questions = self.questions();
 		(questions.clone(), subscribe())
 	}
+
+	fn runs(&self) -> MutexGuard<'_, HashMap<RunKey, Run<S>>> {
+		self.runs.lock().unwrap_or_else(PoisonError::into_inner)
+	}
+
+	fn moved_by(&self, scope: &RuntimeScope, event: &AgentEvent) -> bool {
+		let mut runs = self.runs();
+		let Some(run) = runs.get_mut(&run_key(scope)).filter(|run| &run.scope == scope) else {
+			return false;
+		};
+		match event {
+			AgentEvent::TurnChanged { state } => {
+				run.is_mid_turn = matches!(
+					state,
+					TurnState::Submitting | TurnState::Running | TurnState::Stopping
+				)
+			}
+			AgentEvent::PermissionRequested { request } => {
+				run.permissions.insert(request.id.clone());
+			}
+			AgentEvent::PermissionResolved { id, .. } => {
+				run.permissions.remove(id);
+			}
+			AgentEvent::TurnEnded { .. } => run.settle(),
+			AgentEvent::Failed { error } if error.is_fatal() => run.settle(),
+			AgentEvent::QuestionRequested { .. } => {}
+			_ => return false,
+		}
+		true
+	}
+
+	fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
+		let (is_turn_running, is_permission_pending) = {
+			let runs = self.runs();
+			let in_thread: Vec<&Run<S>> =
+				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
+			(
+				in_thread.iter().any(|run| run.is_mid_turn),
+				in_thread.iter().any(|run| !run.permissions.is_empty()),
+			)
+		};
+		let is_question_pending = self
+			.questions()
+			.iter()
+			.any(|question| question.scope.conversation_id == conversation_id);
+		LivenessSigns {
+			is_prompt_pending: is_permission_pending || is_question_pending,
+			is_turn_running,
+		}
+	}
 }
 
 impl<S: Clone> Live<S> {
@@ -210,7 +269,16 @@ impl<S: Clone> Live<S> {
 			.iter()
 			.any(|(held, run)| held != &key && participant(&run.scope) == participant(&scope));
 		let replaced = runs
-			.insert(key, Run { scope: scope.clone(), session: None, started_at: now_ms() })
+			.insert(
+				key,
+				Run {
+					scope: scope.clone(),
+					session: None,
+					started_at: now_ms(),
+					is_mid_turn: false,
+					permissions: HashSet::new(),
+				},
+			)
 			.and_then(|replaced| replaced.session);
 		drop(runs);
 		self.drop_questions(&scope);
@@ -311,14 +379,17 @@ impl<R: Runtime> TurnSink for RunSink<R> {
 		if !self.live.holds(&self.scope) && !closes_the_run(&event) {
 			return;
 		}
+		let moves_the_thread = self.live.moved_by(&self.scope, &event);
 		if let AgentEvent::QuestionRequested { request } = &event {
 			let asked =
 				PendingQuestion { scope: self.scope.clone(), turn, request: request.clone() };
-			return self
-				.live
-				.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
+			self.live.hold_question(asked, |asked| announce_scoped(&self.app, asked.scoped()));
+			return self.retell_the_mission();
 		}
 		self.release_questions_settled_by(&event);
+		if moves_the_thread {
+			self.retell_the_mission();
+		}
 		if let AgentEvent::SessionReady { session_id, .. } = &event {
 			self.record_its_own_lineage(session_id.clone());
 		}
@@ -350,6 +421,19 @@ impl<R: Runtime> RunSink<R> {
 			}
 			_ => {}
 		}
+	}
+
+	fn retell_the_mission(&self) {
+		let app = self.app.clone();
+		let conversation_id = self.scope.conversation_id.clone();
+		tauri::async_runtime::spawn(async move {
+			let Some(database) = bot_database(&app) else {
+				return log::warn!("a thread moved and its mission was not read without the store");
+			};
+			if let Err(failure) = announce_thread_moved(&app, database, conversation_id).await {
+				log::warn!("a thread moved and the front was not told of its mission: {failure:?}");
+			}
+		});
 	}
 
 	fn record_its_own_lineage(&self, provider_session_id: String) {
@@ -574,6 +658,10 @@ impl AgentState {
 
 	pub(crate) fn host_turns(&self) -> &HostTurns {
 		&self.host_turns
+	}
+
+	pub(crate) fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
+		self.live.thread_signs(conversation_id)
 	}
 
 	pub fn live_session_count(&self) -> usize {
@@ -2058,10 +2146,16 @@ mod tests {
 	const ONE_START: i64 = 1_700_000_000_000;
 
 	fn held_since<S>(live: &Live<S>, scope: RuntimeScope, started_at: i64) {
-		live.runs
-			.lock()
-			.expect("live runs")
-			.insert(run_key(&scope), Run { scope, session: None, started_at });
+		live.runs.lock().expect("live runs").insert(
+			run_key(&scope),
+			Run {
+				scope,
+				session: None,
+				started_at,
+				is_mid_turn: false,
+				permissions: HashSet::new(),
+			},
+		);
 	}
 
 	fn reported_runs<S: Clone>(live: &Live<S>) -> Vec<String> {
