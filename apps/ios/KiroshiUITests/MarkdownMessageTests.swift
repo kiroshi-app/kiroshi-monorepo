@@ -13,6 +13,9 @@ final class MarkdownMessageTests: XCTestCase {
     static let builds =
         "Platform\tSize\tStatus\nmacOS\t48 MB\tSigned\nWindows\t52 MB\tSigned\nLinux\t61 MB\tBuilding"
 
+    static let buildTimes =
+        "Build\tSize\tTime\n4.2.0\t38 MB\t6 min\n4.1.3\t37 MB\t5 min\n4.1.2\t41 MB\t9 min"
+
     override func setUp() async throws {
         continueAfterFailure = false
     }
@@ -27,6 +30,20 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Copy code"].waitForExistence(timeout: 10))
         XCTAssertEqual(pasted(in: app), Self.swiftCode)
+    }
+
+    func testCopyOnATableCopiesTheTableThenSaysCopied() {
+        let app = launch("markdown", "-artboard", "tables")
+        XCTAssertTrue(app.staticTexts["The last three builds:"].waitForExistence(timeout: 10))
+        let copy = app.buttons.matching(identifier: "Copy table").firstMatch
+        XCTAssertTrue(copy.exists)
+
+        copy.tap()
+
+        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Copied"].waitForNonExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(identifier: "Copy table").count, 2)
+        XCTAssertEqual(pasted(in: app), Self.buildTimes)
     }
 
     func testCopyTableFromTheLongPressMenuCopiesTheTableAsTabSeparatedText() {
@@ -70,6 +87,8 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["To do, App Store text reviewed"].exists)
         XCTAssertTrue(app.staticTexts["Secrets sorting"].exists)
         XCTAssertTrue(app.buttons["Copy code"].exists)
+        XCTAssertEqual(app.staticTexts.matching(identifier: "3 rows").count, 2)
+        XCTAssertEqual(app.buttons.matching(identifier: "Copy table").count, 2)
 
         try auditTheReply(app)
     }
