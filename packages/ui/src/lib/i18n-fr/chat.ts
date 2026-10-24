@@ -240,6 +240,10 @@ const chat = {
 		copyFailed:
 			"Copie impossible. Sélectionnez le lien et copiez-le vous-même.",
 	},
+	answeredQuestion: {
+		byViewer: "Vous avez répondu",
+		byMember: "{{name}} a répondu",
+	},
 	applicationInstall: {
 		openSettings: "Ouvrir les réglages",
 		receipt: {

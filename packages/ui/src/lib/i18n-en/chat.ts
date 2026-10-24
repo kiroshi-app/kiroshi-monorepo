@@ -228,6 +228,10 @@ const chat = {
 		copyAnnounced: "Link copied to clipboard",
 		copyFailed: "Couldn’t copy. Select the link and copy it yourself.",
 	},
+	answeredQuestion: {
+		byViewer: "You answered",
+		byMember: "{{name}} answered",
+	},
 	applicationInstall: {
 		openSettings: "Open Settings",
 		receipt: {
