@@ -167,15 +167,18 @@ fn shutting_down_a_session_never_queues_behind_the_quit() {
 		sidecar.set_terminate_grace(QUIT_HELD_OPEN);
 		tokio::join!(
 			async {
-				tokio::time::timeout(PATIENCE, shutdown_session(&state, &a_scope_value()))
-					.await
-					.expect("the shutdown never waited on the quit held open");
+				tokio::time::timeout(
+					PATIENCE,
+					shutdown_session(app.handle(), &state, &a_scope_value()),
+				)
+				.await
+				.expect("the shutdown never waited on the quit held open");
 				finished.lock().expect("order").push("shutdown");
 				let killed = unsafe { libc::kill(sidecar.pid() as libc::pid_t, libc::SIGKILL) };
 				assert_eq!(killed, 0, "the sidecar ends: {}", std::io::Error::last_os_error());
 			},
 			async {
-				tokio::time::timeout(PATIENCE, terminate_session(&state))
+				tokio::time::timeout(PATIENCE, terminate_session(app.handle(), &state))
 					.await
 					.expect("the quit ends once its sidecar is gone");
 				finished.lock().expect("order").push("terminate");

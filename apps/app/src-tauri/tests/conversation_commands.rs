@@ -3481,7 +3481,7 @@ fn a_companion_cancelling_before_its_submit_spares_the_turn_another_companion_wa
 		"the handed turn was not recorded as submitted"
 	);
 	assert_eq!(completed_at(&app, "t1"), None, "the cancel closed a turn another companion holds");
-	tauri::async_runtime::block_on(terminate_session(&writes));
+	tauri::async_runtime::block_on(terminate_session(app.handle(), &writes));
 }
 
 #[cfg(feature = "fake-claude")]
@@ -3565,7 +3565,7 @@ fn a_question_line_the_host_wrote_answers_its_seq_and_refuses_every_front_write(
 
 	assert_eq!(opened, json!(seq), "the front open did not answer the stored seq");
 	assert_eq!(a_question_row(&app), Some(stored), "a front write reached the host question line");
-	tauri::async_runtime::block_on(terminate_session(&app.state::<AgentState>()));
+	tauri::async_runtime::block_on(terminate_session(app.handle(), &app.state::<AgentState>()));
 }
 
 fn agent_text(app: &App<MockRuntime>, bot_id: &str) -> String {

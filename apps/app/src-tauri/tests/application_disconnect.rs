@@ -55,7 +55,10 @@ fn a_bot_disconnect_revokes_and_deletes_the_grant_its_space_holds() {
 		URL.to_owned(),
 	));
 	let kept = store::values(&root, &space).expect("the space scope is readable");
-	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		app.state::<AgentState>().inner(),
+	));
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 
 	assert_eq!(settled, Ok(Disconnected { revoked: true, detail: None }));

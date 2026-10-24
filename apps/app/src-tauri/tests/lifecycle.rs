@@ -155,8 +155,8 @@ fn two_concurrent_starts_leave_one_session_and_one_sidecar() {
 		);
 		assert_eq!(live_groups().len(), 1, "the refused start spawned a sidecar of its own");
 
-		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.state::<AgentState>().inner()).await;
+		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 		assert!(live_groups().is_empty(), "the sidecar outlived the host it served");
 	});
 }
@@ -178,8 +178,8 @@ fn a_start_racing_a_shutdown_never_interleaves() {
 		);
 		assert!(live_groups().len() <= 1, "the two transitions each spawned a sidecar");
 
-		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.state::<AgentState>().inner()).await;
+		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 		assert!(live_groups().is_empty(), "a sidecar outlived both transitions");
 	});
 
@@ -203,7 +203,7 @@ fn a_quit_during_a_start_sweeps_the_group_and_closes_the_gate_for_good() {
 			let orphan = recorded_pid(&pid_file).expect("the wait only returns once it is there");
 			assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
-			terminate_session(app.state::<AgentState>().inner()).await;
+			terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 			poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 		});
 
@@ -248,7 +248,7 @@ fn a_quit_inside_a_restart_never_installs_the_session_it_was_building() {
 
 		let (restarted, ()) = tokio::join!(start(&app), async {
 			opening_signalled(&listener).await;
-			terminate_session(app.state::<AgentState>().inner()).await;
+			terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 		});
 
 		assert!(
@@ -291,7 +291,7 @@ fn a_quit_ends_every_bots_session_and_not_only_the_last_one_started() {
 			"starting the second bot replaced the first one's session"
 		);
 
-		terminate_session(app.state::<AgentState>().inner()).await;
+		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 
 		assert!(live_groups().is_empty(), "the quit left a group behind");
 		for pid in running {
@@ -404,8 +404,8 @@ fn ended_mid_turn(end: impl AsyncFnOnce(&App<MockRuntime>)) {
 		end(&app).await;
 
 		assert_the_run_was_ended(&app, &heard, updated_before).await;
-		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
-		terminate_session(app.state::<AgentState>().inner()).await;
+		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
+		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 	});
 
 	std::env::remove_var("FAKE_AGENT_SCENARIO");
@@ -423,13 +423,13 @@ fn a_session_replaced_mid_turn_ends_its_run_before_the_new_one_is_installed() {
 #[test]
 fn a_session_shut_down_mid_turn_ends_its_run_as_cancelled() {
 	ended_mid_turn(async |app| {
-		shutdown_session(app.state::<AgentState>().inner(), &scope()).await;
+		shutdown_session(app.handle(), app.state::<AgentState>().inner(), &scope()).await;
 	});
 }
 
 #[test]
 fn a_quit_mid_turn_ends_the_run_before_the_sidecar_is_terminated() {
 	ended_mid_turn(async |app| {
-		terminate_session(app.state::<AgentState>().inner()).await;
+		terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 	});
 }

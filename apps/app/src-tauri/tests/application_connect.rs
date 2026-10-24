@@ -105,7 +105,10 @@ fn connected_holding(
 		URL.to_owned(),
 	));
 	let kept = store::values(&root, &scope).expect("the scope is readable");
-	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		app.state::<AgentState>().inner(),
+	));
 	let flows = fs::read_to_string(&log).unwrap_or_default().lines().map(str::to_owned).collect();
 	let _ = fs::remove_file(&log);
 	Connected { settled, kept, flows }

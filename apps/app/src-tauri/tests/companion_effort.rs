@@ -129,7 +129,10 @@ fn the_agent_file_carries_only_an_effort_the_catalogue_offers_for_the_model() {
 		"an effort was held back for a model the catalogue never answered for"
 	);
 
-	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		app.state::<AgentState>().inner(),
+	));
 	std::env::remove_var("FAKE_AGENT_MODELS");
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }
