@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react"
+import type { CSSProperties } from "react"
 import { expect } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
@@ -139,18 +139,6 @@ const LONG_ANSWERS: AnsweredQuestion[] = [
 	},
 ]
 
-type SpaceColumnProps = { children: ReactNode; width?: string }
-
-const SpaceColumn = ({ children, width = "max-w-2xl" }: SpaceColumnProps) => (
-	<div
-		data-space-tint="green"
-		style={{ "--space-tint": blotTint("green") } as CSSProperties}
-		className={cn("mx-auto flex flex-col px-6", width)}
-	>
-		{children}
-	</div>
-)
-
 type AnsweredRunProps = {
 	ask: string
 	author: AnsweredQuestionAuthor
@@ -158,8 +146,17 @@ type AnsweredRunProps = {
 	width?: string
 }
 
-const AnsweredRun = ({ ask, author, questions, width }: AnsweredRunProps) => (
-	<SpaceColumn width={width}>
+const AnsweredRun = ({
+	ask,
+	author,
+	questions,
+	width = "max-w-2xl",
+}: AnsweredRunProps) => (
+	<div
+		data-space-tint="green"
+		style={{ "--space-tint": blotTint("green") } as CSSProperties}
+		className={cn("mx-auto flex flex-col px-6", width)}
+	>
 		<TurnGroup>
 			<AssistantTurn
 				copyText={ask}
@@ -177,7 +174,7 @@ const AnsweredRun = ({ ask, author, questions, width }: AnsweredRunProps) => (
 				/>
 			</AssistantTurn>
 		</TurnGroup>
-	</SpaceColumn>
+	</div>
 )
 
 const meta = preview.meta({
@@ -358,9 +355,9 @@ export const LongContent = meta.story({
 	},
 	play: async ({ canvasElement }) => {
 		const card = cardIn(canvasElement)
-		const { right } = card.getBoundingClientRect()
+		const { right, width } = card.getBoundingClientRect()
 
-		await expect(card.getBoundingClientRect().width).toBeGreaterThanOrEqual(360)
+		await expect(width).toBeGreaterThanOrEqual(360)
 		for (const row of choicesIn(card)) {
 			await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth)
 			await expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(right)
