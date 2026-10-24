@@ -21,10 +21,7 @@ import { DaySeparator } from "@workspace/ui/components/day-separator"
 import { HeaderConversationButton } from "@workspace/ui/components/header-conversation-button"
 import { HeaderIdentityButton } from "@workspace/ui/components/header-identity-button"
 import { InitialsAvatar } from "@workspace/ui/components/initials-avatar"
-import {
-	MessageQuote,
-	type QuotedMessage,
-} from "@workspace/ui/components/message-quote"
+import type { QuotedMessage } from "@workspace/ui/components/message-quote"
 import type { MissionBot } from "@workspace/ui/components/mission"
 import type { MissionCardWrap } from "@workspace/ui/components/mission-card"
 import { MissionDetailSkeleton } from "@workspace/ui/components/mission-detail-skeleton"
@@ -60,6 +57,7 @@ import {
 	UnresolvedMentionsNotice,
 } from "@/components/thread-notice"
 import {
+	AnsweredPrompt,
 	ApprovalPrompt,
 	QuestionPrompt,
 	SpokenApproval,
@@ -86,6 +84,10 @@ import {
 	SessionApplicationsContext,
 } from "@/lib/applications/use-session-application"
 import { useRosterClock } from "@/lib/bots/use-roster-clock"
+import {
+	type AnsweredCards,
+	answeredCardsIn,
+} from "@/lib/chat/answered-question"
 import type { AttachmentsOwner } from "@/lib/chat/attachments-contract"
 import type { AttachmentsController } from "@/lib/chat/attachments-controller"
 import type { ChatError } from "@/lib/chat/chat-state"
@@ -96,6 +98,7 @@ import { messageWithAttachments } from "@/lib/chat/message-attachments"
 import { pinTimestamp } from "@/lib/chat/pin-timestamp"
 import type { PinnedBubble } from "@/lib/chat/pinned-bubbles"
 import { isPostedAnswer } from "@/lib/chat/posted-question"
+import { type AskedBubble, askedQuestionOf } from "@/lib/chat/question-run"
 import {
 	bubbleIdOf,
 	emptyStateStatusFor,
@@ -124,10 +127,6 @@ import {
 	type ThreadPermission,
 	type ThreadQuotes,
 } from "@/lib/chat/thread-contract"
-import {
-	type AskedBubble,
-	useAskedQuestion,
-} from "@/lib/chat/use-asked-question"
 import type { StagedFiles } from "@/lib/chat/use-attachments"
 import { useAttachments } from "@/lib/chat/use-attachments"
 import { useMessageLanding } from "@/lib/chat/use-message-landing"
@@ -527,38 +526,6 @@ const ThreadApproval = ({
 	)
 }
 
-type ThreadPendingProps = ThreadApprovalProps & {
-	questionRecall?: QuotedMessage
-}
-
-const ThreadPending = ({
-	permission,
-	authors,
-	responder,
-	questionRecall,
-}: ThreadPendingProps) => {
-	const t = useChatCopy()
-
-	return (
-		<>
-			{questionRecall ? (
-				<MessageQuote
-					{...questionRecall}
-					label={t("screen.question.recall", {
-						author: questionRecall.author,
-					})}
-					size="md"
-				/>
-			) : null}
-			<ThreadApproval
-				authors={authors}
-				permission={permission}
-				responder={responder}
-			/>
-		</>
-	)
-}
-
 type ConversationEmptySlotProps = {
 	conversation: Conversation
 	present: RosterBot[]
@@ -642,8 +609,7 @@ type ThreadRunProps = {
 	presentation: RunPresentation
 	causes: ThreadCauses
 	rejectedPromptId: string | null
-	asked: AskedBubble | null
-	responder: PromptResponder
+	answered: AnsweredCards
 	botFace: ThreadFace | null
 	authors: ThreadAuthors
 	quotes: ThreadQuotes
@@ -660,8 +626,7 @@ const ThreadRun = ({
 	presentation,
 	causes,
 	rejectedPromptId,
-	asked,
-	responder,
+	answered,
 	botFace,
 	authors,
 	quotes,
@@ -675,14 +640,14 @@ const ThreadRun = ({
 	<TurnGroup carriesMark={presentation.isMarked}>
 		{run.map((row, index) => {
 			const bubble = bubbleIdOf(row.messageId, row.blockIndex)
-			const asking = asked?.messageId === row.messageId ? asked : null
+			const card = answered.get(row.messageId)
 
 			return (
 				<ThreadTurn
 					anchor={bubble}
-					asking={
-						asking ? (
-							<QuestionPrompt request={asking.request} responder={responder} />
+					card={
+						card ? (
+							<AnsweredPrompt card={card} readerName={readerName} />
 						) : undefined
 					}
 					author={row.authorBotId ? authors.get(row.authorBotId) : undefined}
@@ -775,6 +740,26 @@ const readRuns = ({
 		causes: summonedCauses,
 	}
 }
+
+const hiddenRowIdsOf = (
+	asked: AskedBubble | null,
+	answered: AnsweredCards,
+): ReadonlySet<string> =>
+	new Set([
+		...(asked ? [asked.messageId] : []),
+		...[...answered.values()].map(({ answer }) => answer.id),
+	])
+
+const withoutHiddenRows = (
+	{ runs, causes }: ReadRuns,
+	hiddenIds: ReadonlySet<string>,
+): ReadRuns => ({
+	runs: toRuns(
+		runs.flat().filter(({ messageId }) => !hiddenIds.has(messageId)),
+		causes,
+	),
+	causes,
+})
 
 type RunRowsProps = Omit<ThreadRunProps, "run" | "presentation"> & {
 	runs: TranscriptRow[][]
@@ -1401,7 +1386,6 @@ type ThreadAnnotations = ReturnType<typeof useThreadAnnotations>
 const useThreadActions = (
 	{ thread, bots: known, drafts, signIn, spaceId }: ThreadViewProps,
 	seats: ThreadSeats,
-	annotations: ThreadAnnotations,
 ) => {
 	const {
 		composerRef,
@@ -1414,7 +1398,6 @@ const useThreadActions = (
 		state,
 		t,
 	} = seats
-	const { toQuote } = annotations
 
 	const seatMentioned = useSeatMentioned({
 		conversation: facts.conversation,
@@ -1487,18 +1470,22 @@ const useThreadActions = (
 	}, [controller, scrollerRef])
 	const hasNewer = state.hasNewer
 
-	const threadRuns = readRuns({
+	const readThreadRuns = readRuns({
 		messages: state.messages,
 		missionSeat,
 		isSoloThread,
 		causes: facts.causes,
 		t,
 	})
-	const { asked, leadId, recall } = useAskedQuestion({
-		question: facts.question,
-		runs: threadRuns.runs,
-		toQuote,
-	})
+	const { asked, askerBotId, leadId } = askedQuestionOf(
+		facts.question,
+		readThreadRuns.runs,
+	)
+	const answered = answeredCardsIn(state.messages)
+	const threadRuns = withoutHiddenRows(
+		readThreadRuns,
+		hiddenRowIdsOf(asked, answered),
+	)
 	useQuestionLanding({
 		conversationKey: facts.id,
 		isAsking: facts.question !== null,
@@ -1508,7 +1495,9 @@ const useThreadActions = (
 	})
 
 	return {
+		answered,
 		asked,
+		askerBotId,
 		botController,
 		hasNewer,
 		holdReply,
@@ -1518,7 +1507,6 @@ const useThreadActions = (
 		loadOlder,
 		offerSignIn,
 		readDraft,
-		recall,
 		releaseReply,
 		rememberDraft,
 		replyTarget,
@@ -1546,7 +1534,6 @@ const threadRowsOf = (
 		isSoloThread,
 		missionSeat,
 		present,
-		promptResponder,
 		reader,
 		state,
 	} = seats
@@ -1564,8 +1551,14 @@ const threadRowsOf = (
 		toQuote,
 		wrapMissionCard,
 	} = annotations
-	const { asked, botController, holdReply, isSentInMount, retry, threadRuns } =
-		actions
+	const {
+		answered,
+		botController,
+		holdReply,
+		isSentInMount,
+		retry,
+		threadRuns,
+	} = actions
 	const { runs, causes } = threadRuns
 	const presentations = runPresentationsOf({
 		runs,
@@ -1574,7 +1567,7 @@ const threadRowsOf = (
 		isWorking: facts.botWork !== null,
 	})
 	const runRows = toRunRows({
-		asked,
+		answered,
 		authors,
 		botFace,
 		causes,
@@ -1588,7 +1581,6 @@ const threadRowsOf = (
 		quotes,
 		readerName: reader,
 		rejectedPromptId: facts.rejectedPromptId,
-		responder: promptResponder,
 		runs,
 		toQuote,
 	})
@@ -1655,7 +1647,7 @@ const threadRowsOf = (
 const useThreadView = (props: ThreadViewProps) => {
 	const seats = useThreadSeats(props)
 	const annotations = useThreadAnnotations(props, seats)
-	const actions = useThreadActions(props, seats, annotations)
+	const actions = useThreadActions(props, seats)
 
 	return {
 		...seats,
@@ -1664,6 +1656,15 @@ const useThreadView = (props: ThreadViewProps) => {
 		...threadRowsOf(props, seats, annotations, actions),
 	}
 }
+
+type AskerSource = {
+	askerBotId?: string | null
+	authors: ThreadAuthors
+	botFace: ThreadFace | null
+}
+
+const askerNameOf = ({ askerBotId, authors, botFace }: AskerSource) =>
+	(askerBotId ? authors.get(askerBotId)?.name : undefined) ?? botFace?.name
 
 function ThreadView(props: ThreadViewProps) {
 	const { activityPanel, thread, bots: known, runtimes, onOpenMission } = props
@@ -1685,7 +1686,14 @@ function ThreadView(props: ThreadViewProps) {
 			anchorOnSend={view.isSoloThread}
 			busy={view.facts.isBusy}
 			composer={
-				departure ? undefined : (
+				departure ? undefined : view.asked ? (
+					<QuestionPrompt
+						companionName={askerNameOf(view)}
+						key={view.asked.request.id}
+						request={view.asked.request}
+						responder={view.promptResponder}
+					/>
+				) : (
 					<ThreadComposerSlot
 						bots={known}
 						canAttach={view.canAttach}
@@ -1759,16 +1767,15 @@ function ThreadView(props: ThreadViewProps) {
 			onFollowChange={view.controller.follow}
 			pending={
 				departure ? undefined : (
-					<ThreadPending
+					<ThreadApproval
 						authors={view.authors}
 						permission={view.facts.permission}
-						questionRecall={view.recall}
 						responder={view.promptResponder}
 					/>
 				)
 			}
 			reply={
-				view.replyTarget
+				view.replyTarget && !view.asked
 					? { ...view.toQuote(view.replyTarget), onDismiss: view.releaseReply }
 					: undefined
 			}

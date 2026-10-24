@@ -5,29 +5,29 @@ import type { QuestionRequest } from "../agent/contract"
 
 type QuestionRun = {
 	card: TranscriptRow
-	lead: TranscriptRow
-	context?: TranscriptRow
+	lead?: TranscriptRow
 }
 
-const CONTEXT_LINES = 2
+export type AskedBubble = {
+	messageId: string
+	request: QuestionRequest
+}
 
-const isSaid = (row: TranscriptRow) => row.text.trim().length > 0
+export type AskedQuestion = {
+	asked: AskedBubble | null
+	askerBotId?: string | null
+	leadId?: string
+}
 
 const runHolding = (
 	run: TranscriptRow[],
 	cardId: string,
 ): QuestionRun | null => {
-	const cardIndex = run.findIndex((row) => row.messageId === cardId)
-	const card = run[cardIndex]
-	const lead = run[0]
-	if (!card || !lead) {
+	const card = run.find((row) => row.messageId === cardId)
+	if (!card) {
 		return null
 	}
-	return {
-		card,
-		lead,
-		context: run.slice(0, cardIndex).findLast(isSaid),
-	}
+	return { card, lead: run.find((row) => row.messageId !== cardId) }
 }
 
 export const questionRunOf = (
@@ -47,13 +47,19 @@ export const questionRunOf = (
 export const bubbleIdOfRow = (row: TranscriptRow): string =>
 	bubbleIdOf(row.messageId, row.blockIndex)
 
-const firstLinesOf = (text: string): string =>
-	text.trim().split("\n").slice(0, CONTEXT_LINES).join("\n")
+const NOTHING_ASKED: AskedQuestion = { asked: null }
 
-export const recallExcerptOf = (
-	request: QuestionRequest,
-	context: TranscriptRow | undefined,
-): string => {
-	const question = request.questions[0]?.question ?? ""
-	return context ? `${firstLinesOf(context.text)}\n${question}` : question
+export const askedQuestionOf = (
+	question: QuestionRequest | null,
+	runs: TranscriptRow[][],
+): AskedQuestion => {
+	const run = question ? questionRunOf(runs, question) : null
+	if (!question || !run) {
+		return NOTHING_ASKED
+	}
+	return {
+		asked: { messageId: run.card.messageId, request: question },
+		askerBotId: run.card.authorBotId,
+		leadId: run.lead && bubbleIdOfRow(run.lead),
+	}
 }

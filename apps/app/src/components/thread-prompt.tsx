@@ -1,5 +1,6 @@
-import { useContext } from "react"
+import { useContext, useState } from "react"
 
+import { AnsweredQuestionCard } from "@workspace/ui/components/answered-question-card"
 import type { MessageAuthor } from "@workspace/ui/components/message"
 import {
 	ToolApproval,
@@ -19,10 +20,12 @@ import type {
 } from "@/lib/agent/contract"
 import type { Application } from "@/lib/applications/application-port"
 import { ConversationApplicationsContext } from "@/lib/applications/use-conversation-installs"
+import type { AnsweredCard } from "@/lib/chat/answered-question"
 import {
 	isPostedRequest,
 	type PostedAskedQuestion,
 } from "@/lib/chat/posted-question"
+import { usePersonOf } from "@/lib/chat/thread-authorship"
 import type { PromptResponder } from "@/lib/chat/use-prompt-responder"
 
 type ApprovalPromptProps = {
@@ -85,6 +88,7 @@ const toQuestionItem = ({
 type QuestionPromptProps = {
 	request: QuestionRequest
 	responder: PromptResponder
+	companionName?: string
 }
 
 const markOf = (
@@ -95,12 +99,21 @@ const markOf = (
 		? curated.find(({ name }) => name === subject.application)?.logo
 		: undefined
 
-export const QuestionPrompt = ({ request, responder }: QuestionPromptProps) => {
+export const QuestionPrompt = ({
+	request,
+	responder,
+	companionName,
+}: QuestionPromptProps) => {
 	const applications = useContext(ConversationApplicationsContext)
 	const mark = markOf(request.subject, applications?.curated ?? [])
+	const [isMinimised, setIsMinimised] = useState(false)
 
 	return (
 		<ToolQuestion
+			companionName={companionName}
+			minimised={isMinimised}
+			onExpand={() => setIsMinimised(false)}
+			onMinimise={() => setIsMinimised(true)}
 			onAnswer={(answers) => {
 				void responder.answer(request.id, answers)
 			}}
@@ -115,6 +128,31 @@ export const QuestionPrompt = ({ request, responder }: QuestionPromptProps) => {
 				...toQuestionItem(asked),
 				mark,
 			}))}
+		/>
+	)
+}
+
+type AnsweredPromptProps = {
+	card: AnsweredCard
+	readerName: string
+}
+
+export const AnsweredPrompt = ({
+	card: { answer, questions },
+	readerName,
+}: AnsweredPromptProps) => {
+	const personOf = usePersonOf()
+	const person = personOf(answer)
+
+	return (
+		<AnsweredQuestionCard
+			answeredAt={answer.createdAt}
+			author={
+				person === undefined
+					? { name: readerName, isViewer: true }
+					: { name: person }
+			}
+			questions={questions}
 		/>
 	)
 }

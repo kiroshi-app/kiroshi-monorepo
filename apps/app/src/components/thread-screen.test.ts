@@ -1292,6 +1292,61 @@ const rowIndexOf = (text: string) =>
 
 const askedForm = () => screen.getByRole("form", { name: "Which wall holds?" })
 
+const ASKED_WITH_OPTIONS: AgentEvent[] = [
+	{
+		type: "questionRequested",
+		request: {
+			id: "ask-2",
+			questions: [
+				{
+					header: "Which wall",
+					question: "Which wall holds?",
+					options: [
+						{ label: "North", description: "Faces the sun", preview: null },
+						{ label: "South", description: null, preview: null },
+					],
+					multiSelect: false,
+				},
+			],
+		},
+	},
+]
+
+const composerField = () => screen.queryByRole("textbox", { name: "Message" })
+
+const answeredCardFrom = () =>
+	document
+		.querySelector('[data-slot="answered-question-card"]')
+		?.closest("[data-from]")
+		?.getAttribute("data-from") ?? null
+
+const answeredCardText = () =>
+	document.querySelector('[data-slot="answered-question-card"]')?.textContent ??
+	null
+
+const pickNorth = async () => {
+	await act(async () => {
+		fireEvent.click(screen.getByRole("radio", { name: "North" }))
+	})
+	await settle()
+}
+
+const askedSolo = async () => {
+	const solo = await soloOf({})
+	const shown = render(screenOf(solo.thread()), {
+		wrapper: createQueryTestWrapper().wrapper,
+	})
+	await settle()
+	await solo.send("hold the wall")
+	await solo.push([...FIRST_TOKEN, ...ASKED_WITH_OPTIONS])
+	const rerender = async () => {
+		shown.rerender(screenOf(solo.thread()))
+		await settle()
+	}
+	await rerender()
+	return { solo, rerender }
+}
+
 const elapsedText = () =>
 	document.querySelector('[data-slot="bot-working-elapsed"]')?.textContent ??
 	null
@@ -2274,15 +2329,61 @@ describe("ThreadScreen", () => {
 		rerender(screenOf(solo.thread()))
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(rowIndexOf("the walls hold")).toBeLessThan(
-			rowIndexOf("Which wall holds?"),
-		)
+		expect(rowIndexOf("Which wall holds?")).toBe(-1)
 		expect(askedForm()).toBeTruthy()
 
 		await solo.push(WRITING_LANDED)
 		rerender(screenOf(solo.thread()))
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
+	})
+
+	it("asks in the composer slot instead of a bubble", async () => {
+		await askedSolo()
+
+		expect(askedForm()).toBeTruthy()
+		expect(composerField()).toBeNull()
+		expect(rowIndexOf("Which wall holds?")).toBe(-1)
+		expect(screen.getByText("Return to send.")).toBeTruthy()
+		expect(screen.queryByText(/Press 1-2/)).toBeNull()
+	})
+
+	it("folds into the waiting bar and unfolds with the pick still held", async () => {
+		await askedSolo()
+
+		await pickNorth()
+		await press("Minimize")
+
+		expect(screen.queryByRole("form", { name: "Which wall holds?" })).toBeNull()
+		expect(screen.getByText("Ada is waiting on your answer")).toBeTruthy()
+		expect(composerField()).toBeNull()
+
+		await press("Answer")
+
+		expect(askedForm()).toBeTruthy()
+		expect(
+			screen.getByRole("radio", { name: "North" }).getAttribute("aria-checked"),
+		).toBe("true")
+	})
+
+	it("brings the composer back and records the answer as a card of the companion", async () => {
+		const { solo, rerender } = await askedSolo()
+
+		await pickNorth()
+		await press("Send answers")
+		await solo.push([
+			{ type: "permissionResolved", id: "ask-2", decision: "allowOnce" },
+		])
+		await rerender()
+
+		expect(composerField()).toBeTruthy()
+		expect(screen.queryByRole("form", { name: "Which wall holds?" })).toBeNull()
+		expect(answeredCardText()).toContain("You answered")
+		expect(answeredCardText()).toContain("Faces the sun")
+		expect(
+			transcriptRows().filter((row) => row.includes("North")),
+		).toHaveLength(1)
+		expect(answeredCardFrom()).toBe("assistant")
 	})
 
 	it("counts the solo working row from the instant the turn began", async () => {
@@ -2442,9 +2543,7 @@ describe("ThreadScreen", () => {
 		await settle()
 
 		expect(screen.getByText("the walls hold")).toBeTruthy()
-		expect(rowIndexOf("the walls hold")).toBeLessThan(
-			rowIndexOf("Which wall holds?"),
-		)
+		expect(rowIndexOf("Which wall holds?")).toBe(-1)
 		expect(askedForm()).toBeTruthy()
 
 		act(() => {
