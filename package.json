@@ -30,6 +30,7 @@
 		"test:red-main": "bun test scripts/red-main.test.ts",
 		"test:ci": "bun test scripts/ci.test.ts",
 		"test:release": "bun test scripts/release.test.ts",
+		"test:slot": "bun test scripts/slot.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",
 		"snapshots": "bun apps/app/sidecar/scripts/generate.ts && UPDATE_SNAPSHOTS=1 bun test --cwd apps/app/sidecar src/contracts.test.ts && UPDATE_SNAPSHOTS=1 cargo test --manifest-path apps/app/src-tauri/Cargo.toml --features fake-claude --test contracts && UPDATE_SNAPSHOTS=1 cargo test --manifest-path apps/app/src-tauri/Cargo.toml --features fake-claude --lib member_socket::tests::the_committed_schema_is_the_one_the_specta_types_produce",
