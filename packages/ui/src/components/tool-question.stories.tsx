@@ -94,7 +94,7 @@ const ASKED_BY_THE_SESSION =
 	"`apps/app/src/lib/onboarding/onboarding-steps.ts:52` posts this step as a question of its own, and `apps/app/src/components/thread-prompt.tsx:103` draws it with no Skip, since a posted request cannot be denied."
 
 const POSTED_BY_ONBOARDING =
-	"`apps/app/src/components/thread-prompt.tsx:103` mounts the card for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
+	"`apps/app/src/components/thread-prompt.tsx:103` mounts the panel for the `AskUserQuestion` the session raised, inside the turn `apps/app/src/components/thread-screen.tsx:628` is asking on."
 
 const meta = preview.meta({
 	title: "Conversation/Tools/ToolQuestion",
@@ -882,7 +882,7 @@ export const LongHeaderScrolls = meta.story({
 		docs: {
 			description: {
 				story:
-					"A header too long for a 320px column, next to a short one. A tab never wraps and never grows past the strip, so a header wider than the whole column ends in an ellipsis instead of pushing the first tab off the button's edge: the strip keeps its one line inside the card and hands the tabs out of view to a sideways scroll, with no scrollbar drawn over them. Check that both tabs share a height and a top edge, that the segment track starts on the same line as Skip below, that the strip stops at the edge of the column, that the question below stays clear of the strip, and that walking the strip with the arrow keys brings the tab it lands on back into view. " +
+					"A header too long for a 320px column, next to a short one, in the segmented control. A segment never wraps and never grows past the track, so a header wider than the whole column ends in an ellipsis instead of pushing the first segment out of the panel: the track keeps its one line inside the panel and hands the segments out of view to a sideways scroll, with no scrollbar drawn over them. Check that both segments share a height and a top edge, that the track starts on the same line as Skip below, that the track stops at the edge of the column, that the question below stays clear of it, and that walking the segmented control with the arrow keys brings the segment it lands on back into view. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -928,7 +928,7 @@ export const ArrowKeyTabs = meta.story({
 		docs: {
 			description: {
 				story:
-					"The tab strip walked with the arrow keys. A tab here changes nothing but which question is on screen, so walking is opening: the arrows select as they move and the card follows without a second press. Check that the question under the strip is the one the arrows landed on. The search palette does the opposite, because a tab there starts a query. " +
+					"The segmented control walked with the arrow keys. A segment changes nothing but which question is on screen, so walking is opening: the arrows select as they move and the panel follows without a second press. Check that the question under the segmented control is the one the arrows landed on. The search palette does the opposite, because selecting there starts a query. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
