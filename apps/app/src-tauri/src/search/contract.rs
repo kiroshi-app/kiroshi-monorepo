@@ -133,16 +133,16 @@ pub struct CatalogueMission {
 }
 
 impl CatalogueMission {
-	pub fn present(self, present: MissionPresence) -> Self {
+	pub fn with_presence(self, presence: MissionPresence) -> Self {
 		Self {
-			liveness: present.liveness,
-			pending_prompt: present.pending_prompt,
-			working_bot_ids: present.working_bot_ids,
+			liveness: presence.liveness,
+			pending_prompt: presence.pending_prompt,
+			working_bot_ids: presence.working_bot_ids,
 			..self
 		}
 	}
 
-	pub fn stored_presence(&self) -> MissionPresence {
+	pub fn presence(&self) -> MissionPresence {
 		MissionPresence {
 			liveness: self.liveness,
 			pending_prompt: self.pending_prompt.clone(),

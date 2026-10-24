@@ -72,9 +72,8 @@ async fn observed_chats<R: Runtime>(
 }
 
 fn observed_mission<R: Runtime>(app: &AppHandle<R>, hit: CatalogueMission) -> CatalogueMission {
-	let stored = hit.stored_presence();
-	let observed = present(app, &hit.thread_conversation_id, &hit.bot_id, stored);
-	hit.present(observed)
+	let observed = present(app, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
+	hit.with_presence(observed)
 }
 
 #[cfg(test)]

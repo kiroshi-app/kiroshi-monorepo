@@ -227,18 +227,18 @@ pub(crate) fn a_pending_prompt(conversation_id: &str, kind: PromptKind) -> Pendi
 		prompt_id: "p1".to_owned(),
 		conversation_id: conversation_id.to_owned(),
 		kind,
-		request: a_request_of(kind, "p1"),
+		request: a_request(kind),
 		asked_at: 1,
 	}
 }
 
 #[cfg(test)]
-pub(crate) fn a_request_of(kind: PromptKind, prompt_id: &str) -> String {
+fn a_request(kind: PromptKind) -> String {
 	use crate::agent::contract::AskedQuestion;
 
 	let request = match kind {
 		PromptKind::Question => serde_json::to_value(QuestionRequest {
-			id: prompt_id.to_owned(),
+			id: "p1".to_owned(),
 			questions: vec![AskedQuestion {
 				header: "Branch".to_owned(),
 				question: "Which branch ships?".to_owned(),
@@ -248,7 +248,7 @@ pub(crate) fn a_request_of(kind: PromptKind, prompt_id: &str) -> String {
 			subject: None,
 		}),
 		PromptKind::Permission => serde_json::to_value(PermissionRequest {
-			id: prompt_id.to_owned(),
+			id: "p1".to_owned(),
 			tool_name: "Bash".to_owned(),
 			title: "Run git push".to_owned(),
 			detail: None,
