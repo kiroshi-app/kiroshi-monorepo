@@ -55,19 +55,45 @@ final class SyntaxHighlighting {
             let drawn = highlightr?.highlight(code.text, as: language)
         else { return nil }
         var highlighted = AttributedString()
+        var isAfterSwiftTypeDeclaration = false
         drawn.enumerateAttribute(
             .foregroundColor, in: NSRange(location: 0, length: drawn.length)
         ) { color, range, _ in
-            var piece = AttributedString(drawn.attributedSubstring(from: range).string)
-            if let role = (color as? UIColor).flatMap(Self.role) {
-                piece.foregroundColor = Color("syntax-\(role.rawValue)")
-                if role == .keyword {
-                    piece.font = CodeBlockCard.font.bold()
-                }
+            let text = drawn.attributedSubstring(from: range).string
+            let role = (color as? UIColor).flatMap(Self.role)
+            if isAfterSwiftTypeDeclaration, role == nil {
+                highlighted += Self.declaredTypeName(in: text)
+            } else {
+                highlighted += Self.piece(text, role: role)
             }
-            highlighted += piece
+            isAfterSwiftTypeDeclaration =
+                language == "swift" && role == .keyword
+                && Self.swiftTypeDeclarations.contains(text)
         }
         return highlighted
+    }
+
+    private static let swiftTypeDeclarations: Set<String> = ["struct", "class", "enum", "protocol"]
+
+    private static func declaredTypeName(in text: String) -> AttributedString {
+        let nameStart = text.firstIndex { !$0.isWhitespace } ?? text.endIndex
+        let nameEnd =
+            text[nameStart...].firstIndex { !($0.isLetter || $0.isNumber || $0 == "_") }
+            ?? text.endIndex
+        return piece(String(text[..<nameStart]), role: nil)
+            + piece(String(text[nameStart..<nameEnd]), role: .type)
+            + piece(String(text[nameEnd...]), role: nil)
+    }
+
+    private static func piece(_ text: String, role: Role?) -> AttributedString {
+        var piece = AttributedString(text)
+        if let role {
+            piece.foregroundColor = Color("syntax-\(role.rawValue)")
+            if role == .keyword {
+                piece.font = CodeBlockCard.font.bold()
+            }
+        }
+        return piece
     }
 
     private static func role(of color: UIColor) -> Role? {
