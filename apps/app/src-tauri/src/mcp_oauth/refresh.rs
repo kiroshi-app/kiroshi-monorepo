@@ -312,6 +312,7 @@ mod tests {
 
 	use super::*;
 	use crate::agent::protocol::{OauthFailureKind, OauthStep};
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{OAUTH_EXPIRES_AT, OAUTH_REASON};
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -338,7 +339,7 @@ mod tests {
 	}
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("mcp-refresh-{name}"))
+		fixture_root(&format!("mcp-refresh-{name}"))
 	}
 
 	fn a_bot() -> EnvOwner {

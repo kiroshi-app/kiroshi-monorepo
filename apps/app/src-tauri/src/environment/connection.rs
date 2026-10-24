@@ -26,11 +26,12 @@ pub fn held(root: &Path) -> Result<Values, EnvError> {
 mod tests {
 
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{EnvOwner, API_KEY, SUBSCRIPTION_TOKEN};
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("connection-{name}"))
+		fixture_root(&format!("connection-{name}"))
 	}
 
 	fn a_bot() -> EnvOwner {

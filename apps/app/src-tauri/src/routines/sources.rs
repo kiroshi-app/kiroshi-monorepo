@@ -52,10 +52,11 @@ mod tests {
 	use serde_json::json;
 
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_bundle(name: &str) -> RemovedOnDrop {
-		let path = crate::db::connection::fixture_root(&format!("triggers-{name}"));
+		let path = fixture_root(&format!("triggers-{name}"));
 		fs::create_dir_all(&path).expect("the bundle directory is there");
 		path
 	}

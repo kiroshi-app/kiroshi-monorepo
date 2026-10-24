@@ -482,6 +482,7 @@ async fn revoked<R: Runtime>(app: &AppHandle<R>, url: &str, held: &Values) -> Di
 mod tests {
 	use super::*;
 	use crate::agent::protocol::{OauthFailure, OauthFailureKind};
+	use crate::db::connection::fixture_root;
 	use crate::mcp_oauth::status::ApplicationStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::an_app_of_its_own;
@@ -643,7 +644,7 @@ mod tests {
 
 	#[test]
 	fn a_server_a_session_reported_waiting_reads_connected_once_the_person_authorizes_it() {
-		let root = crate::db::connection::fixture_root("mcp-oauth-connect-clears");
+		let root = fixture_root("mcp-oauth-connect-clears");
 		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 		let reports = ApplicationReports::default();
 		reports.record("b1", "granola", Standing::NeedsAuth { reason: None });
@@ -708,7 +709,7 @@ mod tests {
 	}
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("mcp-oauth-commands-{name}"))
+		fixture_root(&format!("mcp-oauth-commands-{name}"))
 	}
 
 	fn read_row(root: &Path, owner: &EnvOwner) -> ApplicationRow {

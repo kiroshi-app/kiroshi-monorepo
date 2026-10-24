@@ -465,11 +465,12 @@ fn touched(repository: &Repository, commit: &Commit) -> Result<Vec<String>, git2
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use git2::{DiffFormat, DiffOptions};
 
 	fn a_bundle(name: &str) -> RemovedOnDrop {
-		let bundle = crate::db::connection::fixture_root(&format!("git-{name}"));
+		let bundle = fixture_root(&format!("git-{name}"));
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
 		init(&bundle).expect("the repository is created");
 		bundle
@@ -477,7 +478,7 @@ mod tests {
 
 	#[test]
 	fn a_bundle_with_no_repository_refuses_the_record_and_is_given_none() {
-		let bundle = crate::db::connection::fixture_root("git-no-repository");
+		let bundle = fixture_root("git-no-repository");
 		fs::create_dir_all(&bundle).expect("the bundle is laid down");
 		fs::write(bundle.join("agent.md"), "Answer briefly.").expect("the file lands");
 

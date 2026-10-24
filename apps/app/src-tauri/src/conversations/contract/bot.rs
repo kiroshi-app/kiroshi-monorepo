@@ -337,6 +337,7 @@ mod tests {
 	use super::super::tests::assert_crosses_as;
 	use super::super::Chat;
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[test]
@@ -491,7 +492,7 @@ mod tests {
 	}
 
 	fn a_bundle_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("contract-{name}"))
+		fixture_root(&format!("contract-{name}"))
 	}
 
 	#[test]

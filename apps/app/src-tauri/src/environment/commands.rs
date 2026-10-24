@@ -78,6 +78,7 @@ mod tests {
 
 	use super::*;
 	use crate::agent::protocol::OauthCredentials;
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{
 		EnvOwner, CONNECTION_NAMES, OAUTH_ACCESS_TOKEN, OAUTH_REFRESH_TOKEN, RESERVED_NAMES,
 	};
@@ -85,7 +86,7 @@ mod tests {
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("env-set-{name}"))
+		fixture_root(&format!("env-set-{name}"))
 	}
 
 	fn a_bot() -> EnvOwner {

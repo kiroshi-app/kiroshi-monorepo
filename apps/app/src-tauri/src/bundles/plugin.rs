@@ -174,12 +174,13 @@ mod tests {
 	use super::super::user;
 	use super::super::{INVOCATION_KEY, LEARNED_NAME};
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use std::fs;
 	use std::thread;
 
 	fn a_path(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("plugin-{name}"))
+		fixture_root(&format!("plugin-{name}"))
 	}
 
 	fn about_file(path: &Path) -> PathBuf {

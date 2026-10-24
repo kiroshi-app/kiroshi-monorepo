@@ -128,11 +128,12 @@ fn rolled_back(root: &Path, scope: &EnvScope, refused: EnvError) -> EnvError {
 mod tests {
 
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::EnvOwner;
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		crate::db::connection::fixture_root(&format!("mcp-oauth-{name}"))
+		fixture_root(&format!("mcp-oauth-{name}"))
 	}
 
 	fn a_server() -> EnvScope {
