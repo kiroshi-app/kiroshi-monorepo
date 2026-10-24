@@ -13,6 +13,7 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { type FakeLayout, fakeLayout } from "@/lib/perf/fake-layout"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
 const harness = vi.hoisted(
 	(): { store: TranscriptStore | null; driver: FakeChatDriver | null } => ({
@@ -56,6 +57,7 @@ const settle = async (ms: number) => {
 }
 
 const mountApp = async () => {
+	writeMirror({ ...readMirror(), firstRunDone: true })
 	layout = fakeLayout()
 	const store = createFakeTranscriptStore()
 	const [space] = await store.spaces()

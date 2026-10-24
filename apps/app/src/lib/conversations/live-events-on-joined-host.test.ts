@@ -51,13 +51,13 @@ import {
 	questionMessageIdOf,
 	questionMessageText,
 } from "../chat/question-message"
+import { askedQuestionOf } from "../chat/question-run"
 import {
 	sidebarActivityFor,
 	toRuns,
 	toTranscriptRows,
 	workingStateFor,
 } from "../chat/screen-model"
-import { useAskedQuestion } from "../chat/use-asked-question"
 import type { HostSocket } from "../host/http"
 import { aMission } from "../missions/mission-fixtures"
 import { useLiveMissions } from "../missions/use-live-missions"
@@ -1867,13 +1867,7 @@ const openAskedSoloChat = async (prepare = NOTHING_TO_PREPARE) => {
 }
 
 const askedIn = ({ messages, question }: QuestionShown) =>
-	renderHook(() =>
-		useAskedQuestion({
-			question,
-			runs: toRuns(toTranscriptRows(messages)),
-			toQuote: vi.fn(),
-		}),
-	).result.current.asked
+	askedQuestionOf(question, toRuns(toTranscriptRows(messages))).asked
 
 const questionRowsIn = ({ messages }: QuestionShown) =>
 	messages.filter(({ id }) => id === QUESTION_ROW_ID)

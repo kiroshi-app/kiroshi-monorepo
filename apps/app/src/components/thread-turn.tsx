@@ -34,7 +34,7 @@ type ThreadTurnProps = {
 	author?: MessageAuthor
 	cause?: TurnCause
 	avatarFace?: ThreadFace
-	asking?: ReactNode
+	card?: ReactNode
 	quoted?: ReplyTarget
 	pinned: boolean
 	now: number
@@ -56,7 +56,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	author,
 	cause,
 	avatarFace,
-	asking,
+	card,
 	quoted,
 	pinned,
 	now,
@@ -69,7 +69,7 @@ export const ThreadTurn = memo(function ThreadTurn({
 	const personOf = usePersonOf()
 	const person = row.role === "user" ? personOf(row) : undefined
 	const { text, attachments } = messageWithAttachments(row.text)
-	const content = asking ?? <TurnBody attachments={attachments} text={text} />
+	const content = card ?? <TurnBody attachments={attachments} text={text} />
 	const repliedTo = quoted ? toQuote(quoted) : undefined
 	const pin = () => {
 		onPin(row.messageId, row.blockIndex)
@@ -131,11 +131,10 @@ export const ThreadTurn = memo(function ThreadTurn({
 			author={author}
 			cause={cause}
 			identity={avatarFace}
-			bare={bare}
+			bare={bare || card !== undefined}
 			botId={botId}
 			carriesMark={carriesMark}
-			copyText={text}
-			fills={asking !== undefined}
+			copyText={card === undefined ? text : ""}
 			messageId={anchor}
 			now={now}
 			onPin={pin}
