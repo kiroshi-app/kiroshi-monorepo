@@ -425,16 +425,18 @@ impl<R: Runtime> Desk<R> {
 		if self.store.is_quitting() {
 			return;
 		}
-		let kept = match (event, prompts_settled_by(event)) {
-			(AgentEvent::QuestionRequested { request }, _) => {
+		let kept = match event {
+			AgentEvent::QuestionRequested { request } => {
 				self.store.hold_prompt(&request.id, PromptKind::Question, request).await
 			}
-			(AgentEvent::PermissionRequested { request }, _) => {
+			AgentEvent::PermissionRequested { request } => {
 				self.store.hold_prompt(&request.id, PromptKind::Permission, request).await
 			}
-			(_, Some(SettledPrompts::One(id))) => self.store.release_prompt(id).await,
-			(_, Some(SettledPrompts::Every)) => self.store.release_prompts().await,
-			(_, None) => return,
+			_ => match prompts_settled_by(event) {
+				Some(SettledPrompts::One(id)) => self.store.release_prompt(id).await,
+				Some(SettledPrompts::Every) => self.store.release_prompts().await,
+				None => return,
+			},
 		};
 		if let Err(error) = kept {
 			self.store.report("a pending prompt", &error);
