@@ -9,7 +9,8 @@ use super::contract::{
 use crate::db;
 use crate::db::repositories::conversations::Activity;
 use crate::events::{self, CONVERSATION_STATE_CHANGED};
-use crate::missions::contract::Mission;
+use crate::missions::commands::observed as mission_observed;
+use crate::missions::contract::MissionLiveness;
 
 #[derive(Default)]
 struct Observed(Mutex<States>);
@@ -19,7 +20,7 @@ pub(crate) async fn listed<R: Runtime>(
 	database: &db::Database,
 	ids: Vec<String>,
 ) -> Result<States, TranscriptStoreError> {
-	let states = states_of(database, ids).await?;
+	let states = states_of(app, database, ids).await?;
 	let held = observed(app);
 	let mut observed = held.0.lock().await;
 	for (id, state) in &states {
@@ -39,7 +40,7 @@ pub(crate) async fn observe<R: Runtime>(
 	let Some(activity) = activity.into_iter().next() else {
 		return Err(TranscriptStoreError::UnknownConversation { id: conversation_id.to_owned() });
 	};
-	let state = ranked(&activity, &origins_needing_you(database).await?);
+	let state = ranked(&activity, &origins_needing_you(app, database).await?);
 	if state_in(&observed, conversation_id) == state {
 		return Ok(state);
 	}
@@ -84,25 +85,28 @@ pub(crate) fn observe_later<R: Runtime>(app: &AppHandle<R>, conversation_id: Str
 	});
 }
 
-async fn states_of(
+async fn states_of<R: Runtime>(
+	app: &AppHandle<R>,
 	database: &db::Database,
 	ids: Vec<String>,
 ) -> Result<States, TranscriptStoreError> {
 	let activities = database.conversations().activity_of(ids).await?;
-	let needing_you = origins_needing_you(database).await?;
+	let needing_you = origins_needing_you(app, database).await?;
 	Ok(activities
 		.iter()
 		.map(|activity| (activity.conversation_id.clone(), ranked(activity, &needing_you)))
 		.collect())
 }
 
-async fn origins_needing_you(
+async fn origins_needing_you<R: Runtime>(
+	app: &AppHandle<R>,
 	database: &db::Database,
 ) -> Result<HashSet<String>, TranscriptStoreError> {
 	let open = database.missions().still_open().await?;
 	Ok(open
 		.into_iter()
-		.filter(Mission::needs_you)
+		.map(|mission| mission_observed(app, mission))
+		.filter(|mission| mission.liveness == MissionLiveness::NeedsYou)
 		.map(|mission| mission.origin_conversation_id)
 		.collect())
 }
@@ -127,12 +131,17 @@ fn observed<R: Runtime>(app: &AppHandle<R>) -> State<'_, Observed> {
 #[cfg(test)]
 mod tests {
 	use std::sync::{Arc, Mutex as Held};
+	use std::time::Duration;
 
-	use serde_json::Value;
+	use serde_json::{json, Value};
 	use tauri::test::{mock_builder, MockRuntime};
 	use tauri::{App, Listener};
+	use tokio::time::timeout;
 
 	use super::*;
+	use crate::agent::commands::a_run_held_by_the_app;
+	use crate::agent::contract::{AgentEvent, PermissionDecision, PermissionRequest, RuntimeScope};
+	use crate::agent::reply_writer::TurnSink;
 	use crate::conversations::commands::ready;
 	use crate::conversations::commands::{
 		conversation_delete, conversation_list, conversation_page,
@@ -141,9 +150,11 @@ mod tests {
 	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 	use crate::db::repositories::messages::NewTurn;
 	use crate::missions::contract::{
-		MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
+		Mission, MissionDraft, MissionEntry, MissionEventKind, MissionNote, Ticket,
 	};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
+
+	const PATIENCE: Duration = Duration::from_secs(10);
 
 	const ONE_SEATED_ROOM: &str = "
 		INSERT INTO bots (id, name, model, created_at) VALUES ('b1', 'First', 'sonnet', 1);
@@ -211,7 +222,7 @@ mod tests {
 		database(app).messages().complete_turn("t1".to_owned(), 2).await.expect("the turn ends");
 	}
 
-	async fn a_mission_moved_to(app: &App<MockRuntime>, kind: MissionEventKind) {
+	async fn an_open_mission(app: &App<MockRuntime>) -> Mission {
 		let draft = MissionDraft {
 			origin_conversation_id: "c1".to_owned(),
 			bot_id: "b1".to_owned(),
@@ -226,10 +237,72 @@ mod tests {
 			source: "bot".to_owned(),
 			workspace_path: None,
 		};
-		let missions = database(app).missions();
-		let opened = missions.open(draft, "k1".to_owned()).await.expect("the mission opens");
+		database(app).missions().open(draft, "k1".to_owned()).await.expect("the mission opens")
+	}
+
+	async fn told(app: &App<MockRuntime>, mission: &Mission, entry: MissionEntry) {
+		database(app)
+			.missions()
+			.append(mission.id.clone(), entry)
+			.await
+			.expect("the mission moves");
+	}
+
+	fn a_hook_call(kind: MissionEventKind, payload: Value) -> MissionEntry {
+		MissionEntry { kind, source: "agent-hook".to_owned(), payload }
+	}
+
+	fn a_permission_prompt() -> MissionEntry {
+		a_hook_call(
+			MissionEventKind::AgentAsked,
+			json!({ "event": "Notification", "notification": "permission_prompt" }),
+		)
+	}
+
+	fn an_escalation() -> MissionEntry {
 		let note = MissionNote { source: "bot".to_owned(), payload: Value::Null };
-		missions.append(opened.id, MissionEntry::of(kind, note)).await.expect("the mission moves");
+		MissionEntry::of(MissionEventKind::Escalated, note)
+	}
+
+	fn the_thread_of(mission: &Mission) -> RuntimeScope {
+		RuntimeScope {
+			conversation_id: mission.thread_conversation_id.clone(),
+			bot_id: mission.bot_id.clone(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 1,
+		}
+	}
+
+	fn a_permission(id: &str) -> AgentEvent {
+		AgentEvent::PermissionRequested {
+			request: PermissionRequest {
+				id: id.to_owned(),
+				tool_name: "Bash".to_owned(),
+				title: "Run a command".to_owned(),
+				detail: None,
+			},
+		}
+	}
+
+	fn resolved(id: &str) -> AgentEvent {
+		AgentEvent::PermissionResolved {
+			id: id.to_owned(),
+			decision: PermissionDecision::AllowOnce,
+		}
+	}
+
+	fn a_change(state: &str) -> Value {
+		json!({ "conversationId": "c1", "spaceId": "personal", "state": state })
+	}
+
+	async fn heard_until(heard: &Held<Vec<Value>>, expected: &[Value]) {
+		let waited = timeout(PATIENCE, async {
+			while heard.lock().expect("the list is kept").as_slice() != expected {
+				tokio::time::sleep(Duration::from_millis(10)).await;
+			}
+		})
+		.await;
+		assert!(waited.is_ok(), "heard {:?}", heard.lock().expect("the list is kept"));
 	}
 
 	fn heard_states(app: &App<MockRuntime>) -> Arc<Held<Vec<Value>>> {
@@ -282,20 +355,84 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn a_mission_waiting_on_a_human_makes_its_origin_need_you() {
-		let app = a_host("mission-waiting-human").await;
-		a_mission_moved_to(&app, MissionEventKind::Escalated).await;
+	async fn a_mission_reads_needs_you_for_its_origin_only_through_its_observed_liveness() {
+		let app = a_host("mission-observed").await;
+		let opened = an_open_mission(&app).await;
+		let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+		let before = listed_state(&app).await;
+
+		run.emit(a_permission("p1"), None);
+		let prompted = listed_state(&app).await;
+		run.emit(resolved("p1"), None);
+
+		assert_eq!(
+			[before, prompted, listed_state(&app).await],
+			[
+				Ok(ConversationState::Idle),
+				Ok(ConversationState::NeedsYou),
+				Ok(ConversationState::Idle)
+			],
+			"the stored mission reads idle, its live thread prompt needs you"
+		);
+	}
+
+	#[tokio::test]
+	async fn a_closed_mission_that_needed_you_leaves_its_origin_idle() {
+		let app = a_host("mission-closed").await;
+		let opened = an_open_mission(&app).await;
+		told(&app, &opened, an_escalation()).await;
+		let note = MissionNote { source: "bot".to_owned(), payload: Value::Null };
+		told(&app, &opened, MissionEntry::of(MissionEventKind::Closed, note)).await;
+
+		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
+	}
+
+	#[tokio::test]
+	async fn a_thread_move_that_moves_the_mission_liveness_re_observes_its_origin() {
+		let app = a_host("mission-thread-move").await;
+		let opened = an_open_mission(&app).await;
+		let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
+		let heard = heard_states(&app);
+
+		run.emit(a_permission("p1"), None);
+		heard_until(&heard, &[a_change("needs_you")]).await;
+		run.emit(resolved("p1"), None);
+
+		heard_until(&heard, &[a_change("needs_you"), a_change("idle")]).await;
+	}
+
+	#[tokio::test]
+	async fn a_checkout_whose_last_hook_event_is_a_stop_leaves_its_origin_idle() {
+		let app = a_host("mission-stopped").await;
+		let opened = an_open_mission(&app).await;
+		told(&app, &opened, a_permission_prompt()).await;
+		let stop = json!({ "event": "Stop" });
+		told(&app, &opened, a_hook_call(MissionEventKind::AgentStopped, stop.clone())).await;
+		told(&app, &opened, a_hook_call(MissionEventKind::AgentAsked, stop)).await;
+
+		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
+		assert_eq!(paged_state(&app).await, ConversationState::Idle);
+	}
+
+	#[tokio::test]
+	async fn a_permission_prompt_of_the_checkout_makes_its_origin_need_you() {
+		let app = a_host("mission-permission-prompt").await;
+		let opened = an_open_mission(&app).await;
+		told(&app, &opened, a_permission_prompt()).await;
 
 		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
 		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
-	async fn a_mission_waiting_on_its_bot_leaves_its_origin_idle() {
-		let app = a_host("mission-waiting-bot").await;
-		a_mission_moved_to(&app, MissionEventKind::AgentAsked).await;
+	async fn an_unanswered_escalation_makes_its_origin_need_you() {
+		let app = a_host("mission-escalated").await;
+		let opened = an_open_mission(&app).await;
+		told(&app, &opened, an_escalation()).await;
 
-		assert_eq!(listed_state(&app).await, Ok(ConversationState::Idle));
+		assert_eq!(listed_state(&app).await, Ok(ConversationState::NeedsYou));
+		assert_eq!(paged_state(&app).await, ConversationState::NeedsYou);
 	}
 
 	#[tokio::test]
@@ -328,10 +465,9 @@ mod tests {
 		observed_state(&app).await;
 		observed_state(&app).await;
 
-		let announced = |state: &str| serde_json::json!({ "conversationId": "c1", "spaceId": "personal", "state": state });
 		assert_eq!(
 			*heard.lock().expect("the list is kept"),
-			[announced("working"), announced("needs_you"), announced("working"), announced("idle")]
+			[a_change("working"), a_change("needs_you"), a_change("working"), a_change("idle")]
 		);
 	}
 
