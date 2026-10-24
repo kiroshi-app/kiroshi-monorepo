@@ -383,15 +383,15 @@ describe("ci:fast", () => {
 		"runs the lint step of the pr-dequeue tests before the changed unit tests when the diff touches %s",
 		(path) => {
 			const steps = fastSteps(["AGENTS.md", path])
-			const dequeue = steps.find((step) => step.name === PR_DEQUEUE_STEP)
+			const dequeue = steps[FAST_STEP_NAMES.length]
 
 			expect(steps.map((step) => step.name)).toEqual([
 				...FAST_STEP_NAMES,
 				PR_DEQUEUE_STEP,
 				CHANGED_UNIT_TESTS.name,
 			])
-			expect(GATE.lint).toContainEqual(dequeue as Step)
-			expect(dequeue?.command).toBe("bun run test:pr-dequeue")
+			expect(GATE.lint).toContainEqual(dequeue)
+			expect(dequeue.command).toBe("bun run test:pr-dequeue")
 		},
 	)
 
