@@ -1,5 +1,7 @@
 "use client"
 
+import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
+import { Radio as RadioPrimitive } from "@base-ui/react/radio"
 import {
 	type FormEvent,
 	type KeyboardEvent,
@@ -12,18 +14,13 @@ import { useTranslation } from "react-i18next"
 import { type Icon, Icons } from "@workspace/ui/components/icons"
 import { INVERSE_BUTTON_CLASS } from "@workspace/ui/components/inverse-button"
 import { ApplicationMark } from "@workspace/ui/components/plugin-settings/application-mark"
-import { SettingsField } from "@workspace/ui/components/settings-field"
 import {
 	FIELD_CONTROL_CLASS,
 	FIELD_CONTROL_INVALID_CLASS,
 	FIELD_LABEL_CLASS,
 } from "@workspace/ui/components/settings-styles"
 import { Button } from "@workspace/ui/components/ui/button"
-import { Checkbox } from "@workspace/ui/components/ui/checkbox"
-import {
-	RadioGroup,
-	RadioGroupItem,
-} from "@workspace/ui/components/ui/radio-group"
+import { RadioGroup } from "@workspace/ui/components/ui/radio-group"
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/ui/tabs"
 import { useAutoFocus } from "@workspace/ui/hooks/use-auto-focus"
 import { useCopyText } from "@workspace/ui/hooks/use-copy-text"
@@ -31,14 +28,14 @@ import { useFocusFirstInvalid } from "@workspace/ui/hooks/use-focus-first-invali
 import { usePendingSubmit } from "@workspace/ui/hooks/use-pending-submit"
 import { cn } from "@workspace/ui/lib/utils"
 
-const QUESTION_TAB_LIST_CLASS =
-	"-m-1 relative scrollbar-hide max-w-full justify-start gap-1 overflow-x-auto scroll-px-1 bg-transparent p-1 group-data-horizontal/tabs:h-fit"
+const QUESTION_PANEL_CLASS =
+	"flex w-full flex-col gap-3 rounded-4xl border border-border bg-muted p-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
 
-const QUESTION_TAB_CLASS =
-	"h-fit max-w-full shrink-0 px-2.5 py-1 motion-reduce:transition-none motion-reduce:duration-0"
+const QUESTION_SEGMENTS_CLASS =
+	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
 
-const QUESTION_FORM_CLASS =
-	"grid w-full grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-card"
+const QUESTION_SEGMENT_CLASS =
+	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 transition-[color,background-color,box-shadow] hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] motion-reduce:transition-none motion-reduce:duration-0 dark:text-question-segment-foreground dark:data-active:bg-card"
 
 const QUESTION_GROUP_CLASS = "flex flex-col gap-1.5"
 
@@ -46,6 +43,27 @@ const QUESTION_MONO_LINE_CLASS = "truncate font-mono text-compact leading-5"
 
 const QUESTION_LINK_ROW_CLASS =
 	"flex items-center gap-2 rounded-control border border-input bg-muted py-1 pe-1 ps-3 has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/30"
+
+const QUESTION_ROW_CLASS =
+	"flex w-full cursor-pointer items-start gap-3 rounded-control p-3 text-start outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+
+const QUESTION_PILL_CLASS =
+	"h-8 rounded-full font-medium text-compact leading-4"
+
+const QUESTION_GHOST_PILL_CLASS = cn(
+	QUESTION_PILL_CLASS,
+	"px-2.5 text-muted-foreground",
+)
+
+const QUESTION_INVERSE_PILL_CLASS = cn(
+	INVERSE_BUTTON_CLASS,
+	QUESTION_PILL_CLASS,
+	"gap-1.5",
+)
+
+const QUESTION_PILL_GLYPH_CLASS = "size-3.5"
+
+const QUESTION_CHECK_CLASS = "size-4.5 shrink-0 stroke-[2.4]!"
 
 type ToolQuestionOption = {
 	label: string
@@ -110,6 +128,10 @@ export interface ToolQuestionProps {
 	questions: (ToolQuestionItem | ToolQuestionNotice)[]
 	onAnswer?: (answers: ToolQuestionAnswers) => unknown
 	onDeny?: () => void
+	companionName?: string
+	minimised?: boolean
+	onMinimise?: () => void
+	onExpand?: () => void
 	className?: string
 }
 
@@ -120,10 +142,16 @@ const EMPTY_DRAFT: Draft = { selected: [], text: "" }
 const answerOf = ({ selected, text }: Draft) =>
 	text.trim() || selected.join(", ")
 
+const digitRangeOf = (count: number) => (count === 1 ? "1" : `1-${count}`)
+
 const ToolQuestion = ({
 	questions,
 	onAnswer,
 	onDeny,
+	companionName,
+	minimised,
+	onMinimise,
+	onExpand,
 	className,
 }: ToolQuestionProps) => {
 	const { t } = useTranslation("chat")
@@ -176,6 +204,17 @@ const ToolQuestion = ({
 	const item = questions[shownIndex]
 	if (!item) return null
 
+	if (minimised) {
+		return (
+			<WaitingBar
+				className={className}
+				companionName={companionName}
+				onExpand={onExpand}
+				question={item.isNotice ? item.failure.title : item.question}
+			/>
+		)
+	}
+
 	const isAnswered = item.isNotice || answers[item.question] !== ""
 	const waiting = waitingAfter(item)
 
@@ -206,45 +245,121 @@ const ToolQuestion = ({
 		sendOrAdvance()
 	}
 
+	const hintOf = () => {
+		if (item.isNotice) return null
+		const typesOwnAnswer = item.entry || draftOf(item.question).text !== ""
+		if (typesOwnAnswer || item.options.length === 0) {
+			return waiting ? t("toolQuestion.hint.next") : t("toolQuestion.hint.send")
+		}
+		const range = digitRangeOf(item.options.length)
+		if (item.multiSelect) {
+			return waiting
+				? t("toolQuestion.hint.toggleThenNext", { range })
+				: t("toolQuestion.hint.toggleThenSend", { range })
+		}
+		return waiting
+			? t("toolQuestion.hint.chooseThenNext", { range })
+			: t("toolQuestion.hint.chooseThenSend", { range })
+	}
+
+	const hasSegments = questions.length > 1
 	const hasEntry = !item.isNotice && Boolean(item.entry)
+	const isWaitingOnAnswer = !isAnswered && !isPending
 
 	return (
 		<form
 			aria-describedby={!item.isNotice && item.failure ? failureId : undefined}
 			aria-labelledby={item.isNotice ? failureId : askedId}
-			className={cn(QUESTION_FORM_CLASS, className)}
+			className={cn(QUESTION_PANEL_CLASS, className)}
 			onKeyDown={readKey}
 			onSubmit={submitForm}
 			ref={cardRef}
 			tabIndex={-1}
 		>
-			<Tabs onValueChange={setShownIndex} value={shownIndex}>
-				<TabsList activateOnFocus className={QUESTION_TAB_LIST_CLASS}>
-					{questions.map((candidate, index) => (
-						<TabsTrigger
-							className={QUESTION_TAB_CLASS}
-							key={
-								candidate.isNotice
-									? `notice:${candidate.header}`
-									: candidate.question
-							}
-							value={index}
-						>
-							<span className="truncate">{candidate.header}</span>
-							{!candidate.isNotice && answers[candidate.question] ? (
-								<Icons.Check className="size-3" />
+			<div className="flex items-start gap-3 px-1 pt-1">
+				<div
+					className={cn(
+						"flex min-w-0 flex-1 flex-col",
+						hasSegments ? "gap-2.5" : "gap-1",
+					)}
+				>
+					{hasSegments ? (
+						<Tabs onValueChange={setShownIndex} value={shownIndex}>
+							<TabsList activateOnFocus className={QUESTION_SEGMENTS_CLASS}>
+								{questions.map((candidate, index) => (
+									<TabsTrigger
+										className={QUESTION_SEGMENT_CLASS}
+										key={
+											candidate.isNotice
+												? `notice:${candidate.header}`
+												: candidate.question
+										}
+										value={index}
+									>
+										{!candidate.isNotice && answers[candidate.question] ? (
+											<Icons.Check
+												aria-hidden="true"
+												className="size-3 text-bot-badge-done"
+											/>
+										) : null}
+										<span className="truncate">{candidate.header}</span>
+									</TabsTrigger>
+								))}
+							</TabsList>
+						</Tabs>
+					) : (
+						<p className="truncate font-medium text-muted-foreground text-xs">
+							{item.header}
+						</p>
+					)}
+
+					{item.failure ? (
+						<FailureBlock failure={item.failure} titleId={failureId} />
+					) : null}
+
+					{item.isNotice ? null : (
+						<>
+							<p
+								className={cn(
+									"wrap-break-word font-semibold text-foreground text-reading",
+									item.mark && "flex items-center gap-2",
+								)}
+								id={askedId}
+							>
+								{item.mark ? (
+									<ApplicationMark mark={item.mark} size="inline" />
+								) : null}
+								{item.question}
+							</p>
+							{item.multiSelect ? (
+								<p className="text-compact text-muted-foreground leading-4.5">
+									{t("toolQuestion.pickAny")}
+								</p>
 							) : null}
-						</TabsTrigger>
-					))}
-				</TabsList>
-			</Tabs>
+						</>
+					)}
+				</div>
 
-			<div className={cn("grid", hasEntry ? "gap-3" : "gap-2")} ref={fieldsRef}>
-				{item.failure ? (
-					<FailureBlock failure={item.failure} titleId={failureId} />
+				{onMinimise ? (
+					<Button
+						aria-label={t("toolQuestion.minimise")}
+						className="size-7 shrink-0 rounded-md text-muted-foreground"
+						onClick={onMinimise}
+						size="icon-sm"
+						type="button"
+						variant="ghost"
+					>
+						<Icons.Expand aria-hidden="true" className="size-4" />
+					</Button>
 				) : null}
+			</div>
 
-				{item.isNotice ? null : (
+			{item.isNotice ? null : (
+				<div
+					className={cn(QUESTION_GROUP_CLASS, hasEntry && "gap-3")}
+					ref={fieldsRef}
+				>
+					{item.link ? <LinkField link={item.link} /> : null}
 					<QuestionFields
 						draft={draftOf(item.question)}
 						errorId={isRefused ? blankId : undefined}
@@ -254,64 +369,135 @@ const ToolQuestion = ({
 						onType={(text) => writeDraft(item.question, { selected: [], text })}
 						questionId={askedId}
 					/>
-				)}
-				{isRefused ? (
-					<p
-						className="flex items-center gap-1.5 text-foreground text-xs"
-						id={blankId}
-						role="alert"
-					>
-						<Icons.Error
-							aria-hidden="true"
-							className="size-3.5 shrink-0 text-destructive"
-						/>
-						{t("toolQuestion.blank")}
-					</p>
-				) : null}
-			</div>
+					{isRefused ? (
+						<p
+							className="flex items-center gap-1.5 px-1 text-foreground text-xs"
+							id={blankId}
+							role="alert"
+						>
+							<Icons.Error
+								aria-hidden="true"
+								className="size-3.5 shrink-0 text-destructive"
+							/>
+							{t("toolQuestion.blank")}
+						</p>
+					) : null}
+				</div>
+			)}
 
-			<div className="flex flex-wrap items-center gap-2">
-				{item.action ? (
-					<ActionButton action={item.action} />
-				) : (
+			<div className="flex flex-wrap items-center gap-3 ps-1">
+				{onDeny ? (
 					<Button
-						className={INVERSE_BUTTON_CLASS}
-						disabled={isPending}
-						size="sm"
-						type="submit"
+						className={QUESTION_GHOST_PILL_CLASS}
+						onClick={onDeny}
+						type="button"
+						variant="ghost"
 					>
-						{waiting ? (
-							<>
-								{t("toolQuestion.next")}
-								<Icons.Next data-icon="inline-end" />
-							</>
-						) : (
-							<>
-								<Icons.Send data-icon="inline-start" />
-								{t(hasEntry ? "toolQuestion.continue" : "toolQuestion.submit")}
-							</>
-						)}
+						{t("toolQuestion.skip")}
 					</Button>
-				)}
+				) : null}
 				{item.exit ? (
 					<Button
-						className="text-muted-foreground leading-5"
+						className={QUESTION_GHOST_PILL_CLASS}
 						onClick={item.exit.onSelect}
-						size="sm"
 						type="button"
 						variant="ghost"
 					>
 						{item.exit.label}
 					</Button>
 				) : null}
-				{onDeny ? (
-					<Button onClick={onDeny} size="sm" type="button" variant="outline">
-						<Icons.Close data-icon="inline-start" />
-						{t("toolQuestion.dismiss")}
+				<p className="min-w-0 flex-1 text-end text-muted-foreground text-xs">
+					{hintOf()}
+				</p>
+				{item.action ? (
+					<ActionButton action={item.action} />
+				) : (
+					<Button
+						aria-disabled={isWaitingOnAnswer ? true : undefined}
+						aria-label={
+							waiting
+								? t("toolQuestion.next")
+								: hasEntry
+									? undefined
+									: t("toolQuestion.submit")
+						}
+						className={cn(
+							QUESTION_INVERSE_PILL_CLASS,
+							"ms-auto",
+							waiting ? "ps-3.5 pe-3" : "ps-3 pe-3.5",
+							"aria-disabled:opacity-40",
+						)}
+						disabled={isPending}
+						type="submit"
+					>
+						{waiting ? (
+							<>
+								{t("toolQuestion.nextLabel")}
+								<Icons.ArrowRight
+									aria-hidden="true"
+									className={QUESTION_PILL_GLYPH_CLASS}
+								/>
+							</>
+						) : (
+							<>
+								<Icons.Send
+									aria-hidden="true"
+									className={QUESTION_PILL_GLYPH_CLASS}
+								/>
+								{t(hasEntry ? "toolQuestion.continue" : "toolQuestion.send")}
+							</>
+						)}
 					</Button>
-				) : null}
+				)}
 			</div>
 		</form>
+	)
+}
+
+type WaitingBarProps = {
+	question: string
+	companionName?: string
+	onExpand?: () => void
+	className?: string
+}
+
+const WaitingBar = ({
+	question,
+	companionName,
+	onExpand,
+	className,
+}: WaitingBarProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<div
+			className={cn("w-full px-6 py-2", className)}
+			data-slot="tool-question-waiting"
+		>
+			<div className="flex h-12.5 items-center gap-2.5 rounded-full border border-border bg-question-bar py-2 ps-4 pe-2 shadow-[0_1px_3px_rgb(0_0_0/6%)] dark:shadow-[0_1px_3px_rgb(0_0_0/50%)]">
+				<span
+					aria-hidden="true"
+					className="grid size-4 shrink-0 place-items-center rounded-full bg-warning font-bold text-[11px] text-background leading-none"
+				>
+					{t("toolQuestion.waiting.mark")}
+				</span>
+				<p className="min-w-0 truncate font-medium text-compact text-foreground leading-4.5">
+					{companionName
+						? t("toolQuestion.waiting.title", { name: companionName })
+						: t("toolQuestion.waiting.unnamedTitle")}
+				</p>
+				<p className="min-w-0 flex-1 truncate text-compact text-muted-foreground leading-4.5">
+					{question}
+				</p>
+				<Button
+					className={cn(QUESTION_INVERSE_PILL_CLASS, "px-3.5")}
+					onClick={onExpand}
+					type="button"
+				>
+					{t("toolQuestion.waiting.answer")}
+				</Button>
+			</div>
+		</div>
 	)
 }
 
@@ -334,83 +520,92 @@ const QuestionFields = ({
 	onType,
 	onSubmit,
 }: QuestionFieldsProps) => {
-	const { t } = useTranslation("chat")
-	const rows = item.options.map((option) => (
+	const rows = item.options.map((option, index) => (
 		<OptionRow
-			isSelected={draft.selected.includes(option.label)}
+			digit={index + 1}
+			isChecked={draft.selected.includes(option.label)}
+			isMultiSelect={Boolean(item.multiSelect)}
 			key={option.label}
+			onPick={() => onPick(option.label)}
 			option={option}
-			render={(id) =>
-				item.multiSelect ? (
-					<Checkbox
-						checked={draft.selected.includes(option.label)}
-						id={id}
-						onCheckedChange={() => onPick(option.label)}
-					/>
-				) : (
-					<RadioGroupItem id={id} value={option.label} />
-				)
-			}
 		/>
 	))
 
+	if (item.entry) {
+		return (
+			<EntryField
+				entry={item.entry}
+				errorId={errorId}
+				onSubmit={onSubmit}
+				onValueChange={onType}
+				value={draft.text}
+			/>
+		)
+	}
+
 	return (
 		<>
-			<p
-				className={cn(
-					"font-medium text-foreground",
-					item.mark && "flex items-center gap-2",
-				)}
-				id={questionId}
-			>
-				{item.mark ? <ApplicationMark mark={item.mark} size="inline" /> : null}
-				{item.question}
-			</p>
-
-			{item.link ? <LinkField link={item.link} /> : null}
-
-			{item.entry ? (
-				<EntryField
-					entry={item.entry}
-					errorId={errorId}
-					onSubmit={onSubmit}
-					onValueChange={onType}
-					value={draft.text}
-				/>
+			{item.multiSelect ? (
+				<div
+					aria-describedby={errorId}
+					aria-invalid={errorId ? true : undefined}
+					aria-labelledby={questionId}
+					className={QUESTION_GROUP_CLASS}
+					role="group"
+				>
+					{rows}
+				</div>
 			) : (
-				<>
-					{item.multiSelect ? (
-						<div
-							aria-describedby={errorId}
-							aria-invalid={errorId ? true : undefined}
-							className="grid gap-2"
-							role="group"
-						>
-							{rows}
-						</div>
-					) : (
-						<RadioGroup
-							aria-describedby={errorId}
-							aria-invalid={errorId ? true : undefined}
-							className="gap-2"
-							onValueChange={(label: string) => onPick(label)}
-							value={draft.selected[0] ?? ""}
-						>
-							{rows}
-						</RadioGroup>
-					)}
+				<RadioGroup
+					aria-describedby={errorId}
+					aria-invalid={errorId ? true : undefined}
+					aria-labelledby={questionId}
+					className="gap-1.5"
+					onValueChange={(label: string) => onPick(label)}
+					value={draft.selected[0] ?? ""}
+				>
+					{rows}
+				</RadioGroup>
+			)}
 
-					{item.optionsOnly ? null : (
-						<SettingsField
-							label={t("toolQuestion.freeText")}
-							onValueChange={onType}
-							placeholder={t("toolQuestion.freeTextPlaceholder")}
-							value={draft.text}
-						/>
-					)}
-				</>
+			{item.optionsOnly ? null : (
+				<OwnAnswerField onValueChange={onType} value={draft.text} />
 			)}
 		</>
+	)
+}
+
+type OwnAnswerFieldProps = {
+	value: string
+	onValueChange: (value: string) => void
+}
+
+const OwnAnswerField = ({ value, onValueChange }: OwnAnswerFieldProps) => {
+	const { t } = useTranslation("chat")
+
+	return (
+		<label className="flex h-11 cursor-text items-center gap-3 rounded-control bg-card px-3 has-[input:focus]:ring-3 has-[input:focus]:ring-ring/30">
+			<span
+				aria-hidden="true"
+				className="grid size-5 shrink-0 place-items-center text-muted-foreground"
+			>
+				<Icons.Edit className="size-3.75" />
+			</span>
+			<input
+				aria-label={t("toolQuestion.freeText")}
+				className="h-full min-w-0 flex-1 bg-transparent text-foreground text-sm leading-5 caret-ring outline-none placeholder:text-muted-foreground"
+				onChange={(event) => onValueChange(event.target.value)}
+				placeholder={t("toolQuestion.freeTextPlaceholder")}
+				value={value}
+			/>
+			{value ? (
+				<Icons.Check
+					aria-hidden="true"
+					className={cn(QUESTION_CHECK_CLASS, "text-ring")}
+					data-slot="tool-question-own-answer-check"
+				/>
+			) : null}
+		</label>
 	)
 }
 
@@ -422,12 +617,11 @@ const ActionButton = ({
 	action: { label, icon: Glyph, onSelect },
 }: ActionButtonProps) => (
 	<Button
-		className={INVERSE_BUTTON_CLASS}
+		className={cn(QUESTION_INVERSE_PILL_CLASS, "ms-auto ps-3 pe-3.5")}
 		onClick={onSelect}
-		size="sm"
 		type="button"
 	>
-		<Glyph data-icon="inline-start" />
+		<Glyph aria-hidden="true" className={QUESTION_PILL_GLYPH_CLASS} />
 		{label}
 	</Button>
 )
@@ -569,43 +763,124 @@ const EntryField = ({
 
 type OptionRowProps = {
 	option: ToolQuestionOption
-	isSelected: boolean
-	render: (id: string) => ReactNode
+	digit: number
+	isChecked: boolean
+	isMultiSelect: boolean
+	onPick: () => void
 }
 
-const OptionRow = ({ option, isSelected, render }: OptionRowProps) => {
+const OptionRow = ({
+	option,
+	digit,
+	isChecked,
+	isMultiSelect,
+	onPick,
+}: OptionRowProps) => {
 	const { t } = useTranslation("chat")
-	const id = useId()
+	const labelId = useId()
+	const descriptionId = useId()
+
+	const rowClass = cn(
+		QUESTION_ROW_CLASS,
+		isChecked
+			? "surface-user-bubble text-user-bubble-foreground"
+			: "bg-card text-foreground",
+	)
+
+	const content = (
+		<>
+			<span
+				aria-hidden="true"
+				className={cn(
+					"grid size-5 shrink-0 place-items-center rounded-sm font-medium text-[11px] leading-3 tabular-nums",
+					isChecked
+						? "bg-user-bubble-foreground/10 text-user-bubble-foreground/80"
+						: "bg-foreground/6 text-muted-foreground dark:bg-foreground/8",
+				)}
+				data-slot="tool-question-key"
+			>
+				{digit}
+			</span>
+			<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+				<span
+					className="min-w-0 wrap-break-word font-medium text-sm leading-5"
+					id={labelId}
+				>
+					{option.label}
+				</span>
+				<span
+					className={cn(
+						"min-w-0 wrap-break-word text-compact leading-5",
+						isChecked
+							? "text-user-bubble-foreground/70 dark:text-user-bubble-foreground"
+							: "text-muted-foreground",
+					)}
+					id={descriptionId}
+				>
+					{option.description}
+				</span>
+			</span>
+			<span
+				aria-hidden="true"
+				className="grid size-5 shrink-0 place-items-center"
+				data-slot="tool-question-mark"
+			>
+				<OptionMark isChecked={isChecked} isMultiSelect={isMultiSelect} />
+			</span>
+		</>
+	)
 
 	return (
-		<div
-			className={cn(
-				"grid gap-1 rounded-xl",
-				isSelected ? "bg-card" : "bg-card/50 hover:bg-card/75",
+		<>
+			{isMultiSelect ? (
+				<CheckboxPrimitive.Root
+					aria-describedby={descriptionId}
+					aria-labelledby={labelId}
+					checked={isChecked}
+					className={rowClass}
+					onCheckedChange={onPick}
+				>
+					{content}
+				</CheckboxPrimitive.Root>
+			) : (
+				<RadioPrimitive.Root
+					aria-describedby={descriptionId}
+					aria-labelledby={labelId}
+					className={rowClass}
+					value={option.label}
+				>
+					{content}
+				</RadioPrimitive.Root>
 			)}
-		>
-			<label className="flex cursor-pointer items-start gap-3 p-3" htmlFor={id}>
-				{render(id)}
-				<span className="grid gap-0.5">
-					<span className="font-medium text-foreground leading-5">
-						{option.label}
-					</span>
-					<span className="text-muted-foreground text-xs">
-						{option.description}
-					</span>
-				</span>
-			</label>
-			{isSelected && option.preview ? (
-				<div className="grid gap-1 pb-3 pe-3 ps-11">
+			{isChecked && option.preview ? (
+				<div className="grid gap-1 px-3 pb-1">
 					<span className="text-muted-foreground text-xs">
 						{t("toolQuestion.preview")}
 					</span>
-					<div className="min-w-0 break-words font-mono text-foreground text-xs">
+					<div className="min-w-0 wrap-break-word font-mono text-foreground text-xs">
 						{option.preview}
 					</div>
 				</div>
 			) : null}
-		</div>
+		</>
+	)
+}
+
+type OptionMarkProps = {
+	isChecked: boolean
+	isMultiSelect: boolean
+}
+
+const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
+	if (!isMultiSelect) {
+		return isChecked ? <Icons.Check className={QUESTION_CHECK_CLASS} /> : null
+	}
+	return isChecked ? (
+		<span className="grid size-5 place-items-center rounded-full bg-user-bubble-foreground text-(--user-bubble)">
+			<Icons.Check className="size-3" />
+		</span>
+	) : (
+		<span className="size-5 rounded-full border-[1.5px] border-foreground/17" />
 	)
 }
 
