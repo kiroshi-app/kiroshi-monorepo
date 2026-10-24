@@ -1731,52 +1731,36 @@
       "type": "object"
     },
     "CatalogueChat": {
-      "properties": {
-        "botId": {
-          "anyOf": [
-            {
-              "type": "string"
+      "allOf": [
+        {
+          "properties": {
+            "pendingPrompt": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PendingPrompt"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            {
-              "type": "null"
+            "state": {
+              "$ref": "#/$defs/ConversationState"
+            },
+            "workingBotIds": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             }
-          ]
-        },
-        "conversationId": {
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/ConversationKind"
-        },
-        "participants": {
-          "items": {
-            "type": "string"
           },
-          "type": "array"
+          "required": [],
+          "type": "object"
         },
-        "spaceId": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "title": {
-          "type": "string"
+        {
+          "$ref": "#/$defs/ChatHit"
         }
-      },
-      "required": [
-        "conversationId",
-        "kind",
-        "title",
-        "botId",
-        "participants",
-        "spaceId"
-      ],
-      "type": "object"
+      ]
     },
     "CatalogueError": {
       "anyOf": [
@@ -1840,6 +1824,21 @@
             "id"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "detail": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unreadableState"
+            }
+          },
+          "required": [
+            "kind",
+            "detail"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1851,8 +1850,21 @@
         "id": {
           "type": "string"
         },
+        "liveness": {
+          "$ref": "#/$defs/MissionLiveness"
+        },
         "objective": {
           "type": "string"
+        },
+        "pendingPrompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "spaceId": {
           "type": "string"
@@ -1871,6 +1883,12 @@
         },
         "ticketTitle": {
           "type": "string"
+        },
+        "workingBotIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -1940,14 +1958,81 @@
         "id": {
           "type": "string"
         },
+        "pendingPrompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ConversationState"
+        },
         "updatedAt": {
           "type": "integer"
+        },
+        "workingBotIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
         "id",
         "createdAt",
         "updatedAt"
+      ],
+      "type": "object"
+    },
+    "ChatHit": {
+      "properties": {
+        "botId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conversationId": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ConversationKind"
+        },
+        "participants": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversationId",
+        "kind",
+        "title",
+        "botId",
+        "participants",
+        "spaceId"
       ],
       "type": "object"
     },
@@ -2302,18 +2387,10 @@
     "ConversationInList": {
       "allOf": [
         {
-          "properties": {
-            "state": {
-              "$ref": "#/$defs/ConversationState"
-            }
-          },
-          "required": [
-            "state"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/Conversation"
         },
         {
-          "$ref": "#/$defs/Conversation"
+          "$ref": "#/$defs/ObservedState"
         }
       ]
     },
@@ -2353,22 +2430,21 @@
                   "type": "null"
                 }
               ]
-            },
-            "state": {
-              "$ref": "#/$defs/ConversationState"
             }
           },
           "required": [
             "lastActivityAt",
             "lastWord",
             "soloBotId",
-            "activeTurn",
-            "state"
+            "activeTurn"
           ],
           "type": "object"
         },
         {
           "$ref": "#/$defs/Conversation"
+        },
+        {
+          "$ref": "#/$defs/ObservedState"
         }
       ]
     },
@@ -2462,30 +2538,33 @@
       ]
     },
     "ConversationStateChanged": {
-      "properties": {
-        "conversationId": {
-          "type": "string"
-        },
-        "spaceId": {
-          "anyOf": [
-            {
+      "allOf": [
+        {
+          "properties": {
+            "conversationId": {
               "type": "string"
             },
-            {
-              "type": "null"
+            "spaceId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
-          ]
+          },
+          "required": [
+            "conversationId",
+            "spaceId"
+          ],
+          "type": "object"
         },
-        "state": {
-          "$ref": "#/$defs/ConversationState"
+        {
+          "$ref": "#/$defs/ObservedState"
         }
-      },
-      "required": [
-        "conversationId",
-        "spaceId",
-        "state"
-      ],
-      "type": "object"
+      ]
     },
     "ConversationStored": {
       "properties": {
@@ -4154,6 +4233,16 @@
         "originConversationId": {
           "type": "string"
         },
+        "pendingPrompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "pullRequestUrl": {
           "anyOf": [
             {
@@ -4217,6 +4306,12 @@
           "$ref": "#/$defs/Ticket"
         },
         "tools": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workingBotIds": {
           "items": {
             "type": "string"
           },
@@ -4296,6 +4391,16 @@
         "missionId": {
           "type": "string"
         },
+        "pendingPrompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "spaceId": {
           "anyOf": [
             {
@@ -4311,6 +4416,12 @@
         },
         "stateSeq": {
           "type": "integer"
+        },
+        "workingBotIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -5227,6 +5338,33 @@
         "tokenExchange"
       ]
     },
+    "ObservedState": {
+      "properties": {
+        "pendingPrompt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PendingPrompt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ConversationState"
+        },
+        "workingBotIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
     "OfferedModel_Serialize": {
       "properties": {
         "supportedEffortLevels": {
@@ -5325,6 +5463,31 @@
         "type"
       ],
       "type": "object"
+    },
+    "PendingPrompt": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PendingPromptKind"
+        },
+        "promptId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "promptId",
+        "kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "PendingPromptKind": {
+      "enum": [
+        "question",
+        "permission"
+      ]
     },
     "PermissionDecision": {
       "enum": [

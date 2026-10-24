@@ -3,8 +3,8 @@ use tauri::{AppHandle, Runtime, State};
 use super::super::context;
 use super::super::contract::{
 	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
-	ConversationInList, ConversationInPage, ConversationPage, ConversationState,
-	ConversationStored, RuntimeSession, TranscriptStoreError,
+	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, ObservedState,
+	RuntimeSession, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -24,12 +24,17 @@ use crate::file_store::FileStore;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn conversation_main_chat(
+pub async fn conversation_main_chat<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	bot_id: String,
 	space_id: Option<String>,
 ) -> Result<Chat, TranscriptStoreError> {
-	Ok(ready(&state)?.conversations().ensure_chat(bot_id, space_id).await?.into())
+	let database = ready(&state)?;
+	let chat = database.conversations().ensure_chat(bot_id, space_id).await?;
+	let states = conversation_state::listed(&app, database, vec![chat.id.clone()]).await?;
+	let observed = state_in(&states, &chat.id);
+	Ok(Chat::of(chat, observed))
 }
 
 #[tauri::command]
@@ -64,7 +69,7 @@ pub async fn conversation_list<R: Runtime>(
 	Ok(stored
 		.into_iter()
 		.map(|room| ConversationInList {
-			state: state_in(&states, &room.id),
+			observed: state_in(&states, &room.id),
 			conversation: Conversation::of(room, dir.as_deref()),
 		})
 		.collect())
@@ -219,7 +224,7 @@ pub(crate) async fn announce_conversation<R: Runtime>(
 	conversation_id: &str,
 ) {
 	let failure = match conversation_state::observe(app, database, conversation_id).await {
-		Ok(state) => match announced(app, database, event, conversation_id, state).await {
+		Ok(observed) => match announced(app, database, event, conversation_id, observed).await {
 			Ok(()) => return,
 			Err(failure) => failure,
 		},
@@ -233,12 +238,12 @@ async fn announced<R: Runtime>(
 	database: &db::Database,
 	event: Event<ConversationStored>,
 	conversation_id: &str,
-	state: ConversationState,
+	observed: ObservedState,
 ) -> Result<(), String> {
 	match database.conversations().conversation_in_page(conversation_id.to_owned()).await {
 		Ok(Some(row)) => {
 			let conversation =
-				ConversationInPage::of(row, state, avatars::Avatars::dir(app).as_deref());
+				ConversationInPage::of(row, observed, avatars::Avatars::dir(app).as_deref());
 			let space_id = conversation.conversation.space_id.clone();
 			events::emit(app, event, ConversationStored { space_id, conversation })
 				.map_err(|failure| failure.to_string())

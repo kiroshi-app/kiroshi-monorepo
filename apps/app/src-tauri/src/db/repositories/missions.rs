@@ -8,6 +8,7 @@ use uuid::Uuid;
 use super::conversations::{open_thread_under, retitle_thread, seat_in_thread};
 use super::keyset::{paged, Keyset, Page};
 use super::messages::conversation_of_turn;
+use crate::conversations::contract::{PendingPrompt, PendingPromptKind};
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::{
 	CheckoutCounts, ConversationMissions, HookedMission, LivenessSigns, Mission, MissionActivity,
@@ -110,7 +111,13 @@ pub(in crate::db) const MISSION_COLUMNS: &str = concat!(
 				'updated', 'handed_off')
 			AND NOT ",
 	a_notification_prompting_nobody!(),
-	"	ORDER BY mission_events.seq DESC LIMIT 1), 'opened') AS liveness_state_kind
+	"	ORDER BY mission_events.seq DESC LIMIT 1), 'opened') AS liveness_state_kind,
+	(SELECT id FROM mission_events
+		WHERE mission_events.mission_id = missions.id AND mission_events.kind = 'escalated'
+		ORDER BY mission_events.seq DESC LIMIT 1) AS escalation_id,
+	(SELECT json_extract(mission_events.payload, '$.question') FROM mission_events
+		WHERE mission_events.mission_id = missions.id AND mission_events.kind = 'escalated'
+		ORDER BY mission_events.seq DESC LIMIT 1) AS escalated_question
 	FROM missions"
 );
 
@@ -1135,6 +1142,8 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		state_seq: row.get(15)?,
 		is_agent_running: checkout.is_turn_running,
 		liveness: MissionLiveness::observed(derived(row.get(29)?)?, checkout),
+		pending_prompt: escalation(row, state)?,
+		working_bot_ids: Vec::new(),
 		status: last_status(row)?,
 		last_activity_at: row.get(19)?,
 		last_activity: row.get::<_, Option<String>>(20)?.map(|_| from_text(row, 20)).transpose()?,
@@ -1144,6 +1153,18 @@ pub(in crate::db) fn mission(row: &Row<'_>) -> rusqlite::Result<Mission> {
 		branch: row.get(25)?,
 		workspace_path: row.get(26)?,
 	})
+}
+
+fn escalation(row: &Row<'_>, state: MissionState) -> rusqlite::Result<Option<PendingPrompt>> {
+	if state != MissionState::WaitingHuman {
+		return Ok(None);
+	}
+	let asked = row.get::<_, Option<String>>(30)?.zip(row.get::<_, Option<String>>(31)?);
+	Ok(asked.map(|(prompt_id, text)| PendingPrompt {
+		prompt_id,
+		kind: PendingPromptKind::Question,
+		text,
+	}))
 }
 
 fn mission_record(row: &Row<'_>) -> rusqlite::Result<MissionRecord> {

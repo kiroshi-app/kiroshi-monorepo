@@ -335,7 +335,7 @@ mod tests {
 	use serde_json::json;
 
 	use super::super::tests::assert_crosses_as;
-	use super::super::Chat;
+	use super::super::{Chat, ObservedState};
 	use super::*;
 	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
@@ -391,8 +391,18 @@ mod tests {
 			}),
 		);
 		assert_crosses_as(
-			Chat { id: "c1".into(), created_at: 1, updated_at: 2 },
-			json!({ "id": "c1", "createdAt": 1, "updatedAt": 2 }),
+			Chat::of(
+				conversations::Chat { id: "c1".into(), created_at: 1, updated_at: 2 },
+				ObservedState::idle(),
+			),
+			json!({
+				"id": "c1",
+				"createdAt": 1,
+				"updatedAt": 2,
+				"state": "idle",
+				"pendingPrompt": null,
+				"workingBotIds": []
+			}),
 		);
 	}
 

@@ -607,15 +607,12 @@ export type Catalogue = {
 };
 
 export type CatalogueChat = {
-	conversationId: string,
-	kind: ConversationKind,
-	title: string,
-	botId: string | null,
-	participants: string[],
-	spaceId: string | null,
-};
+	state?: ConversationState,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
+} & ChatHit;
 
-export type CatalogueError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number } | { kind: "unknownBot"; id: string };
+export type CatalogueError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "queryTooLong"; limit: number } | { kind: "unknownBot"; id: string } | { kind: "unreadableState"; detail: string };
 
 export type CatalogueMission = {
 	id: string,
@@ -625,6 +622,9 @@ export type CatalogueMission = {
 	ticketExternalId: string,
 	ticketTitle: string,
 	state: MissionState,
+	liveness?: MissionLiveness,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
 	botId: string,
 	spaceId: string,
 };
@@ -644,6 +644,18 @@ export type Chat = {
 	id: string,
 	createdAt: number,
 	updatedAt: number,
+	state?: ConversationState,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
+};
+
+export type ChatHit = {
+	conversationId: string,
+	kind: ConversationKind,
+	title: string,
+	botId: string | null,
+	participants: string[],
+	spaceId: string | null,
 };
 
 export type ChatMessage = {
@@ -720,17 +732,14 @@ export type Conversation = {
 	participants: Participant[],
 };
 
-export type ConversationInList = {
-	state: ConversationState,
-} & Conversation;
+export type ConversationInList = Conversation & ObservedState;
 
 export type ConversationInPage = {
 	lastActivityAt: number,
 	lastWord: LastWord | null,
 	soloBotId: string | null,
 	activeTurn: ActiveTurn | null,
-	state: ConversationState,
-} & Conversation;
+} & Conversation & ObservedState;
 
 export type ConversationKind = "main" | "topic" | "mission";
 
@@ -1113,6 +1122,8 @@ export type Mission = {
 	stateSeq: number,
 	isAgentRunning: boolean,
 	liveness?: MissionLiveness,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
 	openedAt: number,
 	closedAt: number | null,
 	reportedAt: number | null,
@@ -1139,6 +1150,8 @@ export type MissionChanged = {
 	stateSeq: number,
 	isAgentRunning: boolean,
 	liveness?: MissionLiveness,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
 	lastActivityAt: number | null,
 };
 
@@ -1246,6 +1259,12 @@ export type OauthError_Serialize = ({ kind: "alreadyRunning" }) & { body?: never
 
 export type OauthStep = "discovery" | "registration" | "tokenExchange";
 
+export type ObservedState = {
+	state: ConversationState,
+	pendingPrompt?: PendingPrompt | null,
+	workingBotIds?: string[],
+};
+
 export type OfferedModel = OfferedModel_Serialize | OfferedModel_Deserialize;
 
 export type OfferedModel_Deserialize = {
@@ -1275,6 +1294,14 @@ export type PayloadField = {
 	name: string,
 	type: FieldType,
 };
+
+export type PendingPrompt = {
+	promptId: string,
+	kind: PendingPromptKind,
+	text: string,
+};
+
+export type PendingPromptKind = "question" | "permission";
 
 export type PermissionDecision = "allowOnce" | "deny";
 

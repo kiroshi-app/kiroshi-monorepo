@@ -333,6 +333,7 @@ impl From<CatalogueError> for CompanionError {
 			CatalogueError::UnknownBot { id } => {
 				CompanionError::Unexpected { detail: format!("the catalogue names no bot {id}") }
 			}
+			CatalogueError::UnreadableState { detail } => CompanionError::Unexpected { detail },
 		}
 	}
 }
