@@ -10,20 +10,29 @@ struct TableCard: View {
     @ScaledMetric(relativeTo: .subheadline) private var columnGap: CGFloat = 16
     @State private var cardWidth: CGFloat = 0
 
+    static func rowCount(_ count: Int) -> String {
+        count == 1 ? "1 row" : "\(count) rows"
+    }
+
     var body: some View {
-        ScrollView(.horizontal) {
-            grid
-                .frame(minWidth: cardWidth, alignment: .leading)
+        VStack(alignment: .leading, spacing: 0) {
+            MessageCardHeader(
+                label: Self.rowCount(table.rows.count), copyLabel: "Copy table",
+                copied: table.tabSeparated)
+            ScrollView(.horizontal) {
+                grid
+                    .frame(minWidth: cardWidth, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                cardWidth = $0
+            }
         }
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .textSelection(.disabled)
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.width
-        } action: {
-            cardWidth = $0
-        }
-        .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 14))
-        .contentShape(.contextMenuPreview, .rect(cornerRadius: 14))
+        .messageCard()
+        .contentShape(.contextMenuPreview, .rect(cornerRadius: MessageCard.cornerRadius))
         .contextMenu {
             Button("Copy Table", systemImage: "square.on.square", action: copyTable)
             Button("Copy Message", systemImage: "message", action: copyMessage)
@@ -59,7 +68,7 @@ struct TableCard: View {
             }
         }
         .padding(.horizontal, inset)
-        .padding(.vertical, 2)
+        .padding(.bottom, 2)
     }
 
     private func cell(row: Int, column: Int) -> some View {

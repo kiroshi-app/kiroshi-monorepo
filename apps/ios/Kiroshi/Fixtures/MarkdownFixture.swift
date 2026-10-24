@@ -104,6 +104,30 @@
             | Pinned order | Basil | Desktop | Oct 20 | +88 |
             | Secrets sorting | Basil | Desktop | Oct 21 | +36 |
             """
+        static let buildTimes = """
+            | Build | Size | Time |
+            |---|--:|--:|
+            | 4.2.0 | 38 MB | 6 min |
+            | 4.1.3 | 37 MB | 5 min |
+            | 4.1.2 | 41 MB | 9 min |
+            """
+        static let latency = """
+            | Region | Requests | p50 | p95 | Errors | Owner |
+            |---|--:|--:|--:|--:|---|
+            | Europe West | 1,284,330 | 82 ms | 240 ms | 0.12% | Juniper |
+            | US East | 2,019,442 | 64 ms | 198 ms | 0.08% | Atlas |
+            | Asia Pacific | 731,005 | 120 ms | 410 ms | 0.31% | Juniper |
+            """
+        static let buildsAndLatency = """
+            The last three builds:
+
+            \(buildTimes)
+
+            And latency by region this week:
+
+            \(latency)
+            """
+        static let retryHelperAndBuilds = retryHelper + "\n\n" + buildTimes
         static let builds = "Builds for 4.2:\n\n" + narrowTable
         static let changes = "And the changes behind them:\n\n" + wideTable
         static let mention =
@@ -172,6 +196,8 @@
             "6": (false, [codeBlock]),
             "retry": (false, [retryHelper]),
             "7": (false, [builds, changes]),
+            "tables": (false, [buildsAndLatency]),
+            "code-and-table": (false, [retryHelperAndBuilds]),
             "8": (true, [mention]),
             "9": (false, [diagrams]),
             "10": (false, [mixedReply]),
