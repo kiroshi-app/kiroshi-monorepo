@@ -203,13 +203,13 @@ const OWN_ANSWER = "Wait until the spring catalogue is ready"
 
 export const NothingChosen = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { questions: [PLAN_QUESTION], onMinimise: fn() },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
 	render: inComposerSlot,
 	parameters: {
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip and the foot hint names the range, but no digit key is bound. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
+				story: `Artboard 1.1: one single-select question waiting on its first pick. ${ARTBOARD}The header label sits above the question, Minimize top right. Every row carries its 1-based digit in a key chip, and with \`hasDigitKeys\` the foot hint names the range; the panel binds no digit key itself, and without the prop the hint reads the Return part alone. Send is drawn at 40% while nothing is chosen and the own-answer field is empty; it stays reachable, and pressing it says what is missing. Skip calls \`onDeny\`, Minimize calls \`onMinimise\`.`,
 			},
 		},
 	},
@@ -264,7 +264,7 @@ export const NothingChosen = meta.story({
 
 export const OptionChosen = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { questions: [PLAN_QUESTION], onMinimise: fn() },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
 	render: inComposerSlot,
 	parameters: {
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
@@ -327,7 +327,11 @@ export const ChosenRowFollowsSpaceTint = meta.story({
 
 export const SeveralChecked = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { questions: [CHANNELS_QUESTION], onMinimise: fn() },
+	args: {
+		questions: [CHANNELS_QUESTION],
+		onMinimise: fn(),
+		hasDigitKeys: true,
+	},
 	render: inComposerSlot,
 	parameters: {
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
@@ -377,7 +381,7 @@ export const SeveralChecked = meta.story({
 
 export const OwnAnswerTyping = meta.story({
 	globals: { theme_layout: "side-by-side" },
-	args: { questions: [PLAN_QUESTION], onMinimise: fn() },
+	args: { questions: [PLAN_QUESTION], onMinimise: fn(), hasDigitKeys: true },
 	render: inComposerSlot,
 	parameters: {
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
@@ -419,6 +423,7 @@ export const SeveralQuestions = meta.story({
 	args: {
 		questions: [PLAN_QUESTION, CHANNELS_QUESTION, RELEASE_QUESTION],
 		onMinimise: fn(),
+		hasDigitKeys: true,
 	},
 	render: inComposerSlot,
 	parameters: {
@@ -473,7 +478,7 @@ export const WaitingBar = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`.`,
+				story: `Artboard 3.1: the panel folded into its waiting bar, drawn by the same component while \`minimised\` is true. ${ARTBOARD}An amber question mark, who is waiting, then the question on one clamped line, and Answer, which calls \`onExpand\`. A screen reader reaches the title as text before Answer, and Answer is described by the question.`,
 			},
 		},
 	},
@@ -485,9 +490,16 @@ export const WaitingBar = meta.story({
 		for (const bar of bars) {
 			const strip = bar.firstElementChild as HTMLElement
 			const question = within(bar).getByText(PLAN_QUESTION.question)
+			const title = within(bar).getByText("Shoto is waiting on your answer")
+			const answer = within(bar).getByRole("button", {
+				name: chat.toolQuestion.waiting.answer,
+			})
+			await expect(title).toBeVisible()
+			await expect(answer).toHaveAccessibleDescription(PLAN_QUESTION.question)
 			await expect(
-				within(bar).getByText("Shoto is waiting on your answer"),
-			).toBeVisible()
+				title.compareDocumentPosition(answer) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy()
 			await expect(backgroundOf(strip)).toBe(
 				tokenStyleIn(strip, "bg-question-bar", "backgroundColor"),
 			)
@@ -605,11 +617,12 @@ export const KeyboardFocusRings = meta.story({
 })
 
 export const SingleSelect = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"One question that holds at most one answer: picking a second option replaces the first rather than adding to it. Reach for this to check the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked option, and that Skip calls `onDeny`. " +
+					"The behaviour behind `NothingChosen` and `OptionChosen`: one question that holds at most one answer, so picking a second option replaces the first. Check that the whole row picks the option (the description, the padding, anywhere but the preview), that Send loses its 40% once a pick is held, that the preview appears only under the picked row, that without `hasDigitKeys` the foot hint reads only `Return to send.`, and that Skip calls `onDeny`. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -622,6 +635,8 @@ export const SingleSelect = meta.story({
 			canvas.getByText("Server rendering and routing out of the box."),
 		)
 		await expect(submit).not.toHaveAttribute("aria-disabled")
+		await expect(canvas.getByText(chat.toolQuestion.hint.send)).toBeVisible()
+		await expect(canvas.queryByText(/^Press /)).not.toBeInTheDocument()
 		await expect(
 			canvas.getByText("bun create next-app dashboard"),
 		).toBeVisible()
@@ -645,12 +660,13 @@ export const SingleSelect = meta.story({
 })
 
 export const MultiSelect = meta.story({
+	tags: ["test-only"],
 	args: { questions: [SCOPE_QUESTION] },
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The same question with `multiSelect` true: several options hold at once and the answer is their labels joined by `, `, in the order they were picked. Check that picking a second option keeps the first, that picking a held option lets it go, and that the card stays put — a question still being built must not be taken as done. " +
+					"The behaviour behind `SeveralChecked`: with `multiSelect` true every row is a checkbox, several hold at once, and the answer is their labels joined by `, `, in the order they were checked. Check that checking a second row keeps the first, that checking a held row lets it go, and that the panel stays on the question, since a question still being built must not be taken as done. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -669,11 +685,12 @@ export const MultiSelect = meta.story({
 })
 
 export const FreeText = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"The answer the call never offered. Every question carries an own-answer field under its options, and what is typed there is reported as the whole answer: it is not a note attached to a pick. Check that typing drops whatever was picked, that the keyboard alone reaches the options, the field, Skip and Send, and that the answer is the typed text verbatim. " +
+					"The behaviour behind `OwnAnswerTyping`: the answer the call never offered. What is typed in the own-answer field under the rows is reported as the whole answer, not a note attached to a pick. Check that typing drops whatever was picked, that the keyboard alone reaches the rows, the field, Skip and Send, and that the answer is the typed text verbatim. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -712,7 +729,7 @@ export const KeyboardOnly = meta.story({
 		docs: {
 			description: {
 				story:
-					"The card as a docked surface reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it above the composer. Enter does exactly what the primary button does — it hands over the next question still waiting, and sends the answers once none is. Enter on a question holding nothing does nothing, and every control that already answers to Enter — an option, a tab, the free-text field, a footer button — keeps its own behaviour. " +
+					"The panel reached without the mouse: it is a form that takes focus the moment it appears, so the reader never hunts for it. Return on the panel or on an option row does what the end of the foot does: it hands over the next question still waiting, and sends once none is. Return on a question holding nothing sends nothing and says what is missing. Every other control keeps its own Return: a segment, the own-answer field, Skip, Minimize, an exit and a notice action. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -725,22 +742,17 @@ export const KeyboardOnly = meta.story({
 		await expect(args.onAnswer).not.toHaveBeenCalled()
 		await expect(canvas.getByText(SCOPE_QUESTION.question)).toBeVisible()
 
-		await userEvent.click(canvas.getByRole("checkbox", { name: /Chat/ }))
-		await expect(
-			canvas.getByRole("button", { name: /next question/i }),
-		).toBeEnabled()
-
-		card.focus()
+		const checkbox = canvas.getByRole("checkbox", { name: "Chat" })
+		await userEvent.click(checkbox)
+		await expect(checkbox).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
 		await expect(canvas.getByText(RELEASE_QUESTION.question)).toBeVisible()
 
-		await userEvent.click(canvas.getByRole("radio", { name: /Now/ }))
-		await expect(
-			canvas.getByRole("button", { name: /send answers/i }),
-		).toBeEnabled()
-
-		card.focus()
+		const radio = canvas.getByRole("radio", { name: "Now" })
+		await userEvent.click(radio)
+		await expect(radio).toHaveFocus()
 		await userEvent.keyboard("{Enter}")
+		await expect(args.onAnswer).toHaveBeenCalledTimes(1)
 		await expect(args.onAnswer).toHaveBeenCalledWith({
 			[SCOPE_QUESTION.question]: "Chat",
 			[RELEASE_QUESTION.question]: "Now",
@@ -749,6 +761,7 @@ export const KeyboardOnly = meta.story({
 })
 
 export const FourQuestions = meta.story({
+	tags: ["test-only"],
 	args: {
 		questions: [
 			FRAMEWORK_QUESTION,
@@ -761,7 +774,7 @@ export const FourQuestions = meta.story({
 		docs: {
 			description: {
 				story:
-					"The widest call the tool can make: four questions under four tabs, one on screen at a time. The primary button carries the reader through them: it reads `Next question` while another question still waits, and only becomes `Send answers` on the last one, so nothing is sent half-answered. Check that answering a single-select question hands over the next by itself, that pressing the button before the question on screen holds an answer keeps it on screen with an error, that a tab can be reached in any order once the reader wants to change an answer, that an answered tab carries its check, and that the send reports all four at once, keyed by question. " +
+					"The behaviour behind `SeveralQuestions`, at the widest call the tool can make: four questions under four segments, one on screen at a time. The end of the foot carries the reader through them: it reads `Next` while another question still waits, and only becomes `Send` on the last one, so nothing is sent half-answered. Check that answering a single-select question hands over the next by itself, that a segment can be reached in any order to change an answer, that an answered segment carries its check, and that the send reports all four at once, keyed by question. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -826,7 +839,7 @@ export const Narrow = meta.story({
 		docs: {
 			description: {
 				story:
-					"The four-tab card in a 320px column, the narrowest surface a transcript ever hands it. Check that the tab strip stays inside the column and scrolls sideways rather than pushing a tab out of it, that the four tabs hold one line by sharing a top edge, that every tab is still reachable by pointer and by arrow key, and that an option below still takes a press and hands the card over to the next question waiting. Pick `FourQuestions` for the same card with room to spread. " +
+					"Four questions in a 320px column, the narrowest surface a transcript ever hands the panel. Check that the segment track stays inside the column and scrolls sideways rather than pushing a segment out of it, that the four segments hold one line by sharing a top edge, that every segment is still reachable by pointer and by arrow key, and that a row below still takes a press and hands the panel over to the next question waiting. Pick `SeveralQuestions` for the same control with room to spread. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -939,7 +952,7 @@ export const ReducedMotion = meta.story({
 		docs: {
 			description: {
 				story:
-					"The card for a reader who asked the system to stop moving things. The registry tab transitions every property it changes; the card drops that under `prefers-reduced-motion`, so the fill moves from one tab to the next in a single frame. Check that every tab reports a transition of no duration, and that the strip still selects. " +
+					"The panel for a reader who asked the system to stop moving things. A segment transitions its colour, fill and shadow; the panel drops that under `prefers-reduced-motion`, so the lifted fill moves from one segment to the next in a single frame. Check that every segment reports a transition of no duration, and that the track still selects. " +
 					POSTED_BY_ONBOARDING,
 			},
 		},
@@ -1559,7 +1572,7 @@ export const Failure = meta.story({
 		docs: {
 			description: {
 				story:
-					"A failure carried by the question itself. The block sits above the question line inside the same card: a dot in the destructive token, the sentence that says what went wrong across the whole row, and the raw detail on a surface sized to its own text at the inline start. The question keeps its options below, and the form names the failure in its accessible description, so a screen reader hears what went wrong along with the question it asks. " +
+					"A failure carried by the question itself. The block sits in the head of the panel, between the header label and the question: a dot in the destructive token, the sentence that says what went wrong, and the raw detail on a `card` surface sized to its own text at the inline start. The question keeps its rows below, and the form names the failure in its accessible description, so a screen reader hears what went wrong along with the question it asks. " +
 					ASKED_BY_THE_SESSION,
 			},
 		},
@@ -1773,7 +1786,7 @@ export const FailureWithAction = meta.story({
 		docs: {
 			description: {
 				story:
-					"The upper bubble of artboard E11: an item declared a notice, a failure with nothing to answer. A notice takes no question text, so no option, no free text and no question line are drawn, the failure title names the form, and the primary action replaces Send, enabled without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question. `packages/ui/src/components/application-install-turn.tsx:30` posts the notice when the key an install needs was left out: no question, no dismiss, one action to Settings.",
+					"An item declared a notice: a failure with nothing to answer. A notice takes no question text, so no row, no own-answer field and no question line are drawn, the failure title names the form, and its action takes the end of the foot in place of Send, at full strength without any answer, with its own label and leading glyph. Pick `Failure` when the failure still asks a question below it, and `NoticeInQueue` for a notice beside a question. `packages/ui/src/components/application-install-turn.tsx:30` posts the notice when the key an install needs was left out: no question, no Skip, one action to Settings.",
 			},
 		},
 	},
@@ -1803,7 +1816,7 @@ export const NoticeInQueue = meta.story({
 		docs: {
 			description: {
 				story:
-					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's option keeps the card on the question, the primary control reads `Send answers` rather than `Next question`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own. No request mixes the two: `packages/ui/src/components/application-install-turn.tsx:30` posts a notice alone and `apps/app/src/components/thread-prompt.tsx:114` maps questions the agent asked, never a notice beside them.",
+					"A question queued beside a notice. The notice has nothing to answer, so it never waits: picking the question's row keeps the panel on the question, the foot ends on `Send` rather than `Next`, and sending reports the question's answer alone. Pick `FailureWithAction` for a notice on its own. No request mixes the two: `packages/ui/src/components/application-install-turn.tsx:30` posts a notice alone and `apps/app/src/components/thread-prompt.tsx:114` maps questions the agent asked, never a notice beside them.",
 			},
 		},
 	},
@@ -1834,7 +1847,7 @@ const INVERSE_BUTTONS =
 	'button[type="submit"], [data-card="action"] [data-slot="button"]'
 
 const INVERSE_TREATMENT =
-	"The primary controls of the card in the inverse treatment of artboards V1e and V1f, light and dark side by side: `Send answers`, `Next question` on a card with a question still waiting, and the action of a notice, each filled with the `foreground` token with its label and glyph drawn with the `background` token. Skip stays ghost. "
+	"The pill at the end of the foot in the inverse treatment, light and dark side by side: `Send`, `Next` on a panel with a question still waiting, and the action of a notice, each filled with the `foreground` token with its label and glyph drawn with the `background` token. Skip stays ghost. "
 
 const inverseButtonsIn = (canvasElement: HTMLElement) => [
 	...canvasElement.querySelectorAll<HTMLButtonElement>(INVERSE_BUTTONS),
@@ -1938,7 +1951,7 @@ export const InverseButtonsPending = meta.story({
 		a11y: A11Y_SIDE_BY_SIDE_TWIN_LANDMARKS,
 		docs: {
 			description: {
-				story: `${INVERSE_TREATMENT}The only disabled state these buttons have: \`Send answers\` while the answers are on their way. The primitive halves the opacity of the whole button, fill and label together, so the label stays apart from its fill.`,
+				story: `${INVERSE_TREATMENT}\`Send\` while the answers are on their way, the one state where it is disabled rather than drawn at 40%. The primitive halves the opacity of the whole pill, fill and label together, so the label stays apart from its fill.`,
 			},
 		},
 	},
@@ -1968,7 +1981,7 @@ export const ThemesLinkRowAtRest = meta.story({
 		docs: {
 			description: {
 				story:
-					"The link row on the frame of the artboard V1e text field, light and dark side by side: a `muted` fill, a 1px `input` outline and the `radius-control` corner around the read-only link and its copy control.",
+					"The link row of an entry question inside the panel, light and dark side by side: a `muted` fill, a 1px `input` outline and the `radius-control` corner around the read-only link and its copy control, on the frame every settings text field wears.",
 			},
 		},
 	},

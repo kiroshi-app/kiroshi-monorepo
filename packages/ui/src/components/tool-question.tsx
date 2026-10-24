@@ -35,7 +35,7 @@ const QUESTION_SEGMENTS_CLASS =
 	"relative scrollbar-hide max-w-full justify-start gap-0.5 self-start overflow-x-auto rounded-[11px] bg-border p-0.75 group-data-horizontal/tabs:h-fit"
 
 const QUESTION_SEGMENT_CLASS =
-	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 transition-[color,background-color,box-shadow] hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] motion-reduce:transition-none motion-reduce:duration-0 dark:text-question-segment-foreground dark:data-active:bg-card"
+	"h-6.5 max-w-full flex-none shrink-0 gap-1 rounded-md px-3 py-0 font-medium text-compact text-question-segment-foreground leading-4 transition-[color,background-color,box-shadow] hover:text-foreground data-active:bg-card data-active:text-foreground data-active:shadow-[0_1px_2px_rgb(0_0_0/10%)] motion-reduce:transition-none motion-reduce:duration-0 dark:data-active:bg-card"
 
 const QUESTION_GROUP_CLASS = "flex flex-col gap-1.5"
 
@@ -129,6 +129,7 @@ export interface ToolQuestionProps {
 	onAnswer?: (answers: ToolQuestionAnswers) => unknown
 	onDeny?: () => void
 	companionName?: string
+	hasDigitKeys?: boolean
 	minimised?: boolean
 	onMinimise?: () => void
 	onExpand?: () => void
@@ -142,6 +143,11 @@ const EMPTY_DRAFT: Draft = { selected: [], text: "" }
 const answerOf = ({ selected, text }: Draft) =>
 	text.trim() || selected.join(", ")
 
+const OPTION_ROW_SLOT = "tool-question-option"
+
+const isOptionRow = (target: EventTarget) =>
+	target instanceof HTMLElement && target.dataset.slot === OPTION_ROW_SLOT
+
 const digitRangeOf = (count: number) => (count === 1 ? "1" : `1-${count}`)
 
 const ToolQuestion = ({
@@ -149,6 +155,7 @@ const ToolQuestion = ({
 	onAnswer,
 	onDeny,
 	companionName,
+	hasDigitKeys,
 	minimised,
 	onMinimise,
 	onExpand,
@@ -239,7 +246,8 @@ const ToolQuestion = ({
 	}
 
 	const readKey = (event: KeyboardEvent<HTMLFormElement>) => {
-		if (event.target !== event.currentTarget) return
+		if (event.target !== event.currentTarget && !isOptionRow(event.target))
+			return
 		if (event.key !== "Enter" || event.shiftKey) return
 		event.preventDefault()
 		sendOrAdvance()
@@ -248,7 +256,7 @@ const ToolQuestion = ({
 	const hintOf = () => {
 		if (item.isNotice) return null
 		const typesOwnAnswer = item.entry || draftOf(item.question).text !== ""
-		if (typesOwnAnswer || item.options.length === 0) {
+		if (!hasDigitKeys || typesOwnAnswer || item.options.length === 0) {
 			return waiting ? t("toolQuestion.hint.next") : t("toolQuestion.hint.send")
 		}
 		const range = digitRangeOf(item.options.length)
@@ -467,6 +475,7 @@ const WaitingBar = ({
 	className,
 }: WaitingBarProps) => {
 	const { t } = useTranslation("chat")
+	const questionId = useId()
 
 	return (
 		<div
@@ -485,10 +494,14 @@ const WaitingBar = ({
 						? t("toolQuestion.waiting.title", { name: companionName })
 						: t("toolQuestion.waiting.unnamedTitle")}
 				</p>
-				<p className="min-w-0 flex-1 truncate text-compact text-muted-foreground leading-4.5">
+				<p
+					className="min-w-0 flex-1 truncate text-compact text-muted-foreground leading-4.5"
+					id={questionId}
+				>
 					{question}
 				</p>
 				<Button
+					aria-describedby={questionId}
 					className={cn(QUESTION_INVERSE_PILL_CLASS, "px-3.5")}
 					onClick={onExpand}
 					type="button"
@@ -833,6 +846,7 @@ const OptionRow = ({
 		<>
 			{isMultiSelect ? (
 				<CheckboxPrimitive.Root
+					data-slot={OPTION_ROW_SLOT}
 					aria-describedby={descriptionId}
 					aria-labelledby={labelId}
 					checked={isChecked}
@@ -843,6 +857,7 @@ const OptionRow = ({
 				</CheckboxPrimitive.Root>
 			) : (
 				<RadioPrimitive.Root
+					data-slot={OPTION_ROW_SLOT}
 					aria-describedby={descriptionId}
 					aria-labelledby={labelId}
 					className={rowClass}
@@ -875,7 +890,7 @@ const OptionMark = ({ isChecked, isMultiSelect }: OptionMarkProps) => {
 		return isChecked ? <Icons.Check className={QUESTION_CHECK_CLASS} /> : null
 	}
 	return isChecked ? (
-		<span className="grid size-5 place-items-center rounded-full bg-user-bubble-foreground text-(--user-bubble)">
+		<span className="grid size-5 place-items-center rounded-full bg-user-bubble-foreground text-user-bubble">
 			<Icons.Check className="size-3" />
 		</span>
 	) : (

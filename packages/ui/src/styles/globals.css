@@ -76,6 +76,7 @@
 	--color-presence-online: var(--presence-online);
 	--color-presence-offline: var(--presence-offline);
 	--color-title-bar-pill: var(--title-bar-pill);
+	--color-user-bubble: var(--user-bubble);
 	--color-user-bubble-foreground: var(--user-bubble-foreground);
 	--color-question-bar: var(--question-bar);
 	--color-question-segment-foreground: var(--question-segment-foreground);
