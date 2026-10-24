@@ -18,7 +18,7 @@ struct TableCardTests {
     static let artboards = [
         Artboard(
             name: "stroke", color: MessageCard.stroke, light: "#C6C6C8", dark: "#48484A",
-            increasedLight: "#8A8A8E", increasedDark: "#7C7C80"),
+            increasedLight: "#6C6C70", increasedDark: "#7C7C80"),
         Artboard(
             name: "row count", color: MessageCard.label, light: "#6C6C70", dark: "#EBEBF599",
             increasedLight: "#545456", increasedDark: "#AEAEB2"),
