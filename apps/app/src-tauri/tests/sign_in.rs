@@ -84,7 +84,7 @@ async fn answered_after_the_cancel(app: &App<MockRuntime>) {
 }
 
 async fn wind_down(app: &App<MockRuntime>) {
-	terminate_session(app.state::<AgentState>().inner()).await;
+	terminate_session(app.handle(), app.state::<AgentState>().inner()).await;
 }
 
 fn a_received_file(name: &str) -> RemovedOnDrop {

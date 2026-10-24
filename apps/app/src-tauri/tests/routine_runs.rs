@@ -297,7 +297,7 @@ impl Host {
 	}
 
 	fn quit(self) {
-		block_on(terminate_session(&self.app.state::<AgentState>()));
+		block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
 	}
 }
 

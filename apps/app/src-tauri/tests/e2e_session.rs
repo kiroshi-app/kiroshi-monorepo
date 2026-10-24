@@ -97,7 +97,7 @@ impl Harness {
 
 	fn quit(&self) {
 		let runtime = tokio::runtime::Runtime::new().expect("runtime");
-		runtime.block_on(terminate_session(&self.app.state::<AgentState>()));
+		runtime.block_on(terminate_session(self.app.handle(), &self.app.state::<AgentState>()));
 	}
 
 	fn scope(&self) -> Value {
@@ -507,7 +507,10 @@ impl Stored {
 	}
 
 	fn close(self) {
-		tauri::async_runtime::block_on(terminate_session(&self.app.state::<AgentState>()));
+		tauri::async_runtime::block_on(terminate_session(
+			self.app.handle(),
+			&self.app.state::<AgentState>(),
+		));
 	}
 
 	fn turn_endings(&self) -> Vec<TurnOutcome> {

@@ -423,7 +423,7 @@ impl Host {
 	async fn session_gone_while_lagging(&self, scope: &RuntimeScope) {
 		let stall = Stall::every_worker();
 		let state = self.app.state::<AgentState>();
-		let mut shutting = std::pin::pin!(shutdown_session(&state, scope));
+		let mut shutting = std::pin::pin!(shutdown_session(self.app.handle(), &state, scope));
 		tokio::select! {
 			biased;
 			() = &mut shutting => {}
@@ -698,7 +698,7 @@ impl Host {
 	}
 
 	async fn quit(self) {
-		terminate_session(&self.app.state::<AgentState>()).await;
+		terminate_session(self.app.handle(), &self.app.state::<AgentState>()).await;
 		self.app.state::<Webhook>().stop();
 		if let Ok(dir) = self.app.path().app_data_dir() {
 			if let Err(failure) = std::fs::remove_dir_all(&dir) {
@@ -1037,7 +1037,7 @@ fn a_speaker_whose_session_shuts_down_mid_turn_releases_the_turn_for_the_next_se
 		host.speaking(ADA).await;
 		let held: RuntimeScope =
 			serde_json::from_value(host.scope_of(ADA)).expect("a runtime scope");
-		shutdown_session(&host.app.state::<AgentState>(), &held).await;
+		shutdown_session(host.app.handle(), &host.app.state::<AgentState>(), &held).await;
 		host.turn_ended_for(ADA).await;
 
 		let ada_ended: Vec<Value> = host

@@ -64,6 +64,12 @@ pub(crate) fn announce_in_turn<R: Runtime>(
 	announce_scoped(app, ScopedEvent { scope, turn, event });
 }
 
+fn announce_denied<R: Runtime>(app: &AppHandle<R>, dropped: &[PendingQuestion]) {
+	for question in dropped {
+		announce_scoped(app, question.denied());
+	}
+}
+
 fn announce_scoped<R: Runtime>(app: &AppHandle<R>, scoped: ScopedEvent) {
 	if let Err(failure) = events::emit(app, AGENT_EVENT, scoped) {
 		log::warn!("a turn event was not announced: {failure}");
@@ -127,6 +133,17 @@ impl PendingQuestion {
 		}
 	}
 
+	fn denied(&self) -> ScopedEvent {
+		ScopedEvent {
+			scope: Some(self.scope.clone()),
+			turn: self.turn.clone(),
+			event: AgentEvent::PermissionResolved {
+				id: self.request.id.clone(),
+				decision: PermissionDecision::Deny,
+			},
+		}
+	}
+
 	fn asked_by(&self, scope: &RuntimeScope) -> bool {
 		run_key(&self.scope) == run_key(scope)
 	}
@@ -152,6 +169,12 @@ impl<S> Run<S> {
 struct Admission<S> {
 	replaced: Option<S>,
 	keeps_lineage: bool,
+	dropped: Vec<PendingQuestion>,
+}
+
+struct Cleared<T> {
+	ended: T,
+	dropped: Vec<PendingQuestion>,
 }
 
 impl<S> Admission<S> {
@@ -179,8 +202,8 @@ impl<S> Live<S> {
 			.retain(|question| !(question.asked_by(scope) && question.request.id == id));
 	}
 
-	fn drop_questions(&self, scope: &RuntimeScope) {
-		self.questions().retain(|question| !question.asked_by(scope));
+	fn drop_questions(&self, scope: &RuntimeScope) -> Vec<PendingQuestion> {
+		self.questions().extract_if(.., |question| question.asked_by(scope)).collect()
 	}
 
 	fn pending_questions(&self) -> Vec<PendingQuestion> {
@@ -213,8 +236,8 @@ impl<S: Clone> Live<S> {
 			.insert(key, Run { scope: scope.clone(), session: None, started_at: now_ms() })
 			.and_then(|replaced| replaced.session);
 		drop(runs);
-		self.drop_questions(&scope);
-		Admission { replaced, keeps_lineage }
+		let dropped = self.drop_questions(&scope);
+		Admission { replaced, keeps_lineage, dropped }
 	}
 
 	fn install(&self, scope: &RuntimeScope, session: S) -> bool {
@@ -229,21 +252,20 @@ impl<S: Clone> Live<S> {
 		true
 	}
 
-	fn clear(&self, scope: &RuntimeScope) -> Option<S> {
-		let cleared = self
+	fn clear(&self, scope: &RuntimeScope) -> Cleared<Option<S>> {
+		let ended = self
 			.runs
 			.lock()
 			.expect("live runs")
 			.remove(&run_key(scope))
 			.and_then(|run| run.session);
-		self.drop_questions(scope);
-		cleared
+		Cleared { ended, dropped: self.drop_questions(scope) }
 	}
 
-	fn clear_all(&self) -> Vec<S> {
+	fn clear_all(&self) -> Cleared<Vec<S>> {
 		let cleared = std::mem::take(&mut *self.runs.lock().expect("live runs"));
-		self.questions().clear();
-		cleared.into_values().filter_map(|run| run.session).collect()
+		let dropped = std::mem::take(&mut *self.questions());
+		Cleared { ended: cleared.into_values().filter_map(|run| run.session).collect(), dropped }
 	}
 
 	fn hold_question(&self, asked: PendingQuestion, announce: impl FnOnce(PendingQuestion)) {
@@ -344,12 +366,14 @@ impl<R: Runtime> RunSink<R> {
 			AgentEvent::PermissionResolved { id, .. } => {
 				self.live.release_question(&self.scope, id)
 			}
-			AgentEvent::TurnEnded { .. } => self.live.drop_questions(&self.scope),
-			AgentEvent::Failed { error } if error.is_fatal() => {
-				self.live.drop_questions(&self.scope)
-			}
+			AgentEvent::TurnEnded { .. } => self.drop_questions(),
+			AgentEvent::Failed { error } if error.is_fatal() => self.drop_questions(),
 			_ => {}
 		}
+	}
+
+	fn drop_questions(&self) {
+		announce_denied(&self.app, &self.live.drop_questions(&self.scope));
 	}
 
 	fn record_its_own_lineage(&self, provider_session_id: String) {
@@ -566,6 +590,16 @@ impl<Item: Clone> Catalogue<Item> {
 impl AgentState {
 	pub fn leasing(lease: RunLease) -> Self {
 		Self { lease, ..Self::default() }
+	}
+
+	fn admit<R: Runtime>(
+		&self,
+		app: &AppHandle<R>,
+		scope: RuntimeScope,
+	) -> Admission<Arc<Session>> {
+		let admitted = self.live.take_over(scope);
+		announce_denied(app, &admitted.dropped);
+		admitted
 	}
 
 	pub fn host_writes(&self) -> &HostWrites {
@@ -1022,7 +1056,7 @@ pub(crate) async fn start_run<R: Runtime>(
 	let RunStart { scope, resume, cwd, output_schema, lineage } = start;
 	let _claim = state.claim(&scope)?;
 
-	let admitted = state.live.take_over(scope.clone());
+	let admitted = state.admit(&app, scope.clone());
 	let lineage_is_held_elsewhere = resume.is_some() && !admitted.keeps_lineage;
 	let resume = admitted.resume(resume);
 	if let Some(previous) = admitted.replaced {
@@ -1392,28 +1426,40 @@ pub async fn agent_pending_questions_in_space(
 	Ok(in_the_space)
 }
 
-pub async fn shutdown_session(state: &AgentState, scope: &RuntimeScope) {
-	let session = state.live.clear(scope);
-	if let Some(session) = session {
+pub async fn shutdown_session<R: Runtime>(
+	app: &AppHandle<R>,
+	state: &AgentState,
+	scope: &RuntimeScope,
+) {
+	let cleared = state.live.clear(scope);
+	announce_denied(app, &cleared.dropped);
+	if let Some(session) = cleared.ended {
 		session.shutdown().await;
 	}
 }
 
-pub async fn terminate_session(state: &AgentState) {
-	state.enter_quit();
-	let ending: Vec<_> = state
-		.live
-		.clear_all()
-		.into_iter()
-		.map(|session| tauri::async_runtime::spawn(async move { session.shutdown().await }))
-		.collect();
-	for termination in ending {
-		let _ = termination.await;
-	}
+pub async fn terminate_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
+	end_every_session(app, state).await;
 	if let Some(sidecar) = state.take_sidecar().await {
 		sidecar.terminate().await;
 	}
 	sidecar::sweep_live_groups();
+}
+
+async fn end_every_session<R: Runtime>(app: &AppHandle<R>, state: &AgentState) {
+	state.enter_quit();
+	let cleared = state.live.clear_all();
+	announce_denied(app, &cleared.dropped);
+	let ending: Vec<_> = cleared
+		.ended
+		.into_iter()
+		.map(|session| tauri::async_runtime::spawn(async move { session.shutdown().await }))
+		.collect();
+	for termination in ending {
+		if let Err(failure) = termination.await {
+			log::warn!("a session did not shut down at quit: {failure}");
+		}
+	}
 }
 
 #[tauri::command]
@@ -1427,7 +1473,7 @@ pub async fn agent_shutdown<R: Runtime>(
 	if state.live.is_foreign(&scope) {
 		return Err(stale(&scope));
 	}
-	shutdown_session(&state, &scope).await;
+	shutdown_session(&app, &state, &scope).await;
 	announce(&app, Some(scope), AgentEvent::ConnectionChanged { state: ConnectionState::Checking });
 	Ok(())
 }
@@ -2001,7 +2047,11 @@ mod tests {
 		for scope in &runs {
 			assert!(live.holds(scope), "a run the host admitted was not held live");
 		}
-		assert_eq!(live.clear_all().len(), runs.len(), "the host let go of a run it had admitted");
+		assert_eq!(
+			live.clear_all().ended.len(),
+			runs.len(),
+			"the host let go of a run it had admitted"
+		);
 	}
 
 	#[test]
@@ -2020,7 +2070,7 @@ mod tests {
 		assert_eq!(live.session_for(&another_bots_run()).ok(), Some(ANOTHER_BOTS_SESSION));
 		assert!(live.holds(&a_scope()) && live.holds(&another_bots_run()));
 
-		assert_eq!(live.clear(&a_scope()), Some(REPLACED_SESSION));
+		assert_eq!(live.clear(&a_scope()).ended, Some(REPLACED_SESSION));
 		assert!(
 			live.holds(&another_bots_run()),
 			"ending one bot's run ended the run of the bot beside it"
@@ -2041,7 +2091,7 @@ mod tests {
 		live.install(&another_bots_run(), ANOTHER_BOTS_SESSION);
 		live.take_over(a_run_named("r7"));
 
-		let mut ended = live.clear_all();
+		let mut ended = live.clear_all().ended;
 		ended.sort_unstable();
 		assert_eq!(
 			ended,
@@ -2522,16 +2572,127 @@ mod tests {
 			assert_eq!(a_late_listener(app.handle()), vec![kept]);
 		}
 
-		#[tokio::test]
-		async fn a_stopped_session_leaves_no_question_pending() {
-			let app = an_app("stopped");
-			let run = a_run_held_by_the_app(app.handle(), a_scope());
+		fn denied(id: &str) -> Frame {
+			let resolved = ScopedEvent {
+				scope: Some(a_scope()),
+				turn: the_turn(),
+				event: AgentEvent::PermissionResolved {
+					id: id.into(),
+					decision: PermissionDecision::Deny,
+				},
+			};
+			events::frame(AGENT_EVENT, &resolved).expect("a frame")
+		}
+
+		fn framed(event: AgentEvent) -> Frame {
+			let scoped = ScopedEvent { scope: Some(a_scope()), turn: the_turn(), event };
+			events::frame(AGENT_EVENT, &scoped).expect("a frame")
+		}
+
+		fn everything_heard(heard: &mut broadcast::Receiver<Frame>) -> Vec<Frame> {
+			std::iter::from_fn(|| heard.try_recv().ok()).collect()
+		}
+
+		fn two_questions_and_one_elsewhere(app: &AppHandle<MockRuntime>) {
+			let run = a_run_held_by_the_app(app, a_scope());
 			run.emit(question("q1"), the_turn());
+			run.emit(question("q2"), the_turn());
+			a_run_held_by_the_app(app, another_bots_run()).emit(
+				question("q9"),
+				Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+			);
+		}
 
-			shutdown_session(&app.state::<AgentState>(), &a_scope()).await;
+		#[tokio::test]
+		async fn a_stopped_session_announces_each_of_its_questions_denied_once_and_lists_none() {
+			let app = an_app("stopped");
+			two_questions_and_one_elsewhere(app.handle());
+			let mut heard = events::subscribed(app.handle());
 
+			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+
+			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert_eq!(
+				pending_in(app.handle(), "c2").await.len(),
+				1,
+				"another run lost its question"
+			);
+		}
+
+		#[tokio::test]
+		async fn a_quit_announces_every_pending_question_denied_and_lists_none() {
+			let app = an_app("quit");
+			two_questions_and_one_elsewhere(app.handle());
+			let mut heard = events::subscribed(app.handle());
+
+			end_every_session(app.handle(), &app.state::<AgentState>()).await;
+
+			let elsewhere = ScopedEvent {
+				scope: Some(another_bots_run()),
+				turn: Some(EventTurn { turn_id: "t9".into(), conversation_id: "c2".into() }),
+				event: AgentEvent::PermissionResolved {
+					id: "q9".into(),
+					decision: PermissionDecision::Deny,
+				},
+			};
+			assert_eq!(
+				everything_heard(&mut heard),
+				vec![
+					denied("q1"),
+					denied("q2"),
+					events::frame(AGENT_EVENT, &elsewhere).expect("a frame")
+				]
+			);
 			assert!(a_late_listener(app.handle()).is_empty());
 			assert!(pending_in(app.handle(), "c1").await.is_empty());
+			assert!(pending_in(app.handle(), "c2").await.is_empty());
+		}
+
+		#[tokio::test]
+		async fn a_run_taken_over_announces_the_questions_it_held_denied() {
+			let app = an_app("taken-over");
+			two_questions_and_one_elsewhere(app.handle());
+			let mut heard = events::subscribed(app.handle());
+
+			app.state::<AgentState>().admit(app.handle(), a_scope());
+
+			assert_eq!(everything_heard(&mut heard), vec![denied("q1"), denied("q2")]);
+			assert!(pending_in(app.handle(), "c1").await.is_empty());
+		}
+
+		#[test]
+		fn a_turn_that_ends_or_crashes_announces_its_questions_denied_before_its_end() {
+			for (name, settling) in [("ended-denied", turn_ended()), ("crashed-denied", crashed())]
+			{
+				let app = an_app(name);
+				let run = a_run_held_by_the_app(app.handle(), a_scope());
+				run.emit(question("q1"), the_turn());
+				let mut heard = events::subscribed(app.handle());
+
+				run.emit(settling.clone(), the_turn());
+
+				assert_eq!(
+					everything_heard(&mut heard),
+					vec![denied("q1"), framed(settling)],
+					"{name} did not settle its question"
+				);
+			}
+		}
+
+		#[tokio::test]
+		async fn a_question_answered_before_the_shutdown_is_not_announced_again() {
+			let app = an_app("answered-then-stopped");
+			let run = a_run_held_by_the_app(app.handle(), a_scope());
+			run.emit(question("q1"), the_turn());
+			run.emit(answered("q1"), the_turn());
+			let mut heard = events::subscribed(app.handle());
+
+			shutdown_session(app.handle(), &app.state::<AgentState>(), &a_scope()).await;
+			run.emit(turn_ended(), the_turn());
+
+			assert_eq!(everything_heard(&mut heard), vec![framed(turn_ended())]);
 		}
 
 		#[tokio::test]

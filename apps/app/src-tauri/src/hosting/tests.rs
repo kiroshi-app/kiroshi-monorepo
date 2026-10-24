@@ -3112,7 +3112,7 @@ fn the_pending_questions_in_a_space_leave_out_every_question_settled_or_let_go()
 			match settled {
 				"answered" => run.emit(its_answer(settled), a_turn_in("c-theirs")),
 				"cancelled" => run.emit(cancelled.clone(), a_turn_in("c-theirs")),
-				"shut down" => commands::shutdown_session(&app.state(), &scope).await,
+				"shut down" => commands::shutdown_session(app, &app.state(), &scope).await,
 				_ => {
 					commands::a_run_held_by_the_app(app, scope.clone());
 				}
@@ -3156,6 +3156,41 @@ fn a_relay_guest_hears_a_question_of_the_shared_space_and_its_answer_without_rea
 			})
 			.collect();
 		assert_eq!(heard, expected);
+	});
+}
+
+#[test]
+fn a_relay_guest_hears_a_pending_question_settled_when_the_host_shuts_its_session_down() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("question-shut-down").await;
+		let app = guest.harness.app.handle().clone();
+		let scope = a_held_scope_in("c-mine", "b-mine");
+		commands::a_run_held_by_the_app(&app, scope.clone())
+			.emit(a_question("q-mine"), a_turn_in("c-mine"));
+
+		commands::shutdown_session(&app, &app.state(), &scope).await;
+		let heard = guest.events_until_the_marker().await;
+
+		let denied = agent::AgentEvent::PermissionResolved {
+			id: "q-mine".to_owned(),
+			decision: agent::PermissionDecision::Deny,
+		};
+		let expected: Vec<Value> = [a_question("q-mine"), denied]
+			.into_iter()
+			.map(|event| {
+				let emitted = agent::ScopedEvent {
+					scope: Some(scope.clone()),
+					turn: a_turn_in("c-mine"),
+					event,
+				};
+				as_forwarded((
+					commands::EVENT_CHANNEL,
+					serde_json::to_value(emitted).expect("a payload"),
+				))
+			})
+			.collect();
+		assert_eq!(heard, expected);
+		assert!(pending_in_the_space(&app, PERSONAL).await.is_empty());
 	});
 }
 

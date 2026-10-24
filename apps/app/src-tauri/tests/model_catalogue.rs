@@ -63,7 +63,10 @@ fn the_catalogue_crosses_as_the_sidecar_offers_it() {
 	std::env::set_var("FAKE_AGENT_MODELS", "something,else");
 	assert_eq!(call(&window, "agent_models"), Ok(offered), "a second ask reached the sidecar");
 
-	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		app.state::<AgentState>().inner(),
+	));
 	std::env::remove_var("FAKE_AGENT_MODELS");
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }

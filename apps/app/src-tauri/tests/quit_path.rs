@@ -67,7 +67,7 @@ async fn quitting_during_a_startup_sweeps_the_group_it_cannot_see_yet() {
 	assert!(is_alive(orphan), "the grandchild must be running before the quit");
 
 	let state = AgentState::default();
-	terminate_session(&state).await;
+	terminate_session(tauri::test::mock_app().handle(), &state).await;
 
 	poll_until("the exit sweep to leave no orphan behind", || !is_alive(orphan)).await;
 

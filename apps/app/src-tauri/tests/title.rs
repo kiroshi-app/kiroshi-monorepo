@@ -70,7 +70,10 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 		"an empty answer crossed as a title"
 	);
 
-	tauri::async_runtime::block_on(terminate_session(app.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		app.handle(),
+		app.state::<AgentState>().inner(),
+	));
 
 	std::env::set_var(ICON_ENV, "Rocket");
 	let iconed = an_app_naming("title-icon");
@@ -82,7 +85,10 @@ fn a_naming_crosses_without_a_session_and_nothing_crosses_when_the_runtime_answe
 		"the icon the runtime picked did not cross beside the title"
 	);
 
-	tauri::async_runtime::block_on(terminate_session(iconed.state::<AgentState>().inner()));
+	tauri::async_runtime::block_on(terminate_session(
+		iconed.handle(),
+		iconed.state::<AgentState>().inner(),
+	));
 	std::env::remove_var(ICON_ENV);
 	std::env::remove_var(SIDECAR_OVERRIDE_ENV);
 }

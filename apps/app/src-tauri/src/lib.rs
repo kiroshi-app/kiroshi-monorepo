@@ -137,6 +137,7 @@ pub fn run() {
 					directory.stop();
 				}
 				tauri::async_runtime::block_on(terminate_session(
+					app,
 					app.state::<AgentState>().inner(),
 				));
 			}
