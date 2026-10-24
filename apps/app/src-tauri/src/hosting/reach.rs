@@ -139,6 +139,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("agent_live_sessions", Reach::HostOnly),
 	("agent_live_sessions_in_space", Reach::Scoped(SPACE_ID)),
 	("agent_pending_questions", Reach::Scoped(CONVERSATION_ID)),
+	("agent_pending_questions_in_space", Reach::Scoped(SPACE_ID)),
 	("conversation_bots", Reach::Scoped(SPACE_ID)),
 	(
 		"conversation_bots_by_presence",
