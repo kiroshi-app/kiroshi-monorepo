@@ -12,6 +12,7 @@ final class SyntaxHighlighting {
         case string
         case comment
         case number
+        case function
     }
 
     private static let themeRoles: [UInt32: Role] = [
@@ -56,6 +57,7 @@ final class SyntaxHighlighting {
         else { return nil }
         var highlighted = AttributedString()
         var isAfterSwiftTypeDeclaration = false
+        var isAfterFunctionDeclaration = false
         drawn.enumerateAttribute(
             .foregroundColor, in: NSRange(location: 0, length: drawn.length)
         ) { color, range, _ in
@@ -63,17 +65,23 @@ final class SyntaxHighlighting {
             let role = (color as? UIColor).flatMap(Self.role)
             if isAfterSwiftTypeDeclaration, role == nil {
                 highlighted += Self.declaredTypeName(in: text)
+            } else if role == nil {
+                highlighted += Self.callsAndMembers(
+                    in: text, isAfterFunctionDeclaration: isAfterFunctionDeclaration)
             } else {
                 highlighted += Self.piece(text, role: role)
             }
             isAfterSwiftTypeDeclaration =
                 language == "swift" && role == .keyword
                 && Self.swiftTypeDeclarations.contains(text)
+            isAfterFunctionDeclaration =
+                role == .keyword && Self.functionDeclarations.contains(text)
         }
         return highlighted
     }
 
     private static let swiftTypeDeclarations: Set<String> = ["struct", "class", "enum", "protocol"]
+    private static let functionDeclarations: Set<String> = ["func", "def", "fn", "fun", "function"]
 
     private static func declaredTypeName(in text: String) -> AttributedString {
         let nameStart = text.firstIndex { !$0.isWhitespace } ?? text.endIndex
@@ -82,16 +90,38 @@ final class SyntaxHighlighting {
             ?? text.endIndex
         return piece(String(text[..<nameStart]), role: nil)
             + piece(String(text[nameStart..<nameEnd]), role: .type)
-            + piece(String(text[nameEnd...]), role: nil)
+            + callsAndMembers(in: String(text[nameEnd...]), isAfterFunctionDeclaration: false)
+    }
+
+    private static func callsAndMembers(in text: String, isAfterFunctionDeclaration: Bool)
+        -> AttributedString
+    {
+        var drawn = AttributedString()
+        var isDeclaredName = isAfterFunctionDeclaration
+        var rest = text[...]
+        while let start = rest.firstIndex(where: isIdentifierPart) {
+            let end = rest[start...].firstIndex { !isIdentifierPart($0) } ?? rest.endIndex
+            let before = text[..<start]
+            let isMember = before.hasSuffix(".") && !before.hasSuffix("..")
+            let isCall = rest[end...].first { $0 != " " } == "("
+            let isName = !rest[start].isNumber
+            let role: Role? = isName && !isDeclaredName && (isMember || isCall) ? .function : nil
+            drawn += piece(String(rest[..<start]), role: nil)
+            drawn += piece(String(rest[start..<end]), role: role)
+            isDeclaredName = isDeclaredName && !isName
+            rest = rest[end...]
+        }
+        return drawn + piece(String(rest), role: nil)
+    }
+
+    private static func isIdentifierPart(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber || character == "_"
     }
 
     private static func piece(_ text: String, role: Role?) -> AttributedString {
         var piece = AttributedString(text)
         if let role {
             piece.foregroundColor = Color("syntax-\(role.rawValue)")
-            if role == .keyword {
-                piece.font = CodeBlockCard.font.bold()
-            }
         }
         return piece
     }
