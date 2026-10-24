@@ -19,7 +19,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"The bots of a conversation as a row of 14px hexagons on a 16px line, 10px apart. Each later hexagon sits over the earlier one behind a 1.5px knockout cut through to whatever lies beneath, so the ring always wears the row's own colour. Four bots or more show two and a counter.",
+					"The bots of a conversation as a row of 14px hexagons on a 16px line, 10px apart. Each later hexagon sits over the earlier one behind a 1.5px knockout cut through to whatever lies beneath, so the ring always wears the row's own colour. Four bots or more show two and a counter. The `side-by-side` layout, worn by the Needs you line, draws 16px hexagons 2px apart with no overlap, knockout or outline.",
 			},
 		},
 	},
@@ -98,5 +98,57 @@ export const FiveBotsShowTwoAndACounter = meta.story({
 			"tabular-nums",
 		)
 		await expect(getComputedStyle(counter).fontWeight).toBe("700")
+	},
+})
+
+const sideBySideBoxesOf = (canvasElement: HTMLElement) => {
+	const pile = slotIn(canvasElement, "conversation-bot-pile")
+	const origin = pile.getBoundingClientRect().left
+	return [
+		...slotsIn(pile, "conversation-bot-pile-bot"),
+		...slotsIn(pile, "conversation-bot-pile-overflow"),
+	].map((slot) => {
+		const box = slot.getBoundingClientRect()
+		return [box.left - origin, box.width, box.height]
+	})
+}
+
+const outlinesIn = (canvasElement: HTMLElement) =>
+	slotsIn(slotIn(canvasElement, "conversation-bot-pile"), "outlined-hexagon")
+
+export const SideBySideThreeBots = meta.story({
+	args: { bots: BOTS.slice(0, 3), layout: "side-by-side" },
+	play: async ({ canvasElement }) => {
+		await expect(sideBySideBoxesOf(canvasElement)).toEqual([
+			[0, 16, 16],
+			[18, 16, 16],
+			[36, 16, 16],
+		])
+		await expect(widthOf(canvasElement)).toBe(52)
+		await expect(coveredIn(canvasElement)).toEqual([false, false, false])
+		await expect(outlinesIn(canvasElement)).toHaveLength(0)
+		await expect(
+			slotIn(canvasElement, "conversation-bot-pile"),
+		).toHaveAttribute("aria-hidden", "true")
+	},
+})
+
+export const SideBySideFiveBotsShowTwoAndACounter = meta.story({
+	args: { bots: [...BOTS], layout: "side-by-side" },
+	play: async ({ canvasElement }) => {
+		const pile = slotIn(canvasElement, "conversation-bot-pile")
+		await expect(sideBySideBoxesOf(canvasElement)).toEqual([
+			[0, 16, 16],
+			[18, 16, 16],
+			[36, 16, 16],
+		])
+		await expect(coveredIn(canvasElement)).toEqual([false, false])
+		await expect(outlinesIn(canvasElement)).toHaveLength(0)
+		await expect(
+			slotIn(pile, "conversation-bot-pile-overflow"),
+		).toHaveTextContent("+3")
+		await expect(within(canvasElement).getByRole("img", { name: "+3" })).toBe(
+			pile,
+		)
 	},
 })

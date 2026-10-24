@@ -325,6 +325,11 @@ const chat = {
 			failed: "Impossible d’envoyer cette demande",
 			stopFailed: "Impossible d’arrêter l’agent",
 			stopFailedNamed: "Impossible d’arrêter {{name}}",
+			questionRunFailed: {
+				title: "L’exécution de {{name}} a échoué avant votre réponse",
+				description:
+					"La question est fermée. Envoyez un message pour reprendre.",
+			},
 			unauthorized: {
 				title: "L’hôte a refusé cet appel.",
 				description: "Rouvrez le lien depuis l’application de bureau.",

@@ -34,7 +34,6 @@ import { BotRoster } from "@workspace/ui/components/app-sidebar-roster"
 const meta = preview.meta({
 	title: "Navigation/AppSidebarRoster",
 	component: BotRoster,
-	tags: ["test-only"],
 	parameters: { layout: "fullscreen" },
 	decorators: [
 		(Story) => (
@@ -57,6 +56,7 @@ const meta = preview.meta({
 })
 
 export const PinnedZoneThenSortedZone = meta.story({
+	tags: ["test-only"],
 	play: async ({ canvasElement }) => {
 		const [pinned, sorted] = slotsIn(canvasElement, "roster-drop-area").filter(
 			(area) =>
@@ -95,22 +95,26 @@ const expectComplete = async (canvasElement: HTMLElement) => {
 }
 
 export const ReadingMore = meta.story({
+	tags: ["test-only"],
 	args: { listEnd: READING_MORE },
 	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const ReadingMoreDark = meta.story({
+	tags: ["test-only"],
 	args: { listEnd: READING_MORE },
 	globals: { theme: "dark", theme_layout: "single" },
 	play: ({ canvasElement }) => expectReadingMore(canvasElement),
 })
 
 export const Complete = meta.story({
+	tags: ["test-only"],
 	args: { listEnd: COMPLETE },
 	play: ({ canvasElement }) => expectComplete(canvasElement),
 })
 
 export const CompleteDark = meta.story({
+	tags: ["test-only"],
 	args: { listEnd: COMPLETE },
 	globals: { theme: "dark", theme_layout: "single" },
 	play: ({ canvasElement }) => expectComplete(canvasElement),
@@ -168,6 +172,7 @@ export const RosterNeedingYouDark = meta.story({
 const PAST_SKELETON_DELAY_MS = 400
 
 export const Idle = meta.story({
+	tags: ["test-only"],
 	args: { listEnd: { hasNextPage: true, isFetchingNextPage: false } },
 	play: async ({ canvasElement }) => {
 		await new Promise((resolve) => setTimeout(resolve, PAST_SKELETON_DELAY_MS))
@@ -266,6 +271,7 @@ const rowsRenderedBy = async (
 }
 
 export const RowRendersOnlyWhenItsOwnPropsChange = meta.story({
+	tags: ["test-only"],
 	render: (args) => <ReshownRoster {...args} handle={rosterHandle} />,
 	play: async ({ args, canvasElement }) => {
 		await expect(committedRowHooksIn(canvasElement).size).toBe(3)

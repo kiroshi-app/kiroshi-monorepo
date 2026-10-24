@@ -1011,6 +1011,8 @@ navigation-appsidebarsection--name-field-commits-on-enter
 navigation-appsidebarsection--open-section
 navigation-conversationbotpile--five-bots-show-two-and-a-counter
 navigation-conversationbotpile--one-bot
+navigation-conversationbotpile--side-by-side-five-bots-show-two-and-a-counter
+navigation-conversationbotpile--side-by-side-three-bots
 navigation-conversationbotpile--three-bots
 navigation-conversationbotpile--two-bots
 navigation-conversationsubjecticon--blue
@@ -1109,6 +1111,7 @@ navigation-sidebarmenurow--long-content
 navigation-sidebarmenurow--selected
 navigation-sidebarmenurow--with-second-line
 navigation-sidebarresize--clamped
+navigation-sidebarresize--restored-below-the-minimum
 navigation-sidebarresize--right-side
 navigation-skiplink--custom-label
 navigation-skiplink--focused
@@ -1224,6 +1227,7 @@ overlays-noticesurface--loading
 overlays-noticesurface--long-content
 overlays-noticesurface--m-13-signed-out
 overlays-noticesurface--marks
+overlays-noticesurface--question-run-failed
 overlays-noticesurface--reduced-motion
 overlays-noticesurface--removed-with-space-mark
 overlays-noticesurface--repeated-failure

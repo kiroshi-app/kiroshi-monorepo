@@ -29,7 +29,6 @@ import { SidebarMenu } from "@workspace/ui/components/ui/sidebar"
 const meta = preview.meta({
 	title: "Navigation/AppSidebarConversationRow",
 	component: ConversationRosterRow,
-	tags: ["test-only"],
 	parameters: { layout: "fullscreen" },
 	decorators: [
 		(Story, { parameters }) => (
@@ -51,6 +50,7 @@ const meta = preview.meta({
 })
 
 export const PinnedConversationWithAWorkingBot = meta.story({
+	tags: ["test-only"],
 	play: async ({ args, canvasElement }) => {
 		const row = slotIn(canvasElement, "sidebar-menu-button")
 		await expect(within(row).getByText(DESK_ROOM.name)).toBeVisible()
@@ -99,6 +99,16 @@ const expectRowAnatomy = async (row: HTMLElement) => {
 	await expect(pile.right).toBeCloseTo(timestamp.right, 0)
 	await expect(pile.top).toBeGreaterThanOrEqual(timestamp.bottom)
 	await expect(pile.height).toBe(16)
+}
+
+const expectTwoBotsAndACounter = async (row: HTMLElement) => {
+	await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
+	await expect(slotIn(row, "conversation-bot-pile-overflow")).toHaveTextContent(
+		"+3",
+	)
+	await expect(within(row).getByRole("img", { name: "+3" })).toBe(
+		slotIn(row, "conversation-bot-pile"),
+	)
 }
 
 const expectCellWears = async (row: HTMLElement, token: string) => {
@@ -173,6 +183,7 @@ const expectPileWholeAtTheSidebarWidth = async (
 }
 
 export const PileWholeAtTheNarrowestSidebar = meta.story({
+	tags: ["test-only"],
 	parameters: { sidebarWidth: SIDEBAR_MIN_WIDTH },
 	args: { conversation: roomOf(FIVE_BOTS) },
 	play: ({ canvasElement }) =>
@@ -180,6 +191,7 @@ export const PileWholeAtTheNarrowestSidebar = meta.story({
 })
 
 export const PileWholeAtTheDefaultSidebar = meta.story({
+	tags: ["test-only"],
 	parameters: { sidebarWidth: DEFAULT_SIDEBAR_WIDTH },
 	args: { conversation: roomOf(FIVE_BOTS) },
 	play: ({ canvasElement }) =>
@@ -187,6 +199,7 @@ export const PileWholeAtTheDefaultSidebar = meta.story({
 })
 
 export const RowWithoutIconOrColour = meta.story({
+	tags: ["test-only"],
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
@@ -199,6 +212,7 @@ export const RowWithoutIconOrColour = meta.story({
 })
 
 export const RedShieldKeyRow = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "red", icon: "ShieldKey" } },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -209,54 +223,63 @@ export const RedShieldKeyRow = meta.story({
 })
 
 export const RowInRed = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "red" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-red"),
 })
 
 export const RowInYellow = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "yellow" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-yellow"),
 })
 
 export const RowInGreen = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "green" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-green"),
 })
 
 export const RowInCyan = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "cyan" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-cyan"),
 })
 
 export const RowInBlue = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "blue" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-blue"),
 })
 
 export const RowInPurple = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "purple" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-purple"),
 })
 
 export const RowInPink = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "pink" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-pink"),
 })
 
 export const RowInOrange = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...DESK_ROOM, color: "orange" } },
 	play: async ({ canvasElement }) =>
 		expectCellWears(rowIn(canvasElement), "--conversation-icon-orange"),
 })
 
 export const RowWithOneBot = meta.story({
+	tags: ["test-only"],
 	args: { conversation: roomOf([ATLAS]) },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -266,6 +289,7 @@ export const RowWithOneBot = meta.story({
 })
 
 export const RowWithTwoBots = meta.story({
+	tags: ["test-only"],
 	args: { conversation: roomOf([ATLAS, BEACON]) },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -276,6 +300,7 @@ export const RowWithTwoBots = meta.story({
 })
 
 export const RowWithThreeBots = meta.story({
+	tags: ["test-only"],
 	args: { conversation: roomOf([ATLAS, BEACON, CINDER]) },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -292,21 +317,17 @@ export const RowWithThreeBots = meta.story({
 })
 
 export const RowWithFiveBots = meta.story({
+	tags: ["test-only"],
 	args: { conversation: roomOf(FIVE_BOTS) },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expectRowAnatomy(row)
-		await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
-		await expect(
-			slotIn(row, "conversation-bot-pile-overflow"),
-		).toHaveTextContent("+3")
-		await expect(within(row).getByRole("img", { name: "+3" })).toBe(
-			slotIn(row, "conversation-bot-pile"),
-		)
+		await expectTwoBotsAndACounter(row)
 	},
 })
 
 export const RowWithABadgeAndAPile = meta.story({
+	tags: ["test-only"],
 	args: { conversation: { ...roomOf(FIVE_BOTS), badge: "done" } },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -327,6 +348,7 @@ export const RowWithABadgeAndAPile = meta.story({
 })
 
 export const LongTitleAndPreviewTruncate = meta.story({
+	tags: ["test-only"],
 	args: {
 		conversation: {
 			...roomOf([ATLAS, CINDER, DUNE, EMBER]),
@@ -352,6 +374,7 @@ export const LongTitleAndPreviewTruncate = meta.story({
 })
 
 export const KnockoutWearsTheRowAtRestAndHovered = meta.story({
+	tags: ["test-only"],
 	args: { conversation: roomOf(FIVE_BOTS), isSelected: false },
 	play: async ({ canvasElement }) => {
 		const row = rowIn(canvasElement)
@@ -362,6 +385,7 @@ export const KnockoutWearsTheRowAtRestAndHovered = meta.story({
 })
 
 export const OpenRowWithMissionStrips = meta.story({
+	tags: ["test-only"],
 	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
 	args: {
 		isSelected: true,
@@ -409,6 +433,7 @@ export const OpenRowWithMissionStrips = meta.story({
 })
 
 export const WorkingConversationKeepsItsTimestamp = meta.story({
+	tags: ["test-only"],
 	play: async ({ canvas, canvasElement }) => {
 		const row = rowIn(canvasElement)
 		await expect(
@@ -442,10 +467,42 @@ const expectPileAfterTheQuestion = async (row: HTMLElement) => {
 	)
 }
 
+const expectBotsSideBySide = async (row: HTMLElement) => {
+	const pile = slotIn(row, "conversation-bot-pile")
+	const slots = [
+		...slotsIn(pile, "conversation-bot-pile-bot"),
+		...slotsIn(pile, "conversation-bot-pile-overflow"),
+	]
+	const boxes = slots.map((slot) => slot.getBoundingClientRect())
+	for (const box of boxes) {
+		await expect([box.width, box.height]).toEqual([16, 16])
+	}
+	for (const [index, box] of boxes.slice(1).entries()) {
+		await expect(box.left - boxes[index].right).toBe(2)
+	}
+	for (const slot of slots) {
+		await expect(getComputedStyle(slot).maskImage).toBe("none")
+	}
+	await expect(slotsIn(pile, "outlined-hexagon")).toHaveLength(0)
+}
+
+const expectLongQuestionBesideAWholePile = async (
+	canvasElement: HTMLElement,
+) => {
+	const row = rowIn(canvasElement)
+	await expectQuestionCutInsideTheRow(row)
+	await expectPileAfterTheQuestion(row)
+	await expectBotsSideBySide(row)
+	await expectTwoBotsAndACounter(row)
+	await expectPileWhole(row, canvasElement)
+}
+
 const expectConversationNeedingYou = async (canvasElement: HTMLElement) => {
 	const row = rowIn(canvasElement)
 	await expectNeedingYou(row, PENDING_QUESTION)
 	await expectPileAfterTheQuestion(row)
+	await expectBotsSideBySide(row)
+	await expect(slotsIn(row, "conversation-bot-pile-bot")).toHaveLength(2)
 }
 
 const expectConversationAnswered = async (canvasElement: HTMLElement) => {
@@ -467,15 +524,18 @@ export const ConversationNeedingYouDark = meta.story({
 })
 
 export const ConversationAnswered = meta.story({
+	tags: ["test-only"],
 	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
 })
 
 export const ConversationAnsweredDark = meta.story({
+	tags: ["test-only"],
 	globals: DARK,
 	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
 })
 
 export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
+	tags: ["test-only"],
 	parameters: {
 		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
 		sidebarWidth: SIDEBAR_MIN_WIDTH,
@@ -486,10 +546,6 @@ export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
 			pendingQuestion: LONG_PENDING_QUESTION,
 		},
 	},
-	play: async ({ canvasElement }) => {
-		const row = rowIn(canvasElement)
-		await expectQuestionCutInsideTheRow(row)
-		await expectPileAfterTheQuestion(row)
-		await expectPileWhole(row, canvasElement)
-	},
+	play: ({ canvasElement }) =>
+		expectLongQuestionBesideAWholePile(canvasElement),
 })

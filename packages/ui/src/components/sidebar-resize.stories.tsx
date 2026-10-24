@@ -44,13 +44,15 @@ const shellStyle = (width: number) =>
 
 type ShellProps = {
 	side: "left" | "right"
+	width?: number
 	onWidthChange?: (width: number) => void
 }
 
-const Shell = ({ side, onWidthChange }: ShellProps) => (
+const Shell = ({ side, width, onWidthChange }: ShellProps) => (
 	<SidebarResizeProvider
 		defaultWidth={SIDEBAR_DEFAULT_WIDTH}
 		onWidthChange={onWidthChange}
+		width={width}
 	>
 		{(resize) => (
 			<SidebarProvider style={shellStyle(resize.width)}>
@@ -99,7 +101,7 @@ const meta = preview.meta({
 		docs: {
 			description: {
 				component:
-					"How wide the panel is, and who decides. The provider owns the width and clamps every answer between 192px and 416px, so no caller can ever hand the shell a width it cannot draw; the handle is the grip on the panel's edge, a `separator` carrying the width as its value. It is a pointer drag, an arrow key step of 16px, and a double press back to the default — three ways to the same number. The handle takes itself off screen wherever a width is not the reader's to set: the icon rail, a narrow window, a shell that declared itself fixed.",
+					"How wide the panel is, and who decides. The provider owns the width and clamps every answer between 224px and 416px, so no caller can ever hand the shell a width it cannot draw; the handle is the grip on the panel's edge, a `separator` carrying the width as its value. It is a pointer drag, an arrow key step of 16px, and a double press back to the default — three ways to the same number. The handle takes itself off screen wherever a width is not the reader's to set: the icon rail, a narrow window, a shell that declared itself fixed.",
 			},
 		},
 	},
@@ -111,7 +113,7 @@ export const Clamped = meta.story({
 		docs: {
 			description: {
 				story:
-					"The reader asking for a panel narrower than the app can draw. Check that the width stops at 192px instead of following the pointer to zero, and that the value the handle announces is the clamped one rather than the one that was asked for — the bound belongs to the provider, so nothing downstream ever sees an impossible width.",
+					"The reader asking for a panel narrower than the app can draw. Check that the width stops at 224px instead of following the pointer to zero, and that the value the handle announces is the clamped one rather than the one that was asked for — the bound belongs to the provider, so nothing downstream ever sees an impossible width.",
 			},
 		},
 	},
@@ -141,6 +143,35 @@ export const Clamped = meta.story({
 				String(SIDEBAR_MIN_WIDTH),
 			)
 		}, FRAME_POLL)
+		await waitFor(async () => {
+			await expect(panel.getBoundingClientRect().width).toBe(SIDEBAR_MIN_WIDTH)
+		}, FRAME_POLL)
+	},
+})
+
+const WIDTH_STORED_UNDER_THE_OLD_MINIMUM = 192
+
+export const RestoredBelowTheMinimum = meta.story({
+	tags: ["test-only"],
+	render: () => (
+		<Shell side="left" width={WIDTH_STORED_UNDER_THE_OLD_MINIMUM} />
+	),
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A width stored before the minimum rose, handed back on launch. Check that the panel opens at 224px and the handle announces 224, not the stored value.",
+			},
+		},
+	},
+	play: async ({ canvas }) => {
+		const handle = canvas.getByRole("separator", { name: HANDLE_LABEL })
+		const panel = canvas.getByRole("complementary", { name: "Workspace" })
+
+		await expect(handle).toHaveAttribute(
+			"aria-valuenow",
+			String(SIDEBAR_MIN_WIDTH),
+		)
 		await waitFor(async () => {
 			await expect(panel.getBoundingClientRect().width).toBe(SIDEBAR_MIN_WIDTH)
 		}, FRAME_POLL)
