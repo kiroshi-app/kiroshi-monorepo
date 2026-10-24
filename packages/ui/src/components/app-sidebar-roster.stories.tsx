@@ -9,11 +9,19 @@ import {
 import { expect, fn, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { SidebarFrame, slotIn, slotsIn } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectAnswered,
+	expectNeedingYou,
+	SidebarFrame,
+	slotIn,
+	slotsIn,
+} from "@workspace/storybook/story-utils"
 import {
 	ATLAS,
 	BEACON,
 	DESK_ROOM,
+	PENDING_QUESTION,
 	SIDEBAR_BOTS,
 	SIDEBAR_CONVERSATIONS,
 	SIDEBAR_SECTION,
@@ -106,6 +114,55 @@ export const CompleteDark = meta.story({
 	args: { listEnd: COMPLETE },
 	globals: { theme: "dark", theme_layout: "single" },
 	play: ({ canvasElement }) => expectComplete(canvasElement),
+})
+
+const ROOM_QUESTION = "Which of the two layouts goes to review?"
+
+const NEEDING_YOU_ROSTER = {
+	bots: [{ ...ATLAS, pendingQuestion: PENDING_QUESTION }, BEACON],
+	conversations: [
+		DESK_ROOM,
+		{
+			id: "review-room",
+			name: "Review room",
+			participants: [ATLAS, BEACON],
+			lastMessage: "Both layouts are up.",
+			lastSpeaker: BEACON.name,
+			timestamp: "09:31",
+			pendingQuestion: ROOM_QUESTION,
+		},
+	],
+}
+
+const rosterRowOf = (canvasElement: HTMLElement, name: string) =>
+	within(canvasElement)
+		.getByText(name)
+		.closest<HTMLElement>('[data-slot="sidebar-menu-button"]') as HTMLElement
+
+const expectRosterNeedingYou = async (canvasElement: HTMLElement) => {
+	await expect(slotsIn(canvasElement, "roster-row-needs-you")).toHaveLength(2)
+	await expectNeedingYou(
+		rosterRowOf(canvasElement, ATLAS.name),
+		PENDING_QUESTION,
+	)
+	await expectNeedingYou(
+		rosterRowOf(canvasElement, "Review room"),
+		ROOM_QUESTION,
+	)
+	await expectAnswered(rosterRowOf(canvasElement, DESK_ROOM.name))
+	await expectAnswered(rosterRowOf(canvasElement, BEACON.name))
+}
+
+export const RosterNeedingYou = meta.story({
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+	args: NEEDING_YOU_ROSTER,
+	play: ({ canvasElement }) => expectRosterNeedingYou(canvasElement),
+})
+
+export const RosterNeedingYouDark = meta.story({
+	args: NEEDING_YOU_ROSTER,
+	globals: { theme: "dark", theme_layout: "single" },
+	play: ({ canvasElement }) => expectRosterNeedingYou(canvasElement),
 })
 
 const PAST_SKELETON_DELAY_MS = 400

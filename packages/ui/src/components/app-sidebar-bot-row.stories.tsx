@@ -1,10 +1,19 @@
 import { expect, fn, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
-import { SidebarFrame, slotIn } from "@workspace/storybook/story-utils"
+import {
+	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectAnswered,
+	expectNeedingYou,
+	expectQuestionCutInsideTheRow,
+	SidebarFrame,
+	slotIn,
+} from "@workspace/storybook/story-utils"
 import {
 	ATLAS,
 	BEACON,
+	LONG_PENDING_QUESTION,
+	PENDING_QUESTION,
 	SIDEBAR_SECTION,
 	SIDEBAR_SPACES,
 	STILL_LIFT,
@@ -76,4 +85,61 @@ export const WorkingBotKeepsItsTimestamp = meta.story({
 		)
 		await expect(canvas.getAllByRole("button")).toEqual([row])
 	},
+})
+
+const ATLAS_NEEDING_YOU = {
+	...ATLAS,
+	badge: "attention" as const,
+	pendingQuestion: PENDING_QUESTION,
+}
+
+const DARK = { theme: "dark", theme_layout: "single" }
+
+const expectBotNeedingYou = async (canvasElement: HTMLElement) => {
+	const row = slotIn(canvasElement, "sidebar-menu-button")
+	await expectNeedingYou(row, PENDING_QUESTION)
+	await expect(
+		getComputedStyle(slotIn(row, "roster-row-needs-you")).paddingInlineEnd,
+	).toBe("4px")
+}
+
+const expectBotAnswered = async (canvasElement: HTMLElement) => {
+	const row = slotIn(canvasElement, "sidebar-menu-button")
+	await expectAnswered(row)
+	await expect(slotIn(row, "roster-row-preview")).toHaveTextContent(
+		ATLAS.lastMessage ?? "",
+	)
+}
+
+export const BotNeedingYou = meta.story({
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+	args: { bot: ATLAS_NEEDING_YOU, isSelected: false },
+	play: ({ canvasElement }) => expectBotNeedingYou(canvasElement),
+})
+
+export const BotNeedingYouDark = meta.story({
+	globals: DARK,
+	args: { bot: ATLAS_NEEDING_YOU, isSelected: false },
+	play: ({ canvasElement }) => expectBotNeedingYou(canvasElement),
+})
+
+export const BotAnswered = meta.story({
+	args: { isSelected: false },
+	play: ({ canvasElement }) => expectBotAnswered(canvasElement),
+})
+
+export const BotAnsweredDark = meta.story({
+	globals: DARK,
+	args: { isSelected: false },
+	play: ({ canvasElement }) => expectBotAnswered(canvasElement),
+})
+
+export const BotLongQuestionStaysOnOneLine = meta.story({
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+	args: {
+		bot: { ...ATLAS_NEEDING_YOU, pendingQuestion: LONG_PENDING_QUESTION },
+		isSelected: false,
+	},
+	play: ({ canvasElement }) =>
+		expectQuestionCutInsideTheRow(slotIn(canvasElement, "sidebar-menu-button")),
 })

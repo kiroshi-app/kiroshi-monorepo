@@ -65,6 +65,7 @@ interface AppSidebarBot {
 	status?: AppSidebarStatus
 	pose?: ActivityIndicatorKind
 	badge?: BotBadge
+	pendingQuestion?: string
 	missions?: AppSidebarRowMission[]
 }
 
@@ -80,6 +81,7 @@ interface AppSidebarConversation {
 	lastActivityAt?: number
 	status?: AppSidebarStatus
 	badge?: BotBadge
+	pendingQuestion?: string
 	missions?: AppSidebarRowMission[]
 	icon?: string
 	color?: BotAvatarBlot

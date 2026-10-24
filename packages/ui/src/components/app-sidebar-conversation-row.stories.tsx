@@ -3,6 +3,9 @@ import { expect, fn, userEvent, within } from "storybook/test"
 import preview from "@workspace/storybook/preview"
 import {
 	A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+	expectAnswered,
+	expectNeedingYou,
+	expectQuestionCutInsideTheRow,
 	glyphIn,
 	SidebarFrame,
 	slotIn,
@@ -13,6 +16,8 @@ import {
 	ATLAS,
 	BEACON,
 	DESK_ROOM,
+	LONG_PENDING_QUESTION,
+	PENDING_QUESTION,
 	SIDEBAR_SECTION,
 	STILL_LIFT,
 } from "@workspace/ui/components/app-sidebar.fixtures"
@@ -413,6 +418,78 @@ export const WorkingConversationKeepsItsTimestamp = meta.story({
 			DESK_ROOM.timestamp ?? "",
 		)
 		await expect(canvas.getAllByRole("button")).toEqual([row])
+		await expectPileWhole(row, canvasElement)
+	},
+})
+
+const DESK_ROOM_NEEDING_YOU = {
+	...DESK_ROOM,
+	badge: "attention" as const,
+	pendingQuestion: PENDING_QUESTION,
+}
+
+const DARK = { theme: "dark", theme_layout: "single" }
+
+const expectPileAfterTheQuestion = async (row: HTMLElement) => {
+	const line = slotIn(row, "roster-row-needs-you")
+	const question = boxOf(line, "roster-row-preview")
+	const pile = boxOf(line, "conversation-bot-pile")
+	await expect(pile.left - question.right).toBe(8)
+	await expect([pile.top, pile.bottom]).toEqual([question.top, question.bottom])
+	await expect(pile.right).toBeCloseTo(
+		boxOf(row, "roster-row-timestamp").right,
+		0,
+	)
+}
+
+const expectConversationNeedingYou = async (canvasElement: HTMLElement) => {
+	const row = rowIn(canvasElement)
+	await expectNeedingYou(row, PENDING_QUESTION)
+	await expectPileAfterTheQuestion(row)
+}
+
+const expectConversationAnswered = async (canvasElement: HTMLElement) => {
+	const row = rowIn(canvasElement)
+	await expectAnswered(row)
+	await expectRowAnatomy(row)
+}
+
+export const ConversationNeedingYou = meta.story({
+	parameters: { a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION },
+	args: { conversation: DESK_ROOM_NEEDING_YOU },
+	play: ({ canvasElement }) => expectConversationNeedingYou(canvasElement),
+})
+
+export const ConversationNeedingYouDark = meta.story({
+	globals: DARK,
+	args: { conversation: DESK_ROOM_NEEDING_YOU },
+	play: ({ canvasElement }) => expectConversationNeedingYou(canvasElement),
+})
+
+export const ConversationAnswered = meta.story({
+	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
+})
+
+export const ConversationAnsweredDark = meta.story({
+	globals: DARK,
+	play: ({ canvasElement }) => expectConversationAnswered(canvasElement),
+})
+
+export const ConversationLongQuestionAtTheNarrowestSidebar = meta.story({
+	parameters: {
+		a11y: A11Y_CONTRAST_AWAITING_DESIGN_DECISION,
+		sidebarWidth: SIDEBAR_MIN_WIDTH,
+	},
+	args: {
+		conversation: {
+			...roomOf(FIVE_BOTS),
+			pendingQuestion: LONG_PENDING_QUESTION,
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const row = rowIn(canvasElement)
+		await expectQuestionCutInsideTheRow(row)
+		await expectPileAfterTheQuestion(row)
 		await expectPileWhole(row, canvasElement)
 	},
 })

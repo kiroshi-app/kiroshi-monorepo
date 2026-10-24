@@ -584,3 +584,84 @@ export const expectRoundAvatar = async (avatar: HTMLElement) => {
 	await expect(getComputedStyle(avatar).overflow).toBe("hidden")
 	await expect(getComputedStyle(layer).maskImage).toBe("none")
 }
+
+const NEEDS_YOU_LABEL = "Needs you"
+
+const literally = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const typeOf = (element: Element) => {
+	const { color, fontSize, fontWeight, lineHeight } = getComputedStyle(element)
+	return { color, fontSize, fontWeight, lineHeight }
+}
+
+export const expectNeedingYou = async (row: HTMLElement, question: string) => {
+	const line = slotIn(row, "roster-row-needs-you")
+	const glyph = slotIn(line, "needs-you-glyph")
+	const label = slotIn(line, "needs-you-label")
+	const text = slotIn(line, "roster-row-preview")
+	const warning = colourOfToken("--warning", row)
+
+	await expect(line.getBoundingClientRect().height).toBe(16)
+	await expect(getComputedStyle(line).alignItems).toBe("center")
+	await expect(getComputedStyle(line).columnGap).toBe("4px")
+	await expect(sidesOf(glyph)).toEqual([12, 12])
+	await expect(glyph).toHaveAttribute("aria-hidden", "true")
+	await expect(getComputedStyle(glyph).backgroundColor).toBe(warning)
+	await expect(getComputedStyle(glyph, "::before").content).toBe('"?"')
+	await expect(typeOf(glyph)).toEqual({
+		color: colourOfToken("--warning-foreground", row),
+		fontSize: "9px",
+		fontWeight: "700",
+		lineHeight: "12px",
+	})
+	await expect(label).toHaveTextContent(NEEDS_YOU_LABEL)
+	await expect(typeOf(label)).toEqual({
+		color: warning,
+		fontSize: "12px",
+		fontWeight: "600",
+		lineHeight: "16px",
+	})
+	await expect(text).toHaveTextContent(question)
+	await expect(typeOf(text)).toEqual({
+		color: colourOfToken("--muted-foreground", row),
+		fontSize: "12px",
+		fontWeight: "400",
+		lineHeight: "16px",
+	})
+	const timestamp = typeOf(slotIn(row, "roster-row-timestamp"))
+	await expect([timestamp.color, timestamp.fontWeight]).toEqual([
+		warning,
+		"500",
+	])
+	await expect(row.querySelector('[data-slot="bot-activity-dot"]')).toBeNull()
+	await expect(row).toHaveAccessibleName(
+		new RegExp(`${NEEDS_YOU_LABEL} ${literally(question)}`),
+	)
+}
+
+export const expectAnswered = async (row: HTMLElement) => {
+	await expect(
+		row.querySelector('[data-slot="roster-row-needs-you"]'),
+	).toBeNull()
+	await expect(row.querySelector('[data-slot="needs-you-glyph"]')).toBeNull()
+	await expect(row).not.toHaveAccessibleName(new RegExp(NEEDS_YOU_LABEL))
+	await expect(slotIn(row, "roster-row-timestamp")).toHaveStyle({
+		color: colourOfToken("--muted-foreground", row),
+	})
+}
+
+export const expectQuestionCutInsideTheRow = async (row: HTMLElement) => {
+	const line = slotIn(row, "roster-row-needs-you")
+	const question = slotIn(line, "roster-row-preview")
+	const edge = row.getBoundingClientRect().right
+	await expect(question.scrollWidth).toBeGreaterThan(question.clientWidth)
+	await expect(getComputedStyle(question).textOverflow).toBe("ellipsis")
+	await expect(question.getBoundingClientRect().height).toBe(16)
+	for (const part of line.children)
+		await expect(part.getBoundingClientRect().right).toBeLessThanOrEqual(edge)
+	const label = slotIn(line, "needs-you-label")
+	await expect(label.scrollWidth).toBeLessThan(
+		label.getBoundingClientRect().width + 1,
+	)
+	await expect(sidesOf(slotIn(line, "needs-you-glyph"))).toEqual([12, 12])
+}

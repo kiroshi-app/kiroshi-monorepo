@@ -38,6 +38,7 @@ interface SidebarListRowProps extends SidebarListRowElementProps {
 	isWorking?: boolean
 	isNameMuted?: boolean
 	badge?: BotBadge
+	pendingQuestion?: string
 	strips?: ReactNode
 	"data-opens"?: string
 }
@@ -53,6 +54,7 @@ const SidebarListRow = ({
 	isWorking = false,
 	isNameMuted = false,
 	badge,
+	pendingQuestion,
 	strips,
 	...rowProps
 }: SidebarListRowProps) => {
@@ -83,6 +85,7 @@ const SidebarListRow = ({
 				isWorking={isWorking}
 				name={name}
 				nameSlot="roster-row-name"
+				pendingQuestion={pendingQuestion}
 				preview={preview}
 				previewSlot="roster-row-preview"
 				previewTrailing={previewTrailing}

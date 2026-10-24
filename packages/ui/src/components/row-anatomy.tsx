@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { type BotBadge, BotBadgeDot } from "@workspace/ui/components/bot-badge"
 import {
@@ -56,6 +57,56 @@ const PREVIEW: Record<RowGeometry, string> = {
 	activity: "flex h-4 items-center gap-[5px] text-muted-foreground text-xs",
 }
 
+const TIMESTAMP_NEEDING_YOU = "font-medium text-warning"
+
+const NEEDS_YOU_LINE = "flex h-4 min-w-0 items-center gap-1 [&_svg]:size-full!"
+
+const NEEDS_YOU_LINE_ALONE = "pe-1"
+
+const NEEDS_YOU_GLYPH =
+	"pointer-events-none flex size-3 shrink-0 items-center justify-center rounded-full bg-warning font-bold text-[9px] text-warning-foreground leading-3 before:content-['?']"
+
+const NEEDS_YOU_LABEL = "shrink-0 font-semibold text-warning text-xs leading-4"
+
+const NEEDS_YOU_QUESTION =
+	"min-w-0 flex-1 truncate font-normal text-muted-foreground text-xs leading-4"
+
+const NEEDS_YOU_TRAILING = "flex shrink-0 ps-1"
+
+type NeedsYouLineProps = {
+	question: string
+	questionSlot?: string
+	trailing?: ReactNode
+}
+
+const NeedsYouLine = ({
+	question,
+	questionSlot,
+	trailing,
+}: NeedsYouLineProps) => {
+	const { t } = useTranslation("bots")
+
+	return (
+		<span
+			className={cn(NEEDS_YOU_LINE, !trailing && NEEDS_YOU_LINE_ALONE)}
+			data-slot="roster-row-needs-you"
+		>
+			<span
+				aria-hidden="true"
+				className={NEEDS_YOU_GLYPH}
+				data-slot="needs-you-glyph"
+			/>
+			<span className={NEEDS_YOU_LABEL} data-slot="needs-you-label">
+				{t("roster.needsYou")}
+			</span>{" "}
+			<span className={NEEDS_YOU_QUESTION} data-slot={questionSlot}>
+				{question}
+			</span>
+			{trailing ? <span className={NEEDS_YOU_TRAILING}>{trailing}</span> : null}
+		</span>
+	)
+}
+
 type RowPartsProps = {
 	parts: RowPart[]
 	slot: string
@@ -88,8 +139,8 @@ const RowParts = ({ parts, slot, identifier, lead }: RowPartsProps) => {
 }
 
 type RowAnatomyGeometry =
-	| { geometry: "roster"; badge?: BotBadge }
-	| { geometry: "activity"; badge?: never }
+	| { geometry: "roster"; badge?: BotBadge; pendingQuestion?: string }
+	| { geometry: "activity"; badge?: never; pendingQuestion?: never }
 
 type RowAnatomyProps = RowAnatomyGeometry & {
 	name: ReactNode
@@ -120,10 +171,12 @@ const RowAnatomy = ({
 	isNameMuted = false,
 	isNameRegular = false,
 	badge,
+	pendingQuestion,
 	nameSlot,
 	timestampSlot,
 	previewSlot,
 }: RowAnatomyProps) => {
+	const isNeedingYou = Boolean(pendingQuestion)
 	const previewText =
 		preview === undefined ? null : (
 			<span
@@ -143,6 +196,21 @@ const RowAnatomy = ({
 			</span>
 		)
 
+	const previewLine = pendingQuestion ? (
+		<NeedsYouLine
+			question={pendingQuestion}
+			questionSlot={previewSlot}
+			trailing={previewTrailing}
+		/>
+	) : previewTrailing ? (
+		<span className={cn(PREVIEW_LINE, badge && "pe-3.5")}>
+			{previewText}
+			{previewTrailing}
+		</span>
+	) : (
+		previewText
+	)
+
 	return (
 		<>
 			{media}
@@ -160,21 +228,20 @@ const RowAnatomy = ({
 					</span>
 					{trailing}
 					{timestamp === undefined ? null : (
-						<span className={TIMESTAMP[geometry]} data-slot={timestampSlot}>
+						<span
+							className={cn(
+								TIMESTAMP[geometry],
+								isNeedingYou && TIMESTAMP_NEEDING_YOU,
+							)}
+							data-slot={timestampSlot}
+						>
 							{timestamp}
 						</span>
 					)}
 				</span>
-				{previewTrailing ? (
-					<span className={cn(PREVIEW_LINE, badge && "pe-3.5")}>
-						{previewText}
-						{previewTrailing}
-					</span>
-				) : (
-					previewText
-				)}
+				{previewLine}
 				{detail}
-				{badge ? (
+				{badge && !isNeedingYou ? (
 					<BotBadgeDot
 						badge={badge}
 						data-slot="bot-activity-dot"
