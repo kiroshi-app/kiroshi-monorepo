@@ -8,7 +8,12 @@ use crate::db::DatabaseError;
 #[serde(rename_all = "camelCase")]
 pub struct SubmittedAttachment {
 	pub name: String,
-	pub bytes: Vec<u8>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub bytes: Option<Vec<u8>>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub base64: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -28,6 +33,17 @@ pub enum AttachmentStoreError {
 	TooLargeTogether { bytes: u64, limit: u64 },
 	#[serde(rename_all = "camelCase")]
 	Unwritable { detail: String },
+}
+
+impl AttachmentStoreError {
+	pub fn exceeds_a_limit(&self) -> bool {
+		matches!(
+			self,
+			AttachmentStoreError::TooMany { .. }
+				| AttachmentStoreError::TooLarge { .. }
+				| AttachmentStoreError::TooLargeTogether { .. }
+		)
+	}
 }
 
 impl From<Rejection> for AttachmentStoreError {
@@ -97,7 +113,27 @@ mod tests {
 
 		assert_eq!(
 			submitted,
-			SubmittedAttachment { name: "notes.md".to_owned(), bytes: vec![1, 2, 3] }
+			SubmittedAttachment {
+				name: "notes.md".to_owned(),
+				bytes: Some(vec![1, 2, 3]),
+				base64: None
+			}
+		);
+	}
+
+	#[test]
+	fn a_submitted_file_is_read_from_the_base64_shape_a_member_sends() {
+		let submitted: SubmittedAttachment =
+			serde_json::from_value(json!({ "name": "photo.jpg", "base64": "AQID" }))
+				.expect("the submission parses");
+
+		assert_eq!(
+			submitted,
+			SubmittedAttachment {
+				name: "photo.jpg".to_owned(),
+				bytes: None,
+				base64: Some("AQID".to_owned())
+			}
 		);
 	}
 }

@@ -119,13 +119,15 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 403 | `"this command reaches outside the shared space"`: an id in `args` names something outside the shared space |
 | 403 | `{ "kind": "refusedToAMember" }`: the command would reach what belongs to the host person |
 | 413 | a string: the call is larger than the host accepts |
+| 413 | `commands.chat_store_attachments.error` with `kind` `tooLarge`, `tooLargeTogether` or `tooMany`: the attachments exceed a limit of [Attachments](#attachments) |
 | 502 | a string: the host could not run the call on its side |
 
 The host bounds each call at 300 seconds. A client that hears no answer by then
 fails the call.
 
 A command whose schema entry has no `error` key never answers 500 with a typed
-body.
+body. `chat_store_attachments` is the only command that answers a typed body on
+413.
 
 ### The event frame
 
@@ -238,6 +240,31 @@ avatars one at a time.
 | 500 | `{ "error": "the avatar was not read" }` |
 | 502 | `{ "error": "<reason>" }` |
 
+### Attachments
+
+`chat_store_attachments` takes each attachment of `args.attachments` as
+`{ "name": "photo.jpg", "base64": "<the file, standard base64 with padding>" }`.
+The integer array `{ "name": "photo.jpg", "bytes": [255, 216] }` is still read,
+but weighs about 3.6 bytes of frame per byte of file: a member sends `base64`.
+An attachment carries exactly one of the two keys.
+
+The host weighs the decoded bytes against these limits, and refuses the whole
+call when one is exceeded: no file of the batch is stored.
+
+| Limit | Bytes | Answer |
+|---|---|---|
+| one file | 10485760 (10 MiB) | 413, `{ "kind": "tooLarge", "name", "bytes", "limit": 10485760 }` |
+| files in one call | 20 files | 413, `{ "kind": "tooMany", "count", "limit": 20 }` |
+| all files of one call | 31457280 (30 MiB) | 413, `{ "kind": "tooLargeTogether", "bytes", "limit": 31457280 }` |
+
+An attachment that carries both keys, neither key, or `base64` text that does not
+decode answers 500 with `{ "kind": "unwritable", "detail" }`, the `detail` naming
+the attachment.
+
+A batch of 30 MiB is about 40 MiB of base64 in the call, and about 53 MiB once
+the envelope base64-encodes it again in `ct`: under the relay cap of
+[Frames the relay refuses](#frames-the-relay-refuses).
+
 ### The shared-space frame
 
 ```json
@@ -273,6 +300,10 @@ member:
 JSON object"` otherwise. That answer carries no `"v": 2`, so the client drops it
 like any envelope that is not v2: it fails the call it was sending, if any, by
 itself.
+
+The relay caps a member frame at 67108864 bytes (64 MiB). A larger frame is
+refused with status 413 to that member alone: nothing reaches the host, the host
+socket stays open.
 
 ## Close codes
 
@@ -344,7 +375,8 @@ on each socket open. Neither the epoch nor the seq survives an app restart.
 
 - `commands.<name>.args` is the object schema of the call's `args`.
 - `commands.<name>.ok` is the answer body on 200. `commands.<name>.error`, when
-  present, is the typed answer body on 500.
+  present, is the typed answer body on 500, and on 413 for
+  `chat_store_attachments`.
 - `events.<name>.payload` is the payload of that event.
 - `$defs` holds the shared types every entry refers to. A name ending in
   `_Deserialize` is the shape the host reads (args); `_Serialize` is the shape the

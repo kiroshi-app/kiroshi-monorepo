@@ -1,11 +1,13 @@
 pub mod commands;
 pub mod contract;
 
+use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use chrono::{DateTime, SecondsFormat, Utc};
 use uuid::Uuid;
 
@@ -69,12 +71,13 @@ pub fn store(
 	conversation_id: &str,
 	submitted: &[SubmittedAttachment],
 ) -> Result<Vec<PathBuf>, Rejection> {
-	refuse(submitted)?;
+	let contents = submitted.iter().map(content_of).collect::<Result<Vec<_>, _>>()?;
+	refuse(submitted, &contents)?;
 	let dir = conversation_dir(root, conversation_id);
 	let paths: Vec<PathBuf> =
 		submitted.iter().map(|attachment| dir.join(minted_name(&attachment.name))).collect();
-	for (path, attachment) in paths.iter().zip(submitted) {
-		if let Err(error) = private_files::write(path, &attachment.bytes) {
+	for (path, content) in paths.iter().zip(&contents) {
+		if let Err(error) = private_files::write(path, content) {
 			take_back(&paths);
 			return Err(unwritable(error));
 		}
@@ -82,12 +85,27 @@ pub fn store(
 	Ok(paths)
 }
 
-fn refuse(submitted: &[SubmittedAttachment]) -> Result<(), Rejection> {
+fn content_of(attachment: &SubmittedAttachment) -> Result<Cow<'_, [u8]>, Rejection> {
+	let unreadable = |reason: &str| Rejection::Unwritable {
+		detail: format!("the attachment {:?} {reason}", attachment.name),
+	};
+	match (&attachment.bytes, &attachment.base64) {
+		(Some(bytes), None) => Ok(Cow::Borrowed(bytes)),
+		(None, Some(text)) => BASE64_STANDARD.decode(text).map(Cow::Owned).map_err(|error| {
+			unreadable(&format!("carries base64 text that does not decode: {error}"))
+		}),
+		(Some(_), Some(_)) => Err(unreadable("carries both base64 and bytes")),
+		(None, None) => Err(unreadable("carries neither base64 nor bytes")),
+	}
+}
+
+fn refuse(submitted: &[SubmittedAttachment], contents: &[Cow<'_, [u8]>]) -> Result<(), Rejection> {
 	let sized: Vec<SizedFile<'_>> = submitted
 		.iter()
-		.map(|attachment| SizedFile {
+		.zip(contents)
+		.map(|(attachment, content)| SizedFile {
 			name: &attachment.name,
-			bytes: attachment.bytes.len() as u64,
+			bytes: content.len() as u64,
 		})
 		.collect();
 	refuse_block(&sized)
@@ -161,7 +179,11 @@ mod tests {
 	}
 
 	fn an_attachment(name: &str, bytes: &[u8]) -> SubmittedAttachment {
-		SubmittedAttachment { name: name.to_owned(), bytes: bytes.to_vec() }
+		SubmittedAttachment { name: name.to_owned(), bytes: Some(bytes.to_vec()), base64: None }
+	}
+
+	fn a_base64_attachment(name: &str, text: &str) -> SubmittedAttachment {
+		SubmittedAttachment { name: name.to_owned(), bytes: None, base64: Some(text.to_owned()) }
 	}
 
 	fn names_in(dir: &Path) -> Vec<String> {
@@ -392,6 +414,86 @@ mod tests {
 			.expect("the attachment is stored");
 
 		assert_eq!(stored.len(), 1);
+		fs::remove_dir_all(&root).expect("cleanup");
+	}
+
+	#[test]
+	fn the_same_content_sent_as_base64_and_as_bytes_is_stored_byte_identical() {
+		let root = temp_root();
+		let content: Vec<u8> = (0..=255).collect();
+
+		let stored = store(
+			&root,
+			CONVERSATION,
+			&[
+				an_attachment("shot.png", &content),
+				a_base64_attachment("shot.png", &BASE64_STANDARD.encode(&content)),
+			],
+		)
+		.expect("both forms are stored");
+
+		assert_eq!(fs::read(&stored[0]).expect("the bytes form"), content);
+		assert_eq!(fs::read(&stored[1]).expect("the base64 form"), content);
+		assert_eq!(stored[0].parent(), stored[1].parent());
+		assert_eq!(extension_of(&stored[0]), extension_of(&stored[1]));
+		fs::remove_dir_all(&root).expect("cleanup");
+	}
+
+	#[test]
+	fn an_attachment_whose_content_cannot_be_read_refuses_the_whole_call_naming_it() {
+		let unreadable = [
+			a_base64_attachment("photo.jpg", "not base64!"),
+			a_base64_attachment("photo.jpg", "AQI"),
+			SubmittedAttachment {
+				name: "photo.jpg".to_owned(),
+				bytes: Some(vec![1]),
+				base64: Some("AQ==".to_owned()),
+			},
+			SubmittedAttachment { name: "photo.jpg".to_owned(), bytes: None, base64: None },
+		];
+		for attachment in unreadable {
+			let root = temp_root();
+
+			let rejection = store(
+				&root,
+				CONVERSATION,
+				&[an_attachment("first.txt", b"kept out"), attachment.clone()],
+			)
+			.expect_err("the call is refused");
+
+			match rejection {
+				Rejection::Unwritable { detail } => {
+					assert!(
+						detail.contains("\"photo.jpg\""),
+						"{detail} does not name the attachment"
+					)
+				}
+				other => panic!("{attachment:?} was refused as {other:?}"),
+			}
+			assert!(!root.exists(), "a refused call wrote {attachment:?}");
+		}
+	}
+
+	#[test]
+	fn the_limits_weigh_the_decoded_bytes_of_a_base64_attachment() {
+		let root = temp_root();
+		let at_limit = BASE64_STANDARD.encode(vec![0u8; MAX_BYTES as usize]);
+		let over_limit = BASE64_STANDARD.encode(vec![0u8; (MAX_BYTES + 1) as usize]);
+
+		let stored = store(&root, CONVERSATION, &[a_base64_attachment("edge.bin", &at_limit)])
+			.expect("a decoded file at the limit is stored");
+		let rejection = store(&root, CONVERSATION, &[a_base64_attachment("huge.bin", &over_limit)])
+			.expect_err("a decoded file over the limit is refused");
+
+		assert_eq!(stored.len(), 1);
+		assert_eq!(
+			rejection,
+			Rejection::TooLarge {
+				name: "huge.bin".to_owned(),
+				bytes: MAX_BYTES + 1,
+				limit: MAX_BYTES
+			}
+		);
 		fs::remove_dir_all(&root).expect("cleanup");
 	}
 

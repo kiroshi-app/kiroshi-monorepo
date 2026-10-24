@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use common::{an_app_of_its_own, AppOfItsOwn};
 use kiroshi_app::agent::contract::TransportError;
 use kiroshi_app::agent::AgentState;
@@ -445,6 +446,44 @@ async fn a_rejected_command_answers_the_error_the_front_receives() {
 
 	assert_eq!(status, 500);
 	assert_eq!(Err(parsed(&body)), direct(&window, "conversation_update", edit));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_member_batch_over_the_attachment_limits_answers_413_with_the_typed_refusal() {
+	let host = Host::new();
+	let window = host.window();
+	let server = host.started();
+	let token = host.token();
+	let room = direct(&window, "conversation_main_chat", json!({ "botId": "default" }))
+		.expect("a conversation");
+	let quarter = BASE64_STANDARD.encode(vec![7u8; 31 * 1024 * 1024 / 4]);
+	let photo = json!({ "name": "photo.jpg", "base64": quarter });
+	let batch = json!({
+		"conversationId": room["id"],
+		"attachments": [photo, photo, photo, photo],
+	})
+	.to_string();
+	let unknown = json!({ "conversationId": "nowhere", "attachments": [] }).to_string();
+
+	let (status, body) = server.sent(member_invoke("chat_store_attachments", &token, &batch)).await;
+	let (other_status, other_body) =
+		server.sent(member_invoke("chat_store_attachments", &token, &unknown)).await;
+
+	assert_eq!(status, 413, "{body}");
+	assert_eq!(
+		parsed(&body),
+		json!({ "kind": "tooLargeTogether", "bytes": 31 * 1024 * 1024, "limit": 30 * 1024 * 1024 })
+	);
+	assert_eq!(other_status, 500, "{other_body}");
+	assert_eq!(parsed(&other_body)["kind"], json!("unknownConversation"));
+}
+
+fn member_invoke(command: &str, token: &str, body: &str) -> Vec<u8> {
+	format!(
+		"POST /api/invoke/{command} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAuthorization: Bearer {token}\r\nKiroshi-Relayed-Member: unvouched\r\nContent-Length: {}\r\n\r\n{body}",
+		body.len()
+	)
+	.into_bytes()
 }
 
 #[tokio::test(flavor = "multi_thread")]

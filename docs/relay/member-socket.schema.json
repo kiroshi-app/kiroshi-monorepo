@@ -7275,20 +7275,36 @@
     },
     "SubmittedAttachment": {
       "properties": {
+        "base64": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "bytes": {
-          "items": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "name": {
           "type": "string"
         }
       },
       "required": [
-        "name",
-        "bytes"
+        "name"
       ],
       "type": "object"
     },

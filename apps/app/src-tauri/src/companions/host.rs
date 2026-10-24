@@ -477,7 +477,7 @@ fn stored_copy(
 	path: &str,
 	bytes: Vec<u8>,
 ) -> Result<PathBuf, CompanionError> {
-	let submitted = SubmittedAttachment { name: path.to_owned(), bytes };
+	let submitted = SubmittedAttachment { name: path.to_owned(), bytes: Some(bytes), base64: None };
 	store(root, conversation_id, &[submitted])?.into_iter().next().ok_or_else(|| {
 		CompanionError::Unexpected { detail: "the attachment store answered no path".to_owned() }
 	})

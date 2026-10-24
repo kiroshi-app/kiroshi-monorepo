@@ -1614,7 +1614,8 @@ export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mod
 
 export type SubmittedAttachment = {
 	name: string,
-	bytes: number[],
+	bytes?: number[] | null,
+	base64?: string | null,
 };
 
 export type SubmittedTurn = {
