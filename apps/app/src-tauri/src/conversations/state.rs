@@ -172,8 +172,8 @@ mod tests {
 		conversation_delete, conversation_list, conversation_main_chat, conversation_page,
 		conversation_solo_states,
 	};
+	use crate::conversations::contract::Chat;
 	use crate::conversations::contract::STATE_CHANGED_EVENT;
-	use crate::conversations::contract::{Chat, SoloState};
 	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 	use crate::db::repositories::messages::NewTurn;
 	use crate::missions::contract::{
@@ -727,12 +727,12 @@ mod tests {
 	";
 
 	async fn a_solo_thread_of(app: &App<MockRuntime>, bot_id: &str) -> String {
-		let solo = database(app)
+		database(app)
 			.conversations()
 			.ensure_chat(bot_id.to_owned(), Some("personal".to_owned()))
 			.await
-			.expect("the solo thread is opened");
-		solo.id
+			.expect("the solo thread is opened")
+			.id
 	}
 
 	async fn conversations_held(app: &App<MockRuntime>) -> i64 {
@@ -743,12 +743,6 @@ mod tests {
 			})
 			.await
 			.expect("the conversations are counted")
-	}
-
-	async fn the_solo_states(app: &App<MockRuntime>) -> Vec<SoloState> {
-		conversation_solo_states(app.handle().clone(), app.state(), "personal".to_owned())
-			.await
-			.expect("the solo states read")
 	}
 
 	#[tokio::test]
@@ -768,7 +762,10 @@ mod tests {
 		a_run_of(&app, ("t1", &working, 1), "b2").await;
 		let held_before = conversations_held(&app).await;
 
-		let read = the_solo_states(&app).await;
+		let read =
+			conversation_solo_states(app.handle().clone(), app.state(), "personal".to_owned())
+				.await
+				.expect("the solo states read");
 
 		assert_eq!(conversations_held(&app).await, held_before);
 		let answered: Vec<(&str, &str, ConversationState, Vec<String>)> = read
