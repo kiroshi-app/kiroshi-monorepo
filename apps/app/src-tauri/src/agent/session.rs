@@ -949,7 +949,6 @@ async fn on_exit(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::removed_on_drop::RemovedOnDrop;
 
 	#[derive(Debug)]
 	struct StubHost {
@@ -1157,14 +1156,14 @@ mod tests {
 
 	#[test]
 	fn a_run_serves_neither_connection_name_and_carries_the_held_source_alone() {
+		use crate::db::connection::fixture_root;
 		use crate::environment::connection;
 		use crate::environment::contract::{
 			ConnectionKind, EnvOwner, EnvScope, API_KEY, CONNECTION_NAMES, SUBSCRIPTION_TOKEN,
 		};
 		use crate::environment::store;
 
-		let root = RemovedOnDrop(std::env::temp_dir().join("kiroshi-session-connection"));
-		let _ = std::fs::remove_dir_all(&root);
+		let root = fixture_root("session-connection");
 		let owner = EnvOwner::Bot { id: "b1".to_owned(), space_id: "s1".to_owned() };
 		let space = EnvScope::Space { id: "s1".to_owned() };
 		let server = EnvScope::Server { name: "clock".to_owned(), owner: owner.clone() };

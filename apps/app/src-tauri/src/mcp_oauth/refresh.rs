@@ -309,10 +309,10 @@ fn told(failure: Option<OauthFailure>) -> String {
 #[cfg(test)]
 mod tests {
 	use std::cell::Cell;
-	use std::fs;
 
 	use super::*;
 	use crate::agent::protocol::{OauthFailureKind, OauthStep};
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{OAUTH_EXPIRES_AT, OAUTH_REASON};
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -339,9 +339,7 @@ mod tests {
 	}
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-mcp-refresh-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		fixture_root(&format!("mcp-refresh-{name}"))
 	}
 
 	fn a_bot() -> EnvOwner {

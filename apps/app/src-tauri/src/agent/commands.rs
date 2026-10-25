@@ -1655,6 +1655,7 @@ pub(crate) fn a_host_wide_announce<R: Runtime>(app: &AppHandle<R>, event: AgentE
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::db::repositories::runtime_context::RuntimeSessionStatus;
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -1764,8 +1765,7 @@ mod tests {
 	}
 
 	fn a_fresh_app_data(name: &str) -> RemovedOnDrop {
-		let app_data = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-app-data-{name}")));
-		let _ = std::fs::remove_dir_all(&app_data);
+		let app_data = fixture_root(&format!("app-data-{name}"));
 		std::fs::create_dir_all(&app_data).expect("the app data directory is there");
 		app_data
 	}
@@ -1824,10 +1824,7 @@ mod tests {
 	}
 
 	fn a_fresh_bundle_root(name: &str) -> RemovedOnDrop {
-		let root =
-			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-session-rules-{name}")));
-		let _ = std::fs::remove_dir_all(&root);
-		root
+		fixture_root(&format!("session-rules-{name}"))
 	}
 
 	fn a_rule(allow: &str) -> bundles::BotPermissions {

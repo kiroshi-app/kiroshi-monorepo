@@ -431,13 +431,12 @@ fn is_a_name_character(character: char) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::environment::contract::{API_KEY, OAUTH_ACCESS_TOKEN};
 	use crate::removed_on_drop::RemovedOnDrop;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-environment-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		fixture_root(&format!("environment-{name}"))
 	}
 
 	fn a_space() -> EnvScope {

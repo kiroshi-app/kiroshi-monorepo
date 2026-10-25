@@ -1094,6 +1094,7 @@ fn color_value(blot: Option<AvatarBlot>) -> String {
 mod tests {
 	use super::front::parts;
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::db::repositories::conversations::Bot;
 	use crate::removed_on_drop::RemovedOnDrop;
 
@@ -1132,9 +1133,7 @@ mod tests {
 	}
 
 	pub(super) fn a_root(name: &str) -> RemovedOnDrop {
-		let root = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-bundle-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		fixture_root(&format!("bundle-{name}"))
 	}
 
 	#[test]

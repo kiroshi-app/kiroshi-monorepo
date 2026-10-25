@@ -186,6 +186,7 @@ mod tests {
 	use std::path::PathBuf;
 
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::db::repositories::conversations::BotIdentity;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
@@ -193,10 +194,7 @@ mod tests {
 	use tauri::Manager;
 
 	fn a_root(name: &str) -> RemovedOnDrop {
-		let root =
-			RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-space-bundles-{name}")));
-		let _ = fs::remove_dir_all(&root);
-		root
+		fixture_root(&format!("space-bundles-{name}"))
 	}
 
 	fn bundle_name(slug: &str, bot_id: &str) -> String {

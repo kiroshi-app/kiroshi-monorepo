@@ -174,14 +174,13 @@ mod tests {
 	use super::super::user;
 	use super::super::{INVOCATION_KEY, LEARNED_NAME};
 	use super::*;
+	use crate::db::connection::fixture_root;
 	use crate::removed_on_drop::RemovedOnDrop;
 	use std::fs;
 	use std::thread;
 
 	fn a_path(name: &str) -> RemovedOnDrop {
-		let path = RemovedOnDrop(std::env::temp_dir().join(format!("kiroshi-plugin-{name}")));
-		let _ = fs::remove_dir_all(&path);
-		path
+		fixture_root(&format!("plugin-{name}"))
 	}
 
 	fn about_file(path: &Path) -> PathBuf {
