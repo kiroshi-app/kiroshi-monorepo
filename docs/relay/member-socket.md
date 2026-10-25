@@ -115,6 +115,7 @@ with `id` and `status` is an answer frame. Anything else is ignored.
 | 200 | `commands.<command>.ok` |
 | 500 | `commands.<command>.error`, or a string when the host could not read the args |
 | 400 | a string: the frame is not `{id, command, args}` with `args` an object |
+| 400 | `commands.chat_store_attachments.error` with `kind` `unreadable`: an attachment of [Attachments](#attachments) carries no content the host can read |
 | 403 | `"this command belongs to the host"`: the command is not open to members, or no command bears this name |
 | 403 | `"this command reaches outside the shared space"`: an id in `args` names something outside the shared space |
 | 403 | `{ "kind": "refusedToAMember" }`: the command would reach what belongs to the host person |
@@ -127,7 +128,7 @@ fails the call.
 
 A command whose schema entry has no `error` key never answers 500 with a typed
 body. `chat_store_attachments` is the only command that answers a typed body on
-413.
+400 and on 413.
 
 ### The event frame
 
@@ -258,7 +259,7 @@ call when one is exceeded: no file of the batch is stored.
 | all files of one call | 31457280 (30 MiB) | 413, `{ "kind": "tooLargeTogether", "bytes", "limit": 31457280 }` |
 
 An attachment that carries both keys, neither key, or `base64` text that does not
-decode refuses the whole call with 500 and
+decode refuses the whole call with 400 and
 `{ "kind": "unreadable", "name", "detail" }`: `name` is the attachment's, `detail`
 says which of the three it is. `unwritable` answers 500 only when the host disk
 refused a write.
@@ -377,7 +378,7 @@ on each socket open. Neither the epoch nor the seq survives an app restart.
 
 - `commands.<name>.args` is the object schema of the call's `args`.
 - `commands.<name>.ok` is the answer body on 200. `commands.<name>.error`, when
-  present, is the typed answer body on 500, and on 413 for
+  present, is the typed answer body on 500, and on 400 and 413 for
   `chat_store_attachments`.
 - `events.<name>.payload` is the payload of that event.
 - `$defs` holds the shared types every entry refers to. A name ending in

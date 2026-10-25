@@ -449,7 +449,8 @@ async fn a_rejected_command_answers_the_error_the_front_receives() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_member_batch_over_the_attachment_limits_answers_413_with_the_typed_refusal() {
+async fn a_member_batch_refused_by_the_attachment_store_answers_its_status_with_the_typed_refusal()
+{
 	let host = Host::new();
 	let window = host.window();
 	let server = host.started();
@@ -483,7 +484,7 @@ async fn a_member_batch_over_the_attachment_limits_answers_413_with_the_typed_re
 	);
 	assert_eq!(other_status, 500, "{other_body}");
 	assert_eq!(parsed(&other_body)["kind"], json!("unknownConversation"));
-	assert_eq!(unreadable_status, 500, "{unreadable_body}");
+	assert_eq!(unreadable_status, 400, "{unreadable_body}");
 	assert_eq!(parsed(&unreadable_body)["kind"], json!("unreadable"));
 	assert_eq!(parsed(&unreadable_body)["name"], json!("photo.jpg"));
 }

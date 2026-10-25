@@ -230,22 +230,23 @@ fn answered(command: &str, response: InvokeResponse) -> Response {
 			(StatusCode::FORBIDDEN, [(header::CONTENT_TYPE, JSON)], error.to_string())
 				.into_response()
 		}
-		InvokeResponse::Err(InvokeError(error))
-			if exceeds_the_attachment_limits(command, &error) =>
-		{
-			(StatusCode::PAYLOAD_TOO_LARGE, [(header::CONTENT_TYPE, JSON)], error.to_string())
-				.into_response()
-		}
 		InvokeResponse::Err(InvokeError(error)) => {
-			(StatusCode::INTERNAL_SERVER_ERROR, [(header::CONTENT_TYPE, JSON)], error.to_string())
-				.into_response()
+			let status = attachment_refusal_status(command, &error)
+				.unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+			(status, [(header::CONTENT_TYPE, JSON)], error.to_string()).into_response()
 		}
 	}
 }
 
-fn exceeds_the_attachment_limits(command: &str, error: &Value) -> bool {
-	command == STORE_ATTACHMENTS
-		&& AttachmentStoreError::deserialize(error).is_ok_and(|error| error.exceeds_a_limit())
+fn attachment_refusal_status(command: &str, error: &Value) -> Option<StatusCode> {
+	if command != STORE_ATTACHMENTS {
+		return None;
+	}
+	match AttachmentStoreError::deserialize(error).ok()? {
+		AttachmentStoreError::Unreadable { .. } => Some(StatusCode::BAD_REQUEST),
+		refusal if refusal.exceeds_a_limit() => Some(StatusCode::PAYLOAD_TOO_LARGE),
+		_ => None,
+	}
 }
 
 fn unregistered(command: &str) -> Value {
