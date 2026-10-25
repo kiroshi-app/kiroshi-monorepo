@@ -27,6 +27,11 @@ const SHARED_ROOT_DIRECTORIES = ["patches/", ".github/"]
 
 const IOS_ROOT_FILES = [".swift-format", ".xcode-version"]
 
+const FILES_SRC_TAURI_EMBEDS = [
+	".claude/settings.json",
+	"apps/app/src/lib/host/index.ts",
+]
+
 const EVERY_JOB: FilteredJobs = {
 	rust: true,
 	vitest: true,
@@ -56,7 +61,9 @@ const touchesRust = (path: string) =>
 		"apps/app/src-tauri/",
 		"apps/app/sidecar/",
 		"packages/shared/",
-	]) || ["Cargo.toml", "Cargo.lock"].includes(fileName(path))
+	]) ||
+	FILES_SRC_TAURI_EMBEDS.includes(path) ||
+	["Cargo.toml", "Cargo.lock"].includes(fileName(path))
 
 const touchesVitest = (path: string) =>
 	isUnder(path, ["packages/", "scripts/", "baselines/"]) ||
@@ -89,7 +96,8 @@ export const decideJobs = ({ event, paths }: ChangeSet): FilteredJobs => {
 	if (event === "push") return { ...NO_JOB, ios: true }
 	if (event === "tag") return { ...EVERY_JOB, ios: false }
 	const touched = touchedJobs(paths)
-	if (event === "pull_request") return { ...NO_JOB, vitest: touched.vitest }
+	if (event === "pull_request")
+		return { ...NO_JOB, vitest: touched.vitest, rust: touched.rust }
 	return { ...touched, ios: false }
 }
 

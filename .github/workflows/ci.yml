@@ -21,7 +21,7 @@ concurrency:
 
 # lint runs on every event but a push to main, without waiting on changes.
 # scripts/ci-changes.ts selects every other job per event, verify requires every selected job.
-# pull_request: changes, lint, vitest on the test files the diff changed, verify.
+# pull_request: changes, lint, vitest on the test files the diff changed, rust on its library tests, verify.
 # merge_group: changes, lint, vitest, website, rust, storybook, verify.
 # push to main: changes, ios, verify. The merge_group run of the commit already ran every desktop job.
 # v* tag: changes, lint, vitest, website, rust, storybook, verify.
@@ -128,7 +128,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Gate on the library tests, the integration targets left to the merge_group
+        if: github.event_name == 'pull_request'
+        run: bun scripts/ci.ts rust-lib
+
       - name: Gate
+        if: github.event_name != 'pull_request'
         run: bun scripts/ci.ts rust
 
   storybook:

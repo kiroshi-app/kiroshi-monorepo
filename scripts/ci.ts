@@ -44,6 +44,19 @@ const BINDINGS_MATCH: Step = {
 	command: "git diff --exit-code apps/app/src/lib/bindings.ts",
 }
 
+export const RUST_LIB_STEPS: Step[] = [
+	RUSTFMT,
+	BUILD_SIDECAR,
+	CLIPPY,
+	{
+		name: "Library tests",
+		command:
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
+		cwd: APP,
+		heavy: true,
+	},
+]
+
 export const GATE = {
 	lint: [
 		{ name: "Biome format", command: "bun run format" },
@@ -148,7 +161,6 @@ export const GROUP_ORDER: Group[] = [
 
 const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 	website: "on a merge_group and on a v* tag",
-	rust: "on a merge_group and on a v* tag",
 	storybook: "on a merge_group and on a v* tag",
 	ios: "on a push to main only",
 }
@@ -305,9 +317,10 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === undefined) return runGate()
 	if (argument === "fast") return runSteps("fast", fastSteps())
 	if (argument === "changed") return runSteps("changed", [CHANGED_UNIT_TESTS])
+	if (argument === "rust-lib") return runSteps("rust-lib", RUST_LIB_STEPS)
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed, rust-lib or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 

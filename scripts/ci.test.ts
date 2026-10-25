@@ -9,6 +9,7 @@ import {
 	GROUP_ORDER,
 	type Group,
 	offPullRequestNote,
+	RUST_LIB_STEPS,
 	SIMULATOR_LOOKUP,
 	type Step,
 	skipReason,
@@ -74,7 +75,7 @@ const CI_JOBS = GROUP_ORDER.filter(
 const LINT_EVENTS =
 	"github.event_name != 'push' || startsWith(github.ref, 'refs/tags/v')"
 
-const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "rust", "storybook", "ios"]
+const OFF_PULL_REQUEST_JOBS: Group[] = ["website", "storybook", "ios"]
 
 const EVERY_PATH_TOUCHED = {
 	rust: true,
@@ -142,11 +143,11 @@ type CiEvent = Parameters<typeof decideJobs>[0]["event"]
 const ciEventOf = (github: GitHubContext) =>
 	interpolate(workflow.jobs.changes?.env?.CI_EVENT ?? "", { github }) as CiEvent
 
-const outputsOn = (github: GitHubContext) =>
+const outputsOn = (github: GitHubContext, paths = ["bun.lock"]) =>
 	Object.fromEntries(
-		Object.entries(
-			decideJobs({ event: ciEventOf(github), paths: ["bun.lock"] }),
-		).map(([job, runs]) => [job, String(runs)]),
+		Object.entries(decideJobs({ event: ciEventOf(github), paths })).map(
+			([job, runs]) => [job, String(runs)],
+		),
 	)
 
 const scopeOf = (github: GitHubContext, results: JobResults = {}) => ({
@@ -205,7 +206,7 @@ const queueCommit = (pullRequest: number): GitHubContext => ({
 
 const A_QUEUE_COMMIT = queueCommit(7)
 
-const PULL_REQUEST_JOB_SET = ["changes", "lint", "verify", "vitest"]
+const PULL_REQUEST_JOB_SET = ["changes", "lint", "rust", "verify", "vitest"]
 
 const MERGE_GROUP_JOB_SET = [
 	"changes",
@@ -265,6 +266,18 @@ describe("the gate", () => {
 		}
 	})
 
+	it("runs rustfmt, clippy and the library tests on a pull_request, never an integration target", () => {
+		expect(RUST_LIB_STEPS.map((step) => step.command)).toEqual([
+			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+			"bun run --filter sidecar build",
+			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
+		])
+		expect(
+			RUST_LIB_STEPS.filter((step) => step.heavy).map((step) => step.name),
+		).toEqual(["Build sidecar", "Clippy", "Library tests"])
+	})
+
 	it("builds the website with the command the Render deploy runs", () => {
 		expect(GATE.website.map((step) => step.command)).toEqual([
 			"bun run build:website",
@@ -315,7 +328,7 @@ describe("the gate", () => {
 		expect(GROUP_ORDER.filter((group) => offPullRequestNote(group))).toEqual(
 			OFF_PULL_REQUEST_JOBS,
 		)
-		for (const group of ["website", "rust", "storybook"] as const) {
+		for (const group of ["website", "storybook"] as const) {
 			expect(offPullRequestNote(group)).toBe(
 				`${group} skips a pull_request, CI runs it on a merge_group and on a v* tag`,
 			)
@@ -388,7 +401,7 @@ describe("the jobs of ci.yml", () => {
 		expect(JSON.stringify(workflow.jobs.verify)).not.toContain("rust-check")
 	})
 
-	it.each(CI_JOBS.filter((group) => group !== "vitest"))(
+	it.each(CI_JOBS.filter((group) => group !== "vitest" && group !== "rust"))(
 		"%s runs its checks through bun scripts/ci.ts",
 		(job) => {
 			const gateSteps = runStepsOf(job).filter(
@@ -402,13 +415,16 @@ describe("the jobs of ci.yml", () => {
 	)
 
 	it.each([
-		[A_PULL_REQUEST, "bun scripts/ci.ts changed"],
-		[A_QUEUE_COMMIT, "bun scripts/ci.ts vitest"],
-		[A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
-	])(
-		"has vitest run one gate through bun scripts/ci.ts on %p",
-		(github, command) => {
-			const gateSteps = runStepsOf("vitest").filter(
+		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
+		["vitest", A_QUEUE_COMMIT, "bun scripts/ci.ts vitest"],
+		["vitest", A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
+		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-lib"],
+		["rust", A_QUEUE_COMMIT, "bun scripts/ci.ts rust"],
+		["rust", A_RELEASE_TAG, "bun scripts/ci.ts rust"],
+	] as const)(
+		"has %s run one gate through bun scripts/ci.ts on %p",
+		(job, github, command) => {
+			const gateSteps = runStepsOf(job).filter(
 				(step) =>
 					!SETUP_STEPS.has(step.name ?? "") &&
 					evaluate(step.if ?? "true", scopeOf(github)),
@@ -486,7 +502,7 @@ describe("the jobs of ci.yml", () => {
 		})
 	})
 
-	it("runs only changes, lint and vitest on a pull_request", () => {
+	it("runs only changes, lint, vitest and rust on a pull_request", () => {
 		expect(jobsRunningOn(A_PULL_REQUEST)).toEqual(PULL_REQUEST_JOB_SET)
 	})
 
@@ -545,7 +561,23 @@ describe("the jobs of ci.yml", () => {
 		expect(failingVerifySteps(A_PUSH_TO_MAIN, results)).not.toEqual([])
 	})
 
-	it.each(["rust", "storybook", "website"])(
+	it("skips rust on a pull_request whose paths leave the rust filter unselected, and has verify accept the skip", () => {
+		const scope = {
+			github: A_PULL_REQUEST,
+			needs: {
+				rust: { result: "skipped" },
+				changes: {
+					result: "success",
+					outputs: outputsOn(A_PULL_REQUEST, ["apps/app/src/main.tsx"]),
+				},
+			},
+		}
+
+		expect(evaluate(workflow.jobs.rust?.if ?? "true", scope)).toBe(false)
+		expect(evaluate(verifyCondition("rust") ?? "true", scope)).toBe(false)
+	})
+
+	it.each(["storybook", "website"])(
 		"has verify fail on a pull_request when %s ran",
 		(job) => {
 			const results = { ...resultsByRule(A_PULL_REQUEST), [job]: "success" }
