@@ -95,6 +95,7 @@ export const commands = {
 	conversationRecordBotCommands: (botId: string, commands: AgentCommand_Deserialize[]) => typedError<null, TranscriptStoreError>(__TAURI_INVOKE("conversation_record_bot_commands", { botId, commands })),
 	conversationBotCommands: (botId: string) => typedError<AgentCommand_Serialize[], TranscriptStoreError>(__TAURI_INVOKE("conversation_bot_commands", { botId })),
 	conversationMainChat: (botId: string, spaceId: string | null) => typedError<Chat, TranscriptStoreError>(__TAURI_INVOKE("conversation_main_chat", { botId, spaceId })),
+	conversationSoloStates: (spaceId: string) => typedError<SoloState[], TranscriptStoreError>(__TAURI_INVOKE("conversation_solo_states", { spaceId })),
 	conversationCreate: (spaceId: string, sectionId: string | null, title: string, botIds: string[]) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_create", { spaceId, sectionId, title, botIds })),
 	conversationList: (spaceId: string) => typedError<ConversationInList[], TranscriptStoreError>(__TAURI_INVOKE("conversation_list", { spaceId })),
 	conversationMissionThread: (conversationId: string) => typedError<Conversation, TranscriptStoreError>(__TAURI_INVOKE("conversation_mission_thread", { conversationId })),
@@ -1609,6 +1610,11 @@ export type SnippetPart = {
 	text: string,
 	matched: boolean,
 };
+
+export type SoloState = {
+	botId: string,
+	conversationId: string,
+} & ObservedState;
 
 export type Space = {
 	id: string,

@@ -170,9 +170,10 @@ mod tests {
 	use crate::conversations::commands::ready;
 	use crate::conversations::commands::{
 		conversation_delete, conversation_list, conversation_main_chat, conversation_page,
+		conversation_solo_states,
 	};
-	use crate::conversations::contract::Chat;
 	use crate::conversations::contract::STATE_CHANGED_EVENT;
+	use crate::conversations::contract::{Chat, SoloState};
 	use crate::db::repositories::conversations::{a_pending_prompt, PromptKind};
 	use crate::db::repositories::messages::NewTurn;
 	use crate::missions::contract::{
@@ -711,6 +712,94 @@ mod tests {
 
 		assert_eq!(read.id, solo.id);
 		assert_eq!(read.state, ConversationState::NeedsYou);
+	}
+
+	const THREE_COMPANIONS_AND_ONE_GONE: &str = "
+		INSERT INTO bots (id, name, model, created_at)
+			VALUES ('b2', 'Second', 'sonnet', 2), ('b3', 'Third', 'sonnet', 3),
+				('b4', 'Gone', 'sonnet', 4);
+		INSERT INTO bot_spaces (bot_id, space_id, joined_at)
+			VALUES ('b2', 'personal', 1), ('b3', 'personal', 1);
+		INSERT INTO conversations (id, space_id, kind, title, created_at, updated_at)
+			VALUES ('c-gone', 'personal', 'main', 'Gone', 1, 1);
+		INSERT INTO conversation_participants (conversation_id, bot_id, role, joined_at, join_seq)
+			VALUES ('c-gone', 'b4', 'lead', 1, 0);
+	";
+
+	async fn a_solo_thread_of(app: &App<MockRuntime>, bot_id: &str) -> String {
+		let solo = database(app)
+			.conversations()
+			.ensure_chat(bot_id.to_owned(), Some("personal".to_owned()))
+			.await
+			.expect("the solo thread is opened");
+		solo.id
+	}
+
+	async fn conversations_held(app: &App<MockRuntime>) -> i64 {
+		database(app)
+			.call(|connection| {
+				Ok(connection
+					.query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))?)
+			})
+			.await
+			.expect("the conversations are counted")
+	}
+
+	async fn the_solo_states(app: &App<MockRuntime>) -> Vec<SoloState> {
+		conversation_solo_states(app.handle().clone(), app.state(), "personal".to_owned())
+			.await
+			.expect("the solo states read")
+	}
+
+	#[tokio::test]
+	async fn the_solo_states_of_a_space_answer_each_held_solo_thread_and_open_none() {
+		let app = a_host("solo-states").await;
+		database(&app)
+			.call_mut(|connection| Ok(connection.execute_batch(THREE_COMPANIONS_AND_ONE_GONE)?))
+			.await
+			.expect("the companions are planted");
+		let asking = a_solo_thread_of(&app, "b1").await;
+		let working = a_solo_thread_of(&app, "b2").await;
+		database(&app)
+			.conversations()
+			.hold_prompt(a_pending_prompt(&asking, PromptKind::Question))
+			.await
+			.expect("the prompt is held");
+		a_run_of(&app, ("t1", &working, 1), "b2").await;
+		let held_before = conversations_held(&app).await;
+
+		let read = the_solo_states(&app).await;
+
+		assert_eq!(conversations_held(&app).await, held_before);
+		let answered: Vec<(&str, &str, ConversationState, Vec<String>)> = read
+			.iter()
+			.map(|entry| {
+				(
+					entry.bot_id.as_str(),
+					entry.conversation_id.as_str(),
+					entry.observed.state,
+					entry.observed.working_bot_ids.clone(),
+				)
+			})
+			.collect();
+		assert_eq!(
+			answered,
+			[
+				("b1", asking.as_str(), ConversationState::NeedsYou, vec![]),
+				("b2", working.as_str(), ConversationState::Working, vec!["b2".to_owned()]),
+			]
+		);
+		assert_eq!(
+			serde_json::to_value(&read[0].observed.pending_prompt).ok(),
+			Some(the_question())
+		);
+		assert_eq!(read[0].observed, paged(&app, &asking).await);
+		assert_eq!(read[1].observed, paged(&app, &working).await);
+		let main = the_main_chat(&app).await;
+		assert_eq!(
+			(main.id, main.state, main.pending_prompt),
+			(asking, read[0].observed.state, read[0].observed.pending_prompt.clone())
+		);
 	}
 
 	const MALFORMED_PROMPTS: &str = "
