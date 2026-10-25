@@ -128,9 +128,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Gate on the library tests, the integration targets left to the merge_group
+      - name: Gate on the library tests, the integration targets and the bindings
         if: github.event_name == 'pull_request'
-        run: bun scripts/ci.ts rust-lib
+        run: bun scripts/ci.ts rust-pr
 
       - name: Gate
         if: github.event_name != 'pull_request'

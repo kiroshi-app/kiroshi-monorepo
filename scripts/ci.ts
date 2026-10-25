@@ -51,7 +51,7 @@ const BINDINGS_MATCH: Step = {
 	command: "git diff --exit-code apps/app/src/lib/bindings.ts",
 }
 
-export const RUST_LIB_STEPS: Step[] = [
+export const RUST_PULL_REQUEST_STEPS: Step[] = [
 	RUSTFMT,
 	BUILD_SIDECAR,
 	CLIPPY,
@@ -62,6 +62,14 @@ export const RUST_LIB_STEPS: Step[] = [
 		cwd: APP,
 		heavy: true,
 	},
+	{
+		name: "Integration tests",
+		command:
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+		cwd: APP,
+		heavy: true,
+	},
+	BINDINGS_MATCH,
 ]
 
 export const GATE = {
@@ -331,10 +339,11 @@ const runRequested = (argument: string | undefined) => {
 	if (argument === "fast")
 		return runSteps("fast", fastSteps(pathsChangedSinceMain()))
 	if (argument === "changed") return runSteps("changed", [CHANGED_UNIT_TESTS])
-	if (argument === "rust-lib") return runSteps("rust-lib", RUST_LIB_STEPS)
+	if (argument === "rust-pr")
+		return runSteps("rust-pr", RUST_PULL_REQUEST_STEPS)
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(
-		`unknown argument "${argument}", expected fast, changed, rust-lib or one of ${GROUP_ORDER.join(", ")}`,
+		`unknown argument "${argument}", expected fast, changed, rust-pr or one of ${GROUP_ORDER.join(", ")}`,
 	)
 }
 
