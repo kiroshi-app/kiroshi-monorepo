@@ -2,10 +2,13 @@ import SwiftUI
 
 struct InlineText: View {
     static let chipEdge = "\u{202F}"
+    nonisolated static let unbreakableHyphen = "\u{2011}"
 
     let inline: MarkdownInline
     var codeFont: Font? = .subheadline.monospaced()
     var strongWeight: Font.Weight? = .semibold
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         inline.runs.reduce(Text(verbatim: "")) { text, run in
@@ -22,6 +25,18 @@ struct InlineText: View {
 
     private var isSpokenPlain: Bool {
         hasChips && !inline.runs.contains { $0.link != nil }
+    }
+
+    nonisolated static func shown(code: String, breaksAfterWordHyphens: Bool) -> String {
+        guard breaksAfterWordHyphens else {
+            return code.replacing("-", with: unbreakableHyphen)
+        }
+        var shown = ""
+        for character in code {
+            let followsAWord = shown.last.map { $0.isLetter || $0.isNumber } ?? false
+            shown += character == "-" && !followsAWord ? unbreakableHyphen : String(character)
+        }
+        return shown
     }
 
     private func piece(_ run: MarkdownInline.Run) -> Text {
@@ -41,8 +56,9 @@ struct InlineText: View {
         case .text:
             return text
         case .code:
-            let unbroken = run.text.replacing("-", with: "\u{2011}")
-            let code = Text(verbatim: Self.chipEdge + unbroken + Self.chipEdge)
+            let shown = Self.shown(
+                code: run.text, breaksAfterWordHyphens: dynamicTypeSize.isAccessibilitySize)
+            let code = Text(verbatim: Self.chipEdge + shown + Self.chipEdge)
             return (codeFont.map { code.font($0) } ?? code.monospaced())
                 .customAttribute(Chip(radius: 5))
         case .mention(let isKnown):
