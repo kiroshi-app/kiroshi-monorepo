@@ -530,15 +530,10 @@ const rosterBaseOf = (
 	}
 }
 
-const hostStatesOfChat = ({
-	id,
-	state,
-	pendingPrompt,
-	workingBotIds,
-}: Chat): ConversationHostStates =>
-	state === undefined
+const hostStatesOfChat = (chat: Chat): ConversationHostStates =>
+	chat.state === undefined
 		? NO_HOST_STATES
-		: { [id]: { state, pendingPrompt, workingBotIds } }
+		: { [chat.id]: observedStateOf({ ...chat, state: chat.state }) }
 
 const rosterStateOf = (
 	base: RosterState,

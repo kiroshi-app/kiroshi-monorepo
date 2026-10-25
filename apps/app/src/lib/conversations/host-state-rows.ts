@@ -60,19 +60,17 @@ export const workingFromHost = (
 		),
 	)
 
-const askedIn = (observed: ObservedState | undefined) =>
-	observed?.pendingPrompt?.text || undefined
-
 export const withNeedsYou = <Row extends NeedsYouRow>(
 	rows: Row[],
 	hostStates: ConversationHostStates,
 ): Row[] =>
-	rows.map((row) =>
-		hostStates[row.id]?.state === "needs_you"
+	rows.map((row) => {
+		const observed = hostStates[row.id]
+		return observed?.state === "needs_you"
 			? {
 					...row,
 					badge: "attention",
-					pendingQuestion: askedIn(hostStates[row.id]),
+					pendingQuestion: observed.pendingPrompt?.text || undefined,
 				}
-			: row,
-	)
+			: row
+	})
