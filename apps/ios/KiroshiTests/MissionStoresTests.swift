@@ -322,7 +322,8 @@ struct MissionStoresTests {
         let attachment = ((stored["args"] as? [String: Any])?["attachments"] as? [[String: Any]])?
             .first
         #expect(attachment?["name"] as? String == "Photo 1.png")
-        #expect(attachment?["bytes"] as? [Int] == [1, 2])
+        #expect(attachment?["base64"] as? String == "AQI=")
+        #expect(attachment?["bytes"] == nil)
         let content =
             ((sent["args"] as? [String: Any])?["message"] as? [String: Any])?["content"] as? String
         #expect(

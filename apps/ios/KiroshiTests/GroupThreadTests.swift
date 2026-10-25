@@ -154,7 +154,7 @@ extension ThreadStoreTests {
         await store.send()?.value
 
         #expect(store.draft == "@Atlas ship it")
-        #expect(store.sendFailure == .refused)
+        #expect(store.sendFailure == .hostFault)
         following.cancel()
         await connection.stop()
     }

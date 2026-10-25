@@ -4,6 +4,7 @@ import Observation
 enum MissionSendProblem: Equatable {
     case couldNotSend
     case tooLarge
+    case tooMany
     case offline
 }
 
@@ -98,6 +99,10 @@ final class MissionThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay else { return nil }
+        if let rejection = AttachmentRejection.of(attachments) {
+            sendProblem = rejection == .tooMany ? .tooMany : .tooLarge
+            return nil
+        }
         let id = newId()
         lastSentId = id
         isSending = true
@@ -130,9 +135,8 @@ final class MissionThreadStore {
             var content = text
             if !picked.isEmpty {
                 let paths = try await relay.store(
-                    ConversationAttachments(
-                        conversationId: mission.threadConversationId,
-                        attachments: picked.map { .init(name: $0.name, bytes: Array($0.data)) }))
+                    await ConversationAttachments.encoding(
+                        picked, in: mission.threadConversationId))
                 content = AttachmentBlock.prompt(text: text, paths: paths, sentAt: sentAt)
             }
             let message = MissionAnswer.Message(
@@ -151,9 +155,11 @@ final class MissionThreadStore {
             if attachments == picked {
                 attachments = []
             }
+        } catch is CancellationError {
+            return
         } catch MissionsCallError.refused(status: 413) {
             sendProblem = .tooLarge
-        } catch RelayCallError.notConnected {
+        } catch RelayCallError.hostOffline {
             sendProblem = .offline
         } catch {
             sendProblem = .couldNotSend
@@ -238,6 +244,10 @@ extension MissionThreadStore: ThreadModel {
             String(
                 localized:
                     "Couldn’t send your files: they’re too large. Remove one and send again.")
+        case .tooMany:
+            String(
+                localized:
+                    "Couldn’t send your files: there are more than 20. Remove some and send again.")
         case .offline:
             String(
                 localized:

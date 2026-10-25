@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Synchronization
 import Testing
 
 @testable import Kiroshi
@@ -255,7 +256,8 @@ struct ThreadStoreTests {
         let storeArgs = try stored.args(as: StoreArgs.self)
         #expect(storeArgs.conversationId == "chat-juniper")
         #expect(storeArgs.attachments.map(\.name) == ["flow.png"])
-        #expect(storeArgs.attachments.map(\.bytes) == [[1, 2]])
+        #expect(storeArgs.attachments.map(\.base64) == ["AQI="])
+        #expect(!stored.text.contains(#""bytes""#))
         #expect(
             try sent.args(as: SendTurnArgs.self).message.content == """
                 Look at this
@@ -288,6 +290,75 @@ struct ThreadStoreTests {
         #expect(store.attachments == picked)
         #expect(store.entries.isEmpty)
         #expect(store.problem?.hasPrefix("Couldn’t send your files") == true)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func filesOverTheHostLimitsSendNothingAndSaySo() async {
+        let commands = Mutex<[String]>([])
+        let host = TestHost { call in
+            commands.withLock { $0.append(call.command) }
+            return call.command == "conversation_send_turn" ? TestHost.ok(call, "4") : nil
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        let picked = [10, 10, 10, 1].map {
+            PickedAttachment(id: UUID(), name: "Photo.jpg", data: Data(count: $0 << 20))
+        }
+
+        store.draft = "Look"
+        store.attachments = picked
+        #expect(store.send() == nil)
+
+        #expect(store.sendFailure == .tooLarge)
+        #expect(store.attachments == picked)
+        #expect(store.draft == "Look")
+        #expect(!store.isSending)
+        store.attachments = []
+        await store.send()?.value
+        #expect(commands.withLock { $0.filter { $0 == "chat_store_attachments" } }.isEmpty)
+        #expect(commands.withLock { $0.filter { $0 == "conversation_send_turn" } }.count == 1)
+        #expect(store.sendFailure == nil)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func anUnreadableAttachmentStaysPickedAndAsksToPickItAgain() async {
+        let host = TestHost { call in
+            guard call.command == "chat_store_attachments" else { return nil }
+            return TestHost.refused(
+                call, status: 400, #"{"kind":"unreadable","name":"flow.png","detail":"bad"}"#)
+        }
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        let picked = [PickedAttachment(id: UUID(), name: "flow.png", data: Data([1, 2]))]
+
+        store.attachments = picked
+        await store.send()?.value
+
+        #expect(store.sendFailure == .unreadableAttachment)
+        #expect(store.attachments == picked)
+        #expect(store.entries.isEmpty)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aSendCutOffByTheRelayDroppingSaysTheSpaceCouldNotBeReached() async {
+        let host = TestHost()
+        let store = makeStore()
+        let (connection, following) = await follow(host, store)
+        let sending = Task {
+            _ = await host.nextCall("conversation_send_turn")
+            host.socket.push(.close(1006))
+        }
+
+        store.draft = "Hello"
+        await store.send()?.value
+        await sending.value
+
+        #expect(store.sendFailure == .unreachable)
+        #expect(store.draft == "Hello")
+        #expect(store.problem?.contains("is offline") == false)
         following.cancel()
         await connection.stop()
     }
@@ -614,7 +685,7 @@ struct ThreadStoreTests {
         await connection.stop()
     }
 
-    @Test func anErrorAnswerSaysSendingFailed() async {
+    @Test func aHostSideErrorSaysSomethingWentWrongOnTheHost() async {
         let host = TestHost { call in
             guard call.command == "conversation_send_turn" else { return nil }
             return TestHost.refused(call, status: 502, #""the host could not run the call""#)
@@ -625,7 +696,8 @@ struct ThreadStoreTests {
         store.draft = "Hello"
         await store.send()?.value
 
-        #expect(store.sendFailure == .refused)
+        #expect(store.sendFailure == .hostFault)
+        #expect(store.problem?.contains("the computer hosting this Space") == true)
         #expect(store.draft == "Hello")
         #expect(!store.isWorking)
         following.cancel()
@@ -830,7 +902,7 @@ struct ThreadStoreTests {
     struct StoreArgs: Decodable {
         struct Attachment: Decodable {
             let name: String
-            let bytes: [UInt8]
+            let base64: String
         }
 
         let conversationId: String

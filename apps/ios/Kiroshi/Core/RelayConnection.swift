@@ -5,6 +5,7 @@ import os
 enum RelayCallError: Error, Equatable {
     case notConnected
     case connectionClosed
+    case hostOffline
     case timedOut
     case counterUnreadable
     case challengeRefused
@@ -206,7 +207,7 @@ actor RelayConnection {
             socket = nil
             self.outbox = nil
             challenge = nil
-            failPendingCalls()
+            failPendingCalls(with: ending.state == .hostOffline ? .hostOffline : .connectionClosed)
         }
         return ending
     }
