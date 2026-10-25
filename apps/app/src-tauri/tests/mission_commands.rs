@@ -172,6 +172,8 @@ fn reopening_a_closed_mission_brings_it_back_to_working_and_tells_the_front() {
 			"isAgentRunning": false,
 			"liveness": "idle",
 			"lastActivityAt": null,
+			"pendingPrompt": null,
+			"workingBotIds": [],
 		})],
 		"the front was not told the mission reopened"
 	);
