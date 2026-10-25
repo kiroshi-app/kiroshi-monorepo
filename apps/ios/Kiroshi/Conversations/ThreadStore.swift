@@ -255,6 +255,10 @@ final class ThreadStore {
     @discardableResult
     func send() -> Task<Void, Never>? {
         guard canSend, let relay, let conversationId else { return nil }
+        if let rejection = AttachmentRejection.of(attachments) {
+            sendFailure = SendFailure(rejection)
+            return nil
+        }
         let outgoing = Outgoing(
             id: makeId(), turnId: makeId(), conversationId: conversationId,
             written: draft.trimmingCharacters(in: .whitespacesAndNewlines), picked: attachments,
@@ -295,11 +299,8 @@ final class ThreadStore {
             var content = content(of: outgoing.written)
             if !outgoing.picked.isEmpty {
                 let paths = try await relay.storeAttachments(
-                    ConversationAttachments(
-                        conversationId: outgoing.conversationId,
-                        attachments: outgoing.picked.map {
-                            .init(name: $0.name, bytes: Array($0.data))
-                        }))
+                    await ConversationAttachments.encoding(
+                        outgoing.picked, in: outgoing.conversationId))
                 content = AttachmentBlock.prompt(
                     text: content, paths: paths, sentAt: outgoing.sentAt)
             }
@@ -542,10 +543,33 @@ extension ThreadStore: ThreadModel {
                 localized:
                     "Couldn’t send, \(workingName) is still working. Tap Send again once it answers."
             )
+        case .unreachable:
+            String(
+                localized:
+                    "Couldn’t send, the Space couldn’t be reached. Check your connection and tap Send again."
+            )
+        case .timedOut:
+            String(localized: "Couldn’t send, it took too long. Tap Send to try again.")
         case .tooLarge:
             String(
                 localized:
-                    "Couldn’t send your files, they’re too large. Remove one and tap Send again.")
+                    "Couldn’t send your files, they’re too large. Each can be up to 10 MB, 30 MB together. Remove one and tap Send again."
+            )
+        case .tooMany:
+            String(
+                localized:
+                    "Couldn’t send your files, there are more than 20. Remove some and tap Send again."
+            )
+        case .unreadableAttachment:
+            String(
+                localized:
+                    "Couldn’t send, a file couldn’t be read. Remove it, pick it again and tap Send."
+            )
+        case .hostFault:
+            String(
+                localized:
+                    "Couldn’t send, something went wrong on the computer hosting this Space. Tap Send to try again."
+            )
         case .refused: String(localized: "Couldn’t send. Tap Send to try again.")
         case nil: nil
         }

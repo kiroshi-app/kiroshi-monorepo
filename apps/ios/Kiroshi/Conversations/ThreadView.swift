@@ -17,9 +17,12 @@ struct ThreadView: View {
         #else
             let draft = ""
         #endif
-        _thread = State(
-            initialValue: ThreadStore(
-                subject: subject, work: space.work, authorship: space.authorship, draft: draft))
+        let thread = ThreadStore(
+            subject: subject, work: space.work, authorship: space.authorship, draft: draft)
+        #if DEBUG
+            thread.attachments = ConversationsFixture.photos
+        #endif
+        _thread = State(initialValue: thread)
     }
 
     var body: some View {

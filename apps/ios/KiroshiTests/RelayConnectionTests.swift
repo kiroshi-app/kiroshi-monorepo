@@ -282,7 +282,7 @@ struct RelayConnectionTests {
         await connection.stop()
     }
 
-    @Test func aCloseFailsTheCallsStillWaiting() async throws {
+    @Test func theHostLeavingFailsTheCallsStillWaitingAsOffline() async throws {
         let connection = makeConnection()
         let updates = await connection.updates()
         await connection.start()
@@ -296,6 +296,25 @@ struct RelayConnectionTests {
         }
         _ = try await sentCall(socket)
         socket.push(.close(RelayClosure.hostOffline))
+
+        await #expect(throws: RelayCallError.hostOffline) { try await answer.value }
+        await connection.stop()
+    }
+
+    @Test func aDropThatNamesNoHostFailsTheCallsAsClosed() async throws {
+        let connection = makeConnection()
+        let updates = await connection.updates()
+        await connection.start()
+        let socket = ScriptedRelaySocket(sharedSpaceId: "s-1")
+        await transport.nextOpening().accept(socket)
+        await waitFor(.online(sharedSpaceId: "s-1"), in: updates)
+        _ = try await sentCall(socket)
+
+        let answer = Task {
+            try await connection.call("conversation_list", args: ["spaceId": "s-1"])
+        }
+        _ = try await sentCall(socket)
+        socket.push(.close(1006))
 
         await #expect(throws: RelayCallError.connectionClosed) { try await answer.value }
         await connection.stop()
