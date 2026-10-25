@@ -64,6 +64,20 @@
                 ?? openingDraft
         }
 
+        static var photos: [PickedAttachment] {
+            let sizes = (UserDefaults.standard.string(forKey: "photos") ?? "").split(separator: ",")
+            return sizes.enumerated().compactMap { index, mebibytes in
+                Int(mebibytes).map {
+                    PickedAttachment(
+                        id: UUID(), name: "Photo \(index + 1).jpg", data: Data(count: $0 << 20))
+                }
+            }
+        }
+
+        static var storeAnswer: String? {
+            UserDefaults.standard.string(forKey: "storeAnswer")
+        }
+
         static var openingDraft: String {
             switch SignInFixture.opened {
             case .groupMention: "@"
@@ -506,6 +520,7 @@
                 : FixtureHost.Script(
                     companions: companions, groups: [releaseCrew, designReview],
                     messages: listMessages.merging(groupMessages) { listed, _ in listed })
+            script.storeAnswer = storeAnswer
             if isPaged {
                 script.laterPagesAnswerAfter = laterPageDelay
                 script.listPageSize = MissionsFixture.pageSize
@@ -769,6 +784,7 @@
             var pinned: [String] = []
             var refusesPins = false
             var question: FixtureQuestion?
+            var storeAnswer: String?
         }
 
         static let spaceId = "space-studio"
@@ -1085,6 +1101,32 @@
             push(.frame(#"{"id":\#(id),"status":200,"body":\#(body)}"#, after: delay))
         }
 
+        private static func carriesBase64Only(_ args: [String: Any]) -> Bool {
+            (args["attachments"] as? [[String: Any]] ?? []).allSatisfy { attachment in
+                attachment["bytes"] == nil
+                    && (attachment["base64"] as? String).flatMap { Data(base64Encoded: $0) } != nil
+            }
+        }
+
+        private func answerStore(_ id: Int, refusing args: [String: Any]) {
+            let name =
+                (args["attachments"] as? [[String: Any]])?.first?["name"] as? String ?? ""
+            switch script.storeAnswer {
+            case "unwritable":
+                push(
+                    .frame(
+                        #"{"id":\#(id),"status":500,"body":{"kind":"unwritable","detail":"disk full"}}"#
+                    ))
+            case "cut": push(.close(1006))
+            case "silent": break
+            default:
+                push(
+                    .frame(
+                        #"{"id":\#(id),"status":400,"body":{"kind":"unreadable","name":"\#(name)","detail":"not base64"}}"#
+                    ))
+            }
+        }
+
         private func refuse(_ id: Int) {
             push(
                 .frame(
@@ -1177,6 +1219,9 @@
                 } else {
                     playTurn(after: message)
                 }
+            case "chat_store_attachments"
+            where !Self.carriesBase64Only(args) || script.storeAnswer != nil:
+                answerStore(id, refusing: args)
             case "chat_store_attachments":
                 let conversationId = args["conversationId"] as? String ?? ""
                 let names = (args["attachments"] as? [[String: Any]] ?? []).compactMap {
