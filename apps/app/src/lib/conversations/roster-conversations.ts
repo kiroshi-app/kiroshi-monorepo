@@ -38,6 +38,8 @@ export type ConversationWorker = {
 
 const NO_WORKERS: ConversationWorker[] = []
 
+const NO_BOT_IDS: string[] = []
+
 export type StoredConversation = Conversation &
 	Partial<Pick<ConversationInPage, "activeTurn">>
 
@@ -205,14 +207,16 @@ const previewText = (
 
 const toSeatedRows = (
 	seated: Participant[],
+	workingBotIds: string[],
 	workers: ConversationWorker[],
 ): AppSidebarBot[] =>
 	seated.map((participant) => {
+		const isWorking = workingBotIds.includes(participant.botId)
 		const worker = workers.find(({ botId }) => botId === participant.botId)
 		return {
 			...toParticipantRow(participant),
-			status: worker ? "working" : "idle",
-			pose: worker?.kind,
+			status: isWorking ? "working" : "idle",
+			pose: isWorking ? worker?.kind : undefined,
 		}
 	})
 
@@ -223,10 +227,8 @@ export const toRosterConversations = (
 ): AppSidebarConversation[] =>
 	mostRecentFirst(conversations, activity).map((conversation) => {
 		const preview = activity.previews[conversation.id]
-		const isWorking = activity.hostStates[conversation.id] === "working"
-		const workers = isWorking
-			? (activity.working[conversation.id] ?? NO_WORKERS)
-			: NO_WORKERS
+		const observed = activity.hostStates[conversation.id]
+		const isWorking = observed?.state === "working"
 		const seated = presentParticipants(conversation)
 		return {
 			id: conversation.id,
@@ -234,7 +236,11 @@ export const toRosterConversations = (
 			...toConversationLook(conversation),
 			sectionId: conversation.sectionId,
 			pinPosition: conversation.pinPosition,
-			participants: toSeatedRows(seated, workers),
+			participants: toSeatedRows(
+				seated,
+				observed?.workingBotIds ?? NO_BOT_IDS,
+				activity.working[conversation.id] ?? NO_WORKERS,
+			),
 			lastMessage: previewText(conversation, preview),
 			lastSpeaker: speakerNameAmong(seated, preview, activity.personOf),
 			timestamp: preview ? rosterTimestamp(preview.at, now) : undefined,

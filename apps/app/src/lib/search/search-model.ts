@@ -25,7 +25,10 @@ import { faceOfBot, type ThreadFace } from "@/lib/chat/thread-contract"
 import { toConversationLook } from "@/lib/conversations/roster-conversations"
 import type { Bot, Conversation } from "@/lib/conversations/store-contract"
 import { toMissionFace } from "@/lib/missions/mission-thread-model"
-import { badgeOfMissionState } from "@/lib/missions/missions-model"
+import {
+	badgeOfMissionState,
+	missionStateOf,
+} from "@/lib/missions/missions-model"
 
 const SHOWN_PER_KIND = 3
 
@@ -191,7 +194,7 @@ const identityOfMission = (
 ): SearchResultIdentity => ({
 	kind: "mission",
 	bot: botFaceOf(mission.botId, lookups),
-	badge: badgeOfMissionState(mission.state) ?? undefined,
+	badge: badgeOfMissionState(missionStateOf(mission)) ?? undefined,
 	mark: missionTicketPlatform(mission.ticketPlatform).Mark,
 })
 

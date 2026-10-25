@@ -14,7 +14,6 @@ import {
 	type JoinedSpace,
 	type JoinedSpaceMember,
 } from "../bindings"
-import type { ScopedEvent } from "../agent/contract"
 import { mountRoster } from "../bots/mounted-roster"
 import type { RosterController } from "../bots/roster-controller"
 import { rosterLinesIn } from "../bots/roster-line"
@@ -22,12 +21,11 @@ import {
 	type ChatController,
 	createChatController,
 } from "../chat/chat-controller"
-import type { ChatDriver } from "../chat/driver"
 import { createConversationController } from "../conversations/conversation-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import { createScriptedDriver } from "../conversations/scripted-driver"
-import type { ConversationHostState } from "../conversations/store-contract"
+import type { ObservedState } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -86,15 +84,8 @@ const NO_HELD_CONVERSATIONS: HeldConversations = {
 	heldFor: () => null,
 }
 
-type HeardEvents = Pick<ChatDriver, "subscribe">
-
-const NO_EVENTS: HeardEvents = {
-	subscribe: async () => () => undefined,
-}
-
 type RosterListsWiring = {
 	roster: RosterController
-	driver?: HeardEvents
 	chat?: HeldChat
 	conversationRuntimes?: HeldConversations
 	joinedSpaces?: JoinedSpace[]
@@ -104,7 +95,6 @@ const SIGNED_IN = { kind: "signedIn", id: "account-self" }
 
 const rosterListsOn = ({
 	roster,
-	driver = NO_EVENTS,
 	chat = NO_HELD_CHAT,
 	conversationRuntimes = NO_HELD_CONVERSATIONS,
 	joinedSpaces = [],
@@ -116,7 +106,6 @@ const rosterListsOn = ({
 			joinedSpaces: { state: { joinedSpaces } },
 			chat: { controller: chat },
 			conversationRuntimes,
-			driver,
 			roster: { controller: roster, state: { isRosterPending: false } },
 		},
 		drivers: { badges: {}, conversationBadges: {} },
@@ -151,65 +140,39 @@ const renderRosterLists = (wiring: RosterListsWiring) =>
 		wrapper: createQueryTestWrapper().wrapper,
 	}).result
 
-const createHeardEvents = () => {
-	const listeners = new Set<(scoped: ScopedEvent) => void>()
-	return {
-		subscribe: async (onEvent: (scoped: ScopedEvent) => void) => {
-			listeners.add(onEvent)
-			return () => {
-				listeners.delete(onEvent)
-			}
-		},
-		emit: (scoped: ScopedEvent) =>
-			act(() => {
-				for (const listener of listeners) {
-					listener(scoped)
-				}
-			}),
-	}
+const WHICH_BRANCH = {
+	promptId: "prompt-branch",
+	kind: "question",
+	text: "Which branch should I use?",
+} as const
+
+const asking: ObservedState = {
+	state: "needs_you",
+	pendingPrompt: WHICH_BRANCH,
+	workingBotIds: [],
 }
 
-const askedIn = (conversationId: string): ScopedEvent => ({
-	scope: {
-		conversationId,
-		botId: BOT,
-		runtimeSessionId: `${conversationId}-run`,
-		epoch: 1,
-	},
-	event: {
-		type: "questionRequested",
-		request: {
-			id: "question-one",
-			questions: [
-				{
-					header: "Branch",
-					question: "Which branch should I use?",
-					options: [],
-					multiSelect: false,
-				},
-			],
-		},
-	},
+const workingBy = (botId: string): ObservedState => ({
+	state: "working",
+	pendingPrompt: null,
+	workingBotIds: [botId],
 })
 
-const ANSWERED: ScopedEvent = {
-	scope: null,
-	event: {
-		type: "permissionResolved",
-		id: "question-one",
-		decision: "allowOnce",
-	},
+const AT_REST: ObservedState = {
+	state: "idle",
+	pendingPrompt: null,
+	workingBotIds: [],
 }
 
 const hostReads = (
 	roster: RosterController,
 	conversationId: string,
-	state: ConversationHostState,
+	observed: ObservedState,
 ) =>
 	act(() =>
 		roster.holdHostState(
 			{ hostId: null, spaceId: SPACE },
-			{ conversationId, state },
+			{ conversationId, ...observed },
 		),
 	)
 
@@ -224,10 +187,9 @@ describe("useRosterLists", () => {
 			botIds: [BOT],
 		})
 		const roster = await loadedRoster(store)
-		const heard = createHeardEvents()
 		const { queryClient, wrapper } = createQueryTestWrapper()
 		const { result } = renderHook(
-			() => useRosterLists(rosterListsOn({ roster, driver: heard })),
+			() => useRosterLists(rosterListsOn({ roster })),
 			{ wrapper },
 		)
 		await waitFor(() => expect(queryClient.isFetching()).toBe(0))
@@ -238,8 +200,7 @@ describe("useRosterLists", () => {
 		const botRow = () =>
 			result.current.rosterBotsBySpace[SPACE]?.find(({ id }) => id === BOT)
 
-		heard.emit(askedIn(conversation.id))
-		hostReads(roster, conversation.id, "needs_you")
+		hostReads(roster, conversation.id, asking)
 
 		await waitFor(() =>
 			expect(conversationRow()?.pendingQuestion).toBe(
@@ -250,7 +211,7 @@ describe("useRosterLists", () => {
 		expect(botRow()).toMatchObject({ status: "idle", badge: undefined })
 		expect(botRow()?.pendingQuestion).toBeUndefined()
 
-		hostReads(roster, conversation.id, "working")
+		hostReads(roster, conversation.id, workingBy(BOT))
 
 		await waitFor(() =>
 			expect(conversationRow()?.pendingQuestion).toBeUndefined(),
@@ -258,7 +219,7 @@ describe("useRosterLists", () => {
 		expect(conversationRow()).toMatchObject({ status: "working" })
 		expect(botRow()).toMatchObject({ status: "idle" })
 
-		hostReads(roster, soloThread.id, "needs_you")
+		hostReads(roster, soloThread.id, asking)
 
 		await waitFor(() =>
 			expect(botRow()).toMatchObject({
@@ -267,17 +228,18 @@ describe("useRosterLists", () => {
 			}),
 		)
 
-		hostReads(roster, soloThread.id, "working")
+		hostReads(roster, soloThread.id, workingBy(BOT))
 
 		await waitFor(() => expect(botRow()?.status).toBe("working"))
 		expect(botRow()?.pendingQuestion).toBeUndefined()
 
-		heard.emit(ANSWERED)
-		hostReads(roster, conversation.id, "idle")
-		hostReads(roster, soloThread.id, "idle")
+		hostReads(roster, conversation.id, AT_REST)
+		hostReads(roster, soloThread.id, AT_REST)
 
 		await waitFor(() => expect(conversationRow()?.status).toBe("idle"))
-		expect(botRow()?.status).toBe("idle")
+		expect(conversationRow()?.badge).toBeUndefined()
+		expect(botRow()).toMatchObject({ status: "idle", badge: undefined })
+		expect(botRow()?.pendingQuestion).toBeUndefined()
 	})
 
 	it("shows the host state of a row nothing holds in memory, and follows it on rerender", async () => {
@@ -299,13 +261,13 @@ describe("useRosterLists", () => {
 			)
 		expect(conversationRow()).toMatchObject({ status: "idle" })
 
-		hostReads(roster, conversation.id, "working")
+		hostReads(roster, conversation.id, workingBy(BOT))
 		rerender()
 
 		expect(conversationRow()).toMatchObject({ status: "working" })
 		expect(conversationRow()?.badge).toBeUndefined()
 
-		hostReads(roster, conversation.id, "needs_you")
+		hostReads(roster, conversation.id, { state: "needs_you" })
 		rerender()
 
 		expect(conversationRow()).toMatchObject({
@@ -386,6 +348,7 @@ describe("useRosterLists", () => {
 							bots: openBotIds.map((botId) => ({ botId, startedAt: 1 })),
 						},
 						state: openBotIds ? "working" : "idle",
+						workingBotIds: openBotIds ?? [],
 					},
 				),
 			)

@@ -319,7 +319,7 @@ describe("toRosterConversations", () => {
 				}),
 			],
 			{
-				hostStates: { "c-1": "working" },
+				hostStates: { "c-1": { state: "working", workingBotIds: ["b-2"] } },
 				working: { "c-1": [working("b-2", "searching")] },
 				previews: {},
 				personOf: personNamedFromRecord,
@@ -342,7 +342,7 @@ describe("toRosterConversations", () => {
 		const [row] = toRosterConversations(
 			[conversation()],
 			{
-				hostStates: { "c-1": "working" },
+				hostStates: { "c-1": { state: "working", workingBotIds: ["b-1"] } },
 				working: {},
 				previews: {},
 				personOf: personNamedFromRecord,
@@ -351,7 +351,40 @@ describe("toRosterConversations", () => {
 		)
 
 		expect(row.status).toBe("working")
-		expect(row.participants.map((seat) => seat.status)).toEqual(["idle"])
+		expect(row.participants.map((seat) => seat.status)).toEqual(["working"])
+		expect(row.participants.map((seat) => seat.pose)).toEqual([undefined])
+	})
+
+	it("names in each room the companion the host reads working there", () => {
+		const atlas = participant({ botId: "atlas", name: "Atlas" })
+		const beacon = participant({ botId: "beacon", name: "Beacon" })
+		const rows = toRosterConversations(
+			[
+				conversation({ id: "c-1", participants: [atlas, beacon] }),
+				conversation({ id: "c-2", participants: [atlas, beacon] }),
+			],
+			{
+				hostStates: {
+					"c-1": { state: "working", workingBotIds: ["atlas"] },
+					"c-2": { state: "working", workingBotIds: ["beacon"] },
+				},
+				working: {
+					"c-1": [working("atlas", "writing"), working("beacon", "searching")],
+				},
+				previews: {},
+				personOf: personNamedFromRecord,
+			},
+			NOW,
+		)
+
+		const workingNamesOf = (id: string) =>
+			rows
+				.find((row) => row.id === id)
+				?.participants.filter((seat) => seat.status === "working")
+				.map((seat) => seat.name)
+
+		expect(workingNamesOf("c-1")).toEqual(["Atlas"])
+		expect(workingNamesOf("c-2")).toEqual(["Beacon"])
 	})
 
 	it.each(["idle", "needs_you"] as const)(
@@ -360,7 +393,7 @@ describe("toRosterConversations", () => {
 			const [row] = toRosterConversations(
 				[conversation()],
 				{
-					hostStates: { "c-1": state },
+					hostStates: { "c-1": { state } },
 					working: { "c-1": [working("b-1", "waiting")] },
 					previews: {},
 					personOf: personNamedFromRecord,

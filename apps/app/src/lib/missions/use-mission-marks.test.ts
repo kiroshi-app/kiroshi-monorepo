@@ -330,7 +330,6 @@ describe("the rail rings of local Spaces", () => {
 			hostStates: {},
 			missions,
 			now: 0,
-			pendingQuestions: { spaceRowId: null, byConversation: {}, byBot: {} },
 			previews: {} as never,
 			rosters: ROSTERS,
 			soloThreads: SOLO_THREADS,

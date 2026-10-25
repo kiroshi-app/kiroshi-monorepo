@@ -5,19 +5,33 @@ import {
 	withNeedsYou,
 	workingFromHost,
 } from "./host-state-rows"
+import type { ObservedState, PendingPrompt } from "./store-contract"
 
-import {
-	questionsByBotIn,
-	questionsByConversationIn,
-	type SpaceQuestions,
-} from "../agent/pending-questions"
 import type { ConversationHostStates } from "../bots/roster-pages"
 
-const QUESTIONS: SpaceQuestions = {
-	spaceRowId: "home",
-	byConversation: { "room-one": "Which branch?", "room-two": "Which file?" },
-	byBot: { atlas: "Which name?" },
+const asked = (text: string): PendingPrompt => ({
+	promptId: `prompt-${text}`,
+	kind: "question",
+	text,
+})
+
+const needingYou = (text: string): ObservedState => ({
+	state: "needs_you",
+	pendingPrompt: asked(text),
+	workingBotIds: [],
+})
+
+const IDLE: ObservedState = {
+	state: "idle",
+	pendingPrompt: null,
+	workingBotIds: [],
 }
+
+const workingBy = (...workingBotIds: string[]): ObservedState => ({
+	state: "working",
+	pendingPrompt: null,
+	workingBotIds,
+})
 
 type ShownRow = {
 	id: string
@@ -33,12 +47,10 @@ describe("a conversation row against its host state", () => {
 		{ id: "room-three", lastMessage: "Hello" },
 	]
 
-	it("needs you with the question asked when the host reads needs_you", () => {
-		const [roomOne] = withNeedsYou(
-			rows,
-			{ "room-one": "needs_you" },
-			questionsByConversationIn(QUESTIONS, "home"),
-		)
+	it("needs you with the text of the pending prompt the host reads", () => {
+		const [roomOne] = withNeedsYou(rows, {
+			"room-one": needingYou("Which branch?"),
+		})
 
 		expect(roomOne).toEqual({
 			id: "room-one",
@@ -48,44 +60,36 @@ describe("a conversation row against its host state", () => {
 		})
 	})
 
-	it("needs you without a text when the store holds no question for it", () => {
-		const [, , roomThree] = withNeedsYou(
-			rows,
-			{ "room-three": "needs_you" },
-			questionsByConversationIn(QUESTIONS, "home"),
-		)
+	it("needs you without a text when the host reads needs_you with no readable prompt", () => {
+		const [, , roomThree] = withNeedsYou(rows, {
+			"room-three": { state: "needs_you", pendingPrompt: null },
+		})
 
 		expect(roomThree).toMatchObject({ badge: "attention" })
 		expect(roomThree.pendingQuestion).toBeUndefined()
 	})
 
-	it("shows no question while the host reads idle or working, even if the store still holds one", () => {
-		const shown = withNeedsYou(
-			rows,
-			{ "room-one": "working", "room-two": "idle" },
-			questionsByConversationIn(QUESTIONS, "home"),
-		)
+	it("returns to its normal state with no text once the prompt is cleared", () => {
+		const asking = { "room-one": needingYou("Which branch?") }
+		const cleared = { "room-one": IDLE }
 
-		expect(shown).toEqual(rows)
+		expect(withNeedsYou(rows, asking)[0].pendingQuestion).toBe("Which branch?")
+		expect(withNeedsYou(rows, cleared)).toEqual(rows)
 	})
 
-	it("leaves the rows of another space without the question of the shown space", () => {
-		const [roomOne] = withNeedsYou(
-			rows,
-			{ "room-one": "needs_you" },
-			questionsByConversationIn(QUESTIONS, "work"),
-		)
-
-		expect(roomOne.pendingQuestion).toBeUndefined()
+	it("shows no question while the host reads idle or working", () => {
+		expect(
+			withNeedsYou(rows, { "room-one": workingBy("atlas"), "room-two": IDLE }),
+		).toEqual(rows)
 	})
 
 	it("is working exactly when the host reads working, with the pose heard in memory", () => {
 		expect(
 			workingFromHost(
 				{
-					"room-one": "working",
-					"room-two": "idle",
-					"room-three": "needs_you",
+					"room-one": workingBy("atlas"),
+					"room-two": IDLE,
+					"room-three": needingYou("Which file?"),
 				},
 				{
 					"room-one": { isWorking: true, kind: "searching" },
@@ -96,13 +100,13 @@ describe("a conversation row against its host state", () => {
 	})
 
 	it("is working without a pose when no runtime is held in memory", () => {
-		expect(workingFromHost({ atlas: "working" }, {})).toEqual({
+		expect(workingFromHost({ atlas: workingBy("atlas") }, {})).toEqual({
 			atlas: { isWorking: true, kind: undefined },
 		})
 	})
 })
 
-describe("a bot row against the host state of its solo thread", () => {
+describe("a companion row against the host state of its solo thread", () => {
 	const soloThreads = {
 		"atlas-home": { spaceId: "home", botId: "atlas" },
 		"atlas-work": { spaceId: "work", botId: "atlas" },
@@ -112,43 +116,58 @@ describe("a bot row against the host state of its solo thread", () => {
 	const statesIn = (hostStates: ConversationHostStates) =>
 		botHostStatesIn({ hostStates, soloThreads, spaceId: "home" })
 
-	it("needs you when its solo thread in the space needs you", () => {
+	const companionRowsIn = (hostStates: ConversationHostStates) =>
+		withNeedsYou([{ id: "atlas" }, { id: "beacon" }], statesIn(hostStates))
+
+	it("needs you with the text its solo thread asks", () => {
 		expect(
-			statesIn({ "atlas-home": "needs_you", "beacon-home": "idle" }),
-		).toEqual({ atlas: "needs_you", beacon: "idle" })
-	})
-
-	it("is working when its solo thread in the space is working", () => {
-		expect(statesIn({ "atlas-home": "working" })).toEqual({ atlas: "working" })
-	})
-
-	it("reads only the solo thread of the space it is listed in", () => {
-		expect(
-			statesIn({ "atlas-work": "needs_you", "atlas-home": "idle" }),
-		).toEqual({ atlas: "idle" })
-	})
-
-	it.each(["needs_you", "working"] as const)(
-		"leaves both bots seated in a %s room without a state",
-		(state) => {
-			const atlasAndBeaconRoom = "walls"
-
-			expect(statesIn({ [atlasAndBeaconRoom]: state })).toEqual({})
-		},
-	)
-
-	it("carries the question of the bot only while it needs you", () => {
-		const rows = [{ id: "atlas" }, { id: "beacon" }]
-
-		expect(
-			withNeedsYou(
-				rows,
-				{ atlas: "needs_you", beacon: "working" },
-				questionsByBotIn(QUESTIONS, "home"),
-			),
+			companionRowsIn({
+				"atlas-home": needingYou("Which name?"),
+				"beacon-home": IDLE,
+			}),
 		).toEqual([
 			{ id: "atlas", badge: "attention", pendingQuestion: "Which name?" },
 			{ id: "beacon" },
 		])
 	})
+
+	it("leaves the companion row at rest when it asks in a room", () => {
+		const atlasAndBeaconRoom = "walls"
+
+		expect(
+			companionRowsIn({
+				[atlasAndBeaconRoom]: needingYou("Which wall?"),
+				"atlas-home": IDLE,
+			}),
+		).toEqual([{ id: "atlas" }, { id: "beacon" }])
+	})
+
+	it("returns to its normal state once its solo thread prompt is cleared", () => {
+		expect(companionRowsIn({ "atlas-home": IDLE })).toEqual([
+			{ id: "atlas" },
+			{ id: "beacon" },
+		])
+	})
+
+	it("is working when its solo thread in the space is working", () => {
+		expect(statesIn({ "atlas-home": workingBy("atlas") })).toEqual({
+			atlas: workingBy("atlas"),
+		})
+	})
+
+	it("reads only the solo thread of the space it is listed in", () => {
+		expect(
+			statesIn({ "atlas-work": needingYou("Which desk?"), "atlas-home": IDLE }),
+		).toEqual({ atlas: IDLE })
+	})
+
+	it.each([
+		["needs_you", needingYou("Which wall?")],
+		["working", workingBy("atlas", "beacon")],
+	] as const)(
+		"leaves both companions seated in a %s room without a state",
+		(_, observed) => {
+			expect(statesIn({ walls: observed })).toEqual({})
+		},
+	)
 })

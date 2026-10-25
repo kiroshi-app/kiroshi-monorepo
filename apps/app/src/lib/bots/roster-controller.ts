@@ -24,6 +24,7 @@ import {
 	NO_HOST_STATES,
 	NO_LAST_WORDS,
 	NO_SOLO_BOT_IDS,
+	observedStateOf,
 	ROSTER_PAGE_SIZE,
 	type RosterPage,
 	type RosterPages,
@@ -53,9 +54,10 @@ import {
 import type {
 	Bot,
 	BotDraft,
+	Chat,
 	Conversation,
-	ConversationHostState,
 	ConversationInPage,
+	ObservedState,
 	Participant,
 	RosterPin,
 	SpaceError,
@@ -75,9 +77,8 @@ import {
 
 type SpaceOnHost = { hostId: string | null; spaceId: string | null }
 
-export type ConversationStateChange = {
+export type ConversationStateChange = ObservedState & {
 	conversationId: string
-	state: ConversationHostState
 }
 
 export type BotPreviews = Record<string, LastWord | undefined>
@@ -155,7 +156,7 @@ const ROSTER_REREAD_DELAY_MS = 250
 const soloThreadQueryOf = (
 	line: RosterLine,
 	spaceId: string,
-	read: (signal: AbortSignal) => Promise<string>,
+	read: (signal: AbortSignal) => Promise<Chat>,
 ) =>
 	queryOptions({
 		queryKey: conversationQueryKeys.soloThread(
@@ -529,18 +530,31 @@ const rosterBaseOf = (
 	}
 }
 
+const hostStatesOfChat = ({
+	id,
+	state,
+	pendingPrompt,
+	workingBotIds,
+}: Chat): ConversationHostStates =>
+	state === undefined
+		? NO_HOST_STATES
+		: { [id]: { state, pendingPrompt, workingBotIds } }
+
 const rosterStateOf = (
 	base: RosterState,
-	soloThreadIds: (string | undefined)[],
+	soloChats: (Chat | undefined)[],
 ): RosterState => {
 	const soloThreads: SoloThreads = { ...base.soloThreads }
+	const chatStates: ConversationHostStates[] = []
 	rosterLinesIn(base.rosters).forEach((line, index) => {
-		const conversationId = soloThreadIds[index]
-		if (conversationId !== undefined) {
-			soloThreads[conversationId] = line
+		const chat = soloChats[index]
+		if (chat !== undefined) {
+			soloThreads[chat.id] = line
+			chatStates.push(hostStatesOfChat(chat))
 		}
 	})
-	return { ...base, soloThreads }
+	const hostStates = Object.assign({}, ...chatStates, base.hostStates)
+	return { ...base, soloThreads, hostStates }
 }
 
 export type RosterControllerOptions = {
@@ -609,10 +623,9 @@ export const createRosterController = (
 
 	const soloThreadQuery = (line: RosterLine) => {
 		const spaceId = hostSpaceIdOf(line.spaceId)
-		return soloThreadQueryOf(line, spaceId, async (signal) => {
-			const chat = await store.mainChat(line.botId, spaceId, signal)
-			return chat.id
-		})
+		return soloThreadQueryOf(line, spaceId, (signal) =>
+			store.mainChat(line.botId, spaceId, signal),
+		)
 	}
 
 	const rosterReadIn = (spaceRowId: string) =>
@@ -631,7 +644,7 @@ export const createRosterController = (
 		)
 	}
 
-	const soloThreadIdOf = (line: RosterLine) =>
+	const soloChatOf = (line: RosterLine) =>
 		queryClient.getQueryData(soloThreadQuery(line).queryKey)
 
 	const base = memoizedOn(() => {
@@ -646,7 +659,7 @@ export const createRosterController = (
 
 	const current = memoizedOn(() => {
 		const held = base()
-		return [held, rosterLinesIn(held.rosters).map(soloThreadIdOf)]
+		return [held, rosterLinesIn(held.rosters).map(soloChatOf)]
 	}, rosterStateOf)
 
 	const choose = (fields: Partial<RosterChoice>) =>
@@ -819,7 +832,7 @@ export const createRosterController = (
 
 	const holdHostState = (
 		origin: SpaceOnHost,
-		{ conversationId, state }: ConversationStateChange,
+		changed: ConversationStateChange,
 	) => {
 		const spaceRowId = heldRowIdOf(origin)
 		if (spaceRowId === undefined) {
@@ -827,7 +840,9 @@ export const createRosterController = (
 		}
 		queryClient.setQueryData(
 			rosterQuery(spaceRowId).queryKey,
-			(paged) => paged && withHostState(paged, conversationId, state),
+			(paged) =>
+				paged &&
+				withHostState(paged, changed.conversationId, observedStateOf(changed)),
 		)
 	}
 

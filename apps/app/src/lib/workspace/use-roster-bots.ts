@@ -2,10 +2,6 @@ import { useMemo } from "react"
 
 import { probeRender } from "@workspace/ui/lib/render-probe"
 
-import {
-	questionsByBotIn,
-	type SpaceQuestions,
-} from "../agent/pending-questions"
 import { toRosterBots } from "../bots/bot-settings"
 import type { SoloThreads } from "../bots/roster-line"
 import type { ConversationHostStates } from "../bots/roster-pages"
@@ -35,7 +31,6 @@ type RosterBotsInput = {
 	hostStates: ConversationHostStates
 	missions: ReturnType<typeof missionsBySpaceId>
 	now: number
-	pendingQuestions: SpaceQuestions
 	previews: PreviewsBySpaceId
 	rosteredSpaceId: string | null
 	soloThreads: SoloThreads
@@ -48,7 +43,6 @@ export const useRosterBots = ({
 	hostStates,
 	missions,
 	now,
-	pendingQuestions,
 	previews,
 	rosteredSpaceId,
 	soloThreads,
@@ -83,7 +77,6 @@ export const useRosterBots = ({
 					rosteredSpaceId,
 				),
 				botStates,
-				questionsByBotIn(pendingQuestions, rosteredSpaceId),
 			),
 			missionsIn(missions, rosteredSpaceId),
 		)
@@ -97,6 +90,5 @@ export const useRosterBots = ({
 		now,
 		badges,
 		missions,
-		pendingQuestions,
 	])
 }
