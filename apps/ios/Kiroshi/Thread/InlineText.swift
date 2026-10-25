@@ -3,20 +3,39 @@ import SwiftUI
 struct InlineText: View {
     static let chipEdge = "\u{202F}"
     nonisolated static let unbreakableHyphen = "\u{2011}"
+    nonisolated static let largestTexture: CGFloat = 16384
+    nonisolated static let chipFill = Color(.tertiarySystemFill)
 
     let inline: MarkdownInline
     var codeFont: Font? = .subheadline.monospaced()
     var strongWeight: Font.Weight? = .semibold
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.displayScale) private var displayScale
+    @State private var size = CGSize.zero
 
     var body: some View {
-        inline.runs.reduce(Text(verbatim: "")) { text, run in
+        let text = inline.runs.reduce(Text(verbatim: "")) { text, run in
             Text("\(text)\(piece(run))")
         }
-        .modifier(ChipDrawing(isDrawn: hasChips))
-        .tint(Color(.link))
-        .modifier(SpokenSource(source: hasChips ? Self.source(of: inline) : nil))
+        let measuresSize = hasChips
+        text
+            .modifier(ChipDrawing(isDrawn: hasChips && !fillsChipsAsText, width: size.width))
+            .onGeometryChange(for: CGSize.self) { proxy in
+                measuresSize ? proxy.size : .zero
+            } action: { measured in
+                size = measured
+            }
+            .tint(Color(.link))
+            .modifier(SpokenSource(source: hasChips ? Self.source(of: inline) : nil))
+    }
+
+    private var fillsChipsAsText: Bool {
+        Self.isTooTallForOneTexture(height: size.height, scale: displayScale)
+    }
+
+    nonisolated static func isTooTallForOneTexture(height: CGFloat, scale: CGFloat) -> Bool {
+        height * scale > largestTexture
     }
 
     private var hasChips: Bool {
@@ -62,24 +81,31 @@ struct InlineText: View {
         case .code:
             let shown = Self.shown(
                 code: run.text, breaksAfterWordHyphens: dynamicTypeSize.isAccessibilitySize)
-            let code = Text(verbatim: Self.chipEdge + shown + Self.chipEdge)
-            return (codeFont.map { code.font($0) } ?? code.monospaced())
-                .customAttribute(Chip(radius: 5))
+            let code = chip(shown, radius: 5)
+            return codeFont.map { code.font($0) } ?? code.monospaced()
         case .mention(let isKnown):
-            return Text(verbatim: Self.chipEdge + run.text + Self.chipEdge)
+            return chip(run.text, radius: 6)
                 .fontWeight(.semibold)
                 .foregroundStyle(isKnown ? Color.primary : Color.secondary)
-                .customAttribute(Chip(radius: 6))
         }
+    }
+
+    private func chip(_ shown: String, radius: CGFloat) -> Text {
+        var attributed = AttributedString(Self.chipEdge + shown + Self.chipEdge)
+        if fillsChipsAsText {
+            attributed.backgroundColor = Self.chipFill
+        }
+        return Text(attributed).customAttribute(Chip(radius: radius))
     }
 }
 
 private struct ChipDrawing: ViewModifier {
     let isDrawn: Bool
+    let width: CGFloat
 
     func body(content: Content) -> some View {
         if isDrawn {
-            content.textRenderer(ChipRenderer())
+            content.textRenderer(ChipRenderer(width: width))
         } else {
             content
         }
@@ -103,17 +129,25 @@ struct Chip: TextAttribute {
 }
 
 struct ChipRenderer: TextRenderer {
+    let width: CGFloat
+
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         for line in layout {
             for run in line {
-                if let chip = run[Chip.self] {
-                    let chipShape = Path(
-                        roundedRect: run.typographicBounds.rect, cornerRadius: chip.radius,
-                        style: .continuous)
-                    context.fill(chipShape, with: .color(Color(.tertiarySystemFill)))
+                if let chip = run[Chip.self],
+                    case let shown = Self.shown(run.typographicBounds.rect, within: width),
+                    !shown.isEmpty
+                {
+                    context.fill(
+                        Path(roundedRect: shown, cornerRadius: chip.radius, style: .continuous),
+                        with: .color(InlineText.chipFill))
                 }
                 context.draw(run)
             }
         }
+    }
+
+    nonisolated static func shown(_ bounds: CGRect, within width: CGFloat) -> CGRect {
+        bounds.intersection(CGRect(x: 0, y: bounds.minY, width: width, height: bounds.height))
     }
 }
