@@ -160,6 +160,25 @@ final class MarkdownMessageTests: XCTestCase {
         try auditTheReply(app)
     }
 
+    func testAReplyWithEveryFamilyKeepsItsCardsInsideTheThreadAtTheLargestTextSize() {
+        let app = launch(
+            "markdown", "-artboard", "all", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        let transcript = app.scrollViews.firstMatch
+        let heading = transcript.staticTexts["Juniper, Release 4.2"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        let name = transcript.staticTexts.matching(identifier: "Juniper").firstMatch
+
+        XCTAssertEqual(heading.frame.minY, name.frame.maxY, accuracy: 20)
+        let thread = app.windows.firstMatch.frame.insetBy(dx: 16, dy: 0)
+        let cards = transcript.scrollViews.allElementsBoundByIndex
+        XCTAssertEqual(cards.count, 4)
+        for card in cards {
+            XCTAssertGreaterThanOrEqual(card.frame.minX, thread.minX, "\(card.frame)")
+            XCTAssertLessThanOrEqual(card.frame.maxX, thread.maxX, "\(card.frame)")
+        }
+    }
+
     func labels(in app: XCUIApplication) -> [String] {
         guard let transcript = try? app.scrollViews.firstMatch.snapshot() else { return [] }
         return readingOrder(of: transcript)

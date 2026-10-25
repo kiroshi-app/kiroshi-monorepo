@@ -15,6 +15,7 @@ struct DaySeparator: View {
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .accessibilityAddTraits(.isHeader)
+                .layoutPriority(1)
             line
         }
     }

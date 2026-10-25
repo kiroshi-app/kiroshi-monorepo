@@ -20,56 +20,86 @@ struct MessageBubbles: View {
 
     @ScaledMetric(relativeTo: .footnote) private var timeWidth = Self.timeWidth
     @Environment(\.areTimesShown) private var areTimesShown
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if !isYours {
-                avatar
-            }
-            VStack(alignment: isYours ? .trailing : .leading, spacing: 4) {
-                if let name {
-                    Text(name)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 14)
-                        .accessibilityHidden(true)
-                }
-                ForEach(bubbles) { bubble in
-                    let opensMessage = bubble.id == bubbles.first?.id
-                    BubbleText(
-                        bubble: bubble, isYours: isYours, speaker: opensMessage ? speaker : nil,
-                        time: opensMessage ? time : ""
-                    )
-                    .padding(isYours ? .leading : .trailing, isYours ? 70 : 48)
-                    .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
-                    .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
-                }
-            }
-        }
-        .modifier(
-            MessageAccessibility(
-                readsBlocks: isMarkdown, text: accessibilityText, time: time)
-        )
-        .overlayPreferenceValue(BubbleRows.self) { rows in
-            if areTimesShown {
-                GeometryReader { proxy in
-                    ForEach(rows.indices, id: \.self) { index in
-                        let row = proxy[rows[index]]
-                        Text(time)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .frame(width: timeWidth, alignment: .trailing)
-                            .position(x: row.maxX + Self.timeGap + timeWidth / 2, y: row.midY)
+        stack
+            .modifier(
+                MessageAccessibility(
+                    readsBlocks: isMarkdown, text: accessibilityText, time: time)
+            )
+            .overlayPreferenceValue(BubbleRows.self) { rows in
+                if areTimesShown {
+                    GeometryReader { proxy in
+                        ForEach(rows.indices, id: \.self) { index in
+                            let row = proxy[rows[index]]
+                            Text(time)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .fixedSize()
+                                .frame(width: timeWidth, alignment: .trailing)
+                                .position(x: row.maxX + Self.timeGap + timeWidth / 2, y: row.midY)
+                        }
                     }
                 }
+            }
+    }
+
+    @ViewBuilder private var stack: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                column
+                if isAvatarDrawn {
+                    avatar
+                }
+            }
+        } else {
+            HStack(alignment: .bottom, spacing: 8) {
+                if !isYours {
+                    avatar
+                }
+                column
             }
         }
     }
 
+    private var column: some View {
+        VStack(alignment: isYours ? .trailing : .leading, spacing: 4) {
+            if let name {
+                Text(name)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .accessibilityHidden(true)
+            }
+            ForEach(bubbles) { bubble in
+                let opensMessage = bubble.id == bubbles.first?.id
+                BubbleText(
+                    bubble: bubble, isYours: isYours, speaker: opensMessage ? speaker : nil,
+                    time: opensMessage ? time : ""
+                )
+                .padding(isYours ? .leading : .trailing, gutter)
+                .frame(maxWidth: .infinity, alignment: isYours ? .trailing : .leading)
+                .anchorPreference(key: BubbleRows.self, value: .bounds) { [$0] }
+            }
+        }
+    }
+
+    private var gutter: CGFloat {
+        if isYours { 70 } else if dynamicTypeSize.isAccessibilitySize { 0 } else { 48 }
+    }
+
     private var isYours: Bool {
         writer == .you
+    }
+
+    private var isAvatarDrawn: Bool {
+        switch writer {
+        case .person: showsAvatar
+        case .companion: showsAvatar && companion != nil
+        case .you: false
+        }
     }
 
     private var isMarkdown: Bool {
@@ -78,9 +108,9 @@ struct MessageBubbles: View {
 
     @ViewBuilder private var avatar: some View {
         switch writer {
-        case .person where showsAvatar:
+        case .person where isAvatarDrawn:
             PersonAvatar(initials: initials)
-        case .companion where showsAvatar && companion != nil:
+        case .companion where isAvatarDrawn:
             CompanionAvatar(companion, size: .message)
         case .you, .person, .companion:
             CompanionPlaceholder(size: .message)

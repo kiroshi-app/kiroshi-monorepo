@@ -30,18 +30,22 @@ struct MessageCardHeader: View {
     @State private var copies = 0
     @ScaledMetric(relativeTo: .footnote) private var height: CGFloat = 36
     @ScaledMetric(relativeTo: .footnote) private var inset: CGFloat = 12
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 0) {
+        layout {
             if let label {
                 Text(verbatim: label)
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(MessageCard.label)
-                    .fixedSize()
+                    .fixedSize(horizontal: !isStacked, vertical: true)
+                    .padding(.top, isStacked ? inset : 0)
                     .modifier(MessageOpening(speaker: speaker, time: time))
                     .accessibilitySortPriority(1)
             }
-            Spacer(minLength: 8)
+            if !isStacked {
+                Spacer(minLength: 8)
+            }
             copyButton
                 .modifier(
                     MessageOpening(
@@ -60,6 +64,16 @@ struct MessageCardHeader: View {
             }
             copies = 0
         }
+    }
+
+    private var isStacked: Bool {
+        dynamicTypeSize.isAccessibilitySize
+    }
+
+    private var layout: AnyLayout {
+        isStacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 0))
     }
 
     private var isCopied: Bool {
@@ -89,7 +103,9 @@ struct MessageCardHeader: View {
                     .labelStyle(.iconOnly)
                     .font(.body)
                     .foregroundStyle(Color("card-copy"))
-                    .frame(minWidth: height, minHeight: height)
+                    .frame(
+                        minWidth: height, minHeight: height,
+                        alignment: isStacked ? .leading : .center)
             }
         }
         .buttonStyle(.plain)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MarkdownBlocksView: View {
     let blocks: [MarkdownBlock]
@@ -102,9 +103,7 @@ private struct MarkdownListView: View {
     let speaker: String?
     let time: String
 
-    @ScaledMetric(relativeTo: .body) private var markerWidth: CGFloat = 26
-    @ScaledMetric(relativeTo: .body) private var numberWidth: CGFloat = 20
-    @ScaledMetric(relativeTo: .body) private var checkWidth: CGFloat = 22
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: list.isTaskList ? 6 : 4) {
@@ -132,6 +131,24 @@ private struct MarkdownListView: View {
                     .padding(.leading, indent(of: item.marker))
             }
         }
+    }
+
+    private var markerWidth: CGFloat {
+        scaledUpToXXXLarge(26)
+    }
+
+    private var numberWidth: CGFloat {
+        scaledUpToXXXLarge(20)
+    }
+
+    private var checkWidth: CGFloat {
+        scaledUpToXXXLarge(22)
+    }
+
+    private func scaledUpToXXXLarge(_ width: CGFloat) -> CGFloat {
+        let size = UIContentSizeCategory(min(dynamicTypeSize, .xxxLarge))
+        return UIFontMetrics(forTextStyle: .body).scaledValue(
+            for: width, compatibleWith: UITraitCollection(preferredContentSizeCategory: size))
     }
 
     private func indent(of marker: MarkdownList.Marker) -> CGFloat {
@@ -162,6 +179,7 @@ private struct MarkdownListView: View {
                     isDone ? Color.white : Color(.tertiaryLabel), Color(.systemGray)
                 )
                 .font(.body)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .frame(width: checkWidth)
                 .padding(.trailing, 8)
                 .accessibilityLabel(marker.spoken)
