@@ -195,7 +195,9 @@ A companion's message is Markdown, drawn the way page "Message Markdown" of the 
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture markdown -artboard all
 ```
 
-`MarkdownMessageTests` (unit) covers each family; `MarkdownMessageTests` (UI) copies a code block, takes Copy Table from the long-press menu and pastes both into the composer, and audits the every-family reply, at the largest text size too.
+At the accessibility sizes a companion's bubbles take the thread's width, its avatar under them instead of beside them, list indents and the task check stop growing past xxxLarge, a card's header puts its copy button under its label so the card never runs past its bubble, and inline code longer than the line breaks only after a hyphen inside a word (`--force-|with-lease`), never at a leading one.
+
+`MarkdownMessageTests` (unit) covers each family; `MarkdownMessageTests` (UI) copies a code block, takes Copy Table from the long-press menu and pastes both into the composer, audits the every-family reply, at the largest text size too, and checks there that its cards stay inside the thread and its first heading sits right under the author's name.
 
 The group thread plays Release crew (Juniper leads, Atlas): `group-thread` opens on it, each companion's messages under its name and avatar, `group-mention` opens it with `@` typed so the mention picker shows, `group-working` with Juniper and Atlas both at work, and `group-failed` on the thread refused. Picking a companion in the picker writes `@Name`, sent to the host as `<@botId>` with that companion in `summoned`; with no mention, `summoned` stays empty and the host summons the lead, as the desktop does. The scripted host answers a group send with a tool activity, not shown, then an `On it.` from each companion summoned, whose turn then ends:
 
