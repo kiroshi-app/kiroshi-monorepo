@@ -1832,16 +1832,20 @@ mod tests {
 				"lastActivityAt",
 				"lastWord",
 				"participants",
+				"pendingPrompt",
 				"pinPosition",
 				"sectionId",
 				"soloBotId",
 				"spaceId",
 				"state",
 				"title",
-				"updatedAt"
+				"updatedAt",
+				"workingBotIds"
 			]
 		);
 		assert_eq!(conversation["state"], json!("working"));
+		assert_eq!(conversation["pendingPrompt"], json!(null));
+		assert_eq!(conversation["workingBotIds"], json!([DEFAULT_BOT_ID]));
 		assert_eq!(conversation["id"], json!(written.conversation_id));
 		assert_eq!(conversation["spaceId"], json!("personal"));
 		assert_eq!(conversation["sectionId"], json!(null));

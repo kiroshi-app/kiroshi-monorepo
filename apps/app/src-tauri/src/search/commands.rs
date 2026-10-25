@@ -1,11 +1,13 @@
-use tauri::State;
+use tauri::{AppHandle, Runtime, State};
 
 use super::contract::{
-	Catalogue, CatalogueChat, CatalogueError, CatalogueScope, MessageHit, MessageSearchError,
-	MessageSearchQuery,
+	Catalogue, CatalogueChat, CatalogueError, CatalogueMission, CatalogueScope, ChatHit,
+	MessageHit, MessageSearchError, MessageSearchQuery,
 };
-use crate::conversations::contract::StorageFailure;
+use crate::conversations::contract::{state_in, StorageFailure};
+use crate::conversations::state as conversation_state;
 use crate::db;
+use crate::missions::commands::present;
 
 fn ready(state: &db::DatabaseState) -> Result<&db::Database, StorageFailure> {
 	state.as_ref().map_err(StorageFailure::from)
@@ -26,29 +28,52 @@ pub async fn search_messages(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn search_catalogue(
+pub async fn search_catalogue<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	query: String,
 	space_id: String,
 ) -> Result<Catalogue, CatalogueError> {
-	ready(&state)
-		.map_err(|failure| CatalogueError::Unavailable { failure })?
-		.catalogue()
-		.search(CatalogueScope { query, space_id, kind: None })
-		.await
+	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
+	let hits = database.catalogue().search(CatalogueScope { query, space_id, kind: None }).await?;
+	Ok(Catalogue {
+		chats: observed_chats(&app, database, hits.chats).await?,
+		missions: hits.missions.into_iter().map(|hit| observed_mission(&app, hit)).collect(),
+		routines: hits.routines,
+	})
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn search_recent(
+pub async fn search_recent<R: Runtime>(
+	app: AppHandle<R>,
 	state: State<'_, db::DatabaseState>,
 	space_id: String,
 ) -> Result<Vec<CatalogueChat>, CatalogueError> {
-	ready(&state)
-		.map_err(|failure| CatalogueError::Unavailable { failure })?
-		.catalogue()
-		.recent(space_id)
-		.await
+	let database = ready(&state).map_err(|failure| CatalogueError::Unavailable { failure })?;
+	let hits = database.catalogue().recent(space_id).await?;
+	observed_chats(&app, database, hits).await
+}
+
+async fn observed_chats<R: Runtime>(
+	app: &AppHandle<R>,
+	database: &db::Database,
+	hits: Vec<ChatHit>,
+) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	let ids = hits.iter().map(|hit| hit.conversation_id.clone()).collect();
+	let states = conversation_state::listed(app, database, ids).await?;
+	Ok(hits
+		.into_iter()
+		.map(|hit| {
+			let observed = state_in(&states, &hit.conversation_id);
+			CatalogueChat::of(hit, observed)
+		})
+		.collect())
+}
+
+fn observed_mission<R: Runtime>(app: &AppHandle<R>, hit: CatalogueMission) -> CatalogueMission {
+	let observed = present(app, &hit.thread_conversation_id, &hit.bot_id, hit.presence());
+	hit.with_presence(observed)
 }
 
 #[cfg(test)]
@@ -59,8 +84,14 @@ mod tests {
 	use tauri::{App, Manager as _};
 
 	use super::*;
+	use crate::agent::commands::a_run_held_by_the_app;
+	use crate::agent::contract::{AgentEvent, RuntimeScope, TurnState};
+	use crate::agent::reply_writer::TurnSink;
+	use crate::conversations::commands::conversation_page;
+	use crate::conversations::contract::ConversationState;
 	use crate::db::repositories::messages::{NewAssistantMessage, TerminalState};
 	use crate::db::repositories::search::MAX_HITS;
+	use crate::missions::contract::{MissionDraft, MissionLiveness, Ticket};
 	use crate::search::contract::{ConversationKind, SnippetPart, MAX_QUERY_CHARS};
 	use crate::test_app::{an_app_of_its_own, AppOfItsOwn};
 
@@ -319,7 +350,9 @@ mod tests {
 			"a query at the cap was refused"
 		);
 		assert!(
-			search_catalogue(app.state(), held, "personal".to_owned()).await.is_ok(),
+			search_catalogue(app.handle().clone(), app.state(), held, "personal".to_owned())
+				.await
+				.is_ok(),
 			"a query at the cap was refused"
 		);
 		assert_eq!(
@@ -328,9 +361,91 @@ mod tests {
 			"the message search read a query past the cap"
 		);
 		assert_eq!(
-			search_catalogue(app.state(), over, "personal".to_owned()).await,
+			search_catalogue(app.handle().clone(), app.state(), over, "personal".to_owned()).await,
 			Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS }),
 			"the catalogue read a query past the cap"
 		);
+	}
+
+	fn a_draft_for_c1() -> MissionDraft {
+		MissionDraft {
+			origin_conversation_id: "c1".to_owned(),
+			bot_id: "b1".to_owned(),
+			objective: "Fix the crash".to_owned(),
+			ticket: Ticket {
+				platform: "github".to_owned(),
+				external_id: "42".to_owned(),
+				url: "https://kiroshi.test/tickets/42".to_owned(),
+				title: "Crash on open".to_owned(),
+			},
+			tools: Vec::new(),
+			source: "bot".to_owned(),
+			workspace_path: None,
+		}
+	}
+
+	#[tokio::test]
+	async fn a_mission_hit_reads_working_while_its_thread_runs_a_turn() {
+		let app = a_host("mission-working").await;
+		let opened = ready(&app.state::<db::DatabaseState>())
+			.expect("the database opens")
+			.missions()
+			.open(a_draft_for_c1(), "k1".to_owned())
+			.await
+			.expect("the mission opens");
+		let thread = RuntimeScope {
+			conversation_id: opened.thread_conversation_id.clone(),
+			bot_id: opened.bot_id.clone(),
+			runtime_session_id: "r1".to_owned(),
+			epoch: 1,
+		};
+		let run = a_run_held_by_the_app(app.handle(), thread);
+		run.emit(AgentEvent::TurnChanged { state: TurnState::Running }, None);
+
+		let found = search_catalogue(
+			app.handle().clone(),
+			app.state(),
+			"crash".to_owned(),
+			"personal".to_owned(),
+		)
+		.await
+		.expect("the catalogue answers");
+
+		let hit = found.missions.first().expect("the mission is found");
+		assert_eq!(
+			(hit.liveness, hit.pending_prompt.clone(), hit.working_bot_ids.clone()),
+			(MissionLiveness::Working, None, vec!["b1".to_owned()])
+		);
+	}
+
+	#[tokio::test]
+	async fn a_conversation_hit_carries_the_state_its_page_row_carries() {
+		let app = a_host("chat-state").await;
+
+		let found = search_catalogue(
+			app.handle().clone(),
+			app.state(),
+			"room".to_owned(),
+			"work".to_owned(),
+		)
+		.await
+		.expect("the catalogue answers");
+		let recent = search_recent(app.handle().clone(), app.state(), "work".to_owned())
+			.await
+			.expect("the recent chats answer");
+		let page =
+			conversation_page(app.handle().clone(), app.state(), "work".to_owned(), None, None)
+				.await
+				.expect("the page reads");
+
+		let paged = page.conversations.into_iter().find(|row| row.conversation.id == "c2");
+		let paged = paged.expect("the room is on the page").observed;
+		assert_eq!(paged.state, ConversationState::Working);
+		let catalogued = |chat: &CatalogueChat| {
+			(chat.state, chat.pending_prompt.clone(), chat.working_bot_ids.clone())
+		};
+		let expected = (paged.state, paged.pending_prompt, paged.working_bot_ids);
+		assert_eq!(found.chats.first().map(catalogued), Some(expected.clone()));
+		assert_eq!(recent.first().map(catalogued), Some(expected));
 	}
 }

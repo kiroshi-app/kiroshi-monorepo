@@ -2067,6 +2067,8 @@ mod tests {
 				"isAgentRunning": false,
 				"liveness": "idle",
 				"lastActivityAt": null,
+				"pendingPrompt": null,
+				"workingBotIds": [],
 			})],
 			"the front was not told which mission github moved and where it stands"
 		);

@@ -143,6 +143,12 @@ pub struct QuestionRequest {
 	pub subject: Option<QuestionSubject>,
 }
 
+impl QuestionRequest {
+	pub fn text(&self) -> String {
+		self.questions.iter().map(|asked| asked.question.as_str()).collect::<Vec<_>>().join("\n")
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PermissionDecision {

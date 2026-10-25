@@ -37,7 +37,7 @@ use crate::events::{
 };
 use crate::file_store::FileStore;
 use crate::search::contract::{
-	CatalogueChat, CatalogueScope, ConversationKind, MessageHit, MessageSearchQuery,
+	CatalogueScope, ChatHit, ConversationKind, MessageHit, MessageSearchQuery,
 };
 
 const LIST_LIMIT: Bound = Bound { default: 50, maximum: 200 };
@@ -440,7 +440,7 @@ impl<R: Runtime> CompanionHost<R> {
 	}
 }
 
-fn found_conversation(chat: CatalogueChat) -> FoundConversation {
+fn found_conversation(chat: ChatHit) -> FoundConversation {
 	FoundConversation {
 		id: chat.conversation_id,
 		kind: chat.kind,

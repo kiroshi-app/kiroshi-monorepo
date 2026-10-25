@@ -8,8 +8,8 @@ use super::checkout;
 use super::contract::{
 	ConversationMissions, HookedMission, Mission, MissionAnswer, MissionClosing, MissionDetail,
 	MissionDraft, MissionEntry, MissionError, MissionEventKind, MissionHandoff, MissionInSpace,
-	MissionLiveness, MissionNote, MissionOnBoard, MissionOpened, MissionSpacePage, MissionState,
-	MissionUpdate, MissionWatch, MissionWatching,
+	MissionLiveness, MissionNote, MissionOnBoard, MissionOpened, MissionPresence, MissionSpacePage,
+	MissionState, MissionUpdate, MissionWatch, MissionWatching,
 };
 use super::{github, hook};
 use crate::agent::commands::AgentState;
@@ -17,7 +17,7 @@ use crate::avatars;
 use crate::bundles;
 use crate::companions::host::picked;
 use crate::conversations::commands::{bot_row, ready, seat_participant};
-use crate::conversations::contract::{Bot, CompanionSpoke};
+use crate::conversations::contract::{Bot, CompanionSpoke, PendingPrompt};
 use crate::conversations::state as conversation_state;
 use crate::db;
 use crate::db::repositories::keyset;
@@ -56,18 +56,22 @@ pub struct MissionChanged {
 	pub is_agent_running: bool,
 	#[specta(optional)]
 	pub liveness: MissionLiveness,
+	#[specta(optional)]
+	pub pending_prompt: Option<PendingPrompt>,
+	#[specta(optional)]
+	pub working_bot_ids: Vec<String>,
 	pub last_activity_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Pulse {
 	is_agent_running: bool,
-	liveness: MissionLiveness,
+	presence: MissionPresence,
 }
 
 impl Pulse {
 	fn of(mission: &Mission) -> Self {
-		Self { is_agent_running: mission.is_agent_running, liveness: mission.liveness }
+		Self { is_agent_running: mission.is_agent_running, presence: MissionPresence::of(mission) }
 	}
 }
 
@@ -81,11 +85,36 @@ impl AnnouncedLiveness {
 }
 
 pub(crate) fn observed<R: Runtime>(app: &AppHandle<R>, mission: Mission) -> Mission {
+	let stored = MissionPresence::of(&mission);
+	let present = present(app, &mission.thread_conversation_id, &mission.bot_id, stored);
+	Mission {
+		liveness: present.liveness,
+		pending_prompt: present.pending_prompt,
+		working_bot_ids: present.working_bot_ids,
+		..mission
+	}
+}
+
+pub(crate) fn present<R: Runtime>(
+	app: &AppHandle<R>,
+	thread_conversation_id: &str,
+	bot_id: &str,
+	stored: MissionPresence,
+) -> MissionPresence {
 	let Some(agent) = app.try_state::<AgentState>() else {
-		return mission;
+		return stored;
 	};
-	let thread = agent.thread_signs(&mission.thread_conversation_id);
-	Mission { liveness: mission.liveness.joined(thread), ..mission }
+	let thread = agent.thread_signs(thread_conversation_id);
+	let liveness = stored.liveness.joined(thread);
+	let pending_prompt = agent
+		.thread_prompt(thread_conversation_id)
+		.or(stored.pending_prompt)
+		.filter(|_| liveness == MissionLiveness::NeedsYou);
+	let working_bot_ids = match thread.is_turn_running {
+		true => vec![bot_id.to_owned()],
+		false => Vec::new(),
+	};
+	MissionPresence { liveness, pending_prompt, working_bot_ids }
 }
 
 fn observed_all<R: Runtime>(app: &AppHandle<R>, missions: Vec<Mission>) -> Vec<Mission> {
@@ -145,6 +174,8 @@ fn emit_change<R: Runtime>(app: &AppHandle<R>, mission: &Mission) -> Result<(), 
 			state_seq: mission.state_seq,
 			is_agent_running: mission.is_agent_running,
 			liveness: mission.liveness,
+			pending_prompt: mission.pending_prompt.clone(),
+			working_bot_ids: mission.working_bot_ids.clone(),
 			last_activity_at: mission.last_activity_at,
 		},
 	)
@@ -960,6 +991,8 @@ mod tests {
 					"stateSeq": asked.state_seq,
 					"isAgentRunning": false,
 					"liveness": "idle",
+					"pendingPrompt": null,
+					"workingBotIds": [],
 					"lastActivityAt": null
 				}),
 				json!({
@@ -969,6 +1002,8 @@ mod tests {
 					"stateSeq": answered.state_seq,
 					"isAgentRunning": false,
 					"liveness": "idle",
+					"pendingPrompt": null,
+					"workingBotIds": [],
 					"lastActivityAt": null
 				}),
 				json!({
@@ -978,6 +1013,8 @@ mod tests {
 					"stateSeq": asked_again.state_seq,
 					"isAgentRunning": false,
 					"liveness": "idle",
+					"pendingPrompt": null,
+					"workingBotIds": [],
 					"lastActivityAt": null
 				}),
 			],
@@ -1094,6 +1131,8 @@ mod tests {
 					"stateSeq": 1,
 					"isAgentRunning": false,
 					"liveness": "idle",
+					"pendingPrompt": null,
+					"workingBotIds": [],
 					"lastActivityAt": null,
 				}),
 				json!({
@@ -1103,6 +1142,8 @@ mod tests {
 					"stateSeq": 2,
 					"isAgentRunning": false,
 					"liveness": "needs_you",
+					"pendingPrompt": null,
+					"workingBotIds": [],
 					"lastActivityAt": null,
 				}),
 			],
@@ -1561,6 +1602,7 @@ mod tests {
 			TurnEnded, TurnOutcome, TurnState,
 		};
 		use crate::agent::reply_writer::TurnSink;
+		use crate::conversations::contract::PendingPromptKind;
 
 		const PATIENCE: Duration = Duration::from_secs(10);
 
@@ -1830,6 +1872,85 @@ mod tests {
 					.iter()
 					.all(|told| told[0]["missionId"] == json!(opened.id)),
 				"another mission was told"
+			);
+		}
+
+		async fn on_the_board_whole(app: &App<MockRuntime>, id: &str) -> Value {
+			let mission = mission_board(app.handle().clone(), app.state())
+				.await
+				.expect("the board reads")
+				.into_iter()
+				.find(|row| row.mission.id == id)
+				.expect("the mission is on the board")
+				.mission;
+			json!({ "pendingPrompt": mission.pending_prompt, "workingBotIds": mission.working_bot_ids })
+		}
+
+		fn presence_of(heard: &[Value]) -> Vec<Value> {
+			heard
+				.iter()
+				.map(|payload| {
+					json!({
+						"pendingPrompt": payload["pendingPrompt"],
+						"workingBotIds": payload["workingBotIds"],
+					})
+				})
+				.collect()
+		}
+
+		#[tokio::test]
+		async fn the_thread_prompt_and_its_working_companion_ride_on_every_read_and_event() {
+			let app = a_watched_host("presence").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let run = a_run_held_by_the_app(app.handle(), the_thread_of(&opened));
+			let received = listening(&app);
+			let permission =
+				json!({ "promptId": "p1", "kind": "permission", "text": "Run a command" });
+
+			let mut told = Vec::new();
+
+			run.emit(turned(TurnState::Running), None);
+			told.extend(heard(&received, 1));
+			let running = on_the_board_whole(&app, &opened.id).await;
+			run.emit(a_permission("p1"), None);
+			told.extend(heard(&received, 1));
+			let asked = on_the_board_whole(&app, &opened.id).await;
+			run.emit(resolved("p1"), None);
+			told.extend(heard(&received, 1));
+			run.emit(ended(), None);
+			told.extend(heard(&received, 1));
+
+			assert_eq!(running, json!({ "pendingPrompt": null, "workingBotIds": ["b1"] }));
+			assert_eq!(asked, json!({ "pendingPrompt": permission, "workingBotIds": ["b1"] }));
+			assert_eq!(
+				presence_of(&told),
+				vec![
+					running.clone(),
+					asked,
+					running,
+					json!({ "pendingPrompt": null, "workingBotIds": [] }),
+				]
+			);
+		}
+
+		#[tokio::test]
+		async fn an_escalated_question_is_the_pending_prompt_while_the_mission_waits_on_a_human() {
+			let app = a_watched_host("escalated-question").await;
+			let opened = a_mission(&app, a_draft("c1", "b1", "Fix it")).await;
+			let note = MissionNote {
+				source: "bot".to_owned(),
+				payload: json!({ "question": "Which branch ships?", "reason": "Two are ready" }),
+			};
+
+			let escalated = mission_escalate(app.handle().clone(), app.state(), opened.id, note)
+				.await
+				.expect("the mission is escalated");
+
+			let prompt = escalated.pending_prompt.expect("the escalation is pending");
+			assert_eq!(escalated.liveness, MissionLiveness::NeedsYou);
+			assert_eq!(
+				(prompt.kind, prompt.text.as_str()),
+				(PendingPromptKind::Question, "Which branch ships?")
 			);
 		}
 	}

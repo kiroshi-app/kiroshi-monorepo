@@ -9,7 +9,7 @@ use super::missions::{mission, MISSION_COLUMNS};
 use crate::db::{Access, DatabaseError};
 use crate::missions::contract::Mission;
 use crate::search::contract::{
-	Catalogue, CatalogueChat, CatalogueError, CatalogueMission, CatalogueRoutine, CatalogueScope,
+	CatalogueError, CatalogueHits, CatalogueMission, CatalogueRoutine, CatalogueScope, ChatHit,
 	ConversationKind, MAX_MATCHES_PER_LIST, MAX_QUERY_CHARS, MAX_RECENT_CHATS,
 };
 
@@ -89,7 +89,7 @@ impl CatalogueRepository {
 		Self { access }
 	}
 
-	pub async fn search(&self, scope: CatalogueScope) -> Result<Catalogue, CatalogueError> {
+	pub async fn search(&self, scope: CatalogueScope) -> Result<CatalogueHits, CatalogueError> {
 		if scope.query.chars().count() > MAX_QUERY_CHARS {
 			return Err(CatalogueError::QueryTooLong { limit: MAX_QUERY_CHARS });
 		}
@@ -97,7 +97,7 @@ impl CatalogueRepository {
 		self.access.call(move |connection| Ok(searched(connection, &scope, &needle))).await?
 	}
 
-	pub async fn recent(&self, space_id: String) -> Result<Vec<CatalogueChat>, CatalogueError> {
+	pub async fn recent(&self, space_id: String) -> Result<Vec<ChatHit>, CatalogueError> {
 		self.access.call(move |connection| Ok(recent_chats(connection, &space_id))).await?
 	}
 }
@@ -106,20 +106,17 @@ fn searched(
 	connection: &Connection,
 	scope: &CatalogueScope,
 	needle: &str,
-) -> Result<Catalogue, CatalogueError> {
+) -> Result<CatalogueHits, CatalogueError> {
 	let seated = seated_bots(connection)?;
 	let spaces = bot_spaces(connection)?;
-	Ok(Catalogue {
+	Ok(CatalogueHits {
 		chats: matching_chats(connection, scope, needle, &seated)?,
 		missions: matching_missions(connection, scope, needle, &spaces)?,
 		routines: matching_routines(connection, scope, needle, &spaces)?,
 	})
 }
 
-fn recent_chats(
-	connection: &Connection,
-	space_id: &str,
-) -> Result<Vec<CatalogueChat>, CatalogueError> {
+fn recent_chats(connection: &Connection, space_id: &str) -> Result<Vec<ChatHit>, CatalogueError> {
 	let seated = seated_bots(connection)?;
 	let mut statement =
 		connection.prepare_cached(&format!("{} {RECENT_CHATS_OF_SCOPE} {CHAT_ORDER}", chats()))?;
@@ -137,7 +134,7 @@ fn matching_chats(
 	scope: &CatalogueScope,
 	needle: &str,
 	seated: &Seated,
-) -> Result<Vec<CatalogueChat>, CatalogueError> {
+) -> Result<Vec<ChatHit>, CatalogueError> {
 	let mut statement =
 		connection.prepare_cached(&format!("{} {CHATS_OF_KIND} {CHAT_ORDER}", chats()))?;
 	let rows = statement.query_map(params![scope.kind], chat_row)?;
@@ -180,6 +177,9 @@ fn matching_missions(
 			ticket_external_id: mission.ticket.external_id,
 			ticket_title: mission.ticket.title,
 			state: mission.state,
+			liveness: mission.liveness,
+			pending_prompt: mission.pending_prompt,
+			working_bot_ids: mission.working_bot_ids,
 			bot_id: mission.bot_id,
 			space_id,
 		});
@@ -221,12 +221,12 @@ fn matching_routines(
 	Ok(held)
 }
 
-fn chat_of(row: ChatRow, seated: &Seated) -> Option<CatalogueChat> {
+fn chat_of(row: ChatRow, seated: &Seated) -> Option<ChatHit> {
 	let bots = seated.get(&row.conversation_id).map(Vec::as_slice).unwrap_or_default();
 	Some(match row.kind {
 		ConversationKind::Main => {
 			let (bot_id, name) = bots.first()?;
-			CatalogueChat {
+			ChatHit {
 				conversation_id: row.conversation_id,
 				kind: row.kind,
 				title: name.clone(),
@@ -235,7 +235,7 @@ fn chat_of(row: ChatRow, seated: &Seated) -> Option<CatalogueChat> {
 				space_id: row.space_id,
 			}
 		}
-		ConversationKind::Topic => CatalogueChat {
+		ConversationKind::Topic => ChatHit {
 			conversation_id: row.conversation_id,
 			kind: row.kind,
 			title: row.title,
@@ -243,7 +243,7 @@ fn chat_of(row: ChatRow, seated: &Seated) -> Option<CatalogueChat> {
 			participants: bots.iter().map(|(_, name)| name.clone()).collect(),
 			space_id: row.space_id,
 		},
-		ConversationKind::Mission => CatalogueChat {
+		ConversationKind::Mission => ChatHit {
 			conversation_id: row.conversation_id,
 			kind: row.kind,
 			title: row.title,
@@ -254,7 +254,7 @@ fn chat_of(row: ChatRow, seated: &Seated) -> Option<CatalogueChat> {
 	})
 }
 
-fn chat_matches(chat: &CatalogueChat, needle: &str) -> bool {
+fn chat_matches(chat: &ChatHit, needle: &str) -> bool {
 	folded(&chat.title).contains(needle)
 		|| chat.participants.iter().any(|name| folded(name).contains(needle))
 }
@@ -479,7 +479,7 @@ mod tests {
 		missions.iter().map(|mission| mission.objective.as_str()).collect()
 	}
 
-	fn titles(chats: &[CatalogueChat]) -> Vec<&str> {
+	fn titles(chats: &[ChatHit]) -> Vec<&str> {
 		chats.iter().map(|chat| chat.title.as_str()).collect()
 	}
 
@@ -496,7 +496,7 @@ mod tests {
 		held.into_iter().filter(|one| wanted.contains(one)).collect()
 	}
 
-	fn named(chats: &[CatalogueChat]) -> Vec<(&str, ConversationKind, &str)> {
+	fn named(chats: &[ChatHit]) -> Vec<(&str, ConversationKind, &str)> {
 		chats
 			.iter()
 			.map(|chat| (chat.conversation_id.as_str(), chat.kind, chat.title.as_str()))

@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
-use super::prompts::HAS_OPEN_TURN;
+use super::prompts::{open_turn_starts, HAS_OPEN_TURN, OPEN_TURN_BOTS};
 use super::{
 	conversation, seats_by_conversation, Conversation, ConversationError, ConversationsRepository,
 	Seat, CHAT_KIND, MISSION_KIND, SEAT_COLUMNS, TOPIC_KIND,
@@ -115,18 +115,7 @@ fn active_rows() -> String {
 			word.written_from AS word_written_from, word.author_email AS word_author_email,
 			word.author_computer AS word_author_computer,
 			{HAS_OPEN_TURN} AS has_open_turn,
-			(SELECT json_group_array(json_array(working.bot_id, working.started_at)) FROM (
-				SELECT reply.author_bot_id AS bot_id, open_turn.started_at AS started_at
-					FROM turns AS open_turn
-					JOIN messages AS reply
-						ON reply.turn_id = open_turn.id AND reply.role = 'assistant'
-					WHERE open_turn.conversation_id = conversations.id
-						AND open_turn.completed_at IS NULL AND reply.author_bot_id IS NOT NULL
-				UNION ALL
-				SELECT run.bot_id, open_turn.started_at FROM turns AS open_turn
-					JOIN turn_runs AS run ON run.turn_id = open_turn.id
-					WHERE open_turn.conversation_id = conversations.id
-						AND open_turn.completed_at IS NULL) AS working) AS open_turn_bots
+			{OPEN_TURN_BOTS} AS open_turn_bots
 		FROM conversations
 		LEFT JOIN conversation_participants AS solo_seat
 			ON conversations.kind = '{CHAT_KIND}' AND solo_seat.conversation_id = conversations.id
@@ -356,16 +345,7 @@ fn listed_row(row: &Row<'_>) -> rusqlite::Result<ListedConversation> {
 }
 
 fn active_turn(row: &Row<'_>) -> rusqlite::Result<ActiveTurn> {
-	let links: String = row.get("open_turn_bots")?;
-	let links: Vec<(String, i64)> = serde_json::from_str(&links).map_err(|error| {
-		rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
-	})?;
-	let mut earliest: BTreeMap<String, i64> = BTreeMap::new();
-	for (bot_id, started_at) in links {
-		let start = earliest.entry(bot_id).or_insert(started_at);
-		*start = (*start).min(started_at);
-	}
-	let bots = earliest
+	let bots = open_turn_starts(&row.get::<_, String>("open_turn_bots")?)?
 		.into_iter()
 		.map(|(bot_id, started_at)| WorkingBot { bot_id, started_at })
 		.collect();

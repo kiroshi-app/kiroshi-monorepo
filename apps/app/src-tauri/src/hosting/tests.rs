@@ -59,11 +59,12 @@ use crate::conversations::commands::{
 	conversation_update_bot,
 };
 use crate::conversations::contract::{
-	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, ConversationState, LastWord,
-	NewUserMessage, ParticipantRole, TranscriptStoreError, WrittenFrom,
+	Bot, BotDraft, BotIdentity, Conversation, ConversationInPage, LastWord, NewUserMessage,
+	ObservedState, ParticipantRole, TranscriptStoreError, WrittenFrom,
 	CREATED_EVENT as CONVERSATION_CREATED_EVENT, DELETED_EVENT as CONVERSATION_DELETED_EVENT,
-	MESSAGE_STORED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
+	MESSAGE_STORED_EVENT, STATE_CHANGED_EVENT, UPDATED_EVENT as CONVERSATION_UPDATED_EVENT,
 };
+use crate::conversations::state as conversation_state;
 use crate::conversations::turn_run_deadline::{arm_start_deadlines, TurnRunDeadlines};
 use crate::crypto::commands::{DeviceKeysState, SpaceKeys};
 use crate::crypto::device_keys::{verify, DeviceKeys};
@@ -4257,6 +4258,34 @@ fn a_relay_guest_hears_the_end_of_a_host_turn_in_the_shared_conversation() {
 }
 
 #[test]
+fn a_relay_guest_hears_the_state_change_of_a_main_conversation_of_the_shared_space() {
+	run(async {
+		let mut guest = Guest::of_two_spaces("main-state").await;
+		let app = guest.harness.app.handle().clone();
+		let database = db::open(&guest.effects.database);
+		let conversations = database.conversations();
+		let main = conversations
+			.ensure_chat("b-mine".to_owned(), Some(PERSONAL.to_owned()))
+			.await
+			.expect("the main conversation opens");
+		let prompt = a_pending_prompt(&main.id, PromptKind::Permission);
+		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+
+		conversation_state::observe(&app, &database, &main.id).await.expect("the state reads");
+		let heard = guest.events_until_the_marker().await;
+
+		let changed = json!({
+			"conversationId": main.id,
+			"spaceId": PERSONAL,
+			"state": "needs_you",
+			"pendingPrompt": { "promptId": "p1", "kind": "permission", "text": "Run git push" },
+			"workingBotIds": [],
+		});
+		assert_eq!(heard, [as_forwarded((STATE_CHANGED_EVENT, changed))]);
+	});
+}
+
+#[test]
 fn a_host_wide_connection_check_reaches_no_relay_guest_and_is_not_logged_as_kept_off() {
 	run(async {
 		let mut guest = Guest::of_two_spaces("host-wide-check").await;
@@ -5448,7 +5477,7 @@ fn in_page(
 		last_word,
 		solo_bot_id: None,
 		active_turn: None,
-		state: ConversationState::Idle,
+		observed: ObservedState::idle(),
 	})
 }
 

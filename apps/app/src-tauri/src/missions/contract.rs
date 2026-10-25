@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::companions::contract::CompanionError;
-use crate::conversations::contract::{Bot, StorageFailure, TranscriptStoreError};
+use crate::conversations::contract::{Bot, PendingPrompt, StorageFailure, TranscriptStoreError};
 use crate::db::repositories::conversations::ConversationError;
 use crate::db::DatabaseError;
 
@@ -96,6 +96,23 @@ pub enum MissionLiveness {
 	Failed,
 	Done,
 	Closed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissionPresence {
+	pub liveness: MissionLiveness,
+	pub pending_prompt: Option<PendingPrompt>,
+	pub working_bot_ids: Vec<String>,
+}
+
+impl MissionPresence {
+	pub fn of(mission: &Mission) -> Self {
+		Self {
+			liveness: mission.liveness,
+			pending_prompt: mission.pending_prompt.clone(),
+			working_bot_ids: mission.working_bot_ids.clone(),
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -215,6 +232,10 @@ pub struct Mission {
 	pub is_agent_running: bool,
 	#[specta(optional)]
 	pub liveness: MissionLiveness,
+	#[specta(optional)]
+	pub pending_prompt: Option<PendingPrompt>,
+	#[specta(optional)]
+	pub working_bot_ids: Vec<String>,
 	pub opened_at: i64,
 	pub closed_at: Option<i64>,
 	pub reported_at: Option<i64>,

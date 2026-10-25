@@ -425,6 +425,8 @@ mod tests {
 				"isAgentRunning": false,
 				"liveness": "idle",
 				"lastActivityAt": null,
+				"pendingPrompt": null,
+				"workingBotIds": [],
 			})],
 			"the front was not told the hook moved the mission"
 		);

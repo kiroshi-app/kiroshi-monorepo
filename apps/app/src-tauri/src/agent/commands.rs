@@ -9,8 +9,8 @@ use tokio::sync::{broadcast, Mutex};
 use super::contract::{
 	AccountReport, AgentEvent, CancelFailureReason, CancelOutcome, CheckReport, ConnectionState,
 	ConversationNaming, EventTurn, EvolvedBundle, LiveSession, OfferedModel, PermissionDecision,
-	QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn, TransportError,
-	TurnOutcome, TurnState,
+	PermissionRequest, QuestionRequest, RuntimeScope, ScopedEvent, SessionHandle, SubmittedTurn,
+	TransportError, TurnOutcome, TurnState,
 };
 use super::host::hosted;
 use super::lease::RunLease;
@@ -26,7 +26,7 @@ use crate::bundles;
 use crate::bundles::host::BundleHost;
 use crate::companions::host::CompanionHost;
 use crate::conversations::commands::{announce_conversation, ready, space_of_the_conversation};
-use crate::conversations::contract::TranscriptStoreError;
+use crate::conversations::contract::{PendingPrompt, PendingPromptKind, TranscriptStoreError};
 use crate::conversations::host_turn::{ended_as, HostTurns};
 use crate::conversations::state as conversation_state;
 use crate::db;
@@ -159,7 +159,7 @@ struct Run<S> {
 	session: Option<S>,
 	started_at: i64,
 	is_mid_turn: bool,
-	permissions: HashSet<String>,
+	permissions: Vec<PermissionRequest>,
 }
 
 impl<S> Run<S> {
@@ -253,10 +253,12 @@ impl<S> Live<S> {
 				)
 			}
 			AgentEvent::PermissionRequested { request } => {
-				run.permissions.insert(request.id.clone());
+				if run.permissions.iter().all(|held| held.id != request.id) {
+					run.permissions.push(request.clone());
+				}
 			}
 			AgentEvent::PermissionResolved { id, .. } => {
-				run.permissions.remove(id);
+				run.permissions.retain(|held| &held.id != id);
 			}
 			AgentEvent::TurnEnded { .. } => run.settle(),
 			AgentEvent::Failed { error } if error.is_fatal() => run.settle(),
@@ -285,6 +287,31 @@ impl<S> Live<S> {
 			is_turn_running,
 		}
 	}
+
+	fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		let asked = self
+			.questions()
+			.iter()
+			.find(|question| question.scope.conversation_id == conversation_id)
+			.map(|question| PendingPrompt {
+				prompt_id: question.request.id.clone(),
+				kind: PendingPromptKind::Question,
+				text: question.request.text(),
+			});
+		asked.or_else(|| {
+			let runs = self.runs();
+			let mut in_thread: Vec<&Run<S>> =
+				runs.values().filter(|run| run.scope.conversation_id == conversation_id).collect();
+			in_thread.sort_by_key(|run| run.started_at);
+			in_thread.into_iter().find_map(|run| run.permissions.first()).map(|request| {
+				PendingPrompt {
+					prompt_id: request.id.clone(),
+					kind: PendingPromptKind::Permission,
+					text: request.title.clone(),
+				}
+			})
+		})
+	}
 }
 
 impl<S: Clone> Live<S> {
@@ -302,7 +329,7 @@ impl<S: Clone> Live<S> {
 					session: None,
 					started_at: now_ms(),
 					is_mid_turn: false,
-					permissions: HashSet::new(),
+					permissions: Vec::new(),
 				},
 			)
 			.and_then(|replaced| replaced.session);
@@ -707,6 +734,10 @@ impl AgentState {
 
 	pub(crate) fn thread_signs(&self, conversation_id: &str) -> LivenessSigns {
 		self.live.thread_signs(conversation_id)
+	}
+
+	pub(crate) fn thread_prompt(&self, conversation_id: &str) -> Option<PendingPrompt> {
+		self.live.thread_prompt(conversation_id)
 	}
 
 	pub fn live_session_count(&self) -> usize {
@@ -2245,13 +2276,7 @@ mod tests {
 	fn held_since<S>(live: &Live<S>, scope: RuntimeScope, started_at: i64) {
 		live.runs.lock().expect("live runs").insert(
 			run_key(&scope),
-			Run {
-				scope,
-				session: None,
-				started_at,
-				is_mid_turn: false,
-				permissions: HashSet::new(),
-			},
+			Run { scope, session: None, started_at, is_mid_turn: false, permissions: Vec::new() },
 		);
 	}
 
@@ -2913,7 +2938,11 @@ mod tests {
 			let rows = conversation_list(app.handle().clone(), app.state(), "personal".to_owned())
 				.await
 				.expect("the list reads");
-			rows.into_iter().find(|row| row.conversation.id == "c1").expect("c1 is listed").state
+			rows.into_iter()
+				.find(|row| row.conversation.id == "c1")
+				.expect("c1 is listed")
+				.observed
+				.state
 		}
 
 		fn heard_states(app: &AppOfItsOwn) -> Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
@@ -2954,7 +2983,11 @@ mod tests {
 
 			assert_eq!(stored_prompts(&app).await, 1);
 			assert_eq!(listed_state(&app).await, ConversationState::NeedsYou);
-			assert!(heard.lock().expect("the list is kept").is_empty());
+			assert_eq!(
+				*heard.lock().expect("the list is kept"),
+				[serde_json::json!("needs_you")],
+				"the pending prompt moved to the one left, the state stayed"
+			);
 		}
 
 		#[tokio::test]

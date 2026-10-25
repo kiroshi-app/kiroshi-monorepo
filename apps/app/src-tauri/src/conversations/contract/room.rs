@@ -14,11 +14,24 @@ pub struct Chat {
 	pub id: String,
 	pub created_at: i64,
 	pub updated_at: i64,
+	#[specta(optional)]
+	pub state: ConversationState,
+	#[specta(optional)]
+	pub pending_prompt: Option<PendingPrompt>,
+	#[specta(optional)]
+	pub working_bot_ids: Vec<String>,
 }
 
-impl From<conversations::Chat> for Chat {
-	fn from(chat: conversations::Chat) -> Self {
-		Self { id: chat.id, created_at: chat.created_at, updated_at: chat.updated_at }
+impl Chat {
+	pub fn of(chat: conversations::Chat, observed: ObservedState) -> Self {
+		Self {
+			id: chat.id,
+			created_at: chat.created_at,
+			updated_at: chat.updated_at,
+			state: observed.state,
+			pending_prompt: observed.pending_prompt,
+			working_bot_ids: observed.working_bot_ids,
+		}
 	}
 }
 
@@ -38,12 +51,59 @@ pub enum ConversationState {
 	NeedsYou,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PendingPromptKind {
+	Question,
+	Permission,
+}
+
+impl From<conversations::PromptKind> for PendingPromptKind {
+	fn from(kind: conversations::PromptKind) -> Self {
+		match kind {
+			conversations::PromptKind::Question => Self::Question,
+			conversations::PromptKind::Permission => Self::Permission,
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingPrompt {
+	pub prompt_id: String,
+	pub kind: PendingPromptKind,
+	pub text: String,
+}
+
+impl From<conversations::WaitingPrompt> for PendingPrompt {
+	fn from(prompt: conversations::WaitingPrompt) -> Self {
+		Self { prompt_id: prompt.prompt_id, kind: prompt.kind.into(), text: prompt.text }
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservedState {
+	pub state: ConversationState,
+	#[specta(optional)]
+	pub pending_prompt: Option<PendingPrompt>,
+	#[specta(optional)]
+	pub working_bot_ids: Vec<String>,
+}
+
+impl ObservedState {
+	pub fn idle() -> Self {
+		Self { state: ConversationState::Idle, pending_prompt: None, working_bot_ids: Vec::new() }
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationStateChanged {
 	pub conversation_id: String,
 	pub space_id: Option<String>,
-	pub state: ConversationState,
+	#[serde(flatten)]
+	pub observed: ObservedState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -111,8 +171,8 @@ impl ConversationPage {
 		let drawn = |rows: Vec<conversations::ActiveConversation>| {
 			rows.into_iter()
 				.map(|row| {
-					let state = state_in(states, &row.conversation.id);
-					ConversationInPage::of(row, state, avatars)
+					let observed = state_in(states, &row.conversation.id);
+					ConversationInPage::of(row, observed, avatars)
 				})
 				.collect()
 		};
@@ -133,13 +193,14 @@ pub struct ConversationInPage {
 	pub last_word: Option<LastWord>,
 	pub solo_bot_id: Option<String>,
 	pub active_turn: Option<ActiveTurn>,
-	pub state: ConversationState,
+	#[serde(flatten)]
+	pub observed: ObservedState,
 }
 
 impl ConversationInPage {
 	pub fn of(
 		row: conversations::ActiveConversation,
-		state: ConversationState,
+		observed: ObservedState,
 		avatars: Option<&Path>,
 	) -> Self {
 		Self {
@@ -148,15 +209,15 @@ impl ConversationInPage {
 			last_word: row.last_word.map(Into::into),
 			solo_bot_id: row.solo_bot_id,
 			active_turn: row.active_turn.map(Into::into),
-			state,
+			observed,
 		}
 	}
 }
 
-pub type States = HashMap<String, ConversationState>;
+pub type States = HashMap<String, ObservedState>;
 
-pub fn state_in(states: &States, conversation_id: &str) -> ConversationState {
-	states.get(conversation_id).copied().unwrap_or(ConversationState::Idle)
+pub fn state_in(states: &States, conversation_id: &str) -> ObservedState {
+	states.get(conversation_id).cloned().unwrap_or_else(ObservedState::idle)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -164,7 +225,8 @@ pub fn state_in(states: &States, conversation_id: &str) -> ConversationState {
 pub struct ConversationInList {
 	#[serde(flatten)]
 	pub conversation: Conversation,
-	pub state: ConversationState,
+	#[serde(flatten)]
+	pub observed: ObservedState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

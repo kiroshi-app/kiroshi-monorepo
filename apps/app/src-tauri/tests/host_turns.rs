@@ -415,6 +415,8 @@ impl Host {
 				state_seq: 1,
 				is_agent_running: true,
 				liveness: MissionLiveness::Working,
+				pending_prompt: None,
+				working_bot_ids: Vec::new(),
 				last_activity_at: None,
 			};
 			events::emit(self.app.handle(), MISSION_CHANGED, changed).expect("the flood is sent");
