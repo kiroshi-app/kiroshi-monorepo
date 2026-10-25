@@ -825,6 +825,20 @@ export const createRosterController = (
 		)
 	}
 
+	const holdSoloChatState = (
+		conversationId: string,
+		observed: ObservedState,
+	) => {
+		const line = current().soloThreads[conversationId]
+		if (line === undefined) {
+			return
+		}
+		queryClient.setQueryData(
+			soloThreadQuery(line).queryKey,
+			(chat) => chat && { ...chat, ...observed },
+		)
+	}
+
 	const holdHostState = (
 		origin: SpaceOnHost,
 		changed: ConversationStateChange,
@@ -833,12 +847,13 @@ export const createRosterController = (
 		if (spaceRowId === undefined) {
 			return
 		}
+		const observed = observedStateOf(changed)
 		queryClient.setQueryData(
 			rosterQuery(spaceRowId).queryKey,
 			(paged) =>
-				paged &&
-				withHostState(paged, changed.conversationId, observedStateOf(changed)),
+				paged && withHostState(paged, changed.conversationId, observed),
 		)
+		holdSoloChatState(changed.conversationId, observed)
 	}
 
 	const pendingRereads = new Map<string, ReturnType<typeof setTimeout>>()

@@ -15,6 +15,7 @@ import { useRosterReads } from "./use-roster"
 import { useControllerState } from "../use-controller"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import { botHostStatesIn, withNeedsYou } from "../conversations/host-state-rows"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -269,6 +270,99 @@ it("carries the state of a solo thread outside the loaded pages from its main ch
 		pendingPrompt: null,
 		workingBotIds: [],
 	})
+})
+
+const companionRowIn = (controller: RosterController, botId: string) => {
+	const { hostStates, soloThreads } = controller.getState()
+	const botStates = botHostStatesIn({
+		hostStates,
+		soloThreads,
+		spaceId: LOCAL.spaceRowId,
+	})
+	return withNeedsYou([{ id: botId }], botStates)[0]
+}
+
+it("keeps the answer of a solo thread outside the loaded pages once the roster is reread", async () => {
+	const { store, companion, controller, queryClient, pageReads } =
+		await loadedRoster()
+	const soloThread = controller.soloThreadQuery({
+		spaceId: LOCAL.spaceRowId,
+		botId: companion.id,
+	})
+	vi.spyOn(store, "mainChat").mockResolvedValue({
+		id: "solo-unpaged",
+		createdAt: 1,
+		updatedAt: 1,
+		state: "needs_you",
+		pendingPrompt: WHICH_BRANCH,
+		workingBotIds: [],
+	})
+	await act(() => queryClient.fetchQuery(soloThread))
+
+	expect(companionRowIn(controller, companion.id)).toEqual({
+		id: companion.id,
+		badge: "attention",
+		pendingQuestion: "Which branch?",
+	})
+
+	await emitOnHost("conversation://state-changed", {
+		conversationId: "solo-unpaged",
+		spaceId: LOCAL.spaceId,
+		state: "idle",
+		pendingPrompt: null,
+		workingBotIds: [],
+	})
+	pageReads.mockClear()
+	await emitOnHost("conversation://deleted", {
+		spaceId: LOCAL.spaceId,
+		conversationId: "unknown",
+	})
+	await vi.waitFor(() => expect(pageReads).toHaveBeenCalled())
+	await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0))
+
+	expect(queryClient.getQueryData(soloThread.queryKey)).toMatchObject({
+		state: "idle",
+		pendingPrompt: null,
+	})
+	expect(companionRowIn(controller, companion.id)).toEqual({
+		id: companion.id,
+	})
+})
+
+it("keeps a state read in the roster pages over the solo thread snapshot", async () => {
+	const { store, companion, controller, queryClient } = await loadedRoster()
+	const soloThread = controller.soloThreadQuery({
+		spaceId: LOCAL.spaceRowId,
+		botId: companion.id,
+	})
+	vi.spyOn(store, "mainChat").mockResolvedValue({
+		id: "solo-unpaged",
+		createdAt: 1,
+		updatedAt: 1,
+		state: "idle",
+	})
+	await act(() => queryClient.fetchQuery(soloThread))
+	await emitOnHost("conversation://state-changed", {
+		conversationId: "solo-unpaged",
+		spaceId: LOCAL.spaceId,
+		state: "working",
+		pendingPrompt: null,
+		workingBotIds: [companion.id],
+	})
+
+	act(() => {
+		queryClient.setQueryData(soloThread.queryKey, {
+			id: "solo-unpaged",
+			createdAt: 1,
+			updatedAt: 1,
+			state: "needs_you",
+			pendingPrompt: WHICH_BRANCH,
+		})
+	})
+
+	expect(controller.getState().hostStates["solo-unpaged"]?.state).toBe(
+		"working",
+	)
 })
 
 it("writes the icon and the colour of a conversation updated on the host into its roster", async () => {
