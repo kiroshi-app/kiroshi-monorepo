@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test"
+import { readFileSync } from "node:fs"
+import { dirname, join, relative } from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { decideJobs, touchedJobs } from "./ci-changes"
 
@@ -35,6 +38,24 @@ const PATH_MIXES = [
 
 const touching = (...paths: string[]) => touchedJobs(paths)
 
+const REPO = fileURLToPath(new URL("..", import.meta.url))
+
+const SRC_TAURI = join(REPO, "apps/app/src-tauri")
+
+const EMBEDDED_PATH = /include_(?:str|bytes)!\(\s*"([^"]+)"\s*\)/g
+
+const embeddedPathsOf = (source: string) => {
+	const file = join(SRC_TAURI, source)
+	return [...readFileSync(file, "utf8").matchAll(EMBEDDED_PATH)].map(
+		([, embedded]) => relative(REPO, join(dirname(file), embedded ?? "")),
+	)
+}
+
+const filesSrcTauriEmbeds = () =>
+	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })].flatMap(
+		embeddedPathsOf,
+	)
+
 const runChangeDetector = (...args: string[]) =>
 	Bun.spawnSync([
 		process.execPath,
@@ -44,19 +65,20 @@ const runChangeDetector = (...args: string[]) =>
 
 describe("ci jobs per event", () => {
 	it.each(PATH_MIXES)(
-		"selects only vitest on a pull_request, on the paths it watches, on %p",
+		"selects only vitest and rust on a pull_request, on the paths they watch, on %p",
 		(...paths) => {
 			expect(decideJobs({ event: "pull_request", paths })).toEqual({
 				...none,
 				vitest: touchedJobs(paths).vitest,
+				rust: touchedJobs(paths).rust,
 			})
 		},
 	)
 
-	it("skips storybook, rust, website and ios on a pull_request touching every path", () => {
+	it("skips storybook, website and ios on a pull_request touching every path", () => {
 		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
 
-		expect(jobs).toEqual({ ...none, vitest: true })
+		expect(jobs).toEqual({ ...none, vitest: true, rust: true })
 	})
 
 	it.each(PATH_MIXES)(
@@ -207,6 +229,25 @@ describe("the paths each job watches", () => {
 
 	it("runs rust on packages/shared/permission-modes.json alone, since src-tauri embeds it", () => {
 		expect(touching("packages/shared/permission-modes.json").rust).toBe(true)
+	})
+
+	it("runs only rust on .claude/settings.json, since src-tauri embeds it", () => {
+		expect(touching(".claude/settings.json")).toEqual({ ...none, rust: true })
+	})
+
+	it("runs rust and vitest on apps/app/src/lib/host/index.ts, since a src-tauri test embeds it", () => {
+		expect(touching("apps/app/src/lib/host/index.ts")).toEqual({
+			...none,
+			rust: true,
+			vitest: true,
+		})
+	})
+
+	it("runs rust on every file src-tauri embeds with include_str! or include_bytes!", () => {
+		const embedded = filesSrcTauriEmbeds()
+
+		expect(embedded).toContain(".claude/settings.json")
+		expect(embedded.filter((path) => !touching(path).rust)).toEqual([])
 	})
 
 	it("runs every job when the change detector scripts/ci-changes.ts changed", () => {
