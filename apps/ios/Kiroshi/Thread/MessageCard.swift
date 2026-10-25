@@ -24,6 +24,8 @@ struct MessageCardHeader: View {
     let label: String?
     let copyLabel: String
     let copied: String
+    var speaker: String?
+    var time = ""
 
     @State private var copies = 0
     @ScaledMetric(relativeTo: .footnote) private var height: CGFloat = 36
@@ -36,10 +38,16 @@ struct MessageCardHeader: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(MessageCard.label)
                     .fixedSize()
+                    .modifier(MessageOpening(speaker: speaker, time: time))
+                    .accessibilitySortPriority(1)
             }
             Spacer(minLength: 8)
             copyButton
+                .modifier(
+                    MessageOpening(
+                        speaker: label == nil ? speaker : nil, time: label == nil ? time : ""))
         }
+        .accessibilityElement(children: .contain)
         .padding(.leading, inset)
         .padding(.trailing, 4)
         .frame(minHeight: height)
@@ -62,11 +70,13 @@ struct MessageCardHeader: View {
         Button {
             UIPasteboard.general.string = copied
             copies += 1
+            AccessibilityNotification.Announcement(String(localized: "Copied")).post()
         } label: {
             if isCopied {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Color(.systemGreen))
+                        .accessibilityHidden(true)
                     Text("Copied")
                         .foregroundStyle(.secondary)
                 }

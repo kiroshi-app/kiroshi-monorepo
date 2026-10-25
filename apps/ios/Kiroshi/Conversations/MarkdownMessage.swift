@@ -35,13 +35,6 @@ struct MarkdownMessage: Equatable {
     var hasCard: Bool {
         blocks.contains(where: \.isCard)
     }
-
-    var opensWithText: Bool {
-        switch blocks.first {
-        case .heading, .paragraph: true
-        default: false
-        }
-    }
 }
 
 indirect enum MarkdownBlock: Equatable {
@@ -58,6 +51,10 @@ indirect enum MarkdownBlock: Equatable {
         case .code, .table: true
         default: false
         }
+    }
+
+    static func openingIndex(of blocks: [MarkdownBlock]) -> Int {
+        blocks.firstIndex { $0 != .rule } ?? 0
     }
 
     var isFootnoteDefinition: Bool {

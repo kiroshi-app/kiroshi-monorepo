@@ -267,6 +267,21 @@ struct MarkdownMessageTests {
             ])
     }
 
+    @Test(arguments: [
+        "- [x] Changelog drafted", "```swift\nlet a = 1\n```", "> Keep it short.", "Hi.",
+    ])
+    func theFirstBlockOpensTheMessageWhateverItsKind(text: String) {
+        #expect(MarkdownBlock.openingIndex(of: MarkdownMessage(text).blocks) == 0)
+    }
+
+    @Test func aLeadingRuleHandsTheOpeningToTheNextBlock() {
+        let message = MarkdownMessage("---\n\n- Replies stream word by word")
+
+        #expect(message.blocks.first == .rule)
+        #expect(MarkdownBlock.openingIndex(of: message.blocks) == 1)
+        #expect(MarkdownBlock.openingIndex(of: [.rule]) == 0)
+    }
+
     static func list(_ block: MarkdownBlock?) -> MarkdownList? {
         guard case .list(let list) = block else { return nil }
         return list

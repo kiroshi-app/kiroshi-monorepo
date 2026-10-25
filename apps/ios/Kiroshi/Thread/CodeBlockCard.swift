@@ -4,12 +4,16 @@ struct CodeBlockCard: View {
     static let font = Font.footnote.monospaced()
 
     let code: MarkdownCode
+    var speaker: String?
+    var time = ""
 
     @ScaledMetric(relativeTo: .footnote) private var inset: CGFloat = 12
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MessageCardHeader(label: code.language, copyLabel: "Copy code", copied: code.text)
+            MessageCardHeader(
+                label: code.language, copyLabel: "Copy code", copied: code.text, speaker: speaker,
+                time: time)
             ScrollView(.horizontal) {
                 Text(SyntaxHighlighting.shared.highlighted(code))
                     .font(Self.font)

@@ -4,6 +4,8 @@ import UIKit
 struct TableCard: View {
     let table: MarkdownTable
     let messageText: String
+    var speaker: String?
+    var time = ""
 
     @State private var cardWidth: CGFloat = 0
 
@@ -15,7 +17,7 @@ struct TableCard: View {
         VStack(alignment: .leading, spacing: 0) {
             MessageCardHeader(
                 label: Self.rowCount(table.rows.count), copyLabel: "Copy table",
-                copied: table.tabSeparated)
+                copied: table.tabSeparated, speaker: speaker, time: time)
             ScrollView(.horizontal) {
                 TableGrid(table: table)
                     .frame(minWidth: cardWidth, alignment: .leading)
