@@ -11,13 +11,17 @@ struct InlineText: View {
         inline.runs.reduce(Text(verbatim: "")) { text, run in
             Text("\(text)\(piece(run))")
         }
-        .textRenderer(ChipRenderer())
+        .modifier(ChipDrawing(isDrawn: hasChips))
         .tint(Color(.link))
         .modifier(SpokenPlain(text: isSpokenPlain ? inline.plain : nil))
     }
 
+    private var hasChips: Bool {
+        inline.runs.contains { $0.kind != .text }
+    }
+
     private var isSpokenPlain: Bool {
-        inline.runs.contains { $0.kind != .text } && !inline.runs.contains { $0.link != nil }
+        hasChips && !inline.runs.contains { $0.link != nil }
     }
 
     private func piece(_ run: MarkdownInline.Run) -> Text {
@@ -46,6 +50,18 @@ struct InlineText: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(isKnown ? Color.primary : Color.secondary)
                 .customAttribute(Chip(radius: 6))
+        }
+    }
+}
+
+private struct ChipDrawing: ViewModifier {
+    let isDrawn: Bool
+
+    func body(content: Content) -> some View {
+        if isDrawn {
+            content.textRenderer(ChipRenderer())
+        } else {
+            content
         }
     }
 }
