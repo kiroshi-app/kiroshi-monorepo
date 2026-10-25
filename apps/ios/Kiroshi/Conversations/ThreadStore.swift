@@ -357,7 +357,7 @@ final class ThreadStore {
             let conversationId =
                 switch subject {
                 case .companion(let companion):
-                    try await relay.mainChat(of: companion.id, in: spaceId)
+                    try await relay.mainChat(of: companion.id, in: spaceId).id
                 case .group(let group): group.id
                 }
             guard !Task.isCancelled else { return }

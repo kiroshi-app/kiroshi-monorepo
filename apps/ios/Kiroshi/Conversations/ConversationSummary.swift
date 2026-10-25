@@ -50,7 +50,7 @@ struct ConversationSummary: Identifiable, Equatable {
     var conversationId: String?
     var lastMessage: MessagePreview?
     var activeAt: Date?
-    var state = ConversationState.idle
+    var observed = ObservedState()
     var timeLabel: String?
     var preview: String?
 
@@ -61,6 +61,10 @@ struct ConversationSummary: Identifiable, Equatable {
     var role: String? {
         guard case .companion(let companion) = subject else { return nil }
         return companion.role
+    }
+
+    var state: ConversationState {
+        observed.state
     }
 
     var isWorking: Bool {

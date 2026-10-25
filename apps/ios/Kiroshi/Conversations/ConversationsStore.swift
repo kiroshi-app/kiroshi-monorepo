@@ -325,7 +325,7 @@ final class ConversationsStore {
             guard rows.contains(where: { $0.subject.isGroup(id) }) else { return }
             publish(rows.filter { !$0.subject.isGroup(id) })
         case .stateChanged(let changed):
-            update(changed.conversationId) { $0.state = changed.state }
+            update(changed.conversationId) { $0.observed = changed.observed }
         }
     }
 
@@ -382,8 +382,8 @@ final class ConversationsStore {
                 })
             pinnedIds = page.map { pinnedIds(of: $0, among: companions) } ?? []
             read(page)
-            publish(paged + subjects.compactMap { loaded[$0.id] })
             self.companions = companions
+            publish(paged + subjects.compactMap { loaded[$0.id] })
             phase = .loaded
             if let opening, let subject = rows.first(where: { $0.id == opening })?.subject {
                 self.opening = nil
@@ -453,10 +453,10 @@ final class ConversationsStore {
 
     private func absorb(_ page: ConversationPage) {
         let paged = Self.summaries(of: page, among: companions, authorship: authorship)
-        let states = Dictionary(paged.map { ($0.id, $0.state) }) { _, last in last }
+        let states = Dictionary(paged.map { ($0.id, $0.observed) }) { _, last in last }
         let known = rows.map { row in
             var row = row
-            row.state = states[row.id] ?? row.state
+            row.observed = states[row.id] ?? row.observed
             return row
         }
         let knownIds = Set(rows.map(\.id))
@@ -496,7 +496,7 @@ final class ConversationsStore {
             ConversationSummary(
                 subject: subject(of: row, among: companions), conversationId: row.group.id,
                 lastMessage: row.lastWord.map { MessagePreview($0, authorship: authorship) },
-                activeAt: Date(milliseconds: row.lastActivityAt), state: row.state)
+                activeAt: Date(milliseconds: row.lastActivityAt), observed: row.observed)
         }
     }
 
@@ -515,10 +515,13 @@ final class ConversationsStore {
         authorship: ThreadAuthorship
     ) async throws -> ConversationSummary {
         let conversationId: String
+        var observed = ObservedState()
         switch subject {
         case .companion(let companion):
             do {
-                conversationId = try await relay.mainChat(of: companion.id, in: spaceId)
+                let chat = try await relay.mainChat(of: companion.id, in: spaceId)
+                conversationId = chat.id
+                observed = chat.observed
             } catch is ConversationCallError {
                 return ConversationSummary(subject: subject)
             }
@@ -533,7 +536,8 @@ final class ConversationsStore {
         }
         return ConversationSummary(
             subject: subject, conversationId: conversationId,
-            lastMessage: last.map { MessagePreview($0, authorship: authorship) })
+            lastMessage: last.map { MessagePreview($0, authorship: authorship) },
+            observed: observed)
     }
 
     private func publish(_ changed: [ConversationSummary]) {
@@ -551,8 +555,15 @@ final class ConversationsStore {
             if summary.state != .idle {
                 summary.timeLabel = String(localized: "Now")
             }
+            if summary.needsYou, let question = summary.observed.pendingPrompt?.text,
+                !question.isEmpty
+            {
+                summary.preview = question
+            }
             if summary.isWorking {
-                summary.preview = String(localized: "working…")
+                summary.preview =
+                    WorkingNames(summary.observed.workingBotIds, among: companions).line
+                    ?? String(localized: "working…")
             }
             return summary
         }
