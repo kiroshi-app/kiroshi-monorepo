@@ -6,6 +6,13 @@ final class MissionsAccessibilityTests: XCTestCase {
         continueAfterFailure = true
     }
 
+    func keep(_ name: String, of app: XCUIApplication) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     func row(_ objective: String, in app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", objective)).firstMatch
     }
@@ -71,12 +78,35 @@ final class MissionsAccessibilityTests: XCTestCase {
         XCTAssertTrue(split.waitForExistence(timeout: 10))
         XCTAssertTrue(split.label.hasPrefix("Split the onboarding flow, OPE-212"), split.label)
         XCTAssertTrue(
-            split.label.hasSuffix("Atlas · Asked you which screen goes first."), split.label)
+            split.label.hasSuffix(
+                "Atlas · Which screen goes first, the account step or the space picker?"),
+            split.label)
+        let dictation = row("Add dictation to the composer", in: app)
+        XCTAssertTrue(dictation.label.hasSuffix("Pico · Working now"), dictation.label)
+        keep("Missions · question and working companion", of: app)
         XCTAssertTrue(row("Settings sheet on iPhone", in: app).exists)
         XCTAssertTrue(app.buttons["Settings"].exists)
         XCTAssertTrue(app.tabBars.buttons["Missions"].isSelected)
 
         try auditTheList(app, onScreenAtTheLargestSize: onScreen)
+    }
+
+    func testAtTheLargestTextSizeAMissionRowStillReadsTheQuestionAndItsCompanion() throws {
+        let app = launch(
+            "5.1", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        let split = row("Split the onboarding flow", in: app)
+        XCTAssertTrue(split.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            split.label.hasSuffix(
+                "Atlas · Which screen goes first, the account step or the space picker?"),
+            split.label)
+        keep("Missions · AX5 · question", of: app)
+        let dictation = row("Add dictation to the composer", in: app)
+        app.swipeUp()
+        XCTAssertTrue(dictation.waitForExistence(timeout: 5))
+        XCTAssertTrue(dictation.label.hasSuffix("Pico · Working now"), dictation.label)
+        keep("Missions · AX5 · working companion", of: app)
     }
 
     func testAnOpenedMissionPassesTheAuditThenSwipingLeftShowsEachMessagesTime() throws {

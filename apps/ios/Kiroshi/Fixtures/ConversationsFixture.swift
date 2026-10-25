@@ -319,6 +319,7 @@
                         objective: "Draft the 0.42 release notes", botId: juniper.id,
                         state: "waiting_human", isAgentRunning: false,
                         status: "Asked you which fix leads.",
+                        question: "Which fix leads the 0.42 notes, uploads or dictation?",
                         movedAt: MissionsFixture.at(hour: 9, minute: 20))),
             ]
             return missions
@@ -646,6 +647,8 @@
                 script.question = question
                 if fixture == .questionsList {
                     script.workingCompanion = atlas.id
+                    let seconds = UserDefaults.standard.integer(forKey: "answeredAfter")
+                    script.answersFromTheListAfter = seconds > 0 ? .seconds(seconds) : nil
                 }
             }
             if opensEmpty, let opening = opening(fixture) {
@@ -739,11 +742,12 @@
 
             func pageJSON(
                 lastActivityAt: Int, lastWord: String?, soloBotId: Companion.ID?,
-                state: String = "idle"
+                state: String = "idle", prompt: String? = nil, working: [Companion.ID] = []
             ) -> String {
                 let solo = soloBotId.map { #""\#($0)""# } ?? "null"
+                let observed = FixtureHost.observedJSON(state, prompt: prompt, working: working)
                 return
-                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo),\"activeTurn\":null,\"state\":\"\(state)\"}"
+                    "\(json.dropLast()),\"lastActivityAt\":\(lastActivityAt),\"lastWord\":\(lastWord ?? "null"),\"soloBotId\":\(solo),\"activeTurn\":null,\(observed)}"
             }
 
             var json: String {
@@ -784,6 +788,7 @@
             var pinned: [String] = []
             var refusesPins = false
             var question: FixtureQuestion?
+            var answersFromTheListAfter: Duration?
             var storeAnswer: String?
         }
 
@@ -834,6 +839,8 @@
             let lastWord: String?
             var soloBotId: Companion.ID?
             var state = "idle"
+            var prompt: String?
+            var working: [Companion.ID] = []
         }
 
         static func soloRow(of companion: Companion, last: Message) -> PageRow {
@@ -865,7 +872,8 @@
                 rows.map {
                     $0.group.pageJSON(
                         lastActivityAt: $0.lastActivityAt, lastWord: $0.lastWord,
-                        soloBotId: $0.soloBotId, state: $0.state)
+                        soloBotId: $0.soloBotId, state: $0.state, prompt: $0.prompt,
+                        working: $0.working)
                 }
                 .joined(separator: ",")
             }
@@ -890,8 +898,25 @@
             #"{"event":{"event":"agent://event","payload":{"scope":\#(scope(conversationId, by: companionId)),"event":\#(event),"turn":{"turnId":"turn-live","conversationId":"\#(conversationId)"}}}}"#
         }
 
-        static func stateChanged(_ conversationId: String, _ state: String) -> String {
-            #"{"event":{"event":"conversation://state-changed","payload":{"conversationId":"\#(conversationId)","spaceId":"\#(spaceId)","state":"\#(state)"}}}"#
+        static func stateChanged(
+            _ conversationId: String, _ state: String, prompt: String? = nil,
+            working: [Companion.ID] = []
+        ) -> String {
+            let observed = observedJSON(state, prompt: prompt, working: working)
+            return
+                #"{"event":{"event":"conversation://state-changed","payload":{"conversationId":"\#(conversationId)","spaceId":"\#(spaceId)",\#(observed)}}}"#
+        }
+
+        static func observedJSON(_ state: String, prompt: String?, working: [Companion.ID])
+            -> String
+        {
+            let pending =
+                prompt.map {
+                    let text = String(decoding: try! JSONEncoder().encode($0), as: UTF8.self)
+                    return #"{"promptId":"prompt-1","kind":"question","text":\#(text)}"#
+                } ?? "null"
+            let ids = working.map { #""\#($0)""# }.joined(separator: ",")
+            return #""state":"\#(state)","pendingPrompt":\#(pending),"workingBotIds":[\#(ids)]"#
         }
 
         static func activity(_ id: String, _ title: String, _ status: String) -> String {
@@ -1169,16 +1194,14 @@
                     return FixtureHost.PageRow(
                         group: group, lastActivityAt: max(group.createdAt, last?.createdAt ?? 0),
                         lastWord: last?.lastWordJSON,
-                        state: group.id == script.workingGroup?.id ? "working" : "idle")
+                        state: group.id == script.workingGroup?.id ? "working" : "idle",
+                        working: group.id == script.workingGroup?.id
+                            ? script.workingGroup?.companions ?? [] : [])
                 }
-                let asking = isQuestionAnswered.withLock { $0 } ? nil : script.question?.companionId
                 let solos = script.companions.compactMap { companion in
                     script.messages[companion.id]?.last.map {
                         var row = FixtureHost.soloRow(of: companion, last: $0)
-                        row.state =
-                            companion.id == asking
-                            ? "needs_you"
-                            : companion.id == script.workingCompanion ? "working" : "idle"
+                        (row.state, row.prompt, row.working) = observed(of: companion.id)
                         return row
                     }
                 }
@@ -1197,12 +1220,18 @@
                     after: cursor == nil ? .zero : script.laterPagesAnswerAfter)
                 if cursor == nil {
                     listed.yield()
+                    if let question = script.question, let delay = script.answersFromTheListAfter {
+                        answerElsewhere(question, after: delay, endingTheTurn: true)
+                    }
                 }
             case "conversation_main_chat":
                 let companionId = args["botId"] as? String ?? ""
+                let (state, prompt, working) = observed(of: companionId)
+                let observed = FixtureHost.observedJSON(state, prompt: prompt, working: working)
                 reply(
                     id,
-                    #"{"id":"\#(FixtureHost.chat(of: companionId))","createdAt":0,"updatedAt":0}"#)
+                    #"{"id":"\#(FixtureHost.chat(of: companionId))","createdAt":0,"updatedAt":0,\#(observed)}"#
+                )
             case "conversation_message_page":
                 let conversationId = args["conversationId"] as? String ?? ""
                 let limit = args["limit"] as? Int ?? 50
@@ -1247,7 +1276,10 @@
                 guard let question = script.question else { return }
                 isQuestionAnswered.withLock { $0 = true }
                 push(.frame(Self.resolved(question)))
-                push(.frame(FixtureHost.stateChanged(question.conversationId, "working")))
+                push(
+                    .frame(
+                        FixtureHost.stateChanged(
+                            question.conversationId, "working", working: [question.companionId])))
             case "conversation_append_user_message":
                 guard let message = args["message"] as? [String: Any] else { return }
                 reply(id, "4")
@@ -1308,12 +1340,33 @@
             )
         }
 
-        private func answerElsewhere(_ question: FixtureQuestion, after delay: Duration) {
+        private func observed(of companionId: Companion.ID) -> (
+            state: String, prompt: String?, working: [Companion.ID]
+        ) {
+            if let question = script.question, question.companionId == companionId,
+                !isQuestionAnswered.withLock({ $0 })
+            {
+                return ("needs_you", question.text, [])
+            }
+            if companionId == script.workingCompanion {
+                return ("working", nil, [companionId])
+            }
+            return ("idle", nil, [])
+        }
+
+        private func answerElsewhere(
+            _ question: FixtureQuestion, after delay: Duration, endingTheTurn: Bool = false
+        ) {
             answeringElsewhere.withLock { scheduled in
                 guard scheduled == nil else { return }
                 scheduled = Task { [weak self] in
-                    guard (try? await ContinuousClock().sleep(for: delay)) != nil else { return }
+                    let clock = ContinuousClock()
+                    guard (try? await clock.sleep(for: delay)) != nil else { return }
                     self?.playAnswerElsewhere(question)
+                    guard endingTheTurn, (try? await clock.sleep(for: delay)) != nil else {
+                        return
+                    }
+                    self?.push(.frame(FixtureHost.stateChanged(question.conversationId, "idle")))
                 }
             }
         }
@@ -1321,7 +1374,10 @@
         private func playAnswerElsewhere(_ question: FixtureQuestion) {
             isQuestionAnswered.withLock { $0 = true }
             push(.frame(Self.resolved(question)))
-            push(.frame(FixtureHost.stateChanged(question.conversationId, "working")))
+            push(
+                .frame(
+                    FixtureHost.stateChanged(
+                        question.conversationId, "working", working: [question.companionId])))
             let answer = FixtureHost.messageJSON(
                 id: "answer-elsewhere", conversationId: question.conversationId, seq: 97,
                 role: "user", content: "Full changelog", createdAt: Date.now.milliseconds,
@@ -1413,7 +1469,7 @@
                             conversationId, #"{"type":"turnChanged","state":"running"}"#,
                             by: companionId), after: .milliseconds(300)))
             }
-            push(.frame(FixtureHost.stateChanged(conversationId, "working")))
+            push(.frame(FixtureHost.stateChanged(conversationId, "working", working: summoned)))
             for companionId in summoned {
                 let event = { (event: String) in
                     FixtureHost.agentEvent(conversationId, event, by: companionId)
@@ -1449,7 +1505,11 @@
             push(
                 .frame(
                     event(#"{"type":"turnChanged","state":"running"}"#), after: .milliseconds(300)))
-            push(.frame(FixtureHost.stateChanged(conversationId, "working")))
+            push(
+                .frame(
+                    FixtureHost.stateChanged(
+                        conversationId, "working",
+                        working: [conversationId.replacingOccurrences(of: "chat-", with: "")])))
             let tools = [
                 "Read · notes/changelog.md", "Read · apps/app/package.json",
                 "Read · docs/relay/member-socket.md",

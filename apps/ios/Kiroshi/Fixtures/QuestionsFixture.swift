@@ -10,6 +10,11 @@
             FixtureHost.chat(of: companionId)
         }
 
+        var text: String {
+            let asked = try? JSONDecoder().decode(QuestionRequest.self, from: Data(request.utf8))
+            return (asked?.questions ?? []).map(\.question).joined(separator: "\n")
+        }
+
         var pending: String {
             #"[{"scope":\#(FixtureHost.scope(conversationId)),"turn":{"turnId":"turn-live","conversationId":"\#(conversationId)"},"event":{"type":"questionRequested","request":\#(request)}}]"#
         }

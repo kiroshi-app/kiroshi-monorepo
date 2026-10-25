@@ -95,7 +95,9 @@
                 json(
                     id: "mission-212", ticket: "OPE-212", objective: "Split the onboarding flow",
                     botId: "bot-atlas", state: "waiting_human", isAgentRunning: false,
-                    status: "Asked you which screen goes first.", movedAt: at(hour: 8, minute: 32)),
+                    status: "Asked you which screen goes first.",
+                    question: "Which screen goes first, the account step or the space picker?",
+                    movedAt: at(hour: 8, minute: 32)),
                 json(
                     id: "mission-215", ticket: "OPE-215",
                     objective: "Add dictation to the composer",
@@ -181,7 +183,7 @@
 
         static func json(
             id: String, ticket: String, objective: String, botId: String, state: String,
-            isAgentRunning: Bool, status: String?, movedAt: Int
+            isAgentRunning: Bool, status: String?, question: String? = nil, movedAt: Int
         ) -> String {
             let written = status.map { #"{"text":"\#($0)","writtenAt":\#(movedAt)}"# } ?? "null"
             let thread = id == "mission-212" ? threadConversationId : "thread-\(id)"
@@ -191,8 +193,12 @@
                 case "working", "waiting_bot": isAgentRunning ? "working" : "idle"
                 default: state
                 }
+            let pending =
+                question.map { #"{"promptId":"prompt-\#(id)","kind":"question","text":"\#($0)"}"# }
+                ?? "null"
+            let working = liveness == "working" ? #""\#(botId)""# : ""
             return
-                #"{"id":"\#(id)","originConversationId":"conversation-roadmap","botId":"\#(botId)","threadConversationId":"\#(thread)","objective":"\#(objective)","ticket":{"platform":"linear","externalId":"\#(ticket)","url":"https://linear.app/kiroshi/issue/\#(ticket)","title":"\#(objective)"},"tools":[],"state":"\#(state)","stateSeq":1,"isAgentRunning":\#(isAgentRunning),"liveness":"\#(liveness)","openedAt":\#(movedAt - 600_000),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(movedAt),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}"#
+                #"{"id":"\#(id)","originConversationId":"conversation-roadmap","botId":"\#(botId)","threadConversationId":"\#(thread)","objective":"\#(objective)","ticket":{"platform":"linear","externalId":"\#(ticket)","url":"https://linear.app/kiroshi/issue/\#(ticket)","title":"\#(objective)"},"tools":[],"state":"\#(state)","stateSeq":1,"isAgentRunning":\#(isAgentRunning),"liveness":"\#(liveness)","pendingPrompt":\#(pending),"workingBotIds":[\#(working)],"openedAt":\#(movedAt - 600_000),"closedAt":null,"reportedAt":null,"reportedTurnId":null,"status":\#(written),"lastActivityAt":\#(movedAt),"lastActivity":null,"commitsAhead":null,"dirtyFiles":null,"pullRequestUrl":null,"branch":null,"workspacePath":null}"#
         }
     }
 #endif
