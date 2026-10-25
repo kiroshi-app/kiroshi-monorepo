@@ -366,7 +366,7 @@ mod tests {
 	}
 
 	#[test]
-	fn the_tracked_allows_are_the_auto_merge_and_the_three_feature_branch_pushes() {
+	fn the_tracked_allows_are_the_auto_merge_the_feature_branch_pushes_and_the_dequeue_script() {
 		assert_eq!(
 			tracked_rules(ALLOW_KEY),
 			[
@@ -374,6 +374,8 @@ mod tests {
 				"Bash(git push --force-with-lease origin feature/*)",
 				"Bash(git push origin feature/*)",
 				"Bash(git push -u origin feature/*)",
+				"Bash(scripts/pr-dequeue.sh)",
+				"Bash(./scripts/pr-dequeue.sh)",
 			]
 		);
 	}
@@ -404,12 +406,18 @@ mod tests {
 	}
 
 	#[test]
-	fn the_tracked_denies_are_the_refused_pushes_to_main_and_the_refused_merges() {
+	fn the_tracked_denies_are_the_refused_pushes_and_merges_and_the_dequeue_script_edits() {
 		let refused_pushes = refused_by_design_starting_with("Bash(git push");
 		let refused_merges = refused_by_design_starting_with("Bash(gh pr merge*");
+		let pr_dequeue_script_edits = BTreeSet::from(
+			["Edit(/scripts/pr-dequeue.sh)", "Write(/scripts/pr-dequeue.sh)"].map(str::to_owned),
+		);
 
 		assert_eq!(refused_pushes.len(), 8);
-		assert_eq!(BTreeSet::from_iter(tracked_rules(DENY_KEY)), &refused_pushes | &refused_merges);
+		assert_eq!(
+			BTreeSet::from_iter(tracked_rules(DENY_KEY)),
+			&(&refused_pushes | &refused_merges) | &pr_dequeue_script_edits
+		);
 	}
 
 	#[test]
