@@ -39,6 +39,13 @@ const CLIPPY: Step = {
 	heavy: true,
 }
 
+const PR_DEQUEUE_UNIT_TESTS: Step = {
+	name: "PR dequeue script unit tests",
+	command: "bun run test:pr-dequeue",
+}
+
+const PR_DEQUEUE_PATHS = ["scripts/pr-dequeue.sh", "scripts/pr-dequeue.test.ts"]
+
 const BINDINGS_MATCH: Step = {
 	name: "Bindings match the command surface",
 	command: "git diff --exit-code apps/app/src/lib/bindings.ts",
@@ -53,6 +60,7 @@ export const GATE = {
 			command: "bun run test:ci-changes",
 		},
 		{ name: "Red main reporter unit tests", command: "bun run test:red-main" },
+		PR_DEQUEUE_UNIT_TESTS,
 		{ name: "Gate definition matches ci.yml", command: "bun run test:ci" },
 		{
 			name: "Biome and knip against the baseline",
@@ -157,7 +165,8 @@ const OFF_PULL_REQUEST_TRIGGERS: Partial<Record<Group, string>> = {
 // dozen agents loading the machine, which the full unit set cannot do. It
 // runs the format, Biome and knip against the baseline, the types, and only
 // the apps/app and packages/ui unit test files changed since origin/main,
-// never a file of the apps/app perf project. bun run ci and the CI jobs
+// never a file of the apps/app perf project, and the pr-dequeue script tests
+// when the diff touches the script or its tests. bun run ci and the CI jobs
 // keep the rest: the full unit set, the perf set, the story ids, the
 // stories, the website and sidecar suites, rust, the website build and ios.
 export const FAST_STEP_NAMES = [
@@ -175,12 +184,16 @@ export const SIMULATOR_LOOKUP = `xcrun simctl list devices available "iOS $(cat 
 
 const gateSteps = (): Step[] => GROUP_ORDER.flatMap((group) => GATE[group])
 
-export const fastSteps = (): Step[] => [
+const touchesPrDequeue = (changedPaths: string[]) =>
+	changedPaths.some((path) => PR_DEQUEUE_PATHS.includes(path))
+
+export const fastSteps = (changedPaths: string[]): Step[] => [
 	...FAST_STEP_NAMES.map((name) => {
 		const step = gateSteps().find((candidate) => candidate.name === name)
 		if (!step) throw new Error(`ci:fast names "${name}", not a gate step`)
 		return step
 	}),
+	...(touchesPrDequeue(changedPaths) ? [PR_DEQUEUE_UNIT_TESTS] : []),
 	CHANGED_UNIT_TESTS,
 ]
 
@@ -303,7 +316,8 @@ const runGate = () => {
 
 const runRequested = (argument: string | undefined) => {
 	if (argument === undefined) return runGate()
-	if (argument === "fast") return runSteps("fast", fastSteps())
+	if (argument === "fast")
+		return runSteps("fast", fastSteps(pathsChangedSinceMain()))
 	if (argument === "changed") return runSteps("changed", [CHANGED_UNIT_TESTS])
 	if (isGroup(argument)) return runGroup(argument)
 	throw new Error(

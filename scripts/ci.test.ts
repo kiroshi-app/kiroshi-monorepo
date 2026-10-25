@@ -353,9 +353,14 @@ describe("the gate", () => {
 
 describe("ci:fast", () => {
 	const gate = GROUP_ORDER.flatMap((group) => GATE[group])
+	const PR_DEQUEUE_PATHS = [
+		"scripts/pr-dequeue.sh",
+		"scripts/pr-dequeue.test.ts",
+	]
+	const PR_DEQUEUE_STEP = "PR dequeue script unit tests"
 
 	it("runs the named gate steps with the same command, then the changed unit tests", () => {
-		const steps = fastSteps()
+		const steps = fastSteps([])
 
 		expect(steps.map((step) => step.name)).toEqual([
 			...FAST_STEP_NAMES,
@@ -366,11 +371,34 @@ describe("ci:fast", () => {
 
 	it("leaves the full unit set and the perf set to the gate", () => {
 		expect(gate).not.toContainEqual(CHANGED_UNIT_TESTS)
-		for (const step of GATE.vitest) expect(fastSteps()).not.toContainEqual(step)
+		for (const step of GATE.vitest)
+			expect(fastSteps(PR_DEQUEUE_PATHS)).not.toContainEqual(step)
 	})
 
 	it("takes no slot", () => {
-		expect(fastSteps().filter((step) => step.heavy)).toEqual([])
+		expect(fastSteps(PR_DEQUEUE_PATHS).filter((step) => step.heavy)).toEqual([])
+	})
+
+	it.each(PR_DEQUEUE_PATHS)(
+		"runs the lint step of the pr-dequeue tests before the changed unit tests when the diff touches %s",
+		(path) => {
+			const steps = fastSteps(["AGENTS.md", path])
+			const dequeue = steps[FAST_STEP_NAMES.length]
+
+			expect(steps.map((step) => step.name)).toEqual([
+				...FAST_STEP_NAMES,
+				PR_DEQUEUE_STEP,
+				CHANGED_UNIT_TESTS.name,
+			])
+			expect(GATE.lint).toContainEqual(dequeue)
+			expect(dequeue.command).toBe("bun run test:pr-dequeue")
+		},
+	)
+
+	it("leaves the pr-dequeue tests out when the diff touches neither the script nor its tests", () => {
+		expect(
+			fastSteps(["scripts/slot.sh", "scripts/ci.ts"]).map((step) => step.name),
+		).not.toContain(PR_DEQUEUE_STEP)
 	})
 })
 

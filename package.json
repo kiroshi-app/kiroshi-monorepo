@@ -30,6 +30,7 @@
 		"test:red-main": "bun test scripts/red-main.test.ts",
 		"test:ci": "bun test scripts/ci.test.ts",
 		"test:release": "bun test scripts/release.test.ts",
+		"test:pr-dequeue": "bun test scripts/pr-dequeue.test.ts",
 		"test:slot": "bun test scripts/slot.test.ts",
 		"baseline:update": "bun scripts/baseline.ts --update",
 		"baseline:prune": "bun scripts/baseline.ts --prune",
