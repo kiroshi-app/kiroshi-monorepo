@@ -57,6 +57,19 @@
         static let inlineCode = """
             The flag is `--force-with-lease`, set in `push.default`. Your `.gitconfig` already has it.
             """
+        static let copiedCode = """
+            Push it with `--force-with-lease`.
+
+            Read the [push guide](https://kiroshi.app/support) before `--force-with-lease`.
+
+            | Flag | Refuses |
+            |---|---|
+            | `--force-with-lease` | A stale push |
+
+            ```sh
+            git push --force-with-lease
+            ```
+            """
         static let swiftCode = """
             ```swift
             struct Release {
@@ -204,6 +217,7 @@
             "all": (true, [everyFamily]),
             "group-openings": (true, [tasks, swiftCode]),
             "fitting-code": (false, [fittingCode]),
+            "copied-code": (false, [copiedCode]),
         ]
 
         static var artboard: (isGroup: Bool, replies: [String]) {

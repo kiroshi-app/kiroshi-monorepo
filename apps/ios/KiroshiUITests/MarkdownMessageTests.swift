@@ -122,6 +122,19 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertTrue(pasted.hasSuffix("main --> tag[Tag v4.2]\n```"), pasted)
     }
 
+    func testInlineCodeReadsTheHyphensTheCompanionWroteAndKeepsTheLinkBesideIt() {
+        for size in ["UICTContentSizeCategoryL", "UICTContentSizeCategoryAccessibilityXXXL"] {
+            let app = launch(
+                "markdown", "-artboard", "copied-code", "-UIPreferredContentSizeCategoryName", size)
+            let linked = app.staticTexts["Read the push guide before --force-with-lease."]
+            XCTAssertTrue(linked.waitForExistence(timeout: 10), size)
+
+            XCTAssertTrue(linked.links["push guide"].exists, size)
+            XCTAssertTrue(app.staticTexts["Push it with --force-with-lease."].exists, size)
+            XCTAssertTrue(app.staticTexts["--force-with-lease"].exists, size)
+        }
+    }
+
     func testAReplyWithEveryFamilyReadsBlockByBlockAndPassesTheAudit() throws {
         let app = launch("markdown", "-artboard", "all")
         XCTAssertTrue(app.staticTexts["Juniper, Release 4.2"].waitForExistence(timeout: 10))
