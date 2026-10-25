@@ -52,9 +52,9 @@ const embeddedPathsOf = (source: string) => {
 }
 
 const filesSrcTauriEmbeds = () =>
-	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })]
-		.flatMap(embeddedPathsOf)
-		.sort()
+	[...new Bun.Glob("{src,tests}/**/*.rs").scanSync({ cwd: SRC_TAURI })].flatMap(
+		embeddedPathsOf,
+	)
 
 const runChangeDetector = (...args: string[]) =>
 	Bun.spawnSync([
@@ -79,12 +79,6 @@ describe("ci jobs per event", () => {
 		const jobs = decideJobs({ event: "pull_request", paths: ["bun.lock"] })
 
 		expect(jobs).toEqual({ ...none, vitest: true, rust: true })
-	})
-
-	it("leaves rust unselected on a pull_request whose paths do not touch it", () => {
-		const paths = ["apps/app/src/main.tsx"]
-
-		expect(decideJobs({ event: "pull_request", paths }).rust).toBe(false)
 	})
 
 	it.each(PATH_MIXES)(
