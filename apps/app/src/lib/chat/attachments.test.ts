@@ -146,6 +146,16 @@ describe("a refused store", () => {
 		).toBe("huge.bin is over the 20 MB file limit. Attach a smaller one.")
 	})
 
+	it("names the file whose content the host could not read", () => {
+		expect(
+			describeAttachmentError(t, {
+				kind: "unreadable",
+				name: "photo.jpg",
+				detail: "carries neither base64 nor bytes",
+			}),
+		).toBe("Couldn’t read photo.jpg. Attach it again.")
+	})
+
 	it("reads a refusal the host sent as it was sent", () => {
 		expect(
 			toAttachmentStoreError({ kind: "tooMany", count: 21, limit: 20 }),

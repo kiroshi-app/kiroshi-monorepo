@@ -6,6 +6,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Router;
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::sync::{Mutex, PoisonError};
 use tauri::ipc::{CallbackFn, InvokeBody, InvokeError, InvokeResponse, InvokeResponseBody};
@@ -15,6 +16,7 @@ use tokio::sync::oneshot;
 
 use super::cors::WINDOW_ORIGIN;
 use super::token::HostToken;
+use crate::attachments::contract::AttachmentStoreError;
 use crate::routines::webhook::{named_here, Calls};
 
 pub const PATH: &str = "/api/invoke/{command}";
@@ -29,6 +31,8 @@ pub(crate) const RELAYED_MEMBER_HEADER: HeaderName =
 	HeaderName::from_static("kiroshi-relayed-member");
 
 pub(crate) const REFUSED_TO_A_MEMBER: &str = "refusedToAMember";
+
+const STORE_ATTACHMENTS: &str = "chat_store_attachments";
 
 const BLANK_PAGE: &str = "about:blank";
 
@@ -227,9 +231,21 @@ fn answered(command: &str, response: InvokeResponse) -> Response {
 				.into_response()
 		}
 		InvokeResponse::Err(InvokeError(error)) => {
-			(StatusCode::INTERNAL_SERVER_ERROR, [(header::CONTENT_TYPE, JSON)], error.to_string())
-				.into_response()
+			let status = attachment_refusal_status(command, &error)
+				.unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+			(status, [(header::CONTENT_TYPE, JSON)], error.to_string()).into_response()
 		}
+	}
+}
+
+fn attachment_refusal_status(command: &str, error: &Value) -> Option<StatusCode> {
+	if command != STORE_ATTACHMENTS {
+		return None;
+	}
+	match AttachmentStoreError::deserialize(error).ok()? {
+		AttachmentStoreError::Unreadable { .. } => Some(StatusCode::BAD_REQUEST),
+		refusal if refusal.exceeds_a_limit() => Some(StatusCode::PAYLOAD_TOO_LARGE),
+		_ => None,
 	}
 }
 

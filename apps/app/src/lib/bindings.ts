@@ -506,7 +506,7 @@ export type AskedQuestion = {
 	multiSelect: boolean,
 };
 
-export type AttachmentStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownConversation"; id: string } | { kind: "tooMany"; count: number; limit: number } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "tooLargeTogether"; bytes: number; limit: number } | { kind: "unwritable"; detail: string };
+export type AttachmentStoreError = { kind: "unavailable"; failure: StorageFailure } | { kind: "storage"; failure: StorageFailure } | { kind: "unknownConversation"; id: string } | { kind: "tooMany"; count: number; limit: number } | { kind: "tooLarge"; name: string; bytes: number; limit: number } | { kind: "tooLargeTogether"; bytes: number; limit: number } | { kind: "unreadable"; name: string; detail: string } | { kind: "unwritable"; detail: string };
 
 export type AuthPosture = "authRequired" | "noAuth";
 
@@ -1614,7 +1614,8 @@ export type StorageFailure = { kind: "appDataDir" } | { kind: "journalMode"; mod
 
 export type SubmittedAttachment = {
 	name: string,
-	bytes: number[],
+	bytes?: number[] | null,
+	base64?: string | null,
 };
 
 export type SubmittedTurn = {

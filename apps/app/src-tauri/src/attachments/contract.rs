@@ -8,7 +8,12 @@ use crate::db::DatabaseError;
 #[serde(rename_all = "camelCase")]
 pub struct SubmittedAttachment {
 	pub name: String,
-	pub bytes: Vec<u8>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub bytes: Option<Vec<u8>>,
+	#[serde(default)]
+	#[specta(optional)]
+	pub base64: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -27,7 +32,20 @@ pub enum AttachmentStoreError {
 	#[serde(rename_all = "camelCase")]
 	TooLargeTogether { bytes: u64, limit: u64 },
 	#[serde(rename_all = "camelCase")]
+	Unreadable { name: String, detail: String },
+	#[serde(rename_all = "camelCase")]
 	Unwritable { detail: String },
+}
+
+impl AttachmentStoreError {
+	pub fn exceeds_a_limit(&self) -> bool {
+		matches!(
+			self,
+			AttachmentStoreError::TooMany { .. }
+				| AttachmentStoreError::TooLarge { .. }
+				| AttachmentStoreError::TooLargeTogether { .. }
+		)
+	}
 }
 
 impl From<Rejection> for AttachmentStoreError {
@@ -39,6 +57,9 @@ impl From<Rejection> for AttachmentStoreError {
 			}
 			Rejection::TooLargeTogether { bytes, limit } => {
 				AttachmentStoreError::TooLargeTogether { bytes, limit }
+			}
+			Rejection::Unreadable { name, detail } => {
+				AttachmentStoreError::Unreadable { name, detail }
 			}
 			Rejection::Unwritable { detail } => AttachmentStoreError::Unwritable { detail },
 		}
@@ -84,9 +105,37 @@ mod tests {
 			json!({ "kind": "tooLargeTogether", "bytes": 101, "limit": 100 })
 		);
 		assert_eq!(
+			crosses_as(AttachmentStoreError::Unreadable {
+				name: "photo.jpg".to_owned(),
+				detail: "carries neither base64 nor bytes".to_owned()
+			}),
+			json!({
+				"kind": "unreadable",
+				"name": "photo.jpg",
+				"detail": "carries neither base64 nor bytes"
+			})
+		);
+		assert_eq!(
 			crosses_as(AttachmentStoreError::Unwritable { detail: "no space".to_owned() }),
 			json!({ "kind": "unwritable", "detail": "no space" })
 		);
+	}
+
+	#[test]
+	fn only_a_limit_refusal_exceeds_a_limit() {
+		let over = [
+			AttachmentStoreError::TooMany { count: 21, limit: 20 },
+			AttachmentStoreError::TooLarge { name: "a".to_owned(), bytes: 2, limit: 1 },
+			AttachmentStoreError::TooLargeTogether { bytes: 2, limit: 1 },
+		];
+		let within = [
+			AttachmentStoreError::Unreadable { name: "a".to_owned(), detail: "d".to_owned() },
+			AttachmentStoreError::Unwritable { detail: "d".to_owned() },
+			AttachmentStoreError::UnknownConversation { id: "c1".to_owned() },
+		];
+
+		assert!(over.iter().all(AttachmentStoreError::exceeds_a_limit));
+		assert!(!within.iter().any(AttachmentStoreError::exceeds_a_limit));
 	}
 
 	#[test]
@@ -97,7 +146,27 @@ mod tests {
 
 		assert_eq!(
 			submitted,
-			SubmittedAttachment { name: "notes.md".to_owned(), bytes: vec![1, 2, 3] }
+			SubmittedAttachment {
+				name: "notes.md".to_owned(),
+				bytes: Some(vec![1, 2, 3]),
+				base64: None
+			}
+		);
+	}
+
+	#[test]
+	fn a_submitted_file_is_read_from_the_base64_shape_a_member_sends() {
+		let submitted: SubmittedAttachment =
+			serde_json::from_value(json!({ "name": "photo.jpg", "base64": "AQID" }))
+				.expect("the submission parses");
+
+		assert_eq!(
+			submitted,
+			SubmittedAttachment {
+				name: "photo.jpg".to_owned(),
+				bytes: None,
+				base64: Some("AQID".to_owned())
+			}
 		);
 	}
 }
