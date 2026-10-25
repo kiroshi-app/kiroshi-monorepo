@@ -192,6 +192,50 @@ final class MarkdownMessageTests: XCTestCase {
         }
     }
 
+    func testAMentionParagraphTallerThanOneTextureShowsItsTextAtTheLargestTextSize() throws {
+        let app = launch(
+            "markdown", "-artboard", "tall-mention", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        let paragraph = app.scrollViews.firstMatch.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "where the release stands")
+        ).firstMatch
+        XCTAssertTrue(paragraph.waitForExistence(timeout: 10))
+        let window = app.windows.firstMatch.frame
+
+        XCTAssertGreaterThan(paragraph.frame.height, 16384 / 3)
+        let middle = CGRect(x: window.minX, y: window.midY - 100, width: window.width, height: 200)
+        let shown = paragraph.frame.intersection(middle)
+        XCTAssertEqual(shown.height, middle.height)
+        XCTAssertGreaterThan(inkedPixels(in: shown, of: app.screenshot().image, window: window), 0)
+        try auditTheReply(app)
+    }
+
+    func inkedPixels(in area: CGRect, of screenshot: UIImage, window: CGRect) -> Int {
+        guard let image = screenshot.cgImage else { return 0 }
+        let scale = CGFloat(image.width) / window.width
+        let crop = CGRect(
+            x: area.minX * scale, y: area.minY * scale, width: area.width * scale,
+            height: area.height * scale
+        ).integral
+        guard let region = image.cropping(to: crop) else { return 0 }
+        let width = region.width
+        let height = region.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        guard
+            let context = CGContext(
+                data: &bytes, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return 0 }
+        context.draw(region, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let lightness = stride(from: 0, to: bytes.count, by: 4).map { index in
+            (Int(bytes[index]) + Int(bytes[index + 1]) + Int(bytes[index + 2])) / 3
+        }
+        let counts = Dictionary(grouping: lightness, by: { $0 }).mapValues(\.count)
+        guard let fill = counts.max(by: { $0.value < $1.value })?.key else { return 0 }
+        return lightness.filter { abs($0 - fill) > 100 }.count
+    }
+
     func labels(in app: XCUIApplication) -> [String] {
         guard let transcript = try? app.scrollViews.firstMatch.snapshot() else { return [] }
         return readingOrder(of: transcript)
