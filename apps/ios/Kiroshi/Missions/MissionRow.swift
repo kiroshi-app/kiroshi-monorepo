@@ -3,6 +3,7 @@ import SwiftUI
 struct MissionRow: View {
     let mission: Mission
     let companion: MissionCompanion?
+    let detail: String
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -16,7 +17,7 @@ struct MissionRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     TicketChip(id: mission.ticket.externalId)
                 }
-                Text(mission.detailLine(companion: companion))
+                Text(detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(lineLimit)

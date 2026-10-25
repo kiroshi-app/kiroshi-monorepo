@@ -4,6 +4,8 @@ struct MissionChanged: Decodable, Equatable, Sendable {
     let stateSeq: Int
     let isAgentRunning: Bool
     var liveness: Mission.Liveness?
+    var pendingPrompt: PendingPrompt?
+    var workingBotIds: [String] = []
     let lastActivityAt: Int?
 
     private enum CodingKeys: String, CodingKey {
@@ -12,6 +14,8 @@ struct MissionChanged: Decodable, Equatable, Sendable {
         case stateSeq
         case isAgentRunning
         case liveness
+        case pendingPrompt
+        case workingBotIds
         case lastActivityAt
     }
 }
@@ -33,6 +37,9 @@ extension MissionChanged {
         isAgentRunning = try container.decode(Bool.self, forKey: .isAgentRunning)
         liveness = (try? container.decodeIfPresent(String.self, forKey: .liveness))
             .flatMap(Mission.Liveness.init(rawValue:))
+        pendingPrompt = try? container.decodeIfPresent(PendingPrompt.self, forKey: .pendingPrompt)
+        workingBotIds =
+            (try? container.decodeIfPresent([String].self, forKey: .workingBotIds)) ?? []
         lastActivityAt = try container.decodeIfPresent(Int.self, forKey: .lastActivityAt)
     }
 }

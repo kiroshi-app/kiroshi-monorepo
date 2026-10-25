@@ -51,9 +51,9 @@ struct ConversationRelay: Sendable {
         return try await ask("conversation_create", args, as: GroupConversation.self)
     }
 
-    func mainChat(of companionId: Companion.ID, in spaceId: String) async throws -> String {
+    func mainChat(of companionId: Companion.ID, in spaceId: String) async throws -> MainChat {
         let args = MainChatArgs(botId: companionId, spaceId: spaceId)
-        return try await ask("conversation_main_chat", args, as: MainChat.self).id
+        return try await ask("conversation_main_chat", args, as: MainChat.self)
     }
 
     func latestMessages(in conversationId: String, limit: Int) async throws -> [TranscriptMessage] {
@@ -126,8 +126,19 @@ private struct StoreError: Decodable {
     let kind: String
 }
 
-private struct MainChat: Decodable {
+struct MainChat: Decodable, Sendable {
     let id: String
+    let observed: ObservedState
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        observed = try ObservedState(from: decoder)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+    }
 }
 
 private struct InConversationArgs: Encodable {

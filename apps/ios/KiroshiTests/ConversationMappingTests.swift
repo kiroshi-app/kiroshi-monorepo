@@ -129,8 +129,8 @@ struct ConversationMappingTests {
                 #"{"id":"t","title":"Old","createdAt":1,"participants":[],"lastActivityAt":9}"#
                     .utf8))
 
-        #expect(row.state == state)
-        #expect(older.state == .idle)
+        #expect(row.observed.state == state)
+        #expect(older.observed == ObservedState())
     }
 
     @Test(arguments: [
@@ -150,9 +150,9 @@ struct ConversationMappingTests {
             return
         }
         var summary = ConversationSummary(subject: .companion(Companion(id: "a", name: "Atlas")))
-        summary.state = change.state
+        summary.observed = change.observed
         #expect(change.conversationId == "c1")
-        #expect(change.state == state)
+        #expect(change.observed == ObservedState(state: state))
         #expect(summary.isWorking == isWorking)
         #expect(summary.needsYou == needsYou)
     }

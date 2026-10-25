@@ -95,11 +95,122 @@ struct ConversationsStoreTests {
         await connection.stop()
     }
 
-    func pushState(_ state: String, of conversationId: String, to host: TestHost) {
+    func pushState(
+        _ state: String, of conversationId: String, to host: TestHost, prompt: String? = nil,
+        working: [Companion.ID] = []
+    ) {
+        let observed = FixtureHost.observedJSON(state, prompt: prompt, working: working)
         host.push(
             event: "conversation://state-changed",
-            payload:
-                #"{"conversationId":"\#(conversationId)","spaceId":"s-1","state":"\#(state)"}"#)
+            payload: #"{"conversationId":"\#(conversationId)","spaceId":"s-1",\#(observed)}"#)
+    }
+
+    nonisolated static let question = "Which format should the release notes take?"
+
+    @Test func aRowWaitingOnYouShowsTheQuestionUntilItIsAnswered() async {
+        let host = host
+        let (store, connection, following) = await follow(host)
+        let row = { store.summaries.first { $0.id == "juniper" } }
+
+        pushState("needs_you", of: "chat-juniper", to: host, prompt: Self.question)
+        await waitUntil { row()?.needsYou == true }
+        #expect(row()?.preview == Self.question)
+
+        pushState("working", of: "chat-juniper", to: host, working: [juniper.id])
+        await waitUntil { row()?.isWorking == true }
+        #expect(row()?.preview == "Juniper is working…")
+
+        pushState("idle", of: "chat-juniper", to: host)
+        await waitUntil { row()?.state == .idle }
+        #expect(row()?.preview == "The release notes are drafted.")
+        #expect(row()?.timeLabel != "Now")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aQuestionWithoutTextKeepsTheLastMessage() async {
+        let host = host
+        let (store, connection, following) = await follow(host)
+        let row = { store.summaries.first { $0.id == "juniper" } }
+
+        pushState("needs_you", of: "chat-juniper", to: host, prompt: "")
+        await waitUntil { row()?.needsYou == true }
+
+        #expect(row()?.preview == "The release notes are drafted.")
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test(arguments: [
+        (["juniper"], "Juniper is working…"),
+        (["juniper", "atlas"], "Juniper and Atlas are working…"),
+        (["juniper", "atlas", "pico"], "Juniper and 2 others are working…"),
+        (["ghost", "atlas"], "Atlas is working…"),
+        (["ghost"], "working…"),
+        ([], "working…"),
+    ])
+    func aWorkingGroupNamesItsCompanionsAndSkipsAnUnknownOne(ids: [String], line: String) async {
+        let host = hostWithGroups
+        let (store, connection, following) = await follow(host)
+        let row = { store.summaries.first { $0.id == "group-release" } }
+
+        pushState("working", of: "group-release", to: host, working: ids)
+        await waitUntil { row()?.isWorking == true }
+
+        #expect(row()?.preview == line)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func theMainConversationShowsTheStateItIsReadWith() async {
+        let host = TestHost(companions: [juniper, atlas, pico]) { call in
+            guard call.command == "conversation_main_chat",
+                let botId = try? call.args(as: TestHost.BotArgs.self).botId
+            else { return nil }
+            let observed =
+                switch botId {
+                case "juniper":
+                    FixtureHost.observedJSON("needs_you", prompt: Self.question, working: [])
+                case "atlas": FixtureHost.observedJSON("working", prompt: nil, working: ["atlas"])
+                default: FixtureHost.observedJSON("idle", prompt: nil, working: [])
+                }
+            return TestHost.ok(
+                call, #"{"id":"chat-\#(botId)","createdAt":0,"updatedAt":0,\#(observed)}"#)
+        }
+        let (store, connection, following) = await follow(host)
+        let row = { (id: String) in store.summaries.first { $0.id == id } }
+
+        #expect(row("juniper")?.needsYou == true)
+        #expect(row("juniper")?.preview == Self.question)
+        #expect(row("atlas")?.preview == "Atlas is working…")
+        #expect(row("pico")?.state == .idle)
+        following.cancel()
+        await connection.stop()
+    }
+
+    @Test func aPageRowShowsItsQuestionAndItsWorkingCompanions() async {
+        let release = FixtureHost.Group(
+            id: "group-release", title: "Release crew", members: [juniper, atlas], createdAt: 0)
+        let calm = FixtureHost.Group(
+            id: "group-calm", title: "Calm", members: [pico], createdAt: 0)
+        let host = TestHost(companions: [juniper, atlas, pico], groups: [release, calm]) { call in
+            guard call.command == "conversation_page" else { return nil }
+            var asking = TestHost.pageRow(release, last: nil)
+            asking.state = "needs_you"
+            asking.prompt = Self.question
+            var working = TestHost.pageRow(calm, last: nil)
+            working.state = "working"
+            working.working = [pico.id]
+            let page = FixtureHost.conversationPage([asking, working], cursor: nil, limit: 30)
+            return TestHost.ok(call, page)
+        }
+        let (store, connection, following) = await follow(host)
+        let row = { (id: String) in store.summaries.first { $0.id == id } }
+
+        #expect(row("group-release")?.preview == Self.question)
+        #expect(row("group-calm")?.preview == "Pico is working…")
+        following.cancel()
+        await connection.stop()
     }
 
     @Test func theHostStateMovesItsRowLive() async {

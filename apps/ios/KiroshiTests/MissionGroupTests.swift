@@ -128,6 +128,59 @@ struct MissionGroupTests {
         #expect(mission.detailLine(companion: nil) == "Asked you which screen goes first.")
     }
 
+    @Test func aMissionWaitingOnYouShowsTheQuestionAndAWorkingOneNamesItsCompanions() {
+        let atlas = Companion(id: "bot-1", name: "Atlas")
+        let pico = Companion(id: "bot-2", name: "Pico")
+        let asking = MissionTesting.mission(
+            state: "waiting_human", liveness: "needs_you",
+            status: "Asked you which screen goes first.",
+            presence:
+                #""pendingPrompt":{"promptId":"p1","kind":"question","text":"Which screen goes first?"},"#
+        )
+        let blank = MissionTesting.mission(
+            state: "waiting_human", liveness: "needs_you",
+            status: "Asked you which screen goes first.",
+            presence: #""pendingPrompt":{"promptId":"p1","kind":"question","text":""},"#)
+        let working = { (ids: String) in
+            MissionTesting.mission(
+                isAgentRunning: true, liveness: "working", presence: #""workingBotIds":\#(ids),"#)
+        }
+
+        #expect(
+            asking.detailLine(companion: atlas, among: [atlas])
+                == "Atlas · Which screen goes first?")
+        #expect(
+            blank.detailLine(companion: atlas, among: [atlas])
+                == "Atlas · Asked you which screen goes first.")
+        #expect(
+            working(#"["bot-1"]"#).detailLine(companion: atlas, among: [atlas, pico])
+                == "Atlas · Working now")
+        #expect(
+            working(#"["bot-1","bot-2"]"#).detailLine(companion: atlas, among: [atlas, pico])
+                == "Atlas and Pico · Working now")
+        #expect(
+            working(#"["ghost"]"#).detailLine(companion: atlas, among: [atlas, pico])
+                == "Atlas · Working now")
+    }
+
+    @Test func aChangeCarriesTheQuestionAndClearsItOnceAnswered() {
+        let mission = MissionTesting.mission(state: "working", stateSeq: 4, liveness: "idle")
+        let question = PendingPrompt(promptId: "p1", text: "Which screen goes first?")
+        let asking = mission.moved(
+            by: MissionChanged(
+                missionId: mission.id, state: .working, stateSeq: 4, isAgentRunning: false,
+                liveness: .needsYou, pendingPrompt: question, lastActivityAt: 9))
+        let answered = asking.moved(
+            by: MissionChanged(
+                missionId: mission.id, state: .working, stateSeq: 4, isAgentRunning: true,
+                liveness: .working, workingBotIds: ["bot-1"], lastActivityAt: 10))
+
+        #expect(asking.statusLine == "Which screen goes first?")
+        #expect(answered.pendingPrompt == nil)
+        #expect(answered.workingBotIds == ["bot-1"])
+        #expect(answered.statusLine == "Working now")
+    }
+
     @Test func aChangeMovesTheMissionUnlessItIsStale() {
         let mission = MissionTesting.mission(state: "working", stateSeq: 4)
         let moved = mission.moved(

@@ -15,7 +15,10 @@ final class ConversationsAccessibilityTests: XCTestCase {
         "Ada Lovelace: Can we keep the grouped inset list for settings?",
         "You: Send me the notes once they’re drafted.",
         "Noor Haddad: Can you split the onboarding ticket in two?",
+        "Which format should the release notes take?",
     ]
+
+    static let question = "Which format should the release notes take?"
 
     static let pileCounters: Set<String> = ["+2", "+3"]
 
@@ -122,6 +125,90 @@ final class ConversationsAccessibilityTests: XCTestCase {
         XCTAssertTrue(juniper.label.contains("Now"), juniper.label)
 
         try auditTheHome(app)
+    }
+
+    func keep(_ name: String, of app: XCUIApplication) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    func row(_ name: String, reading text: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", name, text)
+        ).firstMatch
+    }
+
+    func testARowReadsTheQuestionWaitingAndWhoWorksThenPassesTheAudit() throws {
+        let app = launchInEnglish("questions-2.1")
+
+        XCTAssertTrue(row("Juniper", reading: Self.question, in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(row("Atlas", reading: "Atlas is working…", in: app).exists)
+        keep("Conversations · question and working companion", of: app)
+
+        try auditTheRows(app)
+    }
+
+    func testAtTheLargestTextSizeARowStillReadsTheQuestionAndTheWorkingName() throws {
+        let app = launchInEnglish(
+            "questions-2.1", "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL")
+        let juniper = row("Juniper", reading: Self.question, in: app)
+        XCTAssertTrue(juniper.waitForExistence(timeout: 10))
+        keep("Conversations · AX5 · question", of: app)
+        let atlas = row("Atlas", reading: "Atlas is working…", in: app)
+        app.swipeUp()
+        XCTAssertTrue(atlas.waitForExistence(timeout: 5))
+        keep("Conversations · AX5 · working companion", of: app)
+
+        try auditTheRows(app)
+    }
+
+    func auditTheRows(_ app: XCUIApplication) throws {
+        let titleBottom = titleBottom(in: app) + GroupThreadTests.softScrollEdgeDepth
+        let navigationBar = app.navigationBars.firstMatch.frame
+        let tabBar = app.tabBars.firstMatch.frame
+        try audit(app) { issue in
+            guard let element = issue.element else { return issue.auditType == .textClipped }
+            let isTheArtboardOrange =
+                element.label == "Now" || element.label.hasSuffix("Needs you")
+            let isUnderTheBars =
+                element.frame.minY < titleBottom || element.frame.intersects(tabBar)
+            return switch issue.auditType {
+            case .textClipped: Self.truncatedPreviews.contains(element.label)
+            case .contrast: isTheArtboardOrange || isUnderTheBars
+            case .dynamicType: navigationBar.contains(element.frame) || isUnderTheBars
+            default: false
+            }
+        }
+    }
+
+    func testAWorkingGroupNamesBothCompanionsInItsRow() throws {
+        let app = launchInEnglish("group-working")
+        let back = app.navigationBars.buttons["BackButton"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10))
+        back.tap()
+
+        XCTAssertTrue(
+            row("Release crew", reading: "Juniper and Atlas are working…", in: app)
+                .waitForExistence(timeout: 10))
+        keep("Conversations · working group", of: app)
+    }
+
+    func testARowGoesBackToItsLastMessageOnceTheQuestionIsAnsweredOnTheMac() throws {
+        let app = launchInEnglish("questions-2.1", "-answeredAfter", "4")
+
+        XCTAssertTrue(row("Juniper", reading: Self.question, in: app).waitForExistence(timeout: 10))
+        keep("Conversations · live · question waiting", of: app)
+        XCTAssertTrue(
+            row("Juniper", reading: "Juniper is working…", in: app).waitForExistence(timeout: 10))
+        keep("Conversations · live · answered, working", of: app)
+        XCTAssertTrue(
+            row("Juniper", reading: "Full changelog", in: app).waitForExistence(timeout: 10))
+        XCTAssertFalse(row("Juniper", reading: "Needs you", in: app).exists)
+        XCTAssertFalse(row("Juniper", reading: "working…", in: app).exists)
+        keep("Conversations · live · back to normal", of: app)
     }
 
     func testTheCompanionListPassesTheAuditAndAGroupRowReadsItsMembersAndOpensItsThread() throws {

@@ -45,6 +45,10 @@ final class MissionsStore {
         companions[mission.botId]
     }
 
+    func detailLine(of mission: Mission) -> String {
+        mission.detailLine(companion: companion(of: mission), among: Array(companions.values))
+    }
+
     func live(_ mission: Mission) -> Mission {
         entries.first { $0.mission.id == mission.id }?.mission ?? mission
     }

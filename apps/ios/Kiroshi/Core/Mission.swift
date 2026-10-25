@@ -37,6 +37,8 @@ struct Mission: Decodable, Identifiable, Hashable, Sendable {
     var stateSeq: Int
     var isAgentRunning: Bool
     var liveness: Liveness?
+    var pendingPrompt: PendingPrompt?
+    var workingBotIds: [String] = []
     let openedAt: Int
     let closedAt: Int?
     var lastActivityAt: Int?
@@ -54,6 +56,8 @@ extension Mission {
         case stateSeq
         case isAgentRunning
         case liveness
+        case pendingPrompt
+        case workingBotIds
         case openedAt
         case closedAt
         case lastActivityAt
@@ -72,6 +76,9 @@ extension Mission {
         isAgentRunning = try container.decode(Bool.self, forKey: .isAgentRunning)
         liveness = (try? container.decodeIfPresent(String.self, forKey: .liveness))
             .flatMap(Liveness.init(rawValue:))
+        pendingPrompt = try? container.decodeIfPresent(PendingPrompt.self, forKey: .pendingPrompt)
+        workingBotIds =
+            (try? container.decodeIfPresent([String].self, forKey: .workingBotIds)) ?? []
         openedAt = try container.decode(Int.self, forKey: .openedAt)
         closedAt = try container.decodeIfPresent(Int.self, forKey: .closedAt)
         lastActivityAt = try container.decodeIfPresent(Int.self, forKey: .lastActivityAt)
