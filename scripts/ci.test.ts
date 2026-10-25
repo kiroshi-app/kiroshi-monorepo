@@ -9,7 +9,7 @@ import {
 	GROUP_ORDER,
 	type Group,
 	offPullRequestNote,
-	RUST_LIB_STEPS,
+	RUST_PULL_REQUEST_STEPS,
 	SIMULATOR_LOOKUP,
 	type Step,
 	skipReason,
@@ -266,16 +266,19 @@ describe("the gate", () => {
 		}
 	})
 
-	it("runs rustfmt, clippy and the library tests on a pull_request, never an integration target", () => {
-		expect(RUST_LIB_STEPS.map((step) => step.command)).toEqual([
+	it("runs rustfmt, clippy, the library tests and every integration target on a pull_request", () => {
+		expect(RUST_PULL_REQUEST_STEPS.map((step) => step.command)).toEqual([
 			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
 			"bun run --filter sidecar build",
 			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
 			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
+			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
 		])
 		expect(
-			RUST_LIB_STEPS.filter((step) => step.heavy).map((step) => step.name),
-		).toEqual(["Build sidecar", "Clippy", "Library tests"])
+			RUST_PULL_REQUEST_STEPS.filter((step) => step.heavy).map(
+				(step) => step.name,
+			),
+		).toEqual(["Build sidecar", "Clippy", "Library tests", "Integration tests"])
 	})
 
 	it("builds the website with the command the Render deploy runs", () => {
@@ -446,7 +449,7 @@ describe("the jobs of ci.yml", () => {
 		["vitest", A_PULL_REQUEST, "bun scripts/ci.ts changed"],
 		["vitest", A_QUEUE_COMMIT, "bun scripts/ci.ts vitest"],
 		["vitest", A_RELEASE_TAG, "bun scripts/ci.ts vitest"],
-		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-lib"],
+		["rust", A_PULL_REQUEST, "bun scripts/ci.ts rust-pr"],
 		["rust", A_QUEUE_COMMIT, "bun scripts/ci.ts rust"],
 		["rust", A_RELEASE_TAG, "bun scripts/ci.ts rust"],
 	] as const)(
