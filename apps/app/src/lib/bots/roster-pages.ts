@@ -3,9 +3,9 @@ import type { InfiniteData } from "@tanstack/react-query"
 import type {
 	Bot,
 	Conversation,
-	ConversationHostState,
 	ConversationInPage,
 	ConversationPage,
+	ObservedState,
 	StoredLastWord,
 } from "../conversations/store-contract"
 import type { LastWord } from "../conversations/transcript-state"
@@ -24,7 +24,7 @@ export type LastWords = {
 
 export type SoloBotIds = Record<string, string>
 
-export type ConversationHostStates = Record<string, ConversationHostState>
+export type ConversationHostStates = Record<string, ObservedState>
 
 export type RosterPage = RosterRead & {
 	lastWords: LastWords
@@ -115,12 +115,18 @@ export const soloBotIdsIn = ({
 export const soloBotIdsOf = ({ pages }: RosterPages): SoloBotIds =>
 	Object.assign({}, ...pages.map(({ soloBotIds }) => soloBotIds))
 
+export const observedStateOf = ({
+	state,
+	pendingPrompt,
+	workingBotIds,
+}: ObservedState): ObservedState => ({ state, pendingPrompt, workingBotIds })
+
 export const hostStatesIn = ({
 	pinned,
 	conversations,
 }: ConversationPage): ConversationHostStates =>
 	Object.fromEntries(
-		[...pinned, ...conversations].map(({ id, state }) => [id, state]),
+		[...pinned, ...conversations].map((row) => [row.id, observedStateOf(row)]),
 	)
 
 export const hostStatesOf = ({ pages }: RosterPages): ConversationHostStates =>
@@ -129,10 +135,10 @@ export const hostStatesOf = ({ pages }: RosterPages): ConversationHostStates =>
 export const withHostState = (
 	paged: RosterPages,
 	conversationId: string,
-	state: ConversationHostState,
+	observed: ObservedState,
 ): RosterPages => {
 	const [head, ...laterPages] = paged.pages
-	const hostStates = { ...head.hostStates, [conversationId]: state }
+	const hostStates = { ...head.hostStates, [conversationId]: observed }
 	return { ...paged, pages: [{ ...head, hostStates }, ...laterPages] }
 }
 
@@ -256,7 +262,7 @@ export const withPageRow = (
 ): RosterPages => {
 	const [head, ...laterPages] = paged.pages
 	const lastWords = withWordsOf(head.lastWords, lastWordsOfRow(row))
-	const hostStates = { ...head.hostStates, [row.id]: row.state }
+	const hostStates = { ...head.hostStates, [row.id]: observedStateOf(row) }
 	if (row.soloBotId !== null) {
 		const soloBotIds = { ...head.soloBotIds, [row.id]: row.soloBotId }
 		return {

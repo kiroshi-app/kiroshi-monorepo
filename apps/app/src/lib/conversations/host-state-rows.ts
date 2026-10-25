@@ -1,12 +1,10 @@
 import type { BotBadge } from "@workspace/ui/components/bot-badge"
 
-import type { ConversationHostState } from "./store-contract"
+import type { ConversationHostState, ObservedState } from "./store-contract"
 
 import type { SoloThreads } from "../bots/roster-line"
 import type { ConversationHostStates } from "../bots/roster-pages"
 import type { SidebarActivity } from "../chat/screen-model"
-
-type QuestionTexts = Record<string, string>
 
 type NeedsYouRow = {
 	id: string
@@ -21,9 +19,10 @@ const URGENCY: Record<ConversationHostState, number> = {
 }
 
 const moreUrgentOf = (
-	one: ConversationHostState,
-	other: ConversationHostState,
-): ConversationHostState => (URGENCY[other] > URGENCY[one] ? other : one)
+	one: ObservedState | undefined,
+	other: ObservedState,
+): ObservedState =>
+	one === undefined || URGENCY[other.state] > URGENCY[one.state] ? other : one
 
 type BotSoloThreadsInSpace = {
 	hostStates: ConversationHostStates
@@ -41,9 +40,9 @@ export const botHostStatesIn = ({
 		conversationId,
 		{ spaceId: lineSpaceId, botId },
 	] of Object.entries(soloThreads)) {
-		const state = hostStates[conversationId]
-		if (lineSpaceId === spaceId && state !== undefined) {
-			botStates[botId] = moreUrgentOf(botStates[botId] ?? "idle", state)
+		const observed = hostStates[conversationId]
+		if (lineSpaceId === spaceId && observed !== undefined) {
+			botStates[botId] = moreUrgentOf(botStates[botId], observed)
 		}
 	}
 	return botStates
@@ -54,7 +53,7 @@ export const workingFromHost = (
 	poses: Record<string, SidebarActivity>,
 ): Record<string, SidebarActivity> =>
 	Object.fromEntries(
-		Object.entries(hostStates).flatMap(([id, state]) =>
+		Object.entries(hostStates).flatMap(([id, { state }]) =>
 			state === "working"
 				? [[id, { isWorking: true, kind: poses[id]?.kind }]]
 				: [],
@@ -64,10 +63,14 @@ export const workingFromHost = (
 export const withNeedsYou = <Row extends NeedsYouRow>(
 	rows: Row[],
 	hostStates: ConversationHostStates,
-	questions: QuestionTexts,
 ): Row[] =>
-	rows.map((row) =>
-		hostStates[row.id] === "needs_you"
-			? { ...row, badge: "attention", pendingQuestion: questions[row.id] }
-			: row,
-	)
+	rows.map((row) => {
+		const observed = hostStates[row.id]
+		return observed?.state === "needs_you"
+			? {
+					...row,
+					badge: "attention",
+					pendingQuestion: observed.pendingPrompt?.text || undefined,
+				}
+			: row
+	})

@@ -15,6 +15,8 @@ import { useRosterReads } from "./use-roster"
 import { useControllerState } from "../use-controller"
 import { conversationQueryKeys } from "../conversations/conversation-query-keys"
 import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
+import { botHostStatesIn, withNeedsYou } from "../conversations/host-state-rows"
+import type { Chat, ObservedState } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
 import { createQueryTestWrapper } from "../query/query-test-wrapper"
 
@@ -56,6 +58,25 @@ const reconnectHost = (hostId: string) =>
 			onReconnected(hostId)
 		}
 	})
+
+const WHICH_BRANCH = {
+	promptId: "prompt-branch",
+	kind: "question",
+	text: "Which branch?",
+} as const
+
+const ASKING: ObservedState = {
+	state: "needs_you",
+	pendingPrompt: WHICH_BRANCH,
+	workingBotIds: [],
+}
+
+const unpagedSoloChat = (observed: ObservedState): Chat => ({
+	id: "solo-unpaged",
+	createdAt: 1,
+	updatedAt: 1,
+	...observed,
+})
 
 const neverAnswered = () => new Promise<never>(() => undefined)
 
@@ -171,25 +192,37 @@ it("writes a conversation state changed on the host into its row and reads nothi
 		await loadedRoster()
 	const topic = await firstTopicIn(store, garage.spaceId)
 	const localTopic = await firstTopicIn(store, LOCAL.spaceId)
-	expect(controller.getState().hostStates[topic.id]).toBe("idle")
+	expect(controller.getState().hostStates[topic.id]?.state).toBe("idle")
 	pageReads.mockClear()
 
 	await emitOnHost("conversation://state-changed", {
 		conversationId: topic.id,
 		spaceId: garage.spaceId,
 		state: "needs_you",
+		pendingPrompt: WHICH_BRANCH,
+		workingBotIds: [],
 	})
 
-	expect(controller.getState().hostStates[topic.id]).toBe("needs_you")
-	expect(controller.getState().hostStates[localTopic.id]).toBe("idle")
+	expect(controller.getState().hostStates[topic.id]).toEqual({
+		state: "needs_you",
+		pendingPrompt: WHICH_BRANCH,
+		workingBotIds: [],
+	})
+	expect(controller.getState().hostStates[localTopic.id]?.state).toBe("idle")
 
 	await emitOnHost("conversation://state-changed", {
 		conversationId: topic.id,
 		spaceId: garage.spaceId,
 		state: "working",
+		pendingPrompt: null,
+		workingBotIds: ["atlas", "beacon"],
 	})
 
-	expect(controller.getState().hostStates[topic.id]).toBe("working")
+	expect(controller.getState().hostStates[topic.id]).toEqual({
+		state: "working",
+		pendingPrompt: null,
+		workingBotIds: ["atlas", "beacon"],
+	})
 	expect(pageReads).not.toHaveBeenCalled()
 	expect(threadReads).not.toHaveBeenCalled()
 	expect(queryClient.isFetching()).toBe(0)
@@ -205,7 +238,7 @@ it("writes a conversation state changed on a joined host into the row of that ho
 		"another-host",
 	)
 
-	expect(controller.getState().hostStates[topic.id]).toBe("idle")
+	expect(controller.getState().hostStates[topic.id]?.state).toBe("idle")
 
 	await emitOnHost(
 		"conversation://state-changed",
@@ -213,7 +246,114 @@ it("writes a conversation state changed on a joined host into the row of that ho
 		SHED_HOST,
 	)
 
-	expect(controller.getState().hostStates[topic.id]).toBe("needs_you")
+	expect(controller.getState().hostStates[topic.id]?.state).toBe("needs_you")
+})
+
+it("carries the state of a solo thread outside the loaded pages from its main chat read, before any event", async () => {
+	const { store, companion, controller, queryClient } = await loadedRoster()
+	const line = { spaceId: LOCAL.spaceRowId, botId: companion.id }
+	vi.spyOn(store, "mainChat").mockResolvedValue(unpagedSoloChat(ASKING))
+	expect(controller.getState().soloThreads["solo-unpaged"]).toBeUndefined()
+
+	await act(() => queryClient.fetchQuery(controller.soloThreadQuery(line)))
+
+	expect(controller.getState().soloThreads["solo-unpaged"]).toEqual(line)
+	expect(controller.getState().hostStates["solo-unpaged"]).toEqual({
+		state: "needs_you",
+		pendingPrompt: WHICH_BRANCH,
+		workingBotIds: [],
+	})
+
+	await emitOnHost("conversation://state-changed", {
+		conversationId: "solo-unpaged",
+		spaceId: LOCAL.spaceId,
+		state: "idle",
+		pendingPrompt: null,
+		workingBotIds: [],
+	})
+
+	expect(controller.getState().hostStates["solo-unpaged"]).toEqual({
+		state: "idle",
+		pendingPrompt: null,
+		workingBotIds: [],
+	})
+})
+
+const companionRowIn = (controller: RosterController, botId: string) => {
+	const { hostStates, soloThreads } = controller.getState()
+	const botStates = botHostStatesIn({
+		hostStates,
+		soloThreads,
+		spaceId: LOCAL.spaceRowId,
+	})
+	return withNeedsYou([{ id: botId }], botStates)[0]
+}
+
+it("keeps the answer of a solo thread outside the loaded pages once the roster is reread", async () => {
+	const { store, companion, controller, queryClient, pageReads } =
+		await loadedRoster()
+	const soloThread = controller.soloThreadQuery({
+		spaceId: LOCAL.spaceRowId,
+		botId: companion.id,
+	})
+	vi.spyOn(store, "mainChat").mockResolvedValue(unpagedSoloChat(ASKING))
+	await act(() => queryClient.fetchQuery(soloThread))
+
+	expect(companionRowIn(controller, companion.id)).toEqual({
+		id: companion.id,
+		badge: "attention",
+		pendingQuestion: "Which branch?",
+	})
+
+	await emitOnHost("conversation://state-changed", {
+		conversationId: "solo-unpaged",
+		spaceId: LOCAL.spaceId,
+		state: "idle",
+		pendingPrompt: null,
+		workingBotIds: [],
+	})
+	pageReads.mockClear()
+	await emitOnHost("conversation://deleted", {
+		spaceId: LOCAL.spaceId,
+		conversationId: "unknown",
+	})
+	await vi.waitFor(() => expect(pageReads).toHaveBeenCalled())
+	await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0))
+
+	expect(queryClient.getQueryData(soloThread.queryKey)).toMatchObject({
+		state: "idle",
+		pendingPrompt: null,
+	})
+	expect(companionRowIn(controller, companion.id)).toEqual({
+		id: companion.id,
+	})
+})
+
+it("keeps a state read in the roster pages over the solo thread snapshot", async () => {
+	const { store, companion, controller, queryClient } = await loadedRoster()
+	const soloThread = controller.soloThreadQuery({
+		spaceId: LOCAL.spaceRowId,
+		botId: companion.id,
+	})
+	vi.spyOn(store, "mainChat").mockResolvedValue(
+		unpagedSoloChat({ state: "idle" }),
+	)
+	await act(() => queryClient.fetchQuery(soloThread))
+	await emitOnHost("conversation://state-changed", {
+		conversationId: "solo-unpaged",
+		spaceId: LOCAL.spaceId,
+		state: "working",
+		pendingPrompt: null,
+		workingBotIds: [companion.id],
+	})
+
+	act(() => {
+		queryClient.setQueryData(soloThread.queryKey, unpagedSoloChat(ASKING))
+	})
+
+	expect(controller.getState().hostStates["solo-unpaged"]?.state).toBe(
+		"working",
+	)
 })
 
 it("writes the icon and the colour of a conversation updated on the host into its roster", async () => {
@@ -355,8 +495,16 @@ it("rereads the roster of the reconnected joined host alone and marks its solo t
 		LOCAL.spaceId,
 		companion.id,
 	)
-	queryClient.setQueryData(shedThread, "thread-in-shed")
-	queryClient.setQueryData(localThread, "thread-at-home")
+	queryClient.setQueryData(shedThread, {
+		id: "thread-in-shed",
+		createdAt: 1,
+		updatedAt: 1,
+	})
+	queryClient.setQueryData(localThread, {
+		id: "thread-at-home",
+		createdAt: 1,
+		updatedAt: 1,
+	})
 
 	await reconnectHost(SHED_HOST)
 

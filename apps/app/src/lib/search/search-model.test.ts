@@ -53,9 +53,12 @@ const readOf = (
 	routines: [],
 })
 
-const identityOfMissionIn = (state: MissionState) => {
+const identityOfMissionIn = (
+	state: MissionState,
+	liveness?: CatalogueMission["liveness"],
+) => {
 	const groups = toSearchGroups({
-		read: readOf([{ ...A_MISSION, state }]),
+		read: readOf([{ ...A_MISSION, state, liveness }]),
 		recents: [],
 		query: "roadmap",
 		lookups: createSearchLookups({
@@ -81,6 +84,17 @@ it("gives a mission result the badge its own state carries", () => {
 	expect(identityOfMissionIn("waiting_human")).toMatchObject({
 		kind: "mission",
 		badge: "attention",
+	})
+})
+
+it("gives a mission result the badge its own liveness carries over its stored state", () => {
+	expect(identityOfMissionIn("working", "needs_you")).toMatchObject({
+		kind: "mission",
+		badge: "attention",
+	})
+	expect(identityOfMissionIn("waiting_human", "working")).toMatchObject({
+		kind: "mission",
+		badge: undefined,
 	})
 })
 
