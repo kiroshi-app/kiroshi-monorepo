@@ -17,7 +17,8 @@ struct MissionsList: View {
                                 open(mission)
                             } label: {
                                 MissionRow(
-                                    mission: mission, companion: missions.companion(of: mission))
+                                    mission: mission, companion: missions.companion(of: mission),
+                                    detail: missions.detailLine(of: mission))
                             }
                             .listRowInsets(.vertical, 0)
                             .listRowSeparator(.hidden)

@@ -20,21 +20,22 @@ enum MissionTesting {
     static func mission(
         id: String = "mission-1", state: String = "working", stateSeq: Int = 1,
         isAgentRunning: Bool = false, liveness: String? = nil, status: String? = nil,
-        openedAt: Int = 1_000, lastActivityAt: Int? = nil, botId: String = "bot-1"
+        openedAt: Int = 1_000, lastActivityAt: Int? = nil, botId: String = "bot-1",
+        presence: String = ""
     ) -> Mission {
         let text = missionJSON(
             id: id, state: state, stateSeq: stateSeq, isAgentRunning: isAgentRunning,
             liveness: liveness, status: status, openedAt: openedAt,
-            lastActivityAt: lastActivityAt, botId: botId)
+            lastActivityAt: lastActivityAt, botId: botId, presence: presence)
         return try! JSONDecoder().decode(Mission.self, from: Data(text.utf8))
     }
 
     static func missionJSON(
         id: String, state: String, stateSeq: Int = 1, isAgentRunning: Bool = false,
         liveness: String? = nil, status: String? = nil, openedAt: Int = 1_000,
-        lastActivityAt: Int? = nil, botId: String = "bot-1"
+        lastActivityAt: Int? = nil, botId: String = "bot-1", presence: String = ""
     ) -> String {
-        let observed = liveness.map { #""liveness":"\#($0)","# } ?? ""
+        let observed = (liveness.map { #""liveness":"\#($0)","# } ?? "") + presence
         let written = status.map { #"{"text":"\#($0)","writtenAt":1}"# } ?? "null"
         let activity = lastActivityAt.map(String.init) ?? "null"
         let text = #"""

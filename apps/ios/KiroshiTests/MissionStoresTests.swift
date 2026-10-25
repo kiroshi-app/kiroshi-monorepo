@@ -196,6 +196,39 @@ struct MissionStoresTests {
         await connection.stop()
     }
 
+    @Test func aRowShowsTheQuestionLiveThenNamesItsCompanionOnceAnswered() async {
+        let connection = makeConnection()
+        let store = MissionsStore()
+        let socket = ScriptedRelaySocket(
+            sharedSpaceId: "s-1", answers: ["conversation_bots": companions])
+        let following = Task { await store.follow(connection) }
+        await connection.start()
+        await transport.nextOpening().accept(socket)
+        let first = await nextCall("mission_space_page", on: socket)
+        socket.push(
+            .frame(
+                #"{"id":\#(first["id"] as? Int ?? 0),"status":200,"body":\#(feed(MissionTesting.mission(id: "works", liveness: "idle")))}"#
+            ))
+        await waitUntil { store.hasLoaded && !store.companions.isEmpty }
+        let detail = { store.sections.flatMap(\.missions).first.map(store.detailLine(of:)) }
+
+        socket.push(
+            .frame(
+                #"{"event":{"event":"mission://changed","payload":{"missionId":"works","state":"waiting_human","stateSeq":2,"isAgentRunning":false,"liveness":"needs_you","pendingPrompt":{"promptId":"p1","kind":"question","text":"Which screen goes first?"},"workingBotIds":[],"lastActivityAt":5}}}"#
+            ))
+        await waitUntil { detail() == "Atlas · Which screen goes first?" }
+
+        socket.push(
+            .frame(
+                #"{"event":{"event":"mission://changed","payload":{"missionId":"works","state":"working","stateSeq":3,"isAgentRunning":true,"liveness":"working","pendingPrompt":null,"workingBotIds":["bot-1"],"lastActivityAt":6}}}"#
+            ))
+        await waitUntil { detail() == "Atlas · Working now" }
+
+        #expect(store.sections.map(\.group) == [.working])
+        following.cancel()
+        await connection.stop()
+    }
+
     @Test func theThreadReadsItsConversationAndSendsAnAnswerToItsCompanion() async {
         let connection = makeConnection()
         let mission = MissionTesting.mission(

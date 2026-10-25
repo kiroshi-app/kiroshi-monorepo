@@ -67,6 +67,9 @@ extension Mission {
     var statusLine: String {
         if group == .review { return "Ready to merge" }
         if isWorking, group == .working { return "Working now" }
+        if group == .needsYou, let question = pendingPrompt?.text, !question.isEmpty {
+            return question
+        }
         let written = status?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !written.isEmpty { return written }
         return group == .needsYou ? "Blocked on you" : "Working now"
@@ -77,8 +80,12 @@ extension Mission {
             separator: " · ")
     }
 
-    func detailLine(companion: MissionCompanion?) -> String {
-        [companion?.name, statusLine].compactMap(\.self).joined(separator: " · ")
+    func detailLine(companion: MissionCompanion?, among companions: [MissionCompanion] = [])
+        -> String
+    {
+        let working = WorkingNames(workingBotIds, among: companions).joined
+        return [working ?? companion?.name, statusLine].compactMap(\.self).joined(
+            separator: " · ")
     }
 
     func moved(by changed: MissionChanged) -> Mission {
@@ -89,6 +96,8 @@ extension Mission {
             moved.state = changed.state
             moved.stateSeq = changed.stateSeq
             moved.liveness = changed.liveness
+            moved.pendingPrompt = changed.pendingPrompt
+            moved.workingBotIds = changed.workingBotIds
         }
         return moved
     }
