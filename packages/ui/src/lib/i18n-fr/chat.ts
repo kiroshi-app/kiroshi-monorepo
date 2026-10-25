@@ -539,6 +539,7 @@ const chat = {
 				"{{name}} dépasse la limite de {{limit}} par fichier. Joignez un fichier plus léger.",
 			tooLargeTogether:
 				"Ces fichiers totalisent {{bytes}}, au-delà de la limite de {{limit}} par message. Retirez-en.",
+			unreadable: "Impossible de lire {{name}}. Joignez-le à nouveau.",
 			unwritable:
 				"Impossible d’enregistrer les fichiers ({{detail}}). Joignez-les à nouveau.",
 		},

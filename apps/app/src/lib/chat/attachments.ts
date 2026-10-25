@@ -109,6 +109,8 @@ export function describeAttachmentError(
 				bytes: inMegabytes(t, error.bytes),
 				limit: inMegabytes(t, error.limit),
 			})
+		case "unreadable":
+			return t("screen.attachment.unreadable", { name: error.name })
 		case "unwritable":
 			return t("screen.attachment.unwritable", { detail: error.detail })
 	}

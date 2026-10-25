@@ -518,6 +518,7 @@ const chat = {
 				"{{name}} is over the {{limit}} file limit. Attach a smaller one.",
 			tooLargeTogether:
 				"These files total {{bytes}}, over the {{limit}} message limit. Remove some.",
+			unreadable: "Couldn’t read {{name}}. Attach it again.",
 			unwritable: "Couldn’t save the files ({{detail}}). Attach them again.",
 		},
 	},
