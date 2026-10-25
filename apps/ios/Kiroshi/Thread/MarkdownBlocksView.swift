@@ -8,11 +8,12 @@ struct MarkdownBlocksView: View {
     var time = ""
 
     var body: some View {
+        let opening = MarkdownBlock.openingIndex(of: blocks)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(blocks.indices, id: \.self) { index in
                 MarkdownBlockView(
                     block: blocks[index], messageText: messageText,
-                    speaker: index == 0 ? speaker : nil, time: index == 0 ? time : ""
+                    speaker: index == opening ? speaker : nil, time: index == opening ? time : ""
                 )
                 .padding(.horizontal, insetsText && !blocks[index].isCard ? 8 : 0)
                 .padding(
@@ -43,7 +44,7 @@ private struct MarkdownBlockView: View {
                 .font(.body)
                 .modifier(MessageOpening(speaker: speaker, time: time))
         case .list(let list):
-            MarkdownListView(list: list, messageText: messageText)
+            MarkdownListView(list: list, messageText: messageText, speaker: speaker, time: time)
         case .quote(let blocks):
             MarkdownBlocksView(
                 blocks: blocks, messageText: messageText, speaker: speaker, time: time
@@ -55,9 +56,9 @@ private struct MarkdownBlockView: View {
                     .frame(width: 3)
             }
         case .code(let code):
-            CodeBlockCard(code: code)
+            CodeBlockCard(code: code, speaker: speaker, time: time)
         case .table(let table):
-            TableCard(table: table, messageText: messageText)
+            TableCard(table: table, messageText: messageText, speaker: speaker, time: time)
         case .rule:
             Rectangle()
                 .fill(Color(.separator))
@@ -77,7 +78,7 @@ private struct MarkdownBlockView: View {
     }
 }
 
-private struct MessageOpening: ViewModifier {
+struct MessageOpening: ViewModifier {
     let speaker: String?
     let time: String
 
@@ -98,6 +99,8 @@ private struct MessageOpening: ViewModifier {
 private struct MarkdownListView: View {
     let list: MarkdownList
     let messageText: String
+    let speaker: String?
+    let time: String
 
     @ScaledMetric(relativeTo: .body) private var markerWidth: CGFloat = 26
     @ScaledMetric(relativeTo: .body) private var numberWidth: CGFloat = 20
@@ -106,12 +109,12 @@ private struct MarkdownListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: list.isTaskList ? 6 : 4) {
             ForEach(list.items.indices, id: \.self) { index in
-                item(list.items[index])
+                item(list.items[index], opensList: index == 0)
             }
         }
     }
 
-    private func item(_ item: MarkdownList.Item) -> some View {
+    private func item(_ item: MarkdownList.Item, opensList: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 marker(item.marker)
@@ -122,6 +125,8 @@ private struct MarkdownListView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityRemoveTraits(.isSelected)
+            .modifier(
+                MessageOpening(speaker: opensList ? speaker : nil, time: opensList ? time : ""))
             if !item.rest.isEmpty {
                 MarkdownBlocksView(blocks: item.rest, messageText: messageText)
                     .padding(.leading, indent(of: item.marker))

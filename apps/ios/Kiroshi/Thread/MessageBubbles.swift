@@ -32,7 +32,7 @@ struct MessageBubbles: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 14)
-                        .accessibilityHidden(opensWithText)
+                        .accessibilityHidden(true)
                 }
                 ForEach(bubbles) { bubble in
                     let opensMessage = bubble.id == bubbles.first?.id
@@ -74,10 +74,6 @@ struct MessageBubbles: View {
 
     private var isMarkdown: Bool {
         bubbles.contains { $0.markdown != nil }
-    }
-
-    private var opensWithText: Bool {
-        bubbles.first?.markdown?.opensWithText ?? false
     }
 
     @ViewBuilder private var avatar: some View {
