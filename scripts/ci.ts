@@ -69,6 +69,7 @@ export const RUST_PULL_REQUEST_STEPS: Step[] = [
 		cwd: APP,
 		heavy: true,
 	},
+	BINDINGS_MATCH,
 ]
 
 export const GATE = {

@@ -266,13 +266,14 @@ describe("the gate", () => {
 		}
 	})
 
-	it("runs rustfmt, clippy, the library tests and every integration target on a pull_request", () => {
+	it("runs rustfmt, clippy, the library tests, every integration target and the bindings check on a pull_request", () => {
 		expect(RUST_PULL_REQUEST_STEPS.map((step) => step.command)).toEqual([
 			"cargo fmt --manifest-path src-tauri/Cargo.toml --check",
 			"bun run --filter sidecar build",
 			"cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features fake-claude -- -D warnings",
 			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --lib",
 			"cargo test --manifest-path src-tauri/Cargo.toml --features fake-claude --test '*'",
+			"git diff --exit-code apps/app/src/lib/bindings.ts",
 		])
 		expect(
 			RUST_PULL_REQUEST_STEPS.filter((step) => step.heavy).map(
