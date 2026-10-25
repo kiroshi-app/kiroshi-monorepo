@@ -27,9 +27,55 @@ final class MarkdownMessageTests: XCTestCase {
 
         copy.tap()
 
-        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 5))
+        let copied = app.buttons["Copied"]
+        XCTAssertTrue(copied.waitForExistence(timeout: 5))
+        XCTAssertFalse(copied.isSelected)
         XCTAssertTrue(app.buttons["Copy code"].waitForExistence(timeout: 10))
         XCTAssertEqual(pasted(in: app), Self.swiftCode)
+    }
+
+    func testEveryReplyReadsItsAuthorOnceOnItsFirstBlock() {
+        for (artboard, openings) in [
+            ("1", ["Juniper, Release notes, 4.2"]),
+            ("8", ["Juniper, @Atlas can you take the desktop half?"]),
+            ("group-openings", ["Juniper, Done, Changelog drafted", "Juniper, swift"]),
+        ] {
+            let app = launch("markdown", "-artboard", artboard)
+            let opening = app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH %@", openings[0])
+            ).firstMatch
+            XCTAssertTrue(opening.waitForExistence(timeout: 10), artboard)
+            let read = authoredLabels(in: app)
+            XCTAssertEqual(read.count, openings.count, "\(artboard) \(read)")
+            for (label, start) in zip(read, openings) {
+                XCTAssertTrue(label.hasPrefix(start), "\(artboard) \(label)")
+            }
+            let name = app.staticTexts["Juniper"]
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(name.frame), artboard)
+            XCTAssertFalse(name.isHittable, artboard)
+            XCTAssertTrue(opening.isHittable, artboard)
+        }
+    }
+
+    func testAReplyOpeningWithAListCarriesTheTimeOnItsFirstItem() {
+        let app = launchInEnglish("markdown", "-artboard", "3")
+        let firstTask = app.staticTexts["Done, Changelog drafted"]
+        XCTAssertTrue(firstTask.waitForExistence(timeout: 10))
+
+        XCTAssertEqual(firstTask.value as? String, "9:41\u{202F}AM")
+        XCTAssertEqual(app.staticTexts["Done, Screenshots updated"].value as? String ?? "", "")
+    }
+
+    func testACodeCardReadsItsLanguageBeforeCopyCode() {
+        for (artboard, header) in [
+            ("6", ["swift", "Copy code"]), ("all", ["swift", "Copy code", "mermaid", "Copy code"]),
+        ] {
+            let app = launch("markdown", "-artboard", artboard)
+            XCTAssertTrue(app.buttons["Copy code"].firstMatch.waitForExistence(timeout: 10))
+
+            let read = labels(in: app).filter { ["swift", "mermaid", "Copy code"].contains($0) }
+            XCTAssertEqual(read, header, artboard)
+        }
     }
 
     func testCopyOnATableCopiesTheTableThenSaysCopied() {
@@ -79,6 +125,7 @@ final class MarkdownMessageTests: XCTestCase {
     func testAReplyWithEveryFamilyReadsBlockByBlockAndPassesTheAudit() throws {
         let app = launch("markdown", "-artboard", "all")
         XCTAssertTrue(app.staticTexts["Juniper, Release 4.2"].waitForExistence(timeout: 10))
+        XCTAssertEqual(authoredLabels(in: app), ["Juniper, Release 4.2"])
         XCTAssertTrue(app.staticTexts["What changed in the thread:"].exists)
         XCTAssertFalse(app.staticTexts["Juniper, What changed in the thread:"].exists)
         XCTAssertTrue(app.staticTexts["•, Replies stream word by word"].exists)
@@ -111,6 +158,20 @@ final class MarkdownMessageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Secrets sorting"].exists)
 
         try auditTheReply(app)
+    }
+
+    func labels(in app: XCUIApplication) -> [String] {
+        guard let transcript = try? app.scrollViews.firstMatch.snapshot() else { return [] }
+        return readingOrder(of: transcript)
+    }
+
+    func authoredLabels(in app: XCUIApplication) -> [String] {
+        labels(in: app).filter { $0.hasPrefix("Juniper, ") }
+    }
+
+    func readingOrder(of element: XCUIElementSnapshot) -> [String] {
+        let label = element.label.isEmpty ? [] : [element.label]
+        return label + element.children.flatMap(readingOrder)
     }
 
     func pasted(in app: XCUIApplication) -> String? {

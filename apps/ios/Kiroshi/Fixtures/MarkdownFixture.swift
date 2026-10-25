@@ -202,6 +202,7 @@
             "9": (false, [diagrams]),
             "10": (false, [mixedReply]),
             "all": (true, [everyFamily]),
+            "group-openings": (true, [tasks, swiftCode]),
             "fitting-code": (false, [fittingCode]),
         ]
 
