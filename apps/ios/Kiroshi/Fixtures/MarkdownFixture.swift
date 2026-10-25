@@ -145,6 +145,13 @@
         static let changes = "And the changes behind them:\n\n" + wideTable
         static let mention =
             "<@atlas-3> can you take the desktop half? I’ve also asked <@basil> too."
+        static let tallMention =
+            "<@atlas-3> here’s where the release stands, so you can take the desktop half without reading the whole thread. "
+            + String(
+                repeating:
+                    "The signed builds are on the release page, the notes are drafted, and the queue is green since this morning. ",
+                count: 24)
+            + "Run `bun run ci --filter desktop` before you tag, then ping <@basil> once the desktop half is tagged."
         static let mermaid = """
             ```mermaid
             flowchart LR
@@ -218,6 +225,7 @@
             "group-openings": (true, [tasks, swiftCode]),
             "fitting-code": (false, [fittingCode]),
             "copied-code": (false, [copiedCode]),
+            "tall-mention": (true, [tallMention]),
         ]
 
         static var artboard: (isGroup: Bool, replies: [String]) {
