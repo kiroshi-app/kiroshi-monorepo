@@ -16,15 +16,19 @@ struct InlineText: View {
         }
         .modifier(ChipDrawing(isDrawn: hasChips))
         .tint(Color(.link))
-        .modifier(SpokenPlain(text: isSpokenPlain ? inline.plain : nil))
+        .modifier(SpokenSource(source: hasChips ? Self.source(of: inline) : nil))
     }
 
     private var hasChips: Bool {
         inline.runs.contains { $0.kind != .text }
     }
 
-    private var isSpokenPlain: Bool {
-        hasChips && !inline.runs.contains { $0.link != nil }
+    nonisolated static func source(of inline: MarkdownInline) -> AttributedString {
+        inline.runs.reduce(into: AttributedString()) { source, run in
+            var piece = AttributedString(run.text)
+            piece.link = run.link
+            source += piece
+        }
     }
 
     nonisolated static func shown(code: String, breaksAfterWordHyphens: Bool) -> String {
@@ -82,12 +86,12 @@ private struct ChipDrawing: ViewModifier {
     }
 }
 
-private struct SpokenPlain: ViewModifier {
-    let text: String?
+private struct SpokenSource: ViewModifier {
+    let source: AttributedString?
 
     func body(content: Content) -> some View {
-        if let text {
-            content.accessibilityLabel(text)
+        if let source {
+            content.accessibilityRepresentation { Text(source) }
         } else {
             content
         }
