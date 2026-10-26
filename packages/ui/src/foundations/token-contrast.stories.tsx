@@ -25,11 +25,10 @@ const FOREGROUND_SUFFIX = "-foreground"
 const THEMES: ThemeName[] = ["light", "dark"]
 const TRANSPARENT_COMPUTED_COLOR = "rgba(0, 0, 0, 0)"
 const CANVAS_BASE: Rgb = [255, 255, 255]
-const WHITE: Rgb = [255, 255, 255]
 const LIGHT_PAGE: Rgb = [245, 245, 245]
 const DARK_CARD: Rgb = [18, 18, 19]
 const PRIMARY_FOREGROUND_FLOOR = 9.8
-const PRIMARY_STRONG_ON_WHITE_FLOOR = 5
+const PRIMARY_STRONG_ON_CANVAS_BASE_FLOOR = 5
 const PRIMARY_STRONG_ON_LIGHT_PAGE_FLOOR = 4.5
 const DARK_TINT_ON_CARD_FLOOR = 9.2
 const SHOWCASED_TINTS: BotAvatarBlot[] = ["yellow", "purple"]
@@ -183,6 +182,17 @@ const failuresIn = (measurements: Measurement[], floor = AA_TEXT_RATIO) =>
 				`${key}: measured ${ratio.toFixed(2)}:1, needs ${floor}:1`,
 		)
 
+const tintScopeStyle = (blot: BotAvatarBlot) =>
+	({ "--space-tint": blotTint(blot) }) as CSSProperties
+
+const tintScopeIn = (scope: HTMLElement, blot: BotAvatarBlot) => {
+	const tinted = scope.querySelector<HTMLElement>(`[data-blot-scope="${blot}"]`)
+	if (!tinted) {
+		throw new Error(`Missing tint scope for ${blot}.`)
+	}
+	return tinted
+}
+
 const meta = preview.meta({
 	title: "Foundations/Token Contrast",
 	tags: ["test-only", "!autodocs"],
@@ -254,7 +264,7 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 							data-blot-scope={blot}
 							data-space-tint={blot}
 							className="on-user-bubble"
-							style={{ "--space-tint": blotTint(blot) } as CSSProperties}
+							style={tintScopeStyle(blot)}
 						/>
 					))}
 				</div>
@@ -267,12 +277,7 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 			probeTheme(pixel, canvasElement, scheme),
 		).flatMap((theme) =>
 			BLOT_TINTS.flatMap((blot) => {
-				const scope = theme.scope.querySelector<HTMLElement>(
-					`[data-blot-scope="${blot}"]`,
-				)
-				if (!scope) {
-					throw new Error(`Missing tint scope for ${blot}.`)
-				}
+				const scope = tintScopeIn(theme.scope, blot)
 				return TINTED_USER_BUBBLE_PAIRS.map((pair) => ({
 					key: `${theme.scheme} ${blot} ${pairKey(theme.scheme, pair)}`,
 					ratio: measurePair(pixel, { ...theme, scope }, pair),
@@ -288,22 +293,11 @@ export const TintedUserBubbleMeetsAaText = meta.story({
 	},
 })
 
-const tintScopeStyle = (blot: BotAvatarBlot) =>
-	({ "--space-tint": blotTint(blot) }) as CSSProperties
-
-const tintScopeIn = (scope: HTMLElement, blot: BotAvatarBlot) => {
-	const tinted = scope.querySelector<HTMLElement>(`[data-blot-scope="${blot}"]`)
-	if (!tinted) {
-		throw new Error(`Missing tint scope for ${blot}.`)
-	}
-	return tinted
-}
-
 const opaqueColor = (
 	pixel: CanvasRenderingContext2D,
 	scope: HTMLElement,
 	token: string,
-) => paintOver(pixel, WHITE, readComputedColor(scope, token))
+) => paintOver(pixel, CANVAS_BASE, readComputedColor(scope, token))
 
 type PrimaryMeasurement = Measurement & { floor: number }
 
@@ -338,8 +332,8 @@ const primaryMeasurements = (
 		onPrimary,
 		{
 			key: key("--primary-strong on #fff"),
-			ratio: contrastRatio(strong, WHITE),
-			floor: PRIMARY_STRONG_ON_WHITE_FLOOR,
+			ratio: contrastRatio(strong, CANVAS_BASE),
+			floor: PRIMARY_STRONG_ON_CANVAS_BASE_FLOOR,
 		},
 		{
 			key: key("--primary-strong on #f5f5f5"),
