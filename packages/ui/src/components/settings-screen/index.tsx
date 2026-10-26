@@ -19,6 +19,7 @@ import { BotGeneralFields } from "@workspace/ui/components/bot-settings-dialog/g
 import { BotInstructionsFields } from "@workspace/ui/components/bot-settings-dialog/instructions-fields"
 import { PermissionsPanel } from "@workspace/ui/components/bot-settings-dialog/permissions-panel"
 import { RuntimeFields } from "@workspace/ui/components/bot-settings-dialog/runtime-fields"
+import type { BotAvatarBlot } from "@workspace/ui/components/companion-colour"
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
 import { EnvironmentPanel } from "@workspace/ui/components/environment-panel"
 import type { SpaceHost } from "@workspace/ui/components/host-pill"
@@ -116,6 +117,7 @@ type SettingsScreenNavigation = {
 	width?: number
 	onWidthChange?: (width: number) => void
 	isResizable?: boolean
+	spaceTint?: BotAvatarBlot | null
 }
 
 type SpaceState = FocusedSpace["state"]
@@ -204,6 +206,7 @@ const SettingsScreenLayout = ({
 	width,
 	onWidthChange,
 	isResizable,
+	spaceTint,
 	avatar,
 	name,
 	subtitle,
@@ -300,6 +303,7 @@ const SettingsScreenLayout = ({
 	return (
 		<WorkspaceShell
 			isResizable={isResizable}
+			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			sidebar={
 				<>
@@ -410,6 +414,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 		width,
 		onWidthChange,
 		isResizable,
+		spaceTint,
 		target: _target,
 		spaceState: _spaceState,
 		hostName: _hostName,
@@ -515,6 +520,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 			pages={pages}
 			pinnedAction={pinnedAction}
 			isResizable={isResizable}
+			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
@@ -539,6 +545,7 @@ const UserSettingsScreen = ({
 	width,
 	onWidthChange,
 	isResizable,
+	spaceTint,
 	ownedSpaces = [],
 	joinedSpaces = [],
 	invitations = [],
@@ -573,6 +580,7 @@ const UserSettingsScreen = ({
 			onEntryChange={onEntryChange}
 			pages={pages}
 			isResizable={isResizable}
+			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
@@ -627,6 +635,7 @@ const CompanionSettingsScreen = ({
 	width,
 	onWidthChange,
 	isResizable,
+	spaceTint,
 	value,
 	onValueChange,
 	models,
@@ -841,6 +850,7 @@ const CompanionSettingsScreen = ({
 			isCompanionPage
 			pages={pages}
 			isResizable={isResizable}
+			spaceTint={spaceTint}
 			onWidthChange={onWidthChange}
 			rail={rail}
 			sessions={sessions}
