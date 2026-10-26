@@ -4,16 +4,22 @@ import UIKit
 struct SpaceAccent: Equatable, Sendable {
     static let lightTintStrength = 1.0
     static let darkTintStrength = 0.5
+    static let tileFillOpacity = 0.25
 
     let tint: CompanionTint?
     let userBubble: Color
     let userBubbleForeground: Color
+    let tile: Color
+    let tileFill: Color
 
     init(tint: CompanionTint?) {
         self.tint = tint
         userBubble = Color(uiColor: Self.userBubble(tint))
         userBubbleForeground = Color(
             uiColor: .kiroshi(tint == nil ? .userBubbleForeground : .userBubbleTintInk))
+        let tile = Self.blot(tint ?? .blue)
+        self.tile = Color(uiColor: tile)
+        tileFill = Color(uiColor: tile.withAlphaComponent(Self.tileFillOpacity))
     }
 
     static func == (lhs: SpaceAccent, rhs: SpaceAccent) -> Bool {

@@ -378,3 +378,9 @@ Your bubbles wear the colour of the Space shown, as the desktop does since OPE-1
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 3.1 -spaceColours purple,green
 xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture shared-thread -spaceColours purple,green
 ```
+
+An invitation wears the colour of the Space it invites to. `GET /invitations` and the valid `GET /invitations/{id}/state` carry the Space's `colour` the same way, decoded by the same `tint(forKey:)` as `Space`, and a joined Space keeps it. The tile at the top of the invitation sheet takes `SpaceAccent.tile` (the tint's `bot-blot-*`) over `tileFill` (the same at 25%); an invitation without a colour keeps the blue tile it wore before, `bot-blot-blue`, the catalogue's `primary`. The rest of the sheet is chrome and keeps the system colours. `-invitationColour` gives the fixture invitation its colour, `null` when omitted:
+
+```bash
+xcrun simctl launch --terminate-running-process booted com.kiroshi.app.ios -fixture 4.2 -invitationColour pink
+```

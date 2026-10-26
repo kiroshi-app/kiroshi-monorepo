@@ -123,7 +123,7 @@ final class Invitations {
         case .valid(let valid):
             shown = Invitation(
                 id: invitationId, instanceId: "", instanceName: valid.spaceName,
-                inviterEmail: valid.inviter)
+                inviterEmail: valid.inviter, colour: valid.colour)
             details[invitationId] = valid
             phases[invitationId] = .refused(.otherEmail)
         case .refused(let refusal):
@@ -192,7 +192,7 @@ final class Invitations {
         joined(
             Space(
                 id: invitation.instanceId, name: invitation.instanceName, role: .member,
-                isHostOnline: true))
+                isHostOnline: true, colour: invitation.colour))
     }
 
     private func answerNo(to invitation: Invitation) async {

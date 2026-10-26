@@ -5,12 +5,33 @@ struct Invitation: Decodable, Identifiable, Equatable, Sendable {
     let instanceId: String
     let instanceName: String
     let inviterEmail: String
+    var colour: CompanionTint?
+}
+
+extension Invitation {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case instanceId
+        case instanceName
+        case inviterEmail
+        case colour
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        instanceId = try container.decode(String.self, forKey: .instanceId)
+        instanceName = try container.decode(String.self, forKey: .instanceName)
+        inviterEmail = try container.decode(String.self, forKey: .inviterEmail)
+        colour = container.tint(forKey: .colour)
+    }
 }
 
 struct ValidInvitation: Equatable, Sendable {
     let spaceName: String
     let inviter: String
     let expiresAt: Date
+    var colour: CompanionTint?
 }
 
 enum InvitationRefusal: Equatable, Sendable {
@@ -171,10 +192,28 @@ enum InvitationLink {
 }
 
 private struct ReadState: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case state
+        case spaceName
+        case inviter
+        case expiresAt
+        case colour
+    }
+
     let state: String
     let spaceName: String?
     let inviter: String?
     let expiresAt: String?
+    let colour: CompanionTint?
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        state = try container.decode(String.self, forKey: .state)
+        spaceName = try container.decodeIfPresent(String.self, forKey: .spaceName)
+        inviter = try container.decodeIfPresent(String.self, forKey: .inviter)
+        expiresAt = try container.decodeIfPresent(String.self, forKey: .expiresAt)
+        colour = container.tint(forKey: .colour)
+    }
 
     var answer: InvitationStateAnswer? {
         switch state {
@@ -185,7 +224,8 @@ private struct ReadState: Decodable {
                 })
             else { return nil }
             return .valid(
-                ValidInvitation(spaceName: spaceName, inviter: inviter, expiresAt: expiresAt))
+                ValidInvitation(
+                    spaceName: spaceName, inviter: inviter, expiresAt: expiresAt, colour: colour))
         case "used": return .refused(.used)
         case "expired": return .refused(.expired)
         case "withdrawn": return .refused(.withdrawn)

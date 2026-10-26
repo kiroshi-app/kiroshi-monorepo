@@ -58,13 +58,14 @@ struct InvitationSheet: View {
     }
 
     private var identity: some View {
-        VStack(spacing: 12) {
+        let accent = SpaceAccent(tint: invitation.colour)
+        return VStack(spacing: 12) {
             Image(systemName: "square.fill")
                 .resizable()
                 .frame(width: markSide, height: markSide)
-                .foregroundStyle(Color.kiroshi(.primary))
+                .foregroundStyle(accent.tile)
                 .frame(width: tileSide, height: tileSide)
-                .background(Color.kiroshi(.primary).opacity(0.25), in: .rect(cornerRadius: 16))
+                .background(accent.tileFill, in: .rect(cornerRadius: 16))
                 .accessibilityHidden(true)
             VStack(spacing: 2) {
                 Text(

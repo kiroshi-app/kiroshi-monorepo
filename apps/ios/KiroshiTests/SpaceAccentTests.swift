@@ -92,6 +92,27 @@ struct SpaceAccentTests {
         #expect(SpaceAccent.darkTintStrength == 0.5)
     }
 
+    @Test(arguments: desktop)
+    func anInvitationsTileIsTheInvitedSpacesColourOrBlue(_ desktop: Desktop) throws {
+        let accent = SpaceAccent(tint: desktop.tint)
+        let colour = desktop.tint == nil ? "#A0BEE8" : desktop.light
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(try Self.hex(of: accent.tile, in: scheme) == colour)
+            #expect(try Self.hex(of: accent.tileFill, in: scheme) == colour)
+            var environment = EnvironmentValues()
+            environment.colorScheme = scheme
+            #expect(accent.tileFill.resolve(in: environment).opacity == 0.25)
+        }
+    }
+
+    @Test func anInvitationWithoutAColourKeepsTheTileItWore() throws {
+        let tile = SpaceAccent(tint: nil).tile
+        for scheme in [ColorScheme.light, .dark] {
+            #expect(
+                try Self.hex(of: tile, in: scheme) == Self.hex(of: .kiroshi(.primary), in: scheme))
+        }
+    }
+
     @Test func anotherSpaceIsAnotherAccent() {
         #expect(SpaceAccent(tint: .green) == SpaceAccent(tint: .green))
         #expect(SpaceAccent(tint: .green) != SpaceAccent(tint: .pink))

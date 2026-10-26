@@ -46,6 +46,51 @@ struct CloudInvitationsTests {
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
+    static let colours: [(String, CompanionTint?)] = [
+        (#""colour":"pink","#, .pink), (#""colour":null,"#, nil), ("", nil),
+        (#""colour":"magenta","#, nil), (#""colour":7,"#, nil),
+    ]
+
+    @Test(arguments: colours)
+    func theListReadsTheInvitedSpacesColourAndNothingElseForAnUnknownOne(
+        written: String, colour: CompanionTint?
+    ) async throws {
+        let (invitations, _) = cloud([
+            InvitationsFixture.listPath: .status(
+                200,
+                #"[{"id":"\#(invitation.id)","instanceId":"\#(invitation.instanceId)","instanceName":"Studio",\#(written)"inviterEmail":"noa@example.com","invitedAt":"2026-10-18T12:00:00.000Z"}]"#
+            )
+        ])
+
+        let answer = try await invitations.list(bearer: "bearer-1")
+
+        guard case .invitations(let listed) = answer else {
+            Issue.record("The list wasn't read: \(answer)")
+            return
+        }
+        #expect(listed.map(\.colour) == [colour])
+    }
+
+    @Test(arguments: colours)
+    func aValidStateReadsTheInvitedSpacesColourAndNothingElseForAnUnknownOne(
+        written: String, colour: CompanionTint?
+    ) async throws {
+        let (invitations, _) = cloud([
+            InvitationsFixture.statePath: .status(
+                200,
+                #"{"state":"valid","spaceName":"Studio",\#(written)"inviter":"noa@example.com","expiresAt":"2026-10-25T12:00:00.000Z"}"#
+            )
+        ])
+
+        let answer = try await invitations.state(of: invitation.id)
+
+        guard case .valid(let valid) = answer else {
+            Issue.record("The state wasn't read: \(answer)")
+            return
+        }
+        #expect(valid.colour == colour)
+    }
+
     @Test(arguments: [
         ("withdrawn", InvitationRefusal.withdrawn), ("expired", .expired), ("used", .used),
     ])
