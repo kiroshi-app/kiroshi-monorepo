@@ -7,6 +7,7 @@ import {
 	DEFAULT_BOT_OUTPUT_STYLE,
 	readBotPermissionMode,
 } from "@workspace/ui/components/bot-settings"
+import type { CompanionSummary } from "@workspace/ui/components/space-settings-dialog/companions-section"
 
 import { rosterTimestamp } from "./roster-timestamp"
 
@@ -138,6 +139,22 @@ export const toSettingsValue = (bot: Bot): BotSettingsValue => ({
 		...bot.permissions,
 		defaultMode: readBotPermissionMode(bot.permissions.defaultMode),
 	},
+})
+
+// TODO: read both counts once the host answers them for every companion of a Space in one call
+const UNREAD_COUNT = 0
+
+export const toCompanionSummary = (bot: Bot): CompanionSummary => ({
+	id: bot.id,
+	name: bot.name,
+	blot: bot.avatarBlot ?? undefined,
+	seed: bot.id,
+	image: avatarSrc(bot.avatarImagePath),
+	title: bot.title,
+	instructions: bot.instructions,
+	permissionMode: readBotPermissionMode(bot.permissions.defaultMode),
+	skillsCount: UNREAD_COUNT,
+	applicationsCount: UNREAD_COUNT,
 })
 
 export const toIdentity = (

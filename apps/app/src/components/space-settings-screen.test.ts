@@ -44,6 +44,8 @@ import {
 } from "@/lib/spaces/spaces-controller"
 import { useControllerState } from "@/lib/use-controller"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
+import type { RosterLines } from "@/lib/workspace/use-roster-lines"
+import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
@@ -198,6 +200,10 @@ const SpaceSettingsHarness = ({
 					core,
 					panels,
 					rail: () => null,
+					rosterLines: {
+						sidebarActions: { onCreateBot: vi.fn() },
+					} as unknown as RosterLines,
+					rosterView: { bots: [] } as unknown as RosterView,
 					scopes,
 				})
 			: null,

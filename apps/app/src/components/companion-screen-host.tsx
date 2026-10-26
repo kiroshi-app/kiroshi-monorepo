@@ -1,5 +1,12 @@
+import type { ReactNode } from "react"
+
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
-import { BotSettingsDialog } from "@workspace/ui/components/bot-settings-dialog"
+import {
+	CompanionSettingsScreen,
+	type SettingsScreenRequestLeave,
+} from "@workspace/ui/components/settings-screen"
+import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
 	changesRuntime,
@@ -13,36 +20,71 @@ import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
-type BotSettingsHostProps = {
+const GENERAL_ENTRY = "general"
+
+const DANGER_ENTRY = "danger"
+
+type CompanionScreenHostProps = {
 	core: WorkspaceCore
 	panels: SettingsPanels
+	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	rosterLines: RosterLines
 	rosterView: RosterView
 	scopes: ApplicationScopes
 }
 
-export const BotSettingsHost = ({
+export const CompanionScreenHost = ({
 	core,
 	panels,
+	rail,
 	rosterLines,
 	rosterView,
 	scopes,
-}: BotSettingsHostProps) => {
+}: CompanionScreenHostProps) => {
 	const { botEnvironment, botMcpServers, catalogue, chat, roster } = core
-	const { applicationToOpenOn, botHistory, closeSettingsTab, companionSkills } =
+	const { applicationToOpenOn, botHistory, closeSettings, companionSkills } =
 		panels
 	const { activity, deleteBot } = rosterLines
-	const { isEditing, isShowingDanger, settingsBot } = rosterView
+	const { isShowingDanger, settingsBot } = rosterView
 	const {
 		botApplications,
+		isSpaceEditing,
 		selectedSpaceId,
 		serverEnvironmentSection,
 		setOpenedMcpServer,
+		setSettingsApplication,
+		setSettingsTab,
 		settingsTab,
 	} = scopes
 
-	return settingsBot ? (
-		<BotSettingsDialog
+	if (!settingsBot) {
+		return null
+	}
+
+	const backToCompanions = () => {
+		roster.controller.setEditing(false)
+		setSettingsApplication(undefined)
+		setSettingsTab(COMPANIONS_ENTRY)
+	}
+
+	const leave = isSpaceEditing ? backToCompanions : closeSettings
+
+	const showEntry = (entry: string) => {
+		if (isShowingDanger) {
+			roster.controller.edit(settingsBot.id)
+		}
+		setSettingsTab(entry)
+	}
+
+	return (
+		<CompanionSettingsScreen
+			backLabel={
+				isSpaceEditing ? i18n.t("settings:screen.backToCompanions") : undefined
+			}
+			entry={isShowingDanger ? DANGER_ENTRY : (settingsTab ?? GENERAL_ENTRY)}
+			onBack={leave}
+			onEntryChange={showEntry}
+			rail={rail}
 			history={botHistory}
 			haveMcpServersFailedToLoad={botMcpServers.hasFailedToLoad}
 			{...botApplications}
@@ -50,7 +92,6 @@ export const BotSettingsHost = ({
 				kind: "companion",
 				id: settingsBot.id,
 			})}
-			tab={settingsTab}
 			environment={toEnvironmentRows(botEnvironment.entries)}
 			hasEnvironmentFailedToRead={botEnvironment.hasFailedToRead}
 			isEnvironmentPending={botEnvironment.isPending}
@@ -81,12 +122,8 @@ export const BotSettingsHost = ({
 			onAvatarUpload={(file) => {
 				void roster.controller.uploadAvatar(settingsBot.id, file)
 			}}
-			onClose={() => {
-				closeSettingsTab()
-				roster.controller.setEditing(false)
-			}}
 			onDelete={() => {
-				void deleteBot(settingsBot.id)
+				void deleteBot(settingsBot.id).then(leave)
 			}}
 			onOutputStyleChange={(outputStyle) => {
 				if (outputStyle === settingsBot.outputStyle) {
@@ -101,13 +138,11 @@ export const BotSettingsHost = ({
 					chat.controller.redescribe(settingsBot.id)
 				}
 			}}
-			open={isEditing}
 			seed={settingsBot.id}
 			{...companionSkills}
-			showDanger={isShowingDanger}
 			value={toSettingsValue(settingsBot)}
 			working={activity.isWorking}
 			workingKind={activity.kind}
 		/>
-	) : null
+	)
 }

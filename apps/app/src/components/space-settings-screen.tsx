@@ -13,12 +13,15 @@ import {
 import { SPACE_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
 
 import { signedInAccountIdOf } from "@/lib/account/use-account"
+import { toCompanionSummary } from "@/lib/bots/bot-settings"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
 import { openJoinedSpaceOf } from "@/lib/spaces/joined-spaces-controller"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
+import type { RosterLines } from "@/lib/workspace/use-roster-lines"
+import type { RosterView } from "@/lib/workspace/use-roster-view"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
@@ -36,6 +39,8 @@ type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
 	panels: SettingsPanels
 	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
+	rosterLines: RosterLines
+	rosterView: RosterView
 	scopes: ApplicationScopes
 }
 
@@ -43,13 +48,22 @@ export const SpaceSettingsScreen = ({
 	core,
 	panels,
 	rail,
+	rosterLines,
+	rosterView,
 	scopes,
 }: SpaceSettingsScreenProps) => {
-	const { account, joinedSpaces, spaceEnvironment, spaceMcpServers, spaces } =
-		core
+	const {
+		account,
+		joinedSpaces,
+		roster,
+		spaceEnvironment,
+		spaceMcpServers,
+		spaces,
+	} = core
 	const {
 		applicationToOpenOn,
 		closeSettings,
+		closeSettingsTab,
 		openAccountSettings,
 		spaceHistory,
 		spaceSkills,
@@ -104,6 +118,11 @@ export const SpaceSettingsScreen = ({
 		openAccountSettings()
 	}
 
+	const openCompanion = (id: string) => {
+		closeSettingsTab()
+		roster.controller.edit(id)
+	}
+
 	const hostingProps = hosting ? { ...hosting, onSignIn: signIn } : {}
 
 	const membersPropsOf = (spaceName: string, memberView?: MemberView) =>
@@ -153,6 +172,11 @@ export const SpaceSettingsScreen = ({
 		onValueChange: (value: SpaceSettingsValue) =>
 			spaces.controller.describe(selectedSpaceId, value),
 		...spaceSkills,
+		companions: {
+			companions: rosterView.bots.map(toCompanionSummary),
+			onSelect: openCompanion,
+			onCreate: rosterLines.sidebarActions.onCreateBot,
+		},
 	}
 
 	if (selectedSpace) {

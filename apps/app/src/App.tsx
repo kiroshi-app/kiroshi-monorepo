@@ -146,7 +146,7 @@ export function App() {
 
 	return (
 		<>
-			{panels.openSettings ? (
+			{panels.openSettings || panels.isCompanionScreenOpen ? (
 				<WorkspaceSettings about={about} scopes={scopes} {...railProps} />
 			) : (
 				<WorkspaceShell
@@ -215,10 +215,8 @@ export function App() {
 			<AppDialogs
 				core={core}
 				overlay={overlay}
-				panels={panels}
 				rosterLines={rosterLines}
 				rosterView={rosterView}
-				scopes={scopes}
 				whatsNewDialog={whatsNew.dialog}
 			/>
 		</>
