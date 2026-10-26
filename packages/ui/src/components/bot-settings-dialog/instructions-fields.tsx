@@ -19,7 +19,7 @@ const BotInstructionsFields = ({
 	onValueChange,
 	memory,
 	onMemoryChange,
-	isTall = false,
+	isTall,
 }: BotInstructionsFieldsProps) => {
 	const { t } = useTranslation("bots")
 
