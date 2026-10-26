@@ -334,6 +334,14 @@ const openMission = async () => {
 const missionHeader = () =>
 	document.querySelector('[data-slot="mission-header"]')
 
+const missionHeaderSkeleton = () =>
+	document.querySelector('[data-slot="mission-header-skeleton"]')
+
+const threadAppHeaders = () =>
+	document.querySelectorAll(
+		'[data-slot="chat-layout"] [data-slot="app-header"]',
+	)
+
 const framedSlot = (frame: string, slot: string) =>
 	document.querySelector(`[data-slot="${frame}"] [data-slot="${slot}"]`)
 
@@ -509,7 +517,7 @@ describe("WorkspaceBody missions", () => {
 		expect(screen.getAllByText("Walls").length).toBeGreaterThan(0)
 	})
 
-	it("frames the loading mission under the app header", async () => {
+	it("frames the loading mission under the mission header skeleton", async () => {
 		const { workspace } = await seed((mission) => ({ mission, events: [] }))
 		readMission.mockReturnValue(new Promise(() => undefined))
 		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
@@ -517,7 +525,11 @@ describe("WorkspaceBody missions", () => {
 
 		await openMission()
 
-		expect(threadSlot("app-header")).not.toBeNull()
+		const [header, ...otherHeaders] = threadAppHeaders()
+		expect(otherHeaders).toHaveLength(0)
+		expect(
+			header?.closest('[data-slot="mission-header-skeleton"]'),
+		).toBeTruthy()
 		expect(
 			document.querySelector('[data-slot="skeleton-agent-bubble"]'),
 		).toBeNull()
@@ -529,6 +541,44 @@ describe("WorkspaceBody missions", () => {
 			).not.toBeNull(),
 		)
 		expect(missionHeader()).toBeNull()
+	})
+
+	it("returns to the origin conversation from Back while the mission loads", async () => {
+		const { workspace } = await seed((mission) => ({ mission, events: [] }))
+		readMission.mockReturnValue(new Promise(() => undefined))
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		fireEvent.click(screen.getByRole("button", { name: BACK }))
+		await settle()
+
+		expect(missionHeaderSkeleton()).toBeNull()
+		expect(screen.getAllByText("Walls").length).toBeGreaterThan(0)
+	})
+
+	it("replaces the mission header skeleton once the mission arrives", async () => {
+		const { workspace, mission } = await seed((opened) => ({
+			mission: opened,
+			events: [],
+		}))
+		let deliver: (detail: MissionDetail) => void = () => undefined
+		readMission.mockReturnValue(
+			new Promise((delivered) => {
+				deliver = delivered
+			}),
+		)
+		render(workspace.body(), { wrapper: createQueryTestWrapper().wrapper })
+		await settle()
+
+		await openMission()
+		expect(missionHeaderSkeleton()).not.toBeNull()
+
+		await act(async () => deliver({ mission, events: [] }))
+		await settle()
+
+		expect(missionHeader()?.textContent).toContain("OPE-42")
+		expect(missionHeaderSkeleton()).toBeNull()
 	})
 
 	it("reads the mission again when the read failure is retried", async () => {
