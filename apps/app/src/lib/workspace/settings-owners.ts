@@ -6,10 +6,11 @@ import {
 	type OpenSettings,
 	openCompanionIdOf,
 } from "../navigation/open-settings"
+import type { SpacesState } from "../spaces/spaces-controller"
 
 type ListedBots = Pick<RosterState, "bots">
 
-type SelectedSpace = { selectedSpaceId: string | null }
+type SelectedSpace = Pick<SpacesState, "selectedSpaceId">
 
 export const companionSettingsOwnerOf = (
 	openSettings: OpenSettings | null,
