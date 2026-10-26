@@ -29,7 +29,6 @@ import { runMutation } from "../query/run-mutation"
 export type SpacesState = {
 	spaces: Space[]
 	selectedSpaceId: string | null
-	isSettingsOpen: boolean
 	hasFailedToLoad: boolean
 	hasFailedToCreate: boolean
 }
@@ -41,7 +40,6 @@ export type SpacesController = {
 	load: (lastSpaceId: string | null) => Promise<void>
 	select: (id: string) => void
 	create: () => Promise<void>
-	setSettingsOpen: (isSettingsOpen: boolean) => void
 	describe: (id: string, value: SpaceSettingsValue) => void
 	reorder: (ids: string[]) => Promise<void>
 	remove: (id: string) => Promise<void>
@@ -98,7 +96,6 @@ type SpacesChoice = {
 	chosenSpaceId: string | null
 	isChosenListed: boolean
 	rememberedSpaceId: string | null
-	isSettingsOpen: boolean
 	hasFailedToCreate: boolean
 }
 
@@ -106,7 +103,6 @@ const initialSpacesChoice: SpacesChoice = {
 	chosenSpaceId: null,
 	isChosenListed: false,
 	rememberedSpaceId: null,
-	isSettingsOpen: false,
 	hasFailedToCreate: false,
 }
 
@@ -145,7 +141,6 @@ const spacesStateOf = (
 		heldIdIn(spaces, choice.rememberedSpaceId) ??
 		spaces[0]?.id ??
 		null,
-	isSettingsOpen: choice.isSettingsOpen,
 	hasFailedToLoad,
 	hasFailedToCreate: choice.hasFailedToCreate,
 })
@@ -320,8 +315,6 @@ export const createSpacesController = (
 				choose({ ...listedChoice(created.id), hasFailedToCreate: false })
 			}).catch(noteRefusedCreate),
 
-		setSettingsOpen: (isSettingsOpen: boolean) => choose({ isSettingsOpen }),
-
 		describe: (id: string, value: SpaceSettingsValue) => {
 			const held = current().spaces.find((space) => space.id === id)
 			if (!held) {
@@ -346,10 +339,7 @@ export const createSpacesController = (
 				writes.drop(id)
 				const spaces = current().spaces.filter((space) => space.id !== id)
 				hold(spaces)
-				choose({
-					...listedChoice(spaces[0]?.id ?? null),
-					isSettingsOpen: false,
-				})
+				choose(listedChoice(spaces[0]?.id ?? null))
 			}).catch(reload),
 
 		exportSpace,

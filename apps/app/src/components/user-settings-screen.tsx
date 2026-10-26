@@ -1,18 +1,16 @@
-import type { ReactNode } from "react"
-
 import { ConfirmDialog } from "@workspace/ui/components/confirm-dialog"
-import {
-	SettingsScreen,
-	type SettingsScreenRequestLeave,
-} from "@workspace/ui/components/settings-screen"
+import { SettingsScreen } from "@workspace/ui/components/settings-screen"
 import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { signOutLeavingOf, useAccount } from "@/lib/account/use-account"
 import { openedServerScope } from "@/lib/applications/application-settings"
 import { useYourDevices } from "@/lib/devices/use-your-devices"
+import type { SettingsSearch } from "@/lib/navigation/settings-search"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { isRelaySpace } from "@/lib/spaces/joined-spaces-controller"
 import { diagnosticsActions } from "@/lib/user/diagnostics-actions"
 import { toNotificationChange } from "@/lib/user/user-settings"
+import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import {
 	ACCOUNT_TAB,
@@ -25,19 +23,23 @@ import { USER_OWNER } from "@/lib/workspace/user-owner"
 type UserSettingsScreenProps = {
 	about: AboutFieldsProps | undefined
 	core: WorkspaceCore
+	frame: SettingsFrame
+	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
-	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	scopes: ApplicationScopes
+	search: SettingsSearch
 }
 
 export const UserSettingsScreen = ({
 	about,
 	core,
+	frame,
+	navigation,
 	overlay,
 	panels,
-	rail,
 	scopes,
+	search,
 }: UserSettingsScreenProps) => {
 	const {
 		account: watchedAccount,
@@ -47,15 +49,9 @@ export const UserSettingsScreen = ({
 		userMcpServers,
 	} = core
 	const { userSettings } = overlay
-	const { applicationToOpenOn, closeSettings, personSkills, userHistory } =
-		panels
-	const {
-		serverEnvironmentSection,
-		setOpenedMcpServer,
-		setSettingsTab,
-		settingsTab,
-		userApplications,
-	} = scopes
+	const { personSkills, userHistory } = panels
+	const { serverEnvironmentSection, setOpenedMcpServer, userApplications } =
+		scopes
 	const { panel: accountPanel, signOutConfirmation } = useAccount(
 		watchedAccount,
 		userSettings.name,
@@ -70,11 +66,11 @@ export const UserSettingsScreen = ({
 	return (
 		<>
 			<SettingsScreen
+				{...frame}
 				target="user"
-				entry={settingsTab ?? ACCOUNT_TAB}
-				onEntryChange={setSettingsTab}
-				onBack={closeSettings}
-				rail={rail}
+				entry={search.entry ?? ACCOUNT_TAB}
+				onEntryChange={navigation.showEntry}
+				onBack={navigation.back}
 				about={about}
 				account={{ ...accountPanel, devices }}
 				applications={{
@@ -89,7 +85,7 @@ export const UserSettingsScreen = ({
 					serverConnection: userApplications.serverConnection,
 					serverEnvironment: serverEnvironmentSection,
 					catalogue: userApplications.mcpCatalogue,
-					serverToOpen: applicationToOpenOn({ kind: "user" }),
+					serverToOpen: search.application,
 				}}
 				diagnostics={diagnosticsActions}
 				history={userHistory}

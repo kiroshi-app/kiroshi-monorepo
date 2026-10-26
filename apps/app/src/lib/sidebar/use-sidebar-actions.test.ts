@@ -11,20 +11,14 @@ import {
 } from "./use-sidebar-actions"
 
 import { createStore } from "../store"
-import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
-import { createFakeTranscriptStore } from "../conversations/fake-transcript-store"
 import {
 	createOpenedMissionController,
 	type SelectedRow,
 } from "../missions/opened-mission-controller"
-import {
-	createSpacesController,
-	type SpacesController,
-} from "../spaces/spaces-controller"
 
 const UNUSED = {} as never
 
-const gearFor = (spaces: SpacesController) => {
+const gearFor = (settings: SidebarActionsSource["settings"]) => {
 	const source: SidebarActionsSource = {
 		attachments: UNUSED,
 		collapsedSections: UNUSED,
@@ -34,8 +28,8 @@ const gearFor = (spaces: SpacesController) => {
 		roster: UNUSED,
 		runtimes: UNUSED,
 		sections: UNUSED,
-		spaces,
-		user: UNUSED,
+		settings,
+		spaces: UNUSED,
 	}
 	const { result } = renderHook(() => useSidebarActions(source))
 	return { press: result.current.onOpenSpaceSettings }
@@ -44,17 +38,17 @@ const gearFor = (spaces: SpacesController) => {
 afterEach(cleanup)
 
 describe("the rail gear", () => {
-	it("opens the settings of the selected space", async () => {
-		const store = createFakeTranscriptStore()
-		const shown = await store.createSpace("Vocca")
-		const { queryClient } = createQueryTestWrapper()
-		const spaces = createSpacesController(store, { queryClient })
-		await spaces.load(shown.id)
-		const gear = gearFor(spaces)
+	it("opens the settings of the selected space", () => {
+		const settings = {
+			openCompanionSettings: vi.fn(),
+			openSpaceSettings: vi.fn(),
+			openUserSettings: vi.fn(),
+		}
+		const gear = gearFor(settings)
 
 		gear.press()
 
-		expect(spaces.getState().isSettingsOpen).toBe(true)
+		expect(settings.openSpaceSettings).toHaveBeenCalledOnce()
 	})
 })
 
@@ -79,8 +73,8 @@ const rowsFor = (selected: SelectedRow) => {
 		roster: rows as never,
 		runtimes: UNUSED,
 		sections: UNUSED,
+		settings: UNUSED,
 		spaces: UNUSED,
-		user: UNUSED,
 	}
 	const { result, rerender } = renderHook(() => useSidebarActions(source))
 	return { actions: () => result.current, rerender, openedMission, rows }
@@ -139,8 +133,8 @@ const idleActions = () => {
 		roster: UNUSED,
 		runtimes: UNUSED,
 		sections: UNUSED,
+		settings: UNUSED,
 		spaces: UNUSED,
-		user: UNUSED,
 	}
 	return renderHook(() => useSidebarActions(source)).result.current
 }

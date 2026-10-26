@@ -206,3 +206,5 @@ export const useRosterLists = ({
 		rosterSkeleton,
 	}
 }
+
+export type RosterLists = ReturnType<typeof useRosterLists>

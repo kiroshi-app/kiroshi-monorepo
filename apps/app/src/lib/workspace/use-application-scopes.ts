@@ -9,7 +9,6 @@ import {
 } from "../applications/application-settings"
 import { applicationTransport } from "../applications/application-transport"
 import { createSessionReopener } from "../applications/session-reopening"
-import type { SettingsTarget } from "../applications/settings-target"
 import { useApplicationInstalls } from "../applications/use-application-installs"
 import { useApplicationMarks } from "../applications/use-application-marks"
 import type { EnvScope } from "../conversations/store-contract"
@@ -38,13 +37,10 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	const [openedMcpServer, setOpenedMcpServer] = useState<EnvScope | null>(null)
 	const serverEnvironment = useEnvironment(store, openedMcpServer)
-	const [settingsTab, setSettingsTab] = useState<string>()
-	const [settingsApplication, setSettingsApplication] =
-		useState<SettingsTarget>()
 	const openedServerName =
 		openedMcpServer?.kind === "server" ? openedMcpServer.name : null
 
-	const { selectedSpaceId, isSettingsOpen: isSpaceEditing } = spaces.state
+	const { selectedSpaceId } = spaces.state
 	const openRowId = openRowIdOf(joinedSpaces.state, selectedSpaceId)
 	const selectedSpace = openLocalSpaceOf(spaces.state.spaces, openRowId)
 	const spaceTint = openSpaceColourOf(spaces.state, joinedSpaces.state)
@@ -111,7 +107,6 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 
 	return {
 		botApplications,
-		isSpaceEditing,
 		openedMcpServer,
 		openRowId,
 		selectedSpace,
@@ -119,10 +114,6 @@ export const useApplicationScopes = (core: WorkspaceCore) => {
 		serverEnvironmentSection,
 		spaceTint,
 		setOpenedMcpServer,
-		setSettingsApplication,
-		setSettingsTab,
-		settingsApplication,
-		settingsTab,
 		spaceApplications,
 		userApplications,
 	}

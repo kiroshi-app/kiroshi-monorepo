@@ -1,11 +1,5 @@
-import type { ReactNode } from "react"
-
 import { readBotOutputStyle } from "@workspace/ui/components/bot-settings"
-import {
-	CompanionSettingsScreen,
-	type SettingsScreenRequestLeave,
-} from "@workspace/ui/components/settings-screen"
-import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog/use-space-settings"
+import { CompanionSettingsScreen } from "@workspace/ui/components/settings-screen"
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import {
@@ -15,6 +9,9 @@ import {
 } from "@/lib/bots/bot-settings"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { failureReporterIn } from "@/lib/failure-report"
+import type { CompanionSettingsSearch } from "@/lib/navigation/settings-search"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
+import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -23,54 +20,43 @@ import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
 
 const GENERAL_ENTRY = "general"
 
-const DANGER_ENTRY = "danger"
-
 const reportFailure = failureReporterIn("companion-screen-host")
 
 type CompanionScreenHostProps = {
 	core: WorkspaceCore
+	frame: SettingsFrame
+	navigation: SettingsNavigation
 	panels: SettingsPanels
-	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	rosterLines: RosterLines
 	rosterView: RosterView
 	scopes: ApplicationScopes
+	search: CompanionSettingsSearch
 }
 
 export const CompanionScreenHost = ({
 	core,
+	frame,
+	navigation,
 	panels,
-	rail,
 	rosterLines,
 	rosterView,
 	scopes,
+	search,
 }: CompanionScreenHostProps) => {
 	const { botEnvironment, botMcpServers, catalogue, chat, roster } = core
-	const { applicationToOpenOn, botHistory, closeSettings, companionSkills } =
-		panels
+	const { botHistory, companionSkills } = panels
 	const { activity, deleteBot } = rosterLines
-	const { isShowingDanger, settingsBot } = rosterView
+	const { settingsBot } = rosterView
 	const {
 		botApplications,
-		isSpaceEditing,
 		selectedSpaceId,
 		serverEnvironmentSection,
 		setOpenedMcpServer,
-		setSettingsApplication,
-		setSettingsTab,
-		settingsTab,
 	} = scopes
 
 	if (!settingsBot) {
 		return null
 	}
-
-	const backToCompanions = () => {
-		roster.controller.setEditing(false)
-		setSettingsApplication(undefined)
-		setSettingsTab(COMPANIONS_ENTRY)
-	}
-
-	const leave = isSpaceEditing ? backToCompanions : closeSettings
 
 	const refuseDeletion = () => {
 		void reportFailure(
@@ -79,29 +65,21 @@ export const CompanionScreenHost = ({
 		)
 	}
 
-	const showEntry = (entry: string) => {
-		if (isShowingDanger) {
-			roster.controller.edit(settingsBot.id)
-		}
-		setSettingsTab(entry)
-	}
-
 	return (
 		<CompanionSettingsScreen
+			{...frame}
 			backLabel={
-				isSpaceEditing ? i18n.t("settings:screen.backToCompanions") : undefined
+				search.isFromSpaceSettings
+					? i18n.t("settings:screen.backToCompanions")
+					: undefined
 			}
-			entry={isShowingDanger ? DANGER_ENTRY : (settingsTab ?? GENERAL_ENTRY)}
-			onBack={leave}
-			onEntryChange={showEntry}
-			rail={rail}
+			entry={search.entry ?? GENERAL_ENTRY}
+			onBack={navigation.back}
+			onEntryChange={navigation.showEntry}
 			history={botHistory}
 			haveMcpServersFailedToLoad={botMcpServers.hasFailedToLoad}
 			{...botApplications}
-			mcpServerToOpen={applicationToOpenOn({
-				kind: "companion",
-				id: settingsBot.id,
-			})}
+			mcpServerToOpen={search.application}
 			environment={toEnvironmentRows(botEnvironment.entries)}
 			hasEnvironmentFailedToRead={botEnvironment.hasFailedToRead}
 			isEnvironmentPending={botEnvironment.isPending}
@@ -133,7 +111,7 @@ export const CompanionScreenHost = ({
 				void roster.controller.uploadAvatar(settingsBot.id, file)
 			}}
 			onDelete={() => {
-				void deleteBot(settingsBot.id).then(leave, refuseDeletion)
+				void deleteBot(settingsBot.id).then(navigation.back, refuseDeletion)
 			}}
 			onOutputStyleChange={(outputStyle) => {
 				if (outputStyle === settingsBot.outputStyle) {

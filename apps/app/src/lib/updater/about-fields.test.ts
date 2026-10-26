@@ -37,7 +37,7 @@ const updaterOf = (state: UpdaterState) => {
 
 const userOf = (preferences: Partial<User["state"]["preferences"]> = {}) =>
 	({
-		state: { preferences, isSettingsOpen: true },
+		state: { preferences },
 		controller: {
 			setUpdateChannel: vi.fn(async () => undefined),
 			setShowWhatsNew: vi.fn(async () => undefined),

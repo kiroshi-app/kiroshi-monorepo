@@ -6,6 +6,7 @@ import type { RosterView } from "./use-roster-view"
 import type { WorkspaceCore } from "./use-workspace-core"
 import { useWorkspaceShortcuts } from "./use-workspace-shortcuts"
 
+import type { OpenSettings } from "../navigation/open-settings"
 import {
 	useSearch,
 	useSearchLookups,
@@ -16,6 +17,7 @@ import { toUserSettingsValue } from "../user/user-settings"
 
 type WorkspaceOverlayInput = {
 	core: WorkspaceCore
+	openSettings: OpenSettings | null
 	rosterLines: RosterLines
 	rosterView: RosterView
 	scopes: ApplicationScopes
@@ -23,6 +25,7 @@ type WorkspaceOverlayInput = {
 
 export const useWorkspaceOverlay = ({
 	core,
+	openSettings,
 	rosterLines,
 	rosterView,
 	scopes,
@@ -39,21 +42,15 @@ export const useWorkspaceOverlay = ({
 	const { now, sidebarActions } = rosterLines
 	const {
 		conversationRosters,
-		isEditing,
 		isEditingConversation,
 		selected,
 		selectedBotId,
 		selectedConversationId,
 		settingsConversationId,
 	} = rosterView
-	const { isSpaceEditing, selectedSpace, selectedSpaceId } = scopes
+	const { selectedSpace, selectedSpaceId } = scopes
 
-	const isDialogOpen = [
-		isEditing,
-		isEditingConversation,
-		user.state.isSettingsOpen,
-		isSpaceEditing,
-	].some(Boolean)
+	const isDialogOpen = openSettings !== null || isEditingConversation
 
 	const searchLookups = useSearchLookups({
 		rosters: roster.state.rosters,
@@ -86,9 +83,9 @@ export const useWorkspaceOverlay = ({
 
 	const toggleSettings = useCallback(() => {
 		if (selectedBotId) {
-			roster.controller.edit(selectedBotId)
+			sidebarActions.onEditBot(selectedBotId)
 		}
-	}, [roster.controller, selectedBotId])
+	}, [sidebarActions, selectedBotId])
 
 	const userSettings = useMemo(
 		() => toUserSettingsValue(preferences),

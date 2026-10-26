@@ -138,20 +138,17 @@ describe("useCompanionArrivals", () => {
 		expect(participantsOf(away)).toContain(invitedBotId)
 	})
 
-	it("leaves the selected row and the open settings dialog as they were", async () => {
+	it("leaves the selected row as it was", async () => {
 		const away = await anAwayConversation()
 		const { store, controller, conversationId, invitedBotId } = away
 		const selectedBotId = firstBotOf(controller)
 		controller.select(selectedBotId)
-		controller.edit(selectedBotId)
 		await listening(controller)
 		await store.addConversationParticipant(conversationId, invitedBotId)
 
 		await announcing(arrivalOf(conversationId, invitedBotId))
 
 		expect(controller.getState().selectedBotId).toBe(selectedBotId)
-		expect(controller.getState().settingsBotId).toBe(selectedBotId)
-		expect(controller.getState().isEditing).toBe(true)
 	})
 
 	it("re-reads the roster once when the same arrival is announced twice", async () => {

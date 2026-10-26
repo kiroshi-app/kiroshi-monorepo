@@ -1,55 +1,40 @@
 import { AppRail } from "@workspace/ui/components/app-rail"
 import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import type { SidebarPanel } from "@/lib/user/use-sidebar-tab"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
-import { useRosterLists } from "@/lib/workspace/use-roster-lists"
-import type { RosterView } from "@/lib/workspace/use-roster-view"
+import type { RosterLists } from "@/lib/workspace/use-roster-lists"
 import type { SettingsPanels } from "@/lib/workspace/use-settings-panels"
-import type { SidebarMissions } from "@/lib/workspace/use-sidebar-missions"
 import type { useSidebarPanelSwitch } from "@/lib/workspace/use-sidebar-panel-switch"
 import type { WorkspaceCore } from "@/lib/workspace/use-workspace-core"
-import type { WorkspaceDrivers } from "@/lib/workspace/use-workspace-drivers"
 import type { WorkspaceOverlay } from "@/lib/workspace/use-workspace-overlay"
 
-export type WorkspaceRailProps = {
+type WorkspaceRailProps = {
 	collapsedSectionIds: string[]
 	core: WorkspaceCore
-	drivers: WorkspaceDrivers
+	navigation: SettingsNavigation
 	overlay: WorkspaceOverlay
 	panels: SettingsPanels
-	rosterLines: RosterLines
-	rosterView: RosterView
-	sidebarMissions: SidebarMissions
-	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
-}
-
-type WorkspaceRailLeave = {
 	requestLeave: SettingsScreenRequestLeave
+	rosterLines: RosterLines
+	rosterLists: RosterLists
+	sidebarTab: ReturnType<typeof useSidebarPanelSwitch>
 }
 
 export const WorkspaceRail = ({
 	collapsedSectionIds,
 	core,
-	drivers,
+	navigation,
 	overlay,
 	panels,
 	requestLeave,
 	rosterLines,
-	rosterView,
-	sidebarMissions,
+	rosterLists,
 	sidebarTab,
-}: WorkspaceRailProps & WorkspaceRailLeave) => {
-	const rosterLists = useRosterLists({
-		core,
-		drivers,
-		rosterLines,
-		rosterView,
-		waitingMissionCount: sidebarMissions.waitingCount,
-	})
-
+}: WorkspaceRailProps) => {
 	const leaveSettingsFor = (panel: SidebarPanel) => {
-		panels.closeSettings()
+		navigation.openConversations()
 		if (panel === sidebarTab.openTab) return
 		sidebarTab.openSidebarTab(panel, {
 			botsBySpaceId: rosterLists.rosterBotsBySpace,
@@ -62,13 +47,15 @@ export const WorkspaceRail = ({
 	return (
 		<AppRail
 			dots={rosterLists.railSignals}
-			onOpenSpaceSettings={() => requestLeave(panels.openSpaceSettings)}
-			onOpenYou={() => requestLeave(panels.openUserSettings)}
+			onOpenSpaceSettings={() =>
+				requestLeave(() => navigation.openSpaceSettings())
+			}
+			onOpenYou={() => requestLeave(() => navigation.openUserSettings())}
 			onSelectConversations={() =>
 				requestLeave(() => leaveSettingsFor("conversations"))
 			}
 			onSelectMissions={() => requestLeave(() => leaveSettingsFor("missions"))}
-			openSettings={panels.openSettings}
+			openSettings={panels.railSettings}
 			selected={sidebarTab.openTab}
 			updateBadge={rosterLines.updateBadge}
 			user={overlay.userSettings}

@@ -18,7 +18,6 @@ import { COMPANIONS_ENTRY } from "@workspace/ui/components/space-settings-dialog
 import { i18n } from "@workspace/ui/lib/i18n"
 
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
-import { APPLICATIONS_TAB } from "@/lib/applications/connection-settings"
 import {
 	type AccountState,
 	type CompanionCounts,
@@ -34,6 +33,8 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { Bot } from "@/lib/conversations/store-contract"
 import { botIdentity } from "@/lib/conversations/transcript-fixtures"
 import { invoke, isDesktopHost, listen } from "@/lib/host/index"
+import type { SettingsSearch } from "@/lib/navigation/settings-search"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
 import {
 	createJoinedSpacesController,
@@ -47,6 +48,7 @@ import {
 	type SpacesController,
 } from "@/lib/spaces/spaces-controller"
 import { useControllerState } from "@/lib/use-controller"
+import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -159,7 +161,8 @@ const SpaceSettingsHarness = ({
 	openAccountSettings,
 	bots = [],
 }: SpaceSettingsHarnessProps) => {
-	const [settingsTab, setSettingsTab] = useState(openedTab)
+	const [isOpen, setIsOpen] = useState(true)
+	const [search, setSearch] = useState<SettingsSearch>({ entry: openedTab })
 	const spacesState = useControllerState(spaces)
 	const joinedState = useControllerState(joined)
 	const { selectedSpaceId } = spacesState
@@ -175,17 +178,14 @@ const SpaceSettingsHarness = ({
 		},
 		spaceMcpServers: { hasFailedToLoad: false },
 	} as unknown as WorkspaceCore
+	const navigation = {
+		back: () => setIsOpen(false),
+		openConversations: () => setIsOpen(false),
+		openCompanionSettings: vi.fn(),
+		showEntry: (entry: string) => setSearch({ entry }),
+	} as unknown as SettingsNavigation
 	const panels = {
-		applicationToOpenOn: () => undefined,
-		closeSettings: () => {
-			setSettingsTab(undefined)
-			spaces.setSettingsOpen(false)
-		},
 		openAccountSettings,
-		openSpaceMembers: () => {
-			setSettingsTab("members")
-			spaces.setSettingsOpen(true)
-		},
 		spaceHistory: { days: [], oldestDate: "2026-01-01", onUndo: vi.fn() },
 		spaceSkills: { skills: [] },
 	} as unknown as SettingsPanels
@@ -196,23 +196,23 @@ const SpaceSettingsHarness = ({
 		),
 		selectedSpaceId,
 		setOpenedMcpServer: vi.fn(),
-		setSettingsTab,
-		settingsTab,
 		spaceApplications: { mcpServers: [] },
 	} as unknown as ApplicationScopes
 	return createElement(
 		Fragment,
 		null,
-		spacesState.isSettingsOpen
+		isOpen
 			? createElement(SpaceSettingsScreen, {
 					core,
+					frame: { rail: () => null } as unknown as SettingsFrame,
+					navigation,
 					panels,
-					rail: () => null,
 					rosterLines: {
 						sidebarActions: { onCreateBot: vi.fn() },
 					} as unknown as RosterLines,
 					rosterView: { bots } as unknown as RosterView,
 					scopes,
+					search,
 				})
 			: null,
 		createElement(NoticeSurface),
@@ -226,7 +226,6 @@ const settingsMenuOf = () =>
 
 const openSettingsOf = (gear: Gear, rowId: string, openedTab?: string) => {
 	gear.joined.selectSpace(rowId)
-	gear.spaces.setSettingsOpen(true)
 	return render(createElement(SpaceSettingsHarness, { ...gear, openedTab }), {
 		wrapper: createQueryTestWrapper().wrapper,
 	}).container
@@ -319,25 +318,6 @@ describe("SpaceSettingsScreen on a joined space", () => {
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
 	})
 
-	it("resets the settings tab so the next Settings opens on the first tab", async () => {
-		const gear = await gearWithGarage()
-		const dialog = openSettingsOf(gear, GARAGE_ROW, APPLICATIONS_TAB)
-
-		await confirmLeave(dialog)
-		await waitFor(() => expect(settingsMenuOf()).toBeNull())
-		act(() => gear.spaces.setSettingsOpen(true))
-
-		const reopened = await screen.findByRole("navigation", {
-			name: SETTINGS_MENU,
-		})
-		expect(
-			within(reopened).getByRole("button", {
-				name: i18n.t("settings:rail.space"),
-				current: "page",
-			}),
-		).toBeTruthy()
-	})
-
 	it("keeps the space and raises the refusal when the leave fails", async () => {
 		const gear = await gearWithGarage()
 		gear.transport.remove.mockRejectedValueOnce(new Error("disk full"))
@@ -374,24 +354,14 @@ describe("SpaceSettingsScreen on a local space", () => {
 		).toBeTruthy()
 	})
 
-	it("resets the settings tab once the space is deleted, so the next Settings opens on the first tab", async () => {
+	it("returns to the conversations once the space is deleted", async () => {
 		const gear = await gearWithGarage()
 		await gear.spaces.create()
-		const dialog = openSettingsOf(gear, gear.home.id, APPLICATIONS_TAB)
+		const dialog = openSettingsOf(gear, gear.home.id)
 
 		await confirmDelete(dialog)
-		await waitFor(() => expect(settingsMenuOf()).toBeNull())
-		act(() => gear.spaces.setSettingsOpen(true))
 
-		const reopened = await screen.findByRole("navigation", {
-			name: SETTINGS_MENU,
-		})
-		expect(
-			within(reopened).getByRole("button", {
-				name: i18n.t("settings:rail.space"),
-				current: "page",
-			}),
-		).toBeTruthy()
+		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 	})
 })
 
@@ -400,7 +370,6 @@ const MEMBERS_TAB_NAME = i18n.t("settings:rail.members")
 const openShareOf = async (gear: Gear, rowId: string) => {
 	const openAccountSettings = vi.fn()
 	gear.joined.selectSpace(rowId)
-	gear.spaces.setSettingsOpen(true)
 	const dialog = render(
 		createElement(SpaceSettingsHarness, { ...gear, openAccountSettings }),
 		{
@@ -430,7 +399,7 @@ describe("SpaceSettingsScreen hosting on the desktop", () => {
 		expect(hostingSwitchOf(dialog).getAttribute("aria-checked")).toBe("true")
 	})
 
-	it("closes the space settings and opens the account settings on Sign in", async () => {
+	it("opens the account settings on Sign in", async () => {
 		vi.mocked(isDesktopHost).mockReturnValue(true)
 		vi.mocked(commands.hostingState).mockResolvedValue({ kind: "needsSignIn" })
 		const gear = await gearWithGarage()
@@ -446,7 +415,6 @@ describe("SpaceSettingsScreen hosting on the desktop", () => {
 		)
 
 		expect(openAccountSettings).toHaveBeenCalledOnce()
-		await waitFor(() => expect(settingsMenuOf()).toBeNull())
 	})
 
 	it("leaves the switch off and raises the H6 notice when the start fails", async () => {
@@ -1171,7 +1139,6 @@ const countsLineOf = (bot: Bot) =>
 
 const openCompanionsOf = async (gear: Gear, rowId: string) => {
 	gear.joined.selectSpace(rowId)
-	gear.spaces.setSettingsOpen(true)
 	const rendered = render(
 		createElement(SpaceSettingsHarness, {
 			...gear,

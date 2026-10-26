@@ -96,10 +96,7 @@ export type RosterState = {
 	conversationPreviews: ConversationPreviews
 	selectedBotId: string | null
 	selectedConversationId: string | null
-	settingsBotId: string | null
 	settingsConversationId: string | null
-	isEditing: boolean
-	isShowingDanger: boolean
 	isEditingConversation: boolean
 	hasLoaded: boolean
 	hasFailedToLoad: boolean
@@ -214,8 +211,6 @@ export type RosterController = {
 	createFromDraft: (draft: BotDraft) => Promise<Bot>
 	createConversation: (botIds?: string[]) => Promise<Conversation | null>
 	duplicate: (id: string, spaceRowId?: string) => Promise<Bot | null>
-	edit: (id: string) => void
-	setEditing: (isEditing: boolean) => void
 	describe: (id: string, value: BotSettingsValue) => void
 	restyle: (id: string, outputStyle: BotOutputStyle) => void
 	uploadAvatar: (id: string, file: File) => Promise<void>
@@ -226,7 +221,6 @@ export type RosterController = {
 	addToSpace: (botId: string, spaceRowId: string) => Promise<void>
 	removeFromSpace: (botId: string, spaceRowId: string) => Promise<void>
 	clearSection: (sectionId: string) => void
-	askToDelete: (id: string) => void
 	remove: (id: string) => Promise<void>
 	moveConversationToSection: (
 		conversationId: string,
@@ -259,10 +253,7 @@ type RosterChoice = {
 	lastRowId: string | null
 	chosenBotId: string | null
 	chosenConversationId: string | null
-	settingsBotId: string | null
 	settingsConversationId: string | null
-	isEditing: boolean
-	isShowingDanger: boolean
 	isEditingConversation: boolean
 	hasLoaded: boolean
 }
@@ -273,10 +264,7 @@ const initialRosterChoice: RosterChoice = {
 	lastRowId: null,
 	chosenBotId: null,
 	chosenConversationId: null,
-	settingsBotId: null,
 	settingsConversationId: null,
-	isEditing: false,
-	isShowingDanger: false,
 	isEditingConversation: false,
 	hasLoaded: false,
 }
@@ -349,14 +337,9 @@ const NOTHING_SELECTED: Landing = {
 }
 
 const NO_SETTINGS = {
-	settingsBotId: null,
 	settingsConversationId: null,
-	isEditing: false,
-	isShowingDanger: false,
 	isEditingConversation: false,
 }
-
-type BotSettingsOpening = { id: string; isShowingDanger: boolean }
 
 const NO_SPACE = { kind: "unknownSpace", id: "" } satisfies SpaceError
 
@@ -437,20 +420,15 @@ const landingIn = (
 
 const settingsStandingIn = (
 	choice: RosterChoice,
-	bots: Bot[],
 	conversations: Conversation[],
 ) => {
-	const holdsBot = bots.some((bot) => bot.id === choice.settingsBotId)
 	const holdsConversation = conversations.some(
 		(conversation) => conversation.id === choice.settingsConversationId,
 	)
 	return {
-		settingsBotId: holdsBot ? choice.settingsBotId : null,
 		settingsConversationId: holdsConversation
 			? choice.settingsConversationId
 			: null,
-		isEditing: choice.isEditing && holdsBot,
-		isShowingDanger: choice.isShowingDanger && holdsBot,
 		isEditingConversation: choice.isEditingConversation && holdsConversation,
 	}
 }
@@ -555,7 +533,7 @@ const rosterBaseOf = (
 		conversationPreviews,
 		spaceRowId: choice.spaceRowId,
 		...landingIn(choice, rosters, conversationRosters),
-		...settingsStandingIn(choice, bots, conversations),
+		...settingsStandingIn(choice, conversations),
 		hasLoaded: choice.hasLoaded,
 		hasFailedToLoad: failures.includes(true),
 		isRosterPending: pendings[chosenIndex] ?? false,
@@ -1112,14 +1090,6 @@ export const createRosterController = (
 		await joinedReads
 	}
 
-	const openBotSettings = ({ id, isShowingDanger }: BotSettingsOpening) =>
-		choose({
-			settingsBotId: id,
-			isEditing: true,
-			isShowingDanger,
-			isEditingConversation: false,
-		})
-
 	return {
 		getState: current,
 
@@ -1239,14 +1209,6 @@ export const createRosterController = (
 				return written
 			}).catch(reloadAndYield),
 
-		edit: (id: string) => openBotSettings({ id, isShowingDanger: false }),
-
-		setEditing: (isEditing: boolean) =>
-			choose({
-				isEditing,
-				isShowingDanger: isEditing && chosen().isShowingDanger,
-			}),
-
 		describe: (id: string, value: BotSettingsValue) => {
 			preview(id, value)
 			writes.push(id, value)
@@ -1356,8 +1318,6 @@ export const createRosterController = (
 			}))
 		},
 
-		askToDelete: (id: string) => openBotSettings({ id, isShowingDanger: true }),
-
 		remove: (id: string) =>
 			commit(async () => {
 				await store.deleteBot(id)
@@ -1400,8 +1360,6 @@ export const createRosterController = (
 		editConversation: (id: string) =>
 			choose({
 				settingsConversationId: id,
-				isEditing: false,
-				isShowingDanger: false,
 				isEditingConversation: true,
 			}),
 

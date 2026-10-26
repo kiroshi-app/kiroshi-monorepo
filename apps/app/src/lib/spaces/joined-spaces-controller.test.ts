@@ -434,9 +434,8 @@ describe("leaving a space", () => {
 		return gear
 	}
 
-	it("removes the selected space, closes its settings and selects the first local one", async () => {
+	it("removes the selected space and selects the first local one", async () => {
 		const gear = await leavingGarage()
-		gear.spaces.setSettingsOpen(true)
 
 		await gear.joined.leave(GARAGE.id)
 
@@ -446,7 +445,6 @@ describe("leaving a space", () => {
 		expect(gear.joined.getState().joinedSpaces).toEqual([])
 		expect(gear.spaces.getState().selectedSpaceId).toBe(firstLocal?.id)
 		expect(gear.hosts.activate).toHaveBeenLastCalledWith(null)
-		expect(gear.spaces.getState().isSettingsOpen).toBe(false)
 	})
 
 	it("keeps the selection when the space left is not the selected one", async () => {

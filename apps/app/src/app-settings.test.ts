@@ -19,20 +19,44 @@ import { createFakeTranscriptStore } from "@/lib/conversations/fake-transcript-s
 import type { TranscriptStore } from "@/lib/conversations/store-port"
 import { isDesktopHost } from "@/lib/host/index"
 import { createQueryTestWrapper } from "@/lib/query/query-test-wrapper"
+import type { UserPreferences } from "@/lib/user/preferences-contract"
 import { readMirror, writeMirror } from "@/lib/user/preferences-mirror"
 
-const harness = vi.hoisted((): { store: TranscriptStore | null } => ({
-	store: null,
-}))
+type Harness = {
+	store: TranscriptStore | null
+	preferences: UserPreferences | null
+}
+
+const harness = vi.hoisted(
+	(): Harness => ({
+		store: null,
+		preferences: null,
+	}),
+)
 
 vi.mock("@/lib/conversations/create-store", () => ({
 	createTranscriptStore: () => harness.store,
 }))
 
-vi.mock("@/lib/host/index", async (importOriginal) => ({
-	...(await importOriginal<typeof import("@/lib/host/index")>()),
-	isDesktopHost: vi.fn(() => false),
-}))
+const PREFERENCES_COMMANDS = ["user_preferences", "user_set_preferences"]
+
+vi.mock("@/lib/host/index", async (importOriginal) => {
+	const host = await importOriginal<typeof import("@/lib/host/index")>()
+	const answerPreferences = (args: unknown) => {
+		const written = (args as { preferences?: UserPreferences } | undefined)
+			?.preferences
+		harness.preferences = written ?? harness.preferences
+		return Promise.resolve(harness.preferences)
+	}
+	return {
+		...host,
+		isDesktopHost: vi.fn(() => false),
+		invoke: (command: string, args?: Record<string, unknown>) =>
+			harness.preferences && PREFERENCES_COMMANDS.includes(command)
+				? answerPreferences(args)
+				: host.invoke(command, args),
+	}
+})
 
 vi.mock("@/lib/bindings", async (importOriginal) => {
 	const bindings = await importOriginal<typeof import("@/lib/bindings")>()
@@ -64,6 +88,8 @@ afterEach(() => {
 	cleanup()
 	vi.useRealTimers()
 	vi.mocked(isDesktopHost).mockReturnValue(false)
+	writeMirror({ ...readMirror(), sidebarWidth: null })
+	harness.preferences = null
 })
 
 const settle = async () => {
@@ -344,4 +370,128 @@ it("opens the applications catalogue on Add an application", async () => {
 			name: i18n.t("bots:applications.catalogue.category.everything"),
 		}),
 	).toBeTruthy()
+})
+
+const VOCCA = "Vocca"
+
+const STORED_PREFERENCES: UserPreferences = {
+	displayName: "",
+	profilePicturePath: null,
+	colorScheme: "system",
+	language: null,
+	notifyOnQuestion: true,
+	notifyOnPermission: true,
+	notifyOnFinishedTurn: true,
+	notifyWithSound: true,
+	sidebarWidth: null,
+	sidebarTab: "conversations",
+	activityPanelOpen: false,
+	firstRunDone: true,
+	lastSpaceId: null,
+	lastBotIdBySpace: {},
+}
+
+const secondSpace: Installs = (store) => store.createSpace(VOCCA)
+
+const backOf = () =>
+	within(settingsMenuOf() as HTMLElement).getByRole("button", {
+		name: i18n.t("settings:screen.back"),
+	})
+
+const resizeHandleOf = () =>
+	document.querySelector(
+		'[data-slot="sidebar-resize-handle"][data-side="left"]',
+	) as HTMLElement
+
+const sidebarWidthOf = () =>
+	Number(resizeHandleOf().getAttribute("aria-valuenow"))
+
+const widenSidebar = async () => {
+	await act(async () => {
+		fireEvent.keyDown(resizeHandleOf(), { key: "ArrowRight" })
+	})
+	await settle()
+}
+
+const switchSpaceTo = async (name: string) => {
+	await press(
+		document.querySelector('[data-slot="space-switcher"]') as HTMLElement,
+	)
+	await press(screen.getByRole("menuitemradio", { name: new RegExp(name) }))
+}
+
+const openFirstCompanionOfSpace = async () => {
+	await press(gearOf())
+	await press(menuEntryOf(new RegExp(`^${i18n.t("settings:rail.companions")}`)))
+	await press(
+		document
+			.querySelector('[data-slot="companion-card-name"]')
+			?.closest("button") as HTMLElement,
+	)
+}
+
+it("goes back one entry, to the user settings the space settings were opened over, then to the conversations", async () => {
+	await mountApp()
+	await press(avatarOf())
+	await press(gearOf())
+
+	await press(backOf())
+
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+
+	await press(backOf())
+
+	expect(shownSettingsOf()).toBeNull()
+})
+
+it("opens the conversations and every settings screen at the width set on a settings screen, after a restart too", async () => {
+	harness.preferences = STORED_PREFERENCES
+	await mountApp()
+	await press(gearOf())
+	const openingWidth = sidebarWidthOf()
+
+	await widenSidebar()
+	const widened = sidebarWidthOf()
+
+	expect(widened).toBeGreaterThan(openingWidth)
+	await press(backOf())
+	expect(sidebarWidthOf()).toBe(widened)
+	await press(avatarOf())
+	expect(sidebarWidthOf()).toBe(widened)
+
+	cleanup()
+	await mountApp()
+
+	expect(shownSettingsOf()).toBeNull()
+	expect(sidebarWidthOf()).toBe(widened)
+})
+
+it("shows the settings of the new Space when the Space switches from the Space settings", async () => {
+	const opened = await mountApp(secondSpace)
+	await press(gearOf())
+	expect(screen.getByDisplayValue(opened.name)).toBeTruthy()
+
+	await switchSpaceTo(VOCCA)
+
+	expect(shownSettingsOf()?.subtitle).toBe("space")
+	expect(screen.getByDisplayValue(VOCCA)).toBeTruthy()
+})
+
+it("keeps the user settings when the Space switches from them", async () => {
+	await mountApp(secondSpace)
+	await press(avatarOf())
+
+	await switchSpaceTo(VOCCA)
+
+	expect(shownSettingsOf()?.subtitle).toBe("user")
+})
+
+it("returns to the conversations when the Space switches from the settings of a companion", async () => {
+	await mountApp(secondSpace)
+	await openFirstCompanionOfSpace()
+	expect(settingsMenuOf()).toBeTruthy()
+
+	await switchSpaceTo(VOCCA)
+
+	expect(settingsMenuOf()).toBeNull()
 })
