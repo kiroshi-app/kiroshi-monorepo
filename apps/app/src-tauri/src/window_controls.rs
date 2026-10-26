@@ -238,17 +238,15 @@ mod macos {
 		window.on_window_event(move |event| match event {
 			WindowEvent::Resized(_) => {
 				let replaced = subject.clone();
-				let _ = subject.run_on_main_thread(move || place_in(&replaced));
+				let _ = subject.run_on_main_thread(move || {
+					if let Some(ns_window) = main_window(&replaced) {
+						place(&ns_window);
+					}
+				});
 			}
 			WindowEvent::Destroyed => exit_observer.stop(),
 			_ => {}
 		});
-	}
-
-	fn place_in<R: Runtime>(window: &WebviewWindow<R>) {
-		if let Some(ns_window) = main_window(window) {
-			place(&ns_window);
-		}
 	}
 
 	fn place(ns_window: &NSWindow) {
