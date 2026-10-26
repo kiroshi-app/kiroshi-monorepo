@@ -25,6 +25,7 @@ import { pluginScopeOf } from "../conversations/plugin-scope"
 import { createSpokenWords } from "../conversations/spoken-words"
 import { useEnvironment } from "../environment/use-environment"
 import { createOpenedMissionController } from "../missions/opened-mission-controller"
+import type { OpenSettings } from "../navigation/open-settings"
 import { usePlugin } from "../plugins/use-plugin"
 import { createOpenedRoutineController } from "../routines/opened-routine-controller"
 import { createMessageLandingController } from "../search/message-landing-controller"
@@ -36,7 +37,7 @@ import { useJoinedSpaces } from "../spaces/use-joined-spaces"
 import { useSpaces } from "../spaces/use-spaces"
 import { useUser } from "../user/use-user"
 
-export const useWorkspaceCore = () => {
+export const useWorkspaceCore = (openSettings: OpenSettings | null) => {
 	const store = useMemo(createTranscriptStore, [])
 	const driver = useMemo(() => createChatDriver(store), [store])
 	const account = useWatchedAccount()
@@ -103,11 +104,12 @@ export const useWorkspaceCore = () => {
 	const joinedSpaces = useJoinedSpaces(spaces.controller, roster.controller)
 	const invitations = useInvitations(joinedSpaces.controller)
 	const companionSettingsOwner = companionSettingsOwnerOf(
+		openSettings,
 		roster.state,
 		spaces.state,
 	)
-	const spaceSettingsOwner = spaceSettingsOwnerOf(spaces.state)
-	const userSettingsOwner = userSettingsOwnerOf(user.state.isSettingsOpen)
+	const spaceSettingsOwner = spaceSettingsOwnerOf(openSettings, spaces.state)
+	const userSettingsOwner = userSettingsOwnerOf(openSettings)
 	const applications = useApplications(applicationTransport, store, {
 		isCatalogueOpen: Boolean(
 			companionSettingsOwner ?? spaceSettingsOwner ?? userSettingsOwner,

@@ -92,7 +92,7 @@ type JoinedSpacesHosts = Pick<
 
 type JoinedSpacesControllerOptions = {
 	queryClient: QueryClient
-	spaces: Pick<SpacesController, "getState" | "select" | "setSettingsOpen">
+	spaces: Pick<SpacesController, "getState" | "select">
 	hosts?: JoinedSpacesHosts
 	transport?: JoinedSpacesTransport
 	reportFailure?: (notice: NoticeMessage) => void
@@ -562,7 +562,6 @@ export const createJoinedSpacesController = ({
 		})
 		hosts.forget(leaving.id)
 		hold(heldWithout(leaving.id))
-		spaces.setSettingsOpen(false)
 		const [firstLocal] = spaces.getState().spaces
 		if (isOpenJoined(leaving) && firstLocal) {
 			selectSpace(firstLocal.id)

@@ -13,29 +13,35 @@ import {
 	ownerOfScope,
 	type ReopenedScope,
 } from "../applications/session-reopening"
-import { applicationToOpenIn } from "../applications/settings-target"
 import { useHistoryView } from "../bots/use-history-view"
+import type { OpenSettings } from "../navigation/open-settings"
+import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { toPluginSkills } from "../plugins/plugin-skills"
 
 export const ACCOUNT_TAB = "account"
 
 const MEMBERS_TAB = "members"
 
-type SettingsOpening = { setSettingsOpen: (isSettingsOpen: boolean) => void }
-
-const showSettingsOf = (shown: SettingsOpening, hidden: SettingsOpening) => {
-	hidden.setSettingsOpen(false)
-	shown.setSettingsOpen(true)
+const railSettingsOf = (
+	openSettings: OpenSettings | null,
+): AppRailSettings | undefined => {
+	if (openSettings?.kind === "user") return "you"
+	if (openSettings?.kind === "space") return "space"
+	return openSettings?.isFromSpaceSettings ? "space" : undefined
 }
 
 type SettingsPanelsInput = {
 	core: WorkspaceCore
+	navigation: SettingsNavigation
+	openSettings: OpenSettings | null
 	rosterView: RosterView
 	scopes: ApplicationScopes
 }
 
 export const useSettingsPanels = ({
 	core,
+	navigation,
+	openSettings,
 	rosterView,
 	scopes,
 }: SettingsPanelsInput) => {
@@ -43,25 +49,16 @@ export const useSettingsPanels = ({
 		applications,
 		chat,
 		companionPlugin,
-		roster,
 		spacePlugin,
 		spaces,
-		user,
 		userPlugin,
 	} = core
-	const { isEditing, settingsBot, settingsBotId } = rosterView
-	const {
-		isSpaceEditing,
-		selectedSpaceId,
-		setOpenedMcpServer,
-		setSettingsApplication,
-		setSettingsTab,
-		settingsApplication,
-	} = scopes
+	const { settingsBotId } = rosterView
+	const { selectedSpaceId, setOpenedMcpServer } = scopes
 
 	const botHistory = useHistoryView({
 		...companionPlugin.state,
-		isOpen: isEditing,
+		isOpen: openSettings?.kind === "companion",
 		onOpenRun: companionPlugin.actions.openFiles,
 		onUndoRun: (oldestCommitId, newestCommitId) => {
 			companionPlugin.actions.revert(oldestCommitId, newestCommitId)
@@ -71,14 +68,14 @@ export const useSettingsPanels = ({
 
 	const spaceHistory = useHistoryView({
 		...spacePlugin.state,
-		isOpen: isSpaceEditing,
+		isOpen: openSettings?.kind === "space",
 		onOpenRun: spacePlugin.actions.openFiles,
 		onUndoRun: spacePlugin.actions.revert,
 	})
 
 	const userHistory = useHistoryView({
 		...userPlugin.state,
-		isOpen: user.state.isSettingsOpen,
+		isOpen: openSettings?.kind === "user",
 		onOpenRun: userPlugin.actions.openFiles,
 		onUndoRun: userPlugin.actions.revert,
 	})
@@ -87,74 +84,30 @@ export const useSettingsPanels = ({
 	const spaceSkills = toPluginSkills(spacePlugin)
 	const personSkills = toPluginSkills(userPlugin)
 
-	const applicationToOpenOn = (scope: ReopenedScope) =>
-		applicationToOpenIn(scope, settingsApplication)
-
-	const closeSettingsTab = () => {
-		setSettingsTab(undefined)
-		setSettingsApplication(undefined)
-	}
-
-	const closeCompanionScreen = () => {
-		closeSettingsTab()
-		roster.controller.setEditing(false)
-	}
-
-	const openSpaceSettings = () => {
-		closeCompanionScreen()
-		showSettingsOf(spaces.controller, user.controller)
-	}
-
-	const openUserSettings = () => {
-		closeCompanionScreen()
-		showSettingsOf(user.controller, spaces.controller)
-	}
-
-	const closeSettings = () => {
-		closeCompanionScreen()
-		spaces.controller.setSettingsOpen(false)
-		user.controller.setSettingsOpen(false)
-	}
-
-	const openSettings: AppRailSettings | undefined = user.state.isSettingsOpen
-		? "you"
-		: isSpaceEditing && selectedSpaceId
-			? "space"
-			: undefined
-
-	const isCompanionScreenOpen = isEditing && settingsBot !== undefined
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the setters come from useState in useApplicationScopes and never change
 	const openApplicationsOf = useCallback(
 		(scope: ReopenedScope, server?: string) => {
-			setSettingsTab(APPLICATIONS_TAB)
-			setSettingsApplication(
-				server ? { scope, application: server } : undefined,
-			)
 			setOpenedMcpServer(
 				openedServerScope(server ?? null, ownerOfScope(scope, selectedSpaceId)),
 			)
+			const search = { entry: APPLICATIONS_TAB, application: server }
 			if (scope.kind === "user") {
-				showSettingsOf(user.controller, spaces.controller)
+				navigation.openUserSettings(search)
 			} else if (scope.kind === "companion") {
-				roster.controller.edit(scope.id)
+				navigation.openCompanionSettings(scope.id, search)
 			} else {
-				showSettingsOf(spaces.controller, user.controller)
+				navigation.openSpaceSettings(search)
 			}
 		},
-		[roster.controller, spaces.controller, user.controller, selectedSpaceId],
+		[navigation, selectedSpaceId, setOpenedMcpServer],
 	)
 
-	const openAccountSettings = () => {
-		setSettingsTab(ACCOUNT_TAB)
-		showSettingsOf(user.controller, spaces.controller)
-	}
+	const openAccountSettings = () =>
+		navigation.openUserSettings({ entry: ACCOUNT_TAB })
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the setter comes from useState in useApplicationScopes and never changes
-	const openSpaceMembers = useCallback(() => {
-		setSettingsTab(MEMBERS_TAB)
-		showSettingsOf(spaces.controller, user.controller)
-	}, [spaces.controller, user.controller])
+	const openSpaceMembers = useCallback(
+		() => navigation.openSpaceSettings({ entry: MEMBERS_TAB }),
+		[navigation],
+	)
 
 	const conversationApplications = useMemo(
 		() => ({
@@ -172,19 +125,13 @@ export const useSettingsPanels = ({
 	)
 
 	return {
-		applicationToOpenOn,
 		botHistory,
-		closeSettings,
-		closeSettingsTab,
 		companionSkills,
 		conversationApplications,
-		isCompanionScreenOpen,
 		openAccountSettings,
-		openSettings,
 		openSpaceMembers,
-		openSpaceSettings,
-		openUserSettings,
 		personSkills,
+		railSettings: railSettingsOf(openSettings),
 		sessionApplications,
 		spaceHistory,
 		spaceSkills,

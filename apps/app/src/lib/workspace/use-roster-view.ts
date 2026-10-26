@@ -4,17 +4,23 @@ import type { WorkspaceCore } from "./use-workspace-core"
 import type { WorkspaceDrivers } from "./use-workspace-drivers"
 
 import { missionsBySpaceId } from "../missions/missions-model"
+import {
+	type OpenSettings,
+	openCompanionIdOf,
+} from "../navigation/open-settings"
 
 type RosterViewInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	openRowId: string | null
+	openSettings: OpenSettings | null
 }
 
 export const useRosterView = ({
 	core,
 	drivers,
 	openRowId,
+	openSettings,
 }: RosterViewInput) => {
 	const { roster } = core
 	const { missionMarks } = drivers
@@ -27,10 +33,7 @@ export const useRosterView = ({
 		spaceRowId: rosteredSpaceId,
 		selectedBotId,
 		selectedConversationId,
-		settingsBotId,
 		settingsConversationId,
-		isEditing,
-		isShowingDanger,
 		isEditingConversation,
 		hasLoaded,
 	} = roster.state
@@ -41,7 +44,9 @@ export const useRosterView = ({
 	const selectedConversation = conversations.find(
 		(conversation) => conversation.id === shownConversationId,
 	)
-	const settingsBot = bots.find((bot) => bot.id === settingsBotId)
+	const openCompanionId = openCompanionIdOf(openSettings)
+	const settingsBot = bots.find((bot) => bot.id === openCompanionId)
+	const settingsBotId = settingsBot?.id ?? null
 	const settingsConversation = conversations.find(
 		(conversation) => conversation.id === settingsConversationId,
 	)
@@ -60,9 +65,7 @@ export const useRosterView = ({
 		conversationRosters,
 		conversations,
 		hasLoaded,
-		isEditing,
 		isEditingConversation,
-		isShowingDanger,
 		missions,
 		rosteredSpaceId,
 		selected,

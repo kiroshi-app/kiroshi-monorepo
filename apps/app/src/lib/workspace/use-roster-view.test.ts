@@ -209,6 +209,7 @@ const localConversationOpen = async () => {
 				core,
 				drivers: { missionMarks: [], waitingMissionIds: new Set() } as never,
 				openRowId,
+				openSettings: null,
 			})
 			useMissions(rosterView.selectedConversation?.id ?? null)
 			return rosterView

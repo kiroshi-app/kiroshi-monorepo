@@ -40,7 +40,6 @@ type ReportedPreferences = Pick<
 
 export type UserState = {
 	preferences: ReaderPreferences
-	isSettingsOpen: boolean
 }
 
 export type UserController = {
@@ -48,7 +47,6 @@ export type UserController = {
 	subscribe: (listener: () => void) => () => void
 	followOtherWindows: () => () => void
 	load: () => Promise<void>
-	setSettingsOpen: (isSettingsOpen: boolean) => void
 	rename: (displayName: string) => void
 	setNotification: (change: NotificationChange) => Promise<void>
 	setColorScheme: (colorScheme: ColorScheme) => Promise<void>
@@ -90,7 +88,6 @@ const recordOf = (record: UserPreferences): ReaderPreferences => ({
 export const createUserController = (): UserController => {
 	const stateStore = createStore<UserState>({
 		preferences: openingPreferences(),
-		isSettingsOpen: false,
 	})
 	const current = stateStore.getState
 
@@ -191,8 +188,6 @@ export const createUserController = (): UserController => {
 		},
 
 		load: () => readPreferences().then(apply).catch(restore),
-
-		setSettingsOpen: (isSettingsOpen: boolean) => set({ isSettingsOpen }),
 
 		rename: (displayName: string) => {
 			show({ ...current().preferences, displayName })

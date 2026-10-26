@@ -148,17 +148,6 @@ describe("createSpacesController", () => {
 		expect(await names(store)).toEqual(["Personal"])
 	})
 
-	it("closes the settings on the space it deletes", async () => {
-		const store = createFakeTranscriptStore()
-		const controller = await loaded(store)
-		await controller.create()
-		controller.setSettingsOpen(true)
-
-		await controller.remove(controller.getState().selectedSpaceId ?? "")
-
-		expect(controller.getState().isSettingsOpen).toBe(false)
-	})
-
 	it("stays on the space it is in when the record refuses the delete", async () => {
 		const store = createFakeTranscriptStore()
 		const controller = await loaded(store)

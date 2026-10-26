@@ -7,6 +7,8 @@ import type { AttachmentsController } from "../chat/attachments-controller"
 import type { DraftsController } from "../chat/drafts-controller"
 import type { ConversationRuntimes } from "../conversations/conversation-runtimes"
 import type { OpenedMissionController } from "../missions/opened-mission-controller"
+import { COMPANION_DANGER_ENTRY } from "../navigation/settings-search"
+import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { startInvokePhaseUnless } from "../perf/invoke-tally-devtools"
 import type { CollapsedSectionsController } from "../sections/collapsed-sections-controller"
 import { newSectionFor } from "../sections/section-space"
@@ -19,7 +21,6 @@ import {
 	openRowIdOf,
 } from "../spaces/joined-spaces-controller"
 import type { SpacesController } from "../spaces/spaces-controller"
-import type { UserController } from "../user/preferences-controller"
 
 export type SidebarActions = Required<
 	Pick<
@@ -47,6 +48,11 @@ export type SidebarActions = Required<
 	>
 >
 
+type SettingsOpening = Pick<
+	SettingsNavigation,
+	"openCompanionSettings" | "openSpaceSettings" | "openUserSettings"
+>
+
 export type SidebarActionsSource = {
 	attachments: AttachmentsController
 	collapsedSections: CollapsedSectionsController
@@ -56,8 +62,8 @@ export type SidebarActionsSource = {
 	roster: RosterController
 	runtimes: ConversationRuntimes
 	sections: SectionsController
+	settings: SettingsOpening
 	spaces: SpacesController
-	user: UserController
 }
 
 const localSpaceIdsIn = (spaces: SpacesController, ids: string[]) => {
@@ -79,8 +85,8 @@ export const useSidebarActions = ({
 	roster,
 	runtimes,
 	sections,
+	settings,
 	spaces,
-	user,
 }: SidebarActionsSource): SidebarActions =>
 	useMemo(
 		() => ({
@@ -116,7 +122,8 @@ export const useSidebarActions = ({
 			onCreateSpace: () => {
 				void spaces.create()
 			},
-			onDeleteBot: roster.askToDelete,
+			onDeleteBot: (id) =>
+				settings.openCompanionSettings(id, { entry: COMPANION_DANGER_ENTRY }),
 			onDeleteConversation: async (id) => {
 				await runtimes.release(id)
 				attachments.forget({ kind: "conversation", id })
@@ -135,10 +142,10 @@ export const useSidebarActions = ({
 			onRemoveBotFromSpace: (botId, spaceId) => {
 				void roster.removeFromSpace(botId, spaceId)
 			},
-			onEditBot: roster.edit,
+			onEditBot: (id) => settings.openCompanionSettings(id),
 			onOpenConversationSettings: roster.editConversation,
-			onOpenSpaceSettings: () => spaces.setSettingsOpen(true),
-			onOpenUserSettings: () => user.setSettingsOpen(true),
+			onOpenSpaceSettings: () => settings.openSpaceSettings(),
+			onOpenUserSettings: () => settings.openUserSettings(),
 			onPinRoster: (spaceId, pins) => {
 				void sections.pin(spaceId, pins)
 			},
@@ -179,7 +186,7 @@ export const useSidebarActions = ({
 			roster,
 			runtimes,
 			sections,
+			settings,
 			spaces,
-			user,
 		],
 	)

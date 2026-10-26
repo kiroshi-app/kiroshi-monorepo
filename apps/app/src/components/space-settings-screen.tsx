@@ -1,10 +1,5 @@
-import type { ReactNode } from "react"
-
 import type { EnvironmentWrite } from "@workspace/ui/components/environment-panel"
-import {
-	SettingsScreen,
-	type SettingsScreenRequestLeave,
-} from "@workspace/ui/components/settings-screen"
+import { SettingsScreen } from "@workspace/ui/components/settings-screen"
 import type { SpaceSettingsValue } from "@workspace/ui/components/space-settings"
 import {
 	MembersPanel,
@@ -21,8 +16,11 @@ import { useCompanionCounts } from "@/lib/bots/use-companion-counts"
 import { toEnvironmentRows } from "@/lib/environment/environment-rows"
 import { useHosting } from "@/lib/host/use-hosting"
 import { useMembers } from "@/lib/host/use-members"
+import type { SettingsSearch } from "@/lib/navigation/settings-search"
+import type { SettingsNavigation } from "@/lib/navigation/use-settings-navigation"
 import { openJoinedSpaceOf } from "@/lib/spaces/joined-spaces-controller"
 import { toSpaceSettingsValue } from "@/lib/spaces/space-settings"
+import type { SettingsFrame } from "@/lib/workspace/settings-frame"
 import type { ApplicationScopes } from "@/lib/workspace/use-application-scopes"
 import type { RosterLines } from "@/lib/workspace/use-roster-lines"
 import type { RosterView } from "@/lib/workspace/use-roster-view"
@@ -41,44 +39,33 @@ const memberViewOf = (
 
 type SpaceSettingsScreenProps = {
 	core: WorkspaceCore
+	frame: SettingsFrame
+	navigation: SettingsNavigation
 	panels: SettingsPanels
-	rail: (requestLeave: SettingsScreenRequestLeave) => ReactNode
 	rosterLines: RosterLines
 	rosterView: RosterView
 	scopes: ApplicationScopes
+	search: SettingsSearch
 }
 
 export const SpaceSettingsScreen = ({
 	core,
+	frame,
+	navigation,
 	panels,
-	rail,
 	rosterLines,
 	rosterView,
 	scopes,
+	search,
 }: SpaceSettingsScreenProps) => {
-	const {
-		account,
-		joinedSpaces,
-		roster,
-		spaceEnvironment,
-		spaceMcpServers,
-		spaces,
-	} = core
-	const {
-		applicationToOpenOn,
-		closeSettings,
-		closeSettingsTab,
-		openAccountSettings,
-		spaceHistory,
-		spaceSkills,
-	} = panels
+	const { account, joinedSpaces, spaceEnvironment, spaceMcpServers, spaces } =
+		core
+	const { openAccountSettings, spaceHistory, spaceSkills } = panels
 	const {
 		selectedSpace,
 		selectedSpaceId,
 		serverEnvironmentSection,
 		setOpenedMcpServer,
-		setSettingsTab,
-		settingsTab,
 		spaceApplications,
 	} = scopes
 	const editedSpace = selectedSpace
@@ -104,7 +91,7 @@ export const SpaceSettingsScreen = ({
 			signedInAccountIdOf(account.state) === null,
 	})
 	const countsOf = useCompanionCounts(
-		settingsTab === COMPANIONS_ENTRY ? selectedSpace?.id : undefined,
+		search.entry === COMPANIONS_ENTRY ? selectedSpace?.id : undefined,
 	)
 
 	if (!selectedSpaceId) {
@@ -116,21 +103,16 @@ export const SpaceSettingsScreen = ({
 			.getState()
 			.spaces.some((space) => space.id === spaceId)
 		if (!isStillHeld) {
-			closeSettings()
+			navigation.openConversations()
 		}
 	}
 
-	const signIn = () => {
-		closeSettings()
-		openAccountSettings()
-	}
+	const openCompanion = (id: string) =>
+		navigation.openCompanionSettings(id, { isFromSpaceSettings: true })
 
-	const openCompanion = (id: string) => {
-		closeSettingsTab()
-		roster.controller.edit(id)
-	}
-
-	const hostingProps = hosting ? { ...hosting, onSignIn: signIn } : {}
+	const hostingProps = hosting
+		? { ...hosting, onSignIn: openAccountSettings }
+		: {}
 
 	const membersPropsOf = (spaceName: string, memberView?: MemberView) =>
 		members
@@ -147,20 +129,17 @@ export const SpaceSettingsScreen = ({
 			: {}
 
 	const sharedProps = {
+		...frame,
 		target: "space" as const,
-		entry: settingsTab ?? SPACE_ENTRY,
-		onEntryChange: setSettingsTab,
-		onBack: closeSettings,
-		rail,
+		entry: search.entry ?? SPACE_ENTRY,
+		onEntryChange: navigation.showEntry,
+		onBack: navigation.back,
 		environment: toEnvironmentRows(spaceEnvironment.entries),
 		hasEnvironmentFailedToRead: spaceEnvironment.hasFailedToRead,
 		isEnvironmentPending: spaceEnvironment.isPending,
 		haveMcpServersFailedToLoad: spaceMcpServers.hasFailedToLoad,
 		...spaceApplications,
-		mcpServerToOpen: applicationToOpenOn({
-			kind: "space",
-			id: selectedSpaceId,
-		}),
+		mcpServerToOpen: search.application,
 		onMcpServerOpen: (name: string | null) =>
 			setOpenedMcpServer(
 				name
@@ -220,7 +199,9 @@ export const SpaceSettingsScreen = ({
 			)}
 			host={joinedSpace.hostUrl}
 			onLeave={() =>
-				joinedSpaces.controller.leave(joinedSpace.id).then(closeSettings)
+				joinedSpaces.controller
+					.leave(joinedSpace.id)
+					.then(navigation.openConversations)
 			}
 			value={{ name: joinedSpace.name }}
 		/>

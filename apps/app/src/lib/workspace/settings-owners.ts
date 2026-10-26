@@ -2,28 +2,36 @@ import { USER_OWNER } from "./user-owner"
 
 import type { RosterState } from "../bots/roster-controller"
 import type { EnvOwner } from "../conversations/store-contract"
+import {
+	type OpenSettings,
+	openCompanionIdOf,
+} from "../navigation/open-settings"
 import type { SpacesState } from "../spaces/spaces-controller"
 
-type EditedCompanion = Pick<RosterState, "isEditing" | "settingsBotId">
+type ListedBots = Pick<RosterState, "bots">
 
-type SelectedSpace = Pick<SpacesState, "isSettingsOpen" | "selectedSpaceId">
+type SelectedSpace = Pick<SpacesState, "selectedSpaceId">
 
 export const companionSettingsOwnerOf = (
-	{ isEditing, settingsBotId }: EditedCompanion,
+	openSettings: OpenSettings | null,
+	{ bots }: ListedBots,
+	{ selectedSpaceId }: SelectedSpace,
+): EnvOwner | null => {
+	const companionId = openCompanionIdOf(openSettings)
+	const isListed = bots.some((bot) => bot.id === companionId)
+	return companionId && isListed && selectedSpaceId
+		? { kind: "bot", id: companionId, spaceId: selectedSpaceId }
+		: null
+}
+
+export const spaceSettingsOwnerOf = (
+	openSettings: OpenSettings | null,
 	{ selectedSpaceId }: SelectedSpace,
 ): EnvOwner | null =>
-	isEditing && settingsBotId && selectedSpaceId
-		? { kind: "bot", id: settingsBotId, spaceId: selectedSpaceId }
-		: null
-
-export const spaceSettingsOwnerOf = ({
-	isSettingsOpen,
-	selectedSpaceId,
-}: SelectedSpace): EnvOwner | null =>
-	isSettingsOpen && selectedSpaceId
+	openSettings?.kind === "space" && selectedSpaceId
 		? { kind: "space", id: selectedSpaceId }
 		: null
 
 export const userSettingsOwnerOf = (
-	isSettingsOpen: boolean,
-): EnvOwner | null => (isSettingsOpen ? USER_OWNER : null)
+	openSettings: OpenSettings | null,
+): EnvOwner | null => (openSettings?.kind === "user" ? USER_OWNER : null)

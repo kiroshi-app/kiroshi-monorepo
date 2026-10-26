@@ -576,19 +576,6 @@ describe("the first run the reader has been through", () => {
 	})
 })
 
-describe("the settings the chip opens", () => {
-	it("stand open until they are closed, and nothing else moves", async () => {
-		aHost()
-		const controller = await loaded()
-
-		controller.setSettingsOpen(true)
-		expect(controller.getState().isSettingsOpen).toBe(true)
-
-		controller.setSettingsOpen(false)
-		expect(controller.getState().isSettingsOpen).toBe(false)
-	})
-})
-
 describe("the update preferences of the About tab", () => {
 	const REFUSED = {
 		kind: "storage",

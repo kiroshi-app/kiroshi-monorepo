@@ -7,6 +7,7 @@ import type { WorkspaceDrivers } from "./use-workspace-drivers"
 import { useRosterClock } from "../bots/use-roster-clock"
 import { activityOf, useBotActivity } from "../chat/use-chat"
 import type { ConversationSeating } from "../conversations/use-conversation-seating"
+import type { SettingsNavigation } from "../navigation/use-settings-navigation"
 import { useSidebarActions } from "../sidebar/use-sidebar-actions"
 import { useUpdateBadge } from "../updater/use-update-badge"
 
@@ -14,12 +15,14 @@ type RosterLinesInput = {
 	core: WorkspaceCore
 	drivers: WorkspaceDrivers
 	rosterView: RosterView
+	settings: SettingsNavigation
 }
 
 export const useRosterLines = ({
 	core,
 	drivers,
 	rosterView,
+	settings,
 }: RosterLinesInput) => {
 	const {
 		attachments,
@@ -32,7 +35,6 @@ export const useRosterLines = ({
 		roster,
 		sections,
 		spaces,
-		user,
 	} = core
 	const { updater } = drivers
 	const { settingsBotId, soloThreads } = rosterView
@@ -60,8 +62,8 @@ export const useRosterLines = ({
 		roster: roster.controller,
 		runtimes: conversationRuntimes,
 		sections: sections.controller,
+		settings,
 		spaces: spaces.controller,
-		user: user.controller,
 	})
 
 	const deleteBot = async (id: string) => {

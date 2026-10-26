@@ -28,10 +28,32 @@ type Harness = {
 	store: TranscriptStore | null
 	installs: ApplicationInstall[]
 	missions: MissionInSpace[]
+	announceArrival: () => void
 }
 
 const harness = vi.hoisted(
-	(): Harness => ({ store: null, installs: [], missions: [] }),
+	(): Harness => ({
+		store: null,
+		installs: [],
+		missions: [],
+		announceArrival: () => undefined,
+	}),
+)
+
+vi.mock(
+	"@/lib/conversations/use-companion-arrivals",
+	async (importOriginal) => {
+		const actual =
+			await importOriginal<
+				typeof import("@/lib/conversations/use-companion-arrivals")
+			>()
+		return {
+			useCompanionArrivals: (onArrived: () => void) => {
+				harness.announceArrival = onArrived
+				actual.useCompanionArrivals(onArrived)
+			},
+		}
+	},
 )
 
 vi.mock("@/lib/conversations/create-store", () => ({
@@ -688,4 +710,18 @@ it("brings back the open mission thread and its draft on Back to conversations",
 	expect(settingsMenuOf()).toBeNull()
 	expect(screen.getByText(MISSION_SAID)).toBeTruthy()
 	expect(composerOf().value).toBe(MISSION_DRAFT)
+})
+
+it("returns to the conversations when the companion whose settings are open no longer exists", async () => {
+	const seeded = await mountApp()
+	await openContextMenuOn(rosterRowOf(ATLAS))
+	await chooseInMenu(i18n.t("bots:roster.settings"))
+	expect(companionScreenOf(ATLAS)).toEqual(ON_GENERAL)
+
+	await harness.store?.deleteBot(seeded.atlasId)
+	await act(async () => harness.announceArrival())
+	await settle()
+
+	expect(settingsMenuOf()).toBeNull()
+	expect(rosterRowOf(NOVA)).toBeTruthy()
 })
