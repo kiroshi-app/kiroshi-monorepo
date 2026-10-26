@@ -5,6 +5,7 @@ import {
 	PromptReply,
 	type ReplyQuote,
 } from "@workspace/ui/components/prompt-reply"
+import { ScreenLayout } from "@workspace/ui/components/screen-layout"
 import {
 	Transcript,
 	type TranscriptHandle,
@@ -12,7 +13,6 @@ import {
 	type TranscriptNewer,
 	type TranscriptOlder,
 } from "@workspace/ui/components/transcript"
-import { cn } from "@workspace/ui/lib/utils"
 
 interface ThreadLayoutProps {
 	header?: ReactNode
@@ -66,62 +66,54 @@ function ThreadLayout({
 	contentClassName,
 }: ThreadLayoutProps) {
 	return (
-		<div
+		<ScreenLayout
 			ref={rootRef}
 			data-slot="chat-layout"
-			className={cn(
-				"flex h-svh max-h-full flex-col bg-background text-foreground in-data-content-card:bg-card",
-				className,
-			)}
-		>
-			{header}
-
-			{skeleton ? (
-				<div className="min-h-0 flex-1" data-slot="thread-skeleton">
-					{skeleton}
-				</div>
-			) : (
-				<MarkProvider transcriptKey={transcriptKey}>
-					<Transcript
-						className="flex-1"
-						transcriptKey={transcriptKey}
-						autoScroll={autoScroll}
-						busy={busy}
-						label={label}
-						anchorOnSend={anchorOnSend}
-						marksNewMessages={marksNewMessages}
-						countsNewMessages={countsNewMessages}
-						older={older}
-						newer={newer}
-						rows={rows}
-						onFollowChange={onFollowChange}
-						highlightedMessageId={highlightedMessageId}
-						scrollerRef={scrollerRef}
-						contentClassName={cn(
-							"flex min-h-full w-full flex-col px-6 pt-8 pb-4",
-							contentClassName,
-						)}
-					>
-						{children}
-					</Transcript>
-				</MarkProvider>
-			)}
-
-			{notice || pending || composer ? (
-				<div
-					className={cn(
-						"flex w-full shrink-0 flex-col gap-3",
-						composer ? "px-(--shell-inset) pb-(--shell-inset)" : "px-12 pb-6",
-					)}
-				>
-					{notice}
-					{pending}
-					{composer ? (
-						<PromptReply quote={reply}>{composer}</PromptReply>
-					) : null}
-				</div>
-			) : null}
-		</div>
+			className={className}
+			contentClassName={contentClassName}
+			header={header}
+			scroller={(columnClassName) =>
+				skeleton ? (
+					<div className="min-h-0 flex-1" data-slot="thread-skeleton">
+						{skeleton}
+					</div>
+				) : (
+					<MarkProvider transcriptKey={transcriptKey}>
+						<Transcript
+							className="flex-1"
+							transcriptKey={transcriptKey}
+							autoScroll={autoScroll}
+							busy={busy}
+							label={label}
+							anchorOnSend={anchorOnSend}
+							marksNewMessages={marksNewMessages}
+							countsNewMessages={countsNewMessages}
+							older={older}
+							newer={newer}
+							rows={rows}
+							onFollowChange={onFollowChange}
+							highlightedMessageId={highlightedMessageId}
+							scrollerRef={scrollerRef}
+							contentClassName={columnClassName}
+						>
+							{children}
+						</Transcript>
+					</MarkProvider>
+				)
+			}
+			footer={
+				notice || pending || composer ? (
+					<>
+						{notice}
+						{pending}
+						{composer ? (
+							<PromptReply quote={reply}>{composer}</PromptReply>
+						) : null}
+					</>
+				) : null
+			}
+			footerClassName={composer ? undefined : "px-12 pb-6"}
+		/>
 	)
 }
 
