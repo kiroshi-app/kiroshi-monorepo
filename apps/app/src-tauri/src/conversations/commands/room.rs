@@ -4,7 +4,7 @@ use super::super::context;
 use super::super::contract::{
 	state_in, Chat, CompanionArrival, ContextCheckpoint, Conversation, ConversationDeleted,
 	ConversationInList, ConversationInPage, ConversationPage, ConversationStored, ObservedState,
-	RuntimeSession, TranscriptStoreError,
+	RuntimeSession, SoloState, TranscriptStoreError,
 };
 use super::super::state as conversation_state;
 use super::bot::ready;
@@ -35,6 +35,27 @@ pub async fn conversation_main_chat<R: Runtime>(
 	let states = conversation_state::listed(&app, database, vec![chat.id.clone()]).await?;
 	let observed = state_in(&states, &chat.id);
 	Ok(Chat::of(chat, observed))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn conversation_solo_states<R: Runtime>(
+	app: AppHandle<R>,
+	state: State<'_, db::DatabaseState>,
+	space_id: String,
+) -> Result<Vec<SoloState>, TranscriptStoreError> {
+	let database = ready(&state)?;
+	let threads = database.conversations().solo_threads(space_id).await?;
+	let ids = threads.iter().map(|thread| thread.conversation_id.clone()).collect();
+	let states = conversation_state::listed(&app, database, ids).await?;
+	Ok(threads
+		.into_iter()
+		.map(|thread| SoloState {
+			observed: state_in(&states, &thread.conversation_id),
+			bot_id: thread.bot_id,
+			conversation_id: thread.conversation_id,
+		})
+		.collect())
 }
 
 #[tauri::command]

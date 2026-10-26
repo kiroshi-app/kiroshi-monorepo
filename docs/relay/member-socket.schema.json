@@ -7064,6 +7064,28 @@
       ],
       "type": "object"
     },
+    "SoloState": {
+      "allOf": [
+        {
+          "properties": {
+            "botId": {
+              "type": "string"
+            },
+            "conversationId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "botId",
+            "conversationId"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ObservedState"
+        }
+      ]
+    },
     "Space": {
       "properties": {
         "colour": {
@@ -10283,6 +10305,28 @@
       },
       "ok": {
         "$ref": "#/$defs/Conversation"
+      }
+    },
+    "conversation_solo_states": {
+      "args": {
+        "properties": {
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "spaceId"
+        ],
+        "type": "object"
+      },
+      "error": {
+        "$ref": "#/$defs/TranscriptStoreError"
+      },
+      "ok": {
+        "items": {
+          "$ref": "#/$defs/SoloState"
+        },
+        "type": "array"
       }
     },
     "conversation_start_turn": {

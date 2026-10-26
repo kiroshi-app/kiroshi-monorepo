@@ -35,6 +35,15 @@ impl Chat {
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SoloState {
+	pub bot_id: String,
+	pub conversation_id: String,
+	#[serde(flatten)]
+	pub observed: ObservedState,
+}
+
 pub const CREATED_EVENT: &str = "conversation://created";
 
 pub const UPDATED_EVENT: &str = "conversation://updated";

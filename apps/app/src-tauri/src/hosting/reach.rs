@@ -174,6 +174,7 @@ pub(super) const REACHES: &[(&str, Reach)] = &[
 	("conversation_record_bot_commands", Reach::Scoped(&[child(BotHeldAlone, "/botId")])),
 	("conversation_bot_commands", Reach::Scoped(BOT_ID)),
 	("conversation_main_chat", Reach::Scoped(BOT_AND_SPACE)),
+	("conversation_solo_states", Reach::Scoped(SPACE_ID)),
 	(
 		"conversation_create",
 		Reach::Scoped(&[

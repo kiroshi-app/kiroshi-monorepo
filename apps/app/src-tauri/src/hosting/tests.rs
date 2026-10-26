@@ -3374,6 +3374,11 @@ fn a_relay_guest_opens_a_main_chat_in_the_shared_space_only() {
 }
 
 #[test]
+fn a_relay_guest_reads_the_solo_states_of_the_shared_space_only() {
+	run(kept_in_the_space_named("conversation_solo_states", space_named));
+}
+
+#[test]
 fn a_relay_guest_creates_a_conversation_in_the_shared_space_only() {
 	run(kept_in_the_space_named(
 		"conversation_create",
@@ -4822,6 +4827,29 @@ fn a_guest_reads_the_state_the_host_computed_for_each_conversation() {
 			listed,
 			direct(&host.window, "conversation_list", json!({ "spaceId": PERSONAL }))
 		);
+	});
+}
+
+#[test]
+fn a_guest_reads_the_same_solo_states_as_the_host() {
+	run(async {
+		let host = Authoring::new(Some(BEARER)).await;
+		let state = host.app.state::<DatabaseState>();
+		let conversations = state.as_ref().expect("the database").conversations();
+		let prompt = a_pending_prompt(&host.conversation_id, PromptKind::Question);
+		conversations.hold_prompt(prompt).await.expect("the prompt is held");
+		let args = json!({ "spaceId": PERSONAL });
+
+		let read_by_the_guest = host
+			.relayed(json!({ "id": 1, "command": "conversation_solo_states", "args": args }))
+			.await;
+		let read_by_the_host = direct(&host.window, "conversation_solo_states", args);
+
+		assert_eq!(read_by_the_guest, read_by_the_host);
+		assert_eq!(read_by_the_guest.as_array().map(Vec::len), Some(1), "{read_by_the_guest}");
+		assert_eq!(read_by_the_guest[0]["botId"], json!("default"));
+		assert_eq!(read_by_the_guest[0]["conversationId"], json!(host.conversation_id));
+		assert_eq!(read_by_the_guest[0]["state"], json!("needs_you"));
 	});
 }
 

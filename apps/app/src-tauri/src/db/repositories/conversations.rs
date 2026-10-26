@@ -96,6 +96,12 @@ pub struct Chat {
 	pub updated_at: i64,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct SoloThread {
+	pub bot_id: String,
+	pub conversation_id: String,
+}
+
 #[derive(Debug, PartialEq, Eq, specta::Type)]
 pub struct Participant {
 	pub conversation_id: String,
@@ -211,6 +217,16 @@ impl ConversationsRepository {
 		self.call_mut(move |connection| Ok(ensured_chat(connection, &bot_id, space_id.as_deref())))
 			.await?
 			.at("ensure_chat", "conversations")
+	}
+
+	pub async fn solo_threads(&self, space_id: String) -> Result<Vec<SoloThread>, DatabaseError> {
+		self.call(move |connection| {
+			let mut statement = connection.prepare_cached(SELECT_SOLO_THREADS_OF_SPACE)?;
+			let rows = statement.query_map(params![space_id, CHAT_KIND], solo_thread)?;
+			Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+		})
+		.await
+		.at("solo_threads", "conversations")
 	}
 
 	pub async fn bot(&self, id: String) -> Result<Option<Bot>, ConversationError> {
@@ -605,6 +621,19 @@ const SELECT_CHAT_OF_BOT: &str = "SELECT conversations.id,
 		AND conversations.kind = 'main' AND conversations.space_id = ?2
 	ORDER BY conversations.created_at ASC, conversations.id ASC
 	LIMIT 1";
+
+const SELECT_SOLO_THREADS_OF_SPACE: &str = "SELECT membership.bot_id, chat.id
+	FROM bot_spaces AS membership
+	JOIN bots ON bots.id = membership.bot_id AND bots.deleted_at IS NULL
+	JOIN conversations AS chat ON chat.id = (SELECT held.id
+		FROM conversation_participants AS seat
+		JOIN conversations AS held ON held.id = seat.conversation_id
+		WHERE seat.bot_id = membership.bot_id
+			AND held.kind = ?2 AND held.space_id = membership.space_id
+		ORDER BY held.created_at ASC, held.id ASC
+		LIMIT 1)
+	WHERE membership.space_id = ?1
+	ORDER BY bots.created_at ASC, bots.id ASC";
 
 fn space_of_conversation(
 	connection: &Connection,
@@ -1156,6 +1185,10 @@ fn refuse_if_untouched(rows: usize, id: &str) -> Result<(), ConversationError> {
 
 fn chat(row: &Row<'_>) -> rusqlite::Result<Chat> {
 	Ok(Chat { id: row.get(0)?, created_at: row.get(1)?, updated_at: row.get(2)? })
+}
+
+fn solo_thread(row: &Row<'_>) -> rusqlite::Result<SoloThread> {
+	Ok(SoloThread { bot_id: row.get(0)?, conversation_id: row.get(1)? })
 }
 
 fn participant(row: &Row<'_>) -> rusqlite::Result<Participant> {

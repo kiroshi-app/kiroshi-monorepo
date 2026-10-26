@@ -108,6 +108,7 @@ fn commands<R: Runtime>() -> Commands<R> {
 		conversations::commands::conversation_record_bot_commands,
 		conversations::commands::conversation_bot_commands,
 		conversations::commands::conversation_main_chat::<tauri::Wry>,
+		conversations::commands::conversation_solo_states::<tauri::Wry>,
 		conversations::commands::conversation_create::<tauri::Wry>,
 		conversations::commands::conversation_list::<tauri::Wry>,
 		conversations::commands::conversation_mission_thread::<tauri::Wry>,
