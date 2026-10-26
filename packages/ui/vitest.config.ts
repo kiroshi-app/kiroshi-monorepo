@@ -5,6 +5,7 @@ import { storybookTest } from "@storybook/addon-vitest/vitest-plugin"
 import { reactCompilerPreset } from "@vitejs/plugin-react"
 import { playwright } from "@vitest/browser-playwright"
 import { defineConfig } from "vitest/config"
+import type { BrowserCommand } from "vitest/node"
 
 const NO_PAGE_OR_POINTER_SHARED_BETWEEN_STORY_FILES = {
 	isolate: true,
@@ -24,6 +25,12 @@ const readTestWorkers = () => {
 		)
 	}
 	return Number(requested)
+}
+
+const emulateMotionPreference: BrowserCommand<
+	["reduce" | "no-preference"]
+> = async ({ page }, reducedMotion) => {
+	await page.emulateMedia({ reducedMotion })
 }
 
 export default defineConfig({
@@ -56,6 +63,7 @@ export default defineConfig({
 							contextOptions: { reducedMotion: "reduce" },
 						}),
 						instances: [{ browser: "chromium" }],
+						commands: { emulateMotionPreference },
 					},
 				},
 			},

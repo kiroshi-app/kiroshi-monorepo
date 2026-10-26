@@ -62,6 +62,10 @@ const meta = preview.meta({ tags: ["test-only"] })
 
 Spell the tag as a literal: the CSF indexer reads `tags` statically and rejects anything else.
 
+### Stories under the default motion preference
+
+The `storybook` vitest project emulates `prefers-reduced-motion: reduce` for every story. A story that proves the default case sets `parameters: { motionPreference: "no-preference" }`: under vitest, the `beforeEach` of `preview.tsx` switches the browser to that preference before the render and back to `reduce` after the play. The Storybook UI keeps the reader's own preference.
+
 ## 2. Story names
 
 One shared vocabulary of exported names. Reuse an existing name before inventing one.
