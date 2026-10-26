@@ -157,6 +157,7 @@ conversation-message-mention--companion-select-on-counted-pill
 conversation-message-mention--companion-select-on-pill
 conversation-message-mention--companion-select-on-pill-focused
 conversation-message-mention--companion-select-on-pill-hovered
+conversation-message-mention--companion-select-on-pill-hovered-with-motion
 conversation-message-mention--companion-select-on-unknown-pill
 conversation-message-mention--counted
 conversation-message-mention--counted-long-name

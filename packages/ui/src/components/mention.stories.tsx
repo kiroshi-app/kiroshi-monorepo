@@ -521,6 +521,49 @@ export const CompanionSelectOnPillHovered = meta.story({
 	},
 })
 
+const COLOUR_PROPERTY =
+	/^(all|.*color|fill|stroke|box-shadow|background|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?|outline|text-decoration)$/
+
+const MOTION_UTILITY = /(^|:)!?(transition|duration)(-|!|$)|\[transition/
+
+const colourTransitionsOf = (element: HTMLElement) => {
+	const style = getComputedStyle(element)
+	const durations = style.transitionDuration.split(", ")
+
+	return style.transitionProperty
+		.split(", ")
+		.filter(
+			(property, index) =>
+				COLOUR_PROPERTY.test(property) &&
+				durations[index % durations.length] !== "0s",
+		)
+}
+
+export const CompanionSelectOnPillHoveredWithMotion = meta.story({
+	tags: ["test-only"],
+	parameters: {
+		motionPreference: "no-preference",
+		docs: {
+			description: {
+				story: `The same mention for a reader who left the motion preference at its default, the one case the reduced-motion test browser cannot see. The pointer cannot rest on the chip under the test runner, so the play reads the transition the chip carries into its hover, press and selection: check that the tint deepens on hover in a single frame, with no fade, exactly as it does under reduced motion. ${SELECT_NOT_YET_RENDERED}`,
+			},
+		},
+	},
+	render: () => <SelectableMessage source={ASKED} />,
+	play: async ({ canvasElement }) => {
+		const pill = pillIn(canvasElement)
+
+		await expect(
+			window.matchMedia("(prefers-reduced-motion: no-preference)").matches,
+		).toBe(true)
+		await expect(pill).toHaveClass("hover:bg-current/20")
+		await expect(colourTransitionsOf(pill)).toEqual([])
+		await expect(
+			[...pill.classList].filter((name) => MOTION_UTILITY.test(name)),
+		).toEqual([])
+	},
+})
+
 const ReaderBubble = ({ source }: MessageProps) => (
 	<CompanionSelectProvider onSelect={selectCompanion}>
 		<RosterProvider bots={ROOM}>
