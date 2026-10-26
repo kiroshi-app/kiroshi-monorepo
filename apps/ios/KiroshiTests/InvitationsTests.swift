@@ -94,6 +94,20 @@ struct InvitationsTests {
         #expect(invitations.phase(of: invitation) == .open)
     }
 
+    @Test func theJoinedSpaceWearsTheInvitedSpacesColour() async {
+        let (invitations, _) = make()
+        let pink = Invitation(
+            id: invitation.id, instanceId: invitation.instanceId, instanceName: "Studio",
+            inviterEmail: "noa@example.com", colour: .pink)
+        invitations.open(pink)
+
+        invitations.accept(pink)
+        await relay.nextOpening().accept(ScriptedRelaySocket(sharedSpaceId: "space-studio"))
+        await waitUntil { invitations.opened == nil }
+
+        #expect(outcomes.joined.map(\.colour) == [.pink])
+    }
+
     @Test func aBareNotFoundAcceptSaysThereIsNoSuchInvitation() async {
         let (invitations, _) = make([InvitationsFixture.acceptPath: .status(404, "")])
 
@@ -207,6 +221,21 @@ struct InvitationsTests {
         let opened = try? #require(invitations.opened)
         #expect(opened?.instanceName == "Studio")
         #expect(opened.map(invitations.phase(of:)) == .refused(.otherEmail))
+    }
+
+    @Test func aJoinLinkSentToAnotherEmailShowsTheInvitedSpacesColour() async {
+        let (invitations, _) = make([
+            InvitationsFixture.listPath: .status(200, "[]"),
+            InvitationsFixture.otherEmailStatePath: .status(
+                200,
+                #"{"state":"valid","spaceName":"Studio","inviter":"noa@example.com","colour":"pink","expiresAt":"2026-10-25T12:00:00.000Z"}"#
+            ),
+        ])
+
+        invitations.openLink(InvitationsFixture.otherEmailInvitationId)
+
+        await waitUntil { invitations.opened != nil }
+        #expect(invitations.opened?.colour == .pink)
     }
 
     @Test(arguments: ["withdrawn", "expired"])
