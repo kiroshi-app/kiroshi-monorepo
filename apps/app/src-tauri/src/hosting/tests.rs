@@ -1325,17 +1325,7 @@ fn a_space_update_whose_patch_the_relay_refuses_returns_the_space_and_warns_with
 		harness.plant(&instance_id).await;
 
 		let updated = harness.updated("Studio", None).await.expect("the update");
-		let warned = tokio::time::timeout(PATIENCE, async {
-			loop {
-				let warned = warnings_naming(&instance_id);
-				if !warned.is_empty() {
-					return warned;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-		})
-		.await
-		.expect("the refused PATCH was logged");
+		let warned = warnings_naming(&instance_id).await;
 
 		assert_eq!((updated.name.as_str(), updated.colour), ("Studio", None));
 		assert_eq!(
