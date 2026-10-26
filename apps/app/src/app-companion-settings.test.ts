@@ -421,10 +421,7 @@ const refusingDeletion: StoreChange = (store) => ({
 
 const deleteFromDangerZone = async () => {
 	await press(
-		within(document.querySelector("main") ?? document.body).getByRole(
-			"button",
-			{ name: i18n.t("bots:danger.delete") },
-		),
+		screen.getByRole("button", { name: i18n.t("bots:danger.delete") }),
 	)
 	await press(
 		within(screen.getByRole("alertdialog")).getByRole("button", {
