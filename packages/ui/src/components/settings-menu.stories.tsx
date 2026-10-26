@@ -376,7 +376,7 @@ export const States = meta.story({
 					tone="danger"
 				/>
 				<SettingsMenuAction
-					icon="X"
+					icon="Close"
 					label="Decline"
 					onSelect={fn()}
 					tone="quiet"

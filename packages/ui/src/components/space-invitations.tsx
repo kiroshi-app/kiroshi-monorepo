@@ -15,7 +15,10 @@ import {
 	ContextMenuLabel,
 	ContextMenuSeparator,
 } from "@workspace/ui/components/ui/context-menu"
-import { formatDateTime } from "@workspace/ui/lib/time-format"
+import {
+	formatDateTime,
+	formatShortMonthAndDay,
+} from "@workspace/ui/lib/time-format"
 import { cn } from "@workspace/ui/lib/utils"
 
 const GROUP_LABEL = "pt-1.5 pb-0.5"
@@ -115,9 +118,7 @@ const SpaceInvitationRow = ({
 	const isMuted = isClosed || isHostOffline
 	const tint = !isMuted && colour ? blotTint(colour) : undefined
 	const expiry =
-		expiresAt === undefined
-			? undefined
-			: formatDateTime(expiresAt, MONTH_AND_DAY)
+		expiresAt === undefined ? undefined : formatShortMonthAndDay(expiresAt)
 
 	const cause =
 		invitation.state === "failed"

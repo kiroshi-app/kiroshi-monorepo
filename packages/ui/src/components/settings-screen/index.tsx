@@ -474,7 +474,7 @@ const SpaceSettingsScreen = (props: SpaceSettingsScreenProps) => {
 
 	const pinnedAction = onDecline ? (
 		<SettingsMenuAction
-			icon="X"
+			icon="Close"
 			label={tBots("spaces.invitations.decline")}
 			onSelect={onDecline}
 			tone="quiet"

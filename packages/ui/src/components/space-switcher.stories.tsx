@@ -1072,7 +1072,7 @@ export const M2InvitationWaiting = meta.story({
 			`Invited by ${INVITED.hostEmail}`,
 		)
 		const expiry = expiryLineOf(row)
-		await expect(expiry).toHaveTextContent("Expires October 25")
+		await expect(expiry).toHaveTextContent("Expires Oct 25")
 		await expect(expiry?.previousElementSibling).toBe(hostLineOf(row))
 		for (const line of [hostLineOf(row), expiry]) {
 			if (!line) throw new Error("The invitation row lost a line")

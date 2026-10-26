@@ -611,13 +611,108 @@ const JOINED_ARGS = {
 	isShared: undefined,
 } as const
 
+const INK = {
+	foreground: "rgb(245, 245, 245)",
+	muted: "rgb(163, 163, 163)",
+	soft: "rgb(212, 212, 212)",
+	destructive: "oklch(0.704 0.191 22.216)",
+	online: "rgb(63, 180, 102)",
+	offline: "rgb(115, 115, 115)",
+	card: "rgb(18, 18, 19)",
+	none: "rgba(0, 0, 0, 0)",
+}
+
+const TINT = {
+	purple: "rgb(188, 175, 227)",
+	green: "rgb(175, 201, 155)",
+	orange: "rgb(242, 181, 126)",
+	yellow: "rgb(242, 200, 121)",
+}
+
+type PinnedInk = {
+	label: string
+	icon: string
+}
+
+const DANGER_INK: PinnedInk = { label: INK.destructive, icon: INK.destructive }
+
+const QUIET_INK: PinnedInk = { label: INK.soft, icon: INK.muted }
+
 type ArtboardMenu = {
+	kind: string
 	subtitle: string
 	entries: string[]
 	pinned: string
+	pinnedInk: PinnedInk
+	tint: string
+	isInvitation?: boolean
 }
 
-const expectArtboard = async ({ subtitle, entries, pinned }: ArtboardMenu) => {
+type ArtboardType = {
+	size: string
+	leading: string
+	weight: string
+	ink: string
+}
+
+const expectType = async (
+	element: Element,
+	{ size, leading, weight, ink }: ArtboardType,
+) => {
+	const style = getComputedStyle(element)
+	await expect([
+		style.fontSize,
+		style.lineHeight,
+		style.fontWeight,
+		style.color,
+	]).toEqual([size, leading, weight, ink])
+}
+
+const iconOf = (element: Element) => {
+	const icon = element.querySelector("svg")
+	if (!icon) throw new Error("The entry lost its icon")
+	return getComputedStyle(icon)
+}
+
+type ArtboardSquare = {
+	area: HTMLElement
+	size: number
+	radius: string
+	tint: string
+	isInvitation: boolean
+}
+
+const expectSquare = async ({
+	area,
+	size,
+	radius,
+	tint,
+	isInvitation,
+}: ArtboardSquare) => {
+	const square = slotIn(area, "space-dot")
+	const box = square.getBoundingClientRect()
+	await expect([box.width, box.height]).toEqual([size, size])
+	await expect(getComputedStyle(square).borderRadius).toBe(radius)
+	await expect(getComputedStyle(square).backgroundColor).toBe(
+		isInvitation ? INK.none : tint,
+	)
+	if (!isInvitation) return
+	const outline = getComputedStyle(slotIn(square, "space-invitation-outline"))
+	await expect([outline.borderTopStyle, outline.borderTopColor]).toEqual([
+		"dashed",
+		tint,
+	])
+}
+
+const expectArtboard = async ({
+	kind,
+	subtitle,
+	entries,
+	pinned,
+	pinnedInk,
+	tint,
+	isInvitation = false,
+}: ArtboardMenu) => {
 	const menu = await menuIn()
 	await expect(menuNames(menu)).toEqual([
 		"Back to your settings",
@@ -628,6 +723,52 @@ const expectArtboard = async ({ subtitle, entries, pinned }: ArtboardMenu) => {
 	await expect(slotIn(main, "focused-space-standing")).toHaveTextContent(
 		subtitle,
 	)
+
+	const back = entryIn(menu, "Back to your settings")
+	await expect(getComputedStyle(back).alignSelf).toBe("flex-start")
+	await expect(iconOf(back).strokeWidth).toBe("2px")
+
+	const identity = slotIn(menu, "settings-menu-header")
+	await expect(getComputedStyle(identity).columnGap).toBe("10px")
+	await expectType(slotIn(identity, "settings-menu-name"), {
+		size: "14px",
+		leading: "20px",
+		weight: "600",
+		ink: INK.foreground,
+	})
+	await expectType(within(identity).getByText(kind), {
+		size: "12px",
+		leading: "16px",
+		weight: "400",
+		ink: INK.muted,
+	})
+	await expectSquare({
+		area: identity,
+		size: 36,
+		radius: "11px",
+		tint,
+		isInvitation,
+	})
+	await expectSquare({
+		area: slotIn(main, "focused-space-header"),
+		size: 48,
+		radius: "13px",
+		tint,
+		isInvitation,
+	})
+
+	const foot = entryIn(menu, pinned)
+	await expectType(foot, {
+		size: "14px",
+		leading: "20px",
+		weight: "400",
+		ink: pinnedInk.label,
+	})
+	const footIcon = iconOf(foot)
+	await expect([footIcon.stroke, footIcon.strokeWidth]).toEqual([
+		pinnedInk.icon,
+		"1.8px",
+	])
 	return { menu, main }
 }
 
@@ -635,6 +776,39 @@ const hostDotsIn = (menu: HTMLElement, main: HTMLElement) =>
 	[menu, main].map((area) =>
 		area.querySelector("[data-slot=host-dot]")?.getAttribute("data-host"),
 	)
+
+const expectHostDots = async (
+	menu: HTMLElement,
+	main: HTMLElement,
+	ink: string,
+) => {
+	for (const [area, size] of [
+		[menu, 10],
+		[main, 14],
+	] as const) {
+		const dot = slotIn(area, "host-dot")
+		await expect(dot.getBoundingClientRect().width).toBe(size)
+		await expect(getComputedStyle(dot).backgroundColor).toBe(ink)
+		await expect(getComputedStyle(dot).boxShadow).toContain(
+			`${INK.card} 0px 0px 0px 2px`,
+		)
+	}
+	const menuDot = getComputedStyle(slotIn(menu, "host-dot"))
+	await expect([menuDot.insetInlineEnd, menuDot.bottom]).toEqual([
+		"-3px",
+		"-3px",
+	])
+}
+
+const expectHeaderButton = async (button: HTMLElement) => {
+	await expectType(button, {
+		size: "13px",
+		leading: "16px",
+		weight: "500",
+		ink: "rgb(0, 0, 0)",
+	})
+	await expect(getComputedStyle(button).columnGap).toBe("8px")
+}
 
 const YOURS_NOT_SHARED = {
 	entry: "space",
@@ -648,7 +822,10 @@ const YOURS_NOT_SHARED = {
 
 export const YoursNotShared = meta.story({
 	globals: { theme: "dark" },
-	args: YOURS_NOT_SHARED,
+	args: {
+		...YOURS_NOT_SHARED,
+		value: { name: "Field notes", colour: "purple" },
+	},
 	parameters: {
 		docs: {
 			description: {
@@ -659,17 +836,21 @@ export const YoursNotShared = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const { menu, main } = await expectArtboard({
+			kind: "Space settings",
 			subtitle: "Yours · not shared",
 			entries: ARTBOARD_MENU.map((label) =>
 				label === "Companions" ? "Companions2" : label,
 			),
 			pinned: "Danger zone",
+			pinnedInk: DANGER_INK,
+			tint: TINT.purple,
 		})
 		await expect(entryIn(menu, "Space")).toHaveAttribute("aria-current", "page")
 		await expectSettingsPage(main, "Space", "column")
 		await expect(hostDotsIn(menu, main)).toEqual([undefined, undefined])
+		await expect(iconOf(entryIn(menu, "Members")).strokeWidth).toBe("1.8px")
 		await expect(
-			within(main).getByRole("heading", { level: 2, name: "Release desk" }),
+			within(main).getByRole("heading", { level: 2, name: "Field notes" }),
 		).toBeVisible()
 		await expect(within(main).getByLabelText("Name")).not.toHaveAttribute(
 			"readonly",
@@ -686,15 +867,20 @@ export const YoursNotShared = meta.story({
 
 		const open = within(main).getByRole("button", { name: "Open ⌘2" })
 		await expect(getComputedStyle(open).transitionProperty).toBe("none")
-		await expect(getComputedStyle(open).columnGap).toBe("8px")
+		await expectHeaderButton(open)
+		await expect(
+			getComputedStyle(within(open).getByText("⌘2")).fontWeight,
+		).toBe("400")
 		await userEvent.click(open)
 		await expect(args.onOpen).toHaveBeenCalledOnce()
 
 		const card = slotIn(main, "not-shared-card")
 		await expect(card).toHaveTextContent(
-			"Share Release desk to invite people. Deleting it lives in Danger zone.",
+			"Share Field notes to invite people. Deleting it lives in Danger zone.",
 		)
-		await userEvent.click(within(card).getByRole("button", { name: "Share" }))
+		const share = within(card).getByRole("button", { name: "Share" })
+		await expect(getComputedStyle(share).lineHeight).toBe("16px")
+		await userEvent.click(share)
 		await expect(args.onShare).toHaveBeenCalledOnce()
 	},
 })
@@ -752,13 +938,17 @@ export const JoinedHostOnline = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const { menu, main } = await expectArtboard({
+			kind: "Space settings",
 			subtitle: "Joined · hosted by Sam Rivera",
 			entries: ARTBOARD_MENU.map((label) =>
 				label === "Companions" ? "Companions3" : label,
 			),
 			pinned: "Leave space",
+			pinnedInk: DANGER_INK,
+			tint: TINT.green,
 		})
 		await expect(hostDotsIn(menu, main)).toEqual(["up", "up"])
+		await expectHostDots(menu, main, INK.online)
 		await expect(within(main).getByLabelText("Name")).toHaveAttribute(
 			"readonly",
 		)
@@ -783,6 +973,7 @@ export const JoinedHostNotConnected = meta.story({
 	globals: { theme: "dark" },
 	args: {
 		...JOINED_ARGS,
+		value: { name: "Harbor", colour: "orange" },
 		hostName: "Jordan Lee",
 		isConnected: false,
 		rank: 4,
@@ -797,20 +988,15 @@ export const JoinedHostNotConnected = meta.story({
 	},
 	play: async ({ userEvent }) => {
 		const { menu, main } = await expectArtboard({
+			kind: "Space settings",
 			subtitle: "Joined · hosted by Jordan Lee · Not connected",
 			entries: ARTBOARD_MENU,
 			pinned: "Leave space",
+			pinnedInk: DANGER_INK,
+			tint: TINT.orange,
 		})
 		await expect(hostDotsIn(menu, main)).toEqual(["down", "down"])
-		const menuDot = slotIn(menu, "host-dot")
-		await expect(getComputedStyle(menuDot).backgroundColor).toBe(
-			"rgb(115, 115, 115)",
-		)
-		await expect(getComputedStyle(menuDot).insetInlineEnd).toBe("-3px")
-		await expect(getComputedStyle(menuDot).bottom).toBe("-3px")
-		await expect(
-			getComputedStyle(slotIn(main, "host-dot")).backgroundColor,
-		).toBe("rgb(115, 115, 115)")
+		await expectHostDots(menu, main, INK.offline)
 
 		const standing = slotIn(main, "focused-space-standing")
 		await expect(
@@ -827,6 +1013,9 @@ export const JoinedHostNotConnected = meta.story({
 			await expect(entry).toBeDisabled()
 			await expect(getComputedStyle(entry).opacity).toBe("0.4")
 		}
+		await expect(getComputedStyle(entryIn(menu, "Leave space")).opacity).toBe(
+			"1",
+		)
 
 		entryIn(menu, "Back to your settings").focus()
 		await userEvent.tab()
@@ -859,9 +1048,13 @@ export const Invitation = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const { menu, main } = await expectArtboard({
+			kind: "Invitation",
 			subtitle: "Invitation from priya@example.com · Expires Nov 2",
 			entries: ["Invitation"],
 			pinned: "Decline",
+			pinnedInk: QUIET_INK,
+			tint: TINT.yellow,
+			isInvitation: true,
 		})
 		await expect(entryIn(menu, "Invitation")).toHaveAttribute(
 			"aria-current",
@@ -871,7 +1064,9 @@ export const Invitation = meta.story({
 		await expect(slotIn(menu, "space-invitation-outline")).toBeVisible()
 		await expect(slotIn(main, "space-invitation-outline")).toBeVisible()
 
-		await userEvent.click(within(main).getByRole("button", { name: "Accept" }))
+		const accept = within(main).getByRole("button", { name: "Accept" })
+		await expectHeaderButton(accept)
+		await userEvent.click(accept)
 		await expect(args.onAccept).toHaveBeenCalledOnce()
 		await userEvent.click(entryIn(menu, "Decline"))
 		await expect(args.onDecline).toHaveBeenCalledOnce()
