@@ -60,6 +60,7 @@ import type {
 	ObservedState,
 	Participant,
 	RosterPin,
+	SoloState,
 	SpaceError,
 } from "../conversations/store-contract"
 import type { TranscriptStore } from "../conversations/store-port"
@@ -169,8 +170,21 @@ const soloThreadQueryOf = (
 		meta: { ...PREVIEW_FAILURE, rereadsItselfOnReconnect: true },
 	})
 
+const soloStatesQueryOf = (
+	space: RosterSpace,
+	read: (signal: AbortSignal) => Promise<SoloState[]>,
+) =>
+	queryOptions({
+		queryKey: conversationQueryKeys.soloStates(space.spaceRowId, space.spaceId),
+		queryFn: isJoined(space)
+			? ({ signal }) => read(answeredInTime(signal))
+			: ({ signal }) => read(signal),
+		meta: PREVIEW_FAILURE,
+	})
+
 type RosterQuery = ReturnType<typeof rosterQueryOf>
 type SoloThreadQuery = ReturnType<typeof soloThreadQueryOf>
+type SoloStatesQuery = ReturnType<typeof soloStatesQueryOf>
 
 type ConversationStyle = Partial<Pick<Conversation, "icon" | "color">>
 
@@ -179,6 +193,7 @@ export type RosterController = {
 	subscribe: (listener: () => void) => () => void
 	rosterQuery: (spaceRowId: string) => RosterQuery
 	soloThreadQuery: (line: RosterLine) => SoloThreadQuery
+	soloStatesQuery: (spaceRowId: string) => SoloStatesQuery
 	load: (opening: RosterOpening) => Promise<void>
 	retryLoad: () => Promise<void>
 	reload: () => Promise<void>
@@ -461,11 +476,26 @@ const pagedSoloThreadsIn = (
 		),
 	)
 
+const NO_SOLO_STATES: SoloState[] = []
+
+const soloBotIdsOfStates = (soloStates: SoloState[]): SoloBotIds =>
+	Object.fromEntries(
+		soloStates.map(({ conversationId, botId }) => [conversationId, botId]),
+	)
+
+const hostStatesOfSoloStates = (
+	soloStates: SoloState[],
+): ConversationHostStates =>
+	Object.fromEntries(
+		soloStates.map((entry) => [entry.conversationId, observedStateOf(entry)]),
+	)
+
 const rosterBaseOf = (
 	choice: RosterChoice,
 	paged: (RosterPages | undefined)[],
 	failures: boolean[],
 	pendings: boolean[],
+	soloStates: (SoloState[] | undefined)[],
 ): RosterState => {
 	const spaceRowIds = heldSpaceRowIdsOf(choice)
 	const reads = paged.map((pages) => pages && rosterReadOf(pages))
@@ -499,15 +529,17 @@ const rosterBaseOf = (
 	const soloThreads: SoloThreads = Object.assign(
 		{},
 		...spaceRowIds.map((id, index) =>
-			pagedSoloThreadsIn(
-				id,
-				rosters[id],
-				paged[index] ? soloBotIdsOf(paged[index]) : NO_SOLO_BOT_IDS,
-			),
+			pagedSoloThreadsIn(id, rosters[id], {
+				...soloBotIdsOfStates(soloStates[index] ?? NO_SOLO_STATES),
+				...(paged[index] ? soloBotIdsOf(paged[index]) : NO_SOLO_BOT_IDS),
+			}),
 		),
 	)
 	const hostStates: ConversationHostStates = Object.assign(
 		{},
+		...soloStates.map((entries) =>
+			hostStatesOfSoloStates(entries ?? NO_SOLO_STATES),
+		),
 		...paged.map((pages) => (pages ? hostStatesOf(pages) : NO_HOST_STATES)),
 	)
 	const bots = rosterIn(rosters, choice.spaceRowId)
@@ -623,6 +655,16 @@ export const createRosterController = (
 		)
 	}
 
+	const soloStatesQuery = (spaceRowId: string) => {
+		const spaceId = hostSpaceIdOf(spaceRowId)
+		return soloStatesQueryOf({ spaceRowId, spaceId }, (signal) =>
+			store.conversationSoloStates(spaceId, signal),
+		)
+	}
+
+	const soloStatesIn = (spaceRowId: string) =>
+		queryClient.getQueryData(soloStatesQuery(spaceRowId).queryKey)
+
 	const rosterReadIn = (spaceRowId: string) =>
 		queryClient.getQueryData(rosterQuery(spaceRowId).queryKey)
 
@@ -649,6 +691,7 @@ export const createRosterController = (
 			spaceRowIds.map(rosterReadIn),
 			spaceRowIds.map(hasRosterFailedIn),
 			spaceRowIds.map(isRosterPendingIn),
+			spaceRowIds.map(soloStatesIn),
 		]
 	}, rosterBaseOf)
 
@@ -839,6 +882,38 @@ export const createRosterController = (
 		)
 	}
 
+	const holdSoloStateEntry = (
+		spaceRowId: string,
+		conversationId: string,
+		observed: ObservedState,
+	) =>
+		queryClient.setQueryData(soloStatesQuery(spaceRowId).queryKey, (entries) =>
+			entries?.map((entry) =>
+				entry.conversationId === conversationId
+					? { ...entry, ...observed }
+					: entry,
+			),
+		)
+
+	const soloStatesRereadFor = new Set<string>()
+
+	const rereadSoloStatesOnceFor = (
+		spaceRowId: string,
+		conversationId: string,
+	) => {
+		if (
+			spaceOfConversation(conversationId) !== undefined ||
+			soloStatesRereadFor.has(conversationId)
+		) {
+			return
+		}
+		soloStatesRereadFor.add(conversationId)
+		void queryClient.invalidateQueries({
+			queryKey: soloStatesQuery(spaceRowId).queryKey,
+			exact: true,
+		})
+	}
+
 	const holdHostState = (
 		origin: SpaceOnHost,
 		changed: ConversationStateChange,
@@ -854,6 +929,8 @@ export const createRosterController = (
 				paged && withHostState(paged, changed.conversationId, observed),
 		)
 		holdSoloChatState(changed.conversationId, observed)
+		holdSoloStateEntry(spaceRowId, changed.conversationId, observed)
+		rereadSoloStatesOnceFor(spaceRowId, changed.conversationId)
 	}
 
 	const pendingRereads = new Map<string, ReturnType<typeof setTimeout>>()
@@ -1055,6 +1132,8 @@ export const createRosterController = (
 		rosterQuery,
 
 		soloThreadQuery,
+
+		soloStatesQuery,
 
 		load,
 

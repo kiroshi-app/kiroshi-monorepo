@@ -26,6 +26,7 @@ import type {
 	RosterPin,
 	RuntimeSession,
 	Section,
+	SoloState,
 	Space,
 	SpacePreferences,
 	SuggestedBot,
@@ -146,6 +147,10 @@ export type TranscriptStore = TranscriptPort & {
 		limit: number,
 		signal?: AbortSignal,
 	) => Promise<ConversationPage>
+	conversationSoloStates: (
+		spaceId: string,
+		signal?: AbortSignal,
+	) => Promise<SoloState[]>
 	createConversation: (draft: ConversationDraft) => Promise<Conversation>
 	updateConversation: (
 		conversationId: string,

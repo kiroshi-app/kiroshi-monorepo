@@ -38,6 +38,7 @@ import type {
 	RuntimeSession,
 	Section,
 	SectionError,
+	SoloState,
 	Space,
 	SpaceError,
 	SpacePreferences,
@@ -1484,6 +1485,19 @@ export const createFakeTranscriptStore = (
 					cursor,
 					limit,
 				),
+			),
+
+		conversationSoloStates: (spaceId: string) =>
+			Promise.resolve(
+				[...bots.values()]
+					.filter((bot) => isIn(bot.id, spaceId))
+					.map(
+						(bot): SoloState => ({
+							botId: bot.id,
+							conversationId: chatIdOf(bot.id, spaceId),
+							state: "idle",
+						}),
+					),
 			),
 
 		createConversation: (draft: ConversationDraft) => {

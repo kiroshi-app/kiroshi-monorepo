@@ -47,6 +47,7 @@ const withoutSoloThreads = (store: TranscriptStore) => {
 			conversations: page.conversations.filter(isTopic),
 		}
 	})
+	vi.spyOn(store, "conversationSoloStates").mockResolvedValue([])
 }
 
 it("raises a failure notice for the opened bot whose solo thread it could not read and keeps the roster", async () => {
