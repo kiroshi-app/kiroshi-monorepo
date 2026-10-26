@@ -73,7 +73,7 @@ const SPACE_SQUARE_STYLE = {
 	avatar: {
 		square: "relative size-9 rounded-[11px]",
 		hostDot:
-			"absolute -end-0.5 -bottom-0.5 size-2.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
+			"absolute -end-0.75 -bottom-0.75 size-2.5 ring-2 ring-(--host-dot-surface) [--host-dot-surface:var(--color-card)]",
 	},
 	header: {
 		square: "relative size-12 rounded-[13px]",

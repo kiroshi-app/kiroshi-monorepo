@@ -18,17 +18,17 @@ type FocusedSpace =
 	| { state: "invitation"; hostEmail: string; expiresAt: number }
 
 const MONTH_AND_DAY: Intl.DateTimeFormatOptions = {
-	month: "long",
+	month: "short",
 	day: "numeric",
 }
 
 const HEADER_BUTTON = cn(
 	INVERSE_BUTTON_CLASS,
-	"rounded-[9px] px-3.5 text-compact transition-none",
+	"gap-2 rounded-[9px] px-3.5 text-compact transition-none",
 )
 
 const SHORTCUT =
-	"text-[color-mix(in_oklab,var(--background)_60%,var(--foreground))] text-xs"
+	"text-[color-mix(in_srgb,var(--background)_60%,var(--foreground))] text-xs"
 
 const presenceOf = (space: FocusedSpace): SpaceHost | undefined => {
 	if (space.state === "joined") return space.isConnected ? "up" : "down"
@@ -66,7 +66,7 @@ const NotSharedCard = ({ name, onShare }: NotSharedCardProps) => {
 			</div>
 			<Button
 				aria-describedby={descriptionId}
-				className="h-7.5 self-start rounded-md px-2.5 text-compact transition-none"
+				className="h-7.5 self-start rounded-md px-2.5 text-compact transition-none dark:border-white/12"
 				onClick={onShare}
 				variant="outline"
 			>
@@ -124,7 +124,7 @@ const FocusedSpacePage = ({
 					)
 
 	return (
-		<>
+		<div className="contents" data-slot="focused-space-page">
 			<div
 				className="flex min-w-0 items-center gap-3.5"
 				data-slot="focused-space-header"
@@ -135,7 +135,7 @@ const FocusedSpacePage = ({
 					isInvitation={isInvitation}
 					size="header"
 				/>
-				<div className="flex min-w-0 flex-1 flex-col">
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 					<h2 className="break-words font-semibold text-foreground text-xl/6.5 tracking-[-0.01em]">
 						{name}
 					</h2>
@@ -180,7 +180,7 @@ const FocusedSpacePage = ({
 				<NotSharedCard name={name} onShare={onShare} />
 			) : null}
 			{children}
-		</>
+		</div>
 	)
 }
 

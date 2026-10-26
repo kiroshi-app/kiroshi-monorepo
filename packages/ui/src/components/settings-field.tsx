@@ -81,7 +81,7 @@ const SettingsField = ({
 	return (
 		<div
 			className={cn(
-				"flex flex-col gap-1.5 in-data-companion-page:gap-2",
+				"flex flex-col gap-1.5 in-data-companion-page:gap-2 in-data-[slot=focused-space-page]:gap-2",
 				fill && "min-h-0 flex-1",
 			)}
 		>

@@ -581,11 +581,11 @@ export const LeavesASavedApplicationBehind = meta.story({
 	},
 })
 
-const ARTBOARD_COMPANIONS = {
-	companions: SPACE_COMPANIONS,
+const artboardCompanions = (count: number) => ({
+	companions: SPACE_COMPANIONS.slice(0, count),
 	onSelect: fn(),
 	onCreate: fn(),
-}
+})
 
 const ARTBOARD_MENU = [
 	"Space",
@@ -600,10 +600,10 @@ const ARTBOARD_MENU = [
 const JOINED_ARGS = {
 	entry: "space",
 	value: { name: "Northwind", colour: "green" },
-	companions: ARTBOARD_COMPANIONS,
+	companions: artboardCompanions(3),
 	spaceState: "joined",
 	host: "http://192.168.1.24:45367",
-	hostName: "Steve",
+	hostName: "Sam Rivera",
 	rank: 3,
 	onOpen: fn(),
 	onLeave: fn(),
@@ -639,7 +639,7 @@ const hostDotsIn = (menu: HTMLElement, main: HTMLElement) =>
 const YOURS_NOT_SHARED = {
 	entry: "space",
 	value: { name: "Release desk", colour: "blue" },
-	companions: ARTBOARD_COMPANIONS,
+	companions: artboardCompanions(2),
 	isShared: false,
 	rank: 2,
 	onOpen: fn(),
@@ -653,7 +653,7 @@ export const YoursNotShared = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F02: a space of yours, not shared yet. Check the Space header bar over the centred column, then the space's own header with the colour square, the name, Yours · not shared and Open ⌘2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
+					"Artboard F02: a space of yours, not shared yet. Check the Space header bar over the centred column, then the space's own header with the colour square, the name, Yours · not shared and Open ⌘2, Companions counting 2, then the Name field, then the Not shared yet card with Share, Danger zone pinned at the foot, and no presence dot on either square.",
 			},
 		},
 	},
@@ -661,7 +661,7 @@ export const YoursNotShared = meta.story({
 		const { menu, main } = await expectArtboard({
 			subtitle: "Yours · not shared",
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? "Companions4" : label,
+				label === "Companions" ? "Companions2" : label,
 			),
 			pinned: "Danger zone",
 		})
@@ -675,8 +675,18 @@ export const YoursNotShared = meta.story({
 			"readonly",
 		)
 
+		const standing = slotIn(main, "focused-space-standing")
+		await expect(
+			getComputedStyle(standing.parentElement as HTMLElement).rowGap,
+		).toBe("2px")
+		const nameField = within(main).getByLabelText("Name")
+		await expect(
+			getComputedStyle(nameField.parentElement as HTMLElement).rowGap,
+		).toBe("8px")
+
 		const open = within(main).getByRole("button", { name: "Open ⌘2" })
 		await expect(getComputedStyle(open).transitionProperty).toBe("none")
+		await expect(getComputedStyle(open).columnGap).toBe("8px")
 		await userEvent.click(open)
 		await expect(args.onOpen).toHaveBeenCalledOnce()
 
@@ -709,7 +719,11 @@ export const SpaceFormPage = meta.story({
 
 export const SpaceCompanions = meta.story({
 	globals: LAPTOP_WINDOW,
-	args: { ...YOURS_NOT_SHARED, entry: "companions" },
+	args: {
+		...YOURS_NOT_SHARED,
+		entry: "companions",
+		companions: artboardCompanions(SPACE_COMPANIONS.length),
+	},
 	parameters: {
 		docs: {
 			description: {
@@ -732,15 +746,15 @@ export const JoinedHostOnline = meta.story({
 		docs: {
 			description: {
 				story:
-					"Artboard F03: a space joined from Steve, whose computer is online. Check Joined · hosted by Steve, a green presence dot on both squares, a Name field that reads the name without letting it change, no card, and Leave space pinned at the foot, asking before it leaves.",
+					"Artboard F03: a space joined from Sam Rivera, whose computer is online. Check Joined · hosted by Sam Rivera, Companions counting 3, a green presence dot on both squares, a Name field that reads the name without letting it change, no card, and Leave space pinned at the foot, asking before it leaves.",
 			},
 		},
 	},
 	play: async ({ args, userEvent }) => {
 		const { menu, main } = await expectArtboard({
-			subtitle: "Joined · hosted by Steve",
+			subtitle: "Joined · hosted by Sam Rivera",
 			entries: ARTBOARD_MENU.map((label) =>
-				label === "Companions" ? "Companions4" : label,
+				label === "Companions" ? "Companions3" : label,
 			),
 			pinned: "Leave space",
 		})
@@ -767,18 +781,23 @@ export const JoinedHostOnline = meta.story({
 
 export const JoinedHostNotConnected = meta.story({
 	globals: { theme: "dark" },
-	args: { ...JOINED_ARGS, isConnected: false, rank: 4 },
+	args: {
+		...JOINED_ARGS,
+		hostName: "Jordan Lee",
+		isConnected: false,
+		rank: 4,
+	},
 	parameters: {
 		docs: {
 			description: {
 				story:
-					"Artboard F04: a space joined from Steve, whose computer isn't connected. Check · Not connected after the host, a grey presence dot, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
+					"Artboard F04: a space joined from Jordan Lee, whose computer isn't connected. Check · Not connected after the host, a grey presence dot, the header alone with no Name field, every entry but Space dimmed, out of the tab order and announced as disabled with its count hidden, and Leave space still reachable.",
 			},
 		},
 	},
 	play: async ({ userEvent }) => {
 		const { menu, main } = await expectArtboard({
-			subtitle: "Joined · hosted by Steve · Not connected",
+			subtitle: "Joined · hosted by Jordan Lee · Not connected",
 			entries: ARTBOARD_MENU,
 			pinned: "Leave space",
 		})
@@ -805,7 +824,7 @@ export const Invitation = meta.story({
 		value: { name: "Atelier", colour: "yellow" },
 		spaceState: "invitation",
 		invitation: {
-			hostEmail: "steve@example.com",
+			hostEmail: "priya@example.com",
 			expiresAt: new Date(2026, 10, 2).getTime(),
 		},
 		onAccept: fn(),
@@ -821,7 +840,7 @@ export const Invitation = meta.story({
 	},
 	play: async ({ args, userEvent }) => {
 		const { menu, main } = await expectArtboard({
-			subtitle: "Invitation from steve@example.com · Expires November 2",
+			subtitle: "Invitation from priya@example.com · Expires Nov 2",
 			entries: ["Invitation"],
 			pinned: "Decline",
 		})
