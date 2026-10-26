@@ -188,7 +188,7 @@ const THREAD_HEADER_HEIGHT = 48
 
 const THREAD_FIRST_ROW = { top: 32, inline: 24 }
 
-const COLUMN_PAGE_CAP = 800
+export const COLUMN_WIDTH_CAP = 800
 
 export const expectSettingsPage = async (
 	root: Element,
@@ -218,7 +218,7 @@ export const expectSettingsPage = async (
 	)
 	await expect(Math.round(columnBox.width)).toBe(
 		width === "column"
-			? Math.min(COLUMN_PAGE_CAP, scroller.clientWidth)
+			? Math.min(COLUMN_WIDTH_CAP, scroller.clientWidth)
 			: scroller.clientWidth,
 	)
 }

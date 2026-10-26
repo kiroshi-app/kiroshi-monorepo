@@ -3,6 +3,7 @@ import { expect, fn } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import {
+	COLUMN_WIDTH_CAP,
 	probedStyleOf,
 	slotIn,
 	tokenLengthOf,
@@ -14,8 +15,6 @@ import { Button } from "@workspace/ui/components/ui/button"
 import { SidebarProvider } from "@workspace/ui/components/ui/sidebar"
 
 const WIDE_CARD = 1100
-
-const COLUMN_CAP = 800
 
 const CONTENT = (
 	<p>
@@ -160,7 +159,7 @@ export const ColumnWidthInWideCard = meta.story({
 		const leftGap = column.left - card.left
 		const rightGap = card.right - column.right
 
-		await expect(column.width).toBe(COLUMN_CAP)
+		await expect(column.width).toBe(COLUMN_WIDTH_CAP)
 		await expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(1)
 		await expect(
 			getComputedStyle(layoutIn(canvasElement)).backgroundColor,
@@ -183,6 +182,6 @@ export const FullWidthInWideCard = meta.story({
 		const { column, scroller } = boxesIn(canvasElement)
 
 		await expect(Math.round(column.width)).toBe(scroller.clientWidth)
-		await expect(column.width).toBeGreaterThan(COLUMN_CAP)
+		await expect(column.width).toBeGreaterThan(COLUMN_WIDTH_CAP)
 	},
 })
