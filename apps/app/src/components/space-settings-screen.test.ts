@@ -197,7 +197,7 @@ const SpaceSettingsHarness = ({
 			? createElement(SpaceSettingsScreen, {
 					core,
 					panels,
-					rail: null,
+					rail: () => null,
 					scopes,
 				})
 			: null,

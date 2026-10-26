@@ -1,3 +1,4 @@
+import type { SettingsScreenRequestLeave } from "@workspace/ui/components/settings-screen"
 import type { AboutFieldsProps } from "@workspace/ui/components/user-settings-dialog/about-fields"
 
 import { SpaceSettingsScreen } from "@/components/space-settings-screen"
@@ -19,7 +20,9 @@ export const WorkspaceSettings = ({
 	...railProps
 }: WorkspaceSettingsProps) => {
 	const { core, overlay, panels } = railProps
-	const rail = <WorkspaceRail {...railProps} />
+	const rail = (requestLeave: SettingsScreenRequestLeave) => (
+		<WorkspaceRail {...railProps} requestLeave={requestLeave} />
+	)
 
 	return panels.openSettings === "you" ? (
 		<UserSettingsScreen

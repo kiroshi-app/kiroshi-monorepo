@@ -1,5 +1,5 @@
 import { type ComponentType, useState } from "react"
-import { expect, fn, screen, within } from "storybook/test"
+import { expect, fn, screen, waitFor, within } from "storybook/test"
 
 import preview from "@workspace/storybook/preview"
 import { slotIn, slotsIn } from "@workspace/storybook/story-utils"
@@ -57,12 +57,32 @@ const ScreenHost = (props: UserSettingsScreenProps) => {
 	)
 }
 
+const RAIL_PRESSES = {
+	onSelectConversations: fn(),
+	onSelectMissions: fn(),
+	onOpenSpaceSettings: fn(),
+	onOpenYou: fn(),
+}
+
+const RAIL: UserSettingsScreenProps["rail"] = (requestLeave) => (
+	<AppRail
+		onOpenSpaceSettings={() => requestLeave(RAIL_PRESSES.onOpenSpaceSettings)}
+		onOpenYou={() => requestLeave(RAIL_PRESSES.onOpenYou)}
+		onSelectConversations={() =>
+			requestLeave(RAIL_PRESSES.onSelectConversations)
+		}
+		onSelectMissions={() => requestLeave(RAIL_PRESSES.onSelectMissions)}
+		selected="conversations"
+		user={{ name: "Ada Martin" }}
+	/>
+)
+
 const USER_ARGS = {
 	target: "user",
 	entry: "account",
 	onEntryChange: fn(),
 	onBack: fn(),
-	rail: <AppRail selected="conversations" user={{ name: "Ada Martin" }} />,
+	rail: RAIL,
 	value: { name: "Ada Martin", colorScheme: "system" },
 	onValueChange: fn(),
 	language: null,
@@ -292,6 +312,57 @@ export const Skills = meta.story({
 		await expect(
 			within(screen.getByRole("main")).getByText(BOT_SKILLS[0].name),
 		).toBeVisible()
+	},
+})
+
+export const LeavingAnUnsavedSkillByTheRail = meta.story({
+	args: { entry: "skills" },
+	parameters: {
+		docs: {
+			description: {
+				story:
+					"A skill with an edit not yet saved, then the rail's Missions pressed. Check that the screen asks with the skill's leave wording before the rail navigates, that Cancel keeps the skill, the edit and the menu selection, and that Leave drops the edit and runs the rail's navigation once.",
+			},
+		},
+	},
+	play: async ({ args, userEvent }) => {
+		const menu = await expectEntryShown("Skills")
+		const rail = await screen.findByRole("navigation", { name: "Navigation" })
+		const main = screen.getByRole("main")
+		await userEvent.click(
+			within(main).getByRole("button", { name: /release-notes/ }),
+		)
+		const body = within(main).getByLabelText("Body")
+		await userEvent.type(body, "!")
+		const missions = within(rail).getByRole("button", { name: "Missions" })
+
+		await userEvent.click(missions)
+		const question = await screen.findByRole("alertdialog", {
+			name: "Leave without saving?",
+		})
+		await userEvent.click(
+			within(question).getByRole("button", { name: "Cancel" }),
+		)
+		await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull())
+		await expect(body).toHaveValue(`${BOT_SKILLS[0].body}!`)
+		await expect(
+			within(menu).getByRole("button", { name: "Skills" }),
+		).toHaveAttribute("aria-current", "page")
+		await expect(RAIL_PRESSES.onSelectMissions).not.toHaveBeenCalled()
+
+		await userEvent.click(missions)
+		await userEvent.click(
+			within(
+				await screen.findByRole("alertdialog", {
+					name: "Leave without saving?",
+				}),
+			).getByRole("button", { name: "Leave" }),
+		)
+		await expect(RAIL_PRESSES.onSelectMissions).toHaveBeenCalledTimes(1)
+		await waitFor(() =>
+			expect(within(main).queryByLabelText("Body")).toBeNull(),
+		)
+		await expect(args.onEntryChange).not.toHaveBeenCalled()
 	},
 })
 
